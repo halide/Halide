@@ -3,6 +3,7 @@
 #include "Function.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Param.h"
 #include "Scope.h"
 #include "Util.h"

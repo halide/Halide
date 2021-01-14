@@ -18,7 +18,7 @@ using std::vector;
 
 using namespace llvm;
 
-CodeGen_Posix::CodeGen_Posix(Target t)
+CodeGen_Posix::CodeGen_Posix(const Target &t)
     : CodeGen_LLVM(t) {
 }
 

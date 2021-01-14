@@ -1442,10 +1442,6 @@ class FuseGPUThreadLoops : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const For *op) override {
-        if (op->device_api == DeviceAPI::GLSL) {
-            return op;
-        }
-
         user_assert(!(CodeGen_GPU_Dev::is_gpu_thread_var(op->name)))
             << "Loops over GPU thread variable: \"" << op->name
             << "\" is outside of any loop over a GPU block variable. "

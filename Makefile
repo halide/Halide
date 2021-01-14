@@ -120,7 +120,7 @@ WITH_WEBASSEMBLY ?= $(findstring webassembly, $(LLVM_COMPONENTS))
 WITH_AMDGPU ?= $(findstring amdgpu, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
-WITH_OPENGL ?= not-empty
+WITH_OPENGLCOMPUTE ?= not-empty
 WITH_D3D12 ?= not-empty
 WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
@@ -157,7 +157,7 @@ OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENCL), , )
 METAL_CXX_FLAGS=$(if $(WITH_METAL), -DWITH_METAL, )
 METAL_LLVM_CONFIG_LIB=$(if $(WITH_METAL), , )
 
-OPENGL_CXX_FLAGS=$(if $(WITH_OPENGL), -DWITH_OPENGL, )
+OPENGLCOMPUTE_CXX_FLAGS=$(if $(WITH_OPENGLCOMPUTE), -DWITH_OPENGLCOMPUTE, )
 
 D3D12_CXX_FLAGS=$(if $(WITH_D3D12), -DWITH_D3D12, )
 D3D12_LLVM_CONFIG_LIB=$(if $(WITH_D3D12), , )
@@ -205,7 +205,7 @@ CXX_FLAGS += $(AARCH64_CXX_FLAGS)
 CXX_FLAGS += $(X86_CXX_FLAGS)
 CXX_FLAGS += $(OPENCL_CXX_FLAGS)
 CXX_FLAGS += $(METAL_CXX_FLAGS)
-CXX_FLAGS += $(OPENGL_CXX_FLAGS)
+CXX_FLAGS += $(OPENGLCOMPUTE_CXX_FLAGS)
 CXX_FLAGS += $(D3D12_CXX_FLAGS)
 CXX_FLAGS += $(MIPS_CXX_FLAGS)
 CXX_FLAGS += $(POWERPC_CXX_FLAGS)
@@ -429,7 +429,6 @@ SOURCE_FILES = \
   CodeGen_Metal_Dev.cpp \
   CodeGen_MIPS.cpp \
   CodeGen_OpenCL_Dev.cpp \
-  CodeGen_OpenGL_Dev.cpp \
   CodeGen_OpenGLCompute_Dev.cpp \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
@@ -459,6 +458,7 @@ SOURCE_FILES = \
   Expr.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
+  FindIntrinsics.cpp \
   FlattenNestedRamps.cpp \
   Float16.cpp \
   Func.cpp \
@@ -471,7 +471,6 @@ SOURCE_FILES = \
   ImageParam.cpp \
   InferArguments.cpp \
   InjectHostDevBufferCopies.cpp \
-  InjectOpenGLIntrinsics.cpp \
   Inline.cpp \
   InlineReductions.cpp \
   IntegerDivisionTable.cpp \
@@ -565,7 +564,6 @@ SOURCE_FILES = \
   UnsafePromises.cpp \
   Util.cpp \
   Var.cpp \
-  VaryingAttributes.cpp \
   VectorizeLoops.cpp \
   WasmExecutor.cpp \
   WrapCalls.cpp
@@ -602,7 +600,6 @@ HEADER_FILES = \
   CodeGen_Metal_Dev.h \
   CodeGen_MIPS.h \
   CodeGen_OpenCL_Dev.h \
-  CodeGen_OpenGL_Dev.h \
   CodeGen_OpenGLCompute_Dev.h \
   CodeGen_Posix.h \
   CodeGen_PowerPC.h \
@@ -637,6 +634,7 @@ HEADER_FILES = \
   ExternFuncArgument.h \
   FastIntegerDivide.h \
   FindCalls.h \
+  FindIntrinsics.h \
   FlattenNestedRamps.h \
   Float16.h \
   Func.h \
@@ -650,7 +648,6 @@ HEADER_FILES = \
   ImageParam.h \
   InferArguments.h \
   InjectHostDevBufferCopies.h \
-  InjectOpenGLIntrinsics.h \
   Inline.h \
   InlineReductions.h \
   IntegerDivisionTable.h \
@@ -733,7 +730,6 @@ HEADER_FILES = \
   UnsafePromises.h \
   Util.h \
   Var.h \
-  VaryingAttributes.h \
   VectorizeLoops.h \
   WrapCalls.h
 
@@ -784,7 +780,6 @@ RUNTIME_CPP_COMPONENTS = \
   msan \
   msan_stubs \
   opencl \
-  opengl \
   openglcompute \
   opengl_egl_context \
   opengl_glx_context \
@@ -856,7 +851,6 @@ RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeHexagonDma.h \
                             $(INCLUDE_DIR)/HalideRuntimeHexagonHost.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenCL.h \
-                            $(INCLUDE_DIR)/HalideRuntimeOpenGL.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGLCompute.h \
                             $(INCLUDE_DIR)/HalideRuntimeMetal.h	\
                             $(INCLUDE_DIR)/HalideRuntimeQurt.h \
@@ -1115,13 +1109,10 @@ CORRECTNESS_TESTS = $(shell ls $(ROOT_DIR)/test/correctness/*.cpp) $(shell ls $(
 PERFORMANCE_TESTS = $(shell ls $(ROOT_DIR)/test/performance/*.cpp)
 ERROR_TESTS = $(shell ls $(ROOT_DIR)/test/error/*.cpp)
 WARNING_TESTS = $(shell ls $(ROOT_DIR)/test/warning/*.cpp)
-OPENGL_TESTS := $(shell ls $(ROOT_DIR)/test/opengl/*.cpp)
 GENERATOR_EXTERNAL_TESTS := $(shell ls $(ROOT_DIR)/test/generator/*test.cpp)
 GENERATOR_EXTERNAL_TEST_GENERATOR := $(shell ls $(ROOT_DIR)/test/generator/*_generator.cpp)
 TUTORIALS = $(filter-out %_generate.cpp, $(shell ls $(ROOT_DIR)/tutorial/*.cpp))
 AUTO_SCHEDULE_TESTS = $(shell ls $(ROOT_DIR)/test/auto_schedule/*.cpp)
-
--include $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=$(BUILD_DIR)/test_opengl_%.d)
 
 test_correctness: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=quiet_correctness_%) $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.c=quiet_correctness_%)
 test_performance: $(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=performance_%)
@@ -1130,7 +1121,6 @@ test_warning: $(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=warning_%)
 test_tutorial: $(TUTORIALS:$(ROOT_DIR)/tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=valgrind_%)
 test_avx512: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=avx512_%)
-test_opengl: $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=opengl_%)
 test_auto_schedule: test_mullapudi2016 test_li2018 test_adams2019
 
 .PHONY: test_correctness_multi_gpu
@@ -1238,7 +1228,6 @@ ALL_TESTS = test_internal test_correctness test_error test_tutorial test_warning
 # For generator tests they time the compile time only. The times are recorded in CSV files.
 time_compilation_correctness: init_time_compilation_correctness $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=time_compilation_test_%)
 time_compilation_performance: init_time_compilation_performance $(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=time_compilation_performance_%)
-time_compilation_opengl: init_time_compilation_opengl $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=time_compilation_opengl_%)
 time_compilation_generator: init_time_compilation_generator $(GENERATOR_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=time_compilation_generator_%)
 
 init_time_compilation_%:
@@ -1257,14 +1246,6 @@ build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/c
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=$(BIN_DIR)/$(TARGET)/generator_aot_%) \
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=$(BIN_DIR)/generator_jit_%) \
 	$(AUTO_SCHEDULE_TESTS:$(ROOT_DIR)/test/auto_schedule/%.cpp=$(BIN_DIR)/auto_schedule_%)
-
-# OpenGL doesn't build on every host platform we support (eg. ARM).
-.PHONY: build_opengl_tests
-build_opengl_tests: $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=$(BIN_DIR)/opengl_%)
-
-ifneq ($(WITH_OPENGL),)
-build_tests: build_opengl_tests
-endif
 
 clean_generator:
 	rm -rf $(BIN_DIR)/*.generator
@@ -1328,9 +1309,6 @@ $(BIN_DIR)/error_%: $(ROOT_DIR)/test/error/%.cpp $(BIN_DIR)/libHalide.$(SHARED_E
 
 $(BIN_DIR)/warning_%: $(ROOT_DIR)/test/warning/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
-
-$(BIN_DIR)/opengl_%: $(ROOT_DIR)/test/opengl/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h $(INCLUDE_DIR)/HalideRuntimeOpenGL.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(TEST_LD_FLAGS) $(OPENGL_LD_FLAGS) -o $@ -MMD -MF $(BUILD_DIR)/test_opengl_$*.d
 
 # Auto schedule tests that link against libHalide
 $(BIN_DIR)/auto_schedule_%: $(ROOT_DIR)/test/auto_schedule/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
@@ -1913,11 +1891,6 @@ warning_%: $(BIN_DIR)/warning_%
 	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1 | egrep --q "^Warning"
 	@-echo
 
-opengl_%: $(BIN_DIR)/opengl_%
-	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1
-	@-echo
-
 generator_jit_%: $(BIN_DIR)/generator_jit_%
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; $(CURDIR)/$<
@@ -1966,9 +1939,6 @@ time_compilation_test_%: $(BIN_DIR)/test_%
 
 time_compilation_performance_%: $(BIN_DIR)/performance_%
 	$(TIME_COMPILATION) compile_times_performance.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_performance_%=performance_%)
-
-time_compilation_opengl_%: $(BIN_DIR)/opengl_%
-	$(TIME_COMPILATION) compile_times_opengl.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_opengl_%=opengl_%)
 
 time_compilation_generator_%: $(BIN_DIR)/%.generator
 	$(TIME_COMPILATION) compile_times_generator.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_generator_%=$(FILTERS_DIR)/%.a)
@@ -2123,6 +2093,10 @@ ifneq (,$(findstring clang version 11.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 11.1,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring clang version 12.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -2147,7 +2121,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 100 110 120))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 100 110 111 120))
 LLVM_OK=yes
 endif
 
