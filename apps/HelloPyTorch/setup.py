@@ -46,7 +46,7 @@ if __name__ == "__main__":
         has_cuda = True
 
     include_dirs = [build_dir, os.path.join(halide_dir, "include")]
-    compile_args = ["-std=c++17", "-g"]
+    compile_args = ["-std=c++11", "-g"]
     if platform.system() == "Darwin":  # on osx libstdc++ causes trouble
         compile_args += ["-stdlib=libc++"]
 
