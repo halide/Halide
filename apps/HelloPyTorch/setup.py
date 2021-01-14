@@ -14,7 +14,7 @@ def generate_pybind_wrapper(path, headers, has_cuda):
         s += "#define HL_PT_CUDA\n"
     s += "#include \"HalidePyTorchHelpers.h\"\n"
     for h in headers:
-        s += "#include \"{}\"\n".format(os.path.splitext(h)[0] + ".pytorch.h")
+        s += "#include \"{}\"\n".format(os.path.splitext(h)[0]+".pytorch.h")
     if has_cuda:
         s += "#undef HL_PT_CUDA\n"
 
@@ -22,7 +22,7 @@ def generate_pybind_wrapper(path, headers, has_cuda):
     for h in headers:
         name = os.path.splitext(h)[0]
         s += "  m.def(\"{}\", &{}_th_, \"PyTorch wrapper of the Halide pipeline {}\");\n".format(
-            name, name, name)
+          name, name, name)
     s += "}\n"
     with open(path, 'w') as fid:
         fid.write(s)
@@ -79,8 +79,7 @@ if __name__ == "__main__":
         extension = CUDAExtension(ext_name, sources,
                                   include_dirs=include_dirs,
                                   extra_objects=hl_libs,
-                                  # Halide ops need the full cuda lib, not just the RT library
-                                  libraries=["cuda"],
+                                  libraries=["cuda"],  # Halide ops need the full cuda lib, not just the RT library 
                                   extra_compile_args=compile_args)
     else:
         print("Generating CPU wrapper")
