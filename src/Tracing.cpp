@@ -6,6 +6,8 @@
 #include "RealizationOrder.h"
 #include "runtime/HalideRuntime.h"
 
+#include <set>
+
 namespace Halide {
 namespace Internal {
 

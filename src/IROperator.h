@@ -327,6 +327,38 @@ Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args);
 
 Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
 
+/** Compute widen(a) + widen(b). The result is always signed. */
+Expr widening_add(Expr a, Expr b);
+/** Compute widen(a) * widen(b). a and b may have different signedness. */
+Expr widening_mul(Expr a, Expr b);
+/** Compute widen(a) - widen(b). The result is always signed. */
+Expr widening_sub(Expr a, Expr b);
+/** Compute widen(a) << b. */
+Expr widening_shift_left(Expr a, Expr b);
+/** Compute widen(a) >> b. */
+Expr widening_shift_right(Expr a, Expr b);
+
+/** Compute saturating_add(a, (1 >> min(b, 0)) / 2) << b. When b is positive
+ * indicating a left shift, the rounding term is zero. */
+Expr rounding_shift_left(Expr a, Expr b);
+/** Compute saturating_add(a, (1 << max(b, 0)) / 2) >> b. When b is negative
+ * indicating a left shift, the rounding term is zero. */
+Expr rounding_shift_right(Expr a, Expr b);
+
+/** Compute saturating_narrow(widen(a) + widen(b)) */
+Expr saturating_add(Expr a, Expr b);
+/** Compute saturating_narrow(widen(a) - widen(b)) */
+Expr saturating_sub(Expr a, Expr b);
+
+/** Compute narrow((widen(a) + widen(b)) / 2) */
+Expr halving_add(Expr a, Expr b);
+/** Compute narrow((widen(a) + widen(b) + 1) / 2) */
+Expr rounding_halving_add(Expr a, Expr b);
+/** Compute narrow((widen(a) - widen(b)) / 2) */
+Expr halving_sub(Expr a, Expr b);
+/** Compute narrow((widen(a) - widen(b) + 1) / 2) */
+Expr rounding_halving_sub(Expr a, Expr b);
+
 }  // namespace Internal
 
 /** Cast an expression to the halide type corresponding to the C++ type T. */

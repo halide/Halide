@@ -11,9 +11,11 @@
 
 #include "Expr.h"
 #include "Interval.h"
-#include "Target.h"
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
 
 class Function;

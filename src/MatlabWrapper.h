@@ -6,8 +6,6 @@
  * Provides an output function to generate a Matlab mex API compatible object file.
  */
 
-#include "Module.h"
-
 namespace llvm {
 class Module;
 class Function;

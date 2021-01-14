@@ -179,6 +179,7 @@ tests(GROUPS correctness
       interleave_x.cpp
       interpreter.cpp
       interval.cpp
+      intrinsics.cpp
       introspection.cpp
       inverse.cpp
       isnan.cpp
