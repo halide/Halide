@@ -371,7 +371,7 @@ bool test(int lanes, int seed) {
                 if (!close_enough_hypot(im8(x, y), correct)) {
                     std::ostringstream oss;
                     oss << type_of<A>();
-                    printf("    im8(%d, %d) = %f instead of %f (input = %f, type = %s)\n",
+                    printf("     im8(%d, %d) = %f instead of %f (input = %f, type = %s)\n",
                            x, y, (double)im8(x, y), correct, (double)input(x, y), oss.str().c_str());
                     return false;
                 }
