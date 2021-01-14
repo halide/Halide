@@ -2315,7 +2315,7 @@ Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
     user_assert((weight.type().is_uint() || weight.type().is_float()))
         << "A lerp weight must be an unsigned integer or a float, but "
         << "lerp weight " << weight << " has type " << weight.type() << ".\n";
-    user_assert((zero_val.type().is_float() || zero_val.type().lanes() <= 32))
+    user_assert((zero_val.type().is_float() || zero_val.type().bits() <= 32))
         << "Lerping between 64-bit integers is not supported\n";
     // Compilation error for constant weight that is out of range for integer use
     // as this seems like an easy to catch gotcha.
