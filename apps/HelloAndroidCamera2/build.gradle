@@ -1,7 +1,7 @@
 import org.apache.tools.ant.taskdefs.condition.Os
 
 // Avoid conflicts with Bazel on case-insensitive filesystems
-buildDir = 'gradle_build'
+buildDir = 'gradle_build' 
 
 repositories {
     jcenter()
