@@ -15,6 +15,9 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
+// need forward declaration.
+struct Cache;
+
 template<typename T>
 using NodeMap = PerfectHashMap<FunctionDAG::Node, T>;
 
@@ -22,6 +25,8 @@ template<typename T>
 using StageMap = PerfectHashMap<FunctionDAG::Node::Stage, T>;
 
 bool may_subtile();
+
+bool use_memoized_features();
 
 // Given a multi-dimensional box of dimensionality d, generate a list
 // of candidate tile sizes for it, logarithmically spacing the sizes
@@ -104,6 +109,9 @@ struct LoopNest {
         const LoopNest *innermost = nullptr;  // Its innermost node - usually a SIMD loop
         const LoopNest *task = nullptr;       // The parallel for loop it belongs to
         bool inlined = false;                 // Is the Func inlined?
+
+        // Used for caching features/feature intermediates.
+        uint64_t hash_of_producers_stored_at_root;
     };
 
     // Compute all the sites of interest for each pipeline stage
@@ -132,7 +140,8 @@ struct LoopNest {
                           const LoopNest *grandparent,
                           const LoopNest &root,
                           int64_t *working_set,
-                          StageMap<ScheduleFeatures> *features) const;
+                          StageMap<ScheduleFeatures> *features,
+                          bool use_memoized_features) const;
 
     bool is_root() const {
         // The root is the sole node without a Func associated with
@@ -255,6 +264,35 @@ struct LoopNest {
                int depth,
                const LoopNest *parent,
                const LoopNest *compute_site) const;
+
+    // TODO(rootjalex): add docstrings for everything below here
+    // used for caching
+    mutable std::map<uint64_t, StageMap<StageMap<FeatureIntermediates>>> feature_intermediates_cache;
+    mutable std::map<uint64_t, StageMap<ScheduleFeatures>> features_cache;
+
+    void copy_from_including_features(const LoopNest &n);
+
+    // Loops through inlined funcs and caches the pcm found in features, into memoized_features.
+    void memoize_points_computed_minimum(StageMap<ScheduleFeatures>& memoized_features,
+                                         const StageMap<ScheduleFeatures> *features) const;
+
+    // Merges features_to_insert into memoized_features if it does not already exist there.
+    void memoize_features(StageMap<ScheduleFeatures>& memoized_features,
+                          const StageMap<ScheduleFeatures> *features_to_insert) const;
+
+    // Recalculates working_set from cached features
+    // TODO(rootjalex): can this be cached as well..?
+    void compute_working_set_from_features(int64_t *working_set,
+                                           const StageMap<ScheduleFeatures> *features) const;
+
+    void recompute_inlined_features(const StageMap<Sites> &sites,
+                                    StageMap<ScheduleFeatures> *features) const;
+    
+    uint64_t compute_hash_of_producers_stored_at_root(const StageMap<Sites> &sites) const;
+
+    std::vector<std::pair<int, int>> collect_producers(const StageMap<Sites> &sites) const;
+
+    void collect_stages(std::set<const FunctionDAG::Node::Stage *>& stages) const;
 };
 
 }  // namespace Autoscheduler

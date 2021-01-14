@@ -186,7 +186,7 @@ struct ScheduleFeatures {
     double num_realizations = 0;
 
     // The number of times a tile of the stage is computed. The
-    // pProduct of outer loops at compute_at site. Always at least as
+    // product of outer loops at compute_at site. Always at least as
     // large as num_realizations.
     double num_productions = 0;
 
@@ -360,6 +360,28 @@ struct ScheduleFeatures {
         auto os = aslog(0);
         dump(os);
     }
+};
+
+/*
+rootjalex: convo w/ Luke:
+"
+    feature_intermediates are also relevant for the CPU
+    the issue is that the feature values for a given func can actually change when other funcs are later scheduled
+    the features that can change need to be recomputed (edited) 
+    the feature_intermediates are some intermediate values that help with the recomputing
+"
+*/
+struct FeatureIntermediates {
+    double inlined_calls;
+    double num_vectors;
+    double num_scalars;
+    double vector_size;
+    double innermost_pure_loop_extent;
+    double outer_parallelism;
+    double num_warps_per_block;
+    double num_threads_per_block;
+    double points_computed_per_thread;
+    // TODO(rootjalex): add dump() method.
 };
 
 }  // namespace Internal

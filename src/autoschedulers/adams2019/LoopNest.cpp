@@ -1,4 +1,5 @@
 #include "LoopNest.h"
+#include "Caching.h"
 
 using std::set;
 using std::vector;
@@ -234,7 +235,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 const LoopNest *grandparent,
                                 const LoopNest &root,
                                 int64_t *working_set,
-                                StageMap<ScheduleFeatures> *features) const {
+                                StageMap<ScheduleFeatures> *features,
+                                bool use_memoized_features) const {
     int64_t working_set_here = 0;
 
     int64_t loop_instances = 1, parallel_tasks = 1;
@@ -322,8 +324,44 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
     if (is_root()) {
         // TODO: This block of code is repeated below. Refactor
+
+        // TODO(rootjalex): calculate working set from features if features are cached.
+        // TODO(rootjalex): clean up this loop.
         for (const auto &c : children) {
-            c->compute_features(dag, params, sites, subinstances, parallelism, this, parent, root, &working_set_here, features);
+
+            const uint64_t hash_of_producers = sites.get(c->stage).hash_of_producers_stored_at_root;
+
+            if (use_memoized_features) {
+                if (c->features_cache.count(hash_of_producers) > 0) {
+                    // TODO(rootjalex): cache hit (feature cache)
+                    const auto& entry = c->features_cache.at(hash_of_producers);
+
+                    for (auto it = entry.begin(); it != entry.end(); it++) {
+                        auto *stage_ptr = it.key();
+                        const auto &feat = it.value();
+
+                        features->insert(stage_ptr, feat);
+                    }
+
+                    // TODO(rootjalex): the below are Luke's notes.
+                    // 'working_set_here' is required below for computing the
+                    // root-level features so we compute the value that it
+                    // would have had if the current loop nest had not been
+                    // memoized
+                    int64_t working_set_c{0};
+                    c->compute_working_set_from_features(&working_set_c, features);
+                    working_set_here += working_set_c;
+                    continue; // no need to recompute fetures
+                }
+                // TODO(rootjalex): cache miss (feature cache)
+            }
+
+            c->compute_features(dag, params, sites, subinstances, parallelism, this, parent, root, &working_set_here, features, use_memoized_features);
+
+            if (use_memoized_features) {
+                c->features_cache[hash_of_producers].make_large(dag.nodes[0].stages[0].max_id);
+                c->memoize_features(c->features_cache[hash_of_producers], features);
+            }
         }
 
         for (const auto *node : store_at) {
@@ -384,6 +422,37 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 }
                 feat.points_computed_minimum = std::min(feat.points_computed_minimum, (double)points_computed_minimum_if_inlined);
             }
+
+            // TODO(rootjalex): the below are Luke's notes.
+            // When memoizing, we need to recompute features for inlined Funcs
+            // so we reset them here
+            if (use_memoized_features && sites.get(stage).inlined) {
+                feat.inlined_calls = 0;
+                feat.num_scalars = 0;
+                feat.innermost_pure_loop_extent = 0;
+                feat.outer_parallelism = 0;
+                // TODO(rootjalex): I think these are GPU things, commenting out for now.
+                // feat.num_warps_per_block = 0;
+                // feat.num_threads_per_block = 0;
+                // feat.points_computed_per_thread = 0;
+            }
+        }
+
+        if (use_memoized_features) {
+            for (const auto &c : children) {
+                uint64_t hash_of_producers = sites.get(c->stage).hash_of_producers_stored_at_root;
+
+                // When computing feat.points_computed_minimum above, the order
+                // of nodes considered is possibly different from the loop nest
+                // traversal order so 'features->get(e->consumer).points_computed_minimum'
+                // may not have been computed when it is accessed as a memoized
+                // feature. We memoize 'points_computed_minimum' here to ensure
+                // its value is always available
+                if (c->features_cache.count(hash_of_producers) > 0) {
+                    c->memoize_points_computed_minimum(c->features_cache[hash_of_producers], features);
+                }
+            }
+            recompute_inlined_features(sites, features);
         }
 
         return;
@@ -535,7 +604,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
     // Recurse inwards
     for (const auto &c : children) {
-        c->compute_features(dag, params, sites, subinstances, subparallelism, this, parent, root, &working_set_here, features);
+        c->compute_features(dag, params, sites, subinstances, subparallelism, this, parent, root, &working_set_here, features, use_memoized_features);
     }
     for (const auto *node : store_at) {
         auto &feat = features->get(&(node->stages[0]));
@@ -951,6 +1020,25 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         }
         inlined_feat.inner_parallelism = 1;
         inlined_feat.outer_parallelism = parallelism;
+
+        // TODO(rootjalex): clean this up.
+        if (use_memoized_features) {
+            const auto &block = sites.get(stage).task;
+            uint64_t hash_of_producers = sites.get(block->stage).hash_of_producers_stored_at_root;
+            auto& intermediate_map = block->feature_intermediates_cache[hash_of_producers].get_or_create(&(f->stages[0]));
+            auto& intermediate = intermediate_map.get_or_create(stage);
+            intermediate.inlined_calls = it.value() * subinstances;
+            intermediate.num_scalars = it.value() * feat.num_scalars;
+
+            intermediate.innermost_pure_loop_extent = feat.innermost_pure_loop_extent;
+            intermediate.outer_parallelism = parallelism;
+
+            // TODO(rootjalex): I think these are GPU-related things.
+            // intermediate.num_warps_per_block = num_warps;
+
+            // intermediate.num_threads_per_block = gpu_loop_info.thread_info->num_threads;
+            // intermediate.points_computed_per_thread = points_computed_per_thread;
+        }
     }
 }
 
@@ -1882,6 +1970,223 @@ void LoopNest::apply(LoopLevel here,
                 state.schedule_source << "\n    .store" << loop_level;
             }
         }
+    }
+}
+
+void LoopNest::copy_from_including_features(const LoopNest &n) {
+    size = n.size;
+    children = n.children;
+    inlined = n.inlined;
+    store_at = n.store_at;
+    bounds = n.bounds;
+    node = n.node;
+    stage = n.stage;
+    innermost = n.innermost;
+    tileable = n.tileable;
+    parallel = n.parallel;
+    vector_dim = n.vector_dim;
+    vectorized_loop_index = n.vectorized_loop_index;
+    features_cache = n.features_cache;
+    feature_intermediates_cache = n.feature_intermediates_cache;
+}
+
+void LoopNest::memoize_points_computed_minimum(StageMap<ScheduleFeatures>& memoized_features, const StageMap<ScheduleFeatures> *features) const {
+    for (auto it = inlined.begin(); it != inlined.end(); it++) {
+        const auto *node = it.key();
+        const auto *stage_ptr = &(node->stages[0]);
+        const auto &inlined_feat = features->get(stage_ptr);
+        // Save pcm into memoized_features.
+        memoized_features.get(stage_ptr).points_computed_minimum = inlined_feat.points_computed_minimum;
+    }
+
+    memoized_features.get(stage).points_computed_minimum = features->get(stage).points_computed_minimum;
+
+    for (const auto &c : children) {
+        c->memoize_points_computed_minimum(memoized_features, features);
+    }
+}
+
+void LoopNest::memoize_features(StageMap<ScheduleFeatures>& memoized_features, const StageMap<ScheduleFeatures> *features_to_insert) const {
+    for (auto it = inlined.begin(); it != inlined.end(); it++) {
+        const auto *node = it.key();
+        const auto *stage_ptr = &(node->stages[0]);
+        if (memoized_features.contains(stage_ptr)) {
+            continue;
+        }
+
+        // TODO(rootjalex): shouldn't we check that features_to_insert has this stage?
+        const auto &inlined_feat = features_to_insert->get(stage_ptr);
+        memoized_features.insert(stage_ptr, inlined_feat);
+    }
+
+    if (!memoized_features.contains(stage)) {
+        // TODO(rootjalex): shouldn't we check that features_to_insert has this stage?
+        memoized_features.insert(stage, features_to_insert->get(stage));
+    }
+
+    for (const auto &c : children) {
+        c->memoize_features(memoized_features, features_to_insert);
+    }
+}
+
+void LoopNest::compute_working_set_from_features(int64_t *working_set,
+                                    const StageMap<ScheduleFeatures> *features) const {
+    int64_t working_set_here = 0;
+
+    for (const auto &c : children) {
+        c->compute_working_set_from_features(&working_set_here, features);
+    }
+
+    for (const auto *node : store_at) {
+        auto &feat = features->get(&(node->stages[0]));
+        working_set_here += feat.bytes_at_production;
+    }
+
+    *working_set += working_set_here;
+}
+
+// TODO(rootjalex): understand what this is for...
+void LoopNest::recompute_inlined_features(const StageMap<Sites> &sites, StageMap<ScheduleFeatures> *features) const {
+    for (const auto &c : children) {
+        c->recompute_inlined_features(sites, features);
+    }
+
+    // const auto &block = sites.get(this->stage).task;
+    // internal_assert(sites.contains(block->stage)) << "recompute_inlined_features couldn't find this->stage in sites\n";
+    // uint64_t hash_of_producers = sites.get(block->stage).hash_of_producers_stored_at_root;
+    // internal_assert(block->feature_intermediates_cache.count(hash_of_producers) > 0) << "recompute_inlined_features couldn't find hash in block feature intermediates cache\n";
+
+    // // block's feautre_intermediates cache
+    // const auto &cache_map = block->feature_intermediates_cache[hash_of_producers];
+
+    for (auto it = inlined.begin(); it != inlined.end(); it++) {
+
+        const auto *f = it.key();
+        internal_assert(f);
+
+        const auto &block = sites.get(stage).task;
+
+        internal_assert(sites.contains(block->stage));
+        uint64_t hash_of_producers = sites.get(block->stage).hash_of_producers_stored_at_root;
+
+        internal_assert(block->feature_intermediates_cache.count(hash_of_producers) > 0);
+        auto& intermediate_map = block->feature_intermediates_cache[hash_of_producers].get(&(f->stages[0]));
+        auto& intermediate = intermediate_map.get(stage);
+
+        auto &inlined_feat = features->get(&(f->stages[0]));
+        inlined_feat.inlined_calls += intermediate.inlined_calls;
+        inlined_feat.num_scalars += intermediate.num_scalars;
+        if (inlined_feat.innermost_pure_loop_extent > 0) {
+            inlined_feat.innermost_pure_loop_extent =
+                std::min(inlined_feat.innermost_pure_loop_extent,
+                         intermediate.innermost_pure_loop_extent);
+        } else {
+            inlined_feat.innermost_pure_loop_extent = intermediate.innermost_pure_loop_extent;
+        }
+        inlined_feat.outer_parallelism = intermediate.outer_parallelism;
+        // inlined_feat.num_blocks = intermediate.outer_parallelism;
+        // inlined_feat.num_warps_per_block += intermediate.num_warps_per_block;
+
+        // inlined_feat.num_threads_per_block += intermediate.num_threads_per_block;
+        // inlined_feat.points_computed_per_thread += intermediate.points_computed_per_thread;
+
+        /*
+        const auto *node_ptr = it.key();
+        internal_assert(node_ptr) << "recompute_inlined_features found nullptr for DAG node\n";
+
+        const auto *stage_ptr = &(node_ptr->stages[0]);
+        // TODO(rootjalex): should we assert stage_ptr?
+
+
+        // Get features_intermediate of block.
+        auto& intermediate_map = cache_map.get(stage_ptr);
+        auto& intermediate = intermediate_map.get(this->stage);
+
+        // TODO(rootjalex): why does features have this value?
+        auto &inlined_feat = features->get(stage_ptr);
+
+        inlined_feat.inlined_calls += intermediate.inlined_calls;
+        inlined_feat.num_scalars += intermediate.num_scalars;
+        if (inlined_feat.innermost_pure_loop_extent > 0) {
+            inlined_feat.innermost_pure_loop_extent =
+                std::min(inlined_feat.innermost_pure_loop_extent,
+                         intermediate.innermost_pure_loop_extent);
+        } else {
+            inlined_feat.innermost_pure_loop_extent = intermediate.innermost_pure_loop_extent;
+        }
+        inlined_feat.outer_parallelism = intermediate.outer_parallelism;
+        // TODO(rootjalex): remove these for now? I think they're GPU-related.
+        // inlined_feat.num_blocks = intermediate.outer_parallelism;
+        // inlined_feat.num_warps_per_block += intermediate.num_warps_per_block;
+
+        // inlined_feat.num_threads_per_block += intermediate.num_threads_per_block;
+        // inlined_feat.points_computed_per_thread += intermediate.points_computed_per_thread;
+        */
+    }
+}
+
+uint64_t LoopNest::compute_hash_of_producers_stored_at_root(const StageMap<Sites> &sites) const {
+    vector<pair<int, int>> producers = collect_producers(sites);
+
+    // Sort them according to node id
+    std::sort(producers.begin(), producers.end(), [](const pair<int, int>& a, const pair<int, int>& b) {
+        return a.first < b.first;
+    });
+
+    uint64_t store_root_hash = 0;
+    for (const auto& p : producers) {
+        hash_combine(store_root_hash, p.first);
+        hash_combine(store_root_hash, p.second);
+    }
+
+    return store_root_hash;
+}
+
+vector<pair<int, int>> LoopNest::collect_producers(const StageMap<Sites> &sites) const {
+    set<const FunctionDAG::Node::Stage *> stages;
+    collect_stages(stages);
+
+    vector<const FunctionDAG::Edge *> pending;
+
+    for (const auto *stage : stages) {
+        for (const auto *e : stage->incoming_edges) {
+            pending.push_back(e);
+        }
+    }
+
+    set<const FunctionDAG::Node *> done;
+    vector<pair<int, int>> producers;
+
+    // Collect all producers of the funcs within this LoopNest
+    while (!pending.empty()) {
+        const auto *e = pending.back();
+        pending.pop_back();
+        if (done.count(e->producer)) continue;
+        done.insert(e->producer);
+        const auto &site = sites.get(&(e->producer->stages[0]));
+        if (site.store->is_root()) {
+            int vector_dim = (e->producer->is_input ? 0 :
+                                                      site.produce != nullptr ? site.produce->vector_dim :
+                                                                                -1);
+            producers.push_back({e->producer->id, vector_dim});
+        } else if (site.produce != nullptr) {
+            // Computation must be nested inside this task or inlined into it.
+            for (const auto &s : e->producer->stages) {
+                for (const auto *e2 : s.incoming_edges) {
+                    pending.push_back(e2);
+                }
+            }
+        }
+    }
+
+    return producers;
+}
+
+void LoopNest::collect_stages(std::set<const FunctionDAG::Node::Stage *>& stages) const {
+    stages.insert(stage);
+
+    for (const auto &c : children) {
+        c->collect_stages(stages);
     }
 }
 
