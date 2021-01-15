@@ -24,6 +24,9 @@
 #include "PyType.h"
 #include "PyVar.h"
 
+static_assert(PYBIND11_VERSION_MAJOR == 2 && PYBIND11_VERSION_MINOR >= 6,
+              "Halide requires PyBind 2.6+");
+
 #ifndef HALIDE_PYBIND_MODULE_NAME
 #define HALIDE_PYBIND_MODULE_NAME halide
 #endif
