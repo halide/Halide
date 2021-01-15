@@ -62,8 +62,9 @@ public:
 
         // Schedule
         if (!auto_schedule) {
-            // Mac Minis have Intel GPUs that don't have enough memory to handle 32x32
-            // tiles. Use a smaller size here to avoid unexpected crashes.
+            // Some Intel Mac Minis have GPUs that require tile sizes smaller than 32x32
+            // for this pipeline because they have too few registers. Drop to 16x16 to
+            // avoid unexpected crashes in CI.
             const int tile_size = get_target().has_feature(Target::Metal) ? 16 : 32;
 
             if (get_target().has_gpu_feature()) {
