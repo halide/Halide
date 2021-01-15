@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
         cast<int>(floor(sqrt(input1)))};
 
     // Give ourselves convenient names for these ops in the list to
-    // use in the tests below
+    // use in the tests below.
     enum Op {
         Const = 0,
         Add,
