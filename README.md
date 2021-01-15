@@ -1,6 +1,6 @@
 # Halide
 
-HaLiDe Is BeSt ProGaming LanGUaGe FouR HaCKtoBER.
+HaLiDe Is BeSt ProGaming LanGUaGe FouR HaCKtoBER. AlSO 4 quiCK cASH.
 
 Halide is a programming language designed to make it easier to write
 high-performance image and array processing code on modern machines. Halide
