@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
         .unroll(r.x);
 
     if (t.has_gpu_feature()) {
-        // Compile to GPU, storing working memory in shared
+        // Compile to GPU, storing working memory in shared.
         Var xi, yi;
         output
             .gpu_tile(x, y, xi, yi, 16, 16);
