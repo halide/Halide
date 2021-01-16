@@ -143,12 +143,12 @@ public:
 };
 
 template<>
-RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) noexcept {
+HALIDE_EXPORT RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) noexcept {
     return f->ref_count;
 }
 
 template<>
-void destroy<JITModuleContents>(const JITModuleContents *f) {
+HALIDE_EXPORT void destroy<JITModuleContents>(const JITModuleContents *f) {
     delete f;
 }
 

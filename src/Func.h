@@ -27,7 +27,7 @@ class ParamMap;
 
 /** A class that can represent Vars or RVars. Used for reorder calls
  * which can accept a mix of either. */
-struct VarOrRVar {
+struct HALIDE_EXPORT VarOrRVar {
     VarOrRVar(const std::string &n, bool r)
         : var(n), rvar(n), is_rvar(r) {
     }
@@ -67,7 +67,7 @@ struct StorageDim;
 }  // namespace Internal
 
 /** A single definition of a Func. May be a pure or update definition. */
-class Stage {
+class HALIDE_EXPORT Stage {
     /** Reference to the Function this stage (or definition) belongs to. */
     Internal::Function function;
     Internal::Definition definition;
@@ -469,7 +469,7 @@ class FuncTupleElementRef;
  * an update definition, or it could be a call to a function. We don't know
  * until we see how this object gets used.
  */
-class FuncRef {
+class HALIDE_EXPORT FuncRef {
     Internal::Function func;
     int implicit_placeholder_pos;
     int implicit_count;
@@ -588,7 +588,7 @@ inline Expr max(const FuncRef &a, const FuncRef &b) {
  * definition, or it could be a call to a function. We don't know
  * until we see how this object gets used.
  */
-class FuncTupleElementRef {
+class HALIDE_EXPORT FuncTupleElementRef {
     FuncRef func_ref;
     std::vector<Expr> args;  // args to the function
     int idx;                 // Index to function outputs
@@ -663,7 +663,7 @@ class IRMutator;
 
 /** Helper class for identifying purpose of an Expr passed to memoize.
  */
-class EvictionKey {
+class HALIDE_EXPORT EvictionKey {
 protected:
     Expr key;
     friend class Func;
@@ -678,7 +678,7 @@ public:
  * pipeline, and is the unit by which we schedule things. By default
  * they are aggressively inlined, so you are encouraged to make lots
  * of little functions, rather than storing things in Exprs. */
-class Func {
+class HALIDE_EXPORT Func {
 
     /** A handle on the internal halide function that this
      * represents */

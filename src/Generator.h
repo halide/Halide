@@ -350,11 +350,11 @@ inline std::string halide_type_to_enum_string(const Type &t) {
 
 // Convert a Halide Type into a string representation of its C source.
 // e.g., Int(32) -> "Halide::Int(32)"
-std::string halide_type_to_c_source(const Type &t);
+HALIDE_EXPORT std::string halide_type_to_c_source(const Type &t);
 
 // Convert a Halide Type into a string representation of its C Source.
 // e.g., Int(32) -> "int32_t"
-std::string halide_type_to_c_type(const Type &t);
+HALIDE_EXPORT std::string halide_type_to_c_type(const Type &t);
 
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files(); it can be trivially wrapped by a "real" main() to produce a

@@ -16,7 +16,7 @@
 namespace Halide {
 
 /** A struct representing a target machine and os to generate code for. */
-struct Target {
+struct HALIDE_EXPORT Target {
     /** The operating system used by the target. Determines which
      * system calls to generate.
      * Corresponds to os_name_map in Target.cpp. */
@@ -307,23 +307,23 @@ private:
 };
 
 /** Return the target corresponding to the host machine. */
-Target get_host_target();
+HALIDE_EXPORT Target get_host_target();
 
 /** Return the target that Halide will use. If HL_TARGET is set it
  * uses that. Otherwise calls \ref get_host_target */
-Target get_target_from_environment();
+HALIDE_EXPORT Target get_target_from_environment();
 
 /** Return the target that Halide will use for jit-compilation. If
  * HL_JIT_TARGET is set it uses that. Otherwise calls \ref
  * get_host_target. Throws an error if the architecture, bit width,
  * and OS of the target do not match the host target, so this is only
  * useful for controlling the feature set. */
-Target get_jit_target_from_environment();
+HALIDE_EXPORT Target get_jit_target_from_environment();
 
 /** Get the Target feature corresponding to a DeviceAPI. For device
  * apis that do not correspond to any single target feature, returns
  * Target::FeatureEnd */
-Target::Feature target_feature_for_device_api(DeviceAPI api);
+HALIDE_EXPORT Target::Feature target_feature_for_device_api(DeviceAPI api);
 
 namespace Internal {
 HALIDE_EXPORT_FOR_TEST void target_test();

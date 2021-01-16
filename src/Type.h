@@ -38,7 +38,7 @@
  * Although this is in the global namespace, it should be considered "Halide Internal"
  * and subject to change; code outside Halide should avoid referencing it.
  */
-struct halide_cplusplus_type_name {
+struct HALIDE_EXPORT halide_cplusplus_type_name {
     /// An enum to indicate whether a C++ type is non-composite, a struct, class, or union
     enum CPPTypeType {
         Simple,       ///< "int"
@@ -80,7 +80,7 @@ struct halide_cplusplus_type_name {
  * Although this is in the global namespace, it should be considered "Halide Internal"
  * and subject to change; code outside Halide should avoid referencing it.
  */
-struct halide_handle_cplusplus_type {
+struct HALIDE_EXPORT halide_handle_cplusplus_type {
     halide_cplusplus_type_name inner_name;
     std::vector<std::string> namespaces;
     std::vector<halide_cplusplus_type_name> enclosing_types;
@@ -134,7 +134,7 @@ struct halide_handle_cplusplus_type {
  * directly (use the HALIDE_DECLARE_EXTERN_xxx macros instead).
  */
 template<typename T>
-struct halide_c_type_to_name {
+struct HALIDE_EXPORT halide_c_type_to_name {
     static constexpr bool known_type = false;
     static halide_cplusplus_type_name name() {
         return {halide_cplusplus_type_name::Simple, "void"};
@@ -243,7 +243,7 @@ template<typename T>
  * and subject to change; code outside Halide should avoid referencing it directly.
  */
 template<typename T>
-struct halide_handle_traits {
+struct HALIDE_EXPORT halide_handle_traits {
     // This trait must return a pointer to a global structure. I.e. it should never be freed.
     // A return value of nullptr here means "void *".
     HALIDE_ALWAYS_INLINE static const halide_handle_cplusplus_type *type_info() {
@@ -266,7 +266,7 @@ struct Expr;
  * be vectors of the same (by setting the 'lanes' field to something
  * larger than one). Front-end code shouldn't use vector
  * types. Instead vectorize a function. */
-struct Type {
+struct HALIDE_EXPORT Type {
 private:
     halide_type_t type;
 
@@ -519,7 +519,7 @@ inline Type type_of() {
 }
 
 /** Halide type to a C++ type */
-std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true);
+HALIDE_EXPORT std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true);
 
 }  // namespace Halide
 

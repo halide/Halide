@@ -108,7 +108,7 @@ DstType reinterpret_bits(const SrcType &src) {
 /** Make a unique name for an object based on the name of the stack
  * variable passed in. If introspection isn't working or there are no
  * debug symbols, just uses unique_name with the given prefix. */
-std::string make_entity_name(void *stack_ptr, const std::string &type, char prefix);
+HALIDE_EXPORT std::string make_entity_name(void *stack_ptr, const std::string &type, char prefix);
 
 /** Get value of an environment variable. Returns its value
  * is defined in the environment. If the var is not defined, an empty string

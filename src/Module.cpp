@@ -336,12 +336,12 @@ struct ModuleContents {
 };
 
 template<>
-RefCount &ref_count<ModuleContents>(const ModuleContents *t) noexcept {
+HALIDE_EXPORT RefCount &ref_count<ModuleContents>(const ModuleContents *t) noexcept {
     return t->ref_count;
 }
 
 template<>
-void destroy<ModuleContents>(const ModuleContents *t) {
+HALIDE_EXPORT void destroy<ModuleContents>(const ModuleContents *t) {
     delete t;
 }
 

@@ -138,12 +138,12 @@ struct PipelineContents {
 
 namespace Internal {
 template<>
-RefCount &ref_count<PipelineContents>(const PipelineContents *p) noexcept {
+HALIDE_EXPORT RefCount &ref_count<PipelineContents>(const PipelineContents *p) noexcept {
     return p->ref_count;
 }
 
 template<>
-void destroy<PipelineContents>(const PipelineContents *p) {
+HALIDE_EXPORT void destroy<PipelineContents>(const PipelineContents *p) {
     delete p;
 }
 }  // namespace Internal

@@ -16,7 +16,7 @@ namespace Halide {
  * occur. It can be used in the left-hand-side of a function
  * definition, or as an Expr. As an Expr, it always has type
  * Int(32). */
-class Var {
+class HALIDE_EXPORT Var {
     /* The expression representing the Var. Guaranteed to be an
      * Internal::Variable of type Int(32). Created once on
      * construction of the Var to avoid making a fresh Expr every time

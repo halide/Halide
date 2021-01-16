@@ -35,10 +35,10 @@ namespace Halide {
  * scheduled innermost within g.
  */
 //@{
-Expr sum(Expr, const std::string &s = "sum");
-Expr product(Expr, const std::string &s = "product");
-Expr maximum(Expr, const std::string &s = "maximum");
-Expr minimum(Expr, const std::string &s = "minimum");
+HALIDE_EXPORT Expr sum(Expr, const std::string &s = "sum");
+HALIDE_EXPORT Expr product(Expr, const std::string &s = "product");
+HALIDE_EXPORT Expr maximum(Expr, const std::string &s = "maximum");
+HALIDE_EXPORT Expr minimum(Expr, const std::string &s = "minimum");
 //@}
 
 /** Variants of the inline reduction in which the RDom is stated
@@ -51,10 +51,10 @@ Expr minimum(Expr, const std::string &s = "minimum");
  \endcode
 */
 // @{
-Expr sum(const RDom &, Expr, const std::string &s = "sum");
-Expr product(const RDom &, Expr, const std::string &s = "product");
-Expr maximum(const RDom &, Expr, const std::string &s = "maximum");
-Expr minimum(const RDom &, Expr, const std::string &s = "minimum");
+HALIDE_EXPORT Expr sum(const RDom &, Expr, const std::string &s = "sum");
+HALIDE_EXPORT Expr product(const RDom &, Expr, const std::string &s = "product");
+HALIDE_EXPORT Expr maximum(const RDom &, Expr, const std::string &s = "maximum");
+HALIDE_EXPORT Expr minimum(const RDom &, Expr, const std::string &s = "minimum");
 // @}
 
 /** Returns an Expr or Tuple representing the coordinates of the point
@@ -62,10 +62,10 @@ Expr minimum(const RDom &, Expr, const std::string &s = "minimum");
  * expression must refer to some RDom. Also returns the extreme value
  * of the expression as the last element of the tuple. */
 // @{
-Tuple argmax(Expr, const std::string &s = "argmax");
-Tuple argmin(Expr, const std::string &s = "argmin");
-Tuple argmax(const RDom &, Expr, const std::string &s = "argmax");
-Tuple argmin(const RDom &, Expr, const std::string &s = "argmin");
+HALIDE_EXPORT Tuple argmax(Expr, const std::string &s = "argmax");
+HALIDE_EXPORT Tuple argmin(Expr, const std::string &s = "argmin");
+HALIDE_EXPORT Tuple argmax(const RDom &, Expr, const std::string &s = "argmax");
+HALIDE_EXPORT Tuple argmin(const RDom &, Expr, const std::string &s = "argmin");
 // @}
 
 }  // namespace Halide

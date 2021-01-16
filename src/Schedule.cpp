@@ -42,12 +42,12 @@ struct LoopLevelContents {
 };
 
 template<>
-RefCount &ref_count<LoopLevelContents>(const LoopLevelContents *p) noexcept {
+HALIDE_EXPORT RefCount &ref_count<LoopLevelContents>(const LoopLevelContents *p) noexcept {
     return p->ref_count;
 }
 
 template<>
-void destroy<LoopLevelContents>(const LoopLevelContents *p) {
+HALIDE_EXPORT void destroy<LoopLevelContents>(const LoopLevelContents *p) {
     delete p;
 }
 
@@ -259,12 +259,12 @@ struct FuncScheduleContents {
 };
 
 template<>
-RefCount &ref_count<FuncScheduleContents>(const FuncScheduleContents *p) noexcept {
+HALIDE_EXPORT RefCount &ref_count<FuncScheduleContents>(const FuncScheduleContents *p) noexcept {
     return p->ref_count;
 }
 
 template<>
-void destroy<FuncScheduleContents>(const FuncScheduleContents *p) {
+HALIDE_EXPORT void destroy<FuncScheduleContents>(const FuncScheduleContents *p) {
     delete p;
 }
 
@@ -312,12 +312,12 @@ struct StageScheduleContents {
 };
 
 template<>
-RefCount &ref_count<StageScheduleContents>(const StageScheduleContents *p) noexcept {
+HALIDE_EXPORT RefCount &ref_count<StageScheduleContents>(const StageScheduleContents *p) noexcept {
     return p->ref_count;
 }
 
 template<>
-void destroy<StageScheduleContents>(const StageScheduleContents *p) {
+HALIDE_EXPORT void destroy<StageScheduleContents>(const StageScheduleContents *p) {
     delete p;
 }
 

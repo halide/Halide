@@ -26,7 +26,7 @@ class OutputImageParam;
  * RDom, and use RDom::operator[] to get at the variables. For
  * single-dimensional reduction domains, you can just cast a
  * single-dimensional RDom to an RVar. */
-class RVar {
+class HALIDE_EXPORT RVar {
     std::string _name;
     Internal::ReductionDomain _domain;
     int _index = -1;
@@ -190,7 +190,7 @@ public:
  * of the sum in y. This not only results in sum_x walking along the
  * rows, it also improves the locality of the entire pipeline.
  */
-class RDom {
+class HALIDE_EXPORT RDom {
     Internal::ReductionDomain dom;
 
     void init_vars(const std::string &name);
@@ -339,10 +339,10 @@ public:
 };
 
 /** Emit an RVar in a human-readable form */
-std::ostream &operator<<(std::ostream &stream, const RVar &);
+HALIDE_EXPORT std::ostream &operator<<(std::ostream &stream, const RVar &);
 
 /** Emit an RDom in a human-readable form. */
-std::ostream &operator<<(std::ostream &stream, const RDom &);
+HALIDE_EXPORT std::ostream &operator<<(std::ostream &stream, const RDom &);
 }  // namespace Halide
 
 #endif

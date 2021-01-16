@@ -112,7 +112,7 @@ struct IRNode {
 };
 
 template<>
-inline RefCount &ref_count<IRNode>(const IRNode *t) noexcept {
+inline HALIDE_EXPORT RefCount &ref_count<IRNode>(const IRNode *t) noexcept {
     return t->ref_count;
 }
 
@@ -213,7 +213,7 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
 };
 
 /** Integer constants */
-struct IntImm : public ExprNode<IntImm> {
+struct HALIDE_EXPORT IntImm : public ExprNode<IntImm> {
     int64_t value;
 
     static const IntImm *make(Type t, int64_t value);
@@ -222,7 +222,7 @@ struct IntImm : public ExprNode<IntImm> {
 };
 
 /** Unsigned integer constants */
-struct UIntImm : public ExprNode<UIntImm> {
+struct HALIDE_EXPORT UIntImm : public ExprNode<UIntImm> {
     uint64_t value;
 
     static const UIntImm *make(Type t, uint64_t value);
@@ -231,7 +231,7 @@ struct UIntImm : public ExprNode<UIntImm> {
 };
 
 /** Floating point constants */
-struct FloatImm : public ExprNode<FloatImm> {
+struct HALIDE_EXPORT FloatImm : public ExprNode<FloatImm> {
     double value;
 
     static const FloatImm *make(Type t, double value);
@@ -240,7 +240,7 @@ struct FloatImm : public ExprNode<FloatImm> {
 };
 
 /** String constants */
-struct StringImm : public ExprNode<StringImm> {
+struct HALIDE_EXPORT StringImm : public ExprNode<StringImm> {
     std::string value;
 
     static const StringImm *make(const std::string &val);
@@ -253,7 +253,7 @@ struct StringImm : public ExprNode<StringImm> {
 /** A fragment of Halide syntax. It's implemented as reference-counted
  * handle to a concrete expression node, but it's immutable, so you
  * can treat it as a value type. */
-struct Expr : public Internal::IRHandle {
+struct HALIDE_EXPORT Expr : public Internal::IRHandle {
     /** Make an undefined expression */
     HALIDE_ALWAYS_INLINE
     Expr() = default;
@@ -324,7 +324,7 @@ struct Expr : public Internal::IRHandle {
 
 /** This lets you use an Expr as a key in a map of the form
  * map<Expr, Foo, ExprCompare> */
-struct ExprCompare {
+struct HALIDE_EXPORT ExprCompare {
     bool operator()(const Expr &a, const Expr &b) const {
         return a.get() < b.get();
     }
@@ -332,7 +332,7 @@ struct ExprCompare {
 
 /** A single-dimensional span. Includes all numbers between min and
  * (min + extent - 1). */
-struct Range {
+struct HALIDE_EXPORT Range {
     Expr min, extent;
 
     Range() = default;

@@ -16,7 +16,7 @@ namespace Halide {
 namespace Internal {
 
 /** A class representing a reference count to be used with IntrusivePtr */
-class RefCount {
+class HALIDE_EXPORT RefCount {
     std::atomic<int> count;
 
 public:
@@ -45,14 +45,15 @@ public:
  * define something like this in MyClass.cpp (assuming MyClass has
  * a field: mutable RefCount ref_count):
  *
- * template<> RefCount &ref_count<MyClass>(const MyClass *c) noexcept {return c->ref_count;}
+ * template<> HALIDE_EXPORT RefCount &ref_count<MyClass>(const MyClass *c) noexcept {return c->ref_count;}
  * template<> void destroy<MyClass>(const MyClass *c) {delete c;}
  */
 // @{
 template<typename T>
-RefCount &ref_count(const T *t) noexcept;
+HALIDE_EXPORT HALIDE_EXPORT RefCount &ref_count(const T *t) noexcept;
+
 template<typename T>
-void destroy(const T *t);
+HALIDE_EXPORT void destroy(const T *t);
 // @}
 
 /** Intrusive shared pointers have a reference count (a
@@ -65,7 +66,7 @@ void destroy(const T *t);
  * is a useful property.
  */
 template<typename T>
-struct IntrusivePtr {
+struct HALIDE_EXPORT IntrusivePtr {
 private:
     void incref(T *p) {
         if (p) {

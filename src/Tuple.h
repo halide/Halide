@@ -15,7 +15,7 @@ class FuncRef;
 
 /** Create a small array of Exprs for defining and calling functions
  * with multiple outputs. */
-class Tuple {
+class HALIDE_EXPORT Tuple {
 private:
     std::vector<Expr> exprs;
 

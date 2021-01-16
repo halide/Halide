@@ -62,8 +62,8 @@ HALIDE_EXPORT_FOR_TEST std::string get_source_location();
 // the code below. It tests if this functionality works for the given
 // compilation unit, and disables it if not.
 HALIDE_EXPORT_FOR_TEST void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string &)),
-                           bool (*test_a)(const void *, const std::string &),
-                           void (*calib)());
+                                                  bool (*test_a)(const void *, const std::string &),
+                                                  void (*calib)());
 }  // namespace Introspection
 
 }  // namespace Internal

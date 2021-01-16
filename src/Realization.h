@@ -18,7 +18,7 @@ class Buffer;
 
 /** A Realization is a vector of references to existing Buffer objects.
  *  A pipeline with multiple outputs realize to a Realization.  */
-class Realization {
+class HALIDE_EXPORT Realization {
 private:
     std::vector<Buffer<void>> images;
 

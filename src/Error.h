@@ -13,27 +13,27 @@ namespace Halide {
 bool exceptions_enabled();
 
 /** A base class for Halide errors. */
-struct Error : public std::runtime_error {
+struct HALIDE_EXPORT Error : public std::runtime_error {
     // Give each class a non-inlined constructor so that the type
     // doesn't get separately instantiated in each compilation unit.
     Error(const std::string &msg);
 };
 
 /** An error that occurs while running a JIT-compiled Halide pipeline. */
-struct RuntimeError : public Error {
+struct HALIDE_EXPORT RuntimeError : public Error {
     RuntimeError(const std::string &msg);
 };
 
 /** An error that occurs while compiling a Halide pipeline that Halide
  * attributes to a user error. */
-struct CompileError : public Error {
+struct HALIDE_EXPORT CompileError : public Error {
     CompileError(const std::string &msg);
 };
 
 /** An error that occurs while compiling a Halide pipeline that Halide
  * attributes to an internal compiler bug, or to an invalid use of
  * Halide's internals. */
-struct InternalError : public Error {
+struct HALIDE_EXPORT InternalError : public Error {
     InternalError(const std::string &msg);
 };
 
@@ -44,7 +44,7 @@ struct InternalError : public Error {
  * (Implementations of CompileTimeErrorReporter::warning() may return but
  * may also abort(), exit(), etc.)
  */
-class CompileTimeErrorReporter {
+class HALIDE_EXPORT CompileTimeErrorReporter {
 public:
     virtual ~CompileTimeErrorReporter() = default;
     virtual void warning(const char *msg) = 0;
@@ -58,11 +58,11 @@ public:
  * it is up to the caller to ensure that this is the case (and to do any
  * cleanup necessary).
  */
-void set_custom_compile_time_error_reporter(CompileTimeErrorReporter *error_reporter);
+HALIDE_EXPORT void set_custom_compile_time_error_reporter(CompileTimeErrorReporter *error_reporter);
 
 namespace Internal {
 
-struct ErrorReport {
+struct HALIDE_EXPORT ErrorReport {
     enum {
         User = 0x0001,
         Warning = 0x0002,

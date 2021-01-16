@@ -368,72 +368,72 @@ inline Expr cast(Expr a) {
 }
 
 /** Cast an expression to a new type. */
-Expr cast(Type t, Expr a);
+HALIDE_EXPORT Expr cast(Type t, Expr a);
 
 /** Return the sum of two expressions, doing any necessary type
  * coercion using \ref Internal::match_types */
-Expr operator+(Expr a, Expr b);
+HALIDE_EXPORT Expr operator+(Expr a, Expr b);
 
 /** Add an expression and a constant integer. Coerces the type of the
  * integer to match the type of the expression. Errors if the integer
  * cannot be represented in the type of the expression. */
 // @{
-Expr operator+(Expr a, int b);
+HALIDE_EXPORT Expr operator+(Expr a, int b);
 
 /** Add a constant integer and an expression. Coerces the type of the
  * integer to match the type of the expression. Errors if the integer
  * cannot be represented in the type of the expression. */
-Expr operator+(int a, Expr b);
+HALIDE_EXPORT Expr operator+(int a, Expr b);
 
 /** Modify the first expression to be the sum of two expressions,
  * without changing its type. This casts the second argument to match
  * the type of the first. */
-Expr &operator+=(Expr &a, Expr b);
+HALIDE_EXPORT Expr &operator+=(Expr &a, Expr b);
 
 /** Return the difference of two expressions, doing any necessary type
  * coercion using \ref Internal::match_types */
-Expr operator-(Expr a, Expr b);
+HALIDE_EXPORT Expr operator-(Expr a, Expr b);
 
 /** Subtracts a constant integer from an expression. Coerces the type of the
  * integer to match the type of the expression. Errors if the integer
  * cannot be represented in the type of the expression. */
-Expr operator-(Expr a, int b);
+HALIDE_EXPORT Expr operator-(Expr a, int b);
 
 /** Subtracts an expression from a constant integer. Coerces the type
  * of the integer to match the type of the expression. Errors if the
  * integer cannot be represented in the type of the expression. */
-Expr operator-(int a, Expr b);
+HALIDE_EXPORT Expr operator-(int a, Expr b);
 
 /** Return the negative of the argument. Does no type casting, so more
  * formally: return that number which when added to the original,
  * yields zero of the same type. For unsigned integers the negative is
  * still an unsigned integer. E.g. in UInt(8), the negative of 56 is
  * 200, because 56 + 200 == 0 */
-Expr operator-(Expr a);
+HALIDE_EXPORT Expr operator-(Expr a);
 
 /** Modify the first expression to be the difference of two expressions,
  * without changing its type. This casts the second argument to match
  * the type of the first. */
-Expr &operator-=(Expr &a, Expr b);
+HALIDE_EXPORT Expr &operator-=(Expr &a, Expr b);
 
 /** Return the product of two expressions, doing any necessary type
  * coercion using \ref Internal::match_types */
-Expr operator*(Expr a, Expr b);
+HALIDE_EXPORT Expr operator*(Expr a, Expr b);
 
 /** Multiply an expression and a constant integer. Coerces the type of the
  * integer to match the type of the expression. Errors if the integer
  * cannot be represented in the type of the expression. */
-Expr operator*(Expr a, int b);
+HALIDE_EXPORT Expr operator*(Expr a, int b);
 
 /** Multiply a constant integer and an expression. Coerces the type of
  * the integer to match the type of the expression. Errors if the
  * integer cannot be represented in the type of the expression. */
-Expr operator*(int a, Expr b);
+HALIDE_EXPORT Expr operator*(int a, Expr b);
 
 /** Modify the first expression to be the product of two expressions,
  * without changing its type. This casts the second argument to match
  * the type of the first. */
-Expr &operator*=(Expr &a, Expr b);
+HALIDE_EXPORT Expr &operator*=(Expr &a, Expr b);
 
 /** Return the ratio of two expressions, doing any necessary type
  * coercion using \ref Internal::match_types. Note that integer
@@ -455,24 +455,24 @@ Expr &operator*=(Expr &a, Expr b);
  * because scheduling directives can expand the domain of computation
  * of a Func, potentially introducing new zero-division.
  */
-Expr operator/(Expr a, Expr b);
+HALIDE_EXPORT Expr operator/(Expr a, Expr b);
 
 /** Modify the first expression to be the ratio of two expressions,
  * without changing its type. This casts the second argument to match
  * the type of the first. Note that signed integer division in Halide
  * rounds towards minus infinity, unlike C, which rounds towards
  * zero. */
-Expr &operator/=(Expr &a, Expr b);
+HALIDE_EXPORT Expr &operator/=(Expr &a, Expr b);
 
 /** Divides an expression by a constant integer. Coerces the type
  * of the integer to match the type of the expression. Errors if the
  * integer cannot be represented in the type of the expression. */
-Expr operator/(Expr a, int b);
+HALIDE_EXPORT Expr operator/(Expr a, int b);
 
 /** Divides a constant integer by an expression. Coerces the type
  * of the integer to match the type of the expression. Errors if the
  * integer cannot be represented in the type of the expression. */
-Expr operator/(int a, Expr b);
+HALIDE_EXPORT Expr operator/(int a, Expr b);
 
 /** Return the first argument reduced modulo the second, doing any
  * necessary type coercion using \ref Internal::match_types. There are
@@ -484,162 +484,162 @@ Expr operator/(int a, Expr b);
  * always zero or one. Second, mod by zero evaluates to zero (unlike
  * in C, where it faults). This makes modulo, like division, a
  * side-effect-free operation. */
-Expr operator%(Expr a, Expr b);
+HALIDE_EXPORT Expr operator%(Expr a, Expr b);
 
 /** Mods an expression by a constant integer. Coerces the type
  * of the integer to match the type of the expression. Errors if the
  * integer cannot be represented in the type of the expression. */
-Expr operator%(Expr a, int b);
+HALIDE_EXPORT Expr operator%(Expr a, int b);
 
 /** Mods a constant integer by an expression. Coerces the type
  * of the integer to match the type of the expression. Errors if the
  * integer cannot be represented in the type of the expression. */
-Expr operator%(int a, Expr b);
+HALIDE_EXPORT Expr operator%(int a, Expr b);
 
 /** Return a boolean expression that tests whether the first argument
  * is greater than the second, after doing any necessary type coercion
  * using \ref Internal::match_types */
-Expr operator>(Expr a, Expr b);
+HALIDE_EXPORT Expr operator>(Expr a, Expr b);
 
 /** Return a boolean expression that tests whether an expression is
  * greater than a constant integer. Coerces the integer to the type of
  * the expression. Errors if the integer is not representable in that
  * type. */
-Expr operator>(Expr a, int b);
+HALIDE_EXPORT Expr operator>(Expr a, int b);
 
 /** Return a boolean expression that tests whether a constant integer is
  * greater than an expression. Coerces the integer to the type of
  * the expression. Errors if the integer is not representable in that
  * type. */
-Expr operator>(int a, Expr b);
+HALIDE_EXPORT Expr operator>(int a, Expr b);
 
 /** Return a boolean expression that tests whether the first argument
  * is less than the second, after doing any necessary type coercion
  * using \ref Internal::match_types */
-Expr operator<(Expr a, Expr b);
+HALIDE_EXPORT Expr operator<(Expr a, Expr b);
 
 /** Return a boolean expression that tests whether an expression is
  * less than a constant integer. Coerces the integer to the type of
  * the expression. Errors if the integer is not representable in that
  * type. */
-Expr operator<(Expr a, int b);
+HALIDE_EXPORT Expr operator<(Expr a, int b);
 
 /** Return a boolean expression that tests whether a constant integer is
  * less than an expression. Coerces the integer to the type of
  * the expression. Errors if the integer is not representable in that
  * type. */
-Expr operator<(int a, Expr b);
+HALIDE_EXPORT Expr operator<(int a, Expr b);
 
 /** Return a boolean expression that tests whether the first argument
  * is less than or equal to the second, after doing any necessary type
  * coercion using \ref Internal::match_types */
-Expr operator<=(Expr a, Expr b);
+HALIDE_EXPORT Expr operator<=(Expr a, Expr b);
 
 /** Return a boolean expression that tests whether an expression is
  * less than or equal to a constant integer. Coerces the integer to
  * the type of the expression. Errors if the integer is not
  * representable in that type. */
-Expr operator<=(Expr a, int b);
+HALIDE_EXPORT Expr operator<=(Expr a, int b);
 
 /** Return a boolean expression that tests whether a constant integer
  * is less than or equal to an expression. Coerces the integer to the
  * type of the expression. Errors if the integer is not representable
  * in that type. */
-Expr operator<=(int a, Expr b);
+HALIDE_EXPORT Expr operator<=(int a, Expr b);
 
 /** Return a boolean expression that tests whether the first argument
  * is greater than or equal to the second, after doing any necessary
  * type coercion using \ref Internal::match_types */
-Expr operator>=(Expr a, Expr b);
+HALIDE_EXPORT Expr operator>=(Expr a, Expr b);
 
 /** Return a boolean expression that tests whether an expression is
  * greater than or equal to a constant integer. Coerces the integer to
  * the type of the expression. Errors if the integer is not
  * representable in that type. */
-Expr operator>=(const Expr &a, int b);
+HALIDE_EXPORT Expr operator>=(const Expr &a, int b);
 
 /** Return a boolean expression that tests whether a constant integer
  * is greater than or equal to an expression. Coerces the integer to the
  * type of the expression. Errors if the integer is not representable
  * in that type. */
-Expr operator>=(int a, const Expr &b);
+HALIDE_EXPORT Expr operator>=(int a, const Expr &b);
 
 /** Return a boolean expression that tests whether the first argument
  * is equal to the second, after doing any necessary type coercion
  * using \ref Internal::match_types */
-Expr operator==(Expr a, Expr b);
+HALIDE_EXPORT Expr operator==(Expr a, Expr b);
 
 /** Return a boolean expression that tests whether an expression is
  * equal to a constant integer. Coerces the integer to the type of the
  * expression. Errors if the integer is not representable in that
  * type. */
-Expr operator==(Expr a, int b);
+HALIDE_EXPORT Expr operator==(Expr a, int b);
 
 /** Return a boolean expression that tests whether a constant integer
  * is equal to an expression. Coerces the integer to the type of the
  * expression. Errors if the integer is not representable in that
  * type. */
-Expr operator==(int a, Expr b);
+HALIDE_EXPORT Expr operator==(int a, Expr b);
 
 /** Return a boolean expression that tests whether the first argument
  * is not equal to the second, after doing any necessary type coercion
  * using \ref Internal::match_types */
-Expr operator!=(Expr a, Expr b);
+HALIDE_EXPORT Expr operator!=(Expr a, Expr b);
 
 /** Return a boolean expression that tests whether an expression is
  * not equal to a constant integer. Coerces the integer to the type of
  * the expression. Errors if the integer is not representable in that
  * type. */
-Expr operator!=(Expr a, int b);
+HALIDE_EXPORT Expr operator!=(Expr a, int b);
 
 /** Return a boolean expression that tests whether a constant integer
  * is not equal to an expression. Coerces the integer to the type of
  * the expression. Errors if the integer is not representable in that
  * type. */
-Expr operator!=(int a, Expr b);
+HALIDE_EXPORT Expr operator!=(int a, Expr b);
 
 /** Returns the logical and of the two arguments */
-Expr operator&&(Expr a, Expr b);
+HALIDE_EXPORT Expr operator&&(Expr a, Expr b);
 
 /** Logical and of an Expr and a bool. Either returns the Expr or an
  * Expr representing false, depending on the bool. */
 // @{
-Expr operator&&(Expr a, bool b);
-Expr operator&&(bool a, Expr b);
+HALIDE_EXPORT Expr operator&&(Expr a, bool b);
+HALIDE_EXPORT Expr operator&&(bool a, Expr b);
 // @}
 
 /** Returns the logical or of the two arguments */
-Expr operator||(Expr a, Expr b);
+HALIDE_EXPORT Expr operator||(Expr a, Expr b);
 
 /** Logical or of an Expr and a bool. Either returns the Expr or an
  * Expr representing true, depending on the bool. */
 // @{
-Expr operator||(Expr a, bool b);
-Expr operator||(bool a, Expr b);
+HALIDE_EXPORT Expr operator||(Expr a, bool b);
+HALIDE_EXPORT Expr operator||(bool a, Expr b);
 // @}
 
 /** Returns the logical not the argument */
-Expr operator!(Expr a);
+HALIDE_EXPORT Expr operator!(Expr a);
 
 /** Returns an expression representing the greater of the two
  * arguments, after doing any necessary type coercion using
  * \ref Internal::match_types. Vectorizes cleanly on most platforms
  * (with the exception of integer types on x86 without SSE4). */
-Expr max(Expr a, Expr b);
+HALIDE_EXPORT Expr max(Expr a, Expr b);
 
 /** Returns an expression representing the greater of an expression
  * and a constant integer.  The integer is coerced to the type of the
  * expression. Errors if the integer is not representable as that
  * type. Vectorizes cleanly on most platforms (with the exception of
  * integer types on x86 without SSE4). */
-Expr max(Expr a, int b);
+HALIDE_EXPORT Expr max(Expr a, int b);
 
 /** Returns an expression representing the greater of a constant
  * integer and an expression. The integer is coerced to the type of
  * the expression. Errors if the integer is not representable as that
  * type. Vectorizes cleanly on most platforms (with the exception of
  * integer types on x86 without SSE4). */
-Expr max(int a, Expr b);
+HALIDE_EXPORT Expr max(int a, Expr b);
 
 inline Expr max(float a, Expr b) {
     return max(Expr(a), std::move(b));
@@ -769,26 +769,26 @@ inline Expr operator!=(float a, Expr b) {
 
 /** Clamps an expression to lie within the given bounds. The bounds
  * are type-cast to match the expression. Vectorizes as well as min/max. */
-Expr clamp(Expr a, const Expr &min_val, const Expr &max_val);
+HALIDE_EXPORT Expr clamp(Expr a, const Expr &min_val, const Expr &max_val);
 
 /** Returns the absolute value of a signed integer or floating-point
  * expression. Vectorizes cleanly. Unlike in C, abs of a signed
  * integer returns an unsigned integer of the same bit width. This
  * means that abs of the most negative integer doesn't overflow. */
-Expr abs(Expr a);
+HALIDE_EXPORT Expr abs(Expr a);
 
 /** Return the absolute difference between two values. Vectorizes
  * cleanly. Returns an unsigned value of the same bit width. There are
  * various ways to write this yourself, but they contain numerous
  * gotchas and don't always compile to good code, so use this
  * instead. */
-Expr absd(Expr a, Expr b);
+HALIDE_EXPORT Expr absd(Expr a, Expr b);
 
 /** Returns an expression similar to the ternary operator in C, except
  * that it always evaluates all arguments. If the first argument is
  * true, then return the second, else return the third. Typically
  * vectorizes cleanly, but benefits from SSE41 or newer on x86. */
-Expr select(Expr condition, Expr true_value, Expr false_value);
+HALIDE_EXPORT Expr select(Expr condition, Expr true_value, Expr false_value);
 
 /** A multi-way variant of select similar to a switch statement in C,
  * which can accept multiple conditions and values in pairs. Evaluates
@@ -803,8 +803,8 @@ inline Expr select(Expr c0, Expr v0, Expr c1, Expr v1, Args &&... args) {
 /** Equivalent of ternary select(), but taking/returning tuples. If the condition is
  * a Tuple, it must match the size of the true and false Tuples. */
 // @{
-Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value);
-Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &false_value);
+HALIDE_EXPORT Tuple tuple_select(const Tuple &condition, const Tuple &true_value, const Tuple &false_value);
+HALIDE_EXPORT Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &false_value);
 // @}
 
 /** Equivalent of multiway select(), but taking/returning tuples. If the condition is
@@ -831,85 +831,85 @@ inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const
  * img(x, y, c) = mux(c, {100, 50, 25});
  */
 // @{
-Expr mux(const Expr &id, const std::initializer_list<Expr> &values);
-Expr mux(const Expr &id, const std::vector<Expr> &values);
-Expr mux(const Expr &id, const Tuple &values);
+HALIDE_EXPORT Expr mux(const Expr &id, const std::initializer_list<Expr> &values);
+HALIDE_EXPORT Expr mux(const Expr &id, const std::vector<Expr> &values);
+HALIDE_EXPORT Expr mux(const Expr &id, const Tuple &values);
 // @}
 
 /** Return the sine of a floating-point expression. If the argument is
  * not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
-Expr sin(Expr x);
+HALIDE_EXPORT Expr sin(Expr x);
 
 /** Return the arcsine of a floating-point expression. If the argument
  * is not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
-Expr asin(Expr x);
+HALIDE_EXPORT Expr asin(Expr x);
 
 /** Return the cosine of a floating-point expression. If the argument
  * is not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
-Expr cos(Expr x);
+HALIDE_EXPORT Expr cos(Expr x);
 
 /** Return the arccosine of a floating-point expression. If the
  * argument is not floating-point, it is cast to Float(32). Does not
  * vectorize well. */
-Expr acos(Expr x);
+HALIDE_EXPORT Expr acos(Expr x);
 
 /** Return the tangent of a floating-point expression. If the argument
  * is not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
-Expr tan(Expr x);
+HALIDE_EXPORT Expr tan(Expr x);
 
 /** Return the arctangent of a floating-point expression. If the
  * argument is not floating-point, it is cast to Float(32). Does not
  * vectorize well. */
-Expr atan(Expr x);
+HALIDE_EXPORT Expr atan(Expr x);
 
 /** Return the angle of a floating-point gradient. If the argument is
  * not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
-Expr atan2(Expr y, Expr x);
+HALIDE_EXPORT Expr atan2(Expr y, Expr x);
 
 /** Return the hyperbolic sine of a floating-point expression.  If the
  *  argument is not floating-point, it is cast to Float(32). Does not
  *  vectorize well. */
-Expr sinh(Expr x);
+HALIDE_EXPORT Expr sinh(Expr x);
 
 /** Return the hyperbolic arcsinhe of a floating-point expression.  If
  * the argument is not floating-point, it is cast to Float(32). Does
  * not vectorize well. */
-Expr asinh(Expr x);
+HALIDE_EXPORT Expr asinh(Expr x);
 
 /** Return the hyperbolic cosine of a floating-point expression.  If
  * the argument is not floating-point, it is cast to Float(32). Does
  * not vectorize well. */
-Expr cosh(Expr x);
+HALIDE_EXPORT Expr cosh(Expr x);
 
 /** Return the hyperbolic arccosine of a floating-point expression.
  * If the argument is not floating-point, it is cast to
  * Float(32). Does not vectorize well. */
-Expr acosh(Expr x);
+HALIDE_EXPORT Expr acosh(Expr x);
 
 /** Return the hyperbolic tangent of a floating-point expression.  If
  * the argument is not floating-point, it is cast to Float(32). Does
  * not vectorize well. */
-Expr tanh(Expr x);
+HALIDE_EXPORT Expr tanh(Expr x);
 
 /** Return the hyperbolic arctangent of a floating-point expression.
  * If the argument is not floating-point, it is cast to
  * Float(32). Does not vectorize well. */
-Expr atanh(Expr x);
+HALIDE_EXPORT Expr atanh(Expr x);
 
 /** Return the square root of a floating-point expression. If the
  * argument is not floating-point, it is cast to Float(32). Typically
  * vectorizes cleanly. */
-Expr sqrt(Expr x);
+HALIDE_EXPORT Expr sqrt(Expr x);
 
 /** Return the square root of the sum of the squares of two
  * floating-point expressions. If the argument is not floating-point,
  * it is cast to Float(32). Vectorizes cleanly. */
-Expr hypot(const Expr &x, const Expr &y);
+HALIDE_EXPORT Expr hypot(const Expr &x, const Expr &y);
 
 /** Return the exponential of a floating-point expression. If the
  * argument is not floating-point, it is cast to Float(32). For
@@ -918,7 +918,7 @@ Expr hypot(const Expr &x, const Expr &y);
  * vectorizable, does the right thing for extremely small or extremely
  * large inputs, and is accurate up to the last bit of the
  * mantissa. Vectorizes cleanly. */
-Expr exp(Expr x);
+HALIDE_EXPORT Expr exp(Expr x);
 
 /** Return the logarithm of a floating-point expression. If the
  * argument is not floating-point, it is cast to Float(32). For
@@ -927,7 +927,7 @@ Expr exp(Expr x);
  * vectorizable, does the right thing for inputs <= 0 (returns -inf or
  * nan), and is accurate up to the last bit of the
  * mantissa. Vectorizes cleanly. */
-Expr log(Expr x);
+HALIDE_EXPORT Expr log(Expr x);
 
 /** Return one floating point expression raised to the power of
  * another. The type of the result is given by the type of the first
@@ -935,100 +935,100 @@ Expr log(Expr x);
  * cast to Float(32). For Float(32), cleanly vectorizable, and
  * accurate up to the last few bits of the mantissa. Gets worse when
  * approaching overflow. Vectorizes cleanly. */
-Expr pow(Expr x, Expr y);
+HALIDE_EXPORT Expr pow(Expr x, Expr y);
 
 /** Evaluate the error function erf. Only available for
  * Float(32). Accurate up to the last three bits of the
  * mantissa. Vectorizes cleanly. */
-Expr erf(const Expr &x);
+HALIDE_EXPORT Expr erf(const Expr &x);
 
 /** Fast vectorizable approximation to some trigonometric functions for Float(32).
  * Absolute approximation error is less than 1e-5. */
 // @{
-Expr fast_sin(const Expr &x);
-Expr fast_cos(const Expr &x);
+HALIDE_EXPORT Expr fast_sin(const Expr &x);
+HALIDE_EXPORT Expr fast_cos(const Expr &x);
 // @}
 
 /** Fast approximate cleanly vectorizable log for Float(32). Returns
  * nonsense for x <= 0.0f. Accurate up to the last 5 bits of the
  * mantissa. Vectorizes cleanly. */
-Expr fast_log(const Expr &x);
+HALIDE_EXPORT Expr fast_log(const Expr &x);
 
 /** Fast approximate cleanly vectorizable exp for Float(32). Returns
  * nonsense for inputs that would overflow or underflow. Typically
  * accurate up to the last 5 bits of the mantissa. Gets worse when
  * approaching overflow. Vectorizes cleanly. */
-Expr fast_exp(const Expr &x);
+HALIDE_EXPORT Expr fast_exp(const Expr &x);
 
 /** Fast approximate cleanly vectorizable pow for Float(32). Returns
  * nonsense for x < 0.0f. Accurate up to the last 5 bits of the
  * mantissa for typical exponents. Gets worse when approaching
  * overflow. Vectorizes cleanly. */
-Expr fast_pow(Expr x, Expr y);
+HALIDE_EXPORT Expr fast_pow(Expr x, Expr y);
 
 /** Fast approximate inverse for Float(32). Corresponds to the rcpps
  * instruction on x86, and the vrecpe instruction on ARM. Vectorizes
  * cleanly. Note that this can produce slightly different results
  * across different implementations of the same architecture (e.g. AMD vs Intel),
  * even when strict_float is enabled. */
-Expr fast_inverse(Expr x);
+HALIDE_EXPORT Expr fast_inverse(Expr x);
 
 /** Fast approximate inverse square root for Float(32). Corresponds to
  * the rsqrtps instruction on x86, and the vrsqrte instruction on
  * ARM. Vectorizes cleanly. Note that this can produce slightly different results
  * across different implementations of the same architecture (e.g. AMD vs Intel),
  * even when strict_float is enabled. */
-Expr fast_inverse_sqrt(Expr x);
+HALIDE_EXPORT Expr fast_inverse_sqrt(Expr x);
 
 /** Return the greatest whole number less than or equal to a
  * floating-point expression. If the argument is not floating-point,
  * it is cast to Float(32). The return value is still in floating
  * point, despite being a whole number. Vectorizes cleanly. */
-Expr floor(Expr x);
+HALIDE_EXPORT Expr floor(Expr x);
 
 /** Return the least whole number greater than or equal to a
  * floating-point expression. If the argument is not floating-point,
  * it is cast to Float(32). The return value is still in floating
  * point, despite being a whole number. Vectorizes cleanly. */
-Expr ceil(Expr x);
+HALIDE_EXPORT Expr ceil(Expr x);
 
 /** Return the whole number closest to a floating-point expression. If the
  * argument is not floating-point, it is cast to Float(32). The return value
  * is still in floating point, despite being a whole number. On ties, we
  * follow IEEE754 conventions and round to the nearest even number. Vectorizes
  * cleanly. */
-Expr round(Expr x);
+HALIDE_EXPORT Expr round(Expr x);
 
 /** Return the integer part of a floating-point expression. If the argument is
  * not floating-point, it is cast to Float(32). The return value is still in
  * floating point, despite being a whole number. Vectorizes cleanly. */
-Expr trunc(Expr x);
+HALIDE_EXPORT Expr trunc(Expr x);
 
 /** Returns true if the argument is a Not a Number (NaN). Requires a
   * floating point argument.  Vectorizes cleanly.
   * Note that the Expr passed in will be evaluated in strict_float mode,
   * regardless of whether strict_float mode is enabled in the current Target. */
-Expr is_nan(Expr x);
+HALIDE_EXPORT Expr is_nan(Expr x);
 
 /** Returns true if the argument is Inf or -Inf. Requires a
   * floating point argument.  Vectorizes cleanly.
   * Note that the Expr passed in will be evaluated in strict_float mode,
   * regardless of whether strict_float mode is enabled in the current Target. */
-Expr is_inf(Expr x);
+HALIDE_EXPORT Expr is_inf(Expr x);
 
 /** Returns true if the argument is a finite value (ie, neither NaN nor Inf).
   * Requires a floating point argument.  Vectorizes cleanly.
   * Note that the Expr passed in will be evaluated in strict_float mode,
   * regardless of whether strict_float mode is enabled in the current Target. */
-Expr is_finite(Expr x);
+HALIDE_EXPORT Expr is_finite(Expr x);
 
 /** Return the fractional part of a floating-point expression. If the argument
  *  is not floating-point, it is cast to Float(32). The return value has the
  *  same sign as the original expression. Vectorizes cleanly. */
-Expr fract(const Expr &x);
+HALIDE_EXPORT Expr fract(const Expr &x);
 
 /** Reinterpret the bits of one value as another type. */
-Expr reinterpret(Type t, Expr e);
+HALIDE_EXPORT Expr reinterpret(Type t, Expr e);
 
 template<typename T>
 Expr reinterpret(Expr e) {
@@ -1039,43 +1039,43 @@ Expr reinterpret(Expr e) {
  * same type).  The result type is the wider of the two expressions.
  * Only integral types are allowed and both expressions must be signed
  * or both must be unsigned. */
-Expr operator&(Expr x, Expr y);
+HALIDE_EXPORT Expr operator&(Expr x, Expr y);
 
 /** Return the bitwise and of an expression and an integer. The type
  * of the result is the type of the expression argument. */
 // @{
-Expr operator&(Expr x, int y);
-Expr operator&(int x, Expr y);
+HALIDE_EXPORT Expr operator&(Expr x, int y);
+HALIDE_EXPORT Expr operator&(int x, Expr y);
 // @}
 
 /** Return the bitwise or of two expressions (which need not have the
  * same type).  The result type is the wider of the two expressions.
  * Only integral types are allowed and both expressions must be signed
  * or both must be unsigned. */
-Expr operator|(Expr x, Expr y);
+HALIDE_EXPORT Expr operator|(Expr x, Expr y);
 
 /** Return the bitwise or of an expression and an integer. The type of
  * the result is the type of the expression argument. */
 // @{
-Expr operator|(Expr x, int y);
-Expr operator|(int x, Expr y);
+HALIDE_EXPORT Expr operator|(Expr x, int y);
+HALIDE_EXPORT Expr operator|(int x, Expr y);
 // @}
 
 /** Return the bitwise xor of two expressions (which need not have the
  * same type).  The result type is the wider of the two expressions.
  * Only integral types are allowed and both expressions must be signed
  * or both must be unsigned. */
-Expr operator^(Expr x, Expr y);
+HALIDE_EXPORT Expr operator^(Expr x, Expr y);
 
 /** Return the bitwise xor of an expression and an integer. The type
  * of the result is the type of the expression argument. */
 // @{
-Expr operator^(Expr x, int y);
-Expr operator^(int x, Expr y);
+HALIDE_EXPORT Expr operator^(Expr x, int y);
+HALIDE_EXPORT Expr operator^(int x, Expr y);
 // @}
 
 /** Return the bitwise not of an expression. */
-Expr operator~(Expr x);
+HALIDE_EXPORT Expr operator~(Expr x);
 
 /** Shift the bits of an integer value left. This is actually less
  * efficient than multiplying by 2^n, because Halide's optimization
@@ -1085,8 +1085,8 @@ Expr operator~(Expr x);
  * type of the result is equal to the type of the first argument. Both
  * arguments must have integer type. */
 // @{
-Expr operator<<(Expr x, Expr y);
-Expr operator<<(Expr x, int y);
+HALIDE_EXPORT Expr operator<<(Expr x, Expr y);
+HALIDE_EXPORT Expr operator<<(Expr x, int y);
 // @}
 
 /** Shift the bits of an integer value right. Does sign extension for
@@ -1098,8 +1098,8 @@ Expr operator<<(Expr x, int y);
  * the type of the first argument. Both arguments must have integer
  * type. */
 // @{
-Expr operator>>(Expr x, Expr y);
-Expr operator>>(Expr x, int y);
+HALIDE_EXPORT Expr operator>>(Expr x, Expr y);
+HALIDE_EXPORT Expr operator>>(Expr x, int y);
 // @}
 
 /** Linear interpolate between the two values according to a weight.
@@ -1168,32 +1168,32 @@ Expr operator>>(Expr x, int y);
  *
  * \endcode
  * */
-Expr lerp(Expr zero_val, Expr one_val, Expr weight);
+HALIDE_EXPORT Expr lerp(Expr zero_val, Expr one_val, Expr weight);
 
 /** Count the number of set bits in an expression. */
-Expr popcount(Expr x);
+HALIDE_EXPORT Expr popcount(Expr x);
 
 /** Count the number of leading zero bits in an expression. If the expression is
  * zero, the result is the number of bits in the type. */
-Expr count_leading_zeros(Expr x);
+HALIDE_EXPORT Expr count_leading_zeros(Expr x);
 
 /** Count the number of trailing zero bits in an expression. If the expression is
  * zero, the result is the number of bits in the type. */
-Expr count_trailing_zeros(Expr x);
+HALIDE_EXPORT Expr count_trailing_zeros(Expr x);
 
 /** Divide two integers, rounding towards zero. This is the typical
  * behavior of most hardware architectures, which differs from
  * Halide's division operator, which is Euclidean (rounds towards
  * -infinity). Will throw a runtime error if y is zero, or if y is -1
  * and x is the minimum signed integer. */
-Expr div_round_to_zero(Expr x, Expr y);
+HALIDE_EXPORT Expr div_round_to_zero(Expr x, Expr y);
 
 /** Compute the remainder of dividing two integers, when division is
  * rounding toward zero. This is the typical behavior of most hardware
  * architectures, which differs from Halide's mod operator, which is
  * Euclidean (produces the remainder when division rounds towards
  * -infinity). Will throw a runtime error if y is zero. */
-Expr mod_round_to_zero(Expr x, Expr y);
+HALIDE_EXPORT Expr mod_round_to_zero(Expr x, Expr y);
 
 /** Return a random variable representing a uniformly distributed
  * float in the half-open interval [0.0f, 1.0f). For random numbers of
@@ -1224,21 +1224,21 @@ Expr mod_round_to_zero(Expr x, Expr y);
  *
  * This function vectorizes cleanly.
  */
-Expr random_float(Expr seed = Expr());
+HALIDE_EXPORT Expr random_float(Expr seed = Expr());
 
 /** Return a random variable representing a uniformly distributed
  * unsigned 32-bit integer. See \ref random_float. Vectorizes cleanly. */
-Expr random_uint(Expr seed = Expr());
+HALIDE_EXPORT Expr random_uint(Expr seed = Expr());
 
 /** Return a random variable representing a uniformly distributed
  * 32-bit integer. See \ref random_float. Vectorizes cleanly. */
-Expr random_int(Expr seed = Expr());
+HALIDE_EXPORT Expr random_int(Expr seed = Expr());
 
 /** Create an Expr that prints out its value whenever it is
  * evaluated. It also prints out everything else in the arguments
  * list, separated by spaces. This can include string literals. */
 //@{
-Expr print(const std::vector<Expr> &values);
+HALIDE_EXPORT Expr print(const std::vector<Expr> &values);
 
 template<typename... Args>
 inline HALIDE_NO_USER_CODE_INLINE Expr print(Expr a, Args &&... args) {
@@ -1284,7 +1284,7 @@ inline HALIDE_NO_USER_CODE_INLINE Expr print_when(Expr condition, Expr a, Args &
  * will allow the optimizer to assume positive, nonzero values for y.
  */
 // @{
-Expr require(Expr condition, const std::vector<Expr> &values);
+HALIDE_EXPORT Expr require(Expr condition, const std::vector<Expr> &values);
 
 template<typename... Args>
 inline HALIDE_NO_USER_CODE_INLINE Expr require(Expr condition, Expr value, Args &&... args) {
@@ -1312,7 +1312,7 @@ inline HALIDE_NO_USER_CODE_INLINE Expr require(Expr condition, Expr value, Args 
  * Use this feature with great caution, as you can use it to load from
  * uninitialized memory.
  */
-Expr undef(Type t);
+HALIDE_EXPORT Expr undef(Type t);
 
 template<typename T>
 inline Expr undef() {
@@ -1366,11 +1366,11 @@ inline HALIDE_NO_USER_CODE_INLINE Expr memoize_tag(Expr result, Args &&... args)
  * use the boundary condition helpers in the BoundaryConditions
  * namespace instead.
  */
-Expr likely(Expr e);
+HALIDE_EXPORT Expr likely(Expr e);
 
 /** Equivalent to likely, but only triggers a loop partitioning if
  * found in an innermost loop. */
-Expr likely_if_innermost(Expr e);
+HALIDE_EXPORT Expr likely_if_innermost(Expr e);
 
 /** Cast an expression to the halide type corresponding to the C++
  * type T. As part of the cast, clamp to the minimum and maximum
@@ -1382,14 +1382,14 @@ Expr saturating_cast(Expr e) {
 
 /** Cast an expression to a new type, clamping to the minimum and
  * maximum values of the result type. */
-Expr saturating_cast(Type t, Expr e);
+HALIDE_EXPORT Expr saturating_cast(Type t, Expr e);
 
 /** Makes a best effort attempt to preserve IEEE floating-point
  * semantics in evaluating an expression. May not be implemented for
  * all backends. (E.g. it is difficult to do this for C++ code
  * generation as it depends on the compiler flags used to compile the
  * generated code. */
-Expr strict_float(Expr e);
+HALIDE_EXPORT Expr strict_float(Expr e);
 
 /** Create an Expr that that promises another Expr is clamped but do
  * not generate code to check the assertion or modify the value. No
@@ -1409,7 +1409,7 @@ Expr strict_float(Expr e);
  * Unsafe promises can be checked by turning on
  * Target::CheckUnsafePromises. This is intended for debugging only.
  */
-Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max);
+HALIDE_EXPORT Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max);
 
 namespace Internal {
 /**
@@ -1495,8 +1495,8 @@ f(select(p, scatter(3, 5, 5), scatter(1, 2, 3))) = f(select(p, gather(5, 3, 3), 
 * to 5 twice.
 */
 //@{
-Expr scatter(const std::vector<Expr> &args);
-Expr gather(const std::vector<Expr> &args);
+HALIDE_EXPORT Expr scatter(const std::vector<Expr> &args);
+HALIDE_EXPORT Expr gather(const std::vector<Expr> &args);
 
 template<typename... Args>
 Expr scatter(const Expr &e, Args &&... args) {

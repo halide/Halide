@@ -1540,12 +1540,12 @@ int WasmModuleContents::run(const void **args) {
 }
 
 template<>
-RefCount &ref_count<WasmModuleContents>(const WasmModuleContents *p) noexcept {
+HALIDE_EXPORT RefCount &ref_count<WasmModuleContents>(const WasmModuleContents *p) noexcept {
     return p->ref_count;
 }
 
 template<>
-void destroy<WasmModuleContents>(const WasmModuleContents *p) {
+HALIDE_EXPORT void destroy<WasmModuleContents>(const WasmModuleContents *p) {
     delete p;
 }
 

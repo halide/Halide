@@ -166,12 +166,12 @@ FunctionContents *FunctionPtr::get() const {
 }
 
 template<>
-RefCount &ref_count<FunctionGroup>(const FunctionGroup *f) noexcept {
+HALIDE_EXPORT RefCount &ref_count<FunctionGroup>(const FunctionGroup *f) noexcept {
     return f->ref_count;
 }
 
 template<>
-void destroy<FunctionGroup>(const FunctionGroup *f) {
+HALIDE_EXPORT void destroy<FunctionGroup>(const FunctionGroup *f) {
     delete f;
 }
 

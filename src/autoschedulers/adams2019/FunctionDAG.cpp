@@ -6,12 +6,12 @@ namespace Halide {
 namespace Internal {
 
 template<>
-RefCount &ref_count<Autoscheduler::BoundContents>(const Autoscheduler::BoundContents *t) noexcept {
+HALIDE_EXPORT RefCount &ref_count<Autoscheduler::BoundContents>(const Autoscheduler::BoundContents *t) noexcept {
     return t->ref_count;
 }
 
 template<>
-void destroy<Autoscheduler::BoundContents>(const Autoscheduler::BoundContents *t) {
+HALIDE_EXPORT void destroy<Autoscheduler::BoundContents>(const Autoscheduler::BoundContents *t) {
     // Release it back into the memory pool to be reused
     t->layout->release(t);
 }

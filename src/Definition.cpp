@@ -74,12 +74,12 @@ struct DefinitionContents {
 };
 
 template<>
-RefCount &ref_count<DefinitionContents>(const DefinitionContents *d) noexcept {
+HALIDE_EXPORT RefCount &ref_count<DefinitionContents>(const DefinitionContents *d) noexcept {
     return d->ref_count;
 }
 
 template<>
-void destroy<DefinitionContents>(const DefinitionContents *d) {
+HALIDE_EXPORT void destroy<DefinitionContents>(const DefinitionContents *d) {
     delete d;
 }
 
