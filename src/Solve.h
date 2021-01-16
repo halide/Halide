@@ -47,7 +47,7 @@ Interval solve_for_inner_interval(const Expr &c, const std::string &variable);
  * 'and' over the vector lanes, and return a scalar result. */
 Expr and_condition_over_domain(const Expr &c, const Scope<Interval> &varying);
 
-void solve_test();
+HALIDE_EXPORT_FOR_TEST void solve_test();
 
 }  // namespace Internal
 }  // namespace Halide

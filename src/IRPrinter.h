@@ -114,7 +114,7 @@ public:
      * trailing punctuation. */
     void print_list(const std::vector<Expr> &exprs);
 
-    static void test();
+    HALIDE_EXPORT_FOR_TEST static void test();
 
 protected:
     Indentation get_indent() const {

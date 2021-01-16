@@ -283,7 +283,7 @@ class Buffer;
 
 namespace Internal {
 
-void generator_test();
+HALIDE_EXPORT_FOR_TEST void generator_test();
 
 /**
  * ValueTracker is an internal utility class that attempts to track and flag certain

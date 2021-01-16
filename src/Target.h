@@ -326,8 +326,7 @@ Target get_jit_target_from_environment();
 Target::Feature target_feature_for_device_api(DeviceAPI api);
 
 namespace Internal {
-
-void target_test();
+HALIDE_EXPORT_FOR_TEST void target_test();
 }
 
 }  // namespace Halide

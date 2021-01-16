@@ -111,7 +111,7 @@ struct AssociativeOp {
 AssociativeOp prove_associativity(
     const std::string &f, std::vector<Expr> args, std::vector<Expr> exprs);
 
-void associativity_test();
+HALIDE_EXPORT_FOR_TEST void associativity_test();
 
 }  // namespace Internal
 }  // namespace Halide

@@ -50,7 +50,7 @@ bool expr_match(const Expr &pattern, const Expr &expr, std::vector<Expr> &result
  */
 bool expr_match(const Expr &pattern, const Expr &expr, std::map<std::string, Expr> &result);
 
-void expr_match_test();
+HALIDE_EXPORT_FOR_TEST void expr_match_test();
 
 /** An alternative template-metaprogramming approach to expression
  * matching. Potentially more efficient. We lift the expression

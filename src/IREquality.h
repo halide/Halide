@@ -116,7 +116,7 @@ bool graph_equal(const Expr &a, const Expr &b);
 bool graph_equal(const Stmt &a, const Stmt &b);
 // @}
 
-void ir_equality_test();
+HALIDE_EXPORT_FOR_TEST void ir_equality_test();
 
 }  // namespace Internal
 }  // namespace Halide

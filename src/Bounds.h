@@ -171,7 +171,7 @@ Box box_touched(Stmt s, const std::string &fn,
 FuncValueBounds compute_function_value_bounds(const std::vector<std::string> &order,
                                               const std::map<std::string, Function> &env);
 
-void bounds_test();
+HALIDE_EXPORT_FOR_TEST void bounds_test();
 
 }  // namespace Internal
 }  // namespace Halide

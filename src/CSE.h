@@ -29,7 +29,7 @@ Expr common_subexpression_elimination(const Expr &, bool lift_all = false);
  * statement. Does not introduce let statements. */
 Stmt common_subexpression_elimination(const Stmt &, bool lift_all = false);
 
-void cse_test();
+HALIDE_EXPORT_FOR_TEST void cse_test();
 
 }  // namespace Internal
 }  // namespace Halide

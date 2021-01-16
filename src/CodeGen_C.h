@@ -51,7 +51,7 @@ public:
         return target;
     }
 
-    static void test();
+    HALIDE_EXPORT_FOR_TEST static void test();
 
 protected:
     enum class IntegerSuffixStyle {

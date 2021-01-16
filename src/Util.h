@@ -22,20 +22,10 @@
 
 #include "runtime/HalideRuntime.h"
 
-#ifdef Halide_STATIC_DEFINE
-#define HALIDE_EXPORT
-#else
-#if defined(_MSC_VER)
-// Halide_EXPORTS is quietly defined by CMake when building a shared library
-#ifdef Halide_EXPORTS
-#define HALIDE_EXPORT __declspec(dllexport)
-#else
-#define HALIDE_EXPORT __declspec(dllimport)
-#endif
-#else
-#define HALIDE_EXPORT __attribute__((visibility("default")))
-#endif
-#endif
+// Currently, identical to HALIDE_EXPORT, but semantically means
+// "we only need to export this for Halide tests".
+// TODO: find a way to avoid exporting these for non-test Halide builds.
+#define HALIDE_EXPORT_FOR_TEST HALIDE_EXPORT
 
 // If we're in user code, we don't want certain functions to be inlined.
 #if defined(COMPILING_HALIDE) || defined(BUILDING_PYTHON)

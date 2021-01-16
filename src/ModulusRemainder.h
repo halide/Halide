@@ -7,6 +7,8 @@
 
 #include <cstdint>
 
+#include "Util.h"  // for HALIDE_EXPORT_FOR_TEST
+
 namespace Halide {
 
 struct Expr;
@@ -87,7 +89,7 @@ bool reduce_expr_modulo(const Expr &e, int64_t modulus, int64_t *remainder);
 bool reduce_expr_modulo(const Expr &e, int64_t modulus, int64_t *remainder, const Scope<ModulusRemainder> &scope);
 ///@}
 
-void modulus_remainder_test();
+HALIDE_EXPORT_FOR_TEST void modulus_remainder_test();
 
 /** The greatest common divisor of two integers */
 int64_t gcd(int64_t, int64_t);

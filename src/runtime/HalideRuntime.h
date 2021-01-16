@@ -55,6 +55,21 @@ extern "C" {
 #endif
 #endif
 
+#ifdef Halide_STATIC_DEFINE
+#define HALIDE_EXPORT
+#else
+#if defined(_MSC_VER)
+// Halide_EXPORTS is quietly defined by CMake when building a shared library
+#ifdef Halide_EXPORTS
+#define HALIDE_EXPORT __declspec(dllexport)
+#else
+#define HALIDE_EXPORT __declspec(dllimport)
+#endif
+#else
+#define HALIDE_EXPORT __attribute__((visibility("default")))
+#endif
+#endif
+
 /** \file
  *
  * This file declares the routines used by Halide internally in its
@@ -427,7 +442,7 @@ typedef enum halide_type_code_t
  * field). Can also be vectors of the same (by setting the 'lanes'
  * field to something larger than one). This struct should be
  * exactly 32-bits in size. */
-struct halide_type_t {
+struct HALIDE_EXPORT halide_type_t {
     /** The basic type code: signed integer, unsigned integer, or floating point. */
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
     HALIDE_ATTRIBUTE_ALIGN(1)
@@ -502,7 +517,7 @@ enum halide_trace_event_code_t { halide_trace_load = 0,
                                  halide_trace_end_pipeline = 9,
                                  halide_trace_tag = 10 };
 
-struct halide_trace_event_t {
+struct HALIDE_EXPORT halide_trace_event_t {
     /** The name of the Func or Pipeline that this event refers to */
     const char *func;
 
@@ -598,7 +613,7 @@ extern halide_trace_t halide_set_custom_trace(halide_trace_t trace);
 // @}
 
 /** The header of a packet in a binary trace. All fields are 32-bit. */
-struct halide_trace_packet_t {
+struct HALIDE_EXPORT halide_trace_packet_t {
     /** The total size of this packet in bytes. Always a multiple of
      * four. Equivalently, the number of bytes until the next
      * packet. */
@@ -1376,7 +1391,7 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
  */
 extern int halide_default_can_use_target_features(int count, const uint64_t *features);
 
-typedef struct halide_dimension_t {
+typedef struct HALIDE_EXPORT halide_dimension_t {
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
     int32_t min = 0, extent = 0, stride = 0;
 
@@ -1418,7 +1433,7 @@ typedef enum { halide_buffer_flag_host_dirty = 1,
  * Halide code. It includes some stuff to track whether the image is
  * not actually in main memory, but instead on a device (like a
  * GPU). For a more convenient C++ wrapper, use Halide::Buffer<T>. */
-typedef struct halide_buffer_t {
+typedef struct HALIDE_EXPORT halide_buffer_t {
     /** A device-handle for e.g. GPU memory used to back this buffer. */
     uint64_t device;
 
@@ -1571,7 +1586,7 @@ extern "C" {
  * this is conceptually just a union; it's wrapped in a struct to ensure
  * that it doesn't get anonymized by LLVM.)
  */
-struct halide_scalar_value_t {
+struct HALIDE_EXPORT halide_scalar_value_t {
     union {
         bool b;
         int8_t i8;
@@ -1614,7 +1629,7 @@ enum halide_argument_kind_t {
  * Obsolete version of halide_filter_argument_t; only present in
  * code that wrote halide_filter_metadata_t version 0.
  */
-struct halide_filter_argument_t_v0 {
+struct HALIDE_EXPORT halide_filter_argument_t_v0 {
     const char *name;
     int32_t kind;
     int32_t dimensions;
@@ -1626,7 +1641,7 @@ struct halide_filter_argument_t_v0 {
  * halide_filter_argument_t is essentially a plain-C-struct equivalent to
  * Halide::Argument; most user code will never need to create one.
  */
-struct halide_filter_argument_t {
+struct HALIDE_EXPORT halide_filter_argument_t {
     const char *name;    // name of the argument; will never be null or empty.
     int32_t kind;        // actually halide_argument_kind_t
     int32_t dimensions;  // always zero for scalar arguments
@@ -1643,7 +1658,7 @@ struct halide_filter_argument_t {
     int64_t const *const *buffer_estimates;
 };
 
-struct halide_filter_metadata_t {
+struct HALIDE_EXPORT halide_filter_metadata_t {
 #ifdef __cplusplus
     static const int32_t VERSION = 1;
 #endif
@@ -1688,7 +1703,7 @@ void halide_register_argv_and_metadata(
  * alongside the pipeline. */
 
 /** Per-Func state tracked by the sampling profiler. */
-struct halide_profiler_func_stats {
+struct HALIDE_EXPORT halide_profiler_func_stats {
     /** Total time taken evaluating this Func (in nanoseconds). */
     uint64_t time;
 
@@ -1716,7 +1731,7 @@ struct halide_profiler_func_stats {
 
 /** Per-pipeline state tracked by the sampling profiler. These exist
  * in a linked list. */
-struct halide_profiler_pipeline_stats {
+struct HALIDE_EXPORT halide_profiler_pipeline_stats {
     /** Total time spent inside this pipeline (in nanoseconds) */
     uint64_t time;
 
@@ -1761,7 +1776,7 @@ struct halide_profiler_pipeline_stats {
 
 /** The global state of the profiler. */
 
-struct halide_profiler_state {
+struct HALIDE_EXPORT halide_profiler_state {
     /** Guards access to the fields below. If not locked, the sampling
      * profiler thread is free to modify things below (including
      * reordering the linked list of pipeline stats). */
