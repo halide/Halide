@@ -5,6 +5,8 @@
 #include <iostream>
 #include <string>
 
+#include "Util.h"  // for HALIDE_EXPORT_FOR_TEST
+
 /** \file
  *
  * Defines methods for introspecting in C++. Relies on DWARF debugging
@@ -20,7 +22,7 @@ namespace Introspection {
  * variable must be in a compilation unit compiled with -g to
  * work. The expected type helps distinguish between variables at the
  * same address, e.g a class instance vs its first member. */
-std::string get_variable_name(const void *, const std::string &expected_type);
+HALIDE_EXPORT_FOR_TEST std::string get_variable_name(const void *, const std::string &expected_type);
 
 /** Register an untyped heap object. Derive type information from an
  * introspectable pointer to a pointer to a global object of the same
@@ -54,12 +56,12 @@ const void *get_introspection_helper() {
 
 /** Get the source location in the call stack, skipping over calls in
  * the Halide namespace. */
-std::string get_source_location();
+HALIDE_EXPORT_FOR_TEST std::string get_source_location();
 
 // This gets called automatically by anyone who includes Halide.h by
 // the code below. It tests if this functionality works for the given
 // compilation unit, and disables it if not.
-void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string &)),
+HALIDE_EXPORT_FOR_TEST void test_compilation_unit(bool (*test)(bool (*)(const void *, const std::string &)),
                            bool (*test_a)(const void *, const std::string &),
                            void (*calib)());
 }  // namespace Introspection
@@ -139,7 +141,7 @@ static bool test(bool (*f)(const void *, const std::string &)) {
 
 // Run the tests, and calibrate for the PC offset at static initialization time.
 namespace {
-struct TestCompilationUnit {
+struct HALIDE_EXPORT_FOR_TEST TestCompilationUnit {
     TestCompilationUnit() {
         Halide::Internal::Introspection::test_compilation_unit(&test, &test_a, &offset_marker);
     }
