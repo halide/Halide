@@ -74,6 +74,8 @@ CLANG_VERSION = $(shell $(CLANG) --version)
 
 SANITIZER_FLAGS ?=
 
+VISIBILITY_HIDDEN = -fvisibility=hidden -fvisibility-inlines-hidden
+
 # TODO: this is suboptimal hackery; we should really add the relevant
 # support libs for the sanitizer(s) as weak symbols in Codegen_LLVM.
 # (Note also that, in general, most Sanitizers work most reliably with an all-Clang
@@ -221,7 +223,7 @@ CXX_FLAGS += $(WEBASSEMBLY_CXX_FLAGS)
 CXX_FLAGS += -funwind-tables
 
 # Hide everything by default.
-CXX_FLAGS += -fvisibility=hidden
+CXX_FLAGS += $(VISIBILITY_HIDDEN)
 
 print-%:
 	@echo '$*=$($*)'
@@ -925,7 +927,7 @@ endif
 
 $(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(INITIAL_MODULES)
 	@mkdir -p $(@D)
-	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) $(INSTALL_NAME_TOOL_LD_FLAGS) $(LIBHALIDE_SONAME_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
+	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) $(INSTALL_NAME_TOOL_LD_FLAGS) $(LIBHALIDE_SONAME_FLAGS) $(VISIBILITY_HIDDEN) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$(BIN_DIR)/libHalide.$(SHARED_EXT) $(BIN_DIR)/libHalide.$(SHARED_EXT)
 endif
