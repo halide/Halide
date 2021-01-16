@@ -33,7 +33,7 @@ void get_program_name(char *name, int32_t size) {
 // glibc defines the binary name for us
 extern "C" char *program_invocation_name;
 void get_program_name(char *name, int32_t size) {
-    strncpy(name, program_invocation_name, size);
+    snprintf(name, size, "%s", program_invocation_name);
 }
 #endif
 
