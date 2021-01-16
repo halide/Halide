@@ -13,8 +13,6 @@
 #include "Bounds.h"
 #include "Expr.h"
 
-#include <map>
-
 namespace Halide {
 
 struct Target;

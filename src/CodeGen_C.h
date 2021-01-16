@@ -7,14 +7,17 @@
  */
 
 #include "IRPrinter.h"
-#include "Module.h"
 #include "Scope.h"
+#include "Target.h"
 
 namespace Halide {
 
 struct Argument;
+class Module;
 
 namespace Internal {
+
+struct LoweredFunc;
 
 /** This class emits C++ code equivalent to a halide Stmt. It's
  * mostly the same as an IRPrinter, but it's wrapped in a function
@@ -35,7 +38,7 @@ public:
     /** Initialize a C code generator pointing at a particular output
      * stream (e.g. a file, or std::cout) */
     CodeGen_C(std::ostream &dest,
-              Target target,
+              const Target &target,
               OutputKind output_kind = CImplementation,
               const std::string &include_guard = "");
     ~CodeGen_C() override;

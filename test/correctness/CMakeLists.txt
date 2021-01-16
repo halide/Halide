@@ -179,6 +179,7 @@ tests(GROUPS correctness
       interleave_x.cpp
       interpreter.cpp
       interval.cpp
+      intrinsics.cpp
       introspection.cpp
       inverse.cpp
       isnan.cpp
@@ -217,6 +218,7 @@ tests(GROUPS correctness
       multipass_constraints.cpp
       multiple_outputs.cpp
       multiple_outputs_extern.cpp
+      multiple_scatter.cpp
       mux.cpp
       named_updates.cpp
       nested_shiftinwards.cpp

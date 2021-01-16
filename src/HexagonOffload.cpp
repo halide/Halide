@@ -9,6 +9,7 @@
 #include "InjectHostDevBufferCopies.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
+#include "Module.h"
 #include "Param.h"
 #include "Substitute.h"
 
