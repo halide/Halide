@@ -220,6 +220,9 @@ CXX_FLAGS += $(WEBASSEMBLY_CXX_FLAGS)
 # to propagate exceptions and causes a test failure.
 CXX_FLAGS += -funwind-tables
 
+# Hide everything by default.
+CXX_FLAGS += -fvisibility=hidden
+
 print-%:
 	@echo '$*=$($*)'
 
