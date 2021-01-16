@@ -441,7 +441,7 @@ Stmt Simplify::visit(const Block *op) {
         // inside the first one, because if it's true the
         // first one must also be true.
         Stmt then_case = mutate(Block::make(if_first->then_case, if_next));
-        Stmt else_case = mutate(if_first->else_case);
+        Stmt else_case = if_first->else_case;
         Stmt result = IfThenElse::make(if_first->condition, then_case, else_case);
         if (if_rest.defined()) {
             result = Block::make(result, if_rest);
@@ -461,7 +461,7 @@ Stmt Simplify::visit(const Block *op) {
         if (if_first->else_case.defined()) {
             else_case = Block::make(if_first->else_case, else_case);
         }
-        Stmt result = mutate(IfThenElse::make(if_first->condition, then_case, else_case));
+        Stmt result = IfThenElse::make(if_first->condition, then_case, else_case);
         if (if_rest.defined()) {
             result = Block::make(result, if_rest);
         }
