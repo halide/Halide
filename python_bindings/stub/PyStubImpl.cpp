@@ -197,7 +197,9 @@ extern "C" PyObject *_halide_pystub_impl(const char *module_name, FactoryFunc fa
                      major, minor);
         return nullptr;
     }
-    auto m = pybind11::module(module_name);
+
+    // TODO: do something meaningful with the PyModuleDef & add a doc string
+    auto m = pybind11::module_::create_extension_module(module_name, nullptr, new PyModuleDef());
     try {
         Halide::PythonBindings::install_error_handlers(m);
         Halide::PythonBindings::pystub_init(m, factory);
