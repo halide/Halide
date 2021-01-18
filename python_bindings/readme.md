@@ -45,19 +45,24 @@ with some differences where the C++ idiom is either inappropriate or impossible:
 ## Prerequisites
 
 The bindings (and demonstration applications) should work well for Python 3.4
-(or higher), on Linux and OSX platforms. Windows is not yet supported, but could
-be with CMake work. (We have dropped support for Python 2.x and will not accept
-patches to re-enable it.)
+(or higher), on Linux and OSX platforms. Windows support is experimental, and
+available through the CMake build.
 
 #### Python requirements:
 
-See requirements.txt (to be used with `pip`:
-`pip install --user requirements.txt`)
+The best way to get set up is to use a virtual environment:
+
+```console
+$ python3 -m venv venv
+$ . venv/bin/activate
+$ pip install -r requirements.txt 
+```
 
 #### C++ requirements:
 
 - Halide compiled to a distribution (e.g. `make distrib` or similar), with the
   `HALIDE_DISTRIB_PATH` env var pointing to it
+- If using CMake, simply set `-DWITH_PYTHON_BINDINGS=ON` from the main build. 
 
 ## Compilation instructions
 
