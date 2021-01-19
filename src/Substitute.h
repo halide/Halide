@@ -19,7 +19,7 @@ namespace Internal {
  * statements with the same name as the first argument, moving a piece
  * of syntax around can change its meaning, because it can cross lets
  * that redefine variable names that it includes references to. */
-Expr substitute(const std::string &name, const Expr &replacement, const Expr &expr);
+HALIDE_EXPORT_FOR_PLUGINS Expr substitute(const std::string &name, const Expr &replacement, const Expr &expr);
 
 /** Substitute variables with the given name with the replacement
  * expression within stmt. */
@@ -33,7 +33,7 @@ Stmt substitute(const std::map<std::string, Expr> &replacements, const Stmt &stm
 
 /** Substitute expressions for other expressions. */
 // @{
-Expr substitute(const Expr &find, const Expr &replacement, const Expr &expr);
+HALIDE_EXPORT_FOR_PLUGINS Expr substitute(const Expr &find, const Expr &replacement, const Expr &expr);
 Stmt substitute(const Expr &find, const Expr &replacement, const Stmt &stmt);
 // @}
 
