@@ -56,7 +56,7 @@ namespace Halide {
  * otherwise, it is assumed to be an appropriate pathname.
  *
  * Any error in loading will assert-fail. */
-void load_plugin(const std::string &lib_name);
+HALIDE_EXPORT void load_plugin(const std::string &lib_name);
 
 namespace Internal {
 

@@ -202,7 +202,7 @@ public:
 };
 
 /** Link a set of modules together into one module. */
-Module link_modules(const std::string &name, const std::vector<Module> &modules);
+HALIDE_EXPORT Module link_modules(const std::string &name, const std::vector<Module> &modules);
 
 /** Create an object file containing the Halide runtime for a given target. For
  * use with Target::NoRuntime. Standalone runtimes are only compatible with
