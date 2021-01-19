@@ -18,7 +18,7 @@
 namespace Halide {
 namespace Internal {
 
-struct Cost {
+struct HALIDE_EXPORT_FOR_PLUGINS Cost {
     // Estimate of cycles spent doing arithmetic.
     Expr arith;
     // Estimate of bytes loaded.
@@ -45,7 +45,7 @@ struct Cost {
 
 /** Auto scheduling component which is used to assign costs for computing a
  * region of a function or one of its stages. */
-struct RegionCosts {
+struct HALIDE_EXPORT_FOR_PLUGINS RegionCosts {
     /** An environment map which contains all functions in the pipeline. */
     std::map<std::string, Function> env;
     /** Realization order of functions in the pipeline. The first function to

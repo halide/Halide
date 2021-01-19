@@ -343,10 +343,9 @@ T enum_from_string(const std::map<std::string, T> &enum_map, const std::string &
     return it->second;
 }
 
-extern const std::map<std::string, Halide::Type> &get_halide_type_enum_map();
-inline std::string halide_type_to_enum_string(const Type &t) {
-    return enum_to_string(get_halide_type_enum_map(), t);
-}
+HALIDE_EXPORT const std::map<std::string, Halide::Type> &get_halide_type_enum_map();
+
+HALIDE_EXPORT std::string halide_type_to_enum_string(const Type &t);
 
 // Convert a Halide Type into a string representation of its C source.
 // e.g., Int(32) -> "Halide::Int(32)"
@@ -359,7 +358,7 @@ HALIDE_EXPORT std::string halide_type_to_c_type(const Type &t);
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files(); it can be trivially wrapped by a "real" main() to produce a
  * command-line utility for ahead-of-time filter compilation. */
-int generate_filter_main(int argc, char **argv, std::ostream &cerr);
+HALIDE_EXPORT int generate_filter_main(int argc, char **argv, std::ostream &cerr);
 
 // select_type<> is to std::conditional as switch is to if:
 // it allows a multiway compile-time type definition via the form
@@ -1304,7 +1303,7 @@ public:
     }
 };
 
-class StubOutputBufferBase {
+class HALIDE_EXPORT StubOutputBufferBase {
 protected:
     Func f;
     std::shared_ptr<GeneratorBase> generator;
@@ -3454,7 +3453,7 @@ public:
     GeneratorBase &operator=(GeneratorBase &&that) = delete;
 };
 
-class GeneratorRegistry {
+class HALIDE_EXPORT GeneratorRegistry {
 public:
     static void register_factory(const std::string &name, GeneratorFactory generator_factory);
     static void unregister_factory(const std::string &name);
@@ -3693,7 +3692,7 @@ public:
     }
 };
 
-class GeneratorStub : public NamesInterface {
+class HALIDE_EXPORT GeneratorStub : public NamesInterface {
 public:
     GeneratorStub(const GeneratorContext &context,
                   const GeneratorFactory &generator_factory);

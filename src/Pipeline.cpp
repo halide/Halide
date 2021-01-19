@@ -228,6 +228,7 @@ AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const Machine
 
 /* static */
 void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler) {
+    debug(1) << "Registering autoscheduler '" << autoscheduler_name << "'...\n";
     auto &m = get_autoscheduler_map();
     user_assert(m.find(autoscheduler_name) == m.end()) << "'" << autoscheduler_name << "' is already registered as an autoscheduler.\n";
     m[autoscheduler_name] = autoscheduler;

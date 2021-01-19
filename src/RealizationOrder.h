@@ -28,14 +28,14 @@ class Function;
  * 'fused_pairs' list in the function's schedule. Return a pair of
  * the realization order and the fused groups in that order.
  */
-HALIDE_EXPORT_FOR_TEST std::pair<std::vector<std::string>, std::vector<std::vector<std::string>>> realization_order(
+HALIDE_EXPORT_FOR_PLUGINS std::pair<std::vector<std::string>, std::vector<std::vector<std::string>>> realization_order(
     const std::vector<Function> &outputs, std::map<std::string, Function> &env);
 
 /** Given a bunch of functions that call each other, determine a
  * topological order which stays constant regardless of the schedule.
  * This ordering adheres to the producer-consumer dependencies, i.e. producer
  * will come before its consumers in that order */
-std::vector<std::string> topological_order(
+HALIDE_EXPORT_FOR_PLUGINS std::vector<std::string> topological_order(
     const std::vector<Function> &outputs, const std::map<std::string, Function> &env);
 
 }  // namespace Internal

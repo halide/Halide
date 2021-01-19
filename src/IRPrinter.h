@@ -95,7 +95,7 @@ std::ostream &operator<<(std::ostream &stream, const Indentation &);
  * readable form. Can be subclassed if you want to modify the way in
  * which it prints.
  */
-class IRPrinter : public IRVisitor {
+class HALIDE_EXPORT_FOR_TEST IRPrinter : public IRVisitor {
 public:
     /** Construct an IRPrinter pointed at a given output stream
      * (e.g. std::cout, or a std::ofstream) */

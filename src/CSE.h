@@ -23,7 +23,7 @@ namespace Internal {
  * lifted, or only those that the simplifier would not subsitute back
  * in (e.g. addition of a constant).
  */
-Expr common_subexpression_elimination(const Expr &, bool lift_all = false);
+HALIDE_EXPORT_FOR_TEST Expr common_subexpression_elimination(const Expr &, bool lift_all = false);
 
 /** Do common-subexpression-elimination on each expression in a
  * statement. Does not introduce let statements. */

@@ -408,5 +408,15 @@ void propagate_estimate_test() {
     std::cout << "Propagate estimate test passed" << std::endl;
 }
 
+void FindAllCalls::visit(const Call *call) {
+    if (call->call_type == Call::Halide || call->call_type == Call::Image) {
+        funcs_called.insert(call->name);
+        call_args.emplace_back(call->name, call->args);
+    }
+    for (size_t i = 0; i < call->args.size(); i++) {
+        call->args[i].accept(this);
+    }
+}
+
 }  // namespace Internal
 }  // namespace Halide

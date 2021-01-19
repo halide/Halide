@@ -9,6 +9,8 @@
 
 #include <string>
 
+#include "Util.h"  // for HALIDE_EXPORT_FOR_PLUGINS
+
 namespace Halide {
 namespace Internal {
 
@@ -19,9 +21,9 @@ class Definition;
  * this returns true, it's definitely safe. If this returns false, it
  * may still be safe, but Halide couldn't prove it.
  */
-bool can_parallelize_rvar(const std::string &rvar,
-                          const std::string &func,
-                          const Definition &r);
+HALIDE_EXPORT_FOR_PLUGINS bool can_parallelize_rvar(const std::string &rvar,
+                                                    const std::string &func,
+                                                    const Definition &r);
 
 }  // namespace Internal
 }  // namespace Halide

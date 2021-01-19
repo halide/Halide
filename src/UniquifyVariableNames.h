@@ -13,7 +13,7 @@ namespace Internal {
 /** Modify a statement so that every internally-defined variable name
  * is unique. This lets later passes assume syntactic equivalence is
  * semantic equivalence. */
-Stmt uniquify_variable_names(const Stmt &s);
+HALIDE_EXPORT_FOR_TEST Stmt uniquify_variable_names(const Stmt &s);
 
 HALIDE_EXPORT_FOR_TEST void uniquify_variable_names_test();
 

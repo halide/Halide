@@ -30,10 +30,10 @@ const FuncValueBounds &empty_func_value_bounds();
  * This is for tasks such as deducing the region of a buffer
  * loaded by a chunk of code.
  */
-Interval bounds_of_expr_in_scope(const Expr &expr,
-                                 const Scope<Interval> &scope,
-                                 const FuncValueBounds &func_bounds = empty_func_value_bounds(),
-                                 bool const_bound = false);
+HALIDE_EXPORT_FOR_PLUGINS Interval bounds_of_expr_in_scope(const Expr &expr,
+                                                           const Scope<Interval> &scope,
+                                                           const FuncValueBounds &func_bounds = empty_func_value_bounds(),
+                                                           bool const_bound = false);
 
 /** Given a varying expression, try to find a constant that is either:
  * An upper bound (always greater than or equal to the expression), or
@@ -91,7 +91,7 @@ struct Box {
 };
 
 /** Expand box a to encompass box b */
-void merge_boxes(Box &a, const Box &b);
+HALIDE_EXPORT_FOR_PLUGINS void merge_boxes(Box &a, const Box &b);
 
 /** Test if box a could possibly overlap box b. */
 bool boxes_overlap(const Box &a, const Box &b);
@@ -110,12 +110,12 @@ bool box_contains(const Box &a, const Box &b);
  * expression. This is useful for figuring out what regions of things
  * to evaluate. */
 // @{
-std::map<std::string, Box> boxes_required(const Expr &e,
-                                          const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                                          const FuncValueBounds &func_bounds = empty_func_value_bounds());
-std::map<std::string, Box> boxes_required(Stmt s,
-                                          const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
-                                          const FuncValueBounds &func_bounds = empty_func_value_bounds());
+HALIDE_EXPORT_FOR_PLUGINS std::map<std::string, Box> boxes_required(const Expr &e,
+                                                                    const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
+                                                                    const FuncValueBounds &func_bounds = empty_func_value_bounds());
+HALIDE_EXPORT_FOR_PLUGINS std::map<std::string, Box> boxes_required(Stmt s,
+                                                                    const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
+                                                                    const FuncValueBounds &func_bounds = empty_func_value_bounds());
 // @}
 
 /** Compute rectangular domains large enough to cover all the
@@ -168,8 +168,8 @@ Box box_touched(Stmt s, const std::string &fn,
 
 /** Compute the maximum and minimum possible value for each function
  * in an environment. */
-FuncValueBounds compute_function_value_bounds(const std::vector<std::string> &order,
-                                              const std::map<std::string, Function> &env);
+HALIDE_EXPORT_FOR_PLUGINS FuncValueBounds compute_function_value_bounds(const std::vector<std::string> &order,
+                                                                        const std::map<std::string, Function> &env);
 
 HALIDE_EXPORT_FOR_TEST void bounds_test();
 

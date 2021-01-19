@@ -23,18 +23,10 @@ const int64_t unknown = std::numeric_limits<int64_t>::min();
 
 /** Visitor for keeping track of functions that are directly called and the
  * arguments with which they are called. */
-class FindAllCalls : public IRVisitor {
+class HALIDE_EXPORT_FOR_PLUGINS FindAllCalls : public IRVisitor {
     using IRVisitor::visit;
 
-    void visit(const Call *call) override {
-        if (call->call_type == Call::Halide || call->call_type == Call::Image) {
-            funcs_called.insert(call->name);
-            call_args.emplace_back(call->name, call->args);
-        }
-        for (size_t i = 0; i < call->args.size(); i++) {
-            call->args[i].accept(this);
-        }
-    }
+    void visit(const Call *call) override;
 
 public:
     std::set<std::string> funcs_called;
@@ -47,52 +39,52 @@ int string_to_int(const std::string &s);
 /** Substitute every variable in an Expr or a Stmt with its estimate
  * if specified. */
 //@{
-Expr substitute_var_estimates(Expr e);
-Stmt substitute_var_estimates(Stmt s);
+HALIDE_EXPORT_FOR_PLUGINS Expr substitute_var_estimates(Expr e);
+HALIDE_EXPORT_FOR_PLUGINS Stmt substitute_var_estimates(Stmt s);
 //@}
 
 /** Return the size of an interval. Return an undefined expr if the interval
  * is unbounded. */
-Expr get_extent(const Interval &i);
+HALIDE_EXPORT_FOR_PLUGINS Expr get_extent(const Interval &i);
 
 /** Return the size of an n-d box. */
-Expr box_size(const Box &b);
+HALIDE_EXPORT_FOR_PLUGINS Expr box_size(const Box &b);
 
 /** Helper function to print the bounds of a region. */
-void disp_regions(const std::map<std::string, Box> &regions);
+HALIDE_EXPORT_FOR_PLUGINS void disp_regions(const std::map<std::string, Box> &regions);
 
 /** Return the corresponding definition of a function given the stage. This
  * will throw an assertion if the function is an extern function (Extern Func
  * does not have definition). */
-Definition get_stage_definition(const Function &f, int stage_num);
+HALIDE_EXPORT_FOR_PLUGINS Definition get_stage_definition(const Function &f, int stage_num);
 
 /** Return the corresponding loop dimensions of a function given the stage.
  * For extern Func, this will return a list of size 1 containing the
  * dummy __outermost loop dimension. */
-std::vector<Dim> &get_stage_dims(const Function &f, int stage_num);
+HALIDE_EXPORT_FOR_PLUGINS std::vector<Dim> &get_stage_dims(const Function &f, int stage_num);
 
 /** Add partial load costs to the corresponding function in the result costs. */
-void combine_load_costs(std::map<std::string, Expr> &result,
-                        const std::map<std::string, Expr> &partial);
+HALIDE_EXPORT_FOR_PLUGINS void combine_load_costs(std::map<std::string, Expr> &result,
+                                                  const std::map<std::string, Expr> &partial);
 
 /** Return the required bounds of an intermediate stage (f, stage_num) of
  * function 'f' given the bounds of the pure dimensions. */
-DimBounds get_stage_bounds(const Function &f, int stage_num, const DimBounds &pure_bounds);
+HALIDE_EXPORT_FOR_PLUGINS DimBounds get_stage_bounds(const Function &f, int stage_num, const DimBounds &pure_bounds);
 
 /** Return the required bounds for all the stages of the function 'f'. Each entry
  * in the returned vector corresponds to a stage. */
-std::vector<DimBounds> get_stage_bounds(const Function &f, const DimBounds &pure_bounds);
+HALIDE_EXPORT_FOR_PLUGINS std::vector<DimBounds> get_stage_bounds(const Function &f, const DimBounds &pure_bounds);
 
 /** Recursively inline all the functions in the set 'inlines' into the
  * expression 'e' and return the resulting expression. If 'order' is
  * passed, inlining will be done in the reverse order of function realization
  * to avoid extra inlining works. */
-Expr perform_inline(Expr e, const std::map<std::string, Function> &env,
-                    const std::set<std::string> &inlines = std::set<std::string>(),
-                    const std::vector<std::string> &order = std::vector<std::string>());
+HALIDE_EXPORT_FOR_PLUGINS Expr perform_inline(Expr e, const std::map<std::string, Function> &env,
+                                              const std::set<std::string> &inlines = std::set<std::string>(),
+                                              const std::vector<std::string> &order = std::vector<std::string>());
 
 /** Return all functions that are directly called by a function stage (f, stage). */
-std::set<std::string> get_parents(Function f, int stage);
+HALIDE_EXPORT_FOR_PLUGINS std::set<std::string> get_parents(Function f, int stage);
 
 /** Return value of element within a map. This will assert if the element is not
  * in the map. */
@@ -114,21 +106,21 @@ V &get_element(std::map<K, V> &m, const K &key) {
 
 /** If the cost of computing a Func is about the same as calling the Func,
  * inline the Func. Return true of any of the Funcs is inlined. */
-bool inline_all_trivial_functions(const std::vector<Function> &outputs,
-                                  const std::vector<std::string> &order,
-                                  const std::map<std::string, Function> &env);
+HALIDE_EXPORT_FOR_PLUGINS bool inline_all_trivial_functions(const std::vector<Function> &outputs,
+                                                            const std::vector<std::string> &order,
+                                                            const std::map<std::string, Function> &env);
 
 /** Determine if a Func (order[index]) is only consumed by another single Func
  * in element-wise manner. If it is, return the name of the consumer Func;
  * otherwise, return an empty string. */
-std::string is_func_called_element_wise(const std::vector<std::string> &order, size_t index,
-                                        const std::map<std::string, Function> &env);
+HALIDE_EXPORT_FOR_PLUGINS std::string is_func_called_element_wise(const std::vector<std::string> &order, size_t index,
+                                                                  const std::map<std::string, Function> &env);
 
 /** Inline a Func if its values are only consumed by another single Func in
  * element-wise manner. */
-bool inline_all_element_wise_functions(const std::vector<Function> &outputs,
-                                       const std::vector<std::string> &order,
-                                       const std::map<std::string, Function> &env);
+HALIDE_EXPORT_FOR_PLUGINS bool inline_all_element_wise_functions(const std::vector<Function> &outputs,
+                                                                 const std::vector<std::string> &order,
+                                                                 const std::map<std::string, Function> &env);
 
 HALIDE_EXPORT_FOR_TEST void propagate_estimate_test();
 

@@ -722,6 +722,10 @@ const std::map<std::string, Type> &get_halide_type_enum_map() {
     return halide_type_enum_map;
 }
 
+std::string halide_type_to_enum_string(const Type &t) {
+    return enum_to_string(get_halide_type_enum_map(), t);
+}
+
 std::string halide_type_to_c_source(const Type &t) {
     static const std::map<halide_type_code_t, std::string> m = {
         {halide_type_int, "Int"},

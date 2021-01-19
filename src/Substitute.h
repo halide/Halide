@@ -27,7 +27,7 @@ Stmt substitute(const std::string &name, const Expr &replacement, const Stmt &st
 
 /** Substitute variables with names in the map. */
 // @{
-Expr substitute(const std::map<std::string, Expr> &replacements, const Expr &expr);
+HALIDE_EXPORT_FOR_TEST Expr substitute(const std::map<std::string, Expr> &replacements, const Expr &expr);
 Stmt substitute(const std::map<std::string, Expr> &replacements, const Stmt &stmt);
 // @}
 

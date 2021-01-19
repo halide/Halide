@@ -103,10 +103,10 @@ void check_representable(Type t, int64_t val);
 Expr make_bool(bool val, int lanes = 1);
 
 /** Construct the representation of zero in the given type */
-Expr make_zero(Type t);
+HALIDE_EXPORT_FOR_PLUGINS Expr make_zero(Type t);
 
 /** Construct the representation of one in the given type */
-Expr make_one(Type t);
+HALIDE_EXPORT_FOR_PLUGINS Expr make_one(Type t);
 
 /** Construct the representation of two in the given type */
 Expr make_two(Type t);
@@ -122,7 +122,7 @@ HALIDE_EXPORT_FOR_TEST Expr const_false(int lanes = 1);
 /** Attempt to cast an expression to a smaller type while provably not
  * losing information. If it can't be done, return an undefined
  * Expr. */
-Expr lossless_cast(Type t, Expr e);
+HALIDE_EXPORT_FOR_TEST Expr lossless_cast(Type t, Expr e);
 
 /** Attempt to negate x without introducing new IR and without overflow.
  * If it can't be done, return an undefined Expr. */
@@ -306,6 +306,9 @@ inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &arg
 }
 
 Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args);
+
+// TODO: part of the de facto API for memoize_tag (not just for tests)
+HALIDE_EXPORT Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
 
 /** Compute widen(a) + widen(b). The result is always signed. */
 HALIDE_EXPORT_FOR_TEST Expr widening_add(Expr a, Expr b);
@@ -1231,7 +1234,7 @@ inline HALIDE_NO_USER_CODE_INLINE Expr print(Expr a, Args &&... args) {
 /** Create an Expr that prints whenever it is evaluated, provided that
  * the condition is true. */
 // @{
-Expr print_when(Expr condition, const std::vector<Expr> &values);
+HALIDE_EXPORT Expr print_when(Expr condition, const std::vector<Expr> &values);
 
 template<typename... Args>
 inline HALIDE_NO_USER_CODE_INLINE Expr print_when(Expr condition, Expr a, Args &&... args) {
@@ -1327,12 +1330,10 @@ inline Expr undef() {
  * on the digest. */
 // @{
 
-HALIDE_EXPORT Expr memoize_tag(Expr result, const std::vector<Expr> &cache_key_values);
-
 template<typename... Args>
 inline HALIDE_NO_USER_CODE_INLINE Expr memoize_tag(Expr result, Args &&... args) {
     std::vector<Expr> collected_args{std::forward<Args>(args)...};
-    return memoize_tag(std::move(result), collected_args);
+    return memoize_tag_helper(std::move(result), collected_args);
 }
 // @}
 

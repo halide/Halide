@@ -27,10 +27,10 @@ HALIDE_EXPORT_FOR_TEST std::string get_variable_name(const void *, const std::st
 /** Register an untyped heap object. Derive type information from an
  * introspectable pointer to a pointer to a global object of the same
  * type. Not thread-safe. */
-void register_heap_object(const void *obj, size_t size, const void *helper);
+HALIDE_EXPORT_FOR_TEST void register_heap_object(const void *obj, size_t size, const void *helper);
 
 /** Deregister a heap object. Not thread-safe. */
-void deregister_heap_object(const void *obj, size_t size);
+HALIDE_EXPORT_FOR_TEST void deregister_heap_object(const void *obj, size_t size);
 
 /** Dump the contents of the stack frame of the calling function. Used
  * for debugging stack frame sizes inside the compiler. Returns

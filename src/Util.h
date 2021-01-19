@@ -27,6 +27,11 @@
 // TODO: find a way to avoid exporting these for non-test Halide builds.
 #define HALIDE_EXPORT_FOR_TEST HALIDE_EXPORT
 
+// Currently, identical to HALIDE_EXPORT, but semantically means
+// "we only need to export this for Halide plugins, e.g. autoschedulers".
+// TODO: re-examine these to see if they should just be public API.
+#define HALIDE_EXPORT_FOR_PLUGINS HALIDE_EXPORT
+
 // If we're in user code, we don't want certain functions to be inlined.
 #if defined(COMPILING_HALIDE) || defined(BUILDING_PYTHON)
 #define HALIDE_NO_USER_CODE_INLINE
@@ -151,7 +156,7 @@ bool ends_with(const std::string &str, const std::string &suffix);
 HALIDE_EXPORT_FOR_TEST std::string replace_all(const std::string &str, const std::string &find, const std::string &replace);
 
 /** Split the source string using 'delim' as the divider. */
-std::vector<std::string> split_string(const std::string &source, const std::string &delim);
+HALIDE_EXPORT_FOR_TEST std::vector<std::string> split_string(const std::string &source, const std::string &delim);
 
 /** Perform a left fold of a vector. Returns a default-constructed
  * vector element if the vector is empty. Similar to std::accumulate

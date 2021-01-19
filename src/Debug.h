@@ -9,6 +9,8 @@
 #include <iostream>
 #include <string>
 
+#include "Util.h"  // for HALIDE_EXPORT_FOR_PLUGINS
+
 namespace Halide {
 
 struct Expr;
@@ -62,7 +64,7 @@ public:
         return *this;
     }
 
-    static int debug_level();
+    HALIDE_EXPORT_FOR_PLUGINS static int debug_level();
 };
 
 }  // namespace Internal

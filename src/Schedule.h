@@ -503,7 +503,7 @@ struct FunctionContents;
  * applied to all stages of the Function. Right now this interface is
  * basically a struct, offering mutable access to its innards.
  * In the future it may become more encapsulated. */
-class FuncSchedule {
+class HALIDE_EXPORT_FOR_PLUGINS FuncSchedule {
     IntrusivePtr<FuncScheduleContents> contents;
 
 public:

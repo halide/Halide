@@ -80,7 +80,7 @@ protected:
 /** A base class for algorithms that walk recursively over the IR
  * without visiting the same node twice. This is for passes that are
  * capable of interpreting the IR as a DAG instead of a tree. */
-class IRGraphVisitor : public IRVisitor {
+class HALIDE_EXPORT_FOR_PLUGINS IRGraphVisitor : public IRVisitor {
 protected:
     /** By default these methods add the node to the visited set, and
      * return whether or not it was already there. If it wasn't there,
