@@ -360,6 +360,16 @@ struct ScheduleFeatures {
         auto os = aslog(0);
         dump(os);
     }
+
+    bool equal(const ScheduleFeatures &other) const {
+        const size_t n_features = ScheduleFeatures::num_features();
+        for (size_t i = 0; i < n_features; i++) {
+            if ((*this)[i] != other[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
 };
 
 /*

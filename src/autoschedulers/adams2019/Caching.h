@@ -45,6 +45,10 @@ struct Cache {
     mutable size_t cache_hits = 0;
     mutable size_t cache_misses = 0;
 
+    static int feature_hits;
+    static int feature_misses;
+
+
     Cache() = delete;
     Cache(const CachingOptions &_options, size_t nodes_size) : options(_options) {
         if (options.cache_blocks) {
