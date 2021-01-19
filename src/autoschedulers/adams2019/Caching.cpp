@@ -73,9 +73,9 @@ bool Cache::add_memoized_blocks(const State *state,
             block_index++;
         }
 
+        // Copy all stages into new_root.
         for (size_t j = 0; j < num_stages; j++) {
             LoopNest* new_block = new LoopNest;
-            // TODO(rootjalex): why i + j...?
             new_block->copy_from_including_features(*blocks[i + j]);
             new_root->children[block_index++] = new_block;
         }
@@ -83,7 +83,7 @@ bool Cache::add_memoized_blocks(const State *state,
         if (child->calculate_cost(dag, params, cost_model, this->options, memory_limit)) {
             num_children++;
             accept_child(std::move(child));
-            // TODO(rootjalex): stats for cache hits.
+            // TODO(rootjalex): possibly remove statistics for cache hits
             cache_hits++;
         }
     }
@@ -119,9 +119,7 @@ void Cache::memoize_blocks(const FunctionDAG::Node *node, LoopNest* new_root) {
             LoopNest *new_block = new LoopNest;
             new_block->copy_from_including_features(*child.get());
             blocks.push_back(new_block);
-            // TODO(rootjalex): record stats.
-            // also why is this a miss? that's confusing.
-            // ++stats.num_block_memoization_misses;
+            // TODO(rootjalex): possibly remove statistics for cache misses
             cache_misses++;
         }
     }

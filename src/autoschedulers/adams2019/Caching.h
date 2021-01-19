@@ -24,13 +24,14 @@ bool is_memoize_blocks_enabled();
 struct CachingOptions {
     bool cache_blocks = false;
     bool cache_features = false;
-    bool verify_caching = false;
+    bool verify_feature_caching = false;
+    // TODO(rootjalex): do we need a verify block caching?
 
     static CachingOptions MakeOptionsFromEnviron() {
         CachingOptions options;
         options.cache_blocks = is_memoize_blocks_enabled();
         options.cache_features = use_memoized_features();
-        options.verify_caching = verify_memoized_features();
+        options.verify_feature_caching = verify_memoized_features();
         return options;
     }
 };
@@ -38,6 +39,9 @@ struct CachingOptions {
 // Node -> (vector_dim -> vector<tilings>)
 using BlockCache = NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>;
 
+// Cache for memoizing possible tilings.
+// Tracks hit/miss statistics for both block caching
+// and for feature caching (self-contained by LoopNests)
 struct Cache {
     CachingOptions options;
     BlockCache memoized_compute_root_blocks;
@@ -47,7 +51,6 @@ struct Cache {
 
     static int feature_hits;
     static int feature_misses;
-
 
     Cache() = delete;
     Cache(const CachingOptions &_options, size_t nodes_size) : options(_options) {

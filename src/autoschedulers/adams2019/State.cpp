@@ -122,22 +122,22 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
             site.compute = loop;
             site.store = loop;
         }
-        // TODO(rootjalex): Luke did something with num_realizations here - ask him if that's GPU specific.
     }
 
-    // TODO(rootjalex): implement LoopNest::compute_hash_of_producers_stored_at_root()
     for (const auto& c : root->children) {
         sites.get(c->stage).hash_of_producers_stored_at_root = c->compute_hash_of_producers_stored_at_root(sites);
     }
 
-    if (cache_options.verify_caching) {
-        // TODO(rootjalex): implement verification.
+    if (cache_options.verify_feature_caching) {
+        // Check that features produced with or without caching are the same.
         StageMap<ScheduleFeatures> base_features;
         base_features.make_large(dag.nodes[0].stages[0].max_id);
+        // Calculate features without caching.
         root->compute_features(dag, params, sites, 1, 1, nullptr, nullptr, *root, nullptr, &base_features, /* use_cached_features */false);
 
         StageMap<ScheduleFeatures> verification_features;
         verification_features.make_large(dag.nodes[0].stages[0].max_id);
+        // Calculate features with caching.
         root->compute_features(dag, params, sites, 1, 1, nullptr, nullptr, *root, nullptr, &verification_features, /* use_cached_features */true);
 
         for (auto it = base_features.begin(); it != base_features.end(); it++) {
@@ -153,14 +153,11 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
                 verification_features.get(&stage).dump();
                 std::cerr << "\n";
 
-                // TODO(rootjalex): more eloquent failures.
+                // TODO(rootjalex): more eloquent error message.
                 internal_assert(false);
             }
         }
     }
-    
-    // TODO(rootjalex): do we want a Timer to be default?
-    // Timer timer;
 
     root->compute_features(dag, params, sites, 1, 1, nullptr, nullptr, *root, nullptr, features, cache_options.cache_features);
 
@@ -287,7 +284,6 @@ void State::generate_children(const FunctionDAG &dag,
     
     internal_assert(root.defined() && root->is_root()) << "generate_children needs defined root\n";
 
-    // TODO(rootjalex): What is this?
     if (num_decisions_made == 2 * (int)dag.nodes.size()) {
         return;
     }
@@ -336,7 +332,6 @@ void State::generate_children(const FunctionDAG &dag,
         internal_error << "Pipeline so far doesn't use next Func: " << node->func.name() << "\n";
     }
 
-    // TODO(rootjalex): the below code is very different in SearchSpace::generate_children() - figure out why.
     int num_children = 0;
 
     if (phase == 0) {
@@ -595,8 +590,7 @@ void State::generate_children(const FunctionDAG &dag,
                 if (child->calculate_cost(dag, params, cost_model, cache->options, memory_limit)) {
                     num_children++;
                     accept_child(std::move(child));
-                    // TODO(rootjalex): memoize_blocks here, I think?
-                    // cache->?
+                    // Will early return if block caching is not enabled.
                     cache->memoize_blocks(node, new_root);
                 }
             }

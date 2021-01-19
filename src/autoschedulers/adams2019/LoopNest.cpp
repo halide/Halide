@@ -324,8 +324,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
     if (is_root()) {
         // TODO: This block of code is repeated below. Refactor
-
-        // TODO(rootjalex): calculate working set from features if features are cached.
         // TODO(rootjalex): clean up this loop.
         for (const auto &c : children) {
 
@@ -333,7 +331,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
             if (use_memoized_features) {
                 if (c->features_cache.count(hash_of_producers) > 0) {
-                    // TODO(rootjalex): cache hit (feature cache)
+                    // TODO(rootjalex): possibly remove statistics gathering
                     Cache::feature_hits++;
                     const auto& entry = c->features_cache.at(hash_of_producers);
 
@@ -344,7 +342,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                         features->insert(stage_ptr, feat);
                     }
 
-                    // TODO(rootjalex): the below are Luke's notes.
                     // 'working_set_here' is required below for computing the
                     // root-level features so we compute the value that it
                     // would have had if the current loop nest had not been
@@ -354,7 +351,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     working_set_here += working_set_c;
                     continue; // no need to recompute fetures
                 }
-                // TODO(rootjalex): cache miss (feature cache)
+                // TODO(rootjalex): possibly remove statistics gathering?
                 Cache::feature_misses++;
             }
 
@@ -425,7 +422,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 feat.points_computed_minimum = std::min(feat.points_computed_minimum, (double)points_computed_minimum_if_inlined);
             }
 
-            // TODO(rootjalex): the below are Luke's notes.
             // When memoizing, we need to recompute features for inlined Funcs
             // so we reset them here
             if (use_memoized_features && sites.get(stage).inlined) {
@@ -433,10 +429,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 feat.num_scalars = 0;
                 feat.innermost_pure_loop_extent = 0;
                 feat.outer_parallelism = 0;
-                // TODO(rootjalex): I think these are GPU things, commenting out for now.
-                // feat.num_warps_per_block = 0;
-                // feat.num_threads_per_block = 0;
-                // feat.points_computed_per_thread = 0;
             }
         }
 
@@ -1034,12 +1026,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
             intermediate.innermost_pure_loop_extent = feat.innermost_pure_loop_extent;
             intermediate.outer_parallelism = parallelism;
-
-            // TODO(rootjalex): I think these are GPU-related things.
-            // intermediate.num_warps_per_block = num_warps;
-
-            // intermediate.num_threads_per_block = gpu_loop_info.thread_info->num_threads;
-            // intermediate.points_computed_per_thread = points_computed_per_thread;
         }
     }
 }
@@ -2016,13 +2002,13 @@ void LoopNest::memoize_features(StageMap<ScheduleFeatures>& memoized_features, c
             continue;
         }
 
-        // TODO(rootjalex): shouldn't we check that features_to_insert has this stage?
+        // TODO(rootjalex): should probably assert that features_to_insert has this stage
         const auto &inlined_feat = features_to_insert->get(stage_ptr);
         memoized_features.insert(stage_ptr, inlined_feat);
     }
 
     if (!memoized_features.contains(stage)) {
-        // TODO(rootjalex): shouldn't we check that features_to_insert has this stage?
+        // TODO(rootjalex): should probably assert that features_to_insert has this stage
         memoized_features.insert(stage, features_to_insert->get(stage));
     }
 
@@ -2047,20 +2033,12 @@ void LoopNest::compute_working_set_from_features(int64_t *working_set,
     *working_set += working_set_here;
 }
 
-// TODO(rootjalex): understand what this is for...
 void LoopNest::recompute_inlined_features(const StageMap<Sites> &sites, StageMap<ScheduleFeatures> *features) const {
     for (const auto &c : children) {
         c->recompute_inlined_features(sites, features);
     }
 
-    // const auto &block = sites.get(this->stage).task;
-    // internal_assert(sites.contains(block->stage)) << "recompute_inlined_features couldn't find this->stage in sites\n";
-    // uint64_t hash_of_producers = sites.get(block->stage).hash_of_producers_stored_at_root;
-    // internal_assert(block->feature_intermediates_cache.count(hash_of_producers) > 0) << "recompute_inlined_features couldn't find hash in block feature intermediates cache\n";
-
-    // // block's feautre_intermediates cache
-    // const auto &cache_map = block->feature_intermediates_cache[hash_of_producers];
-
+    // TODO(rootjalex): Figure out why hoisting the fetching of block / hash / cache_map breaks this loop.
     for (auto it = inlined.begin(); it != inlined.end(); it++) {
 
         const auto *f = it.key();
@@ -2086,44 +2064,6 @@ void LoopNest::recompute_inlined_features(const StageMap<Sites> &sites, StageMap
             inlined_feat.innermost_pure_loop_extent = intermediate.innermost_pure_loop_extent;
         }
         inlined_feat.outer_parallelism = intermediate.outer_parallelism;
-        // inlined_feat.num_blocks = intermediate.outer_parallelism;
-        // inlined_feat.num_warps_per_block += intermediate.num_warps_per_block;
-
-        // inlined_feat.num_threads_per_block += intermediate.num_threads_per_block;
-        // inlined_feat.points_computed_per_thread += intermediate.points_computed_per_thread;
-
-        /*
-        const auto *node_ptr = it.key();
-        internal_assert(node_ptr) << "recompute_inlined_features found nullptr for DAG node\n";
-
-        const auto *stage_ptr = &(node_ptr->stages[0]);
-        // TODO(rootjalex): should we assert stage_ptr?
-
-
-        // Get features_intermediate of block.
-        auto& intermediate_map = cache_map.get(stage_ptr);
-        auto& intermediate = intermediate_map.get(this->stage);
-
-        // TODO(rootjalex): why does features have this value?
-        auto &inlined_feat = features->get(stage_ptr);
-
-        inlined_feat.inlined_calls += intermediate.inlined_calls;
-        inlined_feat.num_scalars += intermediate.num_scalars;
-        if (inlined_feat.innermost_pure_loop_extent > 0) {
-            inlined_feat.innermost_pure_loop_extent =
-                std::min(inlined_feat.innermost_pure_loop_extent,
-                         intermediate.innermost_pure_loop_extent);
-        } else {
-            inlined_feat.innermost_pure_loop_extent = intermediate.innermost_pure_loop_extent;
-        }
-        inlined_feat.outer_parallelism = intermediate.outer_parallelism;
-        // TODO(rootjalex): remove these for now? I think they're GPU-related.
-        // inlined_feat.num_blocks = intermediate.outer_parallelism;
-        // inlined_feat.num_warps_per_block += intermediate.num_warps_per_block;
-
-        // inlined_feat.num_threads_per_block += intermediate.num_threads_per_block;
-        // inlined_feat.points_computed_per_thread += intermediate.points_computed_per_thread;
-        */
     }
 }
 

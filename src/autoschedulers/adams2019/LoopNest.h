@@ -265,9 +265,10 @@ struct LoopNest {
                const LoopNest *parent,
                const LoopNest *compute_site) const;
 
-    // TODO(rootjalex): add docstrings for everything below here
-    // used for caching
+    // The below are two feature caches.
+    // hash of producers -> StageMap
     mutable std::map<uint64_t, StageMap<StageMap<FeatureIntermediates>>> feature_intermediates_cache;
+    // hash of producers -> StageMap
     mutable std::map<uint64_t, StageMap<ScheduleFeatures>> features_cache;
 
     void copy_from_including_features(const LoopNest &n);
@@ -281,17 +282,20 @@ struct LoopNest {
                           const StageMap<ScheduleFeatures> *features_to_insert) const;
 
     // Recalculates working_set from cached features
-    // TODO(rootjalex): can this be cached as well..?
     void compute_working_set_from_features(int64_t *working_set,
                                            const StageMap<ScheduleFeatures> *features) const;
 
+    // Features need to be recomputed for inlined Funcs
     void recompute_inlined_features(const StageMap<Sites> &sites,
                                     StageMap<ScheduleFeatures> *features) const;
-    
+
+    // Create a (hopefully) unique hash of the producers.
     uint64_t compute_hash_of_producers_stored_at_root(const StageMap<Sites> &sites) const;
 
+    // Gather all stages that are producers for any Func in this LoopNest.
     std::vector<std::pair<int, int>> collect_producers(const StageMap<Sites> &sites) const;
 
+    // Collect all stages referenced in this LoopNest.
     void collect_stages(std::set<const FunctionDAG::Node::Stage *>& stages) const;
 };
 

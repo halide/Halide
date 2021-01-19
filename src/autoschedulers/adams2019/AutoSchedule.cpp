@@ -497,11 +497,12 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
                                           i, num_passes, tick, permitted_hashes, &cache);
 
         std::chrono::duration<double> total_time = timer.elapsed();
+        auto milli = std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count();
 
         tick.clear();
 
         if (aslog::aslog_level() == 0) {
-            aslog(0) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << ", time (ms): " << std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count() << "\n";
+            aslog(0) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << ", time (ms): " << milli << "\n";
         } else {
             aslog(0) << "Pass " << i << " result: ";
             pass->dump();
@@ -516,11 +517,14 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
 
     aslog(0) << "Best cost: " << best->cost << "\n";
 
-    aslog(0) << "Cache (block) hits: " << cache.cache_hits << "\n";
-    aslog(0) << "Cache (block) misses: " << cache.cache_misses << "\n";
-
-    aslog(0) << "Cache (feature) hits: " << Cache::feature_hits << "\n";
-    aslog(0) << "Cache (feature) misses: " << Cache::feature_misses << "\n";
+    if (options.cache_blocks) {
+        aslog(0) << "Cache (block) hits: " << cache.cache_hits << "\n";
+        aslog(0) << "Cache (block) misses: " << cache.cache_misses << "\n";
+    }
+    if (options.cache_features) {
+        aslog(0) << "Cache (feature) hits: " << Cache::feature_hits << "\n";
+        aslog(0) << "Cache (feature) misses: " << Cache::feature_misses << "\n";
+    }
 
     return best;
 }
