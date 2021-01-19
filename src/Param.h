@@ -19,7 +19,7 @@ namespace Halide {
  * before you realize the function uses this. If you're statically
  * compiling, this param should appear in the argument list. */
 template<typename T = void>
-class Param {
+class HALIDE_EXPORT Param {
     /** A reference-counted handle on the internal parameter object */
     Internal::Parameter param;
 

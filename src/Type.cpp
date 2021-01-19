@@ -342,3 +342,31 @@ std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
 }
 
 }  // namespace Halide
+
+halide_handle_cplusplus_type::halide_handle_cplusplus_type(const halide_cplusplus_type_name &inner_name,
+                                                           const std::vector<std::string> &namespaces,
+                                                           const std::vector<halide_cplusplus_type_name> &enclosing_types,
+                                                           const std::vector<uint8_t> &modifiers,
+                                                           ReferenceType reference_type)
+    : inner_name(inner_name),
+      namespaces(namespaces),
+      enclosing_types(enclosing_types),
+      cpp_type_modifiers(modifiers),
+      reference_type(reference_type) {
+}
+
+/*static*/ halide_handle_cplusplus_type halide_handle_cplusplus_type::make(
+    const halide_cplusplus_type_name &inner_name,
+    const std::vector<uint8_t> &cpp_type_modifiers,
+    const ReferenceType &ref_type) {
+
+    halide_handle_cplusplus_type info = {
+        inner_name,
+        {},
+        {},
+        cpp_type_modifiers,
+        ref_type};
+    // Pull off any namespaces
+    info.inner_name.name = Halide::Internal::extract_namespaces(info.inner_name.name, info.namespaces);
+    return info;
+}

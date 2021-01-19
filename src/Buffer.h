@@ -19,7 +19,7 @@ struct BufferContents {
     Runtime::Buffer<> buf;
 };
 
-Expr buffer_accessor(const Buffer<> &buf, const std::vector<Expr> &args);
+HALIDE_EXPORT Expr buffer_accessor(const Buffer<> &buf, const std::vector<Expr> &args);
 
 template<typename... Args>
 struct all_ints_and_optional_name : std::false_type {};
@@ -112,7 +112,7 @@ std::string buffer_type_name() {
  * template parameter is T = void.
  */
 template<typename T>
-class Buffer {
+class HALIDE_EXPORT Buffer {
     Internal::IntrusivePtr<Internal::BufferContents> contents;
 
     template<typename T2>

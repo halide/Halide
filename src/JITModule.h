@@ -29,7 +29,7 @@ namespace Internal {
 class JITModuleContents;
 struct LoweredFunc;
 
-struct JITModule {
+struct HALIDE_EXPORT_FOR_TEST JITModule {
     IntrusivePtr<JITModuleContents> jit_module;
 
     struct Symbol {
@@ -157,7 +157,7 @@ struct JITUserContext {
     JITHandlers handlers;
 };
 
-class JITSharedRuntime {
+class HALIDE_EXPORT_FOR_TEST JITSharedRuntime {
 public:
     // Note only the first llvm::Module passed in here is used. The same shared runtime is used for all JIT.
     static std::vector<JITModule> get(llvm::Module *m, const Target &target, bool create = true);

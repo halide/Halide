@@ -137,8 +137,8 @@ std::string running_program_name();
  * latter returns either f or f$123.
  */
 // @{
-std::string unique_name(char prefix);
-std::string unique_name(const std::string &prefix);
+HALIDE_EXPORT_FOR_TEST std::string unique_name(char prefix);
+HALIDE_EXPORT_FOR_TEST std::string unique_name(const std::string &prefix);
 // @}
 
 /** Test if the first string starts with the second string */
@@ -148,7 +148,7 @@ bool starts_with(const std::string &str, const std::string &prefix);
 bool ends_with(const std::string &str, const std::string &suffix);
 
 /** Replace all matches of the second string in the first string with the last string */
-std::string replace_all(const std::string &str, const std::string &find, const std::string &replace);
+HALIDE_EXPORT_FOR_TEST std::string replace_all(const std::string &str, const std::string &find, const std::string &replace);
 
 /** Split the source string using 'delim' as the divider. */
 std::vector<std::string> split_string(const std::string &source, const std::string &delim);
@@ -234,7 +234,7 @@ std::string dir_make_temp();
 bool file_exists(const std::string &name);
 
 /** assert-fail if the file doesn't exist. useful primarily for testing purposes. */
-void assert_file_exists(const std::string &name);
+HALIDE_EXPORT_FOR_TEST void assert_file_exists(const std::string &name);
 
 /** assert-fail if the file DOES exist. useful primarily for testing purposes. */
 void assert_no_file_exists(const std::string &name);
@@ -247,7 +247,7 @@ void file_unlink(const std::string &name);
 
 /** Ensure that no file with this path exists. If such a file
  * exists and cannot be removed, assert-fail. */
-void ensure_no_file_exists(const std::string &name);
+HALIDE_EXPORT_FOR_TEST void ensure_no_file_exists(const std::string &name);
 
 /** Wrapper for rmdir(). Asserts upon error. */
 void dir_rmdir(const std::string &name);
@@ -454,7 +454,7 @@ std::string c_print_name(const std::string &name);
 /** Return the LLVM_VERSION against which this libHalide is compiled. This is provided
  * only for internal tests which need to verify behavior; please don't use this outside
  * of Halide tests. */
-int get_llvm_version();
+HALIDE_EXPORT_FOR_TEST int get_llvm_version();
 
 }  // namespace Internal
 }  // namespace Halide

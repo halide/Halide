@@ -11,7 +11,7 @@ namespace Halide {
 namespace Internal {
 
 /** A class to represent ranges of Exprs. Can be unbounded above or below. */
-struct Interval {
+struct HALIDE_EXPORT_FOR_TEST Interval {
 
     /** Exprs to represent positive and negative infinity */
 #ifdef COMPILING_HALIDE

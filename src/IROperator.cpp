@@ -359,6 +359,42 @@ Expr make_const(Type t, double val) {
     return make_const_helper(t, val);
 }
 
+Expr make_const(Type t, int32_t val) {
+    return make_const_helper(t, (int64_t)val);
+}
+
+Expr make_const(Type t, uint32_t val) {
+    return make_const_helper(t, (uint64_t)val);
+}
+
+Expr make_const(Type t, int16_t val) {
+    return make_const_helper(t, (int64_t)val);
+}
+
+Expr make_const(Type t, uint16_t val) {
+    return make_const_helper(t, (uint64_t)val);
+}
+
+Expr make_const(Type t, int8_t val) {
+    return make_const_helper(t, (int64_t)val);
+}
+
+Expr make_const(Type t, uint8_t val) {
+    return make_const_helper(t, (uint64_t)val);
+}
+
+Expr make_const(Type t, bool val) {
+    return make_const_helper(t, (uint64_t)val);
+}
+
+Expr make_const(Type t, float val) {
+    return make_const_helper(t, (double)val);
+}
+
+Expr make_const(Type t, float16_t val) {
+    return make_const_helper(t, (double)val);
+}
+
 Expr make_bool(bool val, int w) {
     return make_const(UInt(1, w), val);
 }

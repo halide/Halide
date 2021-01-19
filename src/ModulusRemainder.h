@@ -30,7 +30,7 @@ class Scope;
  * would overflow, it defaults to all of the integers (modulus == 1,
  * remainder == 0). */
 
-struct ModulusRemainder {
+struct HALIDE_EXPORT_FOR_TEST ModulusRemainder {
     ModulusRemainder() = default;
     ModulusRemainder(int64_t m, int64_t r)
         : modulus(m), remainder(r) {
@@ -75,12 +75,12 @@ ModulusRemainder operator%(const ModulusRemainder &a, int64_t b);
  * aligned load. If all else fails, we can just say that an integer is
  * congruent to zero modulo one.
  */
-ModulusRemainder modulus_remainder(const Expr &e);
+HALIDE_EXPORT_FOR_TEST ModulusRemainder modulus_remainder(const Expr &e);
 
 /** If we have alignment information about external variables, we can
  * let the analysis know about that using this version of
  * modulus_remainder: */
-ModulusRemainder modulus_remainder(const Expr &e, const Scope<ModulusRemainder> &scope);
+HALIDE_EXPORT_FOR_TEST ModulusRemainder modulus_remainder(const Expr &e, const Scope<ModulusRemainder> &scope);
 
 /** Reduce an expression modulo some integer. Returns true and assigns
  * to remainder if an answer could be found. */

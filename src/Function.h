@@ -35,7 +35,7 @@ class Parameter;
 /** A reference-counted handle to Halide's internal representation of
  * a function. Similar to a front-end Func object, but with no
  * syntactic sugar to help with definitions. */
-class Function {
+class HALIDE_EXPORT_FOR_TEST Function {
     FunctionPtr contents;
 
 public:

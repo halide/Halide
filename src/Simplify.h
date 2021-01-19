@@ -20,16 +20,16 @@ namespace Internal {
  * repeated variable names.
  */
 // @{
-Stmt simplify(const Stmt &, bool remove_dead_let_stmts = true,
-              const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
-              const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
-Expr simplify(const Expr &, bool remove_dead_let_stmts = true,
-              const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
-              const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
+HALIDE_EXPORT_FOR_TEST Stmt simplify(const Stmt &, bool remove_dead_let_stmts = true,
+                                     const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
+                                     const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
+HALIDE_EXPORT_FOR_TEST Expr simplify(const Expr &, bool remove_dead_let_stmts = true,
+                                     const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
+                                     const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
 // @}
 
 /** Attempt to statically prove an expression is true using the simplifier. */
-bool can_prove(Expr e, const Scope<Interval> &bounds = Scope<Interval>::empty_scope());
+HALIDE_EXPORT_FOR_TEST bool can_prove(Expr e, const Scope<Interval> &bounds = Scope<Interval>::empty_scope());
 
 /** Simplify expressions found in a statement, but don't simplify
  * across different statements. This is safe to perform at an earlier

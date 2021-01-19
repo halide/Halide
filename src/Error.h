@@ -10,7 +10,7 @@
 namespace Halide {
 
 /** Query whether Halide was compiled with exceptions. */
-bool exceptions_enabled();
+HALIDE_EXPORT bool exceptions_enabled();
 
 /** A base class for Halide errors. */
 struct HALIDE_EXPORT Error : public std::runtime_error {

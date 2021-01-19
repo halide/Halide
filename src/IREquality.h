@@ -110,8 +110,8 @@ struct ExprWithCompareCache {
  * comparing non-CSE'd Exprs, use graph_equal, which is safe for nasty
  * graphs of IR nodes. */
 // @{
-bool equal(const Expr &a, const Expr &b);
-bool equal(const Stmt &a, const Stmt &b);
+HALIDE_EXPORT_FOR_TEST bool equal(const Expr &a, const Expr &b);
+HALIDE_EXPORT_FOR_TEST bool equal(const Stmt &a, const Stmt &b);
 bool graph_equal(const Expr &a, const Expr &b);
 bool graph_equal(const Stmt &a, const Stmt &b);
 // @}

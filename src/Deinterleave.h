@@ -20,7 +20,7 @@ Expr extract_odd_lanes(const Expr &a);
 Expr extract_even_lanes(const Expr &a);
 
 /** Extract the nth lane of a vector */
-Expr extract_lane(const Expr &vec, int lane);
+HALIDE_EXPORT_FOR_TEST Expr extract_lane(const Expr &vec, int lane);
 
 /** Look through a statement for expressions of the form select(ramp %
  * 2 == 0, a, b) and replace them with calls to an interleave

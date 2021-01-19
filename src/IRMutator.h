@@ -23,7 +23,7 @@ namespace Internal {
  * the appropriate visit() method and then return the value of expr or
  * stmt after the call to visit.
  */
-class IRMutator {
+class HALIDE_EXPORT_FOR_TEST IRMutator {
 public:
     IRMutator() = default;
     virtual ~IRMutator() = default;

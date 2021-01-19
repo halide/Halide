@@ -26,7 +26,7 @@ class Function;
  * nodes also have a public "type" property */
 
 /** Cast a node from one type to another. Can't change vector widths. */
-struct Cast : public ExprNode<Cast> {
+struct HALIDE_EXPORT Cast : public ExprNode<Cast> {
     Expr value;
 
     static Expr make(Type t, Expr v);
@@ -35,7 +35,7 @@ struct Cast : public ExprNode<Cast> {
 };
 
 /** The sum of two expressions */
-struct Add : public ExprNode<Add> {
+struct HALIDE_EXPORT Add : public ExprNode<Add> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b);
@@ -44,7 +44,7 @@ struct Add : public ExprNode<Add> {
 };
 
 /** The difference of two expressions */
-struct Sub : public ExprNode<Sub> {
+struct HALIDE_EXPORT Sub : public ExprNode<Sub> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b);
@@ -53,7 +53,7 @@ struct Sub : public ExprNode<Sub> {
 };
 
 /** The product of two expressions */
-struct Mul : public ExprNode<Mul> {
+struct HALIDE_EXPORT Mul : public ExprNode<Mul> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b);
@@ -62,7 +62,7 @@ struct Mul : public ExprNode<Mul> {
 };
 
 /** The ratio of two expressions */
-struct Div : public ExprNode<Div> {
+struct HALIDE_EXPORT Div : public ExprNode<Div> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b);
@@ -73,7 +73,7 @@ struct Div : public ExprNode<Div> {
 /** The remainder of a / b. Mostly equivalent to '%' in C, except that
  * the result here is always positive. For floats, this is equivalent
  * to calling fmod. */
-struct Mod : public ExprNode<Mod> {
+struct HALIDE_EXPORT Mod : public ExprNode<Mod> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b);
@@ -82,7 +82,7 @@ struct Mod : public ExprNode<Mod> {
 };
 
 /** The lesser of two values. */
-struct Min : public ExprNode<Min> {
+struct HALIDE_EXPORT Min : public ExprNode<Min> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b);
@@ -91,7 +91,7 @@ struct Min : public ExprNode<Min> {
 };
 
 /** The greater of two values */
-struct Max : public ExprNode<Max> {
+struct HALIDE_EXPORT Max : public ExprNode<Max> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b);
@@ -100,7 +100,7 @@ struct Max : public ExprNode<Max> {
 };
 
 /** Is the first expression equal to the second */
-struct EQ : public ExprNode<EQ> {
+struct HALIDE_EXPORT EQ : public ExprNode<EQ> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b);
@@ -109,7 +109,7 @@ struct EQ : public ExprNode<EQ> {
 };
 
 /** Is the first expression not equal to the second */
-struct NE : public ExprNode<NE> {
+struct HALIDE_EXPORT NE : public ExprNode<NE> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b);
@@ -118,7 +118,7 @@ struct NE : public ExprNode<NE> {
 };
 
 /** Is the first expression less than the second. */
-struct LT : public ExprNode<LT> {
+struct HALIDE_EXPORT LT : public ExprNode<LT> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b);
@@ -127,7 +127,7 @@ struct LT : public ExprNode<LT> {
 };
 
 /** Is the first expression less than or equal to the second. */
-struct LE : public ExprNode<LE> {
+struct HALIDE_EXPORT LE : public ExprNode<LE> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b);
@@ -136,7 +136,7 @@ struct LE : public ExprNode<LE> {
 };
 
 /** Is the first expression greater than the second. */
-struct GT : public ExprNode<GT> {
+struct HALIDE_EXPORT GT : public ExprNode<GT> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b);
@@ -145,7 +145,7 @@ struct GT : public ExprNode<GT> {
 };
 
 /** Is the first expression greater than or equal to the second. */
-struct GE : public ExprNode<GE> {
+struct HALIDE_EXPORT GE : public ExprNode<GE> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b);
@@ -154,7 +154,7 @@ struct GE : public ExprNode<GE> {
 };
 
 /** Logical and - are both expressions true */
-struct And : public ExprNode<And> {
+struct HALIDE_EXPORT And : public ExprNode<And> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b);
@@ -163,7 +163,7 @@ struct And : public ExprNode<And> {
 };
 
 /** Logical or - is at least one of the expression true */
-struct Or : public ExprNode<Or> {
+struct HALIDE_EXPORT Or : public ExprNode<Or> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b);
@@ -172,7 +172,7 @@ struct Or : public ExprNode<Or> {
 };
 
 /** Logical not - true if the expression false */
-struct Not : public ExprNode<Not> {
+struct HALIDE_EXPORT Not : public ExprNode<Not> {
     Expr a;
 
     static Expr make(Expr a);
@@ -183,7 +183,7 @@ struct Not : public ExprNode<Not> {
 /** A ternary operator. Evalutes 'true_value' and 'false_value',
  * then selects between them based on 'condition'. Equivalent to
  * the ternary operator in C. */
-struct Select : public ExprNode<Select> {
+struct HALIDE_EXPORT Select : public ExprNode<Select> {
     Expr condition, true_value, false_value;
 
     static Expr make(Expr condition, Expr true_value, Expr false_value);
@@ -196,7 +196,7 @@ struct Select : public ExprNode<Select> {
  * the buffer has no inherent type. The name may be the name of an
  * enclosing allocation, an input or output buffer, or any other
  * symbol of type Handle(). */
-struct Load : public ExprNode<Load> {
+struct HALIDE_EXPORT Load : public ExprNode<Load> {
     std::string name;
 
     Expr predicate, index;
@@ -226,7 +226,7 @@ struct Load : public ExprNode<Load> {
  * pass around vectors without busting them up into individual
  * elements. E.g. a dense vector load from a buffer can use a ramp
  * node with stride 1 as the index. */
-struct Ramp : public ExprNode<Ramp> {
+struct HALIDE_EXPORT Ramp : public ExprNode<Ramp> {
     Expr base, stride;
     int lanes;
 
@@ -238,7 +238,7 @@ struct Ramp : public ExprNode<Ramp> {
 /** A vector with 'lanes' elements, in which every element is
  * 'value'. This is a special case of the ramp node above, in which
  * the stride is zero. */
-struct Broadcast : public ExprNode<Broadcast> {
+struct HALIDE_EXPORT Broadcast : public ExprNode<Broadcast> {
     Expr value;
     int lanes;
 
@@ -250,7 +250,7 @@ struct Broadcast : public ExprNode<Broadcast> {
 /** A let expression, like you might find in a functional
  * language. Within the expression \ref Let::body, instances of the Var
  * node \ref Let::name refer to \ref Let::value. */
-struct Let : public ExprNode<Let> {
+struct HALIDE_EXPORT Let : public ExprNode<Let> {
     std::string name;
     Expr value, body;
 
@@ -261,7 +261,7 @@ struct Let : public ExprNode<Let> {
 
 /** The statement form of a let node. Within the statement 'body',
  * instances of the Var named 'name' refer to 'value' */
-struct LetStmt : public StmtNode<LetStmt> {
+struct HALIDE_EXPORT LetStmt : public StmtNode<LetStmt> {
     std::string name;
     Expr value;
     Stmt body;
@@ -273,7 +273,7 @@ struct LetStmt : public StmtNode<LetStmt> {
 
 /** If the 'condition' is false, then evaluate and return the message,
  * which should be a call to an error function. */
-struct AssertStmt : public StmtNode<AssertStmt> {
+struct HALIDE_EXPORT AssertStmt : public StmtNode<AssertStmt> {
     // if condition then val else error out with message
     Expr condition;
     Expr message;
@@ -294,7 +294,7 @@ struct AssertStmt : public StmtNode<AssertStmt> {
  * there is an associated Realize node with the same name that creates the buffer
  * being read from or written to in the body of the ProducerConsumer.
  */
-struct ProducerConsumer : public StmtNode<ProducerConsumer> {
+struct HALIDE_EXPORT ProducerConsumer : public StmtNode<ProducerConsumer> {
     std::string name;
     bool is_producer;
     Stmt body;
@@ -312,7 +312,7 @@ struct ProducerConsumer : public StmtNode<ProducerConsumer> {
  * same type as 'value'. The name may be the name of an enclosing
  * Allocate node, an output buffer, or any other symbol of type
  * Handle(). */
-struct Store : public StmtNode<Store> {
+struct HALIDE_EXPORT Store : public StmtNode<Store> {
     std::string name;
     Expr predicate, value, index;
     // If it's a store to an output buffer, then this parameter points to it.
@@ -333,7 +333,7 @@ struct Store : public StmtNode<Store> {
  * array. It gets lowered to a conventional Store node. The name must
  * correspond to an output buffer or the name of an enclosing Realize
  * node. */
-struct Provide : public StmtNode<Provide> {
+struct HALIDE_EXPORT Provide : public StmtNode<Provide> {
     std::string name;
     std::vector<Expr> values;
     std::vector<Expr> args;
@@ -349,7 +349,7 @@ struct Provide : public StmtNode<Provide> {
  * a Free node with a matching name. Allocation only occurs if the
  * condition evaluates to true. Within the body of the allocation,
  * defines a symbol with the given name and the type Handle(). */
-struct Allocate : public StmtNode<Allocate> {
+struct HALIDE_EXPORT Allocate : public StmtNode<Allocate> {
     std::string name;
     Type type;
     MemoryType memory_type;
@@ -385,7 +385,7 @@ struct Allocate : public StmtNode<Allocate> {
 };
 
 /** Free the resources associated with the given buffer. */
-struct Free : public StmtNode<Free> {
+struct HALIDE_EXPORT Free : public StmtNode<Free> {
     std::string name;
 
     static Stmt make(const std::string &name);
@@ -399,7 +399,7 @@ struct Free : public StmtNode<Free> {
  * (min, extent) pairs for each dimension. Allocation only occurs if
  * the condition evaluates to true.
  */
-struct Realize : public StmtNode<Realize> {
+struct HALIDE_EXPORT Realize : public StmtNode<Realize> {
     std::string name;
     std::vector<Type> types;
     MemoryType memory_type;
@@ -414,7 +414,7 @@ struct Realize : public StmtNode<Realize> {
 
 /** A sequence of statements to be executed in-order. 'rest' may be
  * undefined. Used rest.defined() to find out. */
-struct Block : public StmtNode<Block> {
+struct HALIDE_EXPORT Block : public StmtNode<Block> {
     Stmt first, rest;
 
     static Stmt make(Stmt first, Stmt rest);
@@ -428,7 +428,7 @@ struct Block : public StmtNode<Block> {
 /** A pair of statements executed concurrently. Both statements are
  * joined before the Stmt ends. This is the parallel equivalent to
  * Block. */
-struct Fork : public StmtNode<Fork> {
+struct HALIDE_EXPORT Fork : public StmtNode<Fork> {
     Stmt first, rest;
 
     static Stmt make(Stmt first, Stmt rest);
@@ -437,7 +437,7 @@ struct Fork : public StmtNode<Fork> {
 };
 
 /** An if-then-else block. 'else' may be undefined. */
-struct IfThenElse : public StmtNode<IfThenElse> {
+struct HALIDE_EXPORT IfThenElse : public StmtNode<IfThenElse> {
     Expr condition;
     Stmt then_case, else_case;
 
@@ -447,7 +447,7 @@ struct IfThenElse : public StmtNode<IfThenElse> {
 };
 
 /** Evaluate and discard an expression, presumably because it has some side-effect. */
-struct Evaluate : public StmtNode<Evaluate> {
+struct HALIDE_EXPORT Evaluate : public StmtNode<Evaluate> {
     Expr value;
 
     static Stmt make(Expr v);
@@ -461,7 +461,7 @@ struct Evaluate : public StmtNode<Evaluate> {
  * halide function. These two types of call nodes don't survive all
  * the way down to code generation - the lowering process converts
  * them to Load nodes. */
-struct Call : public ExprNode<Call> {
+struct HALIDE_EXPORT Call : public ExprNode<Call> {
     std::string name;
     std::vector<Expr> args;
     typedef enum { Image,            ///< A load from an input image
@@ -567,7 +567,7 @@ struct Call : public ExprNode<Call> {
     // We also declare some symbolic names for some of the runtime
     // functions that we want to construct Call nodes to here to avoid
     // magic string constants and the potential risk of typos.
-    HALIDE_EXPORT static ConstString
+    static ConstString
         buffer_get_dimensions,
         buffer_get_min,
         buffer_get_extent,
@@ -672,7 +672,7 @@ struct Call : public ExprNode<Call> {
 /** A named variable. Might be a loop variable, function argument,
  * parameter, reduction variable, or something defined by a Let or
  * LetStmt node. */
-struct Variable : public ExprNode<Variable> {
+struct HALIDE_EXPORT Variable : public ExprNode<Variable> {
     std::string name;
 
     /** References to scalar parameters, or to the dimensions of buffer
@@ -719,7 +719,7 @@ struct Variable : public ExprNode<Variable> {
  * version of the loop. Each iteration becomes its own
  * statement. Again in this case, 'extent' should be a small
  * integer constant. */
-struct For : public StmtNode<For> {
+struct HALIDE_EXPORT For : public StmtNode<For> {
     std::string name;
     Expr min, extent;
     ForType for_type;
@@ -738,7 +738,7 @@ struct For : public StmtNode<For> {
     static const IRNodeType _node_type = IRNodeType::For;
 };
 
-struct Acquire : public StmtNode<Acquire> {
+struct HALIDE_EXPORT Acquire : public StmtNode<Acquire> {
     Expr semaphore;
     Expr count;
     Stmt body;
@@ -750,7 +750,7 @@ struct Acquire : public StmtNode<Acquire> {
 
 /** Construct a new vector by taking elements from another sequence of
  * vectors. */
-struct Shuffle : public ExprNode<Shuffle> {
+struct HALIDE_EXPORT Shuffle : public ExprNode<Shuffle> {
     std::vector<Expr> vectors;
 
     /** Indices indicating which vector element to place into the
@@ -819,7 +819,7 @@ struct Shuffle : public ExprNode<Shuffle> {
 
 /** Represent a multi-dimensional region of a Func or an ImageParam that
  * needs to be prefetched. */
-struct Prefetch : public StmtNode<Prefetch> {
+struct HALIDE_EXPORT Prefetch : public StmtNode<Prefetch> {
     std::string name;
     std::vector<Type> types;
     Region bounds;
@@ -842,7 +842,7 @@ struct Prefetch : public StmtNode<Prefetch> {
  *  However, if necessary, the node can access a mutex buffer through
  *  mutex_name and mutex_args, by lowering this node into
  *  calls to acquire and release the lock. */
-struct Atomic : public StmtNode<Atomic> {
+struct HALIDE_EXPORT Atomic : public StmtNode<Atomic> {
     std::string producer_name;
     std::string mutex_name;  // empty string if not using mutex
     Stmt body;
@@ -860,7 +860,7 @@ struct Atomic : public StmtNode<Atomic> {
  * types. Groups of adjacent lanes are combined. The number of lanes
  * in the input type must be a divisor of the number of lanes of the
  * output type.  */
-struct VectorReduce : public ExprNode<VectorReduce> {
+struct HALIDE_EXPORT VectorReduce : public ExprNode<VectorReduce> {
     // 99.9% of the time people will use this for horizontal addition,
     // but these are all of our commutative and associative primitive
     // operators.

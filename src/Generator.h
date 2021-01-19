@@ -390,7 +390,7 @@ struct select_type<First> { using type = typename std::conditional<First::value,
 class GeneratorBase;
 class GeneratorParamInfo;
 
-class GeneratorParamBase {
+class HALIDE_EXPORT GeneratorParamBase {
 public:
     explicit GeneratorParamBase(const std::string &name);
     virtual ~GeneratorParamBase();
@@ -1426,7 +1426,7 @@ private:
  * values will assert-fail; you must ensure that all unspecified values are
  * filled in prior to use.)
  */
-class GIOBase {
+class HALIDE_EXPORT GIOBase {
 public:
     bool array_size_defined() const;
     size_t array_size() const;
@@ -1514,7 +1514,7 @@ inline const std::vector<Func> &GIOBase::get_values<Func>() const {
     return funcs();
 }
 
-class GeneratorInputBase : public GIOBase {
+class HALIDE_EXPORT GeneratorInputBase : public GIOBase {
 protected:
     GeneratorInputBase(size_t array_size,
                        const std::string &name,
@@ -2184,7 +2184,7 @@ public:
 
 namespace Internal {
 
-class GeneratorOutputBase : public GIOBase {
+class HALIDE_EXPORT GeneratorOutputBase : public GIOBase {
 protected:
     template<typename T2, typename std::enable_if<std::is_same<T2, Func>::value>::type * = nullptr>
     HALIDE_NO_USER_CODE_INLINE T2 as() const {
@@ -2850,7 +2850,7 @@ class GeneratorStub;
  *  };
  * \endcode
  */
-class GeneratorContext {
+class HALIDE_EXPORT GeneratorContext {
 public:
     using ExternsMap = std::map<std::string, ExternalCode>;
 
@@ -3048,7 +3048,7 @@ public:
     }
 };
 
-class GeneratorBase : public NamesInterface, public GeneratorContext {
+class HALIDE_EXPORT GeneratorBase : public NamesInterface, public GeneratorContext {
 public:
     ~GeneratorBase() override;
 

@@ -28,7 +28,7 @@ struct PipelineContents;
 
 /** A struct representing the machine parameters to generate the auto-scheduled
  * code for. */
-struct MachineParams {
+struct HALIDE_EXPORT MachineParams {
     /** Maximum level of parallelism avalaible. */
     int parallelism;
     /** Size of the last-level cache (in bytes). */
@@ -94,7 +94,7 @@ using AutoSchedulerFn = std::function<void(const Pipeline &, const Target &, con
 
 /** A class representing a Halide pipeline. Constructed from the Func
  * or Funcs that it outputs. */
-class Pipeline {
+class HALIDE_EXPORT Pipeline {
 public:
     struct RealizationArg {
         // Only one of the following may be non-null
@@ -660,7 +660,7 @@ public:
     }
 };
 
-struct JITExtern {
+struct HALIDE_EXPORT_FOR_TEST JITExtern {
 private:
     // Note that exactly one of pipeline_ and extern_c_function_
     // can be set in a given JITExtern instance.

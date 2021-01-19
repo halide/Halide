@@ -16,7 +16,7 @@ namespace Halide {
 
 /** A handle on the output buffer of a pipeline. Used to make static
  * promises about the output size and stride. */
-class OutputImageParam {
+class HALIDE_EXPORT OutputImageParam {
 protected:
     friend class Func;
 

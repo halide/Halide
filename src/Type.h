@@ -113,16 +113,14 @@ struct HALIDE_EXPORT halide_handle_cplusplus_type {
                                  const std::vector<std::string> &namespaces = {},
                                  const std::vector<halide_cplusplus_type_name> &enclosing_types = {},
                                  const std::vector<uint8_t> &modifiers = {},
-                                 ReferenceType reference_type = NotReference)
-        : inner_name(inner_name),
-          namespaces(namespaces),
-          enclosing_types(enclosing_types),
-          cpp_type_modifiers(modifiers),
-          reference_type(reference_type) {
-    }
+                                 ReferenceType reference_type = NotReference);
 
     template<typename T>
     static halide_handle_cplusplus_type make();
+
+    static halide_handle_cplusplus_type make(const halide_cplusplus_type_name &inner_name,
+                                             const std::vector<uint8_t> &cpp_type_modifiers,
+                                             const ReferenceType &ref_type);
 };
 //@}
 
@@ -194,7 +192,9 @@ HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_parallel_task_t);
 //    };
 
 template<typename T>
-/*static*/ halide_handle_cplusplus_type halide_handle_cplusplus_type::make() {
+HALIDE_ALWAYS_INLINE
+    /*static*/ halide_handle_cplusplus_type
+    halide_handle_cplusplus_type::make() {
     constexpr bool is_ptr = std::is_pointer<T>::value;
     constexpr bool is_lvalue_reference = std::is_lvalue_reference<T>::value;
     constexpr bool is_rvalue_reference = std::is_rvalue_reference<T>::value;
@@ -219,15 +219,8 @@ template<typename T>
     constexpr bool known_type = halide_c_type_to_name<TNonCVBase>::known_type;
     static_assert(!(!known_type && !is_ptr), "Unknown types must be pointers");
 
-    halide_handle_cplusplus_type info = {
-        halide_c_type_to_name<TNonCVBase>::name(),
-        {},
-        {},
-        {modifiers},
-        ref_type};
-    // Pull off any namespaces
-    info.inner_name.name = Halide::Internal::extract_namespaces(info.inner_name.name, info.namespaces);
-    return info;
+    return make(halide_c_type_to_name<TNonCVBase>::name(), {modifiers},
+                ref_type);
 }
 
 /** A type traits template to provide a halide_handle_cplusplus_type

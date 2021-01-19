@@ -18,14 +18,14 @@ namespace Halide {
  * the device API is None or Host or a bad value. The error_site
  * argument is printed in the error message. If error_site is null,
  * this routine returns nullptr instead of calling user_error. */
-const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d,
-                                                                     const Target &t = get_jit_target_from_environment(),
-                                                                     const char *error_site = nullptr);
+HALIDE_EXPORT const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d,
+                                                                                   const Target &t = get_jit_target_from_environment(),
+                                                                                   const char *error_site = nullptr);
 
 /** Get the specific DeviceAPI that Halide would select when presented
  * with DeviceAPI::Default_GPU for a given target. If no suitable api
  * is enabled in the target, returns DeviceAPI::Host. */
-DeviceAPI get_default_device_api_for_target(const Target &t);
+HALIDE_EXPORT DeviceAPI get_default_device_api_for_target(const Target &t);
 
 /** This attempts to sniff whether a given Target (and its implied DeviceAPI) is usable on
  * the current host. If it appears to be usable, return true; if not, return false.
@@ -34,7 +34,7 @@ DeviceAPI get_default_device_api_for_target(const Target &t);
  * to allow early-exit when a desired device is definitely not usable.
  * Also note that this call is *NOT* threadsafe, as it temporarily redirect various
  * global error-handling hooks in Halide. */
-bool host_supports_target_device(const Target &t);
+HALIDE_EXPORT bool host_supports_target_device(const Target &t);
 
 namespace Internal {
 /** Get an Expr which evaluates to the device interface for the given device api at runtime. */

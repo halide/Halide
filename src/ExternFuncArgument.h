@@ -14,7 +14,7 @@ namespace Halide {
 
 /** An argument to an extern-defined Func. May be a Function, Buffer,
  * ImageParam or Expr. */
-struct ExternFuncArgument {
+struct HALIDE_EXPORT ExternFuncArgument {
     enum ArgType { UndefinedArg = 0,
                    FuncArg,
                    BufferArg,

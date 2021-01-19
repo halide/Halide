@@ -14,7 +14,7 @@ namespace Halide {
 
 class ImageParam;
 
-class ParamMap {
+class HALIDE_EXPORT ParamMap {
 public:
     struct ParamMapping {
         const Internal::Parameter *parameter{nullptr};

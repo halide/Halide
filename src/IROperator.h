@@ -18,23 +18,23 @@ namespace Internal {
 /** Is the expression either an IntImm, a FloatImm, a StringImm, or a
  * Cast of the same, or a Ramp or Broadcast of the same. Doesn't do
  * any constant folding. */
-bool is_const(const Expr &e);
+HALIDE_EXPORT_FOR_TEST bool is_const(const Expr &e);
 
 /** Is the expression an IntImm, FloatImm of a particular value, or a
  * Cast, or Broadcast of the same. */
-bool is_const(const Expr &e, int64_t v);
+HALIDE_EXPORT_FOR_TEST bool is_const(const Expr &e, int64_t v);
 
 /** If an expression is an IntImm or a Broadcast of an IntImm, return
  * a pointer to its value. Otherwise returns nullptr. */
-const int64_t *as_const_int(const Expr &e);
+HALIDE_EXPORT_FOR_TEST const int64_t *as_const_int(const Expr &e);
 
 /** If an expression is a UIntImm or a Broadcast of a UIntImm, return
  * a pointer to its value. Otherwise returns nullptr. */
-const uint64_t *as_const_uint(const Expr &e);
+HALIDE_EXPORT_FOR_TEST const uint64_t *as_const_uint(const Expr &e);
 
 /** If an expression is a FloatImm or a Broadcast of a FloatImm,
  * return a pointer to its value. Otherwise returns nullptr. */
-const double *as_const_float(const Expr &e);
+HALIDE_EXPORT_FOR_TEST const double *as_const_float(const Expr &e);
 
 /** Is the expression a constant integer power of two. Also returns
  * log base two of the expression if it is. Only returns true for
@@ -54,11 +54,11 @@ bool is_undef(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to zero (in all lanes, if a vector expression) */
-bool is_const_zero(const Expr &e);
+HALIDE_EXPORT_FOR_TEST bool is_const_zero(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to one (in all lanes, if a vector expression) */
-bool is_const_one(const Expr &e);
+HALIDE_EXPORT_FOR_TEST bool is_const_one(const Expr &e);
 
 /** Is the statement a no-op (which we represent as either an
  * undefined Stmt, or as an Evaluate node of a constant) */
@@ -72,36 +72,18 @@ bool is_pure(const Expr &e);
 
 /** Construct an immediate of the given type from any numeric C++ type. */
 // @{
-Expr make_const(Type t, int64_t val);
-Expr make_const(Type t, uint64_t val);
-Expr make_const(Type t, double val);
-inline Expr make_const(Type t, int32_t val) {
-    return make_const(t, (int64_t)val);
-}
-inline Expr make_const(Type t, uint32_t val) {
-    return make_const(t, (uint64_t)val);
-}
-inline Expr make_const(Type t, int16_t val) {
-    return make_const(t, (int64_t)val);
-}
-inline Expr make_const(Type t, uint16_t val) {
-    return make_const(t, (uint64_t)val);
-}
-inline Expr make_const(Type t, int8_t val) {
-    return make_const(t, (int64_t)val);
-}
-inline Expr make_const(Type t, uint8_t val) {
-    return make_const(t, (uint64_t)val);
-}
-inline Expr make_const(Type t, bool val) {
-    return make_const(t, (uint64_t)val);
-}
-inline Expr make_const(Type t, float val) {
-    return make_const(t, (double)val);
-}
-inline Expr make_const(Type t, float16_t val) {
-    return make_const(t, (double)val);
-}
+HALIDE_EXPORT_FOR_TEST Expr make_const(Type t, int64_t val);
+HALIDE_EXPORT_FOR_TEST Expr make_const(Type t, uint64_t val);
+HALIDE_EXPORT_FOR_TEST Expr make_const(Type t, double val);
+HALIDE_EXPORT_FOR_TEST Expr make_const(Type t, int32_t val);
+HALIDE_EXPORT_FOR_TEST Expr make_const(Type t, uint32_t val);
+HALIDE_EXPORT_FOR_TEST Expr make_const(Type t, int16_t val);
+HALIDE_EXPORT_FOR_TEST Expr make_const(Type t, uint16_t val);
+HALIDE_EXPORT_FOR_TEST Expr make_const(Type t, int8_t val);
+HALIDE_EXPORT_FOR_TEST Expr make_const(Type t, uint8_t val);
+HALIDE_EXPORT_FOR_TEST Expr make_const(Type t, bool val);
+HALIDE_EXPORT_FOR_TEST Expr make_const(Type t, float val);
+HALIDE_EXPORT_FOR_TEST Expr make_const(Type t, float16_t val);
 // @}
 
 /** Construct a unique signed_integer_overflow Expr */
@@ -131,11 +113,11 @@ Expr make_two(Type t);
 
 /** Construct the constant boolean true. May also be a vector of
  * trues, if a lanes argument is given. */
-Expr const_true(int lanes = 1);
+HALIDE_EXPORT_FOR_TEST Expr const_true(int lanes = 1);
 
 /** Construct the constant boolean false. May also be a vector of
  * falses, if a lanes argument is given. */
-Expr const_false(int lanes = 1);
+HALIDE_EXPORT_FOR_TEST Expr const_false(int lanes = 1);
 
 /** Attempt to cast an expression to a smaller type while provably not
  * losing information. If it can't be done, return an undefined
@@ -325,39 +307,37 @@ inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &arg
 
 Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args);
 
-Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
-
 /** Compute widen(a) + widen(b). The result is always signed. */
-Expr widening_add(Expr a, Expr b);
+HALIDE_EXPORT_FOR_TEST Expr widening_add(Expr a, Expr b);
 /** Compute widen(a) * widen(b). a and b may have different signedness. */
-Expr widening_mul(Expr a, Expr b);
+HALIDE_EXPORT_FOR_TEST Expr widening_mul(Expr a, Expr b);
 /** Compute widen(a) - widen(b). The result is always signed. */
-Expr widening_sub(Expr a, Expr b);
+HALIDE_EXPORT_FOR_TEST Expr widening_sub(Expr a, Expr b);
 /** Compute widen(a) << b. */
-Expr widening_shift_left(Expr a, Expr b);
+HALIDE_EXPORT_FOR_TEST Expr widening_shift_left(Expr a, Expr b);
 /** Compute widen(a) >> b. */
-Expr widening_shift_right(Expr a, Expr b);
+HALIDE_EXPORT_FOR_TEST Expr widening_shift_right(Expr a, Expr b);
 
 /** Compute saturating_add(a, (1 >> min(b, 0)) / 2) << b. When b is positive
  * indicating a left shift, the rounding term is zero. */
-Expr rounding_shift_left(Expr a, Expr b);
+HALIDE_EXPORT_FOR_TEST Expr rounding_shift_left(Expr a, Expr b);
 /** Compute saturating_add(a, (1 << max(b, 0)) / 2) >> b. When b is negative
  * indicating a left shift, the rounding term is zero. */
-Expr rounding_shift_right(Expr a, Expr b);
+HALIDE_EXPORT_FOR_TEST Expr rounding_shift_right(Expr a, Expr b);
 
 /** Compute saturating_narrow(widen(a) + widen(b)) */
-Expr saturating_add(Expr a, Expr b);
+HALIDE_EXPORT_FOR_TEST Expr saturating_add(Expr a, Expr b);
 /** Compute saturating_narrow(widen(a) - widen(b)) */
-Expr saturating_sub(Expr a, Expr b);
+HALIDE_EXPORT_FOR_TEST Expr saturating_sub(Expr a, Expr b);
 
 /** Compute narrow((widen(a) + widen(b)) / 2) */
-Expr halving_add(Expr a, Expr b);
+HALIDE_EXPORT_FOR_TEST Expr halving_add(Expr a, Expr b);
 /** Compute narrow((widen(a) + widen(b) + 1) / 2) */
-Expr rounding_halving_add(Expr a, Expr b);
+HALIDE_EXPORT_FOR_TEST Expr rounding_halving_add(Expr a, Expr b);
 /** Compute narrow((widen(a) - widen(b)) / 2) */
-Expr halving_sub(Expr a, Expr b);
+HALIDE_EXPORT_FOR_TEST Expr halving_sub(Expr a, Expr b);
 /** Compute narrow((widen(a) - widen(b) + 1) / 2) */
-Expr rounding_halving_sub(Expr a, Expr b);
+HALIDE_EXPORT_FOR_TEST Expr rounding_halving_sub(Expr a, Expr b);
 
 }  // namespace Internal
 
@@ -660,21 +640,21 @@ inline Expr max(A &&a, B &&b, C &&c, Rest &&... rest) {
     return max(std::forward<A>(a), max(std::forward<B>(b), std::forward<C>(c), std::forward<Rest>(rest)...));
 }
 
-Expr min(Expr a, Expr b);
+HALIDE_EXPORT Expr min(Expr a, Expr b);
 
 /** Returns an expression representing the lesser of an expression
  * and a constant integer.  The integer is coerced to the type of the
  * expression. Errors if the integer is not representable as that
  * type. Vectorizes cleanly on most platforms (with the exception of
  * integer types on x86 without SSE4). */
-Expr min(Expr a, int b);
+HALIDE_EXPORT Expr min(Expr a, int b);
 
 /** Returns an expression representing the lesser of a constant
  * integer and an expression. The integer is coerced to the type of
  * the expression. Errors if the integer is not representable as that
  * type. Vectorizes cleanly on most platforms (with the exception of
  * integer types on x86 without SSE4). */
-Expr min(int a, Expr b);
+HALIDE_EXPORT Expr min(int a, Expr b);
 
 inline Expr min(float a, Expr b) {
     return min(Expr(a), std::move(b));
@@ -1346,10 +1326,13 @@ inline Expr undef() {
  * digest, memoize_tag can be used to key computations using that image
  * on the digest. */
 // @{
+
+HALIDE_EXPORT Expr memoize_tag(Expr result, const std::vector<Expr> &cache_key_values);
+
 template<typename... Args>
 inline HALIDE_NO_USER_CODE_INLINE Expr memoize_tag(Expr result, Args &&... args) {
     std::vector<Expr> collected_args{std::forward<Args>(args)...};
-    return Internal::memoize_tag_helper(std::move(result), collected_args);
+    return memoize_tag(std::move(result), collected_args);
 }
 // @}
 

@@ -35,7 +35,7 @@ struct Specialization;
  * Note that, while the Expr in LHS/RHS may be different across specializations,
  * they must have the same number of dimensions and the same pure dimensions.
  */
-class Definition {
+class HALIDE_EXPORT_FOR_TEST Definition {
 
     IntrusivePtr<DefinitionContents> contents;
 

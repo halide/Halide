@@ -73,7 +73,7 @@ CompilerLogger *get_compiler_logger();
 /** JSONCompilerLogger is a basic implementation of the CompilerLogger interface
  * that saves logged data, then logs it all in JSON format in emit_to_stream().
  */
-class JSONCompilerLogger : public CompilerLogger {
+class HALIDE_EXPORT_FOR_TEST JSONCompilerLogger : public CompilerLogger {
 public:
     JSONCompilerLogger() = default;
 

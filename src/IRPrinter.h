@@ -65,7 +65,7 @@ std::ostream &operator<<(std::ostream &stream, const AssociativeOp &);
 
 /** Emit a halide statement on an output stream (such as std::cout) in
  * a human-readable form */
-std::ostream &operator<<(std::ostream &stream, const Stmt &);
+HALIDE_EXPORT_FOR_TEST std::ostream &operator<<(std::ostream &stream, const Stmt &);
 
 /** Emit a halide for loop type (vectorized, serial, etc) in a human
  * readable form */

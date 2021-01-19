@@ -177,6 +177,43 @@ bool Func::is_extern() const {
     return func.has_extern_definition();
 }
 
+void Func::define_extern(const std::string &function_name,
+                         const std::vector<ExternFuncArgument> &params, Type t,
+                         int dimensionality,
+                         NameMangling mangling,
+                         DeviceAPI device_api) {
+    define_extern(function_name, params, t,
+                  Internal::make_argument_list(dimensionality), mangling,
+                  device_api);
+}
+
+void Func::define_extern(const std::string &function_name,
+                         const std::vector<ExternFuncArgument> &params,
+                         const std::vector<Type> &types, int dimensionality,
+                         NameMangling mangling) {
+    define_extern(function_name, params, types,
+                  Internal::make_argument_list(dimensionality), mangling);
+}
+
+void Func::define_extern(const std::string &function_name,
+                         const std::vector<ExternFuncArgument> &params,
+                         const std::vector<Type> &types, int dimensionality,
+                         NameMangling mangling,
+                         DeviceAPI device_api) {
+    define_extern(function_name, params, types,
+                  Internal::make_argument_list(dimensionality), mangling,
+                  device_api);
+}
+
+void Func::define_extern(const std::string &function_name,
+                         const std::vector<ExternFuncArgument> &params, Type t,
+                         const std::vector<Var> &arguments,
+                         NameMangling mangling,
+                         DeviceAPI device_api) {
+    define_extern(function_name, params, std::vector<Type>{t}, arguments,
+                  mangling, device_api);
+}
+
 /** Add an extern definition for this Func. */
 void Func::define_extern(const std::string &function_name,
                          const std::vector<ExternFuncArgument> &args,

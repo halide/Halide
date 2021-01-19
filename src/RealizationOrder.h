@@ -28,7 +28,7 @@ class Function;
  * 'fused_pairs' list in the function's schedule. Return a pair of
  * the realization order and the fused groups in that order.
  */
-std::pair<std::vector<std::string>, std::vector<std::vector<std::string>>> realization_order(
+HALIDE_EXPORT_FOR_TEST std::pair<std::vector<std::string>, std::vector<std::vector<std::string>>> realization_order(
     const std::vector<Function> &outputs, std::map<std::string, Function> &env);
 
 /** Given a bunch of functions that call each other, determine a

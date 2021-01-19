@@ -92,10 +92,10 @@ inline HALIDE_NO_USER_CODE_INLINE Func func_like_to_func(const T &func_like) {
  *  to bound.
  */
 // @{
-Func constant_exterior(const Func &source, const Tuple &value,
-                       const Region &bounds);
-Func constant_exterior(const Func &source, const Expr &value,
-                       const Region &bounds);
+HALIDE_EXPORT Func constant_exterior(const Func &source, const Tuple &value,
+                                     const Region &bounds);
+HALIDE_EXPORT Func constant_exterior(const Func &source, const Expr &value,
+                                     const Region &bounds);
 
 template<typename T>
 HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, const Tuple &value, const Region &bounds) {
@@ -150,7 +150,7 @@ HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, const Expr
  *  to bound.
  */
 // @{
-Func repeat_edge(const Func &source, const Region &bounds);
+HALIDE_EXPORT Func repeat_edge(const Func &source, const Region &bounds);
 
 template<typename T>
 HALIDE_NO_USER_CODE_INLINE Func repeat_edge(const T &func_like, const Region &bounds) {
@@ -190,7 +190,7 @@ HALIDE_NO_USER_CODE_INLINE Func repeat_edge(const T &func_like, Bounds &&... bou
  *  to bound.
  */
 // @{
-Func repeat_image(const Func &source, const Region &bounds);
+HALIDE_EXPORT Func repeat_image(const Func &source, const Region &bounds);
 
 template<typename T>
 HALIDE_NO_USER_CODE_INLINE Func repeat_image(const T &func_like, const Region &bounds) {
@@ -230,7 +230,7 @@ HALIDE_NO_USER_CODE_INLINE Func repeat_image(const T &func_like, Bounds &&... bo
  *  to bound.
  */
 // @{
-Func mirror_image(const Func &source, const Region &bounds);
+HALIDE_EXPORT Func mirror_image(const Func &source, const Region &bounds);
 
 template<typename T>
 HALIDE_NO_USER_CODE_INLINE Func mirror_image(const T &func_like, const Region &bounds) {
@@ -273,7 +273,7 @@ HALIDE_NO_USER_CODE_INLINE Func mirror_image(const T &func_like, Bounds &&... bo
  *  to bound.
  */
 // @{
-Func mirror_interior(const Func &source, const Region &bounds);
+HALIDE_EXPORT Func mirror_interior(const Func &source, const Region &bounds);
 
 template<typename T>
 HALIDE_NO_USER_CODE_INLINE Func mirror_interior(const T &func_like, const Region &bounds) {

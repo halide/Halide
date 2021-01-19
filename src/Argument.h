@@ -15,7 +15,7 @@ namespace Halide {
 template<typename T>
 class Buffer;
 
-struct ArgumentEstimates {
+struct HALIDE_EXPORT ArgumentEstimates {
     /** If this is a scalar argument, then these are its default, min, max, and estimated values.
      * For buffer arguments, all should be undefined. */
     Expr scalar_def, scalar_min, scalar_max, scalar_estimate;
@@ -34,7 +34,7 @@ struct ArgumentEstimates {
  * function. Used for specifying the function signature of
  * generated code.
  */
-struct Argument {
+struct HALIDE_EXPORT Argument {
     /** The name of the argument */
     std::string name;
 

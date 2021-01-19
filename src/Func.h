@@ -1231,38 +1231,24 @@ public:
                        const std::vector<ExternFuncArgument> &params, Type t,
                        int dimensionality,
                        NameMangling mangling = NameMangling::Default,
-                       DeviceAPI device_api = DeviceAPI::Host) {
-        define_extern(function_name, params, t,
-                      Internal::make_argument_list(dimensionality), mangling,
-                      device_api);
-    }
+                       DeviceAPI device_api = DeviceAPI::Host);
 
     void define_extern(const std::string &function_name,
                        const std::vector<ExternFuncArgument> &params,
                        const std::vector<Type> &types, int dimensionality,
-                       NameMangling mangling) {
-        define_extern(function_name, params, types,
-                      Internal::make_argument_list(dimensionality), mangling);
-    }
+                       NameMangling mangling);
 
     void define_extern(const std::string &function_name,
                        const std::vector<ExternFuncArgument> &params,
                        const std::vector<Type> &types, int dimensionality,
                        NameMangling mangling = NameMangling::Default,
-                       DeviceAPI device_api = DeviceAPI::Host) {
-        define_extern(function_name, params, types,
-                      Internal::make_argument_list(dimensionality), mangling,
-                      device_api);
-    }
+                       DeviceAPI device_api = DeviceAPI::Host);
 
     void define_extern(const std::string &function_name,
                        const std::vector<ExternFuncArgument> &params, Type t,
                        const std::vector<Var> &arguments,
                        NameMangling mangling = NameMangling::Default,
-                       DeviceAPI device_api = DeviceAPI::Host) {
-        define_extern(function_name, params, std::vector<Type>{t}, arguments,
-                      mangling, device_api);
-    }
+                       DeviceAPI device_api = DeviceAPI::Host);
 
     void define_extern(const std::string &function_name,
                        const std::vector<ExternFuncArgument> &params,

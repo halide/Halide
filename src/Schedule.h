@@ -140,7 +140,7 @@ enum class LoopAlignStrategy {
  }
  \endcode
  */
-class LoopLevel {
+class HALIDE_EXPORT LoopLevel {
     Internal::IntrusivePtr<Internal::LoopLevelContents> contents;
 
     explicit LoopLevel(Internal::IntrusivePtr<Internal::LoopLevelContents> c)
@@ -606,7 +606,8 @@ public:
 /** A schedule for a single stage of a Halide pipeline. Right now this
  * interface is basically a struct, offering mutable access to its
  * innards. In the future it may become more encapsulated. */
-class StageSchedule {
+// TODO: returned by Func::get_schedule(), thus de facto part of real API
+class HALIDE_EXPORT StageSchedule {
     IntrusivePtr<StageScheduleContents> contents;
 
 public:

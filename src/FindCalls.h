@@ -29,7 +29,7 @@ std::map<std::string, Function> find_direct_calls(Function f);
  *  indirectly in those functions' definitions, recursively. This map always
  *  _includes_ the Function f.
  */
-std::map<std::string, Function> find_transitive_calls(Function f);
+HALIDE_EXPORT_FOR_TEST std::map<std::string, Function> find_transitive_calls(Function f);
 
 /** Find all Functions transitively referenced by f in any way and add
  * them to the given map. */

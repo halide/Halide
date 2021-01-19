@@ -18,7 +18,7 @@ namespace Halide {
  *  Helper structure storing the adjoints Func.
  *  Use d(func) or d(buffer) to obtain the derivative Func.
  */
-class Derivative {
+class HALIDE_EXPORT Derivative {
 public:
     // function name & update_id, for initialization update_id == -1
     using FuncKey = std::pair<std::string, int>;
@@ -48,9 +48,9 @@ private:
  *  each update of that Func, it generates a derivative Func stored in
  *  the Derivative.
  */
-Derivative propagate_adjoints(const Func &output,
-                              const Func &adjoint,
-                              const Region &output_bounds);
+HALIDE_EXPORT Derivative propagate_adjoints(const Func &output,
+                                            const Func &adjoint,
+                                            const Region &output_bounds);
 /**
  *  Given a Func and a corresponding adjoint buffer, (back)propagate the
  *  adjoint to all dependent Funcs, buffers, and parameters.
@@ -58,8 +58,8 @@ Derivative propagate_adjoints(const Func &output,
  *  each update of that Func, it generates a derivative Func stored in
  *  the Derivative.
  */
-Derivative propagate_adjoints(const Func &output,
-                              const Buffer<float> &adjoint);
+HALIDE_EXPORT Derivative propagate_adjoints(const Func &output,
+                                            const Buffer<float> &adjoint);
 /**
  *  Given a scalar Func with size 1, (back)propagate the gradient
  *  to all dependent Funcs, buffers, and parameters.
@@ -67,7 +67,7 @@ Derivative propagate_adjoints(const Func &output,
  *  each update of that Func, it generates a derivative Func stored in
  *  the Derivative.
  */
-Derivative propagate_adjoints(const Func &output);
+HALIDE_EXPORT Derivative propagate_adjoints(const Func &output);
 
 }  // namespace Halide
 

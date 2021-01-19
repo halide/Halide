@@ -14,7 +14,7 @@ namespace Halide {
  *  other than the raw IEEE754 binary16 bits so that it can passed
  *  to code that checks a type's size and used for halide_buffer_t allocation.
  * */
-struct float16_t {
+struct HALIDE_EXPORT float16_t {
 
     static const int mantissa_bits = 10;
     static const uint16_t sign_mask = 0x8000;
@@ -139,7 +139,7 @@ namespace Halide {
  *  This type is enforced to be 16-bits wide and maintains no state
  *  other than the raw bits so that it can passed to code that checks
  *  a type's size and used for halide_buffer_t allocation. */
-struct bfloat16_t {
+struct HALIDE_EXPORT bfloat16_t {
 
     static const int mantissa_bits = 7;
     static const uint16_t sign_mask = 0x8000;

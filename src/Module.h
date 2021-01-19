@@ -132,7 +132,7 @@ struct AutoSchedulerResults;
 
 /** A halide module. This represents IR containing lowered function
  * definitions and buffers. */
-class Module {
+class HALIDE_EXPORT Module {
     Internal::IntrusivePtr<Internal::ModuleContents> contents;
 
 public:
@@ -207,7 +207,7 @@ Module link_modules(const std::string &name, const std::vector<Module> &modules)
 /** Create an object file containing the Halide runtime for a given target. For
  * use with Target::NoRuntime. Standalone runtimes are only compatible with
  * pipelines compiled by the same build of Halide used to call this function. */
-void compile_standalone_runtime(const std::string &object_filename, const Target &t);
+HALIDE_EXPORT void compile_standalone_runtime(const std::string &object_filename, const Target &t);
 
 /** Create an object and/or static library file containing the Halide runtime
  * for a given target. For use with Target::NoRuntime. Standalone runtimes are
@@ -215,17 +215,17 @@ void compile_standalone_runtime(const std::string &object_filename, const Target
  * call this function. Return a map with just the actual outputs filled in
  * (typically, Output::object and/or Output::static_library).
  */
-std::map<Output, std::string> compile_standalone_runtime(const std::map<Output, std::string> &output_files, const Target &t);
+HALIDE_EXPORT std::map<Output, std::string> compile_standalone_runtime(const std::map<Output, std::string> &output_files, const Target &t);
 
 using ModuleFactory = std::function<Module(const std::string &fn_name, const Target &target)>;
 using CompilerLoggerFactory = std::function<std::unique_ptr<Internal::CompilerLogger>(const std::string &fn_name, const Target &target)>;
 
-void compile_multitarget(const std::string &fn_name,
-                         const std::map<Output, std::string> &output_files,
-                         const std::vector<Target> &targets,
-                         const std::vector<std::string> &suffixes,
-                         const ModuleFactory &module_factory,
-                         const CompilerLoggerFactory &compiler_logger_factory = nullptr);
+HALIDE_EXPORT void compile_multitarget(const std::string &fn_name,
+                                       const std::map<Output, std::string> &output_files,
+                                       const std::vector<Target> &targets,
+                                       const std::vector<std::string> &suffixes,
+                                       const ModuleFactory &module_factory,
+                                       const CompilerLoggerFactory &compiler_logger_factory = nullptr);
 
 }  // namespace Halide
 

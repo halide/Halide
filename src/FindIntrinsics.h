@@ -33,7 +33,7 @@ Expr lower_intrinsic(const Call *op);
 
 /** Replace common arithmetic patterns with intrinsics. */
 Stmt find_intrinsics(const Stmt &s);
-Expr find_intrinsics(const Expr &e);
+HALIDE_EXPORT_FOR_TEST Expr find_intrinsics(const Expr &e);
 
 /** The reverse of find_intrinsics. */
 Expr lower_intrinsics(const Expr &e);

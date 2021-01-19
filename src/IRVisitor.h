@@ -16,7 +16,7 @@ namespace Internal {
  * IR. The default implementations just recursively walk over the
  * children. Override the ones you care about.
  */
-class IRVisitor {
+class HALIDE_EXPORT_FOR_TEST IRVisitor {
 public:
     IRVisitor() = default;
     virtual ~IRVisitor() = default;

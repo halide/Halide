@@ -13,7 +13,7 @@
 namespace Halide {
 namespace Internal {
 
-class Dimension {
+class HALIDE_EXPORT Dimension {
 public:
     /** Get an expression representing the minimum coordinates of this image
      * parameter in the given dimension. */
