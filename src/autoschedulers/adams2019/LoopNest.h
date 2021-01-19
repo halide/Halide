@@ -10,6 +10,7 @@
 #include "PerfectHashMap.h"
 #include <set>
 #include <vector>
+#include <map>
 
 namespace Halide {
 namespace Internal {
@@ -271,6 +272,7 @@ struct LoopNest {
     // hash of producers -> StageMap
     mutable std::map<uint64_t, StageMap<ScheduleFeatures>> features_cache;
 
+    // Same as copy_from (above) but also copies the two caches.
     void copy_from_including_features(const LoopNest &n);
 
     // Loops through inlined funcs and caches the pcm found in features, into memoized_features.

@@ -4,9 +4,6 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
-// Keep track of how many times we evaluated a state.
-// int State::cost_calculations = 0;
-
 uint64_t State::structural_hash(int depth) const {
     uint64_t h = num_decisions_made;
     internal_assert(root.defined());
