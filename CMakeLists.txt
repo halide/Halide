@@ -34,9 +34,6 @@ if (CMAKE_SYSTEM_NAME MATCHES "Windows")
     message(STATUS "Windows: setting CMAKE_OBJECT_PATH_MAX to ${CMAKE_OBJECT_PATH_MAX}")
 endif ()
 
-# Export all symbols on Windows to match GCC/Clang behavior on Linux/macOS
-set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
-
 # Require standard C++14
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

@@ -8,6 +8,7 @@
 #endif
 
 // This seems to be required by some LLVM header, which is likely an LLVM bug.
+#include <cassert>
 #include <cstddef>
 
 // No msvc warnings from llvm headers please
@@ -19,6 +20,10 @@
 #endif
 #ifdef __clang__
 #pragma clang system_header
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC visibility push(hidden)
 #endif
 
 #if WITH_WABT
@@ -85,6 +90,10 @@
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Value.h>
+
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC visibility pop
+#endif
 
 // No msvc warnings from llvm headers please
 #ifdef _MSC_VER

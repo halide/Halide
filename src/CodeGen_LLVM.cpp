@@ -58,6 +58,10 @@ using std::pair;
 using std::string;
 using std::vector;
 
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC visibility push(hidden)
+#endif
+
 // Define a local empty inline function for each target
 // to disable initialization.
 #define LLVM_TARGET(target)                    \
@@ -149,6 +153,10 @@ using std::vector;
 #define InitializeWebAssemblyTarget() InitializeTarget(WebAssembly)
 #define InitializeWebAssemblyAsmParser() InitializeAsmParser(WebAssembly)
 #define InitializeWebAssemblyAsmPrinter() InitializeAsmPrinter(WebAssembly)
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC visibility pop
 #endif
 
 namespace {
