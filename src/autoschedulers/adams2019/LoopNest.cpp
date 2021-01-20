@@ -330,8 +330,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
             if (use_memoized_features) {
                 if (c->features_cache.count(hash_of_producers) > 0) {
-                    // TODO(rootjalex): possibly remove statistics gathering
-                    Cache::feature_hits++;
                     const auto &entry = c->features_cache.at(hash_of_producers);
 
                     for (auto it = entry.begin(); it != entry.end(); it++) {
@@ -350,8 +348,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     working_set_here += working_set_c;
                     continue;  // no need to recompute fetures
                 }
-                // TODO(rootjalex): possibly remove statistics gathering?
-                Cache::feature_misses++;
             }
 
             c->compute_features(dag, params, sites, subinstances, parallelism, this, parent, root, &working_set_here, features, use_memoized_features);

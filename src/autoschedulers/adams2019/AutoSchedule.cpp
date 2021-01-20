@@ -521,10 +521,6 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         aslog(0) << "Cache (block) hits: " << cache.cache_hits << "\n";
         aslog(0) << "Cache (block) misses: " << cache.cache_misses << "\n";
     }
-    if (options.cache_features) {
-        aslog(0) << "Cache (feature) hits: " << Cache::feature_hits << "\n";
-        aslog(0) << "Cache (feature) misses: " << Cache::feature_misses << "\n";
-    }
 
     return best;
 }
@@ -543,8 +539,6 @@ void generate_schedule(const std::vector<Function> &outputs,
     HALIDE_TIC;
 
     State::cost_calculations = 0;
-    Cache::feature_hits = 0;
-    Cache::feature_misses = 0;
 
     // Get the seed for random dropout
     string seed_str = get_env_variable("HL_SEED");

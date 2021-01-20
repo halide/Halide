@@ -6,9 +6,6 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
-int Cache::feature_hits = 0;
-int Cache::feature_misses = 0;
-
 bool use_memoized_features() {
     static bool var = get_env_variable("HL_USE_MEMOIZED_FEATURES") == "1";
     return var;
