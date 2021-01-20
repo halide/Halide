@@ -103,7 +103,7 @@ public:
         RealizationArg(Realization &r);
         RealizationArg(Realization &&r);
         RealizationArg(halide_buffer_t *buf);
-        RealizationArg(RealizationArg &&from);
+        RealizationArg(RealizationArg &&from) noexcept;
 
         template<typename T, int D>
         HALIDE_ALWAYS_INLINE RealizationArg(Runtime::Buffer<T, D> &dst)

@@ -148,7 +148,7 @@ void destroy<PipelineContents>(const PipelineContents *p) {
 }
 }  // namespace Internal
 
-Pipeline::RealizationArg::RealizationArg(RealizationArg &&from) = default;
+Pipeline::RealizationArg::RealizationArg(RealizationArg &&from) noexcept = default;
 
 Pipeline::RealizationArg::RealizationArg(Realization &r)
     : r(&r) {
