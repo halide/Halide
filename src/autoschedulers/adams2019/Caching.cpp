@@ -1,6 +1,6 @@
 #include "Caching.h"
-#include "State.h"
 #include "LoopNest.h"
+#include "State.h"
 
 namespace Halide {
 namespace Internal {
@@ -26,7 +26,7 @@ bool is_memoize_blocks_enabled() {
 
 bool Cache::add_memoized_blocks(const State *state,
                                 std::function<void(IntrusivePtr<State> &&)> &accept_child,
-                                const FunctionDAG::Node *node, int& num_children,
+                                const FunctionDAG::Node *node, int &num_children,
                                 const FunctionDAG &dag,
                                 const MachineParams &params,
                                 CostModel *cost_model,
@@ -66,7 +66,7 @@ bool Cache::add_memoized_blocks(const State *state,
 
         int block_index = 0;
         // TODO(rootjalex): is there a faster way to do this? seems like a .find()
-        for (const auto& new_child : new_root->children) {
+        for (const auto &new_child : new_root->children) {
             if (new_child->node == node) {
                 break;
             }
@@ -75,7 +75,7 @@ bool Cache::add_memoized_blocks(const State *state,
 
         // Copy all stages into new_root.
         for (size_t j = 0; j < num_stages; j++) {
-            LoopNest* new_block = new LoopNest;
+            LoopNest *new_block = new LoopNest;
             new_block->copy_from_including_features(*blocks[i + j]);
             new_root->children[block_index++] = new_block;
         }
@@ -92,7 +92,7 @@ bool Cache::add_memoized_blocks(const State *state,
     return true;
 }
 
-void Cache::memoize_blocks(const FunctionDAG::Node *node, LoopNest* new_root) {
+void Cache::memoize_blocks(const FunctionDAG::Node *node, LoopNest *new_root) {
     if (!options.cache_blocks) {
         return;
     }
@@ -111,7 +111,7 @@ void Cache::memoize_blocks(const FunctionDAG::Node *node, LoopNest* new_root) {
 
     internal_assert(loop_nest_found) << "memoize_blocks did not find loop nest!\n";
 
-    auto& blocks = memoized_compute_root_blocks.get_or_create(node)[vector_dim];
+    auto &blocks = memoized_compute_root_blocks.get_or_create(node)[vector_dim];
 
     for (auto &child : new_root->children) {
         if (child->node == node) {
@@ -123,7 +123,6 @@ void Cache::memoize_blocks(const FunctionDAG::Node *node, LoopNest* new_root) {
         }
     }
 }
-
 
 }  // namespace Autoscheduler
 }  // namespace Internal

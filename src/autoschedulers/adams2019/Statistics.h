@@ -1,9 +1,9 @@
 #ifndef STATISTICS_H
 #define STATISTICS_H
 
+#include <chrono>
 #include <set>
 #include <vector>
-#include <chrono>
 
 namespace Halide {
 namespace Internal {
@@ -15,10 +15,8 @@ struct ScopedTimer {
     std::chrono::time_point<Clock> start;
     std::string msg;
 
-    ScopedTimer(const std::string& msg)
-        : start{Clock::now()}
-        , msg{msg}
-    {
+    ScopedTimer(const std::string &msg)
+        : start{Clock::now()}, msg{msg} {
         aslog(0) << "Start: " << msg << "\n";
     }
 
@@ -33,8 +31,7 @@ struct Timer {
     std::chrono::time_point<Clock> start;
 
     Timer()
-        : start{Clock::now()}
-    {
+        : start{Clock::now()} {
     }
 
     void restart() {
@@ -50,4 +47,4 @@ struct Timer {
 }  // namespace Internal
 }  // namespace Halide
 
-#endif // STATISTICS_H
+#endif  // STATISTICS_H

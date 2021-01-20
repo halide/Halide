@@ -55,28 +55,29 @@ struct Cache {
     static int feature_misses;
 
     Cache() = delete;
-    Cache(const CachingOptions &_options, size_t nodes_size) : options(_options) {
+    Cache(const CachingOptions &_options, size_t nodes_size)
+        : options(_options) {
         if (options.cache_blocks) {
             memoized_compute_root_blocks.make_large(nodes_size);
         }
     }
 
     ~Cache() = default;
-   
+
     // check if we generated tilings for the current func on a previous pass
     // if so, add them and return true.
     // otherwise, return false (also return false if memoization is turned off).
     bool add_memoized_blocks(const State *state,
                              std::function<void(IntrusivePtr<State> &&)> &accept_child,
                              const FunctionDAG::Node *node,
-                             int& num_children,
+                             int &num_children,
                              const FunctionDAG &dag,
                              const MachineParams &params,
                              CostModel *cost_model,
                              int64_t memory_limit) const;
 
     // Generate tilings for a specific vector dimension and memoize them.
-    void memoize_blocks(const FunctionDAG::Node *node, LoopNest* new_root);
+    void memoize_blocks(const FunctionDAG::Node *node, LoopNest *new_root);
 };
 
 }  // namespace Autoscheduler

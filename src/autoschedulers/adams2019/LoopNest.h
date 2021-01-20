@@ -8,9 +8,9 @@
 
 #include "FunctionDAG.h"
 #include "PerfectHashMap.h"
+#include <map>
 #include <set>
 #include <vector>
-#include <map>
 
 namespace Halide {
 namespace Internal {
@@ -274,11 +274,11 @@ struct LoopNest {
     void copy_from_including_features(const LoopNest &n);
 
     // Loops through inlined funcs and caches the pcm found in features, into memoized_features.
-    void memoize_points_computed_minimum(StageMap<ScheduleFeatures>& memoized_features,
+    void memoize_points_computed_minimum(StageMap<ScheduleFeatures> &memoized_features,
                                          const StageMap<ScheduleFeatures> *features) const;
 
     // Merges features_to_insert into memoized_features if it does not already exist there.
-    void memoize_features(StageMap<ScheduleFeatures>& memoized_features,
+    void memoize_features(StageMap<ScheduleFeatures> &memoized_features,
                           const StageMap<ScheduleFeatures> *features_to_insert) const;
 
     // Recalculates working_set from cached features
@@ -296,7 +296,7 @@ struct LoopNest {
     std::vector<std::pair<int, int>> collect_producers(const StageMap<Sites> &sites) const;
 
     // Collect all stages referenced in this LoopNest.
-    void collect_stages(std::set<const FunctionDAG::Node::Stage *>& stages) const;
+    void collect_stages(std::set<const FunctionDAG::Node::Stage *> &stages) const;
 };
 
 }  // namespace Autoscheduler

@@ -10,7 +10,6 @@
 #include "LoopNest.h"
 #include "PerfectHashMap.h"
 
-
 namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
@@ -81,4 +80,4 @@ struct State {
 }  // namespace Internal
 }  // namespace Halide
 
-#endif // STATE_H
+#endif  // STATE_H

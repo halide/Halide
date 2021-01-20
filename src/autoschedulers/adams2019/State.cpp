@@ -13,7 +13,7 @@ uint64_t State::structural_hash(int depth) const {
 
 // Compute the parent and depth of every loop nest node
 void State::compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest *, int>> &p,
-                                const LoopNest *here, int depth) const {
+                                      const LoopNest *here, int depth) const {
     for (const auto &c : here->children) {
         p.emplace(c.get(), pair<const LoopNest *, int>{here, depth});
         compute_loop_nest_parents(p, c.get(), depth + 1);
@@ -21,7 +21,7 @@ void State::compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest 
 }
 
 const LoopNest *State::deepest_common_ancestor(const map<const LoopNest *, pair<const LoopNest *, int>> &parent,
-                                        const LoopNest *a, const LoopNest *b) const {
+                                               const LoopNest *a, const LoopNest *b) const {
     if (a->is_root()) {
         return a;
     }
@@ -121,7 +121,7 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
         }
     }
 
-    for (const auto& c : root->children) {
+    for (const auto &c : root->children) {
         sites.get(c->stage).hash_of_producers_stored_at_root = c->compute_hash_of_producers_stored_at_root(sites);
     }
 
@@ -130,12 +130,12 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
         StageMap<ScheduleFeatures> base_features;
         base_features.make_large(dag.nodes[0].stages[0].max_id);
         // Calculate features without caching.
-        root->compute_features(dag, params, sites, 1, 1, nullptr, nullptr, *root, nullptr, &base_features, /* use_cached_features */false);
+        root->compute_features(dag, params, sites, 1, 1, nullptr, nullptr, *root, nullptr, &base_features, /* use_cached_features */ false);
 
         StageMap<ScheduleFeatures> verification_features;
         verification_features.make_large(dag.nodes[0].stages[0].max_id);
         // Calculate features with caching.
-        root->compute_features(dag, params, sites, 1, 1, nullptr, nullptr, *root, nullptr, &verification_features, /* use_cached_features */true);
+        root->compute_features(dag, params, sites, 1, 1, nullptr, nullptr, *root, nullptr, &verification_features, /* use_cached_features */ true);
 
         for (auto it = base_features.begin(); it != base_features.end(); it++) {
             auto &stage = *(it.key());
@@ -196,9 +196,8 @@ void State::save_featurization(const FunctionDAG &dag, const MachineParams &para
     }
 }
 
-
 bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params,
-                    CostModel *cost_model, const CachingOptions &cache_options, int64_t memory_limit, bool verbose) {
+                           CostModel *cost_model, const CachingOptions &cache_options, int64_t memory_limit, bool verbose) {
     StageMap<ScheduleFeatures> features;
     compute_featurization(dag, params, &features, cache_options);
 
@@ -273,12 +272,12 @@ IntrusivePtr<State> State::make_child() const {
 
 // Generate the successor states to this state
 void State::generate_children(const FunctionDAG &dag,
-                        const MachineParams &params,
-                        CostModel *cost_model,
-                        int64_t memory_limit,
-                        std::function<void(IntrusivePtr<State> &&)> &accept_child,
-                        Cache *cache) const {
-    
+                              const MachineParams &params,
+                              CostModel *cost_model,
+                              int64_t memory_limit,
+                              std::function<void(IntrusivePtr<State> &&)> &accept_child,
+                              Cache *cache) const {
+
     internal_assert(root.defined() && root->is_root()) << "generate_children needs defined root\n";
 
     if (num_decisions_made == 2 * (int)dag.nodes.size()) {
@@ -458,9 +457,9 @@ void State::generate_children(const FunctionDAG &dag,
 
             // TODO(rootjalex): we don't want `this` to be a const pointer, so it can be cast to IntrusivePtr
             if (cache->add_memoized_blocks(this, accept_child, node, num_children, dag, params, cost_model, memory_limit)) {
-                return; // successfully added cached states.
+                return;  // successfully added cached states.
             }
-           
+
             internal_assert(pure_size);
 
             // Generate some candidate parallel task shapes.
@@ -517,15 +516,15 @@ void State::generate_children(const FunctionDAG &dag,
                         max_total = std::max(max_total, total);
                         const double tasks_per_core = ((double)total) / params.parallelism;
                         o.idle_core_wastage = std::max(o.idle_core_wastage,
-                                                        std::ceil(tasks_per_core) /
-                                                            tasks_per_core);
+                                                       std::ceil(tasks_per_core) /
+                                                           tasks_per_core);
                     }
                 }
 
                 // Filter out the less useful options
                 bool ok =
                     ((o.entire || min_total >= params.parallelism) &&
-                        (max_total <= params.parallelism * 16));
+                     (max_total <= params.parallelism * 16));
 
                 if (!ok) {
                     continue;
@@ -573,7 +572,7 @@ void State::generate_children(const FunctionDAG &dag,
                                     tiling[i - 1] = 1;
                                 }
                                 while (tiling[i - 1] > 1 &&
-                                        total * tiling[i - 1] > params.parallelism * 8) {
+                                       total * tiling[i - 1] > params.parallelism * 8) {
                                     tiling[i - 1] /= 2;
                                 }
                                 total *= tiling[i - 1];
@@ -596,7 +595,7 @@ void State::generate_children(const FunctionDAG &dag,
 
     if (num_children == 0) {
         aslog(0) << "Warning: Found no legal way to schedule "
-                    << node->func.name() << " in the following State:\n";
+                 << node->func.name() << " in the following State:\n";
         dump();
         // All our children died. Maybe other states have had
         // children. Carry on.
@@ -712,8 +711,8 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params) 
                 // Outermost, and next outermost. Preserve the inner
                 // name to not invalidate any compute_ats.
                 p.second->schedule_source << "\n    .fuse(" << parallel_vars[i].name()
-                                            << ", " << parallel_vars[i - 1].name()
-                                            << ", " << parallel_vars[i].name() << ")";
+                                          << ", " << parallel_vars[i - 1].name()
+                                          << ", " << parallel_vars[i].name() << ")";
                 stage.fuse(parallel_vars[i], parallel_vars[i - 1], parallel_vars[i]);
             }
             if (!parallel_vars.empty()) {

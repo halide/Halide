@@ -88,8 +88,8 @@
 #include "LoopNest.h"
 #include "NetworkSize.h"
 #include "PerfectHashMap.h"
-#include "Statistics.h"
 #include "State.h"
+#include "Statistics.h"
 
 #ifdef _WIN32
 #include <io.h>

@@ -332,7 +332,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 if (c->features_cache.count(hash_of_producers) > 0) {
                     // TODO(rootjalex): possibly remove statistics gathering
                     Cache::feature_hits++;
-                    const auto& entry = c->features_cache.at(hash_of_producers);
+                    const auto &entry = c->features_cache.at(hash_of_producers);
 
                     for (auto it = entry.begin(); it != entry.end(); it++) {
                         auto *stage_ptr = it.key();
@@ -348,7 +348,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     int64_t working_set_c{0};
                     c->compute_working_set_from_features(&working_set_c, features);
                     working_set_here += working_set_c;
-                    continue; // no need to recompute fetures
+                    continue;  // no need to recompute fetures
                 }
                 // TODO(rootjalex): possibly remove statistics gathering?
                 Cache::feature_misses++;
@@ -1018,8 +1018,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         if (use_memoized_features) {
             const auto &block = sites.get(stage).task;
             uint64_t hash_of_producers = sites.get(block->stage).hash_of_producers_stored_at_root;
-            auto& intermediate_map = block->feature_intermediates_cache[hash_of_producers].get_or_create(&(f->stages[0]));
-            auto& intermediate = intermediate_map.get_or_create(stage);
+            auto &intermediate_map = block->feature_intermediates_cache[hash_of_producers].get_or_create(&(f->stages[0]));
+            auto &intermediate = intermediate_map.get_or_create(stage);
 
             intermediate.inlined_calls = it.value() * subinstances;
             intermediate.num_scalars = it.value() * feat.num_scalars;
@@ -1977,7 +1977,7 @@ void LoopNest::copy_from_including_features(const LoopNest &n) {
     feature_intermediates_cache = n.feature_intermediates_cache;
 }
 
-void LoopNest::memoize_points_computed_minimum(StageMap<ScheduleFeatures>& memoized_features, const StageMap<ScheduleFeatures> *features) const {
+void LoopNest::memoize_points_computed_minimum(StageMap<ScheduleFeatures> &memoized_features, const StageMap<ScheduleFeatures> *features) const {
     for (auto it = inlined.begin(); it != inlined.end(); it++) {
         const auto *node = it.key();
         const auto *stage_ptr = &(node->stages[0]);
@@ -1993,7 +1993,7 @@ void LoopNest::memoize_points_computed_minimum(StageMap<ScheduleFeatures>& memoi
     }
 }
 
-void LoopNest::memoize_features(StageMap<ScheduleFeatures>& memoized_features, const StageMap<ScheduleFeatures> *features_to_insert) const {
+void LoopNest::memoize_features(StageMap<ScheduleFeatures> &memoized_features, const StageMap<ScheduleFeatures> *features_to_insert) const {
     for (auto it = inlined.begin(); it != inlined.end(); it++) {
         const auto *node = it.key();
         const auto *stage_ptr = &(node->stages[0]);
@@ -2019,7 +2019,7 @@ void LoopNest::memoize_features(StageMap<ScheduleFeatures>& memoized_features, c
 }
 
 void LoopNest::compute_working_set_from_features(int64_t *working_set,
-                                    const StageMap<ScheduleFeatures> *features) const {
+                                                 const StageMap<ScheduleFeatures> *features) const {
     int64_t working_set_here = 0;
 
     for (const auto &c : children) {
@@ -2051,8 +2051,8 @@ void LoopNest::recompute_inlined_features(const StageMap<Sites> &sites, StageMap
         uint64_t hash_of_producers = sites.get(block->stage).hash_of_producers_stored_at_root;
 
         internal_assert(block->feature_intermediates_cache.count(hash_of_producers) > 0);
-        auto& intermediate_map = block->feature_intermediates_cache[hash_of_producers].get(&(f->stages[0]));
-        auto& intermediate = intermediate_map.get(stage);
+        auto &intermediate_map = block->feature_intermediates_cache[hash_of_producers].get(&(f->stages[0]));
+        auto &intermediate = intermediate_map.get(stage);
 
         auto &inlined_feat = features->get(&(f->stages[0]));
         inlined_feat.inlined_calls += intermediate.inlined_calls;
@@ -2072,12 +2072,12 @@ uint64_t LoopNest::compute_hash_of_producers_stored_at_root(const StageMap<Sites
     vector<pair<int, int>> producers = collect_producers(sites);
 
     // Sort them according to node id
-    std::sort(producers.begin(), producers.end(), [](const pair<int, int>& a, const pair<int, int>& b) {
+    std::sort(producers.begin(), producers.end(), [](const pair<int, int> &a, const pair<int, int> &b) {
         return a.first < b.first;
     });
 
     uint64_t store_root_hash = 0;
-    for (const auto& p : producers) {
+    for (const auto &p : producers) {
         hash_combine(store_root_hash, p.first);
         hash_combine(store_root_hash, p.second);
     }
@@ -2125,7 +2125,7 @@ vector<pair<int, int>> LoopNest::collect_producers(const StageMap<Sites> &sites)
     return producers;
 }
 
-void LoopNest::collect_stages(std::set<const FunctionDAG::Node::Stage *>& stages) const {
+void LoopNest::collect_stages(std::set<const FunctionDAG::Node::Stage *> &stages) const {
     stages.insert(stage);
 
     for (const auto &c : children) {
