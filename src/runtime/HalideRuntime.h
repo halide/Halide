@@ -70,12 +70,6 @@ extern "C" {
 #endif
 #endif
 
-#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
-#define HALIDE_EXPORT_IF_CPP11 HALIDE_EXPORT
-#else
-#define HALIDE_EXPORT_IF_CPP11
-#endif
-
 /** \file
  *
  * This file declares the routines used by Halide internally in its
@@ -448,7 +442,7 @@ typedef enum halide_type_code_t
  * field). Can also be vectors of the same (by setting the 'lanes'
  * field to something larger than one). This struct should be
  * exactly 32-bits in size. */
-struct HALIDE_EXPORT_IF_CPP11 halide_type_t {
+struct halide_type_t {
     /** The basic type code: signed integer, unsigned integer, or floating point. */
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
     HALIDE_ATTRIBUTE_ALIGN(1)
@@ -523,7 +517,7 @@ enum halide_trace_event_code_t { halide_trace_load = 0,
                                  halide_trace_end_pipeline = 9,
                                  halide_trace_tag = 10 };
 
-struct HALIDE_EXPORT_IF_CPP11 halide_trace_event_t {
+struct halide_trace_event_t {
     /** The name of the Func or Pipeline that this event refers to */
     const char *func;
 
@@ -619,7 +613,7 @@ extern halide_trace_t halide_set_custom_trace(halide_trace_t trace);
 // @}
 
 /** The header of a packet in a binary trace. All fields are 32-bit. */
-struct HALIDE_EXPORT_IF_CPP11 halide_trace_packet_t {
+struct halide_trace_packet_t {
     /** The total size of this packet in bytes. Always a multiple of
      * four. Equivalently, the number of bytes until the next
      * packet. */
@@ -1397,7 +1391,7 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
  */
 extern int halide_default_can_use_target_features(int count, const uint64_t *features);
 
-typedef struct HALIDE_EXPORT_IF_CPP11 halide_dimension_t {
+typedef struct halide_dimension_t {
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
     int32_t min = 0, extent = 0, stride = 0;
 
@@ -1439,7 +1433,7 @@ typedef enum { halide_buffer_flag_host_dirty = 1,
  * Halide code. It includes some stuff to track whether the image is
  * not actually in main memory, but instead on a device (like a
  * GPU). For a more convenient C++ wrapper, use Halide::Buffer<T>. */
-typedef struct HALIDE_EXPORT_IF_CPP11 halide_buffer_t {
+typedef struct halide_buffer_t {
     /** A device-handle for e.g. GPU memory used to back this buffer. */
     uint64_t device;
 
@@ -1592,7 +1586,7 @@ extern "C" {
  * this is conceptually just a union; it's wrapped in a struct to ensure
  * that it doesn't get anonymized by LLVM.)
  */
-struct HALIDE_EXPORT_IF_CPP11 halide_scalar_value_t {
+struct halide_scalar_value_t {
     union {
         bool b;
         int8_t i8;
