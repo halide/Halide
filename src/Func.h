@@ -28,30 +28,17 @@ class ParamMap;
 /** A class that can represent Vars or RVars. Used for reorder calls
  * which can accept a mix of either. */
 struct VarOrRVar {
-    VarOrRVar(const std::string &n, bool r)
-        : var(n), rvar(n), is_rvar(r) {
-    }
-    VarOrRVar(const Var &v)
-        : var(v), is_rvar(false) {
-    }
-    VarOrRVar(const RVar &r)
-        : rvar(r), is_rvar(true) {
-    }
-    VarOrRVar(const RDom &r)
-        : rvar(RVar(r)), is_rvar(true) {
-    }
+    VarOrRVar(const std::string &n, bool r);
+    VarOrRVar(const Var &v);
+    VarOrRVar(const RVar &r);
+    VarOrRVar(const RDom &r);
+
     template<int N>
-    VarOrRVar(const ImplicitVar<N> &u)
-        : var(u), is_rvar(false) {
+    HALIDE_ALWAYS_INLINE VarOrRVar(const ImplicitVar<N> &u)
+        : VarOrRVar(u.to_var()) {
     }
 
-    const std::string &name() const {
-        if (is_rvar) {
-            return rvar.name();
-        } else {
-            return var.name();
-        }
-    }
+    const std::string &name() const;
 
     Var var;
     RVar rvar;
@@ -84,30 +71,16 @@ class Stage {
     void remove(const std::string &var);
     Stage &purify(const VarOrRVar &old_name, const VarOrRVar &new_name);
 
-    const std::vector<Internal::StorageDim> &storage_dims() const {
-        return function.schedule().storage_dims();
-    }
+    const std::vector<Internal::StorageDim> &storage_dims() const;
 
     Stage &compute_with(LoopLevel loop_level, const std::map<std::string, LoopAlignStrategy> &align);
 
 public:
-    Stage(Internal::Function f, Internal::Definition d, size_t stage_index)
-        : function(std::move(f)), definition(std::move(d)), stage_index(stage_index) {
-        internal_assert(definition.defined());
-        definition.schedule().touched() = true;
-
-        dim_vars.reserve(function.args().size());
-        for (const auto &arg : function.args()) {
-            dim_vars.emplace_back(arg);
-        }
-        internal_assert(definition.args().size() == dim_vars.size());
-    }
+    Stage(Internal::Function f, Internal::Definition d, size_t stage_index);
 
     /** Return the current StageSchedule associated with this Stage. For
      * introspection only: to modify schedule, use the Func interface. */
-    const Internal::StageSchedule &get_schedule() const {
-        return definition.schedule();
-    }
+    const Internal::StageSchedule &get_schedule() const;
 
     /** Return a string describing the current var list taking into
      * account all the splits, reorders, and tiles. */
@@ -375,7 +348,7 @@ public:
     Stage &reorder(const std::vector<VarOrRVar> &vars);
 
     template<typename... Args>
-    HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
+    HALIDE_ALWAYS_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
     reorder(const VarOrRVar &x, const VarOrRVar &y, Args &&... args) {
         std::vector<VarOrRVar> collected_args{x, y, std::forward<Args>(args)...};
         return reorder(collected_args);
@@ -446,8 +419,8 @@ public:
     Stage &prefetch(const Internal::Parameter &param, const VarOrRVar &var, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     template<typename T>
-    Stage &prefetch(const T &image, VarOrRVar var, Expr offset = 1,
-                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+    HALIDE_ALWAYS_INLINE Stage &prefetch(const T &image, VarOrRVar var, Expr offset = 1,
+                                         PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
         return prefetch(image.parameter(), var, offset, strategy);
     }
     // @}
@@ -566,19 +539,17 @@ public:
     size_t size() const;
 
     /** What function is this calling? */
-    Internal::Function function() const {
-        return func;
-    }
+    Internal::Function function() const;
 };
 
 /** Explicit overloads of min and max for FuncRef. These exist to
  * disambiguate calls to min on FuncRefs when a user has pulled both
  * Halide::min and std::min into their namespace. */
 // @{
-inline Expr min(const FuncRef &a, const FuncRef &b) {
+HALIDE_ALWAYS_INLINE Expr min(const FuncRef &a, const FuncRef &b) {
     return min(Expr(a), Expr(b));
 }
-inline Expr max(const FuncRef &a, const FuncRef &b) {
+HALIDE_ALWAYS_INLINE Expr max(const FuncRef &a, const FuncRef &b) {
     return max(Expr(a), Expr(b));
 }
 // @}
@@ -647,14 +618,10 @@ public:
     operator Expr() const;
 
     /** What function is this calling? */
-    Internal::Function function() const {
-        return func_ref.function();
-    }
+    Internal::Function function() const;
 
     /** Return index to the function outputs. */
-    int index() const {
-        return idx;
-    }
+    int index() const;
 };
 
 namespace Internal {
@@ -669,9 +636,8 @@ protected:
     friend class Func;
 
 public:
-    explicit EvictionKey(const Expr &expr = Expr())
-        : key(expr) {
-    }
+    EvictionKey();
+    explicit EvictionKey(const Expr &expr);
 };
 
 /** A halide function. This class represents one stage in a Halide
@@ -724,7 +690,7 @@ public:
 
     /** Construct a new Func to wrap a Buffer. */
     template<typename T>
-    HALIDE_NO_USER_CODE_INLINE explicit Func(Buffer<T> &im)
+    HALIDE_ALWAYS_INLINE explicit Func(Buffer<T> &im)
         : Func() {
         (*this)(_) = im(_);
     }
@@ -1231,38 +1197,24 @@ public:
                        const std::vector<ExternFuncArgument> &params, Type t,
                        int dimensionality,
                        NameMangling mangling = NameMangling::Default,
-                       DeviceAPI device_api = DeviceAPI::Host) {
-        define_extern(function_name, params, t,
-                      Internal::make_argument_list(dimensionality), mangling,
-                      device_api);
-    }
+                       DeviceAPI device_api = DeviceAPI::Host);
 
     void define_extern(const std::string &function_name,
                        const std::vector<ExternFuncArgument> &params,
                        const std::vector<Type> &types, int dimensionality,
-                       NameMangling mangling) {
-        define_extern(function_name, params, types,
-                      Internal::make_argument_list(dimensionality), mangling);
-    }
+                       NameMangling mangling);
 
     void define_extern(const std::string &function_name,
                        const std::vector<ExternFuncArgument> &params,
                        const std::vector<Type> &types, int dimensionality,
                        NameMangling mangling = NameMangling::Default,
-                       DeviceAPI device_api = DeviceAPI::Host) {
-        define_extern(function_name, params, types,
-                      Internal::make_argument_list(dimensionality), mangling,
-                      device_api);
-    }
+                       DeviceAPI device_api = DeviceAPI::Host);
 
     void define_extern(const std::string &function_name,
                        const std::vector<ExternFuncArgument> &params, Type t,
                        const std::vector<Var> &arguments,
                        NameMangling mangling = NameMangling::Default,
-                       DeviceAPI device_api = DeviceAPI::Host) {
-        define_extern(function_name, params, std::vector<Type>{t}, arguments,
-                      mangling, device_api);
-    }
+                       DeviceAPI device_api = DeviceAPI::Host);
 
     void define_extern(const std::string &function_name,
                        const std::vector<ExternFuncArgument> &params,

@@ -37,9 +37,7 @@ struct MachineParams {
      * the cost of an arithmetic operation at last level cache. */
     float balance;
 
-    explicit MachineParams(int parallelism, uint64_t llc, float balance)
-        : parallelism(parallelism), last_level_cache_size(llc), balance(balance) {
-    }
+    explicit MachineParams(int parallelism, uint64_t llc, float balance);
 
     /** Default machine parameters for generic CPU architecture. */
     static MachineParams generic();
@@ -67,7 +65,7 @@ namespace {
 // Helper for deleting custom lowering passes. In the header so that
 // it goes in user code on windows, where you can have multiple heaps.
 template<typename T>
-void delete_lowering_pass(T *pass) {
+HALIDE_ALWAYS_INLINE void delete_lowering_pass(T *pass) {
     delete pass;
 }
 }  // namespace
@@ -102,38 +100,28 @@ public:
         halide_buffer_t *buf{nullptr};
         std::unique_ptr<std::vector<Buffer<>>> buffer_list;
 
-        RealizationArg(Realization &r)
-            : r(&r) {
-        }
-        RealizationArg(Realization &&r)
-            : r(&r) {
-        }
-        RealizationArg(halide_buffer_t *buf)
-            : buf(buf) {
-        }
+        RealizationArg(Realization &r);
+        RealizationArg(Realization &&r);
+        RealizationArg(halide_buffer_t *buf);
+        RealizationArg(RealizationArg &&from);
+
         template<typename T, int D>
-        RealizationArg(Runtime::Buffer<T, D> &dst)
-            : buf(dst.raw_buffer()) {
+        HALIDE_ALWAYS_INLINE RealizationArg(Runtime::Buffer<T, D> &dst)
+            : RealizationArg(dst.raw_buffer()) {
         }
+
         template<typename T>
-        HALIDE_NO_USER_CODE_INLINE RealizationArg(Buffer<T> &dst)
-            : buf(dst.raw_buffer()) {
+        HALIDE_ALWAYS_INLINE RealizationArg(Buffer<T> &dst)
+            : RealizationArg(dst.raw_buffer()) {
         }
+
         template<typename T, typename... Args,
                  typename = typename std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>::type>
-        RealizationArg(Buffer<T> &a, Args &&... args) {
+        HALIDE_ALWAYS_INLINE RealizationArg(Buffer<T> &a, Args &&... args) {
             buffer_list.reset(new std::vector<Buffer<>>({a, args...}));
         }
-        RealizationArg(RealizationArg &&from) = default;
 
-        size_t size() const {
-            if (r != nullptr) {
-                return r->size();
-            } else if (buffer_list) {
-                return buffer_list->size();
-            }
-            return 1;
-        }
+        size_t size() const;
     };
 
 private:
@@ -465,7 +453,7 @@ public:
      * stack object, or share pass instances between multiple
      * Funcs. */
     template<typename T>
-    void add_custom_lowering_pass(T *pass) {
+    HALIDE_ALWAYS_INLINE void add_custom_lowering_pass(T *pass) {
         // Template instantiate a custom deleter for this type, then
         // wrap in a lambda. The custom deleter lives in user code, so
         // that deletion is on the same heap as construction (I hate Windows).
@@ -569,7 +557,7 @@ public:
     void trace_pipeline();
 
     template<typename... Args>
-    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&... args) {
+    HALIDE_ALWAYS_INLINE void add_requirement(const Expr &condition, Args &&... args) {
         std::vector<Expr> collected_args;
         Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
         add_requirement(condition, collected_args);
@@ -586,53 +574,18 @@ private:
     std::vector<Type> arg_types_;
 
 public:
-    ExternSignature() = default;
-
-    ExternSignature(const Type &ret_type, bool is_void_return, const std::vector<Type> &arg_types)
-        : ret_type_(ret_type),
-          is_void_return_(is_void_return),
-          arg_types_(arg_types) {
-        internal_assert(!(is_void_return && ret_type != Type()));
-    }
+    ExternSignature();
+    ExternSignature(const Type &ret_type, bool is_void_return, const std::vector<Type> &arg_types);
 
     template<typename RT, typename... Args>
-    explicit ExternSignature(RT (*f)(Args... args))
-        : ret_type_(type_of<RT>()),
-          is_void_return_(std::is_void<RT>::value),
-          arg_types_({type_of<Args>()...}) {
+    HALIDE_ALWAYS_INLINE explicit ExternSignature(RT (*f)(Args... args))
+        : ExternSignature(type_of<RT>(), std::is_void<RT>::value, {type_of<Args>()...}) {
     }
 
-    const Type &ret_type() const {
-        internal_assert(!is_void_return());
-        return ret_type_;
-    }
-
-    bool is_void_return() const {
-        return is_void_return_;
-    }
-
-    const std::vector<Type> &arg_types() const {
-        return arg_types_;
-    }
-
-    friend std::ostream &operator<<(std::ostream &stream, const ExternSignature &sig) {
-        if (sig.is_void_return_) {
-            stream << "void";
-        } else {
-            stream << sig.ret_type_;
-        }
-        stream << " (*)(";
-        bool comma = false;
-        for (const auto &t : sig.arg_types_) {
-            if (comma) {
-                stream << ", ";
-            }
-            stream << t;
-            comma = true;
-        }
-        stream << ")";
-        return stream;
-    }
+    const Type &ret_type() const;
+    bool is_void_return() const;
+    const std::vector<Type> &arg_types() const;
+    friend std::ostream &operator<<(std::ostream &stream, const ExternSignature &sig);
 };
 
 struct ExternCFunction {
@@ -641,23 +594,16 @@ private:
     ExternSignature signature_;
 
 public:
-    ExternCFunction() = default;
-
-    ExternCFunction(void *address, const ExternSignature &signature)
-        : address_(address), signature_(signature) {
-    }
+    ExternCFunction();
+    ExternCFunction(void *address, const ExternSignature &signature);
 
     template<typename RT, typename... Args>
-    ExternCFunction(RT (*f)(Args... args))
+    HALIDE_ALWAYS_INLINE ExternCFunction(RT (*f)(Args... args))
         : ExternCFunction((void *)f, ExternSignature(f)) {
     }
 
-    void *address() const {
-        return address_;
-    }
-    const ExternSignature &signature() const {
-        return signature_;
-    }
+    void *address() const;
+    const ExternSignature &signature() const;
 };
 
 struct JITExtern {
@@ -673,16 +619,12 @@ public:
     explicit JITExtern(const ExternCFunction &extern_c_function);
 
     template<typename RT, typename... Args>
-    explicit JITExtern(RT (*f)(Args... args))
+    HALIDE_ALWAYS_INLINE explicit JITExtern(RT (*f)(Args... args))
         : JITExtern(ExternCFunction(f)) {
     }
 
-    const Pipeline &pipeline() const {
-        return pipeline_;
-    }
-    const ExternCFunction &extern_c_function() const {
-        return extern_c_function_;
-    }
+    const Pipeline &pipeline() const;
+    const ExternCFunction &extern_c_function() const;
 };
 
 }  // namespace Halide

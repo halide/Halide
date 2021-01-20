@@ -148,6 +148,29 @@ void destroy<PipelineContents>(const PipelineContents *p) {
 }
 }  // namespace Internal
 
+Pipeline::RealizationArg::RealizationArg(RealizationArg &&from) = default;
+
+Pipeline::RealizationArg::RealizationArg(Realization &r)
+    : r(&r) {
+}
+
+Pipeline::RealizationArg::RealizationArg(Realization &&r)
+    : r(&r) {
+}
+
+Pipeline::RealizationArg::RealizationArg(halide_buffer_t *buf)
+    : buf(buf) {
+}
+
+size_t Pipeline::RealizationArg::size() const {
+    if (r != nullptr) {
+        return r->size();
+    } else if (buffer_list) {
+        return buffer_list->size();
+    }
+    return 1;
+}
+
 Pipeline::Pipeline()
     : contents(nullptr) {
 }
@@ -1333,6 +1356,10 @@ JITExtern::JITExtern(const ExternCFunction &extern_c_function)
     : extern_c_function_(extern_c_function) {
 }
 
+MachineParams::MachineParams(int parallelism, uint64_t llc, float balance)
+    : parallelism(parallelism), last_level_cache_size(llc), balance(balance) {
+}
+
 MachineParams MachineParams::generic() {
     std::string params = Internal::get_env_variable("HL_MACHINE_PARAMS");
     if (params.empty()) {
@@ -1354,6 +1381,67 @@ MachineParams::MachineParams(const std::string &s) {
     parallelism = std::atoi(v[0].c_str());
     last_level_cache_size = std::atoll(v[1].c_str());
     balance = std::atof(v[2].c_str());
+}
+
+ExternSignature::ExternSignature() = default;
+
+ExternSignature::ExternSignature(const Type &ret_type, bool is_void_return, const std::vector<Type> &arg_types)
+    : ret_type_(ret_type),
+      is_void_return_(is_void_return),
+      arg_types_(arg_types) {
+    internal_assert(!(is_void_return && ret_type != Type()));
+}
+
+const Type &ExternSignature::ret_type() const {
+    internal_assert(!is_void_return());
+    return ret_type_;
+}
+
+bool ExternSignature::is_void_return() const {
+    return is_void_return_;
+}
+
+const std::vector<Type> &ExternSignature::arg_types() const {
+    return arg_types_;
+}
+
+/*friend*/ std::ostream &operator<<(std::ostream &stream, const ExternSignature &sig) {
+    if (sig.is_void_return_) {
+        stream << "void";
+    } else {
+        stream << sig.ret_type_;
+    }
+    stream << " (*)(";
+    bool comma = false;
+    for (const auto &t : sig.arg_types_) {
+        if (comma) {
+            stream << ", ";
+        }
+        stream << t;
+        comma = true;
+    }
+    stream << ")";
+    return stream;
+}
+
+ExternCFunction::ExternCFunction() = default;
+
+ExternCFunction::ExternCFunction(void *address, const ExternSignature &signature)
+    : address_(address), signature_(signature) {
+}
+
+void *ExternCFunction::address() const {
+    return address_;
+}
+const ExternSignature &ExternCFunction::signature() const {
+    return signature_;
+}
+
+const Pipeline &JITExtern::pipeline() const {
+    return pipeline_;
+}
+const ExternCFunction &JITExtern::extern_c_function() const {
+    return extern_c_function_;
 }
 
 }  // namespace Halide

@@ -177,6 +177,43 @@ bool Func::is_extern() const {
     return func.has_extern_definition();
 }
 
+void Func::define_extern(const std::string &function_name,
+                         const std::vector<ExternFuncArgument> &params, Type t,
+                         int dimensionality,
+                         NameMangling mangling,
+                         DeviceAPI device_api) {
+    define_extern(function_name, params, t,
+                  Internal::make_argument_list(dimensionality), mangling,
+                  device_api);
+}
+
+void Func::define_extern(const std::string &function_name,
+                         const std::vector<ExternFuncArgument> &params,
+                         const std::vector<Type> &types, int dimensionality,
+                         NameMangling mangling) {
+    define_extern(function_name, params, types,
+                  Internal::make_argument_list(dimensionality), mangling);
+}
+
+void Func::define_extern(const std::string &function_name,
+                         const std::vector<ExternFuncArgument> &params,
+                         const std::vector<Type> &types, int dimensionality,
+                         NameMangling mangling,
+                         DeviceAPI device_api) {
+    define_extern(function_name, params, types,
+                  Internal::make_argument_list(dimensionality), mangling,
+                  device_api);
+}
+
+void Func::define_extern(const std::string &function_name,
+                         const std::vector<ExternFuncArgument> &params, Type t,
+                         const std::vector<Var> &arguments,
+                         NameMangling mangling,
+                         DeviceAPI device_api) {
+    define_extern(function_name, params, std::vector<Type>{t}, arguments,
+                  mangling, device_api);
+}
+
 /** Add an extern definition for this Func. */
 void Func::define_extern(const std::string &function_name,
                          const std::vector<ExternFuncArgument> &args,
@@ -292,6 +329,26 @@ bool var_name_match(const string &candidate, const string &var) {
     return Internal::ends_with(candidate, "." + var);
 }
 }  // namespace
+
+Stage::Stage(Internal::Function f, Internal::Definition d, size_t stage_index)
+    : function(std::move(f)), definition(std::move(d)), stage_index(stage_index) {
+    internal_assert(definition.defined());
+    definition.schedule().touched() = true;
+
+    dim_vars.reserve(function.args().size());
+    for (const auto &arg : function.args()) {
+        dim_vars.emplace_back(arg);
+    }
+    internal_assert(definition.args().size() == dim_vars.size());
+}
+
+const Internal::StageSchedule &Stage::get_schedule() const {
+    return definition.schedule();
+}
+
+const std::vector<Internal::StorageDim> &Stage::storage_dims() const {
+    return function.schedule().storage_dims();
+}
 
 std::string Stage::name() const {
     std::string stage_name = (stage_index == 0) ? function.name() : function.name() + ".update(" + std::to_string(stage_index - 1) + ")";
@@ -2968,6 +3025,10 @@ size_t FuncRef::size() const {
     return func.outputs();
 }
 
+Internal::Function FuncRef::function() const {
+    return func;
+}
+
 FuncTupleElementRef::FuncTupleElementRef(
     const FuncRef &ref, const std::vector<Expr> &args, int idx)
     : func_ref(ref), args(args), idx(idx) {
@@ -3015,6 +3076,20 @@ Stage FuncTupleElementRef::operator=(const FuncRef &e) {
 
 FuncTupleElementRef::operator Expr() const {
     return Internal::Call::make(func_ref.function(), args, idx);
+}
+
+Internal::Function FuncTupleElementRef::function() const {
+    return func_ref.function();
+}
+
+int FuncTupleElementRef::index() const {
+    return idx;
+}
+
+EvictionKey::EvictionKey() = default;
+
+EvictionKey::EvictionKey(const Expr &expr)
+    : key(expr) {
 }
 
 Realization Func::realize(std::vector<int32_t> sizes, const Target &target,
@@ -3274,6 +3349,30 @@ void Func::infer_input_bounds(Pipeline::RealizationArg outputs, const Target &ta
 
 void Func::compile_jit(const Target &target) {
     pipeline().compile_jit(target);
+}
+
+VarOrRVar::VarOrRVar(const std::string &n, bool r)
+    : var(n), rvar(n), is_rvar(r) {
+}
+
+VarOrRVar::VarOrRVar(const Var &v)
+    : var(v), is_rvar(false) {
+}
+
+VarOrRVar::VarOrRVar(const RVar &r)
+    : rvar(r), is_rvar(true) {
+}
+
+VarOrRVar::VarOrRVar(const RDom &r)
+    : rvar(RVar(r)), is_rvar(true) {
+}
+
+const std::string &VarOrRVar::name() const {
+    if (is_rvar) {
+        return rvar.name();
+    } else {
+        return var.name();
+    }
 }
 
 }  // namespace Halide
