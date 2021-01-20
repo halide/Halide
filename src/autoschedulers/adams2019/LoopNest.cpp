@@ -333,7 +333,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     const auto &entry = c->features_cache.at(hash_of_producers);
 
                     for (auto it = entry.begin(); it != entry.end(); it++) {
-                        auto *stage_ptr = it.key();
+                        const auto *stage_ptr = it.key();
                         const auto &feat = it.value();
 
                         features->insert(stage_ptr, feat);
@@ -2023,7 +2023,7 @@ void LoopNest::compute_working_set_from_features(int64_t *working_set,
     }
 
     for (const auto *node : store_at) {
-        auto &feat = features->get(&(node->stages[0]));
+        const auto &feat = features->get(&(node->stages[0]));
         working_set_here += feat.bytes_at_production;
     }
 
@@ -2100,14 +2100,16 @@ vector<pair<int, int>> LoopNest::collect_producers(const StageMap<Sites> &sites)
     while (!pending.empty()) {
         const auto *e = pending.back();
         pending.pop_back();
-        if (done.count(e->producer)) continue;
+        if (done.count(e->producer)) {
+            continue;
+        }
         done.insert(e->producer);
         const auto &site = sites.get(&(e->producer->stages[0]));
         if (site.store->is_root()) {
             int vector_dim = (e->producer->is_input ? 0 :
                                                       site.produce != nullptr ? site.produce->vector_dim :
                                                                                 -1);
-            producers.push_back({e->producer->id, vector_dim});
+            producers.emplace_back(e->producer->id, vector_dim);
         } else if (site.produce != nullptr) {
             // Computation must be nested inside this task or inlined into it.
             for (const auto &s : e->producer->stages) {

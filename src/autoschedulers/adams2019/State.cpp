@@ -138,7 +138,7 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
         root->compute_features(dag, params, sites, 1, 1, nullptr, nullptr, *root, nullptr, &verification_features, /* use_cached_features */ true);
 
         for (auto it = base_features.begin(); it != base_features.end(); it++) {
-            auto &stage = *(it.key());
+            const auto &stage = *(it.key());
             const auto &feat = it.value();
 
             if (!feat.equal(verification_features.get(&stage))) {

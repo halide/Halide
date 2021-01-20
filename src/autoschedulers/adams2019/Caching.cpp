@@ -113,8 +113,10 @@ void Cache::memoize_blocks(const FunctionDAG::Node *node, LoopNest *new_root) {
     for (auto &child : new_root->children) {
         if (child->node == node) {
             LoopNest *new_block = new LoopNest;
-            new_block->copy_from_including_features(*child.get());
-            blocks.push_back(new_block);
+            // Need const reference for copy.
+            const LoopNest *child_ptr = child.get();
+            new_block->copy_from_including_features(*child_ptr);
+            blocks.emplace_back(new_block);
             // TODO(rootjalex): possibly remove statistics for cache misses
             cache_misses++;
         }

@@ -100,8 +100,6 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
-using std::map;
-using std::pair;
 using std::string;
 using std::vector;
 
