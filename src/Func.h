@@ -542,18 +542,6 @@ public:
     Internal::Function function() const;
 };
 
-/** Explicit overloads of min and max for FuncRef. These exist to
- * disambiguate calls to min on FuncRefs when a user has pulled both
- * Halide::min and std::min into their namespace. */
-// @{
-HALIDE_ALWAYS_INLINE Expr min(const FuncRef &a, const FuncRef &b) {
-    return min(Expr(a), Expr(b));
-}
-HALIDE_ALWAYS_INLINE Expr max(const FuncRef &a, const FuncRef &b) {
-    return max(Expr(a), Expr(b));
-}
-// @}
-
 /** A fragment of front-end syntax of the form f(x, y, z)[index], where x, y,
  * z are Vars or Exprs. If could be the left hand side of an update
  * definition, or it could be a call to a function. We don't know
