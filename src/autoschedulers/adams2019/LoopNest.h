@@ -27,8 +27,6 @@ using StageMap = PerfectHashMap<FunctionDAG::Node::Stage, T>;
 
 bool may_subtile();
 
-bool use_memoized_features();
-
 // Given a multi-dimensional box of dimensionality d, generate a list
 // of candidate tile sizes for it, logarithmically spacing the sizes
 // using the given factor. If 'allow_splits' is false, every dimension
