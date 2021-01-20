@@ -108,7 +108,7 @@ struct AssociativeOp {
  * associative binary/unary operator if there is any. 'is_associative'
  * indicates if the operation was successfuly proven as associative.
  */
-AssociativeOp prove_associativity(
+HALIDE_EXPORT_FOR_PLUGINS AssociativeOp prove_associativity(
     const std::string &f, std::vector<Expr> args, std::vector<Expr> exprs);
 
 HALIDE_EXPORT_FOR_TEST void associativity_test();

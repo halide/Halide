@@ -119,7 +119,7 @@ HALIDE_EXPORT std::string make_entity_name(void *stack_ptr, const std::string &t
  * is defined in the environment. If the var is not defined, an empty string
  * is returned.
  */
-std::string get_env_variable(char const *env_var_name);
+HALIDE_EXPORT_FOR_PLUGINS std::string get_env_variable(char const *env_var_name);
 
 /** Get the name of the currently running executable. Platform-specific.
  * If program name cannot be retrieved, function returns an empty string. */
@@ -147,7 +147,7 @@ HALIDE_EXPORT_FOR_TEST std::string unique_name(const std::string &prefix);
 // @}
 
 /** Test if the first string starts with the second string */
-bool starts_with(const std::string &str, const std::string &prefix);
+HALIDE_EXPORT_FOR_PLUGINS bool starts_with(const std::string &str, const std::string &prefix);
 
 /** Test if the first string ends with the second string */
 bool ends_with(const std::string &str, const std::string &suffix);
@@ -407,8 +407,8 @@ using make_index_sequence = make_integer_sequence<size_t, N>;
 // Note that this uses global state internally, and is not thread-safe
 // at all. Only use it for single-threaded debugging sessions.
 
-void halide_tic_impl(const char *file, int line);
-void halide_toc_impl(const char *file, int line);
+HALIDE_EXPORT_FOR_PLUGINS void halide_tic_impl(const char *file, int line);
+HALIDE_EXPORT_FOR_PLUGINS void halide_toc_impl(const char *file, int line);
 #define HALIDE_TIC Halide::Internal::halide_tic_impl(__FILE__, __LINE__)
 #define HALIDE_TOC Halide::Internal::halide_toc_impl(__FILE__, __LINE__)
 #ifdef COMPILING_HALIDE

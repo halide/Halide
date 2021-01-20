@@ -2,6 +2,10 @@
 # Lists of source files. Keep ALL lists sorted in alphabetical order.
 ##
 
+set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS OFF)
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+set(CMAKE_VISIBILITY_INLINES_HIDDEN YES)
+
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
 set(HEADER_FILES

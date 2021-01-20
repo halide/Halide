@@ -33,7 +33,7 @@ HALIDE_EXPORT_FOR_TEST std::map<std::string, Function> find_transitive_calls(Fun
 
 /** Find all Functions transitively referenced by f in any way and add
  * them to the given map. */
-void populate_environment(Function f, std::map<std::string, Function> &env);
+HALIDE_EXPORT_FOR_PLUGINS void populate_environment(Function f, std::map<std::string, Function> &env);
 
 }  // namespace Internal
 }  // namespace Halide

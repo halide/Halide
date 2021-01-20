@@ -92,10 +92,10 @@ bool reduce_expr_modulo(const Expr &e, int64_t modulus, int64_t *remainder, cons
 HALIDE_EXPORT_FOR_TEST void modulus_remainder_test();
 
 /** The greatest common divisor of two integers */
-int64_t gcd(int64_t, int64_t);
+HALIDE_EXPORT_FOR_PLUGINS int64_t gcd(int64_t, int64_t);
 
 /** The least common multiple of two integers */
-int64_t lcm(int64_t, int64_t);
+HALIDE_EXPORT_FOR_PLUGINS int64_t lcm(int64_t, int64_t);
 
 }  // namespace Internal
 }  // namespace Halide

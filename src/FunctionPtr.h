@@ -2,6 +2,7 @@
 #define HALIDE_FUNCTION_PTR_H
 
 #include "IntrusivePtr.h"
+#include "Util.h"  // for HALIDE_EXPORT_FOR_PLUGINS
 
 namespace Halide {
 namespace Internal {
@@ -24,7 +25,7 @@ struct FunctionContents;
  * Note that Function objects are always strong pointers to Halide
  * functions.
  */
-struct FunctionPtr {
+struct HALIDE_EXPORT_FOR_PLUGINS FunctionPtr {
     /** A strong and weak pointer to the group. Only one of these
      * should be non-zero. */
     // @{
