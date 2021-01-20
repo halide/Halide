@@ -21,11 +21,13 @@ bool verify_memoized_features();
 
 bool is_memoize_blocks_enabled();
 
+/*
+Object stores caching options for autoscheduling.
+*/
 struct CachingOptions {
     bool cache_blocks = false;
     bool cache_features = false;
     bool verify_feature_caching = false;
-    // TODO(rootjalex): do we need a verify block caching?
 
     static CachingOptions MakeOptionsFromEnviron() {
         CachingOptions options;
@@ -41,7 +43,7 @@ using BlockCache = NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest
 
 // Cache for memoizing possible tilings.
 // Tracks hit/miss statistics for both block caching
-// and for feature caching (self-contained by LoopNests)
+// and for feature caching (self-contained by LoopNests).
 struct Cache {
     CachingOptions options;
     BlockCache memoized_compute_root_blocks;
@@ -64,7 +66,6 @@ struct Cache {
     // check if we generated tilings for the current func on a previous pass
     // if so, add them and return true.
     // otherwise, return false (also return false if memoization is turned off).
-    // TODO(rootjalex): make state an IntrusivePtr if possible?
     bool add_memoized_blocks(const State *state,
                              std::function<void(IntrusivePtr<State> &&)> &accept_child,
                              const FunctionDAG::Node *node,

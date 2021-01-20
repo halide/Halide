@@ -48,7 +48,7 @@ bool Cache::add_memoized_blocks(const State *state,
     const auto &vector_dim_map = memoized_compute_root_blocks.get(node);
 
     if (vector_dim_map.count(vector_dims) == 0) {
-        // Never cached this vector dimension.
+        // Never cached this vector dimension before.
         return false;
     }
 
@@ -113,7 +113,6 @@ void Cache::memoize_blocks(const FunctionDAG::Node *node, LoopNest* new_root) {
 
     auto& blocks = memoized_compute_root_blocks.get_or_create(node)[vector_dim];
 
-    // TODO(rootjalex): can we merge this with the above?
     for (auto &child : new_root->children) {
         if (child->node == node) {
             LoopNest *new_block = new LoopNest;

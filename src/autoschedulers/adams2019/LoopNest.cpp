@@ -324,7 +324,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
     if (is_root()) {
         // TODO: This block of code is repeated below. Refactor
-        // TODO(rootjalex): clean up this loop.
         for (const auto &c : children) {
 
             const uint64_t hash_of_producers = sites.get(c->stage).hash_of_producers_stored_at_root;
@@ -1015,15 +1014,15 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         inlined_feat.inner_parallelism = 1;
         inlined_feat.outer_parallelism = parallelism;
 
-        // TODO(rootjalex): clean this up.
+        // Memoize intermediate features, based on stage.
         if (use_memoized_features) {
             const auto &block = sites.get(stage).task;
             uint64_t hash_of_producers = sites.get(block->stage).hash_of_producers_stored_at_root;
             auto& intermediate_map = block->feature_intermediates_cache[hash_of_producers].get_or_create(&(f->stages[0]));
             auto& intermediate = intermediate_map.get_or_create(stage);
+
             intermediate.inlined_calls = it.value() * subinstances;
             intermediate.num_scalars = it.value() * feat.num_scalars;
-
             intermediate.innermost_pure_loop_extent = feat.innermost_pure_loop_extent;
             intermediate.outer_parallelism = parallelism;
         }
@@ -2003,12 +2002,14 @@ void LoopNest::memoize_features(StageMap<ScheduleFeatures>& memoized_features, c
         }
 
         // TODO(rootjalex): should probably assert that features_to_insert has this stage
+        internal_assert(features_to_insert->contains(stage_ptr)) << "memoize_features attempted to save a stage_ptr that doesn't exist\n";
         const auto &inlined_feat = features_to_insert->get(stage_ptr);
         memoized_features.insert(stage_ptr, inlined_feat);
     }
 
     if (!memoized_features.contains(stage)) {
         // TODO(rootjalex): should probably assert that features_to_insert has this stage
+        internal_assert(features_to_insert->contains(stage)) << "memoize_features attempted to save this->stage but that's not in features_to_insert\n";
         memoized_features.insert(stage, features_to_insert->get(stage));
     }
 

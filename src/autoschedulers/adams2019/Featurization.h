@@ -373,13 +373,8 @@ struct ScheduleFeatures {
 };
 
 /*
-rootjalex: convo w/ Luke:
-"
-    feature_intermediates are also relevant for the CPU
-    the issue is that the feature values for a given func can actually change when other funcs are later scheduled
-    the features that can change need to be recomputed (edited) 
-    the feature_intermediates are some intermediate values that help with the recomputing
-"
+Some feature values cannot be cached, and need to be recomputed.
+These intermediates allow for faster recomputation of such features.
 */
 struct FeatureIntermediates {
     double inlined_calls;
@@ -391,7 +386,6 @@ struct FeatureIntermediates {
     double num_warps_per_block;
     double num_threads_per_block;
     double points_computed_per_thread;
-    // TODO(rootjalex): add dump() method.
 };
 
 }  // namespace Internal
