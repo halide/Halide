@@ -3,10 +3,6 @@
         # Everything at global namespace beginning with halide_
         halide_* ;
 
-        # Some C++ classes that are overloaded at global namespace
-        # TODO: should not be necessary
-        # _ZN28halide_handle_cplusplus_type* ;
-
         # Everything in Halide:: namespace (including nested namespace)
         # (Don't use _Z*6Halide as that can match things like std::sort()
         # with Halide types in the specialization)
