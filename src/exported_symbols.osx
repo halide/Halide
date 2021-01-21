@@ -1,0 +1,8 @@
+# Everything at global namespace beginning with halide_
+halide_*
+
+# Some C++ classes that are overloaded at global namespace
+__ZN28halide_handle_cplusplus_type*
+
+# Everything in Halide:: namespace
+__Z*6Halide*

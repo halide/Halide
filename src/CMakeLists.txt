@@ -370,6 +370,20 @@ add_library(Halide
             $<TARGET_OBJECTS:Halide_initmod>)
 add_library(Halide::Halide ALIAS Halide)
 
+# TODO: there is probably a more elegant way to do these conditions
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  # using Clang
+  target_link_options(Halide PRIVATE -Wl,-exported_symbols_list ${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx)
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  # using GCC
+  target_link_options(Halide PRIVATE -Wl,--version-script=${CMAKE_CURRENT_LIST_DIR}/exported_symbols.linux)
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+   # using Visual Studio C++
+    message(FATAL_ERROR "TODO")
+else()
+    message(FATAL_ERROR "whoopsie")
+endif()
+
 target_link_libraries(Halide PRIVATE Halide::LLVM)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
 target_compile_definitions(Halide

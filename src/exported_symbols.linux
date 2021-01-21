@@ -1,0 +1,9 @@
+{
+  global:
+        halide_* ;
+        _ZN28halide_handle_cplusplus_type* ;
+        _Z*6Halide* ;
+
+  local: *;
+};
+
