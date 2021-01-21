@@ -378,6 +378,8 @@ target_compile_definitions(Halide
                            $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:WITH_INTROSPECTION>)
 
 include(TargetExportScript)
+## TODO: implement something similar for Windows/link.exe
+# https://github.com/halide/Halide/issues/4651
 target_export_script(Halide
                      APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
                      GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.linux")
