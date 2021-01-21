@@ -1,0 +1,15 @@
+{
+    global:
+        # Everything at global namespace beginning with halide_
+        halide_* ;
+
+        # Everything in Halide:: namespace (including nested namespace)
+        # (Don't use _Z*6Halide as that can match things like std::sort()
+        # with Halide types in the specialization)
+        _Z?6Halide* ;
+        _Z??6Halide* ;
+        _Z???6Halide* ;
+
+    local: *;
+};
+

@@ -252,6 +252,7 @@ set(SOURCE_FILES
     IRPrinter.cpp
     IRVisitor.cpp
     JITModule.cpp
+    Lambda.cpp
     Lerp.cpp
     LICM.cpp
     LLVM_Output.cpp
@@ -375,6 +376,13 @@ target_compile_definitions(Halide
                            PRIVATE
                            $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>
                            $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:WITH_INTROSPECTION>)
+
+include(TargetExportScript)
+## TODO: implement something similar for Windows/link.exe
+# https://github.com/halide/Halide/issues/4651
+target_export_script(Halide
+                     APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
+                     GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.linux")
 
 set_target_properties(Halide PROPERTIES
                       POSITION_INDEPENDENT_CODE ON

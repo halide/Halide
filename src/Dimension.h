@@ -72,11 +72,6 @@ public:
      * used by the auto-scheduler and/or the RunGen tool/ */
     Dimension set_estimate(Expr min, Expr extent);
 
-    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    Dimension set_bounds_estimate(Expr min, Expr extent) {
-        return set_estimate(std::move(min), std::move(extent));
-    }
-
     Expr min_estimate() const;
     Expr extent_estimate() const;
 

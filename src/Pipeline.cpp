@@ -1284,25 +1284,6 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const Target &target, 
     }
 }
 
-void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
-                                  const Target &target,
-                                  const ParamMap &param_map) {
-    vector<int32_t> sizes;
-    if (x_size) {
-        sizes.push_back(x_size);
-    }
-    if (y_size) {
-        sizes.push_back(y_size);
-    }
-    if (z_size) {
-        sizes.push_back(z_size);
-    }
-    if (w_size) {
-        sizes.push_back(w_size);
-    }
-    infer_input_bounds(sizes, target, param_map);
-}
-
 void Pipeline::infer_input_bounds(const std::vector<int32_t> &sizes,
                                   const Target &target,
                                   const ParamMap &param_map) {
