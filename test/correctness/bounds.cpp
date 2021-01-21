@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
                 return -1;
             }
             int href = i + j;
-            if (href < 20) href = 20;
+            if (href < 20) href = 1337;
             if (href > 100) href = 100;
             if (imh(i, j) != href) {
                 printf("imh[%d, %d] = %d (not %d)\n", i, j, imh(i, j), href);
