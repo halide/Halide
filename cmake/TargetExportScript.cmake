@@ -10,6 +10,7 @@ function(target_export_script TARGET)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     set(dummy_source [[ int main() { return 0; } ]])
+    set(is_shared "$<STREQUAL:$<TARGET_PROPERTY:TYPE>,SHARED_LIBRARY>")
 
     # CMake doesn't recognize MSVC/link.exe's unknown-option warning.
     set(extra_errors FAIL_REGEX "LNK4044: unrecognized option")
@@ -21,7 +22,8 @@ function(target_export_script TARGET)
     check_cxx_source_compiles("${dummy_source}" LINKER_HAS_FLAG_VERSION_SCRIPT ${extra_errors})
 
     if (LINKER_HAS_FLAG_VERSION_SCRIPT)
-        target_link_options(${TARGET} PRIVATE "$<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,SHARED_LIBRARY>:${version_script}>")
+        target_link_options(${TARGET} PRIVATE "$<${is_shared}:${version_script}>")
+        set_property(TARGET ${TARGET} APPEND PROPERTY LINK_DEPENDS "$<${is_shared}:${ARG_GNU_LD}>")
         return()
     endif ()
 
@@ -32,7 +34,8 @@ function(target_export_script TARGET)
     check_cxx_source_compiles("${dummy_source}" LINKER_HAS_FLAG_EXPORTED_SYMBOLS_LIST ${extra_errors})
 
     if (LINKER_HAS_FLAG_EXPORTED_SYMBOLS_LIST)
-        target_link_options(${TARGET} PRIVATE "$<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,SHARED_LIBRARY>:${exported_symbols_list}>")
+        target_link_options(${TARGET} PRIVATE "$<${is_shared}:${exported_symbols_list}>")
+        set_property(TARGET ${TARGET} APPEND PROPERTY LINK_DEPENDS "$<${is_shared}:${ARG_APPLE_LD}>")
         return()
     endif ()
 
