@@ -496,12 +496,6 @@ class PartitionLoops : public IRMutator {
             return IRMutator::visit(op);
         }
 
-        // We shouldn't partition GLSL loops - they have control-flow
-        // constraints.
-        if (op->device_api == DeviceAPI::GLSL) {
-            return op;
-        }
-
         // Find simplifications in this loop body
         FindSimplifications finder(op->name);
         body.accept(&finder);
@@ -777,11 +771,6 @@ class RenormalizeGPULoops : public IRMutator {
     vector<pair<string, Expr>> lifted_lets;
 
     Stmt visit(const For *op) override {
-        if (op->device_api == DeviceAPI::GLSL) {
-            // The partitioner did not enter GLSL loops
-            return op;
-        }
-
         bool old_in_gpu_loop = in_gpu_loop;
         Stmt stmt;
 

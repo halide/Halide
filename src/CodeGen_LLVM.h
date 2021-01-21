@@ -43,10 +43,9 @@ class GlobalVariable;
 #include "Target.h"
 
 namespace Halide {
-struct ExternSignature;
-}  // namespace Halide
 
-namespace Halide {
+struct ExternSignature;
+
 namespace Internal {
 
 /** A code generator abstract base class. Actual code generators
@@ -87,7 +86,7 @@ public:
     }
 
 protected:
-    CodeGen_LLVM(Target t);
+    CodeGen_LLVM(const Target &t);
 
     /** Compile a specific halide declaration into the llvm Module. */
     // @{
@@ -457,8 +456,12 @@ protected:
     /** Mapping of intrinsic functions to the various overloads implementing it. */
     std::map<std::string, std::vector<Intrinsic>> intrinsics;
 
+    /** Get an LLVM intrinsic declaration. If it doesn't exist, it will be created. */
+    llvm::Function *get_llvm_intrin(const Type &ret_type, const std::string &name, const std::vector<Type> &arg_types, bool scalars_are_vectors = false);
+    llvm::Function *get_llvm_intrin(llvm::Type *ret_type, const std::string &name, const std::vector<llvm::Type *> &arg_types);
     /** Declare an intrinsic function that participates in overload resolution. */
-    void declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types);
+    void declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types, bool scalars_are_vectors = false);
+    void declare_intrin_overload(const std::string &name, const Type &ret_type, llvm::Function *impl, std::vector<Type> arg_types);
     /** Call an overloaded intrinsic function. Returns nullptr if no suitable overload is found. */
     llvm::Value *call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args);
 

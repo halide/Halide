@@ -93,9 +93,6 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
     case DeviceAPI::OpenGLCompute:
         out << "<OpenGLCompute>";
         break;
-    case DeviceAPI::GLSL:
-        out << "<GLSL>";
-        break;
     case DeviceAPI::Metal:
         out << "<Metal>";
         break;
@@ -1015,7 +1012,7 @@ void IRPrinter::visit(const VectorReduce *op) {
            << op->op
            << ", "
            << op->value
-           << ")\n";
+           << ")";
 }
 
 void IRPrinter::visit(const Atomic *op) {

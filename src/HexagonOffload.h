@@ -7,9 +7,14 @@
  * Hexagon host runtime module.
  */
 
-#include "Module.h"
+#include "Buffer.h"
+#include "Expr.h"
 
 namespace Halide {
+
+class Module;
+struct Target;
+
 namespace Internal {
 
 /** Pull loops marked with the Hexagon device API to a separate

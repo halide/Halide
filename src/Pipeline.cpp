@@ -1075,10 +1075,6 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
-    if (t.has_feature(Target::OpenGL)) {
-        user_warning << "WARNING: OpenGL is deprecated in Halide 11 and will be removed in Halide 12.\n";
-    }
-
     debug(2) << "Realizing Pipeline for " << target << "\n";
 
     if (target.has_unknowns()) {
@@ -1286,25 +1282,6 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const Target &target, 
             p.set_buffer(Buffer<>(std::move(tracked_buffers[i].query)));
         }
     }
-}
-
-void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
-                                  const Target &target,
-                                  const ParamMap &param_map) {
-    vector<int32_t> sizes;
-    if (x_size) {
-        sizes.push_back(x_size);
-    }
-    if (y_size) {
-        sizes.push_back(y_size);
-    }
-    if (z_size) {
-        sizes.push_back(z_size);
-    }
-    if (w_size) {
-        sizes.push_back(w_size);
-    }
-    infer_input_bounds(sizes, target, param_map);
 }
 
 void Pipeline::infer_input_bounds(const std::vector<int32_t> &sizes,
