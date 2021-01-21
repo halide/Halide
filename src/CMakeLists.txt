@@ -252,6 +252,7 @@ set(SOURCE_FILES
     IRPrinter.cpp
     IRVisitor.cpp
     JITModule.cpp
+    Lambda.cpp
     Lerp.cpp
     LICM.cpp
     LLVM_Output.cpp
