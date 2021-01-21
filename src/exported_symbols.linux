@@ -4,7 +4,8 @@
         halide_* ;
 
         # Some C++ classes that are overloaded at global namespace
-        _ZN28halide_handle_cplusplus_type* ;
+        # TODO: should not be necessary
+        # _ZN28halide_handle_cplusplus_type* ;
 
         # Everything in Halide:: namespace (including nested namespace)
         # (Don't use _Z*6Halide as that can match things like std::sort()
