@@ -2042,9 +2042,17 @@ void CodeGen_Xtensa::visit(const Ramp *op) {
 void CodeGen_Xtensa::visit(const Broadcast *op) {
     Type vector_type = op->type.with_lanes(op->lanes);
     string rhs;
-    if (op->type.is_int() && (op->type.bits() == 24) && is_const(op->value)) {
-        // Xtensa compiler seems to be very peculiar about assignments/casts to 24 bit.
-        rhs = std::to_string(op->value.as<IntImm>()->value);
+    if (op->type.is_int() && ((op->type.bits() == 24) || (op->type.bits() == 48)) && is_const(op->value)) {
+        // Assigning a constant to wide vector is tricky.
+        if (is_const_zero(op->value)) {
+            if (op->type.bits() == 24) {
+                rhs = "IVP_MUL2NX8(0, 0)";
+            } else if (op->type.bits() == 48) {
+                rhs = "IVP_MULNX16(0, 0)";
+            }
+        } else {
+            rhs = std::to_string(op->value.as<IntImm>()->value);
+        }
     } else {
         string id_value = print_expr(op->value);
 
