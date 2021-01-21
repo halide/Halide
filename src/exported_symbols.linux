@@ -1,7 +1,12 @@
 {
   global:
+        # Everything at global namespace beginning with halide_
         halide_* ;
+
+        # Some C++ classes that are overloaded at global namespace
         _ZN28halide_handle_cplusplus_type* ;
+
+        # Everything in Halide:: namespace
         _Z*6Halide* ;
 
   local: *;
