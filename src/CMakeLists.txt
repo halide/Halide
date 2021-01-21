@@ -370,24 +370,17 @@ add_library(Halide
             $<TARGET_OBJECTS:Halide_initmod>)
 add_library(Halide::Halide ALIAS Halide)
 
-# TODO: there is probably a more elegant way to do these conditionals in CMake
-if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    # using Clang
-    target_link_options(Halide PRIVATE -Wl,-exported_symbols_list ${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx)
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    # using GCC
-    target_link_options(Halide PRIVATE -Wl,--version-script=${CMAKE_CURRENT_LIST_DIR}/exported_symbols.linux)
-else ()
-    # TODO: implement something similar for MSVC
-    # https://github.com/halide/Halide/issues/4651
-endif ()
-
 target_link_libraries(Halide PRIVATE Halide::LLVM)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
 target_compile_definitions(Halide
                            PRIVATE
                            $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>
                            $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:WITH_INTROSPECTION>)
+
+include(TargetExportScript)
+target_export_script(Halide
+                     APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
+                     GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.linux")
 
 set_target_properties(Halide PROPERTIES
                       POSITION_INDEPENDENT_CODE ON
