@@ -1076,13 +1076,6 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_lerp_i16(const int16x32_t& a, cons
   return IVP_PACKVRNRNX48(output, 14);
 }
 
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_avg121_round_i16(const int16x32_t& a, const int16x32_t& b, const int16x32_t& c) {
-  static const int16_t kCeilAvg121Coef[] = {1, 1, 2, 3};
-  xb_int64pr * __restrict coef = (xb_int64pr*)kCeilAvg121Coef;
-  xb_vecNx48 result = IVP_MULQN16XR16(xb_vecNx16(1), c, b, a, coef[0]);
-  return IVP_PACKVRNRNX48(result, 2);
-}
-
 HALIDE_ALWAYS_INLINE uint16x64_t convert_to_uint16x64_t_from_uint8x64_t(const uint8x64_t& src) {
   xb_vec2Nx24 wide = src * uint8x64_t(1);
   return uint16x64_t(uint16x64_t::from_native_vector,
