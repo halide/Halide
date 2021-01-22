@@ -26,7 +26,7 @@ void check(Expr test, Expr expected) {
     return check(test, expected, expected.type());
 }
 
-template <typename T>
+template<typename T>
 void check_saturating_add_sub() {
     const int64_t min_t = std::numeric_limits<T>::min();
     const int64_t max_t = std::numeric_limits<T>::max();

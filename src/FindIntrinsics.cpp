@@ -632,7 +632,7 @@ Expr lower_saturating_sub(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
     // Lower saturating add without using widening arithmetic, which may require
     // types that aren't supported.
-    return simplify(clamp(a, a.type().min() - max(b, 0), a.type().max() - min(b, 0))) - b;
+    return simplify(clamp(a, a.type().min() + max(b, 0), a.type().max() + min(b, 0))) - b;
 }
 
 Expr lower_halving_add(const Expr &a, const Expr &b) {
