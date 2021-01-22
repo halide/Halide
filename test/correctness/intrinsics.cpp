@@ -14,10 +14,10 @@ void check(Expr test, Expr expected, Type required_type) {
     test = simplify(test);
     Expr result = find_intrinsics(test);
     if (!equal(result, expected) || required_type != expected.type()) {
-        std::cout << "failure!\n";
-        std::cout << "test: " << test << "\n";
-        std::cout << "result: " << result << "\n";
-        std::cout << "exepcted: " << expected << "\n";
+        std::cerr << "failure!\n";
+        std::cerr << "test: " << test << "\n";
+        std::cerr << "result: " << result << "\n";
+        std::cerr << "exepcted: " << expected << "\n";
         abort();
     }
 }
@@ -44,17 +44,17 @@ void check_saturating_add_sub() {
             int64_t reference_add = std::min(std::max(a + b, min_t), max_t);
             int64_t reference_sub = std::min(std::max(a - b, min_t), max_t);
             if (!can_prove(result_add == make_const(halide_t, reference_add))) {
-                std::cout << "failure!\n";
-                std::cout << "test: " << add << "\n";
-                std::cout << "result: " << result_add << "\n";
-                std::cout << "expected: " << reference_add << "\n";
+                std::cerr << "failure!\n";
+                std::cerr << "test: " << add << "\n";
+                std::cerr << "result: " << result_add << "\n";
+                std::cerr << "expected: " << reference_add << "\n";
                 abort();
             }
             if (!can_prove(result_sub == make_const(halide_t, reference_sub))) {
-                std::cout << "failure!\n";
-                std::cout << "test: " << sub << "\n";
-                std::cout << "result: " << result_sub << "\n";
-                std::cout << "expected: " << reference_sub << "\n";
+                std::cerr << "failure!\n";
+                std::cerr << "test: " << sub << "\n";
+                std::cerr << "result: " << result_sub << "\n";
+                std::cerr << "expected: " << reference_sub << "\n";
                 abort();
             }
         }
