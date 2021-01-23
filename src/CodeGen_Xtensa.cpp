@@ -1548,7 +1548,7 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
 
         return rhs.str();
     }
-    // absd needs extra cast to uint*
+    // Functions below needs extra cast to uint*
     if (op->name == "halide_xtensa_absd_i16") {
         rhs << "xb_vecNx16_rtor_xb_vecNx16U(IVP_ABSSUBNX16(" << args[0] + ", " + args[1] + "))";
         return rhs.str();
