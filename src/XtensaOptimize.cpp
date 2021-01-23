@@ -1270,7 +1270,7 @@ public:
     }
 };
 
-// Entry point for Xtensa related lowering passes.
+// Entry point for Xtensa related lowering passes
 Stmt match_xtensa_patterns(Stmt s) {
     s = OptimizeShuffles(64).mutate(s);
     s = align_loads(s, 64);
