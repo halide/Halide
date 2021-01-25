@@ -33,7 +33,6 @@ set(HEADER_FILES
     CodeGen_Metal_Dev.h
     CodeGen_MIPS.h
     CodeGen_OpenCL_Dev.h
-    CodeGen_OpenGL_Dev.h
     CodeGen_OpenGLCompute_Dev.h
     CodeGen_Posix.h
     CodeGen_PowerPC.h
@@ -198,7 +197,6 @@ set(SOURCE_FILES
     CodeGen_Metal_Dev.cpp
     CodeGen_MIPS.cpp
     CodeGen_OpenCL_Dev.cpp
-    CodeGen_OpenGL_Dev.cpp
     CodeGen_OpenGLCompute_Dev.cpp
     CodeGen_Posix.cpp
     CodeGen_PowerPC.cpp
@@ -254,6 +252,7 @@ set(SOURCE_FILES
     IRPrinter.cpp
     IRVisitor.cpp
     JITModule.cpp
+    Lambda.cpp
     Lerp.cpp
     LICM.cpp
     LLVM_Output.cpp
@@ -378,6 +377,13 @@ target_compile_definitions(Halide
                            $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>
                            $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:WITH_INTROSPECTION>)
 
+include(TargetExportScript)
+## TODO: implement something similar for Windows/link.exe
+# https://github.com/halide/Halide/issues/4651
+target_export_script(Halide
+                     APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
+                     GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.linux")
+
 set_target_properties(Halide PROPERTIES
                       POSITION_INDEPENDENT_CODE ON
                       VERSION ${Halide_VERSION}
@@ -460,6 +466,11 @@ endif ()
 option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
 if (TARGET_D3D12COMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_D3D12)
+endif ()
+
+option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
+if (TARGET_OPENGLCOMPUTE)
+    target_compile_definitions(Halide PRIVATE WITH_OPENGLCOMPUTE)
 endif ()
 
 ##

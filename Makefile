@@ -120,7 +120,7 @@ WITH_WEBASSEMBLY ?= $(findstring webassembly, $(LLVM_COMPONENTS))
 WITH_AMDGPU ?= $(findstring amdgpu, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
-WITH_OPENGL ?= not-empty
+WITH_OPENGLCOMPUTE ?= not-empty
 WITH_D3D12 ?= not-empty
 WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
@@ -157,7 +157,7 @@ OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENCL), , )
 METAL_CXX_FLAGS=$(if $(WITH_METAL), -DWITH_METAL, )
 METAL_LLVM_CONFIG_LIB=$(if $(WITH_METAL), , )
 
-OPENGL_CXX_FLAGS=$(if $(WITH_OPENGL), -DWITH_OPENGL, )
+OPENGLCOMPUTE_CXX_FLAGS=$(if $(WITH_OPENGLCOMPUTE), -DWITH_OPENGLCOMPUTE, )
 
 D3D12_CXX_FLAGS=$(if $(WITH_D3D12), -DWITH_D3D12, )
 D3D12_LLVM_CONFIG_LIB=$(if $(WITH_D3D12), , )
@@ -205,7 +205,7 @@ CXX_FLAGS += $(AARCH64_CXX_FLAGS)
 CXX_FLAGS += $(X86_CXX_FLAGS)
 CXX_FLAGS += $(OPENCL_CXX_FLAGS)
 CXX_FLAGS += $(METAL_CXX_FLAGS)
-CXX_FLAGS += $(OPENGL_CXX_FLAGS)
+CXX_FLAGS += $(OPENGLCOMPUTE_CXX_FLAGS)
 CXX_FLAGS += $(D3D12_CXX_FLAGS)
 CXX_FLAGS += $(MIPS_CXX_FLAGS)
 CXX_FLAGS += $(POWERPC_CXX_FLAGS)
@@ -424,7 +424,6 @@ SOURCE_FILES = \
   CodeGen_Metal_Dev.cpp \
   CodeGen_MIPS.cpp \
   CodeGen_OpenCL_Dev.cpp \
-  CodeGen_OpenGL_Dev.cpp \
   CodeGen_OpenGLCompute_Dev.cpp \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
@@ -480,6 +479,7 @@ SOURCE_FILES = \
   IRPrinter.cpp \
   IRVisitor.cpp \
   JITModule.cpp \
+  Lambda.cpp \
   Lerp.cpp \
   LICM.cpp \
   LLVM_Output.cpp \
@@ -596,7 +596,6 @@ HEADER_FILES = \
   CodeGen_Metal_Dev.h \
   CodeGen_MIPS.h \
   CodeGen_OpenCL_Dev.h \
-  CodeGen_OpenGL_Dev.h \
   CodeGen_OpenGLCompute_Dev.h \
   CodeGen_Posix.h \
   CodeGen_PowerPC.h \
@@ -922,9 +921,15 @@ else
 LIBHALIDE_SONAME_FLAGS=
 endif
 
+ifeq ($(UNAME), Linux)
+LIBHALIDE_EXPORTS=-Wl,--version-script=$(ROOT_DIR)/src/exported_symbols.linux
+else
+LIBHALIDE_EXPORTS=-Wl,-exported_symbols_list $(ROOT_DIR)/src/exported_symbols.osx
+endif
+
 $(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(INITIAL_MODULES)
 	@mkdir -p $(@D)
-	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) $(INSTALL_NAME_TOOL_LD_FLAGS) $(LIBHALIDE_SONAME_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
+	$(CXX) -shared $(LIBHALIDE_EXPORTS) $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) $(INSTALL_NAME_TOOL_LD_FLAGS) $(LIBHALIDE_SONAME_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$(BIN_DIR)/libHalide.$(SHARED_EXT) $(BIN_DIR)/libHalide.$(SHARED_EXT)
 endif
@@ -2057,6 +2062,10 @@ ifneq (,$(findstring clang version 11.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 11.1,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring clang version 12.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -2081,7 +2090,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 100 110 120))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 100 110 111 120))
 LLVM_OK=yes
 endif
 
