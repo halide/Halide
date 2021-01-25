@@ -22,8 +22,6 @@ FLATBUFFERS_INCLUDE_PATH ?= /usr/local/Cellar/flatbuffers/1.12.0/include
 #
 # -fPIC is necessary for .so builds (at least on Linux); not necessary for the non-delegate
 # builds but easier to enable it for everything.
-#
-# TODO: Not sure if -fvisibility moves the needle or not
 CXXFLAGS += -Wno-unused-private-field -fno-exceptions -fPIC -fvisibility=hidden -fvisibility-inlines-hidden
 
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
@@ -218,7 +216,6 @@ DELEGATE_LD_FLAGS ?= ERROR_TODO
 endif
 
 # Note: delegates are apparently always .so on OSX (never .dylib)
-# TODO: add a linker script to expose only the exported symbols we want
 $(BIN)/%/libHalideDelegate.so: \
 		$(BIN)/%/halide_delegate.o \
 		$(BIN)/%/halide_delegate_adaptor.o \
