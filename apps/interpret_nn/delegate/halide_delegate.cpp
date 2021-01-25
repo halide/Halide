@@ -11,6 +11,10 @@
 #include "tensorflow/lite/c/c_api.h"
 #include "util/error_util.h"
 
+// TODO: this is likely a worthwhile optimization that we can support without
+// too much effort, but requires some testing harnesses we don't have yet
+// and isn't likely to be our lowest-hanging fruit. Revisit once other optimizations
+// start to become diminishing returns.
 #define ALLOW_DYNAMIC_TENSORS 0
 
 // Use a List-Of-X approach here to ensure that places we handle ops are kept in sync
