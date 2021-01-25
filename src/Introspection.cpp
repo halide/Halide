@@ -750,6 +750,14 @@ public:
 
             debug(5) << "Considering address " << ((void *)address) << "\n";
 
+            // In some situations on OSX, we can get invalid addresses here that
+            // are small but nonnull (eg, 0x08). Skip everything tiny here on the
+            // assumption that it's just noise.
+            if (address <= (uint64_t)0xff) {
+                debug(5) << "Skipping function because address is unlikely to be valid\n";
+                continue;
+            }
+
             const uint8_t *inst_ptr = (const uint8_t *)address;
             if (inst_ptr[-5] == 0xe8) {
                 // The actual address of the call is probably 5 bytes
