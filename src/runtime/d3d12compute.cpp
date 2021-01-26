@@ -2493,7 +2493,7 @@ static int d3d12_create_context(void *user_context) {
     }
 
     if (status == halide_error_code_success) {
-        halide_assert(cmd_allocator_main, (cmd_allocator_main == nullptr));
+        halide_assert(user_context, (cmd_allocator_main == nullptr));
         cmd_allocator_main = new_command_allocator<HALIDE_D3D12_COMMAND_LIST_TYPE>(device);
         if (cmd_allocator_main == nullptr) {
             status = halide_error_code_generic_error;
@@ -2503,8 +2503,8 @@ static int d3d12_create_context(void *user_context) {
     if (status == halide_error_code_success) {
         // NOTE(marcos): a small amount of hard-coded staging buffer storage is
         // sufficient to get started as suballocations will grow them as needed
-        halide_assert(cmd_allocator_main, (upload == 0));
-        halide_assert(cmd_allocator_main, (readback == 0));
+        halide_assert(user_context, (upload == 0));
+        halide_assert(user_context, (readback == 0));
         size_t heap_size = 4 * 1024 * 1024;
         upload = new_upload_buffer(device, heap_size);
         readback = new_readback_buffer(device, heap_size);
@@ -2853,6 +2853,7 @@ WEAK int halide_d3d12compute_device_release(void *user_context) {
             hFenceEvent = nullptr;
 
             release_object(cmd_allocator_main);
+            cmd_allocator_main = nullptr;
 
             release_object(device);
             device = nullptr;
