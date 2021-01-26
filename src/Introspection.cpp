@@ -755,8 +755,8 @@ public:
             // are small but nonnull (eg, 0x08). It's probably better to miss introspection
             // options here than to crash during compilation.
             if (address <= (uint64_t)0xff) {
-                debug(1) << "Skipping function because address is unlikely to be valid. (Did you set -fno-omit-frame-pointer everywhere?)\n";
-                continue;
+                debug(1) << "Bailing out because we found an obviously-bad address in the backtrace. (Did you set -fno-omit-frame-pointer everywhere?)\n";
+                return "";
             }
 
             const uint8_t *inst_ptr = (const uint8_t *)address;
