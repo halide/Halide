@@ -750,11 +750,12 @@ public:
 
             debug(5) << "Considering address " << ((void *)address) << "\n";
 
-            // In some situations on OSX, we can get invalid addresses here that
-            // are small but nonnull (eg, 0x08). Skip everything tiny here on the
-            // assumption that it's just noise.
+            // In some situations on OSX (most notable, compiling with different
+            // setting for -fomit-frame-pointer), we can get invalid addresses here that
+            // are small but nonnull (eg, 0x08). It's probably better to miss introspection
+            // options here than to crash during compilation.
             if (address <= (uint64_t)0xff) {
-                debug(5) << "Skipping function because address is unlikely to be valid\n";
+                debug(1) << "Skipping function because address is unlikely to be valid. (Did you set -fno-omit-frame-pointer everywhere?)\n";
                 continue;
             }
 
