@@ -86,7 +86,7 @@ struct DelegateFactory {
 
 }  // namespace
 
-void run_all(const std::string &filename, int seed, int threads, bool verbose, DelegateFactory *delegate_factory) {
+void run_all(const std::string &filename, int seed, int threads, int verbosity, DelegateFactory *delegate_factory) {
     std::cout << "Comparing " << filename << "\n";
 
     std::vector<char> buffer = read_entire_file(filename);
@@ -103,7 +103,7 @@ void run_all(const std::string &filename, int seed, int threads, bool verbose, D
     // ----- Run in Halide
     {
         Model model = parse_tflite_model_from_buffer(buffer.data());
-        if (verbose) {
+        if (verbosity) {
             model.dump(std::cout);
         }
 
@@ -119,7 +119,7 @@ void run_all(const std::string &filename, int seed, int threads, bool verbose, D
             seeds[t->name()] = seed_here;
             auto input_buf = t->data<void>();
             dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
-            if (verbose) {
+            if (verbosity) {
                 std::cout << "HALIDE input " << t->name() << " inited with seed = " << seed_here << " type " << input_buf.type() << "\n";
             }
         }
@@ -138,7 +138,7 @@ void run_all(const std::string &filename, int seed, int threads, bool verbose, D
 
         // Save the outputs
         for (Tensor *t : interpreter.outputs()) {
-            if (verbose) {
+            if (verbosity) {
                 std::cout << "HALIDE output is " << t->name() << " type " << to_string(t->type()) << "\n";
             }
             // Make a copy since the Buffer might reference memory owned by the interpreter
@@ -147,7 +147,7 @@ void run_all(const std::string &filename, int seed, int threads, bool verbose, D
     }
 
     // ----- Run in TFLite
-    const auto run_in_tflite = [&seeds](const std::vector<char> &buffer, int seed, int threads, bool verbose, TfLiteDelegate *delegate) -> RunResult {
+    const auto run_in_tflite = [&seeds](const std::vector<char> &buffer, int seed, int threads, int verbosity, TfLiteDelegate *delegate) -> RunResult {
         RunResult result;
 
         TfLiteModel *tf_model = TfLiteModelCreate(buffer.data(), buffer.size());
@@ -179,7 +179,7 @@ void run_all(const std::string &filename, int seed, int threads, bool verbose, D
             if (t->allocation_type == kTfLiteMmapRo) {
                 // The Tensor references data from the flatbuffer and is read-only;
                 // presumably it is data we want to keep as-is
-                if (verbose) {
+                if (verbosity) {
                     std::cout << "TFLITE input " << t->name << " is being used as-is\n";
                 }
                 continue;
@@ -189,7 +189,7 @@ void run_all(const std::string &filename, int seed, int threads, bool verbose, D
             int seed_here = seed_i->second;
             auto input_buf = wrap_tf_lite_tensor_with_halide_buffer(t);
             dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
-            if (verbose) {
+            if (verbosity) {
                 std::cout << "TFLITE input " << t->name << " inited with seed = " << seed_here
                           << " type " << input_buf.type() << " from " << TfLiteTypeGetName(t->type) << "\n";
             }
@@ -215,7 +215,7 @@ void run_all(const std::string &filename, int seed, int threads, bool verbose, D
         // Save the outputs
         for (int i = 0; i < outputs; i++) {
             const TfLiteTensor *t = TfLiteInterpreterGetOutputTensor(tf_interpreter, i);
-            if (verbose) {
+            if (verbosity) {
                 std::cout << "TFLITE output is " << t->name << " type " << TfLiteTypeGetName(t->type) << "\n";
             }
             // Make a copy since the Buffer might reference memory owned by the tf_interpreter
@@ -227,13 +227,13 @@ void run_all(const std::string &filename, int seed, int threads, bool verbose, D
         return result;
     };
 
-    RunResult tflite_result = run_in_tflite(buffer, seed, threads, verbose, nullptr);
+    RunResult tflite_result = run_in_tflite(buffer, seed, threads, verbosity, nullptr);
 
     RunResult delegate_result;
     if (delegate_factory) {
         constexpr size_t num_options = 1;
         std::pair<std::string, std::string> options_strs[num_options] = {
-            {"verbosity", std::to_string(verbose ? 1 : 0)},
+            {"verbosity", std::to_string(verbosity)},
         };
         char *keys[num_options];
         char *values[num_options];
@@ -243,7 +243,7 @@ void run_all(const std::string &filename, int seed, int threads, bool verbose, D
         }
         TfLiteDelegate *delegate = delegate_factory->create_delegate(keys, values, num_options, nullptr);
         assert(delegate);
-        delegate_result = run_in_tflite(buffer, seed, threads, verbose, delegate);
+        delegate_result = run_in_tflite(buffer, seed, threads, verbosity, delegate);
         delegate_factory->destroy_delegate(delegate);
     }
 
@@ -274,7 +274,7 @@ void run_all(const std::string &filename, int seed, int threads, bool verbose, D
     }
 
     // ----- Now compare the outputs
-    const auto compare_results = [](const RunResult &a, const RunResult &b, bool verbose) {
+    const auto compare_results = [](const RunResult &a, const RunResult &b, int verbosity) {
         CHECK(a.outputs.size() == b.outputs.size());
         for (size_t i = 0; i < a.outputs.size(); ++i) {
             const Buffer<const void> &tflite_buf = a.outputs[i];
@@ -301,16 +301,16 @@ void run_all(const std::string &filename, int seed, int threads, bool verbose, D
 #endif
             CompareBuffersResult r = dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf, options);
             if (r.ok) {
-                if (verbose) {
+                if (verbosity >= 2) {
                     std::cout << "MATCHING output " << i << " is:\n";
                     dynamic_type_dispatch<DumpBuffer>(halide_buf.type(), halide_buf);
                 }
             }
         }
     };
-    compare_results(tflite_result, halide_result, verbose);
+    compare_results(tflite_result, halide_result, verbosity);
     if (delegate_factory) {
-        compare_results(tflite_result, delegate_result, verbose);
+        compare_results(tflite_result, delegate_result, verbosity);
     }
 }
 
@@ -320,7 +320,7 @@ int main(int argc, char **argv) {
     int seed = time(nullptr);
     int threads = 1;
     bool use_delegate = true;
-    bool verbose = false;
+    int verbosity = 0;
     std::vector<const char *> files;
 
     for (int i = 1; i < argc; i++) {
@@ -337,7 +337,11 @@ int main(int argc, char **argv) {
             continue;
         }
         if (!strcmp(argv[i], "--verbose")) {
-            verbose = true;
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                verbosity = atoi(argv[++i]);
+            } else {
+                verbosity = 1;
+            }
             continue;
         }
         files.push_back(argv[i]);
@@ -370,7 +374,7 @@ int main(int argc, char **argv) {
     }
 
     for (auto f : files) {
-        interpret_nn::run_all(f, seed, threads, verbose, use_delegate ? &delegate_factory : nullptr);
+        interpret_nn::run_all(f, seed, threads, verbosity, use_delegate ? &delegate_factory : nullptr);
         std::cout << "\n";
     }
 

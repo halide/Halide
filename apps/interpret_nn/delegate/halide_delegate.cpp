@@ -594,6 +594,7 @@ private:
     const HalideDelegateOptions options_;
     std::unique_ptr<Model> model_;
     std::unique_ptr<ModelInterpreter> interpreter_;
+    // TODO: unordered_map might be a better choice.
     std::map<int, std::shared_ptr<Tensor>> tensor_id_to_tensor_ptr_;
 };
 
