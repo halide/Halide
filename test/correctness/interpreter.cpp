@@ -147,7 +147,7 @@ int main(int argc, char **argv) {
                 int b = in_buf(x - 1, y);
                 int r0 = (a - b);
                 int r1 = r0 >> 1;
-                int r2 = (uint8_t) r1;
+                int r2 = (uint8_t)r1;
                 uint8_t correct = (uint8_t)(((int)in_buf(x + 1, y) - in_buf(x - 1, y)) >> 1);
                 if (out_buf(x, y) != correct) {
                     printf("out_buf1(%d, %d) = %d instead of %d (%d %d %d)\n", x, y, out_buf(x, y), correct, r0, r1, r2);
@@ -180,12 +180,12 @@ int main(int argc, char **argv) {
                 int r0 = a * a + b * b;
                 float r1 = std::sqrt(r0);
                 float r2 = std::floor(r1);
-                int r3 = (int) r2;
-                int r4 = (uint8_t) r3;
+                int r3 = (int)r2;
+                int r4 = (uint8_t)r3;
                 uint8_t correct = (uint8_t)((int)std::floor(std::sqrt(a * a + b * b)));
                 if (out_buf(x, y) != correct) {
                     printf("out_buf2(%d, %d) = %d instead of %d (%d %d %d %f %f %d %d\n", x, y, out_buf(x, y), correct,
-                        a, b, r0, r1, r2, r3, r4);
+                           a, b, r0, r1, r2, r3, r4);
                     result = -1;
                 }
             }
