@@ -227,7 +227,9 @@ public:
             const int node_index = params->nodes_to_replace->data[i];
             node_indices[i] = node_index;
         }
-        LOG(INFO) << "Delegate " << (void *)this << " Init nodes: " << node_indices << "\n";
+        if (options_.verbosity >= 1) {
+            LOG(INFO) << "Delegate " << (void *)this << " Init nodes: " << node_indices << "\n";
+        }
 
         // Pre-emptively map *all* the TFLiteTensors into our Tensor type.
         for (size_t tensor_id = 0; tensor_id < context->tensors_size; tensor_id++) {
@@ -236,7 +238,9 @@ public:
             model_->tensors.emplace_back(t);
             assert(!tensor_id_to_tensor_ptr_.count(tensor_id));
             tensor_id_to_tensor_ptr_[tensor_id] = t;
-            // LOG(INFO) << "tensor_id " << tensor_id << " -> " << (void*) t.get() << "\n";
+            if (options_.verbosity >= 1) {
+                // LOG(INFO) << "tensor_id " << tensor_id << " -> " << (void*) t.get() << "\n";
+            }
         }
 
         // Be careful with params->input_tensors and params->output_tensors here;
@@ -255,7 +259,9 @@ public:
             }
             auto t = GetTensorById(context, tensor_id);
             t->set_input(true);
-            // LOG(INFO) << "Delegate " << (void *)this << (t->is_constant() ? " Const" : "") << " Input tensor: " << tensor_id << "\n";
+            if (options_.verbosity >= 1) {
+                // LOG(INFO) << "Delegate " << (void *)this << (t->is_constant() ? " Const" : "") << " Input tensor: " << tensor_id << "\n";
+            }
         }
 
         // Add the output tensors.
@@ -264,7 +270,9 @@ public:
             if (tensor_id == kTfLiteOptionalTensor) {
                 continue;
             }
-            // LOG(INFO) << "Delegate " << (void *)this << " Output tensor: " << tensor_id << "\n";
+            if (options_.verbosity >= 1) {
+                // LOG(INFO) << "Delegate " << (void *)this << " Output tensor: " << tensor_id << "\n";
+            }
             auto t = GetTensorById(context, tensor_id);
             t->set_output(true);
         }
@@ -303,7 +311,9 @@ public:
     // It will be called again if tensor shape(s) change. It is preferable
     // to do all memory allocation in Prepare(), rather than Eval(), if possible.
     TfLiteStatus Prepare(TfLiteContext *context, TfLiteNode *node) {
-        LOG(INFO) << "Delegate " << (void *)this << " Prepare\n";
+        if (options_.verbosity >= 1) {
+            LOG(INFO) << "Delegate " << (void *)this << " Prepare\n";
+        }
 
         assert(model_ != nullptr);
 
@@ -332,7 +342,9 @@ public:
     // Eval() will be called at least once. It can expect that prepare() will
     // have been called for the current set of tensor shape(s).
     TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node) {
-        LOG(INFO) << "Delegate " << (void *)this << " Eval\n";
+        if (options_.verbosity >= 1) {
+            LOG(INFO) << "Delegate " << (void *)this << " Eval\n";
+        }
 
         if (interpreter_ == nullptr) {
             TF_LITE_KERNEL_LOG(context, "interpreter_ is not built in Eval");
@@ -360,7 +372,6 @@ public:
         }
 
         // TODO: execute needs to return an error code.
-        halide_set_num_threads(options_.num_threads);
         interpreter_->execute();
 
         // Copy the Tensor outputs. TODO: avoid this by sharing pointers.

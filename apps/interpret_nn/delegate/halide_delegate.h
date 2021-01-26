@@ -9,15 +9,15 @@ extern "C" {
 
 // Use HalideDelegateOptionsDefault() for Default options.
 struct TFL_CAPI_EXPORT HalideDelegateOptions {
-    // The max number of threads to use in Halide.
-    // 0 means use the default (typically, host-cpu-count).
-    //
-    // TODO: should we use TfLiteContext.recommended_num_threads instead?
-    int num_threads;
+    // Verbosity to use.
+    // 0 means "only bare minimum TFKERNEL logs, etc"
+    // 1 means "also do LOG(INFO)"
+    // higher numbers may produce additional output
+    int verbosity;
 
 #ifdef __cplusplus
     HalideDelegateOptions()
-        : num_threads(1) {
+        : verbosity(1) {
     }
 #endif
 };

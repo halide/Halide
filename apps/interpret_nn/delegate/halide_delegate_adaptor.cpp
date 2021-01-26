@@ -23,8 +23,8 @@ bool ParseOptions(char **options_keys,
     HalideDelegateOptionsDefault(options);
 
     for (size_t i = 0; i < num_options; ++i) {
-        if (!strcmp(options_keys[i], "num_threads")) {
-            if (!ParseValue(options_values[i], options->num_threads)) {
+        if (!strcmp(options_keys[i], "verbosity")) {
+            if (!ParseValue(options_values[i], options->verbosity)) {
                 LOG(WARNING) << "ParseOptions: malformed option " << options_keys[i] << "\n";
                 return false;
             }
@@ -54,8 +54,10 @@ TFL_CAPI_EXPORT TfLiteDelegate *tflite_plugin_create_delegate(char **options_key
         return nullptr;
     }
 
-    LOG(INFO) << "HalideDelegate: num_threads set to "
-              << options.num_threads << ".";
+    if (options.verbosity >= 1) {
+        LOG(INFO) << "HalideDelegate: verbosity set to "
+                  << options.verbosity << ".";
+    }
 
     return HalideDelegateCreate(&options);
 }

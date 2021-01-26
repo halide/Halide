@@ -233,7 +233,7 @@ void run_all(const std::string &filename, int seed, int threads, bool verbose, D
     if (delegate_factory) {
         constexpr size_t num_options = 1;
         std::pair<std::string, std::string> options_strs[num_options] = {
-            {"num_threads", std::to_string(threads)},
+            {"verbosity", std::to_string(verbose ? 1 : 0)},
         };
         char *keys[num_options];
         char *values[num_options];
