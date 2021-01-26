@@ -623,12 +623,16 @@ Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
 
 Expr lower_saturating_add(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    return saturating_narrow(widening_add(a, b));
+    // Lower saturating add without using widening arithmetic, which may require
+    // types that aren't supported.
+    return simplify(clamp(a, a.type().min() - min(b, 0), a.type().max() - max(b, 0))) + b;
 }
 
 Expr lower_saturating_sub(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    return saturating_cast(a.type(), widening_sub(a, b));
+    // Lower saturating add without using widening arithmetic, which may require
+    // types that aren't supported.
+    return simplify(clamp(a, a.type().min() + max(b, 0), a.type().max() + min(b, 0))) - b;
 }
 
 Expr lower_halving_add(const Expr &a, const Expr &b) {
@@ -676,6 +680,12 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::widening_sub)) {
         internal_assert(op->args.size() == 2);
         return lower_widening_sub(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::saturating_add)) {
+        internal_assert(op->args.size() == 2);
+        return lower_saturating_add(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::saturating_sub)) {
+        internal_assert(op->args.size() == 2);
+        return lower_saturating_sub(op->args[0], op->args[1]);
     } else if (op->is_intrinsic(Call::widening_shift_left)) {
         internal_assert(op->args.size() == 2);
         return lower_widening_shift_left(op->args[0], op->args[1]);

@@ -22,6 +22,7 @@
 #include "EmulateFloat16Math.h"
 #include "ExprUsesVar.h"
 #include "FindIntrinsics.h"
+#include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "IntegerDivisionTable.h"
@@ -4188,22 +4189,85 @@ void CodeGen_LLVM::visit(const Provide *op) {
 }
 
 void CodeGen_LLVM::visit(const IfThenElse *op) {
-    BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
-    BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
-    BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
-    builder->CreateCondBr(codegen(op->condition), true_bb, false_bb);
 
-    builder->SetInsertPoint(true_bb);
-    codegen(op->then_case);
-    builder->CreateBr(after_bb);
+    // Gather the conditions and values in an if-else chain
+    vector<pair<Expr, Stmt>> blocks;
+    Stmt final_else;
+    const IfThenElse *next_if = op;
+    do {
+        blocks.emplace_back(next_if->condition,
+                            next_if->then_case);
+        final_else = next_if->else_case;
+        next_if = final_else.defined() ? final_else.as<IfThenElse>() : nullptr;
+    } while (next_if);
 
-    builder->SetInsertPoint(false_bb);
-    if (op->else_case.defined()) {
-        codegen(op->else_case);
+    // Check if we should use a switch statement or an if-else tree
+    Expr lhs;
+    bool use_switch = blocks.size() > 1;
+    vector<int> rhs;
+    for (size_t i = 0; i < blocks.size(); i++) {
+        const EQ *eq = blocks[i].first.as<EQ>();
+        const int64_t *r = eq ? as_const_int(eq->b) : nullptr;
+        if (eq &&
+            r &&
+            Int(32).can_represent(*r) &&
+            is_pure(eq->a) &&
+            is_const(eq->b) &&
+            (!lhs.defined() || equal(lhs, eq->a))) {
+            lhs = eq->a;
+            rhs.push_back((int)*r);
+        } else {
+            use_switch = false;
+        }
     }
-    builder->CreateBr(after_bb);
 
-    builder->SetInsertPoint(after_bb);
+    if (use_switch) {
+        // Conditions are all of the form expr == constant for a
+        // consistent expr and different constants. Use a switch
+        // statement.
+
+        BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
+        BasicBlock *default_bb = BasicBlock::Create(*context, "default_bb", function);
+
+        auto *switch_inst = builder->CreateSwitch(codegen(lhs), default_bb, blocks.size());
+        for (int i = 0; i < (int)blocks.size(); i++) {
+            string name = "case_" + std::to_string(rhs[i]) + "_bb";
+            BasicBlock *case_bb = BasicBlock::Create(*context, name, function);
+            switch_inst->addCase(ConstantInt::get(IntegerType::get(*context, 32), rhs[i]), case_bb);
+            builder->SetInsertPoint(case_bb);
+            codegen(blocks[i].second);
+            builder->CreateBr(after_bb);
+        }
+
+        builder->SetInsertPoint(default_bb);
+        if (final_else.defined()) {
+            codegen(final_else);
+        }
+        builder->CreateBr(after_bb);
+
+        builder->SetInsertPoint(after_bb);
+    } else {
+        // Codegen an regular if-else chain using branches.
+
+        BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
+
+        for (const auto &p : blocks) {
+            BasicBlock *then_bb = BasicBlock::Create(*context, "then_bb", function);
+            BasicBlock *next_bb = BasicBlock::Create(*context, "next_bb", function);
+            builder->CreateCondBr(codegen(p.first), then_bb, next_bb);
+            builder->SetInsertPoint(then_bb);
+            codegen(p.second);
+            builder->CreateBr(after_bb);
+            builder->SetInsertPoint(next_bb);
+        }
+
+        if (final_else.defined()) {
+            codegen(final_else);
+        }
+        builder->CreateBr(after_bb);
+
+        builder->SetInsertPoint(after_bb);
+    }
 }
 
 void CodeGen_LLVM::visit(const Evaluate *op) {

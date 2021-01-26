@@ -174,7 +174,10 @@ public:
         check("vnavg(v*.w,v*.w)", hvx_width / 4, i32((i64(i32_1) - i64(i32_2)) / 2));
         if (isa_version >= 65) {
             check("vavg(v*.b,v*.b)", hvx_width / 1, i8((i16(i8_1) + i16(i8_2)) / 2));
+            check("vavg(v*.b,v*.b):rnd", hvx_width / 1, i8((i16(i8_1) + i16(i8_2) + 1) / 2));
             check("vavg(v*.uw,v*.uw)", hvx_width / 4, u32((u64(u32_1) + u64(u32_2)) / 2));
+            check("vavg(v*.uw,v*.uw):rnd", hvx_width / 4, u32((u64(u32_1) + u64(u32_2) + 1) / 2));
+            check("vnavg(v*.b,v*.b)", hvx_width / 1, i8((i16(i8_1) - i16(i8_2)) / 2));
         }
 
         // The behavior of shifts larger than the type behave differently
@@ -330,11 +333,25 @@ public:
 
         check("vround(v*.h,v*.h)", hvx_width / 1, u8_sat((i32(i16_1) + 128) / 256));
         check("vround(v*.h,v*.h)", hvx_width / 1, i8_sat((i32(i16_1) + 128) / 256));
+        check("vround(v*.uh,v*.uh)", hvx_width / 1, u8_sat((u32(u16_1) + 128) / 256));
         // int32 is safe for overflow, allow non-widening rounding.
         check("vround(v*.w,v*.w)", hvx_width / 2, u16_sat((i32_1 + 32768) / 65536));
         check("vround(v*.w,v*.w)", hvx_width / 2, i16_sat((i32_1 + 32768) / 65536));
         check("vround(v*.w,v*.w)", hvx_width / 2, u16_sat((i64(i32_1) + 32768) / 65536));
         check("vround(v*.w,v*.w)", hvx_width / 2, i16_sat((i64(i32_1) + 32768) / 65536));
+        check("vround(v*.uw,v*.uw)", hvx_width / 2, u16_sat((u64(u32_1) + 32768) / 65536));
+
+        check("v*.ub = vasr(v*.h,v*.h,r*):rnd:sat", hvx_width / 1, u8_sat((i32(i16_1) + 8) / 16));
+        check("v*.b = vasr(v*.h,v*.h,r*):rnd:sat", hvx_width / 1, i8_sat((i32(i16_1) + 16) / 32));
+        if (isa_version >= 65) {
+            check("v*.ub = vasr(v*.uh,v*.uh,r*):rnd:sat", hvx_width / 1, u8_sat((u32(u16_1) + 32) / 64));
+        }
+        // int32 is safe for overflow, allow non-widening rounding.
+        check("v*.uh = vasr(v*.w,v*.w,r*):rnd:sat", hvx_width / 2, u16_sat((i32_1 + 64) / 128));
+        check("v*.h = vasr(v*.w,v*.w,r*):rnd:sat", hvx_width / 2, i16_sat((i32_1 + 128) / 256));
+        check("v*.uh = vasr(v*.w,v*.w,r*):rnd:sat", hvx_width / 2, u16_sat((i64(i32_1) + 256) / 512));
+        check("v*.h = vasr(v*.w,v*.w,r*):rnd:sat", hvx_width / 2, i16_sat((i64(i32_1) + 512) / 1024));
+        check("v*.uh = vasr(v*.uw,v*.uw,r*):rnd:sat", hvx_width / 2, u16_sat((u64(u32_1) + 1024) / 2048));
 
         check("vshuff(v*,v*,r*)", hvx_width * 2, select((x % 2) == 0, in_u8(x / 2), in_u8((x + 16) / 2)));
         check("vshuff(v*,v*,r*)", hvx_width * 2, select((x % 2) == 0, in_i8(x / 2), in_i8((x + 16) / 2)));
