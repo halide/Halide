@@ -750,6 +750,15 @@ public:
 
             debug(5) << "Considering address " << ((void *)address) << "\n";
 
+            // In some situations on OSX (most notable, compiling with different
+            // setting for -fomit-frame-pointer), we can get invalid addresses here that
+            // are small but nonnull (eg, 0x08). It's probably better to miss introspection
+            // options here than to crash during compilation.
+            if (address <= (uint64_t)0xff) {
+                debug(1) << "Bailing out because we found an obviously-bad address in the backtrace. (Did you set -fno-omit-frame-pointer everywhere?)\n";
+                return "";
+            }
+
             const uint8_t *inst_ptr = (const uint8_t *)address;
             if (inst_ptr[-5] == 0xe8) {
                 // The actual address of the call is probably 5 bytes
