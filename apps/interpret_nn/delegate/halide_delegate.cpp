@@ -247,7 +247,7 @@ public:
 #endif
 
         // Mark the input and output tensors correctly, as code in our interpreter
-        // relies upon it. TODO: verify that is necessary.
+        // relies upon it.
         for (int i = 0; i < params->input_tensors->size; i++) {
             const int tensor_id = params->input_tensors->data[i];
             if (tensor_id == kTfLiteOptionalTensor) {
