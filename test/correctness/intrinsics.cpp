@@ -234,6 +234,11 @@ int main(int argc, char **argv) {
     check((u16(u8x) * 4 - u16(u8y)) * 3, widening_mul(u8x, u8(12)) - widening_mul(u8y, u8(3)));
     check((u16(u8x) - u16(u8y) * 7) * 5, widening_mul(u8x, u8(5)) - widening_mul(u8y, u8(35)));
 
+    Expr i32a = Variable::make(Int(32), "a");
+    check((i32a / 2) * 2, i32a & ~1);
+    check((i32a / 3) * 3, (i32a / 3) * 3);
+    check((i32a / 8) * 8, i32a & ~7);
+
     check_saturating_add_sub<int8_t>();
     check_saturating_add_sub<uint8_t>();
     check_saturating_add_sub<int16_t>();

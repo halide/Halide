@@ -257,6 +257,16 @@ protected:
     }
 
     Expr visit(const Mul *op) override {
+        // Rewrite (x/N)*N as x & ~(N - 1)
+        int pow2 = 0;
+        if (is_const_power_of_two_integer(op->b, &pow2)) {
+            if (const Div *a = op->a.as<Div>()) {
+                if (equal(a->b, op->b)) {
+                    return mutate(a->a & simplify(~(op->b - 1)));
+                }
+            }
+        }
+
         if (!find_intrinsics_for_type(op->type)) {
             return IRMutator::visit(op);
         }
