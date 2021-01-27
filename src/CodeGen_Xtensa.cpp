@@ -1399,6 +1399,7 @@ class ScopedDmaInitializer {
     }
 }
 
+namespace {
 template<typename T>
 bool is_native_xtensa_vector(Type t) {
     return false;
@@ -1439,6 +1440,12 @@ bool is_native_xtensa_vector<float>(Type t) {
     return t.is_float() && (t.bits() == 32) && (t.lanes() == 16);
 }
 
+bool is_double_native_vector_type(Type t) {
+    return (t.is_int_or_uint() && ((t.bits() == 8 && t.lanes() == 128) || (t.bits() == 16 && t.lanes() == 64) || (t.bits() == 32 && t.lanes() == 32))) || (t.is_float() && t.bits() == 32 && t.lanes() == 32);
+}
+
+}  // namespace
+
 // TODO(vksnk): condense this code.
 bool CodeGen_Xtensa::is_native_vector_type(Type t) {
     if (t.is_int_or_uint() && (t.lanes() == 64) && (t.bits() == 8)) {
@@ -1466,6 +1473,28 @@ bool CodeGen_Xtensa::is_native_vector_type(Type t) {
     }
 
     return false;
+}
+
+std::string suffix_for_type(Type t) {
+    if (t.is_int() && (t.bits() == 8)) {
+        return "_i8";
+    } else if (t.is_uint() && (t.bits() == 8)) {
+        return "_u8";
+    } else if (t.is_int() && (t.bits() == 16)) {
+        return "_i16";
+    } else if (t.is_uint() && (t.bits() == 16)) {
+        return "_u16";
+    } else if (t.is_int() && (t.bits() == 32)) {
+        return "_i32";
+    } else if (t.is_uint() && (t.bits() == 32)) {
+        return "_u32";
+    } else if (t.is_float() && (t.bits() == 32)) {
+        return "_f32";
+    } else if (t.is_float() && (t.bits() == 16)) {
+        return "_f16";
+    }
+
+    return "";
 }
 
 std::string CodeGen_Xtensa::print_type(Type t, AppendSpaceIfNeeded space_option) {
@@ -1548,7 +1577,7 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
 
         return rhs.str();
     }
-    // Functions below needs extra cast to uint*
+    // absd needs extra cast to uint*
     if (op->name == "halide_xtensa_absd_i16") {
         rhs << "xb_vecNx16_rtor_xb_vecNx16U(IVP_ABSSUBNX16(" << args[0] + ", " + args[1] + "))";
         return rhs.str();
@@ -2073,6 +2102,36 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
     const int max_index = (int)(op->vectors[0].type().lanes() * op->vectors.size());
     for (int i : op->indices) {
         internal_assert(i >= -1 && i < max_index);
+    }
+
+    // Generate intrinsics for the interleave op.
+    if (op->is_interleave() && is_double_native_vector_type(op->type)) {
+        string type_suffix = suffix_for_type(op->type);
+
+        Expr call = Call::make(op->type, "halide_xtensa_interleave" + type_suffix,
+                               {op->vectors[0], op->vectors[1]}, Call::PureExtern);
+        call.accept(this);
+        return;
+    }
+
+    if (op->is_slice() && (op->slice_stride() == 1) && (is_native_xtensa_vector<int8_t>(op->type) || is_native_xtensa_vector<uint8_t>(op->type) || is_native_xtensa_vector<int16_t>(op->type) || is_native_xtensa_vector<uint16_t>(op->type) || is_native_xtensa_vector<int32_t>(op->type) || is_native_xtensa_vector<uint32_t>(op->type) || is_native_xtensa_vector<float>(op->type))) {
+        string type_suffix = suffix_for_type(op->type);
+        string function_name = std::string("halide_xtensa_slice") + ((op->slice_begin() < 5) ? "_start" : "");
+        Expr call = Call::make(op->type, function_name + type_suffix,
+                               {op->vectors[0], op->slice_begin()}, Call::PureExtern);
+        call.accept(this);
+        return;
+    }
+
+    if (op->vectors.size() == 1 && is_double_native_vector_type(op->vectors[0].type())) {
+        if (op->is_slice() && (op->slice_begin() < 2) && (op->slice_stride() == 2) && (op->indices.size() == op->vectors[0].type().lanes() / 2)) {
+            string type_suffix = suffix_for_type(op->type);
+            string function_name = std::string("halide_xtensa_deinterleave") + ((op->slice_begin() == 0) ? "_even" : "_odd");
+            Expr call = Call::make(op->type, function_name + type_suffix,
+                                   {op->vectors[0]}, Call::PureExtern);
+            call.accept(this);
+            return;
+        }
     }
 
     std::vector<string> vecs;

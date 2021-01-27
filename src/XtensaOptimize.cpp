@@ -578,124 +578,9 @@ private:
     }
 
     Expr visit(const Shuffle *op) override {
-        // TODO(vksnk): clean-up this if.
-        if (op->is_interleave() && op->type.is_int_or_uint() && (op->type.bits() == 16) && (op->type.lanes() == 64)) {
-            if (op->type.is_int()) {
-                return Call::make(op->type, "halide_xtensa_interleave_i16",
-                                  {mutate(op->vectors[0]), mutate(op->vectors[1])},
-                                  Call::PureExtern);
-            } else if (op->type.is_uint()) {
-                return Call::make(op->type, "halide_xtensa_interleave_u16",
-                                  {mutate(op->vectors[0]), mutate(op->vectors[1])},
-                                  Call::PureExtern);
-            }
-        } else if (op->is_interleave() && op->type.is_int_or_uint() && (op->type.bits() == 8) && (op->type.lanes() == 128)) {
-            if (op->type.is_int()) {
-                return Call::make(op->type, "halide_xtensa_interleave_i8",
-                                  {mutate(op->vectors[0]), mutate(op->vectors[1])},
-                                  Call::PureExtern);
-            } else if (op->type.is_uint()) {
-                return Call::make(op->type, "halide_xtensa_interleave_u8",
-                                  {mutate(op->vectors[0]), mutate(op->vectors[1])},
-                                  Call::PureExtern);
-            }
-        } else if (op->is_slice() && (op->slice_stride() == 1) && op->type.is_int_or_uint() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
-            string suffix = op->type.is_int() ? "_i16" : "_u16";
-            if (op->slice_begin() < 5) {
-                return Call::make(op->type, "halide_xtensa_slice_start_" + suffix,
-                                  {mutate(op->vectors[0]), op->slice_begin()},
-                                  Call::PureExtern);
-            } else {
-                return Call::make(op->type, "halide_xtensa_slice" + suffix,
-                                  {mutate(op->vectors[0]), op->slice_begin()},
-                                  Call::PureExtern);
-            }
-        } else if (op->is_slice() && (op->slice_stride() == 1) && op->type.is_uint() && (op->type.bits() == 8) && (op->type.lanes() == 64)) {
-            // Specialize slices which begin from 1, 2, 3 or 4.
-            if (op->slice_begin() < 5) {
-                return Call::make(op->type, "halide_xtensa_slice_start_u8",
-                                  {mutate(op->vectors[0]), op->slice_begin()},
-                                  Call::PureExtern);
-            } else {
-                return Call::make(op->type, "halide_xtensa_slice_u8",
-                                  {mutate(op->vectors[0]), op->slice_begin()},
-                                  Call::PureExtern);
-            }
-        } else if (op->is_slice() && (op->slice_stride() == 1) && op->type.is_float() && (op->type.bits() == 32) && (op->type.lanes() == 16)) {
-            return Call::make(op->type, "halide_xtensa_slice_f32",
-                              {mutate(op->vectors[0]), op->slice_begin()},
-                              Call::PureExtern);
-        } else if (op->type.is_int_or_uint() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
-            if ((op->vectors.size() == 1) && (op->vectors[0].type().lanes() == 64)) {
-                bool is_deinterleave_even = true;
-                for (int ix = 0; ix < (int)op->indices.size(); ix++) {
-                    is_deinterleave_even = is_deinterleave_even && (op->indices[ix] == 2 * ix);
-                }
-
-                if (is_deinterleave_even) {
-                    if (op->type.is_int()) {
-                        return Call::make(op->type, "halide_xtensa_deinterleave_even_i16",
-                                          {mutate(op->vectors[0])},
-                                          Call::PureExtern);
-                    } else if (op->type.is_uint()) {
-                        return Call::make(op->type, "halide_xtensa_deinterleave_even_u16",
-                                          {mutate(op->vectors[0])},
-                                          Call::PureExtern);
-                    }
-                }
-                bool is_deinterleave_odd = true;
-                for (int ix = 0; ix < (int)op->indices.size(); ix++) {
-                    is_deinterleave_odd = is_deinterleave_odd && (op->indices[ix] == 2 * ix + 1);
-                }
-
-                if (is_deinterleave_odd) {
-                    if (op->type.is_int()) {
-                        return Call::make(op->type, "halide_xtensa_deinterleave_odd_i16",
-                                          {mutate(op->vectors[0])},
-                                          Call::PureExtern);
-                    } else if (op->type.is_uint()) {
-                        return Call::make(op->type, "halide_xtensa_deinterleave_odd_u16",
-                                          {mutate(op->vectors[0])},
-                                          Call::PureExtern);
-                    }
-                }
-            }
-            // TODO(vksnk): That's actually an interleave op.
-        } else if (op->type.is_int_or_uint() && (op->type.bits() == 8) && (op->type.lanes() == 64)) {
-            if ((op->vectors.size() == 1) && (op->vectors[0].type().lanes() == 128)) {
-                bool is_deinterleave_even = true;
-                for (int ix = 0; ix < (int)op->indices.size(); ix++) {
-                    is_deinterleave_even = is_deinterleave_even && (op->indices[ix] == 2 * ix);
-                }
-
-                if (is_deinterleave_even) {
-                    if (op->type.is_int()) {
-                        return Call::make(op->type, "halide_xtensa_deinterleave_even_i8",
-                                          {mutate(op->vectors[0])},
-                                          Call::PureExtern);
-                    } else if (op->type.is_uint()) {
-                        return Call::make(op->type, "halide_xtensa_deinterleave_even_u8",
-                                          {mutate(op->vectors[0])},
-                                          Call::PureExtern);
-                    }
-                }
-                bool is_deinterleave_odd = true;
-                for (int ix = 0; ix < (int)op->indices.size(); ix++) {
-                    is_deinterleave_odd = is_deinterleave_odd && (op->indices[ix] == 2 * ix + 1);
-                }
-
-                if (is_deinterleave_odd) {
-                    if (op->type.is_int()) {
-                        return Call::make(op->type, "halide_xtensa_deinterleave_odd_i8",
-                                          {mutate(op->vectors[0])},
-                                          Call::PureExtern);
-                    } else if (op->type.is_uint()) {
-                        return Call::make(op->type, "halide_xtensa_deinterleave_odd_u8",
-                                          {mutate(op->vectors[0])},
-                                          Call::PureExtern);
-                    }
-                }
-            } else if ((op->vectors.size() == 1) && (op->vectors[0].type().lanes() == 192)) {
+        // TODO(vksnk): generalize this pattern.
+        if (op->type.is_int_or_uint() && (op->type.bits() == 8) && (op->type.lanes() == 64)) {
+            if ((op->vectors.size() == 1) && (op->vectors[0].type().lanes() == 192)) {
                 bool is_extract_off_0_3 = true;
                 for (int ix = 0; ix < (int)op->indices.size(); ix++) {
                     is_extract_off_0_3 = is_extract_off_0_3 && (op->indices[ix] == 3 * ix);
@@ -1270,7 +1155,6 @@ public:
     }
 };
 
-// Entry point for Xtensa related lowering passes.
 Stmt match_xtensa_patterns(Stmt s) {
     s = OptimizeShuffles(64).mutate(s);
     s = align_loads(s, 64);
