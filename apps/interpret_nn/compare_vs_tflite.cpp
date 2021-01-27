@@ -109,10 +109,10 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
 
         ModelInterpreter interpreter(std::move(model));
 
-        // Fill in the inputs with random data (but with the same seeds as above).
+        // Fill in the inputs with pseudorandom data (save the seeds for later).
         for (Tensor *t : interpreter.inputs()) {
             if (t->is_constant()) {
-                // Skip constant buffers, just like TFlite above.
+                // Skip constant buffers, just like TFlite does later on.
                 continue;
             }
             int seed_here = seed++;
@@ -172,8 +172,7 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
         const int inputs = TfLiteInterpreterGetInputTensorCount(tf_interpreter);
         const int outputs = TfLiteInterpreterGetOutputTensorCount(tf_interpreter);
 
-        // Fill in the inputs with random data, remembering the seeds so we can do the
-        // same for the Halide inputs.
+        // Fill in the inputs with the same pseudorandom data as before.
         for (int i = 0; i < inputs; i++) {
             TfLiteTensor *t = TfLiteInterpreterGetInputTensor(tf_interpreter, i);
             if (t->allocation_type == kTfLiteMmapRo) {
@@ -197,14 +196,6 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
 
         // Execute once, to prime the pump
         CHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
-
-        // TODO: left in for now for when we re-add DynamicTensor usage
-        // int input_dims[4] = { 2, 28, 28, 32};
-        // CHECK((status = TfLiteInterpreterResizeInputTensor(tf_interpreter, 0, input_dims, 4)) == kTfLiteOk) << status;
-        // CHECK((status = TfLiteInterpreterResizeInputTensor(tf_interpreter, 1, input_dims, 4)) == kTfLiteOk) << status;
-        // CHECK((status = TfLiteInterpreterAllocateTensors(tf_interpreter)) == kTfLiteOk) << status;
-        // CHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
-        // CHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
 
         // Now benchmark it
         result.time = bench([&tf_interpreter]() {
