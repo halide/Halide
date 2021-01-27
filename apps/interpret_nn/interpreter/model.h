@@ -120,22 +120,63 @@ class Tensor {
     std::string name_;
     TensorType type_;
     std::vector<halide_dimension_t> shape_;
-    std::vector<uint8_t> data_;
+    std::vector<uint8_t> storage_;
+    uint8_t *data_ptr_ = nullptr;
+    size_t data_size_ = 0;
     QuantizationInfo quantization_;
+    bool is_external_ = false;
     bool is_constant_ = false;
     bool is_input_ = false;
     bool is_output_ = false;
 
 public:
+    // A Tensor can own its own storage, or point to externally-owned
+    // storage (eg from a TFLiteTensor).
+    //
+    // - If the former, data_ptr_ == storage_.data() and data_size_ == storage_.size(),
+    // and the storage is discarded when the Tensor is.
+    //
+    // - If the latter, storage_ is empty, and the data pointed to by
+    // data_ptr_ is presumed to remain valid for the life of the Tensor.
+
+    // Using an enum instead of a boolean for better readability at point-of-call
+    enum Access : uint8_t {
+        ReadOnly,
+        ReadWrite
+    };
+
+    // Create a Tensor with captive data storage, owned by the Tensor.
     explicit Tensor(std::string name, TensorType type,
                     std::vector<halide_dimension_t> shape,
-                    std::vector<uint8_t> data, QuantizationInfo quantization)
+                    std::vector<uint8_t> data,
+                    QuantizationInfo quantization,
+                    Access access)
         : name_(std::move(name)),
           type_(type),
           shape_(std::move(shape)),
-          data_(std::move(data)),
-          quantization_(std::move(quantization)) {
-        is_constant_ = data_.size() != 0;
+          storage_(std::move(data)),
+          data_ptr_(storage_.data()),
+          data_size_(storage_.size()),
+          quantization_(std::move(quantization)),
+          is_external_(false),
+          is_constant_(access == ReadOnly) {
+    }
+
+    // Create a Tensor with external data storage.
+    explicit Tensor(std::string name, TensorType type,
+                    std::vector<halide_dimension_t> shape,
+                    uint8_t *data_ptr, size_t data_size,
+                    QuantizationInfo quantization,
+                    Access access)
+        : name_(std::move(name)),
+          type_(type),
+          shape_(std::move(shape)),
+          storage_(),
+          data_ptr_(data_ptr),
+          data_size_(data_size),
+          quantization_(std::move(quantization)),
+          is_external_(true),
+          is_constant_(access == ReadOnly) {
     }
 
     Tensor(const Tensor &copy) = default;
@@ -157,6 +198,9 @@ public:
     }
     const QuantizationInfo &quantization() const {
         return quantization_;
+    }
+    bool is_external() const {
+        return is_external_;
     }
     bool is_constant() const {
         return is_constant_;
@@ -181,12 +225,12 @@ public:
         if (std::is_void<T>::value) {
             return HalideBuffer<T>(
                 to_halide_type(type_),
-                reinterpret_cast<T *>(data_.data()),
+                reinterpret_cast<T *>(data_ptr_),
                 shape_.size(), shape_.data());
         } else {
             assert(is_type<T>(type_));
             return HalideBuffer<T>(
-                reinterpret_cast<T *>(data_.data()),
+                reinterpret_cast<T *>(data_ptr_),
                 shape_.size(), shape_.data());
         }
     }
@@ -196,12 +240,12 @@ public:
         if (std::is_void<T>::value) {
             return HalideBuffer<const T>(
                 to_halide_type(type_),
-                reinterpret_cast<const T *>(data_.data()),
+                reinterpret_cast<const T *>(data_ptr_),
                 shape_.size(), shape_.data());
         } else {
             assert(is_type<T>(type_));
             return HalideBuffer<const T>(
-                reinterpret_cast<const T *>(data_.data()),
+                reinterpret_cast<const T *>(data_ptr_),
                 shape_.size(), shape_.data());
         }
     }
@@ -224,13 +268,25 @@ public:
         return buf;
     }
 
-    bool is_allocated() const {
-        return !data_.empty();
-    }
+    // Some types of external storage might need updating after we create our Tensors
+    // (e.g., kTfLiteArenaRw is only guaranteed to be available during eval).
+    //
+    // It is an error to call this on for a Tensor with is_external() == false.
+    //
+    // Is it an error to call this with a different data_size than the value
+    // the Tensor was created with.
+    void update_external(uint8_t *data_ptr, size_t data_size);
+
+    // Return true iff the Tensor has a nonzero amount of storage (either external or allocated).
+    bool is_allocated() const;
+
+    // If the Tensor doesn't use external storage, allocate the appropriate storage if necessary.
+    // (For Tensors with external storage, just verify that the data size is sane.)
     void allocate();
-    void free() {
-        data_.resize(0);
-    }
+
+    // Free the Tensor's allocated storage (if any) and reset the data pointer to null
+    // and the data size to zero. TODO: this never seems to be called. Do we need it?
+    void free();
 
     void dump(std::ostream &os) const;
 

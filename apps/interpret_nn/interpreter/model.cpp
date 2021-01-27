@@ -141,6 +141,17 @@ void Model::dump(std::ostream &os) {
     os << std::endl;
 }
 
+void Tensor::update_external(uint8_t *data_ptr, size_t data_size) {
+    CHECK(is_external());
+    CHECK(storage_.empty());
+    CHECK(data_size_ == data_size);
+    data_ptr_ = data_ptr;
+}
+
+bool Tensor::is_allocated() const {
+    return data_size_ != 0;
+}
+
 void Tensor::allocate() {
     size_t shape_size = 1;
     for (halide_dimension_t &i : shape_) {
@@ -152,16 +163,34 @@ void Tensor::allocate() {
         shape_size *= i.extent;
     }
     shape_size *= sizeof_tensor_type(type());
-    if (data_.empty()) {
-        data_.resize(shape_size);
+
+    if (is_external()) {
+        // Ensure that the external storage is at least as large as we need.
+        // TODO: Should we check for exact equality? Let's do that for now.
+        CHECK(data_size_ == shape_size);
     } else {
-        CHECK(data_.size() == shape_size);
+        if (storage_.empty()) {
+            storage_.resize(shape_size);
+        } else {
+            CHECK(storage_.size() == shape_size);
+        }
+        data_ptr_ = storage_.data();
+        data_size_ = storage_.size();
     }
+}
+
+void Tensor::free() {
+    storage_.resize(0);
+    data_ptr_ = nullptr;
+    data_size_ = 0;
 }
 
 void Tensor::dump(std::ostream &os) const {
     os << "  " << to_string(type()) << " x " << shape()
-       << (is_allocated() ? " allocated " : " ") << name() << std::endl;
+       << (is_allocated() ? " allocated " : " ")
+       << (is_external() ? " external " : " ")
+       << name()
+       << std::endl;
 }
 
 }  // namespace interpret_nn

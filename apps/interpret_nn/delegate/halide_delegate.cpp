@@ -11,6 +11,8 @@
 #include "tensorflow/lite/c/c_api.h"
 #include "util/error_util.h"
 
+#define USE_EXTERNAL_TENSORS 1
+
 // TODO: this is likely a worthwhile optimization that we can support without
 // too much effort, but requires some testing harnesses we don't have yet
 // and isn't likely to be our lowest-hanging fruit. Revisit once other optimizations
@@ -168,20 +170,13 @@ std::vector<halide_dimension_t> ConvertTfLiteShape(const TfLiteTensor &tensor, s
     return shape;
 }
 
-std::shared_ptr<Tensor> ConvertTfLiteTensor(const TfLiteTensor &tensor) {
-    // TODO: this always makes a copy of the tensor data; we should be able to just
-    // shadow it. Needs some refactoring in Tensor (at least) to make work.
-    std::vector<uint8_t> data;
-    if (tensor.allocation_type == kTfLiteMmapRo) {
-        const uint8_t *d = (const uint8_t *)tensor.data.data;
-        data.assign(d, d + tensor.bytes);
-    }
+std::shared_ptr<Tensor> ConvertTfLiteTensor(const TfLiteTensor &tensor, bool is_input, bool is_output) {
+    CHECK(!(is_input && is_output));
 
     size_t shape_size;
     auto shape = ConvertTfLiteShape(tensor, &shape_size);
 
     TensorType type = ConvertTfLiteType(tensor.type);
-    assert(data.empty() || data.size() == shape_size * sizeof_tensor_type(type));
 
     QuantizationInfo quantization;
     if (tensor.quantization.type == kTfLiteAffineQuantization) {
@@ -201,8 +196,52 @@ std::shared_ptr<Tensor> ConvertTfLiteTensor(const TfLiteTensor &tensor) {
     // for unique or non-empty names in our code, so let's just map that to
     // an empty string.
     const char *name = tensor.name ? tensor.name : "";
-    return std::make_shared<Tensor>(name, type, std::move(shape),
-                                    std::move(data), std::move(quantization));
+
+    std::shared_ptr<Tensor> t;
+#if USE_EXTERNAL_TENSORS
+    if (is_input || is_output) {
+        // If it's an input or an output, it should be an external-storage Tensor
+        // (so we don't have to copy data, just update pointers).
+        Tensor::Access access = Tensor::ReadWrite;
+        if (tensor.allocation_type == kTfLiteMmapRo) {
+            assert(is_input && !is_output);
+            access = Tensor::ReadOnly;
+        } else {
+            CHECK(tensor.data.data == 0);
+        }
+        uint8_t *data_ptr = reinterpret_cast<uint8_t *>(tensor.data.data);
+        size_t data_size = tensor.bytes;
+        assert(data_size == shape_size * sizeof_tensor_type(type));
+        t = std::make_shared<Tensor>(
+            name, type, std::move(shape),
+            data_ptr, data_size, std::move(quantization), access);
+    } else {
+        // It's not constant, nor an input or an output, so we just want a Tensor
+        // with our own storage allocation (initially empty).
+        CHECK(tensor.allocation_type != kTfLiteMmapRo);
+        t = std::make_shared<Tensor>(
+            name, type, std::move(shape),
+            /*data*/ std::vector<uint8_t>{}, std::move(quantization), Tensor::ReadWrite);
+    }
+#else
+    // TODO: this always makes a copy of the tensor data; we should be able to just
+    // shadow it. Needs some refactoring in Tensor (at least) to make work.
+    std::vector<uint8_t> data;
+    Tensor::Access access = Tensor::ReadWrite;
+    if (tensor.allocation_type == kTfLiteMmapRo) {
+        const uint8_t *d = (const uint8_t *)tensor.data.data;
+        data.assign(d, d + tensor.bytes);
+        access = Tensor::ReadOnly;
+    }
+    assert(data.empty() || data.size() == shape_size * sizeof_tensor_type(type));
+    t = std::make_shared<Tensor>(
+        name, type, std::move(shape),
+        std::move(data), std::move(quantization), access);
+#endif
+
+    t->set_input(is_input);
+    t->set_output(is_output);
+    return t;
 }
 
 class HalideDelegateKernel final {
@@ -231,24 +270,47 @@ public:
             LOG(INFO) << "Delegate " << (void *)this << " Init nodes: " << node_indices << "\n";
         }
 
-        // Pre-emptively map *all* the TFLiteTensors into our Tensor type.
-        for (size_t tensor_id = 0; tensor_id < context->tensors_size; tensor_id++) {
-            const TfLiteTensor &tensor = context->tensors[tensor_id];
-            auto t = ConvertTfLiteTensor(tensor);
-            model_->tensors.emplace_back(t);
-            assert(!tensor_id_to_tensor_ptr_.count(tensor_id));
-            tensor_id_to_tensor_ptr_[tensor_id] = t;
-            if (options_.verbosity >= 1) {
-                // LOG(INFO) << "tensor_id " << tensor_id << " -> " << (void*) t.get() << "\n";
-            }
-        }
-
         // Be careful with params->input_tensors and params->output_tensors here;
         // in particular, params->input_tensors will contain all of the 'constant'
         // input tensors (which are generally inputs only to a specific node).
 #if ALLOW_DYNAMIC_TENSORS
         // TODO: verify the above comment is still correct.
 #endif
+        // Make a quick bitmask on the stack so we can quickly tell
+        // which Tensors are input or output as we create them.
+        const size_t io_alloc_size = context->tensors_size * sizeof(uint8_t);
+        uint8_t *io_flags = (uint8_t *)__builtin_alloca(io_alloc_size);
+        memset(io_flags, 0, io_alloc_size);
+        for (int i = 0; i < params->input_tensors->size; i++) {
+            const int tensor_id = params->input_tensors->data[i];
+            if (tensor_id == kTfLiteOptionalTensor) {
+                continue;
+            }
+            assert(tensor_id >= 0 && tensor_id < (int)context->tensors_size);
+            io_flags[tensor_id] |= 1;
+        }
+        for (int i = 0; i < params->output_tensors->size; i++) {
+            const int tensor_id = params->output_tensors->data[i];
+            if (tensor_id == kTfLiteOptionalTensor) {
+                continue;
+            }
+            assert(tensor_id >= 0 && tensor_id < (int)context->tensors_size);
+            io_flags[tensor_id] |= 2;
+        }
+
+        // Pre-emptively map *all* the TFLiteTensors into our Tensor type.
+        for (size_t tensor_id = 0; tensor_id < context->tensors_size; tensor_id++) {
+            const TfLiteTensor &tensor = context->tensors[tensor_id];
+            const bool is_input = (io_flags[tensor_id] & 1) != 0;
+            const bool is_output = (io_flags[tensor_id] & 2) != 0;
+            auto t = ConvertTfLiteTensor(tensor, is_input, is_output);
+            model_->tensors.emplace_back(t);
+            assert(!tensor_id_to_tensor_ptr_.count(tensor_id));
+            tensor_id_to_tensor_ptr_[tensor_id] = t;
+            if (options_.verbosity >= 2) {
+                LOG(INFO) << "tensor_id " << tensor_id << " -> " << (void *)t.get() << "\n";
+            }
+        }
 
         // Mark the input and output tensors correctly, as code in our interpreter
         // relies upon it.
@@ -351,6 +413,22 @@ public:
             return kTfLiteError;
         }
 
+#if USE_EXTERNAL_TENSORS
+        // Update the external Tensors to be sure they have valid data_ptrs.
+        // (We really only need to update the pointers for non-constant Tensors,
+        // but it's harmless & easier to do them all.)
+        for (size_t tensor_id = 0; tensor_id < context->tensors_size; tensor_id++) {
+            const TfLiteTensor &tensor = context->tensors[tensor_id];
+            auto t = GetTensorById(context, tensor_id);
+            if (!t->is_external()) {
+                continue;
+            }
+            uint8_t *data_ptr = reinterpret_cast<uint8_t *>(tensor.data.data);
+            CHECK(data_ptr != nullptr);
+            size_t data_size = tensor.bytes;
+            t->update_external(data_ptr, data_size);
+        }
+#else
         // Copy the non-constant Tensor inputs. TODO: avoid this by sharing pointers.
         for (int i = 0; i < node->inputs->size; i++) {
             const int tensor_id = node->inputs->data[i];
@@ -370,10 +448,14 @@ public:
 
             memcpy(buf.data(), tensor.data.data, tensor.bytes);
         }
+#endif
 
         // TODO: execute needs to return an error code.
         interpreter_->execute();
 
+#if USE_EXTERNAL_TENSORS
+        // nothing
+#else
         // Copy the Tensor outputs. TODO: avoid this by sharing pointers.
         for (int i = 0; i < node->outputs->size; i++) {
             const int tensor_id = node->outputs->data[i];
@@ -390,7 +472,7 @@ public:
 
             memcpy(tensor.data.data, buf.data(), tensor.bytes);
         }
-
+#endif
         // Eval() could be called again with the same graph -- don't destroy the interpreter_ yet.
 
         return kTfLiteOk;

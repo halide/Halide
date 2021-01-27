@@ -130,11 +130,13 @@ protected:
             quantization.dimension = 0;  // TODO -- do we use this?
             quantization.scale.push_back(td.scale);
             quantization.zero.push_back(td.zero_point);
+            Tensor::Access access = Tensor::ReadWrite;
             tensors.push_back(std::make_shared<Tensor>(td.name,
                                                        td.type,
                                                        std::move(shape),
                                                        std::move(data),
-                                                       std::move(quantization)));
+                                                       std::move(quantization),
+                                                       access));
             tensors.back()->allocate();
 
             if (td.init_fn == nullptr) {

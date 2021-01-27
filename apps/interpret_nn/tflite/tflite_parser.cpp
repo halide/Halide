@@ -92,10 +92,12 @@ public:
     std::unique_ptr<Tensor> parse_tensor(const tflite::Tensor *t) {
         const auto *buffers = model_->buffers();
         std::vector<uint8_t> data;
+        Tensor::Access access = Tensor::ReadWrite;
         if (t->buffer() != 0) {
             auto buffer = buffers->Get(t->buffer())->data();
             if (buffer) {
                 data.assign(buffer->cbegin(), buffer->cend());
+                access = Tensor::ReadOnly;
             }
         }
 
@@ -142,9 +144,11 @@ public:
         //     }
         // }
 
+        // Never use external tensors here: They would point into flatbuffer
+        // data that we will discard later.
         return make_unique<Tensor>(
             t->name()->str(), type, std::move(shape),
-            std::move(data), std::move(quantization));
+            std::move(data), std::move(quantization), access);
     }
 
     std::unique_ptr<Op> parse_add(const tflite::Operator *op) {
