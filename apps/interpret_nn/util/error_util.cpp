@@ -34,7 +34,7 @@ Logger::Logger(LogSeverity severity)
     msg << severity_names[(int)severity] << ": ";
 }
 
-Logger::~Logger() noexcept(false) {
+void Logger::finish() noexcept(false) {
     if (!msg.str().empty() && msg.str().back() != '\n') {
         msg << '\n';
     }
@@ -51,6 +51,10 @@ Logger::~Logger() noexcept(false) {
     }
 }
 
+Logger::~Logger() noexcept(false) {
+    finish();
+}
+
 Checker::Checker(const char *condition_string)
     : logger(FATAL) {
     logger.msg << " Condition Failed: " << condition_string << '\n';
@@ -62,6 +66,7 @@ Checker::Checker(const char *file, int line, const char *condition_string)
 }
 
 Checker::~Checker() noexcept(false) {
+    logger.finish();
     std::abort();
 }
 

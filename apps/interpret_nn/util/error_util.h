@@ -59,6 +59,8 @@ struct Logger final {
 
     ~Logger() noexcept(false);
 
+    void finish() noexcept(false);
+
     template<typename T>
     Logger &operator<<(const T &x) {
         msg << x;
