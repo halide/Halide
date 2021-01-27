@@ -172,6 +172,15 @@ Target calculate_host_target() {
             }
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
                 initial_features.push_back(Target::AVX512_Cannonlake);
+
+                const uint32_t avx512vnni = 1U << 11;  // vnni result in ecx
+                const uint32_t avx512bf16 = 1U << 5;   // bf16 result in eax, with cpuid(eax=7, ecx=1)
+                int info3[4];
+                cpuid(info3, 7, 1);
+                if ((info2[2] & avx512vnni) == avx512vnni &&
+                    (info3[0] & avx512bf16) == avx512bf16) {
+                    initial_features.push_back(Target::AVX512_SapphireRapids);
+                }
             }
         }
     }
@@ -374,6 +383,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sve2", Target::SVE2},
     {"arm_dot_prod", Target::ARMDotProd},
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
+    {"avx512_sappirerapids", Target::AVX512_SapphireRapids},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 

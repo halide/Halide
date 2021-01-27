@@ -148,6 +148,7 @@ void define_enums(py::module &m) {
         .value("SVE2", Target::Feature::SVE2)
         .value("ARMDotProd", Target::Feature::ARMDotProd)
         .value("LLVMLargeCodeModel", Target::Feature::LLVMLargeCodeModel)
+        .value("AVX512_SapphireRapids", Target::Feature::AVX512_SapphireRapids)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")
