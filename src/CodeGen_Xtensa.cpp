@@ -2124,7 +2124,7 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
     }
 
     if (op->vectors.size() == 1 && is_double_native_vector_type(op->vectors[0].type())) {
-        if (op->is_slice() && (op->slice_begin() < 2) && (op->slice_stride() == 2) && (op->indices.size() == op->vectors[0].type().lanes() / 2)) {
+        if (op->is_slice() && (op->slice_begin() < 2) && (op->slice_stride() == 2) && ((int)op->indices.size() == op->vectors[0].type().lanes() / 2)) {
             string type_suffix = suffix_for_type(op->type);
             string function_name = std::string("halide_xtensa_deinterleave") + ((op->slice_begin() == 0) ? "_even" : "_odd");
             Expr call = Call::make(op->type, function_name + type_suffix,
