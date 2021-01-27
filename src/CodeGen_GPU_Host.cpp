@@ -101,7 +101,7 @@ private:
 };
 
 Value *get_module_state(llvm::Module *module, const std::string &function_name,
-                        const std::string &api_unique_name, bool create = false) {
+                        const std::string &api_unique_name, bool create = true) {
     std::string name = "module_state_" + function_name + "_" + api_unique_name;
     GlobalVariable *module_state = module->getGlobalVariable(name, true);
     if (!module_state && create) {
