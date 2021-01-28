@@ -25,7 +25,7 @@ int multi_thread_type_test(MemoryType memory_type) {
     const int size_y = 200;
     const int size_z = 4;
 
-    Buffer<uint8_t> out = f6.realize(size_x, size_y, size_z);
+    Buffer<uint8_t> out = f6.realize({size_x, size_y, size_z});
 
     uint8_t correct = 32;
     for (int z = 0; z < size_z; z++) {
@@ -69,7 +69,7 @@ int pyramid_test(MemoryType memory_type) {
             .store_in(memory_type);
     }
 
-    Buffer<int> out = funcs[levels - 1].realize(size_x, size_y);
+    Buffer<int> out = funcs[levels - 1].realize({size_x, size_y});
 
     int correct = 1;
     for (int y = 0; y < size_y; y++) {
@@ -118,7 +118,7 @@ int inverted_pyramid_test(MemoryType memory_type) {
         .bound(x, 0, size_x)
         .bound(y, 0, size_y);
 
-    Buffer<int> out = funcs[levels - 1].realize(size_x, size_y);
+    Buffer<int> out = funcs[levels - 1].realize({size_x, size_y});
 
     int correct = 1;
     for (int y = 0; y < size_y; y++) {

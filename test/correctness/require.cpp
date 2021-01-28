@@ -42,7 +42,7 @@ static void test(int vector_width) {
     p1.set(1);
     p2.set(2);
     error_occurred = false;
-    result = f.realize(realize_width);
+    result = f.realize({realize_width});
     if (!error_occurred) {
         printf("There should have been a requirement error (vector_width = %d)\n", vector_width);
         exit(1);
@@ -51,7 +51,7 @@ static void test(int vector_width) {
     p1.set(1);
     p2.set(kPrime1 - 1);
     error_occurred = false;
-    result = f.realize(realize_width);
+    result = f.realize({realize_width});
     if (error_occurred) {
         printf("There should not have been a requirement error (vector_width = %d)\n", vector_width);
         exit(1);

@@ -156,7 +156,7 @@ void test_parallel_hist(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Buffer<T> out = hist.realize(hist_size);
+        Buffer<T> out = hist.realize({hist_size});
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
         }
@@ -243,7 +243,7 @@ void test_parallel_cas_update(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Buffer<T> out = hist.realize(hist_size);
+        Buffer<T> out = hist.realize({hist_size});
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
         }
@@ -292,7 +292,7 @@ void test_parallel_hist_tuple(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Realization out = hist.realize(hist_size);
+        Realization out = hist.realize({hist_size});
         Buffer<T> out0 = out[0];
         Buffer<T> out1 = out[1];
         for (int i = 0; i < hist_size; i++) {
@@ -405,7 +405,7 @@ void test_predicated_hist(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Buffer<T> out = hist.realize(hist_size);
+        Buffer<T> out = hist.realize({hist_size});
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
         }
@@ -458,7 +458,7 @@ void test_parallel_hist_tuple2(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Realization out = hist.realize(hist_size);
+        Realization out = hist.realize({hist_size});
         Buffer<T> out0 = out[0];
         Buffer<T> out1 = out[1];
         for (int i = 0; i < hist_size; i++) {
@@ -886,7 +886,7 @@ void test_hist_rfactor(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Buffer<T> out = hist.realize(hist_size);
+        Buffer<T> out = hist.realize({hist_size});
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
         }
@@ -969,7 +969,7 @@ void test_hist_tuple_rfactor(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Realization out = hist.realize(hist_size);
+        Realization out = hist.realize({hist_size});
         Buffer<T> out0 = out[0];
         Buffer<T> out1 = out[1];
         for (int i = 0; i < hist_size; i++) {
@@ -1048,7 +1048,7 @@ void test_extern_func(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Buffer<int> out = hist.realize(hist_size);
+        Buffer<int> out = hist.realize({hist_size});
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
         }
@@ -1107,7 +1107,7 @@ void test_async(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Buffer<int> out = consumer.realize(hist_size);
+        Buffer<int> out = consumer.realize({hist_size});
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
         }

@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
     sorted1.vectorize(x, 8).update().vectorize(x, 8);
 
     Buffer<int> output1(128, 8), output2(128, 8);
-    sorted1.realize(output1);
+    sorted1.realize({output1});
 
     // Run the sorting network fully unrolled as a single big multi-scatter
     Func sorted2;
@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
     sorted2(x, scatter(lhs)) = gather(rhs);
     sorted2.vectorize(x, 8).update().vectorize(x, 8);
 
-    sorted2.realize(output2);
+    sorted2.realize({output2});
 
     for (int i = 0; i < output1.dim(0).extent(); i++) {
         vector<int> correct(output1.dim(1).extent());
@@ -122,7 +122,7 @@ int main(int argc, char **argv) {
         rot(scatter(dst_x), scatter(dst_y)) =
             rot(gather(src_x), gather(src_y));
 
-        Buffer<uint8_t> output = rot.realize(sz, sz);
+        Buffer<uint8_t> output = rot.realize({sz, sz});
 
         for (int y = 0; y < sz; y++) {
             for (int x = 0; x < sz; x++) {

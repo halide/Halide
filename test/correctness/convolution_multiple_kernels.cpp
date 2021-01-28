@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
         blur.hexagon().vectorize(x, 64);
     }
 
-    Buffer<uint16_t> out = blur.realize(W, H, target);
+    Buffer<uint16_t> out = blur.realize({W, H}, target);
 
     for (int y = 2; y < H - 2; y++) {
         for (int x = 2; x < W - 2; x++) {

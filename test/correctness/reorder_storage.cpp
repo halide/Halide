@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
     int H = 11;
     expected_allocation = (3 * W * H + 1) * sizeof(int);
 
-    g.realize(W, H, 3);
+    g.realize({W, H, 3});
 
     int x_alignment = 16;
     f.align_storage(x, x_alignment);
@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
 
     // Force g to clear it's cache...
     g.compute_root();
-    g.realize(W, H, 3);
+    g.realize({W, H, 3});
 
     printf("Success!\n");
     return 0;

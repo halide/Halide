@@ -83,7 +83,7 @@ void expected_error(void *, const char *msg) {
 void realize_and_expect_error(Func f, int w, int h) {
     error_occurred = false;
     f.set_error_handler(expected_error);
-    f.realize(w, h);
+    f.realize({w, h});
     if (!error_occurred) {
         printf("Expected an error!\n");
         abort();

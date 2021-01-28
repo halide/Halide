@@ -305,7 +305,7 @@ int rdom_wrapper_test() {
         return -1;
     }
 
-    Buffer<int> im = wrapper.realize(W, H);
+    Buffer<int> im = wrapper.realize({W, H});
     auto func = [](int x, int y) { return 4 * x + 6 * y + 10; };
     if (check_image(im, func)) {
         return -1;

@@ -298,7 +298,7 @@ int rdom_wrapper_test() {
 
     source(x, y) = x + y;
     ImageParam img(Int(32), 2, "img");
-    Buffer<int> buf = source.realize(W, H);
+    Buffer<int> buf = source.realize({W, H});
     img.set(buf);
 
     g(x, y) = 10;
@@ -329,7 +329,7 @@ int rdom_wrapper_test() {
         return -1;
     }
 
-    Buffer<int> im = wrapper.realize(W, H);
+    Buffer<int> im = wrapper.realize({W, H});
     auto func = [](int x, int y) { return 4 * x + 6 * y + 10; };
     if (check_image(im, func)) {
         return -1;

@@ -169,7 +169,7 @@ void do_test() {
     const float one = std::numeric_limits<T>::max();
     f(x, y, c) = cast<T>(clamp(make_noise(10)(x, y, c), 0.0f, 1.0f) * one);
 
-    Buffer<T> color_buf = f.realize(width, height, 3);
+    Buffer<T> color_buf = f.realize({width, height, 3});
 
     // Inset it a bit to ensure that saving buffers with nonzero mins works
     const int inset = 4;

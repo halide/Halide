@@ -480,7 +480,7 @@ int main(int argc, char **argv) {
             .gpu_lanes(xi)
             .unroll(xo);
 
-        Buffer<uint16_t> out = curved.realize(buf.width(), buf.height());
+        Buffer<uint16_t> out = curved.realize({buf.width(), buf.height()});
 
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {

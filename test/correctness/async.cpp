@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
         consumer.compute_root();
         producer.store_root().fold_storage(x, 8).compute_at(consumer, x).async();
 
-        Buffer<int> out = consumer.realize(16);
+        Buffer<int> out = consumer.realize({16});
 
         out.for_each_element([&](int x) {
             int correct = 2 * x - 1;
