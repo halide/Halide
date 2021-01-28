@@ -1174,7 +1174,7 @@ void test_async_tuple(const Backend &backend) {
 
     // Run 10 times to make sure race condition do not happen
     for (int iter = 0; iter < 10; iter++) {
-        Realization out = consumer1.realize({2} * img_size);
+        Realization out = consumer1.realize({2 * img_size});
         Buffer<int> out0 = out[0];
         Buffer<int> out1 = out[1];
         for (int i = 0; i < 2 * img_size; i++) {

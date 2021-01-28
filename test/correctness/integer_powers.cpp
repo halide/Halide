@@ -50,9 +50,9 @@ int main(int argc, char **argv) {
         exact_sin(x) = sin(xf);
 
         // Evaluate from 0 to 5
-        Buffer<float> approx_result_1 = approx_sin_1.realize({256} * 5);
-        Buffer<float> approx_result_2 = approx_sin_2.realize({256} * 5);
-        Buffer<float> exact_result = exact_sin.realize({256} * 5);
+        Buffer<float> approx_result_1 = approx_sin_1.realize({256 * 5});
+        Buffer<float> approx_result_2 = approx_sin_2.realize({256 * 5});
+        Buffer<float> exact_result = exact_sin.realize({256 * 5});
 
         Func rms_1, rms_2;
         RDom r(exact_result);
@@ -92,9 +92,9 @@ int main(int argc, char **argv) {
         exact_exp(x) = exp(1.0f / xf);
 
         // Evaluate from 0 to 5
-        Buffer<float> approx_result_1 = approx_exp_1.realize({256} * 5);
-        Buffer<float> approx_result_2 = approx_exp_2.realize({256} * 5);
-        Buffer<float> exact_result = exact_exp.realize({256} * 5);
+        Buffer<float> approx_result_1 = approx_exp_1.realize({256 * 5});
+        Buffer<float> approx_result_2 = approx_exp_2.realize({256 * 5});
+        Buffer<float> exact_result = exact_exp.realize({256 * 5});
 
         Func rms_1, rms_2;
         RDom r(exact_result);
