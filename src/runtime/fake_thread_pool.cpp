@@ -90,6 +90,7 @@ struct halide_mutex_array {
 };
 
 WEAK halide_mutex_array *halide_mutex_array_create(int sz) {
+    halide_error(nullptr, "halide_mutex_array_create not implemented on this platform.");
     return nullptr;
 }
 

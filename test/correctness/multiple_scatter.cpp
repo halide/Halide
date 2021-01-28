@@ -5,6 +5,12 @@ using namespace Halide;
 using std::vector;
 
 int main(int argc, char **argv) {
+    const Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] multiple_scatter uses atomic(), which is not yet supported for WebAssembly JIT.\n");
+        return 0;
+    }
+
     // Implement a sorting network using update definitions that write to multiple outputs
 
     // The links in the sorting network. Sorts 8 things.
