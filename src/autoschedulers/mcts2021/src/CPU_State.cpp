@@ -362,7 +362,7 @@ bool CPU_State::is_terminal() const {
     return (n_decisions_made == (2 * dag_ptr->nodes.size()));
 }
 
-double CPU_State::calculate_cost() {
+double CPU_State::calculate_cost() const {
     if (!prepruned && prunable(dag_ptr, params_ptr, root.get(), memory_limit)) {
         return std::numeric_limits<double>::max();
     }

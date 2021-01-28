@@ -21,6 +21,7 @@ enum class CPU_ScheduleAction {
     ComputeRoot,
     Input,
     Parallelize,
+    Empty,          // Used for first TreeNode *only*.
 };
 
 // Possible actions to be taken from an exploration State
@@ -42,6 +43,9 @@ struct CPU_Action {
     // Needed for smart pruning, Inlining, etc.
     FunctionDAG::Node *node_ptr;
 
+    static CPU_Action Default() {
+        return CPU_Action(CPU_ScheduleAction::Empty, nullptr);
+    }
 };
 
 class CPU_State {
@@ -73,16 +77,16 @@ class CPU_State {
 
 public:
     CPU_State() = delete;
-    CPU_State(const CPU_State &_state) = delete;
+    CPU_State(const CPU_State &_state) = default;
     CPU_State(CPU_State &&_state) = default;
     CPU_State &operator=(const CPU_State &_state) = default;
     CPU_State(const FunctionDAG *_dag_ptr, const MachineParams *_params_ptr,
               CostModel *_model_ptr, IntrusivePtr<const LoopNest> _root, int n_decisions, int64_t _memory_limit = 0) :
         root(_root), n_decisions_made(n_decisions), dag_ptr(_dag_ptr),
         params_ptr(_params_ptr), model_ptr(_model_ptr), memory_limit(_memory_limit) {
-            internal_assert(dag_ptr) << "CPU_State received nullptr dag_ptr\n";
-            internal_assert(params_ptr) << "CPU_State received nullptr params_ptr\n";
-            internal_assert(model_ptr) << "CPU_State received nullptr model_ptr\n";
+            // internal_assert(dag_ptr) << "CPU_State received nullptr dag_ptr\n";
+            // internal_assert(params_ptr) << "CPU_State received nullptr params_ptr\n";
+            // internal_assert(model_ptr) << "CPU_State received nullptr model_ptr\n";
         }
 
     // This is likely very expensive, but generate all possible
@@ -107,7 +111,7 @@ public:
     // This is probaby a call to calculate_cost.
     // TODO(rootjalex): what do we need to store
     //                  in order to make this call?
-    double calculate_cost();
+    double calculate_cost() const;
 
     // Update the value of this state. Passed by
     // reference in case it needs to be updated.

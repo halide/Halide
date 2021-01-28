@@ -25,11 +25,11 @@ namespace MCTS {
         typedef TreeNode<State, Action>* BarePtr;
 
         // State of this TreeNode.
-        const State state;
+        State state;
         // Action that led to this TreeNode.
         const Action action;
         // parent of this node. null if root. BarePtr to avoid loops of smart pointers.
-        const TreeNode<State, Action>* parent;
+        BarePtr parent;
         const uint32_t depth;
 
         // Data for this node (to be updated)
@@ -46,16 +46,16 @@ namespace MCTS {
 
     public:
         TreeNode(const State &_state, const Action &_action, BarePtr _parent, std::mt19937 &_rng) :
-            state(_state), action(_action), parent(_parent), rng(_rng),
-            num_visits(0), depth(_parent ? _parent->depth + 1: 0) {
+            state(_state), action(_action), parent(_parent),
+            depth(_parent ? _parent->depth + 1: 0), num_visits(0), rng(_rng) {
             
             // The state should be capable of generating it's own actions.
             possible_actions = state.generate_possible_actions();
         }
 
         TreeNode(State &&_state, const Action &_action, BarePtr _parent, std::mt19937 &_rng) :
-            state(_state), action(_action), parent(_parent), rng(_rng),
-            num_visits(0), depth(_parent ? _parent->depth + 1: 0) {
+            state(_state), action(_action), parent(_parent),
+            depth(_parent ? _parent->depth + 1: 0), num_visits(0), rng(_rng) {
             
             // The state should be capable of generating it's own actions.
             possible_actions = state.generate_possible_actions();
@@ -156,7 +156,13 @@ namespace MCTS {
             return children.size() == possible_actions.size();
         }
 
+        int get_num_children() const {
+            return children.size();
+        }
 
+        BarePtr get_parent() const {
+            return parent;
+        }
     };
 
 } // namespace MCTS

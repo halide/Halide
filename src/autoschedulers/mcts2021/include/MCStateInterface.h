@@ -30,7 +30,7 @@ namespace MCTS {
         bool is_terminal() const;
 
         // Used for evaluation / value that is propagated backwards.
-        double calculate_cost();
+        double calculate_cost() const;
 
         // Update the value of this state. Passed by
         // reference in case it needs to be updated.

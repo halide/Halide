@@ -50,6 +50,8 @@ namespace MCTS {
 
         // Private to ensure that the static methods defined below are used.
         Solver() = default;
+
+        typedef std::shared_ptr<Node> NodePtr;
     public:
         // TODO(rootjalex): implement this.
         // static MakeTimerSolver(uint32_t )
@@ -71,11 +73,13 @@ namespace MCTS {
 
         // Node corresponds to best action to take immediately from this state,
         // and includes enough information to iteratively apply it's decisions.
-        std::shared_ptr<Node> solve(const State &current_state, int seed = 1) {
+        NodePtr solve(const State &current_state, int seed = 1) {
             std::mt19937 rng((uint32_t)seed);
-            Node root_node(current_state, Action::Default(), /* parent */ nullptr, rng);
 
-            std::shared_ptr<Node> best_node = nullptr;
+            // TODO(rootjalex): replace with std::make_shared
+            NodePtr root_node = NodePtr(new Node(current_state, Action::Default(), /* parent */ nullptr, rng));
+
+            NodePtr best_node = nullptr;
 
             iterations = 0;
 
@@ -85,7 +89,8 @@ namespace MCTS {
             while (true) {
 
                 // Start at root and find best valued node that has been expanded.
-                Node *node = &root_node;
+                NodePtr node = root_node;
+
                 // TODO(rootjalex): is there a faster way to track from the root?
                 //                  this could be expensive for large Pipelines
                 while (!node->is_terminal() && node->is_fully_expanded()) {
@@ -102,18 +107,26 @@ namespace MCTS {
 
                 // We don't have a simulation step, because only one action per state can be chosen.
 
-                double node_cost = node->get_state().caclulate_cost();
+                double node_cost = node->get_state().calculate_cost();
 
                 // Back propagation. node_cost is passed by value,
                 // because the policy for backprop is handled via the State class.
                 // e.g. it might make node_cost the minimum of values, or the average, etc.
-                while (node && node->update(node_cost)) {
-                    node = node->get_parent();
+                bool continue_updating = node->update(node_cost);
+                if (continue_updating) {
+                    // This messy backprop is due to the fact that
+                    // node is shared but we don't have shared ptrs
+                    // to parent nodes, as that would cause loops.
+                    Node *parent_ptr = node->get_parent();
+                    while (parent_ptr && parent_ptr->update(node_cost)) {
+                        parent_ptr = parent_ptr->get_parent();
+                    }
+                    // TODO(rootjalex): assert (parent_ptr == root_node.get());
                 }
 
                 // TODO(rootjalex): reference code uses get_most_visited_child of the root. Why the heck?
 
-                best_node = get_min_value_child(&root_node);
+                best_node = get_min_value_child(root_node);
 
                 // TODO(rootjalex): check timing here
 
@@ -134,11 +147,11 @@ namespace MCTS {
         }
 
         // Find the best UTC score of the children that have already been generated.
-        std::shared_ptr<Node> get_best_value_child(Node *parent_node) const {
+        NodePtr get_best_value_child(NodePtr parent_node) const {
             // TODO(rootjalex): should we check if parent_node is fully expanded?
 
             double best_uct_score = std::numeric_limits<double>::min();
-            std::shared_ptr<Node> best_node = nullptr;
+            NodePtr best_node = nullptr;
             
             const int num_children = parent_node->get_num_children();
 
@@ -149,7 +162,7 @@ namespace MCTS {
             //                  num_value() represents minimum possible value...
 
             for (int i = 0; i < num_children; i++) {
-                std::shared_ptr<Node> child_ptr = parent_node->get_child(i);
+                NodePtr child_ptr = parent_node->get_child(i);
                 const double nonzero_num_visits = child_ptr->get_num_visits() + std::numeric_limits<double>::epsilon();
                 
                 // This is the UCT formula.
@@ -172,14 +185,14 @@ namespace MCTS {
         }
 
         // Find the most visited of the children that have already been generated.
-        std::shared_ptr<Node> get_most_visited_child(Node *parent_node) const {
+        NodePtr get_most_visited_child(NodePtr parent_node) const {
             uint32_t most_visits = 0;
-            std::shared_ptr<Node> popular_node = nullptr;
+            NodePtr popular_node = nullptr;
 
             const int num_children = parent_node->get_num_children();
 
             for (int i = 0; i < num_children; i++) {
-                std::shared_ptr<Node> child_ptr = parent_node->get_child(i);
+                NodePtr child_ptr = parent_node->get_child(i);
                 const uint32_t num_visits = child_ptr->get_num_visits();
 
                 // MUST be >= not just >, in the case that no child has been visited yet.
@@ -195,14 +208,14 @@ namespace MCTS {
         }
 
         // Find the child with the minimum value.
-        std::shared_ptr<Node> get_min_value_child(Node *parent_node) const {
+        NodePtr get_min_value_child(NodePtr parent_node) const {
             double best_value = std::numeric_limits<double>::max();
-            std::shared_ptr<Node> best_node = nullptr;
+            NodePtr best_node = nullptr;
 
             const int num_children = parent_node->get_num_children();
 
             for (int i = 0; i < num_children; i++) {
-                std::shared_ptr<Node> child_ptr = parent_node->get_child(i);
+                NodePtr child_ptr = parent_node->get_child(i);
                 const uint32_t child_value = child_ptr->get_value();
 
                 if (child_value < best_value) {
