@@ -173,6 +173,8 @@ Target calculate_host_target() {
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
                 initial_features.push_back(Target::AVX512_Cannonlake);
 
+#if LLVM_VERSION >= 120
+                // Sapphire Rapids support was added in LLVM 12, so earlier versions cannot support this CPU's features.
                 const uint32_t avx512vnni = 1U << 11;  // vnni result in ecx
                 const uint32_t avx512bf16 = 1U << 5;   // bf16 result in eax, with cpuid(eax=7, ecx=1)
                 int info3[4];
@@ -181,6 +183,7 @@ Target calculate_host_target() {
                     (info3[0] & avx512bf16) == avx512bf16) {
                     initial_features.push_back(Target::AVX512_SapphireRapids);
                 }
+#endif
             }
         }
     }
