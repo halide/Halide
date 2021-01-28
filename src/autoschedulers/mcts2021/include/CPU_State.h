@@ -76,6 +76,9 @@ class CPU_State {
     // For now, only Inline states are prepruned - that might change.
     bool prepruned = false;
 
+    // Saving the features for calculating cost.
+    mutable StageMap<ScheduleFeatures> features;
+
 public:
     CPU_State() = delete;
     CPU_State(const CPU_State &_state) = default;
@@ -109,6 +112,9 @@ public:
     // TODO(rootjalex): understand what this should do.
     bool is_terminal() const;
 
+    // Checks if this state should be pruned or not.
+    bool is_valid() const;
+
     // This is probaby a call to calculate_cost.
     // TODO(rootjalex): what do we need to store
     //                  in order to make this call?
@@ -131,7 +137,7 @@ public:
 
 // This is used to early-out for certain prunable States.
 // Returns true if this LoopNest should not be a valid State.
-bool prunable(const FunctionDAG *dag_ptr, const MachineParams *params_ptr, const LoopNest *root_ptr, int64_t memory_limit);
+bool prunable(const FunctionDAG *dag_ptr, const MachineParams *params_ptr, const LoopNest *root_ptr, StageMap<ScheduleFeatures> &features, int64_t memory_limit);
 
 // Used by the above to check if a LoopNest is prunable.
 void compute_featurization(const FunctionDAG *dag_ptr, const MachineParams *params_ptr, const LoopNest *root_ptr, StageMap<ScheduleFeatures> *features);

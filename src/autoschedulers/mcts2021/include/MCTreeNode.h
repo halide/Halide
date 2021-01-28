@@ -163,6 +163,14 @@ namespace MCTS {
         BarePtr get_parent() const {
             return parent;
         }
+
+        bool is_valid() const {
+            return state.is_valid();
+        }
+
+        void increment_parent_visits() const {
+            parent->num_visits++;
+        }
     };
 
 } // namespace MCTS

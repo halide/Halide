@@ -41,6 +41,9 @@ namespace MCTS {
         // the average cost of child nodes that have been explored.
         double get_exploitation_value(uint32_t num_visits);
 
+        // Any necessary validity checks that this State might need to check.
+        bool is_valid();
+
     };
 
 } // namespace MCTS

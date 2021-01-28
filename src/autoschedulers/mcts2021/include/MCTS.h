@@ -107,26 +107,29 @@ namespace MCTS {
 
                 // We don't have a simulation step, because only one action per state can be chosen.
 
-                double node_cost = node->get_state().calculate_cost();
+                if (node->is_valid()) {
+                    node->increment_parent_visits();
+                    double node_cost = node->get_state().calculate_cost();
 
-                // Back propagation. node_cost is passed by value,
-                // because the policy for backprop is handled via the State class.
-                // e.g. it might make node_cost the minimum of values, or the average, etc.
-                bool continue_updating = node->update(node_cost);
-                if (continue_updating) {
-                    // This messy backprop is due to the fact that
-                    // node is shared but we don't have shared ptrs
-                    // to parent nodes, as that would cause loops.
-                    Node *parent_ptr = node->get_parent();
-                    while (parent_ptr && parent_ptr->update(node_cost)) {
-                        parent_ptr = parent_ptr->get_parent();
+                    // Back propagation. node_cost is passed by value,
+                    // because the policy for backprop is handled via the State class.
+                    // e.g. it might make node_cost the minimum of values, or the average, etc.
+                    bool continue_updating = node->update(node_cost);
+                    if (continue_updating) {
+                        // This messy backprop is due to the fact that
+                        // node is shared but we don't have shared ptrs
+                        // to parent nodes, as that would cause loops.
+                        Node *parent_ptr = node->get_parent();
+                        while (parent_ptr && parent_ptr->update(node_cost)) {
+                            parent_ptr = parent_ptr->get_parent();
+                        }
+                        // TODO(rootjalex): assert (parent_ptr == root_node.get());
                     }
-                    // TODO(rootjalex): assert (parent_ptr == root_node.get());
+
+                    // TODO(rootjalex): reference code uses get_most_visited_child of the root. Why the heck?
+
+                    best_node = get_min_value_child(root_node);
                 }
-
-                // TODO(rootjalex): reference code uses get_most_visited_child of the root. Why the heck?
-
-                best_node = get_min_value_child(root_node);
 
                 // TODO(rootjalex): check timing here
 

@@ -93,7 +93,9 @@ vector<CPU_Action> CPU_State::generate_injected_realizations(const FunctionDAG::
         LoopNest *new_root = new LoopNest;
         new_root->copy_from(*root);
         new_root->inline_func(node);
-        if (!prunable(dag_ptr, params_ptr, new_root, memory_limit)) {
+        // TODO(rootjalex): this is bad, need someway to transfer these features to futurue use.
+        StageMap<ScheduleFeatures> throwaway_features;
+        if (!prunable(dag_ptr, params_ptr, new_root, throwaway_features, memory_limit)) {
             actions.push_back(CPU_Action(CPU_ScheduleAction::Inline, new_root));
         } else {
             // TODO(rootjalex): is this a leak in adams2019?
@@ -362,11 +364,23 @@ bool CPU_State::is_terminal() const {
     return (n_decisions_made == (2 * dag_ptr->nodes.size()));
 }
 
-double CPU_State::calculate_cost() const {
-    if (!prepruned && prunable(dag_ptr, params_ptr, root.get(), memory_limit)) {
-        return std::numeric_limits<double>::max();
+bool CPU_State::is_valid() const {
+    // If this state was already prepruned, then it is valid.
+    // Otherwise, check that it's not a prunable node.
+    if (prepruned) {
+        return true;
+    } else {
+        // save the feature calculation for use in calculate_cost()
+        return !prunable(dag_ptr, params_ptr, root.get(), features, memory_limit);
     }
-    StageMap<ScheduleFeatures> features;
+}
+
+double CPU_State::calculate_cost() const {
+    // TODO(rootjalex): this is bad, we calculate a featurization once in is_valid (for prunable),
+    //                  and once here, for the same node.... We should probably save these.
+    if (prepruned) {
+        prunable(dag_ptr, params_ptr, root.get(), features, memory_limit);
+    }
     double cost = 0.0f;
     compute_featurization(dag_ptr, params_ptr, &features);
 
@@ -558,8 +572,7 @@ void CPU_State::dump() const {
 }
 
 // This code is taken from the State::calculate_cost() code in the adams2019 autoscheduler.
-bool prunable(const FunctionDAG *dag_ptr, const MachineParams *params_ptr, const LoopNest *root_ptr, int64_t memory_limit) {
-    StageMap<ScheduleFeatures> features;
+bool prunable(const FunctionDAG *dag_ptr, const MachineParams *params_ptr, const LoopNest *root_ptr,  StageMap<ScheduleFeatures> &features, int64_t memory_limit) {
     compute_featurization(dag_ptr, params_ptr, root_ptr, &features);
 
     // TODO(rootjalex): add a verbose dump
