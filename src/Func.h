@@ -827,7 +827,7 @@ public:
     template<typename T, typename = typename std::enable_if<std::is_same<T, int>::value>::type>
     HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
     HALIDE_ALWAYS_INLINE Realization realize(T x_size, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map()) {
+                                             const ParamMap &param_map = ParamMap::empty_map()) {
         return realize(std::vector<int32_t>{x_size}, target, param_map);
     }
     // @}

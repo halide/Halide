@@ -81,7 +81,7 @@ Buffer<float> one_million_rando_floats() {
     Var x("x");
     Func randos;
     randos(x) = random_float();
-    return randos.realize({1}e6);
+    return randos.realize({1e6});
 }
 
 ImageParam in(Float(32), 1);
