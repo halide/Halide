@@ -392,6 +392,162 @@ double CPU_State::get_exploitation_value(uint32_t num_visits) {
     return -minimum_cost;
 }
 
+std::string CPU_State::apply_schedule() {
+    // Stores source code to be output.
+    std::string schedule_source;
+
+    StageMap<std::unique_ptr<LoopNest::StageScheduleState>> state_map;
+    root->apply(LoopLevel::root(), state_map, params_ptr->parallelism, 0, nullptr, nullptr);
+
+    std::ostringstream src;
+
+    // Print handles for all the Funcs
+    int i = (int)(dag_ptr->nodes.size() - 1);
+    for (const auto &n : dag_ptr->nodes) {
+        if (!n.is_input) {
+            src << "Func " << n.func.name() << " = pipeline.get_func(" << i << ");\n";
+        }
+        i--;
+    }
+
+    // Gather all Vars and RVars so that we can declare them in the emitted source
+    map<string, string> vars, rvars;
+    for (auto &p : state_map) {
+        for (auto &v : p.second->vars) {
+            if (v.exists) {
+                if (v.var.is_rvar) {
+                    rvars.emplace(v.var.name(), v.accessor);
+                } else {
+                    vars.emplace(v.var.name(), v.accessor);
+                }
+            }
+        }
+    }
+    if (!vars.empty()) {
+        for (const auto &p : vars) {
+            if (p.second.empty()) {
+                src << "Var " << p.first << "(\"" << p.first << "\");\n";
+            } else {
+                src << "Var " << p.first << "(" << p.second << ");\n";
+            }
+        }
+    }
+    if (!rvars.empty()) {
+        for (const auto &p : rvars) {
+            if (p.second.empty()) {
+                src << "RVar " << p.first << "(\"" << p.first << "\");\n";
+            } else {
+                src << "RVar " << p.first << "(" << p.second << ");\n";
+            }
+        }
+    }
+
+    for (auto &p : state_map) {
+        if (p.first->node->is_input) {
+            continue;
+        }
+
+        Stage stage(p.first->stage);
+
+        // Do all the reorders and pick which vars to
+        // parallelize.
+        vector<VarOrRVar> vars;
+        int64_t parallel_tasks = 1;
+        vector<VarOrRVar> parallel_vars;
+        bool any_parallel_vars = false, any_parallel_rvars = false;
+        for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
+            if (!it->exists || it->extent == 1) {
+                continue;
+            }
+            if (!it->parallel) {
+                break;
+            }
+            any_parallel_rvars |= it->var.is_rvar;
+            any_parallel_vars |= !it->var.is_rvar;
+            parallel_tasks *= it->extent;
+            parallel_vars.push_back(it->var);
+        }
+
+        if (p.second->vars.size() > 1) {
+            p.second->schedule_source << "\n    .reorder(";
+            bool first = true;
+            for (auto &v : p.second->vars) {
+                if (v.exists) {
+                    vars.push_back(v.var);
+                    if (!first) {
+                        p.second->schedule_source << ", ";
+                    } else {
+                        p.second->schedule_source << "{";
+                    }
+                    first = false;
+                    p.second->schedule_source << v.var.name();
+                }
+            }
+            p.second->schedule_source << "})";
+            stage.reorder(vars);
+        }
+
+        // Halide doesn't let you fuse an RVar with a Var, even if
+        // they are both pure.
+        bool can_fuse = !(any_parallel_vars && any_parallel_rvars);
+        if (can_fuse) {
+            for (size_t i = 1; i < parallel_vars.size(); i++) {
+                // Outermost, and next outermost. Preserve the inner
+                // name to not invalidate any compute_ats.
+                p.second->schedule_source << "\n    .fuse(" << parallel_vars[i].name()
+                                            << ", " << parallel_vars[i - 1].name()
+                                            << ", " << parallel_vars[i].name() << ")";
+                stage.fuse(parallel_vars[i], parallel_vars[i - 1], parallel_vars[i]);
+            }
+            if (!parallel_vars.empty()) {
+                p.second->schedule_source << "\n    .parallel(" << parallel_vars.back().name() << ")";
+                stage.parallel(parallel_vars.back());
+            }
+        } else {
+            for (const auto &v : parallel_vars) {
+                p.second->schedule_source << "\n    .parallel(" << v.name() << ")";
+                stage.parallel(v);
+            }
+        }
+
+        // Reorder the vector dimension innermost
+        if (p.first->index == 0 && p.second->vector_dim > 0) {
+            vector<Var> storage_vars = Func(p.first->node->func).args();
+            for (int i = p.second->vector_dim; i > 0; i--) {
+                std::swap(storage_vars[i], storage_vars[i - 1]);
+            }
+            p.second->schedule_source << "\n    .reorder_storage(";
+            bool first = true;
+            for (const auto &v : storage_vars) {
+                if (!first) {
+                    p.second->schedule_source << ", ";
+                }
+                first = false;
+                p.second->schedule_source << v.name();
+            }
+            p.second->schedule_source << ")";
+            Func(p.first->node->func).reorder_storage(storage_vars);
+        }
+
+        // Dump the schedule source string
+        src << p.first->name
+            << p.second->schedule_source.str()
+            << ";\n";
+    }
+    // Sanitize the names of things to make them legal source code.
+    schedule_source = src.str();
+    bool in_quotes = false;
+    for (auto &c : schedule_source) {
+        in_quotes ^= (c == '"');
+        if (!in_quotes && c == '$') {
+            c = '_';
+        }
+    }
+
+    return schedule_source;
+}
+
+
 void CPU_State::dump() const {
     std::cerr << "root:" << root.get()
                 << "\nn_decisions_made:" << n_decisions_made
@@ -563,7 +719,6 @@ const LoopNest *deepest_common_ancestor(const map<const LoopNest *, pair<const L
     // unreachable
     return nullptr;
 }
-
 
 }  // namespace Autoscheduler
 }  // namespace Internal

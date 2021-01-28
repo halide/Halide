@@ -7,6 +7,7 @@
 #include "Halide.h"
 #include "LoopNest.h"
 #include <limits>       // std::numeric_limits
+#include <string>
 
 namespace Halide {
 namespace Internal {
@@ -121,6 +122,9 @@ public:
     // This might be the minimum cost found so far, or
     // the average cost of child nodes that have been explored.
     double get_exploitation_value(uint32_t num_visits);
+
+    // Apply this State to the FunctionDag.
+    std::string apply_schedule();
 
     void dump() const;
 };
