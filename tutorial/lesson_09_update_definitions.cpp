@@ -658,7 +658,7 @@ int main(int argc, char **argv) {
         Func blurry;
         blurry(x, y) = cast<uint8_t>(local_sum(x, y) / 25);
 
-        Buffer<uint8_t> halide_result = blurry.realize(input.width(), input.height());
+        Buffer<uint8_t> halide_result = blurry.realize({input.width(), input.height()});
 
         // The default schedule will inline 'clamped' into the update
         // step of 'local_sum', because clamped only has a pure
@@ -783,7 +783,7 @@ int main(int argc, char **argv) {
         // as we need it in a circular buffer (see lesson 08).
         clamped.store_at(spread, yo).compute_at(spread, yi);
 
-        Buffer<uint8_t> halide_result = spread.realize(input.width(), input.height());
+        Buffer<uint8_t> halide_result = spread.realize({input.width(), input.height()});
 
 // The C equivalent is almost too horrible to contemplate (and
 // took me a long time to debug). This time I want to time

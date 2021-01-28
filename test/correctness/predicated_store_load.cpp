@@ -115,7 +115,7 @@ int vectorized_dense_load_with_stride_minus_one_test(const Target &t) {
     g.compute_root();
 
     ref(x, y) = select(x < 23, g(size - x, y) * 2 + g(20 - x, y), undef<int>());
-    Buffer<int> im_ref = ref.realize(size, size);
+    Buffer<int> im_ref = ref.realize({size, size});
 
     f(x, y) = select(x < 23, g(size - x, y) * 2 + g(20 - x, y), undef<int>());
 
@@ -126,7 +126,7 @@ int vectorized_dense_load_with_stride_minus_one_test(const Target &t) {
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 2, 4));
     }
 
-    Buffer<int> im = f.realize(size, size);
+    Buffer<int> im = f.realize({size, size});
     auto func = [&im_ref, &im](int x, int y, int z) {
         // For x >= 23, the buffer is undef
         return (x < 23) ? im_ref(x, y, z) : im(x, y, z);
@@ -151,7 +151,7 @@ int multiple_vectorized_predicate_test(const Target &t) {
 
     ref(x, y) = 10;
     ref(r.x, r.y) = g(size - r.x, r.y) * 2 + g(67 - r.x, r.y);
-    Buffer<int> im_ref = ref.realize(size, size);
+    Buffer<int> im_ref = ref.realize({size, size});
 
     f(x, y) = 10;
     f(r.x, r.y) = g(size - r.x, r.y) * 2 + g(67 - r.x, r.y);
@@ -163,7 +163,7 @@ int multiple_vectorized_predicate_test(const Target &t) {
         f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 3, 6));
     }
 
-    Buffer<int> im = f.realize(size, size);
+    Buffer<int> im = f.realize({size, size});
     auto func = [&im_ref](int x, int y, int z) { return im_ref(x, y, z); };
     if (check_image(im, func)) {
         return -1;
@@ -404,7 +404,7 @@ int vectorized_predicated_load_lut_test(const Target &t) {
     dst.update().allow_race_conditions().vectorize(r, vector_size);
     dst.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 1, 3));
 
-    dst.realize(dst_len);
+    dst.realize({dst_len});
 
     return 0;
 }

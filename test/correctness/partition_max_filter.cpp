@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
     CountForLoops counter;
     max_y.add_custom_lowering_pass(&counter, nullptr);
 
-    Buffer<uint8_t> out = max_y.realize(width, height);
+    Buffer<uint8_t> out = max_y.realize({width, height});
 
     // We expect a loop structure like:
     // Top of the image

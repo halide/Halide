@@ -158,7 +158,7 @@ int main(int argc, char **argv) {
         f(x) = print(e);
 
         f.set_custom_print(halide_print);
-        Buffer<float> imf = f.realize(N);
+        Buffer<float> imf = f.realize({N});
 
         assert(messages.size() == (size_t)N);
 
@@ -181,7 +181,7 @@ int main(int argc, char **argv) {
 
         g(x) = print(reinterpret(Float(64), (cast<uint64_t>(random_uint()) << 32) | random_uint()));
         g.set_custom_print(halide_print);
-        Buffer<double> img = g.realize(N);
+        Buffer<double> img = g.realize({N});
 
         assert(messages.size() == (size_t)N);
 
