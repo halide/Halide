@@ -142,6 +142,19 @@ namespace MCTS {
             return best_node;
         }
 
+        // After a call to solve(), this function can be used to fetch the best state.
+        State get_optimal_state(const State &starter_state, NodePtr solved_action) {
+            NodePtr node = solved_action;
+            State current_state = starter_state;
+            while (node && !node->is_terminal()) {
+                current_state = current_state.take_action(node->get_action());
+                // TODO(rootjalex): is this the best policy? Should we use UTC?
+                node = get_min_value_child(node);
+            }
+            // TODO(rootjalex): assert(node);
+            return current_state;
+        }
+
         void print() {
             std::cerr << "print solver" << std::endl;
         }
