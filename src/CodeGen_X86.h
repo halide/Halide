@@ -6,7 +6,6 @@
  */
 
 #include "CodeGen_Posix.h"
-#include "Target.h"
 
 namespace llvm {
 class JITEventListener;
@@ -34,6 +33,8 @@ protected:
 
     using CodeGen_Posix::visit;
 
+    void init_module() override;
+
     /** Nodes for which we want to emit specific sse/avx intrinsics */
     // @{
     void visit(const Add *) override;
@@ -48,7 +49,6 @@ protected:
     void visit(const NE *) override;
     void visit(const Select *) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &init) override;
-    void visit(const Mul *) override;
     // @}
 };
 

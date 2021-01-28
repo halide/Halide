@@ -6,6 +6,8 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+
 class EliminateBoolVectors : public IRMutator {
 private:
     using IRMutator::visit;
@@ -313,6 +315,8 @@ private:
         return visit_let<Stmt>(op);
     }
 };
+
+}  // namespace
 
 Stmt eliminate_bool_vectors(const Stmt &s) {
     return EliminateBoolVectors().mutate(s);

@@ -51,8 +51,6 @@ inline T load_misaligned(const T *p) {
 
 typedef uint64_t llvm_offset_t;
 
-}  // namespace
-
 class DebugSections {
 
     bool calibrated;
@@ -751,6 +749,15 @@ public:
             uint64_t address = (uint64_t)trace[frame];
 
             debug(5) << "Considering address " << ((void *)address) << "\n";
+
+            // In some situations on OSX (most notable, compiling with different
+            // setting for -fomit-frame-pointer), we can get invalid addresses here that
+            // are small but nonnull (eg, 0x08). It's probably better to miss introspection
+            // options here than to crash during compilation.
+            if (address <= (uint64_t)0xff) {
+                debug(1) << "Bailing out because we found an obviously-bad address in the backtrace. (Did you set -fno-omit-frame-pointer everywhere?)\n";
+                return "";
+            }
 
             const uint8_t *inst_ptr = (const uint8_t *)address;
             if (inst_ptr[-5] == 0xe8) {
@@ -2215,9 +2222,9 @@ private:
     }
 };
 
-namespace {
 DebugSections *debug_sections = nullptr;
-}
+
+}  // namespace
 
 bool dump_stack_frame() {
     if (!debug_sections || !debug_sections->working) {

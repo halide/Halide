@@ -2,6 +2,7 @@
 
 #include "AutoScheduleUtils.h"
 #include "IREquality.h"
+#include "IRMutator.h"
 #include "ImageParam.h"
 #include "Inline.h"
 #include "Param.h"

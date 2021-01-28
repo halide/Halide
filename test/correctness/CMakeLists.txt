@@ -123,6 +123,7 @@ tests(GROUPS correctness
       gameoflife.cpp
       gather.cpp
       gpu_allocation_cache.cpp
+      gpu_arg_types.cpp
       gpu_assertion_in_kernel.cpp
       gpu_bounds_inference_failure.cpp
       gpu_condition_lifting.cpp
@@ -176,7 +177,9 @@ tests(GROUPS correctness
       interleave.cpp
       interleave_rgb.cpp
       interleave_x.cpp
+      interpreter.cpp
       interval.cpp
+      intrinsics.cpp
       introspection.cpp
       inverse.cpp
       isnan.cpp
@@ -194,6 +197,7 @@ tests(GROUPS correctness
       logical.cpp
       loop_invariant_extern_calls.cpp
       loop_level_generator_param.cpp
+      lossless_cast.cpp
       lots_of_dimensions.cpp
       lots_of_loop_invariants.cpp
       make_struct.cpp
@@ -214,6 +218,7 @@ tests(GROUPS correctness
       multipass_constraints.cpp
       multiple_outputs.cpp
       multiple_outputs_extern.cpp
+      multiple_scatter.cpp
       mux.cpp
       named_updates.cpp
       nested_shiftinwards.cpp

@@ -73,9 +73,7 @@ void Simplify::found_buffer_reference(const string &name, size_t dimensions) {
 }
 
 bool Simplify::const_float(const Expr &e, double *f) {
-    if (e.type().is_vector()) {
-        return false;
-    } else if (const double *p = as_const_float(e)) {
+    if (const double *p = as_const_float(e)) {
         *f = *p;
         return true;
     } else {
@@ -84,9 +82,7 @@ bool Simplify::const_float(const Expr &e, double *f) {
 }
 
 bool Simplify::const_int(const Expr &e, int64_t *i) {
-    if (e.type().is_vector()) {
-        return false;
-    } else if (const int64_t *p = as_const_int(e)) {
+    if (const int64_t *p = as_const_int(e)) {
         *i = *p;
         return true;
     } else {
@@ -95,9 +91,7 @@ bool Simplify::const_int(const Expr &e, int64_t *i) {
 }
 
 bool Simplify::const_uint(const Expr &e, uint64_t *u) {
-    if (e.type().is_vector()) {
-        return false;
-    } else if (const uint64_t *p = as_const_uint(e)) {
+    if (const uint64_t *p = as_const_uint(e)) {
         *u = *p;
         return true;
     } else {
