@@ -31,6 +31,8 @@ using std::vector;
 
 using namespace llvm;
 
+namespace {
+
 // Sniff the contents of a kernel to extracts the bounds of all the
 // thread indices (so we know how many threads to launch), and the
 // amount of shared memory to allocate.
@@ -97,6 +99,25 @@ private:
         allocate->body.accept(this);
     }
 };
+
+Value *get_module_state(llvm::Module *module, const std::string &function_name,
+                        const std::string &api_unique_name, bool create = true) {
+    std::string name = "module_state_" + function_name + "_" + api_unique_name;
+    GlobalVariable *module_state = module->getGlobalVariable(name, true);
+    if (!module_state && create) {
+        // Create a global variable to hold the module state
+        PointerType *void_ptr_type = llvm::Type::getInt8PtrTy(module->getContext());
+        module_state = new GlobalVariable(*module, void_ptr_type,
+                                          false, GlobalVariable::InternalLinkage,
+                                          ConstantPointerNull::get(void_ptr_type),
+                                          name);
+        debug(4) << "Created device module state global variable\n";
+    }
+
+    return module_state;
+}
+
+}  // namespace
 
 template<typename CodeGen_CPU>
 CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(const Target &target)
@@ -174,7 +195,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
 
         // If the module state for this API/function did not get created, there were
         // no kernels using this API.
-        llvm::Value *module_state = get_module_state(api_unique_name, false);
+        llvm::Value *module_state = get_module_state(module.get(), function_name, api_unique_name, false);
         if (!module_state) {
             continue;
         }
@@ -450,7 +471,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         // so the multiple calls to codegen here are fine
         Value *launch_args[] = {
             get_user_context(),
-            builder->CreateLoad(get_module_state(api_unique_name)),
+            builder->CreateLoad(get_module_state(module.get(), function_name, api_unique_name)),
             entry_name_str,
             codegen(bounds.num_blocks[0]),
             codegen(bounds.num_blocks[1]),
@@ -490,24 +511,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
     } else {
         CodeGen_CPU::visit(loop);
     }
-}
-
-template<typename CodeGen_CPU>
-Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state(const std::string &api_unique_name,
-                                                       bool create) {
-    std::string name = "module_state_" + function_name + "_" + api_unique_name;
-    GlobalVariable *module_state = module->getGlobalVariable(name, true);
-    if (!module_state && create) {
-        // Create a global variable to hold the module state
-        PointerType *void_ptr_type = llvm::Type::getInt8PtrTy(*context);
-        module_state = new GlobalVariable(*module, void_ptr_type,
-                                          false, GlobalVariable::InternalLinkage,
-                                          ConstantPointerNull::get(void_ptr_type),
-                                          name);
-        debug(4) << "Created device module state global variable\n";
-    }
-
-    return module_state;
 }
 
 // Force template instantiation.
