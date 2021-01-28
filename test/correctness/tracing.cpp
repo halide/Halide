@@ -197,7 +197,7 @@ int main(int argc, char **argv) {
     f.set_custom_trace(&my_trace);
 
     // Check that Target::TracePipeline works.
-    f.realize(10, get_jit_target_from_environment().with_feature(Target::TracePipeline));
+    f.realize({10}, get_jit_target_from_environment().with_feature(Target::TracePipeline));
 
     // The golden trace, recorded when this test was written
     event correct_pipeline_trace[] = {
@@ -222,7 +222,7 @@ int main(int argc, char **argv) {
 
     input.trace_loads();
 
-    f.realize(10, get_jit_target_from_environment());
+    f.realize({10}, get_jit_target_from_environment());
 
     // The golden trace, recorded when this test was written
     event correct_trace[] = {

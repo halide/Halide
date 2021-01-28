@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     // This makes no sense, because f is also used by g, which is computed at (h, y), which is outside of (h, x).
     f.compute_at(h, x);
 
-    h.realize(10);
+    h.realize({10});
 
     printf("Success!\n");
     return 0;

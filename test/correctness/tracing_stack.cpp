@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
     h.trace_realizations();
 
     h.set_custom_trace(&my_trace);
-    h.realize(100, 100);
+    h.realize({100, 100});
 
     printf("The code should not have reached this print statement.\n");
     return -1;

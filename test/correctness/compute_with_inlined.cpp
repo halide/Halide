@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
     one.compute_at(two[0], Var::outermost());
     three.compute_root();
 
-    three.realize(1024, 1024);
+    three.realize({1024, 1024});
 
     printf("Success!\n");
     return 0;

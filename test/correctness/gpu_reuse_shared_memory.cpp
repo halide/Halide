@@ -151,7 +151,7 @@ int dynamic_shared_test(MemoryType memory_type) {
 
     // The amount of shared memory required varies with x
 
-    Buffer<int> out = f4.realize(500);
+    Buffer<int> out = f4.realize({500});
     for (int x = 0; x < out.width(); x++) {
         int correct = 27 * x;
         if (out(x) != correct) {

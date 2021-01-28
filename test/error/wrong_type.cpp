@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     Func f;
     Var x;
     f(x) = x;
-    Buffer<float> im = f.realize(100);
+    Buffer<float> im = f.realize({100});
 
     printf("Success!\n");
     return 0;

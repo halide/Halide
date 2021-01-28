@@ -485,18 +485,26 @@ public:
 
     /** See Func::realize */
     // @{
-    Realization realize(std::vector<int32_t> sizes, const Target &target = Target(),
+    Realization realize(std::vector<int32_t> sizes = {}, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
     Realization realize(int x_size, int y_size, int z_size, int w_size, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
     Realization realize(int x_size, int y_size, int z_size, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
     Realization realize(int x_size, int y_size, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
-    Realization realize(int x_size, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
-    Realization realize(const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
+
+    // Making this a template function is a trick: `{intliteral}` is a valid scalar initializer
+    // in C++, but we want it to match the vector call, not the (deprecated) scalar one.
+    template<typename T, typename = typename std::enable_if<std::is_same<T, int>::value>::type>
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
+    HALIDE_ALWAYS_INLINE Realization realize(T x_size, const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map()) {
+        return realize(std::vector<int32_t>{x_size}, target, param_map);
+    }
     // @}
 
     /** Evaluate this Pipeline into an existing allocated buffer or

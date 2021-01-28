@@ -780,7 +780,7 @@ public:
      params.set(img, arg_img);
 
      Target t = get_jit_target_from_environment();
-     Buffer<int32_t> result = f.realize(10, 10, t, params);
+     Buffer<int32_t> result = f.realize({10, 10}, t, params);
      \endcode
      *
      * Alternatively, an initializer list can be used
@@ -795,7 +795,7 @@ public:
      <fill in arg_img...>
 
      Target t = get_jit_target_from_environment();
-     Buffer<int32_t> result = f.realize(10, 10, t, { { p, 17 }, { img, arg_img } });
+     Buffer<int32_t> result = f.realize({10, 10}, t, { { p, 17 }, { img, arg_img } });
      \endcode
      *
      * If the Func cannot be realized into a buffer of the given size
@@ -810,18 +810,26 @@ public:
      *
      */
     // @{
-    Realization realize(std::vector<int32_t> sizes, const Target &target = Target(),
+    Realization realize(std::vector<int32_t> sizes = {}, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
     Realization realize(int x_size, int y_size, int z_size, int w_size, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
     Realization realize(int x_size, int y_size, int z_size, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
     Realization realize(int x_size, int y_size, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
-    Realization realize(int x_size, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
-    Realization realize(const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
+
+    // Making this a template function is a trick: `{intliteral}` is a valid scalar initializer
+    // in C++, but we want it to match the vector call, not the (deprecated) scalar one.
+    template<typename T, typename = typename std::enable_if<std::is_same<T, int>::value>::type>
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
+    HALIDE_ALWAYS_INLINE Realization realize(T x_size, const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map()) {
+        return realize(std::vector<int32_t>{x_size}, target, param_map);
+    }
     // @}
 
     /** Evaluate this function into an existing allocated buffer or

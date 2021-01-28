@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
         // Start the thread pool without giving any hints as to the
         // number of tasks we'll be using.
         p.realize(t, 1);
-        double min_time = benchmark([&]() { return p.realize(2, 1000000); });
+        double min_time = benchmark([&]() { return p.realize({2, 1000000}); });
 
         printf("%d: %f ms\n", t, min_time * 1e3);
         if (t == 2) {

@@ -206,7 +206,7 @@ void do_test() {
             // Here we test matching strides
             Func f2;
             f2(x, y, c, w) = f(x, y, c);
-            Buffer<T> funky_buf = f2.realize(10, 10, 1, 3);
+            Buffer<T> funky_buf = f2.realize({10, 10, 1, 3});
             funky_buf.fill(42);
 
             std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "x4\n";

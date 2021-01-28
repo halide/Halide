@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
         f.store_root().compute_at(g, y);
 
         counter = 0;
-        check(g.realize(2, 10));
+        check(g.realize({2, 10}));
 
         int correct = 24;
         if (counter != correct) {
@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
         f.store_root().compute_at(g, y);
 
         counter = 0;
-        check(g.realize(2, 10));
+        check(g.realize({2, 10}));
 
         int correct = 60;
         if (counter != correct) {
@@ -106,7 +106,7 @@ int main(int argc, char **argv) {
         f.store_root().compute_at(g, y);
 
         counter = 0;
-        check(g.realize(2, 10));
+        check(g.realize({2, 10}));
 
         int correct = 42;
         if (counter != correct) {

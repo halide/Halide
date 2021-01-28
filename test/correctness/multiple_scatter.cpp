@@ -157,7 +157,7 @@ int main(int argc, char **argv) {
         // 'true' to atomic().
         prod.update().atomic(true).parallel(r);
 
-        Buffer<uint8_t> result = prod.realize(2);
+        Buffer<uint8_t> result = prod.realize({2});
 
         uint8_t correct_re = 1, correct_im = 0;
         for (int i = 0; i < input.dim(1).extent(); i++) {
@@ -215,7 +215,7 @@ int main(int argc, char **argv) {
         f(x) = 0;
         f(scatter(0, 1, 2, 3)) = 5;
 
-        Buffer<int> out = f.realize(5);
+        Buffer<int> out = f.realize({5});
         for (int i = 0; i < 5; i++) {
             int correct = i < 4 ? 5 : 0;
             if (out(i) != correct) {
@@ -235,7 +235,7 @@ int main(int argc, char **argv) {
         f(x) = 0;
         f(3) = gather(1, 9);
 
-        Buffer<int> out = f.realize(5);
+        Buffer<int> out = f.realize({5});
         for (int i = 0; i < 5; i++) {
             int correct = i == 3 ? 9 : 0;
             if (out(i) != correct) {

@@ -288,7 +288,7 @@ static void test_sum() {
     Node converted = convert_node(sum_node, node_inputs);
 
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<float> output = converted.outputs[0].rep.realize(1, 3, 1, 11);
+    Halide::Buffer<float> output = converted.outputs[0].rep.realize({1, 3, 1, 11});
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 11; ++j) {
             float expected = 0.0f;

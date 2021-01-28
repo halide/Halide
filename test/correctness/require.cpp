@@ -77,7 +77,7 @@ static void test(int vector_width) {
     p2.set(15);
 
     error_occurred = false;
-    result = clamped.realize(64, 3);
+    result = clamped.realize({64, 3});
     if (!error_occurred) {
         printf("There should have been a requirement error (vector_width = %d)\n", vector_width);
         exit(1);
@@ -87,7 +87,7 @@ static void test(int vector_width) {
     p2.set(16);
 
     error_occurred = false;
-    result = clamped.realize(64, 3);
+    result = clamped.realize({64, 3});
     if (error_occurred) {
         printf("There should NOT have been a requirement error (vector_width = %d)\n", vector_width);
         exit(1);

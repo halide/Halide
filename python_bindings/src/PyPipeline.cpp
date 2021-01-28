@@ -113,31 +113,39 @@ void define_pipeline(py::module &m) {
                 },
                 py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target())
 
-            // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
                 "realize", [](Pipeline &p, int x_size, const Target &target) -> py::object {
-                    return realization_to_object(p.realize(x_size, target));
+                    PyErr_WarnEx(PyExc_DeprecationWarning,
+                                 "Call realize() with an explicit list of ints instead.",
+                                 1);
+                    return realization_to_object(p.realize(std::vector<int32_t>{x_size}, target));
                 },
                 py::arg("x_size"), py::arg("target") = Target())
 
-            // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
                 "realize", [](Pipeline &p, int x_size, int y_size, const Target &target) -> py::object {
-                    return realization_to_object(p.realize(x_size, y_size, target));
+                    PyErr_WarnEx(PyExc_DeprecationWarning,
+                                 "Call realize() with an explicit list of ints instead.",
+                                 1);
+                    return realization_to_object(p.realize({x_size, y_size}, target));
                 },
                 py::arg("x_size"), py::arg("y_size"), py::arg("target") = Target())
 
-            // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
                 "realize", [](Pipeline &p, int x_size, int y_size, int z_size, const Target &target) -> py::object {
-                    return realization_to_object(p.realize(x_size, y_size, z_size, target));
+                    PyErr_WarnEx(PyExc_DeprecationWarning,
+                                 "Call realize() with an explicit list of ints instead.",
+                                 1);
+                    return realization_to_object(p.realize({x_size, y_size, z_size}, target));
                 },
                 py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("target") = Target())
 
-            // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
                 "realize", [](Pipeline &p, int x_size, int y_size, int z_size, int w_size, const Target &target) -> py::object {
-                    return realization_to_object(p.realize(x_size, y_size, z_size, w_size, target));
+                    PyErr_WarnEx(PyExc_DeprecationWarning,
+                                 "Call realize() with an explicit list of ints instead.",
+                                 1);
+                    return realization_to_object(p.realize({x_size, y_size, z_size, w_size}, target));
                 },
                 py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("w_size"), py::arg("target") = Target())
 

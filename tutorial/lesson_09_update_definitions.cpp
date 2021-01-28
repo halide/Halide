@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
         // We'll realize this one just to make sure it compiles. The
         // second-to-last definition forces us to realize over a
         // domain that is taller than it is wide.
-        f.realize(100, 101);
+        f.realize({100, 101});
 
         // For each realization of f, each step runs in its entirety
         // before the next one begins. Let's trace the loads and
@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
         g.trace_loads();
         g.trace_stores();
 
-        g.realize(4, 4);
+        g.realize({4, 4});
 
         // See figures/lesson_09_update.gif for a visualization.
 
@@ -151,7 +151,7 @@ int main(int argc, char **argv) {
         // domain" and using it inside an update definition:
         RDom r(0, 50);
         f(x, r) = f(x, r) * f(x, r);
-        Buffer<float> halide_result = f.realize(100, 100);
+        Buffer<float> halide_result = f.realize({100, 100});
 
         // See figures/lesson_09_update_rdom.mp4 for a visualization.
 
@@ -205,7 +205,7 @@ int main(int argc, char **argv) {
         // input image at that point.
         histogram(input(r.x, r.y)) += 1;
 
-        Buffer<int> halide_result = histogram.realize(256);
+        Buffer<int> halide_result = histogram.realize({256});
 
         // The equivalent C is:
         int c_result[256];
@@ -263,7 +263,7 @@ int main(int argc, char **argv) {
         Var yo, yi;
         f.update(1).split(y, yo, yi, 4).parallel(yo);
 
-        Buffer<int> halide_result = f.realize(16, 16);
+        Buffer<int> halide_result = f.realize({16, 16});
 
         // See figures/lesson_09_update_schedule.mp4 for a visualization.
 
@@ -324,7 +324,7 @@ int main(int argc, char **argv) {
         producer(x) = x * 2;
         producer(x) += 10;
         consumer(x) = 2 * producer(x);
-        Buffer<int> halide_result = consumer.realize(10);
+        Buffer<int> halide_result = consumer.realize({10});
 
         // See figures/lesson_09_inline_reduction.gif for a visualization.
 
@@ -383,7 +383,7 @@ int main(int argc, char **argv) {
 
         producer.compute_at(consumer, x);
 
-        Buffer<int> halide_result = consumer.realize(10);
+        Buffer<int> halide_result = consumer.realize({10});
 
         // See figures/lesson_09_compute_at_pure.gif for a visualization.
 
@@ -435,7 +435,7 @@ int main(int argc, char **argv) {
         // the Vars of a Func are shared across the pure and
         // update steps.
 
-        Buffer<int> halide_result = consumer.realize(10);
+        Buffer<int> halide_result = consumer.realize({10});
 
         // See figures/lesson_09_compute_at_update.gif for a visualization.
 
@@ -478,7 +478,7 @@ int main(int argc, char **argv) {
         // redundant work occurs.
         producer.compute_at(consumer, x);
 
-        Buffer<int> halide_result = consumer.realize(10);
+        Buffer<int> halide_result = consumer.realize({10});
 
         // See figures/lesson_09_compute_at_pure_and_update.gif for a visualization.
 
@@ -545,7 +545,7 @@ int main(int argc, char **argv) {
         producer_1.compute_at(consumer_2, x);
         producer_2.compute_at(consumer_2, y);
 
-        Buffer<int> halide_result = consumer_2.realize(10, 10);
+        Buffer<int> halide_result = consumer_2.realize({10, 10});
 
         // See figures/lesson_09_compute_at_multiple_updates.mp4 for a visualization.
 
@@ -601,7 +601,7 @@ int main(int argc, char **argv) {
 
         producer.compute_at(consumer, r);
 
-        Buffer<int> halide_result = consumer.realize(10);
+        Buffer<int> halide_result = consumer.realize({10});
 
         // See figures/lesson_09_compute_at_rvar.gif for a visualization.
 
@@ -720,8 +720,8 @@ int main(int argc, char **argv) {
         // pure function. The reduction domain has been swallowed to
         // define the inner anonymous reduction.
 
-        Buffer<int> halide_result_1 = f1.realize(10);
-        Buffer<int> halide_result_2 = f2.realize(10);
+        Buffer<int> halide_result_1 = f1.realize({10});
+        Buffer<int> halide_result_2 = f2.realize({10});
 
         // The equivalent C is:
         int c_result[10];

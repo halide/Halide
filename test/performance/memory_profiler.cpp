@@ -165,7 +165,7 @@ int main(int argc, char **argv) {
         f3.set_custom_print(&my_print);
 
         reset_stats();
-        f3.realize(1000, 1000, t);
+        f3.realize({1000, 1000}, t);
         if (check_error(0, 0, 0, 0) != 0) {
             return -1;
         }
@@ -182,7 +182,7 @@ int main(int argc, char **argv) {
         f3.set_custom_print(&my_print);
 
         reset_stats();
-        f3.realize(1000, 1000, t);
+        f3.realize({1000, 1000}, t);
         if (check_error(0, 0, 0, 0) != 0) {
             return -1;
         }

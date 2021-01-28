@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
 
     f.trace_realizations();
     h.set_custom_trace(&my_trace);
-    h.realize(1);
+    h.realize({1});
 
     printf("Success!\n");
     return 0;
