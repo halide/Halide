@@ -41,11 +41,47 @@ struct CPU_Action {
     // Root is different for some schedules.
     IntrusivePtr<const LoopNest> root;
 
-    // Needed for smart pruning, Inlining, etc.
-    FunctionDAG::Node *node_ptr;
-
     static CPU_Action Default() {
         return CPU_Action(CPU_ScheduleAction::Empty, nullptr);
+    }
+
+    void dump() {
+        std::cerr << "Root: " << root.get() << std::endl;
+        switch(schedule_action) {
+            case CPU_ScheduleAction::Error: {
+                std::cerr << "Error";
+                break;
+            }
+            case CPU_ScheduleAction::Inline: {
+                std::cerr << "Inline";
+                break;
+            }
+            case CPU_ScheduleAction::Vectorize: {
+                std::cerr << "Vectorize";
+                break;
+            }
+            case CPU_ScheduleAction::Tile: {
+                std::cerr << "Tile";
+                break;
+            }
+            case CPU_ScheduleAction::ComputeRoot: {
+                std::cerr << "ComputeRoot";
+                break;
+            }
+            case CPU_ScheduleAction::Input: {
+                std::cerr << "Input";
+                break;
+            }
+            case CPU_ScheduleAction::Parallelize: {
+                std::cerr << "Parallelize";
+                break;
+            }
+            case CPU_ScheduleAction::Empty: {
+                std::cerr << "Empty";
+                break;
+            }
+        }
+        std::cerr << std::endl;
     }
 };
 
@@ -77,7 +113,7 @@ class CPU_State {
     bool prepruned = false;
 
     // Saving the features for calculating cost.
-    mutable StageMap<ScheduleFeatures> features;
+    // mutable StageMap<ScheduleFeatures> features;
 
 public:
     CPU_State() = delete;
@@ -88,9 +124,9 @@ public:
               CostModel *_model_ptr, IntrusivePtr<const LoopNest> _root, int n_decisions, int64_t _memory_limit = 0) :
         root(_root), n_decisions_made(n_decisions), dag_ptr(_dag_ptr),
         params_ptr(_params_ptr), model_ptr(_model_ptr), memory_limit(_memory_limit) {
-            // internal_assert(dag_ptr) << "CPU_State received nullptr dag_ptr\n";
-            // internal_assert(params_ptr) << "CPU_State received nullptr params_ptr\n";
-            // internal_assert(model_ptr) << "CPU_State received nullptr model_ptr\n";
+            internal_assert(dag_ptr) << "CPU_State received nullptr dag_ptr\n";
+            internal_assert(params_ptr) << "CPU_State received nullptr params_ptr\n";
+            internal_assert(model_ptr) << "CPU_State received nullptr model_ptr\n";
         }
 
     // This is likely very expensive, but generate all possible

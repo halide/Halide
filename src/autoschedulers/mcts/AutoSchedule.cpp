@@ -176,7 +176,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     if (!seed_str.empty()) {
         seed = atoi(seed_str.c_str());
     }
-    aslog(1) << "Dropout seed = " << seed << "\n";
+    aslog(0) << "Random seed = " << seed << "\n";
     std::mt19937 rng((uint32_t)seed);
 
     string weights_in_path = get_env_variable("HL_WEIGHTS_DIR");
@@ -201,17 +201,19 @@ void generate_schedule(const std::vector<Function> &outputs,
     internal_assert(cost_model != nullptr);
     configure_pipeline_features(dag, params, cost_model.get());
 
-    // TODO(rootjalex): we call MCTS here.
+    aslog(0) << "Size: " << dag.nodes.size() << "\n";
+
+    // TODO(rootjalex): do this in parallel.
     auto solver = MCTS::Solver<CPU_State, CPU_Action>::MakeIterationSolver(100);
-    
+
     LoopNest *root = new LoopNest;
     CPU_State start_state(&dag, &params, cost_model.get(), root, /* n_decisions */ 0, memory_limit);
-    auto best_action = solver.solve(start_state);
+    auto best_action = solver.solve(start_state, seed);
     CPU_State optimal = solver.get_optimal_state(start_state, best_action);
 
     double cost = optimal.calculate_cost();
 
-    aslog(0) << "Found Pipeline with cost: " << cost << "\n";
+    aslog(0) << "Found Pipeline with cost: " << cost << "\n\n";
 
     std::string schedule_source = optimal.apply_schedule();
 

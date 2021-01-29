@@ -3,6 +3,7 @@
 
 // TODO(rootjalex): figure out includes.
 //                  should this be in the Halide namespace??
+#include "Halide.h"
 #include "MCTreeNode.h"
 #include <cmath>        // std::sqrt
 #include <cstdint>      // uint32_t
@@ -83,38 +84,48 @@ namespace MCTS {
 
             iterations = 0;
 
+            size_t n_valid_nodes = 0;
+
             // TODO(rootjalex): set up timer set up
 
             // Breaks if no more states to explore, or time or iterations are up.
             while (true) {
+                // std::cerr << "Iteration: " << iterations << std::endl;
+                // std::cerr << "\tNumber valids: " << n_valid_nodes << std::endl;
 
                 // Start at root and find best valued node that has been expanded.
                 NodePtr node = root_node;
 
                 // TODO(rootjalex): is there a faster way to track from the root?
                 //                  this could be expensive for large Pipelines
+                // std::cerr << "\tTrack from root" << std::endl;
                 while (!node->is_terminal() && node->is_fully_expanded()) {
                     node = get_best_value_child(node);
-                    // TODO(rootjalex): assert(node);
+                    internal_assert(node) << "get_best_value_child returned nullptr\n";
                 }
 
                 // Node is either a terminal, or has more actions that can be tried.
                 // Expand if it has more actions to be taken.
+                // std::cerr << "\tExpanding:" << node << std::endl;
                 if (!node->is_fully_expanded()) {
                     // TODO(rootjalex): this needs to be expanded if we want to go all the way to leaves.
                     node = node->choose_new_random_child();
+                    internal_assert(node) << "choose_new_random_child returned nullptr\n";
                 }
 
                 // We don't have a simulation step, because only one action per state can be chosen.
-
+                // std::cerr << "\tValidity checking" << std::endl;
                 if (node->is_valid()) {
                     node->increment_parent_visits();
                     double node_cost = node->get_state().calculate_cost();
+
+                    // std::cerr << "\tFound state with cost: " << node_cost << std::endl; 
 
                     // Back propagation. node_cost is passed by value,
                     // because the policy for backprop is handled via the State class.
                     // e.g. it might make node_cost the minimum of values, or the average, etc.
                     bool continue_updating = node->update(node_cost);
+                    // std::cerr << "Continue updating? " << continue_updating << std::endl;
                     if (continue_updating) {
                         // This messy backprop is due to the fact that
                         // node is shared but we don't have shared ptrs
@@ -123,11 +134,17 @@ namespace MCTS {
                         while (parent_ptr && parent_ptr->update(node_cost)) {
                             parent_ptr = parent_ptr->get_parent();
                         }
-                        // TODO(rootjalex): assert (parent_ptr == root_node.get());
+                        // if (parent_ptr) {
+                        //     std::cerr << "Did not make it to root! " << std::endl;
+                        //     std::cerr << "Made it from " << (int64_t)node->get_depth() << " to " << (int64_t)parent_ptr->get_depth() << std::endl;
+                        // } else {
+                        //     std::cerr << "Made it to root!" << std::endl;
+                        //     std::cerr << "Made it from " << (int64_t)node->get_depth() << std::endl;
+                        // }
                     }
 
                     // TODO(rootjalex): reference code uses get_most_visited_child of the root. Why the heck?
-
+                    n_valid_nodes++;
                     best_node = get_min_value_child(root_node);
                 }
 
@@ -140,8 +157,7 @@ namespace MCTS {
                 iterations++;
             }
 
-            // TODO(rootjalex): assert(best_node)
-
+            internal_assert(best_node) << "MCTS found a nullptr best node\n";
             return best_node;
         }
 
@@ -149,17 +165,19 @@ namespace MCTS {
         State get_optimal_state(const State &starter_state, NodePtr solved_action) {
             NodePtr node = solved_action;
             State current_state = starter_state;
-            while (node && !node->is_terminal()) {
+            while (node) {
+                // std::cerr << "Node value: " << node->get_value() << std::endl;
+                // std::cerr << "State cost: " << current_state.calculate_cost() << std::endl;
                 current_state = current_state.take_action(node->get_action());
                 // TODO(rootjalex): is this the best policy? Should we use UTC?
-                node = get_min_value_child(node);
+                if (node->is_terminal() || node->get_num_children() == 0) {
+                    break;
+                } else {
+                    node = get_min_value_child(node);
+                }
             }
-            // TODO(rootjalex): assert(node);
+            internal_assert(node) << "get_optimal_state ended with a nullptr node\n";
             return current_state;
-        }
-
-        void print() {
-            std::cerr << "print solver" << std::endl;
         }
 
         // Find the best UTC score of the children that have already been generated.
@@ -189,13 +207,14 @@ namespace MCTS {
 
                 const double uct_score = uct_exploitation + uct_k * uct_exploration;
 
-                if (uct_score > best_uct_score) {
+                if (!best_node || uct_score > best_uct_score) {
                     best_uct_score = uct_score;
                     best_node = child_ptr;
                 }
             }
 
-            // TODO(rootjalex): assert(best_node);
+            // std::cerr << "Num children: " << num_children << std::endl;
+            internal_assert(best_node) << "get_best_value_child ended with a nullptr node\n";
 
             return best_node;
         }
@@ -218,8 +237,7 @@ namespace MCTS {
                 }
             }
 
-            // TODO(rootjalex): assert(popular_node);
-
+            internal_assert(popular_node) << "get_most_visited_child ended with a nullptr node\n";
             return popular_node;
         }
 
@@ -232,15 +250,23 @@ namespace MCTS {
 
             for (int i = 0; i < num_children; i++) {
                 NodePtr child_ptr = parent_node->get_child(i);
-                const uint32_t child_value = child_ptr->get_value();
+                const double child_value = child_ptr->get_value();
 
                 if (child_value < best_value) {
                     best_value = child_value;
                     best_node = child_ptr;
                 }
+                // std::cerr << "\t\tChild with cost:" << child_value << std::endl;
             }
 
+            if (!best_node) {
+                std::cerr << "Failed to find best child node, with " << num_children << std::endl;
+            }
+
+            internal_assert(best_node) << "get_min_value_child ended with a nullptr node\n";
             // TODO(rootjalex): assert(best_node);
+
+            // std::cerr << "\t\tBest has cost:" << best_value << std::endl;
 
             return best_node;
         }

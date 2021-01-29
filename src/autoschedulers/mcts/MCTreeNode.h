@@ -64,8 +64,10 @@ namespace MCTS {
         SharedPtr add_child_with_action(const Action &child_action) {
             // This should throw an error if action is not valid.
             State new_state = state.take_action(child_action);
+            // std::cerr << "\tGenerated new state" << std::endl;
 
             BarePtr child_node = new TreeNode<State, Action>(std::move(new_state), child_action, this, rng);
+            // std::cerr << "\tCreated child node:" << child_node << std::endl;
 
             // TODO(rootjalex): deviates from sample code.
             SharedPtr child_sptr = SharedPtr(child_node);
@@ -73,17 +75,22 @@ namespace MCTS {
             // Add to children.
             children.push_back(child_sptr);
 
+            // std::cerr << "\tAdded " << child_sptr << "to children, now have size: " << children.size() << std::endl;
+
             return child_sptr;
         }
 
         SharedPtr choose_new_random_child() {
             // TODO(rootjalex): this might need to be specialized.
             if (possible_actions.empty()) {
+                std::cerr << "No possible actions for choose_nnew_random_child" << std::endl;
                 assert(false); // TODO(rootjalex): better assert
                 return nullptr;
             }
             const uint32_t n_possibles = possible_actions.size();
             const uint32_t n_children = children.size();
+            // std::cerr << "\tPossible:" << n_possibles << std::endl;
+            // std::cerr << "\tChildren:" << n_children << std::endl;
             if (n_possibles == n_children) {
                 // This is bad, can't expand.
                 std::cerr << "choose_new_random_child has no options.\n";
@@ -93,21 +100,37 @@ namespace MCTS {
             // TODO(rootjalex): there's gotta be a more efficient way of doing this.
             std::vector<Action *> untaken_actions;
 
-            for (size_t index = 0; index <= possible_actions.size(); index++) {
+            for (uint32_t index = 0; index < n_possibles; index++) {
                 Action *possible_action = &possible_actions[index];
                 if (!possible_action->explored) {
+                    // std::cerr << "\tAdding new possibility: " << possible_action << std::endl;
                     untaken_actions.push_back(possible_action);
                 }
             }
 
-            uint32_t random_index = rng() & untaken_actions.size();
+            // std::cerr << "\tChoosing with possibilities: " << untaken_actions.size() << std::endl;
+
+            // TODO(rootjalex): what do we do if no possible actions?
+
+            uint32_t random_index = rng() % untaken_actions.size();
+
+            // std::cerr << "\tChose random index: " << random_index << std::endl;
 
             Action *random_action = untaken_actions[random_index];
 
+            // std::cerr << "\tChose random action: " << random_action << std::endl;
+
             // TODO(rootjalex): this should work, I think?
             random_action->explored = true;
+            // random_action->dump();
 
-            return add_child_with_action(*random_action);
+            // std::cerr << "\tAdding random child" << std::endl;
+
+            auto chosen_action = *random_action;
+
+            // std::cerr << "\tAccessed action" << std::endl;
+
+            return add_child_with_action(chosen_action);
         }
 
         // (potentially) update the state's value.

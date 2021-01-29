@@ -15,7 +15,7 @@ void compute_featurization(const FunctionDAG *dag, const MachineParams *params, 
 }
 
 vector<CPU_Action> CPU_State::generate_possible_actions() const {
-    dump();
+    // dump();
     vector<CPU_Action> actions;
     if (is_terminal()) {
         // This is a leaf node.
@@ -371,6 +371,7 @@ bool CPU_State::is_valid() const {
         return true;
     } else {
         // save the feature calculation for use in calculate_cost()
+        StageMap<ScheduleFeatures> features;
         return !prunable(dag_ptr, params_ptr, root.get(), features, memory_limit);
     }
 }
@@ -378,9 +379,10 @@ bool CPU_State::is_valid() const {
 double CPU_State::calculate_cost() const {
     // TODO(rootjalex): this is bad, we calculate a featurization once in is_valid (for prunable),
     //                  and once here, for the same node.... We should probably save these.
-    if (prepruned) {
-        prunable(dag_ptr, params_ptr, root.get(), features, memory_limit);
-    }
+    // if (prepruned) {
+    StageMap<ScheduleFeatures> features;
+    prunable(dag_ptr, params_ptr, root.get(), features, memory_limit);
+    // }
     double cost = 0.0f;
     compute_featurization(dag_ptr, params_ptr, &features);
 
