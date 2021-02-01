@@ -541,7 +541,7 @@ private:
         }
     }
 
-    bool div_cant_overflow(const Interval &a, const Interval &b, Type t) {
+    bool div_cannot_overflow(const Interval &a, const Interval &b, Type t) {
         // No overflow if: not an allowed overflow int type, or `a` cannot be t.min() or
         // `b` cannot be -1, because t.min() / -1 overflows for int16 and int8.
         Expr neg_one = make_const(t, -1);
@@ -594,7 +594,7 @@ private:
 
             Type t = op->type.element_of();
 
-            if (div_cant_overflow(a, b, t)) {
+            if (div_cannot_overflow(a, b, t)) {
                 // TODO: handle real numbers with can_prove(b.min > 0) and can_prove(b.min < 0) as well - treating floating point as
                 // reals can be error prone when dealing with division near 0, so for now we only consider integers in the can_prove() path
                 if (op->type.is_uint() || is_positive_const(b.min) || (op->type.is_int() && can_prove(b.min >= 0))) {
@@ -647,7 +647,7 @@ private:
             } else {
                 Type t = op->type.element_of();
 
-                if (div_cant_overflow(a, b, t)) {
+                if (div_cannot_overflow(a, b, t)) {
                     // Divisor is either strictly positive or strictly
                     // negative, so we can just take the extrema.
                     interval = Interval::nothing();
