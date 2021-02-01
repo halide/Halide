@@ -130,29 +130,45 @@ Matrix<M, N> solve(Matrix<M, M> A, Matrix<M, N> b, Func compute, Var at, bool sk
 // Solve Ax = b at each x, y, z exploiting the fact that A is
 // symmetric. Compute the result at the given Func and Var.
 template<int M, int N>
-Matrix<M, N> solve_symmetric(Matrix<M, M> A, Matrix<M, N> b,
+Matrix<M, N> solve_symmetric(Matrix<M, M> A_, Matrix<M, N> b_,
                              Func compute, Var at, bool skip_schedule, Target target) {
 
     // Put the input matrices in a Func to do sqrt-free Cholesky.
+    // See https://users.wpi.edu/~walker/MA514/HANDOUTS/cholesky.pdf
+    // for an explanation of sqrt-free Cholesky.
+
     Var vi, vj;
     Func f;
     f(x, y, z, vi, vj) = undef<float>();
+
+    // Add more usefully-named accessors.
+    auto A = [&](int i, int j) {
+        return f(x, y, z, i, j);
+    };
+    auto b = [&](int i, int j) {
+        return f(x, y, z, i, M + j);
+    };
+
     for (int i = 0; i < M; i++) {
         for (int j = 0; j < M; j++) {
-            f(x, y, z, i, j) = A(i, j);
+            A(i, j) = A_(i, j);
         }
         for (int j = 0; j < N; j++) {
-            f(x, y, z, i, j + M) = b(i, j);
+            b(i, j) = b_(i, j);
         }
     }
 
+    // L D L' factorization, packed into a single matrix. We'll store
+    // L in the lower triangle, 1/D on the diagonal, and ??? TODO in
+    // the upper triangle.
     for (int j = 0; j < M; j++) {
         // Normalize the jth column starting at the jth row, storing
-        // the normalization factor on the diagonal. The unnormalized
-        // version stays in the jth row.
-        f(x, y, z, j, j) = fast_inverse(f(x, y, z, j, j));
+        // the normalization factor on the diagonal. Because A(i, j)
+        // is symmetric, the unnormalized version stays in the jth
+        // row.
+        A(j, j) = fast_inverse(A(j, j));
         for (int i = j + 1; i < M; i++) {
-            f(x, y, z, i, j) *= f(x, y, z, j, j);
+            A(i, j) *= A(j, j);
         }
 
         // Subtract the outer product of the jth column with its
@@ -162,35 +178,50 @@ Matrix<M, N> solve_symmetric(Matrix<M, M> A, Matrix<M, N> b,
             for (int k = j + 1; k < M; k++) {
                 if (k < i) {
                     // We already did this one. Exploit symmetry
-                    f(x, y, z, i, k) = f(x, y, z, k, i);
+                    A(i, k) = A(k, i);
                 } else {
-                    f(x, y, z, i, k) -= f(x, y, z, k, j) * f(x, y, z, j, i);
+                    A(i, k) -= A(k, j) * A(j, i);
                 }
             }
         }
     }
 
-    // Back substitute
+    // We're done with the upper (unnormalized) triangle
+    // now.
+
+    // Back substitute to solve:
+    // LDL' x = b
+    // We're going to peel the matrices off the left-hand-side from
+    // left to right, updating b as we go.
     Matrix<M, N> result;
     for (int k = 0; k < N; k++) {
+        // First remove the leftmost L, by solving Lz = b.
         for (int j = 0; j < M; j++) {
             for (int i = 0; i < j; i++) {
-                f(x, y, z, j, M + k) -= f(x, y, z, j, i) * f(x, y, z, i, M + k);
+                b(j, k) -= A(j, i) * b(i, k);
             }
         }
+        // L has a unit diagonal, so there's no scaling step
 
+        // The problem is now DL' x = b
+
+        // Multiply both sizes by D inverse, which we have stored on the
+        // diagonal.
         for (int j = 0; j < M; j++) {
-            f(x, y, z, j, M + k) *= f(x, y, z, j, j);
+            b(j, k) *= A(j, j);
         }
 
+        // The problem is now L' x = b
+
+        // Multiply both sides by L transpose inverse.
         for (int j = M - 1; j >= 0; j--) {
             for (int i = j + 1; i < M; i++) {
-                f(x, y, z, j, M + k) -= f(x, y, z, i, j) * f(x, y, z, i, M + k);
+                b(j, k) -= A(i, j) * b(i, k);
             }
         }
 
         for (int j = 0; j < M; j++) {
-            result(j, k) = f(x, y, z, j, M + k);
+            result(j, k) = b(j, k);
         }
     }
 
