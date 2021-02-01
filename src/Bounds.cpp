@@ -402,7 +402,7 @@ private:
             // Assume no overflow for float, int32, and int64
             if (op->type.can_overflow()) {
                 if (interval.has_upper_bound()) {
-                    // TODO(rootjalex): Can't catch overflow of UInt(64) currently.
+                    // TODO(5682): Can't catch overflow of UInt(64) currently.
                     Type t = op->type.is_uint() ? UInt(64) : Int(32);
                     Expr no_overflow = (cast(t, a.max) + cast(t, b.max) == cast(t, interval.max));
                     if (!can_prove(no_overflow)) {
@@ -411,7 +411,7 @@ private:
                     }
                 }
                 if (interval.has_lower_bound()) {
-                    // TODO(rootjalex): Can't catch overflow of UInt(64) currently.
+                    // TODO(5682): Can't catch overflow of UInt(64) currently.
                     Type t = op->type.is_uint() ? UInt(64) : Int(32);
                     Expr no_overflow = (cast(t, a.min) + cast(t, b.min) == cast(t, interval.min));
                     if (!can_prove(no_overflow)) {
@@ -526,7 +526,7 @@ private:
             if (a.is_bounded() && b.is_bounded()) {
                 // Try to prove it can't overflow. (Be sure to use uint32 for unsigned
                 // types so that the case of 65535*65535 won't misleadingly fail.)
-                // TODO(rootjalex): Can't catch overflow of UInt(64) currently.
+                // TODO(5682): Can't catch overflow of UInt(64) currently.
                 Type t = op->type.is_uint() ? UInt(64) : Int(32);
                 Expr test1 = (cast(t, a.min) * cast(t, b.min) == cast(t, a.min * b.min));
                 Expr test2 = (cast(t, a.min) * cast(t, b.max) == cast(t, a.min * b.max));
