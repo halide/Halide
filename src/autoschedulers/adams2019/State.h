@@ -2,7 +2,6 @@
 #define STATE_H
 
 #include "ASLog.h"
-#include "Caching.h"
 #include "CostModel.h"
 #include "DefaultCostModel.h"
 #include "Featurization.h"
@@ -42,17 +41,15 @@ struct State {
 
     void compute_featurization(const FunctionDAG &dag,
                                const MachineParams &params,
-                               StageMap<ScheduleFeatures> *features,
-                               const CachingOptions &cache_options);
+                               StageMap<ScheduleFeatures> *features);
 
     void save_featurization(const FunctionDAG &dag,
                             const MachineParams &params,
-                            const CachingOptions &cache_options,
                             std::ostream &out);
 
     bool calculate_cost(const FunctionDAG &dag, const MachineParams &params,
-                        CostModel *cost_model, const CachingOptions &cache_options,
-                        int64_t memory_limit, bool verbose = false);
+                        CostModel *cost_model, int64_t memory_limit,
+                        bool verbose = false);
 
     // Make a child copy of this state. The loop nest is const (we
     // make mutated copies of it, rather than mutating it), so we can
@@ -65,8 +62,7 @@ struct State {
                            const MachineParams &params,
                            CostModel *cost_model,
                            int64_t memory_limit,
-                           std::function<void(IntrusivePtr<State> &&)> &accept_child,
-                           Cache *cache) const;
+                           std::function<void(IntrusivePtr<State> &&)> &accept_child) const;
 
     void dump() const;
 

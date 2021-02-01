@@ -71,9 +71,7 @@ $(BIN)/libautoschedule_adams2019.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp \
 				$(SRC)/CostModel.h \
 				$(SRC)/State.h \
 				$(SRC)/State.cpp \
-				$(SRC)/Caching.h \
-				$(SRC)/Caching.cpp \
-				$(SRC)/Statistics.h \
+				$(SRC)/Timer.h \
 				$(SRC)/PerfectHashMap.h \
 				$(AUTOSCHED_WEIGHT_OBJECTS) \
 				$(AUTOSCHED_COST_MODEL_LIBS) \

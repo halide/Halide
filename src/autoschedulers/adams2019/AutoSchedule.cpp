@@ -89,7 +89,7 @@
 #include "NetworkSize.h"
 #include "PerfectHashMap.h"
 #include "State.h"
-#include "Statistics.h"
+#include "Timer.h"
 
 #ifdef _WIN32
 #include <io.h>
@@ -261,8 +261,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                           int pass_idx,
                                           int num_passes,
                                           ProgressBar &tick,
-                                          std::unordered_set<uint64_t> &permitted_hashes,
-                                          Cache *cache) {
+                                          std::unordered_set<uint64_t> &permitted_hashes) {
 
     if (cost_model) {
         configure_pipeline_features(dag, params, cost_model);
@@ -321,8 +320,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                              pass_idx,
                                              num_passes,
                                              tick,
-                                             permitted_hashes,
-                                             cache);
+                                             permitted_hashes);
             } else {
                 internal_error << "Ran out of legal states with beam size " << beam_size << "\n";
             }
@@ -410,7 +408,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 return best;
             }
 
-            state->generate_children(dag, params, cost_model, memory_limit, enqueue_new_children, cache);
+            state->generate_children(dag, params, cost_model, memory_limit, enqueue_new_children);
             expanded++;
         }
 
@@ -433,7 +431,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 auto state = q[choice_label];
                 aslog(0) << "\n[" << choice_label << "]:\n";
                 state->dump();
-                state->calculate_cost(dag, params, cost_model, cache->options, memory_limit, true);
+                state->calculate_cost(dag, params, cost_model, memory_limit, true);
             }
             cost_model->evaluate_costs();
 
@@ -459,15 +457,11 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
                                      CostModel *cost_model,
                                      std::mt19937 &rng,
                                      int beam_size,
-                                     int64_t memory_limit,
-                                     const CachingOptions &options) {
+                                     int64_t memory_limit) {
 
     IntrusivePtr<State> best;
 
     std::unordered_set<uint64_t> permitted_hashes;
-
-    // Set up cache with options and size
-    Cache cache(options, dag.nodes.size());
 
     // If the beam size is one, it's pointless doing multiple passes.
     int num_passes = (beam_size == 1) ? 1 : 5;
@@ -492,7 +486,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
 
         auto pass = optimal_schedule_pass(dag, outputs, params, cost_model,
                                           rng, beam_size, memory_limit,
-                                          i, num_passes, tick, permitted_hashes, &cache);
+                                          i, num_passes, tick, permitted_hashes);
 
         std::chrono::duration<double> total_time = timer.elapsed();
         auto milli = std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count();
@@ -514,11 +508,6 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     }
 
     aslog(0) << "Best cost: " << best->cost << "\n";
-
-    if (options.cache_blocks) {
-        aslog(0) << "Cache (block) hits: " << cache.cache_hits << "\n";
-        aslog(0) << "Cache (block) misses: " << cache.cache_misses << "\n";
-    }
 
     return best;
 }
@@ -580,8 +569,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     IntrusivePtr<State> optimal;
 
     // Run beam search
-    CachingOptions cache_options = CachingOptions::MakeOptionsFromEnviron();
-    optimal = optimal_schedule(dag, outputs, params, cost_model.get(), rng, beam_size, memory_limit, cache_options);
+    optimal = optimal_schedule(dag, outputs, params, cost_model.get(), rng, beam_size, memory_limit);
 
     HALIDE_TOC;
 
@@ -591,7 +579,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "** Optimal schedule:\n";
 
     // Just to get the debugging prints to fire
-    optimal->calculate_cost(dag, params, cost_model.get(), cache_options, memory_limit, aslog::aslog_level() > 0);
+    optimal->calculate_cost(dag, params, cost_model.get(), memory_limit, aslog::aslog_level() > 0);
 
     // Apply the schedules to the pipeline
     optimal->apply_schedule(dag, params);
@@ -619,7 +607,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     if (!feature_file.empty()) {
         user_warning << "HL_FEATURE_FILE is deprecated; use the featurization output from Generator instead\n";
         std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
-        optimal->save_featurization(dag, params, cache_options, binfile);
+        optimal->save_featurization(dag, params, binfile);
         binfile.close();
         internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
     }
@@ -629,7 +617,7 @@ void generate_schedule(const std::vector<Function> &outputs,
         auto_scheduler_results->schedule_source = optimal->schedule_source;
         {
             std::ostringstream out;
-            optimal->save_featurization(dag, params, cache_options, out);
+            optimal->save_featurization(dag, params, out);
             auto_scheduler_results->featurization.resize(out.str().size());
             memcpy(auto_scheduler_results->featurization.data(), out.str().data(), out.str().size());
         }
@@ -658,14 +646,13 @@ void find_and_apply_schedule(FunctionDAG &dag,
                              StageMap<ScheduleFeatures> *schedule_features) {
 
     std::mt19937 rng(12345);
-    CachingOptions cache_options = CachingOptions::MakeOptionsFromEnviron();
-    IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, beam_size, memory_limit, cache_options);
+    IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, beam_size, memory_limit);
 
     // Apply the schedules
     optimal->apply_schedule(dag, params);
 
     if (schedule_features) {
-        optimal->compute_featurization(dag, params, schedule_features, cache_options);
+        optimal->compute_featurization(dag, params, schedule_features);
     }
 }
 

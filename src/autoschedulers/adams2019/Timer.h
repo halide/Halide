@@ -1,5 +1,5 @@
-#ifndef STATISTICS_H
-#define STATISTICS_H
+#ifndef HL_TIMER_H
+#define HL_TIMER_H
 
 #include <chrono>
 #include <set>
@@ -47,4 +47,4 @@ struct Timer {
 }  // namespace Internal
 }  // namespace Halide
 
-#endif  // STATISTICS_H
+#endif  // HL_TIMER_H
