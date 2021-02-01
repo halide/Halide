@@ -320,14 +320,6 @@ private:
         // Don't mutate scalars
         if (op->type.is_scalar()) {
             return op;
-        } else if (op->is_intrinsic(Call::glsl_texture_load)) {
-            // glsl_texture_load returns a <uint x 4> result. Deinterleave by
-            // wrapping the call in a shuffle_vector
-            std::vector<int> indices;
-            for (int i = 0; i < new_lanes; i++) {
-                indices.push_back(i * lane_stride + starting_lane);
-            }
-            return Shuffle::make({op}, indices);
         } else {
 
             // Vector calls are always parallel across the lanes, so we
@@ -551,7 +543,7 @@ class Interleaver : public IRMutator {
         bool should_deinterleave_predicate = should_deinterleave;
 
         Expr expr;
-        if (should_deinterleave_idx && (should_deinterleave_predicate || is_one(predicate))) {
+        if (should_deinterleave_idx && (should_deinterleave_predicate || is_const_one(predicate))) {
             // If we want to deinterleave both the index and predicate
             // (or the predicate is one), then deinterleave the
             // resulting load.
@@ -705,7 +697,7 @@ class Interleaver : public IRMutator {
                     return Stmt();
                 }
                 // TODO(psuriana): Predicated load is not currently handled.
-                if (!is_one(load->predicate)) {
+                if (!is_const_one(load->predicate)) {
                     return Stmt();
                 }
 

@@ -1,6 +1,7 @@
 #include "StmtToHtml.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
+#include "Module.h"
 #include "Scope.h"
 
 #include <cstdio>
@@ -301,7 +302,7 @@ private:
         stream << close_span();
         print(op->index);
         stream << matched("]");
-        if (!is_one(op->predicate)) {
+        if (!is_const_one(op->predicate)) {
             stream << " " << keyword("if") << " ";
             print(op->predicate);
         }
@@ -451,7 +452,7 @@ private:
         stream << " " << span("Operator Assign Matched", "=") << " ";
         stream << open_span("StoreValue");
         print(op->value);
-        if (!is_one(op->predicate)) {
+        if (!is_const_one(op->predicate)) {
             stream << " " << keyword("if") << " ";
             print(op->predicate);
         }
@@ -490,7 +491,7 @@ private:
             print(op->extents[i]);
         }
         stream << matched("]");
-        if (!is_one(op->condition)) {
+        if (!is_const_one(op->condition)) {
             stream << " " << keyword("if") << " ";
             print(op->condition);
         }
@@ -534,7 +535,7 @@ private:
             }
         }
         stream << matched(")");
-        if (!is_one(op->condition)) {
+        if (!is_const_one(op->condition)) {
             stream << " " << keyword("if") << " ";
             print(op->condition);
         }
@@ -561,7 +562,7 @@ private:
             }
         }
         stream << matched(")");
-        if (!is_one(op->condition)) {
+        if (!is_const_one(op->condition)) {
             stream << " " << keyword("if") << " ";
             print(op->condition);
         }

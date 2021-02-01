@@ -46,18 +46,18 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
         }
 
         for (auto &t : v) {
-            bool is_full = false, is_one = false;
+            bool is_full = false, is_const_one = false;
             // Skip trivial tilings
             if ((size_t)d == s.size() - 1) {
-                is_one = is_full = true;
+                is_const_one = is_full = true;
                 for (int i = 0; i < d; i++) {
-                    is_one &= (t[i] == 1);
+                    is_const_one &= (t[i] == 1);
                     is_full &= (t[i] == s[i]);
                 }
             }
             t.push_back(0);
             if (!allow_splits) {
-                if (!is_one) {
+                if (!is_const_one) {
                     t.back() = 1;
                     result.push_back(t);
                 }
@@ -69,7 +69,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                 int max_inner = 0;
                 for (int inner = 1; inner < s[d]; inner *= factor) {
                     int outer = (s[d] + inner - 1) / inner;
-                    if (is_one && outer == 1) {
+                    if (is_const_one && outer == 1) {
                         continue;
                     }
                     if (is_full && outer == s[d]) {
@@ -85,7 +85,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                 }
                 for (int outer = 1; outer <= s[d]; outer *= factor) {
                     int inner = (s[d] + outer - 1) / outer;
-                    if (is_one && outer == 1) {
+                    if (is_const_one && outer == 1) {
                         continue;
                     }
                     if (is_full && outer == s[d]) {

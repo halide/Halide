@@ -322,7 +322,7 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
                 Expr be = cast<RT>(Expr(bi));
                 Expr re = simplify(ae * be);
 
-                if (re.as<Call>() && re.as<Call>()->is_intrinsic(Call::signed_integer_overflow)) {
+                if (Call::as_intrinsic(re, {Call::signed_integer_overflow})) {
                     // Don't check correctness of signed integer overflow.
                 } else {
                     if (!Internal::equal(re, Expr(ri)) && (ecount++) < 10) {
@@ -401,6 +401,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
             T ri = r(i, j);
 
             if (BIG(qi) * BIG(bi) + ri != ai && (ecount++) < 10) {
+                std::cerr << "\ndiv_mod failure for t=" << target << " w=" << vector_width << " scheduling=" << (int)scheduling << ":\n";
                 std::cerr << "(a/b)*b + a%b != a; a, b = " << (int64_t)ai
                           << ", " << (int64_t)bi
                           << "; q, r = " << (int64_t)qi
@@ -409,6 +410,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
             } else if (!(0 <= ri &&
                          (t.is_min((int64_t)bi) || ri < (T)std::abs((int64_t)bi))) &&
                        (ecount++) < 10) {
+                std::cerr << "\ndiv_mod failure for t=" << target << " w=" << vector_width << " scheduling=" << (int)scheduling << ":\n";
                 std::cerr << "ri is not in the range [0, |b|); a, b = " << (int64_t)ai
                           << ", " << (int64_t)bi
                           << "; q, r = " << (int64_t)qi
@@ -423,12 +425,14 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
                 Expr re = simplify(ae % be);
 
                 if (!Internal::equal(qe, Expr(qi)) && (ecount++) < 10) {
+                    std::cerr << "\ndiv_mod failure for t=" << target << " w=" << vector_width << " scheduling=" << (int)scheduling << ":\n";
                     std::cerr << "Compiled a/b != simplified a/b: " << (int64_t)ai
                               << "/" << (int64_t)bi
                               << " = " << (int64_t)qi
                               << " != " << qe << "\n";
                     success = false;
                 } else if (!Internal::equal(re, Expr(ri)) && (ecount++) < 10) {
+                    std::cerr << "\ndiv_mod failure for t=" << target << " w=" << vector_width << " scheduling=" << (int)scheduling << ":\n";
                     std::cerr << "Compiled a%b != simplified a%b: " << (int64_t)ai
                               << "%" << (int64_t)bi
                               << " = " << (int64_t)ri
@@ -485,7 +489,7 @@ bool f_mod() {
             if (!Internal::equal(e, eout) && (ecount++) < 10) {
                 Expr diff = simplify(e - eout);
                 Expr smalldiff = simplify(diff < (float)(0.000001) && diff > (float)(-0.000001));
-                if (!Internal::is_one(smalldiff)) {
+                if (!Internal::is_const_one(smalldiff)) {
                     std::cerr << "simplify(" << in_e << ") yielded " << e << "; expected " << eout << "\n";
                     std::cerr << "          difference=" << diff << "\n";
                     success = false;

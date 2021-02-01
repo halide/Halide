@@ -9,6 +9,7 @@
 #include "InjectHostDevBufferCopies.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
+#include "Module.h"
 #include "Param.h"
 #include "Substitute.h"
 
@@ -744,7 +745,7 @@ class InjectHexagonRpc : public IRMutator {
         // After moving this to Hexagon, it doesn't need to be marked
         // Hexagon anymore.
         Stmt body;
-        if (is_one(loop->extent)) {
+        if (is_const_one(loop->extent)) {
             body = LetStmt::make(loop->name, loop->min, loop->body);
         } else {
             body = For::make(loop->name, loop->min, loop->extent, loop->for_type,

@@ -2066,9 +2066,43 @@ Func &Func::atomic(bool override_associativity_test) {
     return *this;
 }
 
-Func &Func::memoize() {
+Func &Func::memoize(const EvictionKey &eviction_key) {
     invalidate_cache();
     func.schedule().memoized() = true;
+    if (eviction_key.key.defined()) {
+        Expr new_eviction_key;
+        const Type &t(eviction_key.key.type());
+        if (!t.is_scalar()) {
+            user_error << "Can't use a vector as a memoization eviction key. Expression is: "
+                       << eviction_key.key << "\n";
+        }
+        if (t.is_float()) {
+            user_error << "Can't use floating-point types as a memoization eviction key. Expression is: "
+                       << eviction_key.key << "\n";
+        } else if (t.is_handle()) {
+            // Wrap this in a memoize_tag so it does not get used in
+            // the cache key. Would be nice to have void version of
+            // memoize_tag that adds no bits to the key, but that is a
+            // small optimization.
+            new_eviction_key = memoize_tag(reinterpret(UInt(64), eviction_key.key), 0);
+        } else {
+            // Ditto above re: memoize_tag
+            new_eviction_key = memoize_tag(reinterpret(UInt(64), cast(t.with_bits(64),
+                                                                      eviction_key.key)),
+                                           0);
+        }
+
+        if (func.schedule().memoize_eviction_key().defined() &&
+            !graph_equal(func.schedule().memoize_eviction_key(), eviction_key.key)) {
+            user_error << "Can't redefine memoize eviction key. First definition is: "
+                       << func.schedule().memoize_eviction_key()
+                       << " new definition is: " << new_eviction_key << "\n";
+        }
+
+        func.schedule().memoize_eviction_key() = new_eviction_key;
+    } else {
+        func.schedule().memoize_eviction_key() = eviction_key.key;  // not defined.
+    }
     return *this;
 }
 
@@ -2418,35 +2452,6 @@ Func &Func::gpu_tile(const VarOrRVar &x, const VarOrRVar &y, const VarOrRVar &z,
     Stage(func, func.definition(), 0)
         .gpu_tile(x, y, z, tx, ty, tz, x_size, y_size, z_size, tail, device_api);
     return *this;
-}
-
-Func &Func::shader(const Var &x, const Var &y, const Var &c, DeviceAPI device_api) {
-    invalidate_cache();
-
-    reorder(c, x, y);
-    // GLSL outputs must be stored interleaved
-    reorder_storage(c, x, y);
-
-    // TODO: Set appropriate constraints if this is the output buffer?
-
-    Stage(func, func.definition(), 0).gpu_blocks(x, y, device_api);
-
-    bool constant_bounds = false;
-    FuncSchedule &sched = func.schedule();
-    for (size_t i = 0; i < sched.bounds().size(); i++) {
-        if (c.name() == sched.bounds()[i].var) {
-            constant_bounds = is_const(sched.bounds()[i].min) &&
-                              is_const(sched.bounds()[i].extent);
-            break;
-        }
-    }
-    user_assert(constant_bounds)
-        << "The color channel for image loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
-    return *this;
-}
-
-Func &Func::glsl(const Var &x, const Var &y, const Var &c) {
-    return shader(x, y, c, DeviceAPI::GLSL).vectorize(c);
 }
 
 Func &Func::hexagon(const VarOrRVar &x) {
@@ -3041,25 +3046,6 @@ Realization Func::realize(int x_size, const Target &target,
 Realization Func::realize(const Target &target,
                           const ParamMap &param_map) {
     return realize(std::vector<int>{}, target, param_map);
-}
-
-void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
-                              const Target &target,
-                              const ParamMap &param_map) {
-    vector<int32_t> sizes;
-    if (x_size) {
-        sizes.push_back(x_size);
-    }
-    if (y_size) {
-        sizes.push_back(y_size);
-    }
-    if (z_size) {
-        sizes.push_back(z_size);
-    }
-    if (w_size) {
-        sizes.push_back(w_size);
-    }
-    infer_input_bounds(sizes, target, param_map);
 }
 
 void Func::infer_input_bounds(const std::vector<int32_t> &sizes,

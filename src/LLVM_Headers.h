@@ -34,6 +34,9 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <llvm/ADT/StringMap.h>
+#if LLVM_VERSION >= 12
+#include <llvm/Analysis/AliasAnalysis.h>
+#endif
 #include <llvm/Analysis/TargetLibraryInfo.h>
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
@@ -46,6 +49,9 @@
 #include <llvm/Object/ObjectFile.h>
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Support/CodeGen.h>
+#if LLVM_VERSION >= 12
+#include <llvm/Support/CommandLine.h>
+#endif
 #include <llvm/Support/DataExtractor.h>
 #include <llvm/Support/DynamicLibrary.h>
 #include <llvm/Support/FileSystem.h>
@@ -113,6 +119,14 @@ inline std::string get_llvm_function_name(const llvm::Function &f) {
     return f.getName().str();
 #else
     return f.getName();
+#endif
+}
+
+inline llvm::StructType *get_llvm_struct_type_by_name(llvm::Module *module, const char *name) {
+#if LLVM_VERSION >= 120
+    return llvm::StructType::getTypeByName(module->getContext(), name);
+#else
+    return module->getTypeByName(name);
 #endif
 }
 

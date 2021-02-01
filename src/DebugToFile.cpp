@@ -15,6 +15,8 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
+namespace {
+
 class DebugToFile : public IRMutator {
     const map<string, Function> &env;
 
@@ -145,6 +147,8 @@ public:
         : outputs(o) {
     }
 };
+
+}  // namespace
 
 Stmt debug_to_file(Stmt s, const vector<Function> &outputs, const map<string, Function> &env) {
     // Temporarily wrap the produce nodes for the output functions in

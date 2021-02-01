@@ -13,9 +13,11 @@
 #include "Argument.h"
 #include "Expr.h"
 #include "Module.h"
-#include "Target.h"
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
 
 class Function;

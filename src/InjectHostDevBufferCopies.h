@@ -9,9 +9,11 @@
 #include <vector>
 
 #include "Expr.h"
-#include "Target.h"
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
 
 /** A helper function to call an extern function, and assert that it

@@ -17,6 +17,8 @@ using std::set;
 using std::string;
 using std::vector;
 
+namespace {
+
 // Is it safe to lift an Expr out of a loop (and potentially across a device boundary)
 class CanLift : public IRVisitor {
     using IRVisitor::visit;
@@ -243,9 +245,6 @@ class LICM : public IRMutator {
 
         if (old_in_gpu_loop && in_gpu_loop) {
             // Don't lift lets to in-between gpu blocks/threads
-            return IRMutator::visit(op);
-        } else if (op->device_api == DeviceAPI::GLSL) {
-            // GLSL uses magic names for varying things. Just skip LICM.
             return IRMutator::visit(op);
         } else {
 
@@ -526,6 +525,8 @@ class GroupLoopInvariants : public IRMutator {
         return visit_let<LetStmt, Stmt>(op);
     }
 };
+
+}  // namespace
 
 Stmt hoist_loop_invariant_values(Stmt s) {
     s = GroupLoopInvariants().mutate(s);

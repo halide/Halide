@@ -77,15 +77,6 @@ define weak_odr <8 x i16>  @packssdwx8(<8 x i32> %arg) nounwind alwaysinline {
   ret <8 x i16> %3
 }
 
-declare <4 x i32> @llvm.x86.sse2.pmadd.wd(<8 x i16>, <8 x i16>)
-
-define weak_odr <4 x i32> @pmaddwdx4(<4 x i16> %a, <4 x i16> %b, <4 x i16> %c, <4 x i16> %d) nounwind alwaysinline {
-  %1 = shufflevector <4 x i16> %a, <4 x i16> %c, <8 x i32> <i32 0, i32 4, i32 1, i32 5, i32 2, i32 6, i32 3, i32 7>
-  %2 = shufflevector <4 x i16> %b, <4 x i16> %d, <8 x i32> <i32 0, i32 4, i32 1, i32 5, i32 2, i32 6, i32 3, i32 7>
-  %3 = tail call <4 x i32> @llvm.x86.sse2.pmadd.wd(<8 x i16> %1, <8 x i16> %2)
-  ret <4 x i32> %3
-}
-
 define weak_odr <4 x float> @sqrt_f32x4(<4 x float> %x) nounwind uwtable readnone alwaysinline {
   %1 = tail call <4 x float> @llvm.x86.sse.sqrt.ps(<4 x float> %x) nounwind
   ret <4 x float> %1
@@ -145,30 +136,6 @@ declare <4 x float> @llvm.x86.sse.rsqrt.ps(<4 x float>) nounwind readnone
 define weak_odr <4 x float> @fast_inverse_sqrt_f32x4(<4 x float> %x) nounwind uwtable readnone alwaysinline {
   %approx = tail call <4 x float> @llvm.x86.sse.rsqrt.ps(<4 x float> %x);
   ret <4 x float> %approx
-}
-
-define weak_odr <4 x float> @min_f32x4(<4 x float> %a, <4 x float> %b) nounwind uwtable readnone alwaysinline {
-  %c = fcmp olt <4 x float> %a, %b
-  %result = select <4 x i1> %c, <4 x float> %a, <4 x float> %b
-  ret <4 x float> %result
-}
-
-define weak_odr <4 x float> @max_f32x4(<4 x float> %a, <4 x float> %b) nounwind uwtable readnone alwaysinline {
-  %c = fcmp olt <4 x float> %a, %b
-  %result = select <4 x i1> %c, <4 x float> %b, <4 x float> %a
-  ret <4 x float> %result
-}
-
-define weak_odr <2 x double> @min_f64x2(<2 x double> %a, <2 x double> %b) nounwind uwtable readnone alwaysinline {
-  %c = fcmp olt <2 x double> %a, %b
-  %result = select <2 x i1> %c, <2 x double> %a, <2 x double> %b
-  ret <2 x double> %result
-}
-
-define weak_odr <2 x double> @max_f64x2(<2 x double> %a, <2 x double> %b) nounwind uwtable readnone alwaysinline {
-  %c = fcmp olt <2 x double> %a, %b
-  %result = select <2 x i1> %c, <2 x double> %b, <2 x double> %a
-  ret <2 x double> %result
 }
 
 ; An admittedly ugly but functional version: "info" is an in-out parameter,

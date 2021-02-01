@@ -74,6 +74,34 @@ int ctz64(uint64_t x) {
 #endif
 }
 
+// Rewrite name(broadcast(args)) to broadcast(name(args)).
+// Assumes that scalars are implicitly broadcast.
+Expr lift_elementwise_broadcasts(Type type, const std::string &name, std::vector<Expr> args, Call::CallType call_type) {
+    if (type.lanes() == 1) {
+        return Expr();
+    }
+    int lanes = 0;
+    for (Expr &i : args) {
+        if (const Broadcast *b = i.as<Broadcast>()) {
+            i = b->value;
+            if (lanes == 0) {
+                lanes = i.type().lanes();
+            } else if (lanes != i.type().lanes()) {
+                // This is a broadcast of another vector, and does not match another vector argument.
+                return Expr();
+            }
+        } else if (!i.type().is_scalar()) {
+            // This is not a scalar or broadcast scalar, we can't lift broadcasts.
+            return Expr();
+        }
+    }
+    if (lanes != type.lanes()) {
+        return Broadcast::make(Call::make(type.with_lanes(lanes), name, args, call_type), type.lanes() / lanes);
+    } else {
+        return Expr();
+    }
+}
+
 }  // namespace
 
 Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
@@ -94,6 +122,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                op->is_intrinsic(Call::count_leading_zeros) ||
                op->is_intrinsic(Call::count_trailing_zeros)) {
         Expr a = mutate(op->args[0], nullptr);
+
+        Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a}, op->call_type);
+        if (unbroadcast.defined()) {
+            return mutate(unbroadcast, bounds);
+        }
 
         uint64_t ua = 0;
         if (const_int(a, (int64_t *)(&ua)) || const_uint(a, &ua)) {
@@ -124,31 +157,37 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     } else if (op->is_intrinsic(Call::shift_left) ||
                op->is_intrinsic(Call::shift_right)) {
         Expr a = mutate(op->args[0], nullptr);
-        Expr b = mutate(op->args[1], nullptr);
+        // TODO: When simplifying b, it would be nice to specify the min/max useful bounds, so
+        // stronger simplifications could occur. For example, x >> min(-i8, 0) should be simplified
+        // to x >> -max(i8, 0) and then x << max(i8, 0). This isn't safe because -i8 can overflow.
+        ExprInfo b_info;
+        Expr b = mutate(op->args[1], &b_info);
 
-        if (is_zero(b)) {
+        if (is_const_zero(b)) {
             return a;
+        }
+
+        Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (unbroadcast.defined()) {
+            return mutate(unbroadcast, bounds);
         }
 
         const Type t = op->type;
 
+        // We might swap from a right to left shift or the reverse.
+        std::string result_op = op->name;
+
+        // If we know the sign of this shift, change it to an unsigned shift.
+        if (b_info.min_defined && b_info.min >= 0) {
+            b = mutate(cast(b.type().with_code(halide_type_uint), b), nullptr);
+        } else if (b_info.max_defined && b_info.max <= 0) {
+            result_op = Call::get_intrinsic_name(op->is_intrinsic(Call::shift_right) ? Call::shift_left : Call::shift_right);
+            b = mutate(cast(b.type().with_code(halide_type_uint), -b), nullptr);
+        }
+
+        // If the shift is by a constant, it should now be unsigned.
         uint64_t ub = 0;
-        int64_t sb = 0;
-        bool b_is_const_uint = const_uint(b, &ub);
-        bool b_is_const_int = const_int(b, &sb);
-        if (b_is_const_uint || b_is_const_int) {
-            if (b_is_const_int) {
-                ub = std::abs(sb);
-            }
-
-            // Determine which direction to shift.
-            const bool b_is_pos = b_is_const_uint || (b_is_const_int && sb >= 0);
-            const bool b_is_neg = b_is_const_int && sb < 0;
-            const bool shift_left = ((op->is_intrinsic(Call::shift_left) && b_is_pos) ||
-                                     (op->is_intrinsic(Call::shift_right) && b_is_neg));
-            const bool shift_right = ((op->is_intrinsic(Call::shift_right) && b_is_pos) ||
-                                      (op->is_intrinsic(Call::shift_left) && b_is_neg));
-
+        if (const_uint(b, &ub)) {
             // LLVM shl and shr instructions produce poison for
             // shifts >= typesize, so we will follow suit in our simplifier.
             if (ub >= (uint64_t)(t.bits())) {
@@ -156,33 +195,46 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             }
             if (a.type().is_uint() || ub < ((uint64_t)t.bits() - 1)) {
                 b = make_const(t, ((int64_t)1LL) << ub);
-                if (shift_left) {
+                if (result_op == Call::get_intrinsic_name(Call::shift_left)) {
                     return mutate(Mul::make(a, b), bounds);
-                } else if (shift_right) {
+                } else {
                     return mutate(Div::make(a, b), bounds);
                 }
             } else {
-                // For signed types, (1 << ub) will overflow into the sign bit while
-                // (-32768 >> ub) propagates the sign bit, making decomposition
+                // For signed types, (1 << (t.bits() - 1)) will overflow into the sign bit while
+                // (-32768 >> (t.bits() - 1)) propagates the sign bit, making decomposition
                 // into mul or div problematic, so just special-case them here.
-                if (shift_left) {
+                if (result_op == Call::get_intrinsic_name(Call::shift_left)) {
                     return mutate(select((a & 1) != 0, make_const(t, ((int64_t)1LL) << ub), make_zero(t)), bounds);
-                } else if (shift_right) {
+                } else {
                     return mutate(select(a < 0, make_const(t, -1), make_zero(t)), bounds);
                 }
             }
         }
 
+        // Rewrite shifts with negated RHSes as shifts of the other direction.
+        if (const Sub *sub = b.as<Sub>()) {
+            if (is_const_zero(sub->a)) {
+                result_op = Call::get_intrinsic_name(op->is_intrinsic(Call::shift_right) ? Call::shift_left : Call::shift_right);
+                b = sub->b;
+                return mutate(Call::make(op->type, result_op, {a, b}, Call::PureIntrinsic), bounds);
+            }
+        }
+
         if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+            internal_assert(result_op == op->name);
             return op;
-        } else if (op->is_intrinsic(Call::shift_left)) {
-            return a << b;
         } else {
-            return a >> b;
+            return Call::make(op->type, result_op, {a, b}, Call::PureIntrinsic);
         }
     } else if (op->is_intrinsic(Call::bitwise_and)) {
         Expr a = mutate(op->args[0], nullptr);
         Expr b = mutate(op->args[1], nullptr);
+
+        Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (unbroadcast.defined()) {
+            return mutate(unbroadcast, bounds);
+        }
 
         int64_t ia, ib = 0;
         uint64_t ua, ub = 0;
@@ -201,6 +253,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         } else if (const_uint(b, &ub) &&
                    b.type().is_max(ub)) {
             return a;
+        } else if (const_int(b, &ib) &&
+                   ib == -1) {
+            return a;
         } else if (const_uint(b, &ub) &&
                    is_const_power_of_two_integer(make_const(a.type(), ub + 1), &bits)) {
             return Mod::make(a, make_const(a.type(), ub + 1));
@@ -212,6 +267,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     } else if (op->is_intrinsic(Call::bitwise_or)) {
         Expr a = mutate(op->args[0], nullptr);
         Expr b = mutate(op->args[1], nullptr);
+
+        Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (unbroadcast.defined()) {
+            return mutate(unbroadcast, bounds);
+        }
 
         int64_t ia, ib;
         uint64_t ua, ub;
@@ -229,6 +289,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     } else if (op->is_intrinsic(Call::bitwise_not)) {
         Expr a = mutate(op->args[0], nullptr);
 
+        Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a}, op->call_type);
+        if (unbroadcast.defined()) {
+            return mutate(unbroadcast, bounds);
+        }
+
         int64_t ia;
         uint64_t ua;
         if (const_int(a, &ia)) {
@@ -243,6 +308,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     } else if (op->is_intrinsic(Call::bitwise_xor)) {
         Expr a = mutate(op->args[0], nullptr);
         Expr b = mutate(op->args[1], nullptr);
+
+        Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (unbroadcast.defined()) {
+            return mutate(unbroadcast, bounds);
+        }
 
         int64_t ia, ib;
         uint64_t ua, ub;
@@ -281,6 +351,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         ExprInfo a_bounds;
         Expr a = mutate(op->args[0], &a_bounds);
 
+        Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a}, op->call_type);
+        if (unbroadcast.defined()) {
+            return mutate(unbroadcast, bounds);
+        }
+
         Type ta = a.type();
         int64_t ia = 0;
         double fa = 0;
@@ -311,6 +386,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         ExprInfo a_bounds, b_bounds;
         Expr a = mutate(op->args[0], &a_bounds);
         Expr b = mutate(op->args[1], &b_bounds);
+
+        Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (unbroadcast.defined()) {
+            return mutate(unbroadcast, bounds);
+        }
 
         Type ta = a.type();
         // absd() should enforce identical types for a and b when the node is created
@@ -411,7 +491,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                 Expr extent_1 = args[j];
                 Expr stride_1 = args[j + 1];
 
-                if (is_one(mutate(extent_0 * stride_0 == stride_1, nullptr))) {
+                if (is_const_one(mutate(extent_0 * stride_0 == stride_1, nullptr))) {
                     Expr new_extent = mutate(extent_0 * extent_1, nullptr);
                     args.erase(args.begin() + j, args.begin() + j + 2);
                     args[i] = new_extent;
@@ -441,7 +521,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             }
         }
 
-        if (is_zero(cond)) {
+        if (is_const_zero(cond)) {
             // (We could simplify this to avoid evaluating the provably-false
             // expression, but since this is a degenerate condition, don't bother.)
             user_warning << "This pipeline is guaranteed to fail a require() expression at runtime: \n"
@@ -455,7 +535,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             result = mutate(op->args[1], bounds);
         }
 
-        if (is_one(cond)) {
+        if (is_const_one(cond)) {
             return result;
         }
 
@@ -522,9 +602,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             }
         }
 
-        if (is_one(cond)) {
+        if (is_const_one(cond)) {
             return mutate(op->args[1], bounds);
-        } else if (is_zero(cond)) {
+        } else if (is_const_zero(cond)) {
             return mutate(op->args[2], bounds);
         } else {
             Expr true_value = mutate(op->args[1], nullptr);

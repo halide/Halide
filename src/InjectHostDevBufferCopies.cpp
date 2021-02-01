@@ -549,7 +549,7 @@ class InjectBufferCopies : public IRMutator {
                 // Then the device_and_host malloc
                 Stmt device_malloc = call_extern_and_assert("halide_device_and_host_malloc",
                                                             {buf, device_interface});
-                if (!is_one(condition)) {
+                if (!is_const_one(condition)) {
                     device_malloc = IfThenElse::make(condition, device_malloc);
                 }
                 body = Block::make(device_malloc, body);

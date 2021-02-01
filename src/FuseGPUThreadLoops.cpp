@@ -28,9 +28,9 @@ using std::string;
 using std::vector;
 
 namespace {
+
 string thread_names[] = {"__thread_id_x", "__thread_id_y", "__thread_id_z", "__thread_id_w"};
 string block_names[] = {"__block_id_x", "__block_id_y", "__block_id_z", "__block_id_w"};
-}  // namespace
 
 class ExtractBlockSize : public IRVisitor {
     Expr block_extent[4], block_count[4];
@@ -1442,10 +1442,6 @@ class FuseGPUThreadLoops : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const For *op) override {
-        if (op->device_api == DeviceAPI::GLSL) {
-            return op;
-        }
-
         user_assert(!(CodeGen_GPU_Dev::is_gpu_thread_var(op->name)))
             << "Loops over GPU thread variable: \"" << op->name
             << "\" is outside of any loop over a GPU block variable. "
@@ -1491,7 +1487,7 @@ class ZeroGPULoopMins : public IRMutator {
                           (op->device_api == DeviceAPI::D3D12Compute);
 
         Stmt stmt = IRMutator::visit(op);
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_zero(op->min)) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_const_zero(op->min)) {
             op = stmt.as<For>();
             internal_assert(op);
             Expr adjusted = Variable::make(Int(32), op->name) + op->min;
@@ -1543,10 +1539,14 @@ class ValidateGPULoopNesting : public IRVisitor {
     }
 };
 
+}  // namespace
+
 // Also used by InjectImageIntrinsics
 Stmt zero_gpu_loop_mins(const Stmt &s) {
     return ZeroGPULoopMins().mutate(s);
 }
+
+namespace {
 
 // Find the inner most GPU block of a statement.
 class FindInnermostGPUBlock : public IRVisitor {
@@ -1614,6 +1614,8 @@ class NormalizeIfStatements : public IRMutator {
         return IRMutator::visit(op);
     }
 };
+
+}  // namespace
 
 Stmt fuse_gpu_thread_loops(Stmt s) {
     ValidateGPULoopNesting validate;
