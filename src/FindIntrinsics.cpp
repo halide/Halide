@@ -656,7 +656,7 @@ Expr lower_rounding_halving_add(const Expr &a, const Expr &b) {
 
 Expr lower_rounding_halving_sub(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    return make_shift_right(a, 1) - make_shift_right(b, 1) - make_shift_right((a & 1) - (b & 1) + 1, 1);
+    return make_shift_right(a, 1) - make_shift_right(b, 1) + make_shift_right((a & 1) - (b & 1) + 1, 1);
 }
 
 Expr lower_mulhi_shr(const Type &result_type, const Expr &a, const Expr &b, const Expr &shift) {
