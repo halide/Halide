@@ -127,6 +127,7 @@ void define_enums(py::module &m) {
         .value("AVX512_KNL", Target::Feature::AVX512_KNL)
         .value("AVX512_Skylake", Target::Feature::AVX512_Skylake)
         .value("AVX512_Cannonlake", Target::Feature::AVX512_Cannonlake)
+        .value("AVX512_SapphireRapids", Target::Feature::AVX512_SapphireRapids)
         .value("TraceLoads", Target::Feature::TraceLoads)
         .value("TraceStores", Target::Feature::TraceStores)
         .value("TraceRealizations", Target::Feature::TraceRealizations)
@@ -148,7 +149,6 @@ void define_enums(py::module &m) {
         .value("SVE2", Target::Feature::SVE2)
         .value("ARMDotProd", Target::Feature::ARMDotProd)
         .value("LLVMLargeCodeModel", Target::Feature::LLVMLargeCodeModel)
-        .value("AVX512_SapphireRapids", Target::Feature::AVX512_SapphireRapids)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

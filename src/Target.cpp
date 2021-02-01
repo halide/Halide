@@ -364,6 +364,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"avx512_knl", Target::AVX512_KNL},
     {"avx512_skylake", Target::AVX512_Skylake},
     {"avx512_cannonlake", Target::AVX512_Cannonlake},
+    {"avx512_sapphirerapids", Target::AVX512_SapphireRapids},
     {"trace_loads", Target::TraceLoads},
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
@@ -386,7 +387,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sve2", Target::SVE2},
     {"arm_dot_prod", Target::ARMDotProd},
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
-    {"avx512_sappirerapids", Target::AVX512_SapphireRapids},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
