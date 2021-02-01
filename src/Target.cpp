@@ -981,13 +981,14 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 12> intersection_features = {{
+    const std::array<Feature, 13> intersection_features = {{
         ARMv7s,
         AVX,
         AVX2,
         AVX512,
         AVX512_Cannonlake,
         AVX512_KNL,
+        AVX512_SapphireRapids,
         AVX512_Skylake,
         F16C,
         FMA,
@@ -1047,6 +1048,11 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // We merge the bits via bitwise or.
     Target output = Target{os, arch, bits};
     output.features = ((features | other.features) & union_mask) | ((features | other.features) & matching_mask) | ((features & other.features) & intersection_mask);
+
+#if LLVM_VERSION < 120
+    // We require LLVM 12+ to compile SapphireRapids features.
+    output.features.reset(AVX512_SapphireRapids);
+#endif
 
     // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features
     int cuda_a = get_cuda_capability_lower_bound();
