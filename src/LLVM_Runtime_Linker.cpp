@@ -207,12 +207,14 @@ DECLARE_NO_INITMOD(windows_d3d12compute_arm)
 #endif
 
 #ifdef WITH_X86
+DECLARE_LL_INITMOD(x86_avx512)
 DECLARE_LL_INITMOD(x86_avx2)
 DECLARE_LL_INITMOD(x86_avx)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_sse41)
 DECLARE_CPP_INITMOD(x86_cpu_features)
 #else
+DECLARE_NO_INITMOD(x86_avx512)
 DECLARE_NO_INITMOD(x86_avx2)
 DECLARE_NO_INITMOD(x86_avx)
 DECLARE_NO_INITMOD(x86)
@@ -1028,6 +1030,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.has_feature(Target::AVX2)) {
                 modules.push_back(get_initmod_x86_avx2_ll(c));
+            }
+            if (t.has_feature(Target::AVX512_SapphireRapids)) {
+                modules.push_back(get_initmod_x86_avx512_ll(c));
             }
             if (t.has_feature(Target::Profile)) {
                 user_assert(t.os != Target::WebAssemblyRuntime) << "The profiler cannot be used in a threadless environment.";
