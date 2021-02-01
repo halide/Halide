@@ -37,7 +37,7 @@ void check_intrinsics_over_range() {
         int64_t a = min_t + ((max_t - min_t) * i) / N;
         for (int j = 0; j < N; j++) {
             int64_t b = min_t + ((max_t - min_t) * j) / N;
-            std::vector<std::pair<Expr, int64_t>> intrinsics_with_reference_answer = {
+            std::pair<Expr, int64_t> intrinsics_with_reference_answer[] = {
                 {saturating_add(make_const(halide_t, a), make_const(halide_t, b)), std::min(std::max(a + b, min_t), max_t)},
                 {saturating_sub(make_const(halide_t, a), make_const(halide_t, b)), std::min(std::max(a - b, min_t), max_t)},
                 {halving_add(make_const(halide_t, a), make_const(halide_t, b)), (a + b) >> 1},
