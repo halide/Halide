@@ -27,7 +27,7 @@ void check(Expr test, Expr expected) {
 }
 
 template<typename T>
-void check_saturating_add_sub() {
+void check_intrinsics_over_range() {
     const int64_t min_t = std::numeric_limits<T>::min();
     const int64_t max_t = std::numeric_limits<T>::max();
     const int N = 128;
@@ -37,25 +37,23 @@ void check_saturating_add_sub() {
         int64_t a = min_t + ((max_t - min_t) * i) / N;
         for (int j = 0; j < N; j++) {
             int64_t b = min_t + ((max_t - min_t) * j) / N;
-            Expr add = saturating_add(make_const(halide_t, a), make_const(halide_t, b));
-            Expr sub = saturating_sub(make_const(halide_t, a), make_const(halide_t, b));
-            Expr result_add = simplify(lower_intrinsic(add.as<Call>()));
-            Expr result_sub = simplify(lower_intrinsic(sub.as<Call>()));
-            int64_t reference_add = std::min(std::max(a + b, min_t), max_t);
-            int64_t reference_sub = std::min(std::max(a - b, min_t), max_t);
-            if (!can_prove(result_add == make_const(halide_t, reference_add))) {
-                std::cerr << "failure!\n";
-                std::cerr << "test: " << add << "\n";
-                std::cerr << "result: " << result_add << "\n";
-                std::cerr << "expected: " << reference_add << "\n";
-                abort();
-            }
-            if (!can_prove(result_sub == make_const(halide_t, reference_sub))) {
-                std::cerr << "failure!\n";
-                std::cerr << "test: " << sub << "\n";
-                std::cerr << "result: " << result_sub << "\n";
-                std::cerr << "expected: " << reference_sub << "\n";
-                abort();
+            std::vector<std::pair<Expr, int64_t>> intrinsics_with_reference_answer = {
+                {saturating_add(make_const(halide_t, a), make_const(halide_t, b)), std::min(std::max(a + b, min_t), max_t)},
+                {saturating_sub(make_const(halide_t, a), make_const(halide_t, b)), std::min(std::max(a - b, min_t), max_t)},
+                {halving_add(make_const(halide_t, a), make_const(halide_t, b)), (a + b) >> 1},
+                {rounding_halving_add(make_const(halide_t, a), make_const(halide_t, b)), (a + b + 1) >> 1},
+                {halving_sub(make_const(halide_t, a), make_const(halide_t, b)), (a - b) >> 1},
+                {rounding_halving_sub(make_const(halide_t, a), make_const(halide_t, b)), (a - b + 1) >> 1}};
+
+            for (const auto &p : intrinsics_with_reference_answer) {
+                Expr result = simplify(lower_intrinsic(p.first.as<Call>()));
+                if (!can_prove(result == make_const(halide_t, p.second))) {
+                    std::cerr << "failure!\n";
+                    std::cerr << "test: " << p.first << "\n";
+                    std::cerr << "result: " << result << "\n";
+                    std::cerr << "expected: " << p.second << "\n";
+                    abort();
+                }
             }
         }
     }
@@ -234,12 +232,12 @@ int main(int argc, char **argv) {
     check((u16(u8x) * 4 - u16(u8y)) * 3, widening_mul(u8x, u8(12)) - widening_mul(u8y, u8(3)));
     check((u16(u8x) - u16(u8y) * 7) * 5, widening_mul(u8x, u8(5)) - widening_mul(u8y, u8(35)));
 
-    check_saturating_add_sub<int8_t>();
-    check_saturating_add_sub<uint8_t>();
-    check_saturating_add_sub<int16_t>();
-    check_saturating_add_sub<uint16_t>();
-    check_saturating_add_sub<int32_t>();
-    check_saturating_add_sub<uint32_t>();
+    check_intrinsics_over_range<int8_t>();
+    check_intrinsics_over_range<uint8_t>();
+    check_intrinsics_over_range<int16_t>();
+    check_intrinsics_over_range<uint16_t>();
+    check_intrinsics_over_range<int32_t>();
+    check_intrinsics_over_range<uint32_t>();
 
     printf("Success!\n");
     return 0;
