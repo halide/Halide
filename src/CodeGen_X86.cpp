@@ -27,6 +27,12 @@ namespace {
 // existing flags, so that instruction patterns can just check for the
 // oldest feature flag that supports an instruction.
 Target complete_x86_target(Target t) {
+    if (t.has_feature(Target::AVX512_SapphireRapids)) {
+        t.set_feature(Target::AVX512_Cannonlake);
+    }
+    if (t.has_feature(Target::AVX512_Cannonlake)) {
+        t.set_feature(Target::AVX512_Skylake);
+    }
     if (t.has_feature(Target::AVX512_Cannonlake) ||
         t.has_feature(Target::AVX512_Skylake) ||
         t.has_feature(Target::AVX512_KNL)) {
