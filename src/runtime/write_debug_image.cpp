@@ -113,13 +113,15 @@ struct ScopedFile {
         f = fopen(filename, mode);
     }
     ALWAYS_INLINE ~ScopedFile() {
-        fclose(f);
+        if (f) {
+            fclose(f);
+        }
     }
     ALWAYS_INLINE bool write(const void *ptr, size_t bytes) {
-        return fwrite(ptr, bytes, 1, f);
+        return f ? fwrite(ptr, bytes, 1, f) > 0 : false;
     }
     ALWAYS_INLINE bool open() const {
-        return f;
+        return f != nullptr;
     }
 };
 
