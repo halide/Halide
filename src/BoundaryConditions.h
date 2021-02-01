@@ -166,15 +166,6 @@ HALIDE_NO_USER_CODE_INLINE Func repeat_edge(const T &func_like) {
 
     return repeat_edge(Internal::func_like_to_func(func_like), object_bounds);
 }
-
-template<typename T, typename... Bounds,
-         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
-HALIDE_ATTRIBUTE_DEPRECATED("Add braces around the bounds like so: {{a, b}, {c, d}}")
-HALIDE_NO_USER_CODE_INLINE Func repeat_edge(const T &func_like, Bounds &&... bounds) {
-    Region collected_bounds;
-    Internal::collect_region(collected_bounds, std::forward<Bounds>(bounds)...);
-    return repeat_edge(Internal::func_like_to_func(func_like), collected_bounds);
-}
 // @}
 
 /** Impose a boundary condition such that the entire coordinate space is
@@ -205,15 +196,6 @@ HALIDE_NO_USER_CODE_INLINE Func repeat_image(const T &func_like) {
     }
 
     return repeat_image(Internal::func_like_to_func(func_like), object_bounds);
-}
-
-template<typename T, typename... Bounds,
-         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
-HALIDE_ATTRIBUTE_DEPRECATED("Add braces around the bounds like so: {{a, b}, {c, d}}")
-HALIDE_NO_USER_CODE_INLINE Func repeat_image(const T &func_like, Bounds &&... bounds) {
-    Region collected_bounds;
-    Internal::collect_region(collected_bounds, std::forward<Bounds>(bounds)...);
-    return repeat_image(Internal::func_like_to_func(func_like), collected_bounds);
 }
 
 /** Impose a boundary condition such that the entire coordinate space is
@@ -247,14 +229,6 @@ HALIDE_NO_USER_CODE_INLINE Func mirror_image(const T &func_like) {
     return mirror_image(Internal::func_like_to_func(func_like), object_bounds);
 }
 
-template<typename T, typename... Bounds,
-         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
-HALIDE_ATTRIBUTE_DEPRECATED("Add braces around the bounds like so: {{a, b}, {c, d}}")
-HALIDE_NO_USER_CODE_INLINE Func mirror_image(const T &func_like, Bounds &&... bounds) {
-    Region collected_bounds;
-    Internal::collect_region(collected_bounds, std::forward<Bounds>(bounds)...);
-    return mirror_image(Internal::func_like_to_func(func_like), collected_bounds);
-}
 // @}
 
 /** Impose a boundary condition such that the entire coordinate space is
@@ -290,14 +264,6 @@ HALIDE_NO_USER_CODE_INLINE Func mirror_interior(const T &func_like) {
     return mirror_interior(Internal::func_like_to_func(func_like), object_bounds);
 }
 
-template<typename T, typename... Bounds,
-         typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
-HALIDE_ATTRIBUTE_DEPRECATED("Add braces around the bounds like so: {{a, b}, {c, d}}")
-HALIDE_NO_USER_CODE_INLINE Func mirror_interior(const T &func_like, Bounds &&... bounds) {
-    Region collected_bounds;
-    Internal::collect_region(collected_bounds, std::forward<Bounds>(bounds)...);
-    return mirror_interior(Internal::func_like_to_func(func_like), collected_bounds);
-}
 // @}
 
 }  // namespace BoundaryConditions
