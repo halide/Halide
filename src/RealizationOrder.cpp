@@ -273,13 +273,13 @@ pair<vector<string>, vector<vector<string>>> realization_order(
         vector<FusedPair> &func_fused_pairs = fused_pairs_graph[caller.first];
         fuse_adjacency_list[caller.first];  // Make sure every Func in 'env' is allocated a slot
         if (!caller.second.has_extern_definition()) {
-            for (auto &p : caller.second.definition().schedule().fused_pairs()) {
+            for (const auto &p : caller.second.definition().schedule().fused_pairs()) {
                 validate_fused_pair(caller.first, 0, env, indirect_calls,
                                     p, func_fused_pairs);
                 collect_fused_pairs(p, func_fused_pairs, graph, fuse_adjacency_list);
             }
             for (size_t i = 0; i < caller.second.updates().size(); ++i) {
-                for (auto &p : caller.second.updates()[i].schedule().fused_pairs()) {
+                for (const auto &p : caller.second.updates()[i].schedule().fused_pairs()) {
                     validate_fused_pair(caller.first, i + 1, env, indirect_calls,
                                         p, func_fused_pairs);
                     collect_fused_pairs(p, func_fused_pairs, graph, fuse_adjacency_list);
@@ -320,7 +320,7 @@ pair<vector<string>, vector<vector<string>>> realization_order(
     vector<string> temp;
     set<string> result_set;
     set<string> visited;
-    for (Function f : outputs) {
+    for (const Function &f : outputs) {
         if (visited.find(f.name()) == visited.end()) {
             realization_order_dfs(f.name(), graph, visited, result_set, temp);
         }
@@ -378,7 +378,7 @@ vector<string> topological_order(const vector<Function> &outputs,
     vector<string> order;
     set<string> result_set;
     set<string> visited;
-    for (Function f : outputs) {
+    for (const Function &f : outputs) {
         if (visited.find(f.name()) == visited.end()) {
             realization_order_dfs(f.name(), graph, visited, result_set, order);
         }

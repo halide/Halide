@@ -1,13 +1,18 @@
 #include <sstream>
 
+#include "CodeGen_ARM.h"
 #include "CodeGen_D3D12Compute_Dev.h"
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_MIPS.h"
 #include "CodeGen_Metal_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_OpenGLCompute_Dev.h"
-#include "CodeGen_OpenGL_Dev.h"
 #include "CodeGen_PTX_Dev.h"
+#include "CodeGen_PowerPC.h"
+#include "CodeGen_RISCV.h"
+#include "CodeGen_WebAssembly.h"
+#include "CodeGen_X86.h"
 #include "Debug.h"
 #include "DeviceArgument.h"
 #include "ExprUsesVar.h"
@@ -16,17 +21,17 @@
 #include "LLVM_Headers.h"
 #include "Simplify.h"
 #include "Util.h"
-#include "VaryingAttributes.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::pair;
 using std::string;
 using std::vector;
 
 using namespace llvm;
+
+namespace {
 
 // Sniff the contents of a kernel to extracts the bounds of all the
 // thread indices (so we know how many threads to launch), and the
@@ -38,20 +43,20 @@ public:
     Expr shared_mem_size;
 
     ExtractBounds()
-        : shared_mem_size(0), found_shared(false) {
+        : shared_mem_size(0) {
         for (int i = 0; i < 4; i++) {
             num_threads[i] = num_blocks[i] = 1;
         }
     }
 
 private:
-    bool found_shared;
+    bool found_shared = false;
 
     using IRVisitor::visit;
 
     void visit(const For *op) override {
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
-            internal_assert(is_zero(op->min));
+            internal_assert(is_const_zero(op->min));
         }
 
         if (ends_with(op->name, ".__thread_id_x")) {
@@ -95,47 +100,55 @@ private:
     }
 };
 
+Value *get_module_state(llvm::Module *module, const std::string &function_name,
+                        const std::string &api_unique_name, bool create = true) {
+    std::string name = "module_state_" + function_name + "_" + api_unique_name;
+    GlobalVariable *module_state = module->getGlobalVariable(name, true);
+    if (!module_state && create) {
+        // Create a global variable to hold the module state
+        PointerType *void_ptr_type = llvm::Type::getInt8PtrTy(module->getContext());
+        module_state = new GlobalVariable(*module, void_ptr_type,
+                                          false, GlobalVariable::InternalLinkage,
+                                          ConstantPointerNull::get(void_ptr_type),
+                                          name);
+        debug(4) << "Created device module state global variable\n";
+    }
+
+    return module_state;
+}
+
+}  // namespace
+
 template<typename CodeGen_CPU>
-CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target)
+CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(const Target &target)
     : CodeGen_CPU(target) {
     // For the default GPU, the order of preferences is: Metal,
-    // OpenCL, CUDA, OpenGLCompute, and OpenGL last.
+    // OpenCL, CUDA, OpenGLCompute last.
     // The code is in reverse order to allow later tests to override
     // earlier ones.
-    if (target.has_feature(Target::OpenGL)) {
-        debug(1) << "Constructing OpenGL device codegen\n";
-        cgdev[DeviceAPI::GLSL] = new CodeGen_OpenGL_Dev(target);
-    }
     if (target.has_feature(Target::OpenGLCompute)) {
         debug(1) << "Constructing OpenGL Compute device codegen\n";
-        cgdev[DeviceAPI::OpenGLCompute] = new CodeGen_OpenGLCompute_Dev(target);
+        cgdev[DeviceAPI::OpenGLCompute] = new_CodeGen_OpenGLCompute_Dev(target);
     }
     if (target.has_feature(Target::CUDA)) {
         debug(1) << "Constructing CUDA device codegen\n";
-        cgdev[DeviceAPI::CUDA] = new CodeGen_PTX_Dev(target);
+        cgdev[DeviceAPI::CUDA] = new_CodeGen_PTX_Dev(target);
     }
     if (target.has_feature(Target::OpenCL)) {
         debug(1) << "Constructing OpenCL device codegen\n";
-        cgdev[DeviceAPI::OpenCL] = new CodeGen_OpenCL_Dev(target);
+        cgdev[DeviceAPI::OpenCL] = new_CodeGen_OpenCL_Dev(target);
     }
     if (target.has_feature(Target::Metal)) {
         debug(1) << "Constructing Metal device codegen\n";
-        cgdev[DeviceAPI::Metal] = new CodeGen_Metal_Dev(target);
+        cgdev[DeviceAPI::Metal] = new_CodeGen_Metal_Dev(target);
     }
     if (target.has_feature(Target::D3D12Compute)) {
         debug(1) << "Constructing Direct3D 12 Compute device codegen\n";
-        cgdev[DeviceAPI::D3D12Compute] = new CodeGen_D3D12Compute_Dev(target);
+        cgdev[DeviceAPI::D3D12Compute] = new_CodeGen_D3D12Compute_Dev(target);
     }
 
     if (cgdev.empty()) {
         internal_error << "Requested unknown GPU target: " << target.to_string() << "\n";
-    }
-}
-
-template<typename CodeGen_CPU>
-CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
-    for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
-        delete i.second;
     }
 }
 
@@ -146,7 +159,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
     function_name = simple_name;
 
     // Create a new module for all of the kernels we find in this function.
-    for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
+    for (auto &i : cgdev) {
         i.second->init_module();
     }
 
@@ -176,14 +189,13 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_func(const LoweredFunc &f,
     // Fill out the init kernels block
     builder->SetInsertPoint(init_kernels_bb);
 
-    for (pair<const DeviceAPI, CodeGen_GPU_Dev *> &i : cgdev) {
-
-        CodeGen_GPU_Dev *gpu_codegen = i.second;
+    for (auto &i : cgdev) {
+        CodeGen_GPU_Dev *gpu_codegen = i.second.get();
         std::string api_unique_name = gpu_codegen->api_unique_name();
 
         // If the module state for this API/function did not get created, there were
         // no kernels using this API.
-        llvm::Value *module_state = get_module_state(api_unique_name, false);
+        llvm::Value *module_state = get_module_state(module.get(), function_name, api_unique_name, false);
         if (!module_state) {
             continue;
         }
@@ -258,27 +270,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         Value *gpu_num_coords_dim0 = zero_int32;
         Value *gpu_num_coords_dim1 = zero_int32;
 
-        if (loop->device_api == DeviceAPI::GLSL) {
-
-            // GL draw calls that invoke the GLSL shader are issued for pairs of
-            // for-loops over spatial x and y dimensions. For each for-loop we create
-            // one scalar vertex attribute for the spatial dimension corresponding to
-            // that loop, plus one scalar attribute for each expression previously
-            // labeled as "glsl_varying"
-
-            // Pass variables created during setup_gpu_vertex_buffer to the
-            // dev run function call.
-            gpu_num_padded_attributes = codegen(Variable::make(Int(32), "glsl.num_padded_attributes"));
-            gpu_num_coords_dim0 = codegen(Variable::make(Int(32), "glsl.num_coords_dim0"));
-            gpu_num_coords_dim1 = codegen(Variable::make(Int(32), "glsl.num_coords_dim1"));
-
-            // Look up the allocation for the vertex buffer and cast it to the
-            // right type
-            gpu_vertex_buffer = codegen(Variable::make(type_of<float *>(), "glsl.vertex_buffer"));
-            gpu_vertex_buffer = builder->CreatePointerCast(gpu_vertex_buffer,
-                                                           CodeGen_LLVM::f32_t->getPointerTo());
-        }
-
         // compute a closure over the state passed into the kernel
         HostClosure c(loop->body, loop->name);
 
@@ -305,38 +296,13 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                       }
                   });
 
-        // Halide allows passing of scalar float and integer arguments. For
-        // OpenGL, pack these into vec4 uniforms and varying attributes
-        if (loop->device_api == DeviceAPI::GLSL) {
-
-            int num_uniform_floats = 0;
-
-            // The spatial x and y coordinates are passed in the first two
-            // scalar float varying slots
-            int num_varying_floats = 2;
-            int num_uniform_ints = 0;
-
-            // Pack scalar parameters into vec4
-            for (size_t i = 0; i < closure_args.size(); i++) {
-                if (closure_args[i].is_buffer) {
-                    continue;
-                } else if (ends_with(closure_args[i].name, ".varying")) {
-                    closure_args[i].packed_index = num_varying_floats++;
-                } else if (closure_args[i].type.is_float()) {
-                    closure_args[i].packed_index = num_uniform_floats++;
-                } else if (closure_args[i].type.is_int()) {
-                    closure_args[i].packed_index = num_uniform_ints++;
-                }
-            }
-        }
-
         for (size_t i = 0; i < closure_args.size(); i++) {
             if (closure_args[i].is_buffer && allocations.contains(closure_args[i].name)) {
                 closure_args[i].size = allocations.get(closure_args[i].name).constant_bytes;
             }
         }
 
-        CodeGen_GPU_Dev *gpu_codegen = cgdev[loop->device_api];
+        CodeGen_GPU_Dev *gpu_codegen = cgdev[loop->device_api].get();
         user_assert(gpu_codegen != nullptr)
             << "Loop is scheduled on device " << loop->device_api
             << " which does not appear in target " << target.to_string() << "\n";
@@ -488,7 +454,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
         // TODO: only three dimensions can be passed to
         // cuLaunchKernel. How should we handle blkid[3]?
-        internal_assert(is_one(bounds.num_threads[3]) && is_one(bounds.num_blocks[3]))
+        internal_assert(is_const_one(bounds.num_threads[3]) && is_const_one(bounds.num_blocks[3]))
             << bounds.num_threads[3] << ", " << bounds.num_blocks[3] << "\n";
         debug(4) << "CodeGen_GPU_Host get_user_context returned " << get_user_context() << "\n";
         debug(3) << "bounds.num_blocks[0] = " << bounds.num_blocks[0] << "\n";
@@ -505,7 +471,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         // so the multiple calls to codegen here are fine
         Value *launch_args[] = {
             get_user_context(),
-            builder->CreateLoad(get_module_state(api_unique_name)),
+            builder->CreateLoad(get_module_state(module.get(), function_name, api_unique_name)),
             entry_name_str,
             codegen(bounds.num_blocks[0]),
             codegen(bounds.num_blocks[1]),
@@ -545,24 +511,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
     } else {
         CodeGen_CPU::visit(loop);
     }
-}
-
-template<typename CodeGen_CPU>
-Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state(const std::string &api_unique_name,
-                                                       bool create) {
-    std::string name = "module_state_" + function_name + "_" + api_unique_name;
-    GlobalVariable *module_state = module->getGlobalVariable(name, true);
-    if (!module_state && create) {
-        // Create a global variable to hold the module state
-        PointerType *void_ptr_type = llvm::Type::getInt8PtrTy(*context);
-        module_state = new GlobalVariable(*module, void_ptr_type,
-                                          false, GlobalVariable::InternalLinkage,
-                                          ConstantPointerNull::get(void_ptr_type),
-                                          name);
-        debug(4) << "Created device module state global variable\n";
-    }
-
-    return module_state;
 }
 
 // Force template instantiation.

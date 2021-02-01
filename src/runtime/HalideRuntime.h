@@ -2,10 +2,16 @@
 #define HALIDE_HALIDERUNTIME_H
 
 #ifndef COMPILING_HALIDE_RUNTIME
+#ifdef __cplusplus
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#else
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#endif
 #else
 #include "runtime_internal.h"
 #endif
@@ -143,9 +149,7 @@ extern int halide_mutex_array_unlock(struct halide_mutex_array *array, int entry
 /** Define halide_do_par_for to replace the default thread pool
  * implementation. halide_shutdown_thread_pool can also be called to
  * release resources used by the default thread pool on platforms
- * where it makes sense. (E.g. On Mac OS, Grand Central Dispatch is
- * used so %Halide does not own the threads backing the pool and they
- * cannot be released.)  See Func::set_custom_do_task and
+ * where it makes sense. See Func::set_custom_do_task and
  * Func::set_custom_do_par_for. Should return zero if all the jobs
  * return zero, or an arbitrarily chosen return value from one of the
  * jobs otherwise.
@@ -397,7 +401,7 @@ extern int32_t halide_debug_to_file(void *user_context, const char *filename,
  * (the bit width is expected to be encoded in a separate value).
  */
 typedef enum halide_type_code_t
-#if __cplusplus >= 201103L
+#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
     : uint8_t
 #endif
 {
@@ -425,7 +429,7 @@ typedef enum halide_type_code_t
  * exactly 32-bits in size. */
 struct halide_type_t {
     /** The basic type code: signed integer, unsigned integer, or floating point. */
-#if __cplusplus >= 201103L
+#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
     HALIDE_ATTRIBUTE_ALIGN(1)
     halide_type_code_t code;  // halide_type_code_t
 #else
@@ -441,7 +445,7 @@ struct halide_type_t {
     HALIDE_ATTRIBUTE_ALIGN(2)
     uint16_t lanes;
 
-#ifdef __cplusplus
+#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
     /** Construct a runtime representation of a Halide type from:
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
@@ -543,11 +547,10 @@ struct halide_trace_event_t {
     /** The length of the coordinates array */
     int32_t dimensions;
 
-#ifdef __cplusplus
+#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
     // If we don't explicitly mark the default ctor as inline,
     // certain build configurations can fail (notably iOS)
-    HALIDE_ALWAYS_INLINE halide_trace_event_t() {
-    }
+    HALIDE_ALWAYS_INLINE halide_trace_event_t() = default;
 #endif
 };
 
@@ -613,11 +616,10 @@ struct halide_trace_packet_t {
     int32_t dimensions;
     // @}
 
-#ifdef __cplusplus
+#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
     // If we don't explicitly mark the default ctor as inline,
     // certain build configurations can fail (notably iOS)
-    HALIDE_ALWAYS_INLINE halide_trace_packet_t() {
-    }
+    HALIDE_ALWAYS_INLINE halide_trace_packet_t() = default;
 
     /** Get the coordinates array, assuming this packet is laid out in
      * memory as it was written. The coordinates array comes
@@ -903,11 +905,20 @@ extern int halide_memoization_cache_lookup(void *user_context, const uint8_t *ca
  *
  * If there is a memory allocation failure, the store does not store
  * the data into the cache.
+ *
+ * If has_eviction_key is true, the entry is marked with eviction_key to
+ * allow removing the key with halide_memoization_cache_evict.
  */
 extern int halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
                                           struct halide_buffer_t *realized_bounds,
                                           int32_t tuple_count,
-                                          struct halide_buffer_t **tuple_buffers);
+                                          struct halide_buffer_t **tuple_buffers,
+                                          bool has_eviction_key, uint64_t eviction_key);
+
+/** Evict all cache entries that were tagged with the given
+ *  eviction_key in the memoize scheduling directive.
+ */
+extern void halide_memoization_cache_evict(void *user_context, uint64_t eviction_key);
 
 /** If halide_memoization_cache_lookup succeeds,
  * halide_memoization_cache_release must be called to signal the
@@ -923,7 +934,7 @@ extern int halide_memoization_cache_store(void *user_context, const uint8_t *cac
  * modifiable host storage.
  *
  * This call is like free and does not have a failure return.
-  */
+ */
 extern void halide_memoization_cache_release(void *user_context, void *host);
 
 /** Free all memory and resources associated with the memoization cache.
@@ -1155,8 +1166,11 @@ enum halide_error_code_t {
     /** The dimensions field of a halide_buffer_t does not match the dimensions of that ImageParam. */
     halide_error_code_bad_dimensions = -43,
 
-    /** An expression that would perform an integer division or modulo
-     * by zero was evaluated. */
+    /** A buffer with the device_dirty flag set was passed to a
+     * pipeline compiled with no device backends enabled, so it
+     * doesn't know how to copy the data back from device memory to
+     * host memory. Either call copy_to_host before calling the Halide
+     * pipeline, or enable the appropriate device backend. */
     halide_error_code_device_dirty_with_no_device_support = -44,
 
 };
@@ -1269,7 +1283,6 @@ typedef enum halide_target_feature_t {
     halide_target_feature_cl_doubles,   ///< Enable double support on OpenCL targets
     halide_target_feature_cl_atomic64,  ///< Enable 64-bit atomics operations on OpenCL targets
 
-    halide_target_feature_opengl,         ///< Enable the OpenGL runtime.
     halide_target_feature_openglcompute,  ///< Enable OpenGL Compute runtime.
 
     halide_target_feature_user_context,  ///< Generated code takes a user_context pointer as first argument
@@ -1285,7 +1298,6 @@ typedef enum halide_target_feature_t {
 
     halide_target_feature_large_buffers,  ///< Enable 64-bit buffer indexing to support buffers > 2GB. Ignored if bits != 64.
 
-    halide_target_feature_hvx_64,                 ///< Enable HVX 64 byte mode.
     halide_target_feature_hvx_128,                ///< Enable HVX 128 byte mode.
     halide_target_feature_hvx_v62,                ///< Enable Hexagon v62 architecture.
     halide_target_feature_fuzz_float_stores,      ///< On every floating point store, set the last bit of the mantissa to zero. Pipelines for which the output is very different with this feature enabled may also produce very different output on different processors.
@@ -1315,12 +1327,14 @@ typedef enum halide_target_feature_t {
     halide_target_feature_wasm_simd128,           ///< Enable +simd128 instructions for WebAssembly codegen.
     halide_target_feature_wasm_signext,           ///< Enable +sign-ext instructions for WebAssembly codegen.
     halide_target_feature_wasm_sat_float_to_int,  ///< Enable saturating (nontrapping) float-to-int instructions for WebAssembly codegen.
+    halide_target_feature_wasm_threads,           ///< Enable the thread pool for WebAssembly codegen. (Also enables +atomics)
+    halide_target_feature_wasm_bulk_memory,       ///< Enable +bulk-memory instructions for WebAssembly codegen.
     halide_target_feature_sve,                    ///< Enable ARM Scalable Vector Extensions
     halide_target_feature_sve2,                   ///< Enable ARM Scalable Vector Extensions v2
     halide_target_feature_egl,                    ///< Force use of EGL support.
-
-    halide_target_feature_arm_dot_prod,  ///< Enable ARMv8.2-a dotprod extension (i.e. udot and sdot instructions)
-    halide_target_feature_end            ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
+    halide_target_feature_arm_dot_prod,           ///< Enable ARMv8.2-a dotprod extension (i.e. udot and sdot instructions)
+    halide_llvm_large_code_model,                 ///< Use the LLVM large code model to compile
+    halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
 /** This function is called internally by Halide in some situations to determine
@@ -1363,15 +1377,13 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
 extern int halide_default_can_use_target_features(int count, const uint64_t *features);
 
 typedef struct halide_dimension_t {
-    int32_t min, extent, stride;
+#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
+    int32_t min = 0, extent = 0, stride = 0;
 
     // Per-dimension flags. None are defined yet (This is reserved for future use).
-    uint32_t flags;
+    uint32_t flags = 0;
 
-#ifdef __cplusplus
-    HALIDE_ALWAYS_INLINE halide_dimension_t()
-        : min(0), extent(0), stride(0), flags(0) {
-    }
+    HALIDE_ALWAYS_INLINE halide_dimension_t() = default;
     HALIDE_ALWAYS_INLINE halide_dimension_t(int32_t m, int32_t e, int32_t s, uint32_t f = 0)
         : min(m), extent(e), stride(s), flags(f) {
     }
@@ -1386,6 +1398,11 @@ typedef struct halide_dimension_t {
     HALIDE_ALWAYS_INLINE bool operator!=(const halide_dimension_t &other) const {
         return !(*this == other);
     }
+#else
+    int32_t min, extent, stride;
+
+    // Per-dimension flags. None are defined yet (This is reserved for future use).
+    uint32_t flags;
 #endif
 } halide_dimension_t;
 
@@ -1429,7 +1446,7 @@ typedef struct halide_buffer_t {
     /** Pads the buffer up to a multiple of 8 bytes */
     void *padding;
 
-#ifdef __cplusplus
+#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
     /** Convenience methods for accessing the flags */
     // @{
     HALIDE_ALWAYS_INLINE bool get_flag(halide_buffer_flags flag) const {
@@ -1512,7 +1529,7 @@ typedef struct halide_buffer_t {
     /** Attempt to call device_sync for the buffer. If the buffer
      * has no device_interface (or no device_sync), this is a quiet no-op.
      * Calling this explicitly should rarely be necessary, except for profiling. */
-    HALIDE_ALWAYS_INLINE int device_sync(void *ctx = NULL) {
+    HALIDE_ALWAYS_INLINE int device_sync(void *ctx = nullptr) {
         if (device_interface && device_interface->device_sync) {
             return device_interface->device_sync(ctx, this);
         }
@@ -1524,7 +1541,7 @@ typedef struct halide_buffer_t {
      * this both adds clarity to code and will facilitate moving to
      * another representation for bounds query arguments. */
     HALIDE_ALWAYS_INLINE bool is_bounds_query() const {
-        return host == NULL && device == 0;
+        return host == nullptr && device == 0;
     }
 
 #endif
@@ -1880,7 +1897,7 @@ extern void halide_register_device_allocation_pool(struct halide_device_allocati
 }  // End extern "C"
 #endif
 
-#ifdef __cplusplus
+#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
 
 namespace {
 template<typename T>
@@ -1954,6 +1971,6 @@ HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int64_t>() {
     return halide_type_t(halide_type_int, 64);
 }
 
-#endif
+#endif  // (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
 
 #endif  // HALIDE_HALIDERUNTIME_H

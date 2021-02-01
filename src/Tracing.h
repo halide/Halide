@@ -10,9 +10,11 @@
 #include <vector>
 
 #include "Expr.h"
-#include "Target.h"
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
 
 class Function;

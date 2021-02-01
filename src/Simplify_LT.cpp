@@ -28,6 +28,7 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
             return const_false(lanes);
         }
 
+        int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::lt(a, b), op->type, ty);
 
         // clang-format off
@@ -52,18 +53,23 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
              // and last lanes are provably < or >= the broadcast
              // we can collapse the comparison.
              (no_overflow(op->type) &&
-              (rewrite(ramp(x, c1) < broadcast(z), true, can_prove(x + fold(max(0, c1 * (lanes - 1))) < z, this)) ||
-               rewrite(ramp(x, c1) < broadcast(z), false, can_prove(x + fold(min(0, c1 * (lanes - 1))) >= z, this)) ||
-               rewrite(broadcast(z) < ramp(x, c1), true, can_prove(z < x + fold(min(0, c1 * (lanes - 1))), this)) ||
-               rewrite(broadcast(z) < ramp(x, c1), false, can_prove(z >= x + fold(max(0, c1 * (lanes - 1))), this)))))) {
+              (rewrite(ramp(x, c1, lanes) < broadcast(z, lanes), true,
+                       can_prove(x + fold(max(0, c1 * (lanes - 1))) < z, this)) ||
+               rewrite(ramp(x, c1, lanes) < broadcast(z, lanes), false,
+                       can_prove(x + fold(min(0, c1 * (lanes - 1))) >= z, this)) ||
+               rewrite(broadcast(z, lanes) < ramp(x, c1, lanes), true,
+                       can_prove(z < x + fold(min(0, c1 * (lanes - 1))), this)) ||
+               rewrite(broadcast(z, lanes) < ramp(x, c1, lanes), false,
+                       can_prove(z >= x + fold(max(0, c1 * (lanes - 1))), this))))
+               )) {
             return rewrite.result;
         }
         // clang-format on
 
         // clang-format off
-        if (rewrite(broadcast(x) < broadcast(y), broadcast(x < y, lanes)) ||
+        if (rewrite(broadcast(x, c0) < broadcast(y, c0), broadcast(x < y, c0)) ||
             (no_overflow(ty) && EVAL_IN_LAMBDA
-             (rewrite(ramp(x, y) < ramp(z, y), broadcast(x < z, lanes)) ||
+             (rewrite(ramp(x, y, c0) < ramp(z, y, c0), broadcast(x < z, c0)) ||
               // Move constants to the RHS
               rewrite(x + c0 < y, x < y + fold(-c0)) ||
 
@@ -270,7 +276,7 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               rewrite(select(y, z, x + c0) < x + c1, !y || (z < x + c1), c0 < c1) ||
 
               // Normalize comparison of ramps to a comparison of a ramp and a broadacst
-              rewrite(ramp(x, y) < ramp(z, w), ramp(x - z, y - w, lanes) < 0))) ||
+              rewrite(ramp(x, y, lanes) < ramp(z, w, lanes), ramp(x - z, y - w, lanes) < 0))) ||
 
             (no_overflow_int(ty) && EVAL_IN_LAMBDA
              (rewrite(x * c0 < y * c1, x < y * fold(c1 / c0), c1 % c0 == 0 && c0 > 0) ||
@@ -399,17 +405,18 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               rewrite(max(x, c0) < max(x, c1) + c2, false, c0 >= c1 + c2 && c2 <= 0) ||
 
               // Comparison of aligned ramps can simplify to a comparison of the base
-              rewrite(ramp(x * c3 + c2, c1) < broadcast(z * c0),
+              rewrite(ramp(x * c3 + c2, c1, lanes) < broadcast(z * c0, lanes),
                       broadcast(x * fold(c3/c0) + fold(c2/c0) < z, lanes),
                       c0 > 0 && (c3 % c0 == 0) &&
                       (c2 % c0) + c1 * (lanes - 1) < c0 &&
                       (c2 % c0) + c1 * (lanes - 1) >= 0) ||
               // c2 = 0
-              rewrite(ramp(x * c3, c1) < broadcast(z * c0),
+              rewrite(ramp(x * c3, c1, lanes) < broadcast(z * c0, lanes),
                       broadcast(x * fold(c3/c0) < z, lanes),
                       c0 > 0 && (c3 % c0 == 0) &&
                       c1 * (lanes - 1) < c0 &&
-                      c1 * (lanes - 1) >= 0)))) {
+                      c1 * (lanes - 1) >= 0)
+              ))) {
             return mutate(rewrite.result, bounds);
         }
         // clang-format on

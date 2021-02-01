@@ -28,8 +28,9 @@ namespace Runtime {
 namespace Internal {
 
 WEAK void annotate_helper(void *uc, const device_copy &c, int d, int64_t off) {
-    while (d >= 0 && c.extent[d] == 1)
+    while (d >= 0 && c.extent[d] == 1) {
         d--;
+    }
 
     if (d == -1) {
         const void *from = (void *)(c.src + off);
@@ -43,8 +44,9 @@ WEAK void annotate_helper(void *uc, const device_copy &c, int d, int64_t off) {
 };
 
 WEAK void check_helper(void *uc, const device_copy &c, int d, int64_t off, const char *buf_name) {
-    while (d >= 0 && c.extent[d] == 1)
+    while (d >= 0 && c.extent[d] == 1) {
         d--;
+    }
 
     if (d == -1) {
         const void *from = (void *)(c.src + off);
@@ -66,7 +68,7 @@ WEAK void check_helper(void *uc, const device_copy &c, int d, int64_t off, const
 // (skipping padding), and sorting into ranges to always mark the smallest number of
 // ranges, in monotonically increasing memory order.
 WEAK int halide_msan_annotate_buffer_is_initialized(void *user_context, halide_buffer_t *b) {
-    if (b == NULL) {
+    if (b == nullptr) {
         return 0;
     }
 
@@ -91,7 +93,7 @@ WEAK void halide_msan_annotate_buffer_is_initialized_as_destructor(void *user_co
 }
 
 WEAK int halide_msan_check_buffer_is_initialized(void *user_context, halide_buffer_t *b, const char *buf_name) {
-    if (b == NULL) {
+    if (b == nullptr) {
         return 0;
     }
 

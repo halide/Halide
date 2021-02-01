@@ -1,10 +1,12 @@
+// Ignore deprecation warnings inside our own runtime
+#define HALIDE_ALLOW_DEPRECATED 1
+
 #include "HalideRuntime.h"
 #include "HalideRuntimeCuda.h"
 #include "HalideRuntimeD3D12Compute.h"
 #include "HalideRuntimeHexagonHost.h"
 #include "HalideRuntimeMetal.h"
 #include "HalideRuntimeOpenCL.h"
-#include "HalideRuntimeOpenGL.h"
 #include "HalideRuntimeOpenGLCompute.h"
 #include "HalideRuntimeQurt.h"
 #include "cpu_features.h"
@@ -105,6 +107,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_malloc,
     (void *)&halide_matlab_call_pipeline,
     (void *)&halide_memoization_cache_cleanup,
+    (void *)&halide_memoization_cache_evict,
     (void *)&halide_memoization_cache_lookup,
     (void *)&halide_memoization_cache_release,
     (void *)&halide_memoization_cache_set_size,
@@ -136,22 +139,16 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_opencl_get_device_type,
     (void *)&halide_opencl_get_platform_name,
     (void *)&halide_opencl_get_crop_offset,
+    (void *)&halide_opencl_image_device_interface,
+    (void *)&halide_opencl_image_wrap_cl_mem,
     (void *)&halide_opencl_initialize_kernels,
     (void *)&halide_opencl_run,
     (void *)&halide_opencl_set_build_options,
     (void *)&halide_opencl_set_device_type,
     (void *)&halide_opencl_set_platform_name,
     (void *)&halide_opencl_wrap_cl_mem,
-    (void *)&halide_opengl_context_lost,
     (void *)&halide_opengl_create_context,
-    (void *)&halide_opengl_detach_texture,
-    (void *)&halide_opengl_device_interface,
     (void *)&halide_opengl_get_proc_address,
-    (void *)&halide_opengl_get_texture,
-    (void *)&halide_opengl_initialize_kernels,
-    (void *)&halide_opengl_run,
-    (void *)&halide_opengl_wrap_render_target,
-    (void *)&halide_opengl_wrap_texture,
     (void *)&halide_openglcompute_device_interface,
     (void *)&halide_openglcompute_initialize_kernels,
     (void *)&halide_openglcompute_run,

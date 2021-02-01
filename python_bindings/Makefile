@@ -38,8 +38,10 @@ OPTIMIZE ?= -O3
 # defining DEBUG + undefining NDEBUG gives extra debug info in PyBind11
 # OPTIMIZE ?= -g -DDEBUG=1 -UNDEBUG
 
-# Compiling with -fvisibility=hidden saves ~80k on optimized x64 builds
-CCFLAGS=$(shell $(PYTHON)-config --cflags) $(PYBIND11_CFLAGS) -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) -std=c++11 $(FPIC) -fvisibility=hidden -fvisibility-inlines-hidden $(OPTIMIZE) $(CXXFLAGS)
+# Compiling with -fvisibility=hidden saves ~80k on optimized x64 builds.
+# It's critical to include -fno-omit-frame-pointer, otherwise introspection can
+# break in amusing ways.
+CCFLAGS=$(shell $(PYTHON)-config --cflags) $(PYBIND11_CFLAGS) -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) -std=c++11 $(FPIC) -fvisibility=hidden -fvisibility-inlines-hidden -fno-omit-frame-pointer $(OPTIMIZE) $(CXXFLAGS)
 # Filter out a pointless warning present in some Python installs
 CCFLAGS := $(filter-out -Wstrict-prototypes,$(CCFLAGS))
 

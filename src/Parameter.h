@@ -18,6 +18,7 @@ template<typename T>
 class Buffer;
 struct Expr;
 struct Type;
+enum class MemoryType;
 
 namespace Internal {
 
@@ -157,6 +158,9 @@ public:
 
     /** Get the ArgumentEstimates appropriate for this Parameter. */
     ArgumentEstimates get_argument_estimates() const;
+
+    void store_in(MemoryType memory_type);
+    MemoryType memory_type() const;
 };
 
 /** Validate arguments to a call to a func, image or imageparam. */

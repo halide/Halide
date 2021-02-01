@@ -37,12 +37,12 @@ struct dma_device_handle {
 // is active in DMA process.
 inline dma_device_handle *malloc_device_handle() {
     dma_device_handle *dev = (dma_device_handle *)malloc(sizeof(dma_device_handle));
-    dev->buffer = 0;
+    dev->buffer = nullptr;
     dev->offset_rdx = 0;
     dev->offset_rdy = 0;
     dev->offset_wrx = 0;
     dev->offset_wry = 0;
-    dev->dma_engine = 0;
+    dev->dma_engine = nullptr;
     dev->frame_width = 0;
     dev->frame_height = 0;
     dev->frame_stride = 0;
@@ -61,7 +61,7 @@ typedef struct desc_pool {
 
 typedef desc_pool_t *pdesc_pool;
 
-WEAK pdesc_pool dma_desc_pool = NULL;
+WEAK pdesc_pool dma_desc_pool = nullptr;
 WEAK halide_mutex hexagon_desc_mutex;
 
 }  // namespace HexagonDma
@@ -79,9 +79,9 @@ namespace {
 void *desc_pool_get(void *user_context) {
     ScopedMutexLock lock(&hexagon_desc_mutex);
     pdesc_pool temp = dma_desc_pool;
-    pdesc_pool prev = NULL;
+    pdesc_pool prev = nullptr;
     // Walk the list
-    while (temp != NULL) {
+    while (temp != nullptr) {
         if (!temp->used) {
             temp->used = true;
             return (void *)temp->descriptor;
@@ -92,34 +92,34 @@ void *desc_pool_get(void *user_context) {
     // If we are still here that means temp was null.
     // We have to allocate two descriptors here, to lock a full cache line
     temp = (pdesc_pool)malloc(sizeof(desc_pool_t));
-    if (temp == NULL) {
+    if (temp == nullptr) {
         error(user_context) << "Hexagon: Out of memory (malloc failed for DMA descriptor pool)\n";
-        return NULL;
+        return nullptr;
     }
-    uint8_t *desc = (uint8_t *)HAP_cache_lock(sizeof(char) * descriptor_size * 2, NULL);
-    if (desc == NULL) {
+    uint8_t *desc = (uint8_t *)HAP_cache_lock(sizeof(char) * descriptor_size * 2, nullptr);
+    if (desc == nullptr) {
         free(temp);
         error(user_context) << "Hexagon: Out of memory (HAP_cache_lock failed for descriptor)\n";
-        return NULL;
+        return nullptr;
     }
     temp->descriptor = (void *)desc;
     temp->used = true;
 
     // Now allocate the second element in list
     temp->next = (pdesc_pool)malloc(sizeof(desc_pool_t));
-    if (temp->next != NULL) {
+    if (temp->next != nullptr) {
         (temp->next)->descriptor = (void *)(desc + descriptor_size);
         (temp->next)->used = false;
-        (temp->next)->next = NULL;
+        (temp->next)->next = nullptr;
     } else {
         // no need to throw error since we allocate two descriptor at a time
         // but only use one
         debug(user_context) << "Hexagon: malloc failed\n";
     }
 
-    if (prev != NULL) {
+    if (prev != nullptr) {
         prev->next = temp;
-    } else if (dma_desc_pool == NULL) {
+    } else if (dma_desc_pool == nullptr) {
         dma_desc_pool = temp;
     }
     return (void *)temp->descriptor;
@@ -129,7 +129,7 @@ void desc_pool_put(void *user_context, void *desc) {
     ScopedMutexLock lock(&hexagon_desc_mutex);
     halide_assert(user_context, desc);
     pdesc_pool temp = dma_desc_pool;
-    while (temp != NULL) {
+    while (temp != nullptr) {
         if (temp->descriptor == desc) {
             temp->used = false;
             return;
@@ -143,22 +143,22 @@ void desc_pool_put(void *user_context, void *desc) {
 void desc_pool_free(void *user_context) {
     ScopedMutexLock lock(&hexagon_desc_mutex);
     pdesc_pool temp = dma_desc_pool;
-    while (temp != NULL) {
+    while (temp != nullptr) {
         pdesc_pool temp2 = temp;
         temp = temp->next;
-        if (temp2->descriptor != NULL) {
+        if (temp2->descriptor != nullptr) {
             HAP_cache_unlock(temp2->descriptor);
         }
         free(temp2);
         temp2 = temp;
-        if (temp != NULL) {
+        if (temp != nullptr) {
             temp = temp->next;
             free(temp2);
         }
     }
 
     // Mark pool is empty, to avoid re-freeing
-    dma_desc_pool = NULL;
+    dma_desc_pool = nullptr;
 }
 
 // User ptovided Image format to DMA format conversion.
@@ -202,7 +202,7 @@ inline t_eDmaFmt halide_hexagon_get_dma_format(void *user_context, const halide_
 int halide_hexagon_dma_wrapper(void *user_context, struct halide_buffer_t *src,
                                struct halide_buffer_t *dst) {
 
-    dma_device_handle *dev = NULL;
+    dma_device_handle *dev = nullptr;
     dev = (dma_device_handle *)src->device;
 
     debug(user_context)
@@ -253,15 +253,16 @@ int halide_hexagon_dma_wrapper(void *user_context, struct halide_buffer_t *src,
         << "Hexagon: Recommended ROI(w: " << roi_width << " h: " << roi_height << " s: " << roi_stride << ")\n";
 
     // account for folding, where the dim[1].stride reflects the fold_storage stride
-    if (dst->dim[1].stride > roi_stride)
+    if (dst->dim[1].stride > roi_stride) {
         roi_stride = dst->dim[1].stride;
+    }
 
     // Assert if destination stride is a multipe of recommended stride
     halide_assert(user_context, ((dst->dim[1].stride % roi_stride) == 0));
 
-    // Return NULL if descriptor is not allocated
+    // Return nullptr if descriptor is not allocated
     void *desc_addr = desc_pool_get(user_context);
-    if (desc_addr == NULL) {
+    if (desc_addr == nullptr) {
         debug(user_context) << "Hexagon: DMA descriptor allocation error\n";
         return halide_error_code_device_buffer_copy_failed;
     }
@@ -493,7 +494,7 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
                                         const struct halide_device_interface_t *dst_device_interface,
                                         struct halide_buffer_t *dst) {
 
-    halide_assert(user_context, dst_device_interface == NULL ||
+    halide_assert(user_context, dst_device_interface == nullptr ||
                                     dst_device_interface == &hexagon_dma_device_interface);
 
     if (src->device_dirty() &&
@@ -502,7 +503,7 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
         // If the source is not hexagon_dma or host memory, ask the source
         // device interface to copy to dst host memory first.
         debug(user_context) << "Hexagon: src->device_interface != &hexagon_dma_device_interface\n";
-        int err = src->device_interface->impl->buffer_copy(user_context, src, NULL, dst);
+        int err = src->device_interface->impl->buffer_copy(user_context, src, nullptr, dst);
         if (err) {
             error(user_context) << "Hexagon: halide_hexagon_dma_buffer_copy (not DMA) failed: " << err << "\n";
             return err;
@@ -511,7 +512,7 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
         src = dst;
     }
 
-    bool from_host = !src->device_dirty() && src->host != NULL;
+    bool from_host = !src->device_dirty() && src->host != nullptr;
     bool to_host = !dst_device_interface;
 
     halide_assert(user_context, from_host || src->device);
@@ -631,7 +632,7 @@ WEAK int halide_hexagon_dma_device_wrap_native(void *user_context, struct halide
     dma_device_handle *dev = malloc_device_handle();
     halide_assert(user_context, dev);
     dev->buffer = reinterpret_cast<uint8_t *>(handle);
-    dev->dma_engine = 0;
+    dev->dma_engine = nullptr;
     dev->frame_width = buf->dim[0].extent * buf->dim[0].stride;
     dev->frame_height = buf->dim[1].extent;
     dev->frame_stride = buf->dim[1].stride;
@@ -654,7 +655,7 @@ WEAK int halide_hexagon_dma_device_detach_native(void *user_context, struct hali
     free(dev);
     buf->device_interface->impl->release_module();
     buf->device = 0;
-    buf->device_interface = NULL;
+    buf->device_interface = nullptr;
 
     return halide_error_code_success;
 }
@@ -751,7 +752,7 @@ WEAK halide_device_interface_t hexagon_dma_device_interface = {
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
-    NULL,
+    nullptr,
     &hexagon_dma_device_interface_impl};
 
 }  // namespace HexagonDma

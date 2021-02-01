@@ -33,16 +33,15 @@ cmake_minimum_required(VERSION 3.16)
 # IMPORTED_NO_SONAME(_<CONFIG>) # shared-only
 # IMPORTED_SONAME(_<CONFIG>) # shared-only
 
-function(bundle_static)
+function(bundle_static TARGET)
     set(options)
-    set(oneValueArgs TARGET)
+    set(oneValueArgs)
     set(multiValueArgs LIBRARIES)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-    set(interfaceLib ${ARG_TARGET})
-    set(objectLib ${ARG_TARGET}.obj)
+    set(interfaceLib ${TARGET})
+    set(objectLib ${interfaceLib}.obj)
 
-    add_library(${interfaceLib} INTERFACE)
     add_library(${objectLib} OBJECT IMPORTED)
     set_target_properties(${objectLib} PROPERTIES IMPORTED_GLOBAL TRUE)
 

@@ -1,12 +1,18 @@
 #ifndef HALIDE_PYTHON_EXTENSION_GEN_H_
 #define HALIDE_PYTHON_EXTENSION_GEN_H_
 
-#include "Module.h"
-#include "Target.h"
+#include <iostream>
 #include <string>
+#include <vector>
 
 namespace Halide {
+
+class Module;
+
 namespace Internal {
+
+struct LoweredArgument;
+struct LoweredFunc;
 
 class PythonExtensionGen {
 public:

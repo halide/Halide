@@ -17,7 +17,7 @@ if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
 endif ()
 
 if (WITH_WABT)
-    set(WABT_VER 1.0.18)
+    set(WABT_VER 1.0.20)
 
     message(STATUS "Fetching WABT ${WABT_VER}...")
     FetchContent_Declare(wabt
@@ -35,10 +35,17 @@ if (WITH_WABT)
 
     set_target_properties(wabt PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+    # Disable this very-noisy warning in GCC
+    target_compile_options(wabt
+                           PRIVATE
+                           $<$<CXX_COMPILER_ID:GNU>:-Wno-alloca-larger-than>)
+
     # TODO: we want to require unique prefixes to include these files, to avoid ambiguity;
     # this means we have to prefix with "wabt-src/...", which is less bad than other alternatives,
     # but perhaps we could do better (esp. if wabt was smarter about what it exposed?)
-    target_include_directories(wabt INTERFACE
+    add_library(wabt-obj INTERFACE)
+    target_sources(wabt-obj INTERFACE $<BUILD_INTERFACE:$<TARGET_OBJECTS:wabt>>)
+    target_include_directories(wabt-obj INTERFACE
                                $<BUILD_INTERFACE:${wabt_SOURCE_DIR}>
                                $<BUILD_INTERFACE:${wabt_BINARY_DIR}>
                                $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/_deps>)
@@ -62,7 +69,7 @@ if (WITH_WASM_SHELL)
     # We want to deliberately choose a stable version (rather than top-of-tree);
     # this might be a canary version (if needed to get the updates to v8 that we need)
     # but should be carefully tested before landing.
-    set(WASM_SHELL_VERSION 8.6.325)
+    set(WASM_SHELL_VERSION 8.8.97)
     set(WASM_SHELL_URL "https://storage.googleapis.com/chromium-v8/official/canary/v8-${WASM_SHELL_PLATFORM}-rel-${WASM_SHELL_VERSION}.zip")
     message(STATUS "Fetching WASM_SHELL ${WASM_SHELL_URL}...")
     FetchContent_Declare(wasm_shell URL "${WASM_SHELL_URL}")
@@ -120,6 +127,7 @@ function(add_wasm_executable TARGET)
         -Wsuggest-override
         -s ASSERTIONS=1
         -s ALLOW_MEMORY_GROWTH=1
+        -s WASM_BIGINT=1
         -s STANDALONE_WASM=1
         -s ENVIRONMENT=shell)
 
@@ -165,6 +173,9 @@ function(add_wasm_halide_test TARGET)
     set(WASM_SHELL_FLAGS)
     if (Halide_TARGET MATCHES "wasm_simd128")
         list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-simd")
+    endif ()
+    if (Halide_TARGET MATCHES "wasm_threads")
+        list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-threads")
     endif ()
 
     add_halide_test("${TARGET}"

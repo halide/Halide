@@ -13,7 +13,7 @@ $(BIN)/%/pytorch_weights/ok:
 
 $(GENERATOR_BIN)/resnet50.generator: Resnet50Generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS) 
+	$(CXX) $(CXXFLAGS) -g -fno-rtti $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 $(BIN)/%/resnet50.a: $(GENERATOR_BIN)/resnet50.generator
 	@mkdir -p $(@D)
@@ -21,7 +21,7 @@ $(BIN)/%/resnet50.a: $(GENERATOR_BIN)/resnet50.generator
 
 $(BIN)/%/process: process.cpp $(BIN)/%/resnet50.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 
 benchmark_and_validate: $(BIN)/$(HL_TARGET)/process $(BIN)/$(HL_TARGET)/pytorch_weights/ok
 	$< 10 $* $(BIN)/$(HL_TARGET)/pytorch_weights/ $(SEED) $(BIN)/$(HL_TARGET)/res50gen_output.bin

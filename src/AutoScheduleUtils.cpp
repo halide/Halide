@@ -2,6 +2,7 @@
 
 #include "AutoScheduleUtils.h"
 #include "IREquality.h"
+#include "IRMutator.h"
 #include "ImageParam.h"
 #include "Inline.h"
 #include "Param.h"
@@ -49,12 +50,16 @@ class SubstituteVarEstimates : public IRMutator {
 }  // anonymous namespace
 
 Expr substitute_var_estimates(Expr e) {
-    if (!e.defined()) return e;
+    if (!e.defined()) {
+        return e;
+    }
     return simplify(SubstituteVarEstimates().mutate(e));
 }
 
 Stmt substitute_var_estimates(Stmt s) {
-    if (!s.defined()) return s;
+    if (!s.defined()) {
+        return s;
+    }
     return simplify(SubstituteVarEstimates().mutate(s));
 }
 
@@ -79,7 +84,7 @@ Expr box_size(const Box &b) {
         Expr extent = get_extent(b[i]);
         if (extent.defined() && size.defined()) {
             size *= extent;
-        } else if (is_zero(extent)) {
+        } else if (is_const_zero(extent)) {
             return make_zero(Int(64));
         } else {
             return Expr();

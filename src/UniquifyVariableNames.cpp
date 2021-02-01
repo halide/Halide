@@ -2,6 +2,7 @@
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Scope.h"
 #include "Var.h"
 #include <sstream>
@@ -9,9 +10,7 @@
 namespace Halide {
 namespace Internal {
 
-using std::map;
 using std::pair;
-using std::set;
 using std::string;
 using std::vector;
 

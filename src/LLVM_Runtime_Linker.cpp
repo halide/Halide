@@ -1,5 +1,7 @@
 #include "LLVM_Runtime_Linker.h"
+#include "Error.h"
 #include "LLVM_Headers.h"
+#include "Target.h"
 
 namespace Halide {
 
@@ -24,8 +26,6 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
 
     return result;
 }
-
-}  // namespace
 
 #define DECLARE_INITMOD(mod)                                                              \
     extern "C" unsigned char halide_internal_initmod_##mod[];                             \
@@ -105,7 +105,6 @@ DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(msan)
 DECLARE_CPP_INITMOD(msan_stubs)
 DECLARE_CPP_INITMOD(opencl)
-DECLARE_CPP_INITMOD(opengl)
 DECLARE_CPP_INITMOD(openglcompute)
 DECLARE_CPP_INITMOD(opengl_egl_context)
 DECLARE_CPP_INITMOD(opengl_glx_context)
@@ -114,7 +113,6 @@ DECLARE_CPP_INITMOD(osx_get_symbol)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
 DECLARE_CPP_INITMOD(osx_opengl_context)
 DECLARE_CPP_INITMOD(osx_yield)
-DECLARE_CPP_INITMOD(posix_abort)
 DECLARE_CPP_INITMOD(posix_allocator)
 DECLARE_CPP_INITMOD(posix_clock)
 DECLARE_CPP_INITMOD(posix_error_handler)
@@ -144,7 +142,6 @@ DECLARE_CPP_INITMOD(tracing)
 DECLARE_CPP_INITMOD(windows_clock)
 DECLARE_CPP_INITMOD(windows_cuda)
 DECLARE_CPP_INITMOD(windows_get_symbol)
-DECLARE_CPP_INITMOD(windows_abort)
 DECLARE_CPP_INITMOD(windows_io)
 DECLARE_CPP_INITMOD(windows_opencl)
 DECLARE_CPP_INITMOD(windows_profiler)
@@ -203,8 +200,10 @@ DECLARE_LL_INITMOD(ptx_compute_35)
 
 #ifdef WITH_D3D12
 DECLARE_CPP_INITMOD(windows_d3d12compute_x86)
+DECLARE_CPP_INITMOD(windows_d3d12compute_arm)
 #else
 DECLARE_NO_INITMOD(windows_d3d12compute_x86)
+DECLARE_NO_INITMOD(windows_d3d12compute_arm)
 #endif
 
 #ifdef WITH_X86
@@ -238,11 +237,9 @@ DECLARE_NO_INITMOD(powerpc_cpu_features)
 #endif  // WITH_POWERPC
 
 #ifdef WITH_HEXAGON
-DECLARE_LL_INITMOD(hvx_64)
 DECLARE_LL_INITMOD(hvx_128)
 DECLARE_CPP_INITMOD(hexagon_cpu_features)
 #else
-DECLARE_NO_INITMOD(hvx_64)
 DECLARE_NO_INITMOD(hvx_128)
 DECLARE_NO_INITMOD(hexagon_cpu_features)
 #endif  // WITH_HEXAGON
@@ -263,74 +260,32 @@ DECLARE_CPP_INITMOD(riscv_cpu_features)
 DECLARE_NO_INITMOD(riscv_cpu_features)
 #endif  // WITH_RISCV
 
-namespace {
-
 llvm::DataLayout get_data_layout_for_target(Target target) {
     if (target.arch == Target::X86) {
         if (target.bits == 32) {
             if (target.os == Target::OSX) {
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:128-n8:16:32-S128");
-#else
-                return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-f80:128-n8:16:32-S128");
-#endif
             } else if (target.os == Target::IOS) {
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:o-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:128-n8:16:32-S128");
-#else
-                return llvm::DataLayout("e-m:o-p:32:32-f64:32:64-f80:128-n8:16:32-S128");
-#endif
             } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:x-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:32-n8:16:32-a:0:32-S32");
-#else
-                return llvm::DataLayout("e-m:x-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
-#endif
             } else if (target.os == Target::Windows) {
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:32-n8:16:32-a:0:32-S32");
-#else
-                return llvm::DataLayout("e-m:e-p:32:32-i64:64-f80:32-n8:16:32-a:0:32-S32");
-#endif
             } else {
                 // Linux/Android
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:32-n8:16:32-S128");
-#else
-                return llvm::DataLayout("e-m:e-p:32:32-f64:32:64-f80:32-n8:16:32-S128");
-#endif
             }
         } else {  // 64-bit
             if (target.os == Target::OSX) {
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
-#else
-                return llvm::DataLayout("e-m:o-i64:64-f80:128-n8:16:32:64-S128");
-#endif
             } else if (target.os == Target::IOS) {
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
-#else
-                return llvm::DataLayout("e-m:o-i64:64-f80:128-n8:16:32:64-S128");
-#endif
             } else if (target.os == Target::Windows && !target.has_feature(Target::JIT)) {
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
-#else
-                return llvm::DataLayout("e-m:w-i64:64-f80:128-n8:16:32:64-S128");
-#endif
             } else if (target.os == Target::Windows) {
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
-#else
-                return llvm::DataLayout("e-m:e-i64:64-f80:128-n8:16:32:64-S128");
-#endif
             } else {
-#if LLVM_VERSION >= 100
                 return llvm::DataLayout("e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128");
-#else
-                return llvm::DataLayout("e-m:e-i64:64-f80:128-n8:16:32:64-S128");
-#endif
             }
         }
     } else if (target.arch == Target::ARM) {
@@ -604,6 +559,25 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     const std::set<string> retain = {"__stack_chk_guard",
                                      "__stack_chk_fail"};
 
+    // COMDAT is not supported in MachO object files, hence it does
+    // not work on Mac OS or iOS. These sometimes show up in the
+    // runtime since we compile for an abstract target that is based
+    // on ELF. This code removes all Comdat items and leaves the
+    // symbols they were attached to as regular definitions, which
+    // only works if there is a single instance, which is generally
+    // the case for the runtime. Presumably if this isn't true,
+    // linking the module will fail.
+    //
+    // Comdats are left in for other platforms as they are required
+    // for certain things on Windows and they are useful in general in
+    // ELF based formats.
+    if (t.os == Target::IOS || t.os == Target::OSX) {
+        for (auto &global_obj : modules[0]->global_objects()) {
+            global_obj.setComdat(nullptr);
+        }
+        modules[0]->getComdatSymbolTable().clear();
+    }
+
     // Enumerate the global variables.
     for (auto &gv : modules[0]->globals()) {
         // No variables are part of the public interface (even the ones labelled halide_)
@@ -765,7 +739,6 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
     modules.push_back(get_initmod_metadata(c, bits_64, debug));
     modules.push_back(get_initmod_float16_t(c, bits_64, debug));
     modules.push_back(get_initmod_errors(c, bits_64, debug));
-    modules.push_back(get_initmod_posix_abort(c, bits_64, debug));
     modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));
 
     // We don't want anything marked as weak for the wasm-jit runtime,
@@ -812,13 +785,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
 
     if (module_type != ModuleGPU) {
         if (module_type != ModuleJITInlined && module_type != ModuleAOTNoRuntime) {
-            // Windows has a unique abort, but everyone else uses POSIX
-            if (t.os == Target::Windows) {
-                modules.push_back(get_initmod_windows_abort(c, bits_64, debug));
-            } else {
-                modules.push_back(get_initmod_posix_abort(c, bits_64, debug));
-            }
-
             // OS-dependent modules
             if (t.os == Target::Linux) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
@@ -846,7 +812,11 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_yield(c, bits_64, debug));
-                modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+                if (t.has_feature(Target::WasmThreads)) {
+                    modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+                }
                 modules.push_back(get_initmod_fake_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::OSX) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
@@ -979,8 +949,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_to_string(c, bits_64, debug));
 
             if (t.arch == Target::Hexagon ||
-                t.has_feature(Target::HVX_64) ||
-                t.has_feature(Target::HVX_128)) {
+                t.has_feature(Target::HVX)) {
                 modules.push_back(get_initmod_alignment_128(c, bits_64, debug));
             } else if (t.arch == Target::X86) {
                 // AVX-512 requires 64-byte alignment. Could only increase alignment
@@ -1042,11 +1011,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.arch == Target::Hexagon) {
                 modules.push_back(get_initmod_qurt_hvx(c, bits_64, debug));
-                if (t.has_feature(Target::HVX_64)) {
-                    modules.push_back(get_initmod_hvx_64_ll(c));
-                } else if (t.has_feature(Target::HVX_128)) {
-                    modules.push_back(get_initmod_hvx_128_ll(c));
-                }
+                modules.push_back(get_initmod_hvx_128_ll(c));
                 if (t.features_any_of({Target::HVX_v65, Target::HVX_v66})) {
                     modules.push_back(get_initmod_qurt_hvx_vtcm(c, bits_64,
                                                                 debug));
@@ -1125,22 +1090,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_opencl(c, bits_64, debug));
             }
         }
-        if (t.has_feature(Target::OpenGL)) {
-            modules.push_back(get_initmod_opengl(c, bits_64, debug));
-            if (t.os == Target::Linux) {
-                if (t.has_feature(Target::EGL)) {
-                    modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
-                } else {
-                    modules.push_back(get_initmod_opengl_glx_context(c, bits_64, debug));
-                }
-            } else if (t.os == Target::OSX) {
-                modules.push_back(get_initmod_osx_opengl_context(c, bits_64, debug));
-            } else if (t.os == Target::Android) {
-                modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
-            } else {
-                // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
-            }
-        }
         if (t.has_feature(Target::OpenGLCompute)) {
             modules.push_back(get_initmod_openglcompute(c, bits_64, debug));
             if (t.os == Target::Android) {
@@ -1171,9 +1120,15 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         if (t.has_feature(Target::D3D12Compute)) {
             user_assert(bits_64) << "D3D12Compute target only available on 64-bit targets for now.\n";
             user_assert(t.os == Target::Windows) << "D3D12Compute target only available on Windows targets.\n";
-            modules.push_back(get_initmod_windows_d3d12compute_x86(c, bits_64, debug));
+            if (t.arch == Target::X86) {
+                modules.push_back(get_initmod_windows_d3d12compute_x86(c, bits_64, debug));
+            } else if (t.arch == Target::ARM) {
+                modules.push_back(get_initmod_windows_d3d12compute_arm(c, bits_64, debug));
+            } else {
+                user_error << "Direct3D 12 can only be used on ARM or X86 architectures.\n";
+            }
         }
-        if (t.arch != Target::Hexagon && t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
             modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));
             modules.push_back(get_initmod_hexagon_host(c, bits_64, debug));
         }

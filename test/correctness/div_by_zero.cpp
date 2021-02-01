@@ -17,17 +17,17 @@ void test() {
     Expr x = Variable::make(t, unique_name('t'));
 
     Expr test = simplify(x / zero == zero);
-    _halide_user_assert(is_one(test)) << test << "\n";
+    _halide_user_assert(is_const_one(test)) << test << "\n";
     test = simplify(x % zero == zero);
-    _halide_user_assert(is_one(test)) << test << "\n";
+    _halide_user_assert(is_const_one(test)) << test << "\n";
 
     if (t.is_int() && t.bits() < 32) {
         test = simplify(t.min() / cast<T>(-1) == t.min());
-        _halide_user_assert(is_one(test)) << simplify(t.min() / cast<T>(-1)) << " vs " << t.min() << "\n";
+        _halide_user_assert(is_const_one(test)) << simplify(t.min() / cast<T>(-1)) << " vs " << t.min() << "\n";
         // Given the above decision, the following is required for
         // the Euclidean identity to hold:
         test = simplify(t.min() % cast<T>(-1) == zero);
-        _halide_user_assert(is_one(test)) << test << "\n";
+        _halide_user_assert(is_const_one(test)) << test << "\n";
     }
 
     // Now check that codegen does the right thing:

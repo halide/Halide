@@ -31,6 +31,7 @@ using std::string;
 using std::vector;
 
 namespace {
+
 // A structure representing a containing LetStmt, IfThenElse, or For
 // loop. Used in build_provide_loop_nest below. Both If and IfInner represent
 // IfThenElse stmts, however, IfInner should not be reordered to outside of
@@ -56,8 +57,6 @@ bool var_name_match(const string &v1, const string &v2) {
             Internal::ends_with(v1, "." + v2) ||
             Internal::ends_with(v2, "." + v1));
 }
-
-}  // anonymous namespace
 
 class ContainsImpureCall : public IRVisitor {
     using IRVisitor::visit;
@@ -192,9 +191,7 @@ Stmt build_loop_nest(
     for (Expr pred : predicates) {
         pred = qualify(prefix, pred);
         // Add a likely qualifier if there isn't already one
-        const Call *c = pred.as<Call>();
-        if (!(c && (c->is_intrinsic(Call::likely) ||
-                    c->is_intrinsic(Call::likely_if_innermost)))) {
+        if (Call::as_intrinsic(pred, {Call::likely, Call::likely_if_innermost})) {
             pred = likely(pred);
         }
         pred_container.emplace_back(Container::If, 0, "", pred);
@@ -372,7 +369,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     Stmt body = Provide::make(func.name(), values, site);
     if (def.schedule().atomic()) {  // Add atomic node.
         bool any_unordered_parallel = false;
-        for (auto d : def.schedule().dims()) {
+        for (const auto &d : def.schedule().dims()) {
             any_unordered_parallel |= is_unordered_parallel(d.for_type);
         }
         if (any_unordered_parallel) {
@@ -764,7 +761,9 @@ class IsUsedInStmt : public IRVisitor {
 
     void visit(const Call *op) override {
         IRVisitor::visit(op);
-        if (op->name == func) result = true;
+        if (op->name == func) {
+            result = true;
+        }
     }
 
     // A reference to the function's buffers counts as a use
@@ -930,7 +929,7 @@ private:
 
             ForType for_type = op->for_type;
             DeviceAPI device_api = op->device_api;
-            if (is_one(extent_val)) {
+            if (is_const_one(extent_val)) {
                 // This is the child loop of a fused group. The real loop of the
                 // fused group is the loop of the parent function of the fused
                 // group. This child loop is just a scheduling point, and should
@@ -1056,9 +1055,8 @@ protected:
         vector<pair<string, Expr>> containers;
         while (1) {
             if (const LetStmt *l = body.as<LetStmt>()) {
-                const Call *call = l->value.as<Call>();
-                if (!(call && call->is_intrinsic(Call::promise_clamped)) &&
-                    !is_pure(l->value)) {
+                const Call *promise_clamped = Call::as_intrinsic(l->value, {Call::promise_clamped});
+                if (!promise_clamped && !is_pure(l->value)) {
                     // The consumer of the Func we're injecting may be an
                     // extern stage, which shows up in the IR as a let
                     // stmt with a side-effecty RHS. We need to take care
@@ -2260,7 +2258,7 @@ class RemoveLoopsOverOutermost : public IRMutator {
 
     Stmt visit(const For *op) override {
         if (ends_with(op->name, ".__outermost") &&
-            is_one(simplify(op->extent)) &&
+            is_const_one(simplify(op->extent)) &&
             op->device_api == DeviceAPI::None) {
             return mutate(substitute(op->name, op->min, op->body));
         } else {
@@ -2285,6 +2283,8 @@ bool group_should_be_inlined(const vector<Function> &funcs) {
             funcs[0].can_be_inlined() &&
             funcs[0].schedule().compute_level().is_inlined());
 }
+
+}  // namespace
 
 std::ostream &operator<<(std::ostream &out, const std::vector<Function> &v) {
     out << "{ ";

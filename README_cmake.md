@@ -308,6 +308,27 @@ If you omit `-G Ninja`, a Makefile-based generator will likely be used instead.
 In either case, [`CMAKE_BUILD_TYPE`][cmake_build_type] must be set to one of the
 standard types: `Debug`, `RelWithDebInfo`, `MinSizeRel`, or `Release`.
 
+### CMake Presets
+
+If you are using CMake 3.19+, we provide several [presets][cmake_presets] to
+make the above commands more convenient. The following CMake preset commands
+correspond to the longer ones above.
+
+```
+> cmake --preset=msvc-release  # Ninja generator, MSVC compiler, Release build
+> cmake --preset=win64         # VS 2019 generator, 64-bit build
+> cmake --preset=win32         # VS 2019 generator, 32-bit build
+$ cmake --preset=gcc-release   # Ninja generator, GCC compiler, Release build
+
+$ cmake --list-presets         # Get full list of presets.
+```
+
+The Windows and MSVC presets assume that the environment variable `VCPKG_ROOT`
+is set and points to the root of the vcpkg installation.
+
+Note that the GCC presets do not define `NDEBUG` in release configurations,
+departing from the usual CMake behavior.
+
 ## Installing
 
 Once built, Halide will need to be installed somewhere before using it in a
@@ -342,6 +363,7 @@ compiled.
 | `Halide_BUNDLE_LLVM`                     | `OFF`                 | When building Halide as a static library, unpack the LLVM static libraries and add those objects to libHalide.a. |
 | `Halide_SHARED_LLVM`                     | `OFF`                 | Link to the shared version of LLVM. Not available on Windows.                                                    |
 | `Halide_ENABLE_RTTI`                     | _inherited from LLVM_ | Enable RTTI when building Halide. Recommended to be set to `ON`                                                  |
+| `Halide_CLANG_TIDY_BUILD`                | `OFF`                 | Used internally to generate fake compile jobs for runtime files when running clang-tidy.                         |
 | `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                                           |
 | `Halide_USE_CODEMODEL_LARGE`             | `OFF`                 | Use the Large LLVM codemodel                                                                                     |
 | `Halide_TARGET`                          | _empty_               | The default target triple to use for `add_halide_library` (and the generator tests, by extension)                |
@@ -370,7 +392,6 @@ apply when `WITH_TESTS=ON`:
 | `WITH_TEST_ERROR`         | `ON`    | enable the expected-error tests   |
 | `WITH_TEST_WARNING`       | `ON`    | enable the expected-warning tests |
 | `WITH_TEST_PERFORMANCE`   | `ON`    | enable performance testing        |
-| `WITH_TEST_OPENGL`        | `OFF`   | enable the OpenGL tests           |
 | `WITH_TEST_GENERATOR`     | `ON`    | enable the AOT generator tests    |
 
 The following options enable/disable various LLVM backends (they correspond to
@@ -394,7 +415,6 @@ The following options enable/disable various Halide-specific backends:
 | Option                | Default | Description                            |
 | --------------------- | ------- | -------------------------------------- |
 | `TARGET_OPENCL`       | `ON`    | Enable the OpenCL-C backend            |
-| `TARGET_OPENGL`       | `ON`    | Enable the OpenGL/GLSL backend         |
 | `TARGET_METAL`        | `ON`    | Enable the Metal backend               |
 | `TARGET_D3D12COMPUTE` | `ON`    | Enable the Direct3D 12 Compute backend |
 
@@ -420,10 +440,16 @@ First, Halide expects to find LLVM and Clang through the `CONFIG` mode of
 `find_package`. You can tell Halide where to find these dependencies by setting
 the corresponding `_DIR` variables:
 
-| Variable    | Description                                          |
-| ----------- | ---------------------------------------------------- |
-| `LLVM_DIR`  | Path to the directory containing `LLVMConfig.cmake`  |
-| `Clang_DIR` | Path to the directory containing `ClangConfig.cmake` |
+| Variable    | Description                                    |
+| ----------- | ---------------------------------------------- |
+| `LLVM_DIR`  | `$LLVM_ROOT/lib/cmake/LLVM/LLVMConfig.cmake`   |
+| `Clang_DIR` | `$LLVM_ROOT/lib/cmake/Clang/ClangConfig.cmake` |
+
+Here, `$LLVM_ROOT` is assumed to point to the root of an LLVM installation tree.
+This is either a system path or one produced by running `cmake --install` (as
+detailed in the main README.md). When building LLVM (and any other `CONFIG`
+packages) manually, it is a common mistake to point CMake to a _build tree_
+rather than an _install tree_. Doing so often produces inscrutable errors.
 
 When using CMake 3.18 or above, some of Halide's tests will search for CUDA
 using the [`FindCUDAToolkit`][findcudatoolkit] module. If it doesn't find your
@@ -437,6 +463,8 @@ CUDA installation automatically, you can point it to it by setting:
 If the CMake version is lower than 3.18, the deprecated [`FindCUDA`][findcuda]
 module will be used instead. It reads the variable `CUDA_TOOLKIT_ROOT_DIR`
 instead of `CUDAToolkit_ROOT` above.
+
+TODO(https://github.com/halide/Halide/issues/5633): update this section for OpenGLCompute, which needs some (but maybe not all) of this.
 
 When targeting OpenGL, the [`FindOpenGL`][findopengl] and [`FindX11`][findx11]
 modules will be used to link AOT generated binaries. These modules can be
@@ -539,11 +567,11 @@ but we require it when authoring new code in the Halide repo.
 
 Finally, we use [`find_package`][find_package] to locate Halide on your system.
 If Halide is not globally installed, you will need to add the root of the Halide
-installation directory to [`CMAKE_MODULE_PATH`][cmake_module_path] at the CMake
+installation directory to [`CMAKE_PREFIX_PATH`][cmake_prefix_path] at the CMake
 command line.
 
 ```
-dev@ubuntu:~/myproj$ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_MODULE_PATH="/path/to/Halide-install" -S . -B build
+dev@ubuntu:~/myproj$ cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="/path/to/Halide-install" -S . -B build
 ```
 
 ## JIT mode
@@ -767,6 +795,7 @@ signature follows:
 add_halide_library(<target> FROM <generator-target>
                    [GENERATOR generator-name]
                    [FUNCTION_NAME function-name]
+                   [NAMESPACE cpp-namespace]
                    [USE_RUNTIME hl-target]
                    [PARAMS param1 [param2 ...]]
                    [TARGETS target1 [target2 ...]]
@@ -789,6 +818,11 @@ one time, using command line arguments derived from the other parameters.
 
 The arguments `GENERATOR` and `FUNCTION_NAME` default to `<target>`. They
 correspond to the `-g` and `-f` command line flags, respectively.
+
+`NAMESPACE` is syntactic sugar to specify the C++ namespace (if any) of the
+generated function; you can also specify the C++ namespace (if any) directly
+in the `FUNCTION_NAME` argument, but for repeated declarations or very long
+namespaces, specifying this separately can provide more readable build files.
 
 If `USE_RUNTIME` is not specified, this function will create another target
 called `<target>.runtime` which corresponds to running the generator with `-r`
@@ -940,6 +974,14 @@ The following are some common mistakes that lead to subtly broken builds.
   `INTERFACE`, or both (aka `PUBLIC`). Pick the most conservative one for each
   scenario. Refer to the [transitive usage requirements][cmake-propagation] docs
   for more information.
+- **Needlessly expanding variables** The [`if`][cmake_if] and
+  [`foreach`][cmake_foreach] commands generally expand variables when provided by
+  name. Expanding such variables manually can unintentionally change the behavior
+  of the command. Use `foreach (item IN LISTS list)` instead of
+  `foreach (item ${list})`. Similarly, use `if (varA STREQUAL varB)` instead of
+  `if ("${varA}" STREQUAL "${varB}")` and _definitely_ don't use
+  `if (${varA} STREQUAL ${varB})` since that will fail (in the best case) if
+  either variable's value contains a semi-colon (due to argument expansion).
 
 ### Prohibited commands list
 
@@ -1135,14 +1177,20 @@ guidelines you should follow when writing a new app.
   https://cmake.org/cmake/help/latest/variable/CMAKE_CXX_STANDARD.html
 [cmake_cxx_standard_required]:
   https://cmake.org/cmake/help/latest/variable/CMAKE_CXX_STANDARD_REQUIRED.html
+[cmake_foreach]:
+  https://cmake.org/cmake/help/latest/command/foreach.html
+[cmake_if]:
+  https://cmake.org/cmake/help/latest/command/if.html
 [cmake_lang_compiler_id]:
   https://cmake.org/cmake/help/latest/variable/CMAKE_LANG_COMPILER_ID.html
 [cmake_make_program]:
   https://cmake.org/cmake/help/latest/variable/CMAKE_MAKE_PROGRAM.html
 [cmake_minimum_required]:
   https://cmake.org/cmake/help/latest/command/cmake_minimum_required.html
-[cmake_module_path]:
-  https://cmake.org/cmake/help/latest/variable/CMAKE_MODULE_PATH.html
+[cmake_prefix_path]:
+  https://cmake.org/cmake/help/latest/variable/CMAKE_PREFIX_PATH.html
+[cmake_presets]:
+  https://cmake.org/cmake/help/latest/manual/cmake-presets.7.html
 [cmake_sizeof_void_p]:
   https://cmake.org/cmake/help/latest/variable/CMAKE_SIZEOF_VOID_P.html
 [cmake_source_dir]:

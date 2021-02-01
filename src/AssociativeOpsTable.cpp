@@ -38,7 +38,7 @@ enum class ValType {
     Float16 = 9,
     Float32 = 10,
     Float64 = 11,
-    All = 11,  // General type (including all previous types)
+    All = 12,  // General type (including all previous types)
 };
 
 ValType convert_halide_type_to_val_type(const Type &halide_t) {
@@ -120,7 +120,7 @@ struct TableKey {
     }
 };
 
-static map<TableKey, vector<AssociativePattern>> pattern_tables;
+map<TableKey, vector<AssociativePattern>> pattern_tables;
 
 #define declare_vars(t, index)                                      \
     Expr x##index = Variable::make(t, "x" + std::to_string(index)); \
@@ -254,7 +254,7 @@ void populate_ops_table_single_uint32_select(const vector<Type> &types, vector<A
     table.emplace_back(select(x0 < -y0, y0, tmax_0), zero_0, true);          // Saturating add
 }
 
-static const map<TableKey, void (*)(const vector<Type> &types, vector<AssociativePattern> &)> val_type_to_populate_luts_fn = {
+const map<TableKey, void (*)(const vector<Type> &types, vector<AssociativePattern> &)> val_type_to_populate_luts_fn = {
     {TableKey(ValType::All, RootExpr::Add, 1), &populate_ops_table_single_general_add},
     {TableKey(ValType::All, RootExpr::Mul, 1), &populate_ops_table_single_general_mul},
     {TableKey(ValType::All, RootExpr::Max, 1), &populate_ops_table_single_general_max},

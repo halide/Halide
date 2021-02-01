@@ -50,6 +50,8 @@ void expr_match_test() {
     std::cout << "expr_match test passed" << std::endl;
 }
 
+namespace {
+
 class IRMatch : public IRVisitor {
 public:
     bool result;
@@ -294,10 +296,16 @@ public:
     }
 };
 
+}  // namespace
+
 bool expr_match(const Expr &pattern, const Expr &expr, vector<Expr> &matches) {
     matches.clear();
-    if (!pattern.defined() && !expr.defined()) return true;
-    if (!pattern.defined() || !expr.defined()) return false;
+    if (!pattern.defined() && !expr.defined()) {
+        return true;
+    }
+    if (!pattern.defined() || !expr.defined()) {
+        return false;
+    }
 
     IRMatch eq(expr, matches);
     pattern.accept(&eq);
@@ -313,8 +321,12 @@ bool expr_match(const Expr &pattern, const Expr &expr, map<string, Expr> &matche
     // Explicitly don't clear matches. This allows usages to pre-match
     // some variables.
 
-    if (!pattern.defined() && !expr.defined()) return true;
-    if (!pattern.defined() || !expr.defined()) return false;
+    if (!pattern.defined() && !expr.defined()) {
+        return true;
+    }
+    if (!pattern.defined() || !expr.defined()) {
+        return false;
+    }
 
     IRMatch eq(expr, matches);
     pattern.accept(&eq);
@@ -346,9 +358,13 @@ bool equal_helper(int a, int b) {
 
 template<typename T>
 HALIDE_ALWAYS_INLINE bool equal_helper(const std::vector<T> &a, const std::vector<T> &b) {
-    if (a.size() != b.size()) return false;
+    if (a.size() != b.size()) {
+        return false;
+    }
     for (size_t i = 0; i < a.size(); i++) {
-        if (!equal_helper(a[i], b[i])) return false;
+        if (!equal_helper(a[i], b[i])) {
+            return false;
+        }
     }
     return true;
 }

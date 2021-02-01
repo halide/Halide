@@ -23,6 +23,8 @@
 #include "Deinterleave.h"
 #include "EarlyFree.h"
 #include "FindCalls.h"
+#include "FindIntrinsics.h"
+#include "FlattenNestedRamps.h"
 #include "Func.h"
 #include "Function.h"
 #include "FuseGPUThreadLoops.h"
@@ -33,7 +35,6 @@
 #include "IRPrinter.h"
 #include "InferArguments.h"
 #include "InjectHostDevBufferCopies.h"
-#include "InjectOpenGLIntrinsics.h"
 #include "Inline.h"
 #include "LICM.h"
 #include "LoopCarry.h"
@@ -67,7 +68,6 @@
 #include "UnpackBuffers.h"
 #include "UnrollLoops.h"
 #include "UnsafePromises.h"
-#include "VaryingAttributes.h"
 #include "VectorizeLoops.h"
 #include "WrapCalls.h"
 
@@ -96,7 +96,7 @@ Module lower(const vector<Function> &output_funcs,
 
     // Compute an environment
     map<string, Function> env;
-    for (Function f : output_funcs) {
+    for (const Function &f : output_funcs) {
         populate_environment(f, env);
     }
 
@@ -108,7 +108,7 @@ Module lower(const vector<Function> &output_funcs,
     result_module.set_any_strict_float(any_strict_float);
 
     // Output functions should all be computed and stored at root.
-    for (Function f : outputs) {
+    for (const Function &f : outputs) {
         Func(f).compute_root().store_root();
     }
 
@@ -204,9 +204,8 @@ Module lower(const vector<Function> &output_funcs,
     bool will_inject_host_copies =
         (t.has_gpu_feature() ||
          t.has_feature(Target::OpenGLCompute) ||
-         t.has_feature(Target::OpenGL) ||
          t.has_feature(Target::HexagonDma) ||
-         (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128}))));
+         (t.arch != Target::Hexagon && (t.has_feature(Target::HVX))));
 
     debug(1) << "Adding checks for images\n";
     s = add_image_checks(s, outputs, t, order, env, func_bounds, will_inject_host_copies);
@@ -256,8 +255,7 @@ Module lower(const vector<Function> &output_funcs,
     // OpenGL relies on GPU var canonicalization occurring before
     // storage flattening.
     if (t.has_gpu_feature() ||
-        t.has_feature(Target::OpenGLCompute) ||
-        t.has_feature(Target::OpenGL)) {
+        t.has_feature(Target::OpenGLCompute)) {
         debug(1) << "Canonicalizing GPU var names...\n";
         s = canonicalize_gpu_vars(s);
         debug(2) << "Lowering after canonicalizing GPU var names:\n"
@@ -308,13 +306,6 @@ Module lower(const vector<Function> &output_funcs,
         debug(1) << "Selecting a GPU API for extern stages...\n";
         s = select_gpu_api(s, t);
         debug(2) << "Lowering after selecting a GPU API for extern stages:\n"
-                 << s << "\n\n";
-    }
-
-    if (t.has_feature(Target::OpenGL)) {
-        debug(1) << "Injecting OpenGL texture intrinsics...\n";
-        s = inject_opengl_intrinsics(s);
-        debug(2) << "Lowering after OpenGL intrinsics:\n"
                  << s << "\n\n";
     }
 
@@ -415,30 +406,32 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
 
-    if (t.has_feature(Target::OpenGL)) {
-        debug(1) << "Detecting varying attributes...\n";
-        s = find_linear_expressions(s);
-        debug(2) << "Lowering after detecting varying attributes:\n"
-                 << s << "\n\n";
-
-        debug(1) << "Moving varying attribute expressions out of the shader...\n";
-        s = setup_gpu_vertex_buffer(s);
-        debug(2) << "Lowering after removing varying attributes:\n"
-                 << s << "\n\n";
-    }
-
     debug(1) << "Lowering unsafe promises...\n";
     s = lower_unsafe_promises(s, t);
     debug(2) << "Lowering after lowering unsafe promises:\n"
              << s << "\n\n";
 
+    debug(1) << "Flattening nested ramps...\n";
+    s = flatten_nested_ramps(s);
+    debug(2) << "Lowering after flattening nested ramps:\n"
+             << s << "\n\n";
+
+    debug(1) << "Removing dead allocations and moving loop invariant code...\n";
     s = remove_dead_allocations(s);
     s = simplify(s);
     s = hoist_loop_invariant_values(s);
+    debug(2) << "Lowering after removing dead allocations and hoisting loop invariant values:\n"
+             << s << "\n\n";
+
+    debug(1) << "Finding intrinsics...\n";
+    s = find_intrinsics(s);
+    debug(2) << "Lowering after finding intrinsics:\n"
+             << s << "\n\n";
+
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";
 
-    if (t.arch != Target::Hexagon && (t.features_any_of({Target::HVX_64, Target::HVX_128}))) {
+    if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
         debug(1) << "Splitting off Hexagon offload...\n";
         s = inject_hexagon_rpc(s, t, result_module);
         debug(2) << "Lowering after splitting off Hexagon offload:\n"
@@ -458,7 +451,7 @@ Module lower(const vector<Function> &output_funcs,
 
     vector<Argument> public_args = args;
     for (const auto &out : outputs) {
-        for (Parameter buf : out.output_buffers()) {
+        for (const Parameter &buf : out.output_buffers()) {
             public_args.emplace_back(buf.name(),
                                      Argument::OutputBuffer,
                                      buf.type(), buf.dimensions(), buf.get_argument_estimates());
@@ -476,7 +469,7 @@ Module lower(const vector<Function> &output_funcs,
         internal_assert(arg.arg.is_input()) << "Expected only input Arguments here";
 
         bool found = false;
-        for (Argument a : args) {
+        for (const Argument &a : args) {
             found |= (a.name == arg.arg.name);
         }
 

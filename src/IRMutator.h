@@ -5,7 +5,9 @@
  * Defines a base class for passes over the IR that modify it
  */
 
-#include "IRVisitor.h"
+#include <map>
+
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {
@@ -23,8 +25,8 @@ namespace Internal {
  */
 class IRMutator {
 public:
-    IRMutator();
-    virtual ~IRMutator();
+    IRMutator() = default;
+    virtual ~IRMutator() = default;
 
     /** This is the main interface for using a mutator. Also call
      * these in your subclass to mutate sub-expressions and

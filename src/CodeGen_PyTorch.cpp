@@ -3,6 +3,7 @@
 #include "CodeGen_C.h"
 #include "CodeGen_PyTorch.h"
 #include "IROperator.h"
+#include "Module.h"
 #include "Param.h"
 #include "Util.h"
 #include "Var.h"
@@ -86,8 +87,9 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
                 << c_print_name(args[i].name);
         }
 
-        if (i < args.size() - 1)
+        if (i < args.size() - 1) {
             stream << ", ";
+        }
     }
 
     stream << ") {\n";
@@ -124,8 +126,9 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
 
     stream << get_indent() << "// Wrap tensors in Halide buffers\n";
     for (size_t i = 0; i < buffer_args.size(); i++) {
-        if (!buffer_args[i].is_buffer())
+        if (!buffer_args[i].is_buffer()) {
             continue;
+        }
 
         stream << get_indent();
         std::string tp = type_to_c_type(buffer_args[i].type, false);
@@ -149,8 +152,9 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
         } else {
             stream << c_print_name(args[i].name);
         }
-        if (i < args.size() - 1)
+        if (i < args.size() - 1) {
             stream << ", ";
+        }
     }
     stream << ");\n";
 
@@ -185,7 +189,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
         if (is_cuda) {
             stream << get_indent() << "halide_memoization_cache_cleanup(__user_context);\n";
         } else {
-            stream << get_indent() << "halide_memoization_cache_cleanup(NULL);\n";
+            stream << get_indent() << "halide_memoization_cache_cleanup(nullptr);\n";
         }
     }
 

@@ -7,14 +7,17 @@
  */
 
 #include "IRPrinter.h"
-#include "Module.h"
 #include "Scope.h"
+#include "Target.h"
 
 namespace Halide {
 
 struct Argument;
+class Module;
 
 namespace Internal {
+
+struct LoweredFunc;
 
 /** This class emits C++ code equivalent to a halide Stmt. It's
  * mostly the same as an IRPrinter, but it's wrapped in a function
@@ -35,7 +38,7 @@ public:
     /** Initialize a C code generator pointing at a particular output
      * stream (e.g. a file, or std::cout) */
     CodeGen_C(std::ostream &dest,
-              Target target,
+              const Target &target,
               OutputKind output_kind = CImplementation,
               const std::string &include_guard = "");
     ~CodeGen_C() override;
@@ -50,10 +53,16 @@ public:
 
     static void test();
 
-    /**  Add common macros to be shared across all backends */
-    void add_common_macros(std::ostream &dest);
-
 protected:
+    enum class IntegerSuffixStyle {
+        PlainC = 0,
+        OpenCL = 1,
+        HLSL = 2
+    };
+
+    /** How to emit 64-bit integer constants */
+    IntegerSuffixStyle integer_suffix_style = IntegerSuffixStyle::PlainC;
+
     /** Emit a declaration. */
     // @{
     virtual void compile(const LoweredFunc &func);
@@ -226,6 +235,7 @@ protected:
     void visit(const Atomic *) override;
 
     void visit_binop(Type t, const Expr &a, const Expr &b, const char *op);
+    void visit_relop(Type t, const Expr &a, const Expr &b, const char *scalar_op, const char *vector_op);
 
     template<typename T>
     static std::string with_sep(const std::vector<T> &v, const std::string &sep) {
@@ -250,6 +260,9 @@ protected:
 
     /** Emit atomic store instructions? */
     bool emit_atomic_stores;
+
+    /** true if add_vector_typedefs() has been called. */
+    bool using_vector_typedefs;
 };
 
 }  // namespace Internal

@@ -278,7 +278,7 @@ ComplexFunc twiddle_factors(int N, Expr gain, int sign,
     // function. Generally, any given FFT will only have one set of twiddle
     // factors where gain != 1.
     ComplexFunc W(prefix + "W");
-    if (is_one(gain)) {
+    if (is_const_one(gain)) {
         W = (*cache)[N];
     }
     if (!W.defined()) {

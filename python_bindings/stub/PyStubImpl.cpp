@@ -13,6 +13,12 @@
 
 #include "Halide.h"
 
+static_assert(PYBIND11_VERSION_MAJOR == 2 && PYBIND11_VERSION_MINOR >= 6,
+              "Halide requires PyBind 2.6+");
+
+static_assert(PY_VERSION_HEX >= 0x03000000,
+              "We appear to be compiling against Python 2.x rather than 3.x, which is not supported.");
+
 namespace py = pybind11;
 
 using FactoryFunc = std::unique_ptr<Halide::Internal::GeneratorBase> (*)(const Halide::GeneratorContext &context);
@@ -86,7 +92,7 @@ StubInput to_stub_input(const py::object &o) {
 
 void append_input(const py::object &value, std::vector<StubInput> &v) {
     if (is_real_sequence(value)) {
-        for (auto o : py::reinterpret_borrow<py::sequence>(value)) {
+        for (const auto &o : py::reinterpret_borrow<py::sequence>(value)) {
             v.push_back(to_stub_input(o));
         }
     } else {
@@ -173,7 +179,7 @@ py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, c
 
 void pystub_init(pybind11::module &m, FactoryFunc factory) {
     m.def(
-        "generate", [factory](const Halide::Target &target, py::args args, py::kwargs kwargs) -> py::object {
+        "generate", [factory](const Halide::Target &target, const py::args &args, const py::kwargs &kwargs) -> py::object {
             return generate_impl(factory, Halide::GeneratorContext(target), args, kwargs);
         },
         py::arg("target"));
@@ -197,7 +203,9 @@ extern "C" PyObject *_halide_pystub_impl(const char *module_name, FactoryFunc fa
                      major, minor);
         return nullptr;
     }
-    auto m = pybind11::module(module_name);
+
+    // TODO: do something meaningful with the PyModuleDef & add a doc string
+    auto m = pybind11::module_::create_extension_module(module_name, nullptr, new PyModuleDef());
     try {
         Halide::PythonBindings::install_error_handlers(m);
         Halide::PythonBindings::pystub_init(m, factory);

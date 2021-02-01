@@ -64,7 +64,7 @@ void define_set_func_ref<double>(py::class_<Func> &func_class) {
                      std::ostringstream os;
                      os << "Loss of precision detected when casting " << rhs << " to a single precision float. The difference is " << diff << ".";
                      std::string msg = os.str();
-                     PyErr_WarnEx(NULL, msg.c_str(), 1);
+                     PyErr_WarnEx(nullptr, msg.c_str(), 1);
                  }
                  return func(lhs) = Expr(f);
              });
@@ -273,21 +273,7 @@ void define_func(py::module &m) {
             .def("output_buffers", &Func::output_buffers)
 
             .def(
-                "infer_input_bounds", [](Func &f, int x_size, int y_size, int z_size, int w_size, const Target &target) -> void {
-                    PyErr_WarnEx(PyExc_DeprecationWarning,
-                                 "Call infer_input_bounds() with an explicit list of ints instead.",
-                                 1);
-                    std::vector<int32_t> sizes;
-                    if (x_size) sizes.push_back(x_size);
-                    if (y_size) sizes.push_back(y_size);
-                    if (z_size) sizes.push_back(z_size);
-                    if (w_size) sizes.push_back(w_size);
-                    f.infer_input_bounds(sizes, target);
-                },
-                py::arg("x_size") = 0, py::arg("y_size") = 0, py::arg("z_size") = 0, py::arg("w_size") = 0, py::arg("target") = get_jit_target_from_environment())
-
-            .def(
-                "infer_input_bounds", [](Func &f, py::object dst, const Target &target) -> void {
+                "infer_input_bounds", [](Func &f, const py::object &dst, const Target &target) -> void {
                     // dst could be Buffer<>, vector<Buffer>, or vector<int>
                     try {
                         Buffer<> b = dst.cast<Buffer<>>();
@@ -333,12 +319,6 @@ void define_func(py::module &m) {
             .def("align_bounds", &Func::align_bounds, py::arg("var"), py::arg("modulus"), py::arg("remainder") = 0)
 
             .def("bound_extent", &Func::bound_extent, py::arg("var"), py::arg("extent"))
-
-            .def("gpu_lanes", &Func::gpu_lanes, py::arg("thread_x"), py::arg("device_api") = DeviceAPI::Default_GPU)
-
-            .def("shader", &Func::shader, py::arg("x"), py::arg("y"), py::arg("c"), py::arg("device_api"))
-
-            .def("glsl", &Func::glsl, py::arg("x"), py::arg("y"), py::arg("c"))
 
             .def("align_storage", &Func::align_storage, py::arg("dim"), py::arg("alignment"))
 

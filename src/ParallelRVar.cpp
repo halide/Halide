@@ -1,10 +1,12 @@
 #include "ParallelRVar.h"
 #include "CSE.h"
 #include "Debug.h"
+#include "Definition.h"
 #include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Simplify.h"
 #include "Substitute.h"
 
@@ -161,7 +163,7 @@ bool can_parallelize_rvar(const string &v,
         hazard = l->body;
     }
 
-    return is_zero(hazard);
+    return is_const_zero(hazard);
 }
 
 }  // namespace Internal

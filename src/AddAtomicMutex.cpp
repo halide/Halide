@@ -327,7 +327,7 @@ protected:
         const string &mutex_name = finder.mutex_name;
         Stmt body = mutate(op->body);
         Expr extent = Expr(1);
-        for (Expr e : op->extents) {
+        for (const Expr &e : op->extents) {
             extent = extent * e;
         }
         body = allocate_mutex(mutex_name, extent, body);
@@ -364,7 +364,7 @@ protected:
         }
 
         set<string> store_names;
-        for (auto buffer : f.output_buffers()) {
+        for (const auto &buffer : f.output_buffers()) {
             store_names.insert(buffer.name());
         }
 

@@ -14,7 +14,7 @@
 #ifdef _MSC_VER
 #include <io.h>
 #else
-#include <stdlib.h>
+#include <cstdlib>
 #include <unistd.h>
 #endif
 #include <sys/stat.h>
@@ -86,7 +86,7 @@ std::string get_env_variable(char const *env_var_name) {
 #ifdef _MSC_VER
     // call getenv_s without a buffer to determine the correct string length:
     size_t length = 0;
-    if ((getenv_s(&length, NULL, 0, env_var_name) != 0) || (length == 0)) {
+    if ((getenv_s(&length, nullptr, 0, env_var_name) != 0) || (length == 0)) {
         return "";
     }
     // call it again to retrieve the value of the environment variable;
@@ -99,7 +99,9 @@ std::string get_env_variable(char const *env_var_name) {
     return lvl;
 #else
     char *lvl = getenv(env_var_name);
-    if (lvl) return std::string(lvl);
+    if (lvl) {
+        return std::string(lvl);
+    }
 #endif
 
     return "";
@@ -122,7 +124,7 @@ string running_program_name() {
         path[len] = '\0';
 #endif
         string tmp = std::string(path);
-        program_name = tmp.substr(tmp.find_last_of("/") + 1);
+        program_name = tmp.substr(tmp.find_last_of('/') + 1);
     } else {
         return "";
     }
@@ -160,7 +162,9 @@ int unique_count(size_t h) {
 // construction.
 
 string unique_name(char prefix) {
-    if (prefix == '$') prefix = '_';
+    if (prefix == '$') {
+        prefix = '_';
+    }
     return prefix + std::to_string(unique_count((size_t)(prefix)));
 }
 
@@ -210,18 +214,26 @@ string unique_name(const std::string &prefix) {
 }
 
 bool starts_with(const string &str, const string &prefix) {
-    if (str.size() < prefix.size()) return false;
+    if (str.size() < prefix.size()) {
+        return false;
+    }
     for (size_t i = 0; i < prefix.size(); i++) {
-        if (str[i] != prefix[i]) return false;
+        if (str[i] != prefix[i]) {
+            return false;
+        }
     }
     return true;
 }
 
 bool ends_with(const string &str, const string &suffix) {
-    if (str.size() < suffix.size()) return false;
+    if (str.size() < suffix.size()) {
+        return false;
+    }
     size_t off = str.size() - suffix.size();
     for (size_t i = 0; i < suffix.size(); i++) {
-        if (str[off + i] != suffix[i]) return false;
+        if (str[off + i] != suffix[i]) {
+            return false;
+        }
     }
     return true;
 }
@@ -373,10 +385,10 @@ std::string get_windows_tmp_dir() {
 #endif
 
 std::string file_make_temp(const std::string &prefix, const std::string &suffix) {
-    internal_assert(prefix.find("/") == string::npos &&
-                    prefix.find("\\") == string::npos &&
-                    suffix.find("/") == string::npos &&
-                    suffix.find("\\") == string::npos);
+    internal_assert(prefix.find('/') == string::npos &&
+                    prefix.find('\\') == string::npos &&
+                    suffix.find('/') == string::npos &&
+                    suffix.find('\\') == string::npos);
 #ifdef _WIN32
     // Windows implementations of mkstemp() try to create the file in the root
     // directory Unfortunately, that requires ADMIN privileges, which are not

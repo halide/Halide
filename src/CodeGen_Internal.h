@@ -14,7 +14,6 @@
 #include "Closure.h"
 #include "Expr.h"
 #include "Scope.h"
-#include "Target.h"
 
 namespace llvm {
 class ConstantFolder;
@@ -33,6 +32,9 @@ class IRBuilder;
 }  // namespace llvm
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
 
 /** The llvm type of a struct containing all of the externally referenced state of a Closure. */
@@ -86,6 +88,12 @@ bool function_takes_user_context(const std::string &name);
  * non-positive. */
 bool can_allocation_fit_on_stack(int64_t size);
 
+/** Does a {div/mod}_round_to_zero using binary long division for int/uint.
+ *  max_abs is the maximum absolute value of (a/b).
+ *  Returns the pair {div_round_to_zero, mod_round_to_zero}. */
+std::pair<Expr, Expr> long_div_mod_round_to_zero(const Expr &a, const Expr &b,
+                                                 const uint64_t *max_abs = nullptr);
+
 /** Given a Halide Euclidean division/mod operation, do constant optimizations
  * and possibly call lower_euclidean_div/lower_euclidean_mod if necessary.
  * Can introduce mulhi_shr and sorted_avg intrinsics as well as those from the
@@ -119,7 +127,7 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to);
 std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &module);
 
 /** Set the appropriate llvm Function attributes given a Target. */
-void set_function_attributes_for_target(llvm::Function *, Target);
+void set_function_attributes_for_target(llvm::Function *, const Target &);
 
 /** Save a copy of the llvm IR currently represented by the module as
  * data in the __LLVM,__bitcode section. Emulates clang's

@@ -7,11 +7,13 @@
 
 #include "Expr.h"
 #include "Function.h"
-#include "Target.h"
 
 #include <map>
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
 
 /** Take a statement with for loops marked for vectorization, and turn

@@ -36,6 +36,7 @@ tests(GROUPS error
       define_after_use.cpp
       device_dirty_with_no_device_support.cpp
       device_target_mismatch.cpp
+      dupe_param_name.cpp
       expanding_reduction.cpp
       extern_func_self_argument.cpp
       five_d_gpu_buffer.cpp
@@ -50,7 +51,9 @@ tests(GROUPS error
       lerp_mismatch.cpp
       lerp_signed_weight.cpp
       memoize_different_compute_store.cpp
+      memoize_redefine_eviction_key.cpp
       metal_vector_too_large.cpp
+      metal_threads_too_large.cpp
       missing_args.cpp
       no_default_device.cpp
       nonexistent_update_stage.cpp
