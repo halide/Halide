@@ -142,7 +142,7 @@ const x86Intrinsic intrinsic_defs[] = {
     // Convert FP32 to BF16
     {"llvm.x86.avx512bf16.cvtneps2bf16.512", BFloat(16, 16), "f32_to_bf16", {Float(32, 16)}, Target::AVX512_SapphireRapids},
     {"llvm.x86.avx512bf16.cvtneps2bf16.256", BFloat(16, 8), "f32_to_bf16", {Float(32, 8)}, Target::AVX512_SapphireRapids},
-    // LLVM 12 does not support cvtneps2bf16 for 128bit inputs
+    // TODO(https://github.com/halide/Halide/issues/5683): LLVM 12 does not support unmasked cvtneps2bf16 for 128bit inputs
     //{"llvm.x86.avx512bf16.cvtneps2bf16.128", BFloat(16, 4), "f32_to_bf16", {Float(32, 4)}, Target::AVX512_SapphireRapids},
 };
 // clang-format on

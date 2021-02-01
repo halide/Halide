@@ -82,8 +82,7 @@ WEAK CpuFeatures halide_get_cpu_features() {
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
                 features.set_available(halide_target_feature_avx512_cannonlake);
                 if ((info2[2] & avx512vnni) == avx512vnni) {
-                    // FIXME: Should also check AVX512-BF16 here, but that needs call to cpuid(eax=7, ecx=1)
-                    // FIXME: Should this check the LLVM version? Only supported on 12+.
+                    // TODO(https://github.com/halide/Halide/issues/5683): Should also check AVX512-BF16 here, but that needs call to cpuid(eax=7, ecx=1)
                     features.set_available(halide_target_feature_avx512_sapphirerapids);
                 }
             }
