@@ -143,6 +143,7 @@ extern int halide_hexagon_run(void *user_context,
                               uint64_t arg_sizes[],
                               void *args[],
                               int arg_flags[]);
+extern void halide_hexagon_finalize_kernels(void *user_context, void *state_ptr);
 extern int halide_hexagon_device_release(void *user_context);
 // @}
 
