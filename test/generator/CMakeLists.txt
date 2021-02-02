@@ -114,19 +114,25 @@ if (NOT ${USING_WASM})
     target_link_libraries(cxx_mangling_define_extern_externs PRIVATE cxx_mangling)
 endif ()
 
+if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
+    include(AddCudaToTarget)
+endif ()
+if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
+    find_package(OpenCL REQUIRED)
+endif ()
+
 ##
 # Create targets for the AOT tests
 ##
 
 # acquire_release_aottest.cpp
 # acquire_release_generator.cpp
+# acquire_release_generator.cpp
 halide_define_aot_test(acquire_release)
 if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
-    include(AddCudaToTarget)
     add_cuda_to_target(generator_aot_acquire_release PRIVATE)
 endif ()
 if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
-    find_package(OpenCL REQUIRED)
     target_link_libraries(generator_aot_acquire_release PRIVATE OpenCL::OpenCL)
 endif ()
 
@@ -256,6 +262,26 @@ halide_define_aot_test(external_code GEN_DEPS external_code_generator_deps)
 # float16_t_aottest.cpp
 # float16_t_generator.cpp
 halide_define_aot_test(float16_t)
+
+# gpu_multi_context_threaded_aottest.cpp
+# gpu_multi_context_threaded_generator.cpp
+halide_define_aot_test(gpu_multi_context_threaded
+                       OMIT_DEFAULT_GENERATOR
+                       EXTRA_LIBS
+                       gpu_multi_context_threaded_add
+                       gpu_multi_context_threaded_mul)
+
+add_halide_library(gpu_multi_context_threaded_add FROM gpu_multi_context_threaded.generator 
+                   FEATURES user_context)
+add_halide_library(gpu_multi_context_threaded_mul FROM gpu_multi_context_threaded.generator
+                   FEATURES user_context)
+
+if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
+    add_cuda_to_target(generator_aot_gpu_multi_context_threaded PRIVATE)
+endif ()
+if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
+    target_link_libraries(generator_aot_gpu_multi_context_threaded PRIVATE OpenCL::OpenCL)
+endif ()
 
 # gpu_object_lifetime_aottest.cpp
 # gpu_object_lifetime_generator.cpp
