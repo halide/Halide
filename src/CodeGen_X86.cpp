@@ -524,7 +524,12 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
 
 string CodeGen_X86::mcpu() const {
     if (target.has_feature(Target::AVX512_SapphireRapids)) {
+#if LLVM_VERSION >= 120
         return "sapphirerapids";
+#else
+        user_error << "AVX512 SapphireRapids requires LLVM 12 or later.";
+        return "";
+#endif
     } else if (target.has_feature(Target::AVX512_Cannonlake)) {
         return "cannonlake";
     } else if (target.has_feature(Target::AVX512_Skylake)) {
@@ -576,7 +581,11 @@ string CodeGen_X86::mattrs() const {
             features += ",+avx512ifma,+avx512vbmi";
         }
         if (target.has_feature(Target::AVX512_SapphireRapids)) {
+#if LLVM_VERSION >= 120
             features += ",+avx512bf16,+avx512vnni";
+#else
+            user_error << "AVX512 SapphireRapids requires LLVM 12 or later.";
+#endif
         }
     }
     return features;
