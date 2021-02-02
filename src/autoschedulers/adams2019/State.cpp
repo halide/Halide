@@ -14,7 +14,8 @@ uint64_t State::structural_hash(int depth) const {
     return h;
 }
 
-void State::compute_featurization(const FunctionDAG &dag, const MachineParams &params, StageMap<ScheduleFeatures> *features) {
+void State::compute_featurization(const FunctionDAG &dag, const MachineParams &params,
+                                  StageMap<ScheduleFeatures> *features, const CachingOptions &cache_options) {
     StageMap<LoopNest::Sites> sites;
     sites.make_large(dag.nodes[0].stages[0].max_id);
     features->make_large(dag.nodes[0].stages[0].max_id);
@@ -74,7 +75,45 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
         }
     }
 
-    root->compute_features(dag, params, sites, 1, 1, nullptr, nullptr, *root, nullptr, features);
+    if (cache_options.cache_features) {
+        // Store unique hashes for each Site, to be used as keys into cache
+        for (const auto &c : root->children) {
+            sites.get(c->stage).hash_of_producers_stored_at_root = c->compute_hash_of_producers_stored_at_root(sites);
+        }
+    }
+
+    // Check that features produced with or without caching are the same.
+    if (cache_options.verify_feature_caching) {
+        StageMap<ScheduleFeatures> base_features;
+        base_features.make_large(dag.nodes[0].stages[0].max_id);
+        // Calculate features without caching.
+        root->compute_features(dag, params, sites, 1, 1, nullptr, nullptr, *root, nullptr, &base_features, /* use_cached_features */ false);
+
+        StageMap<ScheduleFeatures> verification_features;
+        verification_features.make_large(dag.nodes[0].stages[0].max_id);
+        // Calculate features with caching.
+        root->compute_features(dag, params, sites, 1, 1, nullptr, nullptr, *root, nullptr, &verification_features, /* use_cached_features */ true);
+
+        for (auto it = base_features.begin(); it != base_features.end(); it++) {
+            const auto &stage = *(it.key());
+            const auto &feat = it.value();
+
+            if (!feat.equal(verification_features.get(&stage))) {
+                // TODO(rootjalex): not sure what these params should be
+                root->dump("", nullptr);
+                std::cerr << "Feature Mismatch: " << stage.node->func.name() << "\n";
+                feat.dump();
+                std::cerr << "\n";
+                verification_features.get(&stage).dump();
+                std::cerr << "\n";
+
+                // TODO(rootjalex): more eloquent error message.
+                internal_assert(false);
+            }
+        }
+    }
+
+    root->compute_features(dag, params, sites, 1, 1, nullptr, nullptr, *root, nullptr, features, cache_options.cache_features);
 
     for (const auto &n : dag.nodes) {
         if (sites.get(&(n.stages[0])).produce == nullptr) {
@@ -85,9 +124,10 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
     }
 }
 
-void State::save_featurization(const FunctionDAG &dag, const MachineParams &params, std::ostream &out) {
+void State::save_featurization(const FunctionDAG &dag, const MachineParams &params,
+                               const CachingOptions &cache_options, std::ostream &out) {
     StageMap<ScheduleFeatures> features;
-    compute_featurization(dag, params, &features);
+    compute_featurization(dag, params, &features, cache_options);
 
     for (const auto &n : dag.nodes) {
         if (n.is_input) {
@@ -115,9 +155,10 @@ void State::save_featurization(const FunctionDAG &dag, const MachineParams &para
 }
 
 bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params,
-                           CostModel *cost_model, int64_t memory_limit, bool verbose) {
+                           CostModel *cost_model, const CachingOptions &cache_options,
+                           int64_t memory_limit, bool verbose) {
     StageMap<ScheduleFeatures> features;
-    compute_featurization(dag, params, &features);
+    compute_featurization(dag, params, &features, cache_options);
 
     cost = 0.0f;
 
@@ -193,7 +234,8 @@ void State::generate_children(const FunctionDAG &dag,
                               const MachineParams &params,
                               CostModel *cost_model,
                               int64_t memory_limit,
-                              std::function<void(IntrusivePtr<State> &&)> &accept_child) const {
+                              std::function<void(IntrusivePtr<State> &&)> &accept_child,
+                              Cache *cache) const {
 
     internal_assert(root.defined() && root->is_root()) << "generate_children needs defined root\n";
 
@@ -258,7 +300,7 @@ void State::generate_children(const FunctionDAG &dag,
                 new_root->inline_func(node);
                 child->root = new_root;
                 child->num_decisions_made++;
-                if (child->calculate_cost(dag, params, cost_model, memory_limit)) {
+                if (child->calculate_cost(dag, params, cost_model, cache->options, memory_limit)) {
                     num_children++;
                     accept_child(std::move(child));
                 }
@@ -340,7 +382,7 @@ void State::generate_children(const FunctionDAG &dag,
                 auto child = make_child();
                 child->root = std::move(n);
                 child->num_decisions_made++;
-                if (child->calculate_cost(dag, params, cost_model, memory_limit)) {
+                if (child->calculate_cost(dag, params, cost_model, cache->options, memory_limit)) {
                     num_children++;
                     accept_child(std::move(child));
                 }
@@ -372,6 +414,11 @@ void State::generate_children(const FunctionDAG &dag,
             accept_child(std::move(child));
         } else {
             internal_assert(pure_size);
+
+            // TODO(rootjalex): we don't want `this` to be a const pointer, so it can be cast to IntrusivePtr
+            if (cache->add_memoized_blocks(this, accept_child, node, num_children, dag, params, cost_model, memory_limit)) {
+                return;  // successfully added cached states.
+            }
 
             // Generate some candidate parallel task shapes.
             auto tilings = generate_tilings(*pure_size, node->dimensions - 1, 2, true);
@@ -494,9 +541,11 @@ void State::generate_children(const FunctionDAG &dag,
                 }
                 child->root = new_root;
                 child->num_decisions_made++;
-                if (child->calculate_cost(dag, params, cost_model, memory_limit)) {
+                if (child->calculate_cost(dag, params, cost_model, cache->options, memory_limit)) {
                     num_children++;
                     accept_child(std::move(child));
+                    // Will early return if block caching is not enabled.
+                    cache->memoize_blocks(node, new_root);
                 }
             }
         }
