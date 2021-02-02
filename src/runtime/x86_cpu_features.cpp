@@ -9,8 +9,9 @@ extern "C" void x86_cpuid_halide(int32_t *);
 
 namespace {
 
-ALWAYS_INLINE void cpuid(int32_t fn_id, int32_t *info) {
+ALWAYS_INLINE void cpuid(int32_t *info, int32_t fn_id, int32_t extra = 0) {
     info[0] = fn_id;
+    info[1] = extra;
     x86_cpuid_halide(info);
 }
 
@@ -29,7 +30,7 @@ WEAK CpuFeatures halide_get_cpu_features() {
     features.set_known(halide_target_feature_avx512_cannonlake);
 
     int32_t info[4];
-    cpuid(1, info);
+    cpuid(info, 1);
 
     const bool have_sse41 = (info[2] & (1 << 19)) != 0;
     const bool have_avx = (info[2] & (1 << 28)) != 0;
@@ -52,7 +53,7 @@ WEAK CpuFeatures halide_get_cpu_features() {
     const bool use_64_bits = (sizeof(size_t) == 8);
     if (use_64_bits && have_avx && have_f16c && have_rdrand) {
         int info2[4];
-        cpuid(7, info2);
+        cpuid(info2, 7);
         const uint32_t avx2 = 1U << 5;
         const uint32_t avx512f = 1U << 16;
         const uint32_t avx512dq = 1U << 17;
