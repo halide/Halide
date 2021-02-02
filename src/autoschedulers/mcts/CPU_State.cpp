@@ -367,29 +367,30 @@ bool CPU_State::is_terminal() const {
 bool CPU_State::is_valid() const {
     // If this state was already prepruned, then it is valid.
     // Otherwise, check that it's not a prunable node.
-    if (prepruned) {
-        return true;
+    if (cached_features) {
+        return cached_valid;
     } else {
-        // save the feature calculation for use in calculate_cost()
-        StageMap<ScheduleFeatures> features;
-        return !prunable(dag_ptr, params_ptr, root.get(), features, memory_limit);
+        const bool pruned = prunable(dag_ptr, params_ptr, root.get(), features, memory_limit);
+        cached_valid = !pruned;
+        cached_features = true;
+        return cached_valid;
     }
 }
 
 double CPU_State::calculate_cost() const {
     // TODO(rootjalex): this is bad, we calculate a featurization once in is_valid (for prunable),
     //                  and once here, for the same node.... We should probably save these.
-    // if (prepruned) {
-    StageMap<ScheduleFeatures> features;
-    prunable(dag_ptr, params_ptr, root.get(), features, memory_limit);
-    // }
-    double cost = 0.0f;
-    compute_featurization(dag_ptr, params_ptr, &features);
+    if (is_valid()) {
+        double cost = 0.0f;
+        compute_featurization(dag_ptr, params_ptr, &features);
 
-    // TODO(rootjalex): not batching might be slow, but is there any better way?
-    model_ptr->enqueue(*dag_ptr, features, &cost);
-    model_ptr->evaluate_costs();
-    return cost;
+        // TODO(rootjalex): not batching might be slow, but is there any better way?
+        model_ptr->enqueue(*dag_ptr, features, &cost);
+        model_ptr->evaluate_costs();
+        return cost;
+    } else {
+        return std::numeric_limits<double>::max();
+    }
 }
 
 bool CPU_State::update(double &cost_value) {

@@ -191,8 +191,11 @@ namespace MCTS {
             return state.is_valid();
         }
 
-        void increment_parent_visits() const {
-            parent->num_visits++;
+        void increment_visits() {
+            num_visits++;
+            if (parent) {
+                parent->increment_visits();
+            }
         }
     };
 

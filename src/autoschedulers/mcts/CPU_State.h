@@ -113,7 +113,9 @@ class CPU_State {
     bool prepruned = false;
 
     // Saving the features for calculating cost.
-    // mutable StageMap<ScheduleFeatures> features;
+    mutable StageMap<ScheduleFeatures> features;
+    mutable bool cached_features = false;
+    mutable bool cached_valid = false;
 
 public:
     CPU_State() = delete;

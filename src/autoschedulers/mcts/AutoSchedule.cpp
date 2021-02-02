@@ -91,7 +91,7 @@
 
 #include "MCTS.h"
 #include "CPU_State.h"
-
+#include "Timer.h"
 
 #ifdef _WIN32
 #include <io.h>
@@ -204,18 +204,34 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(0) << "Size: " << dag.nodes.size() << "\n";
 
     // TODO(rootjalex): do this in parallel.
-    auto solver = MCTS::Solver<CPU_State, CPU_Action>::MakeIterationSolver(100);
+    Timer timer;
+
+    // TODO(rootjalex): figure out a formula for these.
+    string mcts_iterations_str = get_env_variable("HL_MCTS_ITERS");
+    const uint32_t n_simulations = dag.nodes.size() * 2;
+    const uint32_t n_iterations = mcts_iterations_str.empty() ? n_simulations * 32 : std::stoul(mcts_iterations_str.c_str());
+
+    auto solver = MCTS::Solver<CPU_State, CPU_Action>::MakeIterationSolver(n_iterations, n_simulations);
 
     LoopNest *root = new LoopNest;
     CPU_State start_state(&dag, &params, cost_model.get(), root, /* n_decisions */ 0, memory_limit);
+    aslog(0) << "Starting\n";
     auto best_action = solver.solve(start_state, seed);
+    aslog(0) << "Compounding\n";
     CPU_State optimal = solver.get_optimal_state(start_state, best_action);
-
+    aslog(0) << "Calculating\n";
     double cost = optimal.calculate_cost();
 
-    aslog(0) << "Found Pipeline with cost: " << cost << "\n\n";
+    std::chrono::duration<double> total_time = timer.elapsed();
+    auto milli = std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count();
+
+    aslog(0) << "Found Pipeline with cost: " << cost << "\n";
+
+    aslog(0) << "Execution time: " << milli << " ms\n\n";
 
     std::string schedule_source = optimal.apply_schedule();
+
+    // aslog(0) << "Source:" << schedule_source << "\n\n\n";
 
     HALIDE_TOC;
 

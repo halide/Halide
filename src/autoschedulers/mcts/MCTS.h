@@ -45,6 +45,10 @@ namespace MCTS {
         // https://link.springer.com/chapter/10.1007%2F11871842_29
         double uct_k = std::sqrt(2);
 
+        // Maximum depth to explore from a node.
+        // (Should be size of DAG, probably).
+        uint32_t num_simulations = 0;
+
     private:
         // If true, uses timer (not yet implemented), otherwise uses iteration count.
         bool use_timer = false;
@@ -56,10 +60,11 @@ namespace MCTS {
     public:
         // TODO(rootjalex): implement this.
         // static MakeTimerSolver(uint32_t )
-        static Solver<State, Action> MakeIterationSolver(uint32_t max_iterations) {
+        static Solver<State, Action> MakeIterationSolver(uint32_t max_iterations, uint32_t num_simulations) {
             Solver<State, Action> solver;
             solver.max_iterations = max_iterations;
             solver.use_timer = false;
+            solver.num_simulations = num_simulations;
             return solver;
         }
 
@@ -113,10 +118,17 @@ namespace MCTS {
                     internal_assert(node) << "choose_new_random_child returned nullptr\n";
                 }
 
+                // TODO(rootjalex): need proper simulation (until ending).
+                // TODO(rootjalex): Luke wanted intermediate option: set num_simulations = 0
+                for (uint32_t i = 0; (i < num_simulations) && (!node->is_terminal()); i++) {
+                    node = node->choose_new_random_child();
+                    internal_assert(node) << "simulation returned nullptr\n";
+                }
+
                 // We don't have a simulation step, because only one action per state can be chosen.
                 // std::cerr << "\tValidity checking" << std::endl;
                 if (node->is_valid()) {
-                    node->increment_parent_visits();
+                    node->increment_visits();
                     double node_cost = node->get_state().calculate_cost();
 
                     // std::cerr << "\tFound state with cost: " << node_cost << std::endl; 
@@ -145,17 +157,20 @@ namespace MCTS {
 
                     // TODO(rootjalex): reference code uses get_most_visited_child of the root. Why the heck?
                     n_valid_nodes++;
-                    best_node = get_min_value_child(root_node);
                 }
 
                 // TODO(rootjalex): check timing here
+                iterations++;
 
                 if (!use_timer && iterations >= max_iterations) {
                     break;
                 }
-
-                iterations++;
             }
+
+            std::cerr << "Iterations:" << iterations << std::endl;
+            std::cerr << "Valids:" << n_valid_nodes << std::endl;
+
+            best_node = get_min_value_child(root_node);
 
             internal_assert(best_node) << "MCTS found a nullptr best node\n";
             return best_node;
@@ -197,15 +212,22 @@ namespace MCTS {
 
             for (int i = 0; i < num_children; i++) {
                 NodePtr child_ptr = parent_node->get_child(i);
-                const double nonzero_num_visits = child_ptr->get_num_visits() + std::numeric_limits<double>::epsilon();
-                
-                // This is the UCT formula.
-                // We let the State handle value calculation, as it might be a minimum or it might be an average.
-                const double uct_exploitation = child_ptr->get_exploitation_value();
-                // TODO(rootjalex): Why is this N + 1?
-                const double uct_exploration = std::sqrt(std::log((double)parent_node->get_num_visits() + 1) / nonzero_num_visits);
 
-                const double uct_score = uct_exploitation + uct_k * uct_exploration;
+                double uct_score = 0.5f; // TODO(rootjalex): better default value??
+
+                // TODO(rootjalex): what do we do for `child_ptr->get_num_visits() == 0`??
+
+                if (child_ptr->get_num_visits() != 0) {
+                    const double nonzero_num_visits = child_ptr->get_num_visits();
+
+                    // This is the UCT formula.
+                    // We let the State handle value calculation, as it might be a minimum or it might be an average.
+                    const double uct_exploitation = child_ptr->get_exploitation_value();
+                    // TODO(rootjalex): Why is this N + 1?
+                    const double uct_exploration = std::sqrt(std::log((double)parent_node->get_num_visits() + 1) / nonzero_num_visits);
+
+                    uct_score = uct_exploitation + uct_k * uct_exploration;
+                }
 
                 if (!best_node || uct_score > best_uct_score) {
                     best_uct_score = uct_score;
@@ -219,6 +241,7 @@ namespace MCTS {
             return best_node;
         }
 
+        /*
         // Find the most visited of the children that have already been generated.
         NodePtr get_most_visited_child(NodePtr parent_node) const {
             uint32_t most_visits = 0;
@@ -231,7 +254,7 @@ namespace MCTS {
                 const uint32_t num_visits = child_ptr->get_num_visits();
 
                 // MUST be >= not just >, in the case that no child has been visited yet.
-                if (num_visits >= most_visits) {
+                if (!popular_node || num_visits >= most_visits) {
                     most_visits = num_visits;
                     popular_node = child_ptr;
                 }
@@ -240,6 +263,7 @@ namespace MCTS {
             internal_assert(popular_node) << "get_most_visited_child ended with a nullptr node\n";
             return popular_node;
         }
+        */
 
         // Find the child with the minimum value.
         NodePtr get_min_value_child(NodePtr parent_node) const {
@@ -252,7 +276,7 @@ namespace MCTS {
                 NodePtr child_ptr = parent_node->get_child(i);
                 const double child_value = child_ptr->get_value();
 
-                if (child_value < best_value) {
+                if (!best_node || child_value < best_value) {
                     best_value = child_value;
                     best_node = child_ptr;
                 }
