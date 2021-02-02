@@ -64,9 +64,6 @@ protected:
 
     std::string function_name;
 
-    llvm::Value *get_module_state(const std::string &api_unique_name,
-                                  bool create = true);
-
 private:
     /** Child code generator for device kernels. */
     std::map<DeviceAPI, std::unique_ptr<CodeGen_GPU_Dev>> cgdev;

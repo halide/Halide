@@ -39,6 +39,7 @@ extern int halide_opencl_run(void *user_context,
                              float *vertex_buffer,
                              int num_coords_dim0,
                              int num_coords_dim1);
+extern void halide_opencl_finalize_kernels(void *user_context, void *state_ptr);
 // @}
 
 /** Set the platform name for OpenCL to use (e.g. "Intel" or

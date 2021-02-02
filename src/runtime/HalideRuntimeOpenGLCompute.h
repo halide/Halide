@@ -49,6 +49,8 @@ extern int halide_openglcompute_run(void *user_context,
                                     float *vertex_buffer,
                                     int num_coords_dim0,
                                     int num_coords_dim1);
+
+extern void halide_openglcompute_finalize_kernels(void *user_context, void *state_ptr);
 // @}
 
 /** This function retrieves pointers to OpenGL API functions.
