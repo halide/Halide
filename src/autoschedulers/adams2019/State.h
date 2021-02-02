@@ -15,6 +15,8 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
+// A struct representing an intermediate state in the tree search.
+// It represents a partial schedule for some pipeline.
 struct State {
     mutable RefCount ref_count;
     // The LoopNest this state corresponds to.
