@@ -2308,8 +2308,10 @@ $(DISTRIB_DIR)/lib/libHalideRuntime-xtensa.a:
 	XTENSA_CORE=Aurora_vp2 xt-clang++ -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/posix_allocator.cpp -o $(BIN_DIR)/xtensa_runtime_posix_allocator.o
 	XTENSA_CORE=Aurora_vp2 xt-clang++ -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/posix_error_handler.cpp -o $(BIN_DIR)/xtensa_runtime_posix_error_handler.o
 	XTENSA_CORE=Aurora_vp2 xt-clang++ -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/msan_stubs.cpp -o $(BIN_DIR)/xtensa_runtime_msan_stubs.o
+	XTENSA_CORE=Aurora_vp2 xt-clang++ -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/xtensa_allocator.cpp -o $(BIN_DIR)/xtensa_runtime_xtensa_allocator.o
+	XTENSA_CORE=Aurora_vp2 xt-clang++ -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/xtensa_dma_stubs.cpp -o $(BIN_DIR)/xtensa_runtime_xtensa_dma_stubs.o
 
-	XTENSA_CORE=Aurora_vp2 xt-ar rcs $@ $(BIN_DIR)/xtensa_runtime_alignment_64.o $(BIN_DIR)/xtensa_runtime_errors.o $(BIN_DIR)/xtensa_runtime_posix_allocator.o $(BIN_DIR)/xtensa_runtime_posix_error_handler.o $(BIN_DIR)/xtensa_runtime_msan_stubs.o
+	XTENSA_CORE=Aurora_vp2 xt-ar rcs $@ $(BIN_DIR)/xtensa_runtime_alignment_64.o $(BIN_DIR)/xtensa_runtime_errors.o $(BIN_DIR)/xtensa_runtime_posix_error_handler.o $(BIN_DIR)/xtensa_runtime_msan_stubs.o $(BIN_DIR)/xtensa_runtime_xtensa_allocator.o $(BIN_DIR)/xtensa_runtime_xtensa_dma_stubs.o
 
 xtensa-runtime: distrib $(DISTRIB_DIR)/lib/libHalideRuntime-xtensa.a
 
