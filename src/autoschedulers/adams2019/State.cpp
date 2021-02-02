@@ -4,61 +4,14 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
+using std::map;
+using std::pair;
+
 uint64_t State::structural_hash(int depth) const {
     uint64_t h = num_decisions_made;
     internal_assert(root.defined());
     root->structural_hash(h, depth);
     return h;
-}
-
-// Compute the parent and depth of every loop nest node
-void State::compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest *, int>> &p,
-                                      const LoopNest *here, int depth) const {
-    for (const auto &c : here->children) {
-        p.emplace(c.get(), pair<const LoopNest *, int>{here, depth});
-        compute_loop_nest_parents(p, c.get(), depth + 1);
-    }
-}
-
-const LoopNest *State::deepest_common_ancestor(const map<const LoopNest *, pair<const LoopNest *, int>> &parent,
-                                               const LoopNest *a, const LoopNest *b) const {
-    if (a->is_root()) {
-        return a;
-    }
-    if (b->is_root()) {
-        return b;
-    }
-    if (a == b) {
-        return a;
-    }
-
-    // Walk the deeper one up until they're at the same depth
-    auto it_a = parent.find(a);
-    auto it_b = parent.find(b);
-    internal_assert(it_a != parent.end() && it_b != parent.end());
-    while (it_a->second.second > it_b->second.second) {
-        a = it_a->second.first;
-        it_a = parent.find(a);
-    }
-    while (it_b->second.second > it_a->second.second) {
-        b = it_b->second.first;
-        it_b = parent.find(b);
-    }
-
-    while (1) {
-        // Walk each up one
-        a = it_a->second.first;
-        b = it_b->second.first;
-        if (a == b) {
-            return a;
-        }
-        it_a = parent.find(a);
-        it_b = parent.find(b);
-        internal_assert(it_a != parent.end() && it_b != parent.end());
-    }
-
-    // unreachable
-    return nullptr;
 }
 
 void State::compute_featurization(const FunctionDAG &dag, const MachineParams &params, StageMap<ScheduleFeatures> *features) {
