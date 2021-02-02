@@ -874,8 +874,10 @@ class fast_mutex {
                 continue;
             }
 
-            // If no one is parked, spin with spin count.
-            if ((expected & parked_bit) == 0 && spinner.should_spin()) {
+            // Spin with spin count. Note that this occurs even if
+            // threads are parked. We're prioritizing throughput over
+            // fairness by letting sleeping threads lie.
+            if (spinner.should_spin()) {
                 halide_thread_yield();
                 atomic_load_relaxed(&state, &expected);
                 continue;

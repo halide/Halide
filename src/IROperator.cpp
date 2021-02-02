@@ -242,7 +242,13 @@ bool is_positive_const(const Expr &e) {
         return f->value > 0.0f;
     }
     if (const Cast *c = e.as<Cast>()) {
-        return is_positive_const(c->value);
+        Type to = c->type;
+        Type from = c->value.type();
+        if (!to.is_int_or_uint() || to.can_represent(from)) {
+            // Either the cast does not lose information, or it's a
+            // non-integral cast, so no overflow behavior to worry about.
+            return is_positive_const(c->value);
+        }
     }
     if (const Ramp *r = e.as<Ramp>()) {
         // slightly conservative
@@ -262,7 +268,17 @@ bool is_negative_const(const Expr &e) {
         return f->value < 0.0f;
     }
     if (const Cast *c = e.as<Cast>()) {
-        return is_negative_const(c->value);
+        Type to = c->type;
+        Type from = c->value.type();
+        if (to.is_uint()) {
+            // Early out.
+            return false;
+        }
+        if (!to.is_int_or_uint() || to.can_represent(from)) {
+            // Either the cast does not lose information, or it's a
+            // non-integral cast, so no overflow behavior to worry about.
+            return is_negative_const(c->value);
+        }
     }
     if (const Ramp *r = e.as<Ramp>()) {
         // slightly conservative
