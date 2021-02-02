@@ -1997,14 +1997,12 @@ void LoopNest::memoize_features(StageMap<ScheduleFeatures> &memoized_features, c
             continue;
         }
 
-        // TODO(rootjalex): should probably assert that features_to_insert has this stage
         internal_assert(features_to_insert->contains(stage_ptr)) << "memoize_features attempted to save a stage_ptr that doesn't exist\n";
         const auto &inlined_feat = features_to_insert->get(stage_ptr);
         memoized_features.insert(stage_ptr, inlined_feat);
     }
 
     if (!memoized_features.contains(stage)) {
-        // TODO(rootjalex): should probably assert that features_to_insert has this stage
         internal_assert(features_to_insert->contains(stage)) << "memoize_features attempted to save this->stage but that's not in features_to_insert\n";
         memoized_features.insert(stage, features_to_insert->get(stage));
     }

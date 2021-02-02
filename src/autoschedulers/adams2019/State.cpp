@@ -99,7 +99,6 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
             const auto &feat = it.value();
 
             if (!feat.equal(verification_features.get(&stage))) {
-                // TODO(rootjalex): not sure what these params should be
                 root->dump("", nullptr);
                 std::cerr << "Feature Mismatch: " << stage.node->func.name() << "\n";
                 feat.dump();
@@ -107,8 +106,7 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
                 verification_features.get(&stage).dump();
                 std::cerr << "\n";
 
-                // TODO(rootjalex): more eloquent error message.
-                internal_assert(false);
+                internal_assert(false) "Feature caching verification failed\n";
             }
         }
     }
@@ -415,7 +413,6 @@ void State::generate_children(const FunctionDAG &dag,
         } else {
             internal_assert(pure_size);
 
-            // TODO(rootjalex): we don't want `this` to be a const pointer, so it can be cast to IntrusivePtr
             if (cache->add_memoized_blocks(this, accept_child, node, num_children, dag, params, cost_model, memory_limit)) {
                 return;  // successfully added cached states.
             }
