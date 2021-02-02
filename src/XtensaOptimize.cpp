@@ -5,6 +5,7 @@
 #include "ConciseCasts.h"
 #include "Expr.h"
 #include "ExprUsesVar.h"
+#include "FindIntrinsics.h"
 #include "IREquality.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
@@ -388,10 +389,6 @@ private:
                 {"halide_xtensa_widen_add_i24", i16(wild_i24x) + wild_i8x, Pattern::AccumulatorOutput24},
                 {"halide_xtensa_widen_add_i24", i16(wild_i24x) + wild_i16x, Pattern::AccumulatorOutput24 | Pattern::NarrowOp1},
 
-                // Widening addition
-                {"halide_xtensa_widen_add_u48", wild_u32x + wild_u32x, Pattern::NarrowUnsignedOps | Pattern::AccumulatorOutput48},
-                {"halide_xtensa_widen_add_i48", wild_i32x + wild_i32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
-
                 {"halide_xtensa_widen_mul_add_i64", wild_i64x * wild_i64x + wild_i64x, Pattern::NarrowOps | Pattern::AccumulatorOutput64},
             };
 
@@ -435,11 +432,6 @@ private:
                 // Widening multiplication
                 // NOTE(vksnk): looked like a good idea, but seems to be slower. Need to double-check.
                 // {"halide_xtensa_widen_sqr_i48", wild_i32x * wild_i32x, Pattern::SameOp01 | Pattern::NarrowOps | Pattern::AccumulatorOutput48},
-                {"halide_xtensa_widen_mul_i48", wild_i32x * bc(wild_i32), Pattern::NarrowOps | Pattern::AccumulatorOutput48},
-                {"halide_xtensa_widen_mul_u48", wild_u32x * wild_u32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
-                {"halide_xtensa_widen_mul_i48", wild_i32x * wild_i32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
-
-                {"halide_xtensa_widen_mul_i64", wild_i64x * wild_i64x, Pattern::NarrowOps | Pattern::AccumulatorOutput64},
             };
 
             Expr new_expr = apply_commutative_patterns(op, scalar_muls, this);
@@ -511,18 +503,6 @@ private:
 
     Expr visit(const Cast *op) override {
         static const std::vector<Pattern> casts = {
-            // Averaging
-            {"halide_xtensa_avg_u16", u16((wild_u32x + wild_u32x) / 2), Pattern::NarrowOps},
-            {"halide_xtensa_avg_i16", i16((wild_i32x + wild_i32x) / 2), Pattern::NarrowOps},
-
-            {"halide_xtensa_avg_round_u16", u16((wild_u32x + wild_u32x + 1) / 2), Pattern::NarrowOps},
-            {"halide_xtensa_avg_round_i16", i16((wild_i32x + wild_i32x + 1) / 2), Pattern::NarrowOps},
-
-            // Saturating add/subtract
-            {"halide_xtensa_sat_add_i16", i16_sat(wild_i32x + wild_i32x), Pattern::NarrowOps},
-            {"halide_xtensa_sat_add_i32", i32_sat(wild_i64x + wild_i64x), Pattern::NarrowOps},
-            {"halide_xtensa_sat_sub_i16", i16_sat(wild_i32x - wild_i32x), Pattern::NarrowOps},
-
             // Narrowing multiply with shift.
             // {"halide_xtensa_sat_mul_with_shift_i32", i32(wild_i64x * wild_i64x / wild_i64), Pattern::NarrowOp0 | Pattern::NarrowUnsignedOp1 | Pattern::ExactLog2Op2},
 
@@ -631,9 +611,30 @@ private:
             return Call::make(op->type, "halide_xtensa_absd_i16",
                               {mutate(op->args[0]), mutate(op->args[1])},
                               Call::PureExtern);
+        } else if (op->is_intrinsic(Call::widening_shift_left)) {
+            // Replace widening left shift with multiplication.
+            return mutate(widening_mul(op->args[0], make_one(op->args[0].type()) << op->args[1]));
         }
 
         static const std::vector<Pattern> calls = {
+            {"halide_xtensa_avg_u16", halving_add(wild_u16x, wild_u16x)},
+            {"halide_xtensa_avg_i16", halving_add(wild_i16x, wild_i16x)},
+
+            {"halide_xtensa_avg_round_u16", rounding_halving_add(wild_u16x, wild_u16x)},
+            {"halide_xtensa_avg_round_i16", rounding_halving_add(wild_i16x, wild_i16x)},
+
+            {"halide_xtensa_sat_add_i16", saturating_add(wild_i16x, wild_i16x)},
+            {"halide_xtensa_sat_add_i32", saturating_add(wild_i32x, wild_i32x)},
+            {"halide_xtensa_sat_sub_i16", saturating_sub(wild_i16x, wild_i16x)},
+
+            {"halide_xtensa_widen_mul_i48", widening_mul(wild_i16x, wild_i16x), Pattern::AccumulatorOutput48},
+            {"halide_xtensa_widen_mul_u48", widening_mul(wild_u16x, wild_u16x), Pattern::AccumulatorOutput48},
+            {"halide_xtensa_widen_mul_i64", widening_mul(wild_i32x, wild_i32x), Pattern::AccumulatorOutput64},
+            {"halide_xtensa_widen_mul_u64", widening_mul(wild_u32x, wild_u32x), Pattern::AccumulatorOutput64},
+
+            {"halide_xtensa_widen_add_u48", widening_add(wild_u16x, wild_u16x), Pattern::AccumulatorOutput48},
+            {"halide_xtensa_widen_add_i48", widening_add(wild_i16x, wild_i16x), Pattern::AccumulatorOutput48},
+
             // NOTE(vksnk): looked like a good idea, but seems to be slower. Need to double-check.
             // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(i32(wild_i48x))},
             // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(u32(wild_i48x))},
@@ -680,6 +681,14 @@ private:
             Expr new_expr = apply_patterns(call, calls, this);
             if (!new_expr.same_as(call)) {
                 return new_expr;
+            }
+        }
+
+        if (op->is_intrinsic()) {
+            Expr lowered = lower_intrinsic(op);
+            if (lowered.defined()) {
+                debug(0) << "Unhandled intrinsic - " << op->name << "\n";
+                return mutate(lowered);
             }
         }
 
