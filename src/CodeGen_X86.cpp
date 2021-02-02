@@ -144,6 +144,12 @@ const x86Intrinsic intrinsic_defs[] = {
     {"llvm.x86.avx512bf16.cvtneps2bf16.256", BFloat(16, 8), "f32_to_bf16", {Float(32, 8)}, Target::AVX512_SapphireRapids},
     // LLVM does not provide an unmasked 128bit cvtneps2bf16 intrinsic, so provide a wrapper around the masked version.
     {"vcvtneps2bf16x4", BFloat(16, 4), "f32_to_bf16", {Float(32, 4)}, Target::AVX512_SapphireRapids},
+
+    // Dot product vector reduction
+    // The LLVM intrinsics combine the bf16 pairs into i32, so provide a wrapper to correctly call the intrinsic.
+    {"dpbf16psx16", Float(32, 16), "dot_product", {Float(32, 16), BFloat(16, 32), BFloat(16, 32)}, Target::AVX512_SapphireRapids},
+    {"dpbf16psx8", Float(32, 8), "dot_product", {Float(32, 8), BFloat(16, 16), BFloat(16, 16)}, Target::AVX512_SapphireRapids},
+    {"dpbf16psx4", Float(32, 4), "dot_product", {Float(32, 4), BFloat(16, 8), BFloat(16, 8)}, Target::AVX512_SapphireRapids},
 };
 // clang-format on
 
@@ -480,14 +486,16 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         Expr pattern;
         const char *intrin;
         Type narrow_type;
+        bool combine_init;
     };
     // clang-format off
     static const Pattern patterns[] = {
-        {2, i32(widening_mul(wild_i16x_, wild_i16x_)), "pmaddwd", Int(16)},
-        {2, i32(widening_mul(wild_i8x_, wild_i8x_)), "pmaddwd", Int(16)},
-        {2, i32(widening_mul(wild_i8x_, wild_u8x_)), "pmaddwd", Int(16)},
-        {2, i32(widening_mul(wild_u8x_, wild_i8x_)), "pmaddwd", Int(16)},
-        {2, i32(widening_mul(wild_u8x_, wild_u8x_)), "pmaddwd", Int(16)},
+        {2, f32(wild_bf16x_) * f32(wild_bf16x_), "dot_product", BFloat(16), true},
+        {2, i32(widening_mul(wild_i16x_, wild_i16x_)), "pmaddwd", Int(16), false},
+        {2, i32(widening_mul(wild_i8x_, wild_i8x_)), "pmaddwd", Int(16), false},
+        {2, i32(widening_mul(wild_i8x_, wild_u8x_)), "pmaddwd", Int(16), false},
+        {2, i32(widening_mul(wild_u8x_, wild_i8x_)), "pmaddwd", Int(16), false},
+        {2, i32(widening_mul(wild_u8x_, wild_u8x_)), "pmaddwd", Int(16), false},
         // One could do a horizontal widening addition with
         // pmaddwd against a vector of ones. Currently disabled
         // because I haven't found case where it's clearly better.
@@ -507,14 +515,19 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             internal_assert(a.defined());
             internal_assert(b.defined());
 
-            value = call_overloaded_intrin(op->type, p.intrin, {a, b});
-            if (value) {
-                if (init.defined()) {
-                    Value *x = value;
-                    Value *y = codegen(init);
-                    value = builder->CreateAdd(x, y);
+            if (p.combine_init) {
+                value = call_overloaded_intrin(op->type, p.intrin, {init, a, b});
+                if (value) { return; }
+            } else {
+                value = call_overloaded_intrin(op->type, p.intrin, {a, b});
+                if (value) {
+                    if (init.defined()) {
+                        Value *x = value;
+                        Value *y = codegen(init);
+                        value = builder->CreateAdd(x, y);
+                    }
+                    return;
                 }
-                return;
             }
         }
     }
