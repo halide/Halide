@@ -1929,7 +1929,7 @@ const LoopNest *deepest_common_ancestor(const map<const LoopNest *, pair<const L
 
 // Compute the parent and depth of every loop nest node
 void compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest *, int>> &parents,
-                                      const LoopNest *here, int depth) {
+                               const LoopNest *here, int depth) {
     for (const auto &c : here->children) {
         parents.emplace(c.get(), pair<const LoopNest *, int>{here, depth});
         compute_loop_nest_parents(parents, c.get(), depth + 1);

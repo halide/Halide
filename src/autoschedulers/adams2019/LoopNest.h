@@ -271,7 +271,6 @@ const LoopNest *deepest_common_ancestor(const std::map<const LoopNest *, std::pa
 void compute_loop_nest_parents(std::map<const LoopNest *, std::pair<const LoopNest *, int>> &parents,
                                const LoopNest *here, int depth);
 
-
 }  // namespace Autoscheduler
 }  // namespace Internal
 }  // namespace Halide
