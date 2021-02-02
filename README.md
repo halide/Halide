@@ -1,6 +1,6 @@
 # Halide
 
-Don't accept this PR.
+Don't accept this PR 2.
 
 Halide is a programming language designed to make it easier to write
 high-performance image and array processing code on modern machines. Halide
