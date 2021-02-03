@@ -1839,6 +1839,9 @@ string CodeGen_Hexagon::mattrs() const {
     std::stringstream attrs;
     attrs << "+hvx-length128b";
     attrs << ",+long-calls";
+    if (target.has_feature(Target::HVX)) {
+        attrs << ",+hvxv" << isa_version;
+    }
     return attrs.str();
 }
 
