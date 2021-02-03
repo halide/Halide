@@ -2427,7 +2427,7 @@ struct IsMinValue {
         // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
         a.make_folded_const(val, ty, state);
         if (ty.code == halide_type_int) {
-            const uint64_t min_bits = (uint64_t)(1) << (ty.bits - 1);
+            const uint64_t min_bits = (uint64_t)(-1) << (ty.bits - 1);
             val.u.u64 = (val.u.u64 == min_bits);
         } else if (ty.code == halide_type_uint) {
             val.u.u64 = (val.u.u64 == 0);
