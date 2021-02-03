@@ -106,38 +106,26 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         return mutate(rewrite.result, bounds);
     }
 
-    // Early-out if nothing changed
-    const Add *add = delta.as<Add>();
-    const Sub *sub = delta.as<Sub>();
-    if (sub &&
-        ((sub->a.same_as(op->a) &&
-          sub->b.same_as(op->b)) ||
-         (sub->a.same_as(op->b) &&
-          sub->b.same_as(op->a)))) {
-        return op;
-    } else if (add &&
-               add->a.same_as(op->a) &&
-               (op->b.as<IntImm>() ||
-                op->b.as<UIntImm>() ||
-                op->b.as<FloatImm>())) {
-        // a - b became a + c. c must be the negation of b, which
-        // can't possibly get simpler.
-        return op;
-    } else if (delta.same_as(op->a) &&
-               is_const_zero(op->b)) {
-        // We were comparing something to zero.
-        return op;
-    }
-
     if (rewrite(c0 == 0, fold(c0 == 0)) ||
         rewrite((x - y) + c0 == 0, x == y + fold(-c0)) ||
         rewrite(x + c0 == 0, x == fold(-c0)) ||
         rewrite(c0 - x == 0, x == c0) ||
-        rewrite(x - y == 0, x == y)) {
-        return rewrite.result;
+        rewrite(x - y == 0, x == y) ||
+        rewrite(x == 0, x == 0)) {
+
+        const EQ *eq = rewrite.result.as<EQ>();
+        if (eq &&
+            eq->a.same_as(op->a) &&
+            eq->b.same_as(op->b)) {
+            return op;
+        } else {
+            return rewrite.result;
+        }
     }
 
-    return delta == make_zero(op->a.type());
+    // Unreachable. That last rewrite catches everything and
+    // constructs delta == 0 for us.
+    return Expr();
 }
 
 // ne redirects to not eq
