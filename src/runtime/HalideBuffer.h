@@ -540,7 +540,7 @@ private:
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions(); i++) {
             if (dim(i).stride() < 0) {
-                index += dim(i).stride() * (dim(i).extent() - 1);
+                index += dim(i).stride() * (ptrdiff_t)(dim(i).extent() - 1);
             }
         }
         return index;
@@ -552,7 +552,7 @@ private:
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions(); i++) {
             if (dim(i).stride() > 0) {
-                index += dim(i).stride() * (dim(i).extent() - 1);
+                index += dim(i).stride() * (ptrdiff_t)(dim(i).extent() - 1);
             }
         }
         index += 1;
