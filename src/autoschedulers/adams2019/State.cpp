@@ -106,7 +106,7 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
                 verification_features.get(&stage).dump();
                 std::cerr << "\n";
 
-                internal_assert(false) "Feature caching verification failed\n";
+                internal_assert(false) << "Feature caching verification failed\n";
             }
         }
     }
