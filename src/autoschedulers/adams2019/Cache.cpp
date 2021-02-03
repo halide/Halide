@@ -1,4 +1,4 @@
-#include "Caching.h"
+#include "Cache.h"
 #include "LoopNest.h"
 #include "State.h"
 
@@ -62,7 +62,6 @@ bool Cache::add_memoized_blocks(const State *state,
         child->num_decisions_made++;
 
         int block_index = 0;
-        // TODO(rootjalex): is there a faster way to do this? seems like a .find()
         for (const auto &new_child : new_root->children) {
             if (new_child->node == node) {
                 break;
@@ -80,7 +79,6 @@ bool Cache::add_memoized_blocks(const State *state,
         if (child->calculate_cost(dag, params, cost_model, this->options, memory_limit)) {
             num_children++;
             accept_child(std::move(child));
-            // TODO(rootjalex): possibly remove statistics for cache hits
             cache_hits++;
         }
     }
@@ -98,7 +96,6 @@ void Cache::memoize_blocks(const FunctionDAG::Node *node, LoopNest *new_root) {
     bool loop_nest_found = false;
 
     for (auto &child : new_root->children) {
-        // TODO(rootjalex): is there a faster way to do this? seems like a .find()
         if (child->node == node && child->stage->index == 0) {
             vector_dim = child->vector_dim;
             loop_nest_found = true;
@@ -117,7 +114,6 @@ void Cache::memoize_blocks(const FunctionDAG::Node *node, LoopNest *new_root) {
             const LoopNest *child_ptr = child.get();
             new_block->copy_from_including_features(*child_ptr);
             blocks.emplace_back(new_block);
-            // TODO(rootjalex): possibly remove statistics for cache misses
             cache_misses++;
         }
     }

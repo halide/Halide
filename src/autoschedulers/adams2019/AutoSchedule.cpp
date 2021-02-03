@@ -79,6 +79,7 @@
 
 #include "ASLog.h"
 #include "AutoSchedule.h"
+#include "Cache.h"
 #include "CostModel.h"
 #include "DefaultCostModel.h"
 #include "Errors.h"
@@ -89,7 +90,7 @@
 #include "NetworkSize.h"
 #include "PerfectHashMap.h"
 #include "State.h"
-#include "Statistics.h"
+#include "Timer.h"
 
 #ifdef _WIN32
 #include <io.h>

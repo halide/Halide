@@ -653,8 +653,10 @@ const HvxIntrinsic intrinsic_wrappers[] = {
 
     {INTRINSIC_128B(vroundhub), u8v1, "trunc_satub_rnd.vh", {i16v2}},
     {INTRINSIC_128B(vroundhb), i8v1, "trunc_satb_rnd.vh", {i16v2}},
+    {INTRINSIC_128B(vrounduhub), u8v1, "trunc_satub_rnd.vuh", {u16v2}},
     {INTRINSIC_128B(vroundwuh), u16v1, "trunc_satuh_rnd.vw", {i32v2}},
     {INTRINSIC_128B(vroundwh), i16v1, "trunc_sath_rnd.vw", {i32v2}},
+    {INTRINSIC_128B(vrounduwuh), u16v1, "trunc_satuh_rnd.vuw", {u32v2}},
 
     // vpack does not interleave its input.
     {INTRINSIC_128B(vpackhub_sat), u8v1, "pack_satub.vh", {i16v2}},
@@ -717,20 +719,23 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     // Averaging:
     {INTRINSIC_128B(vavgub), u8v1, "avg.vub.vub", {u8v1, u8v1}},
     {INTRINSIC_128B(vavguh), u16v1, "avg.vuh.vuh", {u16v1, u16v1}},
+    {INTRINSIC_128B(vavguw), u32v1, "avg.vuw.vuw", {u32v1, u32v1}, HvxIntrinsic::v65OrLater},
+    {INTRINSIC_128B(vavgb), i8v1, "avg.vb.vb", {i8v1, i8v1}, HvxIntrinsic::v65OrLater},
     {INTRINSIC_128B(vavgh), i16v1, "avg.vh.vh", {i16v1, i16v1}},
     {INTRINSIC_128B(vavgw), i32v1, "avg.vw.vw", {i32v1, i32v1}},
 
     {INTRINSIC_128B(vavgubrnd), u8v1, "avg_rnd.vub.vub", {u8v1, u8v1}},
     {INTRINSIC_128B(vavguhrnd), u16v1, "avg_rnd.vuh.vuh", {u16v1, u16v1}},
+    {INTRINSIC_128B(vavguwrnd), u32v1, "avg_rnd.vuw.vuw", {u32v1, u32v1}, HvxIntrinsic::v65OrLater},
+    {INTRINSIC_128B(vavgbrnd), i8v1, "avg_rnd.vb.vb", {i8v1, i8v1}, HvxIntrinsic::v65OrLater},
     {INTRINSIC_128B(vavghrnd), i16v1, "avg_rnd.vh.vh", {i16v1, i16v1}},
     {INTRINSIC_128B(vavgwrnd), i32v1, "avg_rnd.vw.vw", {i32v1, i32v1}},
 
      // This one is weird: i8_sat((u8 - u8)/2). It both saturates and averages.
     {INTRINSIC_128B(vnavgub), i8v1, "navg.vub.vub", {u8v1, u8v1}},
+    {INTRINSIC_128B(vnavgb), i8v1, "navg.vb.vb", {i8v1, i8v1}, HvxIntrinsic::v65OrLater},
     {INTRINSIC_128B(vnavgh), i16v1, "navg.vh.vh", {i16v1, i16v1}},
     {INTRINSIC_128B(vnavgw), i32v1, "navg.vw.vw", {i32v1, i32v1}},
-    {INTRINSIC_128B(vavgb), i8v1, "avg.vb.vb", {i8v1, i8v1}, HvxIntrinsic::v65OrLater},
-    {INTRINSIC_128B(vavguw), u32v1, "avg.vuw.vuw", {u32v1, u32v1}, HvxIntrinsic::v65OrLater},
 
     // Non-widening multiplication:
     {INTRINSIC_128B(vmpyih), i16v1, "mul.vh.vh", {i16v1, i16v1}},
@@ -840,6 +845,14 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     {INTRINSIC_128B(vlsrwv), u32v1, "shr.vuw.vw", {u32v1, u32v1}},
     {INTRINSIC_128B(vasrhv), i16v1, "shr.vh.vh", {i16v1, u16v1}},
     {INTRINSIC_128B(vasrwv), i32v1, "shr.vw.vw", {i32v1, u32v1}},
+
+    // Rounding shift right
+    {INTRINSIC_128B(vasrhubrndsat), u8v1, "trunc_satub_shr_rnd.vh", {i16v2, u16}},
+    {INTRINSIC_128B(vasrhbrndsat), i8v1, "trunc_satb_shr_rnd.vh", {i16v2, u16}},
+    {INTRINSIC_128B(vasruhubrndsat), u8v1, "trunc_satub_shr_rnd.vuh", {u16v2, u16}, HvxIntrinsic::v65OrLater},
+    {INTRINSIC_128B(vasrwuhrndsat), u16v1, "trunc_satuh_shr_rnd.vw", {i32v2, u32}},
+    {INTRINSIC_128B(vasrwhrndsat), i16v1, "trunc_sath_shr_rnd.vw", {i32v2, u32}},
+    {INTRINSIC_128B(vasruwuhrndsat), u16v1, "trunc_satuh_shr_rnd.vuw", {u32v2, u32}},
 
     {INTRINSIC_128B(vaslhv), u16v1, "shl.vuh.vh", {u16v1, u16v1}},
     {INTRINSIC_128B(vaslwv), u32v1, "shl.vuw.vw", {u32v1, u32v1}},
@@ -1826,6 +1839,9 @@ string CodeGen_Hexagon::mattrs() const {
     std::stringstream attrs;
     attrs << "+hvx-length128b";
     attrs << ",+long-calls";
+    if (target.has_feature(Target::HVX)) {
+        attrs << ",+hvxv" << isa_version;
+    }
     return attrs.str();
 }
 

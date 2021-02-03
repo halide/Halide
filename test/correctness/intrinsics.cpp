@@ -14,16 +14,49 @@ void check(Expr test, Expr expected, Type required_type) {
     test = simplify(test);
     Expr result = find_intrinsics(test);
     if (!equal(result, expected) || required_type != expected.type()) {
-        std::cout << "failure!\n";
-        std::cout << "test: " << test << "\n";
-        std::cout << "result: " << result << "\n";
-        std::cout << "exepcted: " << expected << "\n";
+        std::cerr << "failure!\n";
+        std::cerr << "test: " << test << "\n";
+        std::cerr << "result: " << result << "\n";
+        std::cerr << "exepcted: " << expected << "\n";
         abort();
     }
 }
 
 void check(Expr test, Expr expected) {
     return check(test, expected, expected.type());
+}
+
+template<typename T>
+void check_intrinsics_over_range() {
+    const int64_t min_t = std::numeric_limits<T>::min();
+    const int64_t max_t = std::numeric_limits<T>::max();
+    const int N = 128;
+    Type halide_t = type_of<T>();
+
+    for (int i = 0; i < N; i++) {
+        int64_t a = min_t + ((max_t - min_t) * i) / N;
+        for (int j = 0; j < N; j++) {
+            int64_t b = min_t + ((max_t - min_t) * j) / N;
+            std::pair<Expr, int64_t> intrinsics_with_reference_answer[] = {
+                {saturating_add(make_const(halide_t, a), make_const(halide_t, b)), std::min(std::max(a + b, min_t), max_t)},
+                {saturating_sub(make_const(halide_t, a), make_const(halide_t, b)), std::min(std::max(a - b, min_t), max_t)},
+                {halving_add(make_const(halide_t, a), make_const(halide_t, b)), (a + b) >> 1},
+                {rounding_halving_add(make_const(halide_t, a), make_const(halide_t, b)), (a + b + 1) >> 1},
+                {halving_sub(make_const(halide_t, a), make_const(halide_t, b)), (a - b) >> 1},
+                {rounding_halving_sub(make_const(halide_t, a), make_const(halide_t, b)), (a - b + 1) >> 1}};
+
+            for (const auto &p : intrinsics_with_reference_answer) {
+                Expr result = simplify(lower_intrinsic(p.first.as<Call>()));
+                if (!can_prove(result == make_const(halide_t, p.second))) {
+                    std::cerr << "failure!\n";
+                    std::cerr << "test: " << p.first << "\n";
+                    std::cerr << "result: " << result << "\n";
+                    std::cerr << "expected: " << p.second << "\n";
+                    abort();
+                }
+            }
+        }
+    }
 }
 
 int main(int argc, char **argv) {
@@ -198,6 +231,13 @@ int main(int argc, char **argv) {
     // TODO: Should these be rewritten to widening muls with mixed signs?
     check((u16(u8x) * 4 - u16(u8y)) * 3, widening_mul(u8x, u8(12)) - widening_mul(u8y, u8(3)));
     check((u16(u8x) - u16(u8y) * 7) * 5, widening_mul(u8x, u8(5)) - widening_mul(u8y, u8(35)));
+
+    check_intrinsics_over_range<int8_t>();
+    check_intrinsics_over_range<uint8_t>();
+    check_intrinsics_over_range<int16_t>();
+    check_intrinsics_over_range<uint16_t>();
+    check_intrinsics_over_range<int32_t>();
+    check_intrinsics_over_range<uint32_t>();
 
     printf("Success!\n");
     return 0;

@@ -38,6 +38,7 @@ extern int halide_cuda_run(void *user_context,
                            float *vertex_buffer,
                            int num_coords_dim0,
                            int num_coords_dim1);
+extern void halide_cuda_finalize_kernels(void *user_context, void *state_ptr);
 // @}
 
 /** Set the underlying cuda device poiner for a buffer. The device

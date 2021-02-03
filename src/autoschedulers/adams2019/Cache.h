@@ -1,5 +1,5 @@
-#ifndef CACHING_H
-#define CACHING_H
+#ifndef BLOCK_CACHE_H
+#define BLOCK_CACHE_H
 
 #include "ASLog.h"
 #include "CostModel.h"
@@ -15,10 +15,13 @@ namespace Autoscheduler {
 
 struct State;
 
+// true iff HL_USE_MEMOIZED_FEATURES=1
 bool use_memoized_features();
 
+// true iff HL_VERIFY_MEMOIZED_FEATURES=1
 bool verify_memoized_features();
 
+// true iff HL_MEMOIZE_BLOCKS=1
 bool is_memoize_blocks_enabled();
 
 /*
@@ -81,4 +84,4 @@ struct Cache {
 }  // namespace Internal
 }  // namespace Halide
 
-#endif  // CACHING_H
+#endif  // BLOCK_CACHE_H

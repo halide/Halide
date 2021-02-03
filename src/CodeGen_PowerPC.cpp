@@ -45,7 +45,7 @@ const PowerPCIntrinsic intrinsic_defs[] = {
     {"llvm.ppc.altivec.vminfp", Float(32, 4), "min", {Float(32, 4), Float(32, 4)}},
     {"llvm.ppc.altivec.vminsd", Int(64, 2), "min", {Int(64, 2), Int(64, 2)}, Target::POWER_ARCH_2_07},
     {"llvm.ppc.altivec.vminud", UInt(64, 2), "min", {UInt(64, 2), UInt(64, 2)}, Target::POWER_ARCH_2_07},
-    {"llvm.ppc.altivec.xvmindp", Float(64, 2), "min", {Float(64, 2), Float(64, 2)}, Target::VSX},
+    {"llvm.ppc.vsx.xvmindp", Float(64, 2), "min", {Float(64, 2), Float(64, 2)}, Target::VSX},
 
     {"llvm.ppc.altivec.vmaxsb", Int(8, 16), "max", {Int(8, 16), Int(8, 16)}},
     {"llvm.ppc.altivec.vmaxub", UInt(8, 16), "max", {UInt(8, 16), UInt(8, 16)}},
@@ -56,7 +56,7 @@ const PowerPCIntrinsic intrinsic_defs[] = {
     {"llvm.ppc.altivec.vmaxfp", Float(32, 4), "max", {Float(32, 4), Float(32, 4)}},
     {"llvm.ppc.altivec.vmaxsd", Int(64, 2), "max", {Int(64, 2), Int(64, 2)}, Target::POWER_ARCH_2_07},
     {"llvm.ppc.altivec.vmaxud", UInt(64, 2), "max", {UInt(64, 2), UInt(64, 2)}, Target::POWER_ARCH_2_07},
-    {"llvm.ppc.altivec.xvmaxdp", Float(64, 2), "max", {Float(64, 2), Float(64, 2)}, Target::VSX},
+    {"llvm.ppc.vsx.xvmaxdp", Float(64, 2), "max", {Float(64, 2), Float(64, 2)}, Target::VSX},
 
     {"llvm.ppc.altivec.vaddsbs", Int(8, 16), "saturating_add", {Int(8, 16), Int(8, 16)}},
     {"llvm.ppc.altivec.vaddubs", UInt(8, 16), "saturating_add", {UInt(8, 16), UInt(8, 16)}},

@@ -4,6 +4,9 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
+using std::map;
+using std::pair;
+
 uint64_t State::structural_hash(int depth) const {
     uint64_t h = num_decisions_made;
     internal_assert(root.defined());
@@ -11,57 +14,8 @@ uint64_t State::structural_hash(int depth) const {
     return h;
 }
 
-// Compute the parent and depth of every loop nest node
-void State::compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest *, int>> &p,
-                                      const LoopNest *here, int depth) const {
-    for (const auto &c : here->children) {
-        p.emplace(c.get(), pair<const LoopNest *, int>{here, depth});
-        compute_loop_nest_parents(p, c.get(), depth + 1);
-    }
-}
-
-const LoopNest *State::deepest_common_ancestor(const map<const LoopNest *, pair<const LoopNest *, int>> &parent,
-                                               const LoopNest *a, const LoopNest *b) const {
-    if (a->is_root()) {
-        return a;
-    }
-    if (b->is_root()) {
-        return b;
-    }
-    if (a == b) {
-        return a;
-    }
-
-    // Walk the deeper one up until they're at the same depth
-    auto it_a = parent.find(a);
-    auto it_b = parent.find(b);
-    internal_assert(it_a != parent.end() && it_b != parent.end());
-    while (it_a->second.second > it_b->second.second) {
-        a = it_a->second.first;
-        it_a = parent.find(a);
-    }
-    while (it_b->second.second > it_a->second.second) {
-        b = it_b->second.first;
-        it_b = parent.find(b);
-    }
-
-    while (1) {
-        // Walk each up one
-        a = it_a->second.first;
-        b = it_b->second.first;
-        if (a == b) {
-            return a;
-        }
-        it_a = parent.find(a);
-        it_b = parent.find(b);
-        internal_assert(it_a != parent.end() && it_b != parent.end());
-    }
-
-    // unreachable
-    return nullptr;
-}
-
-void State::compute_featurization(const FunctionDAG &dag, const MachineParams &params, StageMap<ScheduleFeatures> *features, const CachingOptions &cache_options) {
+void State::compute_featurization(const FunctionDAG &dag, const MachineParams &params,
+                                  StageMap<ScheduleFeatures> *features, const CachingOptions &cache_options) {
     StageMap<LoopNest::Sites> sites;
     sites.make_large(dag.nodes[0].stages[0].max_id);
     features->make_large(dag.nodes[0].stages[0].max_id);
@@ -121,12 +75,15 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
         }
     }
 
-    for (const auto &c : root->children) {
-        sites.get(c->stage).hash_of_producers_stored_at_root = c->compute_hash_of_producers_stored_at_root(sites);
+    if (cache_options.cache_features) {
+        // Store unique hashes for each Site, to be used as keys into cache
+        for (const auto &c : root->children) {
+            sites.get(c->stage).hash_of_producers_stored_at_root = c->compute_hash_of_producers_stored_at_root(sites);
+        }
     }
 
+    // Check that features produced with or without caching are the same.
     if (cache_options.verify_feature_caching) {
-        // Check that features produced with or without caching are the same.
         StageMap<ScheduleFeatures> base_features;
         base_features.make_large(dag.nodes[0].stages[0].max_id);
         // Calculate features without caching.
@@ -142,7 +99,6 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
             const auto &feat = it.value();
 
             if (!feat.equal(verification_features.get(&stage))) {
-                // TODO(rootjalex): not sure what these params should be
                 root->dump("", nullptr);
                 std::cerr << "Feature Mismatch: " << stage.node->func.name() << "\n";
                 feat.dump();
@@ -150,8 +106,7 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
                 verification_features.get(&stage).dump();
                 std::cerr << "\n";
 
-                // TODO(rootjalex): more eloquent error message.
-                internal_assert(false);
+                internal_assert(false) << "Feature caching verification failed\n";
             }
         }
     }
@@ -167,7 +122,8 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
     }
 }
 
-void State::save_featurization(const FunctionDAG &dag, const MachineParams &params, const CachingOptions &cache_options, std::ostream &out) {
+void State::save_featurization(const FunctionDAG &dag, const MachineParams &params,
+                               const CachingOptions &cache_options, std::ostream &out) {
     StageMap<ScheduleFeatures> features;
     compute_featurization(dag, params, &features, cache_options);
 
@@ -197,7 +153,8 @@ void State::save_featurization(const FunctionDAG &dag, const MachineParams &para
 }
 
 bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params,
-                           CostModel *cost_model, const CachingOptions &cache_options, int64_t memory_limit, bool verbose) {
+                           CostModel *cost_model, const CachingOptions &cache_options,
+                           int64_t memory_limit, bool verbose) {
     StageMap<ScheduleFeatures> features;
     compute_featurization(dag, params, &features, cache_options);
 
@@ -454,13 +411,11 @@ void State::generate_children(const FunctionDAG &dag,
             child->num_decisions_made++;
             accept_child(std::move(child));
         } else {
+            internal_assert(pure_size);
 
-            // TODO(rootjalex): we don't want `this` to be a const pointer, so it can be cast to IntrusivePtr
             if (cache->add_memoized_blocks(this, accept_child, node, num_children, dag, params, cost_model, memory_limit)) {
                 return;  // successfully added cached states.
             }
-
-            internal_assert(pure_size);
 
             // Generate some candidate parallel task shapes.
             auto tilings = generate_tilings(*pure_size, node->dimensions - 1, 2, true);

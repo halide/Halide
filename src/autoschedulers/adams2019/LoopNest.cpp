@@ -1,6 +1,8 @@
 #include "LoopNest.h"
-#include "Caching.h"
+#include "Cache.h"
 
+using std::map;
+using std::pair;
 using std::set;
 using std::vector;
 
@@ -1997,14 +1999,12 @@ void LoopNest::memoize_features(StageMap<ScheduleFeatures> &memoized_features, c
             continue;
         }
 
-        // TODO(rootjalex): should probably assert that features_to_insert has this stage
         internal_assert(features_to_insert->contains(stage_ptr)) << "memoize_features attempted to save a stage_ptr that doesn't exist\n";
         const auto &inlined_feat = features_to_insert->get(stage_ptr);
         memoized_features.insert(stage_ptr, inlined_feat);
     }
 
     if (!memoized_features.contains(stage)) {
-        // TODO(rootjalex): should probably assert that features_to_insert has this stage
         internal_assert(features_to_insert->contains(stage)) << "memoize_features attempted to save this->stage but that's not in features_to_insert\n";
         memoized_features.insert(stage, features_to_insert->get(stage));
     }
@@ -2128,6 +2128,56 @@ void LoopNest::collect_stages(std::set<const FunctionDAG::Node::Stage *> &stages
 
     for (const auto &c : children) {
         c->collect_stages(stages);
+    }
+}
+
+const LoopNest *deepest_common_ancestor(const map<const LoopNest *, pair<const LoopNest *, int>> &parents,
+                                        const LoopNest *a, const LoopNest *b) {
+    if (a->is_root()) {
+        return a;
+    }
+    if (b->is_root()) {
+        return b;
+    }
+    if (a == b) {
+        return a;
+    }
+
+    // Walk the deeper one up until they're at the same depth
+    auto it_a = parents.find(a);
+    auto it_b = parents.find(b);
+    internal_assert(it_a != parents.end() && it_b != parents.end());
+    while (it_a->second.second > it_b->second.second) {
+        a = it_a->second.first;
+        it_a = parents.find(a);
+    }
+    while (it_b->second.second > it_a->second.second) {
+        b = it_b->second.first;
+        it_b = parents.find(b);
+    }
+
+    while (1) {
+        // Walk each up one
+        a = it_a->second.first;
+        b = it_b->second.first;
+        if (a == b) {
+            return a;
+        }
+        it_a = parents.find(a);
+        it_b = parents.find(b);
+        internal_assert(it_a != parents.end() && it_b != parents.end());
+    }
+
+    // unreachable
+    return nullptr;
+}
+
+// Compute the parent and depth of every loop nest node
+void compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest *, int>> &parents,
+                               const LoopNest *here, int depth) {
+    for (const auto &c : here->children) {
+        parents.emplace(c.get(), pair<const LoopNest *, int>{here, depth});
+        compute_loop_nest_parents(parents, c.get(), depth + 1);
     }
 }
 
