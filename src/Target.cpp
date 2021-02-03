@@ -172,6 +172,18 @@ Target calculate_host_target() {
             }
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
                 initial_features.push_back(Target::AVX512_Cannonlake);
+
+#if LLVM_VERSION >= 120
+                // Sapphire Rapids support was added in LLVM 12, so earlier versions cannot support this CPU's features.
+                const uint32_t avx512vnni = 1U << 11;  // vnni result in ecx
+                const uint32_t avx512bf16 = 1U << 5;   // bf16 result in eax, with cpuid(eax=7, ecx=1)
+                int info3[4];
+                cpuid(info3, 7, 1);
+                if ((info2[2] & avx512vnni) == avx512vnni &&
+                    (info3[0] & avx512bf16) == avx512bf16) {
+                    initial_features.push_back(Target::AVX512_SapphireRapids);
+                }
+#endif
             }
         }
     }
@@ -246,7 +258,13 @@ Target::Feature calculate_host_cuda_capability(Target t) {
     } else if (ver < 80) {
         return Target::CUDACapability75;
     } else {
+#if LLVM_VERSION >= 110
         return Target::CUDACapability80;
+#else
+        // We require LLVM11+ in order to generate for CUDACapability80,
+        // so don't ever return that capability here, even if present.
+        return Target::CUDACapability75;
+#endif
     }
 }
 
@@ -324,7 +342,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cl_doubles", Target::CLDoubles},
     {"cl_half", Target::CLHalf},
     {"cl_atomics64", Target::CLAtomics64},
-    {"opengl", Target::OpenGL},
     {"openglcompute", Target::OpenGLCompute},
     {"egl", Target::EGL},
     {"user_context", Target::UserContext},
@@ -347,6 +364,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"avx512_knl", Target::AVX512_KNL},
     {"avx512_skylake", Target::AVX512_Skylake},
     {"avx512_cannonlake", Target::AVX512_Cannonlake},
+    {"avx512_sapphirerapids", Target::AVX512_SapphireRapids},
     {"trace_loads", Target::TraceLoads},
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
@@ -654,8 +672,8 @@ bool Target::supported() const {
 #if !defined(WITH_METAL)
     bad |= has_feature(Target::Metal);
 #endif
-#if !defined(WITH_OPENGL)
-    bad |= has_feature(Target::OpenGL) || has_feature(Target::OpenGLCompute);
+#if !defined(WITH_OPENGLCOMPUTE)
+    bad |= has_feature(Target::OpenGLCompute);
 #endif
 #if !defined(WITH_D3D12)
     bad |= has_feature(Target::D3D12Compute);
@@ -753,7 +771,13 @@ int Target::get_cuda_capability_lower_bound() const {
         return 75;
     }
     if (has_feature(Target::CUDACapability80)) {
+#if LLVM_VERSION >= 110
         return 80;
+#else
+        // We require LLVM11+ in order to generate for CUDACapability80,
+        // so don't ever return that capability here, even if present.
+        return 75;
+#endif
     }
     return 20;
 }
@@ -762,14 +786,12 @@ bool Target::supports_type(const Type &t) const {
     if (t.bits() == 64) {
         if (t.is_float()) {
             return !has_feature(Metal) &&
-                   !has_feature(OpenGL) &&
                    !has_feature(OpenGLCompute) &&
                    !has_feature(D3D12Compute) &&
                    (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
         } else {
             return (!has_feature(Metal) &&
                     !has_feature(OpenGLCompute) &&
-                    !has_feature(OpenGL) &&
                     !has_feature(D3D12Compute));
         }
     }
@@ -842,9 +864,6 @@ DeviceAPI Target::get_required_device_api() const {
     if (has_feature(Target::OpenCL)) {
         return DeviceAPI::OpenCL;
     }
-    if (has_feature(Target::OpenGL)) {
-        return DeviceAPI::GLSL;
-    }
     if (has_feature(Target::OpenGLCompute)) {
         return DeviceAPI::OpenGLCompute;
     }
@@ -857,8 +876,6 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
         return Target::CUDA;
     case DeviceAPI::OpenCL:
         return Target::OpenCL;
-    case DeviceAPI::GLSL:
-        return Target::OpenGL;
     case DeviceAPI::OpenGLCompute:
         return Target::OpenGLCompute;
     case DeviceAPI::Metal:
@@ -945,7 +962,6 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         Metal,
         NoNEON,
         OpenCL,
-        OpenGL,
         OpenGLCompute,
 
         // These features are actually intersection-y, but because targets only record the _highest_,
@@ -965,13 +981,14 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 12> intersection_features = {{
+    const std::array<Feature, 13> intersection_features = {{
         ARMv7s,
         AVX,
         AVX2,
         AVX512,
         AVX512_Cannonlake,
         AVX512_KNL,
+        AVX512_SapphireRapids,
         AVX512_Skylake,
         F16C,
         FMA,
@@ -1032,6 +1049,11 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     Target output = Target{os, arch, bits};
     output.features = ((features | other.features) & union_mask) | ((features | other.features) & matching_mask) | ((features & other.features) & intersection_mask);
 
+#if LLVM_VERSION < 120
+    // We require LLVM 12+ to compile SapphireRapids features.
+    output.features.reset(AVX512_SapphireRapids);
+#endif
+
     // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features
     int cuda_a = get_cuda_capability_lower_bound();
     int cuda_b = other.get_cuda_capability_lower_bound();
@@ -1061,9 +1083,15 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     if (cuda_capability < 75) {
         output.features.reset(CUDACapability75);
     }
+#if LLVM_VERSION >= 110
     if (cuda_capability < 80) {
         output.features.reset(CUDACapability80);
     }
+#else
+    // We require LLVM11+ in order to generate for CUDACapability80,
+    // so don't ever return that capability here, even if present.
+    output.features.reset(CUDACapability80);
+#endif
 
     // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
     int hvx_a = get_hvx_lower_bound(*this);
@@ -1105,7 +1133,6 @@ void target_test() {
         {{"x86-64-linux-cuda", "x86-64-linux", "x86-64-linux-cuda"}},
         {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda", "x86-64-linux-cuda"}},
         {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda-cuda_capability_30", "x86-64-linux-cuda-cuda_capability_30"}},
-        {{"x86-64-linux-cuda", "x86-64-linux-opengl", "x86-64-linux-cuda-opengl"}},
         {{"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"}},
         {{"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}},
         {{"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt", ""}},

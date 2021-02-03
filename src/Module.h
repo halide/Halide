@@ -9,7 +9,6 @@
 #include <functional>
 #include <map>
 #include <memory>
-#include <set>
 #include <string>
 
 #include "Argument.h"
@@ -17,12 +16,12 @@
 #include "ExternalCode.h"
 #include "Function.h"  // for NameMangling
 #include "ModulusRemainder.h"
-#include "Target.h"
 
 namespace Halide {
 
 template<typename T>
 class Buffer;
+struct Target;
 
 /** Enums specifying various kinds of outputs that can be produced from a Halide Pipeline. */
 enum class Output {
@@ -208,7 +207,7 @@ Module link_modules(const std::string &name, const std::vector<Module> &modules)
 /** Create an object file containing the Halide runtime for a given target. For
  * use with Target::NoRuntime. Standalone runtimes are only compatible with
  * pipelines compiled by the same build of Halide used to call this function. */
-void compile_standalone_runtime(const std::string &object_filename, Target t);
+void compile_standalone_runtime(const std::string &object_filename, const Target &t);
 
 /** Create an object and/or static library file containing the Halide runtime
  * for a given target. For use with Target::NoRuntime. Standalone runtimes are
@@ -216,7 +215,7 @@ void compile_standalone_runtime(const std::string &object_filename, Target t);
  * call this function. Return a map with just the actual outputs filled in
  * (typically, Output::object and/or Output::static_library).
  */
-std::map<Output, std::string> compile_standalone_runtime(const std::map<Output, std::string> &output_files, Target t);
+std::map<Output, std::string> compile_standalone_runtime(const std::map<Output, std::string> &output_files, const Target &t);
 
 using ModuleFactory = std::function<Module(const std::string &fn_name, const Target &target)>;
 using CompilerLoggerFactory = std::function<std::unique_ptr<Internal::CompilerLogger>(const std::string &fn_name, const Target &target)>;

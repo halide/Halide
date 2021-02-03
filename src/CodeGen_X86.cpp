@@ -9,6 +9,7 @@
 #include "JITModule.h"
 #include "LLVM_Headers.h"
 #include "Param.h"
+#include "Simplify.h"
 #include "Util.h"
 #include "Var.h"
 
@@ -26,6 +27,12 @@ namespace {
 // existing flags, so that instruction patterns can just check for the
 // oldest feature flag that supports an instruction.
 Target complete_x86_target(Target t) {
+    if (t.has_feature(Target::AVX512_SapphireRapids)) {
+        t.set_feature(Target::AVX512_Cannonlake);
+    }
+    if (t.has_feature(Target::AVX512_Cannonlake)) {
+        t.set_feature(Target::AVX512_Skylake);
+    }
     if (t.has_feature(Target::AVX512_Cannonlake) ||
         t.has_feature(Target::AVX512_Skylake) ||
         t.has_feature(Target::AVX512_KNL)) {
@@ -131,6 +138,12 @@ const x86Intrinsic intrinsic_defs[] = {
     {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "pmaddwd", {Int(16, 32), Int(16, 32)}, Target::AVX512_Cannonlake},
     {"llvm.x86.avx2.pmadd.wd", Int(32, 8), "pmaddwd", {Int(16, 16), Int(16, 16)}, Target::AVX2},
     {"llvm.x86.sse2.pmadd.wd", Int(32, 4), "pmaddwd", {Int(16, 8), Int(16, 8)}},
+
+    // Convert FP32 to BF16
+    {"llvm.x86.avx512bf16.cvtneps2bf16.512", BFloat(16, 16), "f32_to_bf16", {Float(32, 16)}, Target::AVX512_SapphireRapids},
+    {"llvm.x86.avx512bf16.cvtneps2bf16.256", BFloat(16, 8), "f32_to_bf16", {Float(32, 8)}, Target::AVX512_SapphireRapids},
+    // TODO(https://github.com/halide/Halide/issues/5683): LLVM 12 does not support unmasked cvtneps2bf16 for 128bit inputs
+    //{"llvm.x86.avx512bf16.cvtneps2bf16.128", BFloat(16, 4), "f32_to_bf16", {Float(32, 4)}, Target::AVX512_SapphireRapids},
 };
 // clang-format on
 
@@ -167,25 +180,41 @@ bool should_use_pmaddwd(const Expr &a, const Expr &b, vector<Expr> &result) {
     Type t = a.type();
     internal_assert(b.type() == t);
 
-    const Mul *ma = a.as<Mul>();
-    const Mul *mb = b.as<Mul>();
-
-    if (!(ma && mb && t.is_int() && t.bits() == 32 && (t.lanes() >= 4))) {
+    if (!(t.is_int() && t.bits() == 32 && t.lanes() >= 4)) {
         return false;
     }
 
-    Type narrow = t.with_bits(16);
-    vector<Expr> args = {lossless_cast(narrow, ma->a),
-                         lossless_cast(narrow, ma->b),
-                         lossless_cast(narrow, mb->a),
-                         lossless_cast(narrow, mb->b)};
-    if (!args[0].defined() || !args[1].defined() ||
-        !args[2].defined() || !args[3].defined()) {
+    const Call *ma = Call::as_intrinsic(a, {Call::widening_mul});
+    const Call *mb = Call::as_intrinsic(b, {Call::widening_mul});
+    // pmaddwd can't handle mixed type widening muls.
+    if (ma && ma->args[0].type() != ma->args[1].type()) {
         return false;
     }
-
-    result.swap(args);
-    return true;
+    if (mb && mb->args[0].type() != mb->args[1].type()) {
+        return false;
+    }
+    // If the operands are widening shifts, we might be able to treat these as
+    // multiplies.
+    const Call *sa = Call::as_intrinsic(a, {Call::widening_shift_left});
+    const Call *sb = Call::as_intrinsic(b, {Call::widening_shift_left});
+    if (sa && !is_const(sa->args[1])) {
+        sa = nullptr;
+    }
+    if (sb && !is_const(sb->args[1])) {
+        sb = nullptr;
+    }
+    if ((ma || sa) && (mb || sb)) {
+        Expr a0 = ma ? ma->args[0] : sa->args[0];
+        Expr a1 = ma ? ma->args[1] : lossless_cast(sa->args[0].type(), simplify(make_const(sa->type, 1) << sa->args[1]));
+        Expr b0 = mb ? mb->args[0] : sb->args[0];
+        Expr b1 = mb ? mb->args[1] : lossless_cast(sb->args[0].type(), simplify(make_const(sb->type, 1) << sb->args[1]));
+        if (a1.defined() && b1.defined()) {
+            std::vector<Expr> args = {a0, a1, b0, b1};
+            result.swap(args);
+            return true;
+        }
+    }
+    return false;
 }
 
 }  // namespace
@@ -196,10 +225,11 @@ void CodeGen_X86::visit(const Add *op) {
         Expr ac = Shuffle::make_interleave({matches[0], matches[2]});
         Expr bd = Shuffle::make_interleave({matches[1], matches[3]});
         value = call_overloaded_intrin(op->type, "pmaddwd", {ac, bd});
-        internal_assert(value);
-    } else {
-        CodeGen_Posix::visit(op);
+        if (value) {
+            return;
+        }
     }
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_X86::visit(const Sub *op) {
@@ -214,37 +244,11 @@ void CodeGen_X86::visit(const Sub *op) {
         Expr ac = Shuffle::make_interleave({matches[0], matches[2]});
         Expr bd = Shuffle::make_interleave({matches[1], matches[3]});
         value = call_overloaded_intrin(op->type, "pmaddwd", {ac, bd});
-        internal_assert(value);
-    } else {
-        CodeGen_Posix::visit(op);
-    }
-}
-
-void CodeGen_X86::visit(const Mul *op) {
-
-#if LLVM_VERSION < 110
-    // Widening integer multiply of non-power-of-two vector sizes is
-    // broken in older llvms for older x86:
-    // https://bugs.llvm.org/show_bug.cgi?id=44976
-    const int lanes = op->type.lanes();
-    if (!target.has_feature(Target::SSE41) &&
-        (lanes & (lanes - 1)) &&
-        (op->type.bits() >= 32) &&
-        !op->type.is_float()) {
-        // Any fancy shuffles to pad or slice into smaller vectors
-        // just gets undone by LLVM and retriggers the bug. Just
-        // scalarize.
-        vector<Expr> result;
-        for (int i = 0; i < lanes; i++) {
-            result.emplace_back(Shuffle::make_extract_element(op->a, i) *
-                                Shuffle::make_extract_element(op->b, i));
+        if (value) {
+            return;
         }
-        codegen(Shuffle::make_concat(result));
-        return;
     }
-#endif
-
-    return CodeGen_Posix::visit(op);
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_X86::visit(const GT *op) {
@@ -360,58 +364,45 @@ void CodeGen_X86::visit(const Cast *op) {
         return;
     }
 
-    vector<Expr> matches;
-
     struct Pattern {
-        bool wide_op;
         string intrin;
         Expr pattern;
     };
 
     // clang-format off
     static Pattern patterns[] = {
-        {true, "saturating_add", i8_sat(wild_i16x_ + wild_i16x_)},
-        {true, "saturating_sub", i8_sat(wild_i16x_ - wild_i16x_)},
-        {true, "saturating_add", i16_sat(wild_i32x_ + wild_i32x_)},
-        {true, "saturating_sub", i16_sat(wild_i32x_ - wild_i32x_)},
-        {true, "saturating_add", u8_sat(wild_u16x_ + wild_u16x_)},
-        {true, "saturating_sub", u8(max(wild_i16x_ - wild_i16x_, 0))},
-        {true, "saturating_add", u16_sat(wild_u32x_ + wild_u32x_)},
-        {true, "saturating_sub", u16(max(wild_i32x_ - wild_i32x_, 0))},
+        {"pmulh", i16(widening_mul(wild_i16x_, wild_i16x_) >> u32(16))},
+        {"pmulh", u16(widening_mul(wild_u16x_, wild_u16x_) >> u32(16))},
+        {"pmulhr", i16(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), u32(15)))},
 
-        {true, "pmulh", i16((wild_i32x_ * wild_i32x_) / 65536)},
-        {true, "pmulh", u16((wild_u32x_ * wild_u32x_) / 65536)},
-        {true, "pmulhr", i16((((wild_i32x_ * wild_i32x_) + 16384)) / 32768)},
+        {"saturating_narrow", i16_sat(wild_i32x_)},
+        {"saturating_narrow", u16_sat(wild_i32x_)},
+        {"saturating_narrow", i8_sat(wild_i16x_)},
+        {"saturating_narrow", u8_sat(wild_i16x_)},
 
-        {true, "rounding_halving_add", u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
-        {true, "rounding_halving_add", u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
-
-        {false, "saturating_narrow", i16_sat(wild_i32x_)},
-        {false, "saturating_narrow", u16_sat(wild_i32x_)},
-        {false, "saturating_narrow", i8_sat(wild_i16x_)},
-        {false, "saturating_narrow", u8_sat(wild_i16x_)},
+        {"f32_to_bf16", bf16(wild_f32x_)},
     };
     // clang-format on
 
+    vector<Expr> matches;
     for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
         const Pattern &pattern = patterns[i];
         if (expr_match(pattern.pattern, op, matches)) {
-            bool match = true;
-            if (pattern.wide_op) {
-                // Try to narrow the matches to the target type.
-                for (size_t i = 0; i < matches.size(); i++) {
-                    matches[i] = lossless_cast(op->type, matches[i]);
-                    if (!matches[i].defined()) {
-                        match = false;
-                    }
-                }
+            value = call_overloaded_intrin(op->type, pattern.intrin, matches);
+            if (value) {
+                return;
             }
-            if (match) {
-                value = call_overloaded_intrin(op->type, pattern.intrin, matches);
-                if (value) {
-                    return;
-                }
-            }
+        }
+    }
+
+    if (const Call *mul = Call::as_intrinsic(op->value, {Call::widening_mul})) {
+        if (op->value.type().bits() < op->type.bits() && op->type.bits() <= 32) {
+            // LLVM/x86 really doesn't like 8 -> 16 bit multiplication. If we're
+            // widening to 32-bits after a widening multiply, LLVM prefers to see a
+            // widening multiply directly to 32-bits. This may result in extra
+            // casts, so simplify to remove them.
+            value = codegen(simplify(Mul::make(Cast::make(op->type, mul->args[0]), Cast::make(op->type, mul->args[1]))));
+            return;
         }
     }
 
@@ -425,7 +416,7 @@ void CodeGen_X86::visit(const Cast *op) {
         Type signed_type = Int(32, op->type.lanes());
 
         // Convert the top 31 bits to float using the signed version
-        Expr top_bits = cast(signed_type, op->value / 2);
+        Expr top_bits = cast(signed_type, op->value >> 1);
         top_bits = cast(op->type, top_bits);
 
         // Convert the bottom bit
@@ -441,21 +432,36 @@ void CodeGen_X86::visit(const Cast *op) {
 }
 
 void CodeGen_X86::visit(const Call *op) {
-    if (op->is_intrinsic(Call::mulhi_shr) &&
-        op->type.is_vector() && op->type.bits() == 16) {
-        internal_assert(op->args.size() == 3);
-        Expr p;
-        if (op->type.is_uint()) {
-            p = u16(u32(op->args[0]) * u32(op->args[1]) / 65536);
-        } else {
-            p = i16(i32(op->args[0]) * i32(op->args[1]) / 65536);
+#if LLVM_VERSION < 110
+    if (op->is_intrinsic(Call::widening_mul) && (op->type.is_int() || op->type.is_uint())) {
+        // Widening integer multiply of non-power-of-two vector sizes is
+        // broken in older llvms for older x86:
+        // https://bugs.llvm.org/show_bug.cgi?id=44976
+        const int lanes = op->type.lanes();
+        if (!target.has_feature(Target::SSE41) &&
+            (lanes & (lanes - 1)) &&
+            (op->type.bits() >= 32) &&
+            !op->type.is_float()) {
+            // Any fancy shuffles to pad or slice into smaller vectors
+            // just gets undone by LLVM and retriggers the bug. Just
+            // scalarize.
+            vector<Expr> result;
+            for (int i = 0; i < lanes; i++) {
+                result.emplace_back(Shuffle::make_extract_element(Cast::make(op->type, op->args[0]), i) *
+                                    Shuffle::make_extract_element(Cast::make(op->type, op->args[1]), i));
+            }
+            codegen(Shuffle::make_concat(result));
+            return;
         }
+    }
+#endif
+    if (op->is_intrinsic(Call::mulhi_shr)) {
+        internal_assert(op->args.size() == 3);
+
+        Expr p_wide = widening_mul(op->args[0], op->args[1]);
         const UIntImm *shift = op->args[2].as<UIntImm>();
         internal_assert(shift != nullptr) << "Third argument to mulhi_shr intrinsic must be an unsigned integer immediate.\n";
-        if (shift->value != 0) {
-            p = p >> shift->value;
-        }
-        value = codegen(p);
+        value = codegen(cast(op->type, p_wide >> op->type.bits()) >> shift->value);
         return;
     }
 
@@ -463,33 +469,53 @@ void CodeGen_X86::visit(const Call *op) {
 }
 
 void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
+    if (op->op != VectorReduce::Add) {
+        CodeGen_Posix::codegen_vector_reduce(op, init);
+        return;
+    }
     const int factor = op->value.type().lanes() / op->type.lanes();
 
-    if (op->type.is_int() &&
-        op->type.bits() == 32 &&
-        factor == 2 &&
-        op->op == VectorReduce::Add) {
-        Type narrower = Int(16, op->value.type().lanes());
-        Expr a, b;
-        if (const Mul *mul = op->value.as<Mul>()) {
-            a = lossless_cast(narrower, mul->a);
-            b = lossless_cast(narrower, mul->b);
-        } else {
-            // One could do a horizontal widening addition with
-            // pmaddwd against a vector of ones. Currently disabled
-            // because I haven't found case where it's clearly better.
+    struct Pattern {
+        int factor;
+        Expr pattern;
+        const char *intrin;
+        Type narrow_type;
+    };
+    // clang-format off
+    static const Pattern patterns[] = {
+        {2, i32(widening_mul(wild_i16x_, wild_i16x_)), "pmaddwd", Int(16)},
+        {2, i32(widening_mul(wild_i8x_, wild_i8x_)), "pmaddwd", Int(16)},
+        {2, i32(widening_mul(wild_i8x_, wild_u8x_)), "pmaddwd", Int(16)},
+        {2, i32(widening_mul(wild_u8x_, wild_i8x_)), "pmaddwd", Int(16)},
+        {2, i32(widening_mul(wild_u8x_, wild_u8x_)), "pmaddwd", Int(16)},
+        // One could do a horizontal widening addition with
+        // pmaddwd against a vector of ones. Currently disabled
+        // because I haven't found case where it's clearly better.
+    };
+    // clang-format on
 
-            //a = lossless_cast(narrower, op->value);
-            //b = make_const(narrower, 1);
+    std::vector<Expr> matches;
+    for (const Pattern &p : patterns) {
+        if (p.factor != factor) {
+            continue;
         }
-        if (a.defined() && b.defined()) {
-            value = call_overloaded_intrin(op->type, "pmaddwd", {a, b});
-            if (init.defined()) {
-                Value *x = value;
-                Value *y = codegen(init);
-                value = builder->CreateAdd(x, y);
+        if (expr_match(p.pattern, op->value, matches)) {
+            Expr a = matches[0];
+            Expr b = matches[1];
+            a = lossless_cast(p.narrow_type.with_lanes(a.type().lanes()), a);
+            b = lossless_cast(p.narrow_type.with_lanes(b.type().lanes()), b);
+            internal_assert(a.defined());
+            internal_assert(b.defined());
+
+            value = call_overloaded_intrin(op->type, p.intrin, {a, b});
+            if (value) {
+                if (init.defined()) {
+                    Value *x = value;
+                    Value *y = codegen(init);
+                    value = builder->CreateAdd(x, y);
+                }
+                return;
             }
-            return;
         }
     }
 
@@ -497,7 +523,14 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
 }
 
 string CodeGen_X86::mcpu() const {
-    if (target.has_feature(Target::AVX512_Cannonlake)) {
+    if (target.has_feature(Target::AVX512_SapphireRapids)) {
+#if LLVM_VERSION >= 120
+        return "sapphirerapids";
+#else
+        user_error << "AVX512 SapphireRapids requires LLVM 12 or later.";
+        return "";
+#endif
+    } else if (target.has_feature(Target::AVX512_Cannonlake)) {
         return "cannonlake";
     } else if (target.has_feature(Target::AVX512_Skylake)) {
         return "skylake-avx512";
@@ -546,6 +579,13 @@ string CodeGen_X86::mattrs() const {
         }
         if (target.has_feature(Target::AVX512_Cannonlake)) {
             features += ",+avx512ifma,+avx512vbmi";
+        }
+        if (target.has_feature(Target::AVX512_SapphireRapids)) {
+#if LLVM_VERSION >= 120
+            features += ",+avx512bf16,+avx512vnni";
+#else
+            user_error << "AVX512 SapphireRapids requires LLVM 12 or later.";
+#endif
         }
     }
     return features;

@@ -6,10 +6,12 @@
  */
 
 #include <map>
-
-#include "Target.h"
+#include <string>
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
 
 class Function;

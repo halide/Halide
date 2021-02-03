@@ -4,6 +4,7 @@
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "Deinterleave.h"
+#include "FindIntrinsics.h"
 #include "IROperator.h"
 #include "Lerp.h"
 #include "Param.h"
@@ -29,7 +30,6 @@ extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeHexagonHost
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeMetal_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenCL_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h[];
-extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGL_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeQurt_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeD3D12Compute_h[];
 
@@ -299,6 +299,12 @@ protected:
             for (const auto &a : op->args) {
                 include_lerp_types(a.type());
             }
+        } else if (op->is_intrinsic()) {
+            Expr lowered = lower_intrinsic(op);
+            if (lowered.defined()) {
+                lowered.accept(this);
+                return;
+            }
         }
 
         IRGraphVisitor::visit(op);
@@ -311,7 +317,7 @@ public:
 
 }  // namespace
 
-CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::string &guard)
+CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const std::string &guard)
     : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind),
       extern_c_open(false), inside_atomic_mutex_node(false), emit_atomic_stores(false), using_vector_typedefs(false) {
 
@@ -417,9 +423,6 @@ CodeGen_C::~CodeGen_C() {
             }
             if (target.has_feature(Target::OpenGLCompute)) {
                 stream << halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h << "\n";
-            }
-            if (target.has_feature(Target::OpenGL)) {
-                stream << halide_internal_runtime_header_HalideRuntimeOpenGL_h << "\n";
             }
             if (target.has_feature(Target::D3D12Compute)) {
                 stream << halide_internal_runtime_header_HalideRuntimeD3D12Compute_h << "\n";
@@ -1583,7 +1586,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
 
         if (uses_gpu_for_loops) {
             stream << get_indent() << "halide_error("
-                   << (have_user_context ? "__user_context_" : "nullptr")
+                   << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
                    << ", \"C++ Backend does not support gpu_blocks() or gpu_threads() yet, "
                    << "this function will always fail at runtime\");\n";
             stream << get_indent() << "return halide_error_code_device_malloc_failed;\n";
@@ -2223,8 +2226,13 @@ void CodeGen_C::visit(const Call *op) {
         string arg0 = print_expr(op->args[0]);
         rhs << "(" << arg0 << ")";
     } else if (op->is_intrinsic()) {
-        // TODO: other intrinsics
-        internal_error << "Unhandled intrinsic in C backend: " << op->name << "\n";
+        Expr lowered = lower_intrinsic(op);
+        if (lowered.defined()) {
+            rhs << print_expr(lowered);
+        } else {
+            // TODO: other intrinsics
+            internal_error << "Unhandled intrinsic in C backend: " << op->name << "\n";
+        }
     } else {
         // Generic extern calls
         rhs << print_extern_call(op);

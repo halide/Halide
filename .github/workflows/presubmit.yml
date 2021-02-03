@@ -49,6 +49,5 @@ jobs:
           (cd test/error               && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
           (cd test/generator           && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
           (cd test/failing_with_issue  && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
-          (cd test/opengl              && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
           (cd test/performance         && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
           (cd test/warning             && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
