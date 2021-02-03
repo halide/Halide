@@ -2788,6 +2788,9 @@ struct Rewriter {
  * some number of patterns and if so rewrite it into another form,
  * using its operator() method. See Simplify.cpp for a bunch of
  * example usage.
+ *
+ * Important: Any Exprs in patterns are captured by reference, not by
+ * value, so ensure they outlive the rewriter.
  */
 // @{
 template<typename Instance,
