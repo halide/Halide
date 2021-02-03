@@ -3,7 +3,10 @@
 
 #include <chrono>
 #include <set>
+#include <string>
 #include <vector>
+
+#include "ASLog.h"
 
 namespace Halide {
 namespace Internal {
