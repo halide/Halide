@@ -65,6 +65,7 @@ WEAK CpuFeatures halide_get_cpu_features() {
         const uint32_t avx512vl = 1U << 31;
         const uint32_t avx512ifma = 1U << 21;
         const uint32_t avx512vnni = 1U << 11;  // vnni result in ecx
+        const uint32_t avx512bf16 = 1U << 5;   // bf16 result in eax, cpuid(eax=7, ecx=1)
         const uint32_t avx512 = avx512f | avx512cd;
         const uint32_t avx512_knl = avx512 | avx512pf | avx512er;
         const uint32_t avx512_skylake = avx512 | avx512vl | avx512bw | avx512dq;
@@ -82,8 +83,11 @@ WEAK CpuFeatures halide_get_cpu_features() {
             }
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
                 features.set_available(halide_target_feature_avx512_cannonlake);
-                if ((info2[2] & avx512vnni) == avx512vnni) {
-                    // TODO(https://github.com/halide/Halide/issues/5683): Should also check AVX512-BF16 here, but that needs call to cpuid(eax=7, ecx=1)
+
+                int32_t info3[4];
+                cpuid(info3, 7, 1);
+                if ((info2[2] & avx512vnni) == avx512vnni &&
+                    (info3[0] & avx512bf16) == avx512bf16) {
                     features.set_available(halide_target_feature_avx512_sapphirerapids);
                 }
             }
