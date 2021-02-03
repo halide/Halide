@@ -1,8 +1,6 @@
 #include "LoopNest.h"
 #include "Cache.h"
 
-using std::map;
-using std::pair;
 using std::set;
 using std::vector;
 
