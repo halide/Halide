@@ -2167,7 +2167,7 @@ struct IsConst {
         ty.code = halide_type_uint;
         ty.bits = 64;
         ty.lanes = 1;
-        val.u.u64 = is_const(e) ? 1 : 0;
+        val.u.u64 = ::Halide::Internal::is_const(e) ? 1 : 0;
     }
 };
 
