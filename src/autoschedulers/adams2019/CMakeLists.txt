@@ -40,6 +40,7 @@ add_autoscheduler(NAME Adams2019
                   DefaultCostModel.cpp
                   FunctionDAG.cpp
                   LoopNest.cpp
+                  State.cpp
                   Weights.cpp
                   ${WF_CPP})
 

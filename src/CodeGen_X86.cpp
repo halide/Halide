@@ -27,6 +27,12 @@ namespace {
 // existing flags, so that instruction patterns can just check for the
 // oldest feature flag that supports an instruction.
 Target complete_x86_target(Target t) {
+    if (t.has_feature(Target::AVX512_SapphireRapids)) {
+        t.set_feature(Target::AVX512_Cannonlake);
+    }
+    if (t.has_feature(Target::AVX512_Cannonlake)) {
+        t.set_feature(Target::AVX512_Skylake);
+    }
     if (t.has_feature(Target::AVX512_Cannonlake) ||
         t.has_feature(Target::AVX512_Skylake) ||
         t.has_feature(Target::AVX512_KNL)) {
@@ -132,6 +138,12 @@ const x86Intrinsic intrinsic_defs[] = {
     {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "pmaddwd", {Int(16, 32), Int(16, 32)}, Target::AVX512_Cannonlake},
     {"llvm.x86.avx2.pmadd.wd", Int(32, 8), "pmaddwd", {Int(16, 16), Int(16, 16)}, Target::AVX2},
     {"llvm.x86.sse2.pmadd.wd", Int(32, 4), "pmaddwd", {Int(16, 8), Int(16, 8)}},
+
+    // Convert FP32 to BF16
+    {"llvm.x86.avx512bf16.cvtneps2bf16.512", BFloat(16, 16), "f32_to_bf16", {Float(32, 16)}, Target::AVX512_SapphireRapids},
+    {"llvm.x86.avx512bf16.cvtneps2bf16.256", BFloat(16, 8), "f32_to_bf16", {Float(32, 8)}, Target::AVX512_SapphireRapids},
+    // TODO(https://github.com/halide/Halide/issues/5683): LLVM 12 does not support unmasked cvtneps2bf16 for 128bit inputs
+    //{"llvm.x86.avx512bf16.cvtneps2bf16.128", BFloat(16, 4), "f32_to_bf16", {Float(32, 4)}, Target::AVX512_SapphireRapids},
 };
 // clang-format on
 
@@ -367,6 +379,8 @@ void CodeGen_X86::visit(const Cast *op) {
         {"saturating_narrow", u16_sat(wild_i32x_)},
         {"saturating_narrow", i8_sat(wild_i16x_)},
         {"saturating_narrow", u8_sat(wild_i16x_)},
+
+        {"f32_to_bf16", bf16(wild_f32x_)},
     };
     // clang-format on
 
@@ -509,7 +523,14 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
 }
 
 string CodeGen_X86::mcpu() const {
-    if (target.has_feature(Target::AVX512_Cannonlake)) {
+    if (target.has_feature(Target::AVX512_SapphireRapids)) {
+#if LLVM_VERSION >= 120
+        return "sapphirerapids";
+#else
+        user_error << "AVX512 SapphireRapids requires LLVM 12 or later.";
+        return "";
+#endif
+    } else if (target.has_feature(Target::AVX512_Cannonlake)) {
         return "cannonlake";
     } else if (target.has_feature(Target::AVX512_Skylake)) {
         return "skylake-avx512";
@@ -558,6 +579,13 @@ string CodeGen_X86::mattrs() const {
         }
         if (target.has_feature(Target::AVX512_Cannonlake)) {
             features += ",+avx512ifma,+avx512vbmi";
+        }
+        if (target.has_feature(Target::AVX512_SapphireRapids)) {
+#if LLVM_VERSION >= 120
+            features += ",+avx512bf16,+avx512vnni";
+#else
+            user_error << "AVX512 SapphireRapids requires LLVM 12 or later.";
+#endif
         }
     }
     return features;
