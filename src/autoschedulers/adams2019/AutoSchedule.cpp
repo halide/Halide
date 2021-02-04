@@ -89,6 +89,9 @@
 #include "NetworkSize.h"
 #include "PerfectHashMap.h"
 
+#include "Timer.h"
+
+
 #ifdef _WIN32
 #include <io.h>
 #define _isatty isatty;
@@ -1213,6 +1216,8 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         num_passes = std::atoi(num_passes_str.c_str());
     }
 
+    Timer timer;
+
     for (int i = 0; i < num_passes; i++) {
         ProgressBar tick;
 
@@ -1236,7 +1241,12 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         }
     }
 
+    std::chrono::duration<double> total_time = timer.elapsed();
+    auto milli = std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count();
+
     aslog(0) << "Best cost: " << best->cost << "\n";
+
+    aslog(0) << "Execution time: " << milli << " ms\n\n";
 
     return best;
 }
@@ -1314,6 +1324,8 @@ void generate_schedule(const std::vector<Function> &outputs,
     if (aslog::aslog_level() > 0) {
         optimal->dump();
     }
+
+    // aslog(0) << "Source:" << optimal->schedule_source << "\n\n\n";
 
     string schedule_file = get_env_variable("HL_SCHEDULE_FILE");
     if (!schedule_file.empty()) {
