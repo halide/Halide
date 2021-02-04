@@ -27,19 +27,26 @@ enum class CPU_ScheduleAction {
 
 // Possible actions to be taken from an exploration State
 struct CPU_Action {
-    // Whether or not this action has been explored yet.
+    // Whether or not this action has been explored yet (needed for MCTS).
     bool explored = false;
+    // This is also necessary for MCTS.
+    mutable size_t index = 0;
 
     CPU_Action() = delete;
     CPU_Action(const CPU_Action &_action)= default;
+    CPU_Action(CPU_ScheduleAction _action, IntrusivePtr<const LoopNest> _root, StageMap<ScheduleFeatures> &_features) :
+        schedule_action(_action), root(std::move(_root)), features(std::move(_features)) {}
     CPU_Action(CPU_ScheduleAction _action, IntrusivePtr<const LoopNest> _root) :
-        schedule_action(_action), root(_root) {}
+        schedule_action(_action), root(std::move(_root)) {}
 
     // TODO(rootjalex): figure out what else is needed.
     // Action to take.
     CPU_ScheduleAction schedule_action;
     // Root is different for some schedules.
     IntrusivePtr<const LoopNest> root;
+
+    // TODO(rootjalex): had pruning problems, now need to pass these on.
+    StageMap<ScheduleFeatures> features;
 
     static CPU_Action Default() {
         return CPU_Action(CPU_ScheduleAction::Empty, nullptr);
@@ -110,7 +117,7 @@ class CPU_State {
 
     // Whether or not this state was already checked for pruning.
     // For now, only Inline states are prepruned - that might change.
-    bool prepruned = false;
+    // bool prepruned = false;
 
     // Saving the features for calculating cost.
     mutable StageMap<ScheduleFeatures> features;

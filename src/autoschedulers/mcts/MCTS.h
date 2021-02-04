@@ -109,19 +109,23 @@ namespace MCTS {
                     internal_assert(node) << "get_best_value_child returned nullptr\n";
                 }
 
+                // std::cerr << "\tChosen node has: " << node->get_n_branches() << " but only " << node->get_num_children() << " explored" << std::endl;
+
                 // Node is either a terminal, or has more actions that can be tried.
                 // Expand if it has more actions to be taken.
                 // std::cerr << "\tExpanding:" << node << std::endl;
                 if (!node->is_fully_expanded()) {
                     // TODO(rootjalex): this needs to be expanded if we want to go all the way to leaves.
-                    node = node->choose_new_random_child();
+                    // Explore any child.
+                    node = node->choose_any_random_child();
                     internal_assert(node) << "choose_new_random_child returned nullptr\n";
                 }
 
                 // TODO(rootjalex): need proper simulation (until ending).
                 // TODO(rootjalex): Luke wanted intermediate option: set num_simulations = 0
                 for (uint32_t i = 0; (i < num_simulations) && (!node->is_terminal()); i++) {
-                    node = node->choose_new_random_child();
+                    // Explore any child.
+                    node = node->choose_any_random_child();
                     internal_assert(node) << "simulation returned nullptr\n";
                 }
 
@@ -227,14 +231,19 @@ namespace MCTS {
                     const double uct_exploration = std::sqrt(std::log((double)parent_node->get_num_visits() + 1) / nonzero_num_visits);
 
                     uct_score = uct_exploitation + uct_k * uct_exploration;
+
+                    // std::cerr << "\tExploitation: " << uct_exploitation << std::endl;
+                    // std::cerr << "\tExploration: " << uct_exploration << std::endl;
                 }
 
+                // std::cerr << "\tScore of: " << uct_score << std::endl;
                 if (!best_node || uct_score > best_uct_score) {
                     best_uct_score = uct_score;
                     best_node = child_ptr;
                 }
             }
 
+            // std::cerr << "\tBest node has score of: " << best_uct_score << std::endl;
             // std::cerr << "Num children: " << num_children << std::endl;
             internal_assert(best_node) << "get_best_value_child ended with a nullptr node\n";
 

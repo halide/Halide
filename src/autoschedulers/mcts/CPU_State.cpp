@@ -47,6 +47,10 @@ vector<CPU_Action> CPU_State::generate_possible_actions() const {
         // We don't need to schedule nodes that represent inputs,
         // and there are no other decisions to be made about them
         // at this time.
+        // TODO(rootjalex): is there a point to pruning, other than feature calculation...?
+        // StageMap<ScheduleFeatures> input_features;
+        // compute_featurization(dag_ptr, params_ptr, root, &input_features);
+        // take_action will store features
         actions.push_back(CPU_Action(CPU_ScheduleAction::Input, root));
         return actions;
     }
@@ -94,9 +98,9 @@ vector<CPU_Action> CPU_State::generate_injected_realizations(const FunctionDAG::
         new_root->copy_from(*root);
         new_root->inline_func(node);
         // TODO(rootjalex): this is bad, need someway to transfer these features to futurue use.
-        StageMap<ScheduleFeatures> throwaway_features;
-        if (!prunable(dag_ptr, params_ptr, new_root, throwaway_features, memory_limit)) {
-            actions.push_back(CPU_Action(CPU_ScheduleAction::Inline, new_root));
+        StageMap<ScheduleFeatures> inline_features;
+        if (!prunable(dag_ptr, params_ptr, new_root, inline_features, memory_limit)) {
+            actions.push_back(CPU_Action(CPU_ScheduleAction::Inline, new_root, inline_features));
         } else {
             // TODO(rootjalex): is this a leak in adams2019?
             delete new_root;
@@ -183,7 +187,11 @@ vector<CPU_Action> CPU_State::generate_injected_realizations(const FunctionDAG::
             // TODO(rootjalex): do we want to prune here too? Or prune later?
             //                  We may screw up the exploration value by not pruning now.
             //                  but we might save a lot of time by not preemptively pruning.
-            actions.push_back(CPU_Action(CPU_ScheduleAction::Vectorize, std::move(n)));
+            // TODO(rootjalex): had too many invalids for many tests, need to do early pruning.
+            StageMap<ScheduleFeatures> vectorize_features;
+            if (!prunable(dag_ptr, params_ptr, n.get(), vectorize_features, memory_limit)) {
+                actions.push_back(CPU_Action(CPU_ScheduleAction::Vectorize, std::move(n), vectorize_features));
+            }
         }
     }
 
@@ -213,7 +221,9 @@ vector<CPU_Action> CPU_State::generate_parallel_realizations(const FunctionDAG::
         // The Func must be scalar, or not compute_root, or
         // we're not asking to use multiple cores.  Just
         // return a copy of the parent state
-        actions.push_back(CPU_Action(CPU_ScheduleAction::Parallelize, root));
+        // StageMap<ScheduleFeatures> no_decision_features;
+        // compute_featurization(dag_ptr, params_ptr, root, &no_decision_features);
+        actions.push_back(CPU_Action(CPU_ScheduleAction::Empty, root)); // do nothing here.
     } else {
         internal_assert(pure_size) << "generate_parallel_realizations did not find pure_size\n";
 
@@ -336,8 +346,11 @@ vector<CPU_Action> CPU_State::generate_parallel_realizations(const FunctionDAG::
                 }
             }
 
-            // TODO(rootjalex): Once again, should we prune here? Or is it fine to delay?
-            actions.push_back(CPU_Action(CPU_ScheduleAction::Tile, new_root));
+            StageMap<ScheduleFeatures> tile_features;
+            if (!prunable(dag_ptr, params_ptr, new_root, tile_features, memory_limit)) {
+                // TODO(rootjalex): Once again, should we prune here? Or is it fine to delay?
+                actions.push_back(CPU_Action(CPU_ScheduleAction::Tile, new_root, tile_features));
+            }
         }
     }
 
@@ -347,8 +360,13 @@ vector<CPU_Action> CPU_State::generate_parallel_realizations(const FunctionDAG::
 CPU_State CPU_State::take_action(const CPU_Action &action) const {
     CPU_State next_state(dag_ptr, params_ptr, model_ptr, action.root, n_decisions_made + 1, memory_limit);
     // TODO(rootjalex): Some delayed calculations may need to be inserted here.
-    if (action.schedule_action == CPU_ScheduleAction::Inline) {
-        next_state.prepruned = true;
+    if (action.schedule_action == CPU_ScheduleAction::Inline ||
+        action.schedule_action == CPU_ScheduleAction::Vectorize ||
+        action.schedule_action == CPU_ScheduleAction::Tile) {
+        // These actions do prepruning when generated.
+        next_state.features = std::move(action.features);
+        next_state.cached_features = true;
+        next_state.cached_valid = true;
     }
     return next_state; // for now, simply return.
 }
@@ -382,8 +400,6 @@ double CPU_State::calculate_cost() const {
     //                  and once here, for the same node.... We should probably save these.
     if (is_valid()) {
         double cost = 0.0f;
-        compute_featurization(dag_ptr, params_ptr, &features);
-
         // TODO(rootjalex): not batching might be slow, but is there any better way?
         model_ptr->enqueue(*dag_ptr, features, &cost);
         model_ptr->evaluate_costs();

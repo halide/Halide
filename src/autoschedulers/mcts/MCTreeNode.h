@@ -80,10 +80,32 @@ namespace MCTS {
             return child_sptr;
         }
 
+        SharedPtr choose_any_random_child() {
+            // TODO(rootjalex): this might need to be specialized.
+            if (possible_actions.empty()) {
+                std::cerr << "No possible actions for choose_any_random_child" << std::endl;
+                assert(false); // TODO(rootjalex): better assert
+                return nullptr;
+            }
+
+            uint32_t random_index = rng() % possible_actions.size();
+
+            Action &random_action = possible_actions[random_index];
+
+            if (random_action.explored) {
+                // Find the child that this corresponds to.
+                return children[random_action.index];
+            } else {
+                random_action.explored = true;
+                random_action.index = children.size();
+                return add_child_with_action(random_action);
+            }
+        }
+
         SharedPtr choose_new_random_child() {
             // TODO(rootjalex): this might need to be specialized.
             if (possible_actions.empty()) {
-                std::cerr << "No possible actions for choose_nnew_random_child" << std::endl;
+                std::cerr << "No possible actions for choose_new_random_child" << std::endl;
                 assert(false); // TODO(rootjalex): better assert
                 return nullptr;
             }
@@ -122,6 +144,7 @@ namespace MCTS {
 
             // TODO(rootjalex): this should work, I think?
             random_action->explored = true;
+            random_action->index = n_children;
             // random_action->dump();
 
             // std::cerr << "\tAdding random child" << std::endl;
@@ -196,6 +219,10 @@ namespace MCTS {
             if (parent) {
                 parent->increment_visits();
             }
+        }
+
+        size_t get_n_branches() const {
+            return possible_actions.size();
         }
     };
 

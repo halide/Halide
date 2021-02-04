@@ -216,7 +216,14 @@ void generate_schedule(const std::vector<Function> &outputs,
     LoopNest *root = new LoopNest;
     CPU_State start_state(&dag, &params, cost_model.get(), root, /* n_decisions */ 0, memory_limit);
     aslog(0) << "Starting\n";
-    auto best_action = solver.solve(start_state, seed);
+    std::shared_ptr<MCTS::TreeNode<CPU_State, CPU_Action> > best_action = nullptr;
+    try {
+        best_action = solver.solve(start_state, seed);
+    } catch (const std::bad_alloc& e) {
+        std::cerr << "Allocation failed: " << e.what() << std::endl;
+    } catch (...) {
+        std::cerr << "Some other exception?" << std::endl;
+    }
     aslog(0) << "Compounding\n";
     CPU_State optimal = solver.get_optimal_state(start_state, best_action);
     aslog(0) << "Calculating\n";
