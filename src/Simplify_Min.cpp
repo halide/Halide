@@ -59,10 +59,10 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
             (rewrite(min(x, x), x) ||
              rewrite(min(c0, c1), fold(min(c0, c1))) ||
              rewrite(min(IRMatcher::Overflow(), x), a) ||
-             rewrite(min(x,IRMatcher::Overflow()), b) ||
+             rewrite(min(x, IRMatcher::Overflow()), b) ||
              // Cases where one side dominates:
-             rewrite(min(x, op->type.min()), b) ||
-             rewrite(min(x, op->type.max()), x) ||
+             rewrite(min(x, c0), b, is_min_value(c0)) ||
+             rewrite(min(x, c0), x, is_max_value(c0)) ||
              rewrite(min((x/c0)*c0, x), a, c0 > 0) ||
              rewrite(min(x, (x/c0)*c0), b, c0 > 0) ||
              rewrite(min(min(x, y), x), a) ||

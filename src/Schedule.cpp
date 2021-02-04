@@ -219,7 +219,8 @@ struct FuncScheduleContents {
     std::vector<Bound> estimates;
     std::map<std::string, Internal::FunctionPtr> wrappers;
     MemoryType memory_type = MemoryType::Auto;
-    bool memoized = false, async = false;
+    bool memoized = false;
+    bool async = false;
     Expr memoize_eviction_key;
 
     FuncScheduleContents()
