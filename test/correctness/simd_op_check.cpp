@@ -510,6 +510,7 @@ public:
         if (use_avx512 && target.has_feature(Target::AVX512_SapphireRapids)) {
             check("vcvtneps2bf16*ymm", 16, cast(BFloat(16), f32_1));
             check("vcvtneps2bf16*xmm", 8, cast(BFloat(16), f32_1));
+            check("vcvtneps2bf16*xmm", 4, cast(BFloat(16), f32_1));
         }
     }
 
