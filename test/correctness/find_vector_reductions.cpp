@@ -45,7 +45,8 @@ std::vector<Expr> make_interleaving_exprs(int factor, int lanes, bool allow_broa
         return result;
     }
 
-    int y = rand();
+    static int next_y = 0;
+    int y = next_y++;
     if (rand() % 2 == 0) {
         // Make a series of loads that interleave cleanly.
         for (int j = 0; j < factor; j++) {
@@ -111,12 +112,10 @@ int main(int argc, char **argv) {
     }
 
     // This test generates a bunch of loads and slices that can interleave cleanly and puts them in a large list.
-    // By the end of this test, operands.size() = test_reps * product(factors), which is a pretty ludicriously
-    // large expression, testing for bad algorithmic complexity in find_vector_reductions.
     const int test_reps = 5;
-    std::vector<Expr> operands;
-    int count = 0;
     for (int reps = 0; reps < test_reps; reps++) {
+        std::vector<Expr> operands;
+        int count = 0;
         for (int i = 0; i < (int)factors.size(); ++i) {
             ++count;
             make_vector_reduction(factors[i], lanes, operands);
