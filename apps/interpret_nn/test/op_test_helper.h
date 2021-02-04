@@ -74,7 +74,6 @@ struct ReferenceOp {
     std::vector<int> filter_size;
     Padding padding = Padding::Same;
     ActivationFunction activation = ActivationFunction::None;
-    int depth_multiplier = 0;
     int axis = 0;
 
     virtual void execute() = 0;

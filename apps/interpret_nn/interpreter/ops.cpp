@@ -420,12 +420,16 @@ void Conv2DOp::execute(const Box &crop) {
     }
 }
 
+int DepthwiseConv2DOp::depth_multiplier() const {
+    return output()->dim(0).extent / input()->dim(0).extent;
+}
+
 Op::Bounds DepthwiseConv2DOp::infer_bounds(const Box &crop) const {
     Box input_crop = crop;
     Box filter_shape = without_strides(filter()->shape());
 
     input_crop[0] = crop[0];
-    input_crop[0] /= depth_multiplier_;
+    input_crop[0] /= depth_multiplier();
     for (int dim = 1; dim <= 2; dim++) {
         input_crop[dim] *= stride_[dim - 1];
     }
@@ -482,7 +486,7 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
         auto bias_buf = bias()->data<int32_t>();
         auto output_buf = out->data<uint8_t>(crop);
 
-        int depth_multiplier = output_buf.dim(0).extent() / input_buf.dim(0).extent();
+        int depth_multiplier = this->depth_multiplier();
         assert(depth_multiplier * input_buf.dim(0).extent() == output_buf.dim(0).extent());
 
         const int input_offset = in->quantization().zero.at(0);
@@ -537,7 +541,7 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
             input_buf.translate({0, pad_width, pad_height, 0});
         }
 
-        if (depth_multiplier_ >= output_buf.dim(0).extent()) {
+        if (depth_multiplier >= output_buf.dim(0).extent()) {
             CHECK(
                 0 == depthwise_convolution_uint8_broadcast(
                          input_buf, filter_buf, bias_buf, depth_multiplier,

@@ -535,10 +535,7 @@ private:
             params->dilation_height_factor,
         };
         auto activation = ConvertTfLiteActivation(params->activation);
-        // TODO: depth_multiplier is considered redundant and semi-deprecated;
-        // see buildin_op_data.h in tflite source for more info.
-        int depth_multiplier = params->depth_multiplier;
-        return make_unique<DepthwiseConv2DOp>(input, filter, bias, output, depth_multiplier, stride,
+        return make_unique<DepthwiseConv2DOp>(input, filter, bias, output, stride,
                                               dilation_factor, padding, activation);
     }
 

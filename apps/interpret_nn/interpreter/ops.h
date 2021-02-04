@@ -183,13 +183,13 @@ class DepthwiseConv2DOp : public Op {
     Padding padding_;
     ActivationFunction activation_;
 
+    int depth_multiplier() const;
+
 public:
     DepthwiseConv2DOp(Tensor *input, Tensor *filter, Tensor *bias, Tensor *output,
-                      int depth_multiplier, std::vector<int> stride,
-                      std::vector<int> dilation, Padding padding,
+                      std::vector<int> stride, std::vector<int> dilation, Padding padding,
                       ActivationFunction activation)
         : Op({input, filter, bias}, {output}),
-          depth_multiplier_(depth_multiplier),
           stride_(std::move(stride)),
           dilation_(std::move(dilation)),
           padding_(padding),
@@ -199,7 +199,7 @@ public:
     std::unique_ptr<Op> clone(const TensorMap &map) const {
         return make_unique<DepthwiseConv2DOp>(
             apply(map, input()), apply(map, filter()), apply(map, bias()),
-            apply(map, output()), depth_multiplier_, stride_, dilation_, padding_, activation_);
+            apply(map, output()), stride_, dilation_, padding_, activation_);
     }
 
     const Tensor *filter() const {

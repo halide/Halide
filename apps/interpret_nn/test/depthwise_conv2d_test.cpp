@@ -25,6 +25,8 @@ struct DepthwiseConv2D_ReferenceOp : public op_test::ReferenceOp {
         auto bias_buf = bias->data<int32_t>();
         auto output_buf = out->data<T>();
 
+        int depth_multiplier = output_buf.dim(0).extent() / input_buf.dim(0).extent();
+
         const int input_offset = in->quantization().zero.at(0);
         const int filter_offset = filt->quantization().zero.at(0);
         const int output_offset = out->quantization().zero.at(0);
@@ -152,17 +154,16 @@ struct DepthwiseConv2DOpTestFactory : public op_test::TestCaseFactory {
     struct DepthwiseConv2DOpTestTemplate {
         int in, filt, bias, out;
         std::vector<int> stride, dilation;
-        int depth_multiplier;
         Padding padding;
         ActivationFunction activation;
     };
     std::vector<DepthwiseConv2DOpTestTemplate> test_templates = {
         // First case is taken from Mobilenet, with well-defined data for filter and bias
-        {0, 1, 2, 3, {1, 1}, {1, 1}, 1, Padding::Same, ActivationFunction::None},
+        {0, 1, 2, 3, {1, 1}, {1, 1}, Padding::Same, ActivationFunction::None},
 
         // Second case is like the first, but with random data for the filter and bias inputs.
         // TODO: find ways to improve random input; many runs are correct but uninteresting
-        {0, 4, 5, 3, {1, 1}, {1, 1}, 1, Padding::Same, ActivationFunction::None},
+        {0, 4, 5, 3, {1, 1}, {1, 1}, Padding::Same, ActivationFunction::None},
     };
     size_t test_index = 0;
 
@@ -190,7 +191,6 @@ struct DepthwiseConv2DOpTestFactory : public op_test::TestCaseFactory {
         r->dilation = test_template.dilation;
         r->padding = test_template.padding;
         r->activation = test_template.activation;
-        r->depth_multiplier = test_template.depth_multiplier;
 
         auto test = make_unique<op_test::TestCase>();
         test->name = "DepthwiseConv2DOp<uint8>/" + std::to_string(test_index - 1);
@@ -200,7 +200,6 @@ struct DepthwiseConv2DOpTestFactory : public op_test::TestCaseFactory {
             filt.get(),
             bias.get(),
             out.get(),
-            test_template.depth_multiplier,
             test_template.stride,
             test_template.dilation,
             test_template.padding,
