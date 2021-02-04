@@ -27,6 +27,7 @@ struct _remote_buffer__seq_octet {
     int dataLen;
 };
 
+typedef int (*remote_set_thread_params_fn)(int priority, int stack_size);
 typedef int (*remote_load_library_fn)(const char *, int, const unsigned char *, int, halide_hexagon_handle_t *);
 typedef int (*remote_get_symbol_fn)(halide_hexagon_handle_t, const char *, int, halide_hexagon_handle_t *);
 typedef int (*remote_run_fn)(halide_hexagon_handle_t, int,
@@ -45,6 +46,7 @@ typedef void (*host_malloc_init_fn)();
 typedef void *(*host_malloc_fn)(size_t);
 typedef void (*host_free_fn)(void *);
 
+WEAK remote_set_thread_params_fn remote_set_thread_params = nullptr;
 WEAK remote_load_library_fn remote_load_library = nullptr;
 WEAK remote_get_symbol_fn remote_get_symbol = nullptr;
 WEAK remote_run_fn remote_run = nullptr;
@@ -164,6 +166,7 @@ WEAK int init_hexagon_runtime(void *user_context) {
     }
 
     // These symbols are optional.
+    get_symbol(user_context, host_lib, "halide_hexagon_remote_set_thread_params", remote_set_thread_params);
     get_symbol(user_context, host_lib, "halide_hexagon_remote_poll_log", remote_poll_log, /* required */ false);
     get_symbol(user_context, host_lib, "halide_hexagon_remote_poll_profiler_state", remote_poll_profiler_state, /* required */ false);
     get_symbol(user_context, host_lib, "halide_hexagon_remote_profiler_set_current_func", remote_profiler_set_current_func, /* required */ false);
@@ -237,9 +240,9 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
                         << ", state_ptr: " << state_ptr
                         << ", *state_ptr: " << *state_ptr
                         << ", code: " << code
-                        << ", code_size: " << (int)code_size << ")\n"
-                        << ", code: " << runtime
-                        << ", code_size: " << (int)runtime_size << ")\n";
+                        << ", code_size: " << (int)code_size
+                        << ", runtime: " << runtime
+                        << ", runtime_size: " << (int)runtime_size << ")\n";
     halide_assert(user_context, state_ptr != nullptr);
 
 #ifdef DEBUG_RUNTIME
@@ -916,6 +919,26 @@ WEAK int halide_hexagon_power_hvx_off(void *user_context) {
 
 WEAK void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * /* obj */) {
     halide_hexagon_power_hvx_off(user_context);
+}
+
+WEAK int halide_hexagon_set_thread_params(void *user_context, int priority, int stack_size) {
+    int result = init_hexagon_runtime(user_context);
+    if (result != 0) {
+        return result;
+    }
+
+    debug(user_context) << "halide_hexagon_set_thread_params\n";
+    if (!remote_set_thread_params) {
+        // This runtime doesn't support changing the performance target.
+        return -1;
+    }
+
+    debug(user_context) << "    remote_set_thread_params("
+                        << "thread_priority: " << priority
+                        << ", thread_stack_size: " << stack_size << ") -> \n";
+    int val = remote_set_thread_params(priority, stack_size);
+    debug(user_context) << "        " << val << "\n";
+    return val;
 }
 
 WEAK int halide_hexagon_set_performance_mode(void *user_context, halide_hexagon_power_mode_t mode) {

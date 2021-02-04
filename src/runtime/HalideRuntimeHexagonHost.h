@@ -106,6 +106,10 @@ typedef struct {
 // This is deprecated.
 typedef halide_hexagon_power_t halide_hvx_power_perf_t;
 
+/** Set fastRPC thread priority and staksize. Set thread params before making
+ * any RPC calls. halide_hexagon_set_thread_params. */
+extern int halide_hexagon_set_thread_params(void *user_context, int priority, int stack_size);
+
 /** Set a performance target for Hexagon. Hexagon applications can
  * vote for the performance levels they want, which may or may not be
  * respected by Hexagon. Applications should be careful not to leave
