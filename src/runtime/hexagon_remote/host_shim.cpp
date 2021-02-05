@@ -3,36 +3,12 @@
 #include <stdio.h>
 
 #include "halide_hexagon_remote.h"
-#include "libadsprpc_shim.h"
-
-#define FASTRPC_THREAD_PARAMS (1)
-#define CDSP_DOMAIN_ID 3
-
-// Used with FASTRPC_THREAD_PARAMS req ID
-struct remote_rpc_thread_params {
-    int domain;      // Remote subsystem domain ID, pass -1 to set params for all domains
-    int prio;        // user thread priority (1 to 255), pass -1 to use default
-    int stack_size;  // user thread stack size, pass -1 to use default
-};
 
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
 typedef halide_hexagon_remote_scalar_t scalar_t;
 
 extern "C" {
-
-int halide_hexagon_remote_set_thread_params(int priority, int stack_size) {
-    struct remote_rpc_thread_params th;
-    th.domain = CDSP_DOMAIN_ID;
-    th.prio = priority;
-    th.stack_size = stack_size;
-    int retval = remote_session_control(FASTRPC_THREAD_PARAMS, (void *)&th, sizeof(th));
-    if (retval != 0) {
-        __android_log_print(ANDROID_LOG_ERROR, "halide", "Error: Could not set stack_size to %d. remote_session_control returned %d.",
-                            stack_size, retval);
-    }
-    return retval;
-}
 
 // In v2, we pass all scalars and small input buffers in a single buffer.
 int halide_hexagon_remote_run(handle_t module_ptr, handle_t function,

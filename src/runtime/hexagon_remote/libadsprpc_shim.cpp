@@ -1,4 +1,3 @@
-#include "libadsprpc_shim.h"
 #include <android/log.h>
 #include <dlfcn.h>
 #include <stdint.h>

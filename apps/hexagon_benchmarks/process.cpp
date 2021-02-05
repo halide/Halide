@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
     // Set thread priority and stack size for RPC thread.
     // -1 for default priority.
     // 32KB stack size.
-    halide_hexagon_set_thread_params(NULL, -1, 1024 * 32);
+    halide_hexagon_set_remote_thread_params(NULL, -1, 1024 * 32);
 #endif
 
     for (PipelineDescriptorBase *p : pipelines) {

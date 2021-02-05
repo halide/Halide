@@ -27,7 +27,6 @@ struct _remote_buffer__seq_octet {
     int dataLen;
 };
 
-typedef int (*remote_set_thread_params_fn)(int priority, int stack_size);
 typedef int (*remote_load_library_fn)(const char *, int, const unsigned char *, int, halide_hexagon_handle_t *);
 typedef int (*remote_get_symbol_fn)(halide_hexagon_handle_t, const char *, int, halide_hexagon_handle_t *);
 typedef int (*remote_run_fn)(halide_hexagon_handle_t, int,
@@ -45,8 +44,8 @@ typedef int (*remote_thread_priority_fn)(int);
 typedef void (*host_malloc_init_fn)();
 typedef void *(*host_malloc_fn)(size_t);
 typedef void (*host_free_fn)(void *);
+typedef int (*set_remote_thread_params_fn)(uint32_t req, void *data, uint32_t datalen);
 
-WEAK remote_set_thread_params_fn remote_set_thread_params = nullptr;
 WEAK remote_load_library_fn remote_load_library = nullptr;
 WEAK remote_get_symbol_fn remote_get_symbol = nullptr;
 WEAK remote_run_fn remote_run = nullptr;
@@ -64,6 +63,7 @@ WEAK host_malloc_init_fn host_malloc_init = nullptr;
 WEAK host_malloc_init_fn host_malloc_deinit = nullptr;
 WEAK host_malloc_fn host_malloc = nullptr;
 WEAK host_free_fn host_free = nullptr;
+WEAK set_remote_thread_params_fn set_remote_thread_params = nullptr;
 
 // This checks if there are any log messages available on the remote
 // side. It should be called after every remote call.
@@ -166,7 +166,6 @@ WEAK int init_hexagon_runtime(void *user_context) {
     }
 
     // These symbols are optional.
-    get_symbol(user_context, host_lib, "halide_hexagon_remote_set_thread_params", remote_set_thread_params);
     get_symbol(user_context, host_lib, "halide_hexagon_remote_poll_log", remote_poll_log, /* required */ false);
     get_symbol(user_context, host_lib, "halide_hexagon_remote_poll_profiler_state", remote_poll_profiler_state, /* required */ false);
     get_symbol(user_context, host_lib, "halide_hexagon_remote_profiler_set_current_func", remote_profiler_set_current_func, /* required */ false);
@@ -177,6 +176,7 @@ WEAK int init_hexagon_runtime(void *user_context) {
     get_symbol(user_context, host_lib, "halide_hexagon_remote_set_performance", remote_set_performance, /* required */ false);
     get_symbol(user_context, host_lib, "halide_hexagon_remote_set_performance_mode", remote_set_performance_mode, /* required */ false);
     get_symbol(user_context, host_lib, "halide_hexagon_remote_set_thread_priority", remote_set_thread_priority, /* required */ false);
+    get_symbol(user_context, host_lib, "remote_session_control", set_remote_thread_params, /* required */ false);
 
     host_malloc_init();
 
@@ -921,24 +921,32 @@ WEAK void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * 
     halide_hexagon_power_hvx_off(user_context);
 }
 
-WEAK int halide_hexagon_set_thread_params(void *user_context, int priority, int stack_size) {
+WEAK int halide_hexagon_set_remote_thread_params(void *user_context, int priority, int stack_size) {
     int result = init_hexagon_runtime(user_context);
     if (result != 0) {
         return result;
     }
 
-    debug(user_context) << "halide_hexagon_set_thread_params\n";
-    if (!remote_set_thread_params) {
-        // This runtime doesn't support changing the performance target.
+    debug(user_context) << "halide_hexagon_set_remote_thread_params\n";
+    if (!set_remote_thread_params) {
+        // This runtime doesn't support changing the thread params.
         return -1;
     }
 
-    debug(user_context) << "    remote_set_thread_params("
+    struct remote_rpc_thread_params th;
+    th.domain = CDSP_DOMAIN_ID;
+    th.prio = priority;
+    th.stack_size = stack_size;
+    debug(user_context) << "    set_remote_thread_params("
                         << "thread_priority: " << priority
                         << ", thread_stack_size: " << stack_size << ") -> \n";
-    int val = remote_set_thread_params(priority, stack_size);
-    debug(user_context) << "        " << val << "\n";
-    return val;
+    result = set_remote_thread_params(FASTRPC_THREAD_PARAMS, (void *)&th, sizeof(th));
+    debug(user_context) << "        " << result << "\n";
+    if (result != 0) {
+        error(user_context) << "set_remote_thread_params faiiled.\n";
+        return result;
+    }
+    return 0;
 }
 
 WEAK int halide_hexagon_set_performance_mode(void *user_context, halide_hexagon_power_mode_t mode) {

@@ -17,6 +17,8 @@ extern "C" {
  */
 
 #define HALIDE_RUNTIME_HEXAGON
+#define FASTRPC_THREAD_PARAMS (1)
+#define CDSP_DOMAIN_ID 3
 
 typedef int halide_hexagon_handle_t;
 
@@ -106,9 +108,6 @@ typedef struct {
 // This is deprecated.
 typedef halide_hexagon_power_t halide_hvx_power_perf_t;
 
-/** Set fastRPC thread priority and staksize. Set thread params before making
- * any RPC calls. halide_hexagon_set_thread_params. */
-extern int halide_hexagon_set_thread_params(void *user_context, int priority, int stack_size);
 
 /** Set a performance target for Hexagon. Hexagon applications can
  * vote for the performance levels they want, which may or may not be
@@ -122,15 +121,28 @@ extern int halide_hexagon_set_performance_mode(void *user_context, halide_hexago
 extern int halide_hexagon_set_performance(void *user_context, halide_hexagon_power_t *perf);
 // @}
 
-/** Set the default priority for Halide Hexagon user threads:
+// Used with FASTRPC_THREAD_PARAMS req ID
+struct remote_rpc_thread_params {
+    int domain;      // Remote subsystem domain ID, pass -1 to set params for all domains
+    int prio;        // user thread priority (1 to 255), pass -1 to use default
+    int stack_size;  // user thread stack size, pass -1 to use default
+};
+
+/** Set the default priority/stack_size for Halide Hexagon user threads:
  *   - Valid priority values range from 1 to 255
  *   - Smaller number for higher priority
  *   - The highest priority for a user thread is 1
  *   - Priority 0 is reserved for OS usage
- * If this routine is not called, the priority will default to 100.
- * This is intended to be called before dispatching any pipeline. */
+ * If halide_hexagon_set_thread_priority routine is not called, the priority
+ * will default to 100. This is intended to be called before dispatching any
+ * pipeline.
+ * halide_hexagon_set_remote_thread_params can be used to change the stack size
+ * for cdsp user threads. It should be called before making any RPC calls
+ *   - Priority in range 1-255. -1 to use default (100)
+ *   - Stack size in bytes. -1 to use default (16KB) */
 // @{
 extern int halide_hexagon_set_thread_priority(void *user_context, int priority);
+extern int halide_hexagon_set_remote_thread_params(void *user_context, int priority, int stack_size);
 // @}
 
 /** These are forward declared here to allow clients to override the
