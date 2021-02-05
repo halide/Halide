@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
     g.set_custom_trace(&my_trace);
     g.bound(x, 0, 2);
     g.output_buffer().dim(0).set_bounds(0, 2);
-    g.realize(2);
+    g.realize({2});
 
     printf("Success!\n");
 

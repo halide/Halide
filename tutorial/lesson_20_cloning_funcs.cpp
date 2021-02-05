@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
         //   for x:
         //     h(x, y) = f(x, y) + g(x, y) + 10
 
-        h.realize(5, 5);
+        h.realize({5, 5});
 
         // The schedule directive f.clone_in(g) replaces all calls to 'f'
         // inside 'g' with a clone of 'f' and then returns that clone.
@@ -134,7 +134,7 @@ int main(int argc, char **argv) {
         //   for x:
         //     out(x, y) = f(x, y) + g(x, y) + h(x, y)
 
-        out.realize(5, 5);
+        out.realize({5, 5});
     }
 
     {

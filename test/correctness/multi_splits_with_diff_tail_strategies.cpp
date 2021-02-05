@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
     Var yoo("yoo"), yoi("yoi");
     f.split(yo, yoo, yoi, 64, TailStrategy::GuardWithIf);
 
-    Buffer<int> im = f.realize(3000, 2000, 3);
+    Buffer<int> im = f.realize({3000, 2000, 3});
     auto func = [](int x, int y, int c) {
         return x + y + c;
     };

@@ -28,7 +28,7 @@ def main():
 
     # Realize the function to produce an output image. We'll keep it
     # very small for this lesson.
-    output = gradient.realize(8, 8)
+    output = gradient.realize([8, 8])
 
     # That line compiled and ran the pipeline. Try running this
     # lesson with the environment variable HL_DEBUG_CODEGEN set to

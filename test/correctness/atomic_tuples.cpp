@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
         Checker checker;
         g.add_custom_lowering_pass(&checker, []() {});
 
-        Buffer<int> out = g.realize(128, 128);
+        Buffer<int> out = g.realize({128, 128});
         for (int y = 0; y < 128; y++) {
             for (int x = 0; x < 128; x++) {
                 int correct = 2 * x + 2 * y;
@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
         Checker checker;
         g.add_custom_lowering_pass(&checker, []() {});
 
-        Buffer<int> out = g.realize(128, 128);
+        Buffer<int> out = g.realize({128, 128});
         for (int y = 0; y < 128; y++) {
             for (int x = 0; x < 128; x++) {
                 int correct = 2 * x + 2 * y;
@@ -114,7 +114,7 @@ int main(int argc, char **argv) {
         Checker checker;
         g.add_custom_lowering_pass(&checker, []() {});
 
-        Buffer<int> out = g.realize(128, 128);
+        Buffer<int> out = g.realize({128, 128});
         for (int y = 0; y < 128; y++) {
             for (int x = 0; x < 128; x++) {
                 int correct = 2 * x + 2 * y + 1;
@@ -154,7 +154,7 @@ int main(int argc, char **argv) {
         Checker checker;
         g.add_custom_lowering_pass(&checker, []() {});
 
-        Buffer<int> out = g.realize(128, 128);
+        Buffer<int> out = g.realize({128, 128});
         for (int y = 0; y < 128; y++) {
             for (int x = 0; x < 128; x++) {
                 int correct = 4 * x + 4 * y;
@@ -201,7 +201,7 @@ int main(int argc, char **argv) {
         Checker checker;
         g.add_custom_lowering_pass(&checker, []() {});
 
-        Buffer<int> out = g.realize(128, 128);
+        Buffer<int> out = g.realize({128, 128});
         for (int y = 0; y < 128; y++) {
             for (int x = 0; x < 128; x++) {
                 int correct = 2 * x + 2 * y + 1;

@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
     h.print_loop_nest();
 
     // Run the schedule
-    Buffer<int> out = p.realize(50, 50);
+    Buffer<int> out = p.realize({50, 50});
 
     printf("Success!\n");
     return 0;

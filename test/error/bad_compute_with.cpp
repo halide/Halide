@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
     f(x, y) += 2;
     f.update(0).compute_with(f, x);
 
-    f.realize(10, 10);
+    f.realize({10, 10});
 
     printf("Success!\n");
     return 0;

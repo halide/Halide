@@ -49,7 +49,7 @@ int main(int argc, char *argv[]) {
 
     // Run 100 times to make sure race condition do happen
     for (int iter = 0; iter < 100; iter++) {
-        Buffer<T> out = final.realize(10, 10);
+        Buffer<T> out = final.realize({10, 10});
         for (int i = 0; i < 10; i++) {
             for (int j = 0; j < 10; j++) {
                 check(__LINE__, out(i, j), correct_final(i, j));

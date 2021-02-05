@@ -110,7 +110,7 @@ int main(int argc, char **argv) {
 
         check_interleave_count(h, 1);
 
-        Realization results = h.realize(16);
+        Realization results = h.realize({16});
         for (int i = 0; i < elements; i++) {
             Buffer<float> result = results[i];
             for (int x = 0; x < 16; x++) {
@@ -324,7 +324,7 @@ int main(int argc, char **argv) {
 
             if (i == 0) {
                 // Making the reference output.
-                refs = new Realization(output6.realize(50, 4));
+                refs = new Realization(output6.realize({50, 4}));
             } else {
                 // Vectorize and compare to the reference.
                 for (int j = 0; j < 11; j++) {
@@ -333,7 +333,7 @@ int main(int argc, char **argv) {
 
                 check_interleave_count(output6, 2 * elements);
 
-                Realization outs = output6.realize(50, 4);
+                Realization outs = output6.realize({50, 4});
                 for (int e = 0; e < elements; e++) {
                     Buffer<uint8_t> ref = (*refs)[e];
                     Buffer<uint8_t> out = outs[e];

@@ -100,8 +100,8 @@ int two_d_histogram() {
         .parallel(u);
     hist.update().vectorize(x, 8);
 
-    ref.realize(256);
-    hist.realize(256);
+    ref.realize({256});
+    hist.realize({256});
 
     Buffer<int> result(256);
     double t_ref = benchmark([&]() {

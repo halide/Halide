@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
 
         f(x, c) = mux(c, {x, 456, 789});
 
-        Buffer<int> result = f.realize(100, 4);
+        Buffer<int> result = f.realize({100, 4});
         check(result);
     }
 
@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
         Func g;
         g(x, c) = mux(c, f(x));
 
-        Buffer<int> result = g.realize(100, 4);
+        Buffer<int> result = g.realize({100, 4});
         check(result);
     }
 

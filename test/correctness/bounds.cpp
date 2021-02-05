@@ -31,9 +31,9 @@ int main(int argc, char **argv) {
 
     printf("Realizing function...\n");
 
-    Buffer<int> imf = f.realize(32, 32, target);
-    Buffer<int> img = g.realize(32, 32, target);
-    Buffer<int> imh = h.realize(32, 32, target);
+    Buffer<int> imf = f.realize({32, 32}, target);
+    Buffer<int> img = g.realize({32, 32}, target);
+    Buffer<int> imh = h.realize({32, 32}, target);
 
     // Check the result was what we expected
     for (int i = 0; i < 32; i++) {

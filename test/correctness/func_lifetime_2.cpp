@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
         {
             printf("Realizing function f...\n");
 
-            Buffer<int> imf = f.realize(32, 32, target);
+            Buffer<int> imf = f.realize({32, 32}, target);
             if (!validate(imf, 1)) {
                 return -1;
             }
@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
 
         printf("Realizing function g...\n");
 
-        Buffer<int> img1 = g.realize(32, 32, target);
+        Buffer<int> img1 = g.realize({32, 32}, target);
         if (!validate(img1, 2)) {
             return -1;
         }
@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
     // Try using g again to ensure it is still valid (after f's destruction).
     printf("Realizing function g again...\n");
 
-    Buffer<int> img2 = g.realize(32, 32, target);
+    Buffer<int> img2 = g.realize({32, 32}, target);
     if (!validate(img2, 2.0f)) {
         return -1;
     }

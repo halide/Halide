@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     f.compute_root();
 
     in.set(param_buf);
-    Buffer<uint8_t> result = f.realize(10, 10);
+    Buffer<uint8_t> result = f.realize({10, 10});
 
     // Avoid a freak-out in the destructor of param_buf.
     param_buf.raw_buffer()->device = 0;
