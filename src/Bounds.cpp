@@ -1472,6 +1472,14 @@ private:
                 result.include(interval);
             }
             interval = result;
+        } else if (op->is_intrinsic(Call::mux)) {
+            // Take the union of all args but the first
+            Interval result = Interval::nothing();
+            for (size_t i = 1; i < op->args.size(); i++) {
+                op->args[i].accept(this);
+                result.include(interval);
+            }
+            interval = result;
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
         } else {

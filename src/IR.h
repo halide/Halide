@@ -527,6 +527,7 @@ struct Call : public ExprNode<Call> {
         memoize_expr,
         mod_round_to_zero,
         mulhi_shr,  // Compute high_half(arg[0] * arg[1]) >> arg[3]. Note that this is a shift in addition to taking the upper half of multiply result. arg[3] must be an unsigned integer immediate.
+        mux,
         popcount,
         prefetch,
         promise_clamped,
