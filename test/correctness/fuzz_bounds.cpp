@@ -23,9 +23,11 @@ std::string fuzz_var(int i) {
     return std::string(1, 'a' + i);
 }
 
+static Type global_var_type = Int(32);
+
 Expr random_var() {
     int fuzz_count = rng() % fuzz_var_count;
-    return Variable::make(Int(64), fuzz_var(fuzz_count));
+    return Variable::make(global_var_type, fuzz_var(fuzz_count));
 }
 
 Type random_type(int width) {
@@ -211,58 +213,6 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
     return random_expr(T, depth, overflow_undef);
 }
 
-bool test_simplification(Expr a, Expr b, Type T, const map<string, Expr> &vars) {
-    for (int j = 0; j < T.lanes(); j++) {
-        Expr a_j = a;
-        Expr b_j = b;
-        if (T.lanes() != 1) {
-            a_j = extract_lane(a, j);
-            b_j = extract_lane(b, j);
-        }
-
-        Expr a_j_v = simplify(substitute(vars, a_j));
-        Expr b_j_v = simplify(substitute(vars, b_j));
-        // If the simplifier didn't produce constants, there must be
-        // undefined behavior in this expression. Ignore it.
-        if (!Internal::is_const(a_j_v) || !Internal::is_const(b_j_v)) {
-            continue;
-        }
-        if (!equal(a_j_v, b_j_v)) {
-            for (map<string, Expr>::const_iterator i = vars.begin(); i != vars.end(); i++) {
-                std::cout << i->first << " = " << i->second << "\n";
-            }
-
-            std::cout << a << "\n";
-            std::cout << b << "\n";
-            std::cout << "In vector lane " << j << ":\n";
-            std::cout << a_j << " -> " << a_j_v << "\n";
-            std::cout << b_j << " -> " << b_j_v << "\n";
-            return false;
-        }
-    }
-    return true;
-}
-
-bool test_expression(Expr test, int samples) {
-    Expr simplified = simplify(test);
-
-    map<string, Expr> vars;
-    for (int i = 0; i < fuzz_var_count; i++) {
-        vars[fuzz_var(i)] = Expr();
-    }
-
-    for (int i = 0; i < samples; i++) {
-        for (std::map<string, Expr>::iterator v = vars.begin(); v != vars.end(); v++) {
-            v->second = random_leaf(test.type().element_of(), true);
-        }
-
-        if (!test_simplification(test, simplified, test.type(), vars)) {
-            return false;
-        }
-    }
-    return true;
-}
-
 // These are here to enable copy of failed output expressions and pasting them into the test for debugging.
 Expr ramp(Expr b, Expr s, int w) {
     return Ramp::make(b, s, w);
@@ -318,21 +268,27 @@ Expr uint16x2(Expr x) {
 Expr uint32x2(Expr x) {
     return Cast::make(UInt(32).with_lanes(2), x);
 }
+Expr uint32x3(Expr x) {
+    return Cast::make(UInt(32).with_lanes(3), x);
+}
 Expr int8x2(Expr x) {
     return Cast::make(Int(8).with_lanes(2), x);
 }
 Expr int16x2(Expr x) {
     return Cast::make(Int(16).with_lanes(2), x);
 }
+Expr int16x3(Expr x) {
+    return Cast::make(Int(16).with_lanes(3), x);
+}
 Expr int32x2(Expr x) {
     return Cast::make(Int(32).with_lanes(2), x);
 }
 
-Expr a(Variable::make(Int(64), fuzz_var(0)));
-Expr b(Variable::make(Int(64), fuzz_var(1)));
-Expr c(Variable::make(Int(64), fuzz_var(2)));
-Expr d(Variable::make(Int(64), fuzz_var(3)));
-Expr e(Variable::make(Int(64), fuzz_var(4)));
+Expr a(Variable::make(global_var_type, fuzz_var(0)));
+Expr b(Variable::make(global_var_type, fuzz_var(1)));
+Expr c(Variable::make(global_var_type, fuzz_var(2)));
+Expr d(Variable::make(global_var_type, fuzz_var(3)));
+Expr e(Variable::make(global_var_type, fuzz_var(4)));
 
 int random_in_range(int min_value, int max_value) {
     if (min_value == max_value) {
@@ -438,6 +394,14 @@ int sample_interval(const Interval &interval) {
     return value;
 }
 
+bool is_integer_overflow(const Expr &expr) {
+    if (const Call *call = expr.as<Call>()) {
+        return call->is_intrinsic(Call::signed_integer_overflow);
+    } else {
+        return false;
+    }
+}
+
 bool test_bounds(Expr test, const Interval &interval, Type T, const map<string, Expr> &vars) {
     for (int j = 0; j < T.lanes(); j++) {
         Expr a_j = test;
@@ -445,7 +409,13 @@ bool test_bounds(Expr test, const Interval &interval, Type T, const map<string, 
             a_j = extract_lane(test, j);
         }
 
+        // std::cerr << "Simplifying...\n";
+        // std::cerr << a_j << std::endl;
         Expr a_j_v = simplify(substitute(vars, a_j));
+        // std::cerr << "Simplied...\n";
+        // std::cerr << a_j_v << std::endl;
+
+        // TODO: handle a_j_v being integer overflow.
 
         // TODO: not sure what else to do here.
         if (interval.has_upper_bound()) {
@@ -494,15 +464,19 @@ bool test_expression_bounds(Expr test, int trials, int samples_per_trial) {
 
         for (auto v = vars.begin(); v != vars.end(); v++) {
             // TODO: why this type? It's what the simplifier fuzzer uses.
-            Interval interval = random_interval(test.type().element_of());
+            Interval interval = random_interval(global_var_type);
             scope.push(v->first, interval);
         }
         // std::cerr << "here (0): " << i << "\n";
 
         Interval interval = bounds_of_expr_in_scope(test, scope);
         // std::cerr << "Before: " << interval << "\n";
+        // std::cerr << "Simplifying bounds...\n";
+        // std::cerr << interval << std::endl;
         interval.min = simplify(interval.min);
         interval.max = simplify(interval.max);
+        // std::cerr << "Simplified.\n";
+        // std::cerr << interval << std::endl;
         // std::cerr << "After: " << interval << "\n";
 
         // std::cerr << "here (1): " << i << "\n";
@@ -528,12 +502,21 @@ bool test_expression_bounds(Expr test, int trials, int samples_per_trial) {
             return true;  // any result is allowed
         }
 
+        if ((interval.has_upper_bound() && is_integer_overflow(interval.max)) ||
+            (interval.has_lower_bound() && is_integer_overflow(interval.min))) {
+            // TODO: what do we do here?
+            return true;
+        }
+
         // std::cerr << "here (2): " << i << "\n";
 
         for (int j = 0; j < samples_per_trial; j++) {
             for (std::map<string, Expr>::iterator v = vars.begin(); v != vars.end(); v++) {
                 Interval interval = scope.get(v->first);
-                v->second = cast(test.type().element_of(), sample_interval(interval));
+                v->second = cast(global_var_type, sample_interval(interval));
+                // std::cerr << "\t" << v->first << std::endl;
+                // std::cerr << "\t\t" << interval << std::endl;
+                // std::cerr << "\t\t" << v->second << std::endl;
             }
 
             if (!test_bounds(test, interval, test.type(), vars)) {
@@ -563,12 +546,11 @@ int main(int argc, char **argv) {
     // Number of trials to test the generated expressions for.
     const int trials = 10;
     // Number of samples of the intervals per trial to test.
-    const int samples = 100;
+    const int samples = 10;
 
     // We want different fuzz tests every time, to increase coverage.
     // We also report the seed to enable reproducing failures.
-    int fuzz_seed = 1609987927;
-    // argc > 1 ? atoi(argv[1]) : time(nullptr);
+    int fuzz_seed = argc > 1 ? atoi(argv[1]) : time(nullptr);
     rng.seed(fuzz_seed);
     std::cout << "bounds inference fuzz test seed: " << fuzz_seed << "\n";
 
@@ -576,9 +558,15 @@ int main(int argc, char **argv) {
     for (int n = 0; n < count; n++) {
         // int width = 1;
         int width = vector_widths[rng() % vector_widths.size()];
-        Type VT = random_type(width);
+        // This is the type that will be the innermost (leaf) value type.
+        Type expr_type = random_type(width);
+        Type var_type = random_type(1);
+        global_var_type = var_type;
         // Generate a random expr...
-        Expr test = random_expr(VT, depth);
+
+        // std::cerr << "Generating...\n";
+        Expr test = random_expr(expr_type, depth);
+        // std::cerr << "Generated...\n";
         // std::cout << "Expr: " << test << "\n";
         if (!test_expression_bounds(test, trials, samples)) {
             return -1;
