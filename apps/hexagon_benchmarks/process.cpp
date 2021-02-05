@@ -45,6 +45,13 @@ int main(int argc, char **argv) {
     std::vector<PipelineDescriptorBase *> pipelines = {&conv3x3a16_pipeline, &dilate3x3_pipeine, &median3x3_pipeline,
                                                        &gaussian5x5_pipeline, &sobel_pipeline, &conv3x3a32_pipeline};
 
+#ifdef HALIDE_RUNTIME_HEXAGON
+    // Set thread priority and stack size for RPC thread.
+    // -1 for default priority.
+    // 32KB stack size.
+    halide_hexagon_set_thread_params(NULL, -1, 1024 * 32);
+#endif
+
     for (PipelineDescriptorBase *p : pipelines) {
         if (!p->defined()) {
             continue;
