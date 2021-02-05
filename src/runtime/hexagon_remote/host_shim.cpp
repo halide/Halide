@@ -3,7 +3,17 @@
 #include <stdio.h>
 
 #include "halide_hexagon_remote.h"
-#include "host_shim.h"
+#include "libadsprpc_shim.h"
+
+#define FASTRPC_THREAD_PARAMS (1)
+#define CDSP_DOMAIN_ID 3
+
+// Used with FASTRPC_THREAD_PARAMS req ID
+struct remote_rpc_thread_params {
+    int domain;      // Remote subsystem domain ID, pass -1 to set params for all domains
+    int prio;        // user thread priority (1 to 255), pass -1 to use default
+    int stack_size;  // user thread stack size, pass -1 to use default
+};
 
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;

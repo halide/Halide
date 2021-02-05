@@ -2,6 +2,7 @@
 #include <dlfcn.h>
 #include <stdint.h>
 #include <sys/stat.h>
+#include "libadsprpc_shim.h"
 
 // This is a shim to allow dynamic loading of either libcdsprpc.so which
 // supports a compute DSP node on hexagon (SDM660 for example) with HVX.
