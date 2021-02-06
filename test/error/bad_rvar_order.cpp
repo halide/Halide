@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     // domain variables when it could change the meaning.
     f.update().reorder(r1.y, r1.x);
 
-    f.realize(10, 10);
+    f.realize({10, 10});
 
     printf("Success!\n");
     return 0;

@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
     Var xi;
     h.vectorize(x, 8).unroll(x, 2).split(x, x, xi, 4).parallel(x);
 
-    Buffer<uint8_t> result = h.realize(100);
+    Buffer<uint8_t> result = h.realize({100});
 
     for (int i = 0; i < 100; i++) {
         uint8_t correct = 4 * i * i;

@@ -31,10 +31,10 @@ int main() {
     t.fill(17);
     t(0) = 0;
     table.set(t);
-    Buffer<int32_t> result1 = h.realize(20, 20);
+    Buffer<int32_t> result1 = h.realize({20, 20});
     t(0) = 1;
     table.set(t);
-    Buffer<int32_t> result2 = h.realize(20, 20);
+    Buffer<int32_t> result2 = h.realize({20, 20});
 
     for (int y = 0; y < 20; y++) {
         for (int x = 0; x < 20; x++) {

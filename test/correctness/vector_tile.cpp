@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
 
         Var io, jo;
         f.tile({i, j}, {io, jo}, {i, j}, {8, 8}, {TailStrategy::RoundUp, TailStrategy::RoundUp});
-        f.realize(128, 128);
+        f.realize({128, 128});
     }
 
     {
@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
 
         Var io, jo;
         f.tile({i, j}, {io, jo}, {i, j}, {8, 8});
-        f.realize(128, 128);
+        f.realize({128, 128});
     }
 
     {
@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
 
         Var io, jo;
         f.update(0).tile({i, j}, {io, jo}, {i, j}, {8, 8});
-        f.realize(128, 128);
+        f.realize({128, 128});
     }
 
     printf("Success!\n");

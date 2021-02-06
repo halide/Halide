@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
         f.vectorize(x, 32);
     }
 
-    Buffer<int> im = g.realize(64, 64, 64);
+    Buffer<int> im = g.realize({64, 64, 64});
 
     for (int x = 0; x < 64; x++) {
         for (int y = 0; y < 64; y++) {

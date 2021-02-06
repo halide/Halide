@@ -15,7 +15,7 @@ Halide::Runtime::Buffer<int32_t> make_gpu_buffer(bool hexagon_rpc) {
         f.gpu_tile(x, y, xi, yi, 8, 8);
     }
 
-    Buffer<int32_t> result = f.realize(128, 128);
+    Buffer<int32_t> result = f.realize({128, 128});
     return *result.get();
 }
 

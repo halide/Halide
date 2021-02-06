@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
         in.set(ten_bit_data);
         lut.set(ten_bit_lut);
 
-        auto result = f.realize(100);
+        auto result = f.realize({100});
     }
 
     {

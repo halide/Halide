@@ -1495,7 +1495,7 @@ typedef struct halide_buffer_t {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions; i++) {
             if (dim[i].stride < 0) {
-                index += dim[i].stride * (dim[i].extent - 1);
+                index += (ptrdiff_t)dim[i].stride * (dim[i].extent - 1);
             }
         }
         return host + index * type.bytes();
@@ -1506,7 +1506,7 @@ typedef struct halide_buffer_t {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions; i++) {
             if (dim[i].stride > 0) {
-                index += dim[i].stride * (dim[i].extent - 1);
+                index += (ptrdiff_t)dim[i].stride * (dim[i].extent - 1);
             }
         }
         index += 1;
@@ -1522,7 +1522,7 @@ typedef struct halide_buffer_t {
     HALIDE_ALWAYS_INLINE uint8_t *address_of(const int *pos) const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions; i++) {
-            index += dim[i].stride * (pos[i] - dim[i].min);
+            index += (ptrdiff_t)dim[i].stride * (pos[i] - dim[i].min);
         }
         return host + index * type.bytes();
     }

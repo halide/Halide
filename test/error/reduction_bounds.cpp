@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
 
     // Use of f is unbounded in g.
 
-    g.realize(100);
+    g.realize({100});
 
     printf("Success!\n");
     return 0;

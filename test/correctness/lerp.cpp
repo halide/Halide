@@ -260,9 +260,9 @@ int main(int argc, char **argv) {
     input_b.set(input_b_img);
 
     w.set(0.0f);
-    Buffer<int32_t> result_should_be_a = lerp_with_casts.realize(16, 16);
+    Buffer<int32_t> result_should_be_a = lerp_with_casts.realize({16, 16});
     w.set(1.0f);
-    Buffer<int32_t> result_should_be_b = lerp_with_casts.realize(16, 16);
+    Buffer<int32_t> result_should_be_b = lerp_with_casts.realize({16, 16});
 
     for (int i = 0; i < 16; i++) {
         for (int j = 0; j < 16; j++) {

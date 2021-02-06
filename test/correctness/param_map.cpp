@@ -27,16 +27,16 @@ int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
 
     p_img.set(in1);
-    Buffer<uint8_t> result1 = f.realize(10, 10, t);
+    Buffer<uint8_t> result1 = f.realize({10, 10}, t);
 
     ParamMap params;
     params.set(p_int, 22);
     params.set(p_float, 2.0f);
     params.set(p_img, in2);
 
-    Buffer<uint8_t> result2 = f.realize(10, 10, t, params);
-    Buffer<uint8_t> result3 = f.realize(10, 10, t, {{p_int, 12}});
-    Buffer<uint8_t> result4 = f.realize(10, 10, t, {{p_int, 16}, {p_img, in2}});
+    Buffer<uint8_t> result2 = f.realize({10, 10}, t, params);
+    Buffer<uint8_t> result3 = f.realize({10, 10}, t, {{p_int, 12}});
+    Buffer<uint8_t> result4 = f.realize({10, 10}, t, {{p_int, 16}, {p_img, in2}});
 
     for (int i = 0; i < 10; i++) {
         for (int j = 0; j < 10; j++) {
