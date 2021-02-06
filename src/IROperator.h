@@ -829,6 +829,9 @@ inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const
  * This is tedious when the list is long. The following function
  * provide convinent syntax that allow one to write:
  * img(x, y, c) = mux(c, {100, 50, 25});
+ *
+ * As with the select equivalent, if the first argument (the index) is
+ * out of range, the expression evaluates to the last value.
  */
 // @{
 Expr mux(const Expr &id, const std::initializer_list<Expr> &values);

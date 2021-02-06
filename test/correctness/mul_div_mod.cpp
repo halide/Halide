@@ -303,7 +303,7 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
         break;
     };
 
-    Buffer<RT> r = f.realize(WIDTH, HEIGHT, target);
+    Buffer<RT> r = f.realize({WIDTH, HEIGHT}, target);
 
     int ecount = 0;
     for (i = 0; i < WIDTH; i++) {
@@ -388,7 +388,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
         break;
     };
 
-    Realization R = f.realize(WIDTH, HEIGHT, target);
+    Realization R = f.realize({WIDTH, HEIGHT}, target);
     Buffer<T> q(R[0]);
     Buffer<T> r(R[1]);
 

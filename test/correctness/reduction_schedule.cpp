@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
                                              energy(r.x, r.y - 1),
                                              energy(xp, r.y - 1));
 
-    Buffer<float> im_energy = energy.realize(size, size);
+    Buffer<float> im_energy = energy.realize({size, size});
     Buffer<float> ref_energy(size, size);
     for (int y = 0; y < size; y++) {
         for (int x = 0; x < size; x++) {

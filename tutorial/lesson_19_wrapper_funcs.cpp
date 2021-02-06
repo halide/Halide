@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
         //   for x:
         //     g(x, y) = 2 * f_in_g(x, y) + 3
 
-        g.realize(5, 5);
+        g.realize({5, 5});
 
         // See figures/lesson_19_wrapper_local.mp4 for a visualization.
 
@@ -122,7 +122,7 @@ int main(int argc, char **argv) {
         //   for x:
         //     h(x, y) = 3 + g(x, y) - f_in(x, y)
 
-        h.realize(5, 5);
+        h.realize({5, 5});
 
         // See figures/lesson_19_wrapper_global.mp4 and for a
         // visualization of what this did.
@@ -161,7 +161,7 @@ int main(int argc, char **argv) {
         //   for x:
         //     h(x, y) = 3 + g(x, y) - f_in_h(x, y)
 
-        h.realize(5, 5);
+        h.realize({5, 5});
         // See figures/lesson_19_wrapper_unique.mp4 for a visualization.
     }
 
@@ -205,7 +205,7 @@ int main(int argc, char **argv) {
         // Note that calling f.in(g) a second time returns the wrapper
         // already created by the first call, it doesn't make a new one.
 
-        h.realize(8, 8);
+        h.realize({8, 8});
         // See figures/lesson_19_wrapper_vary_schedule.mp4 for a
         // visualization.
 
@@ -258,7 +258,7 @@ int main(int argc, char **argv) {
         // effect. Allocations that are only ever accessed at constant
         // indices can be promoted into registers.
 
-        g.realize(16, 16);
+        g.realize({16, 16});
         // See figures/lesson_19_transpose.mp4 for a visualization
     }
 
@@ -316,7 +316,7 @@ int main(int argc, char **argv) {
 
         img.set(input);
         blur.compile_jit(target);
-        Buffer<int> out = blur.realize(256, 256);
+        Buffer<int> out = blur.realize({256, 256});
 
         // Check the output is what we expected
         for (int y = out.top(); y <= out.bottom(); y++) {
@@ -403,7 +403,7 @@ int main(int argc, char **argv) {
         f.vectorize(x, 4);
         f.in(g).vectorize(x, 4);
 
-        g.realize(8, 8);
+        g.realize({8, 8});
         // See figures/lesson_19_group_updates.mp4 for a visualization.
     }
 

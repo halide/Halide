@@ -265,22 +265,25 @@ halide_define_aot_test(float16_t)
 
 # gpu_multi_context_threaded_aottest.cpp
 # gpu_multi_context_threaded_generator.cpp
-halide_define_aot_test(gpu_multi_context_threaded
-                       OMIT_DEFAULT_GENERATOR
-                       EXTRA_LIBS
-                       gpu_multi_context_threaded_add
-                       gpu_multi_context_threaded_mul)
+# (Doesn't build/link properly under wasm, and isn't useful there anyway)
+if (NOT Halide_TARGET MATCHES "wasm")
+  halide_define_aot_test(gpu_multi_context_threaded
+                         OMIT_DEFAULT_GENERATOR
+                         EXTRA_LIBS
+                         gpu_multi_context_threaded_add
+                         gpu_multi_context_threaded_mul)
 
-add_halide_library(gpu_multi_context_threaded_add FROM gpu_multi_context_threaded.generator 
-                   FEATURES user_context)
-add_halide_library(gpu_multi_context_threaded_mul FROM gpu_multi_context_threaded.generator
-                   FEATURES user_context)
+  add_halide_library(gpu_multi_context_threaded_add FROM gpu_multi_context_threaded.generator
+                     FEATURES user_context)
+  add_halide_library(gpu_multi_context_threaded_mul FROM gpu_multi_context_threaded.generator
+                     FEATURES user_context)
 
-if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
-    add_cuda_to_target(generator_aot_gpu_multi_context_threaded PRIVATE)
-endif ()
-if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
-    target_link_libraries(generator_aot_gpu_multi_context_threaded PRIVATE OpenCL::OpenCL)
+  if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
+      add_cuda_to_target(generator_aot_gpu_multi_context_threaded PRIVATE)
+  endif ()
+  if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
+      target_link_libraries(generator_aot_gpu_multi_context_threaded PRIVATE OpenCL::OpenCL)
+  endif ()
 endif ()
 
 # gpu_object_lifetime_aottest.cpp

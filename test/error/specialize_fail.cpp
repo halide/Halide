@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     f.specialize_fail("Expected failure");
 
     p.set(42);  // arbitrary nonzero value
-    f.realize(100);
+    f.realize({100});
 
     printf("Success!\n");
     return 0;

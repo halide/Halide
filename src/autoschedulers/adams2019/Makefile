@@ -69,6 +69,9 @@ $(BIN)/libautoschedule_adams2019.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp \
 				$(SRC)/LoopNest.cpp \
 				$(SRC)/Featurization.h \
 				$(SRC)/CostModel.h \
+				$(SRC)/State.h \
+				$(SRC)/State.cpp \
+				$(SRC)/Timer.h \
 				$(SRC)/PerfectHashMap.h \
 				$(AUTOSCHED_WEIGHT_OBJECTS) \
 				$(AUTOSCHED_COST_MODEL_LIBS) \

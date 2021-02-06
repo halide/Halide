@@ -28,10 +28,10 @@ int main(int argc, char **argv) {
     sin_ref.vectorize(x, 8);
     cos_ref.vectorize(x, 8);
 
-    double t1 = 1e6 * benchmark([&]() { sin_f.realize(1000); });
-    double t2 = 1e6 * benchmark([&]() { cos_f.realize(1000); });
-    double t3 = 1e6 * benchmark([&]() { sin_ref.realize(1000); });
-    double t4 = 1e6 * benchmark([&]() { cos_ref.realize(1000); });
+    double t1 = 1e6 * benchmark([&]() { sin_f.realize({1000}); });
+    double t2 = 1e6 * benchmark([&]() { cos_f.realize({1000}); });
+    double t3 = 1e6 * benchmark([&]() { sin_ref.realize({1000}); });
+    double t4 = 1e6 * benchmark([&]() { cos_ref.realize({1000}); });
 
     printf("sin: %f ns per pixel\n"
            "fast_sine: %f ns per pixel\n"

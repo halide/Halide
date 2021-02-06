@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
 
     h.set_custom_trace(&my_trace);
     h.bound(x, 0, 6);
-    h.realize(6);
+    h.realize({6});
 
     printf("Success!\n");
 
