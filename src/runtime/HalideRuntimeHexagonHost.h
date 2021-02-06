@@ -108,7 +108,6 @@ typedef struct {
 // This is deprecated.
 typedef halide_hexagon_power_t halide_hvx_power_perf_t;
 
-
 /** Set a performance target for Hexagon. Hexagon applications can
  * vote for the performance levels they want, which may or may not be
  * respected by Hexagon. Applications should be careful not to leave
