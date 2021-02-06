@@ -10,6 +10,16 @@ namespace Runtime {
 namespace Internal {
 namespace Hexagon {
 
+#define FASTRPC_THREAD_PARAMS (1)
+#define CDSP_DOMAIN_ID 3
+
+// Used with FASTRPC_THREAD_PARAMS req ID
+struct remote_rpc_thread_params {
+    int domain;      // Remote subsystem domain ID, pass -1 to set params for all domains
+    int prio;        // user thread priority (1 to 255), pass -1 to use default
+    int stack_size;  // user thread stack size, pass -1 to use default
+};
+
 struct ion_device_handle {
     void *buffer;
     size_t size;

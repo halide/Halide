@@ -17,8 +17,6 @@ extern "C" {
  */
 
 #define HALIDE_RUNTIME_HEXAGON
-#define FASTRPC_THREAD_PARAMS (1)
-#define CDSP_DOMAIN_ID 3
 
 typedef int halide_hexagon_handle_t;
 
@@ -120,13 +118,6 @@ extern int halide_hexagon_set_performance_mode(void *user_context, halide_hexago
 extern int halide_hexagon_set_performance(void *user_context, halide_hexagon_power_t *perf);
 // @}
 
-// Used with FASTRPC_THREAD_PARAMS req ID
-struct remote_rpc_thread_params {
-    int domain;      // Remote subsystem domain ID, pass -1 to set params for all domains
-    int prio;        // user thread priority (1 to 255), pass -1 to use default
-    int stack_size;  // user thread stack size, pass -1 to use default
-};
-
 /** Set the default priority/stack_size for Halide Hexagon user threads:
  *   - Valid priority values range from 1 to 255
  *   - Smaller number for higher priority
@@ -137,7 +128,7 @@ struct remote_rpc_thread_params {
  * pipeline.
  * halide_hexagon_set_remote_thread_params can be used to change the stack size
  * for cdsp user threads. It should be called before making any RPC calls
- *   - Priority in range 1-255. -1 to use default (100)
+ *   - Priority in range 1-255. -1 to use default (192)
  *   - Stack size in bytes. -1 to use default (16KB) */
 // @{
 extern int halide_hexagon_set_thread_priority(void *user_context, int priority);
