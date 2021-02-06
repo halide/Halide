@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     p.set(3);
     int rdom_bound = (3 + 8) / 3;
     rdom_bound *= rdom_bound;
-    Buffer<int> buf = f.realize(10);
+    Buffer<int> buf = f.realize({10});
 
     int correct = (rdom_bound * (rdom_bound - 1)) / 2;
 

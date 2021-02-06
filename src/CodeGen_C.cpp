@@ -1586,7 +1586,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
 
         if (uses_gpu_for_loops) {
             stream << get_indent() << "halide_error("
-                   << (have_user_context ? "__user_context_" : "nullptr")
+                   << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
                    << ", \"C++ Backend does not support gpu_blocks() or gpu_threads() yet, "
                    << "this function will always fail at runtime\");\n";
             stream << get_indent() << "return halide_error_code_device_malloc_failed;\n";
@@ -2207,6 +2207,8 @@ void CodeGen_C::visit(const Call *op) {
         rhs << print_expr(op->args[0]) << " / " << print_expr(op->args[1]);
     } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
         rhs << print_expr(op->args[0]) << " % " << print_expr(op->args[1]);
+    } else if (op->is_intrinsic(Call::mux)) {
+        rhs << print_expr(lower_mux(op));
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
                       " integer overflow for int32 and int64 is undefined behavior in"

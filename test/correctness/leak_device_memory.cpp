@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
             }
 
             f.set_custom_print(halide_print);
-            f.realize(50, 50, target);
+            f.realize({50, 50}, target);
 
             // The copy now has a non-zero dev field, but the original
             // buf is unaware of that fact. It should get cleaned up

@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
         Buffer<uint8_t> dummy(size);
         dummy.fill(42);
         input.set(dummy);
-        Buffer<uint8_t> out = f.realize(size);
+        Buffer<uint8_t> out = f.realize({size});
         if (!out.all_equal(42)) {
             std::cerr << "wrong output\n";
             exit(-1);
@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
 
         Buffer<uint8_t> dummy(size);
         input.set(dummy);
-        Buffer<uint8_t> out = f.realize(size);
+        Buffer<uint8_t> out = f.realize({size});
         if (!out.all_equal(42)) {
             std::cerr << "wrong output\n";
             exit(-1);

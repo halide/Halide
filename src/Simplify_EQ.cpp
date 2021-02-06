@@ -109,23 +109,23 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
     if (rewrite(c0 == 0, fold(c0 == 0)) ||
         rewrite((x - y) + c0 == 0, x == y + fold(-c0)) ||
         rewrite(x + c0 == 0, x == fold(-c0)) ||
-        rewrite(c0 - x == 0, x == c0)) {
-        return rewrite.result;
-    }
+        rewrite(c0 - x == 0, x == c0) ||
+        rewrite(x - y == 0, x == y) ||
+        rewrite(x == 0, x == 0)) {
 
-    if (const Sub *s = delta.as<Sub>()) {
-        Expr a = s->a, b = s->b;
-        if (should_commute(a, b)) {
-            std::swap(a, b);
-        }
-        if (a.same_as(op->a) && b.same_as(op->b)) {
+        const EQ *eq = rewrite.result.as<EQ>();
+        if (eq &&
+            eq->a.same_as(op->a) &&
+            eq->b.same_as(op->b)) {
             return op;
         } else {
-            return EQ::make(a, b);
+            return rewrite.result;
         }
     }
 
-    return delta == make_zero(op->a.type());
+    // Unreachable. That last rewrite catches everything and
+    // constructs delta == 0 for us.
+    return Expr();
 }
 
 // ne redirects to not eq

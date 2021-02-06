@@ -621,6 +621,17 @@ Expr lower_signed_shift_right(const Expr &a, const Expr &b) {
     }
 }
 
+Expr lower_mux(const Call *mux) {
+    internal_assert(mux->args.size() >= 2);
+    Expr equiv = mux->args.back();
+    Expr index = mux->args[0];
+    int num_vals = (int)mux->args.size() - 1;
+    for (int i = num_vals - 1; i >= 0; i--) {
+        equiv = select(index == make_const(index.type(), i), mux->args[i + 1], equiv);
+    }
+    return equiv;
+}
+
 bool get_md_bool(llvm::Metadata *value, bool &result) {
     if (!value) {
         return false;

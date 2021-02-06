@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
     // age of the universe if anything combinatorial is going on.
     width.set(1000);
     height.set(1000);
-    pyr_up[0].realize(1000, 1000);
+    pyr_up[0].realize({1000, 1000});
 
     printf("Success!\n");
     return 0;

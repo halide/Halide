@@ -43,7 +43,7 @@ void check(Func out, int line, std::vector<TailStrategy> tails) {
 
     for (int s : sizes_to_try) {
         largest_allocation = 0;
-        out.realize(s);
+        out.realize({s});
         size_t expected = (s + 1) * 4;
         if (largest_allocation > expected) {
             std::cerr << "Failure on line " << line << "\n"

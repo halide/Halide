@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
 
     upsampledx.compute_at(upsampled, yi);
 
-    upsampled.realize(100, 100);
+    upsampled.realize({100, 100});
 
     printf("Success!\n");
     return 0;

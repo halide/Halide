@@ -540,7 +540,7 @@ private:
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions(); i++) {
             if (dim(i).stride() < 0) {
-                index += dim(i).stride() * (dim(i).extent() - 1);
+                index += dim(i).stride() * (ptrdiff_t)(dim(i).extent() - 1);
             }
         }
         return index;
@@ -552,7 +552,7 @@ private:
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions(); i++) {
             if (dim(i).stride() > 0) {
-                index += dim(i).stride() * (dim(i).extent() - 1);
+                index += dim(i).stride() * (ptrdiff_t)(dim(i).extent() - 1);
             }
         }
         index += 1;
@@ -1832,7 +1832,7 @@ private:
     HALIDE_ALWAYS_INLINE
         ptrdiff_t
         offset_of(int d, int first, Args... rest) const {
-        return offset_of(d + 1, rest...) + this->buf.dim[d].stride * (first - this->buf.dim[d].min);
+        return offset_of(d + 1, rest...) + (ptrdiff_t)this->buf.dim[d].stride * (first - this->buf.dim[d].min);
     }
 
     HALIDE_ALWAYS_INLINE
@@ -1855,7 +1855,7 @@ private:
     ptrdiff_t offset_of(const int *pos) const {
         ptrdiff_t offset = 0;
         for (int i = this->dimensions() - 1; i >= 0; i--) {
-            offset += this->buf.dim[i].stride * (pos[i] - this->buf.dim[i].min);
+            offset += (ptrdiff_t)this->buf.dim[i].stride * (pos[i] - this->buf.dim[i].min);
         }
         return offset;
     }

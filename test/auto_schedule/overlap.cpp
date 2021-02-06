@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     load_plugin(argv[1]);
 
     Var x("x"), y("y"), xi("xi"), yi("yi");
-    Buffer<float> input = lambda(x, y, sin(x) + cos(y) + 1.0f).realize(2200, 2200);
+    Buffer<float> input = lambda(x, y, sin(x) + cos(y) + 1.0f).realize({2200, 2200});
 
     int num_levels = 10;
 
@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
     up[num_levels - 1].print_loop_nest();
 
     // Run the schedule
-    Buffer<float> out = p.realize(1500, 1500);
+    Buffer<float> out = p.realize({1500, 1500});
 
     printf("Success!\n");
 

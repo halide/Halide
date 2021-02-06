@@ -333,7 +333,12 @@ TEST_CXX_FLAGS += -DTEST_OPENCL
 endif
 
 ifneq ($(TEST_METAL), )
-TEST_CXX_FLAGS += -DTEST_METAL
+# Using Metal APIs requires writing Objective-C++ (or Swift). Add ObjC++
+# to allow tests to create and destroy Metal contexts, etc. This requires
+# tests to be valid Objective-C++, e.g. avoiding using the identifier "id"
+# in certain ways. In practice this is not enough of a problem to justify
+# the work to limit which files are compiled this way.
+TEST_CXX_FLAGS += -DTEST_METAL -ObjC++
 endif
 
 ifneq ($(TEST_CUDA), )
@@ -839,6 +844,7 @@ RUNTIME_LL_COMPONENTS = \
   x86 \
   x86_avx \
   x86_avx2 \
+  x86_avx512 \
   x86_sse41
 
 RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
@@ -921,9 +927,15 @@ else
 LIBHALIDE_SONAME_FLAGS=
 endif
 
+ifeq ($(UNAME), Linux)
+LIBHALIDE_EXPORTS=-Wl,--version-script=$(ROOT_DIR)/src/exported_symbols.linux
+else
+LIBHALIDE_EXPORTS=-Wl,-exported_symbols_list $(ROOT_DIR)/src/exported_symbols.osx
+endif
+
 $(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(INITIAL_MODULES)
 	@mkdir -p $(@D)
-	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) $(INSTALL_NAME_TOOL_LD_FLAGS) $(LIBHALIDE_SONAME_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
+	$(CXX) -shared $(LIBHALIDE_EXPORTS) $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) $(INSTALL_NAME_TOOL_LD_FLAGS) $(LIBHALIDE_SONAME_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$(BIN_DIR)/libHalide.$(SHARED_EXT) $(BIN_DIR)/libHalide.$(SHARED_EXT)
 endif
@@ -1186,6 +1198,8 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_async_parallel,$(GENERAT
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubtest,$(GENERATOR_AOTCPP_TESTS))
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubuser,$(GENERATOR_AOTCPP_TESTS))
 
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_multi_context_threaded,$(GENERATOR_AOTCPP_TESTS))
+
 test_aotcpp_generator: $(GENERATOR_AOTCPP_TESTS)
 
 # This is just a test to ensure than RunGen builds and links for a critical mass of Generators;
@@ -1201,6 +1215,7 @@ GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/multitarget.rungen,$
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/nested_externs.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/tiled_blur.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/extern_output.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/gpu_multi_context_threaded.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(GENERATOR_BUILD_RUNGEN_TESTS) \
 	$(FILTERS_DIR)/multi_rungen \
 	$(FILTERS_DIR)/multi_rungen2 \
@@ -1547,6 +1562,12 @@ $(FILTERS_DIR)/nested_externs_%.a: $(BIN_DIR)/nested_externs.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g nested_externs_$* $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
 
+# Similarly, gpu_multi needs two different kernels to test compilation caching.
+# Also requies user-context.
+$(FILTERS_DIR)/gpu_multi_context_threaded_%.a: $(BIN_DIR)/gpu_multi_context_threaded.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g gpu_multi_context_threaded_$* $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
+
 GEN_AOT_CXX_FLAGS=$(TEST_CXX_FLAGS) -Wno-unknown-pragmas
 GEN_AOT_INCLUDES=-I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools
 GEN_AOT_LD_FLAGS=$(COMMON_LD_FLAGS)
@@ -1642,9 +1663,34 @@ generator_aot_multitarget: $(BIN_DIR)/$(TARGET)/generator_aot_multitarget
 	HL_MULTITARGET_TEST_USE_NOBOUNDSQUERY_FEATURE=1 $(CURDIR)/$<
 	@-echo
 
+# gpu_multi_context_threaded has additional deps to link in
+$(BIN_DIR)/$(TARGET)/generator_aot_gpu_multi_context_threaded: $(ROOT_DIR)/test/generator/gpu_multi_context_threaded_aottest.cpp \
+	                                                       $(FILTERS_DIR)/gpu_multi_context_threaded_add.a \
+	                                                       $(FILTERS_DIR)/gpu_multi_context_threaded_mul.a \
+	                                                       $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) $(CUDA_LD_FLAGS) -o $@
+
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_gpu_multi_context_threaded: $(ROOT_DIR)/test/generator/gpu_multi_context_threaded_aottest.cpp \
+	                                                          $(FILTERS_DIR)/gpu_multi_context_threaded_add.halide_generated.cpp \
+	                                                          $(FILTERS_DIR)/gpu_multi_context_threaded_mul.halide_generated.cpp \
+	                                                          $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) $(CUDA_LD_FLAGS) -o $@
+
 # nested externs doesn't actually contain a generator named
 # "nested_externs", and has no internal tests in any case.
 test_generator_nested_externs:
+	@echo "Skipping"
+
+# gpu_multi actually contain a generator named
+# "gpu_multi", and has no internal tests in any case.
+test_generator_gpu_multi:
+	@echo "Skipping"
+
+# gpu_multi_context_threaded actually contain a generator named
+# "gpu_multi", and has no internal tests in any case.
+test_generator_gpu_multi_context_threaded:
 	@echo "Skipping"
 
 $(BUILD_DIR)/RunGenMain.o: $(ROOT_DIR)/tools/RunGenMain.cpp $(RUNTIME_EXPORTED_INCLUDES) $(ROOT_DIR)/tools/RunGen.h
@@ -2063,6 +2109,10 @@ ifneq (,$(findstring clang version 12.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 13.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -2083,7 +2133,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 100 110 111 120))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 100 110 111 120 130))
 LLVM_OK=yes
 endif
 

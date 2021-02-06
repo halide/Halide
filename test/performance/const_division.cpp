@@ -75,13 +75,13 @@ bool test(int w, bool div) {
     g.compile_jit();
     h.compile_jit();
 
-    Buffer<T> correct = g.realize(input.width(), num_vals);
+    Buffer<T> correct = g.realize({input.width(), num_vals});
     double t_correct = benchmark([&]() { g.realize(correct); });
 
-    Buffer<T> fast = f.realize(input.width(), num_vals);
+    Buffer<T> fast = f.realize({input.width(), num_vals});
     double t_fast = benchmark([&]() { f.realize(fast); });
 
-    Buffer<T> fast_dynamic = h.realize(input.width(), num_vals);
+    Buffer<T> fast_dynamic = h.realize({input.width(), num_vals});
     double t_fast_dynamic = benchmark([&]() { h.realize(fast_dynamic); });
 
     printf("%6.3f                  %6.3f\n", t_correct / t_fast, t_correct / t_fast_dynamic);

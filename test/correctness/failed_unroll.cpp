@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     f.unroll(x);
 
     setenv("HL_PERMIT_FAILED_UNROLL", "1", 1);
-    f.realize(17);
+    f.realize({17});
     printf("Success!\n");
 #endif
 

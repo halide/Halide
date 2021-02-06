@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < 10; i++) {
         p.set(i);
-        Buffer<float> result = g.realize(W, H);
+        Buffer<float> result = g.realize({W, H});
         result.copy_to_host();
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {

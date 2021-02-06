@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
     Var xo, xi;
     f.vectorize(x, 8, TailStrategy::ShiftInwards);
 
-    f.realize(5);
+    f.realize({5});
 
     // Ignoring scheduling, we're only realizing f over positive
     // values of x, so this shouldn't fault. However scheduling can

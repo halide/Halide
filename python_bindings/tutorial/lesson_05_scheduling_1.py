@@ -31,7 +31,7 @@ def main():
         # slowly. x is the column and y is the row, so this is a
         # row-major traversal.
         print("Evaluating gradient row-major")
-        output = gradient.realize(4, 4)
+        output = gradient.realize([4, 4])
 
         # The equivalent C is:
         print("Equivalent C:")
@@ -72,7 +72,7 @@ def main():
         # traversal.
 
         print("Evaluating gradient column-major")
-        output = gradient.realize(4, 4)
+        output = gradient.realize([4, 4])
 
         print("Equivalent C:")
         for yy in range(4):
@@ -109,7 +109,7 @@ def main():
         # also added within the loops.
 
         print("Evaluating gradient with x split into x_outer and x_inner ")
-        output = gradient.realize(4, 4)
+        output = gradient.realize([4, 4])
 
         print("Equivalent C:")
         for yy in range(4):
@@ -144,7 +144,7 @@ def main():
         gradient.fuse(x, y, fused)
 
         print("Evaluating gradient with x and y fused")
-        output = gradient.realize(4, 4)
+        output = gradient.realize([4, 4])
 
         print("Equivalent C:")
         for fused in range(4 * 4):
@@ -183,7 +183,7 @@ def main():
         # gradient.tile(x, y, x_outer, y_outer, x_inner, y_inner, 2, 2)
 
         print("Evaluating gradient in 2x2 tiles")
-        output = gradient.realize(4, 4)
+        output = gradient.realize([4, 4])
 
         print("Equivalent C:")
         for y_outer in range(2):
@@ -235,7 +235,7 @@ def main():
         # This time we'll evaluate over an 8x4 box, so that we have
         # more than one vector of work per scanline.
         print("Evaluating gradient with x_inner vectorized ")
-        output = gradient.realize(8, 4)
+        output = gradient.realize([8, 4])
 
         print("Equivalent C:")
         for yy in range(4):
@@ -281,7 +281,7 @@ def main():
         # gradient.unroll(x, 2)
 
         print("Evaluating gradient unrolled by a factor of two")
-        result = gradient.realize(4, 4)
+        result = gradient.realize([4, 4])
 
         print("Equivalent C:")
         for yy in range(4):
@@ -321,7 +321,7 @@ def main():
         gradient.split(x, x_outer, x_inner, 2)
 
         print("Evaluating gradient over a 5x4 box with x split by two ")
-        output = gradient.realize(5, 4)
+        output = gradient.realize([5, 4])
 
         print("Equivalent C:")
         for yy in range(4):
@@ -403,7 +403,7 @@ def main():
         #     .parallel(tile_index)
 
         print("Evaluating gradient tiles in parallel")
-        output = gradient.realize(4, 4)
+        output = gradient.realize([4, 4])
 
         # The tiles should occur in arbitrary order, but within each
         # tile the pixels will be traversed in row-major order.
@@ -465,7 +465,7 @@ def main():
         # If you like you can turn on tracing, but it's going to
         # produce a lot of prints. Instead we'll compute the answer
         # both in C and Halide and see if the answers match.
-        result = gradient_fast.realize(800, 600)
+        result = gradient_fast.realize([800, 600])
 
         print("Checking Halide result against equivalent C...")
         for tile_index in range(4 * 3):

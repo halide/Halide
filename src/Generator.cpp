@@ -2242,7 +2242,8 @@ void generator_test() {
         tester.call_generate();
         tester.call_schedule();
 
-        Buffer<float> im = tester_instance.realize(1);
+        Buffer<float> im = tester_instance.realize({1});
+        internal_assert(im.dimensions() == 1);
         internal_assert(im.dim(0).extent() == 1);
         internal_assert(im(0) == 1475.25f) << "Expected 1475.25 but saw " << im(0);
     }

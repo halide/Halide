@@ -113,9 +113,8 @@ public:
 #else
     HALIDE_ALWAYS_INLINE
     Expr mutate(const Expr &e, ExprInfo *b) {
-        Expr new_e = Super::dispatch(e, b);
-        internal_assert(new_e.type() == e.type()) << e << " -> " << new_e << "\n";
-        return new_e;
+        // This gets inlined into every call to mutate, so do not add any code here.
+        return Super::dispatch(e, b);
     }
 #endif
 

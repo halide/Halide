@@ -174,7 +174,7 @@ def main():
     input_width, input_height = input_data.shape[:2]
 
     t0 = datetime.now()
-    output_image = interpolate.realize(input_width, input_height, 3)
+    output_image = interpolate.realize([input_width, input_height, 3])
     t1 = datetime.now()
 
     elapsed = (t1 - t0).total_seconds()

@@ -49,7 +49,7 @@ int main(int arch, char **argv) {
         }
 
         // Run the pipeline and verify the results are correct.
-        Buffer<uint8_t> out = f.realize(W, H, target);
+        Buffer<uint8_t> out = f.realize({W, H}, target);
 
         for (int y = 1; y < H - 1; y++) {
             for (int x = 1; x < W - 1; x++) {
@@ -91,7 +91,7 @@ int main(int arch, char **argv) {
         }
 
         // Run the pipeline and verify the results are correct.
-        Buffer<uint8_t> out = g.realize(W, H, target);
+        Buffer<uint8_t> out = g.realize({W, H}, target);
 
         for (int y = 1; y < H - 1; y++) {
             for (int x = 1; x < W - 1; x++) {
@@ -136,7 +136,7 @@ int main(int arch, char **argv) {
         g.output_buffer().dim(1).set_min(0).set_extent(H);
 
         // Run the pipeline and verify the results are correct.
-        Buffer<uint8_t> out = g.realize(W - 2, H, target);
+        Buffer<uint8_t> out = g.realize({W - 2, H}, target);
 
         for (int y = 1; y < H - 1; y++) {
             for (int x = 0; x < W - 3; x++) {

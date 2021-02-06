@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     f.update(1).compute_with(g, y);
 
     Pipeline p({f, g});
-    p.realize(200, 200);
+    p.realize({200, 200});
 
     printf("Success!\n");
     return 0;
