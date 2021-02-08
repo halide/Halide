@@ -8,7 +8,7 @@ using namespace Halide;
 
 void set_env_variable(const std::string &name, const std::string &value, int overwrite) {
 #ifdef _MSC_VER
-    _putenv_s(nname.c_str(), value.c_str());
+    _putenv_s(name.c_str(), value.c_str());
 #else
     setenv(name.c_str(), value.c_str(), overwrite);
 #endif
