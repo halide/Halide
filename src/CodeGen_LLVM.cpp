@@ -199,7 +199,6 @@ CodeGen_LLVM::CodeGen_LLVM(const Target &t)
       wild_u32x_(Variable::make(UInt(32, 0), "*")),
       wild_i64x_(Variable::make(Int(64, 0), "*")),
       wild_u64x_(Variable::make(UInt(64, 0), "*")),
-      wild_bf16x_(Variable::make(BFloat(16, 0), "*")),
       wild_f32x_(Variable::make(Float(32, 0), "*")),
       wild_f64x_(Variable::make(Float(64, 0), "*")),
 
@@ -212,7 +211,6 @@ CodeGen_LLVM::CodeGen_LLVM(const Target &t)
       wild_u32_(Variable::make(UInt(32), "*")),
       wild_i64_(Variable::make(Int(64), "*")),
       wild_u64_(Variable::make(UInt(64), "*")),
-      wild_bf16_(Variable::make(BFloat(16), "*")),
       wild_f32_(Variable::make(Float(32), "*")),
       wild_f64_(Variable::make(Float(64), "*")),
 

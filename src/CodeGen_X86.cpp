@@ -486,16 +486,19 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         Expr pattern;
         const char *intrin;
         Type narrow_type;
-        bool combine_init;
+        uint32_t flags = 0;
+        enum {
+            CombineInit = 1 << 0,
+        };
     };
     // clang-format off
     static const Pattern patterns[] = {
-        {2, f32(wild_bf16x_) * f32(wild_bf16x_), "dot_product", BFloat(16), true},
-        {2, i32(widening_mul(wild_i16x_, wild_i16x_)), "pmaddwd", Int(16), false},
-        {2, i32(widening_mul(wild_i8x_, wild_i8x_)), "pmaddwd", Int(16), false},
-        {2, i32(widening_mul(wild_i8x_, wild_u8x_)), "pmaddwd", Int(16), false},
-        {2, i32(widening_mul(wild_u8x_, wild_i8x_)), "pmaddwd", Int(16), false},
-        {2, i32(widening_mul(wild_u8x_, wild_u8x_)), "pmaddwd", Int(16), false},
+        {2, wild_f32x_ * wild_f32x_, "dot_product", BFloat(16), Pattern::CombineInit},
+        {2, i32(widening_mul(wild_i16x_, wild_i16x_)), "pmaddwd", Int(16)},
+        {2, i32(widening_mul(wild_i8x_, wild_i8x_)), "pmaddwd", Int(16)},
+        {2, i32(widening_mul(wild_i8x_, wild_u8x_)), "pmaddwd", Int(16)},
+        {2, i32(widening_mul(wild_u8x_, wild_i8x_)), "pmaddwd", Int(16)},
+        {2, i32(widening_mul(wild_u8x_, wild_u8x_)), "pmaddwd", Int(16)},
         // One could do a horizontal widening addition with
         // pmaddwd against a vector of ones. Currently disabled
         // because I haven't found case where it's clearly better.
@@ -512,10 +515,9 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             Expr b = matches[1];
             a = lossless_cast(p.narrow_type.with_lanes(a.type().lanes()), a);
             b = lossless_cast(p.narrow_type.with_lanes(b.type().lanes()), b);
-            internal_assert(a.defined());
-            internal_assert(b.defined());
+            if (!a.defined() || !b.defined()) { continue; }
 
-            if (p.combine_init) {
+            if (p.flags & Pattern::CombineInit) {
                 value = call_overloaded_intrin(op->type, p.intrin, {init, a, b});
                 if (value) { return; }
             } else {
