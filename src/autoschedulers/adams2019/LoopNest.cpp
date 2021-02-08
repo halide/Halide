@@ -1709,7 +1709,7 @@ void LoopNest::apply(LoopLevel here,
                     internal_assert(v.innermost_pure_dim && v.exists) << v.var.name() << "\n";
                     // Is the result of a split
                     state.schedule_source
-                        << "\n    .vectorize(" << v.var.name() << ")";
+                        << "\n    .vectorize(" << conform_name(v.var.name()) << ")";
                     s.vectorize(v.var);
                 }
             } else {
@@ -1760,9 +1760,9 @@ void LoopNest::apply(LoopLevel here,
                         parent.exists = false;
                         parent.extent = 1;
                     } else {
-                        VarOrRVar inner(Var(parent.var.name() + "i"));
+                        VarOrRVar inner(Var(conform_name(parent.var.name() + "i")));
                         if (parent.var.is_rvar) {
-                            inner = RVar(parent.var.name() + "i");
+                            inner = RVar(conform_name(parent.var.name() + "i", "r"));
                         }
 
                         auto tail_strategy = pure_var_tail_strategy;
@@ -1779,8 +1779,8 @@ void LoopNest::apply(LoopLevel here,
                         s.split(parent.var, parent.var, inner, (int)factor, tail_strategy);
                         state.schedule_source
                             << "\n    .split("
-                            << parent.var.name() << ", "
-                            << parent.var.name() << ", "
+                            << conform_name(parent.var.name()) << ", "
+                            << conform_name(parent.var.name()) << ", "
                             << inner.name() << ", "
                             << factor << ", "
                             << "TailStrategy::" << tail_strategy << ")";
@@ -1819,7 +1819,7 @@ void LoopNest::apply(LoopLevel here,
                         for (size_t i = 0; i < symbolic_loop.size(); i++) {
                             if (state.vars[i].pure && state.vars[i].exists && state.vars[i].extent > 1) {
                                 s.unroll(state.vars[i].var);
-                                state.schedule_source << "\n    .unroll(" << state.vars[i].var.name() << ")";
+                                state.schedule_source << "\n    .unroll(" << conform_name(state.vars[i].var.name()) << ")";
                             }
                         }
                     }
@@ -1858,7 +1858,7 @@ void LoopNest::apply(LoopLevel here,
         if (here.is_root()) {
             loop_level = "_root()";
         } else {
-            loop_level = "_at(" + here.func() + ", " + here.var().name() + ")";
+            loop_level = "_at(" + here.func() + ", " + conform_name(here.var().name()) + ")";
         }
         for (const auto &c : children) {
             if (c->node != node) {
