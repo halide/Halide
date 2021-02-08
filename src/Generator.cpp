@@ -597,7 +597,7 @@ void StubEmitter::emit() {
     for (const auto &out : out_info) {
         stream << get_indent() << "stub." << out.getter << ",\n";
     }
-    stream << get_indent() << "stub.generator->get_target()\n";
+    stream << get_indent() << "stub.get_target()\n";
     indent_level--;
     stream << get_indent() << "};\n";
     indent_level--;
@@ -649,47 +649,19 @@ void StubEmitter::emit() {
 }
 
 GeneratorStub::GeneratorStub(const GeneratorContext &context,
-                             const GeneratorFactory &generator_factory)
-    : generator(generator_factory(context)) {
-}
-
-GeneratorStub::GeneratorStub(const GeneratorContext &context,
                              const GeneratorFactory &generator_factory,
                              const GeneratorParamsMap &generator_params,
                              const std::vector<std::vector<Internal::StubInput>> &inputs)
-    : GeneratorStub(context, generator_factory) {
-    generate(generator_params, inputs);
-}
+    : generator(generator_factory(context)) {
 
-// Return a vector of all Outputs of this Generator; non-array outputs are returned
-// as a vector-of-size-1. This method is primarily useful for code that needs
-// to iterate through the outputs of unknown, arbitrary Generators (e.g.,
-// the Python bindings).
-std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap &generator_params,
-                                                       const std::vector<std::vector<Internal::StubInput>> &inputs) {
     generator->set_generator_param_values(generator_params);
     generator->call_configure();
     generator->set_inputs_vector(inputs);
-    Pipeline p = generator->build_pipeline();
+    (void)generator->build_pipeline();
+}
 
-    std::vector<std::vector<Func>> v;
-    GeneratorParamInfo &pi = generator->param_info();
-    if (!pi.outputs().empty()) {
-        for (auto *output : pi.outputs()) {
-            const std::string &name = output->name();
-            if (output->is_array()) {
-                v.push_back(get_array_output(name));
-            } else {
-                v.push_back(std::vector<Func>{get_output(name)});
-            }
-        }
-    } else {
-        // Generators with build() method can't have Output<>, hence can't have array outputs
-        for (const auto &output : p.outputs()) {
-            v.push_back(std::vector<Func>{output});
-        }
-    }
-    return v;
+Target GeneratorStub::get_target() const {
+    return generator->get_target();
 }
 
 GeneratorStub::Names GeneratorStub::get_names() const {
@@ -705,6 +677,14 @@ GeneratorStub::Names GeneratorStub::get_names() const {
         names.outputs.push_back(o->name());
     }
     return names;
+}
+
+Func GeneratorStub::get_output(const std::string &n) const {
+    return generator->get_output(n);
+}
+
+std::vector<Func> GeneratorStub::get_array_output(const std::string &n) const {
+    return generator->get_array_output(n);
 }
 
 const std::map<std::string, Type> &get_halide_type_enum_map() {

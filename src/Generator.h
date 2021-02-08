@@ -3675,20 +3675,14 @@ public:
 class GeneratorStub : public NamesInterface {
 public:
     GeneratorStub(const GeneratorContext &context,
-                  const GeneratorFactory &generator_factory);
-
-    GeneratorStub(const GeneratorContext &context,
                   const GeneratorFactory &generator_factory,
                   const GeneratorParamsMap &generator_params,
                   const std::vector<std::vector<Internal::StubInput>> &inputs);
-    std::vector<std::vector<Func>> generate(const GeneratorParamsMap &generator_params,
-                                            const std::vector<std::vector<Internal::StubInput>> &inputs);
+
+    Target get_target() const;
 
     // Output(s)
-    // TODO: identify vars used
-    Func get_output(const std::string &n) const {
-        return generator->get_output(n);
-    }
+    Func get_output(const std::string &n) const;
 
     template<typename T2>
     T2 get_output_buffer(const std::string &n) const {
@@ -3697,17 +3691,16 @@ public:
 
     template<typename T2>
     std::vector<T2> get_array_output_buffer(const std::string &n) const {
-        auto v = generator->get_array_output(n);
+        auto v = get_array_output(n);
         std::vector<T2> result;
+        result.reserve(v.size());
         for (auto &o : v) {
             result.push_back(T2(o, generator));
         }
         return result;
     }
 
-    std::vector<Func> get_array_output(const std::string &n) const {
-        return generator->get_array_output(n);
-    }
+    std::vector<Func> get_array_output(const std::string &n) const;
 
     static std::vector<StubInput> to_stub_input_vector(const Expr &e) {
         return {StubInput(e)};
@@ -3734,6 +3727,7 @@ public:
     };
     Names get_names() const;
 
+private:
     std::shared_ptr<GeneratorBase> generator;
 };
 
