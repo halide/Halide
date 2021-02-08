@@ -1,7 +1,7 @@
 #include "Halide.h"
+#include <cstdlib>   // setenv (or Windows _putenv_s)
 #include <iostream>  // std::cerr / std::endl
 #include <map>       // std::map
-#include <cstdlib>   // setenv (or Windows _putenv_s)
 #include <string>    // std::to_string
 
 using namespace Halide;
