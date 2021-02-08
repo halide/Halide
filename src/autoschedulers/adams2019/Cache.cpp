@@ -7,18 +7,11 @@ namespace Internal {
 namespace Autoscheduler {
 
 bool use_memoized_features() {
-    static bool var = get_env_variable("HL_USE_MEMOIZED_FEATURES") == "1";
-    return var;
-}
-
-bool verify_memoized_features() {
-    static bool var = get_env_variable("HL_VERIFY_MEMOIZED_FEATURES") == "1";
-    return var;
+    return get_env_variable("HL_DISABLE_MEMOIZED_FEATURES") != "1";
 }
 
 bool is_memoize_blocks_enabled() {
-    static bool var = get_env_variable("HL_MEMOIZE_BLOCKS") == "1";
-    return var;
+    return get_env_variable("HL_DISABLE_MEMOIZED_BLOCKS") != "1";
 }
 
 bool Cache::add_memoized_blocks(const State *state,

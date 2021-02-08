@@ -15,13 +15,10 @@ namespace Autoscheduler {
 
 struct State;
 
-// true iff HL_USE_MEMOIZED_FEATURES=1
+// true unless HL_DISABLE_MEMOIZED_FEATURES=1
 bool use_memoized_features();
 
-// true iff HL_VERIFY_MEMOIZED_FEATURES=1
-bool verify_memoized_features();
-
-// true iff HL_MEMOIZE_BLOCKS=1
+// true unless HL_DISABLE_MEMOIZED_BLOCKS=1
 bool is_memoize_blocks_enabled();
 
 /*
@@ -30,13 +27,11 @@ Object stores caching options for autoscheduling.
 struct CachingOptions {
     bool cache_blocks = false;
     bool cache_features = false;
-    bool verify_feature_caching = false;
 
     static CachingOptions MakeOptionsFromEnviron() {
         CachingOptions options;
         options.cache_blocks = is_memoize_blocks_enabled();
         options.cache_features = use_memoized_features();
-        options.verify_feature_caching = verify_memoized_features();
         return options;
     }
 };

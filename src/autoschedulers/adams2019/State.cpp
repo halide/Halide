@@ -82,35 +82,6 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
         }
     }
 
-    // Check that features produced with or without caching are the same.
-    if (cache_options.verify_feature_caching) {
-        StageMap<ScheduleFeatures> base_features;
-        base_features.make_large(dag.nodes[0].stages[0].max_id);
-        // Calculate features without caching.
-        root->compute_features(dag, params, sites, 1, 1, nullptr, nullptr, *root, nullptr, &base_features, /* use_cached_features */ false);
-
-        StageMap<ScheduleFeatures> verification_features;
-        verification_features.make_large(dag.nodes[0].stages[0].max_id);
-        // Calculate features with caching.
-        root->compute_features(dag, params, sites, 1, 1, nullptr, nullptr, *root, nullptr, &verification_features, /* use_cached_features */ true);
-
-        for (auto it = base_features.begin(); it != base_features.end(); it++) {
-            const auto &stage = *(it.key());
-            const auto &feat = it.value();
-
-            if (!feat.equal(verification_features.get(&stage))) {
-                root->dump("", nullptr);
-                std::cerr << "Feature Mismatch: " << stage.node->func.name() << "\n";
-                feat.dump();
-                std::cerr << "\n";
-                verification_features.get(&stage).dump();
-                std::cerr << "\n";
-
-                internal_assert(false) << "Feature caching verification failed\n";
-            }
-        }
-    }
-
     root->compute_features(dag, params, sites, 1, 1, nullptr, nullptr, *root, nullptr, features, cache_options.cache_features);
 
     for (const auto &n : dag.nodes) {
