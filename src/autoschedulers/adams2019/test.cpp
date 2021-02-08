@@ -1,16 +1,16 @@
 #include "Halide.h"
-#include <iostream>     // std::cerr / std::endl
-#include <map>          // std::map
-#include <stdlib.h>     // setenv (or Windows _putenv_s)
-#include <string>       // std::to_string
+#include <iostream>  // std::cerr / std::endl
+#include <map>       // std::map
+#include <stdlib.h>  // setenv (or Windows _putenv_s)
+#include <string>    // std::to_string
 
 using namespace Halide;
 
 void set_env_variable(const std::string &name, const std::string &value, int overwrite) {
 #ifdef _MSC_VER
-        _putenv_s(nname.c_str(), value.c_str());
+    _putenv_s(nname.c_str(), value.c_str());
 #else
-        setenv(name.c_str(), value.c_str(), overwrite);
+    setenv(name.c_str(), value.c_str(), overwrite);
 #endif
 }
 
@@ -137,8 +137,8 @@ int main(int argc, char **argv) {
             Func f("f"), h("h");
             f(x, y) = (x + y) * (x + 2 * y) * (x + 3 * y);
             h(x, y) = (f(x - 9, y - 9) + f(x, y - 9) + f(x + 9, y - 9) +
-                    f(x - 9, y) + f(x, y) + f(x + 9, y) +
-                    f(x - 9, y + 9) + f(x, y + 9) + f(x + 9, y - 9));
+                       f(x - 9, y) + f(x, y) + f(x + 9, y) +
+                       f(x - 9, y + 9) + f(x, y + 9) + f(x + 9, y - 9));
 
             h.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
@@ -163,8 +163,8 @@ int main(int argc, char **argv) {
             Func f("f"), g("g"), h("h");
             f(x, y) = (x + y) * (x + 2 * y) * (x + 3 * y);
             h(x, y) = (f(x - 1, y - 1) + f(x, y - 1) + f(x + 1, y - 1) +
-                    f(x - 1, y) + f(x, y) + f(x + 1, y) +
-                    f(x - 1, y + 1) + f(x, y + 1) + f(x + 1, y - 1));
+                       f(x - 1, y) + f(x, y) + f(x + 1, y) +
+                       f(x - 1, y + 1) + f(x, y + 1) + f(x + 1, y - 1));
 
             h.set_estimate(x, 0, 2048).set_estimate(y, 0, 2048);
 
