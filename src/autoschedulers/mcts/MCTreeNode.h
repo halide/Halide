@@ -221,6 +221,10 @@ namespace MCTS {
             }
         }
 
+        void clear_parent() {
+            parent = nullptr;
+        }
+
         size_t get_n_branches() const {
             return possible_actions.size();
         }

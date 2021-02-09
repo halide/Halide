@@ -98,16 +98,17 @@ namespace MCTS {
                 // std::cerr << "Iteration: " << iterations << std::endl;
                 // std::cerr << "\tNumber valids: " << n_valid_nodes << std::endl;
 
-                // Start at root and find best valued node that has been expanded.
-                NodePtr node = root_node;
-
                 // TODO(rootjalex): is there a faster way to track from the root?
                 //                  this could be expensive for large Pipelines
-                // std::cerr << "\tTrack from root" << std::endl;
-                while (!node->is_terminal() && node->is_fully_expanded()) {
-                    node = get_best_value_child(node);
-                    internal_assert(node) << "get_best_value_child returned nullptr\n";
+                // std::cerr << "\tTrack from root:" << root_node << std::endl;
+                while (!root_node->is_terminal() && root_node->is_fully_expanded()) {
+                    root_node = get_best_value_child(root_node);
+                    internal_assert(root_node) << "get_best_value_child returned nullptr\n";
+                    root_node->clear_parent(); // delete parent pointer, it's now garbage.
                 }
+
+                // Start at root and find best valued node that has been expanded.
+                NodePtr node = root_node;
 
                 // std::cerr << "\tChosen node has: " << node->get_n_branches() << " but only " << node->get_num_children() << " explored" << std::endl;
 
@@ -121,6 +122,8 @@ namespace MCTS {
                     internal_assert(node) << "choose_new_random_child returned nullptr\n";
                 }
 
+                // std::cerr << "\tSimulating:" << node << std::endl;
+
                 // TODO(rootjalex): need proper simulation (until ending).
                 // TODO(rootjalex): Luke wanted intermediate option: set num_simulations = 0
                 for (uint32_t i = 0; (i < num_simulations) && (!node->is_terminal()); i++) {
@@ -132,6 +135,7 @@ namespace MCTS {
                 // We don't have a simulation step, because only one action per state can be chosen.
                 // std::cerr << "\tValidity checking" << std::endl;
                 // if (node->is_valid()) {
+                    // std::cerr << "\tincrementing:" << node << std::endl;
                     node->increment_visits();
                     double node_cost = node->get_state().calculate_cost();
 
@@ -147,8 +151,11 @@ namespace MCTS {
                         // node is shared but we don't have shared ptrs
                         // to parent nodes, as that would cause loops.
                         Node *parent_ptr = node->get_parent();
-                        while (parent_ptr && parent_ptr->update(node_cost)) {
+                        // std::cerr << "\troot:" << root_node << std::endl;
+                        // std::cerr << "\tfirst parent:" << parent_ptr << std::endl;
+                        while (parent_ptr && parent_ptr->update(node_cost) && parent_ptr != root_node.get()) {
                             parent_ptr = parent_ptr->get_parent();
+                            // std::cerr << "\tparent:" << parent_ptr << std::endl;
                         }
                         // if (parent_ptr) {
                         //     std::cerr << "Did not make it to root! " << std::endl;
@@ -169,6 +176,7 @@ namespace MCTS {
                 if (!use_timer && iterations >= max_iterations) {
                     break;
                 }
+                std::cerr << "iteration:" << iterations << std::endl;
             }
 
             std::cerr << "Iterations:" << iterations << std::endl;
