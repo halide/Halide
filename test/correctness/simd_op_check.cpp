@@ -518,9 +518,6 @@ public:
                 check("vdpbf16ps*zmm", 16, sum(f32(in_bf16(2 * x + r)) * in_bf16(2 * x + r + 32)));
                 check("vdpbf16ps*ymm", 8, sum(f32(in_bf16(2 * x + r)) * in_bf16(2 * x + r + 32)));
                 check("vdpbf16ps*xmm", 4, sum(f32(in_bf16(2 * x + r)) * in_bf16(2 * x + r + 32)));
-                // We match on `sum(f32 * f32)` for bf16 dot product, so check
-                // that we correctly generate code for the f32 dot product too.
-                check("", 4, sum(in_f32(2 * x + r) * in_f32(2 * x + r + 32)));
             }
         }
     }
