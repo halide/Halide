@@ -9,6 +9,7 @@
 #include "Monotonic.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "Solve.h"
 #include "Substitute.h"
 #include <utility>
 
@@ -112,9 +113,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
     Stmt visit(const ProducerConsumer *op) override {
-        if (!op->is_producer || (op->name != func.name())) {
+        if (op->name != func.name()) {
             return IRMutator::visit(op);
-        } else {
+        } else if (op->is_producer) {
             Stmt stmt = op;
 
             // We're interested in the case where exactly one of the
@@ -245,21 +246,34 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 return stmt;
             }
 
+            std::string new_loop_min_name = unique_name('x');
+            new_loop_min = Variable::make(Int(32), new_loop_min_name);
+            Expr new_loop_min_eq;
             Expr new_min, new_max;
             if (can_slide_up) {
-                new_min = select(loop_var_expr <= loop_min, min_required, likely_if_innermost(prev_max_plus_one));
+                new_min = prev_max_plus_one;
                 new_max = max_required;
+
+                new_loop_min_eq =
+                    substitute(loop_var_expr, loop_min, min_required) == substitute(loop_var_expr, new_loop_min, prev_max_plus_one);
             } else {
                 new_min = min_required;
-                new_max = select(loop_var_expr <= loop_min, max_required, likely_if_innermost(prev_min_minus_one));
+                new_max = prev_min_minus_one;
+
+                new_loop_min_eq =
+                    substitute(loop_var_expr, loop_min, max_required) == substitute(loop_var_expr, new_loop_min, prev_min_minus_one);
             }
+            SolverResult new_loop_min_solved = solve_expression(new_loop_min_eq, new_loop_min_name);
+            internal_assert(new_loop_min_solved.fully_solved) << "Could not find the new loop_min.";
+            new_loop_min = new_loop_min_solved.result.as<EQ>()->b;
 
             Expr early_stages_min_required = new_min;
             Expr early_stages_max_required = new_max;
 
             debug(3) << "Sliding " << func.name() << ", " << dim << "\n"
                      << "Pushing min up from " << min_required << " to " << new_min << "\n"
-                     << "Shrinking max from " << max_required << " to " << new_max << "\n";
+                     << "Shrinking max from " << max_required << " to " << new_max << "\n"
+                     << "Adjusting loop_min from " << loop_min << " to " << new_loop_min << "\n";
 
             // Now redefine the appropriate regions required
             if (can_slide_up) {
@@ -293,6 +307,11 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 }
             }
             return stmt;
+        } else {
+            // The producer might have expanded the loop before the min. Add an
+            // if so we don't run the consumer out of bounds.
+            Expr loop_var_expr = Variable::make(Int(32), loop_var);
+            return IfThenElse::make(likely_if_innermost(loop_var_expr >= loop_min), IRMutator::visit(op));
         }
     }
 
@@ -343,6 +362,8 @@ public:
     SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min)
         : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)) {
     }
+
+    Expr new_loop_min;
 };
 
 // Perform sliding window optimization for a particular function
@@ -358,15 +379,24 @@ class SlidingWindowOnFunction : public IRMutator {
 
         new_body = mutate(new_body);
 
+        Expr new_loop_min = op->min;
+        Expr new_loop_extent = op->extent;
         if (op->for_type == ForType::Serial ||
             op->for_type == ForType::Unrolled) {
-            new_body = SlidingWindowOnFunctionAndLoop(func, op->name, op->min).mutate(new_body);
+            SlidingWindowOnFunctionAndLoop slider(func, op->name, op->min);
+            new_body = slider.mutate(new_body);
+            // We might have modified the loop min. If so, update the loop extent
+            // to preserve the max.
+            if (slider.new_loop_min.defined()) {
+                new_loop_min = slider.new_loop_min;
+                new_loop_extent += op->min - slider.new_loop_min;
+            }
         }
 
-        if (new_body.same_as(op->body)) {
+        if (new_body.same_as(op->body) && new_loop_min.same_as(op->min)) {
             return op;
         } else {
-            return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, new_body);
+            return For::make(op->name, new_loop_min, new_loop_extent, op->for_type, op->device_api, new_body);
         }
     }
 
