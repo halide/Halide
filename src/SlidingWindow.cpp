@@ -3,6 +3,7 @@
 #include "Bounds.h"
 #include "CompilerLogger.h"
 #include "Debug.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
@@ -113,9 +114,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
     Stmt visit(const ProducerConsumer *op) override {
-        if (op->name != func.name()) {
-            return IRMutator::visit(op);
-        } else if (op->is_producer) {
+        if (op->is_producer && op->name == func.name()) {
             Stmt stmt = op;
 
             // We're interested in the case where exactly one of the
@@ -265,7 +264,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             }
             SolverResult new_loop_min_solved = solve_expression(new_loop_min_eq, new_loop_min_name);
             internal_assert(new_loop_min_solved.fully_solved) << "Could not find the new loop_min.";
-            new_loop_min = new_loop_min_solved.result.as<EQ>()->b;
+            const EQ *solve_result = new_loop_min_solved.result.as<EQ>();
+            internal_assert(equal(solve_result->a, new_loop_min)) << solve_result->a;
+            new_loop_min = solve_result->b;
 
             Expr early_stages_min_required = new_min;
             Expr early_stages_max_required = new_max;
@@ -307,11 +308,13 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 }
             }
             return stmt;
-        } else {
+        } else if (!op->is_producer) {
             // The producer might have expanded the loop before the min. Add an
             // if so we don't run the consumer out of bounds.
             Expr loop_var_expr = Variable::make(Int(32), loop_var);
             return IfThenElse::make(likely_if_innermost(loop_var_expr >= loop_min), IRMutator::visit(op));
+        } else {
+            return IRMutator::visit(op);
         }
     }
 
@@ -377,8 +380,6 @@ class SlidingWindowOnFunction : public IRMutator {
 
         Stmt new_body = op->body;
 
-        new_body = mutate(new_body);
-
         Expr new_loop_min = op->min;
         Expr new_loop_extent = op->extent;
         if (op->for_type == ForType::Serial ||
@@ -392,6 +393,8 @@ class SlidingWindowOnFunction : public IRMutator {
                 new_loop_extent += op->min - slider.new_loop_min;
             }
         }
+
+        new_body = mutate(new_body);
 
         if (new_body.same_as(op->body) && new_loop_min.same_as(op->min)) {
             return op;
