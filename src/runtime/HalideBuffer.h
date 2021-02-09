@@ -373,7 +373,7 @@ private:
         assert(dim(d).max() >= min + extent - 1);
         ptrdiff_t shift = min - dim(d).min();
         if (buf.host != nullptr) {
-            buf.host += shift * dim(d).stride() * type().bytes();
+            buf.host += (shift * dim(d).stride()) * type().bytes();
         }
         buf.dim[d].min = min;
         buf.dim[d].extent = extent;
@@ -411,7 +411,7 @@ private:
         buf.dimensions--;
         ptrdiff_t shift = pos - buf.dim[d].min;
         if (buf.host != nullptr) {
-            buf.host += shift * buf.dim[d].stride * type().bytes();
+            buf.host += (shift * buf.dim[d].stride) * type().bytes();
         }
         for (int i = d; i < buf.dimensions; i++) {
             buf.dim[i] = buf.dim[i + 1];
