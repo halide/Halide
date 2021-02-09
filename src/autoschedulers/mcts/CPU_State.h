@@ -34,8 +34,8 @@ struct CPU_Action {
 
     CPU_Action() = delete;
     CPU_Action(const CPU_Action &_action)= default;
-    CPU_Action(CPU_ScheduleAction _action, IntrusivePtr<const LoopNest> _root, StageMap<ScheduleFeatures> &_features) :
-        schedule_action(_action), root(std::move(_root)), features(std::move(_features)) {}
+    // CPU_Action(CPU_ScheduleAction _action, IntrusivePtr<const LoopNest> _root, StageMap<ScheduleFeatures> &_features) :
+        // schedule_action(_action), root(std::move(_root)), features(std::move(_features)) {}
     CPU_Action(CPU_ScheduleAction _action, IntrusivePtr<const LoopNest> _root) :
         schedule_action(_action), root(std::move(_root)) {}
 
@@ -46,7 +46,7 @@ struct CPU_Action {
     IntrusivePtr<const LoopNest> root;
 
     // TODO(rootjalex): had pruning problems, now need to pass these on.
-    StageMap<ScheduleFeatures> features;
+    // StageMap<ScheduleFeatures> features;
 
     static CPU_Action Default() {
         return CPU_Action(CPU_ScheduleAction::Empty, nullptr);
@@ -94,7 +94,7 @@ struct CPU_Action {
 
 class CPU_State {
     // Root LoopNest for this state.
-    IntrusivePtr<const LoopNest> root;
+    mutable IntrusivePtr<const LoopNest> root;
 
     // TODO(rootjalex): do we need a parent pointer?
     // IntrusivePtr<const State> parent;
@@ -120,9 +120,14 @@ class CPU_State {
     // bool prepruned = false;
 
     // Saving the features for calculating cost.
-    mutable StageMap<ScheduleFeatures> features;
-    mutable bool cached_features = false;
-    mutable bool cached_valid = false;
+    // mutable StageMap<ScheduleFeatures> features;
+    // mutable bool cached_features = false;
+    // mutable bool cached_valid = false;
+
+    void delete_loop_nest() const {
+        // Can't figure out an easier way to do this...
+        IntrusivePtr<const LoopNest> temp(std::move(root));
+    }
 
 public:
     CPU_State() = delete;

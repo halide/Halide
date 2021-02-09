@@ -131,7 +131,7 @@ namespace MCTS {
 
                 // We don't have a simulation step, because only one action per state can be chosen.
                 // std::cerr << "\tValidity checking" << std::endl;
-                if (node->is_valid()) {
+                // if (node->is_valid()) {
                     node->increment_visits();
                     double node_cost = node->get_state().calculate_cost();
 
@@ -161,7 +161,7 @@ namespace MCTS {
 
                     // TODO(rootjalex): reference code uses get_most_visited_child of the root. Why the heck?
                     n_valid_nodes++;
-                }
+                // }
 
                 // TODO(rootjalex): check timing here
                 iterations++;

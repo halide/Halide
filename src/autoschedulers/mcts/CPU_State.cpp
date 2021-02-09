@@ -19,6 +19,7 @@ vector<CPU_Action> CPU_State::generate_possible_actions() const {
     vector<CPU_Action> actions;
     if (is_terminal()) {
         // This is a leaf node.
+        // DON'T DELETE ROOT NODE.
         return actions;
     }
 
@@ -52,6 +53,7 @@ vector<CPU_Action> CPU_State::generate_possible_actions() const {
         // compute_featurization(dag_ptr, params_ptr, root, &input_features);
         // take_action will store features
         actions.push_back(CPU_Action(CPU_ScheduleAction::Input, root));
+        delete_loop_nest();
         return actions;
     }
 
@@ -86,6 +88,7 @@ vector<CPU_Action> CPU_State::generate_possible_actions() const {
         // children. Carry on.
     }
 
+    delete_loop_nest();
     return actions;
 }
 
@@ -100,7 +103,8 @@ vector<CPU_Action> CPU_State::generate_injected_realizations(const FunctionDAG::
         // TODO(rootjalex): this is bad, need someway to transfer these features to futurue use.
         StageMap<ScheduleFeatures> inline_features;
         if (!prunable(dag_ptr, params_ptr, new_root, inline_features, memory_limit)) {
-            actions.push_back(CPU_Action(CPU_ScheduleAction::Inline, new_root, inline_features));
+            actions.push_back(CPU_Action(CPU_ScheduleAction::Inline, new_root));
+            // actions.push_back(CPU_Action(CPU_ScheduleAction::Inline, new_root, inline_features));
         } else {
             // TODO(rootjalex): is this a leak in adams2019?
             delete new_root;
@@ -190,7 +194,8 @@ vector<CPU_Action> CPU_State::generate_injected_realizations(const FunctionDAG::
             // TODO(rootjalex): had too many invalids for many tests, need to do early pruning.
             StageMap<ScheduleFeatures> vectorize_features;
             if (!prunable(dag_ptr, params_ptr, n.get(), vectorize_features, memory_limit)) {
-                actions.push_back(CPU_Action(CPU_ScheduleAction::Vectorize, std::move(n), vectorize_features));
+                actions.push_back(CPU_Action(CPU_ScheduleAction::Vectorize, std::move(n)));
+                // actions.push_back(CPU_Action(CPU_ScheduleAction::Vectorize, std::move(n), vectorize_features));
             }
         }
     }
@@ -349,7 +354,8 @@ vector<CPU_Action> CPU_State::generate_parallel_realizations(const FunctionDAG::
             StageMap<ScheduleFeatures> tile_features;
             if (!prunable(dag_ptr, params_ptr, new_root, tile_features, memory_limit)) {
                 // TODO(rootjalex): Once again, should we prune here? Or is it fine to delay?
-                actions.push_back(CPU_Action(CPU_ScheduleAction::Tile, new_root, tile_features));
+                actions.push_back(CPU_Action(CPU_ScheduleAction::Tile, new_root));
+                // actions.push_back(CPU_Action(CPU_ScheduleAction::Tile, new_root, tile_features));
             }
         }
     }
@@ -360,6 +366,7 @@ vector<CPU_Action> CPU_State::generate_parallel_realizations(const FunctionDAG::
 CPU_State CPU_State::take_action(const CPU_Action &action) const {
     CPU_State next_state(dag_ptr, params_ptr, model_ptr, action.root, n_decisions_made + 1, memory_limit);
     // TODO(rootjalex): Some delayed calculations may need to be inserted here.
+    /*
     if (action.schedule_action == CPU_ScheduleAction::Inline ||
         action.schedule_action == CPU_ScheduleAction::Vectorize ||
         action.schedule_action == CPU_ScheduleAction::Tile) {
@@ -368,6 +375,7 @@ CPU_State CPU_State::take_action(const CPU_Action &action) const {
         next_state.cached_features = true;
         next_state.cached_valid = true;
     }
+    */
     return next_state; // for now, simply return.
 }
 
@@ -385,27 +393,29 @@ bool CPU_State::is_terminal() const {
 bool CPU_State::is_valid() const {
     // If this state was already prepruned, then it is valid.
     // Otherwise, check that it's not a prunable node.
-    if (cached_features) {
-        return cached_valid;
-    } else {
-        const bool pruned = prunable(dag_ptr, params_ptr, root.get(), features, memory_limit);
-        cached_valid = !pruned;
-        cached_features = true;
-        return cached_valid;
-    }
+    // if (cached_features) {
+    //     return cached_valid;
+    // } else {
+    //     const bool pruned = prunable(dag_ptr, params_ptr, root.get(), features, memory_limit);
+    //     cached_valid = !pruned;
+    //     cached_features = true;
+    //     return cached_valid;
+    // }
+    return true;
 }
 
 double CPU_State::calculate_cost() const {
     // TODO(rootjalex): this is bad, we calculate a featurization once in is_valid (for prunable),
     //                  and once here, for the same node.... We should probably save these.
-    if (is_valid()) {
+    StageMap<ScheduleFeatures> features;
+    if (prunable(dag_ptr, params_ptr, root.get(), features, memory_limit)) {
+        return std::numeric_limits<double>::max();
+    } else {
         double cost = 0.0f;
         // TODO(rootjalex): not batching might be slow, but is there any better way?
         model_ptr->enqueue(*dag_ptr, features, &cost);
         model_ptr->evaluate_costs();
         return cost;
-    } else {
-        return std::numeric_limits<double>::max();
     }
 }
 
