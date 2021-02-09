@@ -90,9 +90,8 @@ std::map<Output, std::string> compute_output_files(const Target &target,
     return output_files;
 }
 
-Argument to_argument(const Internal::Parameter &param, const Expr &default_value) {
+Argument to_argument(const Internal::Parameter &param) {
     ArgumentEstimates argument_estimates = param.get_argument_estimates();
-    argument_estimates.scalar_def = default_value;
     return Argument(param.name(),
                     param.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
                     param.type(), param.dimensions(), argument_estimates);
@@ -1480,7 +1479,7 @@ Module GeneratorBase::build_module(const std::string &function_name,
     std::vector<Argument> filter_arguments;
     for (const auto *input : pi.inputs()) {
         for (const auto &p : input->parameters_) {
-            filter_arguments.push_back(to_argument(p, p.is_buffer() ? Expr() : input->get_def_expr()));
+            filter_arguments.push_back(to_argument(p));
         }
     }
 
@@ -1555,7 +1554,7 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
         // There can be multiple Funcs/Parameters per input if the input is an Array
         internal_assert(input->parameters_.size() == input->funcs_.size());
         for (const auto &p : input->parameters_) {
-            gradient_inputs.push_back(to_argument(p, p.is_buffer() ? Expr() : input->get_def_expr()));
+            gradient_inputs.push_back(to_argument(p));
             debug(DBG) << "    gradient copied input is: " << gradient_inputs.back().name << "\n";
         }
     }
@@ -1585,7 +1584,7 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
                 d_im.parameter().set_extent_constraint_estimate(d, grad_in_estimates.buffer_estimates[i].extent);
             }
             d_output_imageparams.push_back(d_im);
-            gradient_inputs.push_back(to_argument(d_im.parameter(), Expr()));
+            gradient_inputs.push_back(to_argument(d_im.parameter()));
 
             debug(DBG) << "    gradient synthesized input is: " << gradient_inputs.back().name << "\n";
         }
@@ -1893,10 +1892,6 @@ void GeneratorInputBase::check_value_writable() const {
 
 void GeneratorInputBase::set_def_min_max() {
     // nothing
-}
-
-Expr GeneratorInputBase::get_def_expr() const {
-    return Expr();
 }
 
 Parameter GeneratorInputBase::parameter() const {

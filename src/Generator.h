@@ -1535,7 +1535,6 @@ protected:
     void set_inputs(const std::vector<StubInput> &inputs);
 
     virtual void set_def_min_max();
-    virtual Expr get_def_expr() const;
 
     void verify_internals() override;
 
@@ -1925,13 +1924,10 @@ protected:
     const TBase def_{TBase()};
     const Expr def_expr_;
 
-    Expr get_def_expr() const override {
-        return def_expr_;
-    }
-
     void set_def_min_max() override {
         for (Parameter &p : this->parameters_) {
             p.set_scalar<TBase>(def_);
+            p.set_default_value(def_expr_);
         }
     }
 
@@ -1943,12 +1939,13 @@ protected:
     // so that pointer (aka handle) Inputs will get cast to uint64.
     template<typename TBase2 = TBase, typename std::enable_if<!std::is_pointer<TBase2>::value>::type * = nullptr>
     static Expr TBaseToExpr(const TBase2 &value) {
-        return Expr(value);
+        return cast<TBase>(Expr(value));
     }
 
     template<typename TBase2 = TBase, typename std::enable_if<std::is_pointer<TBase2>::value>::type * = nullptr>
     static Expr TBaseToExpr(const TBase2 &value) {
-        return Expr((uint64_t)value);
+        user_assert(value == 0) << "Zero is the only legal default value for Inputs which are pointer types.\n";
+        return Expr();
     }
 
 public:
