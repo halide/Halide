@@ -182,32 +182,40 @@ class DerivativeBounds : public IRVisitor {
     }
 
     void visit(const Mul *op) override {
-        op->a.accept(this);
-        Interval ra = result;
-        op->b.accept(this);
-        Interval rb = result;
+        if (op->type.is_scalar()) {
+            op->a.accept(this);
+            Interval ra = result;
+            op->b.accept(this);
+            Interval rb = result;
 
-        // This is very much like the product rule for derivatives.
-        if (is_constant(rb)) {
-            // Avoid generating large expressions in the common case of constant b.
-            result = multiply(ra, op->b);
+            // This is very much like the product rule for derivatives.
+            if (is_constant(rb)) {
+                // Avoid generating large expressions in the common case of constant b.
+                result = multiply(ra, op->b);
+            } else {
+                result = add(multiply(ra, op->b), multiply(rb, op->a));
+            }
         } else {
-            result = add(multiply(ra, op->b), multiply(rb, op->a));
+            result = Interval();
         }
     }
 
     void visit(const Div *op) override {
-        op->a.accept(this);
-        Interval ra = result;
-        op->b.accept(this);
-        Interval rb = result;
+        if (op->type.is_scalar()) {
+            op->a.accept(this);
+            Interval ra = result;
+            op->b.accept(this);
+            Interval rb = result;
 
-        // This is much like the quotient rule for derivatives.
-        if (is_constant(rb)) {
-            // Avoid generating large expressions in the common case of constant b.
-            result = divide(ra, op->b);
+            // This is much like the quotient rule for derivatives.
+            if (is_constant(rb)) {
+                // Avoid generating large expressions in the common case of constant b.
+                result = divide(ra, op->b);
+            } else {
+                result = divide(add(multiply(ra, op->b), negate(multiply(rb, op->a))), op->b * op->b);
+            }
         } else {
-            result = divide(add(multiply(ra, op->b), negate(multiply(rb, op->a))), op->b * op->b);
+            result = Interval();
         }
     }
 
@@ -309,9 +317,13 @@ class DerivativeBounds : public IRVisitor {
         Interval unified = unify(ra, rb);
 
         // The result is the unified bounds, added to the "bump" that happens when switching from true to false.
-        Expr switch_step = simplify(op->true_value - op->false_value);
-        Interval switch_bounds = multiply(rcond, switch_step);
-        result = add(unified, switch_bounds);
+        if (op->type.is_scalar()) {
+            Expr switch_step = simplify(op->true_value - op->false_value);
+            Interval switch_bounds = multiply(rcond, switch_step);
+            result = add(unified, switch_bounds);
+        } else {
+            result = Interval();
+        }
     }
 
     void visit(const Load *op) override {
