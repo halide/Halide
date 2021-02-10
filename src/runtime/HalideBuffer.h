@@ -371,9 +371,9 @@ private:
     void crop_host(int d, int min, int extent) {
         assert(dim(d).min() <= min);
         assert(dim(d).max() >= min + extent - 1);
-        int shift = min - dim(d).min();
+        ptrdiff_t shift = min - dim(d).min();
         if (buf.host != nullptr) {
-            buf.host += shift * dim(d).stride() * type().bytes();
+            buf.host += (shift * dim(d).stride()) * type().bytes();
         }
         buf.dim[d].min = min;
         buf.dim[d].extent = extent;
@@ -409,9 +409,9 @@ private:
         assert(d >= 0 && d < dimensions());
         assert(pos >= dim(d).min() && pos <= dim(d).max());
         buf.dimensions--;
-        int shift = pos - buf.dim[d].min;
+        ptrdiff_t shift = pos - buf.dim[d].min;
         if (buf.host != nullptr) {
-            buf.host += shift * buf.dim[d].stride * type().bytes();
+            buf.host += (shift * buf.dim[d].stride) * type().bytes();
         }
         for (int i = d; i < buf.dimensions; i++) {
             buf.dim[i] = buf.dim[i + 1];
