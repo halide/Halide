@@ -150,6 +150,15 @@ public:
     Expr estimate() const;
     // @}
 
+    /** Get and set the default values for scalar parameters. At present, these
+     * are used only to emit the default values in the metadata. There isn't
+     * yet a public API in Param<> for them (this is used internally by the
+     * Generator code). */
+    // @{
+    void set_default_value(const Expr &e);
+    Expr default_value() const;
+    // @}
+
     /** Order Parameters by their IntrusivePtr so they can be used
      * to index maps. */
     bool operator<(const Parameter &other) const {
