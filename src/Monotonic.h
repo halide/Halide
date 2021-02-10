@@ -8,15 +8,21 @@
 #include <iostream>
 #include <string>
 
-#include "Expr.h"
 #include "Scope.h"
+#include "Interval.h"
 
 namespace Halide {
 namespace Internal {
 
+/** Find the bounds of the derivative of an expression. */
+Interval derivative_bounds(const Expr &e, const std::string &var,
+                           const Scope<Interval> &scope = Scope<Interval>::empty_scope());
+
 /**
  * Detect whether an expression is monotonic increasing in a variable,
- * decreasing, or unknown.
+ * decreasing, or unknown. If the scope is not empty, this adds some
+ * overhead (and loses some capability to determine monotonicity) to
+ * derivative_bounds above.
  */
 enum class Monotonic { Constant,
                        Increasing,

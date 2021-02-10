@@ -30,26 +30,109 @@ using std::string;
 
 namespace {
 
-class MonotonicVisitor : public IRVisitor {
+Interval zero_interval = Interval::single_point(make_zero(Int(32)));
+
+bool is_constant(const Interval &a) {
+    return a.has_lower_bound() && a.has_upper_bound() && can_prove(a.min == 0 && a.max == 0);
+}
+
+bool is_monotonic_increasing(const Interval &a) {
+    return a.has_lower_bound() && can_prove(a.min >= 0);
+}
+
+bool is_monotonic_decreasing(const Interval &a) {
+    return a.has_upper_bound() && can_prove(a.max <= 0);
+}
+
+Interval to_interval(Monotonic m) {
+    switch (m) {
+    case Monotonic::Constant:
+        return Interval::single_point(make_zero(Int(32)));
+    case Monotonic::Increasing:
+        return Interval(make_zero(Int(32)), Interval::pos_inf());
+    case Monotonic::Decreasing:
+        return Interval(Interval::neg_inf(), make_zero(Int(32)));
+    case Monotonic::Unknown:
+        return Interval();
+    }
+}
+
+Monotonic to_monotonic(const Interval &x) {
+    if (is_constant(x)) {
+        return Monotonic::Constant;
+    } else if (is_monotonic_increasing(x)) {
+        return Monotonic::Increasing;
+    } else if (is_monotonic_decreasing(x)) {
+        return Monotonic::Decreasing;
+    } else {
+        return Monotonic::Unknown;
+    }
+}
+
+Interval unify(const Interval &a, const Interval &b) {
+    return Interval::make_union(a, b);
+}
+
+Interval unify(const Interval &a, const Expr &b) {
+    Interval result;
+    result.include(b);
+    return result;
+}
+
+// Helpers for doing arithmetic on intervals that avoid generating
+// expressions of pos_inf/neg_inf.
+Interval add(const Interval &a, const Interval &b) {
+    Interval result;
+    result.min = a.has_lower_bound() && b.has_lower_bound() ? a.min + b.min : Interval::neg_inf();
+    result.max = a.has_upper_bound() && b.has_upper_bound() ? a.max + b.max : Interval::pos_inf();
+    return result;
+}
+
+Interval add(const Interval &a, const Expr &b) {
+    Interval result;
+    result.min = a.has_lower_bound() ? a.min + b : Interval::neg_inf();
+    result.max = a.has_upper_bound() ? a.max + b : Interval::pos_inf();
+    return result;
+}
+
+Interval multiply(const Interval &a, const Expr &b) {
+    Expr x = a.has_lower_bound() ? a.min * b : a.min;
+    Expr y = a.has_upper_bound() ? a.max * b : a.max;
+    return Interval(Interval::make_min(x, y), Interval::make_max(x, y));
+}
+
+Interval divide(const Interval &a, const Expr &b) {
+    Expr x = a.has_lower_bound() ? a.min / b : a.min;
+    Expr y = a.has_upper_bound() ? a.max / b : a.max;
+    return Interval(Interval::make_min(x, y), Interval::make_max(x, y));
+}
+
+Interval flip(const Interval &r) {
+    Expr min = r.has_upper_bound() ? -r.max : Interval::neg_inf();
+    Expr max = r.has_lower_bound() ? -r.min : Interval::pos_inf();
+    return Interval(min, max);
+}
+
+class DerivativeBounds : public IRVisitor {
     const string &var;
 
-    Scope<Monotonic> scope;
+    Scope<Interval> scope;
 
     void visit(const IntImm *) override {
-        result = Monotonic::Constant;
+        result = zero_interval;
     }
 
     void visit(const UIntImm *) override {
-        result = Monotonic::Constant;
+        result = zero_interval;
     }
 
     void visit(const FloatImm *) override {
-        result = Monotonic::Constant;
+        result = zero_interval;
     }
 
     void visit(const StringImm *) override {
         // require() Exprs can includes Strings.
-        result = Monotonic::Constant;
+        result = zero_interval;
     }
 
     void visit(const Cast *op) override {
@@ -67,135 +150,90 @@ class MonotonicVisitor : public IRVisitor {
 
         // A narrowing cast. There may be more cases we can catch, but
         // for now we punt.
-        if (result != Monotonic::Constant) {
-            result = Monotonic::Unknown;
+        if (!is_constant(result)) {
+            result = Interval();
         }
     }
 
     void visit(const Variable *op) override {
         if (op->name == var) {
-            result = Monotonic::Increasing;
+            result = Interval::single_point(make_one(Int(32)));
         } else if (scope.contains(op->name)) {
             result = scope.get(op->name);
         } else {
-            result = Monotonic::Constant;
+            result = Interval::single_point(make_zero(Int(32)));
         }
-    }
-
-    Monotonic flip(Monotonic r) {
-        switch (r) {
-        case Monotonic::Increasing:
-            return Monotonic::Decreasing;
-        case Monotonic::Decreasing:
-            return Monotonic::Increasing;
-        default:
-            return r;
-        }
-    }
-
-    Monotonic unify(Monotonic a, Monotonic b) {
-        if (a == b) {
-            return a;
-        }
-
-        if (a == Monotonic::Unknown || b == Monotonic::Unknown) {
-            return Monotonic::Unknown;
-        }
-
-        if (a == Monotonic::Constant) {
-            return b;
-        }
-
-        if (b == Monotonic::Constant) {
-            return a;
-        }
-
-        return Monotonic::Unknown;
     }
 
     void visit(const Add *op) override {
         op->a.accept(this);
-        Monotonic ra = result;
+        Interval ra = result;
         op->b.accept(this);
-        Monotonic rb = result;
-        result = unify(ra, rb);
+        Interval rb = result;
+        result = add(ra, rb);
     }
 
     void visit(const Sub *op) override {
         op->a.accept(this);
-        Monotonic ra = result;
+        Interval ra = result;
         op->b.accept(this);
-        Monotonic rb = result;
-        result = unify(ra, flip(rb));
+        Interval rb = flip(result);
+        result = add(ra, rb);
     }
 
     void visit(const Mul *op) override {
         op->a.accept(this);
-        Monotonic ra = result;
+        Interval ra = result;
         op->b.accept(this);
-        Monotonic rb = result;
+        Interval rb = result;
 
-        if (ra == Monotonic::Constant && rb == Monotonic::Constant) {
-            result = Monotonic::Constant;
-        } else if (is_positive_const(op->a)) {
-            result = rb;
-        } else if (is_positive_const(op->b)) {
-            result = ra;
-        } else if (is_negative_const(op->a)) {
-            result = flip(rb);
-        } else if (is_negative_const(op->b)) {
-            result = flip(ra);
-        } else {
-            result = Monotonic::Unknown;
-        }
+        // This is very much like the product rule for derivatives!
+        result = unify(multiply(ra, op->b), multiply(rb, op->a));
     }
 
     void visit(const Div *op) override {
         op->a.accept(this);
-        Monotonic ra = result;
+        Interval ra = result;
         op->b.accept(this);
-        Monotonic rb = result;
+        Interval rb = result;
 
-        if (ra == Monotonic::Constant && rb == Monotonic::Constant) {
-            result = Monotonic::Constant;
-        } else if (is_positive_const(op->b)) {
-            result = ra;
-        } else if (is_negative_const(op->b)) {
-            result = flip(ra);
+        if (is_constant(rb)) {
+            result = divide(ra, op->b);
         } else {
-            result = Monotonic::Unknown;
+            // This might not be too hard to support, but it would produce pretty big expressions quickly.
+            result = Interval();
         }
     }
 
     void visit(const Mod *op) override {
-        result = Monotonic::Unknown;
+        result = Interval();
     }
 
     void visit(const Min *op) override {
         op->a.accept(this);
-        Monotonic ra = result;
+        Interval ra = result;
         op->b.accept(this);
-        Monotonic rb = result;
+        Interval rb = result;
         result = unify(ra, rb);
     }
 
     void visit(const Max *op) override {
         op->a.accept(this);
-        Monotonic ra = result;
+        Interval ra = result;
         op->b.accept(this);
-        Monotonic rb = result;
+        Interval rb = result;
         result = unify(ra, rb);
     }
 
     void visit_eq(const Expr &a, const Expr &b) {
         a.accept(this);
-        Monotonic ra = result;
+        Interval ra = result;
         b.accept(this);
-        Monotonic rb = result;
-        if (ra == Monotonic::Constant && rb == Monotonic::Constant) {
-            result = Monotonic::Constant;
+        Interval rb = result;
+        if (is_constant(ra) && is_constant(rb)) {
+            result = Interval::single_point(make_zero(Int(32)));
         } else {
-            result = Monotonic::Unknown;
+            result = Interval(make_const(Int(32), -1), make_one(Int(32)));
         }
     }
 
@@ -209,10 +247,12 @@ class MonotonicVisitor : public IRVisitor {
 
     void visit_lt(const Expr &a, const Expr &b) {
         a.accept(this);
-        Monotonic ra = result;
+        Interval ra = result;
         b.accept(this);
-        Monotonic rb = result;
+        Interval rb = result;
         result = unify(flip(ra), rb);
+        result.min = Interval::make_max(result.min, make_const(Int(32), -1));
+        result.max = Interval::make_min(result.max, make_one(Int(32)));
     }
 
     void visit(const LT *op) override {
@@ -233,17 +273,17 @@ class MonotonicVisitor : public IRVisitor {
 
     void visit(const And *op) override {
         op->a.accept(this);
-        Monotonic ra = result;
+        Interval ra = result;
         op->b.accept(this);
-        Monotonic rb = result;
+        Interval rb = result;
         result = unify(ra, rb);
     }
 
     void visit(const Or *op) override {
         op->a.accept(this);
-        Monotonic ra = result;
+        Interval ra = result;
         op->b.accept(this);
-        Monotonic rb = result;
+        Interval rb = result;
         result = unify(ra, rb);
     }
 
@@ -254,50 +294,24 @@ class MonotonicVisitor : public IRVisitor {
 
     void visit(const Select *op) override {
         op->condition.accept(this);
-        Monotonic rcond = result;
+        Interval rcond = result;
 
         op->true_value.accept(this);
-        Monotonic ra = result;
+        Interval ra = result;
         op->false_value.accept(this);
-        Monotonic rb = result;
-        Monotonic unified = unify(ra, rb);
+        Interval rb = result;
+        Interval unified = unify(ra, rb);
 
-        if (rcond == Monotonic::Constant) {
-            result = unified;
-            return;
-        }
-
-        bool true_value_ge_false_value = can_prove(op->true_value >= op->false_value);
-        bool true_value_le_false_value = can_prove(op->true_value <= op->false_value);
-
-        bool switches_from_true_to_false = rcond == Monotonic::Decreasing;
-        bool switches_from_false_to_true = rcond == Monotonic::Increasing;
-
-        if (true_value_ge_false_value &&
-            true_value_le_false_value) {
-            // The true value equals the false value.
-            result = ra;
-        } else if ((unified == Monotonic::Increasing || unified == Monotonic::Constant) &&
-                   ((switches_from_false_to_true && true_value_ge_false_value) ||
-                    (switches_from_true_to_false && true_value_le_false_value))) {
-            // Both paths increase, and the condition makes it switch
-            // from the lesser path to the greater path.
-            result = Monotonic::Increasing;
-        } else if ((unified == Monotonic::Decreasing || unified == Monotonic::Constant) &&
-                   ((switches_from_false_to_true && true_value_le_false_value) ||
-                    (switches_from_true_to_false && true_value_ge_false_value))) {
-            // Both paths decrease, and the condition makes it switch
-            // from the greater path to the lesser path.
-            result = Monotonic::Decreasing;
-        } else {
-            result = Monotonic::Unknown;
-        }
+        // The result is the unified bounds, added to the "bump" that happens when switching from true to false.
+        Expr switch_step = simplify(op->true_value - op->false_value);
+        Interval switch_bounds = multiply(rcond, switch_step);
+        result = add(unified, switch_bounds);
     }
 
     void visit(const Load *op) override {
         op->index.accept(this);
-        if (result != Monotonic::Constant) {
-            result = Monotonic::Unknown;
+        if (!is_constant(result)) {
+            result = Interval();
         }
     }
 
@@ -331,27 +345,27 @@ class MonotonicVisitor : public IRVisitor {
             return;
         }
 
-        if (!op->is_pure()) {
+        if (!op->is_pure() || !is_constant(result)) {
             // Even with constant args, the result could vary from one loop iteration to the next.
-            result = Monotonic::Unknown;
+            result = Interval();
             return;
         }
 
         for (size_t i = 0; i < op->args.size(); i++) {
             op->args[i].accept(this);
-            if (result != Monotonic::Constant) {
+            if (!is_constant(result)) {
                 // One of the args is not constant.
-                result = Monotonic::Unknown;
+                result = Interval();
                 return;
             }
         }
-        result = Monotonic::Constant;
+        result = Interval::single_point(make_zero(Int(32)));
     }
 
     void visit(const Let *op) override {
         op->value.accept(this);
 
-        if (result == Monotonic::Constant) {
+        if (is_constant(result)) {
             // No point pushing it if it's constant w.r.t the var,
             // because unknown variables are treated as constant.
             op->body.accept(this);
@@ -365,18 +379,20 @@ class MonotonicVisitor : public IRVisitor {
     void visit(const Shuffle *op) override {
         for (size_t i = 0; i < op->vectors.size(); i++) {
             op->vectors[i].accept(this);
-            if (result != Monotonic::Constant) {
-                result = Monotonic::Unknown;
+            if (!is_constant(result)) {
+                result = Interval();
                 return;
             }
         }
-        result = Monotonic::Constant;
+        result = Interval::single_point(make_zero(Int(32)));
     }
 
     void visit(const VectorReduce *op) override {
         op->value.accept(this);
         switch (op->op) {
         case VectorReduce::Add:
+            result = multiply(result, op->value.type().lanes() / op->type.lanes());
+            break;
         case VectorReduce::Min:
         case VectorReduce::Max:
             // These reductions are monotonic in the arg
@@ -385,8 +401,8 @@ class MonotonicVisitor : public IRVisitor {
         case VectorReduce::And:
         case VectorReduce::Or:
             // These ones are not
-            if (result != Monotonic::Constant) {
-                result = Monotonic::Unknown;
+            if (!is_constant(result)) {
+                result = Interval();
             }
         }
     }
@@ -456,23 +472,34 @@ class MonotonicVisitor : public IRVisitor {
     }
 
 public:
-    Monotonic result;
+    Interval result;
 
-    MonotonicVisitor(const std::string &v, const Scope<Monotonic> &parent)
-        : var(v), result(Monotonic::Unknown) {
+    DerivativeBounds(const std::string &v, const Scope<Interval> &parent)
+        : var(v), result(Interval()) {
         scope.set_containing_scope(&parent);
     }
 };
 
 }  // namespace
 
+Interval derivative_bounds(const Expr &e, const std::string &var, const Scope<Interval> &scope) {
+    if (!e.defined()) {
+        return Interval();
+    }
+    DerivativeBounds m(var, scope);
+    e.accept(&m);
+    return m.result;
+}
+
 Monotonic is_monotonic(const Expr &e, const std::string &var, const Scope<Monotonic> &scope) {
     if (!e.defined()) {
         return Monotonic::Unknown;
     }
-    MonotonicVisitor m(var, scope);
-    e.accept(&m);
-    return m.result;
+    Scope<Interval> intervals_scope;
+    for (Scope<Monotonic>::const_iterator i = scope.cbegin(); i != scope.cend(); ++i) {
+        intervals_scope.push(i.name(), to_interval(i.value()));
+    }
+    return to_monotonic(derivative_bounds(e, var, intervals_scope));
 }
 
 namespace {
@@ -519,6 +546,10 @@ void is_monotonic_test() {
 
     check_unknown(x == y);
     check_unknown(x != y);
+    check_increasing(y <= x);
+    check_increasing(y < x);
+    check_decreasing(x <= y);
+    check_decreasing(x < y);
     check_unknown(x * y);
 
     // Not constant despite having constant args, because there's a side-effect.
@@ -527,10 +558,14 @@ void is_monotonic_test() {
     check_increasing(select(y == 2, x, x + 4));
     check_decreasing(select(y == 2, -x, x * -4));
 
-    check_increasing(select(x > 2, x + 1, x));
-    check_increasing(select(x < 2, x, x + 1));
-    check_decreasing(select(x > 2, -x - 1, -x));
-    check_decreasing(select(x < 2, -x, -x - 1));
+    check_unknown(select(x > 2, x - 2, x));
+    check_unknown(select(x < 2, x, x - 2));
+    check_unknown(select(x > 2, -x + 2, -x));
+    check_unknown(select(x < 2, -x, -x + 2));
+    check_increasing(select(x > 2, x - 1, x));
+    check_increasing(select(x < 2, x, x - 1));
+    check_decreasing(select(x > 2, -x + 1, -x));
+    check_decreasing(select(x < 2, -x, -x + 1));
 
     check_unknown(select(x < 2, x, x - 5));
     check_unknown(select(x > 2, x - 5, x));
@@ -545,6 +580,9 @@ void is_monotonic_test() {
     check_increasing(select(x % 2 == 0, x + 3, x + 3));
 
     check_constant(select(y > 3, y + 23, y - 65));
+
+    check_decreasing(select(2 <= x, 0, 1));
+    check_increasing(select(2 <= x, 0, 1) + x);
 
     std::cout << "is_monotonic test passed" << std::endl;
 }

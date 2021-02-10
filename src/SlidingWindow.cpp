@@ -248,25 +248,34 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             std::string new_loop_min_name = unique_name('x');
             new_loop_min = Variable::make(Int(32), new_loop_min_name);
             Expr new_loop_min_eq;
-            Expr new_min, new_max;
             if (can_slide_up) {
-                new_min = prev_max_plus_one;
-                new_max = max_required;
-
                 new_loop_min_eq =
                     substitute(loop_var_expr, loop_min, min_required) == substitute(loop_var_expr, new_loop_min, prev_max_plus_one);
             } else {
-                new_min = min_required;
-                new_max = prev_min_minus_one;
-
                 new_loop_min_eq =
                     substitute(loop_var_expr, loop_min, max_required) == substitute(loop_var_expr, new_loop_min, prev_min_minus_one);
             }
-            SolverResult new_loop_min_solved = solve_expression(new_loop_min_eq, new_loop_min_name);
-            internal_assert(new_loop_min_solved.fully_solved) << "Could not find the new loop_min.";
-            const EQ *solve_result = new_loop_min_solved.result.as<EQ>();
-            internal_assert(equal(solve_result->a, new_loop_min)) << solve_result->a;
-            new_loop_min = solve_result->b;
+            Interval solve_result = solve_for_inner_interval(new_loop_min_eq, new_loop_min_name);
+            Expr new_min, new_max;
+            if (solve_result.has_upper_bound()) {
+                new_loop_min = solve_result.max;
+                if (can_slide_up) {
+                    new_min = prev_max_plus_one;
+                    new_max = max_required;
+                } else {
+                    new_min = min_required;
+                    new_max = prev_min_minus_one;
+                }
+            } else {
+                new_loop_min = loop_min;
+                if (can_slide_up) {
+                    new_min = select(loop_var_expr <= loop_min, min_required, likely_if_innermost(prev_max_plus_one));
+                    new_max = max_required;
+                } else {
+                    new_min = min_required;
+                    new_max = select(loop_var_expr <= loop_min, max_required, likely_if_innermost(prev_min_minus_one));
+                }
+            }
 
             Expr early_stages_min_required = new_min;
             Expr early_stages_max_required = new_max;
