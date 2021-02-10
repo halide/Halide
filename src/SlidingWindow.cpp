@@ -321,7 +321,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // The producer might have expanded the loop before the min. Add an
             // if so we don't run the consumer out of bounds.
             Expr loop_var_expr = Variable::make(Int(32), loop_var);
-            return IfThenElse::make(likely_if_innermost(loop_var_expr >= loop_min), IRMutator::visit(op));
+            Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
+            return IfThenElse::make(likely_if_innermost(loop_var_expr >= orig_loop_min_expr), IRMutator::visit(op));
         } else {
             return IRMutator::visit(op);
         }
@@ -389,8 +390,10 @@ class SlidingWindowOnFunction : public IRMutator {
 
         Stmt new_body = op->body;
 
-        Expr new_loop_min = op->min;
-        Expr new_loop_extent = op->extent;
+        std::string new_loop_name = op->name;
+
+        Expr new_loop_min;
+        Expr new_loop_extent;
         if (op->for_type == ForType::Serial ||
             op->for_type == ForType::Unrolled) {
             SlidingWindowOnFunctionAndLoop slider(func, op->name, op->min);
@@ -399,17 +402,43 @@ class SlidingWindowOnFunction : public IRMutator {
             // to preserve the max.
             if (slider.new_loop_min.defined()) {
                 new_loop_min = slider.new_loop_min;
-                new_loop_extent += op->min - slider.new_loop_min;
+                new_loop_name += ".new";
+
+                std::string loop_max_name = op->min.as<Variable>()->name;
+                loop_max_name = loop_max_name.substr(0, loop_max_name.length() - 2) + "ax";
+                Expr loop_max = Variable::make(Int(32), loop_max_name);
+                new_loop_extent = loop_max - Variable::make(Int(32), new_loop_name + ".loop_min") + 1;
             }
         }
 
         new_body = mutate(new_body);
 
-        if (new_body.same_as(op->body) && new_loop_min.same_as(op->min)) {
-            return op;
+        Stmt new_for;
+        if (new_body.same_as(op->body) && new_loop_name == op->name) {
+            new_for = op;
         } else {
-            return For::make(op->name, new_loop_min, new_loop_extent, op->for_type, op->device_api, new_body);
+            new_for = For::make(new_loop_name, op->min, op->extent, op->for_type, op->device_api, new_body);
         }
+
+        if (new_loop_name != op->name) {
+            // At this point, everything above is implemented by shadowing the old loop variable and related
+            // lets. This isn't OK, so fix that here.
+            std::map<string, Expr> renames = {
+                {op->name, Variable::make(Int(32), new_loop_name)},
+                {op->name + ".loop_extent", Variable::make(Int(32), new_loop_name + ".loop_extent")},
+                {op->name + ".loop_min", Variable::make(Int(32), new_loop_name + ".loop_min")},
+                {op->name + ".loop_min.orig", Variable::make(Int(32), new_loop_name + ".loop_min.orig")},
+            };
+            new_for = substitute(renames, new_for);
+        }
+
+        if (new_loop_min.defined()) {
+            new_for = LetStmt::make(new_loop_name + ".loop_extent", new_loop_extent, new_for);
+            new_for = LetStmt::make(new_loop_name + ".loop_min", new_loop_min, new_for);
+        }
+        new_for = LetStmt::make(new_loop_name + ".loop_min.orig", op->min, new_for);
+
+        return new_for;
     }
 
 public:

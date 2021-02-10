@@ -215,8 +215,8 @@ int main(int argc, char **argv) {
         count = 0;
         Buffer<int> im = g.realize({100});
 
-        if (count != 101) {
-            printf("f was called %d times instead of %d times\n", count, 101);
+        if (count != 110) {
+            printf("f was called %d times instead of %d times\n", count, 110);
             return -1;
         }
     }
