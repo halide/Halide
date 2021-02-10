@@ -30,7 +30,7 @@ using std::string;
 
 namespace {
 
-Interval zero_interval = Interval::single_point(make_zero(Int(32)));
+Interval constant_interval = Interval::single_point(make_zero(Int(32)));
 
 bool is_constant(const Interval &a) {
     return a.has_lower_bound() && a.has_upper_bound() && can_prove(a.min == 0 && a.max == 0);
@@ -47,7 +47,7 @@ bool is_monotonic_decreasing(const Interval &a) {
 Interval to_interval(Monotonic m) {
     switch (m) {
     case Monotonic::Constant:
-        return Interval::single_point(make_zero(Int(32)));
+        return constant_interval;
     case Monotonic::Increasing:
         return Interval(make_zero(Int(32)), Interval::pos_inf());
     case Monotonic::Decreasing:
@@ -107,7 +107,7 @@ Interval divide(const Interval &a, const Expr &b) {
     return Interval(Interval::make_min(x, y), Interval::make_max(x, y));
 }
 
-Interval flip(const Interval &r) {
+Interval negate(const Interval &r) {
     Expr min = r.has_upper_bound() ? -r.max : Interval::neg_inf();
     Expr max = r.has_lower_bound() ? -r.min : Interval::pos_inf();
     return Interval(min, max);
@@ -119,20 +119,20 @@ class DerivativeBounds : public IRVisitor {
     Scope<Interval> scope;
 
     void visit(const IntImm *) override {
-        result = zero_interval;
+        result = constant_interval;
     }
 
     void visit(const UIntImm *) override {
-        result = zero_interval;
+        result = constant_interval;
     }
 
     void visit(const FloatImm *) override {
-        result = zero_interval;
+        result = constant_interval;
     }
 
     void visit(const StringImm *) override {
         // require() Exprs can includes Strings.
-        result = zero_interval;
+        result = constant_interval;
     }
 
     void visit(const Cast *op) override {
@@ -161,7 +161,7 @@ class DerivativeBounds : public IRVisitor {
         } else if (scope.contains(op->name)) {
             result = scope.get(op->name);
         } else {
-            result = Interval::single_point(make_zero(Int(32)));
+            result = constant_interval;
         }
     }
 
@@ -177,7 +177,7 @@ class DerivativeBounds : public IRVisitor {
         op->a.accept(this);
         Interval ra = result;
         op->b.accept(this);
-        Interval rb = flip(result);
+        Interval rb = negate(result);
         result = add(ra, rb);
     }
 
@@ -187,8 +187,13 @@ class DerivativeBounds : public IRVisitor {
         op->b.accept(this);
         Interval rb = result;
 
-        // This is very much like the product rule for derivatives!
-        result = unify(multiply(ra, op->b), multiply(rb, op->a));
+        // This is very much like the product rule for derivatives.
+        if (is_constant(rb)) {
+            // Avoid generating large expressions in the common case of constant b.
+            result = multiply(ra, op->b);
+        } else {
+            result = add(multiply(ra, op->b), multiply(rb, op->a));
+        }
     }
 
     void visit(const Div *op) override {
@@ -197,11 +202,12 @@ class DerivativeBounds : public IRVisitor {
         op->b.accept(this);
         Interval rb = result;
 
+        // This is much like the quotient rule for derivatives.
         if (is_constant(rb)) {
+            // Avoid generating large expressions in the common case of constant b.
             result = divide(ra, op->b);
         } else {
-            // This might not be too hard to support, but it would produce pretty big expressions quickly.
-            result = Interval();
+            result = divide(add(multiply(ra, op->b), negate(multiply(rb, op->a))), op->b * op->b);
         }
     }
 
@@ -231,7 +237,7 @@ class DerivativeBounds : public IRVisitor {
         b.accept(this);
         Interval rb = result;
         if (is_constant(ra) && is_constant(rb)) {
-            result = Interval::single_point(make_zero(Int(32)));
+            result = constant_interval;
         } else {
             result = Interval(make_const(Int(32), -1), make_one(Int(32)));
         }
@@ -250,7 +256,7 @@ class DerivativeBounds : public IRVisitor {
         Interval ra = result;
         b.accept(this);
         Interval rb = result;
-        result = unify(flip(ra), rb);
+        result = unify(negate(ra), rb);
         result.min = Interval::make_max(result.min, make_const(Int(32), -1));
         result.max = Interval::make_min(result.max, make_one(Int(32)));
     }
@@ -289,7 +295,7 @@ class DerivativeBounds : public IRVisitor {
 
     void visit(const Not *op) override {
         op->a.accept(this);
-        result = flip(result);
+        result = negate(result);
     }
 
     void visit(const Select *op) override {
@@ -359,7 +365,7 @@ class DerivativeBounds : public IRVisitor {
                 return;
             }
         }
-        result = Interval::single_point(make_zero(Int(32)));
+        result = constant_interval;
     }
 
     void visit(const Let *op) override {
@@ -384,7 +390,7 @@ class DerivativeBounds : public IRVisitor {
                 return;
             }
         }
-        result = Interval::single_point(make_zero(Int(32)));
+        result = constant_interval;
     }
 
     void visit(const VectorReduce *op) override {
