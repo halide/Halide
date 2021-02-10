@@ -55,6 +55,7 @@ Interval to_interval(Monotonic m) {
     case Monotonic::Unknown:
         return Interval();
     }
+    return Interval();
 }
 
 Monotonic to_monotonic(const Interval &x) {
