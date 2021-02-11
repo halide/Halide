@@ -62,10 +62,41 @@ EGLAPI EGLSurface EGLAPIENTRY eglCreatePbufferSurface(EGLDisplay dpy, EGLConfig 
                                                       const EGLint *attrib_list);
 EGLAPI EGLBoolean EGLAPIENTRY eglMakeCurrent(EGLDisplay dpy, EGLSurface draw,
                                              EGLSurface read, EGLContext ctx);
+EGLAPI EGLBoolean EGLAPIENTRY eglTerminate(EGLDisplay display);
 
 EGLAPI void *eglGetProcAddress(const char *procname);
 
 extern int strcmp(const char *, const char *);
+
+static bool halide_egl_try_display(EGLDisplay display, EGLConfig *config) {
+    if (display == EGL_NO_DISPLAY) {
+        return false;
+    }
+
+    if (!eglInitialize(display, nullptr, nullptr)) {
+        return false;
+    }
+
+    // clang-format off
+    EGLint attribs[] = {
+        EGL_SURFACE_TYPE,    EGL_PBUFFER_BIT,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+        EGL_RED_SIZE,        8,
+        EGL_GREEN_SIZE,      8,
+        EGL_BLUE_SIZE,       8,
+        EGL_ALPHA_SIZE,      8,
+        EGL_NONE
+    };
+    // clang-format on
+
+    int numconfig;
+    EGLBoolean result = eglChooseConfig(display, attribs, config, 1, &numconfig);
+    bool success = result == EGL_TRUE && numconfig == 1;
+    if (!success) {
+        eglTerminate(display);
+    }
+    return success;
+}
 
 WEAK int halide_opengl_create_context(void *user_context) {
     if (eglGetCurrentContext() != EGL_NO_CONTEXT) {
@@ -73,7 +104,9 @@ WEAK int halide_opengl_create_context(void *user_context) {
     }
 
     EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-    if (display == EGL_NO_DISPLAY || !eglInitialize(display, nullptr, nullptr)) {
+    EGLConfig config;
+
+    if (!halide_egl_try_display(display, &config)) {
         PFNEGLQUERYDEVICESEXTPROC eglQueryDevicesEXT =
             reinterpret_cast<PFNEGLQUERYDEVICESEXTPROC>(
                 eglGetProcAddress("eglQueryDevicesEXT"));
@@ -92,78 +125,40 @@ WEAK int halide_opengl_create_context(void *user_context) {
         EGLDeviceEXT egl_devices[kMaxDevices];
         EGLint num_devices = 0;
         EGLint egl_error = eglGetError();
-        if (!eglQueryDevicesEXT(kMaxDevices, egl_devices, &num_devices) ||
-            egl_error != EGL_SUCCESS) {
+        if (!eglQueryDevicesEXT(kMaxDevices, egl_devices, &num_devices) || egl_error != EGL_SUCCESS) {
             return 1;
         }
 
         EGLBoolean initialized = EGL_FALSE;
         for (EGLint i = 0; i < num_devices; ++i) {
-            display = eglGetPlatformDisplayEXT(EGL_PLATFORM_DEVICE_EXT,
-                                               egl_devices[i], nullptr);
-            if (eglGetError() == EGL_SUCCESS && display != EGL_NO_DISPLAY) {
-                int major, minor;
-                initialized = eglInitialize(display, &major, &minor);
-                if (eglGetError() == EGL_SUCCESS && initialized == EGL_TRUE) {
-                    break;
-                }
+            display = eglGetPlatformDisplayEXT(EGL_PLATFORM_DEVICE_EXT, egl_devices[i], nullptr);
+            if (halide_egl_try_display(display, &config)) {
+                initialized = EGL_TRUE;
+                break;
             }
         }
 
-        if (eglGetError() != EGL_SUCCESS || initialized != EGL_TRUE) {
-            error(user_context) << "Could not initialize EGL display: "
-                                << eglGetError();
+        if (initialized != EGL_TRUE) {
+            error(user_context) << "Could not initialize EGL display: " << eglGetError();
             return 1;
         }
     }
 
-    EGLint attribs[] = {
-        EGL_SURFACE_TYPE,
-        EGL_PBUFFER_BIT,
-        EGL_RENDERABLE_TYPE,
-        EGL_OPENGL_ES2_BIT,
-        EGL_RED_SIZE,
-        8,
-        EGL_GREEN_SIZE,
-        8,
-        EGL_BLUE_SIZE,
-        8,
-        EGL_ALPHA_SIZE,
-        8,
-        EGL_NONE,
-    };
-    EGLConfig config;
-    int numconfig;
-    EGLBoolean result = eglChooseConfig(display, attribs, &config, 1, &numconfig);
-    if (result != EGL_TRUE || numconfig != 1) {
-        error(user_context) << "eglChooseConfig(): config not found: "
-                            << " result=" << (int)result
-                            << " eglGetError=" << eglGetError()
-                            << " numConfig=" << numconfig;
-        return -1;
-    }
-
-    EGLint context_attribs[] = {
-        EGL_CONTEXT_CLIENT_VERSION, 2,
-        EGL_NONE};
-    EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT,
-                                          context_attribs);
+    EGLint context_attribs[] = {EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE};
+    EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribs);
     if (context == EGL_NO_CONTEXT) {
         error(user_context) << "Error: eglCreateContext failed: " << eglGetError();
         return -1;
     }
 
-    EGLint surface_attribs[] = {
-        EGL_WIDTH, 1,
-        EGL_HEIGHT, 1,
-        EGL_NONE};
+    EGLint surface_attribs[] = {EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE};
     EGLSurface surface = eglCreatePbufferSurface(display, config, surface_attribs);
     if (surface == EGL_NO_SURFACE) {
         error(user_context) << "Error: Could not create EGL window surface: " << eglGetError();
         return -1;
     }
 
-    result = eglMakeCurrent(display, surface, surface, context);
+    EGLBoolean result = eglMakeCurrent(display, surface, surface, context);
     if (result != EGL_TRUE) {
         error(user_context) << "eglMakeCurrent fails: "
                             << " result=" << (int)result
