@@ -994,9 +994,10 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 12> matching_features = {{
+    const std::array<Feature, 10> matching_features = {{
         ASAN,
         Debug,
+        EGL,
         HexagonDma,
         HVX,
         HVX_shared_object,
