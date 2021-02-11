@@ -3283,7 +3283,7 @@ private:
     // Return the output with the given name.
     // If the output is singular (a non-array), return a vector of size 1.
     // If no such name exists (or is non-array), assert.
-    // tTis method never returns undefined Funcs.
+    // This method never returns undefined Funcs.
     std::vector<Func> get_outputs(const std::string &n);
 
     void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
