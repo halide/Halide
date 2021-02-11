@@ -389,16 +389,12 @@ void StubEmitter::emit() {
     std::vector<OutputInfo> out_info;
     for (auto *output : outputs) {
         std::string c_type = output->get_c_type();
-        std::string getter;
         const bool is_func = (c_type == "Func");
-        if (output->is_array()) {
-            getter = is_func ? "get_array_output" : "get_array_output_buffer<" + c_type + ">";
-        } else {
-            getter = is_func ? "get_output" : "get_output_buffer<" + c_type + ">";
-        }
+        std::string getter = is_func ? "get_outputs" : "get_output_buffers<" + c_type + ">";
+        std::string getter_suffix = output->is_array() ? "" : ".at(0)";
         out_info.push_back({output->name(),
                             output->is_array() ? "std::vector<" + c_type + ">" : c_type,
-                            getter + "(\"" + output->name() + "\")"});
+                            getter + "(\"" + output->name() + "\")" + getter_suffix});
         if (c_type != "Func") {
             all_outputs_are_func = false;
         }
@@ -675,12 +671,7 @@ std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap 
     GeneratorParamInfo &pi = generator->param_info();
     if (!pi.outputs().empty()) {
         for (auto *output : pi.outputs()) {
-            const std::string &name = output->name();
-            if (output->is_array()) {
-                v.push_back(get_array_output(name));
-            } else {
-                v.push_back(std::vector<Func>{get_output(name)});
-            }
+            v.push_back(get_outputs(output->name()));
         }
     } else {
         // Generators with build() method can't have Output<>, hence can't have array outputs
@@ -1230,18 +1221,7 @@ GeneratorParamInfo &GeneratorBase::param_info() {
     return *param_info_ptr;
 }
 
-Func GeneratorBase::get_output(const std::string &n) {
-    check_min_phase(GenerateCalled);
-    auto *output = find_output_by_name(n);
-    // Call for the side-effect of asserting if the value isn't defined.
-    (void)output->array_size();
-    user_assert(!output->is_array() && output->funcs().size() == 1) << "Output " << n << " must be accessed via get_array_output()\n";
-    Func f = output->funcs().at(0);
-    user_assert(f.defined()) << "Output " << n << " was not defined.\n";
-    return f;
-}
-
-std::vector<Func> GeneratorBase::get_array_output(const std::string &n) {
+std::vector<Func> GeneratorBase::get_outputs(const std::string &n) {
     check_min_phase(GenerateCalled);
     auto *output = find_output_by_name(n);
     // Call for the side-effect of asserting if the value isn't defined.
