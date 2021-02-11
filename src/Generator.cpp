@@ -390,11 +390,17 @@ void StubEmitter::emit() {
     for (auto *output : outputs) {
         std::string c_type = output->get_c_type();
         const bool is_func = (c_type == "Func");
-        std::string getter = is_func ? "get_outputs" : "get_output_buffers<" + c_type + ">";
-        std::string getter_suffix = output->is_array() ? "" : ".at(0)";
+        std::string getter = "stub.get_outputs(\"" + output->name() + "\")";
+        if (!is_func) {
+            getter = c_type + "::to_output_buffers(" + getter + ", stub.generator)";
+        }
+        if (!output->is_array()) {
+            getter = getter + ".at(0)";
+        }
+
         out_info.push_back({output->name(),
                             output->is_array() ? "std::vector<" + c_type + ">" : c_type,
-                            getter + "(\"" + output->name() + "\")" + getter_suffix});
+                            getter});
         if (c_type != "Func") {
             all_outputs_are_func = false;
         }
@@ -594,7 +600,7 @@ void StubEmitter::emit() {
     stream << get_indent() << "return {\n";
     indent_level++;
     for (const auto &out : out_info) {
-        stream << get_indent() << "stub." << out.getter << ",\n";
+        stream << get_indent() << out.getter << ",\n";
     }
     stream << get_indent() << "stub.get_target()\n";
     indent_level--;
@@ -653,7 +659,7 @@ GeneratorStub::GeneratorStub(const GeneratorContext &context,
 }
 
 void GeneratorStub::generate(const GeneratorParamsMap &generator_params,
-                                                       const std::vector<std::vector<Internal::StubInput>> &inputs) {
+                             const std::vector<std::vector<Internal::StubInput>> &inputs) {
     generator->stubgen_generate(generator_params, inputs);
 }
 
@@ -1386,17 +1392,6 @@ GeneratorParamInfo &GeneratorBase::param_info() {
     return *param_info_ptr;
 }
 
-std::vector<Func> GeneratorBase::get_outputs(const std::string &n) {
-    check_min_phase(GenerateCalled);
-    auto *output = find_output_by_name(n);
-    // Call for the side-effect of asserting if the value isn't defined.
-    (void)output->array_size();
-    for (const auto &f : output->funcs()) {
-        user_assert(f.defined()) << "Output " << n << " was not fully defined.\n";
-    }
-    return output->funcs();
-}
-
 // Find output by name. If not found, assert-fail. Never returns null.
 GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name) {
     // There usually are very few outputs, so a linear search is fine
@@ -1674,8 +1669,7 @@ IGenerator::Names GeneratorBase::gen_get_names() {
     return IGenerator::Names{
         get_names(pi.generator_params()),
         get_names(pi.inputs()),
-        get_names(pi.outputs())
-    };
+        get_names(pi.outputs())};
 }
 
 std::vector<Parameter> GeneratorBase::gen_get_input_parameters() {
@@ -1749,15 +1743,22 @@ Pipeline GeneratorBase::gen_build_pipeline() {
 }
 
 std::vector<Func> GeneratorBase::stubgen_get_outputs(const std::string &n) {
-    return get_outputs(n);
+    check_min_phase(GenerateCalled);
+    auto *output = find_output_by_name(n);
+    // Call for the side-effect of asserting if the value isn't defined.
+    (void)output->array_size();
+    for (const auto &f : output->funcs()) {
+        user_assert(f.defined()) << "Output " << n << " was not fully defined.\n";
+    }
+    return output->funcs();
 }
 
 void GeneratorBase::stubgen_generate(const GeneratorParamsMap &generator_params,
-                                                               const std::vector<std::vector<Internal::StubInput>> &inputs) {
+                                     const std::vector<std::vector<Internal::StubInput>> &inputs) {
     gen_set_generator_param_values(generator_params);
     call_configure();
     set_inputs_vector(inputs);
-    (void) build_pipeline();
+    (void)build_pipeline();
 }
 
 bool GeneratorBase::stubgen_emit_cpp_stub(const std::string &stub_file_path) {

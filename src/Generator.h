@@ -1357,6 +1357,15 @@ class StubOutputBuffer : public StubOutputBufferBase {
 
 public:
     StubOutputBuffer() = default;
+
+    static std::vector<StubOutputBuffer<T>> to_output_buffers(const std::vector<Func> &v,
+                                                              const std::shared_ptr<IGenerator> &generator) {
+        std::vector<StubOutputBuffer<T>> result;
+        for (const Func &f : v) {
+            result.push_back(StubOutputBuffer<T>(f, generator));
+        }
+        return result;
+    }
 };
 
 // This is a union-like class that allows for convenient initialization of Stub Inputs
@@ -3013,7 +3022,7 @@ public:
     // Return the output with the given name.
     // If the output is singular (a non-array), return a vector of size 1.
     // If no such name exists (or is non-array), assert.
-    // this method never returns undefined Funcs.
+    // This method never returns undefined Funcs.
     virtual std::vector<Func> stubgen_get_outputs(const std::string &n) = 0;
 
     virtual void stubgen_generate(const GeneratorParamsMap &generator_params,
@@ -3288,12 +3297,6 @@ private:
     void get_jit_target_from_environment();
     void get_target_from_environment();
 
-    // Return the output with the given name.
-    // If the output is singular (a non-array), return a vector of size 1.
-    // If no such name exists (or is non-array), assert.
-    // This method never returns undefined Funcs.
-    std::vector<Func> get_outputs(const std::string &n);
-
     void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
 
     static void check_input_is_singular(Internal::GeneratorInputBase *in);
@@ -3449,7 +3452,7 @@ public:
 
     std::vector<Func> stubgen_get_outputs(const std::string &n) override;
     void stubgen_generate(const GeneratorParamsMap &generator_params,
-                                                    const std::vector<std::vector<Internal::StubInput>> &inputs) override;
+                          const std::vector<std::vector<Internal::StubInput>> &inputs) override;
     bool stubgen_emit_cpp_stub(const std::string &stub_file_path) override;
 
 public:
@@ -3703,22 +3706,12 @@ public:
                   const GeneratorFactory &generator_factory);
 
     void generate(const GeneratorParamsMap &generator_params,
-                                            const std::vector<std::vector<Internal::StubInput>> &inputs);
+                  const std::vector<std::vector<Internal::StubInput>> &inputs);
 
     Target get_target() const;
 
     // Output(s)
     std::vector<Func> get_outputs(const std::string &n) const;
-
-    template<typename T2>
-    std::vector<T2> get_output_buffers(const std::string &n) const {
-        auto v = get_outputs(n);
-        std::vector<T2> result;
-        for (auto &o : v) {
-            result.push_back(T2(o, generator));
-        }
-        return result;
-    }
 
     static std::vector<StubInput> to_stub_input_vector(const Expr &e) {
         return {StubInput(e)};
@@ -3742,7 +3735,6 @@ public:
 
     IGenerator::Names get_names() const;
 
-private:
     std::shared_ptr<IGenerator> generator;
 };
 
@@ -3761,8 +3753,8 @@ struct halide_global_ns;
     namespace halide_register_generator {                                                                                           \
     struct halide_global_ns;                                                                                                        \
     namespace GEN_REGISTRY_NAME##_ns {                                                                                              \
-        std::unique_ptr<Halide::Internal::IGenerator> factory(const Halide::GeneratorContext &context);                          \
-        std::unique_ptr<Halide::Internal::IGenerator> factory(const Halide::GeneratorContext &context) {                         \
+        std::unique_ptr<Halide::Internal::IGenerator> factory(const Halide::GeneratorContext &context);                             \
+        std::unique_ptr<Halide::Internal::IGenerator> factory(const Halide::GeneratorContext &context) {                            \
             return GEN_CLASS_NAME::create(context, #GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME);                                 \
         }                                                                                                                           \
     }                                                                                                                               \
@@ -3822,13 +3814,13 @@ struct halide_global_ns;
     namespace halide_register_generator {                                                                                           \
     struct halide_global_ns;                                                                                                        \
     namespace ORIGINAL_REGISTRY_NAME##_ns {                                                                                         \
-        std::unique_ptr<Halide::Internal::IGenerator> factory(const Halide::GeneratorContext &context);                          \
+        std::unique_ptr<Halide::Internal::IGenerator> factory(const Halide::GeneratorContext &context);                             \
     }                                                                                                                               \
     namespace GEN_REGISTRY_NAME##_ns {                                                                                              \
-        std::unique_ptr<Halide::Internal::IGenerator> factory(const Halide::GeneratorContext &context);                          \
-        std::unique_ptr<Halide::Internal::IGenerator> factory(const Halide::GeneratorContext &context) {                         \
+        std::unique_ptr<Halide::Internal::IGenerator> factory(const Halide::GeneratorContext &context);                             \
+        std::unique_ptr<Halide::Internal::IGenerator> factory(const Halide::GeneratorContext &context) {                            \
             auto g = ORIGINAL_REGISTRY_NAME##_ns::factory(context);                                                                 \
-            g->gen_set_generator_param_values(__VA_ARGS__);                                                                             \
+            g->gen_set_generator_param_values(__VA_ARGS__);                                                                         \
             return g;                                                                                                               \
         }                                                                                                                           \
     }                                                                                                                               \
