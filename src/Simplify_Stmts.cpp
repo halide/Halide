@@ -345,7 +345,7 @@ Stmt Simplify::visit(const Block *op) {
     Stmt rest = op->rest;
 
     if (const AssertStmt *first_assert = first.as<AssertStmt>()) {
-        bool unchanged = true;
+        bool unchanged = first.same_as(op->first);
 
         // Handle an entire sequence of asserts here to avoid a deeply
         // nested stack.  We won't be popping any knowledge until
