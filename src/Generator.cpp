@@ -1437,30 +1437,6 @@ GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name)
     return nullptr;  // not reached
 }
 
-void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params) {
-    GeneratorParamInfo &pi = param_info();
-
-    std::unordered_map<std::string, Internal::GeneratorParamBase *> generator_params_by_name;
-    for (auto *g : pi.generator_params()) {
-        generator_params_by_name[g->name()] = g;
-    }
-
-    for (const auto &key_value : params) {
-        auto gp = generator_params_by_name.find(key_value.first);
-        user_assert(gp != generator_params_by_name.end())
-            << "Generator " << generator_registered_name << " has no GeneratorParam named: " << key_value.first << "\n";
-        if (gp->second->is_looplevel_param()) {
-            if (!key_value.second.string_value.empty()) {
-                gp->second->set_from_string(key_value.second.string_value);
-            } else {
-                gp->second->set(key_value.second.loop_level);
-            }
-        } else {
-            gp->second->set_from_string(key_value.second.string_value);
-        }
-    }
-}
-
 void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
     Halide::GeneratorContext::init_from_context(context);
     internal_assert(param_info_ptr == nullptr);
@@ -1671,7 +1647,27 @@ void GeneratorBase::check_input_kind(Internal::GeneratorInputBase *in, Internal:
 }
 
 void GeneratorBase::gen_set_generator_param_values(const GeneratorParamsMap &params) {
-    return this->set_generator_param_values(params);
+    GeneratorParamInfo &pi = param_info();
+
+    std::unordered_map<std::string, Internal::GeneratorParamBase *> generator_params_by_name;
+    for (auto *g : pi.generator_params()) {
+        generator_params_by_name[g->name()] = g;
+    }
+
+    for (const auto &key_value : params) {
+        auto gp = generator_params_by_name.find(key_value.first);
+        user_assert(gp != generator_params_by_name.end())
+            << "Generator " << generator_registered_name << " has no GeneratorParam named: " << key_value.first << "\n";
+        if (gp->second->is_looplevel_param()) {
+            if (!key_value.second.string_value.empty()) {
+                gp->second->set_from_string(key_value.second.string_value);
+            } else {
+                gp->second->set(key_value.second.loop_level);
+            }
+        } else {
+            gp->second->set_from_string(key_value.second.string_value);
+        }
+    }
 }
 
 Target GeneratorBase::gen_get_target() {
@@ -1789,7 +1785,7 @@ std::vector<Func> GeneratorBase::stubgen_get_array_output(const std::string &n) 
 
 std::vector<std::vector<Func>> GeneratorBase::stubgen_generate(const GeneratorParamsMap &generator_params,
                                                                const std::vector<std::vector<Internal::StubInput>> &inputs) {
-    set_generator_param_values(generator_params);
+    gen_set_generator_param_values(generator_params);
     call_configure();
     set_inputs_vector(inputs);
     Pipeline p = build_pipeline();

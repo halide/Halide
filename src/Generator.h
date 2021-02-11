@@ -3061,8 +3061,6 @@ class GeneratorBase : public NamesInterface, public GeneratorContext, public IGe
 public:
     ~GeneratorBase() override;
 
-    void set_generator_param_values(const GeneratorParamsMap &params);
-
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for the current target. */
     int natural_vector_size(Halide::Type t) const {
