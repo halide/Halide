@@ -234,9 +234,9 @@ private:
         std::vector<Internal::GeneratorParamBase *> out;
         for (auto *p : in) {
             // These are always propagated specially.
-            if (p->name == "target" ||
-                p->name == "auto_schedule" ||
-                p->name == "machine_params") {
+            if (p->name() == "target" ||
+                p->name() == "auto_schedule" ||
+                p->name() == "machine_params") {
                 continue;
             }
             if (p->is_synthetic_param()) {
@@ -263,7 +263,7 @@ void StubEmitter::emit_generator_params_struct() {
     indent_level++;
     if (!v.empty()) {
         for (auto *p : v) {
-            stream << get_indent() << p->get_c_type() << " " << p->name << "{ " << p->get_default_value() << " };\n";
+            stream << get_indent() << p->get_c_type() << " " << p->name() << "{ " << p->get_default_value() << " };\n";
         }
         stream << "\n";
     }
@@ -276,7 +276,7 @@ void StubEmitter::emit_generator_params_struct() {
         indent_level++;
         std::string comma = "";
         for (auto *p : v) {
-            stream << get_indent() << comma << p->get_c_type() << " " << p->name << "\n";
+            stream << get_indent() << comma << p->get_c_type() << " " << p->name() << "\n";
             comma = ", ";
         }
         indent_level--;
@@ -284,7 +284,7 @@ void StubEmitter::emit_generator_params_struct() {
         indent_level++;
         comma = "";
         for (auto *p : v) {
-            stream << get_indent() << comma << p->name << "(" << p->name << ")\n";
+            stream << get_indent() << comma << p->name() << "(" << p->name() << ")\n";
             comma = ", ";
         }
         indent_level--;
@@ -299,11 +299,11 @@ void StubEmitter::emit_generator_params_struct() {
     indent_level++;
     std::string comma = "";
     for (auto *p : v) {
-        stream << get_indent() << comma << "{\"" << p->name << "\", ";
+        stream << get_indent() << comma << "{\"" << p->name() << "\", ";
         if (p->is_looplevel_param()) {
-            stream << p->name << "}\n";
+            stream << p->name() << "}\n";
         } else {
-            stream << p->call_to_string(p->name) << "}\n";
+            stream << p->call_to_string(p->name()) << "}\n";
         }
         comma = ", ";
     }
@@ -695,7 +695,7 @@ GeneratorStub::Names GeneratorStub::get_names() const {
     auto &pi = generator->param_info();
     Names names;
     for (auto *o : pi.generator_params()) {
-        names.generator_params.push_back(o->name);
+        names.generator_params.push_back(o->name());
     }
     for (auto *o : pi.inputs()) {
         names.inputs.push_back(o->name());
@@ -1059,7 +1059,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
 #endif
 
 GeneratorParamBase::GeneratorParamBase(const std::string &name)
-    : name(name) {
+    : name_(name) {
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorParam,
                                               this, nullptr);
 }
@@ -1070,13 +1070,13 @@ GeneratorParamBase::~GeneratorParamBase() {
 
 void GeneratorParamBase::check_value_readable() const {
     // These are always readable.
-    if (name == "target" ||
-        name == "auto_schedule" ||
-        name == "machine_params") {
+    if (name() == "target" ||
+        name() == "auto_schedule" ||
+        name() == "machine_params") {
         return;
     }
     user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
-        << "The GeneratorParam \"" << name << "\" cannot be read before build() or configure()/generate() is called.\n";
+        << "The GeneratorParam \"" << name() << "\" cannot be read before build() or configure()/generate() is called.\n";
 }
 
 void GeneratorParamBase::check_value_writable() const {
@@ -1084,11 +1084,11 @@ void GeneratorParamBase::check_value_writable() const {
     if (!generator) {
         return;
     }
-    user_assert(generator->phase < GeneratorBase::GenerateCalled) << "The GeneratorParam \"" << name << "\" cannot be written after build() or generate() is called.\n";
+    user_assert(generator->phase < GeneratorBase::GenerateCalled) << "The GeneratorParam \"" << name() << "\" cannot be written after build() or generate() is called.\n";
 }
 
 void GeneratorParamBase::fail_wrong_type(const char *type) {
-    user_error << "The GeneratorParam \"" << name << "\" cannot be set with a value of type " << type << ".\n";
+    user_error << "The GeneratorParam \"" << name() << "\" cannot be set with a value of type " << type << ".\n";
 }
 
 /* static */
@@ -1212,9 +1212,9 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
     for (auto *v : vg) {
         auto *param = static_cast<GeneratorParamBase *>(v);
         internal_assert(param != nullptr);
-        user_assert(is_valid_name(param->name)) << "Invalid GeneratorParam name: " << param->name;
-        user_assert(!names.count(param->name)) << "Duplicate GeneratorParam name: " << param->name;
-        names.insert(param->name);
+        user_assert(is_valid_name(param->name())) << "Invalid GeneratorParam name: " << param->name();
+        user_assert(!names.count(param->name())) << "Duplicate GeneratorParam name: " << param->name();
+        names.insert(param->name());
         internal_assert(param->generator == nullptr || param->generator == generator);
         param->generator = generator;
         filter_generator_params.push_back(param);
@@ -1270,7 +1270,7 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params)
 
     std::unordered_map<std::string, Internal::GeneratorParamBase *> generator_params_by_name;
     for (auto *g : pi.generator_params()) {
-        generator_params_by_name[g->name] = g;
+        generator_params_by_name[g->name()] = g;
     }
 
     for (const auto &key_value : params) {
