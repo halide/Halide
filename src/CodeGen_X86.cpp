@@ -151,6 +151,12 @@ const x86Intrinsic intrinsic_defs[] = {
     {"dpbf16psx16", Float(32, 16), "dot_product", {Float(32, 16), BFloat(16, 32), BFloat(16, 32)}, Target::AVX512_SapphireRapids},
     {"dpbf16psx8", Float(32, 8), "dot_product", {Float(32, 8), BFloat(16, 16), BFloat(16, 16)}, Target::AVX512_SapphireRapids},
     {"dpbf16psx4", Float(32, 4), "dot_product", {Float(32, 4), BFloat(16, 8), BFloat(16, 8)}, Target::AVX512_SapphireRapids},
+    {"dpbusdx16", Int(32, 16), "dot_product", {Int(32, 16), UInt(8, 64), Int(8, 64)}, Target::AVX512_SapphireRapids},
+    {"dpbusdx8", Int(32, 8), "dot_product", {Int(32, 8), UInt(8, 32), Int(8, 32)}, Target::AVX512_SapphireRapids},
+    {"dpbusdx4", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, Target::AVX512_SapphireRapids},
+    {"dpwssdx16", Int(32, 16), "dot_product", {Int(32, 16), Int(16, 32), Int(16, 32)}, Target::AVX512_SapphireRapids},
+    {"dpwssdx8", Int(32, 8), "dot_product", {Int(32, 8), Int(16, 16), Int(16, 16)}, Target::AVX512_SapphireRapids},
+    {"dpwssdx4", Int(32, 4), "dot_product", {Int(32, 4), Int(16, 8), Int(16, 8)}, Target::AVX512_SapphireRapids},
 };
 // clang-format on
 
@@ -490,11 +496,15 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         uint32_t flags = 0;
         enum {
             CombineInit = 1 << 0,
+            SwapOperands = 1 << 1,
         };
     };
     // clang-format off
     static const Pattern patterns[] = {
         {2, wild_f32x_ * wild_f32x_, "dot_product", BFloat(16), Pattern::CombineInit},
+        {2, i32(widening_mul(wild_i16x_, wild_i16x_)), "dot_product", {}, Pattern::CombineInit},
+        {4, i32(widening_mul(wild_u8x_, wild_i8x_)), "dot_product", {}, Pattern::CombineInit},
+        {4, i32(widening_mul(wild_i8x_, wild_u8x_)), "dot_product", {}, Pattern::CombineInit | Pattern::SwapOperands},
         {2, i32(widening_mul(wild_i16x_, wild_i16x_)), "pmaddwd", Int(16)},
         {2, i32(widening_mul(wild_i8x_, wild_i8x_)), "pmaddwd", Int(16)},
         {2, i32(widening_mul(wild_i8x_, wild_u8x_)), "pmaddwd", Int(16)},
@@ -514,8 +524,13 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         if (expr_match(p.pattern, op->value, matches)) {
             Expr a = matches[0];
             Expr b = matches[1];
-            a = lossless_cast(p.narrow_type.with_lanes(a.type().lanes()), a);
-            b = lossless_cast(p.narrow_type.with_lanes(b.type().lanes()), b);
+            if (p.flags & Pattern::SwapOperands) {
+                std::swap(a, b);
+            }
+            if (p.narrow_type.bits() > 0) {
+                a = lossless_cast(p.narrow_type.with_lanes(a.type().lanes()), a);
+                b = lossless_cast(p.narrow_type.with_lanes(b.type().lanes()), b);
+            }
             if (!a.defined() || !b.defined()) { continue; }
 
             if (p.flags & Pattern::CombineInit) {
