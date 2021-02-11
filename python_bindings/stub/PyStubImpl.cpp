@@ -21,7 +21,7 @@ static_assert(PY_VERSION_HEX >= 0x03000000,
 
 namespace py = pybind11;
 
-using FactoryFunc = std::unique_ptr<Halide::Internal::GeneratorBase> (*)(const Halide::GeneratorContext &context);
+using FactoryFunc = std::unique_ptr<Halide::Internal::IGenerator> (*)(const Halide::GeneratorContext &context);
 
 namespace Halide {
 namespace PythonBindings {
@@ -101,9 +101,7 @@ void append_input(const py::object &value, std::vector<StubInput> &v) {
 }
 
 py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, const py::args &args, const py::kwargs &kwargs) {
-    Stub stub(context, [factory](const GeneratorContext &context) -> std::unique_ptr<Halide::Internal::GeneratorBase> {
-        return factory(context);
-    });
+    Stub stub(context, factory);
     auto names = stub.get_names();
     _halide_user_assert(!names.outputs.empty())
         << "Generators that use build() (instead of generate()+Output<>) are not supported in the Python bindings.";
