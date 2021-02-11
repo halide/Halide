@@ -390,9 +390,9 @@ void StubEmitter::emit() {
     for (auto *output : outputs) {
         std::string c_type = output->get_c_type();
         const bool is_func = (c_type == "Func");
-        std::string getter = "stub.generator->stubgen_get_outputs(\"" + output->name() + "\")";
+        std::string getter = "generator->stubgen_get_outputs(\"" + output->name() + "\")";
         if (!is_func) {
-            getter = c_type + "::to_output_buffers(" + getter + ", stub.generator)";
+            getter = c_type + "::to_output_buffers(" + getter + ", generator)";
         }
         if (!output->is_array()) {
             getter = getter + ".at(0)";
@@ -577,16 +577,10 @@ void StubEmitter::emit() {
     stream << get_indent() << ")\n";
     stream << get_indent() << "{\n";
     indent_level++;
-    stream << get_indent() << "using Stub = Halide::Internal::GeneratorStub;\n";
-    stream << get_indent() << "Stub stub(\n";
+    stream << get_indent() << "std::shared_ptr<Halide::Internal::IGenerator> generator = halide_register_generator::" << generator_registered_name << "_ns::factory(context);\n";
+    stream << get_indent() << "generator->gen_set_generator_param_values(generator_params.to_generator_params_map());\n";
+    stream << get_indent() << "generator->stubgen_generate(\n";
     indent_level++;
-    stream << get_indent() << "context,\n";
-    stream << get_indent() << "halide_register_generator::" << generator_registered_name << "_ns::factory\n";
-    indent_level--;
-    stream << get_indent() << ");\n";
-    stream << get_indent() << "stub.generate(\n";
-    indent_level++;
-    stream << get_indent() << "generator_params.to_generator_params_map(),\n";
     stream << get_indent() << "{\n";
     indent_level++;
     for (size_t i = 0; i < inputs.size(); ++i) {
@@ -603,7 +597,7 @@ void StubEmitter::emit() {
     for (const auto &out : out_info) {
         stream << get_indent() << out.getter << ",\n";
     }
-    stream << get_indent() << "stub.generator->gen_get_target()\n";
+    stream << get_indent() << "generator->gen_get_target()\n";
     indent_level--;
     stream << get_indent() << "};\n";
     indent_level--;
@@ -652,16 +646,6 @@ void StubEmitter::emit() {
     stream << "\n";
 
     stream << get_indent() << "#endif  // " << guard.str() << "\n";
-}
-
-GeneratorStub::GeneratorStub(const GeneratorContext &context,
-                             const GeneratorFactory &generator_factory)
-    : generator(generator_factory(context)) {
-}
-
-void GeneratorStub::generate(const GeneratorParamsMap &generator_params,
-                             const std::vector<std::vector<Internal::StubInput>> &inputs) {
-    generator->stubgen_generate(generator_params, inputs);
 }
 
 const std::map<std::string, Type> &get_halide_type_enum_map() {
@@ -1742,9 +1726,7 @@ std::vector<Func> GeneratorBase::stubgen_get_outputs(const std::string &n) {
     return output->funcs();
 }
 
-void GeneratorBase::stubgen_generate(const GeneratorParamsMap &generator_params,
-                                     const std::vector<std::vector<Internal::StubInput>> &inputs) {
-    gen_set_generator_param_values(generator_params);
+void GeneratorBase::stubgen_generate(const std::vector<std::vector<Internal::StubInput>> &inputs) {
     call_configure();
     set_inputs_vector(inputs);
     (void)build_pipeline();

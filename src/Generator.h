@@ -1350,7 +1350,6 @@ template<typename T = void>
 class StubOutputBuffer : public StubOutputBufferBase {
     template<typename T2>
     friend class GeneratorOutput_Buffer;
-    friend class GeneratorStub;
     explicit StubOutputBuffer(const Func &f, const std::shared_ptr<IGenerator> &generator)
         : StubOutputBufferBase(f, generator) {
     }
@@ -2806,8 +2805,6 @@ private:
     const std::string error_msg;
 };
 
-class GeneratorStub;
-
 }  // namespace Internal
 
 /** GeneratorContext is a base class that is used when using Generators (or Stubs) directly;
@@ -2982,8 +2979,6 @@ struct NoRealizations<T, Args...> {
     static const bool value = !std::is_convertible<T, Realization>::value && NoRealizations<Args...>::value;
 };
 
-class GeneratorStub;
-
 // Note that these functions must never return null:
 // if they cannot return a valid Generator, they must assert-fail.
 using GeneratorFactory = std::unique_ptr<IGenerator> (*)(const GeneratorContext &context);
@@ -3037,8 +3032,7 @@ public:
     // This method never returns undefined Funcs.
     virtual std::vector<Func> stubgen_get_outputs(const std::string &n) = 0;
 
-    virtual void stubgen_generate(const GeneratorParamsMap &generator_params,
-                                  const std::vector<std::vector<Internal::StubInput>> &inputs) = 0;
+    virtual void stubgen_generate(const std::vector<std::vector<Internal::StubInput>> &inputs) = 0;
 
     // If the Generator is not capable of emitting a Stub, return false.
     virtual bool stubgen_emit_cpp_stub(const std::string &stub_file_path) = 0;
@@ -3278,7 +3272,6 @@ private:
     friend class GeneratorInputBase;
     friend class GeneratorOutputBase;
     friend class GeneratorParamInfo;
-    friend class GeneratorStub;
     friend class StubOutputBufferBase;
 
     const size_t size;
@@ -3463,8 +3456,7 @@ public:
     Pipeline gen_build_pipeline() override;
 
     std::vector<Func> stubgen_get_outputs(const std::string &n) override;
-    void stubgen_generate(const GeneratorParamsMap &generator_params,
-                          const std::vector<std::vector<Internal::StubInput>> &inputs) override;
+    void stubgen_generate(const std::vector<std::vector<Internal::StubInput>> &inputs) override;
     bool stubgen_emit_cpp_stub(const std::string &stub_file_path) override;
 
 public:
@@ -3710,17 +3702,6 @@ public:
     RegisterGenerator(const char *registered_name, GeneratorFactory generator_factory) {
         Internal::GeneratorRegistry::register_factory(registered_name, std::move(generator_factory));
     }
-};
-
-class GeneratorStub final : public NamesInterface {
-public:
-    GeneratorStub(const GeneratorContext &context,
-                  const GeneratorFactory &generator_factory);
-
-    void generate(const GeneratorParamsMap &generator_params,
-                  const std::vector<std::vector<Internal::StubInput>> &inputs);
-
-    std::shared_ptr<IGenerator> generator;
 };
 
 }  // namespace Internal
