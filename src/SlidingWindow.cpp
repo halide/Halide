@@ -267,14 +267,13 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                     new_max = prev_min_minus_one;
                 }
             } else {
-                new_loop_min = loop_min;
-                if (can_slide_up) {
-                    new_min = select(loop_var_expr <= loop_min, min_required, likely_if_innermost(prev_max_plus_one));
-                    new_max = max_required;
-                } else {
-                    new_min = min_required;
-                    new_max = select(loop_var_expr <= loop_min, max_required, likely_if_innermost(prev_min_minus_one));
-                }
+                debug(3) << "Not sliding " << func.name()
+                         << " over dimension " << dim
+                         << " along loop variable " << loop_var
+                         << " because the bounds required of the producer do not appear to depend on the loop variable\n"
+                         << "Min is " << min_required << "\n"
+                         << "Max is " << max_required << "\n";
+                return stmt;
             }
 
             Expr early_stages_min_required = new_min;
@@ -402,8 +401,10 @@ class SlidingWindowOnFunction : public IRMutator {
             // to preserve the max.
             if (slider.new_loop_min.defined()) {
                 new_loop_min = slider.new_loop_min;
+                // We also need to rename the loop.
                 new_loop_name += ".new";
 
+                // The new loop interval is the new loop min to the old loop max.
                 std::string loop_max_name = op->min.as<Variable>()->name;
                 loop_max_name = loop_max_name.substr(0, loop_max_name.length() - 2) + "ax";
                 Expr loop_max = Variable::make(Int(32), loop_max_name);

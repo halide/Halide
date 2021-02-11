@@ -162,27 +162,6 @@ int main(int argc, char **argv) {
     }
 
     {
-        // Sliding where the footprint is actually fixed over the loop
-        // var. Everything in the producer should be computed in the
-        // first iteration.
-        Func f, g;
-
-        f(x) = call_counter(x, 0);
-        g(x) = f(0) + f(5);
-
-        f.store_root().compute_at(g, x);
-
-        count = 0;
-        Buffer<int> im = g.realize({100});
-
-        // f should be able to tell that it only needs to compute each value once
-        if (count != 6) {
-            printf("f was called %d times instead of %d times\n", count, 6);
-            return -1;
-        }
-    }
-
-    {
         // Sliding where we only need a new value every third iteration of the consumer.
         Func f, g;
 
