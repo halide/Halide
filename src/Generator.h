@@ -395,7 +395,9 @@ public:
     explicit GeneratorParamBase(const std::string &name);
     virtual ~GeneratorParamBase();
 
-    const std::string name;
+    inline const std::string &name() const {
+        return name_;
+    }
 
     // overload the set() function to call the right virtual method based on type.
     // This allows us to attempt to set a GeneratorParam via a
@@ -465,6 +467,8 @@ protected:
     void fail_wrong_type(const char *type);
 
 private:
+    const std::string name_;
+
     // Generator which owns this GeneratorParam. Note that this will be null
     // initially; the GeneratorBase itself will set this field when it initially
     // builds its info about params. However, since it (generally) isn't
@@ -686,7 +690,7 @@ public:
         } else if (new_value_string == "inlined") {
             this->set(LoopLevel::inlined());
         } else {
-            user_error << "Unable to parse " << this->name << ": " << new_value_string;
+            user_error << "Unable to parse " << this->name() << ": " << new_value_string;
         }
     }
 
@@ -858,20 +862,20 @@ public:
     }
 
     std::string call_to_string(const std::string &v) const override {
-        return "Enum_" + this->name + "_map().at(" + v + ")";
+        return "Enum_" + this->name() + "_map().at(" + v + ")";
     }
 
     std::string get_c_type() const override {
-        return "Enum_" + this->name;
+        return "Enum_" + this->name();
     }
 
     std::string get_default_value() const override {
-        return "Enum_" + this->name + "::" + enum_to_string(enum_map, this->value());
+        return "Enum_" + this->name() + "::" + enum_to_string(enum_map, this->value());
     }
 
     std::string get_type_decls() const override {
         std::ostringstream oss;
-        oss << "enum class Enum_" << this->name << " {\n";
+        oss << "enum class Enum_" << this->name() << " {\n";
         for (auto key_value : enum_map) {
             oss << "  " << key_value.first << ",\n";
         }
@@ -880,10 +884,10 @@ public:
 
         // TODO: since we generate the enums, we could probably just use a vector (or array!) rather than a map,
         // since we can ensure that the enum values are a nice tight range.
-        oss << "inline HALIDE_NO_USER_CODE_INLINE const std::map<Enum_" << this->name << ", std::string>& Enum_" << this->name << "_map() {\n";
-        oss << "  static const std::map<Enum_" << this->name << ", std::string> m = {\n";
+        oss << "inline HALIDE_NO_USER_CODE_INLINE const std::map<Enum_" << this->name() << ", std::string>& Enum_" << this->name() << "_map() {\n";
+        oss << "  static const std::map<Enum_" << this->name() << ", std::string> m = {\n";
         for (auto key_value : enum_map) {
-            oss << "    { Enum_" << this->name << "::" << key_value.first << ", \"" << key_value.first << "\"},\n";
+            oss << "    { Enum_" << this->name() << "::" << key_value.first << ", \"" << key_value.first << "\"},\n";
         }
         oss << "  };\n";
         oss << "  return m;\n";
