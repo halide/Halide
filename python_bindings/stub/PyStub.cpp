@@ -24,9 +24,10 @@ class IGenerator;
 }  // namespace Internal
 }  // namespace Halide
 
-using FactoryFunc = std::unique_ptr<Halide::Internal::IGenerator> (*)(const Halide::GeneratorContext &context);
+// Note that this must exactly match the definition in Generator.h/Halide.h.
+using GeneratorFactory = std::unique_ptr<Halide::Internal::IGenerator> (*)(const Halide::GeneratorContext &context);
 
-extern "C" PyObject *_halide_pystub_impl(const char *module_name, FactoryFunc factory);
+extern "C" PyObject *_halide_pystub_impl(const char *module_name, GeneratorFactory factory);
 
 #define HALIDE_STRINGIFY(x) #x
 #define HALIDE_TOSTRING(x) HALIDE_STRINGIFY(x)

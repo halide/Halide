@@ -2965,7 +2965,7 @@ class GeneratorStub;
 
 // Note that these functions must never return null:
 // if they cannot return a valid Generator, they must assert-fail.
-using GeneratorFactory = std::function<std::unique_ptr<IGenerator>(const GeneratorContext &)>;
+using GeneratorFactory = std::unique_ptr<IGenerator> (*)(const GeneratorContext &context);
 
 struct StringOrLoopLevel {
     std::string string_value;
@@ -2988,15 +2988,22 @@ class IGenerator {
 public:
     virtual ~IGenerator() = default;
 
+    struct Names {
+        std::vector<std::string> generator_params, inputs, outputs;
+    };
+    // Return a list of the known names/types/etc for inputs, outputs, and GeneratorParams.
+    // Always legal to call on any IGenerator instance.
+    virtual Names gen_get_names() = 0;
+
+    // Set the GeneratorParams for an IGenerator instance.
+    // GP names that aren't known by this IGenerator should trigger an assert-fail.
+    // This should be called at once most per IGenerator instance. Calling multiple
+    // times is UB.
     virtual void gen_set_generator_param_values(const GeneratorParamsMap &params) = 0;
 
     virtual Target gen_get_target() = 0;
     virtual bool gen_get_auto_schedule() = 0;
     virtual MachineParams gen_get_machine_params() = 0;
-    struct Names {
-        std::vector<std::string> generator_params, inputs, outputs;
-    };
-    virtual Names gen_get_names() = 0;
     virtual std::vector<Parameter> gen_get_input_parameters() = 0;
     virtual std::vector<Parameter> gen_get_output_parameters() = 0;
     virtual std::shared_ptr<GeneratorContext::ExternsMap> gen_get_externs_map() = 0;
@@ -3704,10 +3711,6 @@ public:
     GeneratorStub(const GeneratorContext &context,
                   const GeneratorFactory &generator_factory);
 
-    GeneratorStub(const GeneratorContext &context,
-                  const GeneratorFactory &generator_factory,
-                  const GeneratorParamsMap &generator_params,
-                  const std::vector<std::vector<Internal::StubInput>> &inputs);
     std::vector<std::vector<Func>> generate(const GeneratorParamsMap &generator_params,
                                             const std::vector<std::vector<Internal::StubInput>> &inputs);
 

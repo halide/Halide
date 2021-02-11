@@ -578,7 +578,11 @@ void StubEmitter::emit() {
     stream << get_indent() << "Stub stub(\n";
     indent_level++;
     stream << get_indent() << "context,\n";
-    stream << get_indent() << "halide_register_generator::" << generator_registered_name << "_ns::factory,\n";
+    stream << get_indent() << "halide_register_generator::" << generator_registered_name << "_ns::factory\n";
+    indent_level--;
+    stream << get_indent() << ");\n";
+    stream << get_indent() << "stub.generate(\n";
+    indent_level++;
     stream << get_indent() << "generator_params.to_generator_params_map(),\n";
     stream << get_indent() << "{\n";
     indent_level++;
@@ -650,14 +654,6 @@ void StubEmitter::emit() {
 GeneratorStub::GeneratorStub(const GeneratorContext &context,
                              const GeneratorFactory &generator_factory)
     : generator(generator_factory(context)) {
-}
-
-GeneratorStub::GeneratorStub(const GeneratorContext &context,
-                             const GeneratorFactory &generator_factory,
-                             const GeneratorParamsMap &generator_params,
-                             const std::vector<std::vector<Internal::StubInput>> &inputs)
-    : GeneratorStub(context, generator_factory) {
-    generate(generator_params, inputs);
 }
 
 // Return a vector of all Outputs of this Generator; non-array outputs are returned

@@ -21,11 +21,10 @@ static_assert(PY_VERSION_HEX >= 0x03000000,
 
 namespace py = pybind11;
 
-using FactoryFunc = std::unique_ptr<Halide::Internal::IGenerator> (*)(const Halide::GeneratorContext &context);
-
 namespace Halide {
 namespace PythonBindings {
 
+using GeneratorFactory = Internal::GeneratorFactory;
 using GeneratorParamsMap = Internal::GeneratorParamsMap;
 using Stub = Internal::GeneratorStub;
 using StubInput = Internal::StubInput;
@@ -100,7 +99,7 @@ void append_input(const py::object &value, std::vector<StubInput> &v) {
     }
 }
 
-py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, const py::args &args, const py::kwargs &kwargs) {
+py::object generate_impl(GeneratorFactory factory, const GeneratorContext &context, const py::args &args, const py::kwargs &kwargs) {
     Stub stub(context, factory);
     auto names = stub.get_names();
     _halide_user_assert(!names.outputs.empty())
@@ -175,7 +174,7 @@ py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, c
     return std::move(py_outputs);
 }
 
-void pystub_init(pybind11::module &m, FactoryFunc factory) {
+void pystub_init(pybind11::module &m, GeneratorFactory factory) {
     m.def(
         "generate", [factory](const Halide::Target &target, const py::args &args, const py::kwargs &kwargs) -> py::object {
             return generate_impl(factory, Halide::GeneratorContext(target), args, kwargs);
@@ -187,7 +186,7 @@ void pystub_init(pybind11::module &m, FactoryFunc factory) {
 }  // namespace PythonBindings
 }  // namespace Halide
 
-extern "C" PyObject *_halide_pystub_impl(const char *module_name, FactoryFunc factory) {
+extern "C" PyObject *_halide_pystub_impl(const char *module_name, Halide::Internal::GeneratorFactory factory) {
     int major, minor;
     if (sscanf(Py_GetVersion(), "%i.%i", &major, &minor) != 2) {
         PyErr_SetString(PyExc_ImportError, "Can't parse Python version.");
