@@ -95,6 +95,9 @@ std::ostream &operator<<(std::ostream &stream, const Box &b) {
         stream << "[" << b[dim].min << ", " << b[dim].max << "]";
     }
     stream << "}";
+    if (b.used.defined()) {
+        stream << " if " << b.used;
+    }
     return stream;
 }
 
