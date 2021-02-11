@@ -390,7 +390,7 @@ void StubEmitter::emit() {
     for (auto *output : outputs) {
         std::string c_type = output->get_c_type();
         const bool is_func = (c_type == "Func");
-        std::string getter = "stub.get_outputs(\"" + output->name() + "\")";
+        std::string getter = "stub.generator->stubgen_get_outputs(\"" + output->name() + "\")";
         if (!is_func) {
             getter = c_type + "::to_output_buffers(" + getter + ", stub.generator)";
         }
@@ -421,6 +421,7 @@ void StubEmitter::emit() {
     stream << "\n";
 
     stream << get_indent() << "#include <cassert>\n";
+    stream << get_indent() << "#include <iterator>\n";
     stream << get_indent() << "#include <map>\n";
     stream << get_indent() << "#include <memory>\n";
     stream << get_indent() << "#include <string>\n";
@@ -589,7 +590,7 @@ void StubEmitter::emit() {
     stream << get_indent() << "{\n";
     indent_level++;
     for (size_t i = 0; i < inputs.size(); ++i) {
-        stream << get_indent() << "Stub::to_stub_input_vector(inputs." << inputs[i]->name() << ")";
+        stream << get_indent() << "Halide::Internal::StubInput::to_stub_input_vector(inputs." << inputs[i]->name() << ")";
         stream << ",\n";
     }
     indent_level--;
@@ -602,7 +603,7 @@ void StubEmitter::emit() {
     for (const auto &out : out_info) {
         stream << get_indent() << out.getter << ",\n";
     }
-    stream << get_indent() << "stub.get_target()\n";
+    stream << get_indent() << "stub.generator->gen_get_target()\n";
     indent_level--;
     stream << get_indent() << "};\n";
     indent_level--;
@@ -661,18 +662,6 @@ GeneratorStub::GeneratorStub(const GeneratorContext &context,
 void GeneratorStub::generate(const GeneratorParamsMap &generator_params,
                              const std::vector<std::vector<Internal::StubInput>> &inputs) {
     generator->stubgen_generate(generator_params, inputs);
-}
-
-Target GeneratorStub::get_target() const {
-    return generator->gen_get_target();
-}
-
-std::vector<Func> GeneratorStub::get_outputs(const std::string &n) const {
-    return generator->stubgen_get_outputs(n);
-}
-
-IGenerator::Names GeneratorStub::get_names() const {
-    return generator->gen_get_names();
 }
 
 const std::map<std::string, Type> &get_halide_type_enum_map() {

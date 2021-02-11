@@ -1392,6 +1392,18 @@ public:
         : kind_(IOKind::Scalar), parameter_(), func_(), expr_(e) {
     }
 
+    template<typename T>
+    static std::vector<StubInput> to_stub_input_vector(const T &t) {
+        return {StubInput(t)};
+    }
+
+    template<typename T>
+    static std::vector<StubInput> to_stub_input_vector(const std::vector<T> &v) {
+        std::vector<StubInput> r;
+        std::copy(v.begin(), v.end(), std::back_inserter(r));
+        return r;
+    }
+
 private:
     friend class GeneratorInputBase;
 
@@ -3707,33 +3719,6 @@ public:
 
     void generate(const GeneratorParamsMap &generator_params,
                   const std::vector<std::vector<Internal::StubInput>> &inputs);
-
-    Target get_target() const;
-
-    // Output(s)
-    std::vector<Func> get_outputs(const std::string &n) const;
-
-    static std::vector<StubInput> to_stub_input_vector(const Expr &e) {
-        return {StubInput(e)};
-    }
-
-    static std::vector<StubInput> to_stub_input_vector(const Func &f) {
-        return {StubInput(f)};
-    }
-
-    template<typename T = void>
-    static std::vector<StubInput> to_stub_input_vector(const StubInputBuffer<T> &b) {
-        return {StubInput(b)};
-    }
-
-    template<typename T>
-    static std::vector<StubInput> to_stub_input_vector(const std::vector<T> &v) {
-        std::vector<StubInput> r;
-        std::copy(v.begin(), v.end(), std::back_inserter(r));
-        return r;
-    }
-
-    IGenerator::Names get_names() const;
 
     std::shared_ptr<IGenerator> generator;
 };
