@@ -26,7 +26,6 @@ namespace PythonBindings {
 
 using GeneratorFactory = Internal::GeneratorFactory;
 using GeneratorParamsMap = Internal::GeneratorParamsMap;
-using Stub = Internal::GeneratorStub;
 using StubInput = Internal::StubInput;
 using StubInputBuffer = Internal::StubInputBuffer<void>;
 
@@ -99,11 +98,17 @@ void append_input(const py::object &value, std::vector<StubInput> &v) {
     }
 }
 
-py::object generate_impl(GeneratorFactory factory, const GeneratorContext &context, const py::args &args, const py::kwargs &kwargs) {
-    Stub stub(context, factory);
-    auto names = stub.get_names();
+py::object generate_impl(GeneratorFactory factory,
+                         const GeneratorContext &context,
+                         const py::args &args,
+                         const py::kwargs &kwargs) {
+    auto generator = factory(context);
+
+    auto names = generator->gen_get_names();
     _halide_user_assert(!names.outputs.empty())
-        << "Generators that use build() (instead of generate()+Output<>) are not supported in the Python bindings.";
+        << "Generators that use build() (instead of generate()+Output<>) "
+           "are not supported in the Python bindings.";
+
     std::map<std::string, size_t> input_name_to_pos;
     for (size_t i = 0; i < names.inputs.size(); ++i) {
         input_name_to_pos[names.inputs[i]] = i;
@@ -140,19 +145,27 @@ py::object generate_impl(GeneratorFactory factory, const GeneratorContext &conte
 
     // Now, the positional args.
     _halide_user_assert(args.size() <= names.inputs.size())
-        << "Expected at most " << names.inputs.size() << " positional args, but saw " << args.size() << ".";
+        << "Expected at most "
+        << names.inputs.size()
+        << " positional args, but saw "
+        << args.size()
+        << ".";
     for (size_t i = 0; i < args.size(); ++i) {
         _halide_user_assert(inputs[i].empty())
-            << "Generator Input named '" << names.inputs[i] << "' was specified by both position and keyword.";
+            << "Generator Input named '"
+            << names.inputs[i]
+            << "' was specified by both position and keyword.";
         append_input(args[i], inputs[i]);
     }
 
     for (size_t i = 0; i < inputs.size(); ++i) {
         _halide_user_assert(!inputs[i].empty())
-            << "Generator Input named '" << names.inputs[i] << "' was not specified.";
+            << "Generator Input named '"
+            << names.inputs[i]
+            << "' was not specified.";
     }
 
-    const std::vector<std::vector<Func>> outputs = stub.generate(generator_params, inputs);
+    const std::vector<std::vector<Func>> outputs = generator->stubgen_generate(generator_params, inputs);
 
     py::tuple py_outputs(outputs.size());
     for (size_t i = 0; i < outputs.size(); i++) {
