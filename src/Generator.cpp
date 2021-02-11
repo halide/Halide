@@ -389,16 +389,12 @@ void StubEmitter::emit() {
     std::vector<OutputInfo> out_info;
     for (auto *output : outputs) {
         std::string c_type = output->get_c_type();
-        std::string getter;
         const bool is_func = (c_type == "Func");
-        if (output->is_array()) {
-            getter = is_func ? "get_array_output" : "get_array_output_buffer<" + c_type + ">";
-        } else {
-            getter = is_func ? "get_output" : "get_output_buffer<" + c_type + ">";
-        }
+        std::string getter = is_func ? "get_outputs" : "get_output_buffers<" + c_type + ">";
+        std::string getter_suffix = output->is_array() ? "" : ".at(0)";
         out_info.push_back({output->name(),
                             output->is_array() ? "std::vector<" + c_type + ">" : c_type,
-                            getter + "(\"" + output->name() + "\")"});
+                            getter + "(\"" + output->name() + "\")" + getter_suffix});
         if (c_type != "Func") {
             all_outputs_are_func = false;
         }
@@ -656,25 +652,17 @@ GeneratorStub::GeneratorStub(const GeneratorContext &context,
     : generator(generator_factory(context)) {
 }
 
-// Return a vector of all Outputs of this Generator; non-array outputs are returned
-// as a vector-of-size-1. This method is primarily useful for code that needs
-// to iterate through the outputs of unknown, arbitrary Generators (e.g.,
-// the Python bindings).
-std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap &generator_params,
+void GeneratorStub::generate(const GeneratorParamsMap &generator_params,
                                                        const std::vector<std::vector<Internal::StubInput>> &inputs) {
-    return generator->stubgen_generate(generator_params, inputs);
+    generator->stubgen_generate(generator_params, inputs);
 }
 
 Target GeneratorStub::get_target() const {
     return generator->gen_get_target();
 }
 
-Func GeneratorStub::get_output(const std::string &n) const {
-    return generator->stubgen_get_output(n);
-}
-
-std::vector<Func> GeneratorStub::get_array_output(const std::string &n) const {
-    return generator->stubgen_get_array_output(n);
+std::vector<Func> GeneratorStub::get_outputs(const std::string &n) const {
+    return generator->stubgen_get_outputs(n);
 }
 
 IGenerator::Names GeneratorStub::get_names() const {
@@ -1398,18 +1386,7 @@ GeneratorParamInfo &GeneratorBase::param_info() {
     return *param_info_ptr;
 }
 
-Func GeneratorBase::get_output(const std::string &n) {
-    check_min_phase(GenerateCalled);
-    auto *output = find_output_by_name(n);
-    // Call for the side-effect of asserting if the value isn't defined.
-    (void)output->array_size();
-    user_assert(!output->is_array() && output->funcs().size() == 1) << "Output " << n << " must be accessed via get_array_output()\n";
-    Func f = output->funcs().at(0);
-    user_assert(f.defined()) << "Output " << n << " was not defined.\n";
-    return f;
-}
-
-std::vector<Func> GeneratorBase::get_array_output(const std::string &n) {
+std::vector<Func> GeneratorBase::get_outputs(const std::string &n) {
     check_min_phase(GenerateCalled);
     auto *output = find_output_by_name(n);
     // Call for the side-effect of asserting if the value isn't defined.
@@ -1771,39 +1748,16 @@ Pipeline GeneratorBase::gen_build_pipeline() {
     return this->build_pipeline();
 }
 
-Func GeneratorBase::stubgen_get_output(const std::string &n) {
-    return get_output(n);
+std::vector<Func> GeneratorBase::stubgen_get_outputs(const std::string &n) {
+    return get_outputs(n);
 }
 
-std::vector<Func> GeneratorBase::stubgen_get_array_output(const std::string &n) {
-    return get_array_output(n);
-}
-
-std::vector<std::vector<Func>> GeneratorBase::stubgen_generate(const GeneratorParamsMap &generator_params,
+void GeneratorBase::stubgen_generate(const GeneratorParamsMap &generator_params,
                                                                const std::vector<std::vector<Internal::StubInput>> &inputs) {
     gen_set_generator_param_values(generator_params);
     call_configure();
     set_inputs_vector(inputs);
-    Pipeline p = build_pipeline();
-
-    std::vector<std::vector<Func>> v;
-    GeneratorParamInfo &pi = param_info();
-    if (!pi.outputs().empty()) {
-        for (auto *output : pi.outputs()) {
-            const std::string &name = output->name();
-            if (output->is_array()) {
-                v.push_back(get_array_output(name));
-            } else {
-                v.push_back(std::vector<Func>{get_output(name)});
-            }
-        }
-    } else {
-        // Generators with build() method can't have Output<>, hence can't have array outputs
-        for (const auto &output : p.outputs()) {
-            v.push_back(std::vector<Func>{output});
-        }
-    }
-    return v;
+    (void) build_pipeline();
 }
 
 bool GeneratorBase::stubgen_emit_cpp_stub(const std::string &stub_file_path) {

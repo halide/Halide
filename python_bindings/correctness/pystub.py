@@ -69,7 +69,7 @@ def test_simplestub():
 
     try:
         # Inputs that can't be converted to what the receiver needs (positional)
-        f = simplestub.generate(target, 3.141592, "happy")
+        f = simplestub.generate(target, hl.f32(3.141592), "happy")
     except RuntimeError as e:
         assert 'Unable to cast Python instance' in str(e)
     else:

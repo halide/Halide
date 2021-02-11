@@ -3010,18 +3010,14 @@ public:
     virtual std::map<std::string, std::string> gen_get_metadata_rename_map() = 0;
     virtual Pipeline gen_build_pipeline() = 0;
 
-    // Return the Output<Func> or Output<Buffer> with the given name,
-    // which must be a singular (non-array) Func or Buffer output.
-    // If no such name exists (or is non-array), assert; this method never returns an undefined Func.
-    virtual Func stubgen_get_output(const std::string &n) = 0;
-
-    // Return the Output<Func[]> with the given name, which must be an
-    // array-of-Func output. If no such name exists (or is non-array), assert;
+    // Return the output with the given name.
+    // If the output is singular (a non-array), return a vector of size 1.
+    // If no such name exists (or is non-array), assert.
     // this method never returns undefined Funcs.
-    virtual std::vector<Func> stubgen_get_array_output(const std::string &n) = 0;
+    virtual std::vector<Func> stubgen_get_outputs(const std::string &n) = 0;
 
-    virtual std::vector<std::vector<Func>> stubgen_generate(const GeneratorParamsMap &generator_params,
-                                                            const std::vector<std::vector<Internal::StubInput>> &inputs) = 0;
+    virtual void stubgen_generate(const GeneratorParamsMap &generator_params,
+                                  const std::vector<std::vector<Internal::StubInput>> &inputs) = 0;
 
     // If the Generator is not capable of emitting a Stub, return false.
     virtual bool stubgen_emit_cpp_stub(const std::string &stub_file_path) = 0;
@@ -3292,15 +3288,11 @@ private:
     void get_jit_target_from_environment();
     void get_target_from_environment();
 
-    // Return the Output<Func> or Output<Buffer> with the given name,
-    // which must be a singular (non-array) Func or Buffer output.
-    // If no such name exists (or is non-array), assert; this method never returns an undefined Func.
-    Func get_output(const std::string &n);
-
-    // Return the Output<Func[]> with the given name, which must be an
-    // array-of-Func output. If no such name exists (or is non-array), assert;
-    // this method never returns undefined Funcs.
-    std::vector<Func> get_array_output(const std::string &n);
+    // Return the output with the given name.
+    // If the output is singular (a non-array), return a vector of size 1.
+    // If no such name exists (or is non-array), assert.
+    // This method never returns undefined Funcs.
+    std::vector<Func> get_outputs(const std::string &n);
 
     void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
 
@@ -3455,9 +3447,8 @@ public:
     std::map<std::string, std::string> gen_get_metadata_rename_map() override;
     Pipeline gen_build_pipeline() override;
 
-    Func stubgen_get_output(const std::string &n) override;
-    std::vector<Func> stubgen_get_array_output(const std::string &n) override;
-    std::vector<std::vector<Func>> stubgen_generate(const GeneratorParamsMap &generator_params,
+    std::vector<Func> stubgen_get_outputs(const std::string &n) override;
+    void stubgen_generate(const GeneratorParamsMap &generator_params,
                                                     const std::vector<std::vector<Internal::StubInput>> &inputs) override;
     bool stubgen_emit_cpp_stub(const std::string &stub_file_path) override;
 
@@ -3711,24 +3702,17 @@ public:
     GeneratorStub(const GeneratorContext &context,
                   const GeneratorFactory &generator_factory);
 
-    std::vector<std::vector<Func>> generate(const GeneratorParamsMap &generator_params,
+    void generate(const GeneratorParamsMap &generator_params,
                                             const std::vector<std::vector<Internal::StubInput>> &inputs);
 
     Target get_target() const;
 
     // Output(s)
-    Func get_output(const std::string &n) const;
-
-    std::vector<Func> get_array_output(const std::string &n) const;
+    std::vector<Func> get_outputs(const std::string &n) const;
 
     template<typename T2>
-    T2 get_output_buffer(const std::string &n) const {
-        return T2(get_output(n), generator);
-    }
-
-    template<typename T2>
-    std::vector<T2> get_array_output_buffer(const std::string &n) const {
-        auto v = get_array_output(n);
+    std::vector<T2> get_output_buffers(const std::string &n) const {
+        auto v = get_outputs(n);
         std::vector<T2> result;
         for (auto &o : v) {
             result.push_back(T2(o, generator));

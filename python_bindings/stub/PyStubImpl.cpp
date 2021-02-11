@@ -165,7 +165,13 @@ py::object generate_impl(GeneratorFactory factory,
             << "' was not specified.";
     }
 
-    const std::vector<std::vector<Func>> outputs = generator->stubgen_generate(generator_params, inputs);
+    generator->stubgen_generate(generator_params, inputs);
+
+    std::vector<std::vector<Func>> outputs;
+    for (const auto &output_name : names.outputs) {
+        outputs.push_back(generator->stubgen_get_outputs(output_name));
+    }
+
 
     py::tuple py_outputs(outputs.size());
     for (size_t i = 0; i < outputs.size(); i++) {
