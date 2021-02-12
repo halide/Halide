@@ -3000,16 +3000,32 @@ struct StringOrLoopLevel {
 };
 using GeneratorParamsMap = std::map<std::string, StringOrLoopLevel>;
 
+/**
+ * IGenerator is an ABC that defines the API a Generator must provide
+ * to work with the existing Generator infrastructure (GenGen, RunGen,
+ * Generator Stubs). The existing Generator<>-based instances all implement
+ * this API, but any other code that implements this (and uses RegisterGenerator
+ * to register itself) should be indistinguishable from a user perspective.
+ *
+ * Note that an IGenerator instance may be stateful in terms of the order
+ * that methods should be called; calling the methods out of order may cause
+ * assert-fails, or may simply be UB. Read the method notes carefully!
+ */
 class IGenerator {
 public:
     virtual ~IGenerator() = default;
 
     // Return the Target, autoscheduler flag, and MachineParams that this Generator
     // was created with. Always legal to call on any IGenerator instance,
-    // regardless of what other methods have been called.
-    virtual Target gen_get_target() = 0;
-    virtual bool gen_get_auto_schedule() = 0;
-    virtual MachineParams gen_get_machine_params() = 0;
+    // regardless of what other methods have been called. All IGenerator instances
+    // are expected to be created with immutable values for these, which can't be
+    // changed for a given instance.
+    struct TargetInfo {
+        Target target;
+        bool auto_schedule;
+        MachineParams machine_params;
+    };
+    virtual TargetInfo gen_get_target_info() = 0;
 
     // Return a list of the names for inputs, in the correct order.
     // All input and output names will be unique within a given Generator instance.
@@ -3051,13 +3067,24 @@ public:
 
     virtual Pipeline gen_build_pipeline() = 0;
 
-    // Return the ExternsMap for the Generator, if any. (TODO: probably always a nop for G2)
-    virtual std::shared_ptr<GeneratorContext::ExternsMap> gen_get_externs_map() = 0;
+    // Return the ExternsMap for the Generator, if any.
+    // CALL-AFTER: gen_build_pipeline()
+    // CALL-BEFORE: n/a
+    virtual GeneratorContext::ExternsMap gen_get_externs_map() = 0;
 
+    // Set the StubInputs.
     virtual void stubgen_set_inputs(const std::vector<std::vector<StubInput>> &inputs) = 0;
 
+    // Emit a Generator Stub (.stub.h) file to the given path. Not all Generators support this
+    // (typically, only G1, not G2.)
+    //
     // If the Generator is not capable of emitting a Stub, return false.
     // (TODO: definitely a nop for G2)
+    //
+    // CALL-AFTER: none
+    // CALL-BEFORE: none
+    // CALL-NOTES: do not call any other IGenerator methods on this instance,
+    //             before or after this call.
     virtual bool stubgen_emit_cpp_stub(const std::string &stub_file_path) = 0;
 };
 
@@ -3114,8 +3141,6 @@ public:
     int natural_vector_size() const {
         return get_target().natural_vector_size<data_t>();
     }
-
-    void emit_cpp_stub(const std::string &stub_file_path);
 
     /**
      * set_inputs is a variadic wrapper around stubgen_set_inputs, which makes usage much simpler
@@ -3287,6 +3312,8 @@ protected:
     void check_exact_phase(Phase expected_phase) const;
     void check_min_phase(Phase expected_phase) const;
     void advance_phase(Phase new_phase);
+
+    void ensure_configure_has_been_called();
 
 private:
     friend void ::Halide::Internal::generator_test();
@@ -3466,9 +3493,7 @@ public:
     GeneratorParamsMap gen_get_constants() override;
     void gen_set_constants(const GeneratorParamsMap &params) override;
 
-    Target gen_get_target() override;
-    bool gen_get_auto_schedule() override;
-    MachineParams gen_get_machine_params() override;
+    TargetInfo gen_get_target_info() override;
 
     std::vector<std::string> gen_get_input_names() override;
     std::vector<std::string> gen_get_output_names() override;
@@ -3476,7 +3501,7 @@ public:
     std::vector<Parameter> gen_get_parameters_for_input(const std::string &name) override;
     std::vector<Func> gen_get_funcs_for_output(const std::string &name) override;
 
-    std::shared_ptr<ExternsMap> gen_get_externs_map() override;
+    ExternsMap gen_get_externs_map() override;
     Pipeline gen_build_pipeline() override;
 
     void stubgen_set_inputs(const std::vector<std::vector<StubInput>> &inputs) override;
@@ -3623,7 +3648,10 @@ private:
     // have build() or configure()/generate()/schedule() methods.
 
     void call_configure_impl(double, double) {
-        // Called as a side effect for build()-method Generators; quietly do nothing.
+        pre_configure();
+        // Called as a side effect for build()-method Generators; quietly do nothing
+        // (except for pre_configure(), to advance the phase).
+        post_configure();
     }
 
     template<typename T2 = T,

@@ -596,7 +596,7 @@ void StubEmitter::emit() {
     for (const auto &out : out_info) {
         stream << get_indent() << out.getter << ",\n";
     }
-    stream << get_indent() << "generator->gen_get_target()\n";
+    stream << get_indent() << "generator->gen_get_target_info().target\n";
     indent_level--;
     stream << get_indent() << "};\n";
     indent_level--;
@@ -701,8 +701,9 @@ Module build_module(IGenerator &g, const std::string &function_name) {
     Pipeline pipeline = g.gen_build_pipeline();
 
     AutoSchedulerResults auto_schedule_results;
-    if (g.gen_get_auto_schedule()) {
-        auto_schedule_results = pipeline.auto_schedule(g.gen_get_target(), g.gen_get_machine_params());
+    const auto target_info = g.gen_get_target_info();
+    if (target_info.auto_schedule) {
+        auto_schedule_results = pipeline.auto_schedule(target_info.target, target_info.machine_params);
     }
 
     std::vector<Argument> filter_arguments;
@@ -712,8 +713,8 @@ Module build_module(IGenerator &g, const std::string &function_name) {
         }
     }
 
-    Module result = pipeline.compile_to_module(filter_arguments, function_name, g.gen_get_target(), linkage_type);
-    for (const auto &map_entry : *g.gen_get_externs_map()) {
+    Module result = pipeline.compile_to_module(filter_arguments, function_name, target_info.target, linkage_type);
+    for (const auto &map_entry : g.gen_get_externs_map()) {
         result.append(map_entry.second);
     }
 
@@ -887,15 +888,16 @@ Module build_gradient_module(Halide::Internal::IGenerator &g, const std::string 
     Pipeline grad_pipeline = Pipeline(gradient_outputs);
 
     AutoSchedulerResults auto_schedule_results;
-    if (g.gen_get_auto_schedule()) {
-        auto_schedule_results = grad_pipeline.auto_schedule(g.gen_get_target(), g.gen_get_machine_params());
+    const auto target_info = g.gen_get_target_info();
+    if (target_info.auto_schedule) {
+        auto_schedule_results = grad_pipeline.auto_schedule(target_info.target, target_info.machine_params);
     } else {
         user_warning << "Autoscheduling is not enabled in build_gradient_module(), so the resulting "
                         "gradient module will be unscheduled; this is very unlikely to be what you want.\n";
     }
 
-    Module result = grad_pipeline.compile_to_module(gradient_inputs, function_name, g.gen_get_target(), linkage_type);
-    user_assert(g.gen_get_externs_map()->empty())
+    Module result = grad_pipeline.compile_to_module(gradient_inputs, function_name, target_info.target, linkage_type);
+    user_assert(g.gen_get_externs_map().empty())
         << "Building a gradient-descent module for a Generator with ExternalCode is not supported.\n";
 
     result.set_auto_scheduler_results(auto_schedule_results);
@@ -1458,10 +1460,10 @@ void GeneratorBase::check_exact_phase(Phase expected_phase) const {
 void GeneratorBase::advance_phase(Phase new_phase) {
     switch (new_phase) {
     case Created:
-        internal_error << "Impossible";
+        internal_error;
         break;
     case ConfigureCalled:
-        internal_assert(phase == Created) << "pase is " << phase;
+        internal_assert(phase == Created);
         break;
     case InputsSet:
         internal_assert(phase == Created || phase == ConfigureCalled);
@@ -1475,6 +1477,13 @@ void GeneratorBase::advance_phase(Phase new_phase) {
         break;
     }
     phase = new_phase;
+}
+
+void GeneratorBase::ensure_configure_has_been_called() {
+    if (phase < ConfigureCalled) {
+        call_configure();
+    }
+    check_min_phase(ConfigureCalled);
 }
 
 void GeneratorBase::pre_configure() {
@@ -1567,19 +1576,6 @@ Pipeline GeneratorBase::get_pipeline() {
     return pipeline;
 }
 
-void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
-    user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
-    // Make sure we call configure() so that extra inputs/outputs are added as necessary.
-    call_configure();
-    // StubEmitter will want to access the GP/SP values, so advance the phase to avoid assert-fails.
-    advance_phase(GenerateCalled);
-    advance_phase(ScheduleCalled);
-    GeneratorParamInfo &pi = param_info();
-    std::ofstream file(stub_file_path);
-    StubEmitter emit(file, generator_registered_name, generator_stub_name, pi.generator_params(), pi.inputs(), pi.outputs());
-    emit.emit();
-}
-
 void GeneratorBase::check_scheduled(const char *m) const {
     check_min_phase(ScheduleCalled);
 }
@@ -1646,16 +1642,12 @@ void GeneratorBase::gen_set_constants(const GeneratorParamsMap &params) {
     }
 }
 
-Target GeneratorBase::gen_get_target() {
-    return this->get_target();
-}
-
-bool GeneratorBase::gen_get_auto_schedule() {
-    return this->get_auto_schedule();
-}
-
-MachineParams GeneratorBase::gen_get_machine_params() {
-    return this->get_machine_params();
+IGenerator::TargetInfo GeneratorBase::gen_get_target_info() {
+    return {
+        get_target(),
+        get_auto_schedule(),
+        get_machine_params()
+    };
 }
 
 namespace {
@@ -1675,18 +1667,12 @@ std::vector<std::string> get_names(const T &t) {
 }  // namespace
 
 std::vector<std::string> GeneratorBase::gen_get_input_names() {
-    if (phase < GeneratorBase::ConfigureCalled) {
-        // ensure that anything added by add_input() is in place
-        call_configure();
-    }
+    ensure_configure_has_been_called();
     return get_names(param_info().inputs());
 }
 
 std::vector<std::string> GeneratorBase::gen_get_output_names() {
-    if (phase < GeneratorBase::ConfigureCalled) {
-        // ensure that anything added by add_output() is in place
-        call_configure();
-    }
+    ensure_configure_has_been_called();
     return get_names(param_info().outputs());
 }
 
@@ -1731,23 +1717,17 @@ std::vector<Func> GeneratorBase::gen_get_funcs_for_output(const std::string &n) 
     return output->funcs();
 }
 
-std::shared_ptr<GeneratorContext::ExternsMap> GeneratorBase::gen_get_externs_map() {
-    return this->get_externs_map();
+GeneratorContext::ExternsMap GeneratorBase::gen_get_externs_map() {
+    return *get_externs_map();
 }
 
 Pipeline GeneratorBase::gen_build_pipeline() {
-    if (phase < GeneratorBase::ConfigureCalled) {
-        // We might have called it lazily
-        call_configure();
-    }
+    ensure_configure_has_been_called();
     return build_pipeline();
 }
 
 void GeneratorBase::stubgen_set_inputs(const std::vector<std::vector<StubInput>> &inputs) {
-    if (phase < GeneratorBase::ConfigureCalled) {
-        // We might have called it lazily
-        call_configure();
-    }
+    ensure_configure_has_been_called();
     advance_phase(InputsSet);
     internal_assert(!inputs_set) << "stubgen_set_inputs() must be called at most once per Generator instance.\n";
     GeneratorParamInfo &pi = param_info();
@@ -1761,7 +1741,16 @@ void GeneratorBase::stubgen_set_inputs(const std::vector<std::vector<StubInput>>
 }
 
 bool GeneratorBase::stubgen_emit_cpp_stub(const std::string &stub_file_path) {
-    emit_cpp_stub(stub_file_path);
+    user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
+    // Make sure we call configure() so that extra inputs/outputs are added as necessary.
+    ensure_configure_has_been_called();
+    // StubEmitter will want to access the GP/SP values, so advance the phase to avoid assert-fails.
+    advance_phase(GenerateCalled);
+    advance_phase(ScheduleCalled);
+    GeneratorParamInfo &pi = param_info();
+    std::ofstream file(stub_file_path);
+    StubEmitter emit(file, generator_registered_name, generator_stub_name, pi.generator_params(), pi.inputs(), pi.outputs());
+    emit.emit();
     return true;
 }
 
@@ -2124,7 +2113,7 @@ Realization StubOutputBufferBase::realize(std::vector<int32_t> sizes) {
 }
 
 Target StubOutputBufferBase::get_target() const {
-    return generator->gen_get_target();
+    return generator->gen_get_target_info().target;
 }
 
 void generator_test() {
