@@ -670,7 +670,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     } else {
                         can_fold_backwards = true;
                     }
-                } else {
+                } else if (!explicit_only) {
                     // Can't do much with this dimension
                     debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
                              << "min = " << min << "\n"
@@ -936,7 +936,11 @@ class StorageFolding : public IRMutator {
         // more than one produce node for this func.
         bool explicit_only = count_producers(body, op->name) != 1;
         AttemptStorageFoldingOfFunction folder(func, explicit_only);
-        debug(3) << "Attempting to fold " << op->name << "\n";
+        if (explicit_only) {
+            debug(3) << "Attempting to fold " << op->name << " explicitly\n";
+        } else {
+            debug(3) << "Attempting to fold " << op->name << " automatically or explicitly\n";
+        }
         body = folder.mutate(body);
 
         if (body.same_as(op->body)) {
