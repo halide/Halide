@@ -730,7 +730,7 @@ Module build_module(IGenerator &g, const std::string &function_name) {
         }
     }
 #else
-    for (const auto &rename : g.gen_get_metadata_rename_map()) {
+    for (const auto &rename : g.gen_get_metadata_name_map()) {
         result.remap_metadata_name(rename.first, rename.second);
     }
 #endif
@@ -1169,7 +1169,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
             auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(Target()));
             auto stub_file_path = base_path + output_info[Output::cpp_stub].extension;
             if (!gen->stubgen_emit_cpp_stub(stub_file_path)) {
-                cerr << "Generator '" << generator_name << "' is not capable of generator Stubs.\n";
+                cerr << "Generator '" << generator_name << "' is not capable of generating Stubs.\n";
                 return -1;
             }
         }
@@ -1741,7 +1741,7 @@ std::shared_ptr<GeneratorContext::ExternsMap> GeneratorBase::gen_get_externs_map
     return this->get_externs_map();
 }
 
-std::map<std::string, std::string> GeneratorBase::gen_get_metadata_rename_map() {
+std::map<std::string, std::string> GeneratorBase::gen_get_metadata_name_map() {
     std::map<std::string, std::string> renames;
     for (const auto *output : this->param_info().outputs()) {
         for (size_t i = 0; i < output->funcs().size(); ++i) {

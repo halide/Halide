@@ -3036,19 +3036,27 @@ public:
     virtual std::vector<Parameter> gen_get_parameters_for_input(const std::string &name) = 0;
     virtual std::vector<Parameter> gen_get_parameters_for_output(const std::string &name) = 0;
 
-    virtual std::shared_ptr<GeneratorContext::ExternsMap> gen_get_externs_map() = 0;
-    virtual std::map<std::string, std::string> gen_get_metadata_rename_map() = 0;
     virtual Pipeline gen_build_pipeline() = 0;
+
+    // Return the ExternsMap for the Generator, if any. (TODO: probably always a nop for G2)
+    virtual std::shared_ptr<GeneratorContext::ExternsMap> gen_get_externs_map() = 0;
+
+    // Return any names that need remapping for generated metadata (eg due to Func uniquification). (TODO: probably always a nop for G2)
+    virtual std::map<std::string, std::string> gen_get_metadata_name_map() = 0;
 
     // Return the output with the given name.
     // If the output is singular (a non-array), return a vector of size 1.
     // If no such name exists (or is non-array), assert.
     // This method never returns undefined Funcs.
+    //
+    // (TODO: definitely a nop for G2)
     virtual std::vector<Func> stubgen_get_outputs(const std::string &n) = 0;
 
+    // (TODO: definitely a nop for G2)
     virtual void stubgen_generate(const std::vector<std::vector<Internal::StubInput>> &inputs) = 0;
 
     // If the Generator is not capable of emitting a Stub, return false.
+    // (TODO: definitely a nop for G2)
     virtual bool stubgen_emit_cpp_stub(const std::string &stub_file_path) = 0;
 };
 
@@ -3470,7 +3478,7 @@ public:
     std::vector<Parameter> gen_get_parameters_for_output(const std::string &name) override;
 
     std::shared_ptr<ExternsMap> gen_get_externs_map() override;
-    std::map<std::string, std::string> gen_get_metadata_rename_map() override;
+    std::map<std::string, std::string> gen_get_metadata_name_map() override;
     Pipeline gen_build_pipeline() override;
 
     std::vector<Func> stubgen_get_outputs(const std::string &n) override;
