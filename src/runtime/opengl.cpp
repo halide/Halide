@@ -73,11 +73,12 @@
 // List of all OpenGL functions used by the runtime, which may not
 // exist due to an older or less capable version of GL. In using any
 // of these functions, code must test if they are nullptr.
-#define OPTIONAL_GL_FUNCTIONS                            \
-    GLFUNC(PFNGLGENVERTEXARRAYS, GenVertexArrays);       \
-    GLFUNC(PFNGLBINDVERTEXARRAY, BindVertexArray);       \
-    GLFUNC(PFNGLDELETEVERTEXARRAYS, DeleteVertexArrays); \
-    GLFUNC(PFNDRAWBUFFERS, DrawBuffers)
+#define OPTIONAL_GL_FUNCTIONS                                \
+    GLFUNC(PFNGLDEBUGMESSAGECALLBACK, DebugMessageCallback); \
+    GLFUNC(PFNGLGENVERTEXARRAYS, GenVertexArrays);           \
+    GLFUNC(PFNGLBINDVERTEXARRAY, BindVertexArray);           \
+    GLFUNC(PFNGLDELETEVERTEXARRAYS, DeleteVertexArrays);     \
+    GLFUNC(PFNDRAWBUFFERS, DrawBuffers);
 
 // ---------- Types ----------
 
@@ -126,6 +127,69 @@ WEAK const char *gl_error_name(int32_t err) {
     }
     return result;
 }
+
+#ifdef DEBUG_RUNTIME
+static void halide_gl_debug_callback(GLenum source,
+                                     GLenum type,
+                                     GLuint id,
+                                     GLenum severity,
+                                     GLsizei length,
+                                     const GLchar *message,
+                                     void *userParam) {
+    const char *type_str;
+    switch (type) {
+    case GL_DEBUG_TYPE_ERROR:
+        type_str = "Error ";
+        break;
+    case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+        type_str = "Deprecated Behaviour ";
+        break;
+    case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+        type_str = "Undefined Behaviour ";
+        break;
+    case GL_DEBUG_TYPE_PORTABILITY:
+        type_str = "Portability Issue ";
+        break;
+    case GL_DEBUG_TYPE_PERFORMANCE:
+        type_str = "Performance Issue ";
+        break;
+    case GL_DEBUG_TYPE_OTHER:
+        type_str = "Misc Message ";
+        break;
+    case GL_DEBUG_TYPE_MARKER:
+        type_str = "Marker Hit ";
+        break;
+    default:
+        type_str = "Unknown Message Type ";
+        break;
+    }
+
+    const char *severity_str;
+    switch (severity) {
+    case GL_DEBUG_SEVERITY_NOTIFICATION:
+        severity_str = "(Notification): ";
+        break;
+
+    case GL_DEBUG_SEVERITY_LOW:
+        severity_str = "(Low Severity): ";
+        break;
+
+    case GL_DEBUG_SEVERITY_MEDIUM:
+        severity_str = "(Medium Severity): ";
+        break;
+
+    case GL_DEBUG_SEVERITY_HIGH:
+        severity_str = "(High Severity): ";
+        break;
+
+    default:
+        severity_str = "(Unknown Severity): ";
+        break;
+    }
+
+    debug(userParam) << type_str << severity_str << message << "\n";
+}
+#endif
 
 struct HalideMalloc {
     ALWAYS_INLINE HalideMalloc(void *user_context, size_t size)
@@ -621,6 +685,14 @@ WEAK void init_extensions(void *user_context) {
         }
     }
     load_gl_func(user_context, "glDrawBuffers", (void **)&global_state.DrawBuffers, false);
+
+#ifdef DEBUG_RUNTIME
+    load_gl_func(user_context, "glDebugMessageCallback", (void **)&global_state.DebugMessageCallback, false);
+    if (global_state.DebugMessageCallback) {
+        global_state.Enable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        global_state.DebugMessageCallback(halide_gl_debug_callback, user_context);
+    }
+#endif
 
     global_state.have_texture_rg =
         global_state.major_version >= 3 ||
