@@ -208,26 +208,31 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     // TODO(rootjalex): figure out a formula for these.
     string mcts_iterations_str = get_env_variable("HL_MCTS_ITERS");
-    const uint32_t n_simulations = dag.nodes.size() * 2;
-    const uint32_t n_iterations = mcts_iterations_str.empty() ? n_simulations * 32 : std::stoul(mcts_iterations_str.c_str());
+    string mcts_simulations_str = get_env_variable("HL_MCTS_N_SIMS");
+    const uint32_t n_simulations = mcts_simulations_str.empty() ? dag.nodes.size() * 2 : std::stoul(mcts_simulations_str.c_str());
+    const uint32_t n_iterations = mcts_iterations_str.empty() ? dag.nodes.size() * 64 : std::stoul(mcts_iterations_str.c_str());
 
     auto solver = MCTS::Solver<CPU_State, CPU_Action>::MakeIterationSolver(n_iterations, n_simulations);
 
     LoopNest *root = new LoopNest;
     CPU_State start_state(&dag, &params, cost_model.get(), root, /* n_decisions */ 0, memory_limit);
     aslog(0) << "Starting\n";
+    MCTS::state_count = 0;
     std::shared_ptr<MCTS::TreeNode<CPU_State, CPU_Action> > best_action = nullptr;
+    double cost = 0.0f;
+    std::string schedule_source;
+
     try {
-        best_action = solver.solve(start_state, seed);
+        CPU_State optimal = solver.solve(start_state, seed);
+        cost = optimal.calculate_cost();
+        schedule_source = optimal.apply_schedule();
+        std::cerr << "is_terminal?" << optimal.is_terminal() << std::endl;
+        std::cerr << "n states generated: " << MCTS::state_count << std::endl;
     } catch (const std::bad_alloc& e) {
         std::cerr << "Allocation failed: " << e.what() << std::endl;
     } catch (...) {
         std::cerr << "Some other exception?" << std::endl;
     }
-    aslog(0) << "Compounding\n";
-    CPU_State optimal = solver.get_optimal_state(start_state, best_action);
-    aslog(0) << "Calculating\n";
-    double cost = optimal.calculate_cost();
 
     std::chrono::duration<double> total_time = timer.elapsed();
     auto milli = std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count();
@@ -236,9 +241,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     aslog(0) << "Execution time: " << milli << " ms\n\n";
 
-    std::string schedule_source = optimal.apply_schedule();
-
-    // aslog(0) << "Source:" << schedule_source << "\n\n\n";
+    aslog(0) << "Source:" << schedule_source << "\n\n\n";
 
     HALIDE_TOC;
 

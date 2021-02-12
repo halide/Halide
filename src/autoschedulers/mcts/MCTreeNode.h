@@ -18,6 +18,8 @@ TODO(rootjalex): add more details
 
 namespace MCTS {
 
+    size_t state_count;
+
     // TODO(rootjalex): refactor this as needed.
     template<class State, class Action>
     class TreeNode {
@@ -45,20 +47,24 @@ namespace MCTS {
         std::mt19937 &rng;
 
     public:
+
         TreeNode(const State &_state, const Action &_action, BarePtr _parent, std::mt19937 &_rng) :
             state(_state), action(_action), parent(_parent),
-            depth(_parent ? _parent->depth + 1: 0), num_visits(0), rng(_rng) {
+            depth(_parent ? _parent->depth + 1 : 0), num_visits(0), rng(_rng) {
             
             // The state should be capable of generating it's own actions.
             possible_actions = state.generate_possible_actions();
+            // std::cerr << "Generated: " << possible_actions.size() << " at depth " << depth << std::endl;
+            state_count = possible_actions.size();
         }
 
         TreeNode(State &&_state, const Action &_action, BarePtr _parent, std::mt19937 &_rng) :
             state(_state), action(_action), parent(_parent),
-            depth(_parent ? _parent->depth + 1: 0), num_visits(0), rng(_rng) {
-            
+            depth(_parent ? _parent->depth + 1 : 0), num_visits(0), rng(_rng) {
             // The state should be capable of generating it's own actions.
             possible_actions = state.generate_possible_actions();
+            // std::cerr << "Generated: " << possible_actions.size() << " at depth " << depth << std::endl;
+            state_count += possible_actions.size();
         }
         
         SharedPtr add_child_with_action(const Action &child_action) {

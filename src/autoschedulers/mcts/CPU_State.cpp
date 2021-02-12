@@ -53,7 +53,7 @@ vector<CPU_Action> CPU_State::generate_possible_actions() const {
         // compute_featurization(dag_ptr, params_ptr, root, &input_features);
         // take_action will store features
         actions.push_back(CPU_Action(CPU_ScheduleAction::Input, root));
-        delete_loop_nest();
+        // delete_loop_nest();
         return actions;
     }
 
@@ -88,7 +88,7 @@ vector<CPU_Action> CPU_State::generate_possible_actions() const {
         // children. Carry on.
     }
 
-    delete_loop_nest();
+    // delete_loop_nest();
     return actions;
 }
 

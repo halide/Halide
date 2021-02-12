@@ -79,7 +79,7 @@ namespace MCTS {
 
         // Node corresponds to best action to take immediately from this state,
         // and includes enough information to iteratively apply it's decisions.
-        NodePtr solve(const State &current_state, int seed = 1) {
+        State solve(const State &current_state, int seed = 1) {
             std::mt19937 rng((uint32_t)seed);
 
             // TODO(rootjalex): replace with std::make_shared
@@ -176,7 +176,7 @@ namespace MCTS {
                 if (!use_timer && iterations >= max_iterations) {
                     break;
                 }
-                std::cerr << "iteration:" << iterations << std::endl;
+                // std::cerr << "iteration:" << iterations << std::endl;
             }
 
             std::cerr << "Iterations:" << iterations << std::endl;
@@ -185,7 +185,10 @@ namespace MCTS {
             best_node = get_min_value_child(root_node);
 
             internal_assert(best_node) << "MCTS found a nullptr best node\n";
-            return best_node;
+            
+            std::cerr << "Depth of best node:" << best_node->get_depth() << std::endl;
+            
+            return get_optimal_state(root_node->get_state(), best_node);
         }
 
         // After a call to solve(), this function can be used to fetch the best state.
