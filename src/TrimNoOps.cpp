@@ -375,7 +375,7 @@ class TrimNoOps : public IRMutator {
 
         if (is_const_one(is_no_op.condition)) {
             // This loop is definitely useless
-            debug(0) << "Removed empty loop.\n"
+            debug(3) << "Removed empty loop.\n"
                      << "Old: " << Stmt(op) << "\n";
             return Evaluate::make(0);
         } else if (is_const_zero(is_no_op.condition)) {
@@ -397,7 +397,7 @@ class TrimNoOps : public IRMutator {
 
         if (i.is_empty()) {
             // Empty loop
-            debug(0) << "Removed empty loop.\n"
+            debug(3) << "Removed empty loop.\n"
                      << "Old: " << Stmt(op) << "\n";
             return Evaluate::make(0);
         }
@@ -441,7 +441,7 @@ class TrimNoOps : public IRMutator {
         stmt = LetStmt::make(old_max_name, old_max, stmt);
         stmt = simplify(stmt);
 
-        debug(0) << "Rewrote loop.\n"
+        debug(3) << "Rewrote loop.\n"
                  << "Old: " << Stmt(op) << "\n"
                  << "New: " << stmt << "\n";
 
