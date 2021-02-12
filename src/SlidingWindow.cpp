@@ -348,10 +348,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             }
             return stmt;
         } else if (!find_produce(op, func.name())) {
-            // The producer might have expanded the loop before the min. Add an
-            // if so we don't run the consumer out of bounds.
-            // TODO: This gets added to every consumer even when it isn't in a loop
-            // being expanded by sliding window.
+            // The producer might have expanded the loop before the min to warm
+            // up the window. This consumer doesn't contain a producer that might
+            // be part of the warmup, so guard it with an if to only run it on
+            // the original loop bounds.
             Expr loop_var_expr = Variable::make(Int(32), loop_var);
             Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
             return IfThenElse::make(likely_if_innermost(loop_var_expr >= orig_loop_min_expr), IRMutator::visit(op));

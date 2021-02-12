@@ -512,6 +512,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
         Box provided = box_provided(body, func.name());
         Box required = box_required(body, func.name());
+        // For storage folding, we don't care about conditional reads.
         required.used = Expr();
         Box box = box_union(provided, required);
 
