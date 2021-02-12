@@ -91,10 +91,9 @@ std::map<Output, std::string> compute_output_files(const Target &target,
 }
 
 Argument to_argument(const Internal::Parameter &param) {
-    ArgumentEstimates argument_estimates = param.get_argument_estimates();
     return Argument(param.name(),
                     param.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
-                    param.type(), param.dimensions(), argument_estimates);
+                    param.type(), param.dimensions(), param.get_argument_estimates());
 }
 
 Func make_param_func(const Parameter &p, const std::string &name) {
@@ -578,7 +577,7 @@ void StubEmitter::emit() {
     stream << get_indent() << "{\n";
     indent_level++;
     stream << get_indent() << "std::shared_ptr<Halide::Internal::IGenerator> generator = halide_register_generator::" << generator_registered_name << "_ns::factory(context);\n";
-    stream << get_indent() << "generator->gen_set_generator_param_values(generator_params.to_generator_params_map());\n";
+    stream << get_indent() << "generator->gen_set_constants(generator_params.to_generator_params_map());\n";
     stream << get_indent() << "generator->stubgen_generate(\n";
     indent_level++;
     stream << get_indent() << "{\n";
@@ -707,8 +706,10 @@ Module build_module(IGenerator &g, const std::string &function_name) {
     }
 
     std::vector<Argument> filter_arguments;
-    for (const auto &p : g.gen_get_input_parameters()) {
-        filter_arguments.push_back(to_argument(p));
+    for (const auto &i : g.gen_get_inputs()) {
+        for (const auto &p : g.gen_get_parameters_for_input(i)) {
+            filter_arguments.push_back(to_argument(p));
+        }
     }
 
     Module result = pipeline.compile_to_module(filter_arguments, function_name, g.gen_get_target(), linkage_type);
@@ -716,11 +717,23 @@ Module build_module(IGenerator &g, const std::string &function_name) {
         result.append(map_entry.second);
     }
 
-    auto renames = g.gen_get_metadata_rename_map();
+#if 0
+    for (const auto &output_name : g.gen_get_outputs()) {
+        for (const auto &p : g.gen_get_parameters_for_output(i)) {
+            auto from = output->funcs()[i].name();
+            auto to = output->array_name(i);
+            size_t tuple_size = output->types_defined() ? output->types().size() : 1;
+            for (size_t t = 0; t < tuple_size; ++t) {
+                std::string suffix = (tuple_size > 1) ? ("." + std::to_string(t)) : "";
+                result.remap_metadata_name(from + suffix, to + suffix);
+            }
+        }
+    }
+#else
     for (const auto &rename : g.gen_get_metadata_rename_map()) {
         result.remap_metadata_name(rename.first, rename.second);
     }
-
+#endif
     result.set_auto_scheduler_results(auto_schedule_results);
 
     return result;
@@ -761,12 +774,12 @@ Module build_gradient_module(Halide::Internal::IGenerator &g, const std::string 
 
     // First: the original inputs. Note that scalar inputs remain scalar,
     // rather being promoted into zero-dimensional buffers.
-    auto input_parameters = g.gen_get_input_parameters();
-
     std::vector<Argument> gradient_inputs;
-    for (const auto &p : input_parameters) {
-        gradient_inputs.push_back(to_argument(p));
-        debug(DBG) << "    gradient copied input is: " << gradient_inputs.back().name << "\n";
+    for (const auto &i : g.gen_get_inputs()) {
+        for (const auto &p : g.gen_get_parameters_for_input(i)) {
+            gradient_inputs.push_back(to_argument(p));
+            debug(DBG) << "    gradient copied input is: " << gradient_inputs.back().name << "\n";
+        }
     }
 
     // Next: add a grad-input for each *original* output; these will
@@ -775,26 +788,28 @@ Module build_gradient_module(Halide::Internal::IGenerator &g, const std::string 
     // - If an output is an Array, we'll have a separate input for each array element.
 
     std::vector<ImageParam> d_output_imageparams;
-    for (const auto &p : g.gen_get_output_parameters()) {
-        const std::string &output_name = p.name();
-        // output_name is something like "funcname_i"
-        const std::string grad_in_name = replace_all(grad_input_pattern, "$OUT$", output_name);
-        // TODO(srj): does it make sense for gradient to be a non-float type?
-        // For now, assume it's always float32 (unless the output is already some float).
-        const Type grad_in_type = p.type().is_float() ? p.type() : Float(32);
-        const int grad_in_dimensions = p.dimensions();
-        const ArgumentEstimates grad_in_estimates = p.get_argument_estimates();
-        internal_assert((int)grad_in_estimates.buffer_estimates.size() == grad_in_dimensions);
+    for (const auto &i : g.gen_get_outputs()) {
+        for (const auto &p : g.gen_get_parameters_for_output(i)) {
+            const std::string &output_name = p.name();
+            // output_name is something like "funcname_i"
+            const std::string grad_in_name = replace_all(grad_input_pattern, "$OUT$", output_name);
+            // TODO(srj): does it make sense for gradient to be a non-float type?
+            // For now, assume it's always float32 (unless the output is already some float).
+            const Type grad_in_type = p.type().is_float() ? p.type() : Float(32);
+            const int grad_in_dimensions = p.dimensions();
+            const ArgumentEstimates grad_in_estimates = p.get_argument_estimates();
+            internal_assert((int)grad_in_estimates.buffer_estimates.size() == grad_in_dimensions);
 
-        ImageParam d_im(grad_in_type, grad_in_dimensions, grad_in_name);
-        for (int d = 0; d < grad_in_dimensions; d++) {
-            d_im.parameter().set_min_constraint_estimate(d, grad_in_estimates.buffer_estimates.at(d).min);
-            d_im.parameter().set_extent_constraint_estimate(d, grad_in_estimates.buffer_estimates.at(d).extent);
+            ImageParam d_im(grad_in_type, grad_in_dimensions, grad_in_name);
+            for (int d = 0; d < grad_in_dimensions; d++) {
+                d_im.parameter().set_min_constraint_estimate(d, grad_in_estimates.buffer_estimates.at(d).min);
+                d_im.parameter().set_extent_constraint_estimate(d, grad_in_estimates.buffer_estimates.at(d).extent);
+            }
+            d_output_imageparams.push_back(d_im);
+            gradient_inputs.push_back(to_argument(d_im.parameter()));
+
+            debug(DBG) << "    gradient synthesized input is: " << gradient_inputs.back().name << "\n";
         }
-        d_output_imageparams.push_back(d_im);
-        gradient_inputs.push_back(to_argument(d_im.parameter()));
-
-        debug(DBG) << "    gradient synthesized input is: " << gradient_inputs.back().name << "\n";
     }
 
     // Finally: define the output Func(s), one for each unique output/input pair.
@@ -813,55 +828,56 @@ Module build_gradient_module(Halide::Internal::IGenerator &g, const std::string 
         Derivative d = propagate_adjoints(original_output, adjoint_func, bounds);
 
         const std::string &output_name = original_output.name();
-        for (const auto &p : input_parameters) {
-            const std::string &input_name = p.name();
+        for (const auto &i : g.gen_get_inputs()) {
+            for (const auto &p : g.gen_get_parameters_for_input(i)) {
+                const std::string &input_name = p.name();
 
-            if (!p.is_buffer()) {
-                abort();
-                // Not sure if skipping scalar inputs is correct, but that's
-                // what the previous version of this code did, so we'll continue for now.
-                debug(DBG) << "    Skipping scalar input " << output_name << " wrt input " << input_name << "\n";
-                continue;
-            }
-
-            // Note that Derivative looks up by name; we don't have the original
-            // Func, and we can't create a new one with an identical name (since
-            // Func's ctor will uniquify the name for us). Let's just look up
-            // by the original string instead. (In theory this could be wrong
-            // as well, )
-            Func d_f = d(input_name + "_im");
-
-            std::string grad_out_name = replace_all(replace_all(grad_output_pattern, "$OUT$", output_name), "$IN$", input_name);
-            if (!d_f.defined()) {
-                grad_out_name = "_dummy" + grad_out_name;
-            }
-
-            Func d_out_wrt_in(grad_out_name);
-            if (d_f.defined()) {
-                d_out_wrt_in(Halide::_) = d_f(Halide::_);
-            } else {
-                debug(DBG) << "    No Derivative found for output " << output_name << " wrt input " << input_name << "\n";
-                // If there was no Derivative found, don't skip the output;
-                // just replace with a dummy Func that is all zeros. This ensures
-                // that the signature of the Pipeline we produce is always predictable.
-                std::vector<Var> vars;
-                for (int i = 0; i < d_output.dimensions(); i++) {
-                    vars.push_back(Var::implicit(i));
+                if (!p.is_buffer()) {
+                    // Not sure if skipping scalar inputs is correct, but that's
+                    // what the previous version of this code did, so we'll continue for now.
+                    debug(DBG) << "    Skipping scalar input " << output_name << " wrt input " << input_name << "\n";
+                    continue;
                 }
-                d_out_wrt_in(vars) = make_zero(d_output.type());
+
+                // Note that Derivative looks up by name; we don't have the original
+                // Func, and we can't create a new one with an identical name (since
+                // Func's ctor will uniquify the name for us). Let's just look up
+                // by the original string instead. (In theory this could be wrong
+                // as well, )
+                Func d_f = d(input_name + "_im");
+
+                std::string grad_out_name = replace_all(replace_all(grad_output_pattern, "$OUT$", output_name), "$IN$", input_name);
+                if (!d_f.defined()) {
+                    grad_out_name = "_dummy" + grad_out_name;
+                }
+
+                Func d_out_wrt_in(grad_out_name);
+                if (d_f.defined()) {
+                    d_out_wrt_in(Halide::_) = d_f(Halide::_);
+                } else {
+                    debug(DBG) << "    No Derivative found for output " << output_name << " wrt input " << input_name << "\n";
+                    // If there was no Derivative found, don't skip the output;
+                    // just replace with a dummy Func that is all zeros. This ensures
+                    // that the signature of the Pipeline we produce is always predictable.
+                    std::vector<Var> vars;
+                    for (int i = 0; i < d_output.dimensions(); i++) {
+                        vars.push_back(Var::implicit(i));
+                    }
+                    d_out_wrt_in(vars) = make_zero(d_output.type());
+                }
+
+                d_out_wrt_in.set_estimates(p.get_argument_estimates().buffer_estimates);
+
+                // Useful for debugging; ordinarily better to leave out
+                // debug(0) << "\n\n"
+                //          << "output:\n" << FuncWithDependencies(original_output) << "\n"
+                //          << "d_output:\n" << FuncWithDependencies(adjoint_func) << "\n"
+                //          << "input:\n" << FuncWithDependencies(f) << "\n"
+                //          << "d_out_wrt_in:\n" << FuncWithDependencies(d_out_wrt_in) << "\n";
+
+                gradient_outputs.push_back(d_out_wrt_in);
+                debug(DBG) << "    gradient output is: " << d_out_wrt_in.name() << "\n";
             }
-
-            d_out_wrt_in.set_estimates(p.get_argument_estimates().buffer_estimates);
-
-            // Useful for debugging; ordinarily better to leave out
-            // debug(0) << "\n\n"
-            //          << "output:\n" << FuncWithDependencies(original_output) << "\n"
-            //          << "d_output:\n" << FuncWithDependencies(adjoint_func) << "\n"
-            //          << "input:\n" << FuncWithDependencies(f) << "\n"
-            //          << "d_out_wrt_in:\n" << FuncWithDependencies(d_out_wrt_in) << "\n";
-
-            gradient_outputs.push_back(d_out_wrt_in);
-            debug(DBG) << "    gradient output is: " << d_out_wrt_in.name() << "\n";
         }
     }
 
@@ -1166,7 +1182,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
                 sub_generator_args.erase("target");
                 // Must re-create each time since each instance will have a different Target.
                 auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(target));
-                gen->gen_set_generator_param_values(sub_generator_args);
+                gen->gen_set_constants(sub_generator_args);
                 return do_build_gradient_module ? build_gradient_module(*gen, name) : build_module(*gen, name);
             };
             compile_multitarget(function_name, output_files, targets, target_strings, module_factory, compiler_logger_factory);
@@ -1202,14 +1218,7 @@ GeneratorParamBase::~GeneratorParamBase() {
 }
 
 void GeneratorParamBase::check_value_readable() const {
-    // These are always readable.
-    if (name() == "target" ||
-        name() == "auto_schedule" ||
-        name() == "machine_params") {
-        return;
-    }
-    user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
-        << "The GeneratorParam \"" << name() << "\" cannot be read before build() or configure()/generate() is called.\n";
+    // GeneratorParams are now always readable.
 }
 
 void GeneratorParamBase::check_value_writable() const {
@@ -1365,17 +1374,30 @@ GeneratorParamInfo &GeneratorBase::param_info() {
     return *param_info_ptr;
 }
 
-// Find output by name. If not found, assert-fail. Never returns null.
-GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name) {
-    // There usually are very few outputs, so a linear search is fine
-    GeneratorParamInfo &pi = param_info();
-    for (GeneratorOutputBase *output : pi.outputs()) {
-        if (output->name() == name) {
-            return output;
+namespace {
+
+template<typename T>
+T *find_by_name(const std::string &name, const std::vector<T*> &v) {
+    for (T *t : v) {
+        if (t->name() == name) {
+            return t;
         }
     }
-    internal_error << "Output " << name << " not found.";
-    return nullptr;  // not reached
+    return nullptr;
+}
+
+}  // namespace
+
+GeneratorInputBase *GeneratorBase::find_input_by_name(const std::string &name) {
+    auto *t = find_by_name(name, param_info().inputs());
+    internal_assert(t != nullptr) << "Input " << name << " not found.";
+    return t;
+}
+
+GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name) {
+    auto *t = find_by_name(name, param_info().outputs());
+    internal_assert(t != nullptr) << "Output " << name << " not found.";
+    return t;
 }
 
 void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
@@ -1587,7 +1609,30 @@ void GeneratorBase::check_input_kind(Internal::GeneratorInputBase *in, Internal:
         << "Input " << in->name() << " cannot be set with the type specified.";
 }
 
-void GeneratorBase::gen_set_generator_param_values(const GeneratorParamsMap &params) {
+GeneratorParamsMap GeneratorBase::gen_get_constants() {
+    GeneratorParamsMap m;
+
+    for (auto *g : param_info().generator_params()) {
+        if (g->is_synthetic_param()) {
+            continue;
+        }
+        const auto &n = g->name();
+        if (n == "target" ||
+            n == "auto_schedule" ||
+            n == "machine_params") {
+            continue;
+        }
+        if (g->is_looplevel_param()) {
+            m[n] = ((GeneratorParam_LoopLevel *)g)->value();
+        } else {
+            m[n] = g->get_default_value();
+        }
+    }
+
+    return m;
+}
+
+void GeneratorBase::gen_set_constants(const GeneratorParamsMap &params) {
     GeneratorParamInfo &pi = param_info();
 
     std::unordered_map<std::string, Internal::GeneratorParamBase *> generator_params_by_name;
@@ -1625,6 +1670,8 @@ MachineParams GeneratorBase::gen_get_machine_params() {
 
 namespace {
 
+// Note that this deliberately ignores inputs/outputs with multiple array values
+// (ie, one name per input or output, regardless of array_size())
 template<typename T>
 std::vector<std::string> get_names(const T &t) {
     std::vector<std::string> names;
@@ -1637,57 +1684,57 @@ std::vector<std::string> get_names(const T &t) {
 
 }  // namespace
 
-IGenerator::Names GeneratorBase::gen_get_names() {
-    const auto &pi = param_info();
-    return IGenerator::Names{
-        get_names(pi.generator_params()),
-        get_names(pi.inputs()),
-        get_names(pi.outputs())};
+std::vector<std::string> GeneratorBase::gen_get_inputs() {
+    return get_names(param_info().inputs());
 }
 
-std::vector<Parameter> GeneratorBase::gen_get_input_parameters() {
-    std::vector<Parameter> inputs;
-    for (const auto *input : this->param_info().inputs()) {
-        // TODO: replicated code, yuck
-        if (input->kind() == IOKind::Scalar) {
-            internal_assert(input->funcs_.empty() && input->exprs_.size() == input->parameters_.size());
-            for (size_t i = 0; i < input->exprs_.size(); ++i) {
-                const auto &p = input->parameters_[i];
-                internal_assert(!p.is_buffer());
-                internal_assert(p.name() == input->array_name(i)) << "input name was " << p.name() << " expected " << input->array_name(i);
-                internal_assert(p.dimensions() == 0) << "input dimensions was " << p.dimensions() << " expected " << 0;
-                internal_assert(p.type() == input->type()) << "input type was " << p.name() << " expected " << input->type();
-                inputs.push_back(p);
-            }
-        } else {
-            internal_assert(input->exprs_.empty() && input->funcs_.size() == input->parameters_.size());
-            for (size_t i = 0; i < input->funcs_.size(); ++i) {
-                const auto &f = input->funcs_[i];
-                const auto &p = input->parameters_[i];
-                internal_assert(p.is_buffer());
-                internal_assert(p.name() == input->array_name(i)) << "input name was " << p.name() << " expected " << input->array_name(i);
-                internal_assert(p.dimensions() == f.dimensions()) << "input dimensions was " << p.dimensions() << " expected " << f.dimensions();
-                internal_assert(p.type() == input->type()) << "input type was " << p.name() << " expected " << input->type();
-                inputs.push_back(p);
-            }
-        }
-    }
-    return inputs;
+std::vector<std::string> GeneratorBase::gen_get_outputs() {
+    return get_names(param_info().outputs());
 }
 
-std::vector<Parameter> GeneratorBase::gen_get_output_parameters() {
-    std::vector<Parameter> outputs;
-    for (const auto *output : this->param_info().outputs()) {
-        for (size_t i = 0; i < output->funcs().size(); ++i) {
-            const Func &f = output->funcs()[i];
-            auto p = f.output_buffer().parameter();
-            internal_assert(p.name() == output->array_name(i)) << "output name was " << p.name() << " expected " << output->array_name(i);
-            internal_assert(p.dimensions() == f.dimensions()) << "output dimensions was " << p.dimensions() << " expected " << f.dimensions();
-            internal_assert(p.type() == output->type()) << "output type was " << p.name() << " expected " << output->type();
-            outputs.push_back(p);
+std::vector<Parameter> GeneratorBase::gen_get_parameters_for_input(const std::string &name) {
+    auto *input = find_input_by_name(name);
+
+    std::vector<Parameter> params;
+    // TODO: replicated code, yuck
+    if (input->kind() == IOKind::Scalar) {
+        internal_assert(input->funcs_.empty() && input->exprs_.size() == input->parameters_.size());
+        for (size_t i = 0; i < input->exprs_.size(); ++i) {
+            const auto &p = input->parameters_[i];
+            internal_assert(!p.is_buffer());
+            internal_assert(p.name() == input->array_name(i)) << "input name was " << p.name() << " expected " << input->array_name(i);
+            internal_assert(p.dimensions() == 0) << "input dimensions was " << p.dimensions() << " expected " << 0;
+            internal_assert(p.type() == input->type()) << "input type was " << p.name() << " expected " << input->type();
+            params.push_back(p);
+        }
+    } else {
+        internal_assert(input->exprs_.empty() && input->funcs_.size() == input->parameters_.size());
+        for (size_t i = 0; i < input->funcs_.size(); ++i) {
+            const auto &f = input->funcs_[i];
+            const auto &p = input->parameters_[i];
+            internal_assert(p.is_buffer());
+            internal_assert(p.name() == input->array_name(i)) << "input name was " << p.name() << " expected " << input->array_name(i);
+            internal_assert(p.dimensions() == f.dimensions()) << "input dimensions was " << p.dimensions() << " expected " << f.dimensions();
+            internal_assert(p.type() == input->type()) << "input type was " << p.name() << " expected " << input->type();
+            params.push_back(p);
         }
     }
-    return outputs;
+    return params;
+}
+
+std::vector<Parameter> GeneratorBase::gen_get_parameters_for_output(const std::string &name) {
+    auto *output = find_output_by_name(name);
+
+    std::vector<Parameter> params;
+    for (size_t i = 0; i < output->funcs().size(); ++i) {
+        const Func &f = output->funcs()[i];
+        auto p = f.output_buffer().parameter();
+        internal_assert(p.name() == output->array_name(i)) << "output name was " << p.name() << " expected " << output->array_name(i);
+        internal_assert(p.dimensions() == f.dimensions()) << "output dimensions was " << p.dimensions() << " expected " << f.dimensions();
+        internal_assert(p.type() == output->type()) << "output type was " << p.name() << " expected " << output->type();
+        params.push_back(p);
+    }
+    return params;
 }
 
 std::shared_ptr<GeneratorContext::ExternsMap> GeneratorBase::gen_get_externs_map() {

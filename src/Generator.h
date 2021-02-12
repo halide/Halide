@@ -3004,24 +3004,38 @@ class IGenerator {
 public:
     virtual ~IGenerator() = default;
 
-    struct Names {
-        std::vector<std::string> generator_params, inputs, outputs;
-    };
-    // Return a list of the known names/types/etc for inputs, outputs, and GeneratorParams.
-    // Always legal to call on any IGenerator instance.
-    virtual Names gen_get_names() = 0;
+    // Return a list of the known names for inputs and outputs, in the correct order.
+    // Always legal to call on any IGenerator instance, regardless of what other methods
+    // have been called.
+    virtual std::vector<std::string> gen_get_inputs() = 0;
+
+    // Return a list of the known names for outputs, in the correct order.
+    // Always legal to call on any IGenerator instance, regardless of what other methods
+    // have been called.
+    virtual std::vector<std::string> gen_get_outputs() = 0;
+
+    // Return the current name & values for all known GeneratorParams in this Generator.
+    // Synthetic params that are writable will be included (but not synthetic params that
+    // are hardcoded and thus not settable).
+    // Always legal to call on any IGenerator instance, regardless of what other methods
+    // have been called.
+    virtual GeneratorParamsMap gen_get_constants() = 0;
 
     // Set the GeneratorParams for an IGenerator instance.
     // GP names that aren't known by this IGenerator should trigger an assert-fail.
+    // GP names that are present but not settable should trigger an assert-fail.
     // This should be called at once most per IGenerator instance. Calling multiple
     // times is UB.
-    virtual void gen_set_generator_param_values(const GeneratorParamsMap &params) = 0;
+    virtual void gen_set_constants(const GeneratorParamsMap &params) = 0;
 
     virtual Target gen_get_target() = 0;
     virtual bool gen_get_auto_schedule() = 0;
     virtual MachineParams gen_get_machine_params() = 0;
-    virtual std::vector<Parameter> gen_get_input_parameters() = 0;
-    virtual std::vector<Parameter> gen_get_output_parameters() = 0;
+
+
+    virtual std::vector<Parameter> gen_get_parameters_for_input(const std::string &name) = 0;
+    virtual std::vector<Parameter> gen_get_parameters_for_output(const std::string &name) = 0;
+
     virtual std::shared_ptr<GeneratorContext::ExternsMap> gen_get_externs_map() = 0;
     virtual std::map<std::string, std::string> gen_get_metadata_rename_map() = 0;
     virtual Pipeline gen_build_pipeline() = 0;
@@ -3289,6 +3303,7 @@ private:
     // Return our GeneratorParamInfo.
     GeneratorParamInfo &param_info();
 
+    Internal::GeneratorInputBase *find_input_by_name(const std::string &name);
     Internal::GeneratorOutputBase *find_output_by_name(const std::string &name);
 
     void check_scheduled(const char *m) const;
@@ -3441,16 +3456,19 @@ private:
 
 public:
     // IGenerator methods
-    void gen_set_generator_param_values(const GeneratorParamsMap &params) override;
+    GeneratorParamsMap gen_get_constants() override;
+    void gen_set_constants(const GeneratorParamsMap &params) override;
 
     Target gen_get_target() override;
     bool gen_get_auto_schedule() override;
     MachineParams gen_get_machine_params() override;
 
-    IGenerator::Names gen_get_names() override;
+    std::vector<std::string> gen_get_inputs() override;
+    std::vector<std::string> gen_get_outputs() override;
 
-    std::vector<Parameter> gen_get_input_parameters() override;
-    std::vector<Parameter> gen_get_output_parameters() override;
+    std::vector<Parameter> gen_get_parameters_for_input(const std::string &name) override;
+    std::vector<Parameter> gen_get_parameters_for_output(const std::string &name) override;
+
     std::shared_ptr<ExternsMap> gen_get_externs_map() override;
     std::map<std::string, std::string> gen_get_metadata_rename_map() override;
     Pipeline gen_build_pipeline() override;
@@ -3786,7 +3804,7 @@ struct halide_global_ns;
         std::unique_ptr<Halide::Internal::IGenerator> factory(const Halide::GeneratorContext &context);                             \
         std::unique_ptr<Halide::Internal::IGenerator> factory(const Halide::GeneratorContext &context) {                            \
             auto g = ORIGINAL_REGISTRY_NAME##_ns::factory(context);                                                                 \
-            g->gen_set_generator_param_values(__VA_ARGS__);                                                                         \
+            g->gen_set_constants(__VA_ARGS__);                                                                         \
             return g;                                                                                                               \
         }                                                                                                                           \
     }                                                                                                                               \

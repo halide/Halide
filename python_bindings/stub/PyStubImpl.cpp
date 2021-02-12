@@ -104,14 +104,15 @@ py::object generate_impl(GeneratorFactory factory,
                          const py::kwargs &kwargs) {
     auto generator = factory(context);
 
-    auto names = generator->gen_get_names();
-    _halide_user_assert(!names.outputs.empty())
+    auto input_names = generator->gen_get_inputs();
+    auto output_names = generator->gen_get_outputs();
+    _halide_user_assert(!output_names.empty())
         << "Generators that use build() (instead of generate()+Output<>) "
            "are not supported in the Python bindings.";
 
     std::map<std::string, size_t> input_name_to_pos;
-    for (size_t i = 0; i < names.inputs.size(); ++i) {
-        input_name_to_pos[names.inputs[i]] = i;
+    for (size_t i = 0; i < input_names.size(); ++i) {
+        input_name_to_pos[input_names[i]] = i;
     }
 
     // Inputs can be specified by either positional or named args,
@@ -120,8 +121,9 @@ py::object generate_impl(GeneratorFactory factory,
     // GeneratorParams can only be specified by name, and are always optional.
     //
     std::vector<std::vector<StubInput>> inputs;
-    inputs.resize(names.inputs.size());
+    inputs.resize(input_names.size());
 
+    GeneratorParamsMap generator_params1 = generator->gen_get_constants();
     GeneratorParamsMap generator_params;
 
     // Process the kwargs first.
@@ -144,16 +146,16 @@ py::object generate_impl(GeneratorFactory factory,
     }
 
     // Now, the positional args.
-    _halide_user_assert(args.size() <= names.inputs.size())
+    _halide_user_assert(args.size() <= input_names.size())
         << "Expected at most "
-        << names.inputs.size()
+        << input_names.size()
         << " positional args, but saw "
         << args.size()
         << ".";
     for (size_t i = 0; i < args.size(); ++i) {
         _halide_user_assert(inputs[i].empty())
             << "Generator Input named '"
-            << names.inputs[i]
+            << input_names[i]
             << "' was specified by both position and keyword.";
         append_input(args[i], inputs[i]);
     }
@@ -161,15 +163,15 @@ py::object generate_impl(GeneratorFactory factory,
     for (size_t i = 0; i < inputs.size(); ++i) {
         _halide_user_assert(!inputs[i].empty())
             << "Generator Input named '"
-            << names.inputs[i]
+            << input_names[i]
             << "' was not specified.";
     }
 
-    generator->gen_set_generator_param_values(generator_params);
+    generator->gen_set_constants(generator_params);
     generator->stubgen_generate(inputs);
 
     std::vector<std::vector<Func>> outputs;
-    for (const auto &output_name : names.outputs) {
+    for (const auto &output_name : output_names) {
         outputs.push_back(generator->stubgen_get_outputs(output_name));
     }
 
