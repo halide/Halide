@@ -3012,21 +3012,24 @@ public:
     virtual MachineParams gen_get_machine_params() = 0;
 
     // Return a list of the names for inputs, in the correct order.
+    // All input and output names will be unique within a given Generator instance.
     // If this is called after add_input(), the added inputs will be returned.
     // Always legal to call on any IGenerator instance, regardless of what other methods
     // have been called.
     virtual std::vector<std::string> gen_get_input_names() = 0;
 
     // Return a list of the names for outputs, in the correct order.
-    // If this is called after add_output(), the added inputs will be returned.
+    // All input and output names will be unique within a given Generator instance.
+    // If this is called after add_output(), the added outputs will be returned.
     // Always legal to call on any IGenerator instance, regardless of what other methods
     // have been called.
     virtual std::vector<std::string> gen_get_output_names() = 0;
 
-    // Return the current name & values for all known GeneratorParams in this Generator.
+    // Return the current name & current values for all known GeneratorParams in this Generator.
     // (Synthetic params are excluded and will never be returned here.)
     // Always legal to call on any IGenerator instance, regardless of what other methods
-    // have been called.
+    // have been called. Calling this after a call to gen_set_constants() will reflect the
+    // updated values, not the default values.
     virtual GeneratorParamsMap gen_get_constants() = 0;
 
     // Set the GeneratorParams for an IGenerator instance.
