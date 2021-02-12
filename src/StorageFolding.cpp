@@ -677,7 +677,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                                  << "min = " << min << "\n"
                                  << "max = " << max << "\n";
                     } else {
-                        debug(3) << "Not folding because there is no explicit storage folding factor\n"
+                        debug(3) << "Not folding because there is no explicit storage folding factor\n";
                     }
                     continue;
                 }
