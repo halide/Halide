@@ -104,7 +104,7 @@ Interval multiply(const Interval &a, const Expr &b) {
 
 Interval divide(const Interval &a, const Expr &b) {
     Expr x = a.has_lower_bound() ? a.min / b : a.min;
-    Expr y = a.has_upper_bound() ? a.max / b : a.max;
+    Expr y = a.has_upper_bound() ? (a.max + (abs(b) - 1)) / b : a.max;
     return Interval(Interval::make_min(x, y), Interval::make_max(x, y));
 }
 
@@ -211,10 +211,7 @@ class DerivativeBounds : public IRVisitor {
             // This is much like the quotient rule for derivatives.
             if (is_constant(rb)) {
                 // Avoid generating large expressions in the common case of constant b.
-                // TODO: This should be divide(ra, op->b), but it breaks because 1/2 looks
-                // like 0. Multiplying instead preserves the sign of the derivative, but not
-                // the magnitude.
-                result = multiply(ra, op->b);
+                result = divide(ra, op->b);
             } else {
                 result = divide(add(multiply(ra, op->b), negate(multiply(rb, op->a))), op->b * op->b);
             }
@@ -555,6 +552,7 @@ void is_monotonic_test() {
     check_increasing(x + 4);
     check_increasing(x + y);
     check_increasing(x * 4);
+    check_increasing(x / 4);
     check_increasing(min(x + 4, y + 4));
     check_increasing(max(x + y, x - y));
     check_increasing(x >= y);
@@ -562,6 +560,7 @@ void is_monotonic_test() {
 
     check_decreasing(-x);
     check_decreasing(x * -4);
+    check_decreasing(x / -4);
     check_decreasing(y - x);
     check_decreasing(x < y);
     check_decreasing(x <= y);
