@@ -670,11 +670,15 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     } else {
                         can_fold_backwards = true;
                     }
-                } else if (!explicit_only) {
+                } else {
                     // Can't do much with this dimension
-                    debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
-                             << "min = " << min << "\n"
-                             << "max = " << max << "\n";
+                    if (!explicit_only) {
+                        debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
+                                 << "min = " << min << "\n"
+                                 << "max = " << max << "\n";
+                     } else {
+                        debug(3) << "Not folding because there is no explicit storage folding factor\n"
+                     }
                     continue;
                 }
             }
