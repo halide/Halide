@@ -198,6 +198,7 @@ struct GlobalState {
     bool have_vertex_array_objects;
     bool have_texture_rg;
     bool have_texture_float;
+    bool have_color_buffer_float;
     bool have_texture_rgb8_rgba8;
 
     // Various objects shared by all filter kernels
@@ -639,6 +640,10 @@ WEAK void init_extensions(void *user_context) {
          extension_supported(user_context, "GL_ARB_texture_float")) ||
         (global_state.profile == OpenGLES &&
          extension_supported(user_context, "GL_OES_texture_float"));
+
+    global_state.have_color_buffer_float =
+        global_state.profile == OpenGL ||
+        extension_supported(user_context, "GL_EXT_color_buffer_float");
 }
 
 WEAK const char *parse_int(const char *str, int *val) {
@@ -711,7 +716,8 @@ WEAK int halide_opengl_init(void *user_context) {
         << "  vertex_array_objects: " << (global_state.have_vertex_array_objects ? "yes\n" : "no\n")
         << "  texture_rg: " << (global_state.have_texture_rg ? "yes\n" : "no\n")
         << "  have_texture_rgb8_rgba8: " << (global_state.have_texture_rgb8_rgba8 ? "yes\n" : "no\n")
-        << "  texture_float: " << (global_state.have_texture_float ? "yes\n" : "no\n");
+        << "  texture_float: " << (global_state.have_texture_float ? "yes\n" : "no\n")
+        << "  color_buffer_float: " << (global_state.have_color_buffer_float ? "yes\n" : "no\n");
 
     // Initialize framebuffer.
     global_state.GenFramebuffers(1, &global_state.framebuffer_id);
