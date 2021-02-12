@@ -172,9 +172,8 @@ py::object generate_impl(GeneratorFactory factory,
 
     std::vector<std::vector<Func>> outputs;
     for (const auto &output_name : output_names) {
-        outputs.push_back(generator->stubgen_get_outputs(output_name));
+        outputs.push_back(generator->gen_get_funcs_for_output(output_name));
     }
-
 
     py::tuple py_outputs(outputs.size());
     for (size_t i = 0; i < outputs.size(); i++) {

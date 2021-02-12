@@ -389,7 +389,7 @@ void StubEmitter::emit() {
     for (auto *output : outputs) {
         std::string c_type = output->get_c_type();
         const bool is_func = (c_type == "Func");
-        std::string getter = "generator->stubgen_get_outputs(\"" + output->name() + "\")";
+        std::string getter = "generator->gen_get_funcs_for_output(\"" + output->name() + "\")";
         if (!is_func) {
             getter = c_type + "::to_output_buffers(" + getter + ", generator)";
         }
@@ -717,23 +717,25 @@ Module build_module(IGenerator &g, const std::string &function_name) {
         result.append(map_entry.second);
     }
 
-#if 0
-    for (const auto &output_name : g.gen_get_outputs()) {
-        for (const auto &p : g.gen_get_parameters_for_output(i)) {
-            auto from = output->funcs()[i].name();
-            auto to = output->array_name(i);
-            size_t tuple_size = output->types_defined() ? output->types().size() : 1;
-            for (size_t t = 0; t < tuple_size; ++t) {
-                std::string suffix = (tuple_size > 1) ? ("." + std::to_string(t)) : "";
+    for (const std::string &output_name : g.gen_get_outputs()) {
+        const std::vector<Func> output_funcs = g.gen_get_funcs_for_output(output_name);
+        for (size_t i = 0; i < output_funcs.size(); ++i) {
+            const Func &f = output_funcs[i];
+
+            std::string from = f.name();
+            std::string to = output_name;
+            if (output_funcs.size() > 1) {
+                to += "_" + std::to_string(i);
+            }
+
+            const int tuple_size = f.outputs();
+            for (int t = 0; t < tuple_size; ++t) {
+                const std::string suffix = (tuple_size > 1) ? ("." + std::to_string(t)) : "";
                 result.remap_metadata_name(from + suffix, to + suffix);
             }
         }
     }
-#else
-    for (const auto &rename : g.gen_get_metadata_name_map()) {
-        result.remap_metadata_name(rename.first, rename.second);
-    }
-#endif
+
     result.set_auto_scheduler_results(auto_schedule_results);
 
     return result;
@@ -789,7 +791,8 @@ Module build_gradient_module(Halide::Internal::IGenerator &g, const std::string 
 
     std::vector<ImageParam> d_output_imageparams;
     for (const auto &i : g.gen_get_outputs()) {
-        for (const auto &p : g.gen_get_parameters_for_output(i)) {
+        for (const auto &f : g.gen_get_funcs_for_output(i)) {
+            const Parameter &p = f.output_buffer().parameter();
             const std::string &output_name = p.name();
             // output_name is something like "funcname_i"
             const std::string grad_in_name = replace_all(grad_input_pattern, "$OUT$", output_name);
@@ -1377,7 +1380,7 @@ GeneratorParamInfo &GeneratorBase::param_info() {
 namespace {
 
 template<typename T>
-T *find_by_name(const std::string &name, const std::vector<T*> &v) {
+T *find_by_name(const std::string &name, const std::vector<T *> &v) {
     for (T *t : v) {
         if (t->name() == name) {
             return t;
@@ -1722,47 +1725,7 @@ std::vector<Parameter> GeneratorBase::gen_get_parameters_for_input(const std::st
     return params;
 }
 
-std::vector<Parameter> GeneratorBase::gen_get_parameters_for_output(const std::string &name) {
-    auto *output = find_output_by_name(name);
-
-    std::vector<Parameter> params;
-    for (size_t i = 0; i < output->funcs().size(); ++i) {
-        const Func &f = output->funcs()[i];
-        auto p = f.output_buffer().parameter();
-        internal_assert(p.name() == output->array_name(i)) << "output name was " << p.name() << " expected " << output->array_name(i);
-        internal_assert(p.dimensions() == f.dimensions()) << "output dimensions was " << p.dimensions() << " expected " << f.dimensions();
-        internal_assert(p.type() == output->type()) << "output type was " << p.name() << " expected " << output->type();
-        params.push_back(p);
-    }
-    return params;
-}
-
-std::shared_ptr<GeneratorContext::ExternsMap> GeneratorBase::gen_get_externs_map() {
-    return this->get_externs_map();
-}
-
-std::map<std::string, std::string> GeneratorBase::gen_get_metadata_name_map() {
-    std::map<std::string, std::string> renames;
-    for (const auto *output : this->param_info().outputs()) {
-        for (size_t i = 0; i < output->funcs().size(); ++i) {
-            auto from = output->funcs()[i].name();
-            auto to = output->array_name(i);
-            size_t tuple_size = output->types_defined() ? output->types().size() : 1;
-            for (size_t t = 0; t < tuple_size; ++t) {
-                std::string suffix = (tuple_size > 1) ? ("." + std::to_string(t)) : "";
-                renames[from + suffix] = to + suffix;
-            }
-        }
-    }
-    return renames;
-}
-
-Pipeline GeneratorBase::gen_build_pipeline() {
-    this->call_configure();
-    return this->build_pipeline();
-}
-
-std::vector<Func> GeneratorBase::stubgen_get_outputs(const std::string &n) {
+std::vector<Func> GeneratorBase::gen_get_funcs_for_output(const std::string &n) {
     check_min_phase(GenerateCalled);
     auto *output = find_output_by_name(n);
     // Call for the side-effect of asserting if the value isn't defined.
@@ -1771,6 +1734,15 @@ std::vector<Func> GeneratorBase::stubgen_get_outputs(const std::string &n) {
         user_assert(f.defined()) << "Output " << n << " was not fully defined.\n";
     }
     return output->funcs();
+}
+
+std::shared_ptr<GeneratorContext::ExternsMap> GeneratorBase::gen_get_externs_map() {
+    return this->get_externs_map();
+}
+
+Pipeline GeneratorBase::gen_build_pipeline() {
+    this->call_configure();
+    return this->build_pipeline();
 }
 
 void GeneratorBase::stubgen_generate(const std::vector<std::vector<Internal::StubInput>> &inputs) {
