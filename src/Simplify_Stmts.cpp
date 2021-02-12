@@ -70,6 +70,18 @@ Stmt Simplify::visit(const IfThenElse *op) {
         else_acquire &&
         equal(then_acquire->semaphore, else_acquire->semaphore) &&
         equal(then_acquire->count, else_acquire->count)) {
+        // TODO: This simplification sometimes prevents useful loop partioning/no-op
+        // trimming from happening, e.g. it rewrites:
+        //
+        //   for (x, min + -2, extent + 2) {
+        //    if (x < min) {
+        //     acquire (f24.semaphore_0, 1) {}
+        //    } else {
+        //     acquire (f24.semaphore_0, 1) { ... }
+        //    }
+        //   }
+        //
+        // This could be partitioned and simplified, but not after this simplification.
         return Acquire::make(then_acquire->semaphore, then_acquire->count,
                              mutate(IfThenElse::make(condition, then_acquire->body, else_acquire->body)));
     } else if (then_pc &&
