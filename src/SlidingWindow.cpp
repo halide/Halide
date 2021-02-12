@@ -357,7 +357,14 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // the original loop bounds.
             Expr loop_var_expr = Variable::make(Int(32), loop_var);
             Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
-            return IfThenElse::make(likely_if_innermost(loop_var_expr >= orig_loop_min_expr), IRMutator::visit(op));
+            Expr guard = likely_if_innermost(loop_var_expr >= orig_loop_min_expr);
+
+            // Put the if inside the consumer node, so semaphores end up outside the if.
+            // TODO: This is correct, but it produces slightly suboptimal code: if we
+            // didn't do this, the loop could likely be trimmed and the if simplified away.
+            Stmt body = mutate(op->body);
+            body = IfThenElse::make(guard, body);
+            return ProducerConsumer::make(op->name, false, body);
         } else {
             return IRMutator::visit(op);
         }
@@ -438,7 +445,7 @@ class SlidingWindowOnFunction : public IRMutator {
             if (slider.new_loop_min.defined()) {
                 new_loop_min = slider.new_loop_min;
                 // We also need to rename the loop.
-                new_loop_name += ".new";
+                new_loop_name += ".n";
 
                 // The new loop interval is the new loop min to the old loop max.
                 std::string loop_max_name = op->min.as<Variable>()->name;
