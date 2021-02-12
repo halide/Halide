@@ -1,4 +1,3 @@
-
 #include "Halide.h"
 #include <stdio.h>
 
@@ -13,6 +12,11 @@ int test_lut1d() {
 
     // This test must be run with an OpenGL target.
     const Target target = get_jit_target_from_environment().with_feature(Target::OpenGL);
+
+    if (target.has_feature(Target::EGL)) {
+        printf("[SKIP] OpenGL ES does not support 3-channel buffers (ie. RGB)");
+        return 0;
+    }
 
     Var x("x");
     Var y("y");
