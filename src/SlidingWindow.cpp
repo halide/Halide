@@ -12,6 +12,7 @@
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
+#include "UnsafePromises.h"
 #include <utility>
 
 namespace Halide {
@@ -84,6 +85,31 @@ Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
     return result;
 }
 
+class FindProduce : public IRVisitor {
+    const string &func;
+
+    using IRVisitor::visit;
+
+    void visit(const ProducerConsumer *op) override {
+        if (op->is_producer && op->name == func) {
+            found = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+public:
+    bool found = false;
+
+    FindProduce(const string &func) : func(func) {}
+};
+
+bool find_produce(const Stmt &s, const string &func) {
+    FindProduce finder(func);
+    s.accept(&finder);
+    return finder.found;
+}
+
 // Perform sliding window optimization for a function over a
 // particular serial for loop
 class SlidingWindowOnFunctionAndLoop : public IRMutator {
@@ -114,7 +140,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
     Stmt visit(const ProducerConsumer *op) override {
-        if (op->is_producer && op->name == func.name()) {
+        if (op->is_producer) {
+            if (op->name != func.name()) {
+                return IRMutator::visit(op);
+            }
             Stmt stmt = op;
 
             // We're interested in the case where exactly one of the
@@ -246,34 +275,36 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             }
 
             std::string new_loop_min_name = unique_name('x');
-            new_loop_min = Variable::make(Int(32), new_loop_min_name);
+            Expr new_loop_min_var = Variable::make(Int(32), new_loop_min_name);
             Expr new_loop_min_eq;
             if (can_slide_up) {
                 new_loop_min_eq =
-                    substitute(loop_var_expr, loop_min, min_required) == substitute(loop_var_expr, new_loop_min, prev_max_plus_one);
+                    substitute(loop_var_expr, loop_min, min_required) == substitute(loop_var_expr, new_loop_min_var, prev_max_plus_one);
             } else {
                 new_loop_min_eq =
-                    substitute(loop_var_expr, loop_min, max_required) == substitute(loop_var_expr, new_loop_min, prev_min_minus_one);
+                    substitute(loop_var_expr, loop_min, max_required) == substitute(loop_var_expr, new_loop_min_var, prev_min_minus_one);
             }
-            Interval solve_result = solve_for_inner_interval(new_loop_min_eq, new_loop_min_name);
+            Interval solve_result = solve_for_inner_interval(lower_safe_promises(new_loop_min_eq), new_loop_min_name);
             Expr new_min, new_max;
-            if (solve_result.has_upper_bound()) {
-                new_loop_min = solve_result.max;
-                if (can_slide_up) {
-                    new_min = prev_max_plus_one;
-                    new_max = max_required;
-                } else {
-                    new_min = min_required;
-                    new_max = prev_min_minus_one;
-                }
-            } else {
+            if (!solve_result.has_upper_bound()) {
                 debug(3) << "Not sliding " << func.name()
                          << " over dimension " << dim
                          << " along loop variable " << loop_var
                          << " because the bounds required of the producer do not appear to depend on the loop variable\n"
                          << "Min is " << min_required << "\n"
-                         << "Max is " << max_required << "\n";
+                         << "Max is " << max_required << "\n"
+                         << "Equation is " << new_loop_min_eq << "\n";
                 return stmt;
+            }
+
+            internal_assert(!new_loop_min.defined());
+            new_loop_min = solve_result.max;
+            if (can_slide_up) {
+                new_min = prev_max_plus_one;
+                new_max = max_required;
+            } else {
+                new_min = min_required;
+                new_max = prev_min_minus_one;
             }
 
             Expr early_stages_min_required = new_min;
@@ -316,9 +347,11 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 }
             }
             return stmt;
-        } else if (!op->is_producer) {
+        } else if (!find_produce(op, func.name())) {
             // The producer might have expanded the loop before the min. Add an
             // if so we don't run the consumer out of bounds.
+            // TODO: This gets added to every consumer even when it isn't in a loop
+            // being expanded by sliding window.
             Expr loop_var_expr = Variable::make(Int(32), loop_var);
             Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
             return IfThenElse::make(likely_if_innermost(loop_var_expr >= orig_loop_min_expr), IRMutator::visit(op));
@@ -412,32 +445,38 @@ class SlidingWindowOnFunction : public IRMutator {
             }
         }
 
-        new_body = mutate(new_body);
-
-        Stmt new_for;
-        if (new_body.same_as(op->body) && new_loop_name == op->name) {
-            new_for = op;
-        } else {
-            new_for = For::make(new_loop_name, op->min, op->extent, op->for_type, op->device_api, new_body);
-        }
-
+        Expr new_min = op->min;
+        Expr new_extent = op->extent;
         if (new_loop_name != op->name) {
             // At this point, everything above is implemented by shadowing the old loop variable and related
             // lets. This isn't OK, so fix that here.
+            new_min = Variable::make(Int(32), new_loop_name + ".loop_min");
+            new_extent = Variable::make(Int(32), new_loop_name + ".loop_extent");
             std::map<string, Expr> renames = {
                 {op->name, Variable::make(Int(32), new_loop_name)},
-                {op->name + ".loop_extent", Variable::make(Int(32), new_loop_name + ".loop_extent")},
-                {op->name + ".loop_min", Variable::make(Int(32), new_loop_name + ".loop_min")},
-                {op->name + ".loop_min.orig", Variable::make(Int(32), new_loop_name + ".loop_min.orig")},
+                {op->name + ".loop_extent", new_extent},
+                {op->name + ".loop_min", new_min},
             };
-            new_for = substitute(renames, new_for);
+            new_body = substitute(renames, new_body);
+        }
+
+        new_body = mutate(new_body);
+
+        Stmt new_for;
+        if (new_body.same_as(op->body) && new_loop_name == op->name && new_min.same_as(op->min) && new_extent.same_as(op->extent)) {
+            new_for = op;
+        } else {
+            new_for = For::make(new_loop_name, new_min, new_extent, op->for_type, op->device_api, new_body);
         }
 
         if (new_loop_min.defined()) {
+            Expr new_loop_max =
+                Variable::make(Int(32), new_loop_name + ".loop_min") + Variable::make(Int(32), new_loop_name + ".loop_extent") - 1;
+            new_for = LetStmt::make(new_loop_name + ".loop_max", new_loop_max, new_for);
             new_for = LetStmt::make(new_loop_name + ".loop_extent", new_loop_extent, new_for);
+            new_for = LetStmt::make(new_loop_name + ".loop_min.orig", Variable::make(Int(32), new_loop_name + ".loop_min"), new_for);
             new_for = LetStmt::make(new_loop_name + ".loop_min", new_loop_min, new_for);
         }
-        new_for = LetStmt::make(new_loop_name + ".loop_min.orig", op->min, new_for);
 
         return new_for;
     }
@@ -473,11 +512,10 @@ class SlidingWindow : public IRMutator {
 
         Stmt new_body = op->body;
 
-        debug(3) << "Doing sliding window analysis on realization of " << op->name << "\n";
-
-        new_body = SlidingWindowOnFunction(iter->second).mutate(new_body);
-
         new_body = mutate(new_body);
+
+        debug(3) << "Doing sliding window analysis on realization of " << op->name << "\n";
+        new_body = SlidingWindowOnFunction(iter->second).mutate(new_body);
 
         if (new_body.same_as(op->body)) {
             return op;
@@ -493,10 +531,23 @@ public:
     }
 };
 
+class AddLoopMinOrig : public IRMutator {
+    using IRMutator::visit;
+
+    Stmt visit(const For *op) {
+        Stmt body = mutate(op->body);
+        Expr min = mutate(op->min);
+        Expr extent = mutate(op->extent);
+        Stmt result = For::make(op->name, min, extent, op->for_type, op->device_api, body);
+        result = LetStmt::make(op->name + ".loop_min.orig", Variable::make(Int(32), op->name + ".loop_min"), result);
+        return result;
+    }
+};
+
 }  // namespace
 
 Stmt sliding_window(const Stmt &s, const map<string, Function> &env) {
-    return SlidingWindow(env).mutate(s);
+    return SlidingWindow(env).mutate(AddLoopMinOrig().mutate(s));
 }
 
 }  // namespace Internal

@@ -211,7 +211,10 @@ class DerivativeBounds : public IRVisitor {
             // This is much like the quotient rule for derivatives.
             if (is_constant(rb)) {
                 // Avoid generating large expressions in the common case of constant b.
-                result = divide(ra, op->b);
+                // TODO: This should be divide(ra, op->b), but it breaks because 1/2 looks
+                // like 0. Multiplying instead preserves the sign of the derivative, but not
+                // the magnitude.
+                result = multiply(ra, op->b);
             } else {
                 result = divide(add(multiply(ra, op->b), negate(multiply(rb, op->a))), op->b * op->b);
             }

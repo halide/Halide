@@ -60,6 +60,10 @@ Stmt lower_unsafe_promises(const Stmt &s, const Target &t) {
     return LowerUnsafePromises(t.has_feature(Target::CheckUnsafePromises)).mutate(s);
 }
 
+Expr lower_safe_promises(const Expr &e) {
+    return LowerSafePromises().mutate(e);
+}
+
 Stmt lower_safe_promises(const Stmt &s) {
     return LowerSafePromises().mutate(s);
 }

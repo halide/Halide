@@ -512,6 +512,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
         Box provided = box_provided(body, func.name());
         Box required = box_required(body, func.name());
+        required.used = Expr();
         Box box = box_union(provided, required);
 
         Expr loop_var = Variable::make(Int(32), op->name);
@@ -519,12 +520,6 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         Expr loop_max = Variable::make(Int(32), op->name + ".loop_max");
 
         string dynamic_footprint;
-
-        Scope<Interval> bounds;
-        bounds.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
-
-        Scope<Interval> steady_bounds;
-        steady_bounds.push(op->name, Interval(simplify(op->min + 1), simplify(op->min + op->extent - 1)));
 
         HasExternConsumer has_extern_consumer(func.name());
         body.accept(&has_extern_consumer);
@@ -554,19 +549,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             string sema_name = func.name() + ".folding_semaphore." + unique_name('_');
             Expr sema_var = Variable::make(type_of<halide_semaphore_t *>(), sema_name);
 
-            // Consider the initial iteration and steady state
-            // separately for all these proofs.
-            Expr loop_var = Variable::make(Int(32), op->name);
-            Expr steady_state = (op->min < loop_var);
-
-            Expr min_steady = simplify(substitute(steady_state, const_true(), min), true, steady_bounds);
-            Expr max_steady = simplify(substitute(steady_state, const_true(), max), true, steady_bounds);
-            Expr min_initial = simplify(substitute(steady_state, const_false(), min), true, bounds);
-            Expr max_initial = simplify(substitute(steady_state, const_false(), max), true, bounds);
-            Expr extent_initial = simplify(substitute(loop_var, op->min, max_initial - min_initial + 1), true, bounds);
-            Expr extent_steady = simplify(max_steady - min_steady + 1, true, steady_bounds);
-            Expr extent = Max::make(extent_initial, extent_steady);
-            extent = simplify(common_subexpression_elimination(extent), true, bounds);
+            Expr extent = simplify(common_subexpression_elimination(max - min + 1));
 
             // Find the StorageDim corresponding to dim.
             const std::vector<StorageDim> &storage_dims = func.schedule().storage_dims();
@@ -860,10 +843,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             } else {
                 stmt = op;
                 debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
-                         << "min_initial = " << min_initial << "\n"
-                         << "min_steady = " << min_steady << "\n"
-                         << "max_initial = " << max_initial << "\n"
-                         << "max_steady = " << max_steady << "\n";
+                         << "min = " << min << "\n"
+                         << "max = " << max << "\n";
                 break;
             }
         }

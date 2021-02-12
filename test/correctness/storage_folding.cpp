@@ -133,7 +133,7 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = g.realize({100, 1000, 3});
 
-        size_t expected_size = 101 * 1002 * 3 * sizeof(int) + sizeof(int);
+        size_t expected_size = 104 * 1002 * 3 * sizeof(int) + sizeof(int);
         if (custom_malloc_size == 0 || custom_malloc_size != expected_size) {
             printf("Scratch space allocated was %d instead of %d\n", (int)custom_malloc_size, (int)expected_size);
             return -1;
@@ -349,14 +349,14 @@ int main(int argc, char **argv) {
 
         // The automatic storage folding optimization can't figure
         // this out due to the downsampling. Explicitly fold it.
-        g.compute_at(f, x).store_root().fold_storage(y, 2);
+        g.compute_at(f, x).store_root().fold_storage(y, 4);
 
         f.set_custom_allocator(my_malloc, my_free);
 
         Buffer<int> im = f.realize({1000, 1000});
 
         // Halide allocates one extra scalar, so we account for that.
-        size_t expected_size = 1000 * 2 * sizeof(int) + sizeof(int);
+        size_t expected_size = 1000 * 4 * sizeof(int) + sizeof(int);
         if (custom_malloc_size == 0 || custom_malloc_size > expected_size) {
             printf("Scratch space allocated was %d instead of %d\n", (int)custom_malloc_size, (int)expected_size);
             return -1;
