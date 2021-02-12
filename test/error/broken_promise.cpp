@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     in.set(ten_bit_data);
     lut.set(ten_bit_lut);
 
-    auto result = f.realize(100, get_jit_target_from_environment().with_feature(Target::CheckUnsafePromises));
+    auto result = f.realize({100}, get_jit_target_from_environment().with_feature(Target::CheckUnsafePromises));
 
     printf("Success!\n");
     return 0;

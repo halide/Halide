@@ -42,7 +42,7 @@ def main():
 
         # And evaluate it over a 5x5 box.
         print("\nEvaluating producer-consumer pipeline with default schedule")
-        consumer.realize(4, 4)
+        consumer.realize([4, 4])
 
         # There were no messages about computing values of the
         # producer. This is because the default schedule fully
@@ -97,7 +97,7 @@ def main():
 
         # Compile and run.
         print("\nEvaluating producer.compute_root()")
-        consumer.realize(4, 4)
+        consumer.realize([4, 4])
 
         # Reading the output we can see that:
         # A) There were stores to producer.
@@ -194,7 +194,7 @@ def main():
 
         # Compile and run.
         print("\nEvaluating producer.compute_at(consumer, y)")
-        consumer.realize(4, 4)
+        consumer.realize([4, 4])
 
         # Reading the log you should see that producer and consumer
         # alternate on a per-scanline basis. Let's look at the
@@ -264,7 +264,7 @@ def main():
         consumer.trace_stores()
 
         print("\nEvaluating producer.store_root().compute_at(consumer, y)")
-        consumer.realize(4, 4)
+        consumer.realize([4, 4])
 
         # Reading the log you should see that producer and consumer
         # again alternate on a per-scanline basis. It computes a 5x2
@@ -369,7 +369,7 @@ def main():
         consumer.trace_stores()
 
         print("\nEvaluating producer.store_root().compute_at(consumer, x)")
-        consumer.realize(4, 4)
+        consumer.realize([4, 4])
 
         # Reading the log, you should see that producer and consumer
         # now alternate on a per-pixel basis. Here's the equivalent C:
@@ -466,7 +466,7 @@ def main():
         print("\nEvaluating:"
               "consumer.tile(x, y, x_outer, y_outer, x_inner, y_inner, 2, 2)"
               "producer.compute_at(consumer, x_outer)")
-        consumer.realize(4, 4)
+        consumer.realize([4, 4])
 
         # Reading the log, you should see that producer and consumer
         # now alternate on a per-tile basis. Here's the equivalent C:
@@ -546,7 +546,7 @@ def main():
         # consumer.trace_stores()
         # producer.trace_stores()
 
-        halide_result = consumer.realize(800, 600)
+        halide_result = consumer.realize([800, 600])
 
         # Here's the equivalent (serial) C:
 

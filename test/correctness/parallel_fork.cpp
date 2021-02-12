@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
 
     call_count = 0;
     both = make(Serial);
-    im = both.realize(10, 10, 2);
+    im = both.realize({10, 10, 2});
     count = call_count;
     time = benchmark([&]() {
         both.realize(im);
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
 
     call_count = 0;
     both = make(Parallel);
-    im = both.realize(10, 10, 2);
+    im = both.realize({10, 10, 2});
     count = call_count;
     time = benchmark([&]() {
         both.realize(im);
@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
 
     both = make(AsyncRoot);
     call_count = 0;
-    im = both.realize(10, 10, 2);
+    im = both.realize({10, 10, 2});
     count = call_count;
     time = benchmark([&]() {
         both.realize(im);
@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
 
     both = make(AsyncComputeAt);
     call_count = 0;
-    im = both.realize(10, 10, 2);
+    im = both.realize({10, 10, 2});
     count = call_count;
     time = benchmark([&]() {
         both.realize(im);

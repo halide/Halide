@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
     // This can't possibly be a precondition
     p.add_requirement(x == 4 && f(3, 2) == 5);
 
-    p.realize(100, 100);
+    p.realize({100, 100});
 
     printf("Success!\n");
     return 0;

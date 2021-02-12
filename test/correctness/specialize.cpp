@@ -194,7 +194,7 @@ int main(int argc, char **argv) {
 
         reset_alloc_counts();
         param.set(true);
-        out.realize(100);
+        out.realize({100});
 
         if (empty_allocs != 1 || nonempty_allocs != 2 || frees != 3) {
             printf("There were supposed to be 1 empty alloc, 2 nonempty allocs, and 3 frees.\n"
@@ -205,7 +205,7 @@ int main(int argc, char **argv) {
 
         reset_alloc_counts();
         param.set(false);
-        out.realize(100);
+        out.realize({100});
 
         if (empty_allocs != 2 || nonempty_allocs != 1 || frees != 3) {
             printf("There were supposed to be 2 empty allocs, 1 nonempty alloc, and 3 frees.\n"
@@ -241,7 +241,7 @@ int main(int argc, char **argv) {
 
         // Check we don't crash with the small input, and that it uses scalar stores
         reset_trace();
-        f.realize(5);
+        f.realize({5});
         if (!scalar_store || vector_store) {
             printf("These stores were supposed to be scalar.\n");
             return -1;
@@ -252,7 +252,7 @@ int main(int argc, char **argv) {
         im.set(image);
 
         reset_trace();
-        f.realize(100);
+        f.realize({100});
         if (scalar_store || !vector_store) {
             printf("These stores were supposed to be vector.\n");
             return -1;
@@ -306,7 +306,7 @@ int main(int argc, char **argv) {
         size.set(1);
 
         // Not crashing is enough
-        f.realize(100);
+        f.realize({100});
     }
 
     {
@@ -326,7 +326,7 @@ int main(int argc, char **argv) {
         im.set(image);
         // The image is too small, but that should be OK, because the
         // param is false so the image will never be used.
-        f.realize(100);
+        f.realize({100});
     }
 
     {
@@ -555,12 +555,12 @@ int main(int argc, char **argv) {
 
         vector_store_lanes = 0;
         p.set(0);
-        f.realize(100);
+        f.realize({100});
         _halide_user_assert(vector_store_lanes == 32);
 
         vector_store_lanes = 0;
         p.set(42);  // just a nonzero value
-        f.realize(100);
+        f.realize({100});
         _halide_user_assert(vector_store_lanes == 4);
     }
 
@@ -603,12 +603,12 @@ int main(int argc, char **argv) {
 
         vector_store_lanes = 0;
         p.set(42);  // Chosen to ensure pruned branch is pruned
-        f.realize(100);
+        f.realize({100});
         _halide_user_assert(vector_store_lanes == 16);
 
         vector_store_lanes = 0;
         p.set(0);
-        f.realize(100);
+        f.realize({100});
         _halide_user_assert(vector_store_lanes == 32);
     }
 
@@ -630,12 +630,12 @@ int main(int argc, char **argv) {
 
         vector_store_lanes = 0;
         p.set(42);  // arbitrary nonzero value
-        f.realize(100);
+        f.realize({100});
         _halide_user_assert(vector_store_lanes == 16);
 
         vector_store_lanes = 0;
         p.set(0);
-        f.realize(100);
+        f.realize({100});
         _halide_user_assert(vector_store_lanes == 32);
     }
 
@@ -660,7 +660,7 @@ int main(int argc, char **argv) {
 
         vector_store_lanes = 0;
         p.set(0);
-        f.realize(100);
+        f.realize({100});
         _halide_user_assert(vector_store_lanes == 32);
     }
 

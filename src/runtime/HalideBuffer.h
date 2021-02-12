@@ -371,9 +371,9 @@ private:
     void crop_host(int d, int min, int extent) {
         assert(dim(d).min() <= min);
         assert(dim(d).max() >= min + extent - 1);
-        int shift = min - dim(d).min();
+        ptrdiff_t shift = min - dim(d).min();
         if (buf.host != nullptr) {
-            buf.host += shift * dim(d).stride() * type().bytes();
+            buf.host += (shift * dim(d).stride()) * type().bytes();
         }
         buf.dim[d].min = min;
         buf.dim[d].extent = extent;
@@ -409,9 +409,9 @@ private:
         assert(d >= 0 && d < dimensions());
         assert(pos >= dim(d).min() && pos <= dim(d).max());
         buf.dimensions--;
-        int shift = pos - buf.dim[d].min;
+        ptrdiff_t shift = pos - buf.dim[d].min;
         if (buf.host != nullptr) {
-            buf.host += shift * buf.dim[d].stride * type().bytes();
+            buf.host += (shift * buf.dim[d].stride) * type().bytes();
         }
         for (int i = d; i < buf.dimensions; i++) {
             buf.dim[i] = buf.dim[i + 1];
@@ -540,7 +540,7 @@ private:
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions(); i++) {
             if (dim(i).stride() < 0) {
-                index += dim(i).stride() * (dim(i).extent() - 1);
+                index += dim(i).stride() * (ptrdiff_t)(dim(i).extent() - 1);
             }
         }
         return index;
@@ -552,7 +552,7 @@ private:
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions(); i++) {
             if (dim(i).stride() > 0) {
-                index += dim(i).stride() * (dim(i).extent() - 1);
+                index += dim(i).stride() * (ptrdiff_t)(dim(i).extent() - 1);
             }
         }
         index += 1;
@@ -1832,7 +1832,7 @@ private:
     HALIDE_ALWAYS_INLINE
         ptrdiff_t
         offset_of(int d, int first, Args... rest) const {
-        return offset_of(d + 1, rest...) + this->buf.dim[d].stride * (first - this->buf.dim[d].min);
+        return offset_of(d + 1, rest...) + (ptrdiff_t)this->buf.dim[d].stride * (first - this->buf.dim[d].min);
     }
 
     HALIDE_ALWAYS_INLINE
@@ -1855,7 +1855,7 @@ private:
     ptrdiff_t offset_of(const int *pos) const {
         ptrdiff_t offset = 0;
         for (int i = this->dimensions() - 1; i >= 0; i--) {
-            offset += this->buf.dim[i].stride * (pos[i] - this->buf.dim[i].min);
+            offset += (ptrdiff_t)this->buf.dim[i].stride * (pos[i] - this->buf.dim[i].min);
         }
         return offset;
     }

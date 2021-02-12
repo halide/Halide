@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
 
     // Ensure the autoscheduler doesn't try to RoundUp the pure loop
     // in g's update definition.
-    p.realize(13, 17);
+    p.realize({13, 17});
 
     printf("Success!\n");
     return 0;

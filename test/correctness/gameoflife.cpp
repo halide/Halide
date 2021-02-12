@@ -54,11 +54,11 @@ int main(int argc, char **argv) {
 
         for (int i = 0; i < 10; i++) {
             input.set(board1);
-            board1 = oneIteration.realize(32, 32);
+            board1 = oneIteration.realize({32, 32});
             input.set(board1);
-            board1 = oneIteration.realize(32, 32);
+            board1 = oneIteration.realize({32, 32});
             input.set(board2);
-            board2 = twoIterations.realize(32, 32);
+            board2 = twoIterations.realize({32, 32});
 
             /*
             for (int y = 0; y < 32; y++) {

@@ -395,7 +395,9 @@ public:
     explicit GeneratorParamBase(const std::string &name);
     virtual ~GeneratorParamBase();
 
-    const std::string name;
+    inline const std::string &name() const {
+        return name_;
+    }
 
     // overload the set() function to call the right virtual method based on type.
     // This allows us to attempt to set a GeneratorParam via a
@@ -465,6 +467,8 @@ protected:
     void fail_wrong_type(const char *type);
 
 private:
+    const std::string name_;
+
     // Generator which owns this GeneratorParam. Note that this will be null
     // initially; the GeneratorBase itself will set this field when it initially
     // builds its info about params. However, since it (generally) isn't
@@ -686,7 +690,7 @@ public:
         } else if (new_value_string == "inlined") {
             this->set(LoopLevel::inlined());
         } else {
-            user_error << "Unable to parse " << this->name << ": " << new_value_string;
+            user_error << "Unable to parse " << this->name() << ": " << new_value_string;
         }
     }
 
@@ -858,20 +862,20 @@ public:
     }
 
     std::string call_to_string(const std::string &v) const override {
-        return "Enum_" + this->name + "_map().at(" + v + ")";
+        return "Enum_" + this->name() + "_map().at(" + v + ")";
     }
 
     std::string get_c_type() const override {
-        return "Enum_" + this->name;
+        return "Enum_" + this->name();
     }
 
     std::string get_default_value() const override {
-        return "Enum_" + this->name + "::" + enum_to_string(enum_map, this->value());
+        return "Enum_" + this->name() + "::" + enum_to_string(enum_map, this->value());
     }
 
     std::string get_type_decls() const override {
         std::ostringstream oss;
-        oss << "enum class Enum_" << this->name << " {\n";
+        oss << "enum class Enum_" << this->name() << " {\n";
         for (auto key_value : enum_map) {
             oss << "  " << key_value.first << ",\n";
         }
@@ -880,10 +884,10 @@ public:
 
         // TODO: since we generate the enums, we could probably just use a vector (or array!) rather than a map,
         // since we can ensure that the enum values are a nice tight range.
-        oss << "inline HALIDE_NO_USER_CODE_INLINE const std::map<Enum_" << this->name << ", std::string>& Enum_" << this->name << "_map() {\n";
-        oss << "  static const std::map<Enum_" << this->name << ", std::string> m = {\n";
+        oss << "inline HALIDE_NO_USER_CODE_INLINE const std::map<Enum_" << this->name() << ", std::string>& Enum_" << this->name() << "_map() {\n";
+        oss << "  static const std::map<Enum_" << this->name() << ", std::string> m = {\n";
         for (auto key_value : enum_map) {
-            oss << "    { Enum_" << this->name << "::" << key_value.first << ", \"" << key_value.first << "\"},\n";
+            oss << "    { Enum_" << this->name() << "::" << key_value.first << ", \"" << key_value.first << "\"},\n";
         }
         oss << "  };\n";
         oss << "  return m;\n";
@@ -1535,7 +1539,6 @@ protected:
     void set_inputs(const std::vector<StubInput> &inputs);
 
     virtual void set_def_min_max();
-    virtual Expr get_def_expr() const;
 
     void verify_internals() override;
 
@@ -1925,13 +1928,10 @@ protected:
     const TBase def_{TBase()};
     const Expr def_expr_;
 
-    Expr get_def_expr() const override {
-        return def_expr_;
-    }
-
     void set_def_min_max() override {
         for (Parameter &p : this->parameters_) {
             p.set_scalar<TBase>(def_);
+            p.set_default_value(def_expr_);
         }
     }
 
@@ -1943,12 +1943,13 @@ protected:
     // so that pointer (aka handle) Inputs will get cast to uint64.
     template<typename TBase2 = TBase, typename std::enable_if<!std::is_pointer<TBase2>::value>::type * = nullptr>
     static Expr TBaseToExpr(const TBase2 &value) {
-        return Expr(value);
+        return cast<TBase>(Expr(value));
     }
 
     template<typename TBase2 = TBase, typename std::enable_if<std::is_pointer<TBase2>::value>::type * = nullptr>
     static Expr TBaseToExpr(const TBase2 &value) {
-        return Expr((uint64_t)value);
+        user_assert(value == 0) << "Zero is the only legal default value for Inputs which are pointer types.\n";
+        return Expr();
     }
 
 public:
@@ -3279,15 +3280,11 @@ private:
     void get_jit_target_from_environment();
     void get_target_from_environment();
 
-    // Return the Output<Func> or Output<Buffer> with the given name,
-    // which must be a singular (non-array) Func or Buffer output.
-    // If no such name exists (or is non-array), assert; this method never returns an undefined Func.
-    Func get_output(const std::string &n);
-
-    // Return the Output<Func[]> with the given name, which must be an
-    // array-of-Func output. If no such name exists (or is non-array), assert;
-    // this method never returns undefined Funcs.
-    std::vector<Func> get_array_output(const std::string &n);
+    // Return the output with the given name.
+    // If the output is singular (a non-array), return a vector of size 1.
+    // If no such name exists (or is non-array), assert.
+    // This method never returns undefined Funcs.
+    std::vector<Func> get_outputs(const std::string &n);
 
     void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
 
@@ -3685,28 +3682,18 @@ public:
                                             const std::vector<std::vector<Internal::StubInput>> &inputs);
 
     // Output(s)
-    // TODO: identify vars used
-    Func get_output(const std::string &n) const {
-        return generator->get_output(n);
+    std::vector<Func> get_outputs(const std::string &n) const {
+        return generator->get_outputs(n);
     }
 
     template<typename T2>
-    T2 get_output_buffer(const std::string &n) const {
-        return T2(get_output(n), generator);
-    }
-
-    template<typename T2>
-    std::vector<T2> get_array_output_buffer(const std::string &n) const {
-        auto v = generator->get_array_output(n);
+    std::vector<T2> get_output_buffers(const std::string &n) const {
+        auto v = generator->get_outputs(n);
         std::vector<T2> result;
         for (auto &o : v) {
             result.push_back(T2(o, generator));
         }
         return result;
-    }
-
-    std::vector<Func> get_array_output(const std::string &n) const {
-        return generator->get_array_output(n);
     }
 
     static std::vector<StubInput> to_stub_input_vector(const Expr &e) {

@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
     g.print_loop_nest();
 
     // Run the schedule
-    Buffer<uint16_t> out = p.realize(input.width(), input.height());
+    Buffer<uint16_t> out = p.realize({input.width(), input.height()});
 
     printf("Success!\n");
     return 0;

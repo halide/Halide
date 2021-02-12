@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
             g.compute_root();
         }
 
-        Buffer<int32_t> result = h.realize(100);
+        Buffer<int32_t> result = h.realize({100});
 
         for (int i = 0; i < 100; i++) {
             int32_t correct = i * i * i * 2;

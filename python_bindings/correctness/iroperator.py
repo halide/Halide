@@ -44,7 +44,7 @@ def test_select():
                      x == 2, (x * 24),
                      x == 2, 999,  # should be ignored: first condition wins
                              x)
-    b = f.realize(4)
+    b = f.realize([4])
     assert b[0] == 31
     assert b[1] == 1
     assert b[2] == 48
@@ -54,7 +54,7 @@ def test_mux():
     c = hl.Var()
     f = hl.Func()
     f[c] = hl.mux(c, [123, 456, c])
-    b = f.realize(4)
+    b = f.realize([4])
     assert b[0] == 123
     assert b[1] == 456
     assert b[2] == 2
@@ -67,7 +67,7 @@ def test_mux_tuple():
     c = hl.Var()
     g[x] = (123, 456, x)
     f[x, c] = hl.mux(c, g[x])
-    b = f.realize(1, 4)
+    b = f.realize([1, 4])
     assert b[0, 0] == 123
     assert b[0, 1] == 456
     assert b[0, 2] == 0
@@ -80,7 +80,7 @@ def test_minmax():
                      (x == 2) | (x == 4), hl.i32(hl.min(hl.f32(x), hl.f32(3.2), x*hl.f32(2.1))),
                      x == 3,              hl.max(x, x * 3, 1, x * 4),
                                           x)
-    b = f.realize(5)
+    b = f.realize([5])
     assert b[0] == 0
     assert b[1] == 1,b[1]
     assert b[2] == 2

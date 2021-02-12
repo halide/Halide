@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
 
         printf("Case 1 should use %d bytes of shared memory\n", max_elements);
 
-        g.realize(size);
+        g.realize({size});
     }
 
     {
@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
         max_elements *= sizeof(int);
         printf("Case 2 should use %d bytes of shared memory\n", max_elements);
 
-        g.realize(width, height);
+        g.realize({width, height});
     }
 
     {
@@ -117,7 +117,7 @@ int main(int argc, char **argv) {
         max_elements *= (width / tile_width) * (height / tile_height);
         printf("Case 3 should use %d bytes of global memory\n", max_elements);
 
-        g.realize(width, height);
+        g.realize({width, height});
     }
 
     {
@@ -155,7 +155,7 @@ int main(int argc, char **argv) {
         printf("Case 4 should use %d bytes of global memory and %d bytes of shared memory\n",
                heap_bytes, max_elements);
 
-        g.realize(width, height);
+        g.realize({width, height});
     }
 
     printf("Success!\n");

@@ -345,6 +345,8 @@ Stmt Simplify::visit(const Block *op) {
     Stmt rest = op->rest;
 
     if (const AssertStmt *first_assert = first.as<AssertStmt>()) {
+        bool unchanged = first.same_as(op->first);
+
         // Handle an entire sequence of asserts here to avoid a deeply
         // nested stack.  We won't be popping any knowledge until
         // after the end of this chain of asserts, so we can use a
@@ -363,6 +365,7 @@ Stmt Simplify::visit(const Block *op) {
         while ((rest_block = rest.as<Block>()) &&
                (first_assert = rest_block->first.as<AssertStmt>())) {
             first = mutate(first_assert);
+            unchanged &= first.same_as(first_assert);
             rest = rest_block->rest;
             result.push_back(first);
             if ((first_assert = first.as<AssertStmt>())) {
@@ -372,9 +375,15 @@ Stmt Simplify::visit(const Block *op) {
             }
         }
 
-        result.push_back(mutate(rest));
+        Stmt new_rest = mutate(rest);
+        unchanged &= new_rest.same_as(rest);
 
-        return Block::make(result);
+        if (unchanged) {
+            return op;
+        } else {
+            result.push_back(new_rest);
+            return Block::make(result);
+        }
 
     } else {
         rest = mutate(op->rest);
