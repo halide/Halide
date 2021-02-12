@@ -3054,8 +3054,7 @@ public:
     // Return the ExternsMap for the Generator, if any. (TODO: probably always a nop for G2)
     virtual std::shared_ptr<GeneratorContext::ExternsMap> gen_get_externs_map() = 0;
 
-    // (TODO: definitely a nop for G2)
-    virtual void stubgen_generate(const std::vector<std::vector<Internal::StubInput>> &inputs) = 0;
+    virtual void stubgen_set_inputs(const std::vector<std::vector<StubInput>> &inputs) = 0;
 
     // If the Generator is not capable of emitting a Stub, return false.
     // (TODO: definitely a nop for G2)
@@ -3119,7 +3118,7 @@ public:
     void emit_cpp_stub(const std::string &stub_file_path);
 
     /**
-     * set_inputs is a variadic wrapper around set_inputs_vector, which makes usage much simpler
+     * set_inputs is a variadic wrapper around stubgen_set_inputs, which makes usage much simpler
      * in many cases, as it constructs the relevant entries for the vector for you, which
      * is often a bit unintuitive at present. The arguments are passed in Input<>-declaration-order,
      * and the types must be compatible. Array inputs are passed as std::vector<> of the relevant type.
@@ -3130,12 +3129,12 @@ public:
      */
     template<typename... Args>
     void set_inputs(const Args &... args) {
-        // set_inputs_vector() checks this too, but checking it here allows build_inputs() to avoid out-of-range checks.
+        // stubgen_set_inputs() checks this too, but checking it here allows build_inputs() to avoid out-of-range checks.
         GeneratorParamInfo &pi = this->param_info();
         user_assert(sizeof...(args) == pi.inputs().size())
             << "Expected exactly " << pi.inputs().size()
             << " inputs but got " << sizeof...(args) << "\n";
-        set_inputs_vector(build_inputs(std::forward_as_tuple<const Args &...>(args...), make_index_sequence<sizeof...(Args)>{}));
+        stubgen_set_inputs(build_inputs(std::forward_as_tuple<const Args &...>(args...), make_index_sequence<sizeof...(Args)>{}));
     }
 
     Realization realize(std::vector<int32_t> sizes) {
@@ -3327,8 +3326,6 @@ private:
     void get_jit_target_from_environment();
     void get_target_from_environment();
 
-    void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
-
     static void check_input_is_singular(Internal::GeneratorInputBase *in);
     static void check_input_is_array(Internal::GeneratorInputBase *in);
     static void check_input_kind(Internal::GeneratorInputBase *in, Internal::IOKind kind);
@@ -3482,7 +3479,7 @@ public:
     std::shared_ptr<ExternsMap> gen_get_externs_map() override;
     Pipeline gen_build_pipeline() override;
 
-    void stubgen_generate(const std::vector<std::vector<Internal::StubInput>> &inputs) override;
+    void stubgen_set_inputs(const std::vector<std::vector<StubInput>> &inputs) override;
     bool stubgen_emit_cpp_stub(const std::string &stub_file_path) override;
 
 public:

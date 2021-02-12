@@ -578,7 +578,7 @@ void StubEmitter::emit() {
     indent_level++;
     stream << get_indent() << "std::shared_ptr<Halide::Internal::IGenerator> generator = halide_register_generator::" << generator_registered_name << "_ns::factory(context);\n";
     stream << get_indent() << "generator->gen_set_constants(generator_params.to_generator_params_map());\n";
-    stream << get_indent() << "generator->stubgen_generate(\n";
+    stream << get_indent() << "generator->stubgen_set_inputs(\n";
     indent_level++;
     stream << get_indent() << "{\n";
     indent_level++;
@@ -590,7 +590,7 @@ void StubEmitter::emit() {
     stream << get_indent() << "}\n";
     indent_level--;
     stream << get_indent() << ");\n";
-
+    stream << get_indent() << "generator->gen_build_pipeline();\n";
     stream << get_indent() << "return {\n";
     indent_level++;
     for (const auto &out : out_info) {
@@ -1418,19 +1418,6 @@ void GeneratorBase::set_generator_names(const std::string &registered_name, cons
     generator_stub_name = stub_name;
 }
 
-void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs) {
-    advance_phase(InputsSet);
-    internal_assert(!inputs_set) << "set_inputs_vector() must be called at most once per Generator instance.\n";
-    GeneratorParamInfo &pi = param_info();
-    user_assert(inputs.size() == pi.inputs().size())
-        << "Expected exactly " << pi.inputs().size()
-        << " inputs but got " << inputs.size() << "\n";
-    for (size_t i = 0; i < pi.inputs().size(); ++i) {
-        pi.inputs()[i]->set_inputs(inputs[i]);
-    }
-    inputs_set = true;
-}
-
 void GeneratorBase::track_parameter_values(bool include_outputs) {
     GeneratorParamInfo &pi = param_info();
     for (auto *input : pi.inputs()) {
@@ -1756,13 +1743,21 @@ Pipeline GeneratorBase::gen_build_pipeline() {
     return build_pipeline();
 }
 
-void GeneratorBase::stubgen_generate(const std::vector<std::vector<Internal::StubInput>> &inputs) {
+void GeneratorBase::stubgen_set_inputs(const std::vector<std::vector<StubInput>> &inputs) {
     if (phase < GeneratorBase::ConfigureCalled) {
         // We might have called it lazily
         call_configure();
     }
-    set_inputs_vector(inputs);
-    (void)build_pipeline();
+    advance_phase(InputsSet);
+    internal_assert(!inputs_set) << "stubgen_set_inputs() must be called at most once per Generator instance.\n";
+    GeneratorParamInfo &pi = param_info();
+    user_assert(inputs.size() == pi.inputs().size())
+        << "Expected exactly " << pi.inputs().size()
+        << " inputs but got " << inputs.size() << "\n";
+    for (size_t i = 0; i < pi.inputs().size(); ++i) {
+        pi.inputs()[i]->set_inputs(inputs[i]);
+    }
+    inputs_set = true;
 }
 
 bool GeneratorBase::stubgen_emit_cpp_stub(const std::string &stub_file_path) {
@@ -2166,10 +2161,10 @@ void generator_test() {
         // Verify that calling GeneratorParam::set() works.
         tester.gp0.set(1);
 
-        tester.set_inputs_vector({{StubInput(42)}});
+        tester.stubgen_set_inputs({{StubInput(42)}});
         internal_assert(tester.phase == GeneratorBase::InputsSet);
 
-        // tester.set_inputs_vector({{StubInput(43)}});  // This will assert-fail.
+        // tester.stubgen_set_inputs({{StubInput(43)}});  // This will assert-fail.
 
         // Also ok to call in this phase.
         tester.gp1.set(2.f);
@@ -2177,13 +2172,13 @@ void generator_test() {
         tester.call_generate();
         internal_assert(tester.phase == GeneratorBase::GenerateCalled);
 
-        // tester.set_inputs_vector({{StubInput(44)}});  // This will assert-fail.
+        // tester.stubgen_set_inputs({{StubInput(44)}});  // This will assert-fail.
         // tester.gp2.set(2);  // This will assert-fail.
 
         tester.call_schedule();
         internal_assert(tester.phase == GeneratorBase::ScheduleCalled);
 
-        // tester.set_inputs_vector({{StubInput(45)}});  // This will assert-fail.
+        // tester.stubgen_set_inputs({{StubInput(45)}});  // This will assert-fail.
         // tester.gp2.set(2);  // This will assert-fail.
         // tester.sp2.set(202);  // This will assert-fail.
     }
@@ -2229,12 +2224,12 @@ void generator_test() {
         // Verify that calling GeneratorParam::set() works.
         tester.gp0.set(1);
 
-        // set_inputs_vector() can't be called on an old-style Generator;
+        // stubgen_set_inputs() can't be called on an old-style Generator;
         // that's OK, since we can skip from Created -> GenerateCalled anyway
-        // tester.set_inputs_vector({{StubInput(42)}});
+        // tester.stubgen_set_inputs({{StubInput(42)}});
         // internal_assert(tester.phase == GeneratorBase::InputsSet);
 
-        // tester.set_inputs_vector({{StubInput(43)}});  // This will assert-fail.
+        // tester.stubgen_set_inputs({{StubInput(43)}});  // This will assert-fail.
 
         // Also ok to call in this phase.
         tester.gp1.set(2.f);
@@ -2250,7 +2245,7 @@ void generator_test() {
         tester.build_pipeline();
         internal_assert(tester.phase == GeneratorBase::ScheduleCalled);
 
-        // tester.set_inputs_vector({{StubInput(45)}});  // This will assert-fail.
+        // tester.stubgen_set_inputs({{StubInput(45)}});  // This will assert-fail.
         // tester.gp2.set(2);  // This will assert-fail.
         // tester.sp2.set(202);  // This will assert-fail.
     }
@@ -2362,7 +2357,7 @@ void generator_test() {
     gp_tester.init_from_context(context);
     // Accessing the GeneratorParam will assert-fail if we
     // don't do some minimal setup here.
-    gp_tester.set_inputs_vector({});
+    gp_tester.stubgen_set_inputs({});
     gp_tester.call_generate();
     gp_tester.call_schedule();
     auto &gp = gp_tester.gp;

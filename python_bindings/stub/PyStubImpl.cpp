@@ -168,7 +168,8 @@ py::object generate_impl(GeneratorFactory factory,
     }
 
     generator->gen_set_constants(generator_params);
-    generator->stubgen_generate(inputs);
+    generator->stubgen_set_inputs(inputs);
+    generator->gen_build_pipeline();
 
     std::vector<std::vector<Func>> outputs;
     for (const auto &output_name : output_names) {
