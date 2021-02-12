@@ -3280,15 +3280,11 @@ private:
     void get_jit_target_from_environment();
     void get_target_from_environment();
 
-    // Return the Output<Func> or Output<Buffer> with the given name,
-    // which must be a singular (non-array) Func or Buffer output.
-    // If no such name exists (or is non-array), assert; this method never returns an undefined Func.
-    Func get_output(const std::string &n);
-
-    // Return the Output<Func[]> with the given name, which must be an
-    // array-of-Func output. If no such name exists (or is non-array), assert;
-    // this method never returns undefined Funcs.
-    std::vector<Func> get_array_output(const std::string &n);
+    // Return the output with the given name.
+    // If the output is singular (a non-array), return a vector of size 1.
+    // If no such name exists (or is non-array), assert.
+    // This method never returns undefined Funcs.
+    std::vector<Func> get_outputs(const std::string &n);
 
     void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
 
@@ -3686,28 +3682,18 @@ public:
                                             const std::vector<std::vector<Internal::StubInput>> &inputs);
 
     // Output(s)
-    // TODO: identify vars used
-    Func get_output(const std::string &n) const {
-        return generator->get_output(n);
+    std::vector<Func> get_outputs(const std::string &n) const {
+        return generator->get_outputs(n);
     }
 
     template<typename T2>
-    T2 get_output_buffer(const std::string &n) const {
-        return T2(get_output(n), generator);
-    }
-
-    template<typename T2>
-    std::vector<T2> get_array_output_buffer(const std::string &n) const {
-        auto v = generator->get_array_output(n);
+    std::vector<T2> get_output_buffers(const std::string &n) const {
+        auto v = generator->get_outputs(n);
         std::vector<T2> result;
         for (auto &o : v) {
             result.push_back(T2(o, generator));
         }
         return result;
-    }
-
-    std::vector<Func> get_array_output(const std::string &n) const {
-        return generator->get_array_output(n);
     }
 
     static std::vector<StubInput> to_stub_input_vector(const Expr &e) {

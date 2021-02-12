@@ -133,7 +133,6 @@ $(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.a $(BIN)/runtime.a
 
 # TODO: In the optimal case, we'd do %.run on all our generators. Unfortunately,
 # every generator needs its own settings. See https://github.com/halide/Halide/issues/2977.
-.PHONY: test_correctness_bit_test test_correctness_addconstant_test test_correctness_pystub test_correctness_user_context
 test_correctness_addconstant_test: addconstant.run ;
 test_correctness_bit_test: bit.run ;
 test_correctness_user_context_test: user_context.run ;
