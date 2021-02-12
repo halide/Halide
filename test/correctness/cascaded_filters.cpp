@@ -31,8 +31,7 @@ int main(int argc, char **argv) {
     // Add an unreasonable number of specialize() calls, to ensure
     // that various parts of the pipeline don't blow up
     for (int i = 1; i <= 10; i++) {
-        // TODO: Turning this on breaks automatic storage folding.
-        //stages.back().specialize(divisor == i);
+        stages.back().specialize(divisor == i);
     }
 
     divisor.set(2);
