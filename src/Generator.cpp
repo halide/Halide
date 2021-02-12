@@ -1377,6 +1377,8 @@ GeneratorParamInfo &GeneratorBase::param_info() {
     return *param_info_ptr;
 }
 
+namespace {
+
 template<typename T>
 T *find_by_name(const std::string &name, const std::vector<T *> &v) {
     for (T *t : v) {
