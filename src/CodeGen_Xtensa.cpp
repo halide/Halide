@@ -237,6 +237,7 @@ using uint1x32_t = vboolN;
 using uint1x64_t = vbool2N;
 using float16 = xb_vecN_2xf32;
 using int8x4_t = int32_t;
+using int8x8_t = xb_int64pr;
 
 // TODO(vksnk): classes below can be templatized (b/173158037).
 class int32x32_t {
@@ -609,6 +610,32 @@ public:
     inline int8x128_t(FromCppVector, const CppVectorType &src1, const CppVectorType &src2) {
         native_vector[0] = src1;
         native_vector[1] = src2;
+    }
+};
+
+class int24x128_t {
+    typedef int24_t ElementType;
+    typedef xb_vec2Nx24 CppVectorType;
+    static const int Lanes = 128;
+public:
+
+    CppVectorType native_vector[2];
+
+    enum Empty { empty };
+    inline int24x128_t(Empty) {}
+
+    inline int24x128_t(const int24x128_t &in) {
+        native_vector[0] = in.native_vector[0];
+        native_vector[1] = in.native_vector[1];
+    }
+
+    enum FromCppVector { from_native_vector };
+    inline int24x128_t(FromCppVector, const CppVectorType &src1, const CppVectorType &src2) {
+        native_vector[0] = src1;
+        native_vector[1] = src2;
+    }
+    static int24x128_t concat(const int24x64_t& a, const int24x64_t& b) {
+        return int24x128_t(from_native_vector, a, b);
     }
 };
 
@@ -1264,6 +1291,16 @@ HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_quad_mul_add_i24(
   return r;
 }
 
+HALIDE_ALWAYS_INLINE int24x128_t halide_xtensa_dual_widen_quad_mul_add_i24(
+                                            const int24x128_t& acc, 
+                                            const int8x256_t& a,
+                                            const int8x8_t& s
+                                            ) {
+  int24x128_t r(acc);
+  IVP_DMULQA2N8XR8(r.native_vector[1], r.native_vector[0], a.native_vector[3], a.native_vector[2], a.native_vector[1], a.native_vector[0], s);
+  return r;
+}
+
 HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_pair_mul_i48(const int16x32_t& a, const int16x32_t& b,
                                                                   const int16x32_t& c, const int16x32_t& d) {
   return IVP_MULPNX16(a, b, c, d);
@@ -1863,6 +1900,14 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         return rhs.str();
     }
 
+    if (op->name == "halide_xtensa_dual_extract_i32") {
+        rhs << "IVP_DEXTRPRN_2X32("
+            << "IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(" + args[0] + ")), "
+            << "IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(" + args[1] + ")), "
+            << args[2] + ", " + args[3] + ");";
+        return rhs.str();
+    }
+
     if (op->name == "halide_xtensa_copy_1d") {
         args[0] = print_name(op->args[0].as<StringImm>()->value);
         args[1] = print_expr(op->args[1]);
@@ -2046,9 +2091,9 @@ void CodeGen_Xtensa::visit(const Broadcast *op) {
         // Assigning a constant to wide vector is tricky.
         if (is_const_zero(op->value)) {
             if (op->type.bits() == 24) {
-                rhs = "IVP_MUL2NX8(0, 0)";
+                rhs = "IVP_ZERO2NX24()";
             } else if (op->type.bits() == 48) {
-                rhs = "IVP_MULNX16(0, 0)";
+                rhs = "IVP_ZERONX48()";
             }
         } else {
             rhs = std::to_string(op->value.as<IntImm>()->value);
@@ -2658,9 +2703,17 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
     ostringstream rhs;
     if (op->type.is_scalar()) {
         rhs << src << "[" << op->indices[0] << "]";
-    // } else if (op->is_concat()) {
-    //     // Do nothing if it's just concat.
-    //     return;
+    } else if (op->is_concat()) {
+        // Do nothing if it's just concat.
+        return;
+    } else if (op->type.bits() == 24 && op->vectors[0].type().lanes() == 128 && op->type.is_int()) {
+        if (op->is_slice() && op->slice_begin() == 0 && op->slice_stride() == 1 && op->indices.size() == 64) {
+            rhs << src << ".native_vector[0]";
+        }
+        if (op->is_slice() && op->slice_begin() == 64 &&
+            op->slice_stride() == 1 && op->indices.size() == 64) {
+            rhs << src << ".native_vector[1]";
+        }
     } else {
         string indices_name = unique_name('_');
         stream << get_indent() << "const int32_t " << indices_name << "[" << op->indices.size() << "] = { " << with_commas(op->indices) << " };\n";

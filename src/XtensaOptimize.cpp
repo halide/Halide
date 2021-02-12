@@ -283,6 +283,157 @@ Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, IR
     return op;
 }
 
+/** A helper for block_to_vector below. */
+void block_to_vector(const Stmt &s, vector<Stmt> &v) {
+    const Block *b = s.as<Block>();
+    if (!b) {
+        v.push_back(s);
+    } else {
+        block_to_vector(b->first, v);
+        block_to_vector(b->rest, v);
+    }
+}
+
+/** Unpack a block into its component Stmts. */
+vector<Stmt> block_to_vector(const Stmt &s) {
+    vector<Stmt> result;
+    block_to_vector(s, result);
+    return result;
+}
+
+class DualQuadMulMutator : public IRGraphMutator {
+private:
+    using IRGraphMutator::visit;
+
+    Expr visit(const Shuffle *op) override {
+
+        // Merge concat extract i32 calls into one dual call
+        if (op->is_concat() && op->vectors.size() == 2) {
+            const Call *call0 = op->vectors[0].as<Call>();
+            const Call *call1 = op->vectors[1].as<Call>();
+            if (call0 && call0->name == "halide_xtensa_extract_i32" && 
+                call1 && call1->name == "halide_xtensa_extract_i32") {
+                  vector<Expr> dual_args = {
+                      call1->args[0],   // vector1
+                      call0->args[0],   // vector0
+                      call1->args[1],   // index1
+                      call0->args[1]    // index0
+                  };
+                  return Call::make(Int(8, 8), "halide_xtensa_dual_extract_i32",
+                                    dual_args, Call::PureExtern);
+            }
+        }
+
+        return IRGraphMutator::visit(op);
+    };
+
+    Stmt visit(const Block* op) override {
+
+        // Merge two Quad Mul calls into one dual call
+        vector<Stmt> new_stmts;
+
+        // Used to keep track of index of first statement
+        int first_index = -1;
+
+        // Find pairs of Quad Mul statements to merge in rolling window of 2
+        vector<Stmt> stmts = block_to_vector(op);
+        for(int i = 0; i < (int)stmts.size(); ++i) {
+
+            // Case 1: Statement without Quad Mul
+
+            // Quad Mul is a call contained in store
+            const Store *store1 = stmts[i].as<Store>();
+            const Call *call1 = store1 ? store1->value.as<Call>() : nullptr;
+            if (!call1 || call1->name != "halide_xtensa_widen_quad_mul_add_i24") {
+                // Last statement was a Quad Mul
+                if (first_index >= 0) {
+                    // Abandon search for merge and save unchanged as currently
+                    // only merging back to back calls
+                    new_stmts.push_back(stmts[first_index]);
+                    first_index = -1;
+                }
+                new_stmts.push_back(stmts[i]);
+                continue;
+            }
+
+            // Case 2: First Quad Mul
+
+            if (first_index < 0) {
+                // Save index and move on to look for the second
+                first_index = i;
+                continue;
+            }
+
+            // Case 3: Second Quad Mul
+
+            // Fetch the handles to first call from saved index
+            const Store *store0 = stmts[first_index].as<Store>();
+            const Call *call0 = store0->value.as<Call>();
+            internal_assert(call0->name == "halide_xtensa_widen_quad_mul_add_i24");
+
+            // Vector inputs from both Quad Mul calls must match
+            // (there are multiple arg format versions, but MatchXtensaPattern
+            //  should be consolidating to the 3 arg version with concat vectors)
+            if (call0->args.size() != 3 || !equal(call0->args[1], call1->args[1])) {
+                // Abandon merge of first Quad Mul and set current as the first
+                new_stmts.push_back(stmts[first_index]);
+                first_index = i;
+                continue;
+            }
+
+            // Quad Mul can be merged
+
+            // Update stores to take from dual call result
+            std::string dual_name = unique_name("_");
+            Expr dual_24x64 = Variable::make(Type(Type::Int, 24, call0->type.lanes()+call1->type.lanes()),
+                                             dual_name);
+            Expr slice0 = Shuffle::make_slice(dual_24x64, 0, 1, call0->type.lanes());
+            Expr slice1 = Shuffle::make_slice(dual_24x64, call0->type.lanes(), 1, call1->type.lanes());
+            Stmt new_store0 = Store::make(store0->name, slice0, store0->index,
+                                          store0->param, store0->predicate, store0->alignment);
+            Stmt new_store1 = Store::make(store1->name, slice1, store1->index,
+                                          store1->param, store1->predicate, store1->alignment);
+            Stmt stores = Block::make(new_store0, new_store1);
+
+            // Collect inputs for dual call
+            std::vector<Expr> dual_qm_args = {
+                concat({call0->args[0], call1->args[0]}),
+                call0->args[1],
+                // this will get converted to dual extract in recursive mutate
+                concat({call0->args[2], call1->args[2]})
+            };
+
+            // Insert LetStmt with dual call with store scope
+            new_stmts.push_back(
+                LetStmt::make(
+                    dual_name,
+                    call("halide_xtensa_dual_widen_quad_mul_add_i24", dual_24x64, dual_qm_args),
+                    stores
+                )
+            );
+
+            first_index = -1;
+        }
+
+        // Recursively mutate and check size to see if there is any merge
+        for (Stmt &i : new_stmts) {
+            i = mutate(i);
+        }
+        bool unchanged = new_stmts.size() == stmts.size();
+        if (unchanged) {
+            for (int i = 0; i < (int)new_stmts.size(); ++i) {
+                unchanged = unchanged && new_stmts[i].same_as(stmts[i]);
+            }
+        }
+
+        if (unchanged) {
+            return op;
+        } else {
+            return Block::make(new_stmts);
+        }
+    }
+};
+
 class MatchXtensaPatterns : public IRGraphMutator {
 private:
     using IRGraphMutator::visit;
@@ -850,7 +1001,6 @@ private:
                                 })
                             })
             },
-
 
             {"halide_xtensa_widen_quad_mul_add_i24", 
                         call("halide_xtensa_widen_pair_mul_add_i24", wild_i24x, {
@@ -1437,6 +1587,7 @@ Stmt match_xtensa_patterns(Stmt s) {
     for (int ix = 0; ix < 10; ix++) {
         s = MatchXtensaPatterns().mutate(s);
     }
+
     // Split to the native vectors sizes.
     s = substitute_in_all_lets(s);
     s = SplitVectorsToNativeSizes().mutate(s);
@@ -1445,6 +1596,7 @@ Stmt match_xtensa_patterns(Stmt s) {
     s = MatchXtensaPatterns().mutate(s);
     // NOTE(vksnk): looks like we shouldn't do simplification in the end.
     // s = simplify(common_subexpression_elimination(s));
+    s = DualQuadMulMutator().mutate(s);
     s = common_subexpression_elimination(s);
 
     debug(0) << s << "\n";
