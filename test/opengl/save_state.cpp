@@ -35,12 +35,17 @@ public:
                                         TexCoordOut = TexCoordIn; \
                                     }";
 
-        const char *fragmentShader = " \
-                                      varying vec2 TexCoordOut; \
-                                      uniform sampler2D Texture; \
-                                      void main(void) { \
-                                          gl_FragColor = texture2D(Texture, TexCoordOut); \
-                                      }";
+        const char *fragmentShader =
+            "#ifdef GL_FRAGMENT_PRECISION_HIGH\n"
+            "precision highp float;\n"
+            "#else\n"
+            "precision mediump float;\n"
+            "#endif\n"
+            "varying vec2 TexCoordOut;\n"
+            "uniform sampler2D Texture;\n"
+            "void main(void) {\n"
+            "    gl_FragColor = texture2D(Texture, TexCoordOut);\n"
+            "}\n";
 
         GLuint handle = glCreateProgram();
         glAttachShader(handle, compileShader("vertex", vertexShader, GL_VERTEX_SHADER));

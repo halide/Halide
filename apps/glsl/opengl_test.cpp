@@ -55,4 +55,9 @@ int main(int argc, char *argv[]) {
     test_blur();
     test_ycc();
     test_device_sync();
+
+    // This is supposed to be called as an __attribute__((destructor)), but
+    // some EGL implementations can start to unload their libraries before those
+    // destructors run. On such systems, doing this outside of main() segfaults.
+    halide_device_release(nullptr, halide_opengl_device_interface());
 }

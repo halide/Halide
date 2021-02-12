@@ -73,11 +73,12 @@
 // List of all OpenGL functions used by the runtime, which may not
 // exist due to an older or less capable version of GL. In using any
 // of these functions, code must test if they are nullptr.
-#define OPTIONAL_GL_FUNCTIONS                            \
-    GLFUNC(PFNGLGENVERTEXARRAYS, GenVertexArrays);       \
-    GLFUNC(PFNGLBINDVERTEXARRAY, BindVertexArray);       \
-    GLFUNC(PFNGLDELETEVERTEXARRAYS, DeleteVertexArrays); \
-    GLFUNC(PFNDRAWBUFFERS, DrawBuffers)
+#define OPTIONAL_GL_FUNCTIONS                                \
+    GLFUNC(PFNGLDEBUGMESSAGECALLBACK, DebugMessageCallback); \
+    GLFUNC(PFNGLGENVERTEXARRAYS, GenVertexArrays);           \
+    GLFUNC(PFNGLBINDVERTEXARRAY, BindVertexArray);           \
+    GLFUNC(PFNGLDELETEVERTEXARRAYS, DeleteVertexArrays);     \
+    GLFUNC(PFNDRAWBUFFERS, DrawBuffers);
 
 // ---------- Types ----------
 
@@ -126,6 +127,69 @@ WEAK const char *gl_error_name(int32_t err) {
     }
     return result;
 }
+
+#ifdef DEBUG_RUNTIME
+static void halide_gl_debug_callback(GLenum source,
+                                     GLenum type,
+                                     GLuint id,
+                                     GLenum severity,
+                                     GLsizei length,
+                                     const GLchar *message,
+                                     void *userParam) {
+    const char *type_str;
+    switch (type) {
+    case GL_DEBUG_TYPE_ERROR:
+        type_str = "Error ";
+        break;
+    case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+        type_str = "Deprecated Behaviour ";
+        break;
+    case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+        type_str = "Undefined Behaviour ";
+        break;
+    case GL_DEBUG_TYPE_PORTABILITY:
+        type_str = "Portability Issue ";
+        break;
+    case GL_DEBUG_TYPE_PERFORMANCE:
+        type_str = "Performance Issue ";
+        break;
+    case GL_DEBUG_TYPE_OTHER:
+        type_str = "Misc Message ";
+        break;
+    case GL_DEBUG_TYPE_MARKER:
+        type_str = "Marker Hit ";
+        break;
+    default:
+        type_str = "Unknown Message Type ";
+        break;
+    }
+
+    const char *severity_str;
+    switch (severity) {
+    case GL_DEBUG_SEVERITY_NOTIFICATION:
+        severity_str = "(Notification): ";
+        break;
+
+    case GL_DEBUG_SEVERITY_LOW:
+        severity_str = "(Low Severity): ";
+        break;
+
+    case GL_DEBUG_SEVERITY_MEDIUM:
+        severity_str = "(Medium Severity): ";
+        break;
+
+    case GL_DEBUG_SEVERITY_HIGH:
+        severity_str = "(High Severity): ";
+        break;
+
+    default:
+        severity_str = "(Unknown Severity): ";
+        break;
+    }
+
+    debug(userParam) << type_str << severity_str << message << "\n";
+}
+#endif
 
 struct HalideMalloc {
     ALWAYS_INLINE HalideMalloc(void *user_context, size_t size)
@@ -198,6 +262,7 @@ struct GlobalState {
     bool have_vertex_array_objects;
     bool have_texture_rg;
     bool have_texture_float;
+    bool have_color_buffer_float;
     bool have_texture_rgb8_rgba8;
 
     // Various objects shared by all filter kernels
@@ -621,6 +686,14 @@ WEAK void init_extensions(void *user_context) {
     }
     load_gl_func(user_context, "glDrawBuffers", (void **)&global_state.DrawBuffers, false);
 
+#ifdef DEBUG_RUNTIME
+    load_gl_func(user_context, "glDebugMessageCallback", (void **)&global_state.DebugMessageCallback, false);
+    if (global_state.DebugMessageCallback) {
+        global_state.Enable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        global_state.DebugMessageCallback(halide_gl_debug_callback, user_context);
+    }
+#endif
+
     global_state.have_texture_rg =
         global_state.major_version >= 3 ||
         (global_state.profile == OpenGL &&
@@ -639,6 +712,11 @@ WEAK void init_extensions(void *user_context) {
          extension_supported(user_context, "GL_ARB_texture_float")) ||
         (global_state.profile == OpenGLES &&
          extension_supported(user_context, "GL_OES_texture_float"));
+
+    global_state.have_color_buffer_float =
+        global_state.profile == OpenGL ||
+        extension_supported(user_context, "GL_EXT_color_buffer_float") ||
+        extension_supported(user_context, "GL_ARB_color_buffer_float");
 }
 
 WEAK const char *parse_int(const char *str, int *val) {
@@ -711,7 +789,8 @@ WEAK int halide_opengl_init(void *user_context) {
         << "  vertex_array_objects: " << (global_state.have_vertex_array_objects ? "yes\n" : "no\n")
         << "  texture_rg: " << (global_state.have_texture_rg ? "yes\n" : "no\n")
         << "  have_texture_rgb8_rgba8: " << (global_state.have_texture_rgb8_rgba8 ? "yes\n" : "no\n")
-        << "  texture_float: " << (global_state.have_texture_float ? "yes\n" : "no\n");
+        << "  texture_float: " << (global_state.have_texture_float ? "yes\n" : "no\n")
+        << "  color_buffer_float: " << (global_state.have_color_buffer_float ? "yes\n" : "no\n");
 
     // Initialize framebuffer.
     global_state.GenFramebuffers(1, &global_state.framebuffer_id);
@@ -825,32 +904,37 @@ WEAK bool get_texture_format(void *user_context, halide_buffer_t *buf,
         return false;
     }
 
-    switch (global_state.profile) {
-    case OpenGLES:
-        // For OpenGL ES, the texture format has to match the pixel format
-        // since there no conversion is performed during texture transfers.
-        // See OES_texture_float.
-        *internal_format = *format;
-        break;
-    case OpenGL:
-        // For desktop OpenGL, the internal format specifiers include the
-        // precise data type, see ARB_texture_float.
-        if (*type == GL_FLOAT) {
+    if (*type == GL_FLOAT) {
+        if (!global_state.have_color_buffer_float) {
+            error(user_context) << "This system lacks support for float framebuffers";
+            return false;
+        }
+
+        if (global_state.profile == OpenGL) {
+            *internal_format = GL_RGBA32F;
+        } else {
+            // See: https://www.khronos.org/registry/OpenGL/specs/es/3.2/es_spec_3.2.pdf
+            // Refer to table 8.10
             switch (*format) {
             case GL_RED:
+                *internal_format = GL_R32F;
+                break;
             case GL_RG:
+                *internal_format = GL_RG32F;
+                break;
             case GL_RGB:
+                error(user_context) << "OpenGL ES does not allow rendering to RGB (only R, RG, RGBA supported)";
+                return false;
             case GL_RGBA:
                 *internal_format = GL_RGBA32F;
                 break;
             default:
-                error(user_context) << "OpenGL: Cannot select internal format for format " << *format;
-                return false;
+                error(user_context) << "Invalid format " << (*format);
+                break;
             }
-        } else {
-            *internal_format = *format;
         }
-        break;
+    } else {
+        *internal_format = *format;
     }
 
     return true;

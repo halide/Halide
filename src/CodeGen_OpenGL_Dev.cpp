@@ -1045,6 +1045,8 @@ void CodeGen_GLSL::add_kernel(const Stmt &stmt, const string &name,
     if (is_opengl_es(target)) {
         stream << "#ifdef GL_FRAGMENT_PRECISION_HIGH\n"
                << "precision highp float;\n"
+               << "#else\n"
+               << "precision mediump float;\n"
                << "#endif\n";
     }
 
