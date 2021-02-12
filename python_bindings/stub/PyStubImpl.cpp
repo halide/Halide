@@ -104,8 +104,8 @@ py::object generate_impl(GeneratorFactory factory,
                          const py::kwargs &kwargs) {
     auto generator = factory(context);
 
-    auto input_names = generator->gen_get_inputs();
-    auto output_names = generator->gen_get_outputs();
+    auto input_names = generator->gen_get_input_names();
+    auto output_names = generator->gen_get_output_names();
     _halide_user_assert(!output_names.empty())
         << "Generators that use build() (instead of generate()+Output<>) "
            "are not supported in the Python bindings.";

@@ -3004,19 +3004,27 @@ class IGenerator {
 public:
     virtual ~IGenerator() = default;
 
-    // Return a list of the known names for inputs and outputs, in the correct order.
-    // Always legal to call on any IGenerator instance, regardless of what other methods
-    // have been called.
-    virtual std::vector<std::string> gen_get_inputs() = 0;
+    // Return the Target, autoscheduler flag, and MachineParams that this Generator
+    // was created with. Always legal to call on any IGenerator instance,
+    // regardless of what other methods have been called.
+    virtual Target gen_get_target() = 0;
+    virtual bool gen_get_auto_schedule() = 0;
+    virtual MachineParams gen_get_machine_params() = 0;
 
-    // Return a list of the known names for outputs, in the correct order.
+    // Return a list of the names for inputs, in the correct order.
+    // If this is called after add_input(), the added inputs will be returned.
     // Always legal to call on any IGenerator instance, regardless of what other methods
     // have been called.
-    virtual std::vector<std::string> gen_get_outputs() = 0;
+    virtual std::vector<std::string> gen_get_input_names() = 0;
+
+    // Return a list of the names for outputs, in the correct order.
+    // If this is called after add_output(), the added inputs will be returned.
+    // Always legal to call on any IGenerator instance, regardless of what other methods
+    // have been called.
+    virtual std::vector<std::string> gen_get_output_names() = 0;
 
     // Return the current name & values for all known GeneratorParams in this Generator.
-    // Synthetic params that are writable will be included (but not synthetic params that
-    // are hardcoded and thus not settable).
+    // (Synthetic params are excluded and will never be returned here.)
     // Always legal to call on any IGenerator instance, regardless of what other methods
     // have been called.
     virtual GeneratorParamsMap gen_get_constants() = 0;
@@ -3025,14 +3033,17 @@ public:
     // GP names that aren't known by this IGenerator should trigger an assert-fail.
     // GP names that are present but not settable should trigger an assert-fail.
     // This should be called at once most per IGenerator instance. Calling multiple
-    // times is UB.
+    // times is UB.  TODO: UB? Really?
     virtual void gen_set_constants(const GeneratorParamsMap &params) = 0;
 
-    virtual Target gen_get_target() = 0;
-    virtual bool gen_get_auto_schedule() = 0;
-    virtual MachineParams gen_get_machine_params() = 0;
-
+    // Given the name of an input, return the Parameter(s) for that input.
+    // (Most inputs will have exactly one, but G1 inputs that are declared as arrays
+    // will have multiple.)
     virtual std::vector<Parameter> gen_get_parameters_for_input(const std::string &name) = 0;
+
+    // Given the name of an input, return the Func(s) for that input.
+    // (Most outputs will have exactly one, but G1 outputs that are declared as arrays
+    // will have multiple.)
     virtual std::vector<Func> gen_get_funcs_for_output(const std::string &name) = 0;
 
     virtual Pipeline gen_build_pipeline() = 0;
@@ -3459,8 +3470,8 @@ public:
     bool gen_get_auto_schedule() override;
     MachineParams gen_get_machine_params() override;
 
-    std::vector<std::string> gen_get_inputs() override;
-    std::vector<std::string> gen_get_outputs() override;
+    std::vector<std::string> gen_get_input_names() override;
+    std::vector<std::string> gen_get_output_names() override;
 
     std::vector<Parameter> gen_get_parameters_for_input(const std::string &name) override;
     std::vector<Func> gen_get_funcs_for_output(const std::string &name) override;

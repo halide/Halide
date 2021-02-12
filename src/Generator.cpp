@@ -706,7 +706,7 @@ Module build_module(IGenerator &g, const std::string &function_name) {
     }
 
     std::vector<Argument> filter_arguments;
-    for (const auto &i : g.gen_get_inputs()) {
+    for (const auto &i : g.gen_get_input_names()) {
         for (const auto &p : g.gen_get_parameters_for_input(i)) {
             filter_arguments.push_back(to_argument(p));
         }
@@ -717,7 +717,7 @@ Module build_module(IGenerator &g, const std::string &function_name) {
         result.append(map_entry.second);
     }
 
-    for (const std::string &output_name : g.gen_get_outputs()) {
+    for (const std::string &output_name : g.gen_get_output_names()) {
         const std::vector<Func> output_funcs = g.gen_get_funcs_for_output(output_name);
         for (size_t i = 0; i < output_funcs.size(); ++i) {
             const Func &f = output_funcs[i];
@@ -777,7 +777,7 @@ Module build_gradient_module(Halide::Internal::IGenerator &g, const std::string 
     // First: the original inputs. Note that scalar inputs remain scalar,
     // rather being promoted into zero-dimensional buffers.
     std::vector<Argument> gradient_inputs;
-    for (const auto &i : g.gen_get_inputs()) {
+    for (const auto &i : g.gen_get_input_names()) {
         for (const auto &p : g.gen_get_parameters_for_input(i)) {
             gradient_inputs.push_back(to_argument(p));
             debug(DBG) << "    gradient copied input is: " << gradient_inputs.back().name << "\n";
@@ -790,7 +790,7 @@ Module build_gradient_module(Halide::Internal::IGenerator &g, const std::string 
     // - If an output is an Array, we'll have a separate input for each array element.
 
     std::vector<ImageParam> d_output_imageparams;
-    for (const auto &i : g.gen_get_outputs()) {
+    for (const auto &i : g.gen_get_output_names()) {
         for (const auto &f : g.gen_get_funcs_for_output(i)) {
             const Parameter &p = f.output_buffer().parameter();
             const std::string &output_name = p.name();
@@ -831,7 +831,7 @@ Module build_gradient_module(Halide::Internal::IGenerator &g, const std::string 
         Derivative d = propagate_adjoints(original_output, adjoint_func, bounds);
 
         const std::string &output_name = original_output.name();
-        for (const auto &i : g.gen_get_inputs()) {
+        for (const auto &i : g.gen_get_input_names()) {
             for (const auto &p : g.gen_get_parameters_for_input(i)) {
                 const std::string &input_name = p.name();
 
@@ -1687,11 +1687,19 @@ std::vector<std::string> get_names(const T &t) {
 
 }  // namespace
 
-std::vector<std::string> GeneratorBase::gen_get_inputs() {
+std::vector<std::string> GeneratorBase::gen_get_input_names() {
+    if (phase < GeneratorBase::ConfigureCalled) {
+        // ensure that anything added by add_input() is in place
+        call_configure();
+    }
     return get_names(param_info().inputs());
 }
 
-std::vector<std::string> GeneratorBase::gen_get_outputs() {
+std::vector<std::string> GeneratorBase::gen_get_output_names() {
+    if (phase < GeneratorBase::ConfigureCalled) {
+        // ensure that anything added by add_output() is in place
+        call_configure();
+    }
     return get_names(param_info().outputs());
 }
 
@@ -1741,12 +1749,18 @@ std::shared_ptr<GeneratorContext::ExternsMap> GeneratorBase::gen_get_externs_map
 }
 
 Pipeline GeneratorBase::gen_build_pipeline() {
-    this->call_configure();
-    return this->build_pipeline();
+    if (phase < GeneratorBase::ConfigureCalled) {
+        // We might have called it lazily
+        call_configure();
+    }
+    return build_pipeline();
 }
 
 void GeneratorBase::stubgen_generate(const std::vector<std::vector<Internal::StubInput>> &inputs) {
-    call_configure();
+    if (phase < GeneratorBase::ConfigureCalled) {
+        // We might have called it lazily
+        call_configure();
+    }
     set_inputs_vector(inputs);
     (void)build_pipeline();
 }
