@@ -148,22 +148,20 @@ WEAK int halide_opengl_create_context(void *user_context) {
     EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attribs);
     if (context == EGL_NO_CONTEXT) {
         error(user_context) << "Error: eglCreateContext failed: " << eglGetError();
-        return -1;
+        return 1;
     }
 
     EGLint surface_attribs[] = {EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE};
     EGLSurface surface = eglCreatePbufferSurface(display, config, surface_attribs);
     if (surface == EGL_NO_SURFACE) {
         error(user_context) << "Error: Could not create EGL window surface: " << eglGetError();
-        return -1;
+        return 1;
     }
 
     EGLBoolean result = eglMakeCurrent(display, surface, surface, context);
     if (result != EGL_TRUE) {
-        error(user_context) << "eglMakeCurrent fails: "
-                            << " result=" << (int)result
-                            << " eglGetError=" << eglGetError();
-        return -1;
+        error(user_context) << "eglMakeCurrent fails: result=" << (int)result << " eglGetError=" << eglGetError();
+        return 1;
     }
     return 0;
 }
