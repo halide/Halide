@@ -643,7 +643,8 @@ WEAK void init_extensions(void *user_context) {
 
     global_state.have_color_buffer_float =
         global_state.profile == OpenGL ||
-        extension_supported(user_context, "GL_EXT_color_buffer_float");
+        extension_supported(user_context, "GL_EXT_color_buffer_float") ||
+        extension_supported(user_context, "GL_ARB_color_buffer_float");
 }
 
 WEAK const char *parse_int(const char *str, int *val) {
@@ -831,32 +832,37 @@ WEAK bool get_texture_format(void *user_context, halide_buffer_t *buf,
         return false;
     }
 
-    switch (global_state.profile) {
-    case OpenGLES:
-        // For OpenGL ES, the texture format has to match the pixel format
-        // since there no conversion is performed during texture transfers.
-        // See OES_texture_float.
-        *internal_format = *format;
-        break;
-    case OpenGL:
-        // For desktop OpenGL, the internal format specifiers include the
-        // precise data type, see ARB_texture_float.
-        if (*type == GL_FLOAT) {
+    if (*type == GL_FLOAT) {
+        if (!global_state.have_color_buffer_float) {
+            error(user_context) << "This system lacks support for float framebuffers";
+            return false;
+        }
+
+        if (global_state.profile == OpenGL) {
+            *internal_format = GL_RGBA32F;
+        } else {
+            // See: https://www.khronos.org/registry/OpenGL/specs/es/3.2/es_spec_3.2.pdf
+            // Refer to table 8.10
             switch (*format) {
             case GL_RED:
+                *internal_format = GL_R32F;
+                break;
             case GL_RG:
+                *internal_format = GL_RG32F;
+                break;
             case GL_RGB:
+                error(user_context) << "OpenGL ES does not allow rendering to RGB (only R, RG, RGBA supported)";
+                return false;
             case GL_RGBA:
                 *internal_format = GL_RGBA32F;
                 break;
             default:
-                error(user_context) << "OpenGL: Cannot select internal format for format " << *format;
-                return false;
+                error(user_context) << "Invalid format " << (*format);
+                break;
             }
-        } else {
-            *internal_format = *format;
         }
-        break;
+    } else {
+        *internal_format = *format;
     }
 
     return true;
