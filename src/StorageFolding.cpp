@@ -588,14 +588,14 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 // We can't clobber data that will be read later. If
                 // async, the producer can't un-release slots in the
                 // circular buffer.
-                can_fold_forwards = (is_monotonic(min, op->name) == Monotonic::Increasing);
-                can_fold_backwards = (is_monotonic(max, op->name) == Monotonic::Decreasing);
+                can_fold_forwards = (is_monotonic_strong(min, op->name) == Monotonic::Increasing);
+                can_fold_backwards = (is_monotonic_strong(max, op->name) == Monotonic::Decreasing);
                 if (func.schedule().async()) {
                     // Our semaphore acquire primitive can't take
                     // negative values, so we can't un-acquire slots
                     // in the circular buffer.
-                    can_fold_forwards &= (is_monotonic(max_provided, op->name) == Monotonic::Increasing);
-                    can_fold_backwards &= (is_monotonic(min_provided, op->name) == Monotonic::Decreasing);
+                    can_fold_forwards &= (is_monotonic_strong(max_provided, op->name) == Monotonic::Increasing);
+                    can_fold_backwards &= (is_monotonic_strong(min_provided, op->name) == Monotonic::Decreasing);
                     // We need to be able to analyze the required footprint to know how much to release
                     can_fold_forwards &= min_required.defined();
                     can_fold_backwards &= max_required.defined();

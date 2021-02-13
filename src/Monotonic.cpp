@@ -84,27 +84,49 @@ Interval unify(const Interval &a, const Expr &b) {
 // expressions of pos_inf/neg_inf.
 Interval add(const Interval &a, const Interval &b) {
     Interval result;
-    result.min = a.has_lower_bound() && b.has_lower_bound() ? a.min + b.min : Interval::neg_inf();
-    result.max = a.has_upper_bound() && b.has_upper_bound() ? a.max + b.max : Interval::pos_inf();
+    result.min = Interval::make_add(a.min, b.min);
+    result.max = Interval::make_add(a.max, b.max);
     return result;
 }
 
 Interval add(const Interval &a, const Expr &b) {
     Interval result;
-    result.min = a.has_lower_bound() ? a.min + b : Interval::neg_inf();
-    result.max = a.has_upper_bound() ? a.max + b : Interval::pos_inf();
+    result.min = Interval::make_add(a.min, b);
+    result.max = Interval::make_add(a.max, b);
+    return result;
+}
+
+Interval sub(const Interval &a, const Interval &b) {
+    Interval result;
+    result.min = Interval::make_sub(a.min, b.min);
+    result.max = Interval::make_sub(a.max, b.max);
+    return result;
+}
+
+Interval sub(const Interval &a, const Expr &b) {
+    Interval result;
+    result.min = Interval::make_sub(a.min, b);
+    result.max = Interval::make_sub(a.max, b);
     return result;
 }
 
 Interval multiply(const Interval &a, const Expr &b) {
+    if (is_const_zero(b)) {
+        return Interval(b, b);
+    } else if (is_const_one(b)) {
+        return a;
+    }
     Expr x = a.has_lower_bound() ? a.min * b : a.min;
     Expr y = a.has_upper_bound() ? a.max * b : a.max;
     return Interval(Interval::make_min(x, y), Interval::make_max(x, y));
 }
 
 Interval divide(const Interval &a, const Expr &b) {
+    if (is_const_one(b)) {
+        return a;
+    }
     Expr x = a.has_lower_bound() ? a.min / b : a.min;
-    Expr y = a.has_upper_bound() ? (a.max + (abs(b) - 1)) / b : a.max;
+    Expr y = a.has_upper_bound() ? (a.max + simplify(abs(b) - 1)) / b : a.max;
     return Interval(Interval::make_min(x, y), Interval::make_max(x, y));
 }
 
@@ -118,6 +140,24 @@ class DerivativeBounds : public IRVisitor {
     const string &var;
 
     Scope<Interval> scope;
+
+    bool strong;
+
+    void decay_result() {
+        if (!strong) {
+            if (is_constant(result)) {
+                result.min = result.max = make_zero(Int(32));
+            } else if (is_monotonic_increasing(result)) {
+                result.min = make_zero(Int(32));
+                result.max = Interval::pos_inf();
+            } else if (is_monotonic_decreasing(result)) {
+                result.min = Interval::neg_inf();
+                result.max = make_zero(Int(32));
+            } else {
+                result = Interval();
+            }
+        }
+    }
 
     void visit(const IntImm *) override {
         result = constant_interval;
@@ -161,6 +201,7 @@ class DerivativeBounds : public IRVisitor {
             result = Interval::single_point(make_one(Int(32)));
         } else if (scope.contains(op->name)) {
             result = scope.get(op->name);
+            decay_result();
         } else {
             result = constant_interval;
         }
@@ -172,14 +213,16 @@ class DerivativeBounds : public IRVisitor {
         op->b.accept(this);
         Interval rb = result;
         result = add(ra, rb);
+        decay_result();
     }
 
     void visit(const Sub *op) override {
         op->a.accept(this);
         Interval ra = result;
         op->b.accept(this);
-        Interval rb = negate(result);
-        result = add(ra, rb);
+        Interval rb = result;
+        result = sub(ra, rb);
+        decay_result();
     }
 
     void visit(const Mul *op) override {
@@ -196,6 +239,7 @@ class DerivativeBounds : public IRVisitor {
             } else {
                 result = add(multiply(ra, op->b), multiply(rb, op->a));
             }
+            decay_result();
         } else {
             result = Interval();
         }
@@ -213,8 +257,9 @@ class DerivativeBounds : public IRVisitor {
                 // Avoid generating large expressions in the common case of constant b.
                 result = divide(ra, op->b);
             } else {
-                result = divide(add(multiply(ra, op->b), negate(multiply(rb, op->a))), op->b * op->b);
+                result = divide(sub(multiply(ra, op->b), multiply(rb, op->a)), op->b * op->b);
             }
+            decay_result();
         } else {
             result = Interval();
         }
@@ -230,6 +275,7 @@ class DerivativeBounds : public IRVisitor {
         op->b.accept(this);
         Interval rb = result;
         result = unify(ra, rb);
+        decay_result();
     }
 
     void visit(const Max *op) override {
@@ -238,6 +284,7 @@ class DerivativeBounds : public IRVisitor {
         op->b.accept(this);
         Interval rb = result;
         result = unify(ra, rb);
+        decay_result();
     }
 
     void visit_eq(const Expr &a, const Expr &b) {
@@ -268,6 +315,7 @@ class DerivativeBounds : public IRVisitor {
         result = unify(negate(ra), rb);
         result.min = Interval::make_max(result.min, make_const(Int(32), -1));
         result.max = Interval::make_min(result.max, make_one(Int(32)));
+        decay_result();
     }
 
     void visit(const LT *op) override {
@@ -292,6 +340,7 @@ class DerivativeBounds : public IRVisitor {
         op->b.accept(this);
         Interval rb = result;
         result = unify(ra, rb);
+        decay_result();
     }
 
     void visit(const Or *op) override {
@@ -300,11 +349,13 @@ class DerivativeBounds : public IRVisitor {
         op->b.accept(this);
         Interval rb = result;
         result = unify(ra, rb);
+        decay_result();
     }
 
     void visit(const Not *op) override {
         op->a.accept(this);
         result = negate(result);
+        decay_result();
     }
 
     void visit(const Select *op) override {
@@ -319,9 +370,41 @@ class DerivativeBounds : public IRVisitor {
 
         // The result is the unified bounds, added to the "bump" that happens when switching from true to false.
         if (op->type.is_scalar()) {
-            Expr switch_step = simplify(op->true_value - op->false_value);
-            Interval switch_bounds = multiply(rcond, switch_step);
-            result = add(unified, switch_bounds);
+            if (strong) {
+                Expr switch_step = simplify(op->true_value - op->false_value);
+                Interval switch_bounds = multiply(rcond, switch_step);
+                result = add(unified, switch_bounds);
+            } else {
+                if (is_constant(rcond)) {
+                    result = unified;
+                    return;
+                }
+
+                bool true_value_ge_false_value = can_prove(op->true_value >= op->false_value);
+                bool true_value_le_false_value = can_prove(op->true_value <= op->false_value);
+
+                bool switches_from_true_to_false = is_monotonic_decreasing(rcond);
+                bool switches_from_false_to_true = is_monotonic_increasing(rcond);
+
+                if (true_value_ge_false_value && true_value_le_false_value) {
+                    // The true value equals the false value.
+                    result = ra;
+                } else if ((is_monotonic_increasing(unified) || is_constant(unified)) &&
+                           ((switches_from_false_to_true && true_value_ge_false_value) ||
+                            (switches_from_true_to_false && true_value_le_false_value))) {
+                    // Both paths increase, and the condition makes it switch
+                    // from the lesser path to the greater path.
+                    result = Interval(0, Interval::pos_inf());
+                } else if ((is_monotonic_decreasing(unified) || is_constant(unified)) &&
+                           ((switches_from_false_to_true && true_value_le_false_value) ||
+                            (switches_from_true_to_false && true_value_ge_false_value))) {
+                    // Both paths decrease, and the condition makes it switch
+                    // from the greater path to the lesser path.
+                    result = Interval(Interval::neg_inf(), 0);
+                } else {
+                    result = Interval();
+                }
+            }
         } else {
             result = Interval();
         }
@@ -493,24 +576,31 @@ class DerivativeBounds : public IRVisitor {
 public:
     Interval result;
 
-    DerivativeBounds(const std::string &v, const Scope<Interval> &parent)
-        : var(v), result(Interval()) {
+    DerivativeBounds(const std::string &v, const Scope<Interval> &parent, bool strong)
+        : var(v), strong(strong), result(Interval()) {
         scope.set_containing_scope(&parent);
     }
 };
 
 }  // namespace
 
-Interval derivative_bounds(const Expr &e, const std::string &var, const Scope<Interval> &scope) {
+Interval derivative_bounds(const Expr &e, const std::string &var, const Scope<Interval> &scope, bool strong) {
     if (!e.defined()) {
         return Interval();
     }
-    DerivativeBounds m(var, scope);
+    DerivativeBounds m(var, scope, strong);
     e.accept(&m);
     return m.result;
 }
 
-Monotonic is_monotonic(const Expr &e, const std::string &var, const Scope<Monotonic> &scope) {
+Monotonic is_monotonic(const Expr &e, const std::string &var, const Scope<Interval> &scope, bool strong) {
+    if (!e.defined()) {
+        return Monotonic::Unknown;
+    }
+    return to_monotonic(derivative_bounds(e, var, scope, strong));
+}
+
+Monotonic is_monotonic(const Expr &e, const std::string &var, const Scope<Monotonic> &scope, bool strong) {
     if (!e.defined()) {
         return Monotonic::Unknown;
     }
@@ -518,27 +608,47 @@ Monotonic is_monotonic(const Expr &e, const std::string &var, const Scope<Monoto
     for (Scope<Monotonic>::const_iterator i = scope.cbegin(); i != scope.cend(); ++i) {
         intervals_scope.push(i.name(), to_interval(i.value()));
     }
-    return to_monotonic(derivative_bounds(e, var, intervals_scope));
+    return is_monotonic(e, var, intervals_scope, strong);
+}
+
+Monotonic is_monotonic_strong(const Expr &e, const std::string &var) {
+    return is_monotonic(e, var, Scope<Interval>(), true);
 }
 
 namespace {
-void check_increasing(const Expr &e) {
-    internal_assert(is_monotonic(e, "x") == Monotonic::Increasing)
+void check_increasing(const Expr &e, bool only_strong = false) {
+    if (!only_strong) {
+        internal_assert(is_monotonic(e, "x") == Monotonic::Increasing)
+            << "Was supposed to be increasing: " << e << "\n";
+    }
+    internal_assert(is_monotonic(e, "x", Scope<Interval>(), true) == Monotonic::Increasing)
         << "Was supposed to be increasing: " << e << "\n";
 }
 
-void check_decreasing(const Expr &e) {
-    internal_assert(is_monotonic(e, "x") == Monotonic::Decreasing)
+void check_decreasing(const Expr &e, bool only_strong = false) {
+    if (!only_strong) {
+        internal_assert(is_monotonic(e, "x") == Monotonic::Decreasing)
+            << "Was supposed to be decreasing: " << e << "\n";
+    }
+    internal_assert(is_monotonic(e, "x", Scope<Interval>(), true) == Monotonic::Decreasing)
         << "Was supposed to be decreasing: " << e << "\n";
 }
 
-void check_constant(const Expr &e) {
-    internal_assert(is_monotonic(e, "x") == Monotonic::Constant)
+void check_constant(const Expr &e, bool only_strong = false) {
+    if (!only_strong) {
+        internal_assert(is_monotonic(e, "x") == Monotonic::Constant)
+            << "Was supposed to be constant: " << e << "\n";
+    }
+    internal_assert(is_monotonic(e, "x", Scope<Interval>(), true) == Monotonic::Constant)
         << "Was supposed to be constant: " << e << "\n";
 }
 
-void check_unknown(const Expr &e) {
-    internal_assert(is_monotonic(e, "x") == Monotonic::Unknown)
+void check_unknown(const Expr &e, bool only_strong = false) {
+    if (!only_strong) {
+        internal_assert(is_monotonic(e, "x") == Monotonic::Unknown)
+            << "Was supposed to be unknown: " << e << "\n";
+    }
+    internal_assert(is_monotonic(e, "x", Scope<Interval>(), true) == Monotonic::Unknown)
         << "Was supposed to be unknown: " << e << "\n";
 }
 }  // namespace
@@ -583,10 +693,10 @@ void is_monotonic_test() {
     check_unknown(select(x < 2, x, x - 2));
     check_unknown(select(x > 2, -x + 2, -x));
     check_unknown(select(x < 2, -x, -x + 2));
-    check_increasing(select(x > 2, x - 1, x));
-    check_increasing(select(x < 2, x, x - 1));
-    check_decreasing(select(x > 2, -x + 1, -x));
-    check_decreasing(select(x < 2, -x, -x + 1));
+    check_increasing(select(x > 2, x - 1, x), true);
+    check_increasing(select(x < 2, x, x - 1), true);
+    check_decreasing(select(x > 2, -x + 1, -x), true);
+    check_decreasing(select(x < 2, -x, -x + 1), true);
 
     check_unknown(select(x < 2, x, x - 5));
     check_unknown(select(x > 2, x - 5, x));
@@ -602,8 +712,8 @@ void is_monotonic_test() {
 
     check_constant(select(y > 3, y + 23, y - 65));
 
-    check_decreasing(select(2 <= x, 0, 1));
-    check_increasing(select(2 <= x, 0, 1) + x);
+    check_decreasing(select(2 <= x, 0, 1), true);
+    check_increasing(select(2 <= x, 0, 1) + x, true);
 
     std::cout << "is_monotonic test passed" << std::endl;
 }
