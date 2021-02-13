@@ -1359,7 +1359,10 @@ class FindVectorizableExprsInAtomicNode : public IRMutator {
 
     Expr visit(const Call *op) override {
         IRMutator::visit(op);
-        poison |= !op->is_pure();
+        // unsafe_promise_clamped isn't pure because it's not safe to
+        // lift it out of if statements. If *is* safe to lift it out
+        // of atomic nodes though.
+        poison |= !(op->is_pure() || op->is_intrinsic(Call::unsafe_promise_clamped));
         return op;
     }
 
@@ -1581,6 +1584,7 @@ Stmt vectorize_loops(const Stmt &stmt, const map<string, Function> &env, const T
     // TODO: Should this be an earlier pass? It's probably a good idea
     // for non-vectorizing stuff too.
     Stmt s = LiftVectorizableExprsOutOfAllAtomicNodes(env).mutate(stmt);
+    debug(0) << s << "\n";
     s = VectorizeLoops(t).mutate(s);
     s = RemoveUnnecessaryAtomics().mutate(s);
     return s;

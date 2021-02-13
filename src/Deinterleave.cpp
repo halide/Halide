@@ -247,6 +247,7 @@ private:
     Expr visit(const Ramp *op) override {
         int base_lanes = op->base.type().lanes();
         if (base_lanes > 1) {
+            debug(0) << "ELEPHANT: " << base_lanes << " " << lane_stride << " " << starting_lane << "\n";
             if (new_lanes == 1) {
                 int index = starting_lane / base_lanes;
                 Expr expr = op->base + cast(op->base.type(), index) * op->stride;
@@ -254,6 +255,12 @@ private:
                 ScopedValue<int> old_lane_stride(lane_stride, base_lanes);
                 expr = mutate(expr);
                 return expr;
+            } else if (base_lanes == lane_stride &&
+                       starting_lane < base_lanes) {
+                // Base class mutator actually works fine in this case
+                debug(0) << "ELEPHANT\n";
+                ScopedValue<int> old_new_lanes(new_lanes, 1);
+                return IRMutator::visit(op);
             } else {
                 // There is probably a more efficient way to this.
                 return mutate(flatten_nested_ramps(op));
@@ -414,31 +421,13 @@ class Interleaver : public IRMutator {
     bool should_deinterleave = false;
     int num_lanes;
 
-    Expr deinterleave_expr(Expr e) {
-        if (e.type().lanes() <= num_lanes) {
-            // Just scalarize
-            return e;
-        } else if (num_lanes == 2) {
-            Expr a = extract_even_lanes(e, vector_lets);
-            Expr b = extract_odd_lanes(e, vector_lets);
-            return Shuffle::make_interleave({a, b});
-        } else if (num_lanes == 3) {
-            Expr a = extract_mod3_lanes(e, 0, vector_lets);
-            Expr b = extract_mod3_lanes(e, 1, vector_lets);
-            Expr c = extract_mod3_lanes(e, 2, vector_lets);
-            return Shuffle::make_interleave({a, b, c});
-        } else if (num_lanes == 4) {
-            Expr a = extract_even_lanes(e, vector_lets);
-            Expr b = extract_odd_lanes(e, vector_lets);
-            Expr aa = extract_even_lanes(a, vector_lets);
-            Expr ab = extract_odd_lanes(a, vector_lets);
-            Expr ba = extract_even_lanes(b, vector_lets);
-            Expr bb = extract_odd_lanes(b, vector_lets);
-            return Shuffle::make_interleave({aa, ba, ab, bb});
-        } else {
-            // Give up and don't do anything clever for >4
-            return e;
+    Expr deinterleave_expr(const Expr &e) {
+        std::vector<Expr> exprs;
+        for (int i = 0; i < num_lanes; i++) {
+            Scope<> lets;
+            exprs.emplace_back(deinterleave(e, i, num_lanes, e.type().lanes() / num_lanes, lets));
         }
+        return Shuffle::make_interleave(exprs);
     }
 
     template<typename T, typename Body>
@@ -492,6 +481,17 @@ class Interleaver : public IRMutator {
 
     Stmt visit(const LetStmt *op) override {
         return visit_lets<LetStmt, Stmt>(op);
+    }
+
+    Expr visit(const Ramp *op) override {
+        if (op->stride.type().is_vector() &&
+            is_const_one(op->stride)) {
+            // If we deinterleave we'll get ramps of stride 1
+            should_deinterleave = true;
+            num_lanes = op->stride.type().lanes();
+            debug(0) << "ELEPHANT: " << num_lanes << "\n";
+        }
+        return IRMutator::visit(op);
     }
 
     Expr visit(const Mod *op) override {
