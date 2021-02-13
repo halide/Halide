@@ -172,8 +172,10 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         } else {
             // This semaphore will end up on both sides of the fork,
             // so we'd better duplicate it.
-            string cloned_acquire = var->name + unique_name('_');
-            cloned_acquires[var->name] = cloned_acquire;
+            string &cloned_acquire = cloned_acquires[var->name];
+            if (cloned_acquire.empty()) {
+                cloned_acquire = var->name + unique_name('_');
+            }
             return Acquire::make(Variable::make(type_of<halide_semaphore_t *>(), cloned_acquire), op->count, body);
         }
     }
