@@ -82,6 +82,7 @@ public:
             }
         } else if (get_target().has_feature(Target::HVX)) {
             // Hexagon schedule.
+            // TODO: Try using a schedule like the CPU one below.
             const int vector_size = 128;
 
             blur_y.compute_root()
@@ -96,8 +97,16 @@ public:
                 .vectorize(x, vector_size);
         } else {
             // CPU schedule.
-            blur_y.split(y, y, yi, 8).parallel(y).vectorize(x, 8);
-            blur_x.store_at(blur_y, y).compute_at(blur_y, yi).vectorize(x, 8);
+            // Split the image into vertical strips, computing x in
+            // a sliding window down each strip.
+            blur_y.compute_root()
+                .split(x, x, xi, natural_vector_size<uint16_t>() * 4)
+                .reorder(xi, y, x)
+                .vectorize(xi);
+            blur_x.compute_at(blur_y, y)
+                .store_at(blur_y, x)
+                .fold_storage(y, 3)
+                .vectorize(x);
         }
     }
 };
