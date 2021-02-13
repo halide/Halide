@@ -1359,7 +1359,7 @@ class FindVectorizableExprsInAtomicNode : public IRMutator {
 
     Expr visit(const Call *op) override {
         IRMutator::visit(op);
-        // unsafe_promise_clamped and similar wisn't pure because it's
+        // unsafe_promise_clamped and similar isn't pure because it's
         // not safe to lift it out of if statements. If *is* safe to
         // lift it out of atomic nodes though.
         poison |= !(op->is_pure() ||
