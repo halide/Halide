@@ -98,8 +98,8 @@ Interval add(const Interval &a, const Expr &b) {
 
 Interval sub(const Interval &a, const Interval &b) {
     Interval result;
-    result.min = Interval::make_sub(a.min, b.min);
-    result.max = Interval::make_sub(a.max, b.max);
+    result.min = Interval::make_sub(a.min, b.max);
+    result.max = Interval::make_sub(a.max, b.min);
     return result;
 }
 
@@ -145,6 +145,9 @@ class DerivativeBounds : public IRVisitor {
 
     void decay_result() {
         if (!strong) {
+            // If we don't want strong monotonic analysis, we can make it much
+            // cheaper by replacing precise intervals of complex expressions
+            // with simple ones of the same meaning to to_monotonic.
             if (is_constant(result)) {
                 result.min = result.max = make_zero(Int(32));
             } else if (is_monotonic_increasing(result)) {
@@ -714,6 +717,7 @@ void is_monotonic_test() {
 
     check_decreasing(select(2 <= x, 0, 1), true);
     check_increasing(select(2 <= x, 0, 1) + x, true);
+    check_decreasing(-min(x, 16));
 
     std::cout << "is_monotonic test passed" << std::endl;
 }
