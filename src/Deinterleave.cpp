@@ -517,7 +517,8 @@ class Interleaver : public IRMutator {
         for (int i = 2; i <= 4; ++i) {
             if (r &&
                 is_const(op->b, i) &&
-                (r->type.lanes() % i) == 0) {
+                (r->type.lanes() % i) == 0 &&
+                r->type.lanes() > i) {
                 should_deinterleave = true;
                 num_lanes = i;
                 break;
