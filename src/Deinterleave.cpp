@@ -247,7 +247,6 @@ private:
     Expr visit(const Ramp *op) override {
         int base_lanes = op->base.type().lanes();
         if (base_lanes > 1) {
-            debug(0) << "ELEPHANT: " << base_lanes << " " << lane_stride << " " << starting_lane << "\n";
             if (new_lanes == 1) {
                 int index = starting_lane / base_lanes;
                 Expr expr = op->base + cast(op->base.type(), index) * op->stride;
@@ -257,12 +256,14 @@ private:
                 return expr;
             } else if (base_lanes == lane_stride &&
                        starting_lane < base_lanes) {
-                // Base class mutator actually works fine in this case
-                debug(0) << "ELEPHANT\n";
+                // Base class mutator actually works fine in this
+                // case, but we only want one lane from the base and
+                // one lane from the stride.
                 ScopedValue<int> old_new_lanes(new_lanes, 1);
                 return IRMutator::visit(op);
             } else {
-                // There is probably a more efficient way to this.
+                // There is probably a more efficient way to this by
+                // generalizing the two cases above.
                 return mutate(flatten_nested_ramps(op));
             }
         }
@@ -489,7 +490,6 @@ class Interleaver : public IRMutator {
             // If we deinterleave we'll get ramps of stride 1
             should_deinterleave = true;
             num_lanes = op->stride.type().lanes();
-            debug(0) << "ELEPHANT: " << num_lanes << "\n";
         }
         return IRMutator::visit(op);
     }
