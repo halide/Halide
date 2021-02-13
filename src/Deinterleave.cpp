@@ -486,8 +486,12 @@ class Interleaver : public IRMutator {
 
     Expr visit(const Ramp *op) override {
         if (op->stride.type().is_vector() &&
-            is_const_one(op->stride)) {
-            // If we deinterleave we'll get ramps of stride 1
+            is_const_one(op->stride) &&
+            !op->base.as<Ramp>() &&
+            !op->base.as<Broadcast>()) {
+            // We have a ramp with a computed vector base.  If we
+            // deinterleave we'll get ramps of stride 1 with a
+            // computed scalar base.
             should_deinterleave = true;
             num_lanes = op->stride.type().lanes();
         }
@@ -523,7 +527,9 @@ class Interleaver : public IRMutator {
     }
 
     Expr visit(const Call *op) override {
-        if (!op->is_pure()) {
+        if (!op->is_pure() &&
+            !op->is_intrinsic(Call::unsafe_promise_clamped) &&
+            !op->is_intrinsic(Call::promise_clamped)) {
             // deinterleaving potentially changes the order of execution.
             should_deinterleave = false;
         }
