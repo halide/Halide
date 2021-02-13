@@ -183,6 +183,13 @@ Stmt Simplify::visit(const For *op) {
         bounds_and_alignment_info.pop(op->name);
     }
 
+    if (const Acquire *acquire = new_body.as<Acquire>()) {
+        if (is_no_op(acquire->body)) {
+            // Rewrite iterated no-op acquires as a single acquire.
+            return Acquire::make(acquire->semaphore, mutate(acquire->count * new_extent, nullptr), acquire->body);
+        }
+    }
+
     if (is_no_op(new_body)) {
         return new_body;
     } else if (extent_bounds.max_defined &&
