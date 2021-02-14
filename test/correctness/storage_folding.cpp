@@ -348,7 +348,7 @@ int main(int argc, char **argv) {
         g(x, y) = x * y;
         f(x, y) = g(x, y / 2) + g(x, y / 2 + 1);
 
-        g.compute_at(f, x).store_root().fold_storage(y, 2);
+        g.compute_at(f, x).store_root();
 
         f.set_custom_allocator(my_malloc, my_free);
 
