@@ -1304,6 +1304,8 @@ void check_boolean() {
     check(x % 3 <= 0, x % 3 == 0);
     check(x % 4 > 0, x % 4 != 0);
     check(x % 5 >= 1, x % 5 != 0);
+    check(x % 6 < 5, x % 6 != 5);
+    check(5 < x % 7, x % 7 != 6);
 
     check(b1 || !b1, t);
     check(!b1 || b1, t);
@@ -1454,7 +1456,7 @@ void check_boolean() {
     check((x / 8) * 8 < x - 8, f);
     check((x / 8) * 8 < x - 9, f);
     check((x / 8) * 8 < x - 7, f);
-    check((x / 8) * 8 < x - 6, 6 < x % 8);
+    check((x / 8) * 8 < x - 6, x % 8 != 7);
     check(ramp(x * 4, 1, 4) < broadcast(y * 4, 4), broadcast(x < y, 4));
     check(ramp(x * 8, 1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
     check(ramp(x * 8 + 1, 1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
