@@ -274,7 +274,7 @@ public:
     }
 
     template<typename T, typename Body>
-    Body simplify_let(const T *op, ExprInfo *bounds);
+    std::pair<Body, bool> simplify_let(const T *op, ExprInfo *bounds);
 
     Expr visit(const IntImm *op, ExprInfo *bounds);
     Expr visit(const UIntImm *op, ExprInfo *bounds);

@@ -432,7 +432,7 @@ void check_algebra() {
     check(5 % x < 6, const_true());
     check(5 % x < 5, 5 % x < 5);
     check(5 % x >= 0, const_true());
-    check(5 % x > 0, 0 < 5 % x);
+    check(5 % x > 0, 5 % x != 0);
 
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
     check(((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)),
@@ -1202,6 +1202,7 @@ void check_boolean() {
     check(x * 0 < y * 0, f);
     check(x < x + y, 0 < y);
     check(x + y < x, y < 0);
+    check(1 < -x, x < -1);
 
     check(select(x < 3, 2, 2), 2);
     check(select(x < (x + 1), 9, 2), 9);
@@ -1239,6 +1240,10 @@ void check_boolean() {
     check(!(!(x == 0)), x == 0);
     check(!Expr(broadcast(x > y, 4)),
           broadcast(x <= y, 4));
+    check(x % 2 < 1, x % 2 == 0);
+    check(x % 3 <= 0, x % 3 == 0);
+    check(x % 4 > 0, x % 4 != 0);
+    check(x % 5 >= 1, x % 5 != 0);
 
     check(b1 || !b1, t);
     check(!b1 || b1, t);

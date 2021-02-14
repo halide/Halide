@@ -8,6 +8,13 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
     Expr a = mutate(op->a, &a_bounds);
     Expr b = mutate(op->b, &b_bounds);
 
+    if (a_bounds.alignment.remainder > 0 &&
+        b_bounds.alignment.modulus == 0 &&
+        a_bounds.alignment.modulus >= std::abs(b_bounds.alignment.remainder)) {
+        // Rewrite x/N to (x - C)/N when we know x % N == C.
+        return mutate(Div::make(op->a - make_const(op->a.type(), a_bounds.alignment.remainder), op->b), bounds);
+    }
+
     if (bounds && no_overflow_int(op->type)) {
         bounds->min = INT64_MAX;
         bounds->max = INT64_MIN;
