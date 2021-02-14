@@ -560,6 +560,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         Expr arg = mutate(op->args[0], &arg_info);
         Expr lower = mutate(op->args[1], &lower_info);
         Expr upper = mutate(op->args[2], &upper_info);
+
+        const Broadcast *b_arg = arg.as<Broadcast>();
+        const Broadcast *b_lower = lower.as<Broadcast>();
+        const Broadcast *b_upper = upper.as<Broadcast>();
+
         if (arg_info.min_defined &&
             arg_info.max_defined &&
             lower_info.max_defined &&
@@ -567,10 +572,17 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             arg_info.min >= lower_info.max &&
             arg_info.max <= upper_info.min) {
             return arg;
+        } else if (b_arg && b_lower && b_upper) {
+            // Move broadcasts outwards
+            return Broadcast::make(Call::make(b_arg->value.type(), op->name,
+                                              {b_arg->value, b_lower->value, b_upper->value},
+                                              Call::Intrinsic),
+                                   b_arg->lanes);
         } else if (arg.same_as(op->args[0]) &&
                    lower.same_as(op->args[1]) &&
                    upper.same_as(op->args[2])) {
             return op;
+
         } else {
             return Call::make(op->type, op->name,
                               {arg, lower, upper},
