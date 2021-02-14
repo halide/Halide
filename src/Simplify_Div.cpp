@@ -177,9 +177,11 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                rewrite((w + (z + (x * c0 + y))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
                rewrite((w + (z + (y + x * c0))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
-               // Finally, pull out constant additions that are a multiple of the denominator
-               rewrite((x + c0) / c1, x / c1 + fold(c0 / c1), (a_bounds.alignment.remainder - c0) % c1 == 0 && c1 > 0) ||
-               rewrite((c0 - y)/c1, fold(c0 / c1) - y / c1, (c0 + 1) % c1 == 0 && c1 > 0) ||
+               // Finally, pull out additions that are a multiple of the denominator
+               // TODO: I think this rule can be stronger. We should be able to
+               // rewrite (x + 1) / 2 to x / 2 + 1 when x we know x % 2 == 1.
+               rewrite((x + c0) / c1, x / c1 + fold(c0 / c1), c1 > 0 && (c0 % c1 == 0 || can_prove(x % c1 == 0, this))) ||
+               rewrite((c0 - y)/c1, fold(c0 / c1) - y / c1, c1 > 0 && ((c0 + 1) % c1 == 0 && can_prove((y - 1) % c1 == 0, this))) ||
                (denominator_non_zero &&
                 (rewrite((x + y)/x, y/x + 1) ||
                  rewrite((y + x)/x, y/x + 1) ||

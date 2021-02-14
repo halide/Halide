@@ -17,8 +17,8 @@ void check_is_sio(const Expr &e) {
     }
 }
 
-void check(const Expr &a, const Expr &b) {
-    Expr simpler = simplify(a);
+void check(const Expr &a, const Expr &b, const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>()) {
+    Expr simpler = simplify(a, true, Scope<Interval>(), alignment);
     if (!equal(simpler, b)) {
         std::cerr
             << "\nSimplification failure:\n"
@@ -304,6 +304,66 @@ void check_algebra() {
     check((y + 7) / 7, y / 7 + 1);
     check((7 - y) / 7, (-y) / 7 + 1);
     check((y - 7) / 7, y / 7 + (-1));
+
+    // TODO: The commented cases below should be handled by
+    // stronger rules in the simplifier.
+    Scope<ModulusRemainder> alignment;
+    alignment.push("x", ModulusRemainder(2, 0));
+    check((x + 0) / 2, x / 2, alignment);
+    check((x + 1) / 2, x / 2, alignment);
+    check((x + 2) / 2, x / 2 + 1, alignment);
+    check((x + 3) / 2, x / 2 + 1, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(2, 1));
+    check((x + 0) / 2, x / 2, alignment);
+    //check((x + 1) / 2, x / 2 + 1, alignment);
+    check((x + 2) / 2, x / 2 + 1, alignment);
+    //check((x + 3) / 2, x / 2 + 2, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(3, 0));
+    check((x + 0) / 3, x / 3, alignment);
+    check((x + 1) / 3, x / 3, alignment);
+    check((x + 2) / 3, x / 3, alignment);
+    check((x + 3) / 3, x / 3 + 1, alignment);
+    check((x + 4) / 3, x / 3 + 1, alignment);
+    check((x + 5) / 3, x / 3 + 1, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(3, 1));
+    check((x + 0) / 3, x / 3, alignment);
+    //check((x + 1) / 3, x / 3, alignment);
+    //check((x + 2) / 3, x / 3 + 1, alignment);
+    check((x + 3) / 3, x / 3 + 1, alignment);
+    //check((x + 4) / 3, x / 3 + 1, alignment);
+    //check((x + 5) / 3, x / 3 + 2, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(3, 2));
+    check((x + 0) / 3, x / 3, alignment);
+    //check((x + 1) / 3, x / 3 + 1, alignment);
+    //check((x + 2) / 3, x / 3 + 1, alignment);
+    check((x + 3) / 3, x / 3 + 1, alignment);
+    //check((x + 4) / 3, x / 3 + 2, alignment);
+    //check((x + 5) / 3, x / 3 + 2, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(4, 0));
+    check((x + 0) / 2, x / 2, alignment);
+    check((x + 1) / 2, x / 2, alignment);
+    check((x + 2) / 2, x / 2 + 1, alignment);
+    check((x + 3) / 2, x / 2 + 1, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(4, 1));
+    check((x + 0) / 2, x / 2, alignment);
+    //check((x + 1) / 2, x / 2 + 1, alignment);
+    check((x + 2) / 2, x / 2 + 1, alignment);
+    //check((x + 3) / 2, x / 2 + 2, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(2, 0));
+    check((x + 0) / 3, x / 3, alignment);
+    check((x + 1) / 3, (x + 1) / 3, alignment);
+    check((x + 2) / 3, (x + 2) / 3, alignment);
+    check((x + 3) / 3, x / 3 + 1, alignment);
+    check((x + 4) / 3, (x + 4) / 3, alignment);
+    check((x + 5) / 3, (x + 5) / 3, alignment);
+    alignment.pop("x");
 
     check(((7 + y) + z) / 7, (y + z) / 7 + 1);
     check(((y + 7) + z) / 7, (y + z) / 7 + 1);
