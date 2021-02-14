@@ -246,7 +246,7 @@ std::pair<Body, bool> Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *b
             // The new name/value may be used. If the new name is only used once,
             // substitute it instead of making a new let. We know this is safe
             // because it cannot be a let that other passes looks for.
-            if (vars_used.count(it->new_name) == 1) {
+            if (info.new_uses == 1 && is_pure(it->new_value)) {
                 result = substitute(it->new_name, it->new_value, result);
                 substituted = true;
             } else {
