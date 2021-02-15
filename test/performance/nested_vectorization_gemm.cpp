@@ -10,6 +10,9 @@ int main(int argc, char **argv) {
         printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
         return 0;
     }
+    // We don't want to be sensitive to LLVM pulling the same tricks
+    // or not.
+    target.set_feature(Target::DisableLLVMLoopOpt);
 
     // 8-bit mat-mul into 32-bit accumulator
     {
@@ -117,7 +120,7 @@ int main(int argc, char **argv) {
 
             times[use_nested_vectorization] =
                 Tools::benchmark(20, 20, [&]() {
-                    result.realize(out);
+                    result.realize(out, target);
                     out.device_sync();
                 });
         }
@@ -204,7 +207,7 @@ int main(int argc, char **argv) {
 
             times[use_nested_vectorization] =
                 Tools::benchmark(10, 10, [&]() {
-                    result.realize(out);
+                    result.realize(out, target);
                     out.device_sync();
                 });
         }
@@ -283,11 +286,11 @@ int main(int argc, char **argv) {
             Buffer<int16_t> out(f_buf.width() - g_buf.width() - 128);
 
             // Uncomment to check the asm
-            // result.compile_to_assembly("/dev/stdout", {f, g}, target);
+            //result.compile_to_assembly("/dev/stdout", {f, g}, target);
 
             times[use_nested_vectorization] =
                 Tools::benchmark(10, 10, [&]() {
-                    result.realize(out);
+                    result.realize(out, target);
                     out.device_sync();
                 });
         }
@@ -306,6 +309,100 @@ int main(int argc, char **argv) {
         }
     }
     printf("Success!\n");
+
+    // 8-bit sparse blur into 32-bit accumulator
+    {
+
+        double times[2];
+
+        for (int use_nested_vectorization = 0; use_nested_vectorization < 2; use_nested_vectorization++) {
+            Var x, y;
+
+            ImageParam f(UInt(8), 1), g(UInt(8), 1);
+
+            // 128 filter taps at unknown locations, which we will
+            // promise are bounded.
+            ImageParam taps(Int(32), 1);
+
+            RDom r(0, 128);
+            Func prod;
+            prod(x) += cast<uint32_t>(f(x + unsafe_promise_clamped(taps(r), 0, 127))) * g(r);
+
+            Func result;
+            result(x) = prod(x);
+
+            RVar ro, ri;
+
+            g.in().compute_at(prod, ro).vectorize(_0);
+
+            result
+                .vectorize(x, 8, TailStrategy::RoundUp);
+
+            if (use_nested_vectorization) {
+
+                int reduce;
+                if (target.has_feature(Target::ARMDotProd)) {
+                    reduce = 4;
+                } else {
+                    reduce = 2;
+                }
+
+                prod.compute_at(result, x)
+                    .vectorize(x)
+                    .update()
+                    .split(r, ro, ri, 16)
+                    .reorder(ri, x, ro)
+                    .vectorize(x)
+                    .atomic()
+                    .vectorize(ri, reduce)
+                    .unroll(ri);
+            } else {
+                prod.compute_at(result, x)
+                    .vectorize(x)
+                    .update()
+                    .split(r, ro, ri, 16)
+                    .reorder(ri, x, ro)
+                    .vectorize(x);
+            }
+
+            Buffer<uint8_t> f_buf(1024 * 1024);
+            f_buf.fill(100);
+            Buffer<uint8_t> g_buf(128);
+            f_buf.fill(100);
+            f.set(f_buf);
+            g.set(g_buf);
+            Buffer<int> taps_buf(128);
+            for (int i = 0; i < 128; i++) {
+                taps_buf(i) = (i * i) & 127;
+            }
+            taps.set(taps_buf);
+            Buffer<uint32_t> out(f_buf.width() - g_buf.width() - 128);
+
+            // Uncomment to check the asm
+            // result.compile_to_assembly("/dev/stdout", {f, g, taps}, target);
+
+            times[use_nested_vectorization] =
+                Tools::benchmark(10, 10, [&]() {
+                    result.realize(out, target);
+                    out.device_sync();
+                });
+        }
+
+        // We don't actually get any win from this on X86, as the
+        // basic version also manages to use pmaddwd well.
+        double speed_up = times[0] / times[1];
+        printf("8-bit sparse blur\n"
+               "Time with nested vectorization: %0.2f ms \n"
+               "Time without: %0.2f ms \n"
+               "Speed-up: %0.2fx\n",
+               times[1] * 1000,
+               times[0] * 1000,
+               speed_up);
+        if (speed_up < 0.5) {
+            printf("The nested vectorization schedule was supposed to be faster!\n");
+            return -1;
+        }
+    }
 
     return 0;
 }
