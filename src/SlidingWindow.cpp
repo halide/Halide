@@ -101,7 +101,9 @@ class FindProduce : public IRVisitor {
 public:
     bool found = false;
 
-    FindProduce(const string &func) : func(func) {}
+    FindProduce(const string &func)
+        : func(func) {
+    }
 };
 
 bool find_produce(const Stmt &s, const string &func) {
@@ -544,7 +546,7 @@ public:
 class AddLoopMinOrig : public IRMutator {
     using IRMutator::visit;
 
-    Stmt visit(const For *op) {
+    Stmt visit(const For *op) override {
         Stmt body = mutate(op->body);
         Expr min = mutate(op->min);
         Expr extent = mutate(op->extent);
