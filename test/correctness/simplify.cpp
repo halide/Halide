@@ -1456,7 +1456,7 @@ void check_boolean() {
     check((x / 8) * 8 < x - 8, f);
     check((x / 8) * 8 < x - 9, f);
     check((x / 8) * 8 < x - 7, f);
-    check((x / 8) * 8 < x - 6, x % 8 != 7);
+    check((x / 8) * 8 < x - 6, x % 8 == 7);
     check(ramp(x * 4, 1, 4) < broadcast(y * 4, 4), broadcast(x < y, 4));
     check(ramp(x * 8, 1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
     check(ramp(x * 8 + 1, 1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));

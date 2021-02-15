@@ -43,7 +43,7 @@ void count_var_uses(StmtOrExpr x, std::map<std::string, int> &var_uses) {
 }  // namespace
 
 template<typename LetOrLetStmt, typename Body>
-std::pair<Body, bool> Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
+Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
 
     // Lets are often deeply nested. Get the intermediate state off
     // the call stack where it could overflow onto an explicit stack.
@@ -132,6 +132,9 @@ std::pair<Body, bool> Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *b
             } else if (sub && (is_const(sub->b) || var_b)) {
                 replacement = substitute(f.new_name, Sub::make(new_var, sub->b), replacement);
                 f.new_value = sub->a;
+            } else if (sub && is_const(sub->a)) {
+                replacement = substitute(f.new_name, Sub::make(sub->a, new_var), replacement);
+                f.new_value = sub->b;
             } else if (mod && is_const(mod->b)) {
                 replacement = substitute(f.new_name, Mod::make(new_var, mod->b), replacement);
                 f.new_value = mod->a;
@@ -229,8 +232,6 @@ std::pair<Body, bool> Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *b
     std::map<std::string, int> vars_used;
     count_var_uses(result, vars_used);
 
-    bool substituted = false;
-
     for (auto it = frames.rbegin(); it != frames.rend(); it++) {
         if (it->value_bounds_tracked) {
             bounds_and_alignment_info.pop(it->op->name);
@@ -243,15 +244,8 @@ std::pair<Body, bool> Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *b
         var_info.pop(it->op->name);
 
         if (it->new_value.defined() && (info.new_uses > 0 && vars_used.count(it->new_name) > 0)) {
-            // The new name/value may be used. If the new name is only used once,
-            // substitute it instead of making a new let. We know this is safe
-            // because it cannot be a let that other passes looks for.
-            if (info.new_uses == 1 && is_pure(it->new_value)) {
-                result = substitute(it->new_name, it->new_value, result);
-                substituted = true;
-            } else {
-                result = LetOrLetStmt::make(it->new_name, it->new_value, result);
-            }
+            // The new name/value may be used
+            result = LetOrLetStmt::make(it->new_name, it->new_value, result);
             count_var_uses(it->new_value, vars_used);
         }
 
@@ -271,27 +265,15 @@ std::pair<Body, bool> Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *b
         }
     }
 
-    return {result, substituted};
+    return result;
 }
 
 Expr Simplify::visit(const Let *op, ExprInfo *bounds) {
-    Expr result;
-    bool mutate_again;
-    std::tie(result, mutate_again) = simplify_let<Let, Expr>(op, bounds);
-    if (mutate_again) {
-        result = mutate(result, bounds);
-    }
-    return result;
+    return simplify_let<Let, Expr>(op, bounds);
 }
 
 Stmt Simplify::visit(const LetStmt *op) {
-    Stmt result;
-    bool mutate_again;
-    std::tie(result, mutate_again) = simplify_let<LetStmt, Stmt>(op, nullptr);
-    if (mutate_again) {
-        result = mutate(result);
-    }
-    return result;
+    return simplify_let<LetStmt, Stmt>(op, nullptr);
 }
 
 }  // namespace Internal
