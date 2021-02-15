@@ -765,19 +765,6 @@ Realization Pipeline::realize(int x_size, int y_size, const Target &target,
     return realize({x_size, y_size}, target, param_map);
 }
 
-Realization Pipeline::realize(int x_size, const Target &target,
-                              const ParamMap &param_map) {
-    // Use an explicit vector here, since {x_size} can be interpreted
-    // as a scalar initializer
-    vector<int32_t> v = {x_size};
-    return realize(v, target, param_map);
-}
-
-Realization Pipeline::realize(const Target &target,
-                              const ParamMap &param_map) {
-    return realize(vector<int32_t>(), target, param_map);
-}
-
 void Pipeline::add_requirement(const Expr &condition, std::vector<Expr> &error_args) {
     user_assert(defined()) << "Pipeline is undefined\n";
 

@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
             h.compute_root().debug_to_file(h_tmp);
         }
 
-        Buffer<float> im = h.realize(size_x, size_y, target);
+        Buffer<float> im = h.realize({size_x, size_y}, target);
     }
 
     Internal::assert_file_exists(f_tmp);

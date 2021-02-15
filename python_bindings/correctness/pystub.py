@@ -175,7 +175,7 @@ def test_complexstub():
         untyped_buffer_output,
         static_compiled_buffer_output) = r
 
-    b = simple_output.realize(32, 32, 3, target)
+    b = simple_output.realize([32, 32, 3], target)
     assert b.type() == hl.Float(32)
     for x in range(32):
         for y in range(32):
@@ -184,7 +184,7 @@ def test_complexstub():
                 actual = b[x, y, c]
                 assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
-    b = tuple_output.realize(32, 32, 3, target)
+    b = tuple_output.realize([32, 32, 3], target)
     assert b[0].type() == hl.Float(32)
     assert b[1].type() == hl.Float(32)
     assert len(b) == 2
@@ -199,7 +199,7 @@ def test_complexstub():
 
     assert len(array_output) == 2
     for a in array_output:
-        b = a.realize(32, 32, target)
+        b = a.realize([32, 32], target)
         assert b.type() == hl.Int(16)
         for x in range(32):
             for y in range(32):
@@ -211,7 +211,7 @@ def test_complexstub():
     # is used within another Generator; this isn't yet implemented since there
     # isn't yet Python bindings for Generator authoring. This section
     # of the test may need revision at that point.
-    b = typed_buffer_output.realize(32, 32, 3, target)
+    b = typed_buffer_output.realize([32, 32, 3], target)
     assert b.type() == hl.Float(32)
     for x in range(32):
         for y in range(32):
@@ -220,7 +220,7 @@ def test_complexstub():
                 actual = b[x, y, c]
                 assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
-    b = untyped_buffer_output.realize(32, 32, 3, target)
+    b = untyped_buffer_output.realize([32, 32, 3], target)
     assert b.type() == hl.UInt(8)
     for x in range(32):
         for y in range(32):
@@ -229,7 +229,7 @@ def test_complexstub():
                 actual = b[x, y, c]
                 assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
-    b = static_compiled_buffer_output.realize(4, 4, 1, target)
+    b = static_compiled_buffer_output.realize([4, 4, 1], target)
     assert b.type() == hl.UInt(8)
     for x in range(4):
         for y in range(4):

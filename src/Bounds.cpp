@@ -95,6 +95,9 @@ std::ostream &operator<<(std::ostream &stream, const Box &b) {
         stream << "[" << b[dim].min << ", " << b[dim].max << "]";
     }
     stream << "}";
+    if (b.used.defined()) {
+        stream << " if " << b.used;
+    }
     return stream;
 }
 
@@ -1469,6 +1472,14 @@ private:
             Interval result = Interval::nothing();
             for (const Expr &e : op->args) {
                 e.accept(this);
+                result.include(interval);
+            }
+            interval = result;
+        } else if (op->is_intrinsic(Call::mux)) {
+            // Take the union of all args but the first
+            Interval result = Interval::nothing();
+            for (size_t i = 1; i < op->args.size(); i++) {
+                op->args[i].accept(this);
                 result.include(interval);
             }
             interval = result;

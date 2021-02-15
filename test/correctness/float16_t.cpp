@@ -5,8 +5,8 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Var x;
 
-    Buffer<float16_t> in1 = lambda(x, cast<float16_t>(-0.5f) + cast<float16_t>(x) / (128)).realize(128);
-    Buffer<bfloat16_t> in2 = lambda(x, cast<bfloat16_t>(-0.5f) + cast<bfloat16_t>(x) / (128)).realize(128);
+    Buffer<float16_t> in1 = lambda(x, cast<float16_t>(-0.5f) + cast<float16_t>(x) / (128)).realize({128});
+    Buffer<bfloat16_t> in2 = lambda(x, cast<bfloat16_t>(-0.5f) + cast<bfloat16_t>(x) / (128)).realize({128});
 
     // Check the Halide-side float 16 conversion math matches the C++-side math.
     in1.for_each_element([&](int i) {
@@ -155,7 +155,7 @@ int main(int argc, char **argv) {
         const char *names[] = {"trunc", "round", "ceil", "floor"};
 
         Pipeline p(funcs);
-        Realization r = p.realize(1024);
+        Realization r = p.realize({1024});
         for (int i = 0; i < 1024; i++) {
             for (int j = 0; j < 4; j++) {
                 float f32 = Buffer<float>(r[j])(i);
@@ -188,7 +188,7 @@ int main(int argc, char **argv) {
         Buffer<float16_t> in(8, 8);
         in.fill(float16_t(0.25f));
         input.set(in);
-        Buffer<float16_t> buf = output.realize(8, 8);
+        Buffer<float16_t> buf = output.realize({8, 8});
         for (int y = 0; y < 8; y++) {
             for (int x = 0; x < 8; x++) {
                 float16_t correct = float16_t((x * y) / 2.0f);

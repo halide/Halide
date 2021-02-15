@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
             g.gpu_tile(x, xi, 8);
         }
 
-        g.realize(100);
+        g.realize({100});
     }
 
     // Now try a reduction where the pipeline returns that tuple value.
@@ -104,7 +104,7 @@ int main(int argc, char **argv) {
             g.gpu_tile(x, xi, 8);
         }
 
-        Realization r = Pipeline({f, g}).realize(100);
+        Realization r = Pipeline({f, g}).realize({100});
         Buffer<float> f_im = r[0];
         Buffer<uint8_t> g0_im = r[1];
         Buffer<int16_t> g1_im = r[2];

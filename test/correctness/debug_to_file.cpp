@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
             h.compute_root().debug_to_file(h_mat);
         }
 
-        Buffer<int32_t> im = h.realize(10, 10, target);
+        Buffer<int32_t> im = h.realize({10, 10}, target);
     }
 
     {

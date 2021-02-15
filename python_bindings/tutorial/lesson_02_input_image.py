@@ -82,7 +82,7 @@ def main():
     # smaller size. If we request a larger size Halide will throw an
     # error at runtime telling us we're trying to read out of bounds
     # on the input image.
-    output_image = brighter.realize(input.width(), input.height(), input.channels())
+    output_image = brighter.realize([input.width(), input.height(), input.channels()])
     assert output_image.type() == hl.UInt(8)
 
     # Save the output for inspection. It should look like a bright parrot.

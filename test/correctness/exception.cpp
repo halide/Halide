@@ -112,7 +112,7 @@ int main(int argc, char **argv) {
     f2(x) = im(x) * 2.0f;
     try {
         error = false;
-        f2.realize(10);
+        f2.realize({10});
     } catch (const Halide::RuntimeError &e) {
         error = true;
         std::cout << "Expected runtime error:\n"
@@ -123,7 +123,7 @@ int main(int argc, char **argv) {
     Buffer<float> an_image(10);
     lambda(x, x * 7.0f).realize(an_image);
     im.set(an_image);
-    Buffer<float> result = f2.realize(10);
+    Buffer<float> result = f2.realize({10});
     for (size_t i = 0; i < 10; i++) {
         float correct = i * 14.0f;
         if (result(i) != correct) {
@@ -141,7 +141,7 @@ int main(int argc, char **argv) {
         p.set(-4);
         Func f4;
         f4(x) = p;
-        f4.realize(10);
+        f4.realize({10});
     } catch (const Halide::RuntimeError &e) {
         error = true;
         std::cout << "Expected runtime error:\n"

@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
             .gpu_lanes(xi)
             .unroll(xo);
 
-        Buffer<uint8_t> out = g.realize(32, 4);
+        Buffer<uint8_t> out = g.realize({32, 4});
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
                 uint8_t correct = 2 * (x + y);
@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
             .gpu_lanes(y)
             .store_in(MemoryType::Register);
 
-        Buffer<float> out = c.realize(32, 32);
+        Buffer<float> out = c.realize({32, 32});
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
                 float correct = x + 100 * y;
@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
             .vectorize(y, 2)
             .gpu_lanes(y);
 
-        Buffer<float> out = c.realize(64, 64);
+        Buffer<float> out = c.realize({64, 64});
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
                 float correct = x + 100 * y;
@@ -171,7 +171,7 @@ int main(int argc, char **argv) {
                 .gpu_lanes(x);
         }
 
-        Buffer<int> out = d.realize(24, 2);
+        Buffer<int> out = d.realize({24, 2});
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
                 int correct = 27 * (x + y);
@@ -209,7 +209,7 @@ int main(int argc, char **argv) {
                 .gpu_lanes(x);
         }
 
-        Buffer<int> out = d.realize(24, 2);
+        Buffer<int> out = d.realize({24, 2});
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
                 int correct = 27 * (x + y);
@@ -239,7 +239,7 @@ int main(int argc, char **argv) {
             .compute_at(b, yi)
             .gpu_lanes(x);
 
-        Buffer<int> out = b.realize(32, 32);
+        Buffer<int> out = b.realize({32, 32});
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
                 int correct = x + 2 * y;
@@ -302,7 +302,7 @@ int main(int argc, char **argv) {
             .set_min(0)
             .dim(1)
             .set_min(0);
-        Buffer<float> out = upy.realize(128, 128);
+        Buffer<float> out = upy.realize({128, 128});
 
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
@@ -360,7 +360,7 @@ int main(int argc, char **argv) {
             .gpu_lanes(xi)
             .unroll(x);
 
-        Buffer<float> out = s4.realize(64, 64);
+        Buffer<float> out = s4.realize({64, 64});
 
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
@@ -420,7 +420,7 @@ int main(int argc, char **argv) {
             .gpu_lanes(xi)
             .unroll(x);
 
-        Buffer<float> out = s4.realize(32, 32);
+        Buffer<float> out = s4.realize({32, 32});
 
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
@@ -480,7 +480,7 @@ int main(int argc, char **argv) {
             .gpu_lanes(xi)
             .unroll(xo);
 
-        Buffer<uint16_t> out = curved.realize(buf.width(), buf.height());
+        Buffer<uint16_t> out = curved.realize({buf.width(), buf.height()});
 
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
@@ -508,7 +508,7 @@ int main(int argc, char **argv) {
 
         Var xo, xi;
         f.gpu_tile(x, xo, xi, 32);
-        f.realize(1024);
+        f.realize({1024});
     }
 
     printf("Success!\n");

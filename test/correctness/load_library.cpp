@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
     f.gpu_tile(x, y, xi, yi, 8, 8, TailStrategy::Auto, DeviceAPI::OpenCL);
     f.set_error_handler(my_error_handler);
 
-    Buffer<int32_t> out = f.realize(64, 64, target);
+    Buffer<int32_t> out = f.realize({64, 64}, target);
 
     fprintf(stderr, "Should not get here.\n");
     return -1;

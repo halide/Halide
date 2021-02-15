@@ -615,6 +615,7 @@ const char *const intrinsic_op_names[] = {
     "memoize_expr",
     "mod_round_to_zero",
     "mulhi_shr",
+    "mux",
     "popcount",
     "prefetch",
     "promise_clamped",
