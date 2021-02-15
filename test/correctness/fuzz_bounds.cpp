@@ -409,11 +409,7 @@ bool test_bounds(Expr test, const Interval &interval, Type T, const map<string, 
             a_j = extract_lane(test, j);
         }
 
-        // std::cerr << "Simplifying...\n";
-        // std::cerr << a_j << std::endl;
         Expr a_j_v = simplify(substitute(vars, a_j));
-        // std::cerr << "Simplied...\n";
-        // std::cerr << a_j_v << std::endl;
 
         // TODO: handle a_j_v being integer overflow.
 
@@ -422,13 +418,13 @@ bool test_bounds(Expr test, const Interval &interval, Type T, const map<string, 
             if (!can_prove(a_j_v <= interval.max)) {
                 std::cerr << "can't prove upper bound: " << (a_j_v <= interval.max) << "\n";
                 for (auto v = vars.begin(); v != vars.end(); v++) {
-                    std::cout << v->first << " = " << v->second << "\n";
+                    std::cerr << v->first << " = " << v->second << "\n";
                 }
 
-                std::cout << test << "\n";
-                std::cout << interval << "\n";
-                std::cout << "In vector lane " << j << ":\n";
-                std::cout << a_j << " -> " << a_j_v << "\n";
+                std::cerr << test << "\n";
+                std::cerr << interval << "\n";
+                std::cerr << "In vector lane " << j << ":\n";
+                std::cerr << a_j << " -> " << a_j_v << "\n";
                 return false;
             }
         }
@@ -467,35 +463,12 @@ bool test_expression_bounds(Expr test, int trials, int samples_per_trial) {
             Interval interval = random_interval(global_var_type);
             scope.push(v->first, interval);
         }
-        // std::cerr << "here (0): " << i << "\n";
 
         Interval interval = bounds_of_expr_in_scope(test, scope);
-        // std::cerr << "Before: " << interval << "\n";
-        // std::cerr << "Simplifying bounds...\n";
-        // std::cerr << interval << std::endl;
         interval.min = simplify(interval.min);
         interval.max = simplify(interval.max);
-        // std::cerr << "Simplified.\n";
-        // std::cerr << interval << std::endl;
-        // std::cerr << "After: " << interval << "\n";
-
-        // std::cerr << "here (1): " << i << "\n";
 
         if (!(interval.has_upper_bound() || interval.has_lower_bound())) {
-            /*
-            std::cerr << "expr not bounded by interval"
-                      << "\n";
-            std::cerr << test << "\n";
-
-            std::cerr << "{"
-                      << "\n";
-            for (auto v = vars.begin(); v != vars.end(); v++) {
-                std::cerr << "\t" << v->first << " : " << scope.get(v->first) << "\n";
-            }
-            std::cerr << "}"
-                      << "\n";
-            */
-
             // TODO: for now, return. Assumes that no other combo
             // will produce a bounded interval (not necessarily true).
             // This is to shorten the amount of output from this test.
@@ -508,15 +481,10 @@ bool test_expression_bounds(Expr test, int trials, int samples_per_trial) {
             return true;
         }
 
-        // std::cerr << "here (2): " << i << "\n";
-
         for (int j = 0; j < samples_per_trial; j++) {
             for (std::map<string, Expr>::iterator v = vars.begin(); v != vars.end(); v++) {
                 Interval interval = scope.get(v->first);
                 v->second = cast(global_var_type, sample_interval(interval));
-                // std::cerr << "\t" << v->first << std::endl;
-                // std::cerr << "\t\t" << interval << std::endl;
-                // std::cerr << "\t\t" << v->second << std::endl;
             }
 
             if (!test_bounds(test, interval, test.type(), vars)) {
@@ -530,8 +498,6 @@ bool test_expression_bounds(Expr test, int trials, int samples_per_trial) {
                 return false;
             }
         }
-
-        // std::cerr << "here (3): " << i << "\n";
     }
     return true;
 }
@@ -563,11 +529,7 @@ int main(int argc, char **argv) {
         Type var_type = random_type(1);
         global_var_type = var_type;
         // Generate a random expr...
-
-        // std::cerr << "Generating...\n";
         Expr test = random_expr(expr_type, depth);
-        // std::cerr << "Generated...\n";
-        // std::cout << "Expr: " << test << "\n";
         if (!test_expression_bounds(test, trials, samples)) {
             return -1;
         }
