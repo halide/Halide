@@ -1305,7 +1305,7 @@ void check_boolean() {
     check(x % 4 > 0, x % 4 != 0);
     check(x % 5 >= 1, x % 5 != 0);
     check(x % 6 < 5, x % 6 != 5);
-    check(5 < x % 7, x % 7 != 6);
+    check(5 < x % 7, x % 7 == 6);
 
     check(b1 || !b1, t);
     check(!b1 || b1, t);
