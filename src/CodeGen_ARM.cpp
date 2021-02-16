@@ -1067,11 +1067,7 @@ void CodeGen_ARM::visit(const Load *op) {
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), slice_base);
             Value *bitcastI = builder->CreateBitOrPointerCast(ptr, load_return_pointer_type);
             LoadInst *loadI = cast<LoadInst>(builder->CreateLoad(bitcastI));
-#if LLVM_VERSION >= 110
             loadI->setAlignment(Align(alignment));
-#else
-            loadI->setAlignment(MaybeAlign(alignment));
-#endif
             add_tbaa_metadata(loadI, op->name, slice_ramp);
             Value *shuffleInstr = builder->CreateShuffleVector(loadI, undef, constantsV);
             results.push_back(shuffleInstr);

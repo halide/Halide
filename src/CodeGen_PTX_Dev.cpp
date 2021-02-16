@@ -534,12 +534,7 @@ string CodeGen_PTX_Dev::march() const {
 
 string CodeGen_PTX_Dev::mcpu() const {
     if (target.has_feature(Target::CUDACapability80)) {
-#if LLVM_VERSION >= 110
         return "sm_80";
-#else
-        user_error << "CUDACapability80 requires LLVM 11 or later.";
-        return "";
-#endif
     } else if (target.has_feature(Target::CUDACapability75)) {
         return "sm_75";
     } else if (target.has_feature(Target::CUDACapability70)) {
@@ -561,12 +556,7 @@ string CodeGen_PTX_Dev::mcpu() const {
 
 string CodeGen_PTX_Dev::mattrs() const {
     if (target.has_feature(Target::CUDACapability80)) {
-#if LLVM_VERSION >= 110
         return "+ptx70";
-#else
-        user_error << "CUDACapability80 requires LLVM 11 or later.";
-        return "";
-#endif
     } else if (target.has_feature(Target::CUDACapability70) ||
                target.has_feature(Target::CUDACapability75)) {
         return "+ptx60";

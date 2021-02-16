@@ -1194,7 +1194,6 @@ void CodeGen_LLVM::optimize_module() {
                 RequireAnalysisPass<ASanGlobalsMetadataAnalysis, llvm::Module>());
         });
 #endif
-#if LLVM_VERSION >= 110
         pb.registerOptimizerLastEPCallback(
             [](ModulePassManager &mpm, PassBuilder::OptimizationLevel level) {
                 constexpr bool compile_kernel = false;
@@ -1203,16 +1202,6 @@ void CodeGen_LLVM::optimize_module() {
                 mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(
                     compile_kernel, recover, use_after_scope)));
             });
-#else
-        pb.registerOptimizerLastEPCallback(
-            [](FunctionPassManager &fpm, PassBuilder::OptimizationLevel level) {
-                constexpr bool compile_kernel = false;
-                constexpr bool recover = false;
-                constexpr bool use_after_scope = true;
-                fpm.addPass(AddressSanitizerPass(
-                    compile_kernel, recover, use_after_scope));
-            });
-#endif
 #if LLVM_VERSION >= 120
         pb.registerPipelineStartEPCallback(
             [](ModulePassManager &mpm, PassBuilder::OptimizationLevel) {
@@ -1239,18 +1228,11 @@ void CodeGen_LLVM::optimize_module() {
     }
 
     if (get_target().has_feature(Target::TSAN)) {
-#if LLVM_VERSION >= 110
         pb.registerOptimizerLastEPCallback(
             [](ModulePassManager &mpm, PassBuilder::OptimizationLevel level) {
                 mpm.addPass(
                     createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
             });
-#else
-        pb.registerOptimizerLastEPCallback(
-            [](FunctionPassManager &fpm, PassBuilder::OptimizationLevel level) {
-                fpm.addPass(ThreadSanitizerPass());
-            });
-#endif
     }
 
     for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
@@ -2277,13 +2259,8 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
             Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_val->getType()->getPointerTo());
 
             Value *slice_mask = slice_vector(vpred, i, slice_lanes);
-#if LLVM_VERSION >= 110
             Instruction *store_inst =
                 builder->CreateMaskedStore(slice_val, vec_ptr, llvm::Align(alignment), slice_mask);
-#else
-            Instruction *store_inst =
-                builder->CreateMaskedStore(slice_val, vec_ptr, alignment, slice_mask);
-#endif
             add_tbaa_metadata(store_inst, op->name, slice_index);
         }
     } else {  // It's not dense vector store, we need to scalarize it
@@ -2375,11 +2352,7 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
         Instruction *load_inst;
         if (vpred != nullptr) {
             Value *slice_mask = slice_vector(vpred, i, slice_lanes);
-#if LLVM_VERSION >= 110
             load_inst = builder->CreateMaskedLoad(vec_ptr, llvm::Align(alignment), slice_mask);
-#else
-            load_inst = builder->CreateMaskedLoad(vec_ptr, alignment, slice_mask);
-#endif
         } else {
             load_inst = builder->CreateAlignedLoad(vec_ptr, llvm::Align(alignment));
         }

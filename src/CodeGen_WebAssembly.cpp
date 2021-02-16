@@ -21,6 +21,7 @@ CodeGen_WebAssembly::CodeGen_WebAssembly(const Target &t)
 #if !defined(WITH_WEBASSEMBLY)
     user_error << "llvm build not configured with WebAssembly target enabled.\n";
 #endif
+    // TODO: we should probably move this to LLVM 12 or 13, since LLVM11 won't support SIMD usefully enough for Halide
     user_assert(LLVM_VERSION >= 110) << "Generating WebAssembly is only supported under LLVM 11+.";
     user_assert(llvm_WebAssembly_enabled) << "llvm build not configured with WebAssembly target enabled.\n";
     user_assert(target.bits == 32) << "Only wasm32 is supported.";
