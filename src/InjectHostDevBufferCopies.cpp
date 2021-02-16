@@ -345,7 +345,12 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
             // union of the state before the loop starts and the state
             // after one iteration. Just forget everything we know.
             state = State{};
-            return IRMutator::visit(op);
+            Stmt s = IRMutator::visit(op);
+            // The state after analyzing the loop body might not be the
+            // true state if the loop ran for zero iterations. So
+            // forget everything again.
+            state = State{};
+            return s;
         } else {
             return do_copies(op);
         }
