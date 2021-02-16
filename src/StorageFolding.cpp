@@ -773,6 +773,13 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                         to_release = max_required - max_required_next;  // This is the last time we use these entries
                     }
 
+                    if (provided.used.defined()) {
+                        to_acquire = select(provided.used, to_acquire, 0);
+                    }
+                    if (required.used.defined()) {
+                        to_release = select(required.used, to_release, 0);
+                    }
+
                     // Logically we acquire the entire extent on
                     // the first iteration:
 
