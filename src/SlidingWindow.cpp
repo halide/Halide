@@ -14,12 +14,15 @@
 #include "Substitute.h"
 #include "UnsafePromises.h"
 #include <utility>
+#include <list>
 
 namespace Halide {
 namespace Internal {
 
 using std::map;
 using std::string;
+using std::list;
+using std::pair;
 
 namespace {
 
@@ -276,7 +279,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 return stmt;
             }
 
-            std::string new_loop_min_name = unique_name('x');
+            string new_loop_min_name = unique_name('x');
             Expr new_loop_min_var = Variable::make(Int(32), new_loop_min_name);
             Expr new_loop_min_eq;
             if (can_slide_up) {
@@ -427,85 +430,11 @@ public:
     Expr new_loop_min;
 };
 
-// Perform sliding window optimization for a particular function
-class SlidingWindowOnFunction : public IRMutator {
-    Function func;
-
-    using IRMutator::visit;
-
-    Stmt visit(const For *op) override {
-        debug(3) << " Doing sliding window analysis over loop: " << op->name << "\n";
-
-        Stmt new_body = op->body;
-
-        std::string new_loop_name = op->name;
-
-        Expr new_loop_min;
-        Expr new_loop_extent;
-        if (op->for_type == ForType::Serial ||
-            op->for_type == ForType::Unrolled) {
-            SlidingWindowOnFunctionAndLoop slider(func, op->name, op->min);
-            new_body = slider.mutate(new_body);
-            // We might have modified the loop min. If so, update the loop extent
-            // to preserve the max.
-            if (slider.new_loop_min.defined()) {
-                new_loop_min = slider.new_loop_min;
-                // We also need to rename the loop.
-                new_loop_name += ".n";
-
-                // The new loop interval is the new loop min to the old loop max.
-                std::string loop_max_name = op->min.as<Variable>()->name;
-                loop_max_name = loop_max_name.substr(0, loop_max_name.length() - 2) + "ax";
-                Expr loop_max = Variable::make(Int(32), loop_max_name);
-                new_loop_extent = loop_max - Variable::make(Int(32), new_loop_name + ".loop_min") + 1;
-            }
-        }
-
-        Expr new_min = op->min;
-        Expr new_extent = op->extent;
-        if (new_loop_name != op->name) {
-            // At this point, everything above is implemented by shadowing the old loop variable and related
-            // lets. This isn't OK, so fix that here.
-            new_min = Variable::make(Int(32), new_loop_name + ".loop_min");
-            new_extent = Variable::make(Int(32), new_loop_name + ".loop_extent");
-            std::map<string, Expr> renames = {
-                {op->name, Variable::make(Int(32), new_loop_name)},
-                {op->name + ".loop_extent", new_extent},
-                {op->name + ".loop_min", new_min},
-            };
-            new_body = substitute(renames, new_body);
-        }
-
-        new_body = mutate(new_body);
-
-        Stmt new_for;
-        if (new_body.same_as(op->body) && new_loop_name == op->name && new_min.same_as(op->min) && new_extent.same_as(op->extent)) {
-            new_for = op;
-        } else {
-            new_for = For::make(new_loop_name, new_min, new_extent, op->for_type, op->device_api, new_body);
-        }
-
-        if (new_loop_min.defined()) {
-            Expr new_loop_max =
-                Variable::make(Int(32), new_loop_name + ".loop_min") + Variable::make(Int(32), new_loop_name + ".loop_extent") - 1;
-            new_for = LetStmt::make(new_loop_name + ".loop_max", new_loop_max, new_for);
-            new_for = LetStmt::make(new_loop_name + ".loop_extent", new_loop_extent, new_for);
-            new_for = LetStmt::make(new_loop_name + ".loop_min.orig", Variable::make(Int(32), new_loop_name + ".loop_min"), new_for);
-            new_for = LetStmt::make(new_loop_name + ".loop_min", new_loop_min, new_for);
-        }
-
-        return new_for;
-    }
-
-public:
-    SlidingWindowOnFunction(Function f)
-        : func(std::move(f)) {
-    }
-};
-
 // Perform sliding window optimization for all functions
 class SlidingWindow : public IRMutator {
     const map<string, Function> &env;
+
+    list<Function> sliding;
 
     using IRMutator::visit;
 
@@ -526,18 +455,68 @@ class SlidingWindow : public IRMutator {
             return IRMutator::visit(op);
         }
 
-        Stmt new_body = op->body;
-
-        new_body = mutate(new_body);
-
-        debug(3) << "Doing sliding window analysis on realization of " << op->name << "\n";
-        new_body = SlidingWindowOnFunction(iter->second).mutate(new_body);
+        // We want to slide innermost first, so put it on the front of
+        // the list.
+        sliding.push_front(iter->second);
+        Stmt new_body = mutate(op->body);
+        sliding.pop_front();
 
         if (new_body.same_as(op->body)) {
             return op;
         } else {
             return Realize::make(op->name, op->types, op->memory_type,
                                  op->bounds, op->condition, new_body);
+        }
+    }
+
+    Stmt visit(const For *op) override {
+        if (!(op->for_type == ForType::Serial || op->for_type == ForType::Unrolled)) {
+            return IRMutator::visit(op);
+        }
+        string name = op->name;
+        Stmt body = op->body;
+        Expr loop_min = op->min;
+        Expr loop_extent = op->extent;
+        string loop_max_name = loop_min.as<Variable>()->name;
+        loop_max_name = loop_max_name.substr(0, loop_max_name.length() - 2) + "ax";
+        Expr loop_max = Variable::make(Int(32), loop_max_name);
+
+        list<pair<string, Expr>> new_lets;
+        for (const Function &func : sliding) {
+            SlidingWindowOnFunctionAndLoop slider(func, name, loop_min);
+            body = slider.mutate(body);
+
+            if (slider.new_loop_min.defined()) {
+                // Update the loop body to use the adjusted loop min.
+                string new_name = name + ".n";
+                loop_min = Variable::make(Int(32), new_name + ".loop_min");
+                loop_extent = Variable::make(Int(32), new_name + ".loop_extent");
+                body = substitute({
+                    {name, Variable::make(Int(32), new_name)},
+                    {name + ".loop_min", loop_min},
+                    {name + ".loop_extent", loop_extent},
+                }, body);
+
+                name = new_name;
+
+                // The new loop interval is the new loop min to the loop max.
+                new_lets.emplace_front(name + ".loop_min", slider.new_loop_min);
+                new_lets.emplace_front(name + ".loop_min.orig", loop_min);
+                new_lets.emplace_front(name + ".loop_extent", (loop_max - loop_min) + 1);
+            }
+        }
+
+        body = mutate(body);
+
+        if (body.same_as(op->body) && loop_min.same_as(op->min) && loop_extent.same_as(op->extent) && name == op->name) {
+            return op;
+        } else {
+            Stmt result = For::make(name, loop_min, loop_extent, op->for_type, op->device_api, body);
+            result = LetStmt::make(name + ".loop_max", loop_max, result);
+            for (const auto &i : new_lets) {
+                result = LetStmt::make(i.first, i.second, result);
+            }
+            return result;
         }
     }
 
@@ -554,9 +533,14 @@ class AddLoopMinOrig : public IRMutator {
         Stmt body = mutate(op->body);
         Expr min = mutate(op->min);
         Expr extent = mutate(op->extent);
-        Stmt result = For::make(op->name, min, extent, op->for_type, op->device_api, body);
-        result = LetStmt::make(op->name + ".loop_min.orig", Variable::make(Int(32), op->name + ".loop_min"), result);
-        return result;
+
+        Stmt result;
+        if (body.same_as(op->body) && min.same_as(op->min) && extent.same_as(op->extent)) {
+            result = op;
+        } else {
+            result = For::make(op->name, min, extent, op->for_type, op->device_api, body);
+        }
+        return LetStmt::make(op->name + ".loop_min.orig", Variable::make(Int(32), op->name + ".loop_min"), result);
     }
 };
 
