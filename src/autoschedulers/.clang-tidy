@@ -1,7 +1,0 @@
----
-InheritParentConfig: true
-
-Checks: >
-    -performance-unnecessary-copy-initialization,
-    -performance-unnecessary-value-param,
-...
