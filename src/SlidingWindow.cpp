@@ -575,7 +575,12 @@ class SlidingWindow : public IRMutator {
 
             if (slider.new_loop_min.defined()) {
                 // Update the loop body to use the adjusted loop min.
-                Expr new_loop_min = min(slider.new_loop_min, loop_min);
+                Expr new_loop_min = slider.new_loop_min;
+                if (!sliding_loop_min.same_as(loop_min)) {
+                    // If we didn't start from the loop min, take the union
+                    // of the new loop min and the loop min.
+                    new_loop_min = min(new_loop_min, loop_min);
+                }
                 string new_name = name + ".n";
                 loop_min = Variable::make(Int(32), new_name + ".loop_min");
                 loop_extent = Variable::make(Int(32), new_name + ".loop_extent");
