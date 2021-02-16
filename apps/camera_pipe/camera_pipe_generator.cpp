@@ -408,8 +408,7 @@ void CameraPipe::generate() {
     // shift by 16, 12. We also convert it to be signed, so we can deal
     // with values that fall below 0 during processing.
     Func shifted;
-    // TODO: Should be y + 12.
-    shifted(x, y) = cast<int16_t>(input(x + 16, y + 16));
+    shifted(x, y) = cast<int16_t>(input(x + 16, y + 12));
 
     Func denoised = hot_pixel_suppression(shifted);
 

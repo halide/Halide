@@ -49,6 +49,48 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Try two producers used by the same consumer.
+    {
+        count = 0;
+        Func f, g, h;
+
+        f(x) = call_counter(2 * x + 0, 0);
+        g(x) = call_counter(2 * x + 1, 0);
+        h(x) = f(x) + f(x - 1) + g(x) + g(x - 1);
+
+        f.store_root().compute_at(h, x);
+        g.store_root().compute_at(h, x);
+
+        h.output_buffer().dim(0).set_min(0);
+
+        Buffer<int> im = h.realize({100});
+        if (count != 202) {
+            printf("f was called %d times instead of %d times\n", count, 202);
+            return -1;
+        }
+    }
+
+    // Try a sequence of two sliding windows.
+    {
+        count = 0;
+        Func f, g, h;
+
+        f(x) = call_counter(2 * x + 0, 0);
+        g(x) = f(x) + f(x - 1);
+        h(x) = g(x) + g(x - 1);
+
+        f.store_root().compute_at(h, x);
+        g.store_root().compute_at(h, x);
+
+        h.output_buffer().dim(0).set_min(0);
+
+        Buffer<int> im = h.realize({100});
+        if (count != 102) {
+            printf("f was called %d times instead of %d times\n", count, 102);
+            return -1;
+        }
+    }
+
     // Try again where there's a containing stage
     {
         count = 0;

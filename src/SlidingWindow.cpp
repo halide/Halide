@@ -430,6 +430,71 @@ public:
     Expr new_loop_min;
 };
 
+// In Stmt s, does the production of b depend on a?
+// We can't use produce/consume nodes to determine this, because they're "loose".
+// For example, we get this:
+//
+//  produce a {
+//   a(...) = ...
+//  }
+//  consume a {
+//   produce b {
+//    b(...) = ... // not depending on a
+//   }
+//   consume b {
+//    c(...) = a(...) + b(...)
+//   }
+//  }
+//
+// When we'd rather see this:
+//
+//  produce a {
+//   a(...) = ...
+//  }
+//  produce b {
+//   b(...) = ... // not depending on a
+//  }
+//  consume a {
+//   consume b {
+//    c(...) = a(...) + b(...)
+//   }
+//  }
+//
+// TODO: We might also need to figure out transitive dependencies...? If so, it
+// would be best to just fix the produce/consume relationships as above. We would
+// just be able to look for produce b inside produce a.
+class DependsOn : public IRVisitor {
+    using IRVisitor::visit;
+
+    const Function &a;
+    const Function &b;
+    bool finding_a = false;
+
+    void visit(const ProducerConsumer *op) {
+        ScopedValue<bool> old_finding_a(finding_a, op->is_producer && op->name == b.name());
+        return IRVisitor::visit(op);
+    }
+
+    void visit(const Call *op) {
+        if (finding_a && op->name == a.name()) {
+            yes = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+public:
+    bool yes = false;
+
+    DependsOn(const Function &a, const Function &b) : a(a), b(b) {}
+};
+
+bool depends_on(const Function &a, const Function &b, const Stmt &s) {
+    DependsOn check(a, b);
+    s.accept(&check);
+    return check.yes;
+}
+
 // Perform sliding window optimization for all functions
 class SlidingWindow : public IRMutator {
     const map<string, Function> &env;
@@ -473,6 +538,8 @@ class SlidingWindow : public IRMutator {
         if (!(op->for_type == ForType::Serial || op->for_type == ForType::Unrolled)) {
             return IRMutator::visit(op);
         }
+        debug(3) << "Doing sliding window analysis on loop " << op->name << "\n";
+
         string name = op->name;
         Stmt body = op->body;
         Expr loop_min = op->min;
@@ -481,13 +548,34 @@ class SlidingWindow : public IRMutator {
         loop_max_name = loop_max_name.substr(0, loop_max_name.length() - 2) + "ax";
         Expr loop_max = Variable::make(Int(32), loop_max_name);
 
+        Expr prev_loop_min = loop_min;
+        const Function* prev_func = nullptr;
+
         list<pair<string, Expr>> new_lets;
         for (const Function &func : sliding) {
-            SlidingWindowOnFunctionAndLoop slider(func, name, loop_min);
+            debug(3) << "Doing sliding window analysis on function " << func.name() << "\n";
+
+            Expr sliding_loop_min;
+            if (prev_func && depends_on(func, *prev_func, body)) {
+                // The production of func depends on the production of prev_func.
+                // The loop min needs to grow to warm up func before prev_func.
+                sliding_loop_min = loop_min;
+            } else {
+                // The production of func does not depend on the production of prev_func.
+                // We can use the previous loop_min, and move the min to accommodate
+                // both func and prev_func.
+                sliding_loop_min = prev_loop_min;
+            }
+
+            SlidingWindowOnFunctionAndLoop slider(func, name, sliding_loop_min);
             body = slider.mutate(body);
+
+            prev_loop_min = loop_min;
+            prev_func = &func;
 
             if (slider.new_loop_min.defined()) {
                 // Update the loop body to use the adjusted loop min.
+                Expr new_loop_min = min(slider.new_loop_min, loop_min);
                 string new_name = name + ".n";
                 loop_min = Variable::make(Int(32), new_name + ".loop_min");
                 loop_extent = Variable::make(Int(32), new_name + ".loop_extent");
@@ -500,7 +588,7 @@ class SlidingWindow : public IRMutator {
                 name = new_name;
 
                 // The new loop interval is the new loop min to the loop max.
-                new_lets.emplace_front(name + ".loop_min", slider.new_loop_min);
+                new_lets.emplace_front(name + ".loop_min", new_loop_min);
                 new_lets.emplace_front(name + ".loop_min.orig", loop_min);
                 new_lets.emplace_front(name + ".loop_extent", (loop_max - loop_min) + 1);
             }
