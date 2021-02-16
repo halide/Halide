@@ -470,12 +470,12 @@ class DependsOn : public IRVisitor {
     const Function &b;
     bool finding_a = false;
 
-    void visit(const ProducerConsumer *op) {
+    void visit(const ProducerConsumer *op) override {
         ScopedValue<bool> old_finding_a(finding_a, op->is_producer && op->name == b.name());
         return IRVisitor::visit(op);
     }
 
-    void visit(const Call *op) {
+    void visit(const Call *op) override {
         if (finding_a && op->name == a.name()) {
             yes = true;
         } else {
@@ -581,7 +581,7 @@ class SlidingWindow : public IRMutator {
                     // of the new loop min and the loop min.
                     new_loop_min = min(new_loop_min, loop_min);
                 }
-                string new_name = name + ".n";
+                string new_name = name + ".$n";
                 loop_min = Variable::make(Int(32), new_name + ".loop_min");
                 loop_extent = Variable::make(Int(32), new_name + ".loop_extent");
                 body = substitute({
