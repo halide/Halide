@@ -4,6 +4,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
 
+    // TODO(#5738): remove after winbots are upgraded
     Target target = get_jit_target_from_environment();
     if (target.os == Target::Windows &&
         (target.has_feature(Target::OpenCL) ||
