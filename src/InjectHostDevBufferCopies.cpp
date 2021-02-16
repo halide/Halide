@@ -337,10 +337,18 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     // We want to break things down into a serial sequence of leaf
     // stmts, and possibly do copies and update state around each
     // leaf.
-
     Stmt visit(const For *op) override {
-        // All copies happen at the same loop level as the allocation.
-        return do_copies(op);
+        FindBufferUsage finder(buffer, DeviceAPI::Host);
+        op->accept(&finder);
+        if (finder.devices_touched.size() > 1) {
+            // The state of the buffer going into the loop is the
+            // union of the state before the loop starts and the state
+            // after one iteration. Just forget everything we know.
+            state = State{};
+            return IRMutator::visit(op);
+        } else {
+            return do_copies(op);
+        }
     }
 
     Stmt visit(const Fork *op) override {
