@@ -64,7 +64,7 @@ class ExpandExpr : public IRMutator {
     Expr visit(const Variable *var) override {
         if (scope.contains(var->name)) {
             Expr expr = scope.get(var->name);
-            debug(3) << "Fully expanded " << var->name << " -> " << expr << "\n";
+            debug(4) << "Fully expanded " << var->name << " -> " << expr << "\n";
             return expr;
         } else {
             return var;
@@ -81,7 +81,7 @@ public:
 Expr expand_expr(const Expr &e, const Scope<Expr> &scope) {
     ExpandExpr ee(scope);
     Expr result = ee.mutate(e);
-    debug(3) << "Expanded " << e << " into " << result << "\n";
+    debug(4) << "Expanded " << e << " into " << result << "\n";
     return result;
 }
 
@@ -304,6 +304,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             internal_assert(!new_loop_min.defined());
             new_loop_min = solve_result.max;
+            if (equal(new_loop_min, loop_min)) {
+                new_loop_min = Expr();
+            }
             if (can_slide_up) {
                 new_min = prev_max_plus_one;
                 new_max = max_required;
@@ -318,7 +321,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             debug(3) << "Sliding " << func.name() << ", " << dim << "\n"
                      << "Pushing min up from " << min_required << " to " << new_min << "\n"
                      << "Shrinking max from " << max_required << " to " << new_max << "\n"
-                     << "Adjusting loop_min from " << loop_min << " to " << new_loop_min << "\n";
+                     << "Adjusting loop_min from " << loop_min << " to " << new_loop_min << "\n"
+                     << "Equation is " << new_loop_min_eq << "\n";
 
             // Now redefine the appropriate regions required
             if (can_slide_up) {
