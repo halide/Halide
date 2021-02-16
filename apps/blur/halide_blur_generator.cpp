@@ -97,16 +97,17 @@ public:
                 .vectorize(x, vector_size);
         } else {
             // CPU schedule.
-            // Split the image into vertical strips, computing x in
-            // a sliding window down each strip.
-            blur_y.compute_root()
-                .split(x, x, xi, natural_vector_size<uint16_t>() * 4)
-                .reorder(xi, y, x)
-                .vectorize(xi);
-            blur_x.compute_at(blur_y, y)
-                .store_at(blur_y, x)
-                .fold_storage(y, 3)
-                .vectorize(x);
+            // Compute blur_x as needed at each vector of the output.
+            // Halide will store blur_x in a circular buffer so its
+            // results can be re-used.
+            blur_y
+                .split(y, y, yi, 32)
+                .parallel(y)
+                .vectorize(x, 16);
+            blur_x
+                .store_at(blur_y, y)
+                .compute_at(blur_y, x)
+                .vectorize(x, 16);
         }
     }
 };
