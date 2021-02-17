@@ -802,10 +802,10 @@ WEAK int halide_hexagon_buffer_copy(void *user_context, struct halide_buffer_t *
 
     // Get the descriptor associated with the ion buffer.
     if (!from_host) {
-        c.src = ptr_to_uint64((ion_device_handle *)halide_hexagon_get_device_handle(user_context, src));
+        c.src = ptr_to_uint64(halide_hexagon_get_device_handle(user_context, src));
     }
     if (!to_host) {
-        c.dst = ptr_to_uint64((ion_device_handle *)halide_hexagon_get_device_handle(user_context, dst));
+        c.dst = ptr_to_uint64(halide_hexagon_get_device_handle(user_context, dst));
     }
     copy_memory(c, user_context);
 
