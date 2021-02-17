@@ -63,43 +63,6 @@ Expr make_min_helper(const Expr &a, const Expr &b) {
     }
 }
 
-Expr make_add_helper(const Expr &a, const Expr &b) {
-    auto rewrite = IRMatcher::rewriter(IRMatcher::add(a, b), a.type());
-
-    Expr pos_inf = Interval::pos_inf();
-    Expr neg_inf = Interval::neg_inf();
-    if (rewrite(x + pos_inf, pos_inf) ||
-        rewrite(x + neg_inf, neg_inf) ||
-        rewrite(pos_inf + x, pos_inf) ||
-        rewrite(neg_inf + x, neg_inf) ||
-        rewrite(c0 + c1, fold(c0 + c1)) ||
-        rewrite(x + 0, x) ||
-        rewrite(0 + x, x) ||
-        rewrite((x + c0) + c1, x + fold(c0 + c1)) ||
-        rewrite((c0 + x) + c1, x + fold(c0 + c1))) {
-        return rewrite.result;
-    } else {
-        return a + b;
-    }
-}
-
-Expr make_sub_helper(const Expr &a, const Expr &b) {
-    auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b), a.type());
-
-    Expr pos_inf = Interval::pos_inf();
-    Expr neg_inf = Interval::neg_inf();
-    if (rewrite(x - pos_inf, neg_inf) ||
-        rewrite(x - neg_inf, pos_inf) ||
-        rewrite(pos_inf - x, pos_inf) ||
-        rewrite(neg_inf - x, neg_inf) ||
-        rewrite(x - 0, x) ||
-        rewrite(c0 - c1, fold(c0 - c1))) {
-        return rewrite.result;
-    } else {
-        return a - b;
-    }
-}
-
 }  // namespace
 
 Interval Interval::everything() {
@@ -159,14 +122,6 @@ Expr Interval::make_max(const Expr &a, const Expr &b) {
 
 Expr Interval::make_min(const Expr &a, const Expr &b) {
     return make_min_helper(a, b);
-}
-
-Expr Interval::make_add(const Expr &a, const Expr &b) {
-    return make_add_helper(a, b);
-}
-
-Expr Interval::make_sub(const Expr &a, const Expr &b) {
-    return make_sub_helper(a, b);
 }
 
 void Interval::include(const Interval &i) {

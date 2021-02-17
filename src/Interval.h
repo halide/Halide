@@ -90,11 +90,11 @@ struct Interval {
     /** Construct the largest interval contained within two intervals. */
     static Interval make_intersection(const Interval &a, const Interval &b);
 
-    /** Eagerly-simplifying operations of two Exprs that respects infinities. */
+    /** An eagerly-simplifying max of two Exprs that respects infinities. */
     static Expr make_max(const Expr &a, const Expr &b);
+
+    /** An eagerly-simplifying min of two Exprs that respects infinities. */
     static Expr make_min(const Expr &a, const Expr &b);
-    static Expr make_add(const Expr &a, const Expr &b);
-    static Expr make_sub(const Expr &a, const Expr &b);
 
     /** Equivalent to same_as. Exists so that the autoscheduler can
      * compare two map<string, Interval> for equality in order to
