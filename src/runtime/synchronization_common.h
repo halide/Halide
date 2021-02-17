@@ -693,7 +693,7 @@ WEAK uintptr_t unpark_all(uintptr_t addr, uintptr_t unpark_info) {
     size_t waiters = 0;
     queue_data *temp_list_storage[16];
     queue_data **temp_list = &temp_list_storage[0];
-    size_t max_waiters = sizeof(temp_list_storage) / sizeof(temp_list_storage[0]);
+    size_t max_waiters = sizeof(temp_list_storage) / sizeof(temp_list_storage[0]);  // NOLINT(bugprone-sizeof-expression)
 
     while (data != nullptr) {
         uintptr_t cur_addr;
@@ -709,7 +709,7 @@ WEAK uintptr_t unpark_all(uintptr_t addr, uintptr_t unpark_info) {
 
             if (waiters == max_waiters) {
                 queue_data **temp = temp_list;
-                temp_list = (queue_data **)malloc(sizeof(queue_data *) * max_waiters * 2);
+                temp_list = (queue_data **)malloc(sizeof(queue_data *) * max_waiters * 2);  // NOLINT(bugprone-sizeof-expression)
                 for (size_t i = 0; i < max_waiters; i++) {
                     temp_list[i] = temp[i];
                 }

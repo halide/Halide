@@ -3042,7 +3042,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
                 ++num_kernel_args;
             }
 
-            buffer_args = (d3d12_buffer **)__builtin_alloca(num_kernel_args * sizeof(d3d12_buffer *));
+            buffer_args = (d3d12_buffer **)__builtin_alloca(num_kernel_args * sizeof(d3d12_buffer *));  // NOLINT(bugprone-sizeof-expression)
             arg_sizes = (size_t *)__builtin_alloca(num_kernel_args * sizeof(size_t));
             for (size_t i = 0; i < num_kernel_args; i++) {
                 if (arg_is_buffer[i]) {

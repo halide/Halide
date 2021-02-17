@@ -553,7 +553,7 @@ WEAK cl_program compile_kernel(void *user_context, cl_context ctx, const char *s
     cl_int err = 0;
     cl_device_id dev;
 
-    err = clGetContextInfo(ctx, CL_CONTEXT_DEVICES, sizeof(dev), &dev, nullptr);
+    err = clGetContextInfo(ctx, CL_CONTEXT_DEVICES, sizeof(dev), &dev, nullptr);  // NOLINT(bugprone-sizeof-expression)
     if (err != CL_SUCCESS) {
         error(user_context) << "CL: clGetContextInfo(CL_CONTEXT_DEVICES) failed: "
                             << get_opencl_error_name(err);
@@ -1127,7 +1127,7 @@ WEAK int halide_opencl_run(void *user_context,
             }
             if (err == CL_SUCCESS) {
                 debug(user_context) << "Mapped dev handle is: " << (void *)mem << "\n";
-                err = clSetKernelArg(f, i, sizeof(mem), &mem);
+                err = clSetKernelArg(f, i, sizeof(mem), &mem);  // NOLINT(bugprone-sizeof-expression)
             }
         } else {
             err = clSetKernelArg(f, i, arg_sizes[i], this_arg);

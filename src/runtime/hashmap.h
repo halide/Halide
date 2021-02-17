@@ -396,14 +396,14 @@ struct THashMap : public HashMap {
     // member functions below...
 
     static void copy_value_func(uint8_t *dst, const uint8_t *src, size_t size) {
-        halide_assert(nullptr, sizeof(ValueType) == size);
+        halide_assert(nullptr, sizeof(ValueType) == size);  // NOLINT(bugprone-sizeof-expression)
         ValueType *D = reinterpret_cast<ValueType *>(dst);
         const ValueType *S = reinterpret_cast<const ValueType *>(src);
         *D = *S;
     }
 
     static void destroy_value_func(uint8_t *value, size_t size) {
-        halide_assert(nullptr, sizeof(ValueType) == size);
+        halide_assert(nullptr, sizeof(ValueType) == size);  // NOLINT(bugprone-sizeof-expression)
         ValueType *V = reinterpret_cast<ValueType *>(value);
         V->~ValueType();
     }
@@ -413,11 +413,11 @@ struct THashMap : public HashMap {
     }
 
     int lookup(void *user_context, const uint8_t *cache_key, int32_t key_size, ValueType *cache_value) {
-        return HashMap::lookup(user_context, cache_key, key_size, (uint8_t *)cache_value, sizeof(ValueType));
+        return HashMap::lookup(user_context, cache_key, key_size, (uint8_t *)cache_value, sizeof(ValueType));  // NOLINT(bugprone-sizeof-expression)
     }
 
     int store(void *user_context, const uint8_t *cache_key, int32_t key_size, const ValueType *cache_value) {
-        return HashMap::store(user_context, cache_key, key_size, (const uint8_t *)cache_value, sizeof(ValueType));
+        return HashMap::store(user_context, cache_key, key_size, (const uint8_t *)cache_value, sizeof(ValueType));  // NOLINT(bugprone-sizeof-expression)
     }
 };
 
