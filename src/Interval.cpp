@@ -158,7 +158,7 @@ Expr Interval::neg_inf_noinline() {
 }
 
 ConstantInterval::ConstantInterval()
-    : min(-1000), max(1000), min_defined(false), max_defined(false) {}
+    : min(0), max(0), min_defined(false), max_defined(false) {}
 
 ConstantInterval::ConstantInterval(int64_t min, int64_t max)
     : min(min), max(max), min_defined(true), max_defined(true) {}
