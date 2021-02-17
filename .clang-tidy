@@ -13,7 +13,6 @@ Checks: >
     -bugprone-exception-escape,
     -bugprone-incorrect-roundings,
     -bugprone-integer-division,
-    -bugprone-macro-parentheses,
     -bugprone-narrowing-conversions,
     -bugprone-signed-char-misuse,
     misc-*,
