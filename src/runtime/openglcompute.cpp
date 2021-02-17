@@ -784,7 +784,7 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
     const char *END_OF_KERNEL_MARKER = "\n// end of kernel ";
     const size_t END_OF_KERNEL_MARKER_LENGTH = strlen(END_OF_KERNEL_MARKER);
 
-    while (1) {
+    while (true) {
         const char *end_of_kernel_marker = strstr(src, END_OF_KERNEL_MARKER);
         if (!end_of_kernel_marker) {
             break;  // end of kernels sources is reached
