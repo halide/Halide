@@ -1911,7 +1911,7 @@ const LoopNest *deepest_common_ancestor(const map<const LoopNest *, pair<const L
         it_b = parents.find(b);
     }
 
-    while (1) {
+    while (true) {
         // Walk each up one
         a = it_a->second.first;
         b = it_b->second.first;

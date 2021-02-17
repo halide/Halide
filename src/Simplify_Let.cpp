@@ -81,7 +81,7 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
 
         debug(4) << "simplify let " << op->name << " = " << f.value << " in...\n";
 
-        while (1) {
+        while (true) {
             const Variable *var = f.new_value.template as<Variable>();
             const Add *add = f.new_value.template as<Add>();
             const Sub *sub = f.new_value.template as<Sub>();
