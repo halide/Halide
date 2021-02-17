@@ -78,7 +78,7 @@ struct halide_d3d12compute_command_queue;
 extern int halide_d3d12compute_acquire_context(void *user_context, struct halide_d3d12compute_device **device_ret,
                                                struct halide_d3d12compute_command_queue **queue_ret, bool create);
 
-/** This call balances each successfull halide_d3d12compute_acquire_context call.
+/** This call balances each successful halide_d3d12compute_acquire_context call.
  * If halide_d3d12compute_acquire_context is replaced, this routine must be replaced
  * as well.
  */
