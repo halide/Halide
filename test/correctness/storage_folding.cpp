@@ -147,7 +147,7 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = g.realize({100, 1000, 3});
 
-        size_t expected_size = 104 * 1002 * 3 * sizeof(int) + sizeof(int);
+        size_t expected_size = 101 * 1002 * 3 * sizeof(int) + sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
             return -1;
         }

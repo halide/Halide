@@ -136,25 +136,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Sliding on vectors.
-    {
-        count = 0;
-        Func f, g, h;
-        f(x) = call_counter(x, 0);
-        g(x) = f(x);
-        h(x) = g(x + 1) - g(x);
-
-        g.store_root().compute_at(h, x).vectorize(x, 4);
-        f.compute_at(g, x);
-        h.vectorize(x, 4, TailStrategy::RoundUp);
-
-        Buffer<int> im = h.realize({100});
-        if (count != 101) {
-            printf("f was called %d times instead of %d times\n", count, 101);
-            return -1;
-        }
-    }
-
     // Now try with a reduction
     {
         count = 0;
@@ -255,8 +236,25 @@ int main(int argc, char **argv) {
         count = 0;
         Buffer<int> im = g.realize({100});
 
-        if (count != 110) {
-            printf("f was called %d times instead of %d times\n", count, 110);
+        if (count != 101) {
+            printf("f was called %d times instead of %d times\n", count, 101);
+            return -1;
+        }
+    }
+
+    {
+        // Sliding with a vectorized producer and consumer.
+        count = 0;
+        Func f, g;
+        f(x) = call_counter(x, 0);
+        g(x) = f(x + 1) + f(x - 1);
+
+        f.store_root().compute_at(g, x).vectorize(x, 4);
+        g.vectorize(x, 4);
+
+        Buffer<int> im = g.realize({100});
+        if (count != 102) {
+            printf("f was called %d times instead of %d times\n", count, 102);
             return -1;
         }
     }

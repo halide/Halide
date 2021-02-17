@@ -115,6 +115,39 @@ bool find_produce(const Stmt &s, const string &func) {
     return finder.found;
 }
 
+// Insert bounds on a dimension of a producer with a new min or max, or both.
+class GuardProducer : public IRMutator {
+    const Function &func;
+    int dim_idx;
+    // These may be undefined, indicating there is no bound.
+    const Expr &min;
+    const Expr &max;
+
+    Stmt visit(const Provide *op) override {
+        if (op->name != func.name()) {
+            return op;
+        }
+        internal_assert(dim_idx < (int)op->args.size());
+        Expr var = op->args[dim_idx];
+        Expr guard = const_true();
+        if (min.defined()) {
+            guard = guard && likely_if_innermost(var >= min);
+        }
+        if (max.defined()) {
+            guard = guard && likely_if_innermost(var <= max);
+        }
+        return IfThenElse::make(guard, op);
+    }
+
+public:
+    GuardProducer(const Function &func, int dim_idx, const Expr &min, const Expr &max)
+        : func(func), dim_idx(dim_idx), min(min), max(max) {}
+};
+
+Stmt guard_producer(const Stmt &s, const Function &func, int dim_idx, const Expr &min, const Expr &max) {
+    return GuardProducer(func, dim_idx, min, max).mutate(s);
+}
+
 // Perform sliding window optimization for a function over a
 // particular serial for loop
 class SlidingWindowOnFunctionAndLoop : public IRMutator {
@@ -358,6 +391,13 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                     stmt = LetStmt::make(n, max(var, b[dim_idx].max), stmt);
                 }
             }
+
+            // Guard producers against running on expanded bounds.
+            Expr orig_loop_min = Variable::make(Int(32), loop_var + ".loop_min.orig");
+            Expr bounded_loop_var = max(orig_loop_min, likely_if_innermost(loop_var_expr));
+            Expr bounded_min = substitute(loop_var, bounded_loop_var, min_required);
+            stmt = guard_producer(stmt, func, dim_idx, bounded_min, Expr());
+
             return stmt;
         } else if (!find_produce(op, func.name())) {
             // The producer might have expanded the loop before the min to warm
