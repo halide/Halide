@@ -118,6 +118,25 @@ Interval bounds_of_lanes(const Expr &e) {
         } else if (is_negative_const(r->stride)) {
             return {r->base + last_lane_idx * r->stride, r->base};
         }
+    } else if (const LE *le = e.as<LE>()) {
+        // The least true this can be is if we maximize the LHS and minimize the RHS
+        // The most true this can be is if we minimize the LHS and maximize the RHS
+        // This is only exact if one of the two sides is a Broadcast
+        Interval ia = bounds_of_lanes(le->a);
+        Interval ib = bounds_of_lanes(le->b);
+        if (ia.is_single_point() || ib.is_single_point()) {
+            return {ia.max <= ib.min, ia.min <= ib.max};
+        }
+    } else if (const LT *lt = e.as<LT>()) {
+        // The least true this can be is if we maximize the LHS and minimize the RHS
+        // The most true this can be is if we minimize the LHS and maximize the RHS
+        // This is only exact if one of the two sides is a Broadcast
+        Interval ia = bounds_of_lanes(lt->a);
+        Interval ib = bounds_of_lanes(lt->b);
+        if (ia.is_single_point() || ib.is_single_point()) {
+            return {ia.max < ib.min, ia.min < ib.max};
+        }
+
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return {b->value, b->value};
     } else if (const Let *let = e.as<Let>()) {
