@@ -393,19 +393,18 @@ class DerivativeBounds : public IRVisitor {
             ConstantInterval rb = result;
             ConstantInterval unified = unify(ra, rb);
 
-            Expr step = simplify(op->true_value - op->false_value);
-            step.accept(this);
-            ConstantInterval rstep = result;
+            // TODO: How to handle unsigned values?
+            Expr delta = simplify(op->true_value - op->false_value);
+            delta.accept(this);
+            ConstantInterval rdelta = result;
 
-            ConstantInterval adjusted_step;
-            if (is_constant(rstep)) {
-                const int64_t *stepc = as_const_int(step);
-                internal_assert(stepc);
-                adjusted_step = multiply(rcond, *stepc);
+            ConstantInterval adjusted_delta;
+            if (const int64_t *const_delta = as_const_int(delta)) {
+                adjusted_delta = multiply(rcond, *const_delta);
             } else {
-                adjusted_step = multiply(rcond, rstep);
+                adjusted_delta = multiply(rcond, rdelta);
             }
-            result = add(unified, adjusted_step);
+            result = add(unified, adjusted_delta);
         } else {
             result = ConstantInterval();
         }
