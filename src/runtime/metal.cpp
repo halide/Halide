@@ -267,7 +267,7 @@ WEAK mtl_device *get_default_mtl_device() {
         // currently don't provide halide_get_symbol for iOS, only OSX)
         void *handle = dlsym(RTLD_DEFAULT, "MTLCopyAllDevices");
         if (handle != nullptr) {
-            typedef objc_id (*mtl_copy_all_devices_method)(void);
+            typedef objc_id (*mtl_copy_all_devices_method)();
             mtl_copy_all_devices_method method = (mtl_copy_all_devices_method)handle;
             objc_id devices = (objc_id)(*method)();
             if (devices != nullptr) {

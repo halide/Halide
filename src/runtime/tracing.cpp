@@ -37,7 +37,7 @@ class SharedExclusiveSpinLock {
 
 public:
     ALWAYS_INLINE void acquire_shared() {
-        while (1) {
+        while (true) {
             uint32_t x = lock & shared_mask;
             if (__sync_bool_compare_and_swap(&lock, x, x + 1)) {
                 return;
@@ -50,7 +50,7 @@ public:
     }
 
     ALWAYS_INLINE void acquire_exclusive() {
-        while (1) {
+        while (true) {
             // If multiple threads are trying to acquire exclusive
             // ownership, we may need to rerequest exclusive waiting
             // while we spin, as it gets unset whenever a thread

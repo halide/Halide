@@ -934,7 +934,7 @@ void IRPrinter::visit(const Fork *op) {
 
 void IRPrinter::visit(const IfThenElse *op) {
     stream << get_indent();
-    while (1) {
+    while (true) {
         stream << "if (";
         print_no_parens(op->condition);
         stream << ") {\n";
