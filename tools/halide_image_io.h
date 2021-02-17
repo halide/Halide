@@ -264,11 +264,11 @@ inline uint32_t convert(const int64_t &in) {
 }
 template<>
 inline uint32_t convert(const float &in) {
-    return (uint32_t)std::lround(in * 4294967295.0);
+    return (uint32_t)std::llround(in * 4294967295.0);
 }
 template<>
 inline uint32_t convert(const double &in) {
-    return (uint32_t)std::lround(in * 4294967295.0);
+    return (uint32_t)std::llround(in * 4294967295.0);
 }
 
 // Convert to u64
@@ -310,11 +310,11 @@ inline uint64_t convert(const int64_t &in) {
 }
 template<>
 inline uint64_t convert(const float &in) {
-    return convert<uint64_t, uint32_t>((uint32_t)std::lround(in * 4294967295.0));
+    return convert<uint64_t, uint32_t>((uint32_t)std::llround(in * 4294967295.0));
 }
 template<>
 inline uint64_t convert(const double &in) {
-    return convert<uint64_t, uint32_t>((uint32_t)std::lround(in * 4294967295.0));
+    return convert<uint64_t, uint32_t>((uint32_t)std::llround(in * 4294967295.0));
 }
 
 // Convert to i8
