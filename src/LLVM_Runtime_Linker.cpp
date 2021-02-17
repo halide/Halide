@@ -34,21 +34,17 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
         return parse_bitcode_file(sb, context, #mod);                                     \
     }
 
-#define DECLARE_NO_INITMOD(mod)                                                        \
-    std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *, bool, bool) { \
-        user_error << "Halide was compiled without support for this target\n";         \
-        return std::unique_ptr<llvm::Module>();                                        \
-    }                                                                                  \
-    std::unique_ptr<llvm::Module> get_initmod_##mod##_ll(llvm::LLVMContext *) {        \
-        user_error << "Halide was compiled without support for this target\n";         \
-        return std::unique_ptr<llvm::Module>();                                        \
+#define DECLARE_NO_INITMOD(mod)                                                                        \
+    std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *, bool = false, bool = false) { \
+        user_error << "Halide was compiled without support for this target\n";                         \
+        return std::unique_ptr<llvm::Module>();                                                        \
+    }                                                                                                  \
+    std::unique_ptr<llvm::Module> get_initmod_##mod##_ll(llvm::LLVMContext *) {                        \
+        user_error << "Halide was compiled without support for this target\n";                         \
+        return std::unique_ptr<llvm::Module>();                                                        \
     }
 
-#define DECLARE_CPP_INITMOD(mod)                                                                            \
-    DECLARE_INITMOD(mod##_32_debug)                                                                         \
-    DECLARE_INITMOD(mod##_64_debug)                                                                         \
-    DECLARE_INITMOD(mod##_32)                                                                               \
-    DECLARE_INITMOD(mod##_64)                                                                               \
+#define DECLARE_CPP_INITMOD_LOOKUP(mod)                                                                     \
     std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context, bool bits_64, bool debug) { \
         if (bits_64) {                                                                                      \
             if (debug) {                                                                                    \
@@ -64,6 +60,13 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
             }                                                                                               \
         }                                                                                                   \
     }
+
+#define DECLARE_CPP_INITMOD(mod)    \
+    DECLARE_INITMOD(mod##_32_debug) \
+    DECLARE_INITMOD(mod##_64_debug) \
+    DECLARE_INITMOD(mod##_32)       \
+    DECLARE_INITMOD(mod##_64)       \
+    DECLARE_CPP_INITMOD_LOOKUP(mod)
 
 #define DECLARE_LL_INITMOD(mod) \
     DECLARE_INITMOD(mod##_ll)
@@ -197,13 +200,33 @@ DECLARE_LL_INITMOD(ptx_compute_30)
 DECLARE_LL_INITMOD(ptx_compute_35)
 #endif  // WITH_NVPTX
 
-#ifdef WITH_D3D12
+#if defined(WITH_D3D12) && defined(WITH_X86)
 DECLARE_CPP_INITMOD(windows_d3d12compute_x86)
-DECLARE_CPP_INITMOD(windows_d3d12compute_arm)
 #else
 DECLARE_NO_INITMOD(windows_d3d12compute_x86)
-DECLARE_NO_INITMOD(windows_d3d12compute_arm)
 #endif
+
+#ifdef WITH_D3D12
+#ifdef WITH_ARM
+DECLARE_INITMOD(windows_d3d12compute_arm_32)
+DECLARE_INITMOD(windows_d3d12compute_arm_32_debug)
+#else
+DECLARE_NO_INITMOD(windows_d3d12compute_arm_32)
+DECLARE_NO_INITMOD(windows_d3d12compute_arm_32_debug)
+#endif
+
+#ifdef WITH_AARCH64
+DECLARE_INITMOD(windows_d3d12compute_arm_64)
+DECLARE_INITMOD(windows_d3d12compute_arm_64_debug)
+#else
+DECLARE_NO_INITMOD(windows_d3d12compute_arm_64)
+DECLARE_NO_INITMOD(windows_d3d12compute_arm_64_debug)
+#endif
+
+DECLARE_CPP_INITMOD_LOOKUP(windows_d3d12compute_arm)
+#else
+DECLARE_NO_INITMOD(windows_d3d12compute_arm)
+#endif  // WITH_D3D12
 
 #ifdef WITH_X86
 DECLARE_LL_INITMOD(x86_avx2)

@@ -2313,6 +2313,7 @@ std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target, llvm::L
 
 std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
     user_error << "hexagon not enabled for this build of Halide.\n";
+    return nullptr;
 }
 
 #endif  // WITH_HEXAGON
