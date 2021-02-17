@@ -19,6 +19,7 @@ Checks: >
     -misc-unconventional-assign-operator,
     -misc-unused-parameters,
     modernize-deprecated-headers,
+    modernize-redundant-void-arg,
     modernize-use-default-member-init,
     modernize-use-emplace,
     modernize-use-equals-default,
