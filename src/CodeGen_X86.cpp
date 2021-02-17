@@ -1,4 +1,5 @@
 #include "CodeGen_Posix.h"
+
 #include "ConciseCasts.h"
 #include "Debug.h"
 #include "IRMatch.h"
@@ -79,15 +80,21 @@ protected:
     void visit(const EQ *) override;
     void visit(const NE *) override;
     void visit(const Select *) override;
+    void visit(const Allocate *) override;
+    void visit(const Load *) override;
+    void visit(const Store *) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &init) override;
     // @}
+
+private:
+    Scope<MemoryType> mem_type;
 };
 
 CodeGen_X86::CodeGen_X86(Target t)
     : CodeGen_Posix(complete_x86_target(t)) {
 }
 
-const int max_intrinsic_args = 4;
+const int max_intrinsic_args = 6;
 
 struct x86Intrinsic {
     const char *intrin_name;
@@ -184,6 +191,13 @@ const x86Intrinsic intrinsic_defs[] = {
     {"dpwssdx16", Int(32, 16), "dot_product", {Int(32, 16), Int(16, 32), Int(16, 32)}, Target::AVX512_SapphireRapids},
     {"dpwssdx8", Int(32, 8), "dot_product", {Int(32, 8), Int(16, 16), Int(16, 16)}, Target::AVX512_SapphireRapids},
     {"dpwssdx4", Int(32, 4), "dot_product", {Int(32, 4), Int(16, 8), Int(16, 8)}, Target::AVX512_SapphireRapids},
+
+    {"tileloadd64_i8", Int(8, 1024), "tile_load", {Int(16), Int(16), Handle(), Int(64), Int(64)}, Target::AVX512_SapphireRapids},
+    {"tdpbssd", Int(32, 256), "tile_matmul", {Int(16), Int(16), Int(16), Int(32, 256), Int(8, 1024), Int(8, 1024)},  Target::AVX512_SapphireRapids},
+    {"tilezero_i32", Int(32, 256), "tile_zero", {Int(16), Int(16)},  Target::AVX512_SapphireRapids},
+    // CodeGen_LLVM cannot cope with returning Type() ie void*, and return type needs to be vector to trigger call_overloaded_intrin
+    {"tilestored64", Bool(2), "tile_store", {Int(16), Int(16), Handle(), Int(64), Int(64), Int(32, 256)}, Target::AVX512_SapphireRapids},
+
 };
 // clang-format on
 
@@ -574,6 +588,38 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
     }
 
     CodeGen_Posix::codegen_vector_reduce(op, init);
+}
+
+void CodeGen_X86::visit(const Allocate *op) {
+    ScopedBinding<MemoryType> bind(mem_type, op->name, op->memory_type);
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_X86::visit(const Load *op) {
+    if (mem_type.contains(op->name) && mem_type.get(op->name) == MemoryType::AMXTile) {
+        const Ramp *ramp = op->index.as<Ramp>();
+        internal_assert(ramp) << "Expected AMXTile to have index ramp\n";
+        Value *ptr = codegen_buffer_pointer(op->name, op->type, ramp->base);
+        LoadInst *load = builder->CreateAlignedLoad(ptr, llvm::Align(op->type.bytes()));
+        add_tbaa_metadata(load, op->name, op->index);
+        value = load;
+        return;
+    }
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_X86::visit(const Store *op) {
+    if (mem_type.contains(op->name) && mem_type.get(op->name) == MemoryType::AMXTile) {
+        Value *val = codegen(op->value);
+        Halide::Type value_type = op->value.type();
+        const Ramp *ramp = op->index.as<Ramp>();
+        internal_assert(ramp) << "Expected AMXTile to have index ramp\n";
+        Value *ptr = codegen_buffer_pointer(op->name, value_type, ramp->base);
+        StoreInst *store = builder->CreateAlignedStore(val, ptr, llvm::Align(value_type.bytes()));
+        add_tbaa_metadata(store, op->name, op->index);
+        return;
+    }
+    CodeGen_Posix::visit(op);
 }
 
 string CodeGen_X86::mcpu() const {

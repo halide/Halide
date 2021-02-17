@@ -22,6 +22,7 @@
 #include "DebugToFile.h"
 #include "Deinterleave.h"
 #include "EarlyFree.h"
+#include "ExtractTileOperations.h"
 #include "FindCalls.h"
 #include "FindIntrinsics.h"
 #include "FlattenNestedRamps.h"
@@ -411,6 +412,15 @@ Module lower(const vector<Function> &output_funcs,
     s = lower_unsafe_promises(s, t);
     debug(2) << "Lowering after lowering unsafe promises:\n"
              << s << "\n\n";
+
+#if LLVM_VERSION >= 12
+    if (t.has_feature(Target::AVX512_SapphireRapids)) {
+        debug(1) << "Extracting tile operations...\n";
+        s = extract_tile_operations(s);
+        debug(2) << "Lowering after extracting tile operations:\n"
+                 << s << "\n\n";
+    }
+#endif
 
     debug(1) << "Flattening nested ramps...\n";
     s = flatten_nested_ramps(s);
