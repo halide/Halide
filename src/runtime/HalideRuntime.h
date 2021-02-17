@@ -187,7 +187,7 @@ typedef bool (*halide_semaphore_try_acquire_t)(struct halide_semaphore_t *, int)
 
 /** A task representing a serial for loop evaluated over some range.
  * Note that task_parent is a pass through argument that should be
- * passed to any dependent taks that are invokved using halide_do_parallel_tasks
+ * passed to any dependent taks that are invoked using halide_do_parallel_tasks
  * underneath this call. */
 typedef int (*halide_loop_task_t)(void *user_context, int min, int extent,
                                   uint8_t *closure, void *task_parent);
@@ -929,7 +929,7 @@ extern void halide_memoization_cache_evict(void *user_context, uint64_t eviction
  * the case where halide_memoization_cache_lookup is handling multiple
  * buffers.  (This corresponds to memoizing a Tuple in Halide.) Note
  * that the host pointer must be sufficient to get to all information
- * the relase operation needs. The default Halide cache impleemntation
+ * the release operation needs. The default Halide cache impleemntation
  * accomplishes this by storing extra data before the start of the user
  * modifiable host storage.
  *
