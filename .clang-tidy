@@ -1,7 +1,3 @@
-# Note: if you make changes here, you may need to make changes in .clang-tidy
-# files elsewhere in the tree; clang-tidy-10 doesn't allow selective
-# inheritance of parent .clang-tidy files.
-
 # TODO: some of the blocklisted bugprone checks can/should be re-enabled
 # one at a time (with careful code fixes made as necessary).
 
@@ -14,8 +10,10 @@ Checks: >
     -bugprone-integer-division,
     -bugprone-macro-parentheses,
     -bugprone-narrowing-conversions,
+    -bugprone-reserved-identifier,
     -bugprone-signed-char-misuse,
     misc-*,
+    -misc-no-recursion,
     -misc-non-private-member-variables-in-classes,
     -misc-unconventional-assign-operator,
     -misc-unused-parameters,
