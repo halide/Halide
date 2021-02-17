@@ -1033,7 +1033,7 @@ public:
         // bounds inference results so that we don't needlessly
         // complicate our bounds expressions.
         vector<pair<string, Expr>> wrappers;
-        while (1) {
+        while (true) {
             if (const LetStmt *let = body.as<LetStmt>()) {
                 if (depends_on_bounds_inference(let->value)) {
                     break;
