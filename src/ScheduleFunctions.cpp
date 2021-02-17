@@ -1053,7 +1053,7 @@ protected:
 
         // Dig through any let/if statements
         vector<pair<string, Expr>> containers;
-        while (1) {
+        while (true) {
             if (const LetStmt *l = body.as<LetStmt>()) {
                 const Call *promise_clamped = Call::as_intrinsic(l->value, {Call::promise_clamped});
                 if (!promise_clamped && !is_pure(l->value)) {

@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
 
     Var x("x"), y("y");
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -156,7 +156,7 @@ int main(int argc, char **argv) {
     }
 
     // Smaller footprint stencil -> smaller tiles
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -182,7 +182,7 @@ int main(int argc, char **argv) {
     }
 
     // A stencil chain
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -214,7 +214,7 @@ int main(int argc, char **argv) {
     }
 
     // An outer product
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -238,7 +238,7 @@ int main(int argc, char **argv) {
     }
 
     // A separable downsample that models the start of local_laplacian
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -270,7 +270,7 @@ int main(int argc, char **argv) {
     }
 
     // A Func with multiple stages, some of which include additional loops
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -301,7 +301,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -338,7 +338,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -371,7 +371,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -403,7 +403,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline pipeline1;
         Pipeline pipeline2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -446,7 +446,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -479,7 +479,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -507,7 +507,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -535,7 +535,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -566,7 +566,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -591,7 +591,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -615,7 +615,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -646,7 +646,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -679,7 +679,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -717,7 +717,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -744,7 +744,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -772,7 +772,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -818,7 +818,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {
@@ -850,7 +850,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (1) {
+    if (true) {
         Pipeline p1;
         Pipeline p2;
         for (int test_condition = 0; test_condition < 2; test_condition++) {

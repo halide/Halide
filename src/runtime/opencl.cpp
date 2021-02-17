@@ -14,8 +14,12 @@ namespace OpenCL {
 
 // Define the function pointers for the OpenCL API.
 #define HAVE_OPENCL_12
-#define CL_FN(ret, fn, args) WEAK ret(CL_API_CALL *fn) args;
+
+// clang-format off
+#define CL_FN(ret, fn, args) WEAK ret(CL_API_CALL *fn) args;  // NOLINT(bugprone-macro-parentheses)
 #include "cl_functions.h"
+#undef CL_FN
+// clang-format on
 
 // The default implementation of halide_opencl_get_symbol attempts to load
 // the OpenCL runtime shared library/DLL, and then get the symbol from it.
@@ -62,9 +66,13 @@ WEAK void load_libopencl(void *user_context) {
     debug(user_context) << "    load_libopencl (user_context: " << user_context << ")\n";
     halide_assert(user_context, clCreateContext == nullptr);
 
-#define CL_FN(ret, fn, args) fn = get_cl_symbol<ret(CL_API_CALL *) args>(user_context, #fn, true);
-#define CL_12_FN(ret, fn, args) fn = get_cl_symbol<ret(CL_API_CALL *) args>(user_context, #fn, false);
+// clang-format off
+#define CL_FN(ret, fn, args)    fn = get_cl_symbol<ret(CL_API_CALL *) args>(user_context, #fn, true);   // NOLINT(bugprone-macro-parentheses)
+#define CL_12_FN(ret, fn, args) fn = get_cl_symbol<ret(CL_API_CALL *) args>(user_context, #fn, false);  // NOLINT(bugprone-macro-parentheses)
 #include "cl_functions.h"
+#undef CL_12_FN
+#undef CL_FN
+    // clang-format on
 }
 
 extern WEAK halide_device_interface_t opencl_device_interface;

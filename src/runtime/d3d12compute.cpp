@@ -188,8 +188,8 @@ typedef SinkPrinter trace;
 #define TRACEPRINT(msg)
 #define TRACELEVEL(level, msg)
 #define TRACEFATAL(msg) d3d12_panic(msg);
-#define TRACEERROR(msg) debug(user_context) << "ERROR: " << msg;
-#define TRACEWARN(msg) debug(user_context) << "WARNING: " << msg;
+#define TRACEERROR(msg) debug(user_context) << "ERROR: " << (msg);
+#define TRACEWARN(msg) debug(user_context) << "WARNING: " << (msg);
 #define TRACEINFO(msg)
 #endif
 //
@@ -218,7 +218,7 @@ void *d3d12_get_library_symbol(void *lib, const char *name) {
 }
 
 #ifndef MAYBE_UNUSED
-#define MAYBE_UNUSED(x) ((void)x)
+#define MAYBE_UNUSED(x) ((void)(x))
 #endif  // MAYBE_UNUSED
 
 #if HALIDE_D3D12_RENDERDOC
