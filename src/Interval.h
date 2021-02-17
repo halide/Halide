@@ -110,6 +110,71 @@ private:
     static Expr neg_inf_noinline();
 };
 
+/** A class to represent ranges of integers. Can be unbounded above or below. */
+struct ConstantInterval {
+    /** The lower and upper bound of the interval. They are included
+     * in the interval. */
+    int64_t min, max;
+    bool min_defined, max_defined;
+
+    /** A default-constructed Interval is everything */
+    ConstantInterval();
+
+    /** Construct an interval from a lower and upper bound. */
+    ConstantInterval(int64_t min, int64_t max);
+
+    /** The interval representing everything. */
+    static ConstantInterval everything();
+
+    /** The interval representing nothing. */
+    static ConstantInterval nothing();
+
+    /** Construct an interval representing a single point. */
+    static ConstantInterval single_point(int64_t x);
+
+    /** Construct intervals bounded above or below. */
+    static ConstantInterval bounded_below(int64_t min);
+    static ConstantInterval bounded_above(int64_t max);
+
+    /** Is the interval the empty set */
+    bool is_empty() const;
+
+    /** Is the interval the entire range */
+    bool is_everything() const;
+
+    /** Is the interval just a single value (min == max) */
+    bool is_single_point() const;
+
+    /** Is the interval a particular single value */
+    bool is_single_point(int64_t x) const;
+
+    /** Does the interval have a finite least upper bound */
+    bool has_upper_bound() const;
+
+    /** Does the interval have a finite greatest lower bound */
+    bool has_lower_bound() const;
+
+    /** Does the interval have a finite upper and lower bound */
+    bool is_bounded() const;
+
+    /** Expand the interval to include another Interval */
+    void include(const ConstantInterval &i);
+
+    /** Expand the interval to include a point */
+    void include(int64_t x);
+
+    /** Construct the smallest interval containing two intervals. */
+    static ConstantInterval make_union(const ConstantInterval &a, const ConstantInterval &b);
+
+    /** Construct the largest interval contained within two intervals. */
+    static ConstantInterval make_intersection(const ConstantInterval &a, const ConstantInterval &b);
+
+    /** Equivalent to same_as. Exists so that the autoscheduler can
+     * compare two map<string, Interval> for equality in order to
+     * cache computations. */
+    bool operator==(const ConstantInterval &other) const;
+};
+
 }  // namespace Internal
 }  // namespace Halide
 

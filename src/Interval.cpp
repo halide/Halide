@@ -202,5 +202,115 @@ Expr Interval::neg_inf_noinline() {
     return Interval::neg_inf_expr;
 }
 
+ConstantInterval::ConstantInterval()
+    : min(-1000), max(1000), min_defined(false), max_defined(false) {}
+
+ConstantInterval::ConstantInterval(int64_t min, int64_t max)
+    : min(min), max(max), min_defined(true), max_defined(true) {}
+
+ConstantInterval ConstantInterval::everything() {
+    return ConstantInterval();
+}
+
+ConstantInterval ConstantInterval::nothing() {
+    return ConstantInterval(1, 0);
+}
+
+ConstantInterval ConstantInterval::single_point(int64_t x) {
+    return ConstantInterval(x, x);
+}
+
+ConstantInterval ConstantInterval::bounded_below(int64_t min) {
+    ConstantInterval result(min, 0);
+    result.max_defined = false;
+    return result;
+}
+
+ConstantInterval ConstantInterval::bounded_above(int64_t max) {
+    ConstantInterval result(0, max);
+    result.min_defined = false;
+    return result;
+}
+
+bool ConstantInterval::is_empty() const {
+    return min_defined && max_defined && max < min;
+}
+
+bool ConstantInterval::is_everything() const {
+    return !min_defined && !max_defined;
+}
+
+bool ConstantInterval::is_single_point() const {
+    return min_defined && max_defined && min == max;
+}
+
+bool ConstantInterval::is_single_point(int64_t x) const {
+    return min_defined && max_defined && min == x && max == x;
+}
+
+bool ConstantInterval::has_upper_bound() const {
+    return max_defined;
+}
+
+bool ConstantInterval::has_lower_bound() const {
+    return min_defined;
+}
+
+bool ConstantInterval::is_bounded() const {
+    return min_defined && max_defined;
+}
+
+bool ConstantInterval::operator==(const ConstantInterval &other) const {
+    if (min_defined != other.min_defined || max_defined != other.max_defined) {
+        return false;
+    }
+    return (!min_defined || min == other.min) && (!max_defined || max == other.max);
+}
+
+void ConstantInterval::include(const ConstantInterval &i) {
+    if (max_defined && i.max_defined) {
+        max = std::max(max, i.max);
+    } else {
+        max_defined = false;
+    }
+    if (min_defined && i.min_defined) {
+        min = std::min(min, i.min);
+    } else {
+        min_defined = false;
+    }
+}
+
+void ConstantInterval::include(int64_t x) {
+    if (max_defined) {
+        max = std::max(max, x);
+    }
+    if (min_defined) {
+        min = std::min(min, x);
+    }
+}
+
+ConstantInterval ConstantInterval::make_union(const ConstantInterval &a, const ConstantInterval &b) {
+    ConstantInterval result = a;
+    result.include(b);
+    return result;
+}
+
+ConstantInterval ConstantInterval::make_intersection(const ConstantInterval &a, const ConstantInterval &b) {
+    ConstantInterval result;
+    if (a.min_defined && b.min_defined) {
+        result.min = std::max(a.min, b.min);
+        result.min_defined = true;
+    } else {
+        result.min_defined = false;
+    }
+    if (a.max_defined && b.max_defined) {
+        result.max = std::min(a.max, b.max);
+        result.max_defined = true;
+    } else {
+        result.max_defined = false;
+    }
+    return result;
+}
+
 }  // namespace Internal
 }  // namespace Halide

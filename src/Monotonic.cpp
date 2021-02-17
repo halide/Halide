@@ -30,35 +30,33 @@ using std::string;
 
 namespace {
 
-Interval constant_interval = Interval::single_point(make_zero(Int(32)));
-
-bool is_constant(const Interval &a) {
-    return a.has_lower_bound() && a.has_upper_bound() && can_prove(a.min == 0 && a.max == 0);
+bool is_constant(const ConstantInterval &a) {
+    return a.is_single_point(0);
 }
 
-bool is_monotonic_increasing(const Interval &a) {
-    return a.has_lower_bound() && can_prove(a.min >= 0);
+bool is_monotonic_increasing(const ConstantInterval &a) {
+    return a.has_lower_bound() && a.min >= 0;
 }
 
-bool is_monotonic_decreasing(const Interval &a) {
-    return a.has_upper_bound() && can_prove(a.max <= 0);
+bool is_monotonic_decreasing(const ConstantInterval &a) {
+    return a.has_upper_bound() && a.max <= 0;
 }
 
-Interval to_interval(Monotonic m) {
+ConstantInterval to_interval(Monotonic m) {
     switch (m) {
     case Monotonic::Constant:
-        return constant_interval;
+        return ConstantInterval::single_point(0);
     case Monotonic::Increasing:
-        return Interval(make_zero(Int(32)), Interval::pos_inf());
+        return ConstantInterval::bounded_below(0);
     case Monotonic::Decreasing:
-        return Interval(Interval::neg_inf(), make_zero(Int(32)));
+        return ConstantInterval::bounded_above(0);
     case Monotonic::Unknown:
-        return Interval();
+        return ConstantInterval();
     }
-    return Interval();
+    return ConstantInterval();
 }
 
-Monotonic to_monotonic(const Interval &x) {
+Monotonic to_monotonic(const ConstantInterval &x) {
     if (is_constant(x)) {
         return Monotonic::Constant;
     } else if (is_monotonic_increasing(x)) {
@@ -70,113 +68,134 @@ Monotonic to_monotonic(const Interval &x) {
     }
 }
 
-Interval unify(const Interval &a, const Interval &b) {
-    return Interval::make_union(a, b);
+ConstantInterval unify(const ConstantInterval &a, const ConstantInterval &b) {
+    return ConstantInterval::make_union(a, b);
 }
 
-Interval unify(const Interval &a, const Expr &b) {
-    Interval result;
+ConstantInterval unify(const ConstantInterval &a, int64_t b) {
+    ConstantInterval result;
     result.include(b);
     return result;
 }
 
-// Helpers for doing arithmetic on intervals that avoid generating
+// Helpers for doing arithmetic on ConstantIntervals that avoid generating
 // expressions of pos_inf/neg_inf.
-Interval add(const Interval &a, const Interval &b) {
-    Interval result;
-    result.min = Interval::make_add(a.min, b.min);
-    result.max = Interval::make_add(a.max, b.max);
-    return result;
-}
-
-Interval add(const Interval &a, const Expr &b) {
-    Interval result;
-    result.min = Interval::make_add(a.min, b);
-    result.max = Interval::make_add(a.max, b);
-    return result;
-}
-
-Interval sub(const Interval &a, const Interval &b) {
-    Interval result;
-    result.min = Interval::make_sub(a.min, b.max);
-    result.max = Interval::make_sub(a.max, b.min);
-    return result;
-}
-
-Interval sub(const Interval &a, const Expr &b) {
-    Interval result;
-    result.min = Interval::make_sub(a.min, b);
-    result.max = Interval::make_sub(a.max, b);
-    return result;
-}
-
-Interval multiply(const Interval &a, const Expr &b) {
-    if (is_const_zero(b)) {
-        return Interval(b, b);
-    } else if (is_const_one(b)) {
-        return a;
+ConstantInterval add(const ConstantInterval &a, const ConstantInterval &b) {
+    ConstantInterval result;
+    result.min_defined = a.has_lower_bound() && b.has_lower_bound();
+    result.max_defined = a.has_upper_bound() && b.has_upper_bound();
+    if (result.has_lower_bound()) {
+        result.min = a.min + b.min;
     }
-    Expr x = a.has_lower_bound() ? a.min * b : a.min;
-    Expr y = a.has_upper_bound() ? a.max * b : a.max;
-    return Interval(Interval::make_min(x, y), Interval::make_max(x, y));
-}
-
-Interval divide(const Interval &a, const Expr &b) {
-    if (is_const_one(b)) {
-        return a;
+    if (result.has_upper_bound()) {
+        result.max = a.max + b.max;
     }
-    Expr x = a.has_lower_bound() ? a.min / b : a.min;
-    Expr y = a.has_upper_bound() ? (a.max + simplify(abs(b) - 1)) / b : a.max;
-    return Interval(Interval::make_min(x, y), Interval::make_max(x, y));
+    return result;
 }
 
-Interval negate(const Interval &r) {
-    Expr min = r.has_upper_bound() ? -r.max : Interval::neg_inf();
-    Expr max = r.has_lower_bound() ? -r.min : Interval::pos_inf();
-    return Interval(min, max);
+ConstantInterval add(const ConstantInterval &a, int64_t b) {
+    return add(a, ConstantInterval(b, b));
+}
+
+ConstantInterval negate(const ConstantInterval &r) {
+    ConstantInterval result;
+    result.min_defined = r.has_upper_bound();
+    result.min = r.has_upper_bound() ? -r.max : 0;
+    result.max_defined = r.has_lower_bound();
+    result.max = r.has_lower_bound() ? -r.min : 0;
+    return result;
+}
+
+ConstantInterval sub(const ConstantInterval &a, const ConstantInterval &b) {
+    return add(a, negate(b));
+}
+
+ConstantInterval sub(const ConstantInterval &a, int64_t b) {
+    return sub(a, ConstantInterval(b, b));
+}
+
+ConstantInterval multiply(const ConstantInterval &a, int64_t b) {
+    ConstantInterval result(a);
+    if (b < 0) {
+        result = negate(result);
+        b = -b;
+    }
+    if (result.has_lower_bound()) {
+        result.min *= b;
+    }
+    if (result.has_upper_bound()) {
+        result.max *= b;
+    }
+    return result;
+}
+
+ConstantInterval multiply(const ConstantInterval &a, const ConstantInterval &b) {
+    std::vector<int64_t> bounds;
+    bounds.reserve(4);
+    ConstantInterval result;
+    result.min_defined = result.max_defined = true;
+    if (a.has_lower_bound() && b.has_lower_bound()) {
+        bounds.push_back(a.min * b.min);
+    } else {
+        result.max_defined = false;
+    }
+    if (a.has_lower_bound() && b.has_upper_bound()) {
+        bounds.push_back(a.min * b.max);
+    } else {
+        result.min_defined = false;
+    }
+    if (a.has_upper_bound() && b.has_lower_bound()) {
+        bounds.push_back(a.max * b.min);
+    } else {
+        result.min_defined = false;
+    }
+    if (a.has_upper_bound() && b.has_upper_bound()) {
+        bounds.push_back(a.max * b.max);
+    } else {
+        result.max_defined = false;
+    }
+    if (!bounds.empty()) {
+        result.min = *std::min_element(bounds.begin(), bounds.end());
+        result.max = *std::max_element(bounds.begin(), bounds.end());
+    }
+    return result;
+}
+
+ConstantInterval divide(const ConstantInterval &a, int64_t b) {
+    ConstantInterval result(a);
+    if (b < 0) {
+        result = negate(result);
+        b = -b;
+    }
+    if (result.has_lower_bound()) {
+        result.min = div_imp(result.min, b);
+    }
+    if (result.has_upper_bound()) {
+        result.max = div_imp(result.max + b - 1, b);
+    }
+    return result;
 }
 
 class DerivativeBounds : public IRVisitor {
     const string &var;
 
-    Scope<Interval> scope;
-
-    bool strong;
-
-    void decay_result() {
-        if (!strong) {
-            // If we don't want strong monotonic analysis, we can make it much
-            // cheaper by replacing precise intervals of complex expressions
-            // with simple ones of the same meaning to to_monotonic.
-            if (is_constant(result)) {
-                result.min = result.max = make_zero(Int(32));
-            } else if (is_monotonic_increasing(result)) {
-                result.min = make_zero(Int(32));
-                result.max = Interval::pos_inf();
-            } else if (is_monotonic_decreasing(result)) {
-                result.min = Interval::neg_inf();
-                result.max = make_zero(Int(32));
-            } else {
-                result = Interval();
-            }
-        }
-    }
+    Scope<ConstantInterval> scope;
 
     void visit(const IntImm *) override {
-        result = constant_interval;
+        result = ConstantInterval::single_point(0);
     }
 
     void visit(const UIntImm *) override {
-        result = constant_interval;
+        result = ConstantInterval::single_point(0);
     }
 
     void visit(const FloatImm *) override {
-        result = constant_interval;
+        result = ConstantInterval::single_point(0);
     }
 
     void visit(const StringImm *) override {
         // require() Exprs can includes Strings.
-        result = constant_interval;
+        result = ConstantInterval::single_point(0);
     }
 
     void visit(const Cast *op) override {
@@ -195,110 +214,111 @@ class DerivativeBounds : public IRVisitor {
         // A narrowing cast. There may be more cases we can catch, but
         // for now we punt.
         if (!is_constant(result)) {
-            result = Interval();
+            result = ConstantInterval();
         }
     }
 
     void visit(const Variable *op) override {
         if (op->name == var) {
-            result = Interval::single_point(make_one(Int(32)));
+            result = ConstantInterval::single_point(1);
         } else if (scope.contains(op->name)) {
             result = scope.get(op->name);
-            decay_result();
         } else {
-            result = constant_interval;
+            result = ConstantInterval::single_point(0);
         }
     }
 
     void visit(const Add *op) override {
         op->a.accept(this);
-        Interval ra = result;
+        ConstantInterval ra = result;
         op->b.accept(this);
-        Interval rb = result;
+        ConstantInterval rb = result;
         result = add(ra, rb);
-        decay_result();
     }
 
     void visit(const Sub *op) override {
         op->a.accept(this);
-        Interval ra = result;
+        ConstantInterval ra = result;
         op->b.accept(this);
-        Interval rb = result;
+        ConstantInterval rb = result;
         result = sub(ra, rb);
-        decay_result();
     }
 
     void visit(const Mul *op) override {
         if (op->type.is_scalar()) {
             op->a.accept(this);
-            Interval ra = result;
+            ConstantInterval ra = result;
             op->b.accept(this);
-            Interval rb = result;
+            ConstantInterval rb = result;
 
-            // This is very much like the product rule for derivatives.
-            if (is_constant(rb)) {
-                // Avoid generating large expressions in the common case of constant b.
-                result = multiply(ra, op->b);
+            if (const int64_t *b = as_const_int(op->b)) {
+                result = multiply(ra, *b);
+            } else if (const uint64_t *b = as_const_uint(op->b)) {
+                result = multiply(ra, *b);
+            } else if (const int64_t *a = as_const_int(op->a)) {
+                result = multiply(rb, *a);
+            } else if (const uint64_t *a = as_const_uint(op->a)) {
+                result = multiply(rb, *a);
             } else {
-                result = add(multiply(ra, op->b), multiply(rb, op->a));
+                result = ConstantInterval();
             }
-            decay_result();
         } else {
-            result = Interval();
+            result = ConstantInterval();
         }
     }
 
     void visit(const Div *op) override {
         if (op->type.is_scalar()) {
             op->a.accept(this);
-            Interval ra = result;
+            ConstantInterval ra = result;
             op->b.accept(this);
-            Interval rb = result;
+            ConstantInterval rb = result;
 
-            // This is much like the quotient rule for derivatives.
-            if (is_constant(rb)) {
-                // Avoid generating large expressions in the common case of constant b.
-                result = divide(ra, op->b);
+            if (const int64_t *b = as_const_int(op->b)) {
+                result = divide(ra, *b);
+            } else if (const uint64_t *b = as_const_uint(op->b)) {
+                result = divide(ra, *b);
+            } else if (const int64_t *a = as_const_int(op->a)) {
+                result = divide(rb, *a);
+            } else if (const uint64_t *a = as_const_uint(op->a)) {
+                result = divide(rb, *a);
             } else {
-                result = divide(sub(multiply(ra, op->b), multiply(rb, op->a)), op->b * op->b);
+                result = ConstantInterval();
             }
-            decay_result();
         } else {
-            result = Interval();
+            result = ConstantInterval();
         }
     }
 
     void visit(const Mod *op) override {
-        result = Interval();
+        result = ConstantInterval();
     }
 
     void visit(const Min *op) override {
         op->a.accept(this);
-        Interval ra = result;
+        ConstantInterval ra = result;
         op->b.accept(this);
-        Interval rb = result;
+        ConstantInterval rb = result;
         result = unify(ra, rb);
-        decay_result();
     }
 
     void visit(const Max *op) override {
         op->a.accept(this);
-        Interval ra = result;
+        ConstantInterval ra = result;
         op->b.accept(this);
-        Interval rb = result;
+        ConstantInterval rb = result;
         result = unify(ra, rb);
-        decay_result();
     }
 
     void visit_eq(const Expr &a, const Expr &b) {
         a.accept(this);
-        Interval ra = result;
+        ConstantInterval ra = result;
         b.accept(this);
-        Interval rb = result;
+        ConstantInterval rb = result;
         if (is_constant(ra) && is_constant(rb)) {
-            result = constant_interval;
+            result = ConstantInterval::single_point(0);
         } else {
-            result = Interval(make_const(Int(32), -1), make_one(Int(32)));
+            result = ConstantInterval(-1, 1);
         }
     }
 
@@ -312,13 +332,16 @@ class DerivativeBounds : public IRVisitor {
 
     void visit_lt(const Expr &a, const Expr &b) {
         a.accept(this);
-        Interval ra = result;
+        ConstantInterval ra = result;
         b.accept(this);
-        Interval rb = result;
+        ConstantInterval rb = result;
         result = unify(negate(ra), rb);
-        result.min = Interval::make_max(result.min, make_const(Int(32), -1));
-        result.max = Interval::make_min(result.max, make_one(Int(32)));
-        decay_result();
+        if (result.has_lower_bound()) {
+            result.min = std::max<int64_t>(result.min, -1);
+        }
+        if (result.has_upper_bound()) {
+            result.max = std::min<int64_t>(result.max, 1);
+        }
     }
 
     void visit(const LT *op) override {
@@ -339,84 +362,59 @@ class DerivativeBounds : public IRVisitor {
 
     void visit(const And *op) override {
         op->a.accept(this);
-        Interval ra = result;
+        ConstantInterval ra = result;
         op->b.accept(this);
-        Interval rb = result;
+        ConstantInterval rb = result;
         result = unify(ra, rb);
-        decay_result();
     }
 
     void visit(const Or *op) override {
         op->a.accept(this);
-        Interval ra = result;
+        ConstantInterval ra = result;
         op->b.accept(this);
-        Interval rb = result;
+        ConstantInterval rb = result;
         result = unify(ra, rb);
-        decay_result();
     }
 
     void visit(const Not *op) override {
         op->a.accept(this);
         result = negate(result);
-        decay_result();
     }
 
     void visit(const Select *op) override {
-        op->condition.accept(this);
-        Interval rcond = result;
-
-        op->true_value.accept(this);
-        Interval ra = result;
-        op->false_value.accept(this);
-        Interval rb = result;
-        Interval unified = unify(ra, rb);
-
         // The result is the unified bounds, added to the "bump" that happens when switching from true to false.
         if (op->type.is_scalar()) {
-            if (strong) {
-                Expr switch_step = simplify(op->true_value - op->false_value);
-                Interval switch_bounds = multiply(rcond, switch_step);
-                result = add(unified, switch_bounds);
+            op->condition.accept(this);
+            ConstantInterval rcond = result;
+
+            op->true_value.accept(this);
+            ConstantInterval ra = result;
+            op->false_value.accept(this);
+            ConstantInterval rb = result;
+            ConstantInterval unified = unify(ra, rb);
+
+            Expr step = simplify(op->true_value - op->false_value);
+            step.accept(this);
+            ConstantInterval rstep = result;
+
+            ConstantInterval adjusted_step;
+            if (is_constant(rstep)) {
+                const int64_t *stepc = as_const_int(step);
+                internal_assert(stepc);
+                adjusted_step = multiply(rcond, *stepc);
             } else {
-                if (is_constant(rcond)) {
-                    result = unified;
-                    return;
-                }
-
-                bool true_value_ge_false_value = can_prove(op->true_value >= op->false_value);
-                bool true_value_le_false_value = can_prove(op->true_value <= op->false_value);
-
-                bool switches_from_true_to_false = is_monotonic_decreasing(rcond);
-                bool switches_from_false_to_true = is_monotonic_increasing(rcond);
-
-                if (true_value_ge_false_value && true_value_le_false_value) {
-                    // The true value equals the false value.
-                    result = ra;
-                } else if ((is_monotonic_increasing(unified) || is_constant(unified)) &&
-                           ((switches_from_false_to_true && true_value_ge_false_value) ||
-                            (switches_from_true_to_false && true_value_le_false_value))) {
-                    // Both paths increase, and the condition makes it switch
-                    // from the lesser path to the greater path.
-                    result = Interval(0, Interval::pos_inf());
-                } else if ((is_monotonic_decreasing(unified) || is_constant(unified)) &&
-                           ((switches_from_false_to_true && true_value_le_false_value) ||
-                            (switches_from_true_to_false && true_value_ge_false_value))) {
-                    // Both paths decrease, and the condition makes it switch
-                    // from the greater path to the lesser path.
-                    result = Interval(Interval::neg_inf(), 0);
-                } else {
-                    result = Interval();
-                }
+                adjusted_step = multiply(rcond, rstep);
             }
+            result = add(unified, adjusted_step);
         } else {
-            result = Interval();
+            result = ConstantInterval();
         }
     }
 
     void visit(const Load *op) override {
         op->index.accept(this);
         if (!is_constant(result)) {
-            result = Interval();
+            result = ConstantInterval();
         }
     }
 
@@ -452,7 +450,7 @@ class DerivativeBounds : public IRVisitor {
 
         if (!op->is_pure() || !is_constant(result)) {
             // Even with constant args, the result could vary from one loop iteration to the next.
-            result = Interval();
+            result = ConstantInterval();
             return;
         }
 
@@ -460,11 +458,11 @@ class DerivativeBounds : public IRVisitor {
             op->args[i].accept(this);
             if (!is_constant(result)) {
                 // One of the args is not constant.
-                result = Interval();
+                result = ConstantInterval();
                 return;
             }
         }
-        result = constant_interval;
+        result = ConstantInterval::single_point(0);
     }
 
     void visit(const Let *op) override {
@@ -485,11 +483,11 @@ class DerivativeBounds : public IRVisitor {
         for (size_t i = 0; i < op->vectors.size(); i++) {
             op->vectors[i].accept(this);
             if (!is_constant(result)) {
-                result = Interval();
+                result = ConstantInterval();
                 return;
             }
         }
-        result = constant_interval;
+        result = ConstantInterval::single_point(0);
     }
 
     void visit(const VectorReduce *op) override {
@@ -507,7 +505,7 @@ class DerivativeBounds : public IRVisitor {
         case VectorReduce::Or:
             // These ones are not
             if (!is_constant(result)) {
-                result = Interval();
+                result = ConstantInterval();
             }
         }
     }
@@ -577,81 +575,65 @@ class DerivativeBounds : public IRVisitor {
     }
 
 public:
-    Interval result;
+    ConstantInterval result;
 
-    DerivativeBounds(const std::string &v, const Scope<Interval> &parent, bool strong)
-        : var(v), strong(strong), result(Interval()) {
+    DerivativeBounds(const std::string &v, const Scope<ConstantInterval> &parent)
+        : var(v), result(ConstantInterval()) {
         scope.set_containing_scope(&parent);
     }
 };
 
 }  // namespace
 
-Interval derivative_bounds(const Expr &e, const std::string &var, const Scope<Interval> &scope, bool strong) {
+ConstantInterval derivative_bounds(const Expr &e, const std::string &var, const Scope<ConstantInterval> &scope) {
     if (!e.defined()) {
-        return Interval();
+        return ConstantInterval();
     }
-    DerivativeBounds m(var, scope, strong);
+    DerivativeBounds m(var, scope);
     e.accept(&m);
     return m.result;
 }
 
-Monotonic is_monotonic(const Expr &e, const std::string &var, const Scope<Interval> &scope, bool strong) {
+Monotonic is_monotonic(const Expr &e, const std::string &var, const Scope<ConstantInterval> &scope) {
     if (!e.defined()) {
         return Monotonic::Unknown;
     }
-    return to_monotonic(derivative_bounds(e, var, scope, strong));
+    return to_monotonic(derivative_bounds(e, var, scope));
 }
 
-Monotonic is_monotonic(const Expr &e, const std::string &var, const Scope<Monotonic> &scope, bool strong) {
+Monotonic is_monotonic(const Expr &e, const std::string &var, const Scope<Monotonic> &scope) {
     if (!e.defined()) {
         return Monotonic::Unknown;
     }
-    Scope<Interval> intervals_scope;
+    Scope<ConstantInterval> intervals_scope;
     for (Scope<Monotonic>::const_iterator i = scope.cbegin(); i != scope.cend(); ++i) {
         intervals_scope.push(i.name(), to_interval(i.value()));
     }
-    return is_monotonic(e, var, intervals_scope, strong);
+    return is_monotonic(e, var, intervals_scope);
 }
 
 Monotonic is_monotonic_strong(const Expr &e, const std::string &var) {
-    return is_monotonic(e, var, Scope<Interval>(), true);
+    return is_monotonic(e, var, Scope<ConstantInterval>());
 }
 
 namespace {
-void check_increasing(const Expr &e, bool only_strong = false) {
-    if (!only_strong) {
-        internal_assert(is_monotonic(e, "x") == Monotonic::Increasing)
-            << "Was supposed to be increasing: " << e << "\n";
-    }
-    internal_assert(is_monotonic(e, "x", Scope<Interval>(), true) == Monotonic::Increasing)
+void check_increasing(const Expr &e) {
+    internal_assert(is_monotonic(e, "x") == Monotonic::Increasing)
         << "Was supposed to be increasing: " << e << "\n";
 }
 
-void check_decreasing(const Expr &e, bool only_strong = false) {
-    if (!only_strong) {
-        internal_assert(is_monotonic(e, "x") == Monotonic::Decreasing)
-            << "Was supposed to be decreasing: " << e << "\n";
-    }
-    internal_assert(is_monotonic(e, "x", Scope<Interval>(), true) == Monotonic::Decreasing)
+void check_decreasing(const Expr &e) {
+    internal_assert(is_monotonic(e, "x") == Monotonic::Decreasing)
         << "Was supposed to be decreasing: " << e << "\n";
 }
 
-void check_constant(const Expr &e, bool only_strong = false) {
-    if (!only_strong) {
-        internal_assert(is_monotonic(e, "x") == Monotonic::Constant)
-            << "Was supposed to be constant: " << e << "\n";
-    }
-    internal_assert(is_monotonic(e, "x", Scope<Interval>(), true) == Monotonic::Constant)
+void check_constant(const Expr &e) {
+    internal_assert(is_monotonic(e, "x") == Monotonic::Constant)
         << "Was supposed to be constant: " << e << "\n";
 }
 
-void check_unknown(const Expr &e, bool only_strong = false) {
-    if (!only_strong) {
-        internal_assert(is_monotonic(e, "x") == Monotonic::Unknown)
-            << "Was supposed to be unknown: " << e << "\n";
-    }
-    internal_assert(is_monotonic(e, "x", Scope<Interval>(), true) == Monotonic::Unknown)
+void check_unknown(const Expr &e) {
+    internal_assert(is_monotonic(e, "x") == Monotonic::Unknown)
         << "Was supposed to be unknown: " << e << "\n";
 }
 }  // namespace
@@ -696,10 +678,10 @@ void is_monotonic_test() {
     check_unknown(select(x < 2, x, x - 2));
     check_unknown(select(x > 2, -x + 2, -x));
     check_unknown(select(x < 2, -x, -x + 2));
-    check_increasing(select(x > 2, x - 1, x), true);
-    check_increasing(select(x < 2, x, x - 1), true);
-    check_decreasing(select(x > 2, -x + 1, -x), true);
-    check_decreasing(select(x < 2, -x, -x + 1), true);
+    check_increasing(select(x > 2, x - 1, x));
+    check_increasing(select(x < 2, x, x - 1));
+    check_decreasing(select(x > 2, -x + 1, -x));
+    check_decreasing(select(x < 2, -x, -x + 1));
 
     check_unknown(select(x < 2, x, x - 5));
     check_unknown(select(x > 2, x - 5, x));
@@ -715,8 +697,8 @@ void is_monotonic_test() {
 
     check_constant(select(y > 3, y + 23, y - 65));
 
-    check_decreasing(select(2 <= x, 0, 1), true);
-    check_increasing(select(2 <= x, 0, 1) + x, true);
+    check_decreasing(select(2 <= x, 0, 1));
+    check_increasing(select(2 <= x, 0, 1) + x);
     check_decreasing(-min(x, 16));
 
     std::cout << "is_monotonic test passed" << std::endl;

@@ -24,7 +24,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
 
     string loop_var;
 
-    Scope<Interval> monotonic;
+    Scope<ConstantInterval> monotonic;
 
     struct OuterLet {
         string name;
@@ -38,9 +38,9 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         // Visit an entire chain of lets in a single method to conserve stack space.
         struct Frame {
             const LetStmtOrLet *op;
-            ScopedBinding<Interval> binding;
+            ScopedBinding<ConstantInterval> binding;
             Expr new_value;
-            Frame(const LetStmtOrLet *op, const string &loop_var, Scope<Interval> &scope)
+            Frame(const LetStmtOrLet *op, const string &loop_var, Scope<ConstantInterval> &scope)
                 : op(op),
                   binding(scope, op->name, derivative_bounds(op->value, loop_var, scope)) {
             }
@@ -52,14 +52,14 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         StmtOrExpr result;
 
         // Note that we must add *everything* that depends on the loop
-        // var to the Interval scope and the list of lets, even
+        // var to the monotonic scope and the list of lets, even
         // things which we can never substitute in (e.g. impure
         // things). This is for two reasons. First this pass could be
         // used at a time when we still have nested lets under the
         // same name. If we decide not to add an inner let, but do add
         // the outer one, then later references to it will be
         // incorrect. Second, if we don't add something that happens
-        // to be non-Interval, then derivative_bounds finds a variable
+        // to be non-monotonic, then derivative_bounds finds a variable
         // that references it in a later let, it will think it's a
         // constant, not an unknown.
         do {
@@ -118,7 +118,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             tmp_lets.swap(lets);
             loop_var = op->name;
             {
-                ScopedBinding<Interval> bind(monotonic, loop_var, Interval(1, 1));
+                ScopedBinding<ConstantInterval> bind(monotonic, loop_var, ConstantInterval(1, 1));
                 s = IRMutator::visit(op);
             }
             loop_var.clear();

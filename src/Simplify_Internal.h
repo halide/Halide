@@ -36,6 +36,7 @@ public:
 
     struct ExprInfo {
         // We track constant integer bounds when they exist
+        // TODO: Use ConstantInterval?
         int64_t min = 0, max = 0;
         bool min_defined = false, max_defined = false;
         // And the alignment of integer variables
