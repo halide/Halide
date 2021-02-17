@@ -6,7 +6,7 @@ WEAK char *halide_string_to_string(char *dst, char *end, const char *arg) {
     if (dst >= end) {
         return dst;
     }
-    while (1) {
+    while (true) {
         if (dst == end) {
             dst[-1] = 0;
             return dst;

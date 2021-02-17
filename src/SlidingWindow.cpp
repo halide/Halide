@@ -394,7 +394,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             // Guard producers against running on expanded bounds.
             Expr orig_loop_min = Variable::make(Int(32), loop_var + ".loop_min.orig");
-            Expr bounded_loop_var = max(orig_loop_min, likely_if_innermost(loop_var_expr));
+            Expr bounded_loop_var = max(orig_loop_min, loop_var_expr);
             Expr bounded_min = substitute(loop_var, bounded_loop_var, min_required);
             stmt = guard_producer(stmt, func, dim_idx, bounded_min, Expr());
 

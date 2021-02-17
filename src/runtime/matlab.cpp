@@ -67,7 +67,7 @@ typedef size_t mwIndex;
 typedef ptrdiff_t mwSignedIndex;
 #endif
 
-typedef void (*mex_exit_fn)(void);
+typedef void (*mex_exit_fn)();
 
 // Declare function pointers for the mex APIs.
 #define MEX_FN(ret, func, args) ret(*func) args;

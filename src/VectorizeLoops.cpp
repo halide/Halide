@@ -1222,7 +1222,7 @@ class VectorSubs : public IRMutator {
             s = Atomic::make(op->producer_name, op->mutex_name, s);
 
             return s;
-        } while (0);
+        } while (false);
 
         // In the general case, if a whole stmt has to be done
         // atomically, we need to serialize.

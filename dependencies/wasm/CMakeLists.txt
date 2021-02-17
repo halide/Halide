@@ -45,7 +45,9 @@ if (WITH_WABT)
     # but perhaps we could do better (esp. if wabt was smarter about what it exposed?)
     add_library(wabt-obj INTERFACE)
     target_sources(wabt-obj INTERFACE $<BUILD_INTERFACE:$<TARGET_OBJECTS:wabt>>)
-    target_include_directories(wabt-obj INTERFACE
+    target_include_directories(wabt-obj
+                               SYSTEM # Use -isystem instead of -I; this is a trick so that clang-tidy won't analyze these includes
+                               INTERFACE
                                $<BUILD_INTERFACE:${wabt_SOURCE_DIR}>
                                $<BUILD_INTERFACE:${wabt_BINARY_DIR}>
                                $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/_deps>)
