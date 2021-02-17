@@ -8,7 +8,6 @@ Checks: >
     -bugprone-branch-clone,
     -bugprone-exception-escape,
     -bugprone-integer-division,
-    -bugprone-macro-parentheses,
     -bugprone-narrowing-conversions,
     -bugprone-reserved-identifier,
     -bugprone-signed-char-misuse,

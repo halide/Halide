@@ -374,25 +374,39 @@ struct _ENUM_FLAG_SIZED_INTEGER {
 
 #define DEFINE_ENUM_FLAG_OPERATORS(ENUMTYPE)                                                                                   \
     extern "C++" {                                                                                                             \
+    /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                           \
     inline ENUMTYPE operator|(ENUMTYPE a, ENUMTYPE b) {                                                                        \
+        /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                       \
         return ENUMTYPE(((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)a) | ((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)b));        \
     }                                                                                                                          \
+    /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                           \
     inline ENUMTYPE &operator|=(ENUMTYPE &a, ENUMTYPE b) {                                                                     \
+        /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                       \
         return (ENUMTYPE &)(((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type &)a) |= ((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)b)); \
     }                                                                                                                          \
+    /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                           \
     inline ENUMTYPE operator&(ENUMTYPE a, ENUMTYPE b) {                                                                        \
+        /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                       \
         return ENUMTYPE(((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)a) & ((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)b));        \
     }                                                                                                                          \
+    /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                           \
     inline ENUMTYPE &operator&=(ENUMTYPE &a, ENUMTYPE b) {                                                                     \
+        /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                       \
         return (ENUMTYPE &)(((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type &)a) &= ((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)b)); \
     }                                                                                                                          \
+    /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                           \
     inline ENUMTYPE operator~(ENUMTYPE a) {                                                                                    \
+        /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                       \
         return ENUMTYPE(~((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)a));                                                       \
     }                                                                                                                          \
+    /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                           \
     inline ENUMTYPE operator^(ENUMTYPE a, ENUMTYPE b) {                                                                        \
+        /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                       \
         return ENUMTYPE(((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)a) ^ ((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)b));        \
     }                                                                                                                          \
+    /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                           \
     inline ENUMTYPE &operator^=(ENUMTYPE &a, ENUMTYPE b) {                                                                     \
+        /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                       \
         return (ENUMTYPE &)(((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type &)a) ^= ((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)b)); \
     }                                                                                                                          \
     }
@@ -442,7 +456,7 @@ DECLARE_HANDLE(HINSTANCE);
 typedef HINSTANCE HMODULE; /* HMODULEs can be used in place of HINSTANCEs */
 
 /* winerror.h */
-#define _HRESULT_TYPEDEF_(_sc) ((HRESULT)_sc)
+#define _HRESULT_TYPEDEF_(_sc) ((HRESULT)(_sc))
 #define S_OK _HRESULT_TYPEDEF_(0x0L)
 #define E_UNEXPECTED _HRESULT_TYPEDEF_(0x8000FFFFL)
 #define DXGI_ERROR_NOT_FOUND _HRESULT_TYPEDEF_(0x887a0002)
@@ -2292,7 +2306,8 @@ typedef enum D3D12_SHADER_COMPONENT_MAPPING {
                                                                           (((Src2)&D3D12_SHADER_COMPONENT_MAPPING_MASK) << (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * 2)) | \
                                                                           (((Src3)&D3D12_SHADER_COMPONENT_MAPPING_MASK) << (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * 3)) | \
                                                                           D3D12_SHADER_COMPONENT_MAPPING_ALWAYS_SET_BIT_AVOIDING_ZEROMEM_MISTAKES))
-#define D3D12_DECODE_SHADER_4_COMPONENT_MAPPING(ComponentToExtract, Mapping) ((D3D12_SHADER_COMPONENT_MAPPING)(Mapping >> (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * ComponentToExtract) & D3D12_SHADER_COMPONENT_MAPPING_MASK))
+#define D3D12_DECODE_SHADER_4_COMPONENT_MAPPING(ComponentToExtract, Mapping) \
+    ((D3D12_SHADER_COMPONENT_MAPPING)((Mapping) >> (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * (ComponentToExtract)) & D3D12_SHADER_COMPONENT_MAPPING_MASK))
 #define D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(0, 1, 2, 3)
 
 typedef enum D3D12_BUFFER_SRV_FLAGS {
