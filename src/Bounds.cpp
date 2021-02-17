@@ -3155,10 +3155,10 @@ void bounds_test() {
     check(scope, clamp(1000 / (x - 2), x - 10, x + 10), -10, 20);
     check(scope, cast<uint16_t>(x / 2), u16(0), u16(5));
     check(scope, cast<uint16_t>((x + 10) / 2), u16(5), u16(10));
-    check(scope, x < 20, make_bool(1), make_bool(1));
-    check(scope, x < 5, make_bool(0), make_bool(1));
-    check(scope, Broadcast::make(x >= 11, 3), make_bool(0), make_bool(0));
-    check(scope, Ramp::make(x + 5, 1, 5) > Broadcast::make(2, 5), make_bool(1), make_bool(1));
+    check(scope, x < 20, make_bool(true), make_bool(true));
+    check(scope, x < 5, make_bool(false), make_bool(true));
+    check(scope, Broadcast::make(x >= 11, 3), make_bool(false), make_bool(false));
+    check(scope, Ramp::make(x + 5, 1, 5) > Broadcast::make(2, 5), make_bool(true), make_bool(true));
 
     check(scope, print(x, y), 0, 10);
     check(scope, print_when(x > y, x, y), 0, 10);
