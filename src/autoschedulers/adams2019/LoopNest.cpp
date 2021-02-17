@@ -2104,9 +2104,9 @@ vector<pair<int, int>> LoopNest::collect_producers(const StageMap<Sites> &sites)
         done.insert(e->producer);
         const auto &site = sites.get(&(e->producer->stages[0]));
         if (site.store->is_root()) {
-            int vector_dim = (e->producer->is_input ? 0 :
-                                                      site.produce != nullptr ? site.produce->vector_dim :
-                                                                                -1);
+            int vector_dim = (e->producer->is_input   ? 0 :
+                              site.produce != nullptr ? site.produce->vector_dim :
+                                                        -1);
             producers.emplace_back(e->producer->id, vector_dim);
         } else if (site.produce != nullptr) {
             // Computation must be nested inside this task or inlined into it.
