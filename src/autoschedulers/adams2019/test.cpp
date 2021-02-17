@@ -38,7 +38,7 @@ bool test_caching(Pipeline &p1, Pipeline &p2, const Target &target, const Machin
         set_env_variable("HL_SEED", "", /* overwrite */ 1);
     }
 
-    // Compare produced schedules.
+    // Compare calculated features.
     if (results_without_caching.featurization.size() != results_with_caching.featurization.size()) {
         return false;
     } else {

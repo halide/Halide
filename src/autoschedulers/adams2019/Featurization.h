@@ -378,14 +378,9 @@ These intermediates allow for faster recomputation of such features.
 */
 struct FeatureIntermediates {
     double inlined_calls;
-    double num_vectors;
     double num_scalars;
-    double vector_size;
     double innermost_pure_loop_extent;
     double outer_parallelism;
-    double num_warps_per_block;
-    double num_threads_per_block;
-    double points_computed_per_thread;
 };
 
 }  // namespace Internal
