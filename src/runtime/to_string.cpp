@@ -115,7 +115,7 @@ WEAK char *halide_double_to_string(char *dst, char *end, double arg, int scienti
         }
 
         // Convert to fixed-point;
-        uint64_t fixed = (uint64_t)(arg * scale + 0.5);
+        uint64_t fixed = (uint64_t)(arg * scale + 0.5);  // NOLINT(bugprone-incorrect-roundings)
         uint64_t top_digit = fixed / scale;
         uint64_t other_digits = fixed - top_digit * scale;
 

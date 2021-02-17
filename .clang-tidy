@@ -7,7 +7,6 @@ Checks: >
     bugprone-*,
     -bugprone-branch-clone,
     -bugprone-exception-escape,
-    -bugprone-incorrect-roundings,
     -bugprone-integer-division,
     -bugprone-macro-parentheses,
     -bugprone-narrowing-conversions,
