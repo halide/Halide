@@ -136,6 +136,25 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Sliding on vectors.
+    {
+        count = 0;
+        Func f, g, h;
+        f(x) = call_counter(x, 0);
+        g(x) = f(x);
+        h(x) = g(x + 1) - g(x);
+
+        g.store_root().compute_at(h, x).vectorize(x, 4);
+        f.compute_at(g, x);
+        h.vectorize(x, 4, TailStrategy::RoundUp);
+
+        Buffer<int> im = h.realize({100});
+        if (count != 101) {
+            printf("f was called %d times instead of %d times\n", count, 101);
+            return -1;
+        }
+    }
+
     // Now try with a reduction
     {
         count = 0;
