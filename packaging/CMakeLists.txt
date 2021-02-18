@@ -8,29 +8,14 @@ include(CMakePackageConfigHelpers)
 set(Halide_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/Halide"
     CACHE STRING "Path to Halide cmake files")
 
-##
-# Optional dependencies
-##
-
-set(optional_dependencies "")
-foreach (target IN ITEMS Halide_wabt)
-    if (TARGET ${target})
-        list(APPEND optional_dependencies ${target})
-    endif ()
-endforeach ()
+set(Halide_INSTALL_PLUGINDIR "${CMAKE_INSTALL_LIBDIR}"
+    CACHE STRING "Path to Halide plugins folder")
 
 ##
 # Main library exports
 ##
 
-set(optional_targets "")
-foreach (target IN ITEMS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016)
-    if (TARGET ${target})
-        list(APPEND optional_targets ${target})
-    endif ()
-endforeach ()
-
-install(TARGETS Halide Halide_Generator Halide_RunGenMain ${optional_targets}
+install(TARGETS Halide Halide_Generator Halide_RunGenMain
         EXPORT Halide_Targets
 
         RUNTIME
@@ -48,8 +33,21 @@ install(TARGETS Halide Halide_Generator Halide_RunGenMain ${optional_targets}
 
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-install(TARGETS Halide_LLVM ${optional_dependencies}
-        EXPORT Halide_Targets)
+if (TARGET Halide_Adams2019)
+    install(TARGETS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016
+            EXPORT Halide_Targets
+
+            LIBRARY
+            DESTINATION ${Halide_INSTALL_PLUGINDIR}
+            COMPONENT Halide_Runtime
+            NAMELINK_COMPONENT Halide_Development)
+endif ()
+
+foreach (dep IN ITEMS Halide_LLVM Halide_wabt)
+    if (TARGET ${dep})
+        install(TARGETS ${dep} EXPORT Halide_Targets)
+    endif ()
+endforeach ()
 
 install(TARGETS Halide_Tools Halide_ImageIO Halide_LanguageOptions
         EXPORT Halide_Interfaces
@@ -59,12 +57,15 @@ install(TARGETS Halide_Runtime
         EXPORT Halide_Interfaces
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-set(exes "")
-foreach (exe IN ITEMS retrain_cost_model featurization_to_sample get_host_target weightsdir_to_weightsfile)
-    if (TARGET ${exe})
-        list(APPEND exes ${exe})
-    endif ()
-endforeach ()
+# Captures both the runtime and Halide.h
+install(DIRECTORY ${Halide_BINARY_DIR}/include/
+        TYPE INCLUDE
+        COMPONENT Halide_Development
+        FILES_MATCHING PATTERN "include/*.h")
+
+##
+# Patch RPATH for executable targets
+##
 
 file(RELATIVE_PATH lib_dir
      ${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}
@@ -76,15 +77,15 @@ else ()
     set(rbase $ORIGIN)
 endif ()
 
-if (NOT CMAKE_INSTALL_RPATH)
-    set_target_properties(${exes} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
+if (TARGET Halide_Adams2019)
+    set(autoscheduler_utils retrain_cost_model featurization_to_sample get_host_target weightsdir_to_weightsfile)
+    if (NOT CMAKE_INSTALL_RPATH)
+        set_target_properties(${autoscheduler_utils} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
+    endif ()
+    install(TARGETS ${autoscheduler_utils}
+            EXPORT Halide_Interfaces
+            COMPONENT Halide_Development)
 endif ()
-
-install(TARGETS ${exes}
-        EXPORT Halide_Interfaces)
-
-# Captures both the runtime and Halide.h
-install(DIRECTORY ${Halide_BINARY_DIR}/include/ TYPE INCLUDE FILES_MATCHING PATTERN "include/*.h")
 
 ##
 # READMEs and other top-level documentation
@@ -95,14 +96,15 @@ install(FILES
         ${Halide_SOURCE_DIR}/README.md
         ${Halide_SOURCE_DIR}/README_rungen.md
         ${Halide_SOURCE_DIR}/README_webassembly.md
+        COMPONENT Halide_Documentation
         TYPE DATA)
 
 ##
 # Tools
 ##
 
-install(DIRECTORY ${Halide_SOURCE_DIR}/tools
-        TYPE DATA
+install(DIRECTORY ${Halide_SOURCE_DIR}/tools/
+        DESTINATION ${Halide_INSTALL_TOOLSDIR}
         COMPONENT Halide_Development
         FILES_MATCHING
         PATTERN "*.h"
@@ -124,16 +126,19 @@ install(FILES ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/autotune_loop.sh
 # Tutorial
 ##
 
-install(DIRECTORY ${Halide_SOURCE_DIR}/tutorial
-        TYPE DATA
-        FILES_MATCHING
-        PATTERN "*.cpp"
-        PATTERN "*.h"
-        PATTERN "lesson_*.sh"
-        PATTERN "*.gif"
-        PATTERN "*.jpg"
-        PATTERN "*.mp4"
-        PATTERN "*.png")
+if (WITH_TUTORIALS)
+    install(DIRECTORY ${Halide_SOURCE_DIR}/tutorial
+            TYPE DATA
+            COMPONENT Halide_Documentation
+            FILES_MATCHING
+            PATTERN "*.cpp"
+            PATTERN "*.h"
+            PATTERN "lesson_*.sh"
+            PATTERN "*.gif"
+            PATTERN "*.jpg"
+            PATTERN "*.mp4"
+            PATTERN "*.png")
+endif ()
 
 ##
 # CMake scripts
@@ -150,10 +155,17 @@ endif ()
 # the relevant system libraries installed.
 if (Halide_SHARED_LLVM OR (NOT BUILD_SHARED_LIBS AND NOT Halide_BUNDLE_LLVM))
     set(depFile "${CMAKE_CURRENT_BINARY_DIR}/Halide-Deps-${LIB_TYPE}.cmake")
-    file(WRITE "${depFile}" "find_dependency(LLVM CONFIG)\n")
+    file(WRITE "${depFile}" "find_dependency(LLVM ${LLVM_PACKAGE_VERSION} CONFIG)\n")
 
     if (TARGET_WEBASSEMBLY)
-        file(APPEND "${depFile}" "find_dependency(LLD CONFIG HINTS \"\${LLVM_DIR}/../lld\")\n")
+        file(APPEND "${depFile}" [[
+find_dependency(
+  LLD CONFIG
+  HINTS
+    "${LLVM_DIR}/../lld"
+    "${LLVM_DIR}/../lib/cmake/lld"
+)
+]])
     endif ()
 
     install(FILES "${depFile}"
@@ -204,7 +216,7 @@ if (WITH_DOCS)
 endif ()
 
 ##
-# Actual packaging
+# General packaging variables.
 ##
 
 set(CPACK_PACKAGE_NAME Halide)
@@ -220,7 +232,7 @@ set(CPACK_VERBATIM_VARIABLES YES)
 set(CPACK_RESOURCE_FILE_LICENSE "${Halide_SOURCE_DIR}/LICENSE.txt")
 set(CPACK_RESOURCE_FILE_README "${Halide_SOURCE_DIR}/README.md")
 
-set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${Halide_VERSION}-${Halide_CMAKE_TARGET}")
+set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${Halide_VERSION}-${Halide_HOST_TARGET}")
 
 if (WIN32)
     set(CPACK_GENERATOR ZIP)
@@ -229,3 +241,20 @@ else ()
 endif ()
 
 include(CPack)
+
+##
+# Configure components
+##
+
+cpack_add_component(Halide_Runtime
+                    DISPLAY_NAME "Halide"
+                    DESCRIPTION "Runtime files for libHalide and autoschedulers")
+
+cpack_add_component(Halide_Development
+                    DISPLAY_NAME "Halide development"
+                    DESCRIPTION "Static Halide libraries and CMake development files"
+                    DEPENDS Halide_Runtime)
+
+cpack_add_component(Halide_Documentation
+                    DISPLAY_NAME "Halide documentation"
+                    DESCRIPTION "Documentation for Halide")
