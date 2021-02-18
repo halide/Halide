@@ -2584,7 +2584,8 @@ void CodeGen_C::visit(const Allocate *op) {
         alloc.type = op->type;
         allocations.push(op->name, alloc);
         heap_allocations.push(op->name);
-        stream << op_type << "*" << op_name << " = (" << print_expr(op->new_expr) << ");\n";
+        string newe = print_expr(op->new_expr);
+        stream << get_indent() << op_type << "*" << op_name << " = (" << op_type << "*)" << newe << ";\n";
     } else {
         constant_size = op->constant_allocation_size();
         if (constant_size > 0) {

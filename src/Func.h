@@ -938,6 +938,15 @@ public:
                       const std::string &fn_name = "",
                       const Target &target = get_target_from_environment());
 
+    /** Statically compile this function to OpenCL source code. This is
+     * useful for providing fallback code paths that will compile on
+     * many platforms. Vectorization will fail, and parallelization
+     * will produce serial code, except for the OpenCL back-end. */
+    void compile_to_opencl(const std::string &filename,
+                           const std::vector<Argument> &,
+                           const std::string &fn_name = "",
+                           const Target &target = get_target_from_environment());
+
     /** Write out an internal representation of lowered code. Useful
      * for analyzing and debugging scheduling. Can emit html or plain
      * text. */

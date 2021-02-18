@@ -311,6 +311,14 @@ void Pipeline::compile_to_c(const string &filename,
     m.compile(single_output(filename, m, Output::c_source));
 }
 
+void Pipeline::compile_to_opencl(const string &filename,
+                                 const vector<Argument> &args,
+                                 const string &fn_name,
+                                 const Target &target) {
+    Module m = compile_to_module(args, fn_name, target);
+    m.compile(single_output(filename, m, Output::opencl_source));
+}
+
 void Pipeline::print_loop_nest() {
     user_assert(defined()) << "Can't print loop nest of undefined Pipeline.\n";
     debug(0) << Halide::Internal::print_loop_nest(contents->outputs);

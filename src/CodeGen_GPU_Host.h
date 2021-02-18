@@ -9,13 +9,36 @@
 #include <string>
 
 #include "CodeGen_GPU_Dev.h"
+#include "CodeGen_LLVM.h"
 #include "IR.h"
 
 namespace Halide {
 
 struct Target;
-
 namespace Internal {
+
+// Sniff the contents of a kernel to extracts the bounds of all the
+// thread indices (so we know how many threads to launch), and the
+// amount of shared memory to allocate.
+class ExtractBounds : public IRVisitor {
+public:
+    Expr num_threads[4];
+    Expr num_blocks[4];
+    Expr shared_mem_size;
+
+    ExtractBounds();
+
+private:
+    bool found_shared = false;
+
+    using IRVisitor::visit;
+
+    void visit(const For *op) override;
+
+    void visit(const LetStmt *op) override;
+
+    void visit(const Allocate *allocate) override;
+};
 
 /** A code generator that emits GPU code from a given Halide stmt. */
 template<typename CodeGen_CPU>

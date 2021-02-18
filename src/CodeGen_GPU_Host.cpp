@@ -31,74 +31,59 @@ using std::vector;
 
 using namespace llvm;
 
+ExtractBounds::ExtractBounds()
+    : shared_mem_size(0) {
+    for (int i = 0; i < 4; i++) {
+        num_threads[i] = num_blocks[i] = 1;
+    }
+}
+
+void ExtractBounds::visit(const For *op) {
+    if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+        internal_assert(is_const_zero(op->min));
+    }
+
+    if (ends_with(op->name, ".__thread_id_x")) {
+        num_threads[0] = op->extent;
+    } else if (ends_with(op->name, ".__thread_id_y")) {
+        num_threads[1] = op->extent;
+    } else if (ends_with(op->name, ".__thread_id_z")) {
+        num_threads[2] = op->extent;
+    } else if (ends_with(op->name, ".__thread_id_w")) {
+        num_threads[3] = op->extent;
+    } else if (ends_with(op->name, ".__block_id_x")) {
+        num_blocks[0] = op->extent;
+    } else if (ends_with(op->name, ".__block_id_y")) {
+        num_blocks[1] = op->extent;
+    } else if (ends_with(op->name, ".__block_id_z")) {
+        num_blocks[2] = op->extent;
+    } else if (ends_with(op->name, ".__block_id_w")) {
+        num_blocks[3] = op->extent;
+    }
+
+    op->body.accept(this);
+}
+
+void ExtractBounds::visit(const LetStmt *op) {
+    if (expr_uses_var(shared_mem_size, op->name)) {
+        shared_mem_size = Let::make(op->name, op->value, shared_mem_size);
+    }
+    op->body.accept(this);
+}
+
+void ExtractBounds::visit(const Allocate *allocate) {
+    user_assert(!allocate->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n"
+                                               << "(Memoization is not supported inside GPU kernels at present.)\n";
+
+    if (allocate->memory_type == MemoryType::GPUShared) {
+        internal_assert(allocate->extents.size() == 1);
+        shared_mem_size += allocate->extents[0] * allocate->type.bytes();
+        found_shared = true;
+    }
+    allocate->body.accept(this);
+}
+
 namespace {
-
-// Sniff the contents of a kernel to extracts the bounds of all the
-// thread indices (so we know how many threads to launch), and the
-// amount of shared memory to allocate.
-class ExtractBounds : public IRVisitor {
-public:
-    Expr num_threads[4];
-    Expr num_blocks[4];
-    Expr shared_mem_size;
-
-    ExtractBounds()
-        : shared_mem_size(0) {
-        for (int i = 0; i < 4; i++) {
-            num_threads[i] = num_blocks[i] = 1;
-        }
-    }
-
-private:
-    bool found_shared = false;
-
-    using IRVisitor::visit;
-
-    void visit(const For *op) override {
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
-            internal_assert(is_const_zero(op->min));
-        }
-
-        if (ends_with(op->name, ".__thread_id_x")) {
-            num_threads[0] = op->extent;
-        } else if (ends_with(op->name, ".__thread_id_y")) {
-            num_threads[1] = op->extent;
-        } else if (ends_with(op->name, ".__thread_id_z")) {
-            num_threads[2] = op->extent;
-        } else if (ends_with(op->name, ".__thread_id_w")) {
-            num_threads[3] = op->extent;
-        } else if (ends_with(op->name, ".__block_id_x")) {
-            num_blocks[0] = op->extent;
-        } else if (ends_with(op->name, ".__block_id_y")) {
-            num_blocks[1] = op->extent;
-        } else if (ends_with(op->name, ".__block_id_z")) {
-            num_blocks[2] = op->extent;
-        } else if (ends_with(op->name, ".__block_id_w")) {
-            num_blocks[3] = op->extent;
-        }
-
-        op->body.accept(this);
-    }
-
-    void visit(const LetStmt *op) override {
-        if (expr_uses_var(shared_mem_size, op->name)) {
-            shared_mem_size = Let::make(op->name, op->value, shared_mem_size);
-        }
-        op->body.accept(this);
-    }
-
-    void visit(const Allocate *allocate) override {
-        user_assert(!allocate->new_expr.defined()) << "Allocate node inside GPU kernel has custom new expression.\n"
-                                                   << "(Memoization is not supported inside GPU kernels at present.)\n";
-
-        if (allocate->memory_type == MemoryType::GPUShared) {
-            internal_assert(allocate->extents.size() == 1);
-            shared_mem_size += allocate->extents[0] * allocate->type.bytes();
-            found_shared = true;
-        }
-        allocate->body.accept(this);
-    }
-};
 
 Value *get_module_state(llvm::Module *module, const std::string &function_name,
                         const std::string &api_unique_name, bool create = true) {
