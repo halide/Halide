@@ -776,15 +776,13 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     if (provided.used.defined()) {
                         to_acquire = select(provided.used, to_acquire, 0);
                     }
-                    if (required.used.defined()) {
-                        to_release = select(required.used, to_release, 0);
-                    }
+                    // We should always release the required region, even if we don't use it.
 
                     // On the first iteration, we need to acquire the extent of the region shared
                     // between the producer and consumer, and we need to release it on the last
                     // iteration.
-                    to_acquire = select(loop_var > loop_min, likely_if_innermost(to_acquire), extent);
-                    to_release = select(loop_var < loop_max, likely_if_innermost(to_release), extent);
+                    to_acquire = select(loop_var > loop_min, to_acquire, extent);
+                    to_release = select(loop_var < loop_max, to_release, extent);
 
                     // We may need dynamic assertions that a positive
                     // amount of the semaphore is acquired/released,

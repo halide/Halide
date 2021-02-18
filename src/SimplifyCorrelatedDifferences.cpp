@@ -118,7 +118,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             tmp_lets.swap(lets);
             loop_var = op->name;
             {
-                ScopedBinding<ConstantInterval> bind(monotonic, loop_var, ConstantInterval(1, 1));
+                ScopedBinding<ConstantInterval> bind(monotonic, loop_var, ConstantInterval::single_point(1));
                 s = IRMutator::visit(op);
             }
             loop_var.clear();

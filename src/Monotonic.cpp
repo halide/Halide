@@ -51,9 +51,9 @@ ConstantInterval to_interval(Monotonic m) {
     case Monotonic::Decreasing:
         return ConstantInterval::bounded_above(0);
     case Monotonic::Unknown:
-        return ConstantInterval();
+        return ConstantInterval::everything();
     }
-    return ConstantInterval();
+    return ConstantInterval::everything();
 }
 
 Monotonic to_monotonic(const ConstantInterval &x) {
@@ -130,33 +130,34 @@ ConstantInterval multiply(const ConstantInterval &a, int64_t b) {
 }
 
 ConstantInterval multiply(const ConstantInterval &a, const ConstantInterval &b) {
-    std::vector<int64_t> bounds;
-    bounds.reserve(4);
+    int64_t bounds[4];
+    int64_t *bounds_begin = &bounds[0];
+    int64_t *bounds_end = &bounds[0];
     ConstantInterval result;
     result.min_defined = result.max_defined = true;
     if (a.has_lower_bound() && b.has_lower_bound()) {
-        bounds.push_back(a.min * b.min);
+        *bounds_end++ = a.min * b.min;
     } else {
         result.max_defined = false;
     }
     if (a.has_lower_bound() && b.has_upper_bound()) {
-        bounds.push_back(a.min * b.max);
+        *bounds_end++ = a.min * b.max;
     } else {
         result.min_defined = false;
     }
     if (a.has_upper_bound() && b.has_lower_bound()) {
-        bounds.push_back(a.max * b.min);
+        *bounds_end++ = a.max * b.min;
     } else {
         result.min_defined = false;
     }
     if (a.has_upper_bound() && b.has_upper_bound()) {
-        bounds.push_back(a.max * b.max);
+        *bounds_end++ = a.max * b.max;
     } else {
         result.max_defined = false;
     }
-    if (!bounds.empty()) {
-        result.min = *std::min_element(bounds.begin(), bounds.end());
-        result.max = *std::max_element(bounds.begin(), bounds.end());
+    if (bounds_begin != bounds_end) {
+        result.min = *std::min_element(bounds_begin, bounds_end);
+        result.max = *std::max_element(bounds_begin, bounds_end);
     }
     return result;
 }
@@ -214,7 +215,7 @@ class DerivativeBounds : public IRVisitor {
         // A narrowing cast. There may be more cases we can catch, but
         // for now we punt.
         if (!is_constant(result)) {
-            result = ConstantInterval();
+            result = ConstantInterval::everything();
         }
     }
 
@@ -260,10 +261,10 @@ class DerivativeBounds : public IRVisitor {
             } else if (const uint64_t *a = as_const_uint(op->a)) {
                 result = multiply(rb, *a);
             } else {
-                result = ConstantInterval();
+                result = ConstantInterval::everything();
             }
         } else {
-            result = ConstantInterval();
+            result = ConstantInterval::everything();
         }
     }
 
@@ -271,27 +272,21 @@ class DerivativeBounds : public IRVisitor {
         if (op->type.is_scalar()) {
             op->a.accept(this);
             ConstantInterval ra = result;
-            op->b.accept(this);
-            ConstantInterval rb = result;
 
             if (const int64_t *b = as_const_int(op->b)) {
                 result = divide(ra, *b);
             } else if (const uint64_t *b = as_const_uint(op->b)) {
                 result = divide(ra, *b);
-            } else if (const int64_t *a = as_const_int(op->a)) {
-                result = divide(rb, *a);
-            } else if (const uint64_t *a = as_const_uint(op->a)) {
-                result = divide(rb, *a);
             } else {
-                result = ConstantInterval();
+                result = ConstantInterval::everything();
             }
         } else {
-            result = ConstantInterval();
+            result = ConstantInterval::everything();
         }
     }
 
     void visit(const Mod *op) override {
-        result = ConstantInterval();
+        result = ConstantInterval::everything();
     }
 
     void visit(const Min *op) override {
@@ -318,6 +313,9 @@ class DerivativeBounds : public IRVisitor {
         if (is_constant(ra) && is_constant(rb)) {
             result = ConstantInterval::single_point(0);
         } else {
+            // If the result is bounded, limit it to [-1, 1]. The largest
+            // difference possible is flipping from true to false or false
+            // to true.
             result = ConstantInterval(-1, 1);
         }
     }
@@ -336,6 +334,9 @@ class DerivativeBounds : public IRVisitor {
         b.accept(this);
         ConstantInterval rb = result;
         result = unify(negate(ra), rb);
+        // If the result is bounded, limit it to [-1, 1]. The largest
+        // difference possible is flipping from true to false or false
+        // to true.
         if (result.has_lower_bound()) {
             result.min = std::max<int64_t>(result.min, -1);
         }
@@ -406,14 +407,14 @@ class DerivativeBounds : public IRVisitor {
             }
             result = add(unified, adjusted_delta);
         } else {
-            result = ConstantInterval();
+            result = ConstantInterval::everything();
         }
     }
 
     void visit(const Load *op) override {
         op->index.accept(this);
         if (!is_constant(result)) {
-            result = ConstantInterval();
+            result = ConstantInterval::everything();
         }
     }
 
@@ -449,7 +450,7 @@ class DerivativeBounds : public IRVisitor {
 
         if (!op->is_pure() || !is_constant(result)) {
             // Even with constant args, the result could vary from one loop iteration to the next.
-            result = ConstantInterval();
+            result = ConstantInterval::everything();
             return;
         }
 
@@ -457,7 +458,7 @@ class DerivativeBounds : public IRVisitor {
             op->args[i].accept(this);
             if (!is_constant(result)) {
                 // One of the args is not constant.
-                result = ConstantInterval();
+                result = ConstantInterval::everything();
                 return;
             }
         }
@@ -482,7 +483,7 @@ class DerivativeBounds : public IRVisitor {
         for (size_t i = 0; i < op->vectors.size(); i++) {
             op->vectors[i].accept(this);
             if (!is_constant(result)) {
-                result = ConstantInterval();
+                result = ConstantInterval::everything();
                 return;
             }
         }
@@ -504,7 +505,7 @@ class DerivativeBounds : public IRVisitor {
         case VectorReduce::Or:
             // These ones are not
             if (!is_constant(result)) {
-                result = ConstantInterval();
+                result = ConstantInterval::everything();
             }
         }
     }
@@ -577,7 +578,7 @@ public:
     ConstantInterval result;
 
     DerivativeBounds(const std::string &v, const Scope<ConstantInterval> &parent)
-        : var(v), result(ConstantInterval()) {
+        : var(v), result(ConstantInterval::everything()) {
         scope.set_containing_scope(&parent);
     }
 };
@@ -586,7 +587,7 @@ public:
 
 ConstantInterval derivative_bounds(const Expr &e, const std::string &var, const Scope<ConstantInterval> &scope) {
     if (!e.defined()) {
-        return ConstantInterval();
+        return ConstantInterval::everything();
     }
     DerivativeBounds m(var, scope);
     e.accept(&m);

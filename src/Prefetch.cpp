@@ -194,18 +194,12 @@ private:
         Stmt body = mutate(op->body);
 
         if (!prefetch_list.empty() && starts_with(op->name, prefix)) {
-            // Remove ".$n", added by sliding window.
-            std::string name = op->name;
-            while (ends_with(name, ".$n")) {
-                name = name.substr(0, name.size() - 3);
-            }
-
             // If there are multiple prefetches of the same Func or ImageParam,
             // use the most recent one
             set<string> seen;
             for (int i = prefetch_list.size() - 1; i >= 0; --i) {
                 const PrefetchDirective &p = prefetch_list[i];
-                if (!ends_with(name, "." + p.var) || (seen.find(p.name) != seen.end())) {
+                if (!ends_with(op->name, "." + p.var) || (seen.find(p.name) != seen.end())) {
                     continue;
                 }
                 seen.insert(p.name);

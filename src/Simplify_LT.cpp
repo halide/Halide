@@ -79,7 +79,7 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
              (rewrite(ramp(x, y, c0) < ramp(z, y, c0), broadcast(x < z, c0)) ||
               // Move constants to the RHS
               rewrite(x + c0 < y, x < y + fold(-c0)) ||
-              rewrite(c0 < -x, x < fold(-c0)) ||
+              rewrite(c0 < c1 - x, x < fold(c1 - c0)) ||
 
               // Merge RHS constant additions with a constant LHS
               rewrite(c0 < x + c1, fold(c0 - c1) < x) ||

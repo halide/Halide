@@ -20,7 +20,6 @@ Stmt lower_unsafe_promises(const Stmt &s, const Target &t);
 /** Lower all safe promises by just stripping them. This is a good
  * idea once no more lowering stages are going to use
  * boxes_touched. */
-Expr lower_safe_promises(const Expr &e);
 Stmt lower_safe_promises(const Stmt &s);
 
 }  // namespace Internal
