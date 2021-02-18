@@ -68,6 +68,49 @@
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
       }
+    },
+    {
+      "name": "package",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "LLVM_DIR": "$env{LLVM_DIR}",
+        "Clang_DIR": "$env{Clang_DIR}",
+        "LLD_DIR": "$env{LLD_DIR}",
+        "WITH_TESTS": "NO",
+        "WITH_TUTORIALS": "NO",
+        "WITH_DOCS": "YES",
+        "WITH_UTILS": "NO",
+        "WITH_PYTHON_BINDINGS": "NO",
+        "CMAKE_INSTALL_DATADIR": "share/Halide"
+      }
+    },
+    {
+      "name": "package-unix",
+      "hidden": true,
+      "inherits": "package",
+      "generator": "Ninja"
+    },
+    {
+      "name": "package-unix-shared",
+      "inherits": "package-unix",
+      "displayName": "Package UNIX shared libs",
+      "description": "Build for packaging UNIX shared libraries.",
+      "binaryDir": "shared-Release",
+      "cacheVariables": {
+        "BUILD_SHARED_LIBS": "YES"
+      }
+    },
+    {
+      "name": "package-unix-static",
+      "inherits": "package-unix",
+      "displayName": "Package UNIX static libs",
+      "description": "Build for packaging UNIX static libraries.",
+      "binaryDir": "static-Release",
+      "cacheVariables": {
+        "BUILD_SHARED_LIBS": "NO",
+        "Halide_BUNDLE_LLVM": "YES"
+      }
     }
   ]
 }

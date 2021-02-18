@@ -233,12 +233,6 @@ set(CPACK_RESOURCE_FILE_README "${Halide_SOURCE_DIR}/README.md")
 
 set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${Halide_VERSION}-${Halide_HOST_TARGET}")
 
-if (WIN32)
-    set(CPACK_GENERATOR ZIP)
-else ()
-    set(CPACK_GENERATOR TGZ)
-endif ()
-
 include(CPack)
 
 ##
