@@ -187,8 +187,8 @@ write_basic_package_version_file(HalideHelpersConfigVersion.cmake
                                  COMPATIBILITY SameMajorVersion
                                  ARCH_INDEPENDENT)
 
-configure_file(HalideConfig.cmake HalideConfig.cmake @ONLY)
-configure_file(HalideHelpersConfig.cmake HalideHelpersConfig.cmake @ONLY)
+configure_file(common/HalideConfig.cmake HalideConfig.cmake @ONLY)
+configure_file(common/HalideHelpersConfig.cmake HalideHelpersConfig.cmake @ONLY)
 
 install(FILES
         ${CMAKE_CURRENT_BINARY_DIR}/HalideConfig.cmake
@@ -226,8 +226,8 @@ set(CPACK_PACKAGE_VERSION_MAJOR ${Halide_VERSION_MAJOR})
 set(CPACK_PACKAGE_VERSION_MINOR ${Halide_VERSION_MINOR})
 set(CPACK_PACKAGE_VERSION_PATCH ${Halide_VERSION_PATCH})
 set(CPACK_VERBATIM_VARIABLES YES)
-# set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_CURRENT_LIST_DIR}/Description.txt")
-# set(CPACK_RESOURCE_FILE_WELCOME "${CMAKE_CURRENT_LIST_DIR}/Welcome.txt")
+set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_CURRENT_LIST_DIR}/common/Description.txt")
+set(CPACK_RESOURCE_FILE_WELCOME "${CMAKE_CURRENT_LIST_DIR}/common/Welcome.txt")
 set(CPACK_RESOURCE_FILE_LICENSE "${Halide_SOURCE_DIR}/LICENSE.txt")
 set(CPACK_RESOURCE_FILE_README "${Halide_SOURCE_DIR}/README.md")
 
