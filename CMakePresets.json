@@ -156,6 +156,50 @@
         "BUILD_SHARED_LIBS": "NO",
         "WITH_DOCS": "NO"
       }
+    },
+    {
+      "name": "package-nuget",
+      "inherits": "package",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "BUILD_SHARED_LIBS": "YES",
+        "WITH_DOCS": "NO",
+        "DCMAKE_INSTALL_DATADIR": "share/Halide",
+        "Halide_INSTALL_CMAKEDIR": "share/Halide"
+      }
+    },
+    {
+      "name": "package-nuget-win-x86",
+      "inherits": "package-nuget",
+      "binaryDir": "win-x86",
+      "displayName": "Package Halide for Nuget (win-x86)",
+      "description": "Package Halide for Nuget (win-x86)",
+      "generator": "Visual Studio 16 2019",
+      "architecture": "Win32",
+      "toolset": "host=x64",
+      "cacheVariables": {
+        "CPACK_NUGET_PACKAGE_NAME": "Halide.runtime.win-x86",
+        "CMAKE_INSTALL_BINDIR": "runtime/win-x86/native",
+        "CMAKE_INSTALL_LIBDIR": "runtime/win-x86/native",
+        "CMAKE_INSTALL_INCLUDEDIR": "build/native/include"
+      }
+    },
+    {
+      "name": "package-nuget-win-x64",
+      "inherits": "package-nuget",
+      "binaryDir": "win-x64",
+      "displayName": "Package Halide for Nuget (win-x64)",
+      "description": "Package Halide for Nuget (win-x64)",
+      "generator": "Visual Studio 16 2019",
+      "architecture": "x64",
+      "toolset": "host=x64",
+      "cacheVariables": {
+        "CPACK_NUGET_PACKAGE_NAME": "Halide.runtime.win-x64",
+        "CMAKE_INSTALL_BINDIR": "runtime/win-x64/native",
+        "CMAKE_INSTALL_LIBDIR": "runtime/win-x64/native",
+        "CMAKE_INSTALL_INCLUDEDIR": "build/native/include"
+      }
     }
   ]
 }
