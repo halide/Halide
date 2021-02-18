@@ -67,32 +67,39 @@ bool no_overflow(Type t) {
     return t.is_float() || no_overflow_int(t);
 }
 
-// If there's a widening add or subtract in the first e.type().bits() / 2 - 1
-// levels down a tree of adds or subtracts, we know there's enough headroom for
-// another add without overflow. For example, it is safe to add to
-// (widening_add(x, y) - z) without overflow.
-bool is_safe_for_add(const Expr &e, int max_depth) {
-    if (max_depth-- <= 0) {
-        return false;
+template <typename T>
+int used_bits(T x) {
+    // Rather than deal with the headaches and special cases of __builtin_clz, or
+    // float arithmetic, just count the bits of headroom.
+    int result = 0;
+    while (x != 0) {
+        x >>= 1;
+        result += 1;
     }
-    if (const Add *add = e.as<Add>()) {
-        return is_safe_for_add(add->a, max_depth) || is_safe_for_add(add->b, max_depth);
-    } else if (const Sub *sub = e.as<Sub>()) {
-        return is_safe_for_add(sub->a, max_depth) || is_safe_for_add(sub->b, max_depth);
-    } else if (const Cast *cast = e.as<Cast>()) {
-        if (cast->type.bits() > cast->value.type().bits()) {
-            return true;
-        } else if (cast->type.bits() == cast->value.type().bits()) {
-            return is_safe_for_add(cast->value, max_depth);
-        }
-    } else if (Call::as_intrinsic(e, {Call::widening_add, Call::widening_sub})) {
-        return true;
-    }
-    return false;
+    return result;
 }
 
-bool is_safe_for_add(const Expr &e) {
-    return is_safe_for_add(e, e.type().bits() / 2 - 1);
+// Find out how many bits of headroom are in an expression.
+int bits_of_headroom(const Expr &e, const Scope<int> &scope) {
+    if (const Add *add = e.as<Add>()) {
+        return std::max(0, std::min(bits_of_headroom(add->a, scope), bits_of_headroom(add->b, scope)) - 1);
+    } else if (const Sub *sub = e.as<Sub>()) {
+        return std::max(0, std::min(bits_of_headroom(sub->a, scope), bits_of_headroom(sub->b, scope)) - 1);
+    } else if (const Cast *cast = e.as<Cast>()) {
+        return std::max(0, bits_of_headroom(cast->value, scope) + cast->type.bits() - cast->value.type().bits());
+    } else if (Call::as_intrinsic(e, {Call::widening_add, Call::widening_sub})) {
+        // We could recurse into the operands, but this is already a lot of bits.
+        return e.type().bits() / 2 - 1;
+    } else if (const Variable *v = e.as<Variable>()) {
+        if (scope.contains(v->name)) {
+            return scope.get(v->name);
+        }
+    } else if (const int64_t *ci = as_const_int(e)) {
+        return e.type().bits() - used_bits(*ci);
+    } else if (const uint64_t *cu = as_const_uint(e)) {
+        return e.type().bits() - used_bits(*cu);
+    }
+    return 0;
 }
 
 // We want to find and remove an add of 'round' from e. This is not
@@ -120,7 +127,7 @@ Expr find_and_subtract(const Expr &e, const Expr &round) {
     return Expr();
 }
 
-Expr to_rounding_shift(const Call *c) {
+Expr to_rounding_shift(const Call *c, const Scope<int> &headroom) {
     if (c->is_intrinsic(Call::shift_left) || c->is_intrinsic(Call::shift_right)) {
         internal_assert(c->args.size() == 2);
         Expr a = c->args[0];
@@ -162,13 +169,12 @@ Expr to_rounding_shift(const Call *c) {
         if (a_less_round.defined()) {
             // We found and removed the rounding. However, we may have just changed
             // behavior due to overflow. This is still safe if the type is not
-            // overflowing, or we can find a widening add or subtract in the tree
-            // of adds/subtracts. This is a common pattern, e.g.
+            // overflowing, or we have some headroom. This is a common pattern, e.g.
             // rounding_halving_add(a, b) = shift_round(widening_add(a, b) + 1, 1).
             // TODO: This could be done with bounds inference instead of this hack
             // if it supported intrinsics like widening_add and tracked bounds for
             // types other than int32.
-            if (no_overflow(a.type()) || is_safe_for_add(a_less_round)) {
+            if (no_overflow(a.type()) || bits_of_headroom(a_less_round, headroom) > 0) {
                 return rounding_shift(simplify(a_less_round), b);
             }
         }
@@ -180,6 +186,9 @@ Expr to_rounding_shift(const Call *c) {
 class FindIntrinsics : public IRMutator {
 protected:
     using IRMutator::visit;
+
+    // We track how many bits of headroom variables have.
+    Scope<int> headroom;
 
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;
@@ -536,7 +545,7 @@ protected:
             }
 
             // Try to turn this into a rounding shift.
-            Expr rounding_shift = to_rounding_shift(op);
+            Expr rounding_shift = to_rounding_shift(op, headroom);
             if (rounding_shift.defined()) {
                 return mutate(rounding_shift);
             }
@@ -563,6 +572,16 @@ protected:
             }
         }
         return op;
+    }
+
+    Expr visit(const Let *op) override {
+        ScopedBinding<int> value(headroom, op->name, bits_of_headroom(op->value, headroom));
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        ScopedBinding<int> value(headroom, op->name, bits_of_headroom(op->value, headroom));
+        return IRMutator::visit(op);
     }
 };
 
@@ -602,7 +621,7 @@ Expr lower_widening_shift_right(const Expr &a, const Expr &b) {
 
 Expr lower_rounding_shift_left(const Expr &a, const Expr &b) {
     Expr round = simplify(make_shift_right(make_one(a.type()) >> min(b, 0), 1));
-    if ((a.type().is_uint() && a.type().bits() <= 32) || a.type().bits() < 32) {
+    if ((a.type().is_uint() && a.type().bits() < 32) || a.type().bits() < 32) {
         return narrow(widening_add(a, round) << b);
     } else {
         // Avoid widening arithmetic when signed integer overflow is undefined,
@@ -613,7 +632,7 @@ Expr lower_rounding_shift_left(const Expr &a, const Expr &b) {
 
 Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
     Expr round = simplify(make_shift_right(make_one(a.type()) << max(b, 0), 1));
-    if ((a.type().is_uint() && a.type().bits() <= 32) || a.type().bits() < 32) {
+    if ((a.type().is_uint() && a.type().bits() < 32) || a.type().bits() < 32) {
         return narrow(widening_add(a, round) >> b);
     } else {
         // Avoid widening arithmetic when signed integer overflow is undefined,
