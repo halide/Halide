@@ -13,10 +13,7 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_CXX_FLAGS_RELEASE": "-O2",
-        "CMAKE_CXX_FLAGS_RELWITHDEBINFO": "-O2 -g",
-        "CMAKE_CXX_FLAGS_MINSIZEREL": "-Os"
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
@@ -41,13 +38,11 @@
     },
     {
       "name": "msvc-release",
+      "inherits": "msvc-debug",
       "displayName": "MSVC (Release)",
-      "description": "Debug build using Ninja generator and MSVC with vcpkg dependencies.",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build",
+      "description": "Release build using Ninja generator and MSVC with vcpkg dependencies.",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
