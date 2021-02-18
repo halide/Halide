@@ -21,13 +21,11 @@ static_assert(PY_VERSION_HEX >= 0x03000000,
 
 namespace py = pybind11;
 
-using FactoryFunc = std::unique_ptr<Halide::Internal::GeneratorBase> (*)(const Halide::GeneratorContext &context);
-
 namespace Halide {
 namespace PythonBindings {
 
+using GeneratorFactory = Internal::GeneratorFactory;
 using GeneratorParamsMap = Internal::GeneratorParamsMap;
-using Stub = Internal::GeneratorStub;
 using StubInput = Internal::StubInput;
 using StubInputBuffer = Internal::StubInputBuffer<void>;
 
@@ -100,16 +98,21 @@ void append_input(const py::object &value, std::vector<StubInput> &v) {
     }
 }
 
-py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, const py::args &args, const py::kwargs &kwargs) {
-    Stub stub(context, [factory](const GeneratorContext &context) -> std::unique_ptr<Halide::Internal::GeneratorBase> {
-        return factory(context);
-    });
-    auto names = stub.get_names();
-    _halide_user_assert(!names.outputs.empty())
-        << "Generators that use build() (instead of generate()+Output<>) are not supported in the Python bindings.";
+py::object generate_impl(GeneratorFactory factory,
+                         const GeneratorContext &context,
+                         const py::args &args,
+                         const py::kwargs &kwargs) {
+    auto generator = factory(context);
+
+    auto input_names = generator->gen_get_input_names();
+    auto output_names = generator->gen_get_output_names();
+    _halide_user_assert(!output_names.empty())
+        << "Generators that use build() (instead of generate()+Output<>) "
+           "are not supported in the Python bindings.";
+
     std::map<std::string, size_t> input_name_to_pos;
-    for (size_t i = 0; i < names.inputs.size(); ++i) {
-        input_name_to_pos[names.inputs[i]] = i;
+    for (size_t i = 0; i < input_names.size(); ++i) {
+        input_name_to_pos[input_names[i]] = i;
     }
 
     // Inputs can be specified by either positional or named args,
@@ -118,7 +121,7 @@ py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, c
     // GeneratorParams can only be specified by name, and are always optional.
     //
     std::vector<std::vector<StubInput>> inputs;
-    inputs.resize(names.inputs.size());
+    inputs.resize(input_names.size());
 
     GeneratorParamsMap generator_params;
 
@@ -142,42 +145,56 @@ py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, c
     }
 
     // Now, the positional args.
-    _halide_user_assert(args.size() <= names.inputs.size())
-        << "Expected at most " << names.inputs.size() << " positional args, but saw " << args.size() << ".";
+    _halide_user_assert(args.size() <= input_names.size())
+        << "Expected at most "
+        << input_names.size()
+        << " positional args, but saw "
+        << args.size()
+        << ".";
     for (size_t i = 0; i < args.size(); ++i) {
         _halide_user_assert(inputs[i].empty())
-            << "Generator Input named '" << names.inputs[i] << "' was specified by both position and keyword.";
+            << "Generator Input named '"
+            << input_names[i]
+            << "' was specified by both position and keyword.";
         append_input(args[i], inputs[i]);
     }
 
     for (size_t i = 0; i < inputs.size(); ++i) {
         _halide_user_assert(!inputs[i].empty())
-            << "Generator Input named '" << names.inputs[i] << "' was not specified.";
+            << "Generator Input named '"
+            << input_names[i]
+            << "' was not specified.";
     }
 
-    const std::vector<std::vector<Func>> outputs = stub.generate(generator_params, inputs);
+    generator->gen_set_constants(generator_params);
+    generator->rebind_all_inputs(inputs);
+    generator->gen_build_pipeline();
 
-    py::tuple py_outputs(outputs.size());
-    for (size_t i = 0; i < outputs.size(); i++) {
+    const size_t outputs_size = output_names.size();
+    py::tuple py_outputs(outputs_size);
+    for (size_t i = 0; i < outputs_size; i++) {
+        std::vector<Func> outputs = generator->gen_get_funcs_for_output(output_names[i]);
+
         py::object o;
-        if (outputs[i].size() == 1) {
-            // convert list-of-1 into single element
-            o = py::cast(outputs[i][0]);
-        } else {
-            o = py::cast(outputs[i]);
-        }
         if (outputs.size() == 1) {
-            // bail early, return the single object rather than a dict
+            // convert list-of-1 into single element
+            o = py::cast(outputs[0]);
+        } else {
+            o = py::cast(outputs);
+        }
+        if (outputs_size == 1) {
+            // bail early, returning the single object rather than a dict
             return o;
         }
         py_outputs[i] = o;
     }
+
     // An explicit "std::move" is needed here because there's
     // an implicit tuple->object conversion that inhibits it otherwise.
     return std::move(py_outputs);
 }
 
-void pystub_init(pybind11::module &m, FactoryFunc factory) {
+void pystub_init(pybind11::module &m, GeneratorFactory factory) {
     m.def(
         "generate", [factory](const Halide::Target &target, const py::args &args, const py::kwargs &kwargs) -> py::object {
             return generate_impl(factory, Halide::GeneratorContext(target), args, kwargs);
@@ -189,7 +206,7 @@ void pystub_init(pybind11::module &m, FactoryFunc factory) {
 }  // namespace PythonBindings
 }  // namespace Halide
 
-extern "C" PyObject *_halide_pystub_impl(const char *module_name, FactoryFunc factory) {
+extern "C" PyObject *_halide_pystub_impl(const char *module_name, Halide::Internal::GeneratorFactory factory) {
     int major, minor;
     if (sscanf(Py_GetVersion(), "%i.%i", &major, &minor) != 2) {
         PyErr_SetString(PyExc_ImportError, "Can't parse Python version.");
