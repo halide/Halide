@@ -72,7 +72,7 @@ int get_vector_num_elements(llvm::Type *);
  * if it's not a vector type. */
 llvm::Type *get_vector_element_type(llvm::Type *);
 
-const llvm::ElementCount element_count(int e);
+llvm::ElementCount element_count(int e);
 
 llvm::Type *get_vector_type(llvm::Type *, int);
 

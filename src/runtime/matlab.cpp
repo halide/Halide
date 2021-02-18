@@ -67,11 +67,12 @@ typedef size_t mwIndex;
 typedef ptrdiff_t mwSignedIndex;
 #endif
 
-typedef void (*mex_exit_fn)(void);
+typedef void (*mex_exit_fn)();
 
 // Declare function pointers for the mex APIs.
-#define MEX_FN(ret, func, args) ret(*func) args;
+#define MEX_FN(ret, func, args) ret(*func) args;  // NOLINT(bugprone-macro-parentheses)
 #include "mex_functions.h"
+#undef MEX_FN
 
 // Given a halide type code and bit width, find the equivalent matlab class ID.
 WEAK mxClassID get_class_id(int32_t type_code, int32_t type_bits) {
@@ -261,10 +262,15 @@ WEAK int halide_matlab_init(void *user_context) {
         return halide_error_code_success;
     }
 
-#define MEX_FN(ret, func, args) func = get_mex_symbol<ret(*) args>(user_context, #func, true);
-#define MEX_FN_700(ret, func, func_700, args) func_700 = get_mex_symbol<ret(*) args>(user_context, #func, false);
-#define MEX_FN_730(ret, func, func_730, args) func_730 = get_mex_symbol<ret(*) args>(user_context, #func_730, false);
+// clang-format off
+#define MEX_FN(ret, func, args)                 func = get_mex_symbol<ret(*) args>(user_context, #func, true);          // NOLINT(bugprone-macro-parentheses)
+#define MEX_FN_700(ret, func, func_700, args)   func_700 = get_mex_symbol<ret(*) args>(user_context, #func, false);     // NOLINT(bugprone-macro-parentheses)
+#define MEX_FN_730(ret, func, func_730, args)   func_730 = get_mex_symbol<ret(*) args>(user_context, #func_730, false); // NOLINT(bugprone-macro-parentheses)
 #include "mex_functions.h"
+#undef MEX_FN_730
+#undef MEX_FN_700
+#undef MEX_FN
+    // clang-format on
 
     if (!mexWarnMsgTxt) {
         return halide_error_code_matlab_init_failed;

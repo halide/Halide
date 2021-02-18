@@ -928,7 +928,7 @@ public:
      * host_dirty flag. */
     template<typename... Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, int first, Args &&... rest) {
+    explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, int first, Args &&...rest) {
         if (!T_is_void) {
             assert(static_halide_type() == t);
         }
@@ -945,7 +945,7 @@ public:
      * take ownership of the data and does not set the host_dirty flag. */
     template<typename... Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    explicit Buffer(T *data, int first, Args &&... rest) {
+    explicit Buffer(T *data, int first, Args &&...rest) {
         int extents[] = {first, (int)rest...};
         buf.type = static_halide_type();
         constexpr int buf_dimensions = 1 + (int)(sizeof...(rest));
@@ -2075,7 +2075,7 @@ private:
     }
 
     template<typename Fn, typename... Args, int N = sizeof...(Args) + 1>
-    void for_each_value_impl(Fn &&f, Args &&... other_buffers) const {
+    void for_each_value_impl(Fn &&f, Args &&...other_buffers) const {
         Buffer<>::for_each_value_task_dim<N> *t =
             (Buffer<>::for_each_value_task_dim<N> *)HALIDE_ALLOCA((dimensions() + 1) * sizeof(for_each_value_task_dim<N>));
         // Move the preparatory code into a non-templated helper to
@@ -2107,7 +2107,7 @@ public:
      * will result in a compilation error. */
     // @{
     template<typename Fn, typename... Args, int N = sizeof...(Args) + 1>
-    HALIDE_ALWAYS_INLINE const Buffer<T, D> &for_each_value(Fn &&f, Args &&... other_buffers) const {
+    HALIDE_ALWAYS_INLINE const Buffer<T, D> &for_each_value(Fn &&f, Args &&...other_buffers) const {
         for_each_value_impl(f, std::forward<Args>(other_buffers)...);
         return *this;
     }
@@ -2115,7 +2115,7 @@ public:
     template<typename Fn, typename... Args, int N = sizeof...(Args) + 1>
     HALIDE_ALWAYS_INLINE
         Buffer<T, D> &
-        for_each_value(Fn &&f, Args &&... other_buffers) {
+        for_each_value(Fn &&f, Args &&...other_buffers) {
         for_each_value_impl(f, std::forward<Args>(other_buffers)...);
         return *this;
     }

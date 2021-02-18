@@ -1328,7 +1328,7 @@ public:
     }
 
     template<typename... Args>
-    Realization realize(Args &&... args) {
+    Realization realize(Args &&...args) {
         check_scheduled("realize");
         return f.realize(std::forward<Args>(args)..., get_target());
     }
@@ -1629,15 +1629,15 @@ public:
 // types in question satisfy the property of copies referring to the same underlying
 // structure (returning references is just an optimization). Since this is verbose
 // and used in several places, we'll use a helper macro:
-#define HALIDE_FORWARD_METHOD(Class, Method)                                                                                                         \
-    template<typename... Args>                                                                                                                       \
-    inline auto Method(Args &&... args)->typename std::remove_reference<decltype(std::declval<Class>().Method(std::forward<Args>(args)...))>::type { \
-        return this->template as<Class>().Method(std::forward<Args>(args)...);                                                                       \
+#define HALIDE_FORWARD_METHOD(Class, Method)                                                                                                        \
+    template<typename... Args>                                                                                                                      \
+    inline auto Method(Args &&...args)->typename std::remove_reference<decltype(std::declval<Class>().Method(std::forward<Args>(args)...))>::type { \
+        return this->template as<Class>().Method(std::forward<Args>(args)...);                                                                      \
     }
 
 #define HALIDE_FORWARD_METHOD_CONST(Class, Method)                                                                  \
     template<typename... Args>                                                                                      \
-    inline auto Method(Args &&... args) const->                                                                     \
+    inline auto Method(Args &&...args) const->                                                                      \
         typename std::remove_reference<decltype(std::declval<Class>().Method(std::forward<Args>(args)...))>::type { \
         this->check_gio_access();                                                                                   \
         return this->template as<Class>().Method(std::forward<Args>(args)...);                                      \
@@ -1686,7 +1686,7 @@ public:
     }
 
     template<typename... Args>
-    Expr operator()(Args &&... args) const {
+    Expr operator()(Args &&...args) const {
         this->check_gio_access();
         return Func(*this)(std::forward<Args>(args)...);
     }
@@ -1852,7 +1852,7 @@ public:
     }
 
     template<typename... Args>
-    Expr operator()(Args &&... args) const {
+    Expr operator()(Args &&...args) const {
         this->check_gio_access();
         return this->funcs().at(0)(std::forward<Args>(args)...);
     }
@@ -2311,7 +2311,7 @@ protected:
 
 public:
     template<typename... Args, typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
-    FuncRef operator()(Args &&... args) const {
+    FuncRef operator()(Args &&...args) const {
         this->check_gio_access();
         return get_values<ValueType>().at(0)(std::forward<Args>(args)...);
     }
@@ -2874,7 +2874,7 @@ public:
     }
 
     template<typename T, typename... Args>
-    inline std::unique_ptr<T> apply(const Args &... args) const {
+    inline std::unique_ptr<T> apply(const Args &...args) const {
         auto t = this->create<T>();
         t->apply(args...);
         return t;
@@ -3081,7 +3081,7 @@ public:
      * will assert-fail at Halide compile time.
      */
     template<typename... Args>
-    void set_inputs(const Args &... args) {
+    void set_inputs(const Args &...args) {
         // set_inputs_vector() checks this too, but checking it here allows build_inputs() to avoid out-of-range checks.
         GeneratorParamInfo &pi = this->param_info();
         user_assert(sizeof...(args) == pi.inputs().size())
@@ -3098,7 +3098,7 @@ public:
     // Only enable if none of the args are Realization; otherwise we can incorrectly
     // select this method instead of the Realization-as-outparam variant
     template<typename... Args, typename std::enable_if<NoRealizations<Args...>::value>::type * = nullptr>
-    Realization realize(Args &&... args) {
+    Realization realize(Args &&...args) {
         this->check_scheduled("realize");
         return get_pipeline().realize(std::forward<Args>(args)..., get_target());
     }
@@ -3176,7 +3176,7 @@ public:
     }
 
     template<typename... Args>
-    HALIDE_NO_USER_CODE_INLINE void add_requirement(Expr condition, Args &&... args) {
+    HALIDE_NO_USER_CODE_INLINE void add_requirement(Expr condition, Args &&...args) {
         get_pipeline().add_requirement(condition, std::forward<Args>(args)...);
     }
 
@@ -3489,7 +3489,7 @@ public:
     using Internal::GeneratorBase::create;
 
     template<typename... Args>
-    void apply(const Args &... args) {
+    void apply(const Args &...args) {
 #ifndef _MSC_VER
         // VS2015 apparently has some SFINAE issues, so this can inappropriately
         // trigger there. (We'll still fail when generate() is called, just

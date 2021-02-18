@@ -45,7 +45,7 @@ struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
     ModelWeight(const std::string &name, int dim)
         : GeneratorInput<Buffer<float>>(name, dim), grad("updated_" + name, dim + 1) {
     }
-    void backprop(const Derivative &d, Expr learning_rate, const Expr &timestep) {
+    void backprop(const Derivative &d, const Expr &learning_rate, const Expr &timestep) {
         std::vector<Expr> args(dimensions() + 1);
         for (auto &e : args) {
             e = Var();
@@ -171,19 +171,19 @@ public:
     Output<Buffer<float>> loss_output{"loss_output", 0};
 
     // Zero pad alone the last dimension of a Func
-    Func pad_stages(const Func &f, Expr stages) {
+    Func pad_stages(const Func &f, const Expr &stages) {
         Halide::Region bounds(f.dimensions());
         bounds[1].min = 0;
         bounds[1].extent = stages;
         return BoundaryConditions::constant_exterior(f, cast(f.value().type(), 0), bounds);
     }
 
-    Expr activation(Expr e) {
+    Expr activation(const Expr &e) {
         // relu
         return max(e, 0);
     }
 
-    Expr sigmoid(Expr e) {
+    Expr sigmoid(const Expr &e) {
         return 1 / (1 + exp(-e));
     }
 
@@ -352,7 +352,7 @@ public:
         Expr max_threads_hitting_same_page_fault = min(inner_parallelism, 4096 / max(1, innermost_bytes_at_task));
 
         // The total number of page faults is proportionate to the number of bytes allocated
-        Expr num_page_faults = bytes_at_production;
+        const Expr &num_page_faults = bytes_at_production;
 
         // And page faults are serviced serially, so the total CPU time gets multiplied by the thread count again!
         Expr cost_of_page_faults = (num_page_faults * max_threads_hitting_same_page_fault *

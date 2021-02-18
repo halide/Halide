@@ -628,7 +628,7 @@ private:
         stream << open_span("Matched");
         stream << keyword("if") << " (";
         stream << close_span();
-        while (1) {
+        while (true) {
             print(op->condition);
             stream << matched(")");
             stream << close_expand_button() << " ";
