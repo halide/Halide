@@ -589,9 +589,7 @@ class SlidingWindow : public IRMutator {
         Stmt body = op->body;
         Expr loop_min = op->min;
         Expr loop_extent = op->extent;
-        string loop_max_name = loop_min.as<Variable>()->name;
-        loop_max_name = loop_max_name.substr(0, loop_max_name.length() - 2) + "ax";
-        Expr loop_max = Variable::make(Int(32), loop_max_name);
+        Expr loop_max = Variable::make(Int(32), op->name + ".loop_max");
 
         Expr prev_loop_min = loop_min;
         const Function *prev_func = nullptr;
