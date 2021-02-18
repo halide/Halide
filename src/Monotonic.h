@@ -8,8 +8,8 @@
 #include <iostream>
 #include <string>
 
-#include "Scope.h"
 #include "Interval.h"
+#include "Scope.h"
 
 namespace Halide {
 namespace Internal {

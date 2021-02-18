@@ -13,16 +13,16 @@
 #include "Solve.h"
 #include "Substitute.h"
 #include "UnsafePromises.h"
-#include <utility>
 #include <list>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
 
-using std::map;
-using std::string;
 using std::list;
+using std::map;
 using std::pair;
+using std::string;
 
 namespace {
 
@@ -141,7 +141,8 @@ class GuardProducer : public IRMutator {
 
 public:
     GuardProducer(const Function &func, int dim_idx, const Expr &min, const Expr &max)
-        : func(func), dim_idx(dim_idx), min(min), max(max) {}
+        : func(func), dim_idx(dim_idx), min(min), max(max) {
+    }
 };
 
 Stmt guard_producer(const Stmt &s, const Function &func, int dim_idx, const Expr &min, const Expr &max) {
@@ -526,7 +527,9 @@ class DependsOn : public IRVisitor {
 public:
     bool yes = false;
 
-    DependsOn(const Function &a, const Function &b) : a(a), b(b) {}
+    DependsOn(const Function &a, const Function &b)
+        : a(a), b(b) {
+    }
 };
 
 bool depends_on(const Function &a, const Function &b, const Stmt &s) {
@@ -589,7 +592,7 @@ class SlidingWindow : public IRMutator {
         Expr loop_max = Variable::make(Int(32), loop_max_name);
 
         Expr prev_loop_min = loop_min;
-        const Function* prev_func = nullptr;
+        const Function *prev_func = nullptr;
 
         list<pair<string, Expr>> new_lets;
         for (const Function &func : sliding) {
@@ -625,10 +628,11 @@ class SlidingWindow : public IRMutator {
                 loop_min = Variable::make(Int(32), new_name + ".loop_min");
                 loop_extent = Variable::make(Int(32), new_name + ".loop_extent");
                 body = substitute({
-                    {name, Variable::make(Int(32), new_name)},
-                    {name + ".loop_min", loop_min},
-                    {name + ".loop_extent", loop_extent},
-                }, body);
+                                      {name, Variable::make(Int(32), new_name)},
+                                      {name + ".loop_min", loop_min},
+                                      {name + ".loop_extent", loop_extent},
+                                  },
+                                  body);
 
                 name = new_name;
 
