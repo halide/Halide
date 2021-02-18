@@ -513,9 +513,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         Box provided = box_provided(body, func.name());
         Box required = box_required(body, func.name());
         // For storage folding, we don't care about conditional reads.
-        Box unconditional_required = required;
-        unconditional_required.used = Expr();
-        Box box = box_union(provided, unconditional_required);
+        required.used = Expr();
+        Box box = box_union(provided, required);
 
         Expr loop_var = Variable::make(Int(32), op->name);
         Expr loop_min = Variable::make(Int(32), op->name + ".loop_min");
@@ -781,22 +780,11 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                         to_release = select(required.used, to_release, 0);
                     }
 
-                    // Logically we acquire the entire extent on
-                    // the first iteration:
-
-                    // to_acquire = select(loop_var > loop_min, to_acquire, extent);
-
-                    // However it's simpler to implement this by
-                    // just reducing the initial value on the
-                    // semaphore by the difference, as long as it
-                    // doesn't lift any inner names out of scope.
-
-                    Expr fudge = simplify(substitute(op->name, loop_min, extent - to_acquire));
-                    if (is_const(fudge) && can_prove(fudge <= sema.init)) {
-                        sema.init -= fudge;
-                    } else {
-                        to_acquire = select(loop_var > loop_min, likely(to_acquire), extent);
-                    }
+                    // On the first iteration, we need to acquire the extent of the region shared
+                    // between the producer and consumer, and we need to release it on the last
+                    // iteration.
+                    to_acquire = select(loop_var > loop_min, likely_if_innermost(to_acquire), extent);
+                    to_release = select(loop_var < loop_max, likely_if_innermost(to_release), extent);
 
                     // We may need dynamic assertions that a positive
                     // amount of the semaphore is acquired/released,
