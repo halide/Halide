@@ -172,11 +172,9 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         } else {
             // This semaphore will end up on both sides of the fork,
             // so we'd better duplicate it.
-            string &cloned_acquire = cloned_acquires[var->name];
-            if (cloned_acquire.empty()) {
-                cloned_acquire = var->name + unique_name('_');
-            }
-            return Acquire::make(Variable::make(type_of<halide_semaphore_t *>(), cloned_acquire), op->count, body);
+            vector<string> &clones = cloned_acquires[var->name];
+            clones.push_back(var->name + unique_name('_'));
+            return Acquire::make(Variable::make(type_of<halide_semaphore_t *>(), clones.back()), op->count, body);
         }
     }
 
@@ -194,11 +192,11 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         return op;
     }
 
-    map<string, string> &cloned_acquires;
+    map<string, vector<string>> &cloned_acquires;
     set<string> inner_semaphores;
 
 public:
-    GenerateProducerBody(const string &f, const vector<Expr> &s, map<string, string> &a)
+    GenerateProducerBody(const string &f, const vector<Expr> &s, map<string, vector<string>> &a)
         : func(f), sema(s), cloned_acquires(a) {
     }
 };
@@ -313,7 +311,7 @@ class ForkAsyncProducers : public IRMutator {
 
     const map<string, Function> &env;
 
-    map<string, string> cloned_acquires;
+    map<string, vector<string>> cloned_acquires;
 
     Stmt visit(const Realize *op) override {
         auto it = env.find(op->name);
@@ -356,10 +354,10 @@ class ForkAsyncProducers : public IRMutator {
                 // If there's a nested async producer, we may have
                 // recursively cloned this semaphore inside the mutation
                 // of the producer and consumer.
-                auto it = cloned_acquires.find(sema_name);
-                if (it != cloned_acquires.end()) {
-                    body = CloneAcquire(sema_name, it->second).mutate(body);
-                    body = LetStmt::make(it->second, sema_space, body);
+                const vector<string> &clones = cloned_acquires[sema_name];
+                for (const auto &i : clones) {
+                    body = CloneAcquire(sema_name, i).mutate(body);
+                    body = LetStmt::make(i, sema_space, body);
                 }
 
                 body = LetStmt::make(sema_name, sema_space, body);
