@@ -858,7 +858,11 @@ class VectorSubs : public IRMutator {
                 // *every* likely value is true. We can do that by
                 // generating a scalar condition that checks if
                 // the least-true lane is true.
-                Expr all_true = bounds_of_lanes(likely->args[0]).min;
+                Expr all_true = likely->args[0];
+                while (!all_true.type().is_scalar()) {
+                    all_true = bounds_of_lanes(all_true).min;
+                }
+                internal_assert(all_true.type().is_scalar()) << all_true;
                 // Wrap it in the same flavor of likely
                 all_true = Call::make(Bool(), likely->name,
                                       {all_true}, Call::PureIntrinsic);
