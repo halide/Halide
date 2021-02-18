@@ -181,6 +181,9 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                rewrite((w + (z + (y + x * c0))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
                // Finally, pull out additions that are a multiple of the denominator
+               // We want to use this rule when either c0 % c1 == 0 or x % c1 == 0.
+               // Checking c0 % c1 == 0 is easy, but x % c1 is trickier. We can use
+               // the alignment info from a_bounds to compute it.
                // TODO: I think this rule can be stronger. We should be able to
                // rewrite (x + 1) / 2 to x / 2 + 1 when x we know x % 2 == 1.
                rewrite((x + c0) / c1, x / c1 + fold(c0 / c1), c1 > 0 && (c0 % c1 == 0 || (a_mod % c1 == 0 && (c0 - a_rem) % c1 == 0))) ||
