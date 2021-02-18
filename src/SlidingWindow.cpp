@@ -123,6 +123,8 @@ class GuardProducer : public IRMutator {
     const Expr &min;
     const Expr &max;
 
+    using IRMutator::visit;
+
     Stmt visit(const Provide *op) override {
         if (op->name != func.name()) {
             return op;
