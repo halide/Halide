@@ -114,8 +114,15 @@ private:
 struct ConstantInterval {
     /** The lower and upper bound of the interval. They are included
      * in the interval. */
-    int64_t min = 0, max = 0;
-    bool min_defined = false, max_defined = false;
+    int64_t min = neg_inf();
+    int64_t max = pos_inf();
+
+    static int64_t pos_inf() {
+        return INT64_MAX;
+    }
+    static int64_t neg_inf() {
+        return INT64_MIN;
+    }
 
     /* A default-constructed Interval is everything */
     ConstantInterval();
