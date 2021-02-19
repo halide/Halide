@@ -3,6 +3,7 @@
 #include "Bounds.h"
 #include "CompilerLogger.h"
 #include "Debug.h"
+#include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -130,13 +131,22 @@ class GuardProducer : public IRMutator {
         }
         internal_assert(dim_idx < (int)op->args.size());
         Expr var = op->args[dim_idx];
-        Expr guard = const_true();
+        Expr guard_below, guard_above;
         if (min.defined()) {
-            guard = guard && likely_if_innermost(min <= var);
+            guard_below = likely_if_innermost(min <= var);
         }
         if (max.defined()) {
-            guard = guard && likely_if_innermost(var <= max);
+            guard_above = likely_if_innermost(var <= max);
         }
+        Expr guard;
+        if (guard_below.defined() && guard_above.defined()) {
+            guard = guard_below && guard_above;
+        } else if (guard_below.defined()) {
+            guard = guard_below;
+        } else if (guard_above.defined()) {
+            guard = guard_above;
+        }
+        internal_assert(guard.defined());
         return IfThenElse::make(guard, op);
     }
 
@@ -411,8 +421,22 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // TODO: This is correct, but it produces slightly suboptimal code: if we
             // didn't do this, the loop could likely be trimmed and the if simplified away.
             Stmt body = mutate(op->body);
-            body = IfThenElse::make(guard, body);
-            return ProducerConsumer::make_consume(op->name, body);
+            if (const IfThenElse *old_guard = body.as<IfThenElse>()) {
+                if (expr_uses_var(old_guard->condition, loop_var)) {
+                    // If there's already an if that uses our loop variable, it must be
+                    // a previously added guard. That guard must be tighter, because
+                    // earlier loops are smaller.
+                    guard = Expr();
+                }
+            }
+            if (guard.defined()) {
+                body = IfThenElse::make(guard, body);
+            }
+            if (body.same_as(op->body)) {
+                return op;
+            } else {
+                return ProducerConsumer::make_consume(op->name, body);
+            }
         } else {
             return IRMutator::visit(op);
         }
