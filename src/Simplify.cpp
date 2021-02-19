@@ -307,6 +307,7 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
 
 template <class T>
 T substitute_facts_impl(T t, const vector<Expr> &truths, const vector<Expr> &falsehoods) {
+    // An std::map<Expr, Expr> version of substitute might be an optimization?
     for (const auto &i : truths) {
         t = substitute(i, const_true(i.type().lanes()), t);
     }
