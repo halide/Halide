@@ -1646,7 +1646,8 @@ IGenerator::TargetInfo GeneratorBase::gen_get_target_info() {
     return {
         get_target(),
         get_auto_schedule(),
-        get_machine_params()};
+        get_machine_params(),
+    };
 }
 
 namespace {
@@ -2114,6 +2115,12 @@ Realization StubOutputBufferBase::realize(std::vector<int32_t> sizes) {
 Target StubOutputBufferBase::get_target() const {
     return generator->gen_get_target_info().target;
 }
+
+RegisterGenerator::RegisterGenerator(const char *registered_name, GeneratorFactory generator_factory) {
+    Internal::GeneratorRegistry::register_factory(registered_name, std::move(generator_factory));
+}
+
+}  // namespace Internal
 
 void generator_test() {
     GeneratorContext context(get_host_target());

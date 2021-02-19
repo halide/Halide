@@ -3060,19 +3060,26 @@ public:
     // CALL-BEFORE: any
     virtual GeneratorParamsMap gen_get_constants() = 0;
 
-    // Set the GeneratorParams for an IGenerator instance.
+    // Set the GeneratorParams for an IGenerator instance. Note that this merges
+    // with existing values (ie, params that aren't specified in `params` are left as-is).
     // GP names that aren't known by this IGenerator should trigger an assert-fail.
     // GP names that are present but not settable should trigger an assert-fail.
-    // This should be called at once most per IGenerator instance. Calling multiple
-    // times is UB.  TODO: UB? Really?
+    // This can be called multiple times, but only prior to gen_build_pipeline().
     //
-    // CALL-AFTER: TODO???
-    // CALL-BEFORE: TODO???
+    // CALL-AFTER: nona
+    // CALL-BEFORE: gen_build_pipeline
     virtual void gen_set_constants(const GeneratorParamsMap &params) = 0;
+
+    // CALL-AFTER: gen_build_pipeline
+    // CALL-BEFORE: gen_get_parameters_for_input, gen_get_funcs_for_output, gen_get_externs_map, rebind_all_inputs
+    virtual Pipeline gen_build_pipeline() = 0;
 
     // Given the name of an input, return the Parameter(s) for that input.
     // (Most inputs will have exactly one, but G1 inputs that are declared as arrays
     // will have multiple.)
+    //
+    // CALL-AFTER: gen_build_pipeline
+    // CALL-BEFORE: none
     virtual std::vector<Parameter> gen_get_parameters_for_input(const std::string &name) = 0;
 
     // Given the name of an output, return the Func(s) for that output.
@@ -3083,8 +3090,6 @@ public:
     // CALL-AFTER: gen_build_pipeline()
     // CALL-BEFORE: none
     virtual std::vector<Func> gen_get_funcs_for_output(const std::string &name) = 0;
-
-    virtual Pipeline gen_build_pipeline() = 0;
 
     // Return the ExternsMap for the Generator, if any.
     // CALL-AFTER: gen_build_pipeline()
@@ -3783,9 +3788,7 @@ namespace Internal {
 
 class RegisterGenerator {
 public:
-    RegisterGenerator(const char *registered_name, GeneratorFactory generator_factory) {
-        Internal::GeneratorRegistry::register_factory(registered_name, std::move(generator_factory));
-    }
+    RegisterGenerator(const char *registered_name, GeneratorFactory generator_factory);
 };
 
 }  // namespace Internal
