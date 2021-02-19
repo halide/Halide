@@ -126,6 +126,9 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
             return rewrite.result;
         }
 
+        int a_mod = a_bounds.alignment.modulus;
+        int a_rem = a_bounds.alignment.remainder;
+
         // clang-format off
         if (EVAL_IN_LAMBDA
             (rewrite(broadcast(x, c0) / broadcast(y, c0), broadcast(x / y, c0)) ||
@@ -177,9 +180,14 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                rewrite((w + (z + (x * c0 + y))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
                rewrite((w + (z + (y + x * c0))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
-               // Finally, pull out constant additions that are a multiple of the denominator
-               rewrite((x + c0) / c1, x / c1 + fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite((c0 - y)/c1, fold(c0 / c1) - y / c1, (c0 + 1) % c1 == 0 && c1 > 0) ||
+               // Finally, pull out additions that are a multiple of the denominator
+               // We want to use this rule when either c0 % c1 == 0 or x % c1 == 0.
+               // Checking c0 % c1 == 0 is easy, but x % c1 is trickier. We can use
+               // the alignment info from a_bounds to compute it.
+               // TODO: I think this rule can be stronger. We should be able to
+               // rewrite (x + 1) / 2 to x / 2 + 1 when x we know x % 2 == 1.
+               rewrite((x + c0) / c1, x / c1 + fold(c0 / c1), c1 > 0 && (c0 % c1 == 0 || (a_mod % c1 == 0 && (c0 - a_rem) % c1 == 0))) ||
+               rewrite((c0 - y)/c1, fold(c0 / c1) - y / c1, c1 > 0 && ((c0 + 1) % c1 == 0)) ||
                (denominator_non_zero &&
                 (rewrite((x + y)/x, y/x + 1) ||
                  rewrite((y + x)/x, y/x + 1) ||

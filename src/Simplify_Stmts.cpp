@@ -40,14 +40,19 @@ Stmt Simplify::visit(const IfThenElse *op) {
     Stmt then_case, else_case;
     {
         auto f = scoped_truth(unwrapped_condition);
-        // Also substitute the entire condition
-        then_case = substitute(op->condition, const_true(condition.type().lanes()), op->then_case);
-        then_case = mutate(then_case);
+        then_case = mutate(op->then_case);
+        Stmt learned_then_case = f.substitute_facts(then_case);
+        if (!learned_then_case.same_as(then_case)) {
+            then_case = mutate(learned_then_case);
+        }
     }
     {
         auto f = scoped_falsehood(unwrapped_condition);
-        else_case = substitute(op->condition, const_false(condition.type().lanes()), op->else_case);
-        else_case = mutate(else_case);
+        else_case = mutate(op->else_case);
+        Stmt learned_else_case = f.substitute_facts(else_case);
+        if (!learned_else_case.same_as(else_case)) {
+            else_case = mutate(learned_else_case);
+        }
     }
 
     // If both sides are no-ops, bail out.
@@ -59,6 +64,7 @@ Stmt Simplify::visit(const IfThenElse *op) {
     if (equal(then_case, else_case)) {
         return then_case;
     }
+    const IfThenElse *then_if = then_case.as<IfThenElse>();
     const Acquire *then_acquire = then_case.as<Acquire>();
     const Acquire *else_acquire = else_case.as<Acquire>();
     const ProducerConsumer *then_pc = then_case.as<ProducerConsumer>();
@@ -70,6 +76,18 @@ Stmt Simplify::visit(const IfThenElse *op) {
         else_acquire &&
         equal(then_acquire->semaphore, else_acquire->semaphore) &&
         equal(then_acquire->count, else_acquire->count)) {
+        // TODO: This simplification sometimes prevents useful loop partioning/no-op
+        // trimming from happening, e.g. it rewrites:
+        //
+        //   for (x, min + -2, extent + 2) {
+        //    if (x < min) {
+        //     acquire (f24.semaphore_0, 1) {}
+        //    } else {
+        //     acquire (f24.semaphore_0, 1) { ... }
+        //    }
+        //   }
+        //
+        // This could be partitioned and simplified, but not after this simplification.
         return Acquire::make(then_acquire->semaphore, then_acquire->count,
                              mutate(IfThenElse::make(condition, then_acquire->body, else_acquire->body)));
     } else if (then_pc &&
@@ -78,6 +96,15 @@ Stmt Simplify::visit(const IfThenElse *op) {
                then_pc->is_producer == else_pc->is_producer) {
         return ProducerConsumer::make(then_pc->name, then_pc->is_producer,
                                       mutate(IfThenElse::make(condition, then_pc->body, else_pc->body)));
+    } else if (then_pc &&
+               is_no_op(else_case)) {
+        return ProducerConsumer::make(then_pc->name, then_pc->is_producer,
+                                      mutate(IfThenElse::make(condition, then_pc->body)));
+    } else if (then_if &&
+               is_no_op(else_case) &&
+               is_no_op(then_if->else_case) &&
+               is_pure(then_if->condition)) {
+        return mutate(IfThenElse::make(condition && then_if->condition, then_if->then_case));
     } else if (then_block &&
                else_block &&
                equal(then_block->first, else_block->first)) {
@@ -171,6 +198,13 @@ Stmt Simplify::visit(const For *op) {
         bounds_and_alignment_info.pop(op->name);
     }
 
+    if (const Acquire *acquire = new_body.as<Acquire>()) {
+        if (is_no_op(acquire->body)) {
+            // Rewrite iterated no-op acquires as a single acquire.
+            return Acquire::make(acquire->semaphore, mutate(acquire->count * new_extent, nullptr), acquire->body);
+        }
+    }
+
     if (is_no_op(new_body)) {
         return new_body;
     } else if (extent_bounds.max_defined &&
@@ -180,6 +214,8 @@ Stmt Simplify::visit(const For *op) {
                op->device_api == DeviceAPI::None) {
         Stmt s = LetStmt::make(op->name, new_min, new_body);
         return mutate(s);
+    } else if (!stmt_uses_var(new_body, op->name) && !is_const_zero(op->min)) {
+        return For::make(op->name, make_zero(Int(32)), new_extent, op->for_type, op->device_api, new_body);
     } else if (extent_bounds.max_defined &&
                extent_bounds.max == 1 &&
                !in_vector_loop &&
