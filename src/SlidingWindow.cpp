@@ -538,12 +538,12 @@ bool depends_on(const Function &a, const Function &b, const Stmt &s) {
 
 // Update the loop variable referenced by prefetch directives.
 class SubstitutePrefetchVar : public IRMutator {
-    using IRMutator::visit;
-
     const string &old_var;
     const string &new_var;
 
-    Stmt visit(const Prefetch *op) {
+    using IRMutator::visit;
+
+    Stmt visit(const Prefetch *op) override {
         Stmt new_body = mutate(op->body);
         if (op->prefetch.var == old_var) {
             PrefetchDirective p = op->prefetch;
