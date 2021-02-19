@@ -160,16 +160,12 @@ Expr Interval::neg_inf_noinline() {
 ConstantInterval::ConstantInterval() = default;
 
 ConstantInterval::ConstantInterval(int64_t min, int64_t max)
-    : min(min), max(max) {
-    internal_assert(is_empty() || min <= max);
+    : min(min), max(max), min_defined(true), max_defined(true) {
+    internal_assert(min <= max);
 }
 
 ConstantInterval ConstantInterval::everything() {
-    return ConstantInterval(neg_inf(), pos_inf());
-}
-
-ConstantInterval ConstantInterval::nothing() {
-    return ConstantInterval(pos_inf(), neg_inf());
+    return ConstantInterval();
 }
 
 ConstantInterval ConstantInterval::single_point(int64_t x) {
@@ -177,52 +173,68 @@ ConstantInterval ConstantInterval::single_point(int64_t x) {
 }
 
 ConstantInterval ConstantInterval::bounded_below(int64_t min) {
-    return ConstantInterval(min, pos_inf());
-}
-ConstantInterval ConstantInterval::bounded_above(int64_t max) {
-    return ConstantInterval(neg_inf(), max);
+    ConstantInterval result(min, 0);
+    result.max_defined = false;
+    return result;
 }
 
-bool ConstantInterval::is_empty() const {
-    return min == pos_inf() || max == neg_inf();
+ConstantInterval ConstantInterval::bounded_above(int64_t max) {
+    ConstantInterval result(0, max);
+    result.min_defined = false;
+    return result;
 }
 
 bool ConstantInterval::is_everything() const {
-    return min == neg_inf() && max == pos_inf();
+    return !min_defined && !max_defined;
 }
 
 bool ConstantInterval::is_single_point() const {
-    return min == max;
+    return !is_everything() && min == max;
 }
 
 bool ConstantInterval::is_single_point(int64_t x) const {
-    return min == x && max == x;
+    return !is_everything() && min == x && max == x;
 }
 
 bool ConstantInterval::has_upper_bound() const {
-    return max != pos_inf() && !is_empty();
+    return max_defined;
 }
 
 bool ConstantInterval::has_lower_bound() const {
-    return min != neg_inf() && !is_empty();
+    return min_defined;
 }
 
 bool ConstantInterval::is_bounded() const {
-    return has_upper_bound() && has_lower_bound();
+    return !is_everything();
 }
 
 bool ConstantInterval::operator==(const ConstantInterval &other) const {
-    return min == other.min && max == other.max;
+    if (min_defined != other.min_defined || max_defined != other.max_defined) {
+        return false;
+    }
+    return (!min_defined || min == other.min) && (!max_defined || max == other.max);
 }
 
 void ConstantInterval::include(const ConstantInterval &i) {
-    max = std::max(max, i.max);
-    min = std::min(min, i.min);
+    if (max_defined && i.max_defined) {
+        max = std::max(max, i.max);
+    } else {
+        max_defined = false;
+    }
+    if (min_defined && i.min_defined) {
+        min = std::min(min, i.min);
+    } else {
+        min_defined = false;
+    }
 }
 
 void ConstantInterval::include(int64_t x) {
-    max = std::max(max, x);
-    min = std::min(min, x);
+    if (max_defined) {
+        max = std::max(max, x);
+    }
+    if (min_defined) {
+        min = std::min(min, x);
+    }
 }
 
 ConstantInterval ConstantInterval::make_union(const ConstantInterval &a, const ConstantInterval &b) {
@@ -232,8 +244,20 @@ ConstantInterval ConstantInterval::make_union(const ConstantInterval &a, const C
 }
 
 ConstantInterval ConstantInterval::make_intersection(const ConstantInterval &a, const ConstantInterval &b) {
-    return ConstantInterval(std::max(a.min, b.min),
-                            std::min(a.max, b.max));
+    ConstantInterval result;
+    if (a.min_defined && b.min_defined) {
+        result.min = std::max(a.min, b.min);
+        result.min_defined = true;
+    } else {
+        result.min_defined = false;
+    }
+    if (a.max_defined && b.max_defined) {
+        result.max = std::min(a.max, b.max);
+        result.max_defined = true;
+    } else {
+        result.max_defined = false;
+    }
+    return result;
 }
 
 }  // namespace Internal

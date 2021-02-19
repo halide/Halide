@@ -78,46 +78,19 @@ ConstantInterval unify(const ConstantInterval &a, int64_t b) {
     return result;
 }
 
-int64_t add_bound(int64_t a, int64_t b) {
-    if (a == ConstantInterval::neg_inf() || a == ConstantInterval::pos_inf()) {
-        return a;
-    } else if (b == ConstantInterval::neg_inf() || b == ConstantInterval::pos_inf()) {
-        return b;
-    } else {
-        return a + b;
-    }
-}
-
-int64_t mul_bound(int64_t a, int64_t b) {
-    if (a == ConstantInterval::neg_inf() && b == ConstantInterval::neg_inf()) {
-        return ConstantInterval::pos_inf();
-    } else if (a == ConstantInterval::neg_inf() && b == ConstantInterval::pos_inf()) {
-        return ConstantInterval::neg_inf();
-    } else if (a == ConstantInterval::pos_inf() && b == ConstantInterval::neg_inf()) {
-        return ConstantInterval::neg_inf();
-    } else if (a == ConstantInterval::pos_inf() && b == ConstantInterval::pos_inf()) {
-        return ConstantInterval::pos_inf();
-    } else {
-        return a * b;
-    }
-}
-
-int64_t negate_bound(int64_t x) {
-    if (x == ConstantInterval::pos_inf()) {
-        return ConstantInterval::neg_inf();
-    } else if (x == ConstantInterval::neg_inf()) {
-        return ConstantInterval::pos_inf();
-    } else {
-        return -x;
-    }
-}
-
-// Helpers for doing arithmetic on ConstantIntervals.
+// Helpers for doing arithmetic on ConstantIntervals that avoid generating
+// expressions of pos_inf/neg_inf.
 ConstantInterval add(const ConstantInterval &a, const ConstantInterval &b) {
-    if (a.is_empty() || b.is_empty()) {
-        return ConstantInterval::nothing();
+    ConstantInterval result;
+    result.min_defined = a.has_lower_bound() && b.has_lower_bound();
+    result.max_defined = a.has_upper_bound() && b.has_upper_bound();
+    if (result.has_lower_bound()) {
+        result.min = a.min + b.min;
     }
-    return {add_bound(a.min, b.min), add_bound(a.max, b.max)};
+    if (result.has_upper_bound()) {
+        result.max = a.max + b.max;
+    }
+    return result;
 }
 
 ConstantInterval add(const ConstantInterval &a, int64_t b) {
@@ -125,10 +98,12 @@ ConstantInterval add(const ConstantInterval &a, int64_t b) {
 }
 
 ConstantInterval negate(const ConstantInterval &r) {
-    if (r.is_empty()) {
-        return ConstantInterval::nothing();
-    }
-    return {negate_bound(r.max), negate_bound(r.min)};
+    ConstantInterval result;
+    result.min_defined = r.has_upper_bound();
+    result.min = r.has_upper_bound() ? -r.max : 0;
+    result.max_defined = r.has_lower_bound();
+    result.max = r.has_lower_bound() ? -r.min : 0;
+    return result;
 }
 
 ConstantInterval sub(const ConstantInterval &a, const ConstantInterval &b) {
@@ -139,34 +114,59 @@ ConstantInterval sub(const ConstantInterval &a, int64_t b) {
     return sub(a, ConstantInterval(b, b));
 }
 
-ConstantInterval multiply(const ConstantInterval &a, const ConstantInterval &b) {
-    if (a.is_empty() || b.is_empty()) {
-        return ConstantInterval::nothing();
-    }
-    int64_t bounds[4] = {
-        mul_bound(a.min, b.min),
-        mul_bound(a.min, b.max),
-        mul_bound(a.max, b.min),
-        mul_bound(a.max, b.max)
-    };
-    return {
-        *std::min_element(std::begin(bounds), std::end(bounds)),
-        *std::max_element(std::begin(bounds), std::end(bounds))
-    };
-}
-
 ConstantInterval multiply(const ConstantInterval &a, int64_t b) {
-    return multiply(a, ConstantInterval(b, b));
-}
-
-ConstantInterval divide(const ConstantInterval &a, int64_t b) {
-    if (a.is_empty()) {
-        return ConstantInterval::nothing();
-    }
     ConstantInterval result(a);
     if (b < 0) {
         result = negate(result);
-        b = negate_bound(b);
+        b = -b;
+    }
+    if (result.has_lower_bound()) {
+        result.min *= b;
+    }
+    if (result.has_upper_bound()) {
+        result.max *= b;
+    }
+    return result;
+}
+
+ConstantInterval multiply(const ConstantInterval &a, const ConstantInterval &b) {
+    int64_t bounds[4];
+    int64_t *bounds_begin = &bounds[0];
+    int64_t *bounds_end = &bounds[0];
+    ConstantInterval result;
+    result.min_defined = result.max_defined = true;
+    if (a.has_lower_bound() && b.has_lower_bound()) {
+        *bounds_end++ = a.min * b.min;
+    }
+    if (a.has_lower_bound() && b.has_upper_bound()) {
+        *bounds_end++ = a.min * b.max;
+    }
+    if (a.has_upper_bound() && b.has_lower_bound()) {
+        *bounds_end++ = a.max * b.min;
+    }
+    if (a.has_upper_bound() && b.has_upper_bound()) {
+        *bounds_end++ = a.max * b.max;
+    }
+    if (bounds_begin != bounds_end) {
+        result.min = *std::min_element(bounds_begin, bounds_end);
+        result.max = *std::max_element(bounds_begin, bounds_end);
+    }
+    if (!(a.has_lower_bound() && b.has_lower_bound()) ||
+        !(a.has_upper_bound() && b.has_upper_bound())) {
+        result.max_defined = false;
+    }
+    if (!(a.has_lower_bound() && b.has_upper_bound()) ||
+        !(a.has_upper_bound() && b.has_lower_bound())) {
+        result.min_defined = false;
+    }
+    return result;
+}
+
+ConstantInterval divide(const ConstantInterval &a, int64_t b) {
+    ConstantInterval result(a);
+    if (b < 0) {
+        result = negate(result);
+        b = -b;
     }
     if (result.has_lower_bound()) {
         result.min = div_imp(result.min, b);
