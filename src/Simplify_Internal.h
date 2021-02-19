@@ -238,6 +238,10 @@ public:
         void learn_upper_bound(const Variable *v, int64_t val);
         void learn_lower_bound(const Variable *v, int64_t val);
 
+        // Replace exprs known to be truths or falsehoods with const_true or const_false.
+        Expr substitute_facts(const Expr &e);
+        Stmt substitute_facts(const Stmt &s);
+
         ScopedFact(Simplify *s)
             : simplify(s) {
         }

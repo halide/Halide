@@ -1610,7 +1610,7 @@ void check_boolean() {
     check(IfThenElse::make(x == 1, loop), IfThenElse::make(x == 1, body));
 
     // A for loop where the extent is at most one can just be an if statement
-    check(IfThenElse::make(y % 2 == x, loop), IfThenElse::make(y % 2 == x, IfThenElse::make(0 < x, body)));
+    check(IfThenElse::make(y % 2 == x, loop), IfThenElse::make(0 < x && y % 2 == x, body));
 
     // Check we can learn from bounds on variables
     check(IfThenElse::make(x < 5, Evaluate::make(min(x, 17))),
@@ -1642,6 +1642,12 @@ void check_boolean() {
                       AssertStmt::make(0 < x, x)),
           Block::make(AssertStmt::make(max(y, 3) < x, x),
                       Evaluate::make(0)));
+
+    check(IfThenElse::make(y < 3, IfThenElse::make(x <= 5, Evaluate::make(x))),
+          IfThenElse::make(x <= 5 && y < 3, Evaluate::make(x)));
+
+    check(IfThenElse::make(x <= 5 && y < 3, Evaluate::make(select(x <= 5, x, y))),
+          IfThenElse::make(x <= 5 && y < 3, Evaluate::make(x)));
 
     // Check it works transitively
     check(IfThenElse::make(0 < x,

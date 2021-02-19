@@ -40,14 +40,19 @@ Stmt Simplify::visit(const IfThenElse *op) {
     Stmt then_case, else_case;
     {
         auto f = scoped_truth(unwrapped_condition);
-        // Also substitute the entire condition
-        then_case = substitute(op->condition, const_true(condition.type().lanes()), op->then_case);
-        then_case = mutate(then_case);
+        then_case = mutate(op->then_case);
+        Stmt learned_then_case = f.substitute_facts(then_case);
+        if (!learned_then_case.same_as(then_case)) {
+            then_case = mutate(learned_then_case);
+        }
     }
     {
         auto f = scoped_falsehood(unwrapped_condition);
-        else_case = substitute(op->condition, const_false(condition.type().lanes()), op->else_case);
-        else_case = mutate(else_case);
+        else_case = mutate(op->else_case);
+        Stmt learned_else_case = f.substitute_facts(else_case);
+        if (!learned_else_case.same_as(else_case)) {
+            else_case = mutate(learned_else_case);
+        }
     }
 
     // If both sides are no-ops, bail out.
@@ -59,6 +64,7 @@ Stmt Simplify::visit(const IfThenElse *op) {
     if (equal(then_case, else_case)) {
         return then_case;
     }
+    const IfThenElse *then_if = then_case.as<IfThenElse>();
     const Acquire *then_acquire = then_case.as<Acquire>();
     const Acquire *else_acquire = else_case.as<Acquire>();
     const ProducerConsumer *then_pc = then_case.as<ProducerConsumer>();
@@ -90,6 +96,15 @@ Stmt Simplify::visit(const IfThenElse *op) {
                then_pc->is_producer == else_pc->is_producer) {
         return ProducerConsumer::make(then_pc->name, then_pc->is_producer,
                                       mutate(IfThenElse::make(condition, then_pc->body, else_pc->body)));
+    } else if (then_pc &&
+               is_no_op(else_case)) {
+        return ProducerConsumer::make(then_pc->name, then_pc->is_producer,
+                                      mutate(IfThenElse::make(condition, then_pc->body)));
+    } else if (then_if &&
+               is_no_op(else_case) &&
+               is_no_op(then_if->else_case) &&
+               is_pure(then_if->condition)) {
+        return mutate(IfThenElse::make(condition && then_if->condition, then_if->then_case));
     } else if (then_block &&
                else_block &&
                equal(then_block->first, else_block->first)) {
