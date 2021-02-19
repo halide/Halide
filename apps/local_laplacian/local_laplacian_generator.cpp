@@ -133,25 +133,25 @@ public:
             remap.compute_root();
             Var yo;
             output.reorder(c, x, y).split(y, yo, y, 64).parallel(yo).vectorize(x, 8);
-            gray.compute_root().parallel(y, 32).vectorize(x, 8);
+            gray.compute_root().parallel(y, 32).vectorize(x, 8, TailStrategy::RoundUp);
             for (int j = 1; j < 5; j++) {
                 inGPyramid[j]
                     .compute_root()
                     .parallel(y, 32)
-                    .vectorize(x, 8);
+                    .vectorize(x, 8, TailStrategy::RoundUp);
                 gPyramid[j]
                     .compute_root()
                     .reorder_storage(x, k, y)
                     .reorder(k, y)
                     .parallel(y, 8)
-                    .vectorize(x, 8);
+                    .vectorize(x, 8, TailStrategy::RoundUp);
                 outGPyramid[j]
                     .store_at(output, yo)
                     .compute_at(output, y)
                     .fold_storage(y, 8)
-                    .vectorize(x, 8);
+                    .vectorize(x, 8, TailStrategy::RoundUp);
             }
-            outGPyramid[0].compute_at(output, y).vectorize(x, 8);
+            outGPyramid[0].compute_at(output, y).vectorize(x, 8, TailStrategy::RoundUp);
             for (int j = 5; j < J; j++) {
                 inGPyramid[j].compute_root();
                 gPyramid[j].compute_root().parallel(k);

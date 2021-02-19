@@ -151,7 +151,7 @@ public:
                         .reorder(x, c, y)
                         .split(y, yo, yi, 8)
                         .parallel(yo)
-                        .vectorize(x, vec);
+                        .vectorize(x, vec, TailStrategy::RoundUp);
                 }
 
                 // downsampled[0] takes too long to compute_root, so
@@ -165,7 +165,7 @@ public:
                     .compute_at(downsampled[1], yi)
                     .reorder(c, x, y)
                     .unroll(c)
-                    .vectorize(x, vec);
+                    .vectorize(x, vec, TailStrategy::RoundUp);
 
                 normalize
                     .bound(x, 0, input.width())
@@ -182,7 +182,7 @@ public:
                     interpolated[l]
                         .store_at(normalize, yo)
                         .compute_at(normalize, yi)
-                        .vectorize(x, vec);
+                        .vectorize(x, vec, TailStrategy::RoundUp);
                 }
 
                 output = normalize;
