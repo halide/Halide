@@ -7,7 +7,10 @@
 // to simplify build requirements in downstream environments.
 
 #include <Python.h>
+#include <functional>
 #include <memory>
+
+#include "Halide.h"
 
 #ifndef HALIDE_PYSTUB_GENERATOR_NAME
 #error "HALIDE_PYSTUB_GENERATOR_NAME must be defined"
@@ -17,17 +20,7 @@
 #define HALIDE_PYSTUB_MODULE_NAME HALIDE_PYSTUB_GENERATOR_NAME
 #endif
 
-namespace Halide {
-class GeneratorContext;
-namespace Internal {
-class IGenerator;
-}  // namespace Internal
-}  // namespace Halide
-
-// Note that this must exactly match the definition in Generator.h/Halide.h.
-using GeneratorFactory = std::unique_ptr<Halide::Internal::IGenerator> (*)(const Halide::GeneratorContext &context);
-
-extern "C" PyObject *_halide_pystub_impl(const char *module_name, GeneratorFactory factory);
+extern "C" PyObject *_halide_pystub_impl(const char *module_name, Halide::Internal::GeneratorFactory factory);
 
 #define HALIDE_STRINGIFY(x) #x
 #define HALIDE_TOSTRING(x) HALIDE_STRINGIFY(x)

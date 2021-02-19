@@ -258,6 +258,7 @@
  */
 
 #include <algorithm>
+#include <functional>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -2981,7 +2982,8 @@ struct NoRealizations<T, Args...> {
 
 // Note that these functions must never return null:
 // if they cannot return a valid Generator, they must assert-fail.
-using GeneratorFactory = std::unique_ptr<IGenerator> (*)(const GeneratorContext &context);
+//using GeneratorFactory = std::unique_ptr<IGenerator> (*)(const GeneratorContext &context);
+using GeneratorFactory = std::function<std::unique_ptr<IGenerator>(const GeneratorContext &context)>;
 
 struct StringOrLoopLevel {
     std::string string_value;
