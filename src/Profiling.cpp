@@ -22,6 +22,7 @@ using std::vector;
 namespace {
 
 class InjectProfiling : public IRMutator {
+
 public:
     map<string, int> indices;  // maps from func name -> index in buffer.
 
@@ -31,8 +32,15 @@ public:
 
     InjectProfiling(const string &pipeline_name)
         : pipeline_name(pipeline_name) {
-        indices["overhead"] = 0;
-        stack.push_back(0);
+        stack.push_back(get_func_id("overhead"));
+        malloc_id = get_func_id("halide_malloc");
+        free_id = get_func_id("halide_free");
+        internal_assert(stack.back() == 0);
+        internal_assert(malloc_id == 1);
+        internal_assert(free_id == 2);
+        profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
+        profiler_state = Variable::make(Handle(), "profiler_state");
+        profiler_token = Variable::make(Int(32), "profiler_token");
     }
 
     map<int, uint64_t> func_stack_current;  // map from func id -> current stack allocation
@@ -40,6 +48,11 @@ public:
 
 private:
     using IRMutator::visit;
+
+    int malloc_id, free_id;
+    Expr profiler_pipeline_state;
+    Expr profiler_state;
+    Expr profiler_token;
 
     struct AllocSize {
         bool on_stack;
@@ -68,6 +81,12 @@ private:
             idx = iter->second;
         }
         return idx;
+    }
+
+    Stmt set_current_func(Expr id) {
+        // This call gets inlined and becomes a single store instruction.
+        return Evaluate::make(Call::make(Int(32), "halide_profiler_set_current_func",
+                                         {profiler_state, profiler_token, id}, Call::Extern));
     }
 
     Expr compute_allocation_size(const vector<Expr> &extents,
@@ -127,8 +146,10 @@ private:
             internal_assert(int_size != nullptr);  // Stack size is always a const int
             func_stack_current[idx] += *int_size;
             func_stack_peak[idx] = std::max(func_stack_peak[idx], func_stack_current[idx]);
-            debug(3) << "  Allocation on stack: " << op->name << "(" << size << ") in pipeline " << pipeline_name
-                     << "; current: " << func_stack_current[idx] << "; peak: " << func_stack_peak[idx] << "\n";
+            debug(3) << "  Allocation on stack: " << op->name
+                     << "(" << size << ") in pipeline " << pipeline_name
+                     << "; current: " << func_stack_current[idx]
+                     << "; peak: " << func_stack_peak[idx] << "\n";
         }
 
         Stmt body = mutate(op->body);
@@ -148,12 +169,20 @@ private:
         }
 
         if (!is_const_zero(size) && !on_stack && profiling_memory) {
-            Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
-            debug(3) << "  Allocation on heap: " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
-            Expr set_task = Call::make(Int(32), "halide_profiler_memory_allocate",
-                                       {profiler_pipeline_state, idx, size}, Call::Extern);
-            stmt = Block::make(Evaluate::make(set_task), stmt);
+            debug(3) << "  Allocation on heap: " << op->name
+                     << "(" << size << ") in pipeline "
+                     << pipeline_name << "\n";
+
+            vector<Stmt> tasks{
+                set_current_func(malloc_id),
+                Evaluate::make(Call::make(Int(32), "halide_profiler_memory_allocate",
+                                          {profiler_pipeline_state, idx, size}, Call::Extern)),
+                stmt,
+                set_current_func(stack.back())};
+
+            stmt = Block::make(tasks);
         }
+
         return stmt;
     }
 
@@ -167,14 +196,18 @@ private:
         Stmt stmt = IRMutator::visit(op);
 
         if (!is_const_zero(alloc.size)) {
-            Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
-
             if (!alloc.on_stack) {
                 if (profiling_memory) {
                     debug(3) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << pipeline_name << "\n";
-                    Expr set_task = Call::make(Int(32), "halide_profiler_memory_free",
-                                               {profiler_pipeline_state, idx, alloc.size}, Call::Extern);
-                    stmt = Block::make(Evaluate::make(set_task), stmt);
+
+                    vector<Stmt> tasks{
+                        set_current_func(free_id),
+                        Evaluate::make(Call::make(Int(32), "halide_profiler_memory_free",
+                                                  {profiler_pipeline_state, idx, alloc.size}, Call::Extern)),
+                        stmt,
+                        set_current_func(stack.back())};
+
+                    stmt = Block::make(tasks);
                 }
             } else {
                 const uint64_t *int_size = as_const_uint(alloc.size);
@@ -203,28 +236,19 @@ private:
             idx = stack.back();
         }
 
-        Expr profiler_token = Variable::make(Int(32), "profiler_token");
-        Expr profiler_state = Variable::make(Handle(), "profiler_state");
-
-        // This call gets inlined and becomes a single store instruction.
-        Expr set_task = Call::make(Int(32), "halide_profiler_set_current_func",
-                                   {profiler_state, profiler_token, idx}, Call::Extern);
-
-        body = Block::make(Evaluate::make(set_task), body);
+        body = Block::make(set_current_func(idx), body);
 
         return ProducerConsumer::make(op->name, op->is_producer, body);
     }
 
     Stmt incr_active_threads() {
-        Expr state = Variable::make(Handle(), "profiler_state");
         return Evaluate::make(Call::make(Int(32), "halide_profiler_incr_active_threads",
-                                         {state}, Call::Extern));
+                                         {profiler_state}, Call::Extern));
     }
 
     Stmt decr_active_threads() {
-        Expr state = Variable::make(Handle(), "profiler_state");
         return Evaluate::make(Call::make(Int(32), "halide_profiler_decr_active_threads",
-                                         {state}, Call::Extern));
+                                         {profiler_state}, Call::Extern));
     }
 
     Stmt visit_parallel_task(const Stmt &s) {
