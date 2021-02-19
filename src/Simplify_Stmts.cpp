@@ -412,6 +412,10 @@ Stmt Simplify::visit(const Block *op) {
         }
 
         Stmt new_rest = mutate(rest);
+        Stmt learned_new_rest = knowledge.substitute_facts(new_rest);
+        if (!learned_new_rest.same_as(new_rest)) {
+            new_rest = mutate(learned_new_rest);
+        }
         unchanged &= new_rest.same_as(rest);
 
         if (unchanged) {
