@@ -34,12 +34,20 @@ bool is_constant(const ConstantInterval &a) {
     return a.is_single_point(0);
 }
 
+bool may_be_negative(const ConstantInterval &a) {
+    return !a.has_lower_bound() || a.min < 0;
+}
+
+bool may_be_positive(const ConstantInterval &a) {
+    return !a.has_upper_bound() || a.max > 0;
+}
+
 bool is_monotonic_increasing(const ConstantInterval &a) {
-    return a.has_lower_bound() && a.min >= 0;
+    return !may_be_negative(a);
 }
 
 bool is_monotonic_decreasing(const ConstantInterval &a) {
-    return a.has_upper_bound() && a.max <= 0;
+    return !may_be_positive(a);
 }
 
 ConstantInterval to_interval(Monotonic m) {
@@ -133,8 +141,6 @@ ConstantInterval multiply(const ConstantInterval &a, const ConstantInterval &b) 
     int64_t bounds[4];
     int64_t *bounds_begin = &bounds[0];
     int64_t *bounds_end = &bounds[0];
-    ConstantInterval result;
-    result.min_defined = result.max_defined = true;
     if (a.has_lower_bound() && b.has_lower_bound()) {
         *bounds_end++ = a.min * b.min;
     }
@@ -148,18 +154,32 @@ ConstantInterval multiply(const ConstantInterval &a, const ConstantInterval &b) 
         *bounds_end++ = a.max * b.max;
     }
     if (bounds_begin != bounds_end) {
-        result.min = *std::min_element(bounds_begin, bounds_end);
-        result.max = *std::max_element(bounds_begin, bounds_end);
+        ConstantInterval result = {
+            *std::min_element(bounds_begin, bounds_end),
+            *std::max_element(bounds_begin, bounds_end),
+        };
+        // There *must* be a better way than this... Even
+        // cutting half the cases with swapping isn't that much help.
+        if (!a.has_lower_bound()) {
+            if (may_be_negative(b)) result.max_defined = false;
+            if (may_be_positive(b)) result.min_defined = false;
+        }
+        if (!a.has_upper_bound()) {
+            if (may_be_negative(b)) result.min_defined = false;
+            if (may_be_positive(b)) result.max_defined = false;
+        }
+        if (!b.has_lower_bound()) {
+            if (may_be_negative(a)) result.max_defined = false;
+            if (may_be_positive(a)) result.min_defined = false;
+        }
+        if (!b.has_upper_bound()) {
+            if (may_be_negative(a)) result.min_defined = false;
+            if (may_be_positive(a)) result.max_defined = false;
+        }
+        return result;
+    } else {
+        return ConstantInterval::everything();
     }
-    if (!(a.has_lower_bound() && b.has_lower_bound()) ||
-        !(a.has_upper_bound() && b.has_upper_bound())) {
-        result.max_defined = false;
-    }
-    if (!(a.has_lower_bound() && b.has_upper_bound()) ||
-        !(a.has_upper_bound() && b.has_lower_bound())) {
-        result.min_defined = false;
-    }
-    return result;
 }
 
 ConstantInterval divide(const ConstantInterval &a, int64_t b) {
@@ -252,6 +272,8 @@ class DerivativeBounds : public IRVisitor {
             op->b.accept(this);
             ConstantInterval rb = result;
 
+            // This is essentially the product rule: a*rb + b*ra
+            // but only implemented for the case where a or b is constant.
             if (const int64_t *b = as_const_int(op->b)) {
                 result = multiply(ra, *b);
             } else if (const uint64_t *b = as_const_uint(op->b)) {

@@ -173,13 +173,13 @@ ConstantInterval ConstantInterval::single_point(int64_t x) {
 }
 
 ConstantInterval ConstantInterval::bounded_below(int64_t min) {
-    ConstantInterval result(min, 0);
+    ConstantInterval result(min, min);
     result.max_defined = false;
     return result;
 }
 
 ConstantInterval ConstantInterval::bounded_above(int64_t max) {
-    ConstantInterval result(0, max);
+    ConstantInterval result(max, max);
     result.min_defined = false;
     return result;
 }
