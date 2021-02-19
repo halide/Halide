@@ -134,9 +134,6 @@ struct ConstantInterval {
     static ConstantInterval bounded_below(int64_t min);
     static ConstantInterval bounded_above(int64_t max);
 
-    /** Is the interval the empty set */
-    bool is_empty() const;
-
     /** Is the interval the entire range */
     bool is_everything() const;
 
