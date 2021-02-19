@@ -83,7 +83,7 @@ private:
         return idx;
     }
 
-    Stmt set_current_func(Expr id) {
+    Stmt set_current_func(const Expr &id) {
         // This call gets inlined and becomes a single store instruction.
         return Evaluate::make(Call::make(Int(32), "halide_profiler_set_current_func",
                                          {profiler_state, profiler_token, id}, Call::Extern));
