@@ -2120,8 +2120,6 @@ RegisterGenerator::RegisterGenerator(const char *registered_name, GeneratorFacto
     Internal::GeneratorRegistry::register_factory(registered_name, std::move(generator_factory));
 }
 
-}  // namespace Internal
-
 void generator_test() {
     GeneratorContext context(get_host_target());
 
