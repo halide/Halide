@@ -152,6 +152,7 @@ void Simplify::ScopedFact::learn_false(const Expr &fact) {
     } else if (const Call *c = fact.as<Call>()) {
         if (c->is_intrinsic(Call::likely) || c->is_intrinsic(Call::likely_if_innermost)) {
             learn_false(c->args[0]);
+            return;
         }
     } else if (const Or *o = fact.as<Or>()) {
         // Both must be false
@@ -288,6 +289,7 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
     } else if (const Call *c = fact.as<Call>()) {
         if (c->is_intrinsic(Call::likely) || c->is_intrinsic(Call::likely_if_innermost)) {
             learn_true(c->args[0]);
+            return;
         }
     } else if (const And *a = fact.as<And>()) {
         // Both must be true
@@ -305,6 +307,7 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
 
 template <class T>
 T substitute_facts_impl(T t, const vector<Expr> &truths, const vector<Expr> &falsehoods) {
+    // An std::map<Expr, Expr> version of substitute might be an optimization?
     for (const auto &i : truths) {
         t = substitute(i, const_true(i.type().lanes()), t);
     }
