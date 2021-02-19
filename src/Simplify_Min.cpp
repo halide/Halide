@@ -73,7 +73,9 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              rewrite(min(min(min(min(x, y), z), w), y), a) ||
              rewrite(min(min(min(min(min(x, y), z), w), u), x), a) ||
              rewrite(min(min(min(min(min(x, y), z), w), u), y), a) ||
+             rewrite(min(x, min(x, y)), b) ||
              rewrite(min(x, max(x, y)), a) ||
+             rewrite(min(x, min(y, x)), b) ||
              rewrite(min(x, max(y, x)), a) ||
              rewrite(min(max(x, y), min(x, y)), b) ||
              rewrite(min(max(x, y), min(y, x)), b) ||
@@ -104,7 +106,9 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                rewrite(min((x/c1)*c1 + c2, x), a, c1 > 0 && c2 <= 0) ||
                rewrite(min(x, (x/c1)*c1 + c2), b, c1 > 0 && c2 <= 0) ||
                rewrite(min(((x + c0)/c1)*c1, x), a, c1 > 0 && c0 <= 0) ||
-               rewrite(min(x, ((x + c0)/c1)*c1), b, c1 > 0 && c0 <= 0))))) {
+               rewrite(min(x, ((x + c0)/c1)*c1), b, c1 > 0 && c0 <= 0) ||
+               rewrite(min(((x + c0)/c1)*c1, x + c2), x + c2, c1 > 0 && c0 >= c1 + c2) ||
+               false)))) {
             return rewrite.result;
         }
         // clang-format on
