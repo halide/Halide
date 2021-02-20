@@ -390,7 +390,6 @@ int sample_interval(const Interval &interval) {
     }
 
     int value = random_in_range(min_value, max_value);
-    // std::cerr << "sample_interval() = " << value << "\n";
     return value;
 }
 
@@ -506,13 +505,13 @@ bool test_expression_bounds(Expr test, int trials, int samples_per_trial) {
 
 int main(int argc, char **argv) {
     // Number of random expressions to test.
-    const int count = 1000;
+    const int count = 10000;
     // Depth of the randomly generated expression trees.
     const int depth = 3;
     // Number of trials to test the generated expressions for.
     const int trials = 10;
     // Number of samples of the intervals per trial to test.
-    const int samples = 10;
+    const int samples = 100;
 
     // We want different fuzz tests every time, to increase coverage.
     // We also report the seed to enable reproducing failures.

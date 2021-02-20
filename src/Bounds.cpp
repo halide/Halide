@@ -205,7 +205,7 @@ private:
 
     void bounds_of_type(Type t) {
         t = t.element_of();
-        if (t.is_uint() || (t.is_int() && t.bits() <= 16)) {
+        if ((t.is_uint() || t.is_int()) && t.bits() <= 16) {
             interval = Interval(t.min(), t.max());
         } else {
             interval = Interval::everything();
@@ -3265,8 +3265,8 @@ void bounds_test() {
         ScopedBinding<Interval> ab(scope, "a", Interval(UIntImm::make(uint32, 0), simplify(uint32.max() / 4 + 2)));
         ScopedBinding<Interval> bb(scope, "b", Interval(UIntImm::make(uint32, 0), uint32.max()));
         // Overflow should be detected
-        check(scope, a + b, uint32.min(), uint32.max());
-        check(scope, a * b, uint32.min(), uint32.max());
+        check(scope, a + b, Interval::neg_inf(), Interval::pos_inf());
+        check(scope, a * b, Interval::neg_inf(), Interval::pos_inf());
     }
     {
         Type int16 = Int(16);
