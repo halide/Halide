@@ -146,8 +146,15 @@ class GuardProducer : public IRMutator {
         } else if (guard_above.defined()) {
             guard = guard_above;
         }
+
+        // Help bounds inference understand the clamp from this guard if.
+        internal_assert(dim_idx < (int)func.args().size());
+        string bounded_var = func.args()[dim_idx] + ".clamped";
+        Stmt provide = substitute(var, Variable::make(Int(32), bounded_var), op);
+        provide = LetStmt::make(bounded_var, promise_clamped(var, min, max), provide);
+
         internal_assert(guard.defined());
-        return IfThenElse::make(guard, op);
+        return IfThenElse::make(guard, provide);
     }
 
 public:
