@@ -64,7 +64,7 @@ Stmt Simplify::visit(const IfThenElse *op) {
     if (equal(then_case, else_case)) {
         return then_case;
     }
-    const IfThenElse *then_if = then_case.as<IfThenElse>();
+    //const IfThenElse *then_if = then_case.as<IfThenElse>();
     const Acquire *then_acquire = then_case.as<Acquire>();
     const Acquire *else_acquire = else_case.as<Acquire>();
     const ProducerConsumer *then_pc = then_case.as<ProducerConsumer>();
@@ -100,11 +100,12 @@ Stmt Simplify::visit(const IfThenElse *op) {
                is_no_op(else_case)) {
         return ProducerConsumer::make(then_pc->name, then_pc->is_producer,
                                       mutate(IfThenElse::make(condition, then_pc->body)));
-    } else if (then_if &&
-               is_no_op(else_case) &&
-               is_no_op(then_if->else_case) &&
-               is_pure(then_if->condition)) {
-        return mutate(IfThenElse::make(condition && then_if->condition, then_if->then_case));
+    // TODO: This rule uncovers bugs elsewhere...
+    //} else if (then_if &&
+    //           is_no_op(else_case) &&
+    //           is_no_op(then_if->else_case) &&
+    //           is_pure(then_if->condition)) {
+    //    return mutate(IfThenElse::make(condition && then_if->condition, then_if->then_case));
     } else if (then_block &&
                else_block &&
                equal(then_block->first, else_block->first)) {
