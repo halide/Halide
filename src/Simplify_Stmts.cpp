@@ -15,12 +15,10 @@ Stmt Simplify::visit(const IfThenElse *op) {
     Expr condition = mutate(op->condition, nullptr);
 
     // If (likely(true)) ...
-    const Call *call = condition.as<Call>();
+    const Call *likely = Call::as_intrinsic(condition, {Call::likely, Call::likely_if_innermost});
     Expr unwrapped_condition = condition;
-    if (call &&
-        (call->is_intrinsic(Call::likely) ||
-         call->is_intrinsic(Call::likely_if_innermost))) {
-        unwrapped_condition = call->args[0];
+    if (likely) {
+        unwrapped_condition = likely->args[0];
     }
 
     // If (true) ...
@@ -34,6 +32,25 @@ Stmt Simplify::visit(const IfThenElse *op) {
             return mutate(op->else_case);
         } else {
             return Evaluate::make(0);
+        }
+    }
+
+    if (const And *a = unwrapped_condition.as<And>()) {
+        if (is_no_op(op->else_case)) {
+            // Bounds inference handles nested ifs of separate conditions
+            // better than one if of multiple expressions.
+            Expr conditions[] = {a->a, a->b};
+            if (likely) {
+                for (Expr &i : conditions) {
+                    i = Call::make(i.type(), likely->name, {i}, likely->call_type);
+                }
+            }
+
+            Stmt result = op->then_case;
+            for (const Expr &i : conditions) {
+                result = IfThenElse::make(i, result);
+            }
+            return mutate(result);
         }
     }
 
@@ -64,7 +81,6 @@ Stmt Simplify::visit(const IfThenElse *op) {
     if (equal(then_case, else_case)) {
         return then_case;
     }
-    //const IfThenElse *then_if = then_case.as<IfThenElse>();
     const Acquire *then_acquire = then_case.as<Acquire>();
     const Acquire *else_acquire = else_case.as<Acquire>();
     const ProducerConsumer *then_pc = then_case.as<ProducerConsumer>();
@@ -100,12 +116,6 @@ Stmt Simplify::visit(const IfThenElse *op) {
                is_no_op(else_case)) {
         return ProducerConsumer::make(then_pc->name, then_pc->is_producer,
                                       mutate(IfThenElse::make(condition, then_pc->body)));
-    // TODO: This rule uncovers bugs elsewhere...
-    //} else if (then_if &&
-    //           is_no_op(else_case) &&
-    //           is_no_op(then_if->else_case) &&
-    //           is_pure(then_if->condition)) {
-    //    return mutate(IfThenElse::make(condition && then_if->condition, then_if->then_case));
     } else if (then_block &&
                else_block &&
                equal(then_block->first, else_block->first)) {
