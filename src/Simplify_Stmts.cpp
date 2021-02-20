@@ -35,25 +35,6 @@ Stmt Simplify::visit(const IfThenElse *op) {
         }
     }
 
-    if (const And *a = unwrapped_condition.as<And>()) {
-        if (is_no_op(op->else_case)) {
-            // Bounds inference handles nested ifs of separate conditions
-            // better than one if of multiple expressions.
-            Expr conditions[] = {a->a, a->b};
-            if (likely) {
-                for (Expr &i : conditions) {
-                    i = Call::make(i.type(), likely->name, {i}, likely->call_type);
-                }
-            }
-
-            Stmt result = op->then_case;
-            for (const Expr &i : conditions) {
-                result = IfThenElse::make(i, result);
-            }
-            return mutate(result);
-        }
-    }
-
     Stmt then_case, else_case;
     {
         auto f = scoped_truth(unwrapped_condition);
