@@ -378,6 +378,18 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                      << "Adjusting loop_min from " << loop_min << " to " << new_loop_min << "\n"
                      << "Equation is " << new_loop_min_eq << "\n";
 
+            // Guard producers against running on expanded bounds.
+            if (new_loop_min.defined()) {
+                Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
+                Expr produce_min, produce_max;
+                if (can_slide_up) {
+                    produce_min = substitute(loop_var, orig_loop_min_expr, min_required);
+                } else {
+                    produce_max = substitute(loop_var, orig_loop_min_expr, max_required);
+                }
+                stmt = guard_producer(stmt, func, dim_idx, produce_min, produce_max);
+            }
+
             // Now redefine the appropriate regions required
             if (can_slide_up) {
                 replacements[prefix + dim + ".min"] = new_min;
@@ -408,13 +420,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                     Expr var = Variable::make(Int(32), n);
                     stmt = LetStmt::make(n, max(var, b[dim_idx].max), stmt);
                 }
-            }
-
-            // Guard producers against running on expanded bounds.
-            if (new_loop_min.defined()) {
-                Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
-                Expr bounded_min = substitute(loop_var, orig_loop_min_expr, min_required);
-                stmt = guard_producer(stmt, func, dim_idx, bounded_min, Expr());
             }
 
             return stmt;
