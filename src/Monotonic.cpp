@@ -161,20 +161,20 @@ ConstantInterval multiply(const ConstantInterval &a, const ConstantInterval &b) 
         // There *must* be a better way than this... Even
         // cutting half the cases with swapping isn't that much help.
         if (!a.has_lower_bound()) {
-            if (may_be_negative(b)) result.max_defined = false;
-            if (may_be_positive(b)) result.min_defined = false;
+            if (may_be_negative(b)) result.max_defined = false;  // NOLINT
+            if (may_be_positive(b)) result.min_defined = false;  // NOLINT
         }
         if (!a.has_upper_bound()) {
-            if (may_be_negative(b)) result.min_defined = false;
-            if (may_be_positive(b)) result.max_defined = false;
+            if (may_be_negative(b)) result.min_defined = false;  // NOLINT
+            if (may_be_positive(b)) result.max_defined = false;  // NOLINT
         }
         if (!b.has_lower_bound()) {
-            if (may_be_negative(a)) result.max_defined = false;
-            if (may_be_positive(a)) result.min_defined = false;
+            if (may_be_negative(a)) result.max_defined = false;  // NOLINT
+            if (may_be_positive(a)) result.min_defined = false;  // NOLINT
         }
         if (!b.has_upper_bound()) {
-            if (may_be_negative(a)) result.min_defined = false;
-            if (may_be_positive(a)) result.max_defined = false;
+            if (may_be_negative(a)) result.min_defined = false;  // NOLINT
+            if (may_be_positive(a)) result.max_defined = false;  // NOLINT
         }
         return result;
     } else {
