@@ -5,6 +5,7 @@
 #include "Debug.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
+#include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
@@ -23,6 +24,7 @@ using std::list;
 using std::map;
 using std::pair;
 using std::string;
+using std::vector;
 
 namespace {
 
@@ -429,10 +431,12 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // didn't do this, the loop could likely be trimmed and the if simplified away.
             Stmt body = mutate(op->body);
             if (const IfThenElse *old_guard = body.as<IfThenElse>()) {
-                if (expr_uses_var(old_guard->condition, loop_var)) {
-                    // If there's already an if that uses our loop variable, it must be
-                    // a previously added guard. That guard must be tighter, because
-                    // earlier loops are smaller.
+                Expr x = Variable::make(Int(32), "*");
+                vector<Expr> matches;
+                if (expr_match(likely_if_innermost(x <= loop_var_expr), old_guard->condition, matches)) {
+                    // There's already a condition on loop_var_expr here. Since we're
+                    // adding a condition at the old loop min, this if must already be
+                    // guarding more than we will.
                     guard = Expr();
                 }
             }
