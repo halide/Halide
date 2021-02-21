@@ -23,6 +23,7 @@ namespace Internal {
 using std::list;
 using std::map;
 using std::pair;
+using std::set;
 using std::string;
 using std::vector;
 
@@ -175,9 +176,17 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     Function func;
     string loop_var;
     Expr loop_min;
+    set<int> &slid_dimensions;
     Scope<Expr> scope;
 
     map<string, Expr> replacements;
+
+    // A map that gives the appropriate variable replacements to refer
+    // to the previous production of the Func.
+    map<string, Expr> previous_production;
+
+    // The same, for the very first production of a Func
+    map<string, Expr> first_production;
 
     using IRMutator::visit;
 
@@ -219,6 +228,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             string prefix = func.name() + ".s" + std::to_string(func.updates().size()) + ".";
             const std::vector<string> func_args = func.args();
             for (int i = 0; i < func.dimensions(); i++) {
+                if (slid_dimensions.count(i)) {
+                    debug(3) << "Already slid over dimension " << i << ", so skipping it.\n";
+                    continue;
+                }
                 // Look up the region required of this function's last stage
                 string var = prefix + func_args[i];
                 internal_assert(scope.contains(var + ".min") && scope.contains(var + ".max"));
@@ -318,8 +331,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             Expr loop_var_expr = Variable::make(Int(32), loop_var);
 
-            Expr prev_max_plus_one = substitute(loop_var, loop_var_expr - 1, max_required) + 1;
-            Expr prev_min_minus_one = substitute(loop_var, loop_var_expr - 1, min_required) - 1;
+            Expr prev_max_plus_one = simplify(substitute(previous_production, max_required) + 1);
+            Expr prev_min_minus_one = simplify(substitute(previous_production, min_required) - 1);
 
             // If there's no overlap between adjacent iterations, we shouldn't slide.
             if (can_prove(min_required >= prev_max_plus_one) ||
@@ -336,14 +349,20 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             string new_loop_min_name = unique_name('x');
             Expr new_loop_min_var = Variable::make(Int(32), new_loop_min_name);
             Expr new_loop_min_eq;
+            map<string, Expr> new_first_production = first_production;
+            new_first_production[loop_var] = new_loop_min_var;
             if (can_slide_up) {
                 new_loop_min_eq =
-                    substitute(loop_var, loop_min, min_required) == substitute(loop_var, new_loop_min_var, prev_max_plus_one);
+                    (substitute(first_production, min_required) >=
+                     substitute(new_first_production, prev_max_plus_one));
             } else {
                 new_loop_min_eq =
-                    substitute(loop_var, loop_min, max_required) == substitute(loop_var, new_loop_min_var, prev_min_minus_one);
+                    (substitute(first_production, max_required) >=
+                     substitute(new_first_production, prev_min_minus_one));
             }
+            new_loop_min_eq = solve_expression(simplify(new_loop_min_eq), new_loop_min_name).result;
             Interval solve_result = solve_for_inner_interval(new_loop_min_eq, new_loop_min_name);
+
             Expr new_min, new_max;
             if (!solve_result.has_upper_bound()) {
                 debug(3) << "Not sliding " << func.name()
@@ -377,6 +396,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                      << "Shrinking max from " << max_required << " to " << new_max << "\n"
                      << "Adjusting loop_min from " << loop_min << " to " << new_loop_min << "\n"
                      << "Equation is " << new_loop_min_eq << "\n";
+
+            slid_dimensions.insert(dim_idx);
 
             // Now redefine the appropriate regions required
             if (can_slide_up) {
@@ -413,7 +434,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // Guard producers against running on expanded bounds.
             if (new_loop_min.defined()) {
                 Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
-                Expr bounded_min = substitute(loop_var, orig_loop_min_expr, min_required);
+                Expr bounded_min = substitute(loop_var + ".loop_min", orig_loop_min_expr,
+                                              substitute(first_production, min_required));
                 stmt = guard_producer(stmt, func, dim_idx, bounded_min, Expr());
             }
 
@@ -474,6 +496,15 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                      << min << ", " << extent << "\n";
             return op;
         } else {
+            Expr loop_var = Variable::make(Int(32), op->name);
+            for (auto &it : previous_production) {
+                // All previous variables are actually unchanged
+                // unless this is the first iteration of this loop.
+                it.second = select(loop_var == min, it.second,
+                                   likely_if_innermost(Variable::make(Int(32), it.first)));
+            }
+            previous_production[op->name] = loop_var + select(loop_var == min, extent, likely_if_innermost(0)) - 1;
+            first_production[op->name] = min;
             return IRMutator::visit(op);
         }
     }
@@ -498,8 +529,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
 public:
-    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min)
-        : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)) {
+    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min, set<int> &slid_dimensions)
+        : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)), slid_dimensions(slid_dimensions) {
+        previous_production[loop_var] = Variable::make(Int(32), loop_var) - 1;
+        first_production[loop_var] = loop_min;
     }
 
     Expr new_loop_min;
@@ -602,6 +635,9 @@ public:
 class SlidingWindow : public IRMutator {
     const map<string, Function> &env;
 
+    // A map of which dimensions we've already slid over, by Func name.
+    map<string, set<int>> slid_dimensions;
+
     // Keep track of realizations we want to slide, from innermost to
     // outermost.
     list<Function> sliding;
@@ -670,7 +706,7 @@ class SlidingWindow : public IRMutator {
                 sliding_loop_min = prev_loop_min;
             }
 
-            SlidingWindowOnFunctionAndLoop slider(func, name, sliding_loop_min);
+            SlidingWindowOnFunctionAndLoop slider(func, name, sliding_loop_min, slid_dimensions[func.name()]);
             body = slider.mutate(body);
 
             prev_loop_min = loop_min;
