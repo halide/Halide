@@ -259,6 +259,72 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        // A sequence of stencils, all computed at the output.
+        count = 0;
+        Func f, g, h, u, v;
+        f(x, y) = call_counter(x, y);
+        g(x, y) = f(x, y - 1) + f(x, y + 1);
+        h(x, y) = g(x - 1, y) + g(x + 1, y);
+        u(x, y) = h(x, y - 1) + h(x, y + 1);
+        v(x, y) = u(x - 1, y) + u(x + 1, y);
+
+        u.compute_at(v, y);
+        h.store_root().compute_at(v, y);
+        g.store_root().compute_at(v, y);
+        f.store_root().compute_at(v, y);
+
+        v.realize({10, 10});
+        if (count != 14 * 14) {
+            printf("f was called %d times instead of %d times\n", count, 14 * 14);
+            return -1;
+        }
+    }
+
+    {
+        // A sequence of stencils, sliding computed at the output.
+        count = 0;
+        Func f, g, h, u, v;
+        f(x, y) = call_counter(x, y);
+        g(x, y) = f(x, y - 1) + f(x, y + 1);
+        h(x, y) = g(x - 1, y) + g(x + 1, y);
+        u(x, y) = h(x, y - 1) + h(x, y + 1);
+        v(x, y) = u(x - 1, y) + u(x + 1, y);
+
+        u.compute_at(v, y);
+        h.store_root().compute_at(v, y);
+        g.compute_at(h, y);
+        f.store_root().compute_at(v, y);
+
+        v.realize({10, 10});
+        if (count != 14 * 14) {
+            printf("f was called %d times instead of %d times\n", count, 14 * 14);
+            return -1;
+        }
+    }
+
+    {
+        // A sequence of stencils,
+        count = 0;
+        Func f, g, h, u, v;
+        f(x, y) = call_counter(x, y);
+        g(x, y) = f(x, y - 1) + f(x, y + 1);
+        h(x, y) = g(x - 1, y) + g(x + 1, y);
+        u(x, y) = h(x, y - 1) + h(x, y + 1);
+        v(x, y) = u(x - 1, y) + u(x + 1, y);
+
+        u.compute_at(v, y);
+        h.store_root().compute_at(u, y);
+        g.compute_at(h, y);
+        f.store_root().compute_at(g, y);
+
+        v.realize({10, 10});
+        if (count != 14 * 14) {
+            printf("f was called %d times instead of %d times\n", count, 14 * 14);
+            return -1;
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }

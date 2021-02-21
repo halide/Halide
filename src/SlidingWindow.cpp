@@ -15,6 +15,7 @@
 #include "Solve.h"
 #include "Substitute.h"
 #include <list>
+#include <set>
 #include <utility>
 
 namespace Halide {
@@ -23,6 +24,7 @@ namespace Internal {
 using std::list;
 using std::map;
 using std::pair;
+using std::set;
 using std::string;
 using std::vector;
 
@@ -543,38 +545,49 @@ public:
 // TODO: We might also need to figure out transitive dependencies...? If so, it
 // would be best to just fix the produce/consume relationships as above. We would
 // just be able to look for produce b inside produce a.
-class DependsOn : public IRVisitor {
+class Dependencies : public IRVisitor {
     using IRVisitor::visit;
 
-    const Function &a;
-    const Function &b;
-    bool finding_a = false;
+    const string &producer;
+    bool in_producer = false;
 
     void visit(const ProducerConsumer *op) override {
-        ScopedValue<bool> old_finding_a(finding_a, op->is_producer && op->name == b.name());
+        ScopedValue<bool> old_finding_a(in_producer, in_producer || (op->is_producer && op->name == producer));
         return IRVisitor::visit(op);
     }
 
     void visit(const Call *op) override {
-        if (finding_a && op->name == a.name()) {
-            yes = true;
-        } else {
-            IRVisitor::visit(op);
+        if (in_producer && op->call_type == Call::Halide) {
+            if (op->name != producer) {
+                dependencies.insert(op->name);
+            }
         }
+        IRVisitor::visit(op);
     }
 
 public:
-    bool yes = false;
+    set<string> dependencies;
 
-    DependsOn(const Function &a, const Function &b)
-        : a(a), b(b) {
+    Dependencies(const string &producer)
+        : producer(producer) {
     }
 };
 
-bool depends_on(const Function &a, const Function &b, const Stmt &s) {
-    DependsOn check(a, b);
-    s.accept(&check);
-    return check.yes;
+bool depends_on(const string &a, const string &b, const Stmt &s) {
+    if (a == b) {
+        return true;
+    }
+    Dependencies deps(b);
+    s.accept(&deps);
+    // Recursively search for dependencies. Repeatedly using this on the
+    // same set of Funcs is algorithmically slow, but even an absurd number
+    // of Funcs is still relatively small...
+    for (const string &i : deps.dependencies) {
+        if (depends_on(a, i, s)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Update the loop variable referenced by prefetch directives.
@@ -664,7 +677,7 @@ class SlidingWindow : public IRMutator {
             debug(3) << "Doing sliding window analysis on function " << func.name() << "\n";
 
             Expr sliding_loop_min;
-            if (prev_func && depends_on(func, *prev_func, body)) {
+            if (prev_func && depends_on(func.name(), prev_func->name(), body)) {
                 // The production of func depends on the production of prev_func.
                 // The loop min needs to grow to warm up func before prev_func.
                 sliding_loop_min = loop_min;
