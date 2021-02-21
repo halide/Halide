@@ -189,11 +189,11 @@ bool ConstantInterval::is_everything() const {
 }
 
 bool ConstantInterval::is_single_point() const {
-    return !is_everything() && min == max;
+    return min_defined && max_defined && min == max;
 }
 
 bool ConstantInterval::is_single_point(int64_t x) const {
-    return !is_everything() && min == x && max == x;
+    return min_defined && max_defined && min == x && max == x;
 }
 
 bool ConstantInterval::has_upper_bound() const {
@@ -205,7 +205,7 @@ bool ConstantInterval::has_lower_bound() const {
 }
 
 bool ConstantInterval::is_bounded() const {
-    return !is_everything();
+    return has_upper_bound() && has_lower_bound();
 }
 
 bool ConstantInterval::operator==(const ConstantInterval &other) const {

@@ -15,6 +15,7 @@
 #include "Solve.h"
 #include "Substitute.h"
 #include <list>
+#include <set>
 #include <utility>
 
 namespace Halide {
@@ -399,6 +400,20 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             slid_dimensions.insert(dim_idx);
 
+            // Guard producers against running on expanded bounds.
+            if (new_loop_min.defined()) {
+                Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
+                Expr produce_min, produce_max;
+                map<string, Expr> orig_first_production = first_production;
+                orig_first_production[loop_var] = orig_loop_min_expr;
+                if (can_slide_up) {
+                    produce_min = substitute(orig_first_production, min_required);
+                } else {
+                    produce_max = substitute(orig_first_production, max_required);
+                }
+                stmt = guard_producer(stmt, func, dim_idx, produce_min, produce_max);
+            }
+
             // Now redefine the appropriate regions required
             if (can_slide_up) {
                 replacements[prefix + dim + ".min"] = new_min;
@@ -429,14 +444,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                     Expr var = Variable::make(Int(32), n);
                     stmt = LetStmt::make(n, max(var, b[dim_idx].max), stmt);
                 }
-            }
-
-            // Guard producers against running on expanded bounds.
-            if (new_loop_min.defined()) {
-                Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
-                Expr bounded_min = substitute(loop_var + ".loop_min", orig_loop_min_expr,
-                                              substitute(first_production, min_required));
-                stmt = guard_producer(stmt, func, dim_idx, bounded_min, Expr());
             }
 
             return stmt;
@@ -476,6 +483,24 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         }
     }
 
+    // Were two variables split from the same original variable?
+    bool common_root_var(const std::string &a, const std::string &b) {
+
+        size_t i = 0;
+        int count = 0;
+        while (i < a.size() &&
+               i < b.size() &&
+               a[i] == b[i]) {
+            count += (a[i] == '.');
+            i++;
+        }
+
+        // f.s?.var.
+        return count >= 3;
+
+        // TODO: fuse? reorder?
+    }
+
     Stmt visit(const For *op) override {
         // It's not safe to enter an inner loop whose bounds depend on
         // the var we're sliding over.
@@ -495,16 +520,18 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                      << " because the bounds depend on the var we're sliding over: "
                      << min << ", " << extent << "\n";
             return op;
-        } else {
-            Expr loop_var = Variable::make(Int(32), op->name);
+        } else if (common_root_var(op->name, loop_var)) {
+            Expr sub_loop_var = Variable::make(Int(32), op->name);
             for (auto &it : previous_production) {
                 // All previous variables are actually unchanged
                 // unless this is the first iteration of this loop.
-                it.second = select(loop_var == min, it.second,
+                it.second = select(sub_loop_var == min, it.second,
                                    likely_if_innermost(Variable::make(Int(32), it.first)));
             }
-            previous_production[op->name] = loop_var + select(loop_var == min, extent, likely_if_innermost(0)) - 1;
+            previous_production[op->name] = sub_loop_var + select(sub_loop_var == min, extent, likely_if_innermost(0)) - 1;
             first_production[op->name] = min;
+            return IRMutator::visit(op);
+        } else {
             return IRMutator::visit(op);
         }
     }
@@ -571,38 +598,49 @@ public:
 // TODO: We might also need to figure out transitive dependencies...? If so, it
 // would be best to just fix the produce/consume relationships as above. We would
 // just be able to look for produce b inside produce a.
-class DependsOn : public IRVisitor {
+class Dependencies : public IRVisitor {
     using IRVisitor::visit;
 
-    const Function &a;
-    const Function &b;
-    bool finding_a = false;
+    const string &producer;
+    bool in_producer = false;
 
     void visit(const ProducerConsumer *op) override {
-        ScopedValue<bool> old_finding_a(finding_a, op->is_producer && op->name == b.name());
+        ScopedValue<bool> old_finding_a(in_producer, in_producer || (op->is_producer && op->name == producer));
         return IRVisitor::visit(op);
     }
 
     void visit(const Call *op) override {
-        if (finding_a && op->name == a.name()) {
-            yes = true;
-        } else {
-            IRVisitor::visit(op);
+        if (in_producer && op->call_type == Call::Halide) {
+            if (op->name != producer) {
+                dependencies.insert(op->name);
+            }
         }
+        IRVisitor::visit(op);
     }
 
 public:
-    bool yes = false;
+    set<string> dependencies;
 
-    DependsOn(const Function &a, const Function &b)
-        : a(a), b(b) {
+    Dependencies(const string &producer)
+        : producer(producer) {
     }
 };
 
-bool depends_on(const Function &a, const Function &b, const Stmt &s) {
-    DependsOn check(a, b);
-    s.accept(&check);
-    return check.yes;
+bool depends_on(const string &a, const string &b, const Stmt &s) {
+    if (a == b) {
+        return true;
+    }
+    Dependencies deps(b);
+    s.accept(&deps);
+    // Recursively search for dependencies. Repeatedly using this on the
+    // same set of Funcs is algorithmically slow, but even an absurd number
+    // of Funcs is still relatively small...
+    for (const string &i : deps.dependencies) {
+        if (depends_on(a, i, s)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Update the loop variable referenced by prefetch directives.
@@ -695,7 +733,7 @@ class SlidingWindow : public IRMutator {
             debug(3) << "Doing sliding window analysis on function " << func.name() << "\n";
 
             Expr sliding_loop_min;
-            if (prev_func && depends_on(func, *prev_func, body)) {
+            if (prev_func && depends_on(func.name(), prev_func->name(), body)) {
                 // The production of func depends on the production of prev_func.
                 // The loop min needs to grow to warm up func before prev_func.
                 sliding_loop_min = loop_min;
