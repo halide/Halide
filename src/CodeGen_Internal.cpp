@@ -670,6 +670,8 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     get_md_bool(module.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi);
     get_md_string(module.getModuleFlag("halide_mcpu"), mcpu);
     get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
+    std::string mabi;
+    get_md_string(module.getModuleFlag("halide_mabi"), mabi);
     bool use_pic = true;
     get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
 
@@ -690,6 +692,7 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
     options.RelaxELFRelocations = false;
+    options.MCOptions.ABIName = mabi;
 }
 
 void clone_target_options(const llvm::Module &from, llvm::Module &to) {

@@ -22,6 +22,7 @@ protected:
 
     std::string mcpu() const override;
     std::string mattrs() const override;
+    std::string mabi() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
 };
