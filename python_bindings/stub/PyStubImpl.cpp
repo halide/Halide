@@ -188,7 +188,7 @@ void pystub_init(pybind11::module &m, const GeneratorFactory &factory) {
 }  // namespace PythonBindings
 }  // namespace Halide
 
-extern "C" PyObject *_halide_pystub_impl(const char *module_name, Halide::Internal::GeneratorFactory factory) {
+extern "C" PyObject *_halide_pystub_impl(const char *module_name, const Halide::Internal::GeneratorFactory &factory) {
     int major, minor;
     if (sscanf(Py_GetVersion(), "%i.%i", &major, &minor) != 2) {
         PyErr_SetString(PyExc_ImportError, "Can't parse Python version.");
