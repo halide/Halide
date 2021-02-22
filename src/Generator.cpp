@@ -948,7 +948,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         {"-r", ""},
         {"-s", ""},
     };
-    std::map<std::string, std::string> constants;
+    std::map<std::string, std::string> generator_args;
 
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] != '-') {
@@ -957,7 +957,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
                 cerr << kUsage;
                 return 1;
             }
-            constants[v[0]] = v[1];
+            generator_args[v[0]] = v[1];
             continue;
         }
         auto it = flags_info.find(argv[i]);
@@ -1047,7 +1047,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     const std::vector<std::string> emit_flags = split_string(emit_flags_string, ",");
     const bool stub_only = (emit_flags.size() == 1 && emit_flags[0] == "cpp_stub");
     if (!stub_only) {
-        if (constants.find("target") == constants.end()) {
+        if (generator_args.find("target") == generator_args.end()) {
             cerr << "Target missing\n";
             cerr << kUsage;
             return 1;
@@ -1057,7 +1057,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     // it's OK for file_base_name to be empty: filename will be based on function name
     std::string file_base_name = flags_info["-n"];
 
-    auto target_strings = split_string(constants["target"], ",");
+    auto target_strings = split_string(generator_args["target"], ",");
     std::vector<Target> targets;
     for (const auto &s : target_strings) {
         targets.emplace_back(s);
@@ -1119,15 +1119,15 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
 
     const CompilerLoggerFactory json_compiler_logger_factory =
         [&](const std::string &function_name, const Target &target) -> std::unique_ptr<CompilerLogger> {
-        // rebuild constants from the map so that they are always canonical
-        std::string constants_string;
+        // rebuild generator_args from the map so that they are always canonical
+        std::string generator_args_string;
         std::string sep;
-        for (const auto &it : constants) {
+        for (const auto &it : generator_args) {
             if (it.first == "target") {
                 continue;
             }
             std::string quote = it.second.find(' ') != std::string::npos ? "\\\"" : "";
-            constants_string += sep + it.first + "=" + quote + it.second + quote;
+            generator_args_string += sep + it.first + "=" + quote + it.second + quote;
             sep = " ";
         }
         std::unique_ptr<JSONCompilerLogger> t(new JSONCompilerLogger(
@@ -1135,7 +1135,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
             obfuscate_compiler_logging ? "" : function_name,
             obfuscate_compiler_logging ? "" : autoscheduler_name,
             obfuscate_compiler_logging ? Target() : target,
-            obfuscate_compiler_logging ? "" : constants_string,
+            obfuscate_compiler_logging ? "" : generator_args_string,
             obfuscate_compiler_logging));
         return t;
     };
@@ -1184,10 +1184,10 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!stub_only) {
             auto output_files = compute_output_files(targets[0], base_path, outputs);
-            auto module_factory = [&generator_name, &constants, do_build_gradient_module](const std::string &name, const Target &target) -> Module {
+            auto module_factory = [&generator_name, &generator_args, do_build_gradient_module](const std::string &name, const Target &target) -> Module {
                 // Must re-create each time since each instance will have a different Target.
                 auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(target));
-                for (const auto &kv : constants) {
+                for (const auto &kv : generator_args) {
                     if (kv.first == "target" ||
                         kv.first == "auto_schedule" ||
                         kv.first == "machine_params") {
