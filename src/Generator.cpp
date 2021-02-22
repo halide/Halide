@@ -663,7 +663,7 @@ GeneratorStub::GeneratorStub(const GeneratorContext &context,
 std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap &generator_params,
                                                        const std::vector<std::vector<Internal::StubInput>> &inputs) {
     generator->set_generator_param_values(generator_params);
-    generator->call_configure();
+    generator->ensure_configure_has_been_called();
     generator->set_inputs_vector(inputs);
     Pipeline p = generator->build_pipeline();
 
@@ -683,6 +683,7 @@ std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap 
 }
 
 GeneratorStub::Names GeneratorStub::get_names() const {
+    generator->ensure_configure_has_been_called();
     auto &pi = generator->param_info();
     Names names;
     for (auto *o : pi.generator_params()) {
@@ -1356,6 +1357,13 @@ void GeneratorBase::advance_phase(Phase new_phase) {
     phase = new_phase;
 }
 
+void GeneratorBase::ensure_configure_has_been_called() {
+    if (phase < ConfigureCalled) {
+        call_configure();
+    }
+    check_min_phase(ConfigureCalled);
+}
+
 void GeneratorBase::pre_configure() {
     advance_phase(ConfigureCalled);
 }
@@ -1449,7 +1457,7 @@ Pipeline GeneratorBase::get_pipeline() {
 Module GeneratorBase::build_module(const std::string &function_name,
                                    const LinkageType linkage_type) {
     AutoSchedulerResults auto_schedule_results;
-    call_configure();
+    ensure_configure_has_been_called();
     Pipeline pipeline = build_pipeline();
     if (get_auto_schedule()) {
         auto_schedule_results = pipeline.auto_schedule(get_target(), get_machine_params());
@@ -1496,7 +1504,7 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
 
     user_assert(!function_name.empty()) << "build_gradient_module(): function_name cannot be empty\n";
 
-    call_configure();
+    ensure_configure_has_been_called();
     Pipeline original_pipeline = build_pipeline();
     std::vector<Func> original_outputs = original_pipeline.outputs();
 
@@ -1650,7 +1658,7 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
 void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
     user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
     // Make sure we call configure() so that extra inputs/outputs are added as necessary.
-    call_configure();
+    ensure_configure_has_been_called();
     // StubEmitter will want to access the GP/SP values, so advance the phase to avoid assert-fails.
     advance_phase(GenerateCalled);
     advance_phase(ScheduleCalled);

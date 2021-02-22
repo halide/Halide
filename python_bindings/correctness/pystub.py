@@ -165,6 +165,9 @@ def test_complexstub():
     float_arg = 1.25
     int_arg = 33
 
+    func_input = hl.Func("func_input")
+    func_input[x, y, c] = hl.u16(x + y + c)
+
     r = complexstub(target,
                     typed_buffer_input=constant_image,
                     untyped_buffer_input=constant_image,
@@ -173,6 +176,7 @@ def test_complexstub():
                     float_arg=float_arg,
                     int_arg=[ int_arg, int_arg ],
                     untyped_buffer_output_type="uint8",
+                    extra_func_input=func_input,
                     vectorize=True)
 
     # return value is a tuple; unpack separately to avoid
@@ -182,7 +186,8 @@ def test_complexstub():
         array_output,
         typed_buffer_output,
         untyped_buffer_output,
-        static_compiled_buffer_output) = r
+        static_compiled_buffer_output,
+        extra_func_output) = r
 
     b = simple_output.realize([32, 32, 3], target)
     assert b.type() == hl.Float(32)
@@ -247,6 +252,13 @@ def test_complexstub():
                 actual = b[x, y, c]
                 assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
+    b = extra_func_output.realize([32, 32], target)
+    assert b.type() == hl.Float(64)
+    for x in range(32):
+        for y in range(32):
+            expected = x + y + 1
+            actual = b[x, y]
+            assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
 def test_partialbuildmethod():
     x, y, c = hl.Var(), hl.Var(), hl.Var()
