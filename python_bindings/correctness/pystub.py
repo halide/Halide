@@ -260,7 +260,6 @@ def test_complexstub():
             actual = b[x, y]
             assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
-
 def test_partialbuildmethod():
     x, y, c = hl.Var(), hl.Var(), hl.Var()
     target = hl.get_jit_target_from_environment()
