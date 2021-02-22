@@ -99,7 +99,7 @@ void append_input(const py::object &value, std::vector<StubInput> &v) {
     }
 }
 
-py::object generate_impl(GeneratorFactory factory, const GeneratorContext &context, const py::args &args, const py::kwargs &kwargs) {
+py::object generate_impl(const GeneratorFactory &factory, const GeneratorContext &context, const py::args &args, const py::kwargs &kwargs) {
     Stub stub(context, [factory](const GeneratorContext &context) -> std::unique_ptr<Halide::Internal::GeneratorBase> {
         return factory(context);
     });
