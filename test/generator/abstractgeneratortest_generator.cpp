@@ -10,6 +10,13 @@ using namespace Halide::Internal;
 namespace Halide {
 namespace {
 
+// Note to reader: this test is meant as a simple way to verify that arbitrary
+// implementations of AbstractGenerator work properly. That said, we recommend
+// that you don't imitate this code; AbstractGenerator is an *internal*
+// abtraction, intended for Halide to build on internally. If you use AbstractGenerator
+// directly, you'll almost certainly have more work maintaining your code
+// on your own.
+
 const char *const AbstractGeneratorTestName = "abstractgeneratortest";
 
 // We could use std::stoi() here, but we explicitly want to assert-fail
