@@ -258,6 +258,7 @@
  */
 
 #include <algorithm>
+#include <functional>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -269,6 +270,7 @@
 #include <utility>
 #include <vector>
 
+#include "AbstractGenerator.h"
 #include "ExternalCode.h"
 #include "Func.h"
 #include "ImageParam.h"
@@ -1257,10 +1259,6 @@ namespace Internal {
 template<typename T2>
 class GeneratorInput_Buffer;
 
-enum class IOKind { Scalar,
-                    Function,
-                    Buffer };
-
 /**
  * StubInputBuffer is the placeholder that a Stub uses when it requires
  * a Buffer for an input (rather than merely a Func or Expr). It is constructed
@@ -1275,6 +1273,8 @@ class StubInputBuffer {
     friend class StubInput;
     template<typename T2>
     friend class GeneratorInput_Buffer;
+    template<typename T2>
+    friend class StubInputBuffer;
 
     Parameter parameter_;
 
@@ -1290,6 +1290,7 @@ class StubInputBuffer {
     template<typename T2>
     HALIDE_NO_USER_CODE_INLINE static Parameter parameter_from_buffer(const Buffer<T2> &b) {
         user_assert((Buffer<T>::can_convert_from(b)));
+        internal_assert(b.defined());
         Parameter p(b.type(), true, b.dimensions());
         p.set_buffer(b);
         return p;
@@ -1306,36 +1307,45 @@ public:
     StubInputBuffer(const Buffer<T2> &b)
         : parameter_(parameter_from_buffer(b)) {
     }
+
+    template<typename T2>
+    static std::vector<Parameter> to_parameter_vector(const StubInputBuffer<T2> &t) {
+        return {t.parameter_};
+    }
+
+    template<typename T2>
+    static std::vector<Parameter> to_parameter_vector(const std::vector<StubInputBuffer<T2>> &v) {
+        std::vector<Parameter> r;
+        r.reserve(v.size());
+        for (const auto &s : v) {
+            r.push_back(s.parameter_);
+        }
+        return r;
+    }
 };
+
+class AbstractGenerator;
 
 class StubOutputBufferBase {
 protected:
     Func f;
-    std::shared_ptr<GeneratorBase> generator;
+    std::shared_ptr<AbstractGenerator> generator;
 
-    void check_scheduled(const char *m) const;
     Target get_target() const;
 
-    explicit StubOutputBufferBase(const Func &f, std::shared_ptr<GeneratorBase> generator)
-        : f(f), generator(std::move(generator)) {
-    }
-    StubOutputBufferBase() = default;
+    StubOutputBufferBase();
+    explicit StubOutputBufferBase(const Func &f, const std::shared_ptr<AbstractGenerator> &generator);
 
 public:
-    Realization realize(std::vector<int32_t> sizes) {
-        check_scheduled("realize");
-        return f.realize(std::move(sizes), get_target());
-    }
+    Realization realize(std::vector<int32_t> sizes);
 
     template<typename... Args>
     Realization realize(Args &&...args) {
-        check_scheduled("realize");
         return f.realize(std::forward<Args>(args)..., get_target());
     }
 
     template<typename Dst>
     void realize(Dst dst) {
-        check_scheduled("realize");
         f.realize(dst, get_target());
     }
 };
@@ -1356,13 +1366,21 @@ template<typename T = void>
 class StubOutputBuffer : public StubOutputBufferBase {
     template<typename T2>
     friend class GeneratorOutput_Buffer;
-    friend class GeneratorStub;
-    explicit StubOutputBuffer(const Func &f, const std::shared_ptr<GeneratorBase> &generator)
+    explicit StubOutputBuffer(const Func &f, const std::shared_ptr<AbstractGenerator> &generator)
         : StubOutputBufferBase(f, generator) {
     }
 
 public:
     StubOutputBuffer() = default;
+
+    static std::vector<StubOutputBuffer<T>> to_output_buffers(const std::vector<Func> &v,
+                                                              const std::shared_ptr<AbstractGenerator> &generator) {
+        std::vector<StubOutputBuffer<T>> result;
+        for (const Func &f : v) {
+            result.push_back(StubOutputBuffer<T>(f, generator));
+        }
+        return result;
+    }
 };
 
 // This is a union-like class that allows for convenient initialization of Stub Inputs
@@ -1382,15 +1400,15 @@ public:
     StubInput(const StubInputBuffer<T2> &b)
         : kind_(IOKind::Buffer), parameter_(b.parameter_), func_(), expr_() {
     }
+    StubInput(const Parameter &p)
+        : kind_(IOKind::Buffer), parameter_(p), func_(), expr_() {
+    }
     StubInput(const Func &f)
         : kind_(IOKind::Function), parameter_(), func_(f), expr_() {
     }
     StubInput(const Expr &e)
         : kind_(IOKind::Scalar), parameter_(), func_(), expr_(e) {
     }
-
-private:
-    friend class GeneratorInputBase;
 
     IOKind kind() const {
         return kind_;
@@ -1537,6 +1555,7 @@ protected:
 
     void init_internals();
     void set_inputs(const std::vector<StubInput> &inputs);
+    bool inputs_set = false;
 
     virtual void set_def_min_max();
 
@@ -2791,8 +2810,6 @@ private:
     const std::string error_msg;
 };
 
-class GeneratorStub;
-
 }  // namespace Internal
 
 /** GeneratorContext is a base class that is used when using Generators (or Stubs) directly;
@@ -2832,7 +2849,7 @@ class GeneratorStub;
  */
 class GeneratorContext {
 public:
-    using ExternsMap = std::map<std::string, ExternalCode>;
+    using ExternsMap = Halide::Internal::ExternsMap;
 
     explicit GeneratorContext(const Target &t,
                               bool auto_schedule = false,
@@ -2967,12 +2984,9 @@ struct NoRealizations<T, Args...> {
     static const bool value = !std::is_convertible<T, Realization>::value && NoRealizations<Args...>::value;
 };
 
-class GeneratorStub;
-class SimpleGeneratorFactory;
-
 // Note that these functions must never return null:
 // if they cannot return a valid Generator, they must assert-fail.
-using GeneratorFactory = std::function<std::unique_ptr<GeneratorBase>(const GeneratorContext &)>;
+using GeneratorFactory = std::function<std::unique_ptr<AbstractGenerator>(const GeneratorContext &context)>;
 
 struct StringOrLoopLevel {
     std::string string_value;
@@ -3028,7 +3042,7 @@ public:
     }
 };
 
-class GeneratorBase : public NamesInterface, public GeneratorContext {
+class GeneratorBase : public NamesInterface, public GeneratorContext, public AbstractGenerator {
 public:
     ~GeneratorBase() override;
 
@@ -3046,29 +3060,6 @@ public:
     int natural_vector_size() const {
         return get_target().natural_vector_size<data_t>();
     }
-
-    void emit_cpp_stub(const std::string &stub_file_path);
-
-    // Call build() and produce a Module for the result.
-    // If function_name is empty, generator_name() will be used for the function.
-    Module build_module(const std::string &function_name = "",
-                        LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
-
-    /**
-     * Build a module that is suitable for using for gradient descent calculation in TensorFlow or PyTorch.
-     *
-     * Essentially:
-     *   - A new Pipeline is synthesized from the current Generator (according to the rules below)
-     *   - The new Pipeline is autoscheduled (if autoscheduling is requested, but it would be odd not to do so)
-     *   - The Pipeline is compiled to a Module and returned
-     *
-     * The new Pipeline is adjoint to the original; it has:
-     *   - All the same inputs as the original, in the same order
-     *   - Followed by one grad-input for each original output
-     *   - Followed by one output for each unique pairing of original-output + original-input.
-     *     (For the common case of just one original-output, this amounts to being one output for each original-input.)
-     */
-    Module build_gradient_module(const std::string &function_name);
 
     /**
      * set_inputs is a variadic wrapper around set_inputs_vector, which makes usage much simpler
@@ -3190,7 +3181,6 @@ protected:
 
     void init_from_context(const Halide::GeneratorContext &context) override;
 
-    virtual Pipeline build_pipeline() = 0;
     virtual void call_configure() = 0;
     virtual void call_generate() = 0;
     virtual void call_schedule() = 0;
@@ -3241,6 +3231,8 @@ protected:
     void check_min_phase(Phase expected_phase) const;
     void advance_phase(Phase new_phase);
 
+    void ensure_configure_has_been_called();
+
 private:
     friend void ::Halide::Internal::generator_test();
     friend class GeneratorParamBase;
@@ -3248,8 +3240,6 @@ private:
     friend class GeneratorInputBase;
     friend class GeneratorOutputBase;
     friend class GeneratorParamInfo;
-    friend class GeneratorStub;
-    friend class SimpleGeneratorFactory;
     friend class StubOutputBufferBase;
 
     const size_t size;
@@ -3260,13 +3250,13 @@ private:
 
     mutable std::shared_ptr<ExternsMap> externs_map;
 
-    bool inputs_set{false};
     std::string generator_registered_name, generator_stub_name;
     Pipeline pipeline;
 
     // Return our GeneratorParamInfo.
     GeneratorParamInfo &param_info();
 
+    Internal::GeneratorInputBase *find_input_by_name(const std::string &name);
     Internal::GeneratorOutputBase *find_output_by_name(const std::string &name);
 
     void check_scheduled(const char *m) const;
@@ -3279,12 +3269,6 @@ private:
     void get_host_target();
     void get_jit_target_from_environment();
     void get_target_from_environment();
-
-    // Return the output with the given name.
-    // If the output is singular (a non-array), return a vector of size 1.
-    // If no such name exists (or is non-array), assert.
-    // This method never returns undefined Funcs.
-    std::vector<Func> get_outputs(const std::string &n);
 
     void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
 
@@ -3424,6 +3408,31 @@ private:
     }
 
 public:
+    // AbstractGenerator methods
+    std::string get_name() override;
+    TargetInfo get_target_info() override;
+    std::vector<ArgInfo> get_input_arginfos() override;
+    std::vector<ArgInfo> get_output_arginfos() override;
+    std::vector<std::string> get_generatorparam_names() override;
+
+    void set_generatorparam_value(const std::string &name, const std::string &value) override;
+    void set_generatorparam_value(const std::string &name, const LoopLevel &loop_level) override;
+
+    std::vector<Parameter> get_parameters_for_input(const std::string &name) override;
+    std::vector<Func> get_funcs_for_output(const std::string &name) override;
+
+    ExternsMap get_external_code_map() override;
+
+    // This is overridden in the concrete Generator<> subclass.
+    // Pipeline build_pipeline() override;
+
+    void bind_input(const std::string &name, const std::vector<Parameter> &v) override;
+    void bind_input(const std::string &name, const std::vector<Func> &v) override;
+    void bind_input(const std::string &name, const std::vector<Expr> &v) override;
+
+    bool emit_cpp_stub(const std::string &stub_file_path) override;
+
+public:
     GeneratorBase(const GeneratorBase &) = delete;
     GeneratorBase &operator=(const GeneratorBase &) = delete;
     GeneratorBase(GeneratorBase &&that) = delete;
@@ -3437,8 +3446,8 @@ public:
     static std::vector<std::string> enumerate();
     // Note that this method will never return null:
     // if it cannot return a valid Generator, it should assert-fail.
-    static std::unique_ptr<GeneratorBase> create(const std::string &name,
-                                                 const Halide::GeneratorContext &context);
+    static std::unique_ptr<AbstractGenerator> create(const std::string &name,
+                                                     const Halide::GeneratorContext &context);
 
 private:
     using GeneratorFactoryMap = std::map<const std::string, GeneratorFactory>;
@@ -3564,7 +3573,10 @@ private:
     // have build() or configure()/generate()/schedule() methods.
 
     void call_configure_impl(double, double) {
-        // Called as a side effect for build()-method Generators; quietly do nothing.
+        pre_configure();
+        // Called as a side effect for build()-method Generators; quietly do nothing
+        // (except for pre_configure(), to advance the phase).
+        post_configure();
     }
 
     template<typename T2 = T,
@@ -3632,6 +3644,7 @@ private:
 
 protected:
     Pipeline build_pipeline() override {
+        ensure_configure_has_been_called();
         return this->build_pipeline_impl(0);
     }
 
@@ -3649,7 +3662,6 @@ protected:
 
 private:
     friend void ::Halide::Internal::generator_test();
-    friend class Internal::SimpleGeneratorFactory;
     friend void ::Halide::Internal::generator_test();
     friend class ::Halide::GeneratorContext;
 
@@ -3664,64 +3676,7 @@ namespace Internal {
 
 class RegisterGenerator {
 public:
-    RegisterGenerator(const char *registered_name, GeneratorFactory generator_factory) {
-        Internal::GeneratorRegistry::register_factory(registered_name, std::move(generator_factory));
-    }
-};
-
-class GeneratorStub : public NamesInterface {
-public:
-    GeneratorStub(const GeneratorContext &context,
-                  const GeneratorFactory &generator_factory);
-
-    GeneratorStub(const GeneratorContext &context,
-                  const GeneratorFactory &generator_factory,
-                  const GeneratorParamsMap &generator_params,
-                  const std::vector<std::vector<Internal::StubInput>> &inputs);
-    std::vector<std::vector<Func>> generate(const GeneratorParamsMap &generator_params,
-                                            const std::vector<std::vector<Internal::StubInput>> &inputs);
-
-    // Output(s)
-    std::vector<Func> get_outputs(const std::string &n) const {
-        return generator->get_outputs(n);
-    }
-
-    template<typename T2>
-    std::vector<T2> get_output_buffers(const std::string &n) const {
-        auto v = generator->get_outputs(n);
-        std::vector<T2> result;
-        for (auto &o : v) {
-            result.push_back(T2(o, generator));
-        }
-        return result;
-    }
-
-    static std::vector<StubInput> to_stub_input_vector(const Expr &e) {
-        return {StubInput(e)};
-    }
-
-    static std::vector<StubInput> to_stub_input_vector(const Func &f) {
-        return {StubInput(f)};
-    }
-
-    template<typename T = void>
-    static std::vector<StubInput> to_stub_input_vector(const StubInputBuffer<T> &b) {
-        return {StubInput(b)};
-    }
-
-    template<typename T>
-    static std::vector<StubInput> to_stub_input_vector(const std::vector<T> &v) {
-        std::vector<StubInput> r;
-        std::copy(v.begin(), v.end(), std::back_inserter(r));
-        return r;
-    }
-
-    struct Names {
-        std::vector<std::string> generator_params, inputs, outputs;
-    };
-    Names get_names() const;
-
-    std::shared_ptr<GeneratorBase> generator;
+    RegisterGenerator(const char *registered_name, GeneratorFactory generator_factory);
 };
 
 }  // namespace Internal
@@ -3739,8 +3694,7 @@ struct halide_global_ns;
     namespace halide_register_generator {                                                                                           \
     struct halide_global_ns;                                                                                                        \
     namespace GEN_REGISTRY_NAME##_ns {                                                                                              \
-        std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context);                          \
-        std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context) {                         \
+        std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context) {                     \
             return GEN_CLASS_NAME::create(context, #GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME);                                 \
         }                                                                                                                           \
     }                                                                                                                               \
@@ -3800,13 +3754,15 @@ struct halide_global_ns;
     namespace halide_register_generator {                                                                                           \
     struct halide_global_ns;                                                                                                        \
     namespace ORIGINAL_REGISTRY_NAME##_ns {                                                                                         \
-        std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context);                          \
+        std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context);                      \
     }                                                                                                                               \
     namespace GEN_REGISTRY_NAME##_ns {                                                                                              \
-        std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context);                          \
-        std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context) {                         \
+        std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context) {                     \
             auto g = ORIGINAL_REGISTRY_NAME##_ns::factory(context);                                                                 \
-            g->set_generator_param_values(__VA_ARGS__);                                                                             \
+            const std::map<std::string, std::string> m = __VA_ARGS__;                                                               \
+            for (const auto &c : m) {                                                                                               \
+                g->set_generatorparam_value(c.first, c.second);                                                                     \
+            }                                                                                                                       \
             return g;                                                                                                               \
         }                                                                                                                           \
     }                                                                                                                               \

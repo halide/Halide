@@ -7,7 +7,10 @@
 // to simplify build requirements in downstream environments.
 
 #include <Python.h>
+#include <functional>
 #include <memory>
+
+#include "Halide.h"
 
 #ifndef HALIDE_PYSTUB_GENERATOR_NAME
 #error "HALIDE_PYSTUB_GENERATOR_NAME must be defined"
@@ -17,16 +20,7 @@
 #define HALIDE_PYSTUB_MODULE_NAME HALIDE_PYSTUB_GENERATOR_NAME
 #endif
 
-namespace Halide {
-class GeneratorContext;
-namespace Internal {
-class GeneratorBase;
-}  // namespace Internal
-}  // namespace Halide
-
-using FactoryFunc = std::unique_ptr<Halide::Internal::GeneratorBase> (*)(const Halide::GeneratorContext &context);
-
-extern "C" PyObject *_halide_pystub_impl(const char *module_name, FactoryFunc factory);
+extern "C" PyObject *_halide_pystub_impl(const char *module_name, Halide::Internal::GeneratorFactory factory);
 
 #define HALIDE_STRINGIFY(x) #x
 #define HALIDE_TOSTRING(x) HALIDE_STRINGIFY(x)
@@ -51,7 +45,7 @@ static_assert(PY_MAJOR_VERSION >= 3, "Python bindings for Halide require Python 
 
 namespace halide_register_generator {
 namespace HALIDE_CONCAT(HALIDE_PYSTUB_GENERATOR_NAME, _ns) {
-    extern std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context);
+    extern std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context);
 }  // namespace HALIDE_CONCAT(HALIDE_PYSTUB_GENERATOR_NAME,_ns)
 }  // namespace halide_register_generator
 
