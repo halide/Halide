@@ -726,7 +726,7 @@ Module build_module(AbstractGenerator &g, const std::string &function_name) {
         for (size_t i = 0; i < output_funcs.size(); ++i) {
             const Func &f = output_funcs[i];
 
-            std::string from = f.name();
+            const std::string &from = f.name();
             std::string to = output_info.name;
             if (output_funcs.size() > 1) {
                 to += "_" + std::to_string(i);

@@ -20,7 +20,7 @@
 #define HALIDE_PYSTUB_MODULE_NAME HALIDE_PYSTUB_GENERATOR_NAME
 #endif
 
-extern "C" PyObject *_halide_pystub_impl(const char *module_name, Halide::Internal::GeneratorFactory factory);
+extern "C" PyObject *_halide_pystub_impl(const char *module_name, const Halide::Internal::GeneratorFactory &factory);
 
 #define HALIDE_STRINGIFY(x) #x
 #define HALIDE_TOSTRING(x) HALIDE_STRINGIFY(x)
