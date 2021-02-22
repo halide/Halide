@@ -3432,7 +3432,6 @@ public:
 
     bool emit_cpp_stub(const std::string &stub_file_path) override;
 
-public:
     GeneratorBase(const GeneratorBase &) = delete;
     GeneratorBase &operator=(const GeneratorBase &) = delete;
     GeneratorBase(GeneratorBase &&that) = delete;
