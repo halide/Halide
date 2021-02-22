@@ -91,10 +91,11 @@ std::map<Output, std::string> compute_output_files(const Target &target,
 }
 
 Argument to_argument(const Internal::Parameter &param) {
-    ArgumentEstimates argument_estimates = param.get_argument_estimates();
     return Argument(param.name(),
                     param.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
-                    param.type(), param.dimensions(), argument_estimates);
+                    param.type(),
+                    param.dimensions(),
+                    param.get_argument_estimates());
 }
 
 Func make_param_func(const Parameter &p, const std::string &name) {
@@ -989,10 +990,11 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         Target gcd_target = targets[0];
         for (size_t i = 1; i < targets.size(); i++) {
             if (!gcd_target.get_runtime_compatible_target(targets[i], gcd_target)) {
-                user_error << "Failed to find compatible runtime target for "
-                           << gcd_target.to_string()
-                           << " and "
-                           << targets[i].to_string() << "\n";
+                cerr << "Failed to find compatible runtime target for "
+                     << gcd_target.to_string()
+                     << " and "
+                     << targets[i].to_string() << "\n";
+                return -1;
             }
         }
 
@@ -1022,6 +1024,8 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
             auto module_factory = [&generator_name, &generator_args, build_gradient_module](const std::string &name, const Target &target) -> Module {
                 auto sub_generator_args = generator_args;
                 sub_generator_args.erase("target");
+                sub_generator_args.erase("auto_schedule");
+                sub_generator_args.erase("machine_params");
                 // Must re-create each time since each instance will have a different Target.
                 auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(target));
                 gen->set_generator_param_values(sub_generator_args);
@@ -1133,6 +1137,7 @@ std::vector<std::string> GeneratorRegistry::enumerate() {
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     std::vector<std::string> result;
+    result.reserve(registry.factories.size());
     for (const auto &i : registry.factories) {
         result.push_back(i.first);
     }
@@ -1340,7 +1345,7 @@ void GeneratorBase::advance_phase(Phase new_phase) {
         internal_error << "Impossible";
         break;
     case ConfigureCalled:
-        internal_assert(phase == Created) << "pase is " << phase;
+        internal_assert(phase == Created);
         break;
     case InputsSet:
         internal_assert(phase == Created || phase == ConfigureCalled);
@@ -2027,12 +2032,26 @@ void GeneratorOutputBase::resize(size_t size) {
     init_internals();
 }
 
+StubOutputBufferBase::StubOutputBufferBase() = default;
+
+StubOutputBufferBase::StubOutputBufferBase(const Func &f, const std::shared_ptr<GeneratorBase> &generator)
+    : f(f), generator(generator) {
+}
+
 void StubOutputBufferBase::check_scheduled(const char *m) const {
     generator->check_scheduled(m);
 }
 
+Realization StubOutputBufferBase::realize(std::vector<int32_t> sizes) {
+    return f.realize(std::move(sizes), get_target());
+}
+
 Target StubOutputBufferBase::get_target() const {
     return generator->get_target();
+}
+
+RegisterGenerator::RegisterGenerator(const char *registered_name, GeneratorFactory generator_factory) {
+    Internal::GeneratorRegistry::register_factory(registered_name, std::move(generator_factory));
 }
 
 void generator_test() {
