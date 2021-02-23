@@ -1,4 +1,5 @@
 #include "Monotonic.h"
+#include "Bounds.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
 #include "Scope.h"
@@ -137,6 +138,16 @@ ConstantInterval multiply(const ConstantInterval &a, int64_t b) {
     return result;
 }
 
+ConstantInterval multiply(const ConstantInterval &a, const Expr &b) {
+    if (const int64_t *bi = as_const_int(b)) {
+        return multiply(a, *bi);
+    } else if (const uint64_t *bi = as_const_uint(b)) {
+        return multiply(a, *bi);
+    } else {
+        return ConstantInterval::everything();
+    }
+}
+
 ConstantInterval multiply(const ConstantInterval &a, const ConstantInterval &b) {
     int64_t bounds[4];
     int64_t *bounds_begin = &bounds[0];
@@ -201,6 +212,7 @@ class DerivativeBounds : public IRVisitor {
     const string &var;
 
     Scope<ConstantInterval> scope;
+    Scope<Interval> bounds;
 
     void visit(const IntImm *) override {
         result = ConstantInterval::single_point(0);
@@ -418,15 +430,21 @@ class DerivativeBounds : public IRVisitor {
 
             // TODO: How to handle unsigned values?
             Expr delta = simplify(op->true_value - op->false_value);
-            delta.accept(this);
-            ConstantInterval rdelta = result;
 
+            Interval delta_bounds = bounds_of_expr_in_scope(delta, bounds, empty_func_value_bounds(), true);
+            delta_bounds.min = simplify(delta_bounds.min);
+            delta_bounds.max = simplify(delta_bounds.max);
             ConstantInterval adjusted_delta;
-            if (const int64_t *const_delta = as_const_int(delta)) {
-                adjusted_delta = multiply(rcond, *const_delta);
+            if (is_const(delta_bounds.min) && is_const(delta_bounds.max)) {
+                ConstantInterval delta_low = multiply(rcond, delta_bounds.min);
+                ConstantInterval delta_high = multiply(rcond, delta_bounds.max);
+                adjusted_delta = ConstantInterval::make_union(delta_low, delta_high);
             } else {
+                delta.accept(this);
+                ConstantInterval rdelta = result;
                 adjusted_delta = multiply(rcond, rdelta);
             }
+
             result = add(unified, adjusted_delta);
         } else {
             result = ConstantInterval::everything();
@@ -490,14 +508,15 @@ class DerivativeBounds : public IRVisitor {
     void visit(const Let *op) override {
         op->value.accept(this);
 
+        ScopedBinding<Interval> bounds_binding(bounds, op->name, bounds_of_expr_in_scope(op->value, bounds));
+
         if (is_constant(result)) {
             // No point pushing it if it's constant w.r.t the var,
             // because unknown variables are treated as constant.
             op->body.accept(this);
         } else {
-            scope.push(op->name, result);
+            ScopedBinding<ConstantInterval> scope_binding(scope, op->name, result);
             op->body.accept(this);
-            scope.pop(op->name);
         }
     }
 
@@ -722,6 +741,8 @@ void is_monotonic_test() {
     check_decreasing(select(2 <= x, 0, 1));
     check_increasing(select(2 <= x, 0, 1) + x);
     check_decreasing(-min(x, 16));
+
+    check_unknown(select(0 < x, max(min(x, 4), 3), 4));
 
     std::cout << "is_monotonic test passed" << std::endl;
 }

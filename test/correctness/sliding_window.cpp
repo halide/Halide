@@ -40,6 +40,9 @@ int main(int argc, char **argv) {
 
         f.store_root().compute_at(g, x);
 
+        // Test that sliding window works when specializing.
+        g.specialize(g.output_buffer().dim(0).min() == 0);
+
         Buffer<int> im = g.realize({100});
 
         // f should be able to tell that it only needs to compute each value once
@@ -61,8 +64,6 @@ int main(int argc, char **argv) {
         f.store_root().compute_at(h, x);
         g.store_root().compute_at(h, x);
 
-        h.output_buffer().dim(0).set_min(0);
-
         Buffer<int> im = h.realize({100});
         if (count != 202) {
             printf("f was called %d times instead of %d times\n", count, 202);
@@ -81,8 +82,6 @@ int main(int argc, char **argv) {
 
         f.store_root().compute_at(h, x);
         g.store_root().compute_at(h, x);
-
-        h.output_buffer().dim(0).set_min(0);
 
         Buffer<int> im = h.realize({100});
         if (count != 102) {
@@ -204,6 +203,27 @@ int main(int argc, char **argv) {
     }
 
     {
+        // Sliding where the footprint is actually fixed over the loop
+        // var. Everything in the producer should be computed in the
+        // first iteration.
+        Func f, g;
+
+        f(x) = call_counter(x, 0);
+        g(x) = f(0) + f(5);
+
+        f.store_root().compute_at(g, x);
+
+        count = 0;
+        Buffer<int> im = g.realize({100});
+
+        // f should be able to tell that it only needs to compute each value once
+        if (count != 6) {
+            printf("f was called %d times instead of %d times\n", count, 6);
+            return -1;
+        }
+    }
+
+    {
         // Sliding where we only need a new value every third iteration of the consumer.
         Func f, g;
 
@@ -220,6 +240,24 @@ int main(int argc, char **argv) {
             printf("f was called %d times instead of %d times\n", count, 34);
             return -1;
         }
+    }
+
+    {
+        // Sliding where we only need a new value every third iteration of the consumer.
+        // This test checks that we don't ask for excessive bounds.
+        ImageParam f(Int(32), 1);
+        Func g;
+
+        g(x) = f(x / 3);
+
+        Var xo;
+        g.split(x, xo, x, 10);
+        f.in().store_at(g, xo).compute_at(g, x);
+
+        Buffer<int> buf(33);
+        f.set(buf);
+
+        Buffer<int> im = g.realize({98});
     }
 
     {
@@ -321,6 +359,23 @@ int main(int argc, char **argv) {
         v.realize({10, 10});
         if (count != 14 * 14) {
             printf("f was called %d times instead of %d times\n", count, 14 * 14);
+            return -1;
+        }
+    }
+
+    {
+        // Sliding a func that has a boundary condition before the beginning
+        // of the loop. This needs an explicit warmup before we start sliding.
+        count = 0;
+        Func f, g;
+        f(x) = call_counter(x, 0);
+        g(x) = f(max(x, 3));
+
+        f.store_root().compute_at(g, x);
+
+        g.realize({10});
+        if (count != 7) {
+            printf("f was called %d times instead of %d times\n", count, 7);
             return -1;
         }
     }

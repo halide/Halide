@@ -316,9 +316,9 @@ void check_algebra() {
     alignment.pop("x");
     alignment.push("x", ModulusRemainder(2, 1));
     check((x + 0) / 2, x / 2, alignment);
-    //check((x + 1) / 2, x / 2 + 1, alignment);
+    check((x + 1) / 2, x / 2 + 1, alignment);
     check((x + 2) / 2, x / 2 + 1, alignment);
-    //check((x + 3) / 2, x / 2 + 2, alignment);
+    check((x + 3) / 2, x / 2 + 2, alignment);
     alignment.pop("x");
     alignment.push("x", ModulusRemainder(3, 0));
     check((x + 0) / 3, x / 3, alignment);
@@ -330,19 +330,19 @@ void check_algebra() {
     alignment.pop("x");
     alignment.push("x", ModulusRemainder(3, 1));
     check((x + 0) / 3, x / 3, alignment);
-    //check((x + 1) / 3, x / 3, alignment);
-    //check((x + 2) / 3, x / 3 + 1, alignment);
+    check((x + 1) / 3, x / 3, alignment);
+    check((x + 2) / 3, x / 3 + 1, alignment);
     check((x + 3) / 3, x / 3 + 1, alignment);
-    //check((x + 4) / 3, x / 3 + 1, alignment);
-    //check((x + 5) / 3, x / 3 + 2, alignment);
+    check((x + 4) / 3, x / 3 + 1, alignment);
+    check((x + 5) / 3, x / 3 + 2, alignment);
     alignment.pop("x");
     alignment.push("x", ModulusRemainder(3, 2));
     check((x + 0) / 3, x / 3, alignment);
-    //check((x + 1) / 3, x / 3 + 1, alignment);
-    //check((x + 2) / 3, x / 3 + 1, alignment);
+    check((x + 1) / 3, x / 3 + 1, alignment);
+    check((x + 2) / 3, x / 3 + 1, alignment);
     check((x + 3) / 3, x / 3 + 1, alignment);
-    //check((x + 4) / 3, x / 3 + 2, alignment);
-    //check((x + 5) / 3, x / 3 + 2, alignment);
+    check((x + 4) / 3, x / 3 + 2, alignment);
+    check((x + 5) / 3, x / 3 + 2, alignment);
     alignment.pop("x");
     alignment.push("x", ModulusRemainder(4, 0));
     check((x + 0) / 2, x / 2, alignment);
@@ -352,9 +352,9 @@ void check_algebra() {
     alignment.pop("x");
     alignment.push("x", ModulusRemainder(4, 1));
     check((x + 0) / 2, x / 2, alignment);
-    //check((x + 1) / 2, x / 2 + 1, alignment);
+    check((x + 1) / 2, x / 2 + 1, alignment);
     check((x + 2) / 2, x / 2 + 1, alignment);
-    //check((x + 3) / 2, x / 2 + 2, alignment);
+    check((x + 3) / 2, x / 2 + 2, alignment);
     alignment.pop("x");
     alignment.push("x", ModulusRemainder(2, 0));
     check((x + 0) / 3, x / 3, alignment);
@@ -1608,9 +1608,6 @@ void check_boolean() {
 
     // A for loop where the extent is exactly one is just the body
     check(IfThenElse::make(x == 1, loop), IfThenElse::make(x == 1, body));
-
-    // A for loop where the extent is at most one can just be an if statement
-    check(IfThenElse::make(y % 2 == x, loop), IfThenElse::make(y % 2 == x, IfThenElse::make(0 < x, body)));
 
     // Check we can learn from bounds on variables
     check(IfThenElse::make(x < 5, Evaluate::make(min(x, 17))),
