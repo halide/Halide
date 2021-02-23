@@ -91,10 +91,11 @@ std::map<Output, std::string> compute_output_files(const Target &target,
 }
 
 Argument to_argument(const Internal::Parameter &param) {
-    ArgumentEstimates argument_estimates = param.get_argument_estimates();
     return Argument(param.name(),
                     param.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
-                    param.type(), param.dimensions(), argument_estimates);
+                    param.type(),
+                    param.dimensions(),
+                    param.get_argument_estimates());
 }
 
 Func make_param_func(const Parameter &p, const std::string &name) {
@@ -746,7 +747,7 @@ std::string halide_type_to_c_type(const Type &t) {
     return m.at(encode(t));
 }
 
-int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
+int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output) {
     const char kUsage[] =
         "gengen\n"
         "  [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-d 1|0]\n"
@@ -794,7 +795,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         if (argv[i][0] != '-') {
             std::vector<std::string> v = split_string(argv[i], "=");
             if (v.size() != 2 || v[0].empty() || v[1].empty()) {
-                cerr << kUsage;
+                error_output << kUsage;
                 return 1;
             }
             generator_args[v[0]] = v[1];
@@ -803,15 +804,15 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         auto it = flags_info.find(argv[i]);
         if (it != flags_info.end()) {
             if (i + 1 >= argc) {
-                cerr << kUsage;
+                error_output << kUsage;
                 return 1;
             }
             it->second = argv[i + 1];
             ++i;
             continue;
         }
-        cerr << "Unknown flag: " << argv[i] << "\n";
-        cerr << kUsage;
+        error_output << "Unknown flag: " << argv[i] << "\n";
+        error_output << kUsage;
         return 1;
     }
 
@@ -824,8 +825,8 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     }
 
     if (flags_info["-d"] != "1" && flags_info["-d"] != "0") {
-        cerr << "-d must be 0 or 1\n";
-        cerr << kUsage;
+        error_output << "-d must be 0 or 1\n";
+        error_output << kUsage;
         return 1;
     }
     const int build_gradient_module = flags_info["-d"] == "1";
@@ -839,8 +840,8 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
 
     std::vector<std::string> generator_names = GeneratorRegistry::enumerate();
     if (generator_names.empty() && runtime_name.empty()) {
-        cerr << "No generators have been registered and not compiling a standalone runtime\n";
-        cerr << kUsage;
+        error_output << "No generators have been registered and not compiling a standalone runtime\n";
+        error_output << kUsage;
         return 1;
     }
 
@@ -848,13 +849,13 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     if (generator_name.empty() && runtime_name.empty()) {
         // Require either -g or -r to be specified:
         // no longer infer the name when only one Generator is registered
-        cerr << "Either -g <name> or -r must be specified; available Generators are:\n";
+        error_output << "Either -g <name> or -r must be specified; available Generators are:\n";
         if (!generator_names.empty()) {
             for (const auto &name : generator_names) {
-                cerr << "    " << name << "\n";
+                error_output << "    " << name << "\n";
             }
         } else {
-            cerr << "    <none>\n";
+            error_output << "    <none>\n";
         }
         return 1;
     }
@@ -866,8 +867,8 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     }
     std::string output_dir = flags_info["-o"];
     if (output_dir.empty()) {
-        cerr << "-o must always be specified.\n";
-        cerr << kUsage;
+        error_output << "-o must always be specified.\n";
+        error_output << kUsage;
         return 1;
     }
 
@@ -888,8 +889,8 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     const bool stub_only = (emit_flags.size() == 1 && emit_flags[0] == "cpp_stub");
     if (!stub_only) {
         if (generator_args.find("target") == generator_args.end()) {
-            cerr << "Target missing\n";
-            cerr << kUsage;
+            error_output << "Target missing\n";
+            error_output << kUsage;
             return 1;
         }
     }
@@ -929,17 +930,17 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         for (const std::string &opt : emit_flags) {
             auto it = output_name_to_enum.find(opt);
             if (it == output_name_to_enum.end()) {
-                cerr << "Unrecognized emit option: " << opt << " is not one of [";
+                error_output << "Unrecognized emit option: " << opt << " is not one of [";
                 auto end = output_info.cend();
                 auto last = std::prev(end);
                 for (auto iter = output_info.cbegin(); iter != end; ++iter) {
-                    cerr << iter->second.name;
+                    error_output << iter->second.name;
                     if (iter != last) {
-                        cerr << " ";
+                        error_output << " ";
                     }
                 }
-                cerr << "], ignoring.\n";
-                cerr << kUsage;
+                error_output << "], ignoring.\n";
+                error_output << kUsage;
                 return 1;
             }
             outputs.insert(it->second);
@@ -990,10 +991,11 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         Target gcd_target = targets[0];
         for (size_t i = 1; i < targets.size(); i++) {
             if (!gcd_target.get_runtime_compatible_target(targets[i], gcd_target)) {
-                user_error << "Failed to find compatible runtime target for "
-                           << gcd_target.to_string()
-                           << " and "
-                           << targets[i].to_string() << "\n";
+                error_output << "Failed to find compatible runtime target for "
+                             << gcd_target.to_string()
+                             << " and "
+                             << targets[i].to_string() << "\n";
+                return -1;
             }
         }
 
@@ -1023,6 +1025,8 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
             auto module_factory = [&generator_name, &generator_args, build_gradient_module](const std::string &name, const Target &target) -> Module {
                 auto sub_generator_args = generator_args;
                 sub_generator_args.erase("target");
+                sub_generator_args.erase("auto_schedule");
+                sub_generator_args.erase("machine_params");
                 // Must re-create each time since each instance will have a different Target.
                 auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(target));
                 gen->set_generator_param_values(sub_generator_args);
@@ -1134,6 +1138,7 @@ std::vector<std::string> GeneratorRegistry::enumerate() {
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     std::vector<std::string> result;
+    result.reserve(registry.factories.size());
     for (const auto &i : registry.factories) {
         result.push_back(i.first);
     }
@@ -1341,7 +1346,7 @@ void GeneratorBase::advance_phase(Phase new_phase) {
         internal_error << "Impossible";
         break;
     case ConfigureCalled:
-        internal_assert(phase == Created) << "pase is " << phase;
+        internal_assert(phase == Created);
         break;
     case InputsSet:
         internal_assert(phase == Created || phase == ConfigureCalled);
@@ -2035,12 +2040,26 @@ void GeneratorOutputBase::resize(size_t size) {
     init_internals();
 }
 
+StubOutputBufferBase::StubOutputBufferBase() = default;
+
+StubOutputBufferBase::StubOutputBufferBase(const Func &f, const std::shared_ptr<GeneratorBase> &generator)
+    : f(f), generator(generator) {
+}
+
 void StubOutputBufferBase::check_scheduled(const char *m) const {
     generator->check_scheduled(m);
 }
 
+Realization StubOutputBufferBase::realize(std::vector<int32_t> sizes) {
+    return f.realize(std::move(sizes), get_target());
+}
+
 Target StubOutputBufferBase::get_target() const {
     return generator->get_target();
+}
+
+RegisterGenerator::RegisterGenerator(const char *registered_name, GeneratorFactory generator_factory) {
+    Internal::GeneratorRegistry::register_factory(registered_name, std::move(generator_factory));
 }
 
 void generator_test() {
