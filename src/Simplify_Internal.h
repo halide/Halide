@@ -255,12 +255,24 @@ public:
         return f;
     }
 
+    std::vector<ScopedFact> learned_facts;
+
+    // Added by @rootjalex to make a non-scoped truth.
+    void learn_permanent_truth(const Expr &fact) {
+        learned_facts.emplace_back(scoped_truth(fact));
+    }
+
     // Tell the simplifier to assume a boolean condition is false over
     // the lifetime of the returned object.
     ScopedFact scoped_falsehood(const Expr &fact) {
         ScopedFact f(this);
         f.learn_false(fact);
         return f;
+    }
+
+    // Added by @rootjalex to make a non-scoped falsehood.
+    void learn_permanent_falsehood(const Expr &fact) {
+        learned_facts.emplace_back(scoped_falsehood(fact));
     }
 
     template<typename T>
