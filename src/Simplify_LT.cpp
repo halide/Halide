@@ -174,12 +174,14 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
 
               (ty.is_int()   && rewrite(x * c0 < c1, x < fold((c1 + c0 - 1) / c0), c0 > 0)) ||
               (ty.is_float() && rewrite(x * c0 < c1, x < fold(c1 / c0), c0 > 0)) ||
+              (ty.is_float() && rewrite(x * c0 < c1, fold(c1 / c0) < x, c0 < 0)) ||
               rewrite(c1 < x * c0, fold(c1 / c0) < x, c0 > 0) ||
 
               // Multiply-out a division
               rewrite(x / c0 < c1, x < c1 * c0, c0 > 0) ||
               (ty.is_int() && rewrite(c0 < x / c1, fold((c0 + 1) * c1 - 1) < x, c1 > 0)) ||
               (ty.is_float() && rewrite(c0 < x / c1, fold(c0 * c1) < x, c1 > 0)) ||
+              (ty.is_float() && rewrite(c0 < x / c1, x < fold(c0 * c1), c1 < 0)) ||
 
               // We want to break max(x, y) < z into x < z && y <
               // z in cases where one of those two terms is going
