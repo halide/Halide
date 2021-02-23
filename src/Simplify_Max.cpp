@@ -158,6 +158,8 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
 
                rewrite(max(max(x, y), x + c0), max(x + c0, y), c0 > 0) ||
                rewrite(max(max(x, y), x + c0), max(x, y), c0 < 0) ||
+               rewrite(max(max(y, x), x + c0), max(y, x + c0), c0 > 0) ||
+               rewrite(max(max(y, x), x + c0), max(y, x), c0 < 0) ||
 
                rewrite(max(x + y, x + z), x + max(y, z)) ||
                rewrite(max(x + y, z + x), x + max(y, z)) ||
@@ -199,6 +201,7 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
                rewrite(max(y - x, z - x), max(y, z) - x) ||
                rewrite(max(x - y, x - z), x - min(y, z)) ||
                rewrite(max(x - y, (z - y) + w), max(x, z + w) - y) ||
+               rewrite(max(x - y, w + (z - y)), max(x, w + z) - y) ||
 
                rewrite(max(x, x - y), x - min(y, 0)) ||
                rewrite(max(x - y, x), x - min(y, 0)) ||
