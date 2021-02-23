@@ -105,8 +105,8 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
              rewrite((z + (x + y)) - x, z + y) ||
              rewrite((z + (y + x)) - x, z + y) ||
 
-             rewrite(x - ((y + x) + z), -(y + x)) ||
-             rewrite(x - ((x + y) + z), -(x + y)) ||
+             rewrite(x - ((y + x) + z), -(y + z)) ||
+             rewrite(x - ((x + y) + z), -(y + z)) ||
              rewrite((x + y) - (z + (w + y)), x - (z + w)) ||
              rewrite((x + y) - (z + (y + w)), x - (z + w)) ||
 
