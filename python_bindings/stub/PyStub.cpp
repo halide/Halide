@@ -7,7 +7,10 @@
 // to simplify build requirements in downstream environments.
 
 #include <Python.h>
+#include <functional>
 #include <memory>
+
+#include "Halide.h"
 
 #ifndef HALIDE_PYSTUB_GENERATOR_NAME
 #error "HALIDE_PYSTUB_GENERATOR_NAME must be defined"
@@ -17,16 +20,7 @@
 #define HALIDE_PYSTUB_MODULE_NAME HALIDE_PYSTUB_GENERATOR_NAME
 #endif
 
-namespace Halide {
-class GeneratorContext;
-namespace Internal {
-class GeneratorBase;
-}  // namespace Internal
-}  // namespace Halide
-
-using FactoryFunc = std::unique_ptr<Halide::Internal::GeneratorBase> (*)(const Halide::GeneratorContext &context);
-
-extern "C" PyObject *_halide_pystub_impl(const char *module_name, FactoryFunc factory);
+extern "C" PyObject *_halide_pystub_impl(const char *module_name, const Halide::Internal::GeneratorFactory &factory);
 
 #define HALIDE_STRINGIFY(x) #x
 #define HALIDE_TOSTRING(x) HALIDE_STRINGIFY(x)
@@ -34,17 +28,17 @@ extern "C" PyObject *_halide_pystub_impl(const char *module_name, FactoryFunc fa
 #define _HALIDE_CONCAT(first, second) first##second
 #define HALIDE_CONCAT(first, second) _HALIDE_CONCAT(first, second)
 
-#if !defined(HALIDE_EXPORT)
+// Don't use HALIDE_EXPORT: Halide.h will already have defined it,
+// but it might be defined the wrong way (import rather than export).
 #if defined(WIN32) || defined(_WIN32)
-#define HALIDE_EXPORT __declspec(dllexport)
+#define HALIDE_PLUGIN_EXPORT __declspec(dllexport)
 #else
-#define HALIDE_EXPORT __attribute__((visibility("default")))
-#endif
+#define HALIDE_PLUGIN_EXPORT __attribute__((visibility("default")))
 #endif
 
 static_assert(PY_MAJOR_VERSION >= 3, "Python bindings for Halide require Python 3+");
 
-#define _HALIDE_PLUGIN_IMPL(name) extern "C" HALIDE_EXPORT PyObject *PyInit_##name() /* NOLINT(bugprone-macro-parentheses) */
+#define _HALIDE_PLUGIN_IMPL(name) extern "C" HALIDE_PLUGIN_EXPORT PyObject *PyInit_##name() /* NOLINT(bugprone-macro-parentheses) */
 #define HALIDE_PLUGIN_IMPL(name) _HALIDE_PLUGIN_IMPL(name)
 
 // clang-format off
