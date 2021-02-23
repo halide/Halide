@@ -1289,6 +1289,7 @@ class StubInputBuffer {
 
     template<typename T2>
     HALIDE_NO_USER_CODE_INLINE static Parameter parameter_from_buffer(const Buffer<T2> &b) {
+        internal_assert(b.defined());
         user_assert((Buffer<T>::can_convert_from(b)));
         internal_assert(b.defined());
         Parameter p(b.type(), true, b.dimensions());

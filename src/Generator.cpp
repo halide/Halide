@@ -93,7 +93,9 @@ std::map<Output, std::string> compute_output_files(const Target &target,
 Argument to_argument(const Internal::Parameter &param) {
     return Argument(param.name(),
                     param.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
-                    param.type(), param.dimensions(), param.get_argument_estimates());
+                    param.type(),
+                    param.dimensions(),
+                    param.get_argument_estimates());
 }
 
 Func make_param_func(const Parameter &p, const std::string &name) {
