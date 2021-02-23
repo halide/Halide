@@ -672,6 +672,12 @@ class SlidingWindow : public IRMutator {
         sliding.push_front(iter->second);
         Stmt new_body = mutate(op->body);
         sliding.pop_front();
+        // Remove tracking of slid dimensions when we're done realizing
+        // it in case a realization appears elsewhere.
+        auto slid_it = slid_dimensions.find(iter->second.name());
+        if (slid_it != slid_dimensions.end()) {
+            slid_dimensions.erase(slid_it);
+        }
 
         if (new_body.same_as(op->body)) {
             return op;
@@ -754,6 +760,21 @@ class SlidingWindow : public IRMutator {
                 result = LetStmt::make(i.first, i.second, result);
             }
             return result;
+        }
+    }
+
+    Stmt visit(const IfThenElse *op) override {
+        // Don't let specializations corrupt the tracking of which
+        // dimensions have been slid.
+        map<string, set<int>> old_slid_dimensions = slid_dimensions;
+        Stmt then_case = mutate(op->then_case);
+        slid_dimensions = old_slid_dimensions;
+        Stmt else_case = mutate(op->else_case);
+        slid_dimensions = old_slid_dimensions;
+        if (then_case.same_as(op->then_case) && else_case.same_as(op->else_case)) {
+            return op;
+        } else {
+            return IfThenElse::make(op->condition, then_case, else_case);
         }
     }
 

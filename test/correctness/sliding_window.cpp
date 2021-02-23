@@ -40,6 +40,9 @@ int main(int argc, char **argv) {
 
         f.store_root().compute_at(g, x);
 
+        // Test that sliding window works when specializing.
+        g.specialize(g.output_buffer().dim(0).min() == 0);
+
         Buffer<int> im = g.realize({100});
 
         // f should be able to tell that it only needs to compute each value once
