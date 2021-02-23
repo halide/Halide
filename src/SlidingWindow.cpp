@@ -346,16 +346,18 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             Expr new_loop_min_eq;
             if (can_slide_up) {
                 new_loop_min_eq =
-                    substitute(loop_var, loop_min, min_required) == substitute(loop_var, new_loop_min_var, prev_max_plus_one);
+                    (substitute(loop_var, loop_min, min_required) >=
+                     substitute(loop_var, new_loop_min_var, prev_max_plus_one));
             } else {
                 new_loop_min_eq =
-                    substitute(loop_var, loop_min, max_required) == substitute(loop_var, new_loop_min_var, prev_min_minus_one);
+                    (substitute(loop_var, loop_min, max_required) <=
+                     substitute(loop_var, new_loop_min_var, prev_min_minus_one));
             }
             new_loop_min_eq = simplify(new_loop_min_eq, true, bounds);
             Interval solve_result = solve_for_inner_interval(new_loop_min_eq, new_loop_min_name);
-
             internal_assert(!new_loop_min.defined());
-            if (solve_result.has_upper_bound() && can_prove(solve_result.max - loop_min <= 0, bounds)) {
+            if (solve_result.has_upper_bound() &&
+                can_prove(solve_result.max <= loop_min, bounds)) {
                 new_loop_min = solve_result.max;
             }
 
