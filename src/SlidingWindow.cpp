@@ -179,6 +179,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     Expr loop_min;
     set<int> &slid_dimensions;
     Scope<Expr> scope;
+    Scope<Interval> &bounds;
 
     map<string, Expr> replacements;
 
@@ -350,32 +351,34 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 new_loop_min_eq =
                     substitute(loop_var, loop_min, max_required) == substitute(loop_var, new_loop_min_var, prev_min_minus_one);
             }
-            new_loop_min_eq = solve_expression(simplify(new_loop_min_eq), new_loop_min_name).result;
+            new_loop_min_eq = simplify(new_loop_min_eq, true, bounds);
             Interval solve_result = solve_for_inner_interval(new_loop_min_eq, new_loop_min_name);
 
-            Expr new_min, new_max;
-            if (!solve_result.has_upper_bound()) {
-                debug(3) << "Not sliding " << func.name()
-                         << " over dimension " << dim
-                         << " along loop variable " << loop_var
-                         << " because the bounds required of the producer do not appear to depend on the loop variable\n"
-                         << "Min is " << min_required << "\n"
-                         << "Max is " << max_required << "\n"
-                         << "Equation is " << new_loop_min_eq << "\n";
-                return stmt;
+            internal_assert(!new_loop_min.defined());
+            if (solve_result.has_upper_bound() && can_prove(solve_result.max - loop_min <= 0, bounds)) {
+                new_loop_min = solve_result.max;
             }
 
-            internal_assert(!new_loop_min.defined());
-            new_loop_min = solve_result.max;
-            if (equal(new_loop_min, loop_min)) {
-                new_loop_min = Expr();
-            }
+            Expr new_min, new_max;
             if (can_slide_up) {
                 new_min = prev_max_plus_one;
                 new_max = max_required;
             } else {
                 new_min = min_required;
                 new_max = prev_min_minus_one;
+            }
+
+            if (!new_loop_min.defined()) {
+                // If we don't have a new loop min, we need to just compute the warmup on the
+                // first iteration.
+                Expr need_explicit_warmup = loop_var_expr <= loop_min;
+                if (can_slide_up) {
+                    new_min = select(need_explicit_warmup, min_required, likely_if_innermost(new_min));
+                    new_min = simplify(new_min, true, bounds);
+                } else {
+                    new_max = select(need_explicit_warmup, max_required, likely_if_innermost(new_max));
+                    new_max = simplify(new_max, true, bounds);
+                }
             }
 
             Expr early_stages_min_required = new_min;
@@ -389,8 +392,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             slid_dimensions.insert(dim_idx);
 
-            // Guard producers against running on expanded bounds.
             if (new_loop_min.defined()) {
+                // Guard producers against running on expanded bounds.
                 Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
                 Expr produce_min, produce_max;
                 if (can_slide_up) {
@@ -398,6 +401,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 } else {
                     produce_max = substitute(loop_var, orig_loop_min_expr, max_required);
                 }
+                debug(3) << "Guarding producer " << func.name() << ", " << dim << "\n"
+                         << "min " << produce_min << "\n"
+                         << "max " << produce_max << "\n";
                 stmt = guard_producer(stmt, func, dim_idx, produce_min, produce_max);
             }
 
@@ -434,7 +440,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             }
 
             return stmt;
-        } else if (!find_produce(op, func.name())) {
+        } else if (!find_produce(op, func.name()) && new_loop_min.defined()) {
             // The producer might have expanded the loop before the min to warm
             // up the window. This consumer doesn't contain a producer that might
             // be part of the warmup, so guard it with an if to only run it on
@@ -458,6 +464,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 }
             }
             if (guard.defined()) {
+                debug(3) << "Guarding body " << guard << "\n";
                 body = IfThenElse::make(guard, body);
             }
             if (body.same_as(op->body)) {
@@ -495,7 +502,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
-        ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope)));
+        Interval bounds_value = bounds_of_expr_in_scope(op->value, bounds, empty_func_value_bounds(), true);
+        ScopedBinding<Interval> b(bounds, op->name, bounds_value);
+
+        ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope), true, bounds));
         Stmt new_body = mutate(op->body);
 
         Expr value = op->value;
@@ -514,8 +524,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
 public:
-    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min, set<int> &slid_dimensions)
-        : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)), slid_dimensions(slid_dimensions) {
+    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min, set<int> &slid_dimensions, Scope<Interval> &bounds)
+        : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)), slid_dimensions(slid_dimensions), bounds(bounds) {
     }
 
     Expr new_loop_min;
@@ -636,6 +646,8 @@ class SlidingWindow : public IRMutator {
     // outermost.
     list<Function> sliding;
 
+    Scope<Interval> bounds;
+
     using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
@@ -700,7 +712,7 @@ class SlidingWindow : public IRMutator {
                 sliding_loop_min = prev_loop_min;
             }
 
-            SlidingWindowOnFunctionAndLoop slider(func, name, sliding_loop_min, slid_dimensions[func.name()]);
+            SlidingWindowOnFunctionAndLoop slider(func, name, sliding_loop_min, slid_dimensions[func.name()], bounds);
             body = slider.mutate(body);
 
             prev_loop_min = loop_min;
@@ -708,12 +720,7 @@ class SlidingWindow : public IRMutator {
 
             if (slider.new_loop_min.defined()) {
                 // Update the loop body to use the adjusted loop min.
-                Expr new_loop_min = slider.new_loop_min;
-                if (!sliding_loop_min.same_as(loop_min)) {
-                    // If we didn't start from the loop min, take the union
-                    // of the new loop min and the loop min.
-                    new_loop_min = min(new_loop_min, loop_min);
-                }
+                Expr new_loop_min = min(slider.new_loop_min, loop_min);
                 string new_name = name + ".$n";
                 loop_min = Variable::make(Int(32), new_name + ".loop_min");
                 loop_extent = Variable::make(Int(32), new_name + ".loop_extent");
@@ -740,12 +747,20 @@ class SlidingWindow : public IRMutator {
             return op;
         } else {
             Stmt result = For::make(name, loop_min, loop_extent, op->for_type, op->device_api, body);
-            result = LetStmt::make(name + ".loop_max", loop_max, result);
+            if (!new_lets.empty()) {
+                result = LetStmt::make(name + ".loop_max", loop_max, result);
+            }
             for (const auto &i : new_lets) {
                 result = LetStmt::make(i.first, i.second, result);
             }
             return result;
         }
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        Interval bounds_value = bounds_of_expr_in_scope(op->value, bounds, empty_func_value_bounds(), true);
+        ScopedBinding<Interval> b(bounds, op->name, bounds_value);
+        return IRMutator::visit(op);
     }
 
 public:
