@@ -22,7 +22,7 @@ namespace MCTS {
 
     // TODO(rootjalex): refactor this as needed.
     template<class State, class Action>
-    class TreeNode {
+    struct TreeNode {
         typedef std::shared_ptr<TreeNode<State, Action> > SharedPtr;
         typedef TreeNode<State, Action>* BarePtr;
 
@@ -45,8 +45,6 @@ namespace MCTS {
         std::vector<Action> possible_actions;
 
         std::mt19937 &rng;
-
-    public:
 
         TreeNode(const State &_state, const Action &_action, BarePtr _parent, std::mt19937 &_rng) :
             state(_state), action(_action), parent(_parent),
