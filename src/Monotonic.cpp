@@ -431,11 +431,10 @@ class DerivativeBounds : public IRVisitor {
             // TODO: How to handle unsigned values?
             Expr delta = simplify(op->true_value - op->false_value);
 
-            Interval delta_bounds = bounds_of_expr_in_scope(delta, bounds, empty_func_value_bounds(), true);
-            delta_bounds.min = simplify(delta_bounds.min);
-            delta_bounds.max = simplify(delta_bounds.max);
+            Interval delta_bounds = find_constant_bounds(delta, bounds);
             ConstantInterval adjusted_delta;
-            if (is_const(delta_bounds.min) && is_const(delta_bounds.max)) {
+            // TODO: Maybe we can do something with one-sided intervals?
+            if (delta_bounds.is_bounded()) {
                 ConstantInterval delta_low = multiply(rcond, delta_bounds.min);
                 ConstantInterval delta_high = multiply(rcond, delta_bounds.max);
                 adjusted_delta = ConstantInterval::make_union(delta_low, delta_high);
@@ -508,7 +507,7 @@ class DerivativeBounds : public IRVisitor {
     void visit(const Let *op) override {
         op->value.accept(this);
 
-        ScopedBinding<Interval> bounds_binding(bounds, op->name, bounds_of_expr_in_scope(op->value, bounds));
+        ScopedBinding<Interval> bounds_binding(bounds, op->name, find_constant_bounds(op->value, bounds));
 
         if (is_constant(result)) {
             // No point pushing it if it's constant w.r.t the var,

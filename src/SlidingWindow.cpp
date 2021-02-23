@@ -504,7 +504,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
-        Interval bounds_value = bounds_of_expr_in_scope(op->value, bounds, empty_func_value_bounds(), true);
+        Interval bounds_value = find_constant_bounds(op->value, bounds);
         ScopedBinding<Interval> b(bounds, op->name, bounds_value);
 
         ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope), true, bounds));
@@ -781,7 +781,7 @@ class SlidingWindow : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
-        Interval bounds_value = bounds_of_expr_in_scope(op->value, bounds, empty_func_value_bounds(), true);
+        Interval bounds_value = find_constant_bounds(op->value, bounds);
         ScopedBinding<Interval> b(bounds, op->name, bounds_value);
         return IRMutator::visit(op);
     }
