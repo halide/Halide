@@ -1609,9 +1609,6 @@ void check_boolean() {
     // A for loop where the extent is exactly one is just the body
     check(IfThenElse::make(x == 1, loop), IfThenElse::make(x == 1, body));
 
-    // A for loop where the extent is at most one can just be an if statement
-    check(IfThenElse::make(y % 2 == x, loop), IfThenElse::make(y % 2 == x, IfThenElse::make(0 < x, body)));
-
     // Check we can learn from bounds on variables
     check(IfThenElse::make(x < 5, Evaluate::make(min(x, 17))),
           IfThenElse::make(x < 5, Evaluate::make(x)));

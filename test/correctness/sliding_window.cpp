@@ -243,6 +243,24 @@ int main(int argc, char **argv) {
     }
 
     {
+        // Sliding where we only need a new value every third iteration of the consumer.
+        // This test checks that we don't ask for excessive bounds.
+        ImageParam f(Int(32), 1);
+        Func g;
+
+        g(x) = f(x / 3);
+
+        Var xo;
+        g.split(x, xo, x, 10);
+        f.in().store_at(g, xo).compute_at(g, x);
+
+        Buffer<int> buf(33);
+        f.set(buf);
+
+        Buffer<int> im = g.realize({98});
+    }
+
+    {
         // Sliding with an unrolled producer
         Var x, xi;
         Func f, g;
