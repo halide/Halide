@@ -761,7 +761,11 @@ void set_function_attributes_for_target(llvm::Function *fn, const Target &t) {
 void embed_bitcode(llvm::Module *M, const string &halide_command) {
     // Save llvm.compiler.used and remote it.
     SmallVector<Constant *, 2> used_array;
+#if LLVM_VERSION >= 13
+    SmallVector<GlobalValue *, 4> used_globals;
+#else
     SmallPtrSet<GlobalValue *, 4> used_globals;
+#endif
     llvm::Type *used_element_type = llvm::Type::getInt8Ty(M->getContext())->getPointerTo(0);
     GlobalVariable *used = collectUsedGlobalVariables(*M, used_globals, true);
     for (auto *GV : used_globals) {
