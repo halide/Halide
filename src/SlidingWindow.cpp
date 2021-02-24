@@ -127,7 +127,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     Expr loop_min;
     set<int> &slid_dimensions;
     Scope<Expr> scope;
-    Scope<Interval> &bounds;
 
     map<string, Expr> replacements;
 
@@ -301,11 +300,11 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                     (substitute(loop_var, loop_min, max_required) <=
                      substitute(loop_var, new_loop_min_var, prev_min_minus_one));
             }
-            new_loop_min_eq = simplify(new_loop_min_eq, true, bounds);
+            new_loop_min_eq = simplify(new_loop_min_eq);
             Interval solve_result = solve_for_inner_interval(new_loop_min_eq, new_loop_min_name);
             internal_assert(!new_loop_min.defined());
             if (solve_result.has_upper_bound() &&
-                can_prove(solve_result.max <= loop_min, bounds)) {
+                can_prove(solve_result.max <= loop_min)) {
                 new_loop_min = solve_result.max;
             }
 
@@ -332,10 +331,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 Expr need_explicit_warmup = loop_var_expr <= loop_min;
                 if (can_slide_up) {
                     new_min = select(need_explicit_warmup, min_required, likely_if_innermost(new_min));
-                    new_min = simplify(new_min, true, bounds);
+                    new_min = simplify(new_min);
                 } else {
                     new_max = select(need_explicit_warmup, max_required, likely_if_innermost(new_max));
-                    new_max = simplify(new_max, true, bounds);
+                    new_max = simplify(new_max);
                 }
             }
 
@@ -348,6 +347,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             slid_dimensions.insert(dim_idx);
 
             // Now redefine the appropriate regions required
+            internal_assert(replacements.empty());
             if (can_slide_up) {
                 replacements[prefix + dim + ".min"] = new_min;
             } else {
@@ -442,10 +442,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
-        Interval bounds_value = find_constant_bounds(op->value, bounds);
-        ScopedBinding<Interval> b(bounds, op->name, bounds_value);
-
-        ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope), true, bounds));
+        ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope)));
         Stmt new_body = mutate(op->body);
 
         Expr value = op->value;
@@ -464,8 +461,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
 public:
-    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min, set<int> &slid_dimensions, Scope<Interval> &bounds)
-        : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)), slid_dimensions(slid_dimensions), bounds(bounds) {
+    SlidingWindowOnFunctionAndLoop(Function f, string v, Expr v_min, set<int> &slid_dimensions)
+        : func(std::move(f)), loop_var(std::move(v)), loop_min(std::move(v_min)), slid_dimensions(slid_dimensions) {
     }
 
     Expr new_loop_min;
@@ -586,8 +583,6 @@ class SlidingWindow : public IRMutator {
     // outermost.
     list<Function> sliding;
 
-    Scope<Interval> bounds;
-
     using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
@@ -658,7 +653,7 @@ class SlidingWindow : public IRMutator {
                 sliding_loop_min = prev_loop_min;
             }
 
-            SlidingWindowOnFunctionAndLoop slider(func, name, sliding_loop_min, slid_dimensions[func.name()], bounds);
+            SlidingWindowOnFunctionAndLoop slider(func, name, sliding_loop_min, slid_dimensions[func.name()]);
             body = slider.mutate(body);
 
             prev_loop_min = loop_min;
@@ -716,12 +711,6 @@ class SlidingWindow : public IRMutator {
         } else {
             return IfThenElse::make(op->condition, then_case, else_case);
         }
-    }
-
-    Stmt visit(const LetStmt *op) override {
-        Interval bounds_value = find_constant_bounds(op->value, bounds);
-        ScopedBinding<Interval> b(bounds, op->name, bounds_value);
-        return IRMutator::visit(op);
     }
 
 public:

@@ -530,7 +530,7 @@ void CameraPipe::generate() {
             .compute_at(processed, yi)
             .store_at(processed, yo)
             .prefetch(input, y, 2)
-            .fold_storage(y, 8)
+            .fold_storage(y, 16)
             .tile(x, y, x, y, xi, yi, 2 * vec, 2)
             .vectorize(xi)
             .unroll(yi);
