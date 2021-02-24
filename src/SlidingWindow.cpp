@@ -318,7 +318,15 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 new_max = prev_min_minus_one;
             }
 
-            if (!new_loop_min.defined()) {
+            if (new_loop_min.defined()) {
+                // Guard against running on expanded bounds.
+                Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
+                if (can_slide_up) {
+                    new_min = max(new_min, substitute(loop_var, orig_loop_min_expr, min_required));
+                } else {
+                    new_max = min(new_max, substitute(loop_var, orig_loop_min_expr, max_required));
+                }
+            } else {
                 // If we don't have a new loop min, we need to just compute the warmup on the
                 // first iteration.
                 Expr need_explicit_warmup = loop_var_expr <= loop_min;
@@ -328,19 +336,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 } else {
                     new_max = select(need_explicit_warmup, max_required, likely_if_innermost(new_max));
                     new_max = simplify(new_max, true, bounds);
-                }
-            }
-
-            Expr early_stages_min_required = new_min;
-            Expr early_stages_max_required = new_max;
-
-            if (new_loop_min.defined()) {
-                // Guard against running on expanded bounds.
-                Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
-                if (can_slide_up) {
-                    new_min = max(new_min, substitute(loop_var, orig_loop_min_expr, min_required));
-                } else {
-                    new_max = min(new_max, substitute(loop_var, orig_loop_min_expr, max_required));
                 }
             }
 
