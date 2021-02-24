@@ -300,11 +300,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                     (substitute(loop_var, loop_min, max_required) <=
                      substitute(loop_var, new_loop_min_var, prev_min_minus_one));
             }
-            new_loop_min_eq = simplify(new_loop_min_eq);
+            new_loop_min_eq = simplify(new_loop_min_eq && new_loop_min_var <= loop_min);
             Interval solve_result = solve_for_inner_interval(new_loop_min_eq, new_loop_min_name);
             internal_assert(!new_loop_min.defined());
-            if (solve_result.has_upper_bound() &&
-                can_prove(solve_result.max <= loop_min)) {
+            if (solve_result.has_upper_bound()) {
                 new_loop_min = solve_result.max;
             }
 
@@ -318,7 +317,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             }
 
             if (new_loop_min.defined()) {
-                // Guard against running on expanded bounds.
                 Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
                 if (can_slide_up) {
                     new_min = max(new_min, substitute(loop_var, orig_loop_min_expr, min_required));
