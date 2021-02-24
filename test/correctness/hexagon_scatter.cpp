@@ -81,7 +81,7 @@ int test() {
         }
     }
 
-    Buffer<DTYPE> buf = g.realize(W, H);
+    Buffer<DTYPE> buf = g.realize({W, H});
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {

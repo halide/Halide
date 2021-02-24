@@ -165,11 +165,11 @@ llvm::Type *get_vector_element_type(llvm::Type *t) {
 }
 
 #if LLVM_VERSION >= 120
-const llvm::ElementCount element_count(int e) {
+llvm::ElementCount element_count(int e) {
     return llvm::ElementCount::getFixed(e);
 }
 #elif LLVM_VERSION >= 110
-const llvm::ElementCount element_count(int e) {
+llvm::ElementCount element_count(int e) {
     return llvm::ElementCount(e, /*scalable*/ false);
 }
 #else
@@ -621,6 +621,17 @@ Expr lower_signed_shift_right(const Expr &a, const Expr &b) {
     }
 }
 
+Expr lower_mux(const Call *mux) {
+    internal_assert(mux->args.size() >= 2);
+    Expr equiv = mux->args.back();
+    Expr index = mux->args[0];
+    int num_vals = (int)mux->args.size() - 1;
+    for (int i = num_vals - 1; i >= 0; i--) {
+        equiv = select(index == make_const(index.type(), i), mux->args[i + 1], equiv);
+    }
+    return equiv;
+}
+
 bool get_md_bool(llvm::Metadata *value, bool &result) {
     if (!value) {
         return false;
@@ -659,6 +670,8 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     get_md_bool(module.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi);
     get_md_string(module.getModuleFlag("halide_mcpu"), mcpu);
     get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
+    std::string mabi;
+    get_md_string(module.getModuleFlag("halide_mabi"), mabi);
     bool use_pic = true;
     get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
 
@@ -679,6 +692,7 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
     options.RelaxELFRelocations = false;
+    options.MCOptions.ABIName = mabi;
 }
 
 void clone_target_options(const llvm::Module &from, llvm::Module &to) {

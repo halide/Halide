@@ -43,14 +43,14 @@ int main(int argc, char **argv) {
     g.set_custom_print(&my_print);
 
     // Should succeed
-    g.realize(3, 100, t);
+    g.realize({3, 100}, t);
     if (errored) {
         printf("There was not supposed to be an error\n");
         return -1;
     }
 
     // Should trap
-    g.realize(4, 100, t);
+    g.realize({4, 100}, t);
 
     if (!errored) {
         printf("There was supposed to be an error\n");

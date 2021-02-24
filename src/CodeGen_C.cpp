@@ -323,8 +323,8 @@ CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const 
 
     if (is_header()) {
         // If it's a header, emit an include guard.
-        stream << "#ifndef HALIDE_" << print_name(guard) << "\n"
-               << "#define HALIDE_" << print_name(guard) << "\n"
+        stream << "#ifndef HALIDE_" << c_print_name(guard) << "\n"
+               << "#define HALIDE_" << c_print_name(guard) << "\n"
                << "#include <stdint.h>\n"
                << "\n"
                << "// Forward declarations of the types used in the interface\n"
@@ -1586,7 +1586,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
 
         if (uses_gpu_for_loops) {
             stream << get_indent() << "halide_error("
-                   << (have_user_context ? "__user_context_" : "nullptr")
+                   << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
                    << ", \"C++ Backend does not support gpu_blocks() or gpu_threads() yet, "
                    << "this function will always fail at runtime\");\n";
             stream << get_indent() << "return halide_error_code_device_malloc_failed;\n";
@@ -1644,7 +1644,7 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     // Figure out the offset of the last pixel.
     size_t num_elems = 1;
     for (int d = 0; d < b.dimensions; d++) {
-        num_elems += b.dim[d].stride * (b.dim[d].extent - 1);
+        num_elems += b.dim[d].stride * (size_t)(b.dim[d].extent - 1);
     }
 
     // For now, we assume buffers that aren't scalar are constant,
@@ -2207,6 +2207,8 @@ void CodeGen_C::visit(const Call *op) {
         rhs << print_expr(op->args[0]) << " / " << print_expr(op->args[1]);
     } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
         rhs << print_expr(op->args[0]) << " % " << print_expr(op->args[1]);
+    } else if (op->is_intrinsic(Call::mux)) {
+        rhs << print_expr(lower_mux(op));
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
                       " integer overflow for int32 and int64 is undefined behavior in"
@@ -2586,7 +2588,7 @@ void CodeGen_C::visit(const Allocate *op) {
     } else {
         constant_size = op->constant_allocation_size();
         if (constant_size > 0) {
-            int64_t stack_bytes = constant_size * op->type.bytes();
+            int64_t stack_bytes = (int64_t)constant_size * op->type.bytes();
 
             if (stack_bytes > ((int64_t(1) << 31) - 1)) {
                 user_error << "Total size for allocation "

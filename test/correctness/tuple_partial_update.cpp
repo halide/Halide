@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
         f(x, y)[1] *= 4;
         f(x, y)[1] /= 2;
 
-        Realization result = f.realize(1024, 1024);
+        Realization result = f.realize({1024, 1024});
         Buffer<int> a = result[0], b = result[1];
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
         f(x, y) = Tuple(x, y);
         f(x, y)[1] += select(x < 20, 20 * x, undef<int>());
 
-        Realization result = f.realize(1024, 1024);
+        Realization result = f.realize({1024, 1024});
         Buffer<int> a = result[0], b = result[1];
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {

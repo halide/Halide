@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
 
     f.trace_stores();
     f.set_custom_trace(&my_trace);
-    f.realize(8, 8);
+    f.realize({8, 8});
 
     printf("Success!\n");
 

@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     h(x, y) = calc(g(x, y)) + g(x, y) / 4 + (1 << 30);
     h.vectorize(x, 8).compute_root();
 
-    Buffer<int32_t> imf = h.realize(32, 32);
+    Buffer<int32_t> imf = h.realize({32, 32});
 
     // No verification of output: just want to verify no compile-time assertion
 

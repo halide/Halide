@@ -96,8 +96,8 @@ int main(int argc, char **argv) {
         blur2.vectorize(x, 4).parallel(y);
     }
 
-    Buffer<uint16_t> out1 = blur1.realize(W, H, target);
-    Buffer<uint16_t> out2 = blur2.realize(W, H, target);
+    Buffer<uint16_t> out1 = blur1.realize({W, H}, target);
+    Buffer<uint16_t> out2 = blur2.realize({W, H}, target);
 
     for (int y = 1; y < H - 1; y++) {
         for (int x = 1; x < W - 1; x++) {

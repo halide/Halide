@@ -67,7 +67,7 @@ struct Test {
 
     void check(const std::string &inner_loop_level,
                const std::string &outer_loop_level) {
-        Buffer<float> result = outer.realize(1, 1, 1);
+        Buffer<float> result = outer.realize({1, 1, 1});
 
         Module m = outer.compile_to_module({outer.infer_arguments()});
         CheckLoopLevels c(inner_loop_level, outer_loop_level);

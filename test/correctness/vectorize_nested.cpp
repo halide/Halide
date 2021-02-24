@@ -17,7 +17,7 @@ int vectorize_2d_round_up() {
         .vectorize(xi)
         .vectorize(yi);
 
-    Buffer<int> result = f.realize(width, height);
+    Buffer<int> result = f.realize({width, height});
 
     auto cmp_func = [](int x, int y) {
         return 3 * x + y;
@@ -43,7 +43,7 @@ int vectorize_2d_guard_with_if() {
         .vectorize(xi)
         .vectorize(yi);
 
-    Buffer<int> result = f.realize(width, height);
+    Buffer<int> result = f.realize({width, height});
 
     auto cmp_func = [](int x, int y) {
         return 3 * x + y;
@@ -71,7 +71,7 @@ int vectorize_2d_inlined_with_update() {
         .vectorize(xi)
         .vectorize(yi);
 
-    Buffer<int> result = f.realize(width, height);
+    Buffer<int> result = f.realize({width, height});
 
     auto cmp_func = [](int x, int y) {
         return x + 2 * y + 45;
@@ -97,7 +97,7 @@ int vectorize_2d_with_inner_for() {
         .vectorize(xi)
         .vectorize(yi);
 
-    Buffer<int> result = f.realize(width, height, 3);
+    Buffer<int> result = f.realize({width, height, 3});
 
     auto cmp_func = [](int x, int y, int c) {
         return 3 * x + y + 7 * c;
@@ -122,7 +122,7 @@ int vectorize_2d_with_compute_at_vectorized() {
     g.split(x, x, xi, 8).vectorize(xi);
     f.compute_at(g, xi).vectorize(x);
 
-    Buffer<int> result = g.realize(width, height);
+    Buffer<int> result = g.realize({width, height});
 
     auto cmp_func = [](int x, int y) {
         return 6 * x + 3 + 2 * y;
@@ -150,7 +150,7 @@ int vectorize_2d_with_compute_at() {
         .vectorize(xii);
     f.compute_at(g, xii).vectorize(x);
 
-    Buffer<int> result = g.realize(width, height);
+    Buffer<int> result = g.realize({width, height});
 
     auto cmp_func = [](int x, int y) {
         return 6 * x + 3 + 2 * y;
@@ -179,7 +179,7 @@ int vectorize_all_d() {
         .vectorize(yi);
 
     f.bound(x, 0, width).bound(y, 0, height);
-    Buffer<int> result = f.realize(width, height);
+    Buffer<int> result = f.realize({width, height});
 
     auto cmp_func = [](int x, int y) {
         return 3 * x + y;

@@ -507,6 +507,33 @@ public:
             check("vpmaxsq", 8, max(i64_1, i64_2));
             check("vpminsq", 8, min(i64_1, i64_2));
         }
+        if (use_avx512 && target.has_feature(Target::AVX512_SapphireRapids)) {
+            check("vcvtne2ps2bf16*zmm", 32, cast(BFloat(16), f32_1));
+            check("vcvtneps2bf16*ymm", 16, cast(BFloat(16), f32_1));
+            check("vcvtneps2bf16*xmm", 8, cast(BFloat(16), f32_1));
+            check("vcvtneps2bf16*xmm", 4, cast(BFloat(16), f32_1));
+
+            {
+                // 16 bit, 2 element dot product
+                RDom r(0, 2);
+                check("vdpbf16ps*zmm", 16, sum(f32(in_bf16(2 * x + r)) * in_bf16(2 * x + r + 32)));
+                check("vdpbf16ps*ymm", 8, sum(f32(in_bf16(2 * x + r)) * in_bf16(2 * x + r + 32)));
+                check("vdpbf16ps*xmm", 4, sum(f32(in_bf16(2 * x + r)) * in_bf16(2 * x + r + 32)));
+                check("vpdpwssd*zmm", 16, sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                check("vpdpwssd*ymm", 8, sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                check("vpdpwssd*xmm", 4, sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+            }
+            {
+                // 8 bit, 4 element dot product
+                RDom r(0, 4);
+                check("vpdpbusd*zmm", 16, sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusd*zmm", 16, sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                check("vpdpbusd*ymm", 8, sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusd*ymm", 8, sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                check("vpdpbusd*xmm", 4, sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusd*xmm", 4, sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+            }
+        }
     }
 
     void check_neon_all() {
@@ -1649,9 +1676,10 @@ public:
                 // to be used explicitly
 
                 // Shuffling using immediate indices
-                check("v8x16.shuffle", 16 * w, in_u8(2 * x));
-                check("v8x16.shuffle", 8 * w, in_u16(2 * x));
-                check("v8x16.shuffle", 4 * w, in_u32(2 * x));
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("v8x16.shuffle", 16 * w, in_u8(2 * x));
+                // check("v8x16.shuffle", 8 * w, in_u16(2 * x));
+                // check("v8x16.shuffle", 4 * w, in_u32(2 * x));
 
                 // Swizzling using variable indices
                 // (This fails to generate, but that's not entirely surprising -- I don't
@@ -1881,10 +1909,11 @@ public:
                 check("v128.load", 2 * w, f64_1);
 
                 // Load vector with identical lanes
-                check("v8x16.load_splat", 16 * w, in_u8(0));
-                check("v16x8.load_splat", 8 * w, in_u16(0));
-                check("v32x4.load_splat", 4 * w, in_u32(0));
-                check("v64x2.load_splat", 2 * w, in_u64(0));
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("v8x16.load_splat", 16 * w, in_u8(0));
+                // check("v16x8.load_splat", 8 * w, in_u16(0));
+                // check("v32x4.load_splat", 4 * w, in_u32(0));
+                // check("v64x2.load_splat", 2 * w, in_u64(0));
 
                 // Load and Extend
                 if (w == 1) {

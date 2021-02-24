@@ -53,12 +53,12 @@ int main(int argc, char **argv) {
 
         reset_counts();
         toggle1.set(true);
-        f4.realize(10);
+        f4.realize({10});
         check_counts(10, 0);
 
         reset_counts();
         toggle1.set(false);
-        f4.realize(10);
+        f4.realize({10});
         check_counts(0, 10);
     }
 
@@ -81,25 +81,25 @@ int main(int argc, char **argv) {
         reset_counts();
         toggle1.set(true);
         toggle2.set(true);
-        f4.realize(10);
+        f4.realize({10});
         check_counts(10, 10, 10);
 
         reset_counts();
         toggle1.set(false);
         toggle2.set(true);
-        f4.realize(10);
+        f4.realize({10});
         check_counts(10, 0, 10);
 
         reset_counts();
         toggle1.set(true);
         toggle2.set(false);
-        f4.realize(10);
+        f4.realize({10});
         check_counts(10, 10, 0);
 
         reset_counts();
         toggle1.set(false);
         toggle2.set(false);
-        f4.realize(10);
+        f4.realize({10});
         check_counts(0, 0, 0);
     }
 
@@ -118,12 +118,12 @@ int main(int argc, char **argv) {
 
         reset_counts();
         toggle1.set(true);
-        f2.realize(10);
+        f2.realize({10});
         check_counts(10, 10);
 
         reset_counts();
         toggle1.set(false);
-        f2.realize(10);
+        f2.realize({10});
         check_counts(10, 10);
     }
 
@@ -134,18 +134,18 @@ int main(int argc, char **argv) {
         f1(x) = Tuple(call_counter(x, 0), call_counter(x + 1, 1));
         f2(x) = select(toggle1, f1(x)[0], 0);
         f1.compute_root();
-        f2.realize(10);
+        f2.realize({10});
 
         f2.compile_jit();
 
         reset_counts();
         toggle1.set(true);
-        f2.realize(10);
+        f2.realize({10});
         check_counts(10, 10);
 
         reset_counts();
         toggle1.set(false);
-        f2.realize(10);
+        f2.realize({10});
         check_counts(0, 0);
     }
 
@@ -169,25 +169,25 @@ int main(int argc, char **argv) {
         reset_counts();
         toggle1.set(true);
         toggle2.set(true);
-        f4.realize(10);
+        f4.realize({10});
         check_counts(10, 10, 10);
 
         reset_counts();
         toggle1.set(false);
         toggle2.set(true);
-        f4.realize(10);
+        f4.realize({10});
         check_counts(10, 0, 10);
 
         reset_counts();
         toggle1.set(true);
         toggle2.set(false);
-        f4.realize(10);
+        f4.realize({10});
         check_counts(10, 10, 0);
 
         reset_counts();
         toggle1.set(false);
         toggle2.set(false);
-        f4.realize(10);
+        f4.realize({10});
         check_counts(0, 0, 0);
     }
 
@@ -203,7 +203,7 @@ int main(int argc, char **argv) {
 
         f.store_root().compute_at(g, x);
         g.compute_at(h, x);
-        h.realize(10);
+        h.realize({10});
         check_counts(11);
     }
 

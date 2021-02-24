@@ -1,5 +1,7 @@
 #include "LoopNest.h"
 
+using std::map;
+using std::pair;
 using std::set;
 using std::vector;
 
@@ -385,7 +387,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 feat.points_computed_minimum = std::min(feat.points_computed_minimum, (double)points_computed_minimum_if_inlined);
             }
         }
-
         return;
     }
 
@@ -1882,6 +1883,56 @@ void LoopNest::apply(LoopLevel here,
                 state.schedule_source << "\n    .store" << loop_level;
             }
         }
+    }
+}
+
+const LoopNest *deepest_common_ancestor(const map<const LoopNest *, pair<const LoopNest *, int>> &parents,
+                                        const LoopNest *a, const LoopNest *b) {
+    if (a->is_root()) {
+        return a;
+    }
+    if (b->is_root()) {
+        return b;
+    }
+    if (a == b) {
+        return a;
+    }
+
+    // Walk the deeper one up until they're at the same depth
+    auto it_a = parents.find(a);
+    auto it_b = parents.find(b);
+    internal_assert(it_a != parents.end() && it_b != parents.end());
+    while (it_a->second.second > it_b->second.second) {
+        a = it_a->second.first;
+        it_a = parents.find(a);
+    }
+    while (it_b->second.second > it_a->second.second) {
+        b = it_b->second.first;
+        it_b = parents.find(b);
+    }
+
+    while (true) {
+        // Walk each up one
+        a = it_a->second.first;
+        b = it_b->second.first;
+        if (a == b) {
+            return a;
+        }
+        it_a = parents.find(a);
+        it_b = parents.find(b);
+        internal_assert(it_a != parents.end() && it_b != parents.end());
+    }
+
+    // unreachable
+    return nullptr;
+}
+
+// Compute the parent and depth of every loop nest node
+void compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest *, int>> &parents,
+                               const LoopNest *here, int depth) {
+    for (const auto &c : here->children) {
+        parents.emplace(c.get(), pair<const LoopNest *, int>{here, depth});
+        compute_loop_nest_parents(parents, c.get(), depth + 1);
     }
 }
 

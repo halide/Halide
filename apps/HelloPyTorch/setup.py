@@ -46,7 +46,9 @@ if __name__ == "__main__":
         has_cuda = True
 
     include_dirs = [build_dir, os.path.join(halide_dir, "include")]
-    compile_args = ["-std=c++11", "-g"]
+    # Note that recent versions of PyTorch (at least 1.7.1) requires C++14
+    # in order to compile extensions
+    compile_args = ["-std=c++14", "-g"]
     if platform.system() == "Darwin":  # on osx libstdc++ causes trouble
         compile_args += ["-stdlib=libc++"]
 

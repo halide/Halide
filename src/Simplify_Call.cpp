@@ -560,6 +560,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         Expr arg = mutate(op->args[0], &arg_info);
         Expr lower = mutate(op->args[1], &lower_info);
         Expr upper = mutate(op->args[2], &upper_info);
+
+        const Broadcast *b_arg = arg.as<Broadcast>();
+        const Broadcast *b_lower = lower.as<Broadcast>();
+        const Broadcast *b_upper = upper.as<Broadcast>();
+
         if (arg_info.min_defined &&
             arg_info.max_defined &&
             lower_info.max_defined &&
@@ -567,10 +572,17 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             arg_info.min >= lower_info.max &&
             arg_info.max <= upper_info.min) {
             return arg;
+        } else if (b_arg && b_lower && b_upper) {
+            // Move broadcasts outwards
+            return Broadcast::make(Call::make(b_arg->value.type(), op->name,
+                                              {b_arg->value, b_lower->value, b_upper->value},
+                                              Call::Intrinsic),
+                                   b_arg->lanes);
         } else if (arg.same_as(op->args[0]) &&
                    lower.same_as(op->args[1]) &&
                    upper.same_as(op->args[2])) {
             return op;
+
         } else {
             return Call::make(op->type, op->name,
                               {arg, lower, upper},
@@ -619,6 +631,46 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                                             {std::move(cond_value), std::move(true_value), std::move(false_value)},
                                             op->call_type);
             }
+        }
+    } else if (op->is_intrinsic(Call::mux)) {
+        internal_assert(op->args.size() >= 2);
+        int num_values = (int)op->args.size() - 1;
+        if (num_values == 1) {
+            // Mux of a single value
+            return mutate(op->args[1], bounds);
+        }
+        ExprInfo index_info;
+        Expr index = mutate(op->args[0], &index_info);
+
+        // Check if the mux has statically resolved
+        if (index_info.min_defined &&
+            index_info.max_defined &&
+            index_info.min == index_info.max) {
+            if (index_info.min >= 0 && index_info.min < num_values) {
+                // In-range, return the (simplified) corresponding value.
+                return mutate(op->args[index_info.min + 1], bounds);
+            } else {
+                // It's out-of-range, so return the last value.
+                return mutate(op->args.back(), bounds);
+            }
+        }
+
+        // The logic above could be extended to also truncate the
+        // range of values in the case where the mux index has a
+        // constant bound. This seems unlikely to ever come up though.
+
+        bool unchanged = index.same_as(op->args[0]);
+        vector<Expr> mutated_args(op->args.size());
+        mutated_args[0] = index;
+        for (size_t i = 1; i < op->args.size(); ++i) {
+            mutated_args[i] = mutate(op->args[i], nullptr);
+            unchanged &= mutated_args[i].same_as(op->args[i]);
+        }
+
+        if (unchanged) {
+            return op;
+        } else {
+            return Call::make(op->type, Call::mux, mutated_args, op->call_type);
         }
     } else if (op->call_type == Call::PureExtern) {
         // TODO: This could probably be simplified into a single map-lookup

@@ -505,6 +505,7 @@ void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) 
     module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
+    module->addModuleFlag(llvm::Module::Warning, "halide_mabi", MDString::get(*context, mabi()));
     module->addModuleFlag(llvm::Module::Warning, "halide_use_pic", use_pic() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_use_large_code_model", llvm_large_code_model ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float);
@@ -1373,7 +1374,7 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
 
 void CodeGen_LLVM::codegen(const Stmt &s) {
     internal_assert(s.defined());
-    debug(3) << "Codegen: " << s << "\n";
+    debug(4) << "Codegen: " << s << "\n";
     value = nullptr;
     s.accept(this);
 }
@@ -3189,6 +3190,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         value = codegen(op->args[0]);
     } else if (is_float16_transcendental(op)) {
         value = codegen(lower_float16_transcendental_to_float32_equivalent(op));
+    } else if (op->is_intrinsic(Call::mux)) {
+        value = codegen(lower_mux(op));
     } else if (op->is_intrinsic()) {
         Expr lowered = lower_intrinsic(op);
         if (!lowered.defined()) {
@@ -5098,6 +5101,10 @@ bool CodeGen_LLVM::supports_atomic_add(const Type &t) const {
 
 bool CodeGen_LLVM::use_pic() const {
     return true;
+}
+
+std::string CodeGen_LLVM::mabi() const {
+    return "";
 }
 
 }  // namespace Internal

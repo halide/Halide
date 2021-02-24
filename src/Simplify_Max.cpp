@@ -61,8 +61,8 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
              rewrite(max(IRMatcher::Overflow(), x), a) ||
              rewrite(max(x,IRMatcher::Overflow()), b) ||
              // Cases where one side dominates:
-             rewrite(max(x, op->type.max()), b) ||
-             rewrite(max(x, op->type.min()), x) ||
+             rewrite(max(x, c0), b, is_max_value(c0)) ||
+             rewrite(max(x, c0), x, is_min_value(c0)) ||
              rewrite(max((x/c0)*c0, x), b, c0 > 0) ||
              rewrite(max(x, (x/c0)*c0), a, c0 > 0) ||
              rewrite(max(max(x, y), x), a) ||

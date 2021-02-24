@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
         Halide::Internal::JITSharedRuntime::reuse_device_allocations(use_cache);
 
         for (int i = 0; i < 300; i++) {
-            Buffer<float> result = f1[N - 1].realize(128, 128);
+            Buffer<float> result = f1[N - 1].realize({128, 128});
             if (validate) {
                 result.copy_to_host();
                 result.for_each_value([=](float f) {
@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
         Halide::Internal::JITSharedRuntime::reuse_device_allocations(use_cache);
 
         for (int i = 0; i < 300; i++) {
-            Buffer<float> result = f2[N - 1].realize(128, 128);
+            Buffer<float> result = f2[N - 1].realize({128, 128});
             if (validate) {
                 result.copy_to_host();
                 result.for_each_value([=](float f) {
@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
         Halide::Internal::JITSharedRuntime::reuse_device_allocations(use_cache);
         // Increasing size, overlapping lifetimes, looped 300 times. Should OOM on leak.
         for (int i = 0; i < 300; i++) {
-            Buffer<float> result = f3[N - 1].realize(128, 128);
+            Buffer<float> result = f3[N - 1].realize({128, 128});
             if (validate) {
                 result.copy_to_host();
                 result.for_each_value([=](float f) {

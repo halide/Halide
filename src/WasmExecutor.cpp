@@ -632,13 +632,13 @@ void wasmbuf_to_hostbuf(WabtContext &wabt_context, wasm32_ptr_t src_ptr, Halide:
 
     halide_buffer_t dst_tmp;
     dst_tmp.device = 0;
-    dst_tmp.device_interface = 0;
+    dst_tmp.device_interface = nullptr;
     dst_tmp.host = nullptr;  // src->host ? (base + src->host) : nullptr;
     dst_tmp.flags = src->flags;
     dst_tmp.type = src->type;
     dst_tmp.dimensions = src->dimensions;
     dst_tmp.dim = src->dim ? (halide_dimension_t *)(base + src->dim) : nullptr;
-    dst_tmp.padding = 0;
+    dst_tmp.padding = nullptr;
 
     dump_hostbuf(wabt_context, &dst_tmp, "dst_tmp");
 
@@ -679,7 +679,7 @@ void copy_wasmbuf_to_existing_hostbuf(WabtContext &wabt_context, wasm32_ptr_t sr
     }
 
     dst->device = 0;
-    dst->device_interface = 0;
+    dst->device_interface = nullptr;
     dst->flags = src->flags;
 
     dump_hostbuf(wabt_context, dst, "dst_post");
@@ -1348,6 +1348,8 @@ WasmModuleContents::WasmModuleContents(
 
 #if WITH_WABT
     user_assert(LLVM_VERSION >= 110) << "Using the WebAssembly JIT is only supported under LLVM 11+.";
+
+    user_assert(!target.has_feature(Target::WasmThreads)) << "The Halide WebAssembly JIT doesn't support wasm threads yet.";
 
     wdebug(1) << "Compiling wasm function " << fn_name << "\n";
 

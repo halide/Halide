@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     Expr local_mean = sum(input_val) / 9.0f;
     local_variance(x, y) = sum(input_val * input_val) / 81.0f - local_mean * local_mean;
 
-    Buffer<float> result = local_variance.realize(10, 10);
+    Buffer<float> result = local_variance.realize({10, 10});
 
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 10; x++) {
@@ -61,10 +61,10 @@ int main(int argc, char **argv) {
     local_min.vectorize(x, 4);
     min_y.vectorize(x, 4);
 
-    Buffer<float> prod_im = local_product.realize(10, 10);
-    Buffer<float> max_im = local_max.realize(10, 10);
-    Buffer<float> min_im = local_min.realize(10, 10);
-    Buffer<float> min_im_separable = min_y.realize(10, 10);
+    Buffer<float> prod_im = local_product.realize({10, 10});
+    Buffer<float> max_im = local_max.realize({10, 10});
+    Buffer<float> min_im = local_min.realize({10, 10});
+    Buffer<float> min_im_separable = min_y.realize({10, 10});
 
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 10; x++) {
@@ -108,32 +108,32 @@ int main(int argc, char **argv) {
     }
 
     // Verify that all inline reductions compile with implicit argument syntax.
-    Buffer<float> input_3d = lambda(x, y, z, x * 100.0f + y * 10.0f + ((z + 5 % 10))).realize(10, 10, 10);
+    Buffer<float> input_3d = lambda(x, y, z, x * 100.0f + y * 10.0f + ((z + 5 % 10))).realize({10, 10, 10});
     RDom all_z(input_3d.min(2), input_3d.extent(2));
 
     Func sum_implicit;
     sum_implicit(_) = sum(input_3d(_, all_z));
-    Buffer<float> sum_implicit_im = sum_implicit.realize(10, 10);
+    Buffer<float> sum_implicit_im = sum_implicit.realize({10, 10});
 
     Func product_implicit;
     product_implicit(_) = product(input_3d(_, all_z));
-    Buffer<float> product_implicit_im = product_implicit.realize(10, 10);
+    Buffer<float> product_implicit_im = product_implicit.realize({10, 10});
 
     Func min_implicit;
     min_implicit(_) = minimum(input_3d(_, all_z));
-    Buffer<float> min_implicit_im = min_implicit.realize(10, 10);
+    Buffer<float> min_implicit_im = min_implicit.realize({10, 10});
 
     Func max_implicit;
     max_implicit(_, y) = maximum(input_3d(_, y, all_z));
-    Buffer<float> max_implicit_im = max_implicit.realize(10, 10);
+    Buffer<float> max_implicit_im = max_implicit.realize({10, 10});
 
     Func argmin_implicit;
     argmin_implicit(_) = argmin(input_3d(_, all_z))[0];
-    Buffer<int32_t> argmin_implicit_im = argmin_implicit.realize(10, 10);
+    Buffer<int32_t> argmin_implicit_im = argmin_implicit.realize({10, 10});
 
     Func argmax_implicit;
     argmax_implicit(x, _) = argmax(input_3d(x, _, all_z))[0];
-    Buffer<int32_t> argmax_implicit_im = argmax_implicit.realize(10, 10);
+    Buffer<int32_t> argmax_implicit_im = argmax_implicit.realize({10, 10});
 
     // Verify that the min of negative floats and doubles is correct
     // (this used to be buggy due to the minimum float being the

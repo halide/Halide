@@ -1,5 +1,5 @@
-#ifndef HALIDE_DEVICE_INTERFACE_H
-#define HALIDE_DEVICE_INTERFACE_H
+#ifndef HALIDE_RUNTIME_DEVICE_INTERFACE_H
+#define HALIDE_RUNTIME_DEVICE_INTERFACE_H
 
 #ifndef WEAK
 #include "runtime_internal.h"
@@ -54,4 +54,4 @@ extern WEAK int halide_default_device_wrap_native(void *user_context, struct hal
 extern WEAK int halide_default_device_detach_native(void *user_context, struct halide_buffer_t *buf);
 }
 
-#endif  // HALIDE_DEVICE_INTERFACE_H
+#endif  // HALIDE_RUNTIME_DEVICE_INTERFACE_H

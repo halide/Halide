@@ -1,9 +1,12 @@
-#ifndef STATISTICS_H
-#define STATISTICS_H
+#ifndef HL_TIMER_H
+#define HL_TIMER_H
 
 #include <chrono>
 #include <set>
+#include <string>
 #include <vector>
+
+#include "ASLog.h"
 
 namespace Halide {
 namespace Internal {
@@ -47,4 +50,8 @@ struct Timer {
 }  // namespace Internal
 }  // namespace Halide
 
+<<<<<<< HEAD
 #endif  // STATISTICS_H
+=======
+#endif  // HL_TIMER_H
+>>>>>>> 1be92c2cd5ae9f95e37576ffb653cbe4c3458dd0

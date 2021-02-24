@@ -209,12 +209,6 @@ ALWAYS_INLINE T min(const T &a, const T &b) {
     return a < b ? a : b;
 }
 
-template<typename T, typename U>
-ALWAYS_INLINE T reinterpret(const U &x) {
-    T ret;
-    memcpy(&ret, &x, min(sizeof(T), sizeof(U)));
-    return ret;
-}
 }  // namespace
 
 // A namespace for runtime modules to store their internal state

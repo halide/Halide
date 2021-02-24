@@ -172,6 +172,18 @@ Target calculate_host_target() {
             }
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
                 initial_features.push_back(Target::AVX512_Cannonlake);
+
+#if LLVM_VERSION >= 120
+                // Sapphire Rapids support was added in LLVM 12, so earlier versions cannot support this CPU's features.
+                const uint32_t avx512vnni = 1U << 11;  // vnni result in ecx
+                const uint32_t avx512bf16 = 1U << 5;   // bf16 result in eax, with cpuid(eax=7, ecx=1)
+                int info3[4];
+                cpuid(info3, 7, 1);
+                if ((info2[2] & avx512vnni) == avx512vnni &&
+                    (info3[0] & avx512bf16) == avx512bf16) {
+                    initial_features.push_back(Target::AVX512_SapphireRapids);
+                }
+#endif
             }
         }
     }
@@ -352,6 +364,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"avx512_knl", Target::AVX512_KNL},
     {"avx512_skylake", Target::AVX512_Skylake},
     {"avx512_cannonlake", Target::AVX512_Cannonlake},
+    {"avx512_sapphirerapids", Target::AVX512_SapphireRapids},
     {"trace_loads", Target::TraceLoads},
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
@@ -374,6 +387,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sve2", Target::SVE2},
     {"arm_dot_prod", Target::ARMDotProd},
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
+    {"rvv", Target::RVV},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -968,13 +982,14 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 12> intersection_features = {{
+    const std::array<Feature, 13> intersection_features = {{
         ARMv7s,
         AVX,
         AVX2,
         AVX512,
         AVX512_Cannonlake,
         AVX512_KNL,
+        AVX512_SapphireRapids,
         AVX512_Skylake,
         F16C,
         FMA,
@@ -1034,6 +1049,11 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // We merge the bits via bitwise or.
     Target output = Target{os, arch, bits};
     output.features = ((features | other.features) & union_mask) | ((features | other.features) & matching_mask) | ((features & other.features) & intersection_mask);
+
+#if LLVM_VERSION < 120
+    // We require LLVM 12+ to compile SapphireRapids features.
+    output.features.reset(AVX512_SapphireRapids);
+#endif
 
     // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features
     int cuda_a = get_cuda_capability_lower_bound();

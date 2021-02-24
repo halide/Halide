@@ -78,6 +78,7 @@ tests(GROUPS correctness
       deferred_loop_level.cpp
       deinterleave4.cpp
       device_buffer_copy.cpp
+      device_copy_at_inner_loop.cpp
       device_crop.cpp
       device_slice.cpp
       dilate3x3.cpp
@@ -135,6 +136,7 @@ tests(GROUPS correctness
       gpu_give_input_buffers_device_allocations.cpp
       gpu_jit_explicit_copy_to_device.cpp
       gpu_large_alloc.cpp
+      gpu_many_kernels.cpp
       gpu_mixed_dimensionality.cpp
       gpu_mixed_shared_mem_types.cpp
       gpu_multi_kernel.cpp
