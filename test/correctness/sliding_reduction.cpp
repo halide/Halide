@@ -88,9 +88,7 @@ int main(int argc, char **argv) {
         // to compute the final stage of f two rows at a time as well.
 
         // The result is that we extend the loop to warm up f by 2
-        // iterations, with an if around the producer to avoid
-        // expanding the bounds. This adds up to 2*(12*2 - 1) = 46
-        // evaluations of f.
+        // iterations. This adds up to 2*(12*2) = 48 evaluations of f.
         Func f("f");
         f(x, y) = x;
         f(0, y) += f(1, y) + f(2, y);
@@ -108,7 +106,7 @@ int main(int argc, char **argv) {
         counter = 0;
         check(g.realize({2, 10}));
 
-        int correct = 46;
+        int correct = 48;
         if (counter != correct) {
             printf("Failed sliding a reduction: %d evaluations instead of %d\n", counter, correct);
             return -1;

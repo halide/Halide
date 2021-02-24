@@ -261,26 +261,6 @@ int main(int argc, char **argv) {
     }
 
     {
-        // Sliding with an unrolled producer
-        Var x, xi;
-        Func f, g;
-
-        f(x) = call_counter(x, 0) + x * x;
-        g(x) = f(x) + f(x - 1);
-
-        g.split(x, x, xi, 10);
-        f.store_root().compute_at(g, x).unroll(x);
-
-        count = 0;
-        Buffer<int> im = g.realize({100});
-
-        if (count != 101) {
-            printf("f was called %d times instead of %d times\n", count, 101);
-            return -1;
-        }
-    }
-
-    {
         // Sliding with a vectorized producer and consumer.
         count = 0;
         Func f, g;
@@ -291,8 +271,8 @@ int main(int argc, char **argv) {
         g.vectorize(x, 4);
 
         Buffer<int> im = g.realize({100});
-        if (count != 102) {
-            printf("f was called %d times instead of %d times\n", count, 102);
+        if (count != 104) {
+            printf("f was called %d times instead of %d times\n", count, 104);
             return -1;
         }
     }
@@ -333,28 +313,6 @@ int main(int argc, char **argv) {
         h.store_root().compute_at(v, y);
         g.compute_at(h, y);
         f.store_root().compute_at(v, y);
-
-        v.realize({10, 10});
-        if (count != 14 * 14) {
-            printf("f was called %d times instead of %d times\n", count, 14 * 14);
-            return -1;
-        }
-    }
-
-    {
-        // A sequence of stencils,
-        count = 0;
-        Func f, g, h, u, v;
-        f(x, y) = call_counter(x, y);
-        g(x, y) = f(x, y - 1) + f(x, y + 1);
-        h(x, y) = g(x - 1, y) + g(x + 1, y);
-        u(x, y) = h(x, y - 1) + h(x, y + 1);
-        v(x, y) = u(x - 1, y) + u(x + 1, y);
-
-        u.compute_at(v, y);
-        h.store_root().compute_at(u, y);
-        g.compute_at(h, y);
-        f.store_root().compute_at(g, y);
 
         v.realize({10, 10});
         if (count != 14 * 14) {

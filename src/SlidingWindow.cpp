@@ -119,58 +119,6 @@ bool find_produce(const Stmt &s, const string &func) {
     return finder.found;
 }
 
-// Insert bounds on a dimension of a producer with a new min or max, or both.
-class GuardProducer : public IRMutator {
-    const Function &func;
-    int dim_idx;
-    // These may be undefined, indicating there is no bound.
-    const Expr &min;
-    const Expr &max;
-
-    using IRMutator::visit;
-
-    Stmt visit(const Provide *op) override {
-        if (op->name != func.name()) {
-            return op;
-        }
-        internal_assert(dim_idx < (int)op->args.size());
-        Expr var = op->args[dim_idx];
-        Expr guard_below, guard_above;
-        if (min.defined()) {
-            guard_below = likely_if_innermost(min <= var);
-        }
-        if (max.defined()) {
-            guard_above = likely_if_innermost(var <= max);
-        }
-        Expr guard;
-        if (guard_below.defined() && guard_above.defined()) {
-            guard = guard_below && guard_above;
-        } else if (guard_below.defined()) {
-            guard = guard_below;
-        } else if (guard_above.defined()) {
-            guard = guard_above;
-        }
-
-        // Help bounds inference understand the clamp from this guard if.
-        internal_assert(dim_idx < (int)func.args().size());
-        string bounded_var = func.args()[dim_idx] + ".clamped";
-        Stmt provide = substitute(var, Variable::make(Int(32), bounded_var), op);
-        provide = LetStmt::make(bounded_var, promise_clamped(var, min, max), provide);
-
-        internal_assert(guard.defined());
-        return IfThenElse::make(guard, provide);
-    }
-
-public:
-    GuardProducer(const Function &func, int dim_idx, const Expr &min, const Expr &max)
-        : func(func), dim_idx(dim_idx), min(min), max(max) {
-    }
-};
-
-Stmt guard_producer(const Stmt &s, const Function &func, int dim_idx, const Expr &min, const Expr &max) {
-    return GuardProducer(func, dim_idx, min, max).mutate(s);
-}
-
 // Perform sliding window optimization for a function over a
 // particular serial for loop
 class SlidingWindowOnFunctionAndLoop : public IRMutator {
@@ -386,6 +334,16 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             Expr early_stages_min_required = new_min;
             Expr early_stages_max_required = new_max;
 
+            if (new_loop_min.defined()) {
+                // Guard against running on expanded bounds.
+                Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
+                if (can_slide_up) {
+                    new_min = max(new_min, substitute(loop_var, orig_loop_min_expr, min_required));
+                } else {
+                    new_max = min(new_max, substitute(loop_var, orig_loop_min_expr, max_required));
+                }
+            }
+
             debug(3) << "Sliding " << func.name() << ", " << dim << "\n"
                      << "Pushing min up from " << min_required << " to " << new_min << "\n"
                      << "Shrinking max from " << max_required << " to " << new_max << "\n"
@@ -393,21 +351,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                      << "Equation is " << new_loop_min_eq << "\n";
 
             slid_dimensions.insert(dim_idx);
-
-            if (new_loop_min.defined()) {
-                // Guard producers against running on expanded bounds.
-                Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
-                Expr produce_min, produce_max;
-                if (can_slide_up) {
-                    produce_min = substitute(loop_var, orig_loop_min_expr, min_required);
-                } else {
-                    produce_max = substitute(loop_var, orig_loop_min_expr, max_required);
-                }
-                debug(3) << "Guarding producer " << func.name() << ", " << dim << "\n"
-                         << "min " << produce_min << "\n"
-                         << "max " << produce_max << "\n";
-                stmt = guard_producer(stmt, func, dim_idx, produce_min, produce_max);
-            }
 
             // Now redefine the appropriate regions required
             if (can_slide_up) {
