@@ -10,8 +10,22 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
-void compute_featurization(const FunctionDAG *dag, const MachineParams *params, StageMap<ScheduleFeatures> *features) {
+// void compute_featurization(const FunctionDAG *dag, const MachineParams *params, StageMap<ScheduleFeatures> *features) {
 
+// }
+
+void CPU_Action::cache_cost(const CPU_State &parent_state) const {
+    StageMap<ScheduleFeatures> features;
+    if (prunable(parent_state.dag_ptr, parent_state.params_ptr, root.get(), features, parent_state.memory_limit)) {
+        cost = std::numeric_limits<double>::max();
+    } else {
+        // TODO(rootjalex): not batching might be slow, but is there any better way?
+        parent_state.model_ptr->enqueue(*parent_state.dag_ptr, features, &cost);
+    }
+}
+
+double CPU_Action::get_cost() const {
+    return cost;
 }
 
 vector<CPU_Action> CPU_State::generate_possible_actions() const {
@@ -709,57 +723,6 @@ void compute_featurization(const FunctionDAG *dag_ptr, const MachineParams *para
                 << n.func.name() << "\n";
         }
     }
-}
-
-// Also taken directly from State::compute_loop_nest_parents
-void compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest *, int>> &parent,
-                                const LoopNest *here, int depth) {
-    for (const auto &child : here->children) {
-        parent.emplace(child.get(), pair<const LoopNest *, int>{here, depth});
-        compute_loop_nest_parents(parent, child.get(), depth + 1);
-    }
-}
-
-// Also taken directly from State::deepest_common_ancestor.
-const LoopNest *deepest_common_ancestor(const map<const LoopNest *, pair<const LoopNest *, int>> &parent,
-                                        const LoopNest *a, const LoopNest *b) {
-    if (a->is_root()) {
-        return a;
-    }
-    if (b->is_root()) {
-        return b;
-    }
-    if (a == b) {
-        return a;
-    }
-
-    // Walk the deeper one up until they're at the same depth
-    auto it_a = parent.find(a);
-    auto it_b = parent.find(b);
-    internal_assert(it_a != parent.end() && it_b != parent.end());
-    while (it_a->second.second > it_b->second.second) {
-        a = it_a->second.first;
-        it_a = parent.find(a);
-    }
-    while (it_b->second.second > it_a->second.second) {
-        b = it_b->second.first;
-        it_b = parent.find(b);
-    }
-
-    while (true) {
-        // Walk each up one
-        a = it_a->second.first;
-        b = it_b->second.first;
-        if (a == b) {
-            return a;
-        }
-        it_a = parent.find(a);
-        it_b = parent.find(b);
-        internal_assert(it_a != parent.end() && it_b != parent.end());
-    }
-
-    // unreachable
-    return nullptr;
 }
 
 }  // namespace Autoscheduler

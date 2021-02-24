@@ -99,6 +99,35 @@
 #define _isatty isatty;
 #endif
 
+namespace MCTS {
+    uint32_t get_dropout_threshold() {
+        std::string random_dropout_str = Halide::Internal::get_env_variable("HL_RANDOM_DROPOUT");
+        if (!random_dropout_str.empty()) {
+            return atoi(random_dropout_str.c_str());
+        } else {
+            return 100;
+        }
+    }
+
+    bool random_dropout(std::mt19937 &rng, size_t num_decisions) {
+        static double random_dropout_threshold = get_dropout_threshold();
+        if (random_dropout_threshold >= 100) {
+            return false;
+        }
+
+        // The random dropout threshold is the chance that we operate
+        // entirely greedily and never discard anything.
+        double t = random_dropout_threshold;
+        t /= 100;
+        t = std::pow(t, 1.0f / num_decisions);
+        t *= 100;
+
+        uint32_t r = rng();
+        bool drop_it = (r % 100) >= t;
+        return drop_it;
+    }
+}
+
 namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
@@ -293,6 +322,7 @@ struct mcts {
         for (const Func &f : p.outputs()) {
             outputs.push_back(f.function());
         }
+        std::cerr << "hello" << std::endl;
         Autoscheduler::generate_schedule(outputs, target, params, results);
     }
 };

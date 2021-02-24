@@ -25,6 +25,8 @@ enum class CPU_ScheduleAction {
     Empty,          // Used for first TreeNode *only*.
 };
 
+class CPU_State;
+
 // Possible actions to be taken from an exploration State
 struct CPU_Action {
     // Whether or not this action has been explored yet (needed for MCTS).
@@ -90,9 +92,17 @@ struct CPU_Action {
         }
         std::cerr << std::endl;
     }
+
+    // mutable bool cost_cached = false;
+    mutable double cost = 0.0f;
+
+    void cache_cost(const CPU_State &parent_state) const;
+
+    double get_cost() const;
 };
 
 class CPU_State {
+    friend struct CPU_Action;
     // Root LoopNest for this state.
     mutable IntrusivePtr<const LoopNest> root;
 
@@ -110,11 +120,12 @@ class CPU_State {
     // Required information to be able to generate possible actions.
     // All State for a run of MCTS should have the same pointers.
     // TODO(rootjalex): should these be static members then?
+public:
     const FunctionDAG *dag_ptr;
     const MachineParams *params_ptr;
     CostModel *model_ptr;
     int64_t memory_limit = 0;
-
+private:
     // Whether or not this state was already checked for pruning.
     // For now, only Inline states are prepruned - that might change.
     // bool prepruned = false;
@@ -191,14 +202,6 @@ bool prunable(const FunctionDAG *dag_ptr, const MachineParams *params_ptr, const
 
 // Used by the above to check if a LoopNest is prunable.
 void compute_featurization(const FunctionDAG *dag_ptr, const MachineParams *params_ptr, const LoopNest *root_ptr, StageMap<ScheduleFeatures> *features);
-
-// Compute the parent and depth of every loop nest node
-void compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest *, int>> &parent,
-                                const LoopNest *here, int depth);
-
-// Find the deepest common ancestor of `a` and `b`.
-const LoopNest *deepest_common_ancestor(const map<const LoopNest *, pair<const LoopNest *, int>> &parent,
-                                        const LoopNest *a, const LoopNest *b);
 
 }  // namespace Autoscheduler
 }  // namespace Internal

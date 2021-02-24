@@ -3,6 +3,7 @@
 
 // TODO(rootjalex): figure out includes.
 //                  should this be in the Halide namespace??
+#include <algorithm>    // std::sort
 #include <cstdint>      // uint32_t
 #include <iostream>     // std::cerr
 #include <memory>       // std::shared_ptr
@@ -19,6 +20,16 @@ TODO(rootjalex): add more details
 namespace MCTS {
 
     size_t state_count;
+
+    template<class Action>
+    struct CostsLess {
+        bool operator()(const Action &a, const Action &b) const {
+            return a.get_cost() < b.get_cost();
+        }
+    };
+
+    uint32_t get_dropout_threshold();
+    bool random_dropout(std::mt19937 &rng, size_t num_decisions);
 
     // TODO(rootjalex): refactor this as needed.
     template<class State, class Action>
@@ -53,6 +64,7 @@ namespace MCTS {
             // The state should be capable of generating it's own actions.
             possible_actions = state.generate_possible_actions();
             // std::cerr << "Generated: " << possible_actions.size() << " at depth " << depth << std::endl;
+            sort_actions();
             state_count = possible_actions.size();
         }
 
@@ -61,8 +73,26 @@ namespace MCTS {
             depth(_parent ? _parent->depth + 1 : 0), num_visits(0), rng(_rng) {
             // The state should be capable of generating it's own actions.
             possible_actions = state.generate_possible_actions();
+            sort_actions();
             // std::cerr << "Generated: " << possible_actions.size() << " at depth " << depth << std::endl;
             state_count += possible_actions.size();
+        }
+
+        void sort_actions() {
+            // TODO: is there any faster way?
+            static CostsLess<Action> costsLess;
+            // std::cerr << "here(0)" << std::endl;
+            std::for_each(possible_actions.begin(), possible_actions.end(), [this](const Action &_action) {
+                _action.cache_cost(this->state);
+            });
+            // std::cerr << "here(1)" << std::endl;
+            state.model_ptr->evaluate_costs();
+            // std::cerr << "here(2)" << std::endl;
+            // TODO: make costs evaluate in batches.
+            // std::cerr << "here(3)" << std::endl;
+            // std::cerr << "sorting for:" << possible_actions.size() << std::endl;
+            std::sort(possible_actions.begin(), possible_actions.end(), costsLess);
+            // std::cerr << "here(4)" << std::endl;
         }
         
         SharedPtr add_child_with_action(const Action &child_action) {
@@ -84,6 +114,17 @@ namespace MCTS {
             return child_sptr;
         }
 
+        SharedPtr evaluate_action(Action &_action) {
+            if (_action.explored) {
+                // Find the child that this corresponds to.
+                return children[_action.index];
+            } else {
+                _action.explored = true;
+                _action.index = children.size();
+                return add_child_with_action(_action);
+            }
+        }
+
         SharedPtr choose_any_random_child() {
             // TODO(rootjalex): this might need to be specialized.
             if (possible_actions.empty()) {
@@ -96,13 +137,33 @@ namespace MCTS {
 
             Action &random_action = possible_actions[random_index];
 
-            if (random_action.explored) {
-                // Find the child that this corresponds to.
-                return children[random_action.index];
+            return evaluate_action(random_action);
+        }
+
+        SharedPtr choose_weighted_random_child() {
+            // TODO(rootjalex): this might need to be specialized.
+            if (possible_actions.empty()) {
+                std::cerr << "No possible actions for choose_any_random_child" << std::endl;
+                assert(false); // TODO(rootjalex): better assert
+                return nullptr;
+            }
+
+            const size_t n_actions = possible_actions.size();
+
+            if (n_actions == 1) {
+                Action &only_action = possible_actions[0];
+                return evaluate_action(only_action);
             } else {
-                random_action.explored = true;
-                random_action.index = children.size();
-                return add_child_with_action(random_action);
+                // Evaluate everything except for the last, then return that as a default.
+                for (size_t ind = 0; ind < (n_actions - 1); ind++) {
+                    // TODO(rootjalex): better probability sampling or something...
+                    // Talk to Andrew about this.
+                    if (!random_dropout(rng, n_actions)) {
+                        return evaluate_action(possible_actions[ind]);
+                    }
+                }
+                // Didn't return in the for loop above, so return the last action.
+                return evaluate_action(possible_actions[(n_actions - 1)]);
             }
         }
 

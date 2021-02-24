@@ -223,27 +223,6 @@ class PerfectHashMap {
     }
 
 public:
-    PerfectHashMap() = default;
-    PerfectHashMap(const PerfectHashMap<K, T, max_small_size, phm_assert>& other_map) = default;
-    PerfectHashMap& operator=(const PerfectHashMap<K, T, max_small_size, phm_assert>& other_map) = default;
-    
-    PerfectHashMap(PerfectHashMap<K, T, max_small_size, phm_assert>&& other_map) noexcept {
-        storage = std::move(other_map.storage);
-        occupied = other_map.occupied;
-        other_map.occupied = 0;
-        state = other_map.state;
-        other_map.state = Empty;
-    }
-
-    PerfectHashMap& operator=(PerfectHashMap<K, T, max_small_size, phm_assert> && other_map) noexcept {
-        storage = std::move(other_map.storage);
-        occupied = other_map.occupied;
-        other_map.occupied = 0;
-        state = other_map.state;
-        other_map.state = Empty;
-        return *this;
-    }
-
     // Jump straight to the large state
     void make_large(int n) {
         if (state == Empty) {

@@ -134,9 +134,12 @@ namespace MCTS {
 
                 // TODO(rootjalex): need proper simulation (until ending).
                 // TODO(rootjalex): Luke wanted intermediate option: set num_simulations = 0
+                // TODO(rootjalex): make this decision a configurable choice.
                 for (uint32_t i = 0; (i < num_simulations) && (!node->is_leaf()); i++) {
                     // Explore any child.
-                    node = node->choose_any_random_child();
+                    // node = node->choose_any_random_child();
+                    // Nope, explore intelligently.
+                    node = node->choose_weighted_random_child();
                     internal_assert(node) << "simulation returned nullptr\n";
                 }
 
