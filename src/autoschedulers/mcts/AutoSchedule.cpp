@@ -92,6 +92,7 @@
 #include "MCTS.h"
 #include "CPU_State.h"
 #include "Timer.h"
+#include "CostPrinter.h"
 
 #ifdef _WIN32
 #include <io.h>
@@ -241,7 +242,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     aslog(0) << "Execution time: " << milli << " ms\n\n";
 
-    aslog(0) << "Source:" << schedule_source << "\n\n\n";
+    // aslog(0) << "Source:" << schedule_source << "\n\n\n";
 
     HALIDE_TOC;
 
@@ -274,7 +275,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     */
 
     if (auto_scheduler_results) {
-        auto_scheduler_results->scheduler_name = "MCTS2021";
+        auto_scheduler_results->scheduler_name = "mcts";
         auto_scheduler_results->schedule_source = schedule_source;
         {
             // TODO(rootjalex): Figure out how to save featurization.
@@ -286,7 +287,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     }
 }
 
-struct MCTS2021 {
+struct mcts {
     void operator()(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
         std::vector<Function> outputs;
         for (const Func &f : p.outputs()) {
@@ -296,7 +297,7 @@ struct MCTS2021 {
     }
 };
 
-REGISTER_AUTOSCHEDULER(MCTS2021)
+REGISTER_AUTOSCHEDULER(mcts)
 
 // An alternative entrypoint for other uses
 // void find_and_apply_schedule(FunctionDAG &dag,

@@ -79,11 +79,12 @@ namespace MCTS {
 
         // Node corresponds to best action to take immediately from this state,
         // and includes enough information to iteratively apply it's decisions.
-        State solve(const State &current_state, int seed = 1) {
+        State solve(const State &starter_state, int seed = 1) {
             std::mt19937 rng((uint32_t)seed);
 
             // TODO(rootjalex): replace with std::make_shared
-            NodePtr root_node = NodePtr(new Node(current_state, Action::Default(), /* parent */ nullptr, rng));
+            NodePtr root_node = NodePtr(new Node(starter_state, Action::Default(), /* parent */ nullptr, rng));
+            State current_state = starter_state; // track the current best state.
 
             NodePtr best_node = nullptr;
 
@@ -103,8 +104,14 @@ namespace MCTS {
                 // std::cerr << "\tTrack from root:" << root_node << std::endl;
                 while (!root_node->is_terminal() && root_node->is_fully_expanded()) {
                     root_node = get_best_value_child(root_node);
+                    current_state = current_state.take_action(root_node->get_action());
                     internal_assert(root_node) << "get_best_value_child returned nullptr\n";
                     root_node->clear_parent(); // delete parent pointer, it's now garbage.
+                }
+
+                if (current_state.is_terminal()) {
+                    // Stop our iterations, we found it.
+                    break;
                 }
 
                 // Start at root and find best valued node that has been expanded.
@@ -182,33 +189,46 @@ namespace MCTS {
             std::cerr << "Iterations:" << iterations << std::endl;
             std::cerr << "Valids:" << n_valid_nodes << std::endl;
 
-            best_node = get_min_value_child(root_node);
+            return choose_best_decisions(current_state, root_node);
+        }
 
-            internal_assert(best_node) << "MCTS found a nullptr best node\n";
-            
-            std::cerr << "Depth of best node:" << best_node->get_depth() << std::endl;
-            
-            return get_optimal_state(root_node->get_state(), best_node);
+        State choose_best_decisions(const State &starter_state, NodePtr root) {
+            if (starter_state.is_terminal()) {
+                return starter_state;
+            }
+            State current_state = starter_state;
+            NodePtr current_node = root;
+            while (current_node) {
+                current_state = current_state.take_action(current_node->get_action());
+                if (current_node->is_terminal()) {
+                    break;
+                } else {
+                    internal_assert(current_node->get_num_children() != 0) << "Non-terminal state has no children when chosen as best decision.\n";
+                    current_node = get_min_value_child(current_node);
+                }
+            }
+            internal_assert(current_node) << "choose_best_decisions ended with a nullptr node\n";
+            return current_state;
         }
 
         // After a call to solve(), this function can be used to fetch the best state.
-        State get_optimal_state(const State &starter_state, NodePtr solved_action) {
-            NodePtr node = solved_action;
-            State current_state = starter_state;
-            while (node) {
-                // std::cerr << "Node value: " << node->get_value() << std::endl;
-                // std::cerr << "State cost: " << current_state.calculate_cost() << std::endl;
-                current_state = current_state.take_action(node->get_action());
-                // TODO(rootjalex): is this the best policy? Should we use UTC?
-                if (node->is_terminal() || node->get_num_children() == 0) {
-                    break;
-                } else {
-                    node = get_min_value_child(node);
-                }
-            }
-            internal_assert(node) << "get_optimal_state ended with a nullptr node\n";
-            return current_state;
-        }
+        // State get_optimal_state(const State &starter_state, NodePtr solved_action) {
+        //     NodePtr node = solved_action;
+        //     State current_state = starter_state;
+        //     while (node) {
+        //         // std::cerr << "Node value: " << node->get_value() << std::endl;
+        //         // std::cerr << "State cost: " << current_state.calculate_cost() << std::endl;
+        //         current_state = current_state.take_action(node->get_action());
+        //         // TODO(rootjalex): is this the best policy? Should we use UTC?
+        //         if (node->is_terminal() || node->get_num_children() == 0) {
+        //             break;
+        //         } else {
+        //             node = get_min_value_child(node);
+        //         }
+        //     }
+        //     internal_assert(node) << "get_optimal_state ended with a nullptr node\n";
+        //     return current_state;
+        // }
 
         // Find the best UTC score of the children that have already been generated.
         NodePtr get_best_value_child(NodePtr parent_node) const {

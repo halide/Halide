@@ -33,7 +33,7 @@ target_link_libraries(retrain_cost_model PRIVATE cost_model train_cost_model Hal
 # Main autoscheduler library
 ##
 
-add_autoscheduler(NAME MCTS2021
+add_autoscheduler(NAME mcts
                   SOURCES
                   ASLog.cpp
                   AutoSchedule.cpp
@@ -44,7 +44,7 @@ add_autoscheduler(NAME MCTS2021
                   Weights.cpp
                   ${WF_CPP})
 
-target_link_libraries(Halide_MCTS2021 PRIVATE cost_model train_cost_model)
+target_link_libraries(Halide_mcts PRIVATE cost_model train_cost_model)
 
 ##
 # Tests and demos
@@ -58,7 +58,7 @@ target_link_libraries(demo.generator PRIVATE Halide::Generator)
 
 add_halide_library(demo FROM demo.generator
                    TARGETS cmake
-                   AUTOSCHEDULER Halide::MCTS2021
+                   AUTOSCHEDULER Halide::mcts
                    REGISTRATION DEMO_REGISTRATION_FILE)
 
 add_executable(demo_apps_autoscheduler ${DEMO_REGISTRATION_FILE})
@@ -69,7 +69,7 @@ add_test(NAME demo_apps_autoscheduler
 
 set_tests_properties(demo_apps_autoscheduler
                      PROPERTIES
-                     LABELS MCTS2021
+                     LABELS mcts
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
 
 # =================================================================
@@ -79,7 +79,7 @@ target_link_libraries(included_schedule_file.generator PRIVATE Halide::Generator
 
 add_halide_library(included_schedule_file FROM included_schedule_file.generator
                    TARGETS cmake
-                   AUTOSCHEDULER Halide::MCTS2021
+                   AUTOSCHEDULER Halide::mcts
                    REGISTRATION included_schedule_reg)
 
 add_executable(demo_included_schedule_file ${included_schedule_reg})
@@ -90,7 +90,7 @@ add_test(NAME demo_included_schedule_file
 
 set_tests_properties(demo_included_schedule_file
                      PROPERTIES
-                     LABELS MCTS2021
+                     LABELS mcts
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
 
 # ====================================================
@@ -113,11 +113,11 @@ if (BUILD_SHARED_LIBS)
     target_link_libraries(test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
 
     add_test(NAME test_apps_autoscheduler
-             COMMAND test_apps_autoscheduler $<TARGET_FILE:Halide_MCTS2021>)
+             COMMAND test_apps_autoscheduler $<TARGET_FILE:Halide_mcts>)
 
     set_tests_properties(test_apps_autoscheduler PROPERTIES
-                         LABELS MCTS2021
-                         ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_MCTS2021>:$ENV{LD_LIBRARY_PATH};HL_TARGET=${Halide_TARGET}")
+                         LABELS mcts
+                         ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_mcts>:$ENV{LD_LIBRARY_PATH};HL_TARGET=${Halide_TARGET}")
 endif ()
 
 ##
@@ -127,7 +127,7 @@ add_executable(test_perfect_hash_map test_perfect_hash_map.cpp)
 add_test(NAME test_perfect_hash_map COMMAND test_perfect_hash_map)
 set_tests_properties(test_perfect_hash_map
                      PROPERTIES
-                     LABELS MCTS2021
+                     LABELS mcts
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
 
 ##
@@ -138,5 +138,5 @@ target_link_libraries(test_function_dag PRIVATE Halide::Halide Halide::Tools Hal
 add_test(NAME test_function_dag COMMAND test_function_dag)
 set_tests_properties(test_function_dag
                      PROPERTIES
-                     LABELS MCTS2021
+                     LABELS mcts
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")

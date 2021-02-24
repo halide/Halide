@@ -117,8 +117,8 @@ make_featurization() {
         target=${HL_TARGET} \
         auto_schedule=true \
         ${EXTRA_GENERATOR_ARGS} \
-        -p ${AUTOSCHED_BIN}/libautoschedule_mcts2021.so \
-        -s MCTS2021 \
+        -p ${AUTOSCHED_BIN}/libautoschedule_mcts.so \
+        -s mcts \
           2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
 
 
