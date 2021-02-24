@@ -50,8 +50,4 @@ struct Timer {
 }  // namespace Internal
 }  // namespace Halide
 
-<<<<<<< HEAD
-#endif  // STATISTICS_H
-=======
 #endif  // HL_TIMER_H
->>>>>>> 1be92c2cd5ae9f95e37576ffb653cbe4c3458dd0
