@@ -154,7 +154,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             if (op->name != func.name()) {
                 return IRMutator::visit(op);
             }
-            Stmt stmt = op;
 
             // We're interested in the case where exactly one of the
             // dimensions of the buffer has a min/extent that depends
@@ -212,7 +211,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 debug(3) << "Could not perform sliding window optimization of "
                          << func.name() << " over " << loop_var << " because multiple "
                          << "dimensions of the function dependended on the loop var\n";
-                return stmt;
+                return op;
             }
 
             // If the function is not pure in the given dimension, give up. We also
@@ -228,7 +227,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 debug(3) << "Could not performance sliding window optimization of "
                          << func.name() << " over " << loop_var << " because the function "
                          << "scatters along the related axis.\n";
-                return stmt;
+                return op;
             }
 
             bool can_slide_up = false;
@@ -262,7 +261,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                          << " because I couldn't prove it moved monotonically along that dimension\n"
                          << "Min is " << min_required << "\n"
                          << "Max is " << max_required << "\n";
-                return stmt;
+                return op;
             }
 
             // Ok, we've isolated a function, a dimension to slide
@@ -285,7 +284,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                          << " there's no overlap in the region computed across iterations\n"
                          << "Min is " << min_required << "\n"
                          << "Max is " << max_required << "\n";
-                return stmt;
+                return op;
             }
 
             string new_loop_min_name = unique_name('x');
@@ -303,10 +302,12 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             new_loop_min_eq = simplify(new_loop_min_eq && new_loop_min_var <= loop_min);
             Interval solve_result = solve_for_inner_interval(new_loop_min_eq, new_loop_min_name);
             internal_assert(!new_loop_min.defined());
-            if (solve_result.has_upper_bound()) {
-                new_loop_min = solve_result.max;
+            if (solve_result.has_upper_bound() && !equal(solve_result.max, loop_min)) {
+                new_loop_min = simplify(solve_result.max);
             }
 
+            // Update the bounds of this producer assuming the previous iteration
+            // has run already.
             Expr new_min, new_max;
             if (can_slide_up) {
                 new_min = prev_max_plus_one;
@@ -316,7 +317,12 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 new_max = prev_min_minus_one;
             }
 
+            // We can't assume the loop has already run. How we deal with this
+            // depends on whether we found a new loop min or not.
             if (new_loop_min.defined()) {
+                // We have a new loop min, so we an assume every iteration has
+                // a previous iteration. We just need to clamp the bounds to the
+                // original bounds.
                 Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
                 if (can_slide_up) {
                     new_min = max(new_min, substitute(loop_var, orig_loop_min_expr, min_required));
@@ -324,17 +330,18 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                     new_max = min(new_max, substitute(loop_var, orig_loop_min_expr, max_required));
                 }
             } else {
-                // If we don't have a new loop min, we need to just compute the warmup on the
-                // first iteration.
+                // If we don't have a new loop min, we can't assume every
+                // iteration has a previous iteration. The first iteration
+                // will warm up the loop.
                 Expr need_explicit_warmup = loop_var_expr <= loop_min;
                 if (can_slide_up) {
                     new_min = select(need_explicit_warmup, min_required, likely_if_innermost(new_min));
-                    new_min = simplify(new_min);
                 } else {
                     new_max = select(need_explicit_warmup, max_required, likely_if_innermost(new_max));
-                    new_max = simplify(new_max);
                 }
             }
+            new_min = simplify(new_min);
+            new_max = simplify(new_max);
 
             debug(3) << "Sliding " << func.name() << ", " << dim << "\n"
                      << "Pushing min up from " << min_required << " to " << new_min << "\n"
@@ -364,20 +371,21 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // the last stage to cover values produced by stages
             // before the last one. Because, e.g., an intermediate
             // stage may be unrolled, expanding its bounds provided.
+            Stmt result = op;
             if (!func.updates().empty()) {
                 Box b = box_provided(op->body, func.name());
                 if (can_slide_up) {
                     string n = prefix + dim + ".min";
                     Expr var = Variable::make(Int(32), n);
-                    stmt = LetStmt::make(n, min(var, b[dim_idx].min), stmt);
+                    result = LetStmt::make(n, min(var, b[dim_idx].min), result);
                 } else {
                     string n = prefix + dim + ".max";
                     Expr var = Variable::make(Int(32), n);
-                    stmt = LetStmt::make(n, max(var, b[dim_idx].max), stmt);
+                    result = LetStmt::make(n, max(var, b[dim_idx].max), result);
                 }
             }
 
-            return stmt;
+            return result;
         } else if (!find_produce(op, func.name()) && new_loop_min.defined()) {
             // The producer might have expanded the loop before the min to warm
             // up the window. This consumer doesn't contain a producer that might
