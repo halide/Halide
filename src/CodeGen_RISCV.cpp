@@ -39,7 +39,7 @@ string CodeGen_RISCV::mattrs() const {
 string CodeGen_RISCV::mabi() const {
     string abi;
     if (target.bits == 32) {
-        abi = "lp32";
+        abi = "ilp32";
     } else {
         abi = "lp64";
     }
