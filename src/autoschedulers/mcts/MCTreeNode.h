@@ -198,8 +198,13 @@ namespace MCTS {
             return num_visits;
         }
 
-        bool is_terminal() const {
+        bool is_leaf() const {
+            // TODO: um, this seems very bad.
             return possible_actions.empty();
+        }
+
+        bool is_terminal() const {
+            return state.is_terminal();
         }
 
         bool is_fully_expanded() const {

@@ -102,7 +102,8 @@ namespace MCTS {
                 // TODO(rootjalex): is there a faster way to track from the root?
                 //                  this could be expensive for large Pipelines
                 // std::cerr << "\tTrack from root:" << root_node << std::endl;
-                while (!root_node->is_terminal() && root_node->is_fully_expanded()) {
+                // is_leaf checks if there are no more valid actions *or* if the state is terminal.
+                while (!root_node->is_leaf() && root_node->is_fully_expanded()) {
                     root_node = get_best_value_child(root_node);
                     current_state = current_state.take_action(root_node->get_action());
                     internal_assert(root_node) << "get_best_value_child returned nullptr\n";
@@ -133,49 +134,35 @@ namespace MCTS {
 
                 // TODO(rootjalex): need proper simulation (until ending).
                 // TODO(rootjalex): Luke wanted intermediate option: set num_simulations = 0
-                for (uint32_t i = 0; (i < num_simulations) && (!node->is_terminal()); i++) {
+                for (uint32_t i = 0; (i < num_simulations) && (!node->is_leaf()); i++) {
                     // Explore any child.
                     node = node->choose_any_random_child();
                     internal_assert(node) << "simulation returned nullptr\n";
                 }
 
-                // We don't have a simulation step, because only one action per state can be chosen.
-                // std::cerr << "\tValidity checking" << std::endl;
-                // if (node->is_valid()) {
-                    // std::cerr << "\tincrementing:" << node << std::endl;
-                    node->increment_visits();
+                node->increment_visits();
+
+                if (!(node->is_leaf() && !node->is_terminal())) {
+                    // Otherwise state is invalid.
                     double node_cost = node->get_state().calculate_cost();
-
-                    // std::cerr << "\tFound state with cost: " << node_cost << std::endl; 
-
                     // Back propagation. node_cost is passed by value,
                     // because the policy for backprop is handled via the State class.
                     // e.g. it might make node_cost the minimum of values, or the average, etc.
                     bool continue_updating = node->update(node_cost);
-                    // std::cerr << "Continue updating? " << continue_updating << std::endl;
+
                     if (continue_updating) {
                         // This messy backprop is due to the fact that
                         // node is shared but we don't have shared ptrs
                         // to parent nodes, as that would cause loops.
                         Node *parent_ptr = node->get_parent();
-                        // std::cerr << "\troot:" << root_node << std::endl;
-                        // std::cerr << "\tfirst parent:" << parent_ptr << std::endl;
                         while (parent_ptr && parent_ptr->update(node_cost) && parent_ptr != root_node.get()) {
                             parent_ptr = parent_ptr->get_parent();
-                            // std::cerr << "\tparent:" << parent_ptr << std::endl;
                         }
-                        // if (parent_ptr) {
-                        //     std::cerr << "Did not make it to root! " << std::endl;
-                        //     std::cerr << "Made it from " << (int64_t)node->get_depth() << " to " << (int64_t)parent_ptr->get_depth() << std::endl;
-                        // } else {
-                        //     std::cerr << "Made it to root!" << std::endl;
-                        //     std::cerr << "Made it from " << (int64_t)node->get_depth() << std::endl;
-                        // }
                     }
 
                     // TODO(rootjalex): reference code uses get_most_visited_child of the root. Why the heck?
                     n_valid_nodes++;
-                // }
+                }
 
                 // TODO(rootjalex): check timing here
                 iterations++;
@@ -198,16 +185,18 @@ namespace MCTS {
             }
             State current_state = starter_state;
             NodePtr current_node = root;
-            while (current_node) {
+            while (current_node && !current_state.is_terminal()) {
                 current_state = current_state.take_action(current_node->get_action());
                 if (current_node->is_terminal()) {
+                    internal_assert(current_state.is_terminal()) << "Best node has no actions but current_state is not terminal\n";
                     break;
                 } else {
                     internal_assert(current_node->get_num_children() != 0) << "Non-terminal state has no children when chosen as best decision.\n";
                     current_node = get_min_value_child(current_node);
                 }
             }
-            internal_assert(current_node) << "choose_best_decisions ended with a nullptr node\n";
+            internal_assert(current_node) << "choose_best_decisions ended with a nullptr node.\n";
+            internal_assert(current_state.is_terminal()) << "choose_best_decisions ended with a non-terminal state.\n";
             return current_state;
         }
 
