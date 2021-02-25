@@ -33,11 +33,11 @@ public:
     InjectProfiling(const string &pipeline_name)
         : pipeline_name(pipeline_name) {
         stack.push_back(get_func_id("overhead"));
+        // ID 0 is treated specially in the runtime as overhead
+        internal_assert(stack.back() == 0);
+
         malloc_id = get_func_id("halide_malloc");
         free_id = get_func_id("halide_free");
-        internal_assert(stack.back() == 0);
-        internal_assert(malloc_id == 1);
-        internal_assert(free_id == 2);
         profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
         profiler_state = Variable::make(Handle(), "profiler_state");
         profiler_token = Variable::make(Int(32), "profiler_token");
