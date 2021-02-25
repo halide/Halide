@@ -287,6 +287,19 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 return op;
             }
 
+            // Update the bounds of this producer assuming the previous iteration
+            // has run already.
+            Expr new_min, new_max;
+            if (can_slide_up) {
+                new_min = prev_max_plus_one;
+                new_max = max_required;
+            } else {
+                new_min = min_required;
+                new_max = prev_min_minus_one;
+            }
+
+            // See if we can find a new min for the loop that can warm up the
+            // sliding window.
             string new_loop_min_name = unique_name('x');
             Expr new_loop_min_var = Variable::make(Int(32), new_loop_min_name);
             Expr new_loop_min_eq;
@@ -304,32 +317,42 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             internal_assert(!new_loop_min.defined());
             if (solve_result.has_upper_bound() && !equal(solve_result.max, loop_min)) {
                 new_loop_min = simplify(solve_result.max);
-            }
 
-            // Update the bounds of this producer assuming the previous iteration
-            // has run already.
-            Expr new_min, new_max;
-            if (can_slide_up) {
-                new_min = prev_max_plus_one;
-                new_max = max_required;
-            } else {
-                new_min = min_required;
-                new_max = prev_min_minus_one;
-            }
-
-            // We can't assume the loop has already run. How we deal with this
-            // depends on whether we found a new loop min or not.
-            if (new_loop_min.defined()) {
                 // We have a new loop min, so we an assume every iteration has
-                // a previous iteration. We just need to clamp the bounds to the
-                // original bounds.
+                // a previous iteration. In order for this to be safe, we need
+                // the new min/max at the new loop min to be less than or equal to
+                // the min/max required at the original loop min.
+                Expr loop_var_expr = Variable::make(Int(32), loop_var);
                 Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
                 if (can_slide_up) {
-                    new_min = max(new_min, substitute(loop_var, orig_loop_min_expr, min_required));
+                    Expr min_required_at_orig_min = substitute(loop_var, orig_loop_min_expr, min_required);
+                    Expr new_min_at_new_loop_min = substitute(loop_var, new_loop_min, new_min);
+                    Expr is_safe = new_min_at_new_loop_min <= min_required_at_orig_min;
+                    // TODO: Is there a better way to try to prove is_safe with this condition?
+                    is_safe = simplify(is_safe == (loop_min <= orig_loop_min_expr));
+                    if (can_prove(is_safe)) {
+                        new_min = max(new_min, min_required_at_orig_min);
+                    } else {
+                        debug(3) << "Not adjusting loop min because we could not prove it is safe\n"
+                                 << is_safe << "\n";
+                        new_loop_min = Expr();
+                    }
                 } else {
-                    new_max = min(new_max, substitute(loop_var, orig_loop_min_expr, max_required));
+                    Expr max_required_at_orig_min = substitute(loop_var, orig_loop_min_expr, max_required);
+                    Expr new_max_at_new_loop_min = substitute(loop_var, new_loop_min, new_max);
+                    Expr is_safe = new_max_at_new_loop_min >= max_required_at_orig_min;
+                    is_safe = simplify(is_safe == (loop_min <= orig_loop_min_expr));
+                    if (can_prove(is_safe)) {
+                        new_max = min(new_max, max_required_at_orig_min);
+                    } else {
+                        debug(3) << "Not adjusting loop min because we could not prove it is safe\n"
+                                 << is_safe << "\n";
+                        new_loop_min = Expr();
+                    }
                 }
-            } else {
+            }
+
+            if (!new_loop_min.defined()) {
                 // If we don't have a new loop min, we can't assume every
                 // iteration has a previous iteration. The first iteration
                 // will warm up the loop.

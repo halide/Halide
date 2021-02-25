@@ -292,7 +292,7 @@ int main(int argc, char **argv) {
         toggle2.set(false);
         f4.realize(out);
         check_queries(2, 2, 2);
-        check_counts(1, 0, 0);
+        check_counts(0, 0, 0);
     }
 
     printf("Success!\n");
