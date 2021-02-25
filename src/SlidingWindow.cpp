@@ -311,9 +311,13 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             if (can_slide_up) {
                 // We need to find a new loop min that satisfies these constraints:
                 // - The new min at the new loop min needs to be before the min
-                //   required at the original min
+                //   required at the original min.
                 // - The new max needs to be greater than the new min, both at the
-                //   new loop min.
+                //   new loop min. This guarantees that the sliding window.
+                // Together, these conditions guarantee the sliding window is warmed
+                // up. The first condition checks that we reached the original loop
+                // min, and the second condition checks that the iterations before
+                // the original min weren't empty.
                 Expr min_required_at_loop_min = substitute(loop_var, loop_min, min_required);
                 new_loop_min_eq = new_loop_min_eq &&
                                   new_min_at_new_loop_min <= min_required_at_loop_min &&
