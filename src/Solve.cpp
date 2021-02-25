@@ -417,9 +417,10 @@ private:
     }
 
     Expr visit(const Call *op) override {
-        // Ignore likely intrinsics
+        // Ignore intrinsics that shouldn't affect the results.
         if (op->is_intrinsic(Call::likely) ||
-            op->is_intrinsic(Call::likely_if_innermost)) {
+            op->is_intrinsic(Call::likely_if_innermost) ||
+            op->is_intrinsic(Call::promise_clamped)) {
             return mutate(op->args[0]);
         } else {
             return IRMutator::visit(op);
