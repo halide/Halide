@@ -338,6 +338,24 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        // Sliding a func that has a boundary condition on both sides.
+        count = 0;
+        Func f, g, h;
+        f(x) = call_counter(x, 0);
+        g(x) = f(clamp(x, 0, 9));
+        h(x) = g(x - 1) + g(x + 1);
+
+        f.store_root().compute_at(h, x);
+        g.store_root().compute_at(h, x);
+
+        h.realize({10});
+        if (count != 10) {
+            printf("f was called %d times instead of %d times\n", count, 10);
+            return -1;
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }

@@ -299,20 +299,35 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             }
 
             // See if we can find a new min for the loop that can warm up the
-            // sliding window.
+            // sliding window. We're going to do this by building an equation
+            // that describes the constraints we have on our new loop min. The
+            // first constraint is that the new loop min is not after the
+            // loop min.
             string new_loop_min_name = unique_name('x');
             Expr new_loop_min_var = Variable::make(Int(32), new_loop_min_name);
-            Expr new_loop_min_eq;
+            Expr new_loop_min_eq = new_loop_min_var <= loop_min;
+            Expr new_min_at_new_loop_min = substitute(loop_var, new_loop_min_var, new_min);
+            Expr new_max_at_new_loop_min = substitute(loop_var, new_loop_min_var, new_max);
             if (can_slide_up) {
-                new_loop_min_eq =
-                    (substitute(loop_var, loop_min, min_required) >=
-                     substitute(loop_var, new_loop_min_var, prev_max_plus_one));
+                // We need to find a new loop min that satisfies these constraints:
+                // - The new min at the new loop min needs to be before the min
+                //   required at the original min
+                // - The new max needs to be greater than the new min, both at the
+                //   new loop min.
+                Expr min_required_at_loop_min = substitute(loop_var, loop_min, min_required);
+                new_loop_min_eq = new_loop_min_eq &&
+                    new_min_at_new_loop_min <= min_required_at_loop_min &&
+                    new_max_at_new_loop_min >= new_min_at_new_loop_min;
             } else {
-                new_loop_min_eq =
-                    (substitute(loop_var, loop_min, max_required) <=
-                     substitute(loop_var, new_loop_min_var, prev_min_minus_one));
+                // When sliding down, the constraints are similar, just swapping
+                // the roles of the min and max.
+                Expr max_required_at_loop_min = substitute(loop_var, loop_min, max_required);
+                new_loop_min_eq = new_loop_min_eq &&
+                    new_max_at_new_loop_min <= max_required_at_loop_min &&
+                    new_min_at_new_loop_min <= new_max_at_new_loop_min;
             }
-            new_loop_min_eq = simplify(new_loop_min_eq && new_loop_min_var <= loop_min);
+            // Try to solve the equation.
+            new_loop_min_eq = simplify(new_loop_min_eq);
             Interval solve_result = solve_for_inner_interval(new_loop_min_eq, new_loop_min_name);
             internal_assert(!new_loop_min.defined());
             if (solve_result.has_upper_bound() && !equal(solve_result.max, loop_min)) {
@@ -325,30 +340,11 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 Expr loop_var_expr = Variable::make(Int(32), loop_var);
                 Expr orig_loop_min_expr = Variable::make(Int(32), loop_var + ".loop_min.orig");
                 if (can_slide_up) {
-                    Expr min_required_at_orig_min = substitute(loop_var, orig_loop_min_expr, min_required);
-                    Expr new_min_at_new_loop_min = substitute(loop_var, new_loop_min, new_min);
-                    Expr is_safe = new_min_at_new_loop_min <= min_required_at_orig_min;
-                    // TODO: Is there a better way to try to prove is_safe with this condition?
-                    is_safe = simplify(is_safe == (loop_min <= orig_loop_min_expr));
-                    if (can_prove(is_safe)) {
-                        new_min = max(new_min, min_required_at_orig_min);
-                    } else {
-                        debug(3) << "Not adjusting loop min because we could not prove it is safe\n"
-                                 << is_safe << "\n";
-                        new_loop_min = Expr();
-                    }
+                    Expr min_required_at_loop_min = substitute(loop_var, orig_loop_min_expr, min_required);
+                    new_min = max(new_min, min_required_at_loop_min);
                 } else {
-                    Expr max_required_at_orig_min = substitute(loop_var, orig_loop_min_expr, max_required);
-                    Expr new_max_at_new_loop_min = substitute(loop_var, new_loop_min, new_max);
-                    Expr is_safe = new_max_at_new_loop_min >= max_required_at_orig_min;
-                    is_safe = simplify(is_safe == (loop_min <= orig_loop_min_expr));
-                    if (can_prove(is_safe)) {
-                        new_max = min(new_max, max_required_at_orig_min);
-                    } else {
-                        debug(3) << "Not adjusting loop min because we could not prove it is safe\n"
-                                 << is_safe << "\n";
-                        new_loop_min = Expr();
-                    }
+                    Expr max_required_at_loop_min = substitute(loop_var, orig_loop_min_expr, max_required);
+                    new_max = min(new_max, max_required_at_loop_min);
                 }
             }
 
