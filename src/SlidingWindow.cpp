@@ -346,11 +346,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                     Expr max_required_at_loop_min = substitute(loop_var, orig_loop_min_expr, max_required);
                     new_max = min(new_max, max_required_at_loop_min);
                 }
-            }
-
-            if (!new_loop_min.defined()) {
-                // If we don't have a new loop min, we can't assume every
-                // iteration has a previous iteration. The first iteration
+            } else {
+                // We couldn't find a suitable new loop min, we can't assume
+                // every iteration has a previous iteration. The first iteration
                 // will warm up the loop.
                 Expr need_explicit_warmup = loop_var_expr <= loop_min;
                 if (can_slide_up) {
