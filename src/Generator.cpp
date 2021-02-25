@@ -1188,7 +1188,11 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
             auto output_files = compute_output_files(targets[0], base_path, outputs);
             auto module_factory = [&generator_name, &generator_args, do_build_gradient_module](const std::string &name, const Target &target) -> Module {
                 // Must re-create each time since each instance will have a different Target.
-                auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(target));
+                const std::string &auto_schedule_string = generator_args["auto_schedule"];
+                const std::string &machine_params_string = generator_args["machine_params"];
+                const bool auto_schedule = auto_schedule_string == "true" || auto_schedule_string == "True";
+                const MachineParams machine_params = machine_params_string.empty() ? MachineParams::generic() : MachineParams(machine_params_string);
+                auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(target, auto_schedule, machine_params));
                 for (const auto &kv : generator_args) {
                     if (kv.first == "target" ||
                         kv.first == "auto_schedule" ||
