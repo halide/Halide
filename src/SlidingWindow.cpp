@@ -316,15 +316,15 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 //   new loop min.
                 Expr min_required_at_loop_min = substitute(loop_var, loop_min, min_required);
                 new_loop_min_eq = new_loop_min_eq &&
-                    new_min_at_new_loop_min <= min_required_at_loop_min &&
-                    new_max_at_new_loop_min >= new_min_at_new_loop_min;
+                                  new_min_at_new_loop_min <= min_required_at_loop_min &&
+                                  new_max_at_new_loop_min >= new_min_at_new_loop_min;
             } else {
                 // When sliding down, the constraints are similar, just swapping
                 // the roles of the min and max.
                 Expr max_required_at_loop_min = substitute(loop_var, loop_min, max_required);
                 new_loop_min_eq = new_loop_min_eq &&
-                    new_max_at_new_loop_min <= max_required_at_loop_min &&
-                    new_min_at_new_loop_min <= new_max_at_new_loop_min;
+                                  new_max_at_new_loop_min <= max_required_at_loop_min &&
+                                  new_min_at_new_loop_min <= new_max_at_new_loop_min;
             }
             // Try to solve the equation.
             new_loop_min_eq = simplify(new_loop_min_eq);
