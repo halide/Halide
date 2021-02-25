@@ -30,86 +30,87 @@ Expr get_lane(const Expr &e, int l) {
 
 /** Find the exact max and min lanes of a vector expression. Not
  * conservative like bounds_of_expr, but uses similar rules for some
- * common node types where it can be exact. */
-Interval bounds_of_lanes(const Expr &e) {
+ * common node types where it can be exact. If e is a nested vector,
+ * the result will be the bounds of the vectors in each lane. */
+Interval bounds_of_nested_lanes(const Expr &e) {
     if (const Add *add = e.as<Add>()) {
         if (const Broadcast *b = add->b.as<Broadcast>()) {
-            Interval ia = bounds_of_lanes(add->a);
+            Interval ia = bounds_of_nested_lanes(add->a);
             return {ia.min + b->value, ia.max + b->value};
         } else if (const Broadcast *b = add->a.as<Broadcast>()) {
-            Interval ia = bounds_of_lanes(add->b);
+            Interval ia = bounds_of_nested_lanes(add->b);
             return {b->value + ia.min, b->value + ia.max};
         }
     } else if (const Sub *sub = e.as<Sub>()) {
         if (const Broadcast *b = sub->b.as<Broadcast>()) {
-            Interval ia = bounds_of_lanes(sub->a);
+            Interval ia = bounds_of_nested_lanes(sub->a);
             return {ia.min - b->value, ia.max - b->value};
         } else if (const Broadcast *b = sub->a.as<Broadcast>()) {
-            Interval ia = bounds_of_lanes(sub->b);
+            Interval ia = bounds_of_nested_lanes(sub->b);
             return {b->value - ia.max, b->value - ia.max};
         }
     } else if (const Mul *mul = e.as<Mul>()) {
         if (const Broadcast *b = mul->b.as<Broadcast>()) {
             if (is_positive_const(b->value)) {
-                Interval ia = bounds_of_lanes(mul->a);
+                Interval ia = bounds_of_nested_lanes(mul->a);
                 return {ia.min * b->value, ia.max * b->value};
             } else if (is_negative_const(b->value)) {
-                Interval ia = bounds_of_lanes(mul->a);
+                Interval ia = bounds_of_nested_lanes(mul->a);
                 return {ia.max * b->value, ia.min * b->value};
             }
         } else if (const Broadcast *b = mul->a.as<Broadcast>()) {
             if (is_positive_const(b->value)) {
-                Interval ia = bounds_of_lanes(mul->b);
+                Interval ia = bounds_of_nested_lanes(mul->b);
                 return {b->value * ia.min, b->value * ia.max};
             } else if (is_negative_const(b->value)) {
-                Interval ia = bounds_of_lanes(mul->b);
+                Interval ia = bounds_of_nested_lanes(mul->b);
                 return {b->value * ia.max, b->value * ia.min};
             }
         }
     } else if (const Div *div = e.as<Div>()) {
         if (const Broadcast *b = div->b.as<Broadcast>()) {
             if (is_positive_const(b->value)) {
-                Interval ia = bounds_of_lanes(div->a);
+                Interval ia = bounds_of_nested_lanes(div->a);
                 return {ia.min / b->value, ia.max / b->value};
             } else if (is_negative_const(b->value)) {
-                Interval ia = bounds_of_lanes(div->a);
+                Interval ia = bounds_of_nested_lanes(div->a);
                 return {ia.max / b->value, ia.min / b->value};
             }
         }
     } else if (const And *and_ = e.as<And>()) {
         if (const Broadcast *b = and_->b.as<Broadcast>()) {
-            Interval ia = bounds_of_lanes(and_->a);
+            Interval ia = bounds_of_nested_lanes(and_->a);
             return {ia.min && b->value, ia.max && b->value};
         } else if (const Broadcast *b = and_->a.as<Broadcast>()) {
-            Interval ia = bounds_of_lanes(and_->b);
+            Interval ia = bounds_of_nested_lanes(and_->b);
             return {ia.min && b->value, ia.max && b->value};
         }
     } else if (const Or *or_ = e.as<Or>()) {
         if (const Broadcast *b = or_->b.as<Broadcast>()) {
-            Interval ia = bounds_of_lanes(or_->a);
+            Interval ia = bounds_of_nested_lanes(or_->a);
             return {ia.min && b->value, ia.max && b->value};
         } else if (const Broadcast *b = or_->a.as<Broadcast>()) {
-            Interval ia = bounds_of_lanes(or_->b);
+            Interval ia = bounds_of_nested_lanes(or_->b);
             return {ia.min && b->value, ia.max && b->value};
         }
     } else if (const Min *min = e.as<Min>()) {
         if (const Broadcast *b = min->b.as<Broadcast>()) {
-            Interval ia = bounds_of_lanes(min->a);
+            Interval ia = bounds_of_nested_lanes(min->a);
             return {Min::make(ia.min, b->value), Min::make(ia.max, b->value)};
         } else if (const Broadcast *b = min->a.as<Broadcast>()) {
-            Interval ia = bounds_of_lanes(min->b);
+            Interval ia = bounds_of_nested_lanes(min->b);
             return {Min::make(ia.min, b->value), Min::make(ia.max, b->value)};
         }
     } else if (const Max *max = e.as<Max>()) {
         if (const Broadcast *b = max->b.as<Broadcast>()) {
-            Interval ia = bounds_of_lanes(max->a);
+            Interval ia = bounds_of_nested_lanes(max->a);
             return {Max::make(ia.min, b->value), Max::make(ia.max, b->value)};
         } else if (const Broadcast *b = max->a.as<Broadcast>()) {
-            Interval ia = bounds_of_lanes(max->b);
+            Interval ia = bounds_of_nested_lanes(max->b);
             return {Max::make(ia.min, b->value), Max::make(ia.max, b->value)};
         }
     } else if (const Not *not_ = e.as<Not>()) {
-        Interval ia = bounds_of_lanes(not_->a);
+        Interval ia = bounds_of_nested_lanes(not_->a);
         return {!ia.max, !ia.min};
     } else if (const Ramp *r = e.as<Ramp>()) {
         Expr last_lane_idx = make_const(r->base.type(), r->lanes - 1);
@@ -118,11 +119,30 @@ Interval bounds_of_lanes(const Expr &e) {
         } else if (is_negative_const(r->stride)) {
             return {r->base + last_lane_idx * r->stride, r->base};
         }
+    } else if (const LE *le = e.as<LE>()) {
+        // The least true this can be is if we maximize the LHS and minimize the RHS
+        // The most true this can be is if we minimize the LHS and maximize the RHS
+        // This is only exact if one of the two sides is a Broadcast
+        Interval ia = bounds_of_nested_lanes(le->a);
+        Interval ib = bounds_of_nested_lanes(le->b);
+        if (ia.is_single_point() || ib.is_single_point()) {
+            return {ia.max <= ib.min, ia.min <= ib.max};
+        }
+    } else if (const LT *lt = e.as<LT>()) {
+        // The least true this can be is if we maximize the LHS and minimize the RHS
+        // The most true this can be is if we minimize the LHS and maximize the RHS
+        // This is only exact if one of the two sides is a Broadcast
+        Interval ia = bounds_of_nested_lanes(lt->a);
+        Interval ib = bounds_of_nested_lanes(lt->b);
+        if (ia.is_single_point() || ib.is_single_point()) {
+            return {ia.max < ib.min, ia.min < ib.max};
+        }
+
     } else if (const Broadcast *b = e.as<Broadcast>()) {
         return {b->value, b->value};
     } else if (const Let *let = e.as<Let>()) {
-        Interval ia = bounds_of_lanes(let->value);
-        Interval ib = bounds_of_lanes(let->body);
+        Interval ia = bounds_of_nested_lanes(let->value);
+        Interval ib = bounds_of_nested_lanes(let->body);
         if (expr_uses_var(ib.min, let->name)) {
             ib.min = Let::make(let->name, let->value, ib.min);
         }
@@ -144,6 +164,19 @@ Interval bounds_of_lanes(const Expr &e) {
         return {min_lane, max_lane};
     }
 };
+
+/** Similar to bounds_of_nested_lanes, but it recursively reduces
+ * the bounds of nested vectors to scalars. */
+Interval bounds_of_lanes(const Expr &e) {
+    Interval bounds = bounds_of_nested_lanes(e);
+    if (!bounds.min.type().is_scalar()) {
+        bounds.min = bounds_of_nested_lanes(bounds.min).min;
+    }
+    if (!bounds.max.type().is_scalar()) {
+        bounds.max = bounds_of_nested_lanes(bounds.max).max;
+    }
+    return bounds;
+}
 
 // A ramp with the lanes repeated inner_repetitions times, and then
 // the whole vector repeated outer_repetitions times.
