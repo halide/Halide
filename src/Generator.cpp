@@ -1025,8 +1025,6 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
             auto module_factory = [&generator_name, &generator_args, build_gradient_module](const std::string &name, const Target &target) -> Module {
                 auto sub_generator_args = generator_args;
                 sub_generator_args.erase("target");
-                sub_generator_args.erase("auto_schedule");
-                sub_generator_args.erase("machine_params");
                 // Must re-create each time since each instance will have a different Target.
                 auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(target));
                 gen->set_generator_param_values(sub_generator_args);
