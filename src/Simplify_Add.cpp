@@ -88,6 +88,9 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
              rewrite((x - y) + (y - z), x - z) ||
              rewrite((x - y) + (z - x), z - y) ||
 
+             rewrite((x - y) + (y + z), x + z) ||
+             rewrite((x - y) + (z + y), x + z) ||
+
              rewrite(x*y + z*y, (x + z)*y) ||
              rewrite(x*y + y*z, (x + z)*y) ||
              rewrite(y*x + z*y, y*(x + z)) ||
