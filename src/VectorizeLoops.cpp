@@ -170,10 +170,10 @@ Interval bounds_of_nested_lanes(const Expr &e) {
 Interval bounds_of_lanes(const Expr &e) {
     Interval bounds = bounds_of_nested_lanes(e);
     if (!bounds.min.type().is_scalar()) {
-        bounds.min = bounds_of_nested_lanes(bounds.min).min;
+        bounds.min = bounds_of_lanes(bounds.min).min;
     }
     if (!bounds.max.type().is_scalar()) {
-        bounds.max = bounds_of_nested_lanes(bounds.max).max;
+        bounds.max = bounds_of_lanes(bounds.max).max;
     }
     return bounds;
 }
