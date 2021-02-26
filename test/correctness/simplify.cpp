@@ -305,8 +305,6 @@ void check_algebra() {
     check((7 - y) / 7, (-y) / 7 + 1);
     check((y - 7) / 7, y / 7 + (-1));
 
-    // TODO: The commented cases below should be handled by
-    // stronger rules in the simplifier.
     Scope<ModulusRemainder> alignment;
     alignment.push("x", ModulusRemainder(2, 0));
     check((x + 0) / 2, x / 2, alignment);
