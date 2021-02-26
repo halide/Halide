@@ -269,14 +269,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             }
         }
 
-        Value *null_float_ptr = ConstantPointerNull::get(CodeGen_LLVM::f32_t->getPointerTo());
-        Value *zero_int32 = codegen(Expr(cast<int>(0)));
-
-        Value *gpu_num_padded_attributes = zero_int32;
-        Value *gpu_vertex_buffer = null_float_ptr;
-        Value *gpu_num_coords_dim0 = zero_int32;
-        Value *gpu_num_coords_dim1 = zero_int32;
-
         // compute a closure over the state passed into the kernel
         HostClosure c(loop->body, loop->name);
 
@@ -500,10 +492,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 0,
                 0,
                 "gpu_arg_is_buffer_ref" + api_unique_name),
-            gpu_num_padded_attributes,
-            gpu_vertex_buffer,
-            gpu_num_coords_dim0,
-            gpu_num_coords_dim1,
         };
         std::string run_fn_name = "halide_" + api_unique_name + "_run";
         llvm::Function *dev_run_fn = module->getFunction(run_fn_name);

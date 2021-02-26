@@ -1045,11 +1045,7 @@ WEAK int halide_cuda_run(void *user_context,
                          int shared_mem_bytes,
                          size_t arg_sizes[],
                          void *args[],
-                         int8_t arg_is_buffer[],
-                         int num_attributes,
-                         float *vertex_buffer,
-                         int num_coords_dim0,
-                         int num_coords_dim1) {
+                         int8_t arg_is_buffer[]) {
 
     debug(user_context) << "CUDA: halide_cuda_run ("
                         << "user_context: " << user_context << ", "

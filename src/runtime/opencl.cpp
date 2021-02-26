@@ -1043,11 +1043,7 @@ WEAK int halide_opencl_run(void *user_context,
                            int shared_mem_bytes,
                            size_t arg_sizes[],
                            void *args[],
-                           int8_t arg_is_buffer[],
-                           int num_attributes,
-                           float *vertex_buffer,
-                           int num_coords_dim0,
-                           int num_coords_dim1) {
+                           int8_t arg_is_buffer[]) {
     debug(user_context)
         << "CL: halide_opencl_run (user_context: " << user_context << ", "
         << "entry: " << entry_name << ", "
