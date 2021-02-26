@@ -40,6 +40,7 @@
 #include "LoopCarry.h"
 #include "LowerWarpShuffles.h"
 #include "Memoization.h"
+#include "OffloadGPULoops.h"
 #include "PartitionLoops.h"
 #include "Prefetch.h"
 #include "Profiling.h"
@@ -438,6 +439,15 @@ Module lower(const vector<Function> &output_funcs,
                  << s << "\n";
     } else {
         debug(1) << "Skipping Hexagon offload...\n";
+    }
+
+    if (t.has_gpu_feature()) {
+        debug(1) << "Offloading GPU loops...\n";
+        s = inject_gpu_offload(s, t);
+        debug(2) << "Lowering after splitting off GPU loops:\n"
+                 << s << "\n\n";
+    } else {
+        debug(1) << "Skipping GPU offload...\n";
     }
 
     if (!custom_passes.empty()) {

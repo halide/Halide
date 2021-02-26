@@ -422,7 +422,6 @@ SOURCE_FILES = \
   CodeGen_C.cpp \
   CodeGen_D3D12Compute_Dev.cpp \
   CodeGen_GPU_Dev.cpp \
-  CodeGen_GPU_Host.cpp \
   CodeGen_Hexagon.cpp \
   CodeGen_Internal.cpp \
   CodeGen_LLVM.cpp \
@@ -498,6 +497,7 @@ SOURCE_FILES = \
   ModulusRemainder.cpp \
   Monotonic.cpp \
   ObjectInstanceRegistry.cpp \
+  OffloadGPULoops.cpp \
   OutputImageParam.cpp \
   ParallelRVar.cpp \
   Parameter.cpp \
@@ -595,7 +595,6 @@ HEADER_FILES = \
   CodeGen_C.h \
   CodeGen_D3D12Compute_Dev.h \
   CodeGen_GPU_Dev.h \
-  CodeGen_GPU_Host.h \
   CodeGen_Internal.h \
   CodeGen_LLVM.h \
   CodeGen_Metal_Dev.h \
@@ -679,6 +678,7 @@ HEADER_FILES = \
   ModulusRemainder.h \
   Monotonic.h \
   ObjectInstanceRegistry.h \
+  OffloadGPULoops.h \
   OutputImageParam.h \
   ParallelRVar.h \
   Param.h \
