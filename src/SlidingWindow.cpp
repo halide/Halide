@@ -687,6 +687,10 @@ class SlidingWindow : public IRMutator {
             prev_func = &func;
 
             if (slider.new_loop_min.defined()) {
+                Expr new_loop_min = slider.new_loop_min;
+                if (!sliding_loop_min.same_as(loop_min)) {
+                    new_loop_min = min(new_loop_min, loop_min);
+                }
                 // Update the loop body to use the adjusted loop min.
                 string new_name = name + ".$n";
                 loop_min = Variable::make(Int(32), new_name + ".loop_min");
@@ -702,7 +706,7 @@ class SlidingWindow : public IRMutator {
                 name = new_name;
 
                 // The new loop interval is the new loop min to the loop max.
-                new_lets.emplace_front(name + ".loop_min", slider.new_loop_min);
+                new_lets.emplace_front(name + ".loop_min", new_loop_min);
                 new_lets.emplace_front(name + ".loop_min.orig", loop_min);
                 new_lets.emplace_front(name + ".loop_extent", (loop_max - loop_min) + 1);
             }
