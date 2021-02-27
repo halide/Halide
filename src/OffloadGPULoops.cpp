@@ -8,10 +8,10 @@
 #include "CodeGen_OpenGLCompute_Dev.h"
 #include "CodeGen_PTX_Dev.h"
 #include "ExprUsesVar.h"
-#include "InjectHostDevBufferCopies.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "InjectHostDevBufferCopies.h"
 #include "OffloadGPULoops.h"
 #include "Util.h"
 
