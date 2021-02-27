@@ -298,7 +298,7 @@ public:
         internal_assert(!cgdev.empty()) << "Requested unknown GPU target: " << target.to_string() << "\n";
     }
 
-    Stmt inject(Stmt s) {
+    Stmt inject(const Stmt &s) {
         // Create a new module for all of the kernels we find in this function.
         for (auto &i : cgdev) {
             i.second->init_module();

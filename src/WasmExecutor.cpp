@@ -1,6 +1,6 @@
 #include "WasmExecutor.h"
 
-#include "CodeGen_WebAssembly.h"
+#include "CodeGen_Targets.h"
 #include "Error.h"
 #include "Float16.h"
 #include "Func.h"
@@ -285,7 +285,7 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     // for the alloca usage.
     size_t stack_size = 65536;
     {
-        std::unique_ptr<CodeGen_WebAssembly> cg(new CodeGen_WebAssembly(module.target()));
+        std::unique_ptr<CodeGen_Posix> cg(new_CodeGen_WebAssembly(module.target()));
         cg->set_context(context);
         fn_module = cg->compile(module);
         stack_size += cg->get_requested_alloca_total();

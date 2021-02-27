@@ -37,6 +37,8 @@ using namespace Halide::ConciseCasts;
 
 using namespace llvm;
 
+#ifdef WITH_NVPTX
+
 namespace {
 
 /** A code generator that emits GPU code from a given Halide stmt. */
@@ -111,11 +113,6 @@ protected:
 
 CodeGen_PTX_Dev::CodeGen_PTX_Dev(const Target &host)
     : CodeGen_LLVM(host) {
-#if !defined(WITH_NVPTX)
-    user_error << "ptx not enabled for this build of Halide.\n";
-#endif
-    user_assert(llvm_NVPTX_enabled) << "llvm build not configured with nvptx target enabled\n.";
-
     context = new llvm::LLVMContext();
 }
 
@@ -229,9 +226,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 void CodeGen_PTX_Dev::init_module() {
     init_context();
 
-#ifdef WITH_NVPTX
     module = get_initial_module_for_ptx_device(target, context);
-#endif
 
     declare_intrin_overload("dp4a", Int(32), "dp4a_s32_s32", {Int(8, 4), Int(8, 4), Int(32)});
     declare_intrin_overload("dp4a", Int(32), "dp4a_s32_u32", {Int(8, 4), UInt(8, 4), Int(32)});
@@ -587,9 +582,6 @@ bool CodeGen_PTX_Dev::use_soft_float_abi() const {
 }
 
 vector<char> CodeGen_PTX_Dev::compile_to_src() {
-
-#ifdef WITH_NVPTX
-
     debug(2) << "In CodeGen_PTX_Dev::compile_to_src";
 
     // DISABLED - hooked in here to force PrintBeforeAll option - seems to be the only way?
@@ -755,9 +747,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // Null-terminate the ptx source
     buffer.push_back(0);
     return buffer;
-#else  // WITH_NVPTX
-    return vector<char>();
-#endif
 }
 
 int CodeGen_PTX_Dev::native_vector_bits() const {
@@ -800,6 +789,15 @@ bool CodeGen_PTX_Dev::supports_atomic_add(const Type &t) const {
 std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target) {
     return std::make_unique<CodeGen_PTX_Dev>(target);
 }
+
+#else  // WITH_PTX
+
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target) {
+    user_error << "PTX not enabled for this build of Halide.\n";
+    return nullptr;
+}
+
+#endif  // WITH_PTX
 
 }  // namespace Internal
 }  // namespace Halide
