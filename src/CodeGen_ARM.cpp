@@ -65,7 +65,7 @@ protected:
     /** Various patterns to peephole match against */
     struct Pattern {
         string intrin;  ///< Name of the intrinsic
-        Expr pattern;        ///< The pattern to match against
+        Expr pattern;   ///< The pattern to match against
         Pattern() = default;
         Pattern(const string &intrin, Expr p)
             : intrin(intrin), pattern(std::move(p)) {
