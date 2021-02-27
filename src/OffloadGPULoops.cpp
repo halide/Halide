@@ -221,7 +221,7 @@ class InjectGpuOffload : public IRMutator {
 
             if (runtime_run_takes_types) {
                 internal_assert(sizeof(halide_type_t) == sizeof(uint32_t));
-                arg_types_or_sizes.push_back(Expr(*(const uint32_t*)&i.type));
+                arg_types_or_sizes.push_back(Expr(*(const uint32_t *)&i.type));
             } else {
                 arg_types_or_sizes.push_back(cast(target_size_t_type, i.is_buffer ? 8 : i.type.bytes()));
             }
