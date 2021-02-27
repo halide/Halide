@@ -187,7 +187,7 @@ class InjectGpuOffload : public IRMutator {
         sort(closure_args.begin(), closure_args.end(),
              [](const DeviceArgument &a, const DeviceArgument &b) {
                  if (a.is_buffer == b.is_buffer) {
-                    return a.type.bits() > b.type.bits();
+                     return a.type.bits() > b.type.bits();
                  } else {
                      // Ensure that buffer arguments come first:
                      // for many OpenGL/Compute systems, the
@@ -277,7 +277,8 @@ class InjectGpuOffload : public IRMutator {
     }
 
 public:
-    InjectGpuOffload(const Target &target) : target(target) {
+    InjectGpuOffload(const Target &target)
+        : target(target) {
         if (target.has_feature(Target::OpenGLCompute)) {
             cgdev[DeviceAPI::OpenGLCompute] = new_CodeGen_OpenGLCompute_Dev(target);
         }
