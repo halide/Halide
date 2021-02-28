@@ -217,27 +217,27 @@ class InjectGpuOffload : public IRMutator {
                 val = Variable::make(i.type, i.name);
                 val = Call::make(type_of<void *>(), Call::make_struct, {val}, Call::Intrinsic);
             }
-            args.push_back(val);
+            args.emplace_back(val);
 
             if (runtime_run_takes_types) {
                 internal_assert(sizeof(halide_type_t) == sizeof(uint32_t));
-                arg_types_or_sizes.push_back(Expr(*(const uint32_t *)&i.type));
+                arg_types_or_sizes.emplace_back(Expr(*(const uint32_t *)&i.type));
             } else {
-                arg_types_or_sizes.push_back(cast(target_size_t_type, i.is_buffer ? 8 : i.type.bytes()));
+                arg_types_or_sizes.emplace_back(cast(target_size_t_type, i.is_buffer ? 8 : i.type.bytes()));
             }
 
-            arg_is_buffer.push_back(cast<uint8_t>(i.is_buffer));
+            arg_is_buffer.emplace_back(cast<uint8_t>(i.is_buffer));
         }
 
         // nullptr-terminate the lists
-        args.push_back(reinterpret(Handle(), cast<uint64_t>(0)));
+        args.emplace_back(reinterpret(Handle(), cast<uint64_t>(0)));
         if (runtime_run_takes_types) {
             internal_assert(sizeof(halide_type_t) == sizeof(uint32_t));
-            arg_types_or_sizes.push_back(cast<uint32_t>(0));
+            arg_types_or_sizes.emplace_back(cast<uint32_t>(0));
         } else {
-            arg_types_or_sizes.push_back(cast(target_size_t_type, 0));
+            arg_types_or_sizes.emplace_back(cast(target_size_t_type, 0));
         }
-        arg_is_buffer.push_back(cast<uint8_t>(0));
+        arg_is_buffer.emplace_back(cast<uint8_t>(0));
 
         // TODO: only three dimensions can be passed to
         // cuLaunchKernel. How should we handle blkid[3]?
