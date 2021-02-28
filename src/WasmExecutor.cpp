@@ -1,5 +1,6 @@
 #include "WasmExecutor.h"
 
+#include "CodeGen_Posix.h"
 #include "CodeGen_Targets.h"
 #include "Error.h"
 #include "Float16.h"
