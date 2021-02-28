@@ -92,15 +92,6 @@ private:
     }
 };
 
-Expr make_type_arg(const Type &t) {
-    vector<Expr> args = {
-        cast<uint8_t>(t.code()),
-        cast<uint8_t>(t.bits()),
-        cast<uint16_t>(t.lanes()),
-    };
-    return Call::make(type_of<void *>(), Call::make_struct, args, Call::Intrinsic);
-}
-
 class InjectGpuOffload : public IRMutator {
     /** Child code generator for device kernels. */
     map<DeviceAPI, unique_ptr<CodeGen_GPU_Dev>> cgdev;
@@ -229,7 +220,8 @@ class InjectGpuOffload : public IRMutator {
             args.push_back(val);
 
             if (runtime_run_takes_types) {
-                arg_types_or_sizes.push_back(make_type_arg(i.type.with_lanes(1)));
+                internal_assert(sizeof(halide_type_t) == sizeof(uint32_t));
+                arg_types_or_sizes.push_back(Expr(*(const uint32_t *)&i.type));
             } else {
                 arg_types_or_sizes.push_back(cast(target_size_t_type, i.is_buffer ? 8 : i.type.bytes()));
             }
@@ -240,8 +232,8 @@ class InjectGpuOffload : public IRMutator {
         // nullptr-terminate the lists
         args.push_back(reinterpret(Handle(), cast<uint64_t>(0)));
         if (runtime_run_takes_types) {
-            internal_assert(halide_type_int == 0);
-            arg_types_or_sizes.push_back(make_type_arg(Type(halide_type_int, 0, 0)));
+            internal_assert(sizeof(halide_type_t) == sizeof(uint32_t));
+            arg_types_or_sizes.push_back(cast<uint32_t>(0));
         } else {
             arg_types_or_sizes.push_back(cast(target_size_t_type, 0));
         }
@@ -337,7 +329,7 @@ public:
 
 }  // namespace
 
-Stmt inject_gpu_offload(Stmt s, const Target &host_target) {
+Stmt inject_gpu_offload(const Stmt &s, const Target &host_target) {
     return InjectGpuOffload(host_target).inject(s);
 }
 
