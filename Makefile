@@ -2316,7 +2316,7 @@ $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/uti
 
 # Note: you must have CLANG_FORMAT_LLVM_INSTALL_DIR set for this rule to work.
 # Let's default to the Ubuntu install location.
-CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-10
+CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-11
 
 .PHONY: format
 format:
@@ -2324,7 +2324,7 @@ format:
 
 # Note: you must have CLANG_TIDY_LLVM_INSTALL_DIR set for these rules to work.
 # Let's default to the Ubuntu install location.
-CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-10
+CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-11
 
 .PHONY: clang-tidy
 clang-tidy:

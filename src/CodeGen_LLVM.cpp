@@ -504,6 +504,7 @@ void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) 
     module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
+    module->addModuleFlag(llvm::Module::Warning, "halide_mabi", MDString::get(*context, mabi()));
     module->addModuleFlag(llvm::Module::Warning, "halide_use_pic", use_pic() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_use_large_code_model", llvm_large_code_model ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float);
@@ -1372,7 +1373,7 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
 
 void CodeGen_LLVM::codegen(const Stmt &s) {
     internal_assert(s.defined());
-    debug(3) << "Codegen: " << s << "\n";
+    debug(4) << "Codegen: " << s << "\n";
     value = nullptr;
     s.accept(this);
 }
@@ -2456,12 +2457,20 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
             Value *ptr = codegen_buffer_pointer(op->name,
                                                 op->value.type(),
                                                 op->index);
+#if LLVM_VERSION >= 130
+            if (value_type.is_float()) {
+                builder->CreateAtomicRMW(AtomicRMWInst::FAdd, ptr, val, llvm::MaybeAlign(), AtomicOrdering::Monotonic);
+            } else {
+                builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, val, llvm::MaybeAlign(), AtomicOrdering::Monotonic);
+            }
+#else
             // llvm 9 has FAdd which can be used for atomic floats.
             if (value_type.is_float()) {
                 builder->CreateAtomicRMW(AtomicRMWInst::FAdd, ptr, val, AtomicOrdering::Monotonic);
             } else {
                 builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, val, AtomicOrdering::Monotonic);
             }
+#endif
         } else {
             Value *index = codegen(op->index);
             // Scalarize vector store.
@@ -2470,11 +2479,19 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
                 Value *idx = builder->CreateExtractElement(index, lane);
                 Value *v = builder->CreateExtractElement(val, lane);
                 Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), idx);
+#if LLVM_VERSION >= 130
+                if (value_type.is_float()) {
+                    builder->CreateAtomicRMW(AtomicRMWInst::FAdd, ptr, v, llvm::MaybeAlign(), AtomicOrdering::Monotonic);
+                } else {
+                    builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, v, llvm::MaybeAlign(), AtomicOrdering::Monotonic);
+                }
+#else
                 if (value_type.is_float()) {
                     builder->CreateAtomicRMW(AtomicRMWInst::FAdd, ptr, v, AtomicOrdering::Monotonic);
                 } else {
                     builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, v, AtomicOrdering::Monotonic);
                 }
+#endif
             }
         }
     } else {
@@ -2537,8 +2554,13 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
                 val = builder->CreateBitCast(val, int_type);
                 cmp_val = builder->CreateBitCast(cmp_val, int_type);
             }
+#if LLVM_VERSION >= 130
+            Value *cmpxchg_pair = builder->CreateAtomicCmpXchg(
+                ptr, cmp_val, val, llvm::MaybeAlign(), AtomicOrdering::Monotonic, AtomicOrdering::Monotonic);
+#else
             Value *cmpxchg_pair = builder->CreateAtomicCmpXchg(
                 ptr, cmp_val, val, AtomicOrdering::Monotonic, AtomicOrdering::Monotonic);
+#endif
             Value *val_loaded = builder->CreateExtractValue(cmpxchg_pair, 0, "val_loaded");
             Value *success = builder->CreateExtractValue(cmpxchg_pair, 1, "success");
             if (need_bit_cast) {
@@ -5099,6 +5121,10 @@ bool CodeGen_LLVM::supports_atomic_add(const Type &t) const {
 
 bool CodeGen_LLVM::use_pic() const {
     return true;
+}
+
+std::string CodeGen_LLVM::mabi() const {
+    return "";
 }
 
 }  // namespace Internal

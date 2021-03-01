@@ -82,7 +82,7 @@ private:
             return make_zero(UInt(64));
         }
 
-        int32_t constant_size = Allocate::constant_allocation_size(extents, name);
+        int64_t constant_size = Allocate::constant_allocation_size(extents, name);
         if (constant_size > 0) {
             int64_t stack_bytes = constant_size * type.bytes();
             if (can_allocation_fit_on_stack(stack_bytes)) {  // Allocation on stack
