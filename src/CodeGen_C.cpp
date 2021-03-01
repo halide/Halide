@@ -1728,7 +1728,8 @@ string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
     auto cached = cache.find(rhs);
     if (cached == cache.end()) {
         id = unique_name('_');
-        stream << get_indent() << print_type(t, AppendSpace) << (output_kind == CPlusPlusImplementation ? "const " : "") << id << " = " << rhs << ";\n";
+        const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
+        stream << get_indent() << print_type(t, AppendSpace) << const_flag << id << " = " << rhs << ";\n";
         cache[rhs] = id;
     } else {
         id = cached->second;
@@ -2316,7 +2317,8 @@ void CodeGen_C::visit(const Load *op) {
         bool type_cast_needed = !(allocations.contains(op->name) &&
                                   allocations.get(op->name).type.element_of() == t.element_of());
         if (type_cast_needed) {
-            rhs << "((const " << print_type(t.element_of()) << " *)" << name << ")";
+            const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
+            rhs << "((" << const_flag << " " << print_type(t.element_of()) << " *)" << name << ")";
         } else {
             rhs << name;
         }
