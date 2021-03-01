@@ -661,36 +661,41 @@ class SlidingWindow : public IRMutator {
         Expr loop_extent = op->extent;
         Expr loop_max = Variable::make(Int(32), op->name + ".loop_max");
 
-        Expr prev_loop_min = loop_min;
-        const Function *prev_func = nullptr;
-
+        list<pair<string, Expr>> prev_loop_mins;
         list<pair<string, Expr>> new_lets;
         for (const Function &func : sliding) {
             debug(3) << "Doing sliding window analysis on function " << func.name() << "\n";
 
-            Expr sliding_loop_min;
-            if (prev_func && depends_on(func.name(), prev_func->name(), body)) {
-                // The production of func depends on the production of prev_func.
-                // The loop min needs to grow to warm up func before prev_func.
-                sliding_loop_min = loop_min;
-            } else {
-                // The production of func does not depend on the production of prev_func.
-                // We can use the previous loop_min, and move the min to accommodate
-                // both func and prev_func.
-                sliding_loop_min = prev_loop_min;
+            // Figure out where we should start sliding from. If no
+            // other func needs this func, we can just start at the
+            // original loop min.
+            Expr prev_loop_min = op->min;
+            // If a previously slid func needs this func to be warmed
+            // up, then we need to back up the loop to warm up this
+            // func before the already slid func starts warming up.
+            for (const auto &i : prev_loop_mins) {
+                if (depends_on(func.name(), i.first, body)) {
+                    prev_loop_min = i.second;
+                    break;
+                }
             }
 
-            SlidingWindowOnFunctionAndLoop slider(func, name, sliding_loop_min, slid_dimensions[func.name()]);
+            SlidingWindowOnFunctionAndLoop slider(func, name, prev_loop_min, slid_dimensions[func.name()]);
             body = slider.mutate(body);
-
-            prev_loop_min = loop_min;
-            prev_func = &func;
 
             if (slider.new_loop_min.defined()) {
                 Expr new_loop_min = slider.new_loop_min;
-                if (!sliding_loop_min.same_as(loop_min)) {
+                if (!prev_loop_min.same_as(loop_min)) {
+                    // If we didn't start sliding from the previous
+                    // loop min, we the old loop min might already
+                    // be further back than this new one.
                     new_loop_min = min(new_loop_min, loop_min);
                 }
+
+                // Put this at the front of the list, so we find it first
+                // when checking subsequent funcs.
+                prev_loop_mins.emplace_front(func.name(), new_loop_min);
+
                 // Update the loop body to use the adjusted loop min.
                 string new_name = name + ".$n";
                 loop_min = Variable::make(Int(32), new_name + ".loop_min");
