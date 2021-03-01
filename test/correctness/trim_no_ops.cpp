@@ -2,7 +2,7 @@
 
 using namespace Halide;
 
-class CountConditionals : public Internal::IRVisitor {
+class CountConditionals : public Internal::IRMutator {
 public:
     int count = 0;
     int count_if = 0;
@@ -10,33 +10,27 @@ public:
     bool in_produce = false;
 
 private:
-    using Internal::IRVisitor::visit;
+    using Internal::IRMutator::visit;
 
-    void visit(const Internal::Select *op) override {
+    Expr visit(const Internal::Select *op) override {
         if (in_produce) {
             count++;
             count_select++;
         }
-        Internal::IRVisitor::visit(op);
+        return Internal::IRMutator::visit(op);
     }
 
-    void visit(const Internal::IfThenElse *op) override {
+    Internal::Stmt visit(const Internal::IfThenElse *op) override {
         if (in_produce) {
             count++;
             count_if++;
         }
-        Internal::IRVisitor::visit(op);
+        return Internal::IRMutator::visit(op);
     }
 
-    void visit(const Internal::ProducerConsumer *op) override {
-        if (op->is_producer) {
-            bool old_in_produce = in_produce;
-            in_produce = true;
-            Internal::IRVisitor::visit(op);
-            in_produce = old_in_produce;
-        } else {
-            IRVisitor::visit(op);
-        }
+    Internal::Stmt visit(const Internal::ProducerConsumer *op) override {
+        Internal::ScopedValue<bool> v(in_produce, op->is_producer);
+        return Internal::IRMutator::visit(op);
     }
 };
 
@@ -52,10 +46,10 @@ int main(int argc, char **argv) {
         f(x) *= select(x > 20 && x < 30, 2, 1);
         f(x) = select(x >= 60 && x <= 100, 100 - f(x), f(x));
 
-        // There should be no selects or ifs after trim_no_ops runs
-        Module m = f.compile_to_module({});
         CountConditionals s;
-        m.functions().front().body.accept(&s);
+        f.add_custom_lowering_pass(&s, []() {});
+        Module m = f.compile_to_module({});
+
         if (s.count != 0) {
             std::cerr << "There were conditionals in the lowered code: \n"
                       << m.functions().front().body << "\n";
@@ -86,11 +80,12 @@ int main(int argc, char **argv) {
         Var x, y;
         f(x, y) = x + y;
         f(x, y) += select((x == 10) && (x < y), 1, 0);
-        Module m = f.compile_to_module({});
 
         // There should be no selects after trim_no_ops runs
         CountConditionals s;
-        m.functions().front().body.accept(&s);
+        f.add_custom_lowering_pass(&s, []() {});
+        Module m = f.compile_to_module({});
+
         if (s.count != 0) {
             std::cerr << "There were selects in the lowered code: \n"
                       << m.functions().front().body << "\n";
@@ -128,9 +123,10 @@ int main(int argc, char **argv) {
             hist(f(clamp(xi, 0, 73), clamp(yi, 0, 73))) +=
                 select(xi >= 0 && xi <= 73 && yi >= 0 && yi <= 73, 1, 0);
 
-            Module m = hist.compile_to_module({});
             CountConditionals s;
-            m.functions().front().body.accept(&s);
+            hist.add_custom_lowering_pass(&s, []() {});
+            Module m = hist.compile_to_module({});
+
             if (s.count != 0) {
                 std::cerr << "There were selects in the lowered code: \n"
                           << m.functions().front().body << "\n";
@@ -169,9 +165,10 @@ int main(int argc, char **argv) {
         f.tile(x, y, xi, yi, 4, 4);
 
         // Check there are no if statements.
-        Module m = f.compile_to_module({});
         CountConditionals s;
-        m.functions().front().body.accept(&s);
+        f.add_custom_lowering_pass(&s, []() {});
+        Module m = f.compile_to_module({});
+
         if (s.count != 0) {
             std::cerr << "There were selects or ifs in the lowered code: \n"
                       << m.functions().front().body << "\n";
@@ -207,9 +204,10 @@ int main(int argc, char **argv) {
         // if condition since it depends on gpu outer loop r.y
         Target gpu_target(get_host_target());
         gpu_target.set_feature(Target::CUDA);
-        Module m = f.compile_to_module({}, "", gpu_target);
         CountConditionals s;
-        m.functions().front().body.accept(&s);
+        f.add_custom_lowering_pass(&s, []() {});
+        Module m = f.compile_to_module({}, "", gpu_target);
+
         if (s.count_select != 0) {
             std::cerr << "There were selects in the lowered code: \n"
                       << m.functions().front().body << "\n";
