@@ -3429,7 +3429,7 @@ private:
     }
 
     template<typename First, typename Second, typename... Rest>
-    inline void build_inputs(std::vector<std::vector<StubInput>> &inputs, int idx, const First &first, const Second &second, const Rest &... rest) {
+    inline void build_inputs(std::vector<std::vector<StubInput>> &inputs, int idx, const First &first, const Second &second, const Rest &...rest) {
         build_inputs<First>(inputs, idx, first);
         build_inputs<Second, Rest...>(inputs, idx + 1, second, rest...);
     }
