@@ -116,6 +116,7 @@ int main(int argc, char **argv) {
         f.compute_root();
 
         Func hist;
+        Buffer<int> hist_result;
         {
             RDom r(0, 10, 0, 10, 0, 10, 0, 10);
             Expr xi = r[0] + r[2] * 10, yi = r[1] + r[3] * 10;
@@ -132,8 +133,8 @@ int main(int argc, char **argv) {
                           << m.functions().front().body << "\n";
                 return -1;
             }
+            hist_result = hist.realize({256});
         }
-        Buffer<int> hist_result = hist.realize({256});
 
         // Also check the output is correct.
         Func true_hist;
