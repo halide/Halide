@@ -22,6 +22,8 @@ def main():
     result = p.auto_schedule('Li2018', target, params)
     print('Schedule:')
     print(result.schedule_source)
+    print('Lua Schedule:')
+    print(result.lua_schedule_source)
 
     p.compile_jit() # compile
     buf = p.realize(1000) # compute and get the buffer

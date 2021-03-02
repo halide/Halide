@@ -221,6 +221,7 @@ struct LoopNest {
             // Source code to access this Var/RVar. Used for printing
             // valid Halide source for this schedule.
             string accessor;
+            string lua_accessor; // same as above for Lua schedules
 
             // Our estimate of the extent of this var. This is exact
             // when constant_extent flag is true.
@@ -246,6 +247,7 @@ struct LoopNest {
         std::vector<FuncVar> vars;
 
         std::ostringstream schedule_source;
+        std::ostringstream lua_schedule_source;
     };
 
     // Apply the schedule represented by this loop nest to a Halide pipeline.

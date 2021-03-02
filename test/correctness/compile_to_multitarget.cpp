@@ -190,6 +190,7 @@ void test_compile_to_everything(Func j, bool do_object) {
         {Output::pytorch_wrapper, fname + ".pytorch.h"},      // IsSingle
         {Output::registration, fname + ".registration.cpp"},  // IsSingle
         {Output::schedule, fname + ".schedule.h"},            // IsSingle
+        {Output::lua_schedule, fname + "_schedule.lua"},      // IsSingle
         {Output::static_library, fname + a},                  // IsSingle
         {Output::stmt, fname + ".stmt"},                      // IsMulti
         {Output::stmt_html, fname + ".stmt.html"},            // IsMulti

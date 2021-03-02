@@ -437,6 +437,7 @@ struct FunctionDAG {
             // from its owner Func. Used for printing source code
             // equivalent to a computed schedule.
             string accessor;
+            string lua_accessor; // Same as above for Lua schedules
         };
 
         // Get the loop nest shape as a function of the region computed

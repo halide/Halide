@@ -55,6 +55,10 @@ int main(int argc, char **argv) {
               << results.schedule_source
               << "\n******************************************\n\n";
 
+    std::cout << "\n\n******************************************\nLUA SCHEDULE:\n"
+              << "******************************************\n"
+              << results.lua_schedule_source
+              << "\n******************************************\n\n";
     // Inspect the schedule
     stencils[num_stencils - 1].print_loop_nest();
 

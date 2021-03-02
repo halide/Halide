@@ -1,0 +1,8 @@
+{
+    "cmake.configureOnOpen": false,
+    "files.associations": {
+        "tuple": "cpp",
+        "typeindex": "cpp",
+        "typeinfo": "cpp"
+    }
+}

@@ -171,6 +171,7 @@ void define_enums(py::module &m) {
         .value("pytorch_wrapper", Output::pytorch_wrapper)
         .value("registration", Output::registration)
         .value("schedule", Output::schedule)
+        .value("lua_schedule", Output::lua_schedule)
         .value("static_library", Output::static_library)
         .value("stmt", Output::stmt)
         .value("stmt_html", Output::stmt_html)

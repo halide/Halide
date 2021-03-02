@@ -708,6 +708,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                 Node::Loop l;
                 l.var = d.var;
                 l.accessor = stage.name + ".get_schedule().dims()[" + std::to_string(i) + "].var";
+                l.lua_accessor = stage.name + ":get_schedule():dims()[" + std::to_string(i) + "]:var";
 
                 // We already have the right variable names in the stage scope
                 Interval in = stage_scope_with_concrete_rvar_bounds.get(l.var);

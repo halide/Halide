@@ -39,6 +39,7 @@ enum class Output {
     pytorch_wrapper,
     registration,
     schedule,
+    lua_schedule,
     static_library,
     stmt,
     stmt_html,

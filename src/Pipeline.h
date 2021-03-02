@@ -85,6 +85,7 @@ struct AutoSchedulerResults {
     Target target;                       // Target specified to the autoscheduler
     std::string machine_params_string;   // MachineParams specified to the autoscheduler (in string form)
     std::string schedule_source;         // The C++ source code of the generated schedule
+    std::string lua_schedule_source;     // The Lua source code of the generated schedule
     std::vector<uint8_t> featurization;  // The featurization of the pipeline (if any)
 };
 
