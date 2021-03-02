@@ -4676,8 +4676,10 @@ Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::
     constexpr int debug_level = 4;
 
     debug(debug_level) << "call_overloaded_intrin: " << result_type << " " << name << "(";
+    const char *comma = "";
     for (const Expr &i : args) {
-        debug(debug_level) << ", " << i;
+        debug(debug_level) << comma << i;
+        comma = ", ";
     }
     debug(debug_level) << ")\n";
 
@@ -4690,10 +4692,12 @@ Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::
     const Intrinsic *resolved = nullptr;
     for (const Intrinsic &overload : impls_i->second) {
         debug(debug_level) << "Considering candidate " << overload.result_type << "(";
+        const char *comma = "";
         for (const auto &i : overload.arg_types) {
-            debug(debug_level) << ", " << i;
+            debug(debug_level) << comma << i;
+            comma = ", ";
         }
-        debug(debug_level) << "\n";
+        debug(debug_level) << ")\n";
         if (overload.arg_types.size() != args.size()) {
             debug(debug_level) << "Wrong number of arguments\n";
             continue;

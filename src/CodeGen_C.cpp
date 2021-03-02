@@ -2318,7 +2318,7 @@ void CodeGen_C::visit(const Load *op) {
                                   allocations.get(op->name).type.element_of() == t.element_of());
         if (type_cast_needed) {
             const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
-            rhs << "((" << const_flag << " " << print_type(t.element_of()) << " *)" << name << ")";
+            rhs << "((" << const_flag << print_type(t.element_of()) << " *)" << name << ")";
         } else {
             rhs << name;
         }
