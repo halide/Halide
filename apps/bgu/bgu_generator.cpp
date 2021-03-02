@@ -67,7 +67,8 @@ Matrix<R, T> mat_mul(const Matrix<R, S> &A, const Matrix<S, T> &B) {
     return result;
 }
 
-// Solve Ax = b at each x, y, z. Compute the result at the given Func and Var.
+// Solve Ax = b at each x, y, z. Compute the result at the given Func
+// and Var. Not currently used, but preserved for reference.
 template<int M, int N>
 Matrix<M, N> solve(Matrix<M, M> A, Matrix<M, N> b, Func compute, Var at, bool skip_schedule, Target target) {
     // Put the input matrices in a Func to do the Gaussian elimination.
@@ -125,6 +126,117 @@ Matrix<M, N> solve(Matrix<M, M> A, Matrix<M, N> b, Func compute, Var at, bool sk
 
     return b;
 };
+
+// Solve Ax = b at each x, y, z exploiting the fact that A is
+// symmetric. Compute the result at the given Func and Var.
+template<int M, int N>
+Matrix<M, N> solve_symmetric(Matrix<M, M> A_, Matrix<M, N> b_,
+                             Func compute, Var at, bool skip_schedule, Target target) {
+
+    // Put the input matrices in a Func to do sqrt-free Cholesky.
+    // See https://users.wpi.edu/~walker/MA514/HANDOUTS/cholesky.pdf
+    // for an explanation of sqrt-free Cholesky.
+
+    Var vi, vj;
+    Func f;
+    f(x, y, z, vi, vj) = undef<float>();
+
+    // Add more usefully-named accessors.
+    auto A = [&](int i, int j) {
+        return f(x, y, z, i, j);
+    };
+    auto b = [&](int i, int j) {
+        return f(x, y, z, i, M + j);
+    };
+
+    for (int i = 0; i < M; i++) {
+        for (int j = 0; j < M; j++) {
+            A(i, j) = A_(i, j);
+        }
+        for (int j = 0; j < N; j++) {
+            b(i, j) = b_(i, j);
+        }
+    }
+
+    // L D L' factorization, packed into a single matrix. We'll store
+    // L in the lower triangle, 1/D on the diagonal, and ??? TODO in
+    // the upper triangle.
+    for (int j = 0; j < M; j++) {
+        // Normalize the jth column starting at the jth row, storing
+        // the normalization factor on the diagonal. Because A(i, j)
+        // is symmetric, the unnormalized version stays in the jth
+        // row.
+        A(j, j) = fast_inverse(A(j, j));
+        for (int i = j + 1; i < M; i++) {
+            A(i, j) *= A(j, j);
+        }
+
+        // Subtract the outer product of the jth column with its
+        // unnormalized version from the rest of the matrix down and
+        // to the right of it.
+        for (int i = j + 1; i < M; i++) {
+            for (int k = j + 1; k < M; k++) {
+                if (k < i) {
+                    // We already did this one. Exploit symmetry
+                    A(i, k) = A(k, i);
+                } else {
+                    A(i, k) -= A(k, j) * A(j, i);
+                }
+            }
+        }
+    }
+
+    // We're done with the upper (unnormalized) triangle
+    // now.
+
+    // Back substitute to solve:
+    // LDL' x = b
+    // We're going to peel the matrices off the left-hand-side from
+    // left to right, updating b as we go.
+    Matrix<M, N> result;
+    for (int k = 0; k < N; k++) {
+        // First remove the leftmost L, by solving Lz = b.
+        for (int j = 0; j < M; j++) {
+            for (int i = 0; i < j; i++) {
+                b(j, k) -= A(j, i) * b(i, k);
+            }
+        }
+        // L has a unit diagonal, so there's no scaling step
+
+        // The problem is now DL' x = b
+
+        // Multiply both sizes by D inverse, which we have stored on the
+        // diagonal.
+        for (int j = 0; j < M; j++) {
+            b(j, k) *= A(j, j);
+        }
+
+        // The problem is now L' x = b
+
+        // Multiply both sides by L transpose inverse.
+        for (int j = M - 1; j >= 0; j--) {
+            for (int i = j + 1; i < M; i++) {
+                b(j, k) -= A(i, j) * b(i, k);
+            }
+        }
+
+        for (int j = 0; j < M; j++) {
+            result(j, k) = b(j, k);
+        }
+    }
+
+    if (!skip_schedule) {
+        if (!target.has_gpu_feature()) {
+            for (int i = 0; i < f.num_update_definitions(); i++) {
+                f.update(i).vectorize(x);
+            }
+        }
+
+        f.compute_at(compute, at);
+    }
+
+    return result;
+}
 
 template<int N, int M>
 Matrix<M, N> transpose(const Matrix<N, M> &in) {
@@ -318,7 +430,7 @@ public:
             b(2, 2) += weighted_lambda * gain;
 
             // Now solve Ax = b
-            Matrix<3, 4> result = transpose(solve(A, b, line, x, auto_schedule, get_target()));
+            Matrix<3, 4> result = transpose(solve_symmetric(A, b, line, x, auto_schedule, get_target()));
 
             // Pack the resulting matrix into the output Func.
             line(x, y, z, c) = pack_channels(c, {result(0, 0),

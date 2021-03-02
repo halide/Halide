@@ -111,6 +111,7 @@ set(RUNTIME_LL
     x86
     x86_avx
     x86_avx2
+    x86_avx512
     x86_sse41
     )
 
@@ -184,10 +185,12 @@ foreach (i IN LISTS RUNTIME_CPP)
                 endif ()
             # Windows on ARM
             elseif (i MATCHES "windows_.*_arm$")
-                if (j EQUAL 32)
+                if (j EQUAL 32 AND TARGET_ARM)
                     set(TARGET "arm-unknown-windows-unknown")
-                else ()
+                elseif (j EQUAL 64 AND TARGET_AARCH64)
                     set(TARGET "aarch64-unknown-windows-unknown")
+                else ()
+                    continue()
                 endif ()
             # Windows Generic
             else()

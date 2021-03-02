@@ -81,7 +81,7 @@ Buffer<float> one_million_rando_floats() {
     Var x("x");
     Func randos;
     randos(x) = random_float();
-    return randos.realize(1e6);
+    return randos.realize({1000000});
 }
 
 ImageParam in(Float(32), 1);
@@ -176,7 +176,7 @@ Func kahan_sum(int vectorize) {
 }
 
 float eval(Func f, const Target &t, const std::string &name, const std::string &suffix, float expected) {
-    float val = ((Buffer<float>)f.realize(t))();
+    float val = ((Buffer<float>)f.realize({}, t))();
     std::cout << "        " << name << ": " << val;
     if (expected != 0.0f) {
         std::cout << " residual: " << val - expected;

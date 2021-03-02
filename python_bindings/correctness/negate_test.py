@@ -9,8 +9,8 @@ def test_free_logical_not_function():
     not_f = hl.Func('not_f')
     not_f[x] = hl.logical_not(f[x])
 
-    f_out = f.realize(10)
-    not_f_out = not_f.realize(10)
+    f_out = f.realize([10])
+    not_f_out = not_f.realize([10])
 
     for i in range(10):
         assert f_out[i] == (i > 5)
@@ -26,8 +26,8 @@ def test_member_logical_not_function():
     not_f = hl.Func('not_f')
     not_f[x] = f[x].logical_not()
 
-    f_out = f.realize(10)
-    not_f_out = not_f.realize(10)
+    f_out = f.realize([10])
+    not_f_out = not_f.realize([10])
 
     for i in range(10):
         assert f_out[i] == (i > 5)

@@ -73,7 +73,7 @@ int get_vector_num_elements(llvm::Type *);
 llvm::Type *get_vector_element_type(llvm::Type *);
 
 #if LLVM_VERSION >= 110
-const llvm::ElementCount element_count(int e);
+llvm::ElementCount element_count(int e);
 #else
 int element_count(int e);
 #endif
@@ -116,6 +116,9 @@ Expr lower_euclidean_mod(Expr a, Expr b);
 Expr lower_signed_shift_left(const Expr &a, const Expr &b);
 Expr lower_signed_shift_right(const Expr &a, const Expr &b);
 ///@}
+
+/** Reduce a mux intrinsic to a select tree */
+Expr lower_mux(const Call *mux);
 
 /** Given an llvm::Module, set llvm:TargetOptions, cpu and attr information */
 void get_target_options(const llvm::Module &module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs);

@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
 
     funcs[funcs.size() - 1].set_custom_allocator(&test_malloc, &test_free);
     funcs[funcs.size() - 1].set_error_handler(&handler);
-    funcs[funcs.size() - 1].realize(1);
+    funcs[funcs.size() - 1].realize({1});
 
     if (!error_occurred) {
         printf("There should have been an error\n");

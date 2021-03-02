@@ -96,7 +96,7 @@ int split_test() {
         f(x, y) = x + y;
         g(x, y) = x - y;
         h(x, y) = f(x - 1, y + 1) + g(x + 2, y - 2);
-        im_ref = h.realize(200, 200);
+        im_ref = h.realize({200, 200});
     }
 
     {
@@ -130,7 +130,7 @@ int split_test() {
         };
         h.set_custom_trace(&my_trace);
 
-        im = h.realize(200, 200);
+        im = h.realize({200, 200});
     }
 
     auto func = [im_ref](int x, int y) {
@@ -151,7 +151,7 @@ int fuse_test() {
         f(x, y, z) = x + y + z;
         g(x, y, z) = x - y + z;
         h(x, y, z) = f(x + 2, y - 1, z + 3) + g(x - 5, y - 6, z + 2);
-        im_ref = h.realize(100, 100, 100);
+        im_ref = h.realize({100, 100, 100});
     }
 
     {
@@ -184,7 +184,7 @@ int fuse_test() {
         };
         h.set_custom_trace(&my_trace);
 
-        im = h.realize(100, 100, 100);
+        im = h.realize({100, 100, 100});
     }
 
     auto func = [im_ref](int x, int y, int z) {
@@ -213,7 +213,7 @@ int multiple_fuse_group_test() {
         h(x, y) += f(x, y) + g(x, y);
         p(x, y) = x + 2;
         q(x, y) = h(x, y) + 2 + p(x, y);
-        im_ref = q.realize(200, 200);
+        im_ref = q.realize({200, 200});
     }
 
     {
@@ -265,7 +265,7 @@ int multiple_fuse_group_test() {
         };
         q.set_custom_trace(&my_trace);
 
-        im = q.realize(200, 200);
+        im = q.realize({200, 200});
     }
 
     auto func = [im_ref](int x, int y) {
@@ -353,7 +353,7 @@ int fuse_compute_at_test() {
         p(x, y) = h(x, y) + 2;
         q(x, y) = x * y;
         r(x, y) = p(x, y - 1) + q(x - 1, y);
-        im_ref = r.realize(167, 167);
+        im_ref = r.realize({167, 167});
     }
 
     {
@@ -403,7 +403,7 @@ int fuse_compute_at_test() {
         };
         r.set_custom_trace(&my_trace);
 
-        im = r.realize(167, 167);
+        im = r.realize({167, 167});
     }
 
     auto func = [im_ref](int x, int y) {
@@ -424,7 +424,7 @@ int double_split_fuse_test() {
         f(x, y) = x + y;
         g(x, y) = 2 + x - y;
         h(x, y) = f(x, y) + g(x, y) + 10;
-        im_ref = h.realize(200, 200);
+        im_ref = h.realize({200, 200});
     }
 
     {
@@ -460,7 +460,7 @@ int double_split_fuse_test() {
         };
         h.set_custom_trace(&my_trace);
 
-        im = h.realize(200, 200);
+        im = h.realize({200, 200});
     }
 
     auto func = [im_ref](int x, int y) {
@@ -645,7 +645,7 @@ int vectorize_test() {
         f(x, y) = x + y;
         g(x, y) = x - y;
         h(x, y) = f(x - 1, y + 1) + g(x + 2, y - 2);
-        im_ref = h.realize(111, 111);
+        im_ref = h.realize({111, 111});
     }
 
     {
@@ -681,7 +681,7 @@ int vectorize_test() {
         };
         h.set_custom_trace(&my_trace);
 
-        im = h.realize(111, 111);
+        im = h.realize({111, 111});
     }
 
     auto func = [im_ref](int x, int y) {
@@ -705,7 +705,7 @@ int some_are_skipped_test() {
         p(x, y) = x * y;
         h(x, y) = f(x, y) + g(x + 2, y - 2);
         h(x, y) += f(x - 1, y + 1) + p(x, y);
-        im_ref = h.realize(200, 200);
+        im_ref = h.realize({200, 200});
     }
 
     {
@@ -743,7 +743,7 @@ int some_are_skipped_test() {
         };
         h.set_custom_trace(&my_trace);
 
-        im = h.realize(200, 200);
+        im = h.realize({200, 200});
     }
 
     auto func = [im_ref](int x, int y) {
@@ -1108,7 +1108,7 @@ int with_specialization_test() {
         f(x, y) = x + y;
         g(x, y) = x - y;
         h(x, y) = f(x - 1, y + 1) + g(x + 2, y - 2);
-        im_ref = h.realize(200, 200);
+        im_ref = h.realize({200, 200});
     }
 
     {
@@ -1144,7 +1144,7 @@ int with_specialization_test() {
         h.set_custom_trace(&my_trace);
 
         tile.set(true);
-        im = h.realize(200, 200);
+        im = h.realize({200, 200});
     }
 
     auto func = [im_ref](int x, int y) {
@@ -2005,7 +2005,7 @@ int store_at_different_levels_test() {
 
     consumer.bound(x, 0, 16).bound(y, 0, 16);
 
-    Buffer<int> out = consumer.realize(16, 16);
+    Buffer<int> out = consumer.realize({16, 16});
 
     for (int y = 0; y < out.height(); y++) {
         for (int x = 0; x < out.width(); x++) {

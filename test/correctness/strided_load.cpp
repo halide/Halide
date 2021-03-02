@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
 
     //g.compile_to_assembly("/dev/stdout", std::vector<Argument>(), "g");
 
-    g.realize(425);
+    g.realize({425});
 
     printf("Success!\n");
     return 0;

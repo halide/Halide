@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
     f.print_loop_nest();
 
     // Run the schedule
-    p.realize(256);
+    p.realize({256});
 
     printf("Success!\n");
     return 0;

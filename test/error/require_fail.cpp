@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     // choose values that will fail
     p1.set(1);
     p2.set(2);
-    result = f.realize(1);
+    result = f.realize({1});
 
     printf("Success!\n");
     return 0;

@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     Buffer<float> im(32, 32);
     input.set(im);
 
-    f.realize(100, 100, 16);
+    f.realize({100, 100, 16});
 
     printf("Success!\n");
     return 0;
