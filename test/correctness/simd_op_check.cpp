@@ -811,22 +811,22 @@ public:
             check(arm32 ? "vld2.16" : "ld2", 4 * w, in_u16(x * 2) + in_u16(x * 2 + 1));
 
             // VLD3     X       -       Load Three-Element Structures
-            check(arm32 ? "vld3.32" : "ld3", 4 * w, in_i32(x * 3 + y));
-            check(arm32 ? "vld3.32" : "ld3", 4 * w, in_u32(x * 3 + y));
-            check(arm32 ? "vld3.32" : "ld3", 4 * w, in_f32(x * 3 + y));
-            check(arm32 ? "vld3.8" : "ld3", 8 * w, in_i8(x * 3 + y));
-            check(arm32 ? "vld3.8" : "ld3", 8 * w, in_u8(x * 3 + y));
-            check(arm32 ? "vld3.16" : "ld3", 4 * w, in_i16(x * 3 + y));
-            check(arm32 ? "vld3.16" : "ld3", 4 * w, in_u16(x * 3 + y));
+            check(arm32 ? "vld3.32" : "ld3", 4 * w, in_i32(x * 3));
+            check(arm32 ? "vld3.32" : "ld3", 4 * w, in_u32(x * 3));
+            check(arm32 ? "vld3.32" : "ld3", 4 * w, in_f32(x * 3));
+            check(arm32 ? "vld3.8" : "ld3", 8 * w, in_i8(x * 3));
+            check(arm32 ? "vld3.8" : "ld3", 8 * w, in_u8(x * 3));
+            check(arm32 ? "vld3.16" : "ld3", 4 * w, in_i16(x * 3));
+            check(arm32 ? "vld3.16" : "ld3", 4 * w, in_u16(x * 3));
 
             // VLD4     X       -       Load Four-Element Structures
-            check(arm32 ? "vld4.32" : "ld4", 4 * w, in_i32(x * 4 + y));
-            check(arm32 ? "vld4.32" : "ld4", 4 * w, in_u32(x * 4 + y));
-            check(arm32 ? "vld4.32" : "ld4", 4 * w, in_f32(x * 4 + y));
-            check(arm32 ? "vld4.8" : "ld4", 8 * w, in_i8(x * 4 + y));
-            check(arm32 ? "vld4.8" : "ld4", 8 * w, in_u8(x * 4 + y));
-            check(arm32 ? "vld4.16" : "ld4", 4 * w, in_i16(x * 4 + y));
-            check(arm32 ? "vld4.16" : "ld4", 4 * w, in_u16(x * 4 + y));
+            check(arm32 ? "vld4.32" : "ld4", 4 * w, in_i32(x * 4));
+            check(arm32 ? "vld4.32" : "ld4", 4 * w, in_u32(x * 4));
+            check(arm32 ? "vld4.32" : "ld4", 4 * w, in_f32(x * 4));
+            check(arm32 ? "vld4.8" : "ld4", 8 * w, in_i8(x * 4));
+            check(arm32 ? "vld4.8" : "ld4", 8 * w, in_u8(x * 4));
+            check(arm32 ? "vld4.16" : "ld4", 4 * w, in_i16(x * 4));
+            check(arm32 ? "vld4.16" : "ld4", 4 * w, in_u16(x * 4));
 
             // VLDM     X       F, D    Load Multiple Registers
             // VLDR     X       F, D    Load Single Register

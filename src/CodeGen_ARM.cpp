@@ -1000,41 +1000,27 @@ void CodeGen_ARM::visit(const Load *op) {
         return;
     }
 
-    // Strided loads with known stride
-    if (stride && stride->value >= 2 && stride->value <= 4) {
-        // Check alignment on the base. Attempt to shift to an earlier
-        // address if it simplifies the expression. This makes
-        // adjacent strided loads shared a vldN op.
+    // Try to rewrite strided loads as shuffles of dense loads,
+    // aligned to the stride. This makes adjacent strided loads
+    // shared a vldN op. However, this is only safe when the new
+    // load would not cross any alignment boundaries not crossed
+    // by the original load.
+    ModulusRemainder alignment = op->alignment;
+    if (stride && stride->value >= 2 && stride->value <= 4 &&
+        alignment.modulus % stride->value == 0) {
         Expr base = ramp->base;
-        int offset = 0;
-        ModulusRemainder mod_rem = modulus_remainder(ramp->base);
-
-        const Add *add = base.as<Add>();
-        const IntImm *add_b = add ? add->b.as<IntImm>() : nullptr;
-
-        if ((mod_rem.modulus % stride->value) == 0) {
-            offset = mod_rem.remainder % stride->value;
-        } else if ((mod_rem.modulus == 1) && add_b) {
-            offset = add_b->value % stride->value;
-            if (offset < 0) {
-                offset += stride->value;
-            }
-        }
-
+        int offset = mod_imp(alignment.remainder, stride->value);
         if (offset) {
             base = simplify(base - offset);
-            mod_rem.remainder -= offset;
-            if (mod_rem.modulus) {
-                mod_rem.remainder = mod_imp(mod_rem.remainder, mod_rem.modulus);
-            }
+            alignment.remainder -= offset;
         }
 
-        int alignment = op->type.bytes();
-        alignment *= gcd(mod_rem.modulus, mod_rem.remainder);
+        int align_bytes =
+            gcd(alignment.modulus, alignment.remainder) * op->type.bytes();
         // Maximum stack alignment on arm is 16 bytes, so we should
         // never claim alignment greater than that.
-        alignment = gcd(alignment, 16);
-        internal_assert(alignment > 0);
+        align_bytes = gcd(align_bytes, 16);
+        internal_assert(align_bytes > 0);
 
         // Decide what width to slice things into. If not a multiple
         // of 64 or 128 bits, then we can't safely slice it up into
@@ -1068,9 +1054,9 @@ void CodeGen_ARM::visit(const Load *op) {
             Value *bitcastI = builder->CreateBitOrPointerCast(ptr, load_return_pointer_type);
             LoadInst *loadI = cast<LoadInst>(builder->CreateLoad(bitcastI));
 #if LLVM_VERSION >= 110
-            loadI->setAlignment(Align(alignment));
+            loadI->setAlignment(Align(align_bytes));
 #else
-            loadI->setAlignment(MaybeAlign(alignment));
+            loadI->setAlignment(MaybeAlign(align_bytes));
 #endif
             add_tbaa_metadata(loadI, op->name, slice_ramp);
             Value *shuffleInstr = builder->CreateShuffleVector(loadI, undef, constantsV);

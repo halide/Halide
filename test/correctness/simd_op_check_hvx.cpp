@@ -437,10 +437,10 @@ public:
         check("vnot(v*)", hvx_width / 2, ~u16_1);
         check("vnot(v*)", hvx_width / 4, ~u32_1);
 
-        // v62 - Broadcasting unsigned scalars
-        check("v*.b = vsplat(r*)", hvx_width / 1, in_u8(0));
-        check("v*.h = vsplat(r*)", hvx_width / 2, in_u16(0));
-        check("vsplat(r*)", hvx_width / 4, in_u32(0));
+        // v62 - Broadcasting scalars
+        check("vsplat(r*)", hvx_width / 1, in_u8(y));
+        check("vsplat(r*)", hvx_width / 2, in_u16(y));
+        check("vsplat(r*)", hvx_width / 4, in_u32(y));
 
         check("vmux(q*,v*,v*)", hvx_width / 1, select(i8_1 == i8_2, i8_3, i8_2));
         check("vmux(q*,v*,v*)", hvx_width / 2, select(i16_1 == i16_2, i16_3, i16_2));

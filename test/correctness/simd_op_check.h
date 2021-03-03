@@ -52,6 +52,11 @@ public:
                      .with_feature(Target::NoRuntime)
                      .with_feature(Target::DisableLLVMLoopOpt);
         num_threads = Internal::ThreadPool<void>::num_processors_online();
+
+        // Some tests need to know the alignment of the buffer.
+        for (ImageParam i : image_params) {
+            i.dim(0).set_min(0);
+        }
     }
     virtual ~SimdOpCheckTest() = default;
     size_t get_num_threads() const {
