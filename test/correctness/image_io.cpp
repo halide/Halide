@@ -169,7 +169,7 @@ void do_test() {
     const float one = std::numeric_limits<T>::max();
     f(x, y, c) = cast<T>(clamp(make_noise(10)(x, y, c), 0.0f, 1.0f) * one);
 
-    Buffer<T> color_buf = f.realize(width, height, 3);
+    Buffer<T> color_buf = f.realize({width, height, 3});
 
     // Inset it a bit to ensure that saving buffers with nonzero mins works
     const int inset = 4;
@@ -206,7 +206,7 @@ void do_test() {
             // Here we test matching strides
             Func f2;
             f2(x, y, c, w) = f(x, y, c);
-            Buffer<T> funky_buf = f2.realize(10, 10, 1, 3);
+            Buffer<T> funky_buf = f2.realize({10, 10, 1, 3});
             funky_buf.fill(42);
 
             std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "x4\n";

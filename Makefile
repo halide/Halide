@@ -422,7 +422,6 @@ SOURCE_FILES = \
   CodeGen_C.cpp \
   CodeGen_D3D12Compute_Dev.cpp \
   CodeGen_GPU_Dev.cpp \
-  CodeGen_GPU_Host.cpp \
   CodeGen_Hexagon.cpp \
   CodeGen_Internal.cpp \
   CodeGen_LLVM.cpp \
@@ -500,6 +499,7 @@ SOURCE_FILES = \
   ModulusRemainder.cpp \
   Monotonic.cpp \
   ObjectInstanceRegistry.cpp \
+  OffloadGPULoops.cpp \
   OutputImageParam.cpp \
   ParallelRVar.cpp \
   Parameter.cpp \
@@ -598,7 +598,6 @@ HEADER_FILES = \
   CodeGen_C.h \
   CodeGen_D3D12Compute_Dev.h \
   CodeGen_GPU_Dev.h \
-  CodeGen_GPU_Host.h \
   CodeGen_Internal.h \
   CodeGen_LLVM.h \
   CodeGen_Metal_Dev.h \
@@ -684,6 +683,7 @@ HEADER_FILES = \
   ModulusRemainder.h \
   Monotonic.h \
   ObjectInstanceRegistry.h \
+  OffloadGPULoops.h \
   OutputImageParam.h \
   ParallelRVar.h \
   Param.h \
@@ -850,6 +850,7 @@ RUNTIME_LL_COMPONENTS = \
   x86 \
   x86_avx \
   x86_avx2 \
+  x86_avx512 \
   x86_sse41
 
 RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
@@ -1573,7 +1574,7 @@ $(FILTERS_DIR)/gpu_multi_context_threaded_%.a: $(BIN_DIR)/gpu_multi_context_thre
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g gpu_multi_context_threaded_$* $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
 
-GEN_AOT_CXX_FLAGS=$(TEST_CXX_FLAGS) -Wno-unknown-pragmas
+GEN_AOT_CXX_FLAGS=$(TEST_CXX_FLAGS) -Wno-unknown-pragmas -Wno-unused-variable
 GEN_AOT_INCLUDES=-I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools
 GEN_AOT_LD_FLAGS=$(COMMON_LD_FLAGS)
 
@@ -2336,7 +2337,7 @@ $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/uti
 
 # Note: you must have CLANG_FORMAT_LLVM_INSTALL_DIR set for this rule to work.
 # Let's default to the Ubuntu install location.
-CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-10
+CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-11
 
 .PHONY: format
 format:
@@ -2344,7 +2345,7 @@ format:
 
 # Note: you must have CLANG_TIDY_LLVM_INSTALL_DIR set for these rules to work.
 # Let's default to the Ubuntu install location.
-CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-10
+CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-11
 
 .PHONY: clang-tidy
 clang-tidy:

@@ -105,6 +105,7 @@ struct Target {
         AVX512_KNL = halide_target_feature_avx512_knl,
         AVX512_Skylake = halide_target_feature_avx512_skylake,
         AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,
+        AVX512_SapphireRapids = halide_target_feature_avx512_sapphirerapids,
         TraceLoads = halide_target_feature_trace_loads,
         TraceStores = halide_target_feature_trace_stores,
         TraceRealizations = halide_target_feature_trace_realizations,
@@ -127,6 +128,7 @@ struct Target {
         ARMDotProd = halide_target_feature_arm_dot_prod,
         Xtensa = halide_target_feature_xtensa,
         LLVMLargeCodeModel = halide_llvm_large_code_model,
+        RVV = halide_target_feature_rvv,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;

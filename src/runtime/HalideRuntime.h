@@ -1307,6 +1307,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_avx512_knl,             ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER.
     halide_target_feature_avx512_skylake,         ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
     halide_target_feature_avx512_cannonlake,      ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
+    halide_target_feature_avx512_sapphirerapids,  ///< Enable the AVX512 features supported by Sapphire Rapids processors. This include all of the Cannonlake features, plus AVX512-VNNI and AVX512-BF16.
     halide_target_feature_hvx_use_shared_object,  ///< Deprecated
     halide_target_feature_trace_loads,            ///< Trace all loads done by the pipeline. Equivalent to calling Func::trace_loads on every non-inlined Func.
     halide_target_feature_trace_stores,           ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.
@@ -1335,6 +1336,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_arm_dot_prod,           ///< Enable ARMv8.2-a dotprod extension (i.e. udot and sdot instructions)
     halide_target_feature_xtensa,                 ///< Enable Xtensa code generation.
     halide_llvm_large_code_model,                 ///< Use the LLVM large code model to compile
+    halide_target_feature_rvv,                    ///< Enable RISCV "V" Vector Extension
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
@@ -1495,7 +1497,7 @@ typedef struct halide_buffer_t {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions; i++) {
             if (dim[i].stride < 0) {
-                index += dim[i].stride * (dim[i].extent - 1);
+                index += (ptrdiff_t)dim[i].stride * (dim[i].extent - 1);
             }
         }
         return host + index * type.bytes();
@@ -1506,7 +1508,7 @@ typedef struct halide_buffer_t {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions; i++) {
             if (dim[i].stride > 0) {
-                index += dim[i].stride * (dim[i].extent - 1);
+                index += (ptrdiff_t)dim[i].stride * (dim[i].extent - 1);
             }
         }
         index += 1;
@@ -1522,7 +1524,7 @@ typedef struct halide_buffer_t {
     HALIDE_ALWAYS_INLINE uint8_t *address_of(const int *pos) const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions; i++) {
-            index += dim[i].stride * (pos[i] - dim[i].min);
+            index += (ptrdiff_t)dim[i].stride * (pos[i] - dim[i].min);
         }
         return host + index * type.bytes();
     }

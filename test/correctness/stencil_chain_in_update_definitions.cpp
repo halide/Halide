@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
 
     g.trace_stores();
     h.set_custom_trace(&my_trace);
-    h.realize(output_extent);
+    h.realize({output_extent});
 
     if (num_stores != expected) {
         printf("Did not store to g the right numbers of times\n"

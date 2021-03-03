@@ -69,7 +69,7 @@ bool test(int vec_width, const Target &target) {
         }
     }
 
-    Buffer<B> output = f.realize(W, H);
+    Buffer<B> output = f.realize({W, H});
 
     /*
     for (int y = 0; y < H; y++) {

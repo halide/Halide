@@ -12,7 +12,7 @@ extern "C" {
 __attribute__((section(".fini.halide"))) void run_dtors() {
     typedef void (*dtor_func)();
     addr_t *dtor_p = &__DTOR_LIST__;
-    while (1) {
+    while (true) {
         dtor_func dtor = (dtor_func)*dtor_p;
         if (!dtor) {
             break;
@@ -25,7 +25,7 @@ __attribute__((section(".fini.halide"))) void run_dtors() {
 __attribute__((section(".init.halide"))) void run_ctors() {
     typedef void (*ctor_func)();
     addr_t *ctor_p = &__CTOR_END__;
-    while (1) {
+    while (true) {
         ctor_func ctor = (ctor_func) * (--ctor_p);
         if (!ctor) {
             break;

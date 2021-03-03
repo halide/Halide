@@ -107,8 +107,8 @@ int main(int argc, char **argv) {
         filtered_r2c = fft2d_c2r(dft_filtered, W, H, target, inv_desc);
     }
 
-    Buffer<float> result_c2c = filtered_c2c.realize(W, H, target);
-    Buffer<float> result_r2c = filtered_r2c.realize(W, H, target);
+    Buffer<float> result_c2c = filtered_c2c.realize({W, H}, target);
+    Buffer<float> result_r2c = filtered_r2c.realize({W, H}, target);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -140,8 +140,8 @@ int main(int argc, char **argv) {
 
     Var rep("rep");
 
-    Buffer<float> re_in = lambda(x, y, 0.0f).realize(W, H);
-    Buffer<float> im_in = lambda(x, y, 0.0f).realize(W, H);
+    Buffer<float> re_in = lambda(x, y, 0.0f).realize({W, H});
+    Buffer<float> im_in = lambda(x, y, 0.0f).realize({W, H});
 
     printf("%12s %5s%11s%5s %5s%11s%5s\n", "", "", "Halide", "", "", "FFTW", "");
     printf("%12s %10s %10s %10s %10s %10s\n", "DFT type", "Time (us)", "MFLOP/s", "Time (us)", "MFLOP/s", "Ratio");
@@ -154,7 +154,7 @@ int main(int argc, char **argv) {
     c2c_in(x, y, rep) = {re_in(x, y), im_in(x, y)};
     Func bench_c2c = fft2d_c2c(c2c_in, W, H, -1, target, fwd_desc);
     bench_c2c.compile_to_lowered_stmt(output_dir + "c2c.html", bench_c2c.infer_arguments(), HTML);
-    Realization R_c2c = bench_c2c.realize(W, H, reps, target);
+    Realization R_c2c = bench_c2c.realize({W, H, reps}, target);
     // Write all reps to the same place in memory. This means the
     // output appears to be cached on all but the first
     // iteration. This seems to match the behavior of FFTW's benchmark
@@ -185,7 +185,7 @@ int main(int argc, char **argv) {
     r2c_in(x, y, rep) = re_in(x, y);
     Func bench_r2c = fft2d_r2c(r2c_in, W, H, target, fwd_desc);
     bench_r2c.compile_to_lowered_stmt(output_dir + "r2c.html", bench_r2c.infer_arguments(), HTML);
-    Realization R_r2c = bench_r2c.realize(W, H / 2 + 1, reps, target);
+    Realization R_r2c = bench_r2c.realize({W, H / 2 + 1, reps}, target);
     // Write all reps to the same place in memory. See notes on R_c2c.
     R_r2c[0].raw_buffer()->dim[2].stride = 0;
     R_r2c[1].raw_buffer()->dim[2].stride = 0;
@@ -211,7 +211,7 @@ int main(int argc, char **argv) {
     c2r_in(x, y, rep) = {re_in(x, y), im_in(x, y)};
     Func bench_c2r = fft2d_c2r(c2r_in, W, H, target, inv_desc);
     bench_c2r.compile_to_lowered_stmt(output_dir + "c2r.html", bench_c2r.infer_arguments(), HTML);
-    Realization R_c2r = bench_c2r.realize(W, H, reps, target);
+    Realization R_c2r = bench_c2r.realize({W, H, reps}, target);
     // Write all reps to the same place in memory. See notes on R_c2c.
     R_c2r[0].raw_buffer()->dim[2].stride = 0;
 

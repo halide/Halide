@@ -7,7 +7,6 @@
 #include "CPlusPlusMangle.h"
 #include "CSE.h"
 #include "CodeGen_ARM.h"
-#include "CodeGen_GPU_Host.h"
 #include "CodeGen_Hexagon.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
@@ -239,47 +238,7 @@ void CodeGen_LLVM::set_context(llvm::LLVMContext &context) {
 }
 
 std::unique_ptr<CodeGen_LLVM> CodeGen_LLVM::new_for_target(const Target &target, llvm::LLVMContext &context) {
-    // The awkward mapping from targets to code generators
-    if (target.features_any_of({Target::CUDA,
-                                Target::OpenCL,
-                                Target::OpenGLCompute,
-                                Target::Metal,
-                                Target::D3D12Compute})) {
-#ifdef WITH_X86
-        if (target.arch == Target::X86) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_X86>>(target, context);
-        }
-#endif
-#if defined(WITH_ARM) || defined(WITH_AARCH64)
-        if (target.arch == Target::ARM) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_ARM>>(target, context);
-        }
-#endif
-#ifdef WITH_MIPS
-        if (target.arch == Target::MIPS) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_MIPS>>(target, context);
-        }
-#endif
-#ifdef WITH_POWERPC
-        if (target.arch == Target::POWERPC) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_PowerPC>>(target, context);
-        }
-#endif
-#ifdef WITH_WEBASSEMBLY
-        if (target.arch == Target::WebAssembly) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_WebAssembly>>(target, context);
-        }
-#endif
-#ifdef WITH_RISCV
-        if (target.arch == Target::RISCV) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_RISCV>>(target, context);
-        }
-#endif
-        user_error << "Invalid target architecture for GPU backend: "
-                   << target.to_string() << "\n";
-        return nullptr;
-
-    } else if (target.arch == Target::X86) {
+    if (target.arch == Target::X86) {
         return make_codegen<CodeGen_X86>(target, context);
     } else if (target.arch == Target::ARM) {
         return make_codegen<CodeGen_ARM>(target, context);
@@ -505,6 +464,7 @@ void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) 
     module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
+    module->addModuleFlag(llvm::Module::Warning, "halide_mabi", MDString::get(*context, mabi()));
     module->addModuleFlag(llvm::Module::Warning, "halide_use_pic", use_pic() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_use_large_code_model", llvm_large_code_model ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float);
@@ -1373,7 +1333,7 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
 
 void CodeGen_LLVM::codegen(const Stmt &s) {
     internal_assert(s.defined());
-    debug(3) << "Codegen: " << s << "\n";
+    debug(4) << "Codegen: " << s << "\n";
     value = nullptr;
     s.accept(this);
 }
@@ -2457,12 +2417,20 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
             Value *ptr = codegen_buffer_pointer(op->name,
                                                 op->value.type(),
                                                 op->index);
+#if LLVM_VERSION >= 130
+            if (value_type.is_float()) {
+                builder->CreateAtomicRMW(AtomicRMWInst::FAdd, ptr, val, llvm::MaybeAlign(), AtomicOrdering::Monotonic);
+            } else {
+                builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, val, llvm::MaybeAlign(), AtomicOrdering::Monotonic);
+            }
+#else
             // llvm 9 has FAdd which can be used for atomic floats.
             if (value_type.is_float()) {
                 builder->CreateAtomicRMW(AtomicRMWInst::FAdd, ptr, val, AtomicOrdering::Monotonic);
             } else {
                 builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, val, AtomicOrdering::Monotonic);
             }
+#endif
         } else {
             Value *index = codegen(op->index);
             // Scalarize vector store.
@@ -2471,11 +2439,19 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
                 Value *idx = builder->CreateExtractElement(index, lane);
                 Value *v = builder->CreateExtractElement(val, lane);
                 Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), idx);
+#if LLVM_VERSION >= 130
+                if (value_type.is_float()) {
+                    builder->CreateAtomicRMW(AtomicRMWInst::FAdd, ptr, v, llvm::MaybeAlign(), AtomicOrdering::Monotonic);
+                } else {
+                    builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, v, llvm::MaybeAlign(), AtomicOrdering::Monotonic);
+                }
+#else
                 if (value_type.is_float()) {
                     builder->CreateAtomicRMW(AtomicRMWInst::FAdd, ptr, v, AtomicOrdering::Monotonic);
                 } else {
                     builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, v, AtomicOrdering::Monotonic);
                 }
+#endif
             }
         }
     } else {
@@ -2538,8 +2514,13 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
                 val = builder->CreateBitCast(val, int_type);
                 cmp_val = builder->CreateBitCast(cmp_val, int_type);
             }
+#if LLVM_VERSION >= 130
+            Value *cmpxchg_pair = builder->CreateAtomicCmpXchg(
+                ptr, cmp_val, val, llvm::MaybeAlign(), AtomicOrdering::Monotonic, AtomicOrdering::Monotonic);
+#else
             Value *cmpxchg_pair = builder->CreateAtomicCmpXchg(
                 ptr, cmp_val, val, AtomicOrdering::Monotonic, AtomicOrdering::Monotonic);
+#endif
             Value *val_loaded = builder->CreateExtractValue(cmpxchg_pair, 0, "val_loaded");
             Value *success = builder->CreateExtractValue(cmpxchg_pair, 1, "success");
             if (need_bit_cast) {
@@ -3189,6 +3170,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         value = codegen(op->args[0]);
     } else if (is_float16_transcendental(op)) {
         value = codegen(lower_float16_transcendental_to_float32_equivalent(op));
+    } else if (op->is_intrinsic(Call::mux)) {
+        value = codegen(lower_mux(op));
     } else if (op->is_intrinsic()) {
         Expr lowered = lower_intrinsic(op);
         if (!lowered.defined()) {
@@ -4723,8 +4706,10 @@ Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::
     constexpr int debug_level = 4;
 
     debug(debug_level) << "call_overloaded_intrin: " << result_type << " " << name << "(";
+    const char *comma = "";
     for (const Expr &i : args) {
-        debug(debug_level) << ", " << i;
+        debug(debug_level) << comma << i;
+        comma = ", ";
     }
     debug(debug_level) << ")\n";
 
@@ -4737,10 +4722,12 @@ Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::
     const Intrinsic *resolved = nullptr;
     for (const Intrinsic &overload : impls_i->second) {
         debug(debug_level) << "Considering candidate " << overload.result_type << "(";
+        const char *comma = "";
         for (const auto &i : overload.arg_types) {
-            debug(debug_level) << ", " << i;
+            debug(debug_level) << comma << i;
+            comma = ", ";
         }
-        debug(debug_level) << "\n";
+        debug(debug_level) << ")\n";
         if (overload.arg_types.size() != args.size()) {
             debug(debug_level) << "Wrong number of arguments\n";
             continue;
@@ -5098,6 +5085,10 @@ bool CodeGen_LLVM::supports_atomic_add(const Type &t) const {
 
 bool CodeGen_LLVM::use_pic() const {
     return true;
+}
+
+std::string CodeGen_LLVM::mabi() const {
+    return "";
 }
 
 }  // namespace Internal

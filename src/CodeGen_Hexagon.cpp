@@ -1839,6 +1839,9 @@ string CodeGen_Hexagon::mattrs() const {
     std::stringstream attrs;
     attrs << "+hvx-length128b";
     attrs << ",+long-calls";
+    if (target.has_feature(Target::HVX)) {
+        attrs << ",+hvxv" << isa_version;
+    }
     return attrs.str();
 }
 
@@ -2333,6 +2336,7 @@ std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target, llvm::L
 
 std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
     user_error << "hexagon not enabled for this build of Halide.\n";
+    return nullptr;
 }
 
 #endif  // WITH_HEXAGON

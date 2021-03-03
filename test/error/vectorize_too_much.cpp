@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
     f.vectorize(x, 8).vectorize(y, 8);
 
     // Should result in an error
-    Buffer<int> out = f.realize(5, 5);
+    Buffer<int> out = f.realize({5, 5});
 
     printf("Success!\n");
     return 0;

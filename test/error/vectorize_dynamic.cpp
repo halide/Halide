@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
 
     // Should result in an error
     vector_size.set(4);
-    Buffer<int> out = f.realize(5, 5);
+    Buffer<int> out = f.realize({5, 5});
 
     printf("Success!\n");
     return 0;

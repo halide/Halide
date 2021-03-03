@@ -3044,16 +3044,6 @@ Realization Func::realize(int x_size, int y_size, const Target &target,
     return realize({x_size, y_size}, target, param_map);
 }
 
-Realization Func::realize(int x_size, const Target &target,
-                          const ParamMap &param_map) {
-    return realize(std::vector<int>{x_size}, target, param_map);
-}
-
-Realization Func::realize(const Target &target,
-                          const ParamMap &param_map) {
-    return realize(std::vector<int>{}, target, param_map);
-}
-
 void Func::infer_input_bounds(const std::vector<int32_t> &sizes,
                               const Target &target,
                               const ParamMap &param_map) {

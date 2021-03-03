@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
     g.compute_at(f, x);
     g.store_root();
 
-    f.realize(10);
+    f.realize({10});
 
     if (call_counter != 11) {
         printf("g was called %d times instead of %d\n", call_counter, 11);

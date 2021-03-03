@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     // and we don't allow GPU blocks on mutex locks since
     // it leads to deadlocks.
     // This should throw an error
-    Realization out = f.realize(img_size);
+    Realization out = f.realize({img_size});
 
     printf("Success!\n");
     return 0;

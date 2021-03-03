@@ -44,13 +44,13 @@ int main(int argc, char **argv) {
         // Check there's no malloc when the bound is good
         g.set_custom_allocator(&my_malloc, &my_free);
         p.set(5);
-        g.realize(20);
+        g.realize({20});
         g.set_custom_allocator(nullptr, nullptr);
 
         // Check there was an assertion failure of the appropriate type when the bound is violated
         g.set_error_handler(&my_error);
         p.set(10);
-        g.realize(20);
+        g.realize({20});
 
         if (!errored) {
             printf("There was supposed to be an error\n");
@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
         f.bound_extent(x, 8);
 
         g.set_custom_allocator(&my_malloc, &my_free);
-        g.realize(20);
+        g.realize({20});
     }
 
     printf("Success!\n");

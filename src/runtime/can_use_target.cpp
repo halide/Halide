@@ -9,7 +9,7 @@ namespace Internal {
 WEAK halide_can_use_target_features_t custom_can_use_target_features = halide_default_can_use_target_features;
 
 WEAK uint64_t halide_cpu_features_storage[sizeof(CpuFeatures) / sizeof(uint64_t)] = {0};
-WEAK bool halide_cpu_features_initialized = 0;
+WEAK bool halide_cpu_features_initialized = false;
 WEAK halide_mutex halide_cpu_features_initialized_lock;
 
 }  // namespace Internal

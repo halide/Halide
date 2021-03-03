@@ -27,6 +27,12 @@ namespace {
 // existing flags, so that instruction patterns can just check for the
 // oldest feature flag that supports an instruction.
 Target complete_x86_target(Target t) {
+    if (t.has_feature(Target::AVX512_SapphireRapids)) {
+        t.set_feature(Target::AVX512_Cannonlake);
+    }
+    if (t.has_feature(Target::AVX512_Cannonlake)) {
+        t.set_feature(Target::AVX512_Skylake);
+    }
     if (t.has_feature(Target::AVX512_Cannonlake) ||
         t.has_feature(Target::AVX512_Skylake) ||
         t.has_feature(Target::AVX512_KNL)) {
@@ -132,6 +138,25 @@ const x86Intrinsic intrinsic_defs[] = {
     {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "pmaddwd", {Int(16, 32), Int(16, 32)}, Target::AVX512_Cannonlake},
     {"llvm.x86.avx2.pmadd.wd", Int(32, 8), "pmaddwd", {Int(16, 16), Int(16, 16)}, Target::AVX2},
     {"llvm.x86.sse2.pmadd.wd", Int(32, 4), "pmaddwd", {Int(16, 8), Int(16, 8)}},
+
+    // Convert FP32 to BF16
+    {"vcvtne2ps2bf16x32", BFloat(16, 32), "f32_to_bf16", {Float(32, 32)}, Target::AVX512_SapphireRapids},
+    {"llvm.x86.avx512bf16.cvtneps2bf16.512", BFloat(16, 16), "f32_to_bf16", {Float(32, 16)}, Target::AVX512_SapphireRapids},
+    {"llvm.x86.avx512bf16.cvtneps2bf16.256", BFloat(16, 8), "f32_to_bf16", {Float(32, 8)}, Target::AVX512_SapphireRapids},
+    // LLVM does not provide an unmasked 128bit cvtneps2bf16 intrinsic, so provide a wrapper around the masked version.
+    {"vcvtneps2bf16x4", BFloat(16, 4), "f32_to_bf16", {Float(32, 4)}, Target::AVX512_SapphireRapids},
+
+    // Dot product vector reduction
+    // The LLVM intrinsics combine the bf16 pairs into i32, so provide a wrapper to correctly call the intrinsic.
+    {"dpbf16psx16", Float(32, 16), "dot_product", {Float(32, 16), BFloat(16, 32), BFloat(16, 32)}, Target::AVX512_SapphireRapids},
+    {"dpbf16psx8", Float(32, 8), "dot_product", {Float(32, 8), BFloat(16, 16), BFloat(16, 16)}, Target::AVX512_SapphireRapids},
+    {"dpbf16psx4", Float(32, 4), "dot_product", {Float(32, 4), BFloat(16, 8), BFloat(16, 8)}, Target::AVX512_SapphireRapids},
+    {"dpbusdx16", Int(32, 16), "dot_product", {Int(32, 16), UInt(8, 64), Int(8, 64)}, Target::AVX512_SapphireRapids},
+    {"dpbusdx8", Int(32, 8), "dot_product", {Int(32, 8), UInt(8, 32), Int(8, 32)}, Target::AVX512_SapphireRapids},
+    {"dpbusdx4", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, Target::AVX512_SapphireRapids},
+    {"dpwssdx16", Int(32, 16), "dot_product", {Int(32, 16), Int(16, 32), Int(16, 32)}, Target::AVX512_SapphireRapids},
+    {"dpwssdx8", Int(32, 8), "dot_product", {Int(32, 8), Int(16, 16), Int(16, 16)}, Target::AVX512_SapphireRapids},
+    {"dpwssdx4", Int(32, 4), "dot_product", {Int(32, 4), Int(16, 8), Int(16, 8)}, Target::AVX512_SapphireRapids},
 };
 // clang-format on
 
@@ -367,6 +392,8 @@ void CodeGen_X86::visit(const Cast *op) {
         {"saturating_narrow", u16_sat(wild_i32x_)},
         {"saturating_narrow", i8_sat(wild_i16x_)},
         {"saturating_narrow", u8_sat(wild_i16x_)},
+
+        {"f32_to_bf16", bf16(wild_f32x_)},
     };
     // clang-format on
 
@@ -466,9 +493,18 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         Expr pattern;
         const char *intrin;
         Type narrow_type;
+        uint32_t flags = 0;
+        enum {
+            CombineInit = 1 << 0,
+            SwapOperands = 1 << 1,
+        };
     };
     // clang-format off
     static const Pattern patterns[] = {
+        {2, wild_f32x_ * wild_f32x_, "dot_product", BFloat(16), Pattern::CombineInit},
+        {2, i32(widening_mul(wild_i16x_, wild_i16x_)), "dot_product", {}, Pattern::CombineInit},
+        {4, i32(widening_mul(wild_u8x_, wild_i8x_)), "dot_product", {}, Pattern::CombineInit},
+        {4, i32(widening_mul(wild_i8x_, wild_u8x_)), "dot_product", {}, Pattern::CombineInit | Pattern::SwapOperands},
         {2, i32(widening_mul(wild_i16x_, wild_i16x_)), "pmaddwd", Int(16)},
         {2, i32(widening_mul(wild_i8x_, wild_i8x_)), "pmaddwd", Int(16)},
         {2, i32(widening_mul(wild_i8x_, wild_u8x_)), "pmaddwd", Int(16)},
@@ -488,19 +524,28 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         if (expr_match(p.pattern, op->value, matches)) {
             Expr a = matches[0];
             Expr b = matches[1];
-            a = lossless_cast(p.narrow_type.with_lanes(a.type().lanes()), a);
-            b = lossless_cast(p.narrow_type.with_lanes(b.type().lanes()), b);
-            internal_assert(a.defined());
-            internal_assert(b.defined());
+            if (p.flags & Pattern::SwapOperands) {
+                std::swap(a, b);
+            }
+            if (p.narrow_type.bits() > 0) {
+                a = lossless_cast(p.narrow_type.with_lanes(a.type().lanes()), a);
+                b = lossless_cast(p.narrow_type.with_lanes(b.type().lanes()), b);
+            }
+            if (!a.defined() || !b.defined()) { continue; }
 
-            value = call_overloaded_intrin(op->type, p.intrin, {a, b});
-            if (value) {
-                if (init.defined()) {
-                    Value *x = value;
-                    Value *y = codegen(init);
-                    value = builder->CreateAdd(x, y);
+            if (p.flags & Pattern::CombineInit) {
+                value = call_overloaded_intrin(op->type, p.intrin, {init, a, b});
+                if (value) { return; }
+            } else {
+                value = call_overloaded_intrin(op->type, p.intrin, {a, b});
+                if (value) {
+                    if (init.defined()) {
+                        Value *x = value;
+                        Value *y = codegen(init);
+                        value = builder->CreateAdd(x, y);
+                    }
+                    return;
                 }
-                return;
             }
         }
     }
@@ -509,7 +554,14 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
 }
 
 string CodeGen_X86::mcpu() const {
-    if (target.has_feature(Target::AVX512_Cannonlake)) {
+    if (target.has_feature(Target::AVX512_SapphireRapids)) {
+#if LLVM_VERSION >= 120
+        return "sapphirerapids";
+#else
+        user_error << "AVX512 SapphireRapids requires LLVM 12 or later.";
+        return "";
+#endif
+    } else if (target.has_feature(Target::AVX512_Cannonlake)) {
         return "cannonlake";
     } else if (target.has_feature(Target::AVX512_Skylake)) {
         return "skylake-avx512";
@@ -558,6 +610,13 @@ string CodeGen_X86::mattrs() const {
         }
         if (target.has_feature(Target::AVX512_Cannonlake)) {
             features += ",+avx512ifma,+avx512vbmi";
+        }
+        if (target.has_feature(Target::AVX512_SapphireRapids)) {
+#if LLVM_VERSION >= 120
+            features += ",+avx512bf16,+avx512vnni";
+#else
+            user_error << "AVX512 SapphireRapids requires LLVM 12 or later.";
+#endif
         }
     }
     return features;

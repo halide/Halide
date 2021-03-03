@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
 
         f(x, y) = tuple_select(x + y < 30, Tuple(x, y), Tuple(x - 1, y - 2));
 
-        Realization result = f.realize(200, 200);
+        Realization result = f.realize({200, 200});
         Buffer<int> a = result[0], b = result[1];
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
 
         f(x, y) = tuple_select(Tuple(x < 30, y < 30), Tuple(x, y), Tuple(x - 1, y - 2));
 
-        Realization result = f.realize(200, 200);
+        Realization result = f.realize({200, 200});
         Buffer<int> a = result[0], b = result[1];
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
                                x + y < 100, Tuple(x - 1, y - 2),
                                Tuple(x - 100, y - 200));
 
-        Realization result = f.realize(200, 200);
+        Realization result = f.realize({200, 200});
         Buffer<int> a = result[0], b = result[1];
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
                                Tuple(x < 100, y < 100), Tuple(x - 1, y - 2),
                                Tuple(x - 100, y - 200));
 
-        Realization result = f.realize(200, 200);
+        Realization result = f.realize({200, 200});
         Buffer<int> a = result[0], b = result[1];
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {

@@ -47,9 +47,9 @@ int main(int argc, char **argv) {
         f.compute_at(g, xi);
 
         use_gpu.set(get_jit_target_from_environment().has_gpu_feature());
-        Buffer<int> out1 = h.realize(1024, 1024);
+        Buffer<int> out1 = h.realize({1024, 1024});
         use_gpu.set(false);
-        Buffer<int> out2 = h.realize(1024, 1024);
+        Buffer<int> out2 = h.realize({1024, 1024});
 
         for (int y = 0; y < out1.height(); y++) {
             for (int x = 0; x < out1.width(); x++) {
@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
         g.tile(x, y, xi, yi, 2, 2).gpu_blocks(x, y);
 
         p.set(true);
-        Buffer<int> out = g.realize(32, 32);
+        Buffer<int> out = g.realize({32, 32});
 
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {

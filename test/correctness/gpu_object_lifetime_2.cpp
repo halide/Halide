@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
         }
         h.set_custom_print(halide_print);
 
-        h.realize(256, target);
+        h.realize({256}, target);
     }
 
     Internal::JITSharedRuntime::release_all();

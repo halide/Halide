@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
             input.compute_at(output, y);
         }
 
-        Buffer<int32_t> buf = output.realize(100, 100);
+        Buffer<int32_t> buf = output.realize({100, 100});
 
         for (int y = 0; y < buf.height(); y++) {
             for (int x = 0; x < buf.width(); x++) {

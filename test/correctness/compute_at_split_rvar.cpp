@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
         g.update().split(r, ro, ri, 2);
         f.compute_at(g, ri);
 
-        Buffer<int> im = g.realize(10);
+        Buffer<int> im = g.realize({10});
 
         if (call_counter != 10) {
             printf("Wrong number of calls to f: %d\n", call_counter);
@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
         g.update().split(r, ro, ri, 2);
         f.compute_at(g, ro).unroll(x);
 
-        Buffer<int> im = g.realize(10);
+        Buffer<int> im = g.realize({10});
 
         if (call_counter != 10) {
             printf("Wrong number of calls to f: %d\n", call_counter);
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
         g.update().split(r, ro, ri, 2).unroll(ri);
         f.compute_at(g, ri);
 
-        Buffer<int> im = g.realize(10);
+        Buffer<int> im = g.realize({10});
 
         if (call_counter != 10) {
             printf("Wrong number of calls to f: %d\n", call_counter);
@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
         g.update().split(r, ro, ri, 2).reorder(ro, ri);
         f.compute_at(g, ro);
 
-        Buffer<int> im = g.realize(10);
+        Buffer<int> im = g.realize({10});
 
         if (call_counter != 10) {
             printf("Wrong number of calls to f: %d\n", call_counter);
@@ -149,7 +149,7 @@ int main(int argc, char **argv) {
         g.update().split(r, ro, ri, 4).split(ri, rio, rii, 2).fuse(rio, ro, fused);
         f.compute_at(g, fused);
 
-        Buffer<int> im = g.realize(20);
+        Buffer<int> im = g.realize({20});
 
         if (call_counter != 20) {
             printf("Wrong number of calls to f: %d\n", call_counter);
@@ -181,7 +181,7 @@ int main(int argc, char **argv) {
         g.update().split(r, ro, ri, 3);
         f.compute_at(g, ro);
 
-        Buffer<int> im = g.realize(10);
+        Buffer<int> im = g.realize({10});
 
         if (call_counter != 10) {
             printf("Wrong number of calls to f: %d\n", call_counter);

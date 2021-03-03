@@ -221,9 +221,9 @@ class MyPipeline:
     def test_correctness(self, reference_output):
 
         assert reference_output.type() == hl.UInt(8)
-        output = self.curved.realize(self.input.width(),
-                                     self.input.height(),
-                                     self.input.channels())
+        output = self.curved.realize([self.input.width(),
+                                      self.input.height(),
+                                      self.input.channels()])
         assert output.type() == hl.UInt(8)
 
         # Check against the reference output.

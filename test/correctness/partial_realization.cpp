@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
 
         // Hist can only be realized over 256 values, so if we ask for
         // less we get a cropped view.
-        Buffer<int> h = hist.realize(100);
+        Buffer<int> h = hist.realize({100});
         for (int i = 0; i < 100; i++) {
             // There's one zero at the top left corner, two ones, three twos, etc.
             int correct = i + 1;
@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
         Var xi, yi;
         f.tile(x, y, xi, yi, 16, 8, TailStrategy::RoundUp);
 
-        Buffer<int> buf = f.realize(30, 20);
+        Buffer<int> buf = f.realize({30, 20});
 
         // There's no way to realize over that domain with the given
         // schedule. Instead Halide has realized a 32x24 buffer and
