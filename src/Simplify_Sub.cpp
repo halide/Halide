@@ -105,8 +105,23 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
              rewrite((z + (x + y)) - x, z + y) ||
              rewrite((z + (y + x)) - x, z + y) ||
 
+             rewrite(x - (y + (x + z)), 0 - (y + z)) ||
+             rewrite(x - (y + (z + x)), 0 - (y + z)) ||
+             rewrite(x - ((x + y) + z), 0 - (y + z)) ||
+             rewrite(x - ((y + x) + z), 0 - (y + z)) ||
+             rewrite((x + y) - (z + (w + x)), y - (z + w)) ||
+             rewrite((x + y) - (z + (w + y)), x - (z + w)) ||
+             rewrite((x + y) - (z + (x + w)), y - (z + w)) ||
+             rewrite((x + y) - (z + (y + w)), x - (z + w)) ||
+             rewrite((x + y) - ((x + z) + w), y - (z + w)) ||
+             rewrite((x + y) - ((y + z) + w), x - (z + w)) ||
+             rewrite((x + y) - ((z + x) + w), y - (z + w)) ||
+             rewrite((x + y) - ((z + y) + w), x - (z + w)) ||
+
              rewrite((x - y) - (x + z), 0 - y - z) ||
              rewrite((x - y) - (z + x), 0 - y - z) ||
+
+             rewrite(x - x%c0, (x/c0)*c0) ||
 
              (no_overflow(op->type) &&
               (rewrite(max(x, y) - x, max(y - x, 0)) ||
