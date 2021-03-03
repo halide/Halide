@@ -53,4 +53,4 @@ clean:
 
 test: run
 
-.SECONDARY: $(BIN)/%/conv_layer.halide_generated.cpp
+.SECONDARY: $(BIN)/host/conv_layer.halide_generated.cpp

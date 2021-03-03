@@ -33,11 +33,13 @@ public:
 
     void generate() {
         Func blur_x("blur_x");
-        Var x("x"), y("y"), xi("xi"), yi("yi");
-
+        Var x("x"), y("y"), xi("xi"), yi("yi"), xo("xo"), yo("yo"), xii("xii");
+        RDom rx(0, 3);
         // The algorithm
-        blur_x(x, y) = (input(x, y) + input(x + 1, y) + input(x + 2, y)) / 3;
-        blur_y(x, y) = (blur_x(x, y) + blur_x(x, y + 1) + blur_x(x, y + 2)) / 3;
+        blur_x(x, y) = cast(UInt(16),(cast(UInt(32),(input(x, y) + input(x + 1, y) + input(x + 2, y))) * 21845) >> 16);
+        blur_y(x, y) = cast(UInt(16), 0);
+        blur_y(x, y) += blur_x(x, y + rx);
+        blur_y(x, y) = cast(UInt(16),(cast(UInt(32),blur_y(x, y)) * 21845) >> 16);
 
         // How to schedule it
         if (get_target().has_gpu_feature()) {
@@ -95,17 +97,68 @@ public:
                 .compute_at(blur_y, yi)
                 .vectorize(x, vector_size);
         } else if (get_target().has_feature(Target::Xtensa)) {
-            const int vector_size = 32;
-            blur_y.split(y, y, yi, 8)
-                // NOTE(vksnk): parallel is not supported yet.
-                // .parallel(y)
-                .vectorize(x, vector_size);
-            blur_x.store_at(blur_y, y).compute_at(blur_y, yi).vectorize(x, vector_size);
+            // const int vector_size = 32;
+            // blur_y.split(y, y, yi, 8)
+            //     // NOTE(vksnk): parallel is not supported yet.
+            //     // .parallel(y)
+            //     .vectorize(x, vector_size);
+            // blur_x.store_at(blur_y, y).compute_at(blur_y, yi).vectorize(x, vector_size);			
+#if 0
+            blur_y.split(x, xo, xi, 128)
+			.split(y, yo, yi, 64)
+            .split(xi, xi, xii, 32)
+			.vectorize(xii)
+		    .reorder(xii,yi,xi,xo,yo);						
+			
+			blur_x
+			// .store_at(blur_y, xi)
+            .compute_at(blur_y, xi)
+            .vectorize(x, 32);
+#else
+			blur_y.split(x, xo, xi, 128)
+			.split(y, yo, yi, 64)
+			.vectorize(xi, 32)
+		    .reorder(yi,xi,xo,yo);
+			
+            blur_x.compute_root().vectorize(x, 32);
+			// blur_x
+			// // .store_at(blur_y, xi)
+			// .compute_at(blur_y, xi)
+            // .vectorize(x, 32);
+
+            blur_y.update(0).vectorize(x, 32);
+            blur_y.update(1).vectorize(x, 32);
+#endif
         } else {
             // CPU schedule.
             blur_y.split(y, y, yi, 8).parallel(y).vectorize(x, 8);
             blur_x.store_at(blur_y, y).compute_at(blur_y, yi).vectorize(x, 8);
         }
+
+        input.set_host_alignment(64);
+        blur_y.set_host_alignment(64);
+        input.dim(0)
+            .set_min((input.dim(0).min() / 64) * 64)
+            .set_extent((input.dim(0).extent() / 64) * 64);
+
+        // input.dim(1)
+        //     .set_min((input.dim(1).min() / 4) * 4)
+        //     .set_extent((input.dim(1).extent() / 4) * 4);
+
+        input.dim(1).set_stride((input.dim(1).stride() / 64) * 64);
+
+        blur_y.dim(0)
+            .set_min((blur_y.dim(0).min() / 64) * 64)
+            .set_extent((blur_y.dim(0).extent() / 64) * 64);
+
+        // blur_y.dim(1)
+        //     .set_min((blur_y.dim(1).min() / 4) * 4)
+        //     .set_extent((blur_y.dim(1).extent() / 4) * 4);
+
+        blur_y.dim(1).set_stride((blur_y.dim(1).stride() / 64) * 64);
+
+
+        // blur_y.bound(x, 0, 128).bound(y, 0, 128);
     }
 };
 

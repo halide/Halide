@@ -1294,7 +1294,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
         IRGraphVisitor::visit(op);
 
         if (!processed.count(op->name)) {
-            if ((op->call_type == Call::Extern || op->call_type == Call::PureExtern)) {
+            if (op->call_type == Call::Extern || op->call_type == Call::PureExtern) {
                 c_externs.insert({op->name, op});
             } else if (op->call_type == Call::ExternCPlusPlus) {
                 std::vector<std::string> namespaces;
@@ -1728,8 +1728,7 @@ string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
     auto cached = cache.find(rhs);
     if (cached == cache.end()) {
         id = unique_name('_');
-        const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
-        stream << get_indent() << print_type(t, AppendSpace) << const_flag << id << " = " << rhs << ";\n";
+        stream << get_indent() << print_type(t, AppendSpace) << (t.is_handle()?" __restrict ":"") << (output_kind == CPlusPlusImplementation ? "const " : "") << id << " = " << rhs << ";\n";
         cache[rhs] = id;
     } else {
         id = cached->second;
@@ -1881,7 +1880,7 @@ void CodeGen_C::visit(const Not *op) {
 }
 
 void CodeGen_C::visit(const IntImm *op) {
-    if (op->type == Int(32)) {
+    if (op->type.is_int() && (op->type.bits() <= 32)) {
         id = std::to_string(op->value);
     } else {
         static const char *const suffixes[3] = {
@@ -2792,6 +2791,7 @@ void CodeGen_C::visit(const Shuffle *op) {
 }
 
 void CodeGen_C::test() {
+    return ;
     LoweredArgument buffer_arg("buf", Argument::OutputBuffer, Int(32), 3, ArgumentEstimates{});
     LoweredArgument float_arg("alpha", Argument::InputScalar, Float(32), 0, ArgumentEstimates{});
     LoweredArgument int_arg("beta", Argument::InputScalar, Int(32), 0, ArgumentEstimates{});
