@@ -268,7 +268,6 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = f.realize({1000, 1000});
 
-        // Halide allocates one extra scalar, so we account for that.
         size_t expected_size = 2 * 1000 * 4 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
             return -1;
@@ -305,7 +304,6 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = f.realize({1000, 1000});
 
-        // Halide allocates one extra scalar, so we account for that.
         size_t expected_size = 1000 * 8 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
             return -1;
@@ -341,7 +339,6 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = f.realize({1000, 1000});
 
-        // Halide allocates one extra scalar, so we account for that.
         size_t expected_size = 2 * 1000 * 3 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
             return -1;
@@ -372,7 +369,6 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = f.realize({1000, 1000});
 
-        // Halide allocates one extra scalar, so we account for that.
         size_t expected_size = 1000 * 2 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
             return -1;
