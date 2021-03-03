@@ -415,6 +415,10 @@ private:
             first_index = -1;
         }
 
+        if (first_index != -1) {
+            new_stmts.push_back(stmts[first_index]);
+        }
+
         // Recursively mutate and check size to see if there is any merge
         for (Stmt &i : new_stmts) {
             i = mutate(i);
@@ -766,6 +770,9 @@ private:
 
             {"halide_xtensa_narrow_i24_with_shift_i16", i16(wild_i24x >> wild_i24)},
             {"halide_xtensa_narrow_i24_with_shift_i16", i16(wild_i24x / wild_i24), Pattern::ExactLog2Op1},
+
+            {"halide_xtensa_narrow_i24_with_shift_i8", i8(wild_i24x >> wild_i24)},
+            {"halide_xtensa_narrow_i24_with_shift_i8", i8(wild_i24x / wild_i24), Pattern::ExactLog2Op1},
 
             {"halide_xtensa_narrow_high_i32", i32(wild_i64x >> 32)},
             {"halide_xtensa_narrow_high_i32", i32(wild_i64x / IntImm::make(Int(64), 4294967296ll))},

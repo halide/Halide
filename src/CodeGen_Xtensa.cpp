@@ -797,8 +797,8 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint16x64_t uint16x64_t_aligned_load(co
 }
 
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int8x64_t int8x64_t_load(const void *base, int32_t offset) {
-    int8x64_t r;
-    xb_vec2Nx8U* ptr = (xb_vec2Nx8*)((const int8_t*)base + offset);
+    xb_vec2Nx8 r;
+    xb_vec2Nx8* ptr = (xb_vec2Nx8*)((const int8_t*)base + offset);
     IVP_L2U2NX8_XP(r, ptr, 0);
     return r;
 }
@@ -854,6 +854,10 @@ HALIDE_ALWAYS_INLINE void store(const uint8x64_t& a, void *base, int32_t offset)
     memcpy(((uint8_t*)base + offset), &a, sizeof(uint8_t) * 64);
 }
 
+HALIDE_ALWAYS_INLINE void store(const int8x64_t& a, void *base, int32_t offset) {
+    memcpy(((int8_t*)base + offset), &a, sizeof(int8_t) * 64);
+}
+
 HALIDE_ALWAYS_INLINE void aligned_store(const int24x64_t& a, void *base, int32_t offset) {
     *((int24x64_t *)((int24_t*)base + offset)) = a;
 }
@@ -896,6 +900,10 @@ HALIDE_ALWAYS_INLINE void aligned_store(const int16x64_t& a, void *base, int32_t
    int16x32_t *ptr = (int16x32_t *)((int16_t*)base + offset);
    ptr[0] = a.native_vector[0];
    ptr[1] = a.native_vector[1];
+}
+
+HALIDE_ALWAYS_INLINE void aligned_store(const int8x64_t& a, void *base, int32_t offset) {
+    *((int8x64_t *)((int8_t*)base + offset)) = a;
 }
 
 HALIDE_ALWAYS_INLINE void store(const uint8x128_t& a, void *base, int32_t offset) {
@@ -1389,6 +1397,10 @@ HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_narrow_i24_with_shift_i16(const in
     int16x64_t r(int16x64_t::empty);
     IVP_DSELNX16I(r.native_vector[1], r.native_vector[0], odd, even, IVP_DSELI_INTERLEAVE_1);
     return r;
+}
+
+HALIDE_ALWAYS_INLINE int8x64_t halide_xtensa_narrow_i24_with_shift_i8(const int24x64_t& a, int shift) {
+  return IVP_PACKVR2NX24(a, shift);
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_narrow_i48_with_shift_i16(const int48x32_t& a, int shift) {
