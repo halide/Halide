@@ -781,8 +781,10 @@ private:
     }
 
     Expr visit(const Shuffle *op) override {
-        // TODO(vksnk): generalize this pattern.
-        if (op->type.is_int_or_uint() && (op->type.bits() == 8) && (op->type.lanes() == 64)) {
+        if (op->is_slice() && (op->slice_stride() == 1) && (op->slice_begin() % 4 == 0) && op->type.is_int() && (op->type.bits() == 8) && (op->type.lanes() == 4)) {
+            return Call::make(op->type, "halide_xtensa_extract_i32",
+                              {mutate(op->vectors[0]), op->slice_begin() / 4}, Call::PureExtern);
+        } else if (op->type.is_int_or_uint() && (op->type.bits() == 8) && (op->type.lanes() == 64)) {
             if ((op->vectors.size() == 1) && (op->vectors[0].type().lanes() == 192)) {
                 bool is_extract_off_0_3 = true;
                 for (int ix = 0; ix < (int)op->indices.size(); ix++) {

@@ -888,7 +888,7 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_i16(const int16x64_t& a, int
   return IVP_SELNX16(a.native_vector[1], a.native_vector[0], IVP_SEQNX16() + int16x32_t(start));
 }
 
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_u16(const uint16x64_t& a, int start) {
+HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_slice_u16(const uint16x64_t& a, int start) {
   return IVP_SELNX16U(a.native_vector[1], a.native_vector[0], IVP_SEQNX16() + int16x32_t(start));
 }
 
@@ -1244,7 +1244,7 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_lerp_i16(const int16x32_t& a, cons
   xb_vecNx48 output = IVP_MULPN16XR16(a, b, alphaMalpha);
   return IVP_PACKVRNRNX48(output, 14);
 }
-
+/*
 HALIDE_ALWAYS_INLINE uint16x64_t convert_to_uint16x64_t_from_uint8x64_t(const uint8x64_t& src) {
   xb_vec2Nx24 wide = src * uint8x64_t(1);
   return uint16x64_t(uint16x64_t::from_native_vector,
@@ -2266,7 +2266,7 @@ void CodeGen_Xtensa::visit(const For *op) {
     //     stream << get_indent() << "cycles_start = GetCycleCount();\n";
     // }
     // if (current_loop_level == 1) {
-    //   stream << get_indent() << "cycles_start = GetCycleCount();\n";
+    //     stream << get_indent() << "cycles_start = GetCycleCount();\n";
     // }
 
     stream << get_indent() << "for (int "
