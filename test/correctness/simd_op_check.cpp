@@ -1655,9 +1655,13 @@ public:
             for (int w = 1; w <= 4; w <<= 1) {
                 // create arbitrary 16-byte constant
                 // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("v128.constant", 16 * w, u8_1 * u8(42 + x));
+                // (But will be soon in LLVM13, revisit soon)
+                // if (Halide::Internal::get_llvm_version() >= 130) {
+                //      check("v128.constant", 16 * w, u8_1 * u8(42 + x));
+                // }
 
                 // Create vector with identical lanes
+                // (Note that later LLVMs will use 64-bit constants for some smaller splats)
                 check("i8x16.splat", 16 * w, u8_1 * u8(42));
                 if (Halide::Internal::get_llvm_version() >= 120) {
                     check("i64x2.splat", 8 * w, u16_1 * u16(42));
@@ -1676,10 +1680,16 @@ public:
                 // to be used explicitly
 
                 // Shuffling using immediate indices
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("v8x16.shuffle", 16 * w, in_u8(2 * x));
-                // check("v8x16.shuffle", 8 * w, in_u16(2 * x));
-                // check("v8x16.shuffle", 4 * w, in_u32(2 * x));
+                if (Halide::Internal::get_llvm_version() >= 120) {
+                    check("i8x16.shuffle", 16 * w, in_u8(2 * x));
+                    check("i8x16.shuffle", 8 * w, in_u16(2 * x));
+                    check("i8x16.shuffle", 4 * w, in_u32(2 * x));
+                } else {
+                    // older mnemonics
+                    check("v8x16.shuffle", 16 * w, in_u8(2 * x));
+                    check("v8x16.shuffle", 8 * w, in_u16(2 * x));
+                    check("v8x16.shuffle", 4 * w, in_u32(2 * x));
+                }
 
                 // Swizzling using variable indices
                 // (This fails to generate, but that's not entirely surprising -- I don't
@@ -1706,26 +1716,57 @@ public:
                 check("i32x4.mul", 4 * w, i32_1 * i32_2);
                 check("i64x2.mul", 2 * w, i64_1 * i64_2);
 
+                // Integer dot product (16 -> 32)
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // {
+                //     RDom r(0, 4);
+                //     check("i32x4.dot_i16x8_s", 2 * w, sum(i32(in_i16(x * 4 + r)) * in_i16(x * 4 + r + 32)));
+                // }
+
                 // Integer negation
                 check("i8x16.neg", 16 * w, -i8_1);
                 check("i16x8.neg", 8 * w, -i16_1);
                 check("i32x4.neg", 4 * w, -i32_1);
                 check("i64x2.neg", 2 * w, -i64_1);
 
+                // Extended integer multiplication
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("i16x8.extmul_low_i8x16_s", ???, ???);
+                // check("i16x8.extmul_high_i8x16_s", ???, ???);
+                // check("i16x8.extmul_low_i8x16_u", ???, ???);
+                // check("i16x8.extmul_high_i8x16_u", ???, ???);
+                // check("i32x4.extmul_low_i16x8_s", ???, ???);
+                // check("i32x4.extmul_high_i16x8_s", ???, ???);
+                // check("i32x4.extmul_low_i16x8_u", ???, ???);
+                // check("i32x4.extmul_high_i16x8_u", ???, ???);
+                // check("i64x2.extmul_low_i32x4_s", ???, ???);
+                // check("i64x2.extmul_high_i32x4_s", ???, ???);
+                // check("i64x2.extmul_low_i32x4_u", ???, ???);
+                // check("i64x2.extmul_high_i32x4_u", ???, ???);
+
+                // Extended pairwise integer addition
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("i16x8.extadd_pairwise_i8x16_s", ???, ???);
+                // check("i16x8.extadd_pairwise_i8x16_u", ???, ???);
+                // check("i32x4.extadd_pairwise_i16x8_s", ???, ???);
+                // check("i32x4.extadd_pairwise_i16x8_u", ???, ???);
+
                 // Saturating integer addition
-                // TODO(srj): These were *maybe* passing before https://github.com/halide/Halide/pull/5527.
-                // They fail after that PR. However, the generated LLVM IR is *identical* before and after
-                // that PR, so whatever is going on here is very subtle and weird.
-                //check("i8x16.add_saturate_s", 16 * w, i8_sat(i16(i8_1) + i16(i8_2)));
-                //check("i8x16.add_saturate_u", 16 * w, u8_sat(u16(u8_1) + u16(u8_2)));
-                //check("i16x8.add_saturate_s", 8 * w, i16_sat(i32(i16_1) + i32(i16_2)));
-                //check("i16x8.add_saturate_u", 8 * w, u16_sat(u32(u16_1) + u32(u16_2)));
+                check("i8x16.add_saturate_s", 16 * w, i8_sat(i16(i8_1) + i16(i8_2)));
+                check("i8x16.add_saturate_u", 16 * w, u8_sat(u16(u8_1) + u16(u8_2)));
+                check("i16x8.add_saturate_s", 8 * w, i16_sat(i32(i16_1) + i32(i16_2)));
+                check("i16x8.add_saturate_u", 8 * w, u16_sat(u32(u16_1) + u32(u16_2)));
+
                 // Saturating integer subtraction
-                //check("i8x16.sub_saturate_s", 16 * w, i8_sat(i16(i8_1) - i16(i8_2)));
-                //check("i16x8.sub_saturate_s", 8 * w, i16_sat(i32(i16_1) - i32(i16_2)));
+                check("i8x16.sub_saturate_s", 16 * w, i8_sat(i16(i8_1) - i16(i8_2)));
+                check("i16x8.sub_saturate_s", 8 * w, i16_sat(i32(i16_1) - i32(i16_2)));
                 // N.B. Saturating subtracts are expressed by widening to a *signed* type
-                //check("i8x16.sub_saturate_u", 16 * w, u8_sat(i16(u8_1) - i16(u8_2)));
-                //check("i16x8.sub_saturate_u", 8 * w, u16_sat(i32(u16_1) - i32(u16_2)));
+                check("i8x16.sub_saturate_u", 16 * w, u8_sat(i16(u8_1) - i16(u8_2)));
+                check("i16x8.sub_saturate_u", 8 * w, u16_sat(i32(u16_1) - i32(u16_2)));
+
+                // Saturating integer Q-format rounding multiplication
+                // TODO: see arm's qrdmulh, probably
+                // check("i16x8.q15mulr_sat_s", ???, ???);
 
                 // Lane-wise integer minimum
                 check("i8x16.min_s", 16 * w, min(i8_1, i8_2));
@@ -1744,24 +1785,24 @@ public:
                 check("i32x4.max_u", 4 * w, max(u32_1, u32_2));
 
                 // Lane-wise integer rounding average
-                // TODO(srj): These were *maybe* passing before https://github.com/halide/Halide/pull/5527.
-                // They fail after that PR. However, the generated LLVM IR is *identical* before and after
-                // that PR, so whatever is going on here is very subtle and weird.
-                //check("i8x16.avgr_u", 8 * w, u8((u16(u8_1) + u16(u8_2) + 1) / 2));
-                //check("i8x16.avgr_u", 8 * w, u8((u16(u8_1) + u16(u8_2) + 1) >> 1));
-                //check("i16x8.avgr_u", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) / 2));
-                //check("i16x8.avgr_u", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) >> 1));
+                check("i8x16.avgr_u", 8 * w, u8((u16(u8_1) + u16(u8_2) + 1) / 2));
+                check("i8x16.avgr_u", 8 * w, u8((u16(u8_1) + u16(u8_2) + 1) >> 1));
+                check("i16x8.avgr_u", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) / 2));
+                check("i16x8.avgr_u", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) >> 1));
 
                 // Lane-wise integer absolute value
                 check("i8x16.abs", 16 * w, abs(i8_1));
                 check("i16x8.abs", 8 * w, abs(i16_1));
                 check("i32x4.abs", 4 * w, abs(i32_1));
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("i64x2.abs", 2 * w, abs(i64_1));
 
                 // Left shift by constant scalar
                 check("i8x16.shl", 16 * w, i8_1 << i8(7));
                 check("i16x8.shl", 8 * w, i16_1 << i16(7));
                 check("i32x4.shl", 4 * w, i32_1 << i32(7));
                 check("i64x2.shl", 2 * w, i64_1 << i64(7));
+                // unsigned
                 check("i8x16.shl", 16 * w, u8_1 << u8(7));
                 check("i16x8.shl", 8 * w, u16_1 << u16(7));
                 check("i32x4.shl", 4 * w, u32_1 << u32(7));
@@ -1783,6 +1824,7 @@ public:
                 check("i16x8.shr_s", 8 * w, i16_1 >> i16(7));
                 check("i32x4.shr_s", 4 * w, i32_1 >> i32(7));
                 check("i64x2.shr_s", 2 * w, i64_1 >> i64(7));
+                // unsigned
                 check("i8x16.shr_u", 16 * w, u8_1 >> i8(7));
                 check("i16x8.shr_u", 8 * w, u16_1 >> i16(7));
                 check("i32x4.shr_u", 4 * w, u32_1 >> i32(7));
@@ -1834,21 +1876,38 @@ public:
                 check("v128.bitselect", 16 * w, select(bool_1, u8_1, u8_2));
                 check("v128.bitselect", 8 * w, select(bool_1, u16_1, u16_2));
                 if (Halide::Internal::get_llvm_version() >= 120) {
-                    // TODO: check whether these fixes are backported to LLVM 11.x
                     check("v128.bitselect", 4 * w, select(bool_1, u32_1, u32_2));
                     check("v128.bitselect", 2 * w, select(bool_1, u64_1, u64_2));
                     check("v128.bitselect", 4 * w, select(bool_1, f32_1, f32_2));
                     check("v128.bitselect", 2 * w, select(bool_1, f64_1, f64_2));
                 }
 
+                // Lane-wise Population Count
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("i8x16.popcnt", 8 * w, popcount(i8_1));
+                // check("i8x16.popcnt", 8 * w, popcount(u8_1));
+                // check("i8x16.popcnt", 8 * w, popcount(i16_1));
+                // check("i8x16.popcnt", 8 * w, popcount(u16_1));
+                // check("i8x16.popcnt", 8 * w, popcount(i32_1));
+                // check("i8x16.popcnt", 8 * w, popcount(u32_1));
+
                 // Any lane true
                 // All lanes true
                 // TODO: does Halide have any idiom that obviously generates these?
+
+                // Bitmask extraction
+                // TODO:
+                // check("i8x16.bitmask", 16 * w, ???);
+                // check("i16x8.bitmask", 8 * w, ???);
+                // check("i32x4.bitmask", 4 * w, ???);
+                // check("i64x2.bitmask", 2 * w, ???);
 
                 // Equality
                 check("i8x16.eq", 16 * w, i8_1 == i8_2);
                 check("i16x8.eq", 8 * w, i16_1 == i16_2);
                 check("i32x4.eq", 4 * w, i32_1 == i32_2);
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("i64x2.eq", 2 * w, i64_1 == i64_2);
                 check("f32x4.eq", 4 * w, f32_1 == f32_2);
                 check("f64x2.eq", 2 * w, f64_1 == f64_2);
 
@@ -1856,50 +1915,40 @@ public:
                 check("i8x16.ne", 16 * w, i8_1 != i8_2);
                 check("i16x8.ne", 8 * w, i16_1 != i16_2);
                 check("i32x4.ne", 4 * w, i32_1 != i32_2);
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("i64x2.ne", 2 * w, i64_1 != i64_2);
                 check("f32x4.ne", 4 * w, f32_1 != f32_2);
                 check("f64x2.ne", 2 * w, f64_1 != f64_2);
 
                 // Less than
                 check("i8x16.lt_s", 16 * w, i8_1 < i8_2);
-                check("i16x8.lt_s", 8 * w, i16_1 < i16_2);
-                check("i32x4.lt_s", 4 * w, i32_1 < i32_2);
                 check("i8x16.lt_u", 16 * w, u8_1 < u8_2);
+                check("i16x8.lt_s", 8 * w, i16_1 < i16_2);
                 check("i16x8.lt_u", 8 * w, u16_1 < u16_2);
+                check("i32x4.lt_s", 4 * w, i32_1 < i32_2);
                 check("i32x4.lt_u", 4 * w, u32_1 < u32_2);
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("i64x2.lt_s", 2 * w, i64_1 < i64_2);
                 check("f32x4.lt", 4 * w, f32_1 < f32_2);
                 check("f64x2.lt", 2 * w, f64_1 < f64_2);
 
                 // Less than or equal
                 check("i8x16.le_s", 16 * w, i8_1 <= i8_2);
-                check("i16x8.le_s", 8 * w, i16_1 <= i16_2);
-                check("i32x4.le_s", 4 * w, i32_1 <= i32_2);
                 check("i8x16.le_u", 16 * w, u8_1 <= u8_2);
+                check("i16x8.le_s", 8 * w, i16_1 <= i16_2);
                 check("i16x8.le_u", 8 * w, u16_1 <= u16_2);
+                check("i32x4.le_s", 4 * w, i32_1 <= i32_2);
                 check("i32x4.le_u", 4 * w, u32_1 <= u32_2);
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("i64x2.le_s", 2 * w, i64_1 <= i64_2);
                 check("f32x4.le", 4 * w, f32_1 <= f32_2);
                 check("f64x2.le", 2 * w, f64_1 <= f64_2);
 
                 // Greater than
                 // SKIPPED: Halide aggressively simplifies > into <= so we shouldn't see these
-                // check("i8x16.gt_s",   16*w, i8_1 > i8_2);
-                // check("i16x8.gt_s",   8*w, i16_1 > i16_2);
-                // check("i32x4.gt_s",   4*w, i32_1 > i32_2);
-                // check("i8x16.gt_u",   16*w, u8_1 > u8_2);
-                // check("i16x8.gt_u",   8*w, u16_1 > u16_2);
-                // check("i32x4.gt_u",   4*w, u32_1 > u32_2);
-                // check("f32x4.gt",     4*w, f32_1 > f32_2);
-                // check("f64x2.gt", 2 * w, f64_1 > f64_2);
 
                 // Greater than or equal
                 // SKIPPED: Halide aggressively simplifies >= into < so we shouldn't see these
-                // check("i8x16.ge_s",   16*w, i8_1 >= i8_2);
-                // check("i16x8.ge_s",   8*w, i16_1 >= i16_2);
-                // check("i32x4.ge_s",   4*w, i32_1 >= i32_2);
-                // check("i8x16.ge_u",   16*w, u8_1 >= u8_2);
-                // check("i16x8.ge_u",   8*w, u16_1 >= u16_2);
-                // check("i32x4.ge_u",   4*w, u32_1 >= u32_2);
-                // check("f32x4.ge",     4*w, f32_1 >= f32_2);
-                // check("f64x2.ge", 2 * w, f64_1 >= f64_2);
 
                 // Load
                 check("v128.load", 16 * w, i8_1);
@@ -1908,12 +1957,25 @@ public:
                 check("v128.load", 4 * w, f32_1);
                 check("v128.load", 2 * w, f64_1);
 
+                // Load and Zero-Pad
+                // TODO
+
                 // Load vector with identical lanes
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("v8x16.load_splat", 16 * w, in_u8(0));
-                // check("v16x8.load_splat", 8 * w, in_u16(0));
-                // check("v32x4.load_splat", 4 * w, in_u32(0));
-                // check("v64x2.load_splat", 2 * w, in_u64(0));
+                if (Halide::Internal::get_llvm_version() >= 120) {
+                    check("v128.load8_splat", 16 * w, in_u8(0));
+                    check("v128.load16_splat", 8 * w, in_u16(0));
+                    check("v128.load32_splat", 4 * w, in_u32(0));
+                    check("v128.load64_splat", 2 * w, in_u64(0));
+                } else {
+                    // older mnemonics
+                    check("v8x16.load_splat", 16 * w, in_u8(0));
+                    check("v16x8.load_splat", 8 * w, in_u16(0));
+                    check("v32x4.load_splat", 4 * w, in_u32(0));
+                    check("v64x2.load_splat", 2 * w, in_u64(0));
+                }
+
+                // Load Lane
+                // TODO: does Halide have any idiom that obviously generates these?
 
                 // Load and Extend
                 if (w == 1) {
@@ -1925,30 +1987,15 @@ public:
                     check("i64x2.load32x2_u", 2 * w, u64(u32_1));
                 }
 
-                // Integer to integer narrowing
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i8x16.narrow_i16x8_s", 16*w, i8(i16_1));
-                // check("i8x16.narrow_i16x8_u", 16*w, u8(u16_1));
-                // check("i16x8.narrow_i32x4_s", 8*w, i16(i32_1));
-                // check("i16x8.narrow_i32x4_u", 8*w, u8(u16_1));
-
-                // Integer to integer widening
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i16x8.widen_low_i8x16_s", 8*w, i8(x) * 2);
-                // check("i16x8.widen_high_i8x16_s", 8*w, i16(i8_1));
-                // check("i32x4.widen_low_i16x8_s", 4*w, i32(i16_1));
-                // check("i32x4.widen_high_i16x8_s", 4*w, i32(i16_1));
-                // check("i16x8.widen_low_i8x16_u", 8*w, u16(u8_1));
-                // check("i16x8.widen_high_i8x16_u", 8*w, u16(u8_1));
-                // check("i32x4.widen_low_i16x8_u", 4*w, u32(u16_1));
-                // check("i32x4.widen_high_i16x8_u", 4*w, u32(u16_1));
-
                 // Store
                 check("v128.store", 16 * w, i8_1);
                 check("v128.store", 8 * w, i16_1);
                 check("v128.store", 4 * w, i32_1);
                 check("v128.store", 4 * w, f32_1);
                 check("v128.store", 2 * w, f64_1);
+
+                // Store Lane
+                // TODO: does Halide have any idiom that obviously generates these?
 
                 // Negation
                 check("f32x4.neg", 4 * w, -f32_1);
@@ -1965,6 +2012,10 @@ public:
                 // NaN-propagating maximum
                 check("f32x4.max", 4 * w, max(f32_1, f32_2));
                 check("f64x2.max", 2 * w, max(f64_1, f64_2));
+
+                // Pseudo-minimum
+                // Pseudo-maximum
+                // TODO: does Halide have any idiom that obviously generates these?
 
                 // Floating-point addition
                 check("f32x4.add", 4 * w, f32_1 + f32_2);
@@ -1986,13 +2037,73 @@ public:
                 check("f32x4.sqrt", 4 * w, sqrt(f32_1));
                 check("f64x2.sqrt", 2 * w, sqrt(f64_1));
 
-                // Integer to floating point
+                // Round to integer above (ceiling)
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("f32x4.ceil", 4 * w, ceil(f32_1));
+                // check("f64x2.ceil", 2 * w, ceil(f64_1));
+
+                // Round to integer below (floor)
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("f32x4.floor", 4 * w, floor(f32_1));
+                // check("f64x2.floor", 2 * w, floor(f64_1));
+
+                // Round to integer toward zero (truncate to integer)
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("f32x4.trunc", 4 * w, trunc(f32_1));
+                // check("f64x2.trunc", 2 * w, trunc(f64_1));
+
+                // Round to nearest integer, ties to even)
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("f32x4.nearest", 4 * w, round(f32_1));
+                // check("f64x2.nearest", 2 * w, round(f64_1));
+
+                // Integer to single-precision floating point
                 check("f32x4.convert_i32x4_s", 8 * w, cast<float>(i32_1));
                 check("f32x4.convert_i32x4_u", 8 * w, cast<float>(u32_1));
 
-                // Floating point to integer with saturation
-                check("i32x4.trunc_sat_f32x4_s", 8 * w, cast<int32_t>(f32_1));
-                check("i32x4.trunc_sat_f32x4_u", 8 * w, cast<uint32_t>(f32_1));
+                // Integer to double-precision floating point
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("f64x2.convert_low_i32x4_s", 4 * w, cast<double>(i32_1));
+                // check("f64x2.convert_low_i32x4_u", 4 * w, cast<double>(u32_1));
+
+                // Single-precision floating point to integer with saturation
+                check("i32x4.trunc_sat_f32x4_s", 4 * w, cast<int32_t>(f32_1));
+                check("i32x4.trunc_sat_f32x4_u", 4 * w, cast<uint32_t>(f32_1));
+
+                // Double-precision floating point to integer with saturation
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("i32x4.trunc_sat_f64x2_s_zero", 4 * w, cast<int32_t>(f64_1));
+                // check("i32x4.trunc_sat_f64x2_u_zero", 4 * w, cast<uint32_t>(f64_1));
+
+                // Double-precision floating point to single-precision
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("f32x4.demote_f64x2_zero", 4 * w, ???);
+
+                // Single-precision floating point to double-precision
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("f64x2.promote_low_f32x4", 4 * w, ???);
+
+                // Integer to integer narrowing
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("i8x16.narrow_i16x8_s", 16*w, i8(i16_1));
+                // check("i8x16.narrow_i16x8_u", 16*w, u8(u16_1));
+                // check("i16x8.narrow_i32x4_s", 8*w, i16(i32_1));
+                // check("i16x8.narrow_i32x4_u", 8*w, u8(u16_1));
+
+                // Integer to integer widening
+                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
+                // check("i16x8.extend_low_i8x16_s", 8*w, i8(x) * 2);
+                // check("i16x8.extend_high_i8x16_s", 8*w, i16(i8_1));
+                // check("i16x8.extend_low_i8x16_u", 8*w, u8(x) * 2);
+                // check("i16x8.extend_high_i8x16_u", 8*w, u16(u8_1));
+                // check("i32x4.extend_low_i16x8_s", 4*w, i32(i16_1));
+                // check("i32x4.extend_high_i16x8_s", 4*w, i32(i16_1));
+                // check("i32x4.extend_low_i16x8_u", 4*w, u32(u16_1));
+                // check("i32x4.extend_high_i16x8_u", 4*w, u32(u16_1));
+                // check("i64x2.extend_low_i32x4_s", 2*w, i64(i32_1));
+                // check("i64x2.extend_high_i32x4_s", 2*w, i64(i32_1));
+                // check("i64x2.extend_low_i32x4_u", 2*w, u64(u32_1));
+                // check("i64x2.extend_high_i32x4_u", 2*w, u64(u32_1));
             }
         }
     }

@@ -120,18 +120,18 @@ Interval bounds_of_nested_lanes(const Expr &e) {
             return {r->base + last_lane_idx * r->stride, r->base};
         }
     } else if (const LE *le = e.as<LE>()) {
-        // The least true this can be is if we maximize the LHS and minimize the RHS
-        // The most true this can be is if we minimize the LHS and maximize the RHS
-        // This is only exact if one of the two sides is a Broadcast
+        // The least true this can be is if we maximize the LHS and minimize the RHS.
+        // The most true this can be is if we minimize the LHS and maximize the RHS.
+        // This is only exact if one of the two sides is a Broadcast.
         Interval ia = bounds_of_nested_lanes(le->a);
         Interval ib = bounds_of_nested_lanes(le->b);
         if (ia.is_single_point() || ib.is_single_point()) {
             return {ia.max <= ib.min, ia.min <= ib.max};
         }
     } else if (const LT *lt = e.as<LT>()) {
-        // The least true this can be is if we maximize the LHS and minimize the RHS
-        // The most true this can be is if we minimize the LHS and maximize the RHS
-        // This is only exact if one of the two sides is a Broadcast
+        // The least true this can be is if we maximize the LHS and minimize the RHS.
+        // The most true this can be is if we minimize the LHS and maximize the RHS.
+        // This is only exact if one of the two sides is a Broadcast.
         Interval ia = bounds_of_nested_lanes(lt->a);
         Interval ib = bounds_of_nested_lanes(lt->b);
         if (ia.is_single_point() || ib.is_single_point()) {
@@ -170,10 +170,10 @@ Interval bounds_of_nested_lanes(const Expr &e) {
 Interval bounds_of_lanes(const Expr &e) {
     Interval bounds = bounds_of_nested_lanes(e);
     if (!bounds.min.type().is_scalar()) {
-        bounds.min = bounds_of_nested_lanes(bounds.min).min;
+        bounds.min = bounds_of_lanes(bounds.min).min;
     }
     if (!bounds.max.type().is_scalar()) {
-        bounds.max = bounds_of_nested_lanes(bounds.max).max;
+        bounds.max = bounds_of_lanes(bounds.max).max;
     }
     return bounds;
 }

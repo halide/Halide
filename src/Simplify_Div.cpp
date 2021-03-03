@@ -180,7 +180,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                rewrite((w + (z + (x * c0 + y))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
                rewrite((w + (z + (y + x * c0))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
-               /** In (x + c0) / c1, when can be pull the constant
+               /** In (x + c0) / c1, when can we pull the constant
                    addition out of the numerator? An obvious answer is
                    the constant is a multiple of the denominator, but
                    there are other cases too. The condition for the

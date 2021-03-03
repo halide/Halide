@@ -645,6 +645,12 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
         llvm_used->eraseFromParent();
     }
 
+    llvm::GlobalValue *llvm_compiler_used =
+        modules[0]->getNamedGlobal("llvm.compiler.used");
+    if (llvm_compiler_used) {
+        llvm_compiler_used->eraseFromParent();
+    }
+
     // Also drop the dummy runtime api usage. We only needed it so
     // that the declarations are retained in the module during the
     // linking procedure above.
