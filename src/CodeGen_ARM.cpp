@@ -972,6 +972,12 @@ void CodeGen_ARM::visit(const Store *op) {
     CodeGen_Posix::visit(op);
 }
 
+int CodeGen_ARM::allocation_padding(Type type) const {
+    // We want to be able to load up to 3 values past the end of the buffer in
+    // the Load visitor.
+    return std::max(CodeGen_Posix::allocation_padding(type), type.bytes() * 3);
+}
+
 void CodeGen_ARM::visit(const Load *op) {
     // Predicated load
     if (!is_const_one(op->predicate)) {
@@ -1002,12 +1008,22 @@ void CodeGen_ARM::visit(const Load *op) {
 
     // Try to rewrite strided loads as shuffles of dense loads,
     // aligned to the stride. This makes adjacent strided loads
-    // shared a vldN op. However, this is only safe when the new
-    // load would not cross any alignment boundaries not crossed
-    // by the original load.
+    // shared a vldN op.
     ModulusRemainder alignment = op->alignment;
-    if (stride && stride->value >= 2 && stride->value <= 4 &&
-        alignment.modulus % stride->value == 0) {
+    if (stride && stride->value >= 2 && stride->value <= 4) {
+        // For internal buffers, we know this is safe because we
+        // allocate an extra 3 values of padding. For external
+        // buffers, we can only do this if we know the alignment
+        // makes it safe.
+        // (In ASAN mode, don't read beyond the end of internal buffers either,
+        // as ASAN will complain even about harmless stack overreads.)
+        bool external = op->param.defined() || op->image.defined();
+        if (alignment.modulus % stride->value != 0 &&
+            (external || target.has_feature(Target::ASAN))) {
+            CodeGen_Posix::visit(op);
+            return;
+        }
+
         Expr base = ramp->base;
         int offset = mod_imp(alignment.remainder, stride->value);
         if (offset) {

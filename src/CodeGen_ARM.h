@@ -44,6 +44,8 @@ protected:
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
     // @}
 
+    int allocation_padding(Type type) const override;
+
     /** Various patterns to peephole match against */
     struct Pattern {
         std::string intrin;  ///< Name of the intrinsic
