@@ -1760,7 +1760,7 @@ public:
                 // Saturating integer subtraction
                 check("i8x16.sub_saturate_s", 16 * w, i8_sat(i16(i8_1) - i16(i8_2)));
                 check("i16x8.sub_saturate_s", 8 * w, i16_sat(i32(i16_1) - i32(i16_2)));
-                // N.B. Saturating subtracts are expressed by widening to a signed* type
+                // N.B. Saturating subtracts are expressed by widening to a *signed* type
                 check("i8x16.sub_saturate_u", 16 * w, u8_sat(i16(u8_1) - i16(u8_2)));
                 check("i16x8.sub_saturate_u", 8 * w, u16_sat(i32(u16_1) - i32(u16_2)));
 
