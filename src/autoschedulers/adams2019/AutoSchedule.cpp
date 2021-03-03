@@ -812,18 +812,18 @@ struct State {
         if (!lua_vars.empty()) {
             for (const auto &p : lua_vars) {
                 if (p.second.empty()) {
-                    lua_src << conform_name(p.first) << " = Var:new(nil,\"" << p.first << "\")\n";
+                    lua_src << conform_name(p.first) << " = Var:new(\"" << p.first << "\")\n";
                 } else {
-                    lua_src << conform_name(p.first) << " = Var:new(nil," << p.second << ")\n";
+                    lua_src << conform_name(p.first) << " = Var:new(" << p.second << ")\n";
                 }
             }
         }
         if (!lua_rvars.empty()) {
             for (const auto &p : lua_rvars) {
                 if (p.second.empty()) {
-                    lua_src << conform_name(p.first) << " = Rvar:new(nil,\"" << p.first << "\")\n";
+                    lua_src << conform_name(p.first) << " = Rvar:new(\"" << p.first << "\")\n";
                 } else {
-                    lua_src << conform_name(p.first) << " = Rvar:new(nil," << p.second << ")\n";
+                    lua_src << conform_name(p.first) << " = Rvar:new(" << p.second << ")\n";
                 }
             }
         }
