@@ -10,8 +10,7 @@ namespace interpret_nn {
 // Require that the first element of the innermost dimension is aligned to the
 // given alignment, as measured in the number of elements of the buffer. This
 // assumes that the dense dimension is dimension 0 (the default in Halide).
-inline void RequireAlignedRows(Halide::OutputImageParam param, int alignment)
-{
+inline void RequireAlignedRows(Halide::OutputImageParam param, int alignment) {
     // The first dimension should have a min/extent aligned to the required
     // alignment, we assume the stride is 1.
     param.dim(0).set_min((param.dim(0).min() / alignment) * alignment);
@@ -26,7 +25,6 @@ inline void RequireAlignedRows(Halide::OutputImageParam param, int alignment)
 
 class Convolution : public Generator<Convolution> {
 public:
-
     // Input(c, y, x)
     Input<Buffer<int8_t>> input_{"input_", 3};
     // Filter(n, c, y, x)
@@ -47,16 +45,16 @@ public:
         // x - additional input/output dimension
         // k.x, k.y - additional filter dimensions
 
-        int vector_width = 64;            // (64 for Q7, 128 for Q8)
+        int vector_width = 64;  // (64 for Q7, 128 for Q8)
 
         // MAC input vector lane count
-        int vector_reduction = 4;         // Q[uad]MAC instruction
+        int vector_reduction = 4;  // Q[uad]MAC instruction
 
         // MAC output accumulator register count
-        int accumulator_count = 4;        // Wide Vector Registers
+        int accumulator_count = 4;  // Wide Vector Registers
 
         // N partition output depth
-        int np_size = vector_width / 1;   // reduces if using partitioned QMAC
+        int np_size = vector_width / 1;  // reduces if using partitioned QMAC
 
         // C partition input/filter depth
         // (controls number of QMAC unrolled in inner loop)
@@ -74,41 +72,40 @@ public:
         // C is the inner matrix multiplication dimension that is eliminated
         // Align it so inner computation can be unrolled to a fix number
         filter_c = ((filter_c + cp_size - 1) / cp_size) * cp_size;
-        RDom k(0, filter_x, 0, filter_y, 0, filter_c);    // k.z = c dimension
+        RDom k(0, filter_x, 0, filter_y, 0, filter_c);  // k.z = c dimension
         std::cout << "[qys] " << filter_x << " " << filter_y << " " << filter_c << "\n";
         RVar co("co"), ci("ci"), cio("cio"), cii("cii");
 
         Func convolved("convolved");
         convolved(n, y, x) = cast(Int(24), 0);
         // x, k.x, k.y are additional dimensions
-        convolved(n, y, x) += cast(Int(24), input_(k.z, y+k.y, x+k.x)) *
+        convolved(n, y, x) += cast(Int(24), input_(k.z, y + k.y, x + k.x)) *
                               cast(Int(24), filter_(n, k.z, k.y, k.x));
         output_(n, y, x) = cast(Int(8), convolved(n, y, x) >> 6);
 
         // Schedule
         output_
             .split(n, no, ni, np_size, TailStrategy::RoundUp)
-            .split(y, yo, yi, accumulator_count, TailStrategy::ShiftInwards)   // 4xQMAC
+            .split(y, yo, yi, accumulator_count, TailStrategy::ShiftInwards)  // 4xQMAC
             .reorder(ni, yi, yo, x, no)
             .vectorize(ni, np_size)
-            .unroll(yi)                                                   // 4xQMAC
-        ;
+            .unroll(yi)  // 4xQMAC
+            ;
 
         convolved.compute_at(output_, yo)
             .vectorize(n, np_size)
-            .unroll(y)
-        ;
+            .unroll(y);
 
         convolved.update(0)
             .split(k.z, co, ci, cp_size)
             .split(ci, cio, cii, vector_reduction)  // QMAC
             .reorder(n, cii, y, cio, co, k.y, k.x, x)
             .vectorize(n, np_size)
-            .unroll(y)                              // 4xQMAC
-            .unroll(cio)                            // cp x QMAC
+            .unroll(y)    // 4xQMAC
+            .unroll(cio)  // cp x QMAC
             .atomic()
-            .vectorize(cii, vector_reduction)       // QMAC
-        ;
+            .vectorize(cii, vector_reduction)  // QMAC
+            ;
 
         input_.set_host_alignment(64);
         filter_.set_host_alignment(64);
@@ -146,6 +143,6 @@ public:
     }
 };
 
-}  // namespace
+}  // namespace interpret_nn
 
 HALIDE_REGISTER_GENERATOR(interpret_nn::Convolution, Convolution)

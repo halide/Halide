@@ -149,8 +149,8 @@ Expr slice(Expr x, int begin, int stride, int size) {
     return Shuffle::make_slice(std::move(x), begin, stride, size);
 }
 
-Expr load(const Type& type, const string& name, Expr index, ModulusRemainder alignment) {
-    return Load::make(type, name, index,  Buffer<>(), Parameter(), const_true(), alignment);
+Expr load(const Type &type, const string &name, Expr index, ModulusRemainder alignment) {
+    return Load::make(type, name, index, Buffer<>(), Parameter(), const_true(), alignment);
 }
 
 // Check if the matches satisfy the given pattern flags, and mutate the matches
@@ -312,23 +312,23 @@ private:
         if (op->is_concat() && op->vectors.size() == 2) {
             const Call *call0 = op->vectors[0].as<Call>();
             const Call *call1 = op->vectors[1].as<Call>();
-            if (call0 && call0->name == "halide_xtensa_extract_i32" && 
+            if (call0 && call0->name == "halide_xtensa_extract_i32" &&
                 call1 && call1->name == "halide_xtensa_extract_i32") {
-                  vector<Expr> dual_args = {
-                      call1->args[0],   // vector1
-                      call0->args[0],   // vector0
-                      call1->args[1],   // index1
-                      call0->args[1]    // index0
-                  };
-                  return Call::make(Int(8, 8), "halide_xtensa_dual_extract_i32",
-                                    dual_args, Call::PureExtern);
+                vector<Expr> dual_args = {
+                    call1->args[0],  // vector1
+                    call0->args[0],  // vector0
+                    call1->args[1],  // index1
+                    call0->args[1]   // index0
+                };
+                return Call::make(Int(8, 8), "halide_xtensa_dual_extract_i32",
+                                  dual_args, Call::PureExtern);
             }
         }
 
         return IRGraphMutator::visit(op);
     };
 
-    Stmt visit(const Block* op) override {
+    Stmt visit(const Block *op) override {
 
         // Merge two Quad Mul calls into one dual call
         vector<Stmt> new_stmts;
@@ -338,7 +338,7 @@ private:
 
         // Find pairs of Quad Mul statements to merge in rolling window of 2
         vector<Stmt> stmts = block_to_vector(op);
-        for(int i = 0; i < (int)stmts.size(); ++i) {
+        for (int i = 0; i < (int)stmts.size(); ++i) {
 
             // Case 1: Statement without Quad Mul
 
@@ -386,7 +386,7 @@ private:
 
             // Update stores to take from dual call result
             std::string dual_name = unique_name("_");
-            Expr dual_24x64 = Variable::make(Type(Type::Int, 24, call0->type.lanes()+call1->type.lanes()),
+            Expr dual_24x64 = Variable::make(Type(Type::Int, 24, call0->type.lanes() + call1->type.lanes()),
                                              dual_name);
             Expr slice0 = Shuffle::make_slice(dual_24x64, 0, 1, call0->type.lanes());
             Expr slice1 = Shuffle::make_slice(dual_24x64, call0->type.lanes(), 1, call1->type.lanes());
@@ -401,17 +401,14 @@ private:
                 concat({call0->args[0], call1->args[0]}),
                 call0->args[1],
                 // this will get converted to dual extract in recursive mutate
-                concat({call0->args[2], call1->args[2]})
-            };
+                concat({call0->args[2], call1->args[2]})};
 
             // Insert LetStmt with dual call with store scope
             new_stmts.push_back(
                 LetStmt::make(
                     dual_name,
                     call("halide_xtensa_dual_widen_quad_mul_add_i24", dual_24x64, dual_qm_args),
-                    stores
-                )
-            );
+                    stores));
 
             first_index = -1;
         }
@@ -575,7 +572,7 @@ private:
                 {"halide_xtensa_qqqq", slice(wild_i24x256, 0, 1, 128) + slice(wild_i24x256, 128, 1, 128), Pattern::SameOp01},
                 {"halide_xtensa_yyyy", (call("halide_xtensa_xxxx", wild_i24x64, {wild_i24x64, wild_i24x128}) + slice(wild_i24x128, 64, 1, 64)), Pattern::SameOp12},
                 {"halide_xtensa_xxxx", (wild_i24x64 + slice(wild_i24x128, 0, 1, 64))},
-                
+
                 {"halide_xtensa_widen_pair_mul_i48", wild_i32x * wild_i32x + wild_i32x * wild_i32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_pair_mul_u48", wild_u32x * wild_u32x + wild_u32x * wild_u32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
 
@@ -585,13 +582,11 @@ private:
 
                 {"halide_xtensa_widen_mul_add_vu8_si16_i24", i16(wild_i24x) + i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})), Pattern::AccumulatorOutput24},
 
-
-                {"halide_xtensa_widen_mul_add_i24", 
-                            wild_i24x + call("halide_xtensa_widen_mul_i24", wild_i24x, {wild_i8x, wild_i8x})},
+                {"halide_xtensa_widen_mul_add_i24",
+                 wild_i24x + call("halide_xtensa_widen_mul_i24", wild_i24x, {wild_i8x, wild_i8x})},
 
                 {"halide_xtensa_widen_quad_mul_add_i24",
-                            wild_i24x 
-                                + call("halide_xtensa_widen_quad_mul_i24", wild_i24x, {wild_i8x, wild_i8x, wild_i8x, wild_i8x, wild_i8x})},
+                 wild_i24x + call("halide_xtensa_widen_quad_mul_i24", wild_i24x, {wild_i8x, wild_i8x, wild_i8x, wild_i8x, wild_i8x})},
 
                 // Add to accumulator type.
                 // Paired add.
@@ -862,36 +857,16 @@ private:
 
             {"halide_xtensa_widen_add_u48", widening_add(wild_u16x, wild_u16x), Pattern::AccumulatorOutput48},
             {"halide_xtensa_widen_add_i48", widening_add(wild_i16x, wild_i16x), Pattern::AccumulatorOutput48},
-            {"halide_xtensa_widen_quad_mul_add_i24", 
-                        call("halide_xtensa_yyyy", wild_i24x, {
-                            wild_i24x,  call("halide_xtensa_qqqq", wild_i24x, {
-                                    call("halide_xtensa_widen_zzzzz", wild_i24x, {
-                                        wild_i8x, wild_i8x, wild_i8x, wild_i8x, wild_i8x
-                                    })
-                                })
-                            })
-            },
+            {"halide_xtensa_widen_quad_mul_add_i24",
+             call("halide_xtensa_yyyy", wild_i24x, {wild_i24x, call("halide_xtensa_qqqq", wild_i24x, {call("halide_xtensa_widen_zzzzz", wild_i24x, {wild_i8x, wild_i8x, wild_i8x, wild_i8x, wild_i8x})})})},
 
-            {"halide_xtensa_widen_quad_mul_add_i24", 
-                        call("halide_xtensa_yyyy", wild_i24x, {
-                            wild_i24x,  call("halide_xtensa_qqqq", wild_i24x, {
-                                    call("halide_xtensa_widen_zzzzz", wild_i24x, {
-                                        wild_i8x256, wild_i8x4
-                                    })
-                                })
-                            })
-            },
+            {"halide_xtensa_widen_quad_mul_add_i24",
+             call("halide_xtensa_yyyy", wild_i24x, {wild_i24x, call("halide_xtensa_qqqq", wild_i24x, {call("halide_xtensa_widen_zzzzz", wild_i24x, {wild_i8x256, wild_i8x4})})})},
 
-            {"halide_xtensa_widen_quad_mul_add_i24", 
-                        call("halide_xtensa_widen_pair_mul_add_i24", wild_i24x, {
-                            call("halide_xtensa_widen_pair_mul_add_i24", wild_i24x, {wild_i24x, wild_i8x, wild_i8, wild_i8x, wild_i8}),
-                            wild_i8x, wild_i8, wild_i8x, wild_i8})
-            },
-            {"halide_xtensa_widen_pair_mul_add_i24", 
-                        call("halide_xtensa_widen_mul_add_i24", wild_i24x, {
-                            call("halide_xtensa_widen_mul_add_i24", wild_i24x, {wild_i24x, wild_i8x, wild_i8}),
-                            wild_i8x, wild_i8})
-            },
+            {"halide_xtensa_widen_quad_mul_add_i24",
+             call("halide_xtensa_widen_pair_mul_add_i24", wild_i24x, {call("halide_xtensa_widen_pair_mul_add_i24", wild_i24x, {wild_i24x, wild_i8x, wild_i8, wild_i8x, wild_i8}), wild_i8x, wild_i8, wild_i8x, wild_i8})},
+            {"halide_xtensa_widen_pair_mul_add_i24",
+             call("halide_xtensa_widen_mul_add_i24", wild_i24x, {call("halide_xtensa_widen_mul_add_i24", wild_i24x, {wild_i24x, wild_i8x, wild_i8}), wild_i8x, wild_i8})},
 
             // NOTE(vksnk): looked like a good idea, but seems to be slower. Need to double-check.
             // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(i32(wild_i48x))},

@@ -16,19 +16,17 @@ public:
 
         Func matmul("matmul");
         matmul(x, y) = cast(Int(24), 0);
-        matmul(x, y) = matmul(x, y) 
-                        + cast(Int(24), A(k, y)) * cast(Int(24), B(x, k));
-                        // + cast(Int(24), A(4 * k + 1, y)) * cast(Int(24), B(x, 4 * k + 1))
-                        // + cast(Int(24), A(4 * k + 2, y)) * cast(Int(24), B(x, 4 * k + 2))
-                        // + cast(Int(24), A(4 * k + 3, y)) * cast(Int(24), B(x, 4 * k + 3));
-        C(x,y) = cast(Int(16), matmul(x, y) >> 6); 
-
+        matmul(x, y) = matmul(x, y) + cast(Int(24), A(k, y)) * cast(Int(24), B(x, k));
+        // + cast(Int(24), A(4 * k + 1, y)) * cast(Int(24), B(x, 4 * k + 1))
+        // + cast(Int(24), A(4 * k + 2, y)) * cast(Int(24), B(x, 4 * k + 2))
+        // + cast(Int(24), A(4 * k + 3, y)) * cast(Int(24), B(x, 4 * k + 3));
+        C(x, y) = cast(Int(16), matmul(x, y) >> 6);
 
         if (get_target().has_feature(Target::Xtensa)) {
             C.split(y, yo, yi, 4)
-             .vectorize(x, 64)
-             .unroll(yi);
-            
+                .vectorize(x, 64)
+                .unroll(yi);
+
             matmul.compute_at(C, yo)
                 .vectorize(x, 64)
                 .unroll(y);
@@ -40,8 +38,7 @@ public:
                 .unroll(y)
                 .unroll(k)
                 .atomic()
-                .vectorize(ki, 4)
-                ;
+                .vectorize(ki, 4);
 
             // A.in().compute_at(C, yo).vectorize(Halide::_0, 64).unroll(Halide::_1, 4);
         } else {
@@ -65,7 +62,6 @@ public:
         B.dim(1)
             .set_min(0);
 
-
         C.dim(0)
             .set_min(0)
             .set_extent((C.dim(0).extent() / 64) * 64);
@@ -76,7 +72,6 @@ public:
         B.dim(1).set_stride(64);
 
         C.dim(1).set_stride(64);
-
 
         C.bound(x, 0, 64).bound(y, 0, 64);
     }

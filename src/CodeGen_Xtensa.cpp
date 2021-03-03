@@ -2067,7 +2067,7 @@ void CodeGen_Xtensa::visit(const Load *op) {
         internal_assert(t.is_vector());
         std::string op_name;
         // TODO(vksnk): generalize this!
-        int native_lanes = (op->type.element_of().bytes() == 3)? 64 : (64 / op->type.element_of().bytes());
+        int native_lanes = (op->type.element_of().bytes() == 3) ? 64 : (64 / op->type.element_of().bytes());
         if ((op->alignment.modulus % native_lanes == 0) && (op->alignment.remainder % native_lanes == 0)) {
             op_name = "_aligned_load(";
         } else {
@@ -2136,7 +2136,7 @@ void CodeGen_Xtensa::visit(const Store *op) {
         internal_assert(op->value.type().is_vector());
         string op_name;
         // TODO(vksnk): generalize this!
-        int native_lanes = (op->value.type().element_of().bytes() == 3)? 64 : (64 / op->value.type().element_of().bytes());
+        int native_lanes = (op->value.type().element_of().bytes() == 3) ? 64 : (64 / op->value.type().element_of().bytes());
         if ((op->alignment.modulus % native_lanes == 0) && (op->alignment.remainder % native_lanes == 0)) {
             op_name = "aligned_store(";
         } else {
