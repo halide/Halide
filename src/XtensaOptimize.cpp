@@ -588,7 +588,7 @@ private:
                 {"halide_xtensa_widen_mul_add_i24", 
                             wild_i24x + call("halide_xtensa_widen_mul_i24", wild_i24x, {wild_i8x, wild_i8x})},
 
-                {"halide_xtensa_widen_quad_mul_add_i24", 
+                {"halide_xtensa_widen_quad_mul_add_i24",
                             wild_i24x 
                                 + call("halide_xtensa_widen_quad_mul_i24", wild_i24x, {wild_i8x, wild_i8x, wild_i8x, wild_i8x, wild_i8x})},
 
@@ -1085,42 +1085,6 @@ private:
             }
         }
 
-        if ((op->op == VectorReduce::Add) && (op->type.bits() == 24)
-                && (op->type.lanes() == 64) && (op->value.type().lanes() == 256)) {
-            // Expr p = i24(wild_i8x) * bc(i24(wild_i8x));
-            Expr p = wild_i24x * wild_i24x;
-            vector<Expr> matches;
-            if (expr_match(p, op->value, matches)) {
-                //debug(0) << "VECTOR REDUCE\n" << matches.size() << " " << matches[0] << " " << matches[1] << "\n";
-                debug(0) << "VECTOR REDUCE\n" << simplify(Shuffle::make_slice(matches[1], 0, 4, 64)) << "\n";
-                // Check that predicate is const true.
-                // if (const Load *full_load = matches[0].as<Load>()) {
-                //     vector<Expr> ramp_matches;
-                //     Expr ramp_of_ramps = ramp(ramp(wild_i32, wild_i32, 4), bc(1, 4), 64);
-                //     if (expr_match(ramp_of_ramps, full_load->index, ramp_matches)) {
-                //         debug(0) << "Matched ramp\n" << ramp_matches[0] << "\n";
-                //     }
-                //     Expr base = mutate(ramp_matches[0]);
-                //     Expr stride = mutate(ramp_matches[1]);
-
-                //     vector<Expr> args;
-                //     for (int ix = 0; ix < 4; ix++) {
-                //         args.push_back(
-                //             Load::make(
-                //                 Int(8, 64), full_load->name,
-                //                 Ramp::make(base + ix * stride, 1, 64), full_load->image,
-                //                 full_load->param, const_true(64), full_load->alignment));
-                //     }
-                //     // const Load* other_load = matches[1].as<Shuffle>()->vectors[0].as<Load>();
-                //     // Expr other_base = mutate(other_load->index.as<Ramp>()->base);
-                //     // args.push_back(Load::make(Int(8, 4), other_load->name, Ramp::make(other_base, 1, 4), 
-                //     //                             other_load->image, other_load->param, 
-                //     //                             const_true(4), other_load->alignment));
-                //     args.push_back(mutate(matches[1]));
-                //     return Call::make(op->type, "halide_xtensa_widen_quad_mul_i24", args, Call::PureExtern);
-                // }
-            }
-        }
         return IRGraphMutator::visit(op);
     }
 
@@ -1590,7 +1554,6 @@ Stmt match_xtensa_patterns(Stmt s) {
     // need to figure out where it goes wrong.
     s = loop_carry(s, 16);
     s = simplify(s);
-    // debug(0) << s << "\n";
     for (int ix = 0; ix < 10; ix++) {
         s = MatchXtensaPatterns().mutate(s);
     }
@@ -1605,8 +1568,6 @@ Stmt match_xtensa_patterns(Stmt s) {
     // s = simplify(common_subexpression_elimination(s));
     s = DualQuadMulMutator().mutate(s);
     s = common_subexpression_elimination(s);
-
-    debug(0) << s << "\n";
 
     return s;
 }
