@@ -23,23 +23,18 @@ set(HEADER_FILES
     Buffer.h
     CanonicalizeGPUVars.h
     Closure.h
-    CodeGen_ARM.h
     CodeGen_C.h
     CodeGen_D3D12Compute_Dev.h
     CodeGen_GPU_Dev.h
     CodeGen_Internal.h
     CodeGen_LLVM.h
     CodeGen_Metal_Dev.h
-    CodeGen_MIPS.h
     CodeGen_OpenCL_Dev.h
     CodeGen_OpenGLCompute_Dev.h
     CodeGen_Posix.h
-    CodeGen_PowerPC.h
     CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
-    CodeGen_RISCV.h
-    CodeGen_WebAssembly.h
-    CodeGen_X86.h
+    CodeGen_Targets.h
     CompilerLogger.h
     ConciseCasts.h
     CPlusPlusMangle.h
