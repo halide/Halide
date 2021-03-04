@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
     slow_time *= 1e9 / (out_fast.width() * N);
     fast_time *= 1e9 / (out_fast.width() * N);
 
-    if (fabs(out_fast(0) - out_slow(0)) > 1e-8) {
+    if (fabs(out_fast(0) - out_slow(0)) > 1e-5) {
         printf("Mismatched answers:\n"
                "fast: %10.10f\n"
                "slow: %10.10f\n",
