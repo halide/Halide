@@ -83,6 +83,20 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              rewrite(min(max(y, x), x), b) ||
              rewrite(min(max(x, c0), c1), b, c1 <= c0) ||
 
+             rewrite(min(x, max(y, max(x, z))), a) ||
+             rewrite(min(x, max(y, max(z, x))), a) ||
+             rewrite(min(x, max(max(x, y), z)), a) ||
+             rewrite(min(x, max(max(y, x), z)), a) ||
+             rewrite(min(max(x, max(y, z)), y), b) ||
+             rewrite(min(max(x, max(y, z)), z), b) ||
+             rewrite(min(max(max(x, y), z), x), b) ||
+             rewrite(min(max(max(x, y), z), y), b) ||
+
+             rewrite(min(max(x, y), min(x, z)), b) ||
+             rewrite(min(max(x, y), min(y, z)), b) ||
+             rewrite(min(max(x, y), min(z, x)), b) ||
+             rewrite(min(max(x, y), min(z, y)), b) ||
+
              rewrite(min(intrin(Call::likely, x), x), b) ||
              rewrite(min(x, intrin(Call::likely, x)), a) ||
              rewrite(min(intrin(Call::likely_if_innermost, x), x), b) ||
@@ -108,6 +122,16 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                rewrite(min(x, (x/c1)*c1 + c2), b, c1 > 0 && c2 <= 0) ||
                rewrite(min(((x + c0)/c1)*c1, x), a, c1 > 0 && c0 <= 0) ||
                rewrite(min(x, ((x + c0)/c1)*c1), b, c1 > 0 && c0 <= 0) ||
+
+               rewrite(min(x, max(x, y) + c0), a, 0 <= c0) ||
+               rewrite(min(x, max(y, x) + c0), a, 0 <= c0) ||
+               rewrite(min(max(x, y) + c0, x), b, 0 <= c0) ||
+               rewrite(min(max(x, y) + c0, y), b, 0 <= c0) ||
+
+               (no_overflow_int(op->type) &&
+                (rewrite(min(max(c0 - x, x), c1), b, 2*c1 <= c0 + 1) ||
+                 rewrite(min(max(x, c0 - x), c1), b, 2*c1 <= c0 + 1))) ||
+
                false)))) {
             return rewrite.result;
         }
@@ -142,6 +166,15 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              rewrite(min(select(x == c0, c1, x), c2), min(x, c2), (c2 <= c0) && (c2 <= c1)) ||
              rewrite(min(select(x == c0, c1, x), x), select(x == c0, c1, x), c1 < c0) ||
              rewrite(min(select(x == c0, c1, x), x), x, c0 <= c1) ||
+
+             rewrite(min(x, min(y, max(x, z))), min(y, x)) ||
+             rewrite(min(x, min(y, max(z, x))), min(y, x)) ||
+             rewrite(min(x, min(max(x, y), z)), min(x, z)) ||
+             rewrite(min(x, min(max(y, x), z)), min(x, z)) ||
+             rewrite(min(min(x, max(y, z)), y), min(x, y)) ||
+             rewrite(min(min(x, max(y, z)), z), min(x, z)) ||
+             rewrite(min(min(max(x, y), z), x), min(z, x)) ||
+             rewrite(min(min(max(x, y), z), y), min(z, y)) ||
 
              (no_overflow(op->type) &&
               (rewrite(min(min(x, y) + c0, x), min(x, y + c0), c0 > 0) ||
