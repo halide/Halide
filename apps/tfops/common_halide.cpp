@@ -87,13 +87,13 @@ Expr multiply_2x_high(const Expr &a, const Expr &b) {
     return saturating_cast(t, result);
 }
 
-Expr round_shift_right(const Expr &x, const Expr &exponent) {
-    // This is hard to pattern match due to CSE.
-    return rounding_shift_right(x, exponent);
-}
+// Expr round_shift_right_impl(const Expr &x, const Expr &exponent) {
+//     // This is hard to pattern match due to CSE.
+//     return rounding_shift_right(x, exponent);
+// }
 
-Expr multiply_quantized(const Expr &x, const Expr &q, const Expr &shift) {
-    return round_shift_right(multiply_2x_high(x, q), shift);
-}
+// Expr multiply_quantized(const Expr &x, const Expr &q, const Expr &shift) {
+//     return round_shift_right_impl(multiply_2x_high(x, q), shift);
+// }
 
 }  // namespace interpret_nn

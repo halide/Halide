@@ -99,7 +99,7 @@ public:
         convolved.update(0)
             .split(k.z, co, ci, cp_size)
             .split(ci, cio, cii, vector_reduction)  // QMAC
-            .reorder(n, cii, y, cio, co, k.y, k.x, x)
+            .reorder(n, cii, cio, y, k.y, k.x, co, x)
             .vectorize(n, np_size)
             .unroll(y)    // 4xQMAC
             .unroll(cio)  // cp x QMAC

@@ -34,15 +34,15 @@ Halide::Func constant_exterior_tensor(Halide::ImageParam p, Halide::Expr exterio
 // instruction.
 Halide::Expr multiply_2x_high(const Halide::Expr &a, const Halide::Expr &b);
 
-// Correctly-rounded-to-nearest division by a power-of-two. Also known as
-// rounding arithmetic right shift.
-Halide::Expr round_shift_right(const Halide::Expr &x, const Halide::Expr &shift);
+// // Correctly-rounded-to-nearest division by a power-of-two. Also known as
+// // rounding arithmetic right shift.
+// Halide::Expr round_shift_right_impl(const Halide::Expr &x, const Halide::Expr &shift);
 
-// Performs right shift and multiply by a multiplier. Aims to be very close to
-// tflite's reference implementation. However, tflite is standardizing on left
-// (exponent-like) shifts.
-Halide::Expr multiply_quantized(
-    const Halide::Expr &x, const Halide::Expr &quantized_multiplier, const Halide::Expr &shift);
+// // Performs right shift and multiply by a multiplier. Aims to be very close to
+// // tflite's reference implementation. However, tflite is standardizing on left
+// // (exponent-like) shifts.
+// Halide::Expr multiply_quantized(
+//     const Halide::Expr &x, const Halide::Expr &quantized_multiplier, const Halide::Expr &shift);
 
 }  // namespace interpret_nn
 
