@@ -12,6 +12,12 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (target.arch == Target::ARM &&
+        target.os == Target::OSX) {
+        printf("[SKIP] Apple M1 chips have division performance roughly on par with the reciprocal instruction\n");
+        return 0;
+    }
+
     Func slow, fast;
     Var x;
     Param<float> p(1.0f);

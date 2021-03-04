@@ -138,21 +138,6 @@ protected:
      * of functions as. */
     virtual Type upgrade_type_for_argument_passing(const Type &) const;
 
-    /** State needed by llvm for code generation, including the
-     * current module, function, context, builder, and most recently
-     * generated llvm value. */
-    //@{
-    static bool llvm_X86_enabled;
-    static bool llvm_ARM_enabled;
-    static bool llvm_Hexagon_enabled;
-    static bool llvm_AArch64_enabled;
-    static bool llvm_NVPTX_enabled;
-    static bool llvm_Mips_enabled;
-    static bool llvm_PowerPC_enabled;
-    static bool llvm_AMDGPU_enabled;
-    static bool llvm_WebAssembly_enabled;
-    static bool llvm_RISCV_enabled;
-
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;

@@ -980,10 +980,25 @@ class CollapseSelects : public IRMutator {
     }
 };
 
-class ContainsLoop : public IRVisitor {
+class ContainsHotLoop : public IRVisitor {
     using IRVisitor::visit;
     void visit(const For *op) override {
         result = true;
+    }
+
+    void visit(const IfThenElse *op) override {
+        op->then_case.accept(this);
+
+        // Don't count loops that appear in cold paths
+        const Call *c = op->condition.as<Call>();
+        bool else_case_is_cold =
+            (c &&
+             (c->is_intrinsic(Call::likely_if_innermost) ||
+              c->is_intrinsic(Call::likely)));
+        if (op->else_case.defined() &&
+            !else_case_is_cold) {
+            op->else_case.accept(this);
+        }
     }
 
 public:
@@ -1009,7 +1024,7 @@ class LowerLikelyIfInnermost : public IRMutator {
     }
 
     Stmt visit(const For *op) override {
-        ContainsLoop c;
+        ContainsHotLoop c;
         op->body.accept(&c);
         inside_innermost_loop = !c.result;
         Stmt stmt = IRMutator::visit(op);

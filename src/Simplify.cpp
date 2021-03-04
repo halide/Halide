@@ -149,13 +149,21 @@ void Simplify::ScopedFact::learn_false(const Expr &fact) {
                 learn_upper_bound(v, i.max - 1);
             }
         }
+    } else if (const Call *c = fact.as<Call>()) {
+        if (c->is_intrinsic(Call::likely) || c->is_intrinsic(Call::likely_if_innermost)) {
+            learn_false(c->args[0]);
+            return;
+        }
     } else if (const Or *o = fact.as<Or>()) {
         // Both must be false
         learn_false(o->a);
         learn_false(o->b);
+        return;
     } else if (const Not *n = fact.as<Not>()) {
         learn_true(n->a);
-    } else if (simplify->falsehoods.insert(fact).second) {
+        return;
+    }
+    if (simplify->falsehoods.insert(fact).second) {
         falsehoods.push_back(fact);
     }
 }
@@ -278,15 +286,43 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
                 learn_lower_bound(v, i.min);
             }
         }
+    } else if (const Call *c = fact.as<Call>()) {
+        if (c->is_intrinsic(Call::likely) || c->is_intrinsic(Call::likely_if_innermost)) {
+            learn_true(c->args[0]);
+            return;
+        }
     } else if (const And *a = fact.as<And>()) {
         // Both must be true
         learn_true(a->a);
         learn_true(a->b);
+        return;
     } else if (const Not *n = fact.as<Not>()) {
         learn_false(n->a);
-    } else if (simplify->truths.insert(fact).second) {
+        return;
+    }
+    if (simplify->truths.insert(fact).second) {
         truths.push_back(fact);
     }
+}
+
+template<class T>
+T substitute_facts_impl(T t, const vector<Expr> &truths, const vector<Expr> &falsehoods) {
+    // An std::map<Expr, Expr> version of substitute might be an optimization?
+    for (const auto &i : truths) {
+        t = substitute(i, const_true(i.type().lanes()), t);
+    }
+    for (const auto &i : falsehoods) {
+        t = substitute(i, const_false(i.type().lanes()), t);
+    }
+    return t;
+}
+
+Expr Simplify::ScopedFact::substitute_facts(const Expr &e) {
+    return substitute_facts_impl(e, truths, falsehoods);
+}
+
+Stmt Simplify::ScopedFact::substitute_facts(const Stmt &s) {
+    return substitute_facts_impl(s, truths, falsehoods);
 }
 
 Simplify::ScopedFact::~ScopedFact() {
