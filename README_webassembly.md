@@ -143,9 +143,7 @@ https://github.com/halide/Halide/issues/5047 to track progress.)
     with some work. (Patches welcome.)
 -   None of the `apps/` folder has been investigated yet. Many of them should be
     supportable with some work. (Patches welcome.)
--   We currently use v8/d8 as a test environment for AOT code; we may want to
-    consider using Node or (better yet) headless Chrome instead (which is
-    probably required to allow for using threads in AOT code).
+-   We currently use wabt-interp as a test environment for AOT code.
 
 # Known TODO:
 

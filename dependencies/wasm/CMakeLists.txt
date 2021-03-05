@@ -2,17 +2,11 @@ include(FetchContent)
 include(CMakeDependentOption)
 
 cmake_dependent_option(WITH_WABT "Include WABT Interpreter for WASM testing" ON "TARGET_WEBASSEMBLY" OFF)
-cmake_dependent_option(WITH_WASM_SHELL "Download a wasm shell (e.g. d8) for testing AOT wasm code." ON "TARGET_WEBASSEMBLY" OFF)
 
 if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
     if (WITH_WABT)
         message(STATUS "WITH_WABT is not yet supported on Windows")
         set(WITH_WABT OFF CACHE BOOL "WITH_WABT is not yet supported on Windows" FORCE)
-    endif ()
-
-    if (WITH_WASM_SHELL)
-        message(STATUS "WITH_WASM_SHELL is not yet supported on Windows")
-        set(WITH_WASM_SHELL OFF CACHE BOOL "WITH_WASM_SHELL is not yet supported on Windows" FORCE)
     endif ()
 endif ()
 
@@ -24,13 +18,14 @@ if (WITH_WABT)
                          GIT_REPOSITORY https://github.com/WebAssembly/wabt.git
                          GIT_TAG ${WABT_VER}
                          GIT_SHALLOW TRUE
-                         GIT_SUBMODULES "")
+                         GIT_SUBMODULES "third_party/uvwasi")
 
     # configuration for wabt
     set(WITH_EXCEPTIONS ${Halide_ENABLE_EXCEPTIONS})
     set(BUILD_TESTS OFF)
-    set(BUILD_TOOLS OFF)
+    set(BUILD_TOOLS ON)  # we want wabt-interp (at least)
     set(BUILD_LIBWASM OFF)
+    set(WITH_WASI ON)
     FetchContent_MakeAvailable(wabt)
 
     set_target_properties(wabt PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -51,41 +46,6 @@ if (WITH_WABT)
                                $<BUILD_INTERFACE:${wabt_SOURCE_DIR}>
                                $<BUILD_INTERFACE:${wabt_BINARY_DIR}>
                                $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/_deps>)
-endif ()
-
-if (WITH_WASM_SHELL)
-    # Even if we have the latest Emscripten SDK installed, we can't rely on it having
-    # an up-to-date shell for running wasm; it includes a version of Node.js that usually
-    # lags on wasm updates, so we need something more recent to reliably test wasm.
-    # We'll go with a predictable version of d8 (the command-line shell for v8); this
-    # is directly mimicking the approach useed by jsvu.
-    # These are hosted at
-    if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
-        set(WASM_SHELL_PLATFORM "win64")
-    elseif ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Darwin")
-        set(WASM_SHELL_PLATFORM "mac64")
-    else ()
-        set(WASM_SHELL_PLATFORM "linux64")
-    endif ()
-
-    # We want to deliberately choose a stable version (rather than top-of-tree);
-    # this might be a canary version (if needed to get the updates to v8 that we need)
-    # but should be carefully tested before landing.
-    set(WASM_SHELL_VERSION 8.8.97)
-    set(WASM_SHELL_URL "https://storage.googleapis.com/chromium-v8/official/canary/v8-${WASM_SHELL_PLATFORM}-rel-${WASM_SHELL_VERSION}.zip")
-    message(STATUS "Fetching WASM_SHELL ${WASM_SHELL_URL}...")
-    FetchContent_Declare(wasm_shell URL "${WASM_SHELL_URL}")
-    FetchContent_MakeAvailable(wasm_shell)
-
-    find_program(D8_PATH d8
-                 HINTS "${CMAKE_BINARY_DIR}/_deps/wasm_shell-src")
-
-    if (NOT D8_PATH)
-        message(FATAL_ERROR "Could not find or download D8 WASM shell")
-    endif ()
-
-    add_executable(d8 IMPORTED GLOBAL)
-    set_target_properties(d8 PROPERTIES IMPORTED_LOCATION "${D8_PATH}")
 endif ()
 
 function(add_wasm_executable TARGET)
@@ -128,7 +88,7 @@ function(add_wasm_executable TARGET)
         -Wsign-compare
         -Wsuggest-override
         -s ASSERTIONS=1
-        -s ALLOW_MEMORY_GROWTH=1
+        -s INITIAL_MEMORY=67108864
         -s WASM_BIGINT=1
         -s STANDALONE_WASM=1
         -s ENVIRONMENT=shell)
@@ -168,19 +128,19 @@ function(add_wasm_halide_test TARGET)
         return()
     endif ()
 
-    if (NOT WITH_WASM_SHELL)
-        message(FATAL_ERROR "WITH_WASM_SHELL must be enabled if testing AOT WASM code.")
+    if (NOT WITH_WABT)
+        message(FATAL_ERROR "WITH_WABT must be enabled if testing AOT WASM code.")
     endif ()
 
-    set(WASM_SHELL_FLAGS)
+    set(WASM_SHELL_FLAGS "--wasi")
     if (Halide_TARGET MATCHES "wasm_simd128")
-        list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-simd")
+        list(APPEND WASM_SHELL_FLAGS "--enable-simd")
     endif ()
     if (Halide_TARGET MATCHES "wasm_threads")
-        list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-threads")
+        list(APPEND WASM_SHELL_FLAGS "--enable-threads")
     endif ()
 
     add_halide_test("${TARGET}"
                     GROUPS ${args_GROUPS}
-                    COMMAND d8 ${WASM_SHELL_FLAGS} "${TARGET}.js")
+                    COMMAND wasm-interp ${WASM_SHELL_FLAGS} "${TARGET}.wasm")
 endfunction()
