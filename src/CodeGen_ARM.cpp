@@ -1077,9 +1077,11 @@ void CodeGen_ARM::visit(const Load *op) {
         // The min moves lower by offset.
         bool alignment_safe = alignment.remainder >= 0;
         // The max needs to not cross an alignment boundary.
-        int old_max = alignment.remainder + (op->type.lanes() - 1) * stride->value;
-        int new_max = old_max + stride->value - 1 - offset;
-        alignment_safe &= (old_max / alignment.modulus == new_max / alignment.modulus);
+        if (alignment.modulus > 0) {
+            int old_max = alignment.remainder + (op->type.lanes() - 1) * stride->value;
+            int new_max = old_max + stride->value - 1 - offset;
+            alignment_safe &= (old_max / alignment.modulus == new_max / alignment.modulus);
+        }
         bool external = op->param.defined() || op->image.defined();
         if (!alignment_safe && (external || target.has_feature(Target::ASAN))) {
             CodeGen_Posix::visit(op);
