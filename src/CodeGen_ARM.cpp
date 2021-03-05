@@ -1063,7 +1063,7 @@ void CodeGen_ARM::visit(const Load *op) {
 
         if (offset) {
             base = simplify(base - offset);
-            alignment.remainder = offset;
+            alignment.remainder -= offset;
         }
 
         // We want to load a few more bytes than the original load did.
