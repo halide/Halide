@@ -1047,29 +1047,46 @@ void CodeGen_ARM::visit(const Load *op) {
     // aligned to the stride. This makes adjacent strided loads
     // shared a vldN op.
     ModulusRemainder alignment = op->alignment;
+    alignment.remainder = mod_imp(alignment.remainder, alignment.modulus);
     if (stride && stride->value >= 2 && stride->value <= 4) {
-        // For internal buffers, we know this is safe because we
-        // allocate an extra 3 values of padding. For external
-        // buffers, we can only do this if we know the alignment
-        // makes it safe.
+        Expr base = ramp->base;
+        int aligned_stride = gcd(stride->value, alignment.modulus);
+        int offset = 0;
+        if (aligned_stride == stride->value) {
+            offset = mod_imp((int)alignment.remainder, aligned_stride);
+        } else {
+            const Add *add = ramp->base.as<Add>();
+            if (const IntImm *add_c = add ? add->b.as<IntImm>() : ramp->base.as<IntImm>()) {
+                offset = mod_imp(add_c->value, stride->value);
+            }
+        }
+
+        if (offset) {
+            base = simplify(base - offset);
+            alignment.remainder = offset;
+        }
+
+        // We want to load a few more bytes than the original load did.
+        // This is safe under these conditions:
+        // - The alignment information is sufficient to determine the
+        //   modified load is safe.
+        // - For internal buffers, we know this is safe because we
+        //   allocate an extra 3 values of padding.
         // (In ASAN mode, don't read beyond the end of internal buffers either,
         // as ASAN will complain even about harmless stack overreads.)
+        // The min moves lower by offset.
+        bool alignment_safe = alignment.remainder >= 0;
+        // The max moves higher by stride->value - 1 - offset
+        alignment_safe &=
+            alignment.remainder + stride->value - 1 - offset <= alignment.modulus;
         bool external = op->param.defined() || op->image.defined();
-        if (alignment.modulus % stride->value != 0 &&
-            (external || target.has_feature(Target::ASAN))) {
+        if (!alignment_safe && (external || target.has_feature(Target::ASAN))) {
             CodeGen_Posix::visit(op);
             return;
         }
 
-        Expr base = ramp->base;
-        int offset = mod_imp(alignment.remainder, stride->value);
-        if (offset) {
-            base = simplify(base - offset);
-            alignment.remainder -= offset;
-        }
-
-        int align_bytes =
-            gcd(alignment.modulus, alignment.remainder) * op->type.bytes();
+        alignment.remainder = mod_imp(alignment.remainder, alignment.modulus);
+        int align_bytes = gcd(alignment.modulus, alignment.remainder) * op->type.bytes();
         // Maximum stack alignment on arm is 16 bytes, so we should
         // never claim alignment greater than that.
         align_bytes = gcd(align_bytes, 16);
