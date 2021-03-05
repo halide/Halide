@@ -68,10 +68,18 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
 
         // clang-format off
         if (rewrite(broadcast(x, c0) < broadcast(y, c0), broadcast(x < y, c0)) ||
+
+            // We can learn more from equality than less with mod.
+            rewrite(x % y < 1, x % y == 0) ||
+            rewrite(0 < x % y, x % y != 0) ||
+            rewrite(x % c0 < c1, x % c0 != fold(c0 - 1), c1 + 1 == c0 && c0 > 0) ||
+            rewrite(c0 < x % c1, x % c1 == fold(c1 - 1), c0 + 2 == c1 && c1 > 0) ||
+
             (no_overflow(ty) && EVAL_IN_LAMBDA
              (rewrite(ramp(x, y, c0) < ramp(z, y, c0), broadcast(x < z, c0)) ||
               // Move constants to the RHS
               rewrite(x + c0 < y, x < y + fold(-c0)) ||
+              rewrite(c0 < c1 - x, x < fold(c1 - c0)) ||
 
               // Merge RHS constant additions with a constant LHS
               rewrite(c0 < x + c1, fold(c0 - c1) < x) ||
@@ -166,12 +174,14 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
 
               (ty.is_int()   && rewrite(x * c0 < c1, x < fold((c1 + c0 - 1) / c0), c0 > 0)) ||
               (ty.is_float() && rewrite(x * c0 < c1, x < fold(c1 / c0), c0 > 0)) ||
+              (ty.is_float() && rewrite(x * c0 < c1, fold(c1 / c0) < x, c0 < 0)) ||
               rewrite(c1 < x * c0, fold(c1 / c0) < x, c0 > 0) ||
 
               // Multiply-out a division
               rewrite(x / c0 < c1, x < c1 * c0, c0 > 0) ||
               (ty.is_int() && rewrite(c0 < x / c1, fold((c0 + 1) * c1 - 1) < x, c1 > 0)) ||
               (ty.is_float() && rewrite(c0 < x / c1, fold(c0 * c1) < x, c1 > 0)) ||
+              (ty.is_float() && rewrite(c0 < x / c1, x < fold(c0 * c1), c1 < 0)) ||
 
               // We want to break max(x, y) < z into x < z && y <
               // z in cases where one of those two terms is going

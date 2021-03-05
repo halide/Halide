@@ -24,24 +24,18 @@ set(HEADER_FILES
     Buffer.h
     CanonicalizeGPUVars.h
     Closure.h
-    CodeGen_ARM.h
     CodeGen_C.h
     CodeGen_D3D12Compute_Dev.h
     CodeGen_GPU_Dev.h
-    CodeGen_GPU_Host.h
     CodeGen_Internal.h
     CodeGen_LLVM.h
     CodeGen_Metal_Dev.h
-    CodeGen_MIPS.h
     CodeGen_OpenCL_Dev.h
     CodeGen_OpenGLCompute_Dev.h
     CodeGen_Posix.h
-    CodeGen_PowerPC.h
     CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
-    CodeGen_RISCV.h
-    CodeGen_WebAssembly.h
-    CodeGen_X86.h
+    CodeGen_Targets.h
     CompilerLogger.h
     ConciseCasts.h
     CPlusPlusMangle.h
@@ -111,6 +105,7 @@ set(HEADER_FILES
     ModulusRemainder.h
     Monotonic.h
     ObjectInstanceRegistry.h
+    OffloadGPULoops.h
     OutputImageParam.h
     ParallelRVar.h
     Param.h
@@ -191,7 +186,6 @@ set(SOURCE_FILES
     CodeGen_C.cpp
     CodeGen_D3D12Compute_Dev.cpp
     CodeGen_GPU_Dev.cpp
-    CodeGen_GPU_Host.cpp
     CodeGen_Hexagon.cpp
     CodeGen_Internal.cpp
     CodeGen_LLVM.cpp
@@ -267,6 +261,7 @@ set(SOURCE_FILES
     ModulusRemainder.cpp
     Monotonic.cpp
     ObjectInstanceRegistry.cpp
+    OffloadGPULoops.cpp
     OutputImageParam.cpp
     ParallelRVar.cpp
     Parameter.cpp

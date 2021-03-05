@@ -1,21 +1,13 @@
-#include <iostream>
 #include <limits>
 #include <memory>
-#include <mutex>
 #include <sstream>
 
 #include "CPlusPlusMangle.h"
 #include "CSE.h"
-#include "CodeGen_ARM.h"
-#include "CodeGen_GPU_Host.h"
-#include "CodeGen_Hexagon.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
-#include "CodeGen_MIPS.h"
-#include "CodeGen_PowerPC.h"
-#include "CodeGen_RISCV.h"
-#include "CodeGen_WebAssembly.h"
-#include "CodeGen_X86.h"
+#include "CodeGen_Posix.h"
+#include "CodeGen_Targets.h"
 #include "CompilerLogger.h"
 #include "Debug.h"
 #include "Deinterleave.h"
@@ -82,8 +74,7 @@ using std::vector;
 #define InitializeTarget(target)          \
     LLVMInitialize##target##Target();     \
     LLVMInitialize##target##TargetInfo(); \
-    LLVMInitialize##target##TargetMC();   \
-    llvm_##target##_enabled = true;
+    LLVMInitialize##target##TargetMC();
 
 #define InitializeAsmParser(target) \
     LLVMInitialize##target##AsmParser();
@@ -223,81 +214,30 @@ CodeGen_LLVM::CodeGen_LLVM(const Target &t)
     initialize_llvm();
 }
 
-namespace {
-
-template<typename T>
-std::unique_ptr<CodeGen_LLVM> make_codegen(const Target &target, llvm::LLVMContext &context) {
-    std::unique_ptr<CodeGen_LLVM> ret = std::make_unique<T>(target);
-    ret->set_context(context);
-    return ret;
-}
-
-}  // namespace
-
 void CodeGen_LLVM::set_context(llvm::LLVMContext &context) {
     this->context = &context;
 }
 
 std::unique_ptr<CodeGen_LLVM> CodeGen_LLVM::new_for_target(const Target &target, llvm::LLVMContext &context) {
-    // The awkward mapping from targets to code generators
-    if (target.features_any_of({Target::CUDA,
-                                Target::OpenCL,
-                                Target::OpenGLCompute,
-                                Target::Metal,
-                                Target::D3D12Compute})) {
-#ifdef WITH_X86
-        if (target.arch == Target::X86) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_X86>>(target, context);
-        }
-#endif
-#if defined(WITH_ARM) || defined(WITH_AARCH64)
-        if (target.arch == Target::ARM) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_ARM>>(target, context);
-        }
-#endif
-#ifdef WITH_MIPS
-        if (target.arch == Target::MIPS) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_MIPS>>(target, context);
-        }
-#endif
-#ifdef WITH_POWERPC
-        if (target.arch == Target::POWERPC) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_PowerPC>>(target, context);
-        }
-#endif
-#ifdef WITH_WEBASSEMBLY
-        if (target.arch == Target::WebAssembly) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_WebAssembly>>(target, context);
-        }
-#endif
-#ifdef WITH_RISCV
-        if (target.arch == Target::RISCV) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_RISCV>>(target, context);
-        }
-#endif
-        user_error << "Invalid target architecture for GPU backend: "
-                   << target.to_string() << "\n";
-        return nullptr;
-
-    } else if (target.arch == Target::X86) {
-        return make_codegen<CodeGen_X86>(target, context);
+    std::unique_ptr<CodeGen_LLVM> result;
+    if (target.arch == Target::X86) {
+        result = new_CodeGen_X86(target);
     } else if (target.arch == Target::ARM) {
-        return make_codegen<CodeGen_ARM>(target, context);
+        result = new_CodeGen_ARM(target);
     } else if (target.arch == Target::MIPS) {
-        return make_codegen<CodeGen_MIPS>(target, context);
+        result = new_CodeGen_MIPS(target);
     } else if (target.arch == Target::POWERPC) {
-        return make_codegen<CodeGen_PowerPC>(target, context);
+        result = new_CodeGen_PowerPC(target);
     } else if (target.arch == Target::Hexagon) {
-        return new_CodeGen_Hexagon(target, context);
+        result = new_CodeGen_Hexagon(target);
     } else if (target.arch == Target::WebAssembly) {
-        return make_codegen<CodeGen_WebAssembly>(target, context);
+        result = new_CodeGen_WebAssembly(target);
     } else if (target.arch == Target::RISCV) {
-        return make_codegen<CodeGen_RISCV>(target, context);
+        result = new_CodeGen_RISCV(target);
     }
-
-    user_error << "Unknown target architecture: "
-               << target.to_string() << "\n";
-    return nullptr;
+    user_assert(result) << "Unknown target architecture: " << target.to_string() << "\n";
+    result->set_context(context);
+    return result;
 }
 
 void CodeGen_LLVM::initialize_llvm() {
@@ -392,17 +332,6 @@ void CodeGen_LLVM::add_external_code(const Module &halide_module) {
 CodeGen_LLVM::~CodeGen_LLVM() {
     delete builder;
 }
-
-bool CodeGen_LLVM::llvm_X86_enabled = false;
-bool CodeGen_LLVM::llvm_ARM_enabled = false;
-bool CodeGen_LLVM::llvm_Hexagon_enabled = false;
-bool CodeGen_LLVM::llvm_AArch64_enabled = false;
-bool CodeGen_LLVM::llvm_NVPTX_enabled = false;
-bool CodeGen_LLVM::llvm_Mips_enabled = false;
-bool CodeGen_LLVM::llvm_PowerPC_enabled = false;
-bool CodeGen_LLVM::llvm_AMDGPU_enabled = false;
-bool CodeGen_LLVM::llvm_WebAssembly_enabled = false;
-bool CodeGen_LLVM::llvm_RISCV_enabled = false;
 
 namespace {
 
@@ -4747,8 +4676,10 @@ Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::
     constexpr int debug_level = 4;
 
     debug(debug_level) << "call_overloaded_intrin: " << result_type << " " << name << "(";
+    const char *comma = "";
     for (const Expr &i : args) {
-        debug(debug_level) << ", " << i;
+        debug(debug_level) << comma << i;
+        comma = ", ";
     }
     debug(debug_level) << ")\n";
 
@@ -4761,10 +4692,12 @@ Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::
     const Intrinsic *resolved = nullptr;
     for (const Intrinsic &overload : impls_i->second) {
         debug(debug_level) << "Considering candidate " << overload.result_type << "(";
+        const char *comma = "";
         for (const auto &i : overload.arg_types) {
-            debug(debug_level) << ", " << i;
+            debug(debug_level) << comma << i;
+            comma = ", ";
         }
-        debug(debug_level) << "\n";
+        debug(debug_level) << ")\n";
         if (overload.arg_types.size() != args.size()) {
             debug(debug_level) << "Wrong number of arguments\n";
             continue;
