@@ -17,7 +17,7 @@ if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
 endif ()
 
 if (WITH_WABT)
-    set(WABT_VER 1.0.20)
+    set(WABT_VER 1.0.21)
 
     message(STATUS "Fetching WABT ${WABT_VER}...")
     FetchContent_Declare(wabt
