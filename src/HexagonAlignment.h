@@ -39,13 +39,6 @@ public:
 
         internal_assert(native_lanes != 0) << "Type is larger than required alignment of " << required_alignment << " bytes\n";
 
-        // If this is a parameter, the base_alignment should be
-        // host_alignment. Otherwise, this is an internal buffer,
-        // which we assume has been aligned to the required alignment.
-        if (op->param.defined() && ((op->param.host_alignment() % required_alignment) != 0)) {
-            return false;
-        }
-
         bool known_alignment = (op->alignment.modulus % native_lanes) == 0;
         if (known_alignment) {
             *aligned_offset = op->alignment.remainder % native_lanes;

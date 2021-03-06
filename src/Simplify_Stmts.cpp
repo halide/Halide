@@ -270,6 +270,24 @@ Stmt Simplify::visit(const Store *op) {
 
     ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
 
+    if (!allocations.contains(op->name)) {
+        // For external buffers, we also need to know something about the
+        // alignment of the pointer.
+        ModulusRemainder ptr_alignment(1, 0);
+        if (bounds_and_alignment_info.contains(op->name)) {
+            ptr_alignment = bounds_and_alignment_info.get(op->name).alignment;
+            // The alignment of the ptr is in bytes, we need it
+            // in values.
+            int type_bytes = op->value.type().bytes();
+            if (ptr_alignment.modulus % type_bytes == 0 &&
+                ptr_alignment.remainder % type_bytes == 0) {
+                ptr_alignment.modulus /= type_bytes;
+                ptr_alignment.remainder /= type_bytes;
+            }
+        }
+        align = ModulusRemainder::intersect(align, ptr_alignment);
+    }
+
     if (is_const_zero(predicate)) {
         // Predicate is always false
         return Evaluate::make(0);
@@ -293,12 +311,13 @@ Stmt Simplify::visit(const Allocate *op) {
         new_extents.push_back(mutate(op->extents[i], nullptr));
         all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
     }
-    Stmt body = mutate(op->body);
     Expr condition = mutate(op->condition, nullptr);
     Expr new_expr;
     if (op->new_expr.defined()) {
         new_expr = mutate(op->new_expr, nullptr);
     }
+    ScopedBinding<> allocated(allocations, op->name);
+    Stmt body = mutate(op->body);
     const IfThenElse *body_if = body.as<IfThenElse>();
     if (body_if &&
         op->condition.defined() &&

@@ -581,9 +581,6 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string &name,
         size_t i = 0;
         for (auto &arg : function->args()) {
             if (args[i].is_buffer()) {
-                // Track this buffer name so that loads and stores from it
-                // don't try to be too aligned.
-                external_buffer.insert(args[i].name);
                 sym_push(args[i].name + ".buffer", &arg);
             } else {
                 Type passed_type = upgrade_type_for_argument_passing(args[i].type);
@@ -2169,7 +2166,6 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
         Value *vpred = codegen(op->predicate);
         Halide::Type value_type = op->value.type();
         Value *val = codegen(op->value);
-        bool is_external = (external_buffer.find(op->name) != external_buffer.end());
         int alignment = value_type.bytes();
         int native_bits = native_vector_bits();
         int native_bytes = native_bits / 8;
@@ -2182,14 +2178,6 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
             mod_rem.modulus /= 2;
             mod_rem.remainder /= 2;
             alignment *= 2;
-        }
-
-        // If it is an external buffer, then we cannot assume that the host pointer
-        // is aligned to at least the native vector width. However, we may be able to do
-        // better than just assuming that it is unaligned.
-        if (is_external && op->param.defined()) {
-            int host_alignment = op->param.host_alignment();
-            alignment = gcd(alignment, host_alignment);
         }
 
         // For dense vector stores wider than the native vector
@@ -2255,7 +2243,6 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
     const Ramp *ramp = load->index.as<Ramp>();
     internal_assert(ramp && is_const_one(ramp->stride)) << "Should be dense vector load\n";
 
-    bool is_external = (external_buffer.find(load->name) != external_buffer.end());
     int alignment = load->type.bytes();  // The size of a single element
 
     int native_bits = native_vector_bits();
@@ -2273,19 +2260,6 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
         mod_rem.modulus /= 2;
         mod_rem.remainder /= 2;
         alignment *= 2;
-    }
-
-    // If it is an external buffer, then we cannot assume that the host pointer
-    // is aligned to at least native vector width. However, we may be able to do
-    // better than just assuming that it is unaligned.
-    if (is_external) {
-        if (load->param.defined()) {
-            int host_alignment = load->param.host_alignment();
-            alignment = gcd(alignment, host_alignment);
-        } else if (get_target().has_feature(Target::JIT) && load->image.defined()) {
-            // If we're JITting, use the actual pointer value to determine alignment for embedded buffers.
-            alignment = gcd(alignment, (int)(((uintptr_t)load->image.data()) & std::numeric_limits<int>::max()));
-        }
     }
 
     // For dense vector loads wider than the native vector
@@ -3979,7 +3953,6 @@ void CodeGen_LLVM::visit(const Store *op) {
     }
 
     Value *val = codegen(op->value);
-    bool is_external = (external_buffer.find(op->name) != external_buffer.end());
     // Scalar
     if (value_type.is_scalar()) {
         Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
@@ -4004,14 +3977,6 @@ void CodeGen_LLVM::visit(const Store *op) {
                 mod_rem.modulus /= 2;
                 mod_rem.remainder /= 2;
                 alignment *= 2;
-            }
-
-            // If it is an external buffer, then we cannot assume that the host pointer
-            // is aligned to at least the native vector width. However, we may be able to do
-            // better than just assuming that it is unaligned.
-            if (is_external && op->param.defined()) {
-                int host_alignment = op->param.host_alignment();
-                alignment = gcd(alignment, host_alignment);
             }
 
             // For dense vector stores wider than the native vector

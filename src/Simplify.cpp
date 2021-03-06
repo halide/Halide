@@ -202,6 +202,8 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
         const Mod *m = eq->a.as<Mod>();
         const int64_t *modulus = m ? as_const_int(m->b) : nullptr;
         const int64_t *remainder = m ? as_const_int(eq->b) : nullptr;
+        const uint64_t *umodulus = m ? as_const_uint(m->b) : nullptr;
+        const uint64_t *uremainder = m ? as_const_uint(eq->b) : nullptr;
         if (v) {
             if (is_const(eq->b) || eq->b.as<Variable>()) {
                 // TODO: consider other cases where we might want to entirely substitute
@@ -249,6 +251,27 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
             }
             simplify->bounds_and_alignment_info.push(v->name, expr_info);
             bounds_pop_list.push_back(v);
+        } else if (umodulus && uremainder) {
+            Expr m_a = m->a;
+            if (const Call *c = Call::as_intrinsic(m_a, {Call::reinterpret})) {
+                if (c->args[0].type().is_handle()) {
+                    // Ignore reinterprets of pointers for the purposes of learning alignment.
+                    m_a = c->args[0];
+                }
+            }
+            if ((v = m_a.as<Variable>())) {
+                // Learn from expressions of the form x % 8 == 3
+                Simplify::ExprInfo expr_info;
+                expr_info.alignment.modulus = *umodulus;
+                expr_info.alignment.remainder = *uremainder;
+                if (simplify->bounds_and_alignment_info.contains(v->name)) {
+                    // We already know something about this variable and don't want to suppress it.
+                    auto existing_knowledge = simplify->bounds_and_alignment_info.get(v->name);
+                    expr_info.intersect(existing_knowledge);
+                }
+                simplify->bounds_and_alignment_info.push(v->name, expr_info);
+                bounds_pop_list.push_back(v);
+            }
         }
     } else if (const LT *lt = fact.as<LT>()) {
         const Variable *v = lt->a.as<Variable>();

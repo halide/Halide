@@ -307,6 +307,24 @@ Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
 
     ModulusRemainder align = ModulusRemainder::intersect(op->alignment, base_info.alignment);
 
+    if (!allocations.contains(op->name)) {
+        // For external buffers, we also need to know something about the
+        // alignment of the pointer.
+        ModulusRemainder ptr_alignment(1, 0);
+        if (bounds_and_alignment_info.contains(op->name)) {
+            ptr_alignment = bounds_and_alignment_info.get(op->name).alignment;
+            // The alignment of the ptr is in bytes, we need it
+            // in values.
+            int type_bytes = op->type.bytes();
+            if (ptr_alignment.modulus % type_bytes == 0 &&
+                ptr_alignment.remainder % type_bytes == 0) {
+                ptr_alignment.modulus /= type_bytes;
+                ptr_alignment.remainder /= type_bytes;
+            }
+        }
+        align = ModulusRemainder::intersect(align, ptr_alignment);
+    }
+
     const Broadcast *b_index = index.as<Broadcast>();
     const Shuffle *s_index = index.as<Shuffle>();
     if (is_const_zero(predicate)) {
