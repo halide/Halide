@@ -53,10 +53,12 @@ int test() {
     i2.dim(0).set_min(0);
     f.output_buffer().set_host_alignment(128);
     f.output_buffer().dim(0).set_min(0);
+    f.specialize(is_host_aligned(i3, 4));
+    f.specialize_fail("No unaligned loads");
     map<string, int> expected_alignment = {
         {i1.name(), 128},
         {i2.name(), 32},
-        {i3.name(), 1},
+        {i3.name(), 4},
         {f.name(), 128},
     };
 

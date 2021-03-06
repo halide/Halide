@@ -107,4 +107,10 @@ OutputImageParam &OutputImageParam::store_in(MemoryType type) {
     return *this;
 }
 
+Expr is_host_aligned(const OutputImageParam &param, const Expr &alignment_bytes) {
+    Expr host_ptr = Internal::Variable::make(Handle(), param.name(), Buffer<>(), param.parameter(), Internal::ReductionDomain());
+    Expr u64t_host_ptr = reinterpret<uint64_t>(host_ptr);
+    return (u64t_host_ptr % cast<uint64_t>(alignment_bytes)) == 0;
+}
+
 }  // namespace Halide

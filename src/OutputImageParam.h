@@ -121,6 +121,10 @@ public:
     OutputImageParam &store_in(MemoryType type);
 };
 
+/** Returns a boolean Expr that is true if the host pointer of `param`
+ * is aligned to `alignment` bytes. */
+Expr is_host_aligned(const OutputImageParam &param, const Expr &alignment_bytes);
+
 }  // namespace Halide
 
 #endif
