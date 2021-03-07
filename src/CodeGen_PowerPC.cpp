@@ -1,9 +1,4 @@
-#include "CodeGen_PowerPC.h"
-#include "ConciseCasts.h"
-#include "IRMatch.h"
-#include "IROperator.h"
-#include "LLVM_Headers.h"
-#include "Util.h"
+#include "CodeGen_Posix.h"
 
 namespace Halide {
 namespace Internal {
@@ -11,18 +6,37 @@ namespace Internal {
 using std::string;
 using std::vector;
 
-using namespace Halide::ConciseCasts;
-using namespace llvm;
+#if defined(WITH_POWERPC)
+
+namespace {
+
+/** A code generator that emits mips code from a given Halide stmt. */
+class CodeGen_PowerPC : public CodeGen_Posix {
+public:
+    /** Create a powerpc code generator. Processor features can be
+     * enabled using the appropriate flags in the target struct. */
+    CodeGen_PowerPC(const Target &);
+
+protected:
+    void init_module() override;
+
+    string mcpu() const override;
+    string mattrs() const override;
+    bool use_soft_float_abi() const override;
+    int native_vector_bits() const override;
+
+    using CodeGen_Posix::visit;
+
+    /** Nodes for which we want to emit specific PowerPC intrinsics */
+    // @{
+    void visit(const Min *) override;
+    void visit(const Max *) override;
+    // @}
+};
 
 CodeGen_PowerPC::CodeGen_PowerPC(const Target &t)
     : CodeGen_Posix(t) {
-#if !defined(WITH_POWERPC)
-    user_error << "llvm build not configured with PowerPC target enabled.\n";
-#endif
-    user_assert(llvm_PowerPC_enabled) << "llvm build not configured with PowerPC target enabled.\n";
 }
-
-namespace {
 
 const int max_intrinsic_args = 4;
 
@@ -81,8 +95,6 @@ const PowerPCIntrinsic intrinsic_defs[] = {
 };
 // clang-format on
 
-}  // namespace
-
 void CodeGen_PowerPC::init_module() {
     CodeGen_Posix::init_module();
 
@@ -92,7 +104,7 @@ void CodeGen_PowerPC::init_module() {
         }
 
         Type ret_type = i.ret_type;
-        std::vector<Type> arg_types;
+        vector<Type> arg_types;
         arg_types.reserve(max_intrinsic_args);
         for (halide_type_t j : i.arg_types) {
             if (j.bits == 0) {
@@ -140,9 +152,9 @@ string CodeGen_PowerPC::mcpu() const {
 }
 
 string CodeGen_PowerPC::mattrs() const {
-    std::string features;
-    std::string separator;
-    std::string enable;
+    string features;
+    string separator;
+    string enable;
 
     features += "+altivec";
     separator = ",";
@@ -171,6 +183,21 @@ bool CodeGen_PowerPC::use_soft_float_abi() const {
 int CodeGen_PowerPC::native_vector_bits() const {
     return 128;
 }
+
+}  // namespace
+
+std::unique_ptr<CodeGen_Posix> new_CodeGen_PowerPC(const Target &target) {
+    return std::make_unique<CodeGen_PowerPC>(target);
+}
+
+#else  // WITH_POWERPC
+
+std::unique_ptr<CodeGen_Posix> new_CodeGen_PowerPC(const Target &target) {
+    user_error << "PowerPC not enabled for this build of Halide.\n";
+    return nullptr;
+}
+
+#endif  // WITH_POWERPC
 
 }  // namespace Internal
 }  // namespace Halide

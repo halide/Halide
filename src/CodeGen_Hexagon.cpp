@@ -1,7 +1,3 @@
-#include "CodeGen_Hexagon.h"
-
-#include <iostream>
-#include <mutex>
 #include <sstream>
 #include <utility>
 
@@ -12,14 +8,11 @@
 #include "Debug.h"
 #include "HexagonOptimize.h"
 #include "IREquality.h"
-#include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "LICM.h"
 #include "LLVM_Headers.h"
 #include "LoopCarry.h"
-#include "Monotonic.h"
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Target.h"
@@ -138,8 +131,6 @@ private:
 
 CodeGen_Hexagon::CodeGen_Hexagon(const Target &t)
     : CodeGen_Posix(t) {
-    user_assert(llvm_Hexagon_enabled)
-        << "llvm build not configured with Hexagon target enabled.\n";
     if (target.has_feature(Halide::Target::HVX_v66)) {
         isa_version = 66;
     } else if (target.has_feature(Halide::Target::HVX_v65)) {
@@ -2326,15 +2317,13 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
 
 }  // namespace
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
-    std::unique_ptr<CodeGen_Posix> ret(std::make_unique<CodeGen_Hexagon>(target));
-    ret->set_context(context);
-    return ret;
+std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target) {
+    return std::make_unique<CodeGen_Hexagon>(target);
 }
 
 #else  // WITH_HEXAGON
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
+std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target) {
     user_error << "hexagon not enabled for this build of Halide.\n";
     return nullptr;
 }

@@ -17,8 +17,8 @@ void check_is_sio(const Expr &e) {
     }
 }
 
-void check(const Expr &a, const Expr &b) {
-    Expr simpler = simplify(a);
+void check(const Expr &a, const Expr &b, const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>()) {
+    Expr simpler = simplify(a, true, Scope<Interval>(), alignment);
     if (!equal(simpler, b)) {
         std::cerr
             << "\nSimplification failure:\n"
@@ -305,6 +305,64 @@ void check_algebra() {
     check((7 - y) / 7, (-y) / 7 + 1);
     check((y - 7) / 7, y / 7 + (-1));
 
+    Scope<ModulusRemainder> alignment;
+    alignment.push("x", ModulusRemainder(2, 0));
+    check((x + 0) / 2, x / 2, alignment);
+    check((x + 1) / 2, x / 2, alignment);
+    check((x + 2) / 2, x / 2 + 1, alignment);
+    check((x + 3) / 2, x / 2 + 1, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(2, 1));
+    check((x + 0) / 2, x / 2, alignment);
+    check((x + 1) / 2, x / 2 + 1, alignment);
+    check((x + 2) / 2, x / 2 + 1, alignment);
+    check((x + 3) / 2, x / 2 + 2, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(3, 0));
+    check((x + 0) / 3, x / 3, alignment);
+    check((x + 1) / 3, x / 3, alignment);
+    check((x + 2) / 3, x / 3, alignment);
+    check((x + 3) / 3, x / 3 + 1, alignment);
+    check((x + 4) / 3, x / 3 + 1, alignment);
+    check((x + 5) / 3, x / 3 + 1, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(3, 1));
+    check((x + 0) / 3, x / 3, alignment);
+    check((x + 1) / 3, x / 3, alignment);
+    check((x + 2) / 3, x / 3 + 1, alignment);
+    check((x + 3) / 3, x / 3 + 1, alignment);
+    check((x + 4) / 3, x / 3 + 1, alignment);
+    check((x + 5) / 3, x / 3 + 2, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(3, 2));
+    check((x + 0) / 3, x / 3, alignment);
+    check((x + 1) / 3, x / 3 + 1, alignment);
+    check((x + 2) / 3, x / 3 + 1, alignment);
+    check((x + 3) / 3, x / 3 + 1, alignment);
+    check((x + 4) / 3, x / 3 + 2, alignment);
+    check((x + 5) / 3, x / 3 + 2, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(4, 0));
+    check((x + 0) / 2, x / 2, alignment);
+    check((x + 1) / 2, x / 2, alignment);
+    check((x + 2) / 2, x / 2 + 1, alignment);
+    check((x + 3) / 2, x / 2 + 1, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(4, 1));
+    check((x + 0) / 2, x / 2, alignment);
+    check((x + 1) / 2, x / 2 + 1, alignment);
+    check((x + 2) / 2, x / 2 + 1, alignment);
+    check((x + 3) / 2, x / 2 + 2, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(2, 0));
+    check((x + 0) / 3, x / 3, alignment);
+    check((x + 1) / 3, (x + 1) / 3, alignment);
+    check((x + 2) / 3, (x + 2) / 3, alignment);
+    check((x + 3) / 3, x / 3 + 1, alignment);
+    check((x + 4) / 3, (x + 4) / 3, alignment);
+    check((x + 5) / 3, (x + 5) / 3, alignment);
+    alignment.pop("x");
+
     check(((7 + y) + z) / 7, (y + z) / 7 + 1);
     check(((y + 7) + z) / 7, (y + z) / 7 + 1);
     check((y + (7 + z)) / 7, (y + z) / 7 + 1);
@@ -432,7 +490,7 @@ void check_algebra() {
     check(5 % x < 6, const_true());
     check(5 % x < 5, 5 % x < 5);
     check(5 % x >= 0, const_true());
-    check(5 % x > 0, 0 < 5 % x);
+    check(5 % x > 0, 5 % x != 0);
 
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
     check(((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)),
@@ -1202,6 +1260,7 @@ void check_boolean() {
     check(x * 0 < y * 0, f);
     check(x < x + y, 0 < y);
     check(x + y < x, y < 0);
+    check(1 < -x, x < -1);
 
     check(select(x < 3, 2, 2), 2);
     check(select(x < (x + 1), 9, 2), 9);
@@ -1239,6 +1298,12 @@ void check_boolean() {
     check(!(!(x == 0)), x == 0);
     check(!Expr(broadcast(x > y, 4)),
           broadcast(x <= y, 4));
+    check(x % 2 < 1, x % 2 == 0);
+    check(x % 3 <= 0, x % 3 == 0);
+    check(x % 4 > 0, x % 4 != 0);
+    check(x % 5 >= 1, x % 5 != 0);
+    check(x % 6 < 5, x % 6 != 5);
+    check(5 < x % 7, x % 7 == 6);
 
     check(b1 || !b1, t);
     check(!b1 || b1, t);
@@ -1389,7 +1454,7 @@ void check_boolean() {
     check((x / 8) * 8 < x - 8, f);
     check((x / 8) * 8 < x - 9, f);
     check((x / 8) * 8 < x - 7, f);
-    check((x / 8) * 8 < x - 6, 6 < x % 8);
+    check((x / 8) * 8 < x - 6, x % 8 == 7);
     check(ramp(x * 4, 1, 4) < broadcast(y * 4, 4), broadcast(x < y, 4));
     check(ramp(x * 8, 1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
     check(ramp(x * 8 + 1, 1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
@@ -1541,9 +1606,6 @@ void check_boolean() {
 
     // A for loop where the extent is exactly one is just the body
     check(IfThenElse::make(x == 1, loop), IfThenElse::make(x == 1, body));
-
-    // A for loop where the extent is at most one can just be an if statement
-    check(IfThenElse::make(y % 2 == x, loop), IfThenElse::make(y % 2 == x, IfThenElse::make(0 < x, body)));
 
     // Check we can learn from bounds on variables
     check(IfThenElse::make(x < 5, Evaluate::make(min(x, 17))),
