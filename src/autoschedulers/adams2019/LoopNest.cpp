@@ -236,7 +236,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 const LoopNest &root,
                                 int64_t *working_set,
                                 StageMap<ScheduleFeatures> *features,
-                                bool use_memoized_features) const {
+                                bool use_cached_features) const {
     int64_t working_set_here = 0;
 
     int64_t loop_instances = 1, parallel_tasks = 1;
@@ -328,7 +328,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
             const uint64_t hash_of_producers = sites.get(c->stage).hash_of_producers_stored_at_root;
 
-            if (use_memoized_features) {
+            if (use_cached_features) {
+                // Checks if the features cache has seen this state before, and use the cached features if so.
                 if (c->features_cache.count(hash_of_producers) > 0) {
                     const auto &entry = c->features_cache.at(hash_of_producers);
 
@@ -350,9 +351,10 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 }
             }
 
-            c->compute_features(dag, params, sites, subinstances, parallelism, this, parent, root, &working_set_here, features, use_memoized_features);
+            c->compute_features(dag, params, sites, subinstances, parallelism, this, parent, root, &working_set_here, features, use_cached_features);
 
-            if (use_memoized_features) {
+            if (use_cached_features) {
+                // Cache these features for future reference.
                 c->features_cache[hash_of_producers].make_large(dag.nodes[0].stages[0].max_id);
                 c->memoize_features(c->features_cache[hash_of_producers], features);
             }
@@ -419,7 +421,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
             // When memoizing, we need to recompute features for inlined Funcs
             // so we reset them here
-            if (use_memoized_features && sites.get(stage).inlined) {
+            if (use_cached_features && sites.get(stage).inlined) {
                 feat.inlined_calls = 0;
                 feat.num_scalars = 0;
                 feat.innermost_pure_loop_extent = 0;
@@ -427,7 +429,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
             }
         }
 
-        if (use_memoized_features) {
+        if (use_cached_features) {
             for (const auto &c : children) {
                 uint64_t hash_of_producers = sites.get(c->stage).hash_of_producers_stored_at_root;
 
@@ -593,7 +595,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
     // Recurse inwards
     for (const auto &c : children) {
-        c->compute_features(dag, params, sites, subinstances, subparallelism, this, parent, root, &working_set_here, features, use_memoized_features);
+        c->compute_features(dag, params, sites, subinstances, subparallelism, this, parent, root, &working_set_here, features, use_cached_features);
     }
     for (const auto *node : store_at) {
         auto &feat = features->get(&(node->stages[0]));
@@ -1011,7 +1013,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         inlined_feat.outer_parallelism = parallelism;
 
         // Memoize intermediate features, based on stage.
-        if (use_memoized_features) {
+        if (use_cached_features) {
             const auto &block = sites.get(stage).task;
             uint64_t hash_of_producers = sites.get(block->stage).hash_of_producers_stored_at_root;
             auto &intermediate_map = block->feature_intermediates_cache[hash_of_producers].get_or_create(&(f->stages[0]));

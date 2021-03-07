@@ -6,8 +6,8 @@
 
   The most interesting classes to look at are:
 
-  LoopNest               Represents one node in our tree representation of loop nests.
-  State                  A state in the beam search. Holds a root loop nest.
+  LoopNest               Represents one node in our tree representation of loop nests. (Now in LoopNest.(h | cpp)).
+  State                  A state in the beam search. Holds a root loop nest. (Now in State.(h | cpp)).
 
   Interesting functions below are:
 
@@ -60,6 +60,14 @@
 
   HL_AUTOSCHEDULE_MEMORY_LIMIT
   If set, only consider schedules that allocate at most this much memory (measured in bytes).
+
+  HL_DISABLE_MEMOIZED_FEATURES
+  If set, features of possible schedules are always recalculated, and are not cached across passes.
+  (see Cache.h for more information)
+
+  HL_DISABLE_MEMOIZED_BLOCKS
+  If set, then tiling sizes are not cached across passes.
+  (see Cache.h for more information)
 
   TODO: expose these settings by adding some means to pass args to
   generator plugins instead of environment vars.
@@ -467,7 +475,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
 
     std::unordered_set<uint64_t> permitted_hashes;
 
-    // Set up cache with options and size
+    // Set up cache with options and size.
     Cache cache(options, dag.nodes.size());
 
     // If the beam size is one, it's pointless doing multiple passes.
@@ -580,8 +588,10 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     IntrusivePtr<State> optimal;
 
-    // Run beam search
+    // Options generated from environment variables, decide whether or not to cache features and/or tilings.
     CachingOptions cache_options = CachingOptions::MakeOptionsFromEnviron();
+
+    // Run beam search
     optimal = optimal_schedule(dag, outputs, params, cost_model.get(), rng, beam_size, memory_limit, cache_options);
 
     HALIDE_TOC;

@@ -138,7 +138,7 @@ struct LoopNest {
                           const LoopNest &root,
                           int64_t *working_set,
                           StageMap<ScheduleFeatures> *features,
-                          bool use_memoized_features) const;
+                          bool use_cached_features) const;
 
     bool is_root() const {
         // The root is the sole node without a Func associated with
