@@ -637,8 +637,11 @@ Stmt add_image_checks_inner(Stmt s,
             int alignment_required = param.host_alignment();
             Expr u64t_host_ptr = reinterpret<uint64_t>(host_ptr);
             Expr align_condition = (u64t_host_ptr % alignment_required) == 0;
-            Expr error = Call::make(Int(32), "halide_error_unaligned_host_ptr",
-                                    {name, alignment_required}, Call::Extern);
+            Expr error = 0;
+            if (!no_asserts) {
+                error = Call::make(Int(32), "halide_error_unaligned_host_ptr",
+                                   {name, alignment_required}, Call::Extern);
+            }
             asserts_host_alignment.push_back(AssertStmt::make(align_condition, error));
         }
     }
@@ -661,7 +664,6 @@ Stmt add_image_checks_inner(Stmt s,
     if (!no_asserts) {
         // Inject the code that checks the host pointers.
         prepend_stmts(&asserts_host_non_null);
-        prepend_stmts(&asserts_host_alignment);
         prepend_stmts(&asserts_device_not_dirty);
         prepend_stmts(&dims_no_overflow_asserts);
         prepend_lets(&lets_overflow);
@@ -680,6 +682,7 @@ Stmt add_image_checks_inner(Stmt s,
     // Inject the code that checks the constraints are correct. We
     // need these regardless of how NoAsserts is set, because they are
     // what gets Halide to actually exploit the constraint.
+    prepend_stmts(&asserts_host_alignment);
     prepend_stmts(&asserts_constrained);
 
     if (!no_asserts) {

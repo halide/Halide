@@ -346,7 +346,7 @@ void CodeGen_PTX_Dev::visit(const Load *op) {
     // TODO: lanes >= 4, not lanes == 4
     if (is_const_one(op->predicate) && r && is_const_one(r->stride) && r->lanes == 4 && op->type.bits() == 32) {
         ModulusRemainder align = op->alignment;
-        if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
+        if (align.contains(4)) {
             Expr index = simplify(r->base / 4);
             Expr equiv = Load::make(UInt(128), op->name, index,
                                     op->image, op->param, const_true(), align / 4);
@@ -371,7 +371,7 @@ void CodeGen_PTX_Dev::visit(const Store *op) {
     // TODO: lanes >= 4, not lanes == 4
     if (is_const_one(op->predicate) && r && is_const_one(r->stride) && r->lanes == 4 && op->value.type().bits() == 32) {
         ModulusRemainder align = op->alignment;
-        if (align.modulus % 4 == 0 && align.remainder % 4 == 0) {
+        if (align.contains(4)) {
             Expr index = simplify(r->base / 4);
             Expr value = reinterpret(UInt(128), op->value);
             Stmt equiv = Store::make(op->name, value, index, op->param, const_true(), align / 4);
@@ -411,8 +411,7 @@ class RewriteLoadsAs32Bit : public IRMutator {
         if (idx &&
             is_const_one(op->predicate) &&
             is_const_one(idx->stride) &&
-            op->alignment.modulus % sub_lanes == 0 &&
-            op->alignment.remainder % sub_lanes == 0) {
+            op->alignment.contains(sub_lanes)) {
             Expr new_idx = simplify(idx->base / sub_lanes);
             int load_lanes = op->type.lanes() / sub_lanes;
             if (op->type.lanes() > sub_lanes) {

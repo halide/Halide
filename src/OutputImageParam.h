@@ -122,7 +122,7 @@ public:
 };
 
 /** Returns a boolean Expr that is true if the host pointer of `param`
- * is aligned to `alignment` bytes. */
+ * is aligned to `alignment_bytes`. */
 Expr is_host_aligned(const OutputImageParam &param, const Expr &alignment_bytes);
 
 }  // namespace Halide

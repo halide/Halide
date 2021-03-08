@@ -47,6 +47,11 @@ struct ModulusRemainder {
     bool operator==(const ModulusRemainder &other) const {
         return (modulus == other.modulus) && (remainder == other.remainder);
     }
+
+    // Check if this set contains the value x.
+    bool contains(int64_t x) const {
+        return modulus % x == 0 && remainder % x == 0;
+    }
 };
 
 ModulusRemainder operator+(const ModulusRemainder &a, const ModulusRemainder &b);

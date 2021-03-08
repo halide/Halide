@@ -279,13 +279,19 @@ Stmt Simplify::visit(const Store *op) {
             // The alignment of the ptr is in bytes, we need it
             // in values.
             int type_bytes = op->value.type().bytes();
-            if (ptr_alignment.modulus % type_bytes == 0 &&
-                ptr_alignment.remainder % type_bytes == 0) {
+            if (ptr_alignment.contains(type_bytes)) {
                 ptr_alignment.modulus /= type_bytes;
                 ptr_alignment.remainder /= type_bytes;
+            } else {
+                ptr_alignment = {1, 0};
             }
         }
-        align = ModulusRemainder::intersect(align, ptr_alignment);
+        align = ptr_alignment + align;
+
+        // Simplification should never reduce the alignment, but it
+        // does happen if simplifying without context containing
+        // information about the pointer.
+        align = ModulusRemainder::intersect(op->alignment, align);
     }
 
     if (is_const_zero(predicate)) {

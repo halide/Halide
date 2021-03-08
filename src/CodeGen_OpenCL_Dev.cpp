@@ -491,8 +491,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
         internal_assert(op->type.is_vector());
 
         ostringstream rhs;
-        if ((op->alignment.modulus % op->type.lanes() == 0) &&
-            (op->alignment.remainder % op->type.lanes() == 0)) {
+        if (op->alignment.contains(op->type.lanes())) {
             // Get the rhs just for the cache.
             string id_ramp_base = print_expr(ramp_base / op->type.lanes());
             string array_indexing = print_array_access(op->name, op->type, id_ramp_base);
@@ -658,8 +657,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     if (ramp_base.defined()) {
         internal_assert(op->value.type().is_vector());
 
-        if ((op->alignment.modulus % op->value.type().lanes() == 0) &&
-            (op->alignment.remainder % op->value.type().lanes() == 0)) {
+        if (op->alignment.contains(op->value.type().lanes())) {
             string id_ramp_base = print_expr(ramp_base / op->value.type().lanes());
             string array_indexing = print_array_access(op->name, t, id_ramp_base);
             stream << get_indent() << array_indexing << " = " << id_value << ";\n";
