@@ -51,12 +51,17 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
             (rewrite(x + x, x * 2) ||
              rewrite(ramp(x, y, c0) + ramp(z, w, c0), ramp(x + z, y + w, c0)) ||
              rewrite(ramp(x, y, c0) + broadcast(z, c0), ramp(x + z, y, c0)) ||
-             rewrite(broadcast(x, c0) + broadcast(y, c0), broadcast(x + y, c0)) ||
              rewrite(broadcast(x, c0) + broadcast(y, c1), broadcast(x + broadcast(y, fold(c1/c0)), c0), c1 % c0 == 0) ||
              rewrite(broadcast(y, c1) + broadcast(x, c0), broadcast(x + broadcast(y, fold(c1/c0)), c0), c1 % c0 == 0) ||
 
-             rewrite((x + broadcast(y, c0)) + broadcast(z, c0), x + broadcast(y + z, c0)) ||
-             rewrite((x - broadcast(y, c0)) + broadcast(z, c0), x + broadcast(z - y, c0)) ||
+             rewrite((x + broadcast(y, c0)) + broadcast(z, c1), x + broadcast(y + broadcast(z, fold(c1/c0)), c0), c1 % c0 == 0) ||
+             rewrite((x + broadcast(z, c1)) + broadcast(y, c0), x + broadcast(y + broadcast(z, fold(c1/c0)), c0), c1 % c0 == 0) ||
+             rewrite((broadcast(y, c0) + x) + broadcast(z, c1), x + broadcast(y + broadcast(z, fold(c1/c0)), c0), c1 % c0 == 0) ||
+             rewrite((broadcast(z, c1) + x) + broadcast(y, c0), x + broadcast(y + broadcast(z, fold(c1/c0)), c0), c1 % c0 == 0) ||
+             rewrite((x - broadcast(y, c0)) + broadcast(z, c1), x + broadcast(broadcast(z, fold(c1/c0)) - y, c0), c1 % c0 == 0) ||
+             rewrite((x - broadcast(z, c1)) + broadcast(y, c0), x + broadcast(y - broadcast(z, fold(c1/c0)), c0), c1 % c0 == 0) ||
+             rewrite((broadcast(y, c0) - x) + broadcast(z, c1), broadcast(y + broadcast(z, fold(c1/c0)), c0) - x, c1 % c0 == 0) ||
+             rewrite((broadcast(z, c1) - x) + broadcast(y, c0), broadcast(y + broadcast(z, fold(c1/c0)), c0) - x, c1 % c0 == 0) ||
              rewrite(select(x, y, z) + select(x, w, u), select(x, y + w, z + u)) ||
              rewrite(select(x, c0, c1) + c2, select(x, fold(c0 + c2), fold(c1 + c2))) ||
 
@@ -90,6 +95,18 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
 
              rewrite((x - y) + (y + z), x + z) ||
              rewrite((x - y) + (z + y), x + z) ||
+
+             rewrite(x + ((y - x) - z), y - z) ||
+             rewrite(((x - y) - z) + y, x - z) ||
+
+             rewrite(x + (y - (x + z)), y - z) ||
+             rewrite(x + (y - (z + x)), y - z) ||
+             rewrite((x - (y + z)) + y, x - z) ||
+             rewrite((x - (y + z)) + z, x - y) ||
+
+             rewrite(x + ((0 - y) - z), x - (y + z)) ||
+             rewrite(((0 - x) - y) + z, z - (x + y)) ||
+             rewrite(((c0 - x) - y) + c1, (fold(c0 + c1) - y) - x) ||
 
              rewrite(x*y + z*y, (x + z)*y) ||
              rewrite(x*y + y*z, (x + z)*y) ||
