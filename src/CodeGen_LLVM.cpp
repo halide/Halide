@@ -4661,10 +4661,11 @@ llvm::Function *CodeGen_LLVM::get_llvm_intrin(const Type &ret_type, const std::s
     return get_llvm_intrin(llvm_ret_type, name, llvm_arg_types);
 }
 
-void CodeGen_LLVM::declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types, bool scalars_are_vectors) {
+llvm::Function* CodeGen_LLVM::declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types, bool scalars_are_vectors) {
     llvm::Function *intrin = get_llvm_intrin(ret_type, impl_name, arg_types, scalars_are_vectors);
     internal_assert(intrin);
     intrinsics[name].emplace_back(ret_type, std::move(arg_types), intrin);
+    return intrin;
 }
 
 void CodeGen_LLVM::declare_intrin_overload(const std::string &name, const Type &ret_type, llvm::Function *impl, std::vector<Type> arg_types) {
@@ -4893,10 +4894,6 @@ Value *CodeGen_LLVM::call_intrin(llvm::Type *result_type, int intrin_lanes,
     }
 
     CallInst *call = builder->CreateCall(intrin, arg_values);
-
-    call->setDoesNotAccessMemory();
-    call->setDoesNotThrow();
-
     return call;
 }
 

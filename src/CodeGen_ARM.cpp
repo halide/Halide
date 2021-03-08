@@ -671,6 +671,8 @@ void CodeGen_ARM::init_module() {
                 intrin_impl = get_llvm_intrin(ret_type, mangled_name, arg_types, scalars_are_vectors);
             }
 
+            intrin_impl->addFnAttr(llvm::Attribute::AttrKind::ReadNone);
+            intrin_impl->addFnAttr(llvm::Attribute::AttrKind::NoUnwind);
             declare_intrin_overload(intrin.name, ret_type, intrin_impl, arg_types);
             if (intrin.flags & ArmIntrinsic::AllowUnsignedOp1) {
                 // Also generate a version of this intrinsic where the second operand is unsigned.
