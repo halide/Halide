@@ -218,6 +218,7 @@ struct ArmIntrinsic {
         MangleRetArgs = 1 << 4,      // Most intrinsics only mangle the return type. Some mangle the return type and arguments instead.
         ScalarsAreVectors = 1 << 5,  // Some intrinsics have scalar arguments that are vector parameters :(
         SplitArg0 = 1 << 6,          // This intrinsic requires splitting the argument into the low and high halves.
+        NoPrefix = 1 << 7,           // Don't prefix the intrinsic with llvm.*
     };
 };
 
@@ -546,6 +547,18 @@ const ArmIntrinsic intrinsic_defs[] = {
     {nullptr, "sdot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), Int(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle},
     {nullptr, "udot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle},
     {nullptr, "udot.v4i32.v16i8", UInt(32, 4), "dot_product", {UInt(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle},
+
+    // ABDL - Widening absolute difference
+    // Need to be able to handle both signed and unsigned outputs for signed inputs.
+    {"vabdl_i8x8" , "vabdl_i8x8" ,  Int(16, 8), "vabdl", { Int( 8, 8),  Int( 8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i8x8" , "vabdl_i8x8" , UInt(16, 8), "vabdl", { Int( 8, 8),  Int( 8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_u8x8" , "vabdl_u8x8" , UInt(16, 8), "vabdl", {UInt( 8, 8), UInt( 8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i16x4", "vabdl_i16x4",  Int(32, 4), "vabdl", { Int(16, 8),  Int(16, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i16x4", "vabdl_i16x4", UInt(32, 4), "vabdl", { Int(16, 8),  Int(16, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_u16x4", "vabdl_u16x4", UInt(32, 4), "vabdl", {UInt(16, 8), UInt(16, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i32x2", "vabdl_i32x2",  Int(64, 2), "vabdl", { Int(32, 8),  Int(32, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i32x2", "vabdl_i32x2", UInt(64, 2), "vabdl", { Int(32, 8),  Int(32, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_u32x2", "vabdl_u32x2", UInt(64, 2), "vabdl", {UInt(32, 8), UInt(32, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
 };
 // clang-format on
 
@@ -606,7 +619,7 @@ void CodeGen_ARM::init_module() {
             continue;
         }
         string full_name = intrin_name;
-        if (!starts_with(full_name, "llvm.")) {
+        if (!starts_with(full_name, "llvm.") && (intrin.flags & ArmIntrinsic::NoPrefix) == 0) {
             full_name = prefix + full_name;
         }
 
@@ -713,10 +726,7 @@ void CodeGen_ARM::visit(const Cast *op) {
             (op->value.type().is_int() || op->value.type().is_uint()) &&
             t.bits() == op->value.type().bits() * 2) {
             if (const Call *absd = Call::as_intrinsic(op->value, {Call::absd})) {
-                ostringstream ss;
-                int intrin_lanes = 128 / t.bits();
-                ss << "vabdl_" << (absd->args[0].type().is_int() ? "i" : "u") << t.bits() / 2 << "x" << intrin_lanes;
-                value = call_intrin(t, intrin_lanes, ss.str(), absd->args);
+                value = call_overloaded_intrin(t, "vabdl", absd->args);
                 return;
             }
         }
