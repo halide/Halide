@@ -562,7 +562,7 @@ void check_vectors() {
           ramp(-2, 1, 4) == broadcast(0, 4));
 
     check(ramp(broadcast(0, 6), broadcast(6, 6), 4) + broadcast(ramp(0, 1, 3), 8) +
-          broadcast(ramp(broadcast(0, 3), broadcast(3, 3), 2), 4),
+              broadcast(ramp(broadcast(0, 3), broadcast(3, 3), 2), 4),
           ramp(0, 1, 24));
 
     // Any linear combination of simple ramps and broadcasts should
