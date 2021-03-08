@@ -208,8 +208,8 @@ struct Load : public ExprNode<Load> {
     // If it's a load from an image parameter, this points to that
     Parameter param;
 
-    // The alignment of the index. If the index is a vector, this is
-    // the alignment of the first lane.
+    // The alignment of the loaded address. If the index is a vector,
+    // this is the alignment of the first lane.
     ModulusRemainder alignment;
 
     static Expr make(Type type, const std::string &name,
@@ -318,7 +318,7 @@ struct Store : public StmtNode<Store> {
     // If it's a store to an output buffer, then this parameter points to it.
     Parameter param;
 
-    // The alignment of the index. If the index is a vector, this is
+    // The alignment of the stored address. If the index is a vector, this is
     // the alignment of the first lane.
     ModulusRemainder alignment;
 
