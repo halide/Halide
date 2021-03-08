@@ -67,8 +67,8 @@ public:
     /** Set the expected alignment of the host pointer in bytes. */
     OutputImageParam &set_host_alignment(int bytes);
 
-    /** Returns a boolean Expr that is true if the host pointer of `param`
-     * is aligned to `bytes`. */
+    /** Returns a boolean Expr that is true if the host pointer is
+     * aligned to `bytes`. */
     Expr is_host_aligned(int bytes);
 
     /** Get the dimensionality of this image parameter */
