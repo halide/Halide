@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
     f.output_buffer().set_host_alignment(3);
     f.output_buffer().dim(0).set_min(0);
     f.vectorize(x, 12, TailStrategy::RoundUp);
-    f.specialize(is_host_aligned(i3, 4) && i3.dim(0).min() == 0);
+    f.specialize(i3.is_host_aligned(4) && i3.dim(0).min() == 0);
     f.specialize_fail("No unaligned loads");
 
     map<string, ModulusRemainder> expected_alignment = {

@@ -65,7 +65,11 @@ public:
     int host_alignment() const;
 
     /** Set the expected alignment of the host pointer in bytes. */
-    OutputImageParam &set_host_alignment(int);
+    OutputImageParam &set_host_alignment(int bytes);
+
+    /** Returns a boolean Expr that is true if the host pointer of `param`
+     * is aligned to `bytes`. */
+    Expr is_host_aligned(int bytes);
 
     /** Get the dimensionality of this image parameter */
     int dimensions() const;
@@ -120,10 +124,6 @@ public:
      * for MemoryType::GPUTexture at present */
     OutputImageParam &store_in(MemoryType type);
 };
-
-/** Returns a boolean Expr that is true if the host pointer of `param`
- * is aligned to `alignment_bytes`. */
-Expr is_host_aligned(const OutputImageParam &param, const Expr &alignment_bytes);
 
 }  // namespace Halide
 

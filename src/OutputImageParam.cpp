@@ -40,6 +40,12 @@ OutputImageParam &OutputImageParam::set_host_alignment(int bytes) {
     return *this;
 }
 
+Expr OutputImageParam::is_host_aligned(int bytes) {
+    Expr host_ptr = Internal::Variable::make(Handle(), param.name(), Buffer<>(), param, Internal::ReductionDomain());
+    Expr u64t_host_ptr = reinterpret<uint64_t>(host_ptr);
+    return (u64t_host_ptr % cast<uint64_t>(bytes)) == 0;
+}
+
 int OutputImageParam::dimensions() const {
     return param.dimensions();
 }
@@ -105,12 +111,6 @@ OutputImageParam &OutputImageParam::set_estimates(const Region &estimates) {
 OutputImageParam &OutputImageParam::store_in(MemoryType type) {
     param.store_in(type);
     return *this;
-}
-
-Expr is_host_aligned(const OutputImageParam &param, const Expr &alignment_bytes) {
-    Expr host_ptr = Internal::Variable::make(Handle(), param.name(), Buffer<>(), param.parameter(), Internal::ReductionDomain());
-    Expr u64t_host_ptr = reinterpret<uint64_t>(host_ptr);
-    return (u64t_host_ptr % cast<uint64_t>(alignment_bytes)) == 0;
 }
 
 }  // namespace Halide
