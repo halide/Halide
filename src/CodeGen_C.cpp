@@ -323,8 +323,8 @@ CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const 
 
     if (is_header()) {
         // If it's a header, emit an include guard.
-        stream << "#ifndef HALIDE_" << print_name(guard) << "\n"
-               << "#define HALIDE_" << print_name(guard) << "\n"
+        stream << "#ifndef HALIDE_" << c_print_name(guard) << "\n"
+               << "#define HALIDE_" << c_print_name(guard) << "\n"
                << "#include <stdint.h>\n"
                << "\n"
                << "// Forward declarations of the types used in the interface\n"
@@ -1644,7 +1644,7 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     // Figure out the offset of the last pixel.
     size_t num_elems = 1;
     for (int d = 0; d < b.dimensions; d++) {
-        num_elems += b.dim[d].stride * (b.dim[d].extent - 1);
+        num_elems += b.dim[d].stride * (size_t)(b.dim[d].extent - 1);
     }
 
     // For now, we assume buffers that aren't scalar are constant,
@@ -1728,7 +1728,8 @@ string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
     auto cached = cache.find(rhs);
     if (cached == cache.end()) {
         id = unique_name('_');
-        stream << get_indent() << print_type(t, AppendSpace) << (output_kind == CPlusPlusImplementation ? "const " : "") << id << " = " << rhs << ";\n";
+        const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
+        stream << get_indent() << print_type(t, AppendSpace) << const_flag << id << " = " << rhs << ";\n";
         cache[rhs] = id;
     } else {
         id = cached->second;
@@ -2316,7 +2317,8 @@ void CodeGen_C::visit(const Load *op) {
         bool type_cast_needed = !(allocations.contains(op->name) &&
                                   allocations.get(op->name).type.element_of() == t.element_of());
         if (type_cast_needed) {
-            rhs << "((const " << print_type(t.element_of()) << " *)" << name << ")";
+            const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
+            rhs << "((" << const_flag << print_type(t.element_of()) << " *)" << name << ")";
         } else {
             rhs << name;
         }
@@ -2589,7 +2591,7 @@ void CodeGen_C::visit(const Allocate *op) {
     } else {
         constant_size = op->constant_allocation_size();
         if (constant_size > 0) {
-            int64_t stack_bytes = constant_size * op->type.bytes();
+            int64_t stack_bytes = (int64_t)constant_size * op->type.bytes();
 
             if (stack_bytes > ((int64_t(1) << 31) - 1)) {
                 user_error << "Total size for allocation "
