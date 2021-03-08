@@ -243,22 +243,5 @@ ConstantInterval ConstantInterval::make_union(const ConstantInterval &a, const C
     return result;
 }
 
-ConstantInterval ConstantInterval::make_intersection(const ConstantInterval &a, const ConstantInterval &b) {
-    ConstantInterval result;
-    if (a.min_defined && b.min_defined) {
-        result.min = std::max(a.min, b.min);
-        result.min_defined = true;
-    } else {
-        result.min_defined = false;
-    }
-    if (a.max_defined && b.max_defined) {
-        result.max = std::min(a.max, b.max);
-        result.max_defined = true;
-    } else {
-        result.max_defined = false;
-    }
-    return result;
-}
-
 }  // namespace Internal
 }  // namespace Halide

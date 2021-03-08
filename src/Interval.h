@@ -161,9 +161,6 @@ struct ConstantInterval {
     /** Construct the smallest interval containing two intervals. */
     static ConstantInterval make_union(const ConstantInterval &a, const ConstantInterval &b);
 
-    /** Construct the largest interval contained within two intervals. */
-    static ConstantInterval make_intersection(const ConstantInterval &a, const ConstantInterval &b);
-
     /** Equivalent to same_as. Exists so that the autoscheduler can
      * compare two map<string, Interval> for equality in order to
      * cache computations. */
