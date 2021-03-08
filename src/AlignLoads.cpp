@@ -2,7 +2,6 @@
 
 #include "AlignLoads.h"
 #include "Bounds.h"
-#include "HexagonAlignment.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "ModulusRemainder.h"
@@ -22,12 +21,10 @@ namespace {
 class AlignLoads : public IRMutator {
 public:
     AlignLoads(int alignment)
-        : alignment_analyzer(alignment), required_alignment(alignment) {
+        : required_alignment(alignment) {
     }
 
 private:
-    HexagonAlignmentAnalyzer alignment_analyzer;
-
     // Loads and stores should ideally be aligned to the vector width in bytes.
     int required_alignment;
 
@@ -75,14 +72,12 @@ private:
             return IRMutator::visit(op);
         }
 
-        int64_t aligned_offset = 0;
-        bool is_aligned =
-            alignment_analyzer.is_aligned(op, &aligned_offset);
-        // We know the alignment_analyzer has been able to reason about alignment
-        // if the following is true.
-        bool known_alignment = is_aligned || (!is_aligned && aligned_offset != 0);
         int lanes = ramp->lanes;
         int native_lanes = required_alignment / op->type.bytes();
+        int64_t aligned_offset =
+            op->alignment.modulus % native_lanes == 0 ? op->alignment.remainder % native_lanes : 0;
+        bool is_aligned = op->alignment.contains(native_lanes);
+        bool known_alignment = is_aligned || aligned_offset != 0;
         int stride = static_cast<int>(*const_stride);
         if (stride != 1) {
             internal_assert(stride >= 0);

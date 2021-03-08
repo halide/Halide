@@ -5,7 +5,6 @@
 #include "ConciseCasts.h"
 #include "ExprUsesVar.h"
 #include "FindIntrinsics.h"
-#include "HexagonAlignment.h"
 #include "IREquality.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
@@ -1419,10 +1418,7 @@ class EliminateInterleaves : public IRMutator {
     Scope<bool> vars;
 
     // We need to know when loads are a multiple of 2 native vectors.
-    int native_vector_bits;
-
-    // Alignment analyzer for loads and stores
-    HexagonAlignmentAnalyzer alignment_analyzer;
+    const int native_vector_bytes;
 
     // Check if x is an expression that is either an interleave, or
     // transitively is an interleave.
@@ -1884,9 +1880,8 @@ class EliminateInterleaves : public IRMutator {
             }
             internal_assert(aligned_buffer_access.contains(op->name) && "Buffer not found in scope");
             bool &aligned_accesses = aligned_buffer_access.ref(op->name);
-            int64_t aligned_offset = 0;
-
-            if (!alignment_analyzer.is_aligned(op, &aligned_offset)) {
+            const int native_vector_lanes = native_vector_bytes / value.type().bytes();
+            if (op->alignment.contains(native_vector_lanes)) {
                 aligned_accesses = false;
             }
         }
@@ -1906,7 +1901,7 @@ class EliminateInterleaves : public IRMutator {
 
     Expr visit(const Load *op) override {
         if (buffers.contains(op->name)) {
-            if ((op->type.lanes() * op->type.bits()) % (native_vector_bits * 2) == 0) {
+            if ((op->type.lanes() * op->type.bytes()) % (native_vector_bytes * 2) == 0) {
                 // This is a double vector load, we might be able to
                 // deinterleave the storage of this buffer.
                 // We don't want to actually do anything to the buffer
@@ -1918,9 +1913,8 @@ class EliminateInterleaves : public IRMutator {
                 // interleave).
                 internal_assert(aligned_buffer_access.contains(op->name) && "Buffer not found in scope");
                 bool &aligned_accesses = aligned_buffer_access.ref(op->name);
-                int64_t aligned_offset = 0;
-
-                if (!alignment_analyzer.is_aligned(op, &aligned_offset)) {
+                const int native_vector_lanes = native_vector_bytes / op->type.bytes();
+                if (op->alignment.contains(native_vector_lanes)) {
                     aligned_accesses = false;
                 }
             } else {
@@ -1941,7 +1935,7 @@ class EliminateInterleaves : public IRMutator {
 
 public:
     EliminateInterleaves(int native_vector_bytes)
-        : native_vector_bits(native_vector_bytes * 8), alignment_analyzer(native_vector_bytes) {
+        : native_vector_bytes(native_vector_bytes) {
     }
 };
 
