@@ -652,10 +652,6 @@ Monotonic is_monotonic(const Expr &e, const std::string &var, const Scope<Monoto
     return is_monotonic(e, var, intervals_scope);
 }
 
-Monotonic is_monotonic_strong(const Expr &e, const std::string &var) {
-    return is_monotonic(e, var, Scope<ConstantInterval>());
-}
-
 namespace {
 void check_increasing(const Expr &e) {
     internal_assert(is_monotonic(e, "x") == Monotonic::Increasing)
