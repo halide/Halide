@@ -31,6 +31,17 @@ using std::string;
 
 namespace {
 
+const int64_t *as_const_int_or_uint(const Expr &e) {
+    if (const int64_t *i = as_const_int(e)) {
+        return i;
+    } else if (const uint64_t *u = as_const_uint(e)) {
+        if (*u <= (uint64_t)std::numeric_limits<int64_t>::max()) {
+            return (const int64_t *)u;
+        }
+    }
+    return nullptr;
+}
+
 bool is_constant(const ConstantInterval &a) {
     return a.is_single_point(0);
 }
@@ -139,13 +150,10 @@ ConstantInterval multiply(const ConstantInterval &a, int64_t b) {
 }
 
 ConstantInterval multiply(const ConstantInterval &a, const Expr &b) {
-    if (const int64_t *bi = as_const_int(b)) {
+    if (const int64_t *bi = as_const_int_or_uint(b)) {
         return multiply(a, *bi);
-    } else if (const uint64_t *bi = as_const_uint(b)) {
-        return multiply(a, *bi);
-    } else {
-        return ConstantInterval::everything();
     }
+    return ConstantInterval::everything();
 }
 
 ConstantInterval multiply(const ConstantInterval &a, const ConstantInterval &b) {
@@ -286,13 +294,9 @@ class DerivativeBounds : public IRVisitor {
 
             // This is essentially the product rule: a*rb + b*ra
             // but only implemented for the case where a or b is constant.
-            if (const int64_t *b = as_const_int(op->b)) {
+            if (const int64_t *b = as_const_int_or_uint(op->b)) {
                 result = multiply(ra, *b);
-            } else if (const uint64_t *b = as_const_uint(op->b)) {
-                result = multiply(ra, *b);
-            } else if (const int64_t *a = as_const_int(op->a)) {
-                result = multiply(rb, *a);
-            } else if (const uint64_t *a = as_const_uint(op->a)) {
+            } else if (const int64_t *a = as_const_int_or_uint(op->a)) {
                 result = multiply(rb, *a);
             } else {
                 result = ConstantInterval::everything();
@@ -307,9 +311,7 @@ class DerivativeBounds : public IRVisitor {
             op->a.accept(this);
             ConstantInterval ra = result;
 
-            if (const int64_t *b = as_const_int(op->b)) {
-                result = divide(ra, *b);
-            } else if (const uint64_t *b = as_const_uint(op->b)) {
+            if (const int64_t *b = as_const_int_or_uint(op->b)) {
                 result = divide(ra, *b);
             } else {
                 result = ConstantInterval::everything();
@@ -372,10 +374,10 @@ class DerivativeBounds : public IRVisitor {
         // difference possible is flipping from true to false or false
         // to true.
         if (result.has_lower_bound()) {
-            result.min = std::max<int64_t>(result.min, -1);
+            result.min = std::min<int64_t>(std::max<int64_t>(result.min, -1), 1);
         }
         if (result.has_upper_bound()) {
-            result.max = std::min<int64_t>(result.max, 1);
+            result.max = std::min<int64_t>(std::max<int64_t>(result.max, -1), 1);
         }
     }
 
