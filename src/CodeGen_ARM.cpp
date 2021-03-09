@@ -62,8 +62,6 @@ protected:
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
     // @}
 
-    int allocation_padding(Type type) const override;
-
     /** Various patterns to peephole match against */
     struct Pattern {
         string intrin;  ///< Name of the intrinsic
@@ -1009,12 +1007,6 @@ void CodeGen_ARM::visit(const Store *op) {
     CodeGen_Posix::visit(op);
 }
 
-int CodeGen_ARM::allocation_padding(Type type) const {
-    // We want to be able to load up to 3 values past the end of the buffer in
-    // the Load visitor.
-    return std::max(CodeGen_Posix::allocation_padding(type), type.bytes() * 3);
-}
-
 void CodeGen_ARM::visit(const Load *op) {
     // Predicated load
     if (!is_const_one(op->predicate)) {
@@ -1035,109 +1027,10 @@ void CodeGen_ARM::visit(const Load *op) {
         return;
     }
 
+    // If the stride is in [-1, 4], we can deal with that using vanilla codegen
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
-
-    // If the stride is one or minus one, we can deal with that using vanilla codegen
-    if (stride && (stride->value == 1 || stride->value == -1)) {
+    if (stride && (-1 <= stride->value && stride->value <= 4)) {
         CodeGen_Posix::visit(op);
-        return;
-    }
-
-    // Try to rewrite strided loads as shuffles of dense loads,
-    // aligned to the stride. This makes adjacent strided loads
-    // shared a vldN op.
-    ModulusRemainder alignment = op->alignment;
-    alignment.remainder = mod_imp(alignment.remainder, alignment.modulus);
-    if (stride && stride->value >= 2 && stride->value <= 4) {
-        Expr base = ramp->base;
-        int aligned_stride = gcd(stride->value, alignment.modulus);
-        int offset = 0;
-        if (aligned_stride == stride->value) {
-            offset = mod_imp((int)alignment.remainder, aligned_stride);
-        } else {
-            const Add *add = ramp->base.as<Add>();
-            if (const IntImm *add_c = add ? add->b.as<IntImm>() : ramp->base.as<IntImm>()) {
-                offset = mod_imp(add_c->value, stride->value);
-            }
-        }
-
-        if (offset) {
-            base = simplify(base - offset);
-            alignment.remainder -= offset;
-        }
-
-        // We want to load a few more bytes than the original load did.
-        // This is safe under these conditions:
-        // - The alignment information is sufficient to determine the
-        //   modified load is safe.
-        // - For internal buffers, we know this is safe because we
-        //   allocate an extra 3 values of padding.
-        // (In ASAN mode, don't read beyond the end of internal buffers either,
-        // as ASAN will complain even about harmless stack overreads.)
-        // The min moves lower by offset.
-        bool alignment_safe = alignment.remainder >= 0;
-        // The max needs to not cross an alignment boundary.
-        if (alignment.modulus > 0) {
-            int old_max = alignment.remainder + (op->type.lanes() - 1) * stride->value;
-            int new_max = old_max + stride->value - 1 - offset;
-            alignment_safe &= (old_max / alignment.modulus == new_max / alignment.modulus);
-        }
-        bool external = op->param.defined() || op->image.defined();
-        if (!alignment_safe && (external || target.has_feature(Target::ASAN))) {
-            CodeGen_Posix::visit(op);
-            return;
-        }
-
-        alignment.remainder = mod_imp(alignment.remainder, alignment.modulus);
-        int align_bytes = gcd(alignment.modulus, alignment.remainder) * op->type.bytes();
-        // Maximum stack alignment on arm is 16 bytes, so we should
-        // never claim alignment greater than that.
-        align_bytes = gcd(align_bytes, 16);
-        internal_assert(align_bytes > 0);
-
-        // Decide what width to slice things into. If not a multiple
-        // of 64 or 128 bits, then we can't safely slice it up into
-        // some number of vlds, so we hand it over the base class.
-        int bit_width = op->type.bits() * op->type.lanes();
-        int intrin_lanes = 0;
-        if (bit_width % 128 == 0) {
-            intrin_lanes = 128 / op->type.bits();
-        } else if (bit_width % 64 == 0) {
-            intrin_lanes = 64 / op->type.bits();
-        } else {
-            CodeGen_Posix::visit(op);
-            return;
-        }
-
-        llvm::Type *load_return_type = llvm_type_of(op->type.with_lanes(intrin_lanes * stride->value));
-        llvm::Type *load_return_pointer_type = load_return_type->getPointerTo();
-        Value *undef = UndefValue::get(load_return_type);
-        SmallVector<Constant *, 256> constants;
-        for (int j = 0; j < intrin_lanes; j++) {
-            Constant *constant = ConstantInt::get(i32_t, j * stride->value + offset);
-            constants.push_back(constant);
-        }
-        Constant *constantsV = ConstantVector::get(constants);
-
-        vector<Value *> results;
-        for (int i = 0; i < op->type.lanes(); i += intrin_lanes) {
-            Expr slice_base = simplify(base + i * ramp->stride);
-            Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_lanes);
-            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), slice_base);
-            Value *bitcastI = builder->CreateBitOrPointerCast(ptr, load_return_pointer_type);
-            LoadInst *loadI = cast<LoadInst>(builder->CreateLoad(bitcastI));
-#if LLVM_VERSION >= 110
-            loadI->setAlignment(Align(align_bytes));
-#else
-            loadI->setAlignment(MaybeAlign(align_bytes));
-#endif
-            add_tbaa_metadata(loadI, op->name, slice_ramp);
-            Value *shuffleInstr = builder->CreateShuffleVector(loadI, undef, constantsV);
-            results.push_back(shuffleInstr);
-        }
-
-        // Concat the results
-        value = concat_vectors(results);
         return;
     }
 

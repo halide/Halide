@@ -1910,63 +1910,76 @@ void CodeGen_LLVM::visit(const Load *op) {
 
         if (ramp && stride && stride->value == 1) {
             value = codegen_dense_vector_load(op);
-        } else if (ramp && stride && stride->value == 2) {
-            // Load two vectors worth and then shuffle
-            Expr base_a = ramp->base, base_b = ramp->base + ramp->lanes;
-            Expr stride_a = make_one(base_a.type());
-            Expr stride_b = make_one(base_b.type());
-
-            ModulusRemainder align_a = op->alignment;
-            ModulusRemainder align_b = align_a + ramp->lanes;
-
-            // False indicates we should take the even-numbered lanes
-            // from the load, true indicates we should take the
-            // odd-numbered-lanes.
-            bool shifted_a = false, shifted_b = false;
-
-            bool external = op->param.defined() || op->image.defined();
-
-            // Don't read beyond the end of an external buffer.
-            // (In ASAN mode, don't read beyond the end of internal buffers either,
-            // as ASAN will complain even about harmless stack overreads.)
-            if (external || target.has_feature(Target::ASAN)) {
-                base_b -= 1;
-                align_b = align_b - 1;
-                shifted_b = true;
+        } else if (ramp && stride && 2 <= stride->value && stride->value <= 4) {
+            // Try to rewrite strided loads as shuffles of dense loads,
+            // aligned to the stride. This makes adjacent strided loads
+            // shared a vldN op.
+            ModulusRemainder align = op->alignment;
+            Expr base = ramp->base;
+            int aligned_stride = gcd(stride->value, align.modulus);
+            int offset = 0;
+            if (aligned_stride == stride->value) {
+                offset = mod_imp((int)align.remainder, aligned_stride);
             } else {
-                // If the base ends in an odd constant, then subtract one
-                // and do a different shuffle. This helps expressions like
-                // (f(2*x) + f(2*x+1) share loads
-                const Add *add = ramp->base.as<Add>();
-                const IntImm *offset = add ? add->b.as<IntImm>() : ramp->base.as<IntImm>();
-                if (offset && offset->value & 1) {
-                    base_a -= 1;
-                    align_a = align_a - 1;
-                    shifted_a = true;
-                    base_b -= 1;
-                    align_b = align_b - 1;
-                    shifted_b = true;
+                const Add *add = base.as<Add>();
+                if (const IntImm *add_c = add ? add->b.as<IntImm>() : base.as<IntImm>()) {
+                    offset = mod_imp(add_c->value, stride->value);
                 }
             }
 
-            // Do each load.
-            Expr ramp_a = Ramp::make(base_a, stride_a, ramp->lanes);
-            Expr ramp_b = Ramp::make(base_b, stride_b, ramp->lanes);
-            Expr load_a = Load::make(op->type, op->name, ramp_a, op->image, op->param, op->predicate, align_a);
-            Expr load_b = Load::make(op->type, op->name, ramp_b, op->image, op->param, op->predicate, align_b);
-            Value *vec_a = codegen(load_a);
-            Value *vec_b = codegen(load_b);
-
-            // Shuffle together the results.
-            vector<int> indices(ramp->lanes);
-            for (int i = 0; i < (ramp->lanes + 1) / 2; i++) {
-                indices[i] = i * 2 + (shifted_a ? 1 : 0);
-            }
-            for (int i = (ramp->lanes + 1) / 2; i < ramp->lanes; i++) {
-                indices[i] = i * 2 + (shifted_b ? 1 : 0);
+            if (offset) {
+                base = simplify(base - offset);
+                align.remainder -= offset;
             }
 
-            value = shuffle_vectors(vec_a, vec_b, indices);
+            // We want to load a few more bytes than the original load did.
+            // This is safe under these conditions:
+            // - The alignment information is sufficient to determine the
+            //   modified load is safe.
+            // - For internal buffers, we know this is safe because we
+            //   allocate an extra 3 values of padding.
+            // (In ASAN mode, don't read beyond the end of internal buffers either,
+            // as ASAN will complain even about harmless stack overreads.)
+            // The min moves lower by offset.
+            int load_lanes = ramp->lanes * stride->value;
+            bool alignment_safe = align.remainder >= 0;
+            // The max needs to not cross an alignment boundary.
+            if (align.modulus > 0) {
+                int old_max = align.remainder + (op->type.lanes() - 1) * stride->value;
+                int new_max = old_max + stride->value - 1 - offset;
+                alignment_safe &= (old_max / align.modulus == new_max / align.modulus);
+            }
+            bool external = op->param.defined() || op->image.defined();
+            if (!alignment_safe && (external || target.has_feature(Target::ASAN))) {
+                load_lanes -= (stride->value - 1 - offset);
+            }
+
+            int slice_lanes = native_vector_bits() / op->type.bits();
+
+            // We need to slice the result in to native vector lanes, otherwise
+            // LLVM misses optimizations like using ldN on ARM.
+            vector<Value *> results;
+            for (int i = 0; i < op->type.lanes(); i += slice_lanes) {
+                int load_lanes_i = std::min<int>(slice_lanes * stride->value, load_lanes - i);
+                int lanes_i = std::min<int>(slice_lanes, op->type.lanes() - i);
+                Expr slice_base = simplify(base + i * ramp->stride);
+
+                Value *load_i = codegen_dense_vector_load(op->type.with_lanes(load_lanes_i), op->name, slice_base,
+                                                         op->image, op->param, op->alignment, nullptr, false);
+
+                SmallVector<Constant *, 256> constants;
+                for (int j = 0; j < lanes_i; j++) {
+                    Constant *constant = ConstantInt::get(i32_t, j * stride->value + offset);
+                    constants.push_back(constant);
+                }
+                Constant *constantsV = ConstantVector::get(constants);
+                Value *undef = UndefValue::get(load_i->getType());
+                Value *shuffleInstr = builder->CreateShuffleVector(load_i, undef, constantsV);
+                results.push_back(shuffleInstr);
+            }
+
+            // Concat the results
+            value = concat_vectors(results);
         } else if (ramp && stride && stride->value == -1) {
             // Load the vector and then flip it in-place
             Expr flipped_base = ramp->base - ramp->lanes + 1;
@@ -2249,14 +2262,14 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
     }
 }
 
-Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
-    debug(4) << "Vectorize predicated dense vector load:\n\t" << Expr(load) << "\n";
+llvm::Value *CodeGen_LLVM::codegen_dense_vector_load(const Type &type, const std::string &name, const Expr &base,
+                                                     const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
+                                                     llvm::Value *vpred, bool slice_to_native) {
+    debug(4) << "Vectorize predicated dense vector load:\n\t"
+             << "(" << type << ")" << name << "[ramp(base, 1, " << type.lanes() << ")]\n";
 
-    const Ramp *ramp = load->index.as<Ramp>();
-    internal_assert(ramp && is_const_one(ramp->stride)) << "Should be dense vector load\n";
-
-    bool is_external = (external_buffer.find(load->name) != external_buffer.end());
-    int alignment = load->type.bytes();  // The size of a single element
+    bool is_external = (external_buffer.find(name) != external_buffer.end());
+    int align_bytes = type.bytes();  // The size of a single element
 
     int native_bits = native_vector_bits();
     int native_bytes = native_bits / 8;
@@ -2266,58 +2279,66 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred) {
     // maximum alignment we can infer based on the index alone.
 
     // Boost the alignment if possible, up to the native vector width.
-    ModulusRemainder mod_rem = load->alignment;
+    ModulusRemainder mod_rem = alignment;
     while ((mod_rem.remainder & 1) == 0 &&
            (mod_rem.modulus & 1) == 0 &&
-           alignment < native_bytes) {
+           align_bytes < native_bytes) {
         mod_rem.modulus /= 2;
         mod_rem.remainder /= 2;
-        alignment *= 2;
+        align_bytes *= 2;
     }
 
     // If it is an external buffer, then we cannot assume that the host pointer
     // is aligned to at least native vector width. However, we may be able to do
     // better than just assuming that it is unaligned.
     if (is_external) {
-        if (load->param.defined()) {
-            int host_alignment = load->param.host_alignment();
-            alignment = gcd(alignment, host_alignment);
-        } else if (get_target().has_feature(Target::JIT) && load->image.defined()) {
+        if (param.defined()) {
+            int host_alignment = param.host_alignment();
+            align_bytes = gcd(align_bytes, host_alignment);
+        } else if (get_target().has_feature(Target::JIT) && image.defined()) {
             // If we're JITting, use the actual pointer value to determine alignment for embedded buffers.
-            alignment = gcd(alignment, (int)(((uintptr_t)load->image.data()) & std::numeric_limits<int>::max()));
+            align_bytes = gcd(align_bytes, (int)(((uintptr_t)image.data()) & std::numeric_limits<int>::max()));
         }
     }
 
     // For dense vector loads wider than the native vector
     // width, bust them up into native vectors
-    int load_lanes = load->type.lanes();
-    int native_lanes = std::max(1, native_bits / load->type.bits());
+    int load_lanes = type.lanes();
+    int native_lanes = slice_to_native ? std::max(1, native_bits / type.bits()) : load_lanes;
     vector<Value *> slices;
     for (int i = 0; i < load_lanes; i += native_lanes) {
         int slice_lanes = std::min(native_lanes, load_lanes - i);
-        Expr slice_base = simplify(ramp->base + i);
+        Expr slice_base = simplify(base + i);
         Expr slice_stride = make_one(slice_base.type());
         Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, slice_stride, slice_lanes);
-        llvm::Type *slice_type = get_vector_type(llvm_type_of(load->type.element_of()), slice_lanes);
-        Value *elt_ptr = codegen_buffer_pointer(load->name, load->type.element_of(), slice_base);
+        llvm::Type *slice_type = get_vector_type(llvm_type_of(type.element_of()), slice_lanes);
+        Value *elt_ptr = codegen_buffer_pointer(name, type.element_of(), slice_base);
         Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_type->getPointerTo());
 
         Instruction *load_inst;
         if (vpred != nullptr) {
             Value *slice_mask = slice_vector(vpred, i, slice_lanes);
 #if LLVM_VERSION >= 110
-            load_inst = builder->CreateMaskedLoad(vec_ptr, llvm::Align(alignment), slice_mask);
+            load_inst = builder->CreateMaskedLoad(vec_ptr, llvm::Align(align_bytes), slice_mask);
 #else
-            load_inst = builder->CreateMaskedLoad(vec_ptr, alignment, slice_mask);
+            load_inst = builder->CreateMaskedLoad(vec_ptr, align_bytes, slice_mask);
 #endif
         } else {
-            load_inst = builder->CreateAlignedLoad(vec_ptr, llvm::Align(alignment));
+            load_inst = builder->CreateAlignedLoad(vec_ptr, llvm::Align(align_bytes));
         }
-        add_tbaa_metadata(load_inst, load->name, slice_index);
+        add_tbaa_metadata(load_inst, name, slice_index);
         slices.push_back(load_inst);
     }
     value = concat_vectors(slices);
     return value;
+}
+
+Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred, bool slice_to_native) {
+    const Ramp *ramp = load->index.as<Ramp>();
+    internal_assert(ramp && is_const_one(ramp->stride)) << "Should be dense vector load\n";
+
+    return codegen_dense_vector_load(load->type, load->name, ramp->base, load->image, load->param,
+                                     load->alignment, vpred, slice_to_native);
 }
 
 void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
