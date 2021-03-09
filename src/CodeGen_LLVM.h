@@ -552,7 +552,10 @@ private:
 
     llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name, bool result_in_argv = false);
 
-    llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr);
+    llvm::Value *codegen_dense_vector_load(const Type &type, const std::string &name, const Expr &base,
+                                           const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
+                                           llvm::Value *vpred = nullptr, bool slice_to_native = true);
+    llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr, bool slice_to_native = true);
 
     virtual void codegen_predicated_vector_load(const Load *op);
     virtual void codegen_predicated_vector_store(const Store *op);
