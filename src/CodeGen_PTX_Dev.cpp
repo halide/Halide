@@ -229,10 +229,10 @@ void CodeGen_PTX_Dev::init_module() {
     module = get_initial_module_for_ptx_device(target, context);
 
     struct Intrinsic {
-        const char *intrin;
-        Type ret;
         const char *name;
-        std::initializer_list<Type> args;
+        Type ret_type;
+        const char *intrin_name;
+        vector<Type> arg_types;
     };
 
     Intrinsic ptx_intrins[] = {
@@ -247,7 +247,7 @@ void CodeGen_PTX_Dev::init_module() {
     };
 
     for (auto &&i : ptx_intrins) {
-        auto fn = declare_intrin_overload(i.intrin, std::move(i.ret), i.name, std::move(i.args));
+        auto fn = declare_intrin_overload(i.name, i.ret_type, i.intrin_name, std::move(i.arg_types));
         fn->addFnAttr(llvm::Attribute::AttrKind::ReadNone);
         fn->addFnAttr(llvm::Attribute::AttrKind::NoUnwind);
     }
