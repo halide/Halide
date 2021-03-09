@@ -102,6 +102,10 @@ struct x86Intrinsic {
     const char *name;
     halide_type_t arg_types[max_intrinsic_args];
     Target::Feature feature = Target::FeatureEnd;
+    uint32_t flags = 0;
+    enum Options {
+        AccessesMemory = 1 << 0,
+    };
 };
 
 // clang-format off
@@ -192,11 +196,11 @@ const x86Intrinsic intrinsic_defs[] = {
     {"dpwssdx8", Int(32, 8), "dot_product", {Int(32, 8), Int(16, 16), Int(16, 16)}, Target::AVX512_SapphireRapids},
     {"dpwssdx4", Int(32, 4), "dot_product", {Int(32, 4), Int(16, 8), Int(16, 8)}, Target::AVX512_SapphireRapids},
 
-    {"tileloadd64_i8", Int(8, 1024), "tile_load", {Int(16), Int(16), Handle(), Int(64), Int(64)}, Target::AVX512_SapphireRapids},
+    {"tileloadd64_i8", Int(8, 1024), "tile_load", {Int(16), Int(16), Handle(), Int(64), Int(64)}, Target::AVX512_SapphireRapids, x86Intrinsic::AccessesMemory},
     {"tdpbssd", Int(32, 256), "tile_matmul", {Int(16), Int(16), Int(16), Int(32, 256), Int(8, 1024), Int(8, 1024)},  Target::AVX512_SapphireRapids},
     {"tilezero_i32", Int(32, 256), "tile_zero", {Int(16), Int(16)},  Target::AVX512_SapphireRapids},
     // CodeGen_LLVM cannot cope with returning Type() ie void*, and return type needs to be vector to trigger call_overloaded_intrin
-    {"tilestored64", Bool(2), "tile_store", {Int(16), Int(16), Handle(), Int(64), Int(64), Int(32, 256)}, Target::AVX512_SapphireRapids},
+    {"tilestored64", Bool(2), "tile_store", {Int(16), Int(16), Handle(), Int(64), Int(64), Int(32, 256)}, Target::AVX512_SapphireRapids, x86Intrinsic::AccessesMemory},
 
 };
 // clang-format on
@@ -220,7 +224,9 @@ void CodeGen_X86::init_module() {
         }
 
         auto *fn = declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
-        fn->addFnAttr(llvm::Attribute::ReadNone);
+        if((i.flags & x86Intrinsic::AccessesMemory) == 0) {
+          fn->addFnAttr(llvm::Attribute::ReadNone);
+        }
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
 }
