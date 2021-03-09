@@ -32,6 +32,7 @@ int main(int argc, char **argv) {
     Var rxi("rxi"), ryi("ryi"), rz("rz");
     RVar rri("rri"), rro("rro");
     mm.compute_at(mm.in(), y)
+        .store_in(MemoryType::AMXTile)
         .update()
         // Split into (x,y) tile
         .tile(y, x, ryi, rxi, tile_y, tile_x, TailStrategy::GuardWithIf)
