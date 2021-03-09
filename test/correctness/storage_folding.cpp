@@ -6,7 +6,7 @@
 using namespace Halide;
 
 // Override Halide's malloc and free
-
+const int tolerance = 3 * sizeof(int);
 std::set<size_t> custom_malloc_sizes;
 
 void *my_malloc(void *user_context, size_t x) {
@@ -21,13 +21,22 @@ void my_free(void *user_context, void *ptr) {
     free(((void **)ptr)[-1]);
 }
 
+bool check_expected_malloc(size_t expected) {
+    for (size_t i : custom_malloc_sizes) {
+        if (std::abs((int)i - (int)expected) <= tolerance) {
+            return true;
+        }
+    }
+    printf("Expected an allocation of size %d (tolerance %d). Got instead:\n", (int)expected, tolerance);
+    for (size_t i : custom_malloc_sizes) {
+        printf("  %d\n", (int)i);
+    }
+    return false;
+}
+
 bool check_expected_mallocs(const std::vector<size_t> &expected) {
     for (size_t i : expected) {
-        if (custom_malloc_sizes.count(i) == 0) {
-            printf("Expected an allocation of size %d. Got instead:\n", (int)i);
-            for (size_t i : custom_malloc_sizes) {
-                printf("  %d\n", (int)i);
-            }
+        if (!check_expected_malloc(i)) {
             return false;
         }
     }
@@ -126,7 +135,7 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = g.realize({100, 1000, 3});
 
-        size_t expected_size = 101 * 4 * sizeof(int) + sizeof(int);
+        size_t expected_size = 101 * 4 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
             return -1;
         }
@@ -147,7 +156,7 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = g.realize({100, 1000, 3});
 
-        size_t expected_size = 101 * 1002 * 3 * sizeof(int) + sizeof(int);
+        size_t expected_size = 101 * 1002 * 3 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
             return -1;
         }
@@ -170,7 +179,7 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = g.realize({100, 1000});
 
-        size_t expected_size = 101 * 3 * sizeof(int) + sizeof(int);
+        size_t expected_size = 101 * 3 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
             return -1;
         }
@@ -259,8 +268,7 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = f.realize({1000, 1000});
 
-        // Halide allocates one extra scalar, so we account for that.
-        size_t expected_size = 2 * 1000 * 4 * sizeof(int) + sizeof(int);
+        size_t expected_size = 2 * 1000 * 4 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
             return -1;
         }
@@ -296,8 +304,7 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = f.realize({1000, 1000});
 
-        // Halide allocates one extra scalar, so we account for that.
-        size_t expected_size = 1000 * 8 * sizeof(int) + sizeof(int);
+        size_t expected_size = 1000 * 8 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
             return -1;
         }
@@ -332,8 +339,7 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = f.realize({1000, 1000});
 
-        // Halide allocates one extra scalar, so we account for that.
-        size_t expected_size = 2 * 1000 * 3 * sizeof(int) + sizeof(int);
+        size_t expected_size = 2 * 1000 * 3 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
             return -1;
         }
@@ -363,8 +369,7 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = f.realize({1000, 1000});
 
-        // Halide allocates one extra scalar, so we account for that.
-        size_t expected_size = 1000 * 2 * sizeof(int) + sizeof(int);
+        size_t expected_size = 1000 * 2 * sizeof(int);
         if (!check_expected_mallocs({expected_size})) {
             return -1;
         }
@@ -437,9 +442,9 @@ int main(int argc, char **argv) {
 
         size_t expected_size;
         if (interleave) {
-            expected_size = 101 * 3 * 3 * sizeof(int) + sizeof(int);
+            expected_size = 101 * 3 * 3 * sizeof(int);
         } else {
-            expected_size = 101 * 3 * sizeof(int) + sizeof(int);
+            expected_size = 101 * 3 * sizeof(int);
         }
         if (!check_expected_mallocs({expected_size})) {
             return -1;
