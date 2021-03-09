@@ -91,15 +91,15 @@ define weak_odr <4 x i32>  @dpwssdx4(<4 x i32> %init, <8 x i16> %a, <8 x i16> %b
 }
 declare <4 x i32> @llvm.x86.avx512.vpdpwssd.128(<4 x i32>, <4 x i32>, <4 x i32>)
 
-define weak_odr <1024 x i8> @tileloadd64_i8(i16 %rows, i16 %colbytes, i8* %ptr, i64 %off, i64 %stride) nounwind alwaysinline {
+define weak_odr <1024 x i8> @tileloadd64_i8(i16 %rows, i16 %colbytes, i8* %ptr, i64 %off, i64 %stride) nounwind alwaysinline readonly {
   %1 = getelementptr i8, i8* %ptr, i64 %off
-  %2 = tail call x86_amx @llvm.x86.tileloadd64.internal(i16 %rows, i16 %colbytes, i8* %1, i64 %stride)
+  %2 = tail call x86_amx @llvm.x86.tileloadd64.internal(i16 %rows, i16 %colbytes, i8* %1, i64 %stride) nounwind readonly
   %3 = bitcast x86_amx %2 to <1024 x i8>
   ret <1024 x i8> %3
 }
 declare x86_amx @llvm.x86.tileloadd64.internal(i16, i16, i8*, i64)
 
-define weak_odr <256 x i32> @tdpbssd(i16 %rows, i16 %colbytes, i16 %acc, <256 x i32> %out, <1024 x i8> %lhs, <1024 x i8> %rhs) nounwind readnone alwaysinline {
+define weak_odr <256 x i32> @tdpbssd(i16 %rows, i16 %colbytes, i16 %acc, <256 x i32> %out, <1024 x i8> %lhs, <1024 x i8> %rhs) nounwind alwaysinline readnone {
   %1 = bitcast <1024 x i8> %lhs to x86_amx
   %2 = bitcast <1024 x i8> %rhs to x86_amx
   %3 = bitcast <256 x i32> %out to x86_amx
@@ -109,10 +109,10 @@ define weak_odr <256 x i32> @tdpbssd(i16 %rows, i16 %colbytes, i16 %acc, <256 x 
 }
 declare x86_amx @llvm.x86.tdpbssd.internal(i16, i16, i16, x86_amx, x86_amx, x86_amx)
 
-define weak_odr <2 x i1> @tilestored64(i16 %rows, i16 %cols, i8* %ptr, i64 %off, i64 %stride, <256 x i32> %val) nounwind alwaysinline {
+define weak_odr <2 x i1> @tilestored64(i16 %rows, i16 %cols, i8* %ptr, i64 %off, i64 %stride, <256 x i32> %val) nounwind alwaysinline writeonly {
   %1 = getelementptr i8, i8* %ptr, i64 %off
   %2 = bitcast <256 x i32> %val to x86_amx
-  tail call void @llvm.x86.tilestored64.internal(i16 %rows, i16 %cols, i8* %1, i64 %stride, x86_amx %2)
+  tail call void @llvm.x86.tilestored64.internal(i16 %rows, i16 %cols, i8* %1, i64 %stride, x86_amx %2) nounwind writeonly
   ret <2 x i1> zeroinitializer
 }
 declare void @llvm.x86.tilestored64.internal(i16, i16, i8*, i64, x86_amx)
@@ -123,7 +123,7 @@ declare void @llvm.x86.tilestored64.internal(i16, i16, i8*, i64, x86_amx)
 ;     LLVM ERROR: Cannot emit physreg copy instruction
 ;       renamable $tmm1 = COPY renamable $tmm0
 define weak_odr <256 x i32> @tilezero_i32(i16 %rows, i16 %colbytes) nounwind alwaysinline {
-  %1 = tail call x86_amx @llvm.x86.tilezero.internal(i16 %rows, i16 %colbytes)
+  %1 = tail call x86_amx @llvm.x86.tilezero.internal(i16 %rows, i16 %colbytes) nounwind
   %2 = bitcast x86_amx %1 to <256 x i32>
   ret <256 x i32> %2
 }
