@@ -1913,7 +1913,7 @@ void CodeGen_LLVM::visit(const Load *op) {
         } else if (ramp && stride && 2 <= stride->value && stride->value <= 4) {
             // Try to rewrite strided loads as shuffles of dense loads,
             // aligned to the stride. This makes adjacent strided loads
-            // shared a vldN op.
+            // share the same underlying dense loads.
             ModulusRemainder align = op->alignment;
             Expr base = ramp->base;
             int aligned_stride = gcd(stride->value, align.modulus);
