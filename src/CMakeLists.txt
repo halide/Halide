@@ -197,7 +197,6 @@ set(SOURCE_FILES
     CodeGen_PTX_Dev.cpp
     CodeGen_PyTorch.cpp
     CodeGen_RISCV.cpp
-    CodeGen_Simple_OpenCL.cpp
     CodeGen_WebAssembly.cpp
     CodeGen_X86.cpp
     CompilerLogger.cpp

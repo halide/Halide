@@ -34,7 +34,6 @@ enum class Output {
     featurization,
     llvm_assembly,
     object,
-    opencl_source,
     python_extension,
     pytorch_wrapper,
     registration,

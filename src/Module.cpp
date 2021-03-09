@@ -8,7 +8,6 @@
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_PyTorch.h"
-#include "CodeGen_Simple_OpenCL.h"
 #include "CompilerLogger.h"
 #include "Debug.h"
 #include "HexagonOffload.h"
@@ -51,7 +50,6 @@ std::map<Output, const OutputInfo> get_output_info(const Target &target) {
         {Output::featurization, {"featurization", ".featurization", IsMulti}},
         {Output::llvm_assembly, {"llvm_assembly", ".ll", IsMulti}},
         {Output::object, {"object", is_windows_coff ? ".obj" : ".o", IsMulti}},
-        {Output::opencl_source, {"opencl_source", ".cl", IsSingle}},
         {Output::python_extension, {"python_extension", ".py.cpp", IsSingle}},
         {Output::pytorch_wrapper, {"pytorch_wrapper", ".pytorch.h", IsSingle}},
         {Output::registration, {"registration", ".registration.cpp", IsSingle}},
@@ -653,14 +651,6 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
         Internal::CodeGen_C cg(file,
                                target(),
                                target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
-        cg.compile(*this);
-    }
-    if (contains(output_files, Output::opencl_source)) {
-        debug(1) << "Module.compile(): opencl_source " << output_files.at(Output::opencl_source) << "\n";
-        std::ofstream file(output_files.at(Output::opencl_source));
-        Internal::CodeGen_Simple_OpenCL cg(file,
-                                           target(),
-                                           target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
         cg.compile(*this);
     }
     if (contains(output_files, Output::python_extension)) {
