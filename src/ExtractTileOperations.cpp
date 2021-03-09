@@ -188,7 +188,9 @@ class ExtractTileOperations : public IRMutator {
     int found_tile_r = -1;
 
     Stmt visit(const Allocate *op) override {
-        if (op->type.is_int() && op->type.bits() == 32) {
+        if (op->memory_type == MemoryType::AMXTile &&
+            op->type.is_int() &&
+            op->type.bits() == 32) {
             if (in_allocate) {
                 // Found two possible tile allocations
                 // FIXME: Handle this better
