@@ -115,7 +115,7 @@ void CodeGen_PowerPC::init_module() {
             arg_types.emplace_back(j);
         }
 
-        auto fn = declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
+        auto *fn = declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
         fn->addFnAttr(llvm::Attribute::ReadNone);
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
