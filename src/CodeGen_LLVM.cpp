@@ -1965,7 +1965,7 @@ void CodeGen_LLVM::visit(const Load *op) {
                 Expr slice_base = simplify(base + i * ramp->stride);
 
                 Value *load_i = codegen_dense_vector_load(op->type.with_lanes(load_lanes_i), op->name, slice_base,
-                                                         op->image, op->param, op->alignment, nullptr, false);
+                                                          op->image, op->param, op->alignment, nullptr, false);
 
                 SmallVector<Constant *, 256> constants;
                 for (int j = 0; j < lanes_i; j++) {
