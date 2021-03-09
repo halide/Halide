@@ -248,8 +248,8 @@ void CodeGen_PTX_Dev::init_module() {
 
     for (auto &&i : ptx_intrins) {
         auto fn = declare_intrin_overload(i.name, i.ret_type, i.intrin_name, std::move(i.arg_types));
-        fn->addFnAttr(llvm::Attribute::AttrKind::ReadNone);
-        fn->addFnAttr(llvm::Attribute::AttrKind::NoUnwind);
+        fn->addFnAttr(llvm::Attribute::ReadNone);
+        fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
 }
 

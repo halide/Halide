@@ -1,5 +1,7 @@
 #include "CodeGen_Posix.h"
 
+#include "LLVM_Headers.h"
+
 namespace Halide {
 namespace Internal {
 
@@ -114,8 +116,8 @@ void CodeGen_PowerPC::init_module() {
         }
 
         auto fn = declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
-        fn->addFnAttr(llvm::Attribute::AttrKind::ReadNone);
-        fn->addFnAttr(llvm::Attribute::AttrKind::NoUnwind);
+        fn->addFnAttr(llvm::Attribute::ReadNone);
+        fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
 }
 
