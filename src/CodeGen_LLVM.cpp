@@ -1933,24 +1933,14 @@ void CodeGen_LLVM::visit(const Load *op) {
             }
 
             // We want to load a few more bytes than the original load did.
-            // This is safe under these conditions:
-            // - The alignment information is sufficient to determine the
-            //   modified load is safe.
-            // - For internal buffers, we know this is safe because we
-            //   allocate an extra 3 values of padding.
+            // We know this is safe for internal buffers because we allocate
+            // padding.
             // (In ASAN mode, don't read beyond the end of internal buffers either,
             // as ASAN will complain even about harmless stack overreads.)
             // The min moves lower by offset.
             int load_lanes = ramp->lanes * stride->value;
-            bool alignment_safe = align.remainder >= 0;
-            // The max needs to not cross an alignment boundary.
-            if (align.modulus > 0) {
-                int old_max = align.remainder + (op->type.lanes() - 1) * stride->value;
-                int new_max = old_max + stride->value - 1 - offset;
-                alignment_safe &= (old_max / align.modulus == new_max / align.modulus);
-            }
             bool external = op->param.defined() || op->image.defined();
-            if (!alignment_safe && (external || target.has_feature(Target::ASAN))) {
+            if (external || target.has_feature(Target::ASAN)) {
                 load_lanes -= (stride->value - 1 - offset);
             }
 
