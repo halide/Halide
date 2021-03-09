@@ -550,15 +550,15 @@ const ArmIntrinsic intrinsic_defs[] = {
 
     // ABDL - Widening absolute difference
     // Need to be able to handle both signed and unsigned outputs for signed inputs.
-    {"vabdl_i8x8" , "vabdl_i8x8" ,  Int(16, 8), "vabdl", { Int( 8, 8),  Int( 8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
-    {"vabdl_i8x8" , "vabdl_i8x8" , UInt(16, 8), "vabdl", { Int( 8, 8),  Int( 8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
-    {"vabdl_u8x8" , "vabdl_u8x8" , UInt(16, 8), "vabdl", {UInt( 8, 8), UInt( 8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
-    {"vabdl_i16x4", "vabdl_i16x4",  Int(32, 4), "vabdl", { Int(16, 8),  Int(16, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
-    {"vabdl_i16x4", "vabdl_i16x4", UInt(32, 4), "vabdl", { Int(16, 8),  Int(16, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
-    {"vabdl_u16x4", "vabdl_u16x4", UInt(32, 4), "vabdl", {UInt(16, 8), UInt(16, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
-    {"vabdl_i32x2", "vabdl_i32x2",  Int(64, 2), "vabdl", { Int(32, 8),  Int(32, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
-    {"vabdl_i32x2", "vabdl_i32x2", UInt(64, 2), "vabdl", { Int(32, 8),  Int(32, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
-    {"vabdl_u32x2", "vabdl_u32x2", UInt(64, 2), "vabdl", {UInt(32, 8), UInt(32, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i8x8", "vabdl_i8x8", Int(16, 8), "vabdl", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i8x8", "vabdl_i8x8", UInt(16, 8), "vabdl", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_u8x8", "vabdl_u8x8", UInt(16, 8), "vabdl", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i16x4", "vabdl_i16x4", Int(32, 4), "vabdl", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i16x4", "vabdl_i16x4", UInt(32, 4), "vabdl", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_u16x4", "vabdl_u16x4", UInt(32, 4), "vabdl", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i32x2", "vabdl_i32x2", Int(64, 2), "vabdl", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i32x2", "vabdl_i32x2", UInt(64, 2), "vabdl", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_u32x2", "vabdl_u32x2", UInt(64, 2), "vabdl", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
 };
 // clang-format on
 
