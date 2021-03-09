@@ -35,6 +35,10 @@ extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeD3D12Comput
 
 namespace {
 
+bool endsWith(const string &str, const string &suffix) {
+    return str.size() >= suffix.size() && 0 == str.compare(str.size() - suffix.size(), suffix.size(), suffix);
+}
+
 // HALIDE_MUST_USE_RESULT defined here is intended to exactly
 // duplicate the definition in HalideRuntime.h (so that either or
 // both can be present, in any order).
@@ -1653,22 +1657,35 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     // used to store stateful module information in offloading runtimes.
     bool is_constant = buffer.dimensions() != 0;
 
-    // Emit the data
-    stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] HALIDE_ATTRIBUTE_ALIGN(32) = {\n";
-    stream << get_indent();
-    for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
-        if (i > 0) {
-            stream << ",";
-            if (i % 16 == 0) {
-                stream << "\n";
-                stream << get_indent();
-            } else {
-                stream << " ";
-            }
+    // If it is an GPU source kernel, we would like to see the actual output, not the
+    // uint8 representation. We use a string literal for this.
+    if (endsWith(name, "gpu_source_kernels")) {
+        stream << "static const char * " << name << "_string = R\"BUFCHARSOURCE(";
+        for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
+            stream << (char)(b.host[i]);
         }
-        stream << (int)(b.host[i]);
+        stream << ")BUFCHARSOURCE\";\n";
+
+        stream << "static " << (is_constant ? "const" : "") << " uint8_t * " << name << "_data HALIDE_ATTRIBUTE_ALIGN(32) = (uint8_t *)"
+               << name << "_string;\n";
+    } else {
+        // Emit the data
+        stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] HALIDE_ATTRIBUTE_ALIGN(32) = {\n";
+        stream << get_indent();
+        for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
+            if (i > 0) {
+                stream << ",";
+                if (i % 16 == 0) {
+                    stream << "\n";
+                    stream << get_indent();
+                } else {
+                    stream << " ";
+                }
+            }
+            stream << (int)(b.host[i]);
+        }
+        stream << "\n};\n";
     }
-    stream << "\n};\n";
 
     // Emit the shape (constant even for scalar buffers)
     stream << "static const halide_dimension_t " << name << "_buffer_shape[] = {";

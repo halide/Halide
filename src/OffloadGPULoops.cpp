@@ -100,14 +100,14 @@ class InjectGpuOffload : public IRMutator {
 
     const Target &target;
 
-    Expr get_state_var(const string &name){
+    Expr get_state_var(const string &name) {
         // Expr v = Variable::make(type_of<void *>(), name);
         state_needed[name] = true;
         return Load::make(type_of<void *>(), name, 0,
-                                    Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+                          Buffer<>(), Parameter(), const_true(), ModulusRemainder());
     }
 
-    Expr make_state_var(const string &name){
+    Expr make_state_var(const string &name) {
         auto storage = Buffer<void *>::make_scalar(name + "_buf");
         storage() = nullptr;
         Expr buf = Variable::make(type_of<halide_buffer_t *>(), storage.name() + ".buffer", storage);
@@ -292,7 +292,7 @@ public:
 
             debug(2) << "Generating init_kernels for " << api_unique_name << "\n";
             vector<char> kernel_src = i.second->compile_to_src();
-            Expr kernel_src_buf = make_buffer_ptr(kernel_src, api_unique_name + "_kernels");
+            Expr kernel_src_buf = make_buffer_ptr(kernel_src, api_unique_name + "gpu_source_kernels");
 
             string init_kernels_name = "halide_" + api_unique_name + "_initialize_kernels";
             vector<Expr> init_args = {state_ptr_var, kernel_src_buf, Expr((int)kernel_src.size())};
