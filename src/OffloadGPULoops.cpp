@@ -292,7 +292,7 @@ public:
 
             debug(2) << "Generating init_kernels for " << api_unique_name << "\n";
             vector<char> kernel_src = i.second->compile_to_src();
-            Expr kernel_src_buf = make_buffer_ptr(kernel_src, api_unique_name + "gpu_source_kernels");
+            Expr kernel_src_buf = make_buffer_ptr(kernel_src, api_unique_name + "_gpu_source_kernels");
 
             string init_kernels_name = "halide_" + api_unique_name + "_initialize_kernels";
             vector<Expr> init_args = {state_ptr_var, kernel_src_buf, Expr((int)kernel_src.size())};

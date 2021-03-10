@@ -35,10 +35,6 @@ extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeD3D12Comput
 
 namespace {
 
-bool endsWith(const string &str, const string &suffix) {
-    return str.size() >= suffix.size() && 0 == str.compare(str.size() - suffix.size(), suffix.size(), suffix);
-}
-
 // HALIDE_MUST_USE_RESULT defined here is intended to exactly
 // duplicate the definition in HalideRuntime.h (so that either or
 // both can be present, in any order).
@@ -1659,14 +1655,12 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
 
     // If it is an GPU source kernel, we would like to see the actual output, not the
     // uint8 representation. We use a string literal for this.
-    if (endsWith(name, "gpu_source_kernels")) {
-        stream << "static const char * " << name << "_string = R\"BUFCHARSOURCE(";
-        for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
-            stream << (char)(b.host[i]);
-        }
+    if (ends_with(name, "gpu_source_kernels")) {
+        stream << "static const char *" << name << "_string = R\"BUFCHARSOURCE(";
+        stream.write((char *)b.host, num_elems);
         stream << ")BUFCHARSOURCE\";\n";
 
-        stream << "static " << (is_constant ? "const" : "") << " uint8_t * " << name << "_data HALIDE_ATTRIBUTE_ALIGN(32) = (uint8_t *)"
+        stream << "static const uint8_t *" << name << "_data HALIDE_ATTRIBUTE_ALIGN(32) = (const uint8_t *) "
                << name << "_string;\n";
     } else {
         // Emit the data
@@ -2603,8 +2597,8 @@ void CodeGen_C::visit(const Allocate *op) {
         alloc.type = op->type;
         allocations.push(op->name, alloc);
         heap_allocations.push(op->name);
-        string newe = print_expr(op->new_expr);
-        stream << get_indent() << op_type << "*" << op_name << " = (" << op_type << "*)" << newe << ";\n";
+        string new_e = print_expr(op->new_expr);
+        stream << get_indent() << op_type << " *" << op_name << " = (" << op_type << "*)" << new_e << ";\n";
     } else {
         constant_size = op->constant_allocation_size();
         if (constant_size > 0) {
