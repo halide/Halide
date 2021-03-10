@@ -1950,9 +1950,10 @@ void CodeGen_LLVM::visit(const Load *op) {
             // LLVM misses optimizations like using ldN on ARM.
             vector<Value *> results;
             for (int i = 0; i < op->type.lanes(); i += slice_lanes) {
-                int load_lanes_i = std::min<int>(slice_lanes * stride->value, load_lanes - i);
+                int load_base_i = i * stride->value;
+                int load_lanes_i = std::min<int>(slice_lanes * stride->value, load_lanes - load_base_i);
                 int lanes_i = std::min<int>(slice_lanes, op->type.lanes() - i);
-                Expr slice_base = simplify(base + i * ramp->stride);
+                Expr slice_base = simplify(base + load_base_i);
 
                 Value *load_i = codegen_dense_vector_load(op->type.with_lanes(load_lanes_i), op->name, slice_base,
                                                           op->image, op->param, op->alignment, nullptr, false);
