@@ -1,5 +1,4 @@
 #include "CodeGen_Posix.h"
-
 #include "ConciseCasts.h"
 #include "Debug.h"
 #include "IRMatch.h"
@@ -224,8 +223,8 @@ void CodeGen_X86::init_module() {
         }
 
         auto *fn = declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
-        if((i.flags & x86Intrinsic::AccessesMemory) == 0) {
-          fn->addFnAttr(llvm::Attribute::ReadNone);
+        if ((i.flags & x86Intrinsic::AccessesMemory) == 0) {
+            fn->addFnAttr(llvm::Attribute::ReadNone);
         }
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
