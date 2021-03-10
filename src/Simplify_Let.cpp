@@ -132,6 +132,9 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
             } else if (sub && (is_const(sub->b) || var_b)) {
                 replacement = substitute(f.new_name, Sub::make(new_var, sub->b), replacement);
                 f.new_value = sub->a;
+            } else if (sub && is_const(sub->a)) {
+                replacement = substitute(f.new_name, Sub::make(sub->a, new_var), replacement);
+                f.new_value = sub->b;
             } else if (mod && is_const(mod->b)) {
                 replacement = substitute(f.new_name, Mod::make(new_var, mod->b), replacement);
                 f.new_value = mod->a;

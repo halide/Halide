@@ -75,10 +75,10 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
 }
 
 int CodeGen_Posix::allocation_padding(Type type) const {
-    // We potentially load one scalar value past the end of the
+    // We potentially load 3 scalar values past the end of the
     // buffer, so pad the allocation with an extra instance of the
     // scalar type.
-    return type.bytes();
+    return 3 * type.bytes();
 }
 
 CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type, MemoryType memory_type,

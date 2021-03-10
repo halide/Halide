@@ -1,7 +1,3 @@
-#include "CodeGen_Hexagon.h"
-
-#include <iostream>
-#include <mutex>
 #include <sstream>
 #include <utility>
 
@@ -12,14 +8,11 @@
 #include "Debug.h"
 #include "HexagonOptimize.h"
 #include "IREquality.h"
-#include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "LICM.h"
 #include "LLVM_Headers.h"
 #include "LoopCarry.h"
-#include "Monotonic.h"
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Target.h"
@@ -96,7 +89,6 @@ protected:
      * return null if the maybe option is true and the intrinsic is
      * not found. */
     ///@{
-    using CodeGen_LLVM::call_intrin;
     llvm::Value *call_intrin(Type t, const std::string &name,
                              std::vector<Expr>, bool maybe = false);
     llvm::Value *call_intrin(llvm::Type *t, const std::string &name,
@@ -138,8 +130,6 @@ private:
 
 CodeGen_Hexagon::CodeGen_Hexagon(const Target &t)
     : CodeGen_Posix(t) {
-    user_assert(llvm_Hexagon_enabled)
-        << "llvm build not configured with Hexagon target enabled.\n";
     if (target.has_feature(Halide::Target::HVX_v66)) {
         isa_version = 66;
     } else if (target.has_feature(Halide::Target::HVX_v65)) {
@@ -1800,8 +1790,10 @@ Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
             fn = fn2;
         }
     }
-    return call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
-                       get_llvm_function_name(fn), std::move(args));
+    fn->addFnAttr(llvm::Attribute::ReadNone);
+    fn->addFnAttr(llvm::Attribute::NoUnwind);
+    return CodeGen_Posix::call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
+                                      fn, std::move(args));
 }
 
 Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
@@ -1821,8 +1813,10 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
             fn = fn2;
         }
     }
-    return call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
-                       get_llvm_function_name(fn), std::move(args));
+    fn->addFnAttr(llvm::Attribute::ReadNone);
+    fn->addFnAttr(llvm::Attribute::NoUnwind);
+    return CodeGen_Posix::call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
+                                      fn, std::move(args));
 }
 
 string CodeGen_Hexagon::mcpu() const {
@@ -2326,15 +2320,13 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
 
 }  // namespace
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
-    std::unique_ptr<CodeGen_Posix> ret(std::make_unique<CodeGen_Hexagon>(target));
-    ret->set_context(context);
-    return ret;
+std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target) {
+    return std::make_unique<CodeGen_Hexagon>(target);
 }
 
 #else  // WITH_HEXAGON
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
+std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target) {
     user_error << "hexagon not enabled for this build of Halide.\n";
     return nullptr;
 }
