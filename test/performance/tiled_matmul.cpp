@@ -1,12 +1,8 @@
 #include "Halide.h"
 #include "halide_benchmark.h"
-#include "halide_test_dirs.h"
 #include <iomanip>
-#include <stdio.h>
 
 using namespace Halide;
-
-#define FUSE 0
 
 int main(int argc, char **argv) {
     const int row = 16;
@@ -15,6 +11,10 @@ int main(int argc, char **argv) {
 
     Var x("x"), y("y");
     ImageParam A(Int(8), 2, "lhs");
+    // NB the RHS matrix in AMX instructions should be tiled in "VNNI format",
+    // where instead of being (cols, rows) where rows are adjacent in memory it
+    // should be (4, cols, rows / 4) for int8, or (2, cols, rows / 2) for bf16.
+    // This means that the rows must always be divisible by 4 (or 2 for bf16).
     ImageParam B(Int(8), 3, "rhs");
 
     RDom r(0, acc);
@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
     int tile_r = 4;
 
     // Schedule the reduction
-    Var rxi("rxi"), ryi("ryi"), rz("rz");
+    Var rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
     mm.compute_at(mm.in(), y)
         .store_in(MemoryType::AMXTile)
@@ -53,27 +53,25 @@ int main(int argc, char **argv) {
         .vectorize(ixi);
 
     // Schedule the consumer
-    Var mmxi("mmxi"), mmyi("mmyi"), mmz("mmz");
+    Var mmxi("mmxi"), mmyi("mmyi");
     mm.in()
         .tile(y, x, mmyi, mmxi, tile_y, tile_x)
         .vectorize(mmyi)
         .vectorize(mmxi);
 
-    int count = 1;
     Buffer<int8_t> a_buf(acc, row);
     for (int iy = 0; iy < row; iy++) {
         for (int ix = 0; ix < acc; ix++) {
-            a_buf(ix, iy) = count++;  //rand() % 256 - 128;
+            a_buf(ix, iy) = rand() % 256 - 128;
         }
     }
     A.set(a_buf);
 
     Buffer<int8_t> b_buf(4, col, acc / 4);
-    count = 1;
     for (int iy = 0; iy < acc / 4; iy++) {
         for (int ix = 0; ix < col; ix++) {
             for (int ik = 0; ik < 4; ++ik) {
-                b_buf(ik, ix, iy) = count++;  //rand() % 256 - 128;
+                b_buf(ik, ix, iy) = rand() % 256 - 128;
             }
         }
     }
@@ -84,35 +82,14 @@ int main(int argc, char **argv) {
     Func result = mm.in();
 
     // Uncomment to check the asm
-    Target target = get_jit_target_from_environment();
-    result.compile_to_llvm_assembly("matmul.ll", {A, B}, target);
-    //result.compile_to_assembly("matmul.s", {A, B}, target);
+    //Target target = get_jit_target_from_environment();
+    //result.compile_to_llvm_assembly("tiled_matmul.ll", {A, B}, target);
+    //result.compile_to_assembly("tiled_matmul.s", {A, B}, target);
 
     auto time = Tools::benchmark(20, 20, [&]() {
         result.realize(out);
     });
     std::cout << "Exec time: " << time << "\n";
-
-    for (int i = 0; i < row; ++i) {
-        for (int j = 0; j < acc; ++j) {
-            std::cout << std::setw(4) << (int)a_buf(j, i) << " ";
-        }
-        std::cout << "\n";
-    }
-    std::cout << "\n\n*\n\n";
-    for (int i = 0; i < acc; ++i) {
-        for (int j = 0; j < col; ++j) {
-            std::cout << std::setw(4) << (int)b_buf(i % 4, j, i / 4) << " ";
-        }
-        std::cout << "\n";
-    }
-    std::cout << "\n\n=\n\n";
-    for (int i = 0; i < row; ++i) {
-        for (int j = 0; j < col; ++j) {
-            std::cout << std::setw(6) << out(j, i) << " ";
-        }
-        std::cout << "\n";
-    }
 
     for (int j = 0; j < row; ++j) {
         for (int i = 0; i < col; ++i) {
