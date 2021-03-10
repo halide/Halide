@@ -81,6 +81,7 @@ struct CustomLoweringPass {
 struct JITExtern;
 
 struct AutoSchedulerResults {
+    AutoSchedulerResults(): scheduler_name(), target(), machine_params_string(), schedule_source(), lua_schedule_source(), featurization() {}
     std::string scheduler_name;          // name of the autoscheduler used
     Target target;                       // Target specified to the autoscheduler
     std::string machine_params_string;   // MachineParams specified to the autoscheduler (in string form)
@@ -186,6 +187,9 @@ public:
     AutoSchedulerResults auto_schedule(const std::string &autoscheduler_name,
                                        const Target &target,
                                        const MachineParams &arch_params = MachineParams::generic());
+    
+    /** Apply lua schedule to a pipeline - coming thru environment variable for now */
+    void apply_lua_schedule(const Halide::Target &target);
 
     /** Add a new the autoscheduler method with the given name. Does not affect the current default autoscheduler.
      * It is an error to call this with the same name multiple times. */
