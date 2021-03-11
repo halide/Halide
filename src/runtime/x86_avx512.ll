@@ -90,3 +90,51 @@ define weak_odr <4 x i32>  @dpwssdx4(<4 x i32> %init, <8 x i16> %a, <8 x i16> %b
   ret <4 x i32> %3
 }
 declare <4 x i32> @llvm.x86.avx512.vpdpwssd.128(<4 x i32>, <4 x i32>, <4 x i32>)
+
+define weak_odr <16 x i32>  @dpbusdsx16(<16 x i32> %init, <64 x i8> %a, <64 x i8> %b) nounwind alwaysinline {
+  %1 = bitcast <64 x i8> %a to <16 x i32>
+  %2 = bitcast <64 x i8> %b to <16 x i32>
+  %3 = tail call <16 x i32> @llvm.x86.avx512.vpdpbusds.512(<16 x i32> %init, <16 x i32> %1, <16 x i32> %2)
+  ret <16 x i32> %3
+}
+declare <16 x i32> @llvm.x86.avx512.vpdpbusds.512(<16 x i32>, <16 x i32>, <16 x i32>)
+
+define weak_odr <8 x i32>  @dpbusdsx8(<8 x i32> %init, <32 x i8> %a, <32 x i8> %b) nounwind alwaysinline {
+  %1 = bitcast <32 x i8> %a to <8 x i32>
+  %2 = bitcast <32 x i8> %b to <8 x i32>
+  %3 = tail call <8 x i32> @llvm.x86.avx512.vpdpbusds.256(<8 x i32> %init, <8 x i32> %1, <8 x i32> %2)
+  ret <8 x i32> %3
+}
+declare <8 x i32> @llvm.x86.avx512.vpdpbusds.256(<8 x i32>, <8 x i32>, <8 x i32>)
+
+define weak_odr <4 x i32>  @dpbusdsx4(<4 x i32> %init, <16 x i8> %a, <16 x i8> %b) nounwind alwaysinline {
+  %1 = bitcast <16 x i8> %a to <4 x i32>
+  %2 = bitcast <16 x i8> %b to <4 x i32>
+  %3 = tail call <4 x i32> @llvm.x86.avx512.vpdpbusds.128(<4 x i32> %init, <4 x i32> %1, <4 x i32> %2)
+  ret <4 x i32> %3
+}
+declare <4 x i32> @llvm.x86.avx512.vpdpbusds.128(<4 x i32>, <4 x i32>, <4 x i32>)
+
+define weak_odr <16 x i32>  @dpwssdsx16(<16 x i32> %init, <32 x i16> %a, <32 x i16> %b) nounwind alwaysinline {
+  %1 = bitcast <32 x i16> %a to <16 x i32>
+  %2 = bitcast <32 x i16> %b to <16 x i32>
+  %3 = tail call <16 x i32> @llvm.x86.avx512.vpdpwssds.512(<16 x i32> %init, <16 x i32> %1, <16 x i32> %2)
+  ret <16 x i32> %3
+}
+declare <16 x i32> @llvm.x86.avx512.vpdpwssds.512(<16 x i32>, <16 x i32>, <16 x i32>)
+
+define weak_odr <8 x i32>  @dpwssdsx8(<8 x i32> %init, <16 x i16> %a, <16 x i16> %b) nounwind alwaysinline {
+  %1 = bitcast <16 x i16> %a to <8 x i32>
+  %2 = bitcast <16 x i16> %b to <8 x i32>
+  %3 = tail call <8 x i32> @llvm.x86.avx512.vpdpwssds.256(<8 x i32> %init, <8 x i32> %1, <8 x i32> %2)
+  ret <8 x i32> %3
+}
+declare <8 x i32> @llvm.x86.avx512.vpdpwssds.256(<8 x i32>, <8 x i32>, <8 x i32>)
+
+define weak_odr <4 x i32>  @dpwssdsx4(<4 x i32> %init, <8 x i16> %a, <8 x i16> %b) nounwind alwaysinline {
+  %1 = bitcast <8 x i16> %a to <4 x i32>
+  %2 = bitcast <8 x i16> %b to <4 x i32>
+  %3 = tail call <4 x i32> @llvm.x86.avx512.vpdpwssds.128(<4 x i32> %init, <4 x i32> %1, <4 x i32> %2)
+  ret <4 x i32> %3
+}
+declare <4 x i32> @llvm.x86.avx512.vpdpwssds.128(<4 x i32>, <4 x i32>, <4 x i32>)
