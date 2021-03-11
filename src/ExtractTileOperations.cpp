@@ -239,11 +239,11 @@ class ExtractTileOperations : public IRMutator {
         return ProducerConsumer::make(amx_alloc, op->is_producer, body);
     }
 
-    Expr visit(const Load* op) override {
+    Expr visit(const Load *op) override {
         if (op->name == tile_name) {
-          // Any tile load will be matched elsewhere, so a load here means that
-          // the AMX tile is used outside of a tile instruction.
-          is_valid = false;
+            // Any tile load will be matched elsewhere, so a load here means that
+            // the AMX tile is used outside of a tile instruction.
+            is_valid = false;
         }
         return IRMutator::visit(op);
     }
