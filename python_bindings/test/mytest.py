@@ -4,7 +4,7 @@ def main():
     hl.load_plugin("autoschedule_adams2019")
 
     x = hl.Var('x')
-    f_in = hl.Func('in')
+    f_in = hl.Func('in_')
     f_in[x] = hl.f32(x) # Cast to float 32
     f_0 = hl.Func('f_0')
     f_0[x] = 2 * f_in[x]
@@ -20,9 +20,9 @@ def main():
     # Only first parameter is used (number of cores on CPU)
     params = hl.MachineParams(32, 16777216, 40);
     #result = p.auto_schedule('Adams2019', target, params)
-    #print("Loop nest!")
-    #f_2.print_loop_nest()
 
+    print("Loop nest!")
+    f_2.print_loop_nest()
     #print('Schedule:')
     #print(result.schedule_source)
     #print('Lua Schedule:')
@@ -33,6 +33,8 @@ def main():
     # applying the schedule
     print("Applying Lua Schedule...")
     p.apply_lua_schedule(target)
+    print("Loop nest!")
+    f_2.print_loop_nest()
 
     print("JIT Compiling...")
     p.compile_jit() # compile

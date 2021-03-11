@@ -13,12 +13,7 @@ apply_schedule_f2 = function( pipeline, target)
     f_1 = pipeline:get_func(2)
     f_0 = pipeline:get_func(1)
     in_ = pipeline:get_func(0)
-    print("f_2.name is " .. f_2:name())
-    print("prior to calling f_2:get_schedule() ")
-    s = f_2:get_schedule()
-    -- x = Var:new(f_2:get_schedule():dims()[0]:var())
-    -- x = Var_new("x")
-    print("Var is " .. tostring(Var) .. " type of Var is " .. type(Var))
+    x = Var_new(f_2:get_schedule():dims()[1]:var())
     xi = Var_new("xi")
     xii = Var_new("xii")
     f_2
@@ -27,9 +22,7 @@ apply_schedule_f2 = function( pipeline, target)
         :unroll(xi)
         :vectorize(xii)
         :compute_root()
-        :reorder({xii, xi, x})
+        :reorder( xii, xi, x )
         :parallel(x)
     -- --- END machine-generated schedule
-    
 end
-
