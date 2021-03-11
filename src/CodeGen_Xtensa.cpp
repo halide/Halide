@@ -1667,6 +1667,18 @@ std::string suffix_for_type(Type t) {
     return "";
 }
 
+string CodeGen_Xtensa::print_assignment(Type t, const std::string &rhs) {
+    auto cached = cache.find(rhs);
+    if (cached == cache.end()) {
+        id = unique_name('_');
+        stream << get_indent() << print_type(t, AppendSpace) << (t.is_handle() ? " __restrict " : "") << (output_kind == CPlusPlusImplementation ? "const " : "") << id << " = " << rhs << ";\n";
+        cache[rhs] = id;
+    } else {
+        id = cached->second;
+    }
+    return id;
+}
+
 std::string CodeGen_Xtensa::print_type(Type t, AppendSpaceIfNeeded space_option) {
     if (t.bits() == 1 && t.is_vector()) {
         return "uint1x" + std::to_string(t.lanes()) + "_t" + (space_option == AppendSpace ? " " : "");
@@ -1674,6 +1686,18 @@ std::string CodeGen_Xtensa::print_type(Type t, AppendSpaceIfNeeded space_option)
     return CodeGen_C::print_type(t, space_option);
 }
 
+void CodeGen_Xtensa::visit(const IntImm *op) {
+    if (op->type.is_int() && (op->type.bits() <= 32)) {
+        id = std::to_string(op->value);
+    } else {
+        static const char *const suffixes[3] = {
+            "ll",  // PlainC
+            "l",   // OpenCL
+            "",    // HLSL
+        };
+        print_assignment(op->type, "(" + print_type(op->type) + ")(" + std::to_string(op->value) + suffixes[(int)integer_suffix_style] + ")");
+    }
+}
 void CodeGen_Xtensa::visit(const Mul *op) {
     int bits;
     if (is_const_power_of_two_integer(op->b, &bits)) {

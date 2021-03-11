@@ -28,6 +28,7 @@ protected:
 
     bool is_native_vector_type(Type t);
 
+    std::string print_assignment(Type t, const std::string &rhs) override;
     std::string print_type(Type t, CodeGen_C::AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
     std::string print_xtensa_call(const Call *op);
 
@@ -51,6 +52,7 @@ protected:
     void visit(const Shuffle *op) override;
     void visit(const Min *op) override;
     void visit(const Max *op) override;
+    void visit(const IntImm *op) override;
 
 protected:
     int current_loop_level = 0;
