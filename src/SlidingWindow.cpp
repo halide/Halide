@@ -556,20 +556,24 @@ public:
     }
 };
 
-bool depends_on(const string &a, const string &b, const Stmt &s) {
+bool depends_on(const string &a, const string &b, const Stmt &s, map<pair<string, string>, bool> &cache) {
     if (a == b) {
         return true;
     }
+    auto cached = cache.find(std::make_pair(a, b));
+    if (cached != cache.end()) {
+        return cached->second;
+    }
     Dependencies deps(b);
     s.accept(&deps);
-    // Recursively search for dependencies. Repeatedly using this on the
-    // same set of Funcs is algorithmically slow, but even an absurd number
-    // of Funcs is still relatively small...
+    // Recursively search for dependencies.
     for (const string &i : deps.dependencies) {
-        if (depends_on(a, i, s)) {
+        if (depends_on(a, i, s, cache)) {
+            cache[std::make_pair(a, b)] = true;
             return true;
         }
     }
+    cache[std::make_pair(a, b)] = false;
     return false;
 }
 
@@ -663,6 +667,7 @@ class SlidingWindow : public IRMutator {
 
         list<pair<string, Expr>> prev_loop_mins;
         list<pair<string, Expr>> new_lets;
+        map<pair<string, string>, bool> dependens_on_cache;
         for (const Function &func : sliding) {
             debug(3) << "Doing sliding window analysis on function " << func.name() << "\n";
 
@@ -674,7 +679,7 @@ class SlidingWindow : public IRMutator {
             // up, then we need to back up the loop to warm up this
             // func before the already slid func starts warming up.
             for (const auto &i : prev_loop_mins) {
-                if (depends_on(func.name(), i.first, body)) {
+                if (depends_on(func.name(), i.first, body, dependens_on_cache)) {
                     prev_loop_min = i.second;
                     break;
                 }
