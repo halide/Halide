@@ -726,7 +726,7 @@ int main(int argc, char **argv) {
         assert(call_count == 5);
 
         Internal::JITSharedRuntime::memoization_cache_evict(1);
-        Internal::JITSharedRuntime::memoization_cache_evict((uint64_t)&call_count);
+        Internal::JITSharedRuntime::memoization_cache_evict((uint64_t)(uintptr_t)&call_count);
         result1 = f.realize();
         assert(result1(0) == 126);
 

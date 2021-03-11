@@ -218,6 +218,7 @@ struct ArmIntrinsic {
         MangleRetArgs = 1 << 4,      // Most intrinsics only mangle the return type. Some mangle the return type and arguments instead.
         ScalarsAreVectors = 1 << 5,  // Some intrinsics have scalar arguments that are vector parameters :(
         SplitArg0 = 1 << 6,          // This intrinsic requires splitting the argument into the low and high halves.
+        NoPrefix = 1 << 7,           // Don't prefix the intrinsic with llvm.*
     };
 };
 
@@ -546,6 +547,18 @@ const ArmIntrinsic intrinsic_defs[] = {
     {nullptr, "sdot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), Int(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle},
     {nullptr, "udot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle},
     {nullptr, "udot.v4i32.v16i8", UInt(32, 4), "dot_product", {UInt(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle},
+
+    // ABDL - Widening absolute difference
+    // Need to be able to handle both signed and unsigned outputs for signed inputs.
+    {"vabdl_i8x8", "vabdl_i8x8", Int(16, 8), "widening_absd", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i8x8", "vabdl_i8x8", UInt(16, 8), "widening_absd", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_u8x8", "vabdl_u8x8", UInt(16, 8), "widening_absd", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i16x4", "vabdl_i16x4", Int(32, 4), "widening_absd", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i16x4", "vabdl_i16x4", UInt(32, 4), "widening_absd", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_u16x4", "vabdl_u16x4", UInt(32, 4), "widening_absd", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i32x2", "vabdl_i32x2", Int(64, 2), "widening_absd", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i32x2", "vabdl_i32x2", UInt(64, 2), "widening_absd", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_u32x2", "vabdl_u32x2", UInt(64, 2), "widening_absd", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
 };
 // clang-format on
 
@@ -606,7 +619,7 @@ void CodeGen_ARM::init_module() {
             continue;
         }
         string full_name = intrin_name;
-        if (!starts_with(full_name, "llvm.")) {
+        if (!starts_with(full_name, "llvm.") && (intrin.flags & ArmIntrinsic::NoPrefix) == 0) {
             full_name = prefix + full_name;
         }
 
@@ -671,6 +684,8 @@ void CodeGen_ARM::init_module() {
                 intrin_impl = get_llvm_intrin(ret_type, mangled_name, arg_types, scalars_are_vectors);
             }
 
+            intrin_impl->addFnAttr(llvm::Attribute::ReadNone);
+            intrin_impl->addFnAttr(llvm::Attribute::NoUnwind);
             declare_intrin_overload(intrin.name, ret_type, intrin_impl, arg_types);
             if (intrin.flags & ArmIntrinsic::AllowUnsignedOp1) {
                 // Also generate a version of this intrinsic where the second operand is unsigned.
@@ -711,10 +726,7 @@ void CodeGen_ARM::visit(const Cast *op) {
             (op->value.type().is_int() || op->value.type().is_uint()) &&
             t.bits() == op->value.type().bits() * 2) {
             if (const Call *absd = Call::as_intrinsic(op->value, {Call::absd})) {
-                ostringstream ss;
-                int intrin_lanes = 128 / t.bits();
-                ss << "vabdl_" << (absd->args[0].type().is_int() ? "i" : "u") << t.bits() / 2 << "x" << intrin_lanes;
-                value = call_intrin(t, intrin_lanes, ss.str(), absd->args);
+                value = call_overloaded_intrin(t, "widening_absd", absd->args);
                 return;
             }
         }
@@ -1027,93 +1039,10 @@ void CodeGen_ARM::visit(const Load *op) {
         return;
     }
 
+    // If the stride is in [-1, 4], we can deal with that using vanilla codegen
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
-
-    // If the stride is one or minus one, we can deal with that using vanilla codegen
-    if (stride && (stride->value == 1 || stride->value == -1)) {
+    if (stride && (-1 <= stride->value && stride->value <= 4)) {
         CodeGen_Posix::visit(op);
-        return;
-    }
-
-    // Strided loads with known stride
-    if (stride && stride->value >= 2 && stride->value <= 4) {
-        // Check alignment on the base. Attempt to shift to an earlier
-        // address if it simplifies the expression. This makes
-        // adjacent strided loads shared a vldN op.
-        Expr base = ramp->base;
-        int offset = 0;
-        ModulusRemainder mod_rem = modulus_remainder(ramp->base);
-
-        const Add *add = base.as<Add>();
-        const IntImm *add_b = add ? add->b.as<IntImm>() : nullptr;
-
-        if ((mod_rem.modulus % stride->value) == 0) {
-            offset = mod_rem.remainder % stride->value;
-        } else if ((mod_rem.modulus == 1) && add_b) {
-            offset = add_b->value % stride->value;
-            if (offset < 0) {
-                offset += stride->value;
-            }
-        }
-
-        if (offset) {
-            base = simplify(base - offset);
-            mod_rem.remainder -= offset;
-            if (mod_rem.modulus) {
-                mod_rem.remainder = mod_imp(mod_rem.remainder, mod_rem.modulus);
-            }
-        }
-
-        int alignment = op->type.bytes();
-        alignment *= gcd(mod_rem.modulus, mod_rem.remainder);
-        // Maximum stack alignment on arm is 16 bytes, so we should
-        // never claim alignment greater than that.
-        alignment = gcd(alignment, 16);
-        internal_assert(alignment > 0);
-
-        // Decide what width to slice things into. If not a multiple
-        // of 64 or 128 bits, then we can't safely slice it up into
-        // some number of vlds, so we hand it over the base class.
-        int bit_width = op->type.bits() * op->type.lanes();
-        int intrin_lanes = 0;
-        if (bit_width % 128 == 0) {
-            intrin_lanes = 128 / op->type.bits();
-        } else if (bit_width % 64 == 0) {
-            intrin_lanes = 64 / op->type.bits();
-        } else {
-            CodeGen_Posix::visit(op);
-            return;
-        }
-
-        llvm::Type *load_return_type = llvm_type_of(op->type.with_lanes(intrin_lanes * stride->value));
-        llvm::Type *load_return_pointer_type = load_return_type->getPointerTo();
-        Value *undef = UndefValue::get(load_return_type);
-        SmallVector<Constant *, 256> constants;
-        for (int j = 0; j < intrin_lanes; j++) {
-            Constant *constant = ConstantInt::get(i32_t, j * stride->value + offset);
-            constants.push_back(constant);
-        }
-        Constant *constantsV = ConstantVector::get(constants);
-
-        vector<Value *> results;
-        for (int i = 0; i < op->type.lanes(); i += intrin_lanes) {
-            Expr slice_base = simplify(base + i * ramp->stride);
-            Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_lanes);
-            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), slice_base);
-            Value *bitcastI = builder->CreateBitOrPointerCast(ptr, load_return_pointer_type);
-            LoadInst *loadI = cast<LoadInst>(builder->CreateLoad(bitcastI));
-#if LLVM_VERSION >= 110
-            loadI->setAlignment(Align(alignment));
-#else
-            loadI->setAlignment(MaybeAlign(alignment));
-#endif
-            add_tbaa_metadata(loadI, op->name, slice_ramp);
-            Value *shuffleInstr = builder->CreateShuffleVector(loadI, undef, constantsV);
-            results.push_back(shuffleInstr);
-        }
-
-        // Concat the results
-        value = concat_vectors(results);
         return;
     }
 

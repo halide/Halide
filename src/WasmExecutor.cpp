@@ -1158,6 +1158,7 @@ struct ExternArgType {
     halide_type_t type;
     bool is_void;
     bool is_buffer;
+    bool is_ucon;
 };
 
 using TrampolineFn = void (*)(void **);
@@ -1181,7 +1182,15 @@ wabt::Result extern_callback_wrapper(const std::vector<ExternArgType> &arg_types
 
     for (size_t i = 0; i < arg_types_len; ++i) {
         const auto &a = arg_types[i + 1];
-        if (a.is_buffer) {
+        if (a.is_ucon) {
+            // We have to special-case ucon because Halide considers it an int64 everywhere
+            // (even for wasm, where pointers are int32), and trying to extract it as an
+            // int64 from a Value that is int32 will assert-fail. In JIT mode the value
+            // doesn't even matter (except for guarding that it is our predicted constant).
+            wassert(args[i].Get<int32_t>() == 0 || args[i].Get<int32_t>() == kMagicJitUserContextValue);
+            store_value(Int(32), args[i], &scalars[i]);
+            trampoline_args[i] = &scalars[i];
+        } else if (a.is_buffer) {
             const wasm32_ptr_t buf_ptr = args[i].Get<int32_t>();
             wasmbuf_to_hostbuf(wabt_context, buf_ptr, buffers[i]);
             trampoline_args[i] = buffers[i].raw_buffer();
@@ -1255,22 +1264,27 @@ wabt::interp::HostFunc::Ptr make_extern_callback(wabt::interp::Store &store,
     if (sig.is_void_return()) {
         const bool is_void = true;
         const bool is_buffer = false;
+        const bool is_ucon = false;
         // Specifying a type here with bits == 0 should trigger a proper 'void' return type
-        arg_types.push_back(ExternArgType{{halide_type_int, 0, 0}, is_void, is_buffer});
+        arg_types.push_back(ExternArgType{{halide_type_int, 0, 0}, is_void, is_buffer, is_ucon});
     } else {
         const Type &t = sig.ret_type();
         const bool is_void = false;
         const bool is_buffer = (t == type_of<halide_buffer_t *>());
+        const bool is_ucon = false;
         user_assert(t.lanes() == 1) << "Halide Extern functions cannot return vector values.";
         user_assert(!is_buffer) << "Halide Extern functions cannot return halide_buffer_t.";
-        arg_types.push_back(ExternArgType{t, is_void, is_buffer});
+        arg_types.push_back(ExternArgType{t, is_void, is_buffer, is_ucon});
     }
     for (size_t i = 0; i < arg_count; ++i) {
         const Type &t = sig.arg_types()[i];
         const bool is_void = false;
         const bool is_buffer = (t == type_of<halide_buffer_t *>());
+        // Since arbitrary pointer args aren't legal for extern calls,
+        // assume that anything that is a void* is a user context.
+        const bool is_ucon = (t == type_of<void *>());
         user_assert(t.lanes() == 1) << "Halide Extern functions cannot accept vector values as arguments.";
-        arg_types.push_back(ExternArgType{t, is_void, is_buffer});
+        arg_types.push_back(ExternArgType{t, is_void, is_buffer, is_ucon});
     }
 
     const auto callback_wrapper =

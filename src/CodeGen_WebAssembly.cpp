@@ -1,5 +1,6 @@
 #include "CodeGen_Posix.h"
 
+#include "LLVM_Headers.h"
 #include <sstream>
 
 namespace Halide {
@@ -87,7 +88,9 @@ void CodeGen_WebAssembly::init_module() {
             arg_types.emplace_back(i);
         }
 
-        declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
+        auto *fn = declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
+        fn->addFnAttr(llvm::Attribute::ReadNone);
+        fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
 }
 

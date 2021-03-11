@@ -89,7 +89,6 @@ protected:
      * return null if the maybe option is true and the intrinsic is
      * not found. */
     ///@{
-    using CodeGen_LLVM::call_intrin;
     llvm::Value *call_intrin(Type t, const std::string &name,
                              std::vector<Expr>, bool maybe = false);
     llvm::Value *call_intrin(llvm::Type *t, const std::string &name,
@@ -1791,8 +1790,10 @@ Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
             fn = fn2;
         }
     }
-    return call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
-                       get_llvm_function_name(fn), std::move(args));
+    fn->addFnAttr(llvm::Attribute::ReadNone);
+    fn->addFnAttr(llvm::Attribute::NoUnwind);
+    return CodeGen_Posix::call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
+                                      fn, std::move(args));
 }
 
 Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
@@ -1812,8 +1813,10 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
             fn = fn2;
         }
     }
-    return call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
-                       get_llvm_function_name(fn), std::move(args));
+    fn->addFnAttr(llvm::Attribute::ReadNone);
+    fn->addFnAttr(llvm::Attribute::NoUnwind);
+    return CodeGen_Posix::call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
+                                      fn, std::move(args));
 }
 
 string CodeGen_Hexagon::mcpu() const {
