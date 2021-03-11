@@ -1,6 +1,9 @@
 #include "Halide.h"
 #include "halide_benchmark.h"
+#include "halide_test_dirs.h"
+
 #include <iomanip>
+#include <iostream>
 
 using namespace Halide;
 
@@ -83,8 +86,8 @@ int main(int argc, char **argv) {
 
     // Uncomment to check the asm
     //Target target = get_jit_target_from_environment();
-    //result.compile_to_llvm_assembly("tiled_matmul.ll", {A, B}, target);
-    //result.compile_to_assembly("tiled_matmul.s", {A, B}, target);
+    //result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.ll", {A, B}, target);
+    //result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
 
     auto time = Tools::benchmark(20, 20, [&]() {
         result.realize(out);
@@ -104,5 +107,6 @@ int main(int argc, char **argv) {
             }
         }
     }
+    std::cout << "Success!\n";
     return 0;
 }
