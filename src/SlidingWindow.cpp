@@ -577,6 +577,11 @@ bool depends_on(const string &a, const string &b, const Stmt &s, map<pair<string
     return false;
 }
 
+bool depends_on(const string &a, const string &b, const Stmt &s) {
+    map<pair<string, string>, bool> cache;
+    return depends_on(a, b, s, cache);
+}
+
 // Update the loop variable referenced by prefetch directives.
 class SubstitutePrefetchVar : public IRMutator {
     const string &old_var;
@@ -667,7 +672,6 @@ class SlidingWindow : public IRMutator {
 
         list<pair<string, Expr>> prev_loop_mins;
         list<pair<string, Expr>> new_lets;
-        map<pair<string, string>, bool> dependens_on_cache;
         for (const Function &func : sliding) {
             debug(3) << "Doing sliding window analysis on function " << func.name() << "\n";
 
@@ -679,7 +683,7 @@ class SlidingWindow : public IRMutator {
             // up, then we need to back up the loop to warm up this
             // func before the already slid func starts warming up.
             for (const auto &i : prev_loop_mins) {
-                if (depends_on(func.name(), i.first, body, dependens_on_cache)) {
+                if (depends_on(func.name(), i.first, body)) {
                     prev_loop_min = i.second;
                     break;
                 }
