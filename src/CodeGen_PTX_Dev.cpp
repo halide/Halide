@@ -228,14 +228,29 @@ void CodeGen_PTX_Dev::init_module() {
 
     module = get_initial_module_for_ptx_device(target, context);
 
-    declare_intrin_overload("dp4a", Int(32), "dp4a_s32_s32", {Int(8, 4), Int(8, 4), Int(32)});
-    declare_intrin_overload("dp4a", Int(32), "dp4a_s32_u32", {Int(8, 4), UInt(8, 4), Int(32)});
-    declare_intrin_overload("dp4a", Int(32), "dp4a_u32_s32", {UInt(8, 4), Int(8, 4), Int(32)});
-    declare_intrin_overload("dp4a", UInt(32), "dp4a_u32_u32", {UInt(8, 4), UInt(8, 4), UInt(32)});
-    declare_intrin_overload("dp2a", Int(32), "dp2a_s32_s32", {Int(16, 4), Int(8, 4), Int(32)});
-    declare_intrin_overload("dp2a", Int(32), "dp2a_s32_u32", {Int(16, 4), UInt(8, 4), Int(32)});
-    declare_intrin_overload("dp2a", Int(32), "dp2a_u32_s32", {UInt(16, 4), Int(8, 4), Int(32)});
-    declare_intrin_overload("dp2a", UInt(32), "dp2a_u32_u32", {UInt(16, 4), UInt(8, 4), UInt(32)});
+    struct Intrinsic {
+        const char *name;
+        Type ret_type;
+        const char *intrin_name;
+        vector<Type> arg_types;
+    };
+
+    Intrinsic ptx_intrins[] = {
+        {"dp4a", Int(32), "dp4a_s32_s32", {Int(8, 4), Int(8, 4), Int(32)}},
+        {"dp4a", Int(32), "dp4a_s32_u32", {Int(8, 4), UInt(8, 4), Int(32)}},
+        {"dp4a", Int(32), "dp4a_u32_s32", {UInt(8, 4), Int(8, 4), Int(32)}},
+        {"dp4a", UInt(32), "dp4a_u32_u32", {UInt(8, 4), UInt(8, 4), UInt(32)}},
+        {"dp2a", Int(32), "dp2a_s32_s32", {Int(16, 4), Int(8, 4), Int(32)}},
+        {"dp2a", Int(32), "dp2a_s32_u32", {Int(16, 4), UInt(8, 4), Int(32)}},
+        {"dp2a", Int(32), "dp2a_u32_s32", {UInt(16, 4), Int(8, 4), Int(32)}},
+        {"dp2a", UInt(32), "dp2a_u32_u32", {UInt(16, 4), UInt(8, 4), UInt(32)}},
+    };
+
+    for (auto &&i : ptx_intrins) {
+        auto *fn = declare_intrin_overload(i.name, i.ret_type, i.intrin_name, std::move(i.arg_types));
+        fn->addFnAttr(llvm::Attribute::ReadNone);
+        fn->addFnAttr(llvm::Attribute::NoUnwind);
+    }
 }
 
 void CodeGen_PTX_Dev::visit(const Call *op) {
