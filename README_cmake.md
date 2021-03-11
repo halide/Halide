@@ -423,7 +423,9 @@ The following options are WebAssembly-specific. They only apply when
 
 | Option            | Default | Description                                                |
 | ----------------- | ------- | ---------------------------------------------------------- |
-| `WITH_WABT`       | `ON`    | Include WABT Interpreter for WASM testing                  |
+| `WITH_WABT`       | `ON`*   | Include WABT Interpreter for WASM testing                  |
+
+* WABT Interpreter is only supported on 64-bit host systems.
 
 ### Find module options
 

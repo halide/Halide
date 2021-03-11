@@ -10,6 +10,13 @@ if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
     endif ()
 endif ()
 
+if (CMAKE_SIZEOF_VOID_P EQUAL 4)
+    if (WITH_WABT)
+        message(STATUS "WITH_WABT is not supported on 32-bit hosts.")
+        set(WITH_WABT OFF CACHE BOOL "WITH_WABT is not supported on 32-bit hosts." FORCE)
+    endif ()
+endif ()
+
 if (WITH_WABT)
     # TODO: temporary, until #1628 gets included in a tagged build
     set(WABT_VER master)
