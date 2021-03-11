@@ -40,6 +40,7 @@ enum class Output {
     registration,
     schedule,
     lua_schedule,
+    python_schedule,
     static_library,
     stmt,
     stmt_html,

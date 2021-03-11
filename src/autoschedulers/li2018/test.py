@@ -24,6 +24,8 @@ def main():
     print(result.schedule_source)
     print('Lua Schedule:')
     print(result.lua_schedule_source)
+    print('Python Schedule:')
+    print(result.python_schedule_source)
 
     p.compile_jit() # compile
     buf = p.realize(1000) # compute and get the buffer

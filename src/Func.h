@@ -109,6 +109,11 @@ public:
         return definition.schedule();
     }
 
+    /** Return a loop variable name associated with dimension i */
+    std::string get_schedule_dim_var_name(size_t i) const {
+        return definition.schedule().dims()[i].var;
+    }
+
     /** Return a string describing the current var list taking into
      * account all the splits, reorders, and tiles. */
     std::string dump_argument_list() const;
@@ -2466,6 +2471,11 @@ public:
     const Internal::StageSchedule &get_schedule() const {
         return Stage(*this).get_schedule();
     }
+
+    /** Return a loop variable name associated with dimension i */
+    std::string get_schedule_dim_var_name(size_t i) const {
+        return Stage(*this).get_schedule().dims()[i].var;
+    }  
 };
 
 namespace Internal {

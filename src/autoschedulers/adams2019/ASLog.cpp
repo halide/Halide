@@ -65,6 +65,8 @@ std::string conform_name(const std::string &name, const std::string &prefix) {
     std::string result(name);
     std::replace_if(result.begin(), result.end(), invalid_contents, '_');
     if(invalid_prefix(result.front())) { result = std::string(prefix) + result; }
+    if (result == "in" || result == "out")
+        result += "_"; // For Lua's sake
     return result;
 }
 

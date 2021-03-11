@@ -27,6 +27,8 @@ def main():
     #print(result.schedule_source)
     #print('Lua Schedule:')
     #print(result.lua_schedule_source)
+    #print('Python Schedule:')
+    #print(result.python_schedule_source)
 
     # applying the schedule
     print("Applying Lua Schedule...")

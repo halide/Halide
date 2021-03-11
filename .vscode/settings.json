@@ -3,6 +3,7 @@
     "files.associations": {
         "tuple": "cpp",
         "typeindex": "cpp",
-        "typeinfo": "cpp"
+        "typeinfo": "cpp",
+        "functional": "cpp"
     }
 }

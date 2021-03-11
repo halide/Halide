@@ -170,6 +170,7 @@ void define_func(py::module &m) {
 
             .def("defined", &Func::defined)
             .def("name", &Func::name)
+            .def("get_schedule_dim_var_name", &Func::get_schedule_dim_var_name, py::arg("i"))
             .def("dimensions", &Func::dimensions)
             .def("args", &Func::args)
             .def("value", &Func::value)

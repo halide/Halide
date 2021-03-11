@@ -438,6 +438,7 @@ struct FunctionDAG {
             // equivalent to a computed schedule.
             string accessor;
             string lua_accessor; // Same as above for Lua schedules
+            string python_accessor; // Same as above for Python schedules
         };
 
         // Get the loop nest shape as a function of the region computed
