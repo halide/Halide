@@ -512,6 +512,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
         Box provided = box_provided(body, func.name());
         Box required = box_required(body, func.name());
+        // For storage folding, we don't care about conditional reads.
+        required.used = Expr();
         Box box = box_union(provided, required);
 
         Expr loop_var = Variable::make(Int(32), op->name);
@@ -674,8 +676,10 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     // Can't do much with this dimension
                     if (!explicit_only) {
                         debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
-                                 << "min = " << min << "\n"
-                                 << "max = " << max << "\n";
+                                 << "min_initial = " << min_initial << "\n"
+                                 << "min_steady = " << min_steady << "\n"
+                                 << "max_initial = " << max_initial << "\n"
+                                 << "max_steady = " << max_steady << "\n";
                     } else {
                         debug(3) << "Not folding because there is no explicit storage folding factor\n";
                     }
@@ -789,22 +793,16 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                         to_release = max_required - max_required_next;  // This is the last time we use these entries
                     }
 
-                    // Logically we acquire the entire extent on
-                    // the first iteration:
-
-                    // to_acquire = select(loop_var > loop_min, to_acquire, extent);
-
-                    // However it's simpler to implement this by
-                    // just reducing the initial value on the
-                    // semaphore by the difference, as long as it
-                    // doesn't lift any inner names out of scope.
-
-                    Expr fudge = simplify(substitute(op->name, loop_min, extent - to_acquire));
-                    if (is_const(fudge) && can_prove(fudge <= sema.init)) {
-                        sema.init -= fudge;
-                    } else {
-                        to_acquire = select(loop_var > loop_min, likely(to_acquire), extent);
+                    if (provided.used.defined()) {
+                        to_acquire = select(provided.used, to_acquire, 0);
                     }
+                    // We should always release the required region, even if we don't use it.
+
+                    // On the first iteration, we need to acquire the extent of the region shared
+                    // between the producer and consumer, and we need to release it on the last
+                    // iteration.
+                    to_acquire = select(loop_var > loop_min, to_acquire, extent);
+                    to_release = select(loop_var < loop_max, to_release, extent);
 
                     // We may need dynamic assertions that a positive
                     // amount of the semaphore is acquired/released,
@@ -864,10 +862,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             } else {
                 stmt = op;
                 debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
-                         << "min_initial = " << min_initial << "\n"
-                         << "min_steady = " << min_steady << "\n"
-                         << "max_initial = " << max_initial << "\n"
-                         << "max_steady = " << max_steady << "\n";
+                         << "min = " << min << "\n"
+                         << "max = " << max << "\n";
                 break;
             }
         }
