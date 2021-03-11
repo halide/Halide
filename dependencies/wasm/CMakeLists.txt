@@ -149,6 +149,7 @@ function(add_wasm_halide_test TARGET)
         list(APPEND WASM_SHELL_FLAGS "--enable-threads")
     endif ()
 
+    add_dependencies("${TARGET}" wasm-interp)
     add_halide_test("${TARGET}"
                     GROUPS ${args_GROUPS}
                     COMMAND wasm-interp ${WASM_SHELL_FLAGS} "${TARGET}.wasm")
