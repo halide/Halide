@@ -556,11 +556,11 @@ public:
     }
 };
 
-bool depends_on(const string &a, const string &b, const Stmt &s, map<pair<string, string>, bool> &cache) {
+bool depends_on(const string &a, const string &b, const Stmt &s, map<string, bool> &cache) {
     if (a == b) {
         return true;
     }
-    auto cached = cache.find(std::make_pair(a, b));
+    auto cached = cache.find(b);
     if (cached != cache.end()) {
         return cached->second;
     }
@@ -569,16 +569,16 @@ bool depends_on(const string &a, const string &b, const Stmt &s, map<pair<string
     // Recursively search for dependencies.
     for (const string &i : deps.dependencies) {
         if (depends_on(a, i, s, cache)) {
-            cache[std::make_pair(a, b)] = true;
+            cache[b] = true;
             return true;
         }
     }
-    cache[std::make_pair(a, b)] = false;
+    cache[b] = false;
     return false;
 }
 
 bool depends_on(const string &a, const string &b, const Stmt &s) {
-    map<pair<string, string>, bool> cache;
+    map<string, bool> cache;
     return depends_on(a, b, s, cache);
 }
 
