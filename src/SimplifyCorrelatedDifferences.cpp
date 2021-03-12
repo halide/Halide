@@ -139,6 +139,20 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         IRMatcher::WildConst<0> c0;
         IRMatcher::WildConst<1> c1;
 
+        Expr loop_var;
+
+        Expr visit(const Mul *op) override {
+            Expr a = mutate(op->a), b = mutate(op->b);
+            if (op->type == Int(32)) {
+                auto rewrite = IRMatcher::rewriter(IRMatcher::mul(a, b), op->type);
+                if (rewrite(((loop_var + y) / c0) * c0, (loop_var / c0) * c0 + ((y - loop_var % c0) / c0) * c0, c0 != 0) ||
+                    rewrite(((loop_var - y) / c0) * c0, (loop_var / c0) * c0 + ((0 - y - loop_var % c0) / c0) * c0, c0 != 0)) {
+                    return rewrite.result;
+                }
+            }
+            return a * b;
+        }
+
         Expr visit(const Sub *op) override {
 
             Expr a = mutate(op->a), b = mutate(op->b);
@@ -169,6 +183,11 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             }
             return a - b;
         }
+
+    public:
+        PartiallyCancelDifferences(string v)
+            : loop_var(Variable::make(Int(32), v)) {
+        }
     };
 
     Expr cancel_correlated_subexpression(Expr e, const Expr &a, const Expr &b, bool correlated) {
@@ -195,7 +214,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             }
             e = common_subexpression_elimination(e);
             e = solve_expression(e, loop_var).result;
-            e = PartiallyCancelDifferences().mutate(e);
+            e = PartiallyCancelDifferences(loop_var).mutate(e);
             e = simplify(e);
 
             const bool check_non_monotonic = debug::debug_level() > 0 || get_compiler_logger() != nullptr;
