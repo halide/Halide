@@ -163,6 +163,8 @@ private:
     // sensibly match the value. Return Target() if not jitted.
     Target get_compiled_jit_target() const;
 
+    AutoSchedulerResults autoscheduler_results; // saving them for future use.
+
 public:
     /** Make an undefined Pipeline object. */
     Pipeline();
@@ -191,6 +193,9 @@ public:
     
     /** Apply lua schedule to a pipeline - coming thru environment variable for now */
     void apply_lua_schedule(const Halide::Target &target);
+
+    /** Apply python schedule to a pipeline */
+    void apply_python_schedule(const Halide::Target &target);
 
     /** Add a new the autoscheduler method with the given name. Does not affect the current default autoscheduler.
      * It is an error to call this with the same name multiple times. */

@@ -55,6 +55,7 @@ std::map<Output, const OutputInfo> get_output_info(const Target &target) {
         {Output::registration, {"registration", ".registration.cpp", IsSingle}},
         {Output::schedule, {"schedule", ".schedule.h", IsSingle}},
         {Output::lua_schedule, {"lua_schedule", "_schedule.lua", IsSingle}},
+        {Output::python_schedule, {"python_schedule", "_schedule.py", IsSingle}},
         {Output::static_library, {"static_library", is_windows_coff ? ".lib" : ".a", IsSingle}},
         {Output::stmt, {"stmt", ".stmt", IsMulti}},
         {Output::stmt_html, {"stmt_html", ".stmt.html", IsMulti}},
@@ -404,7 +405,7 @@ void emit_python_schedule_file(const std::string &name,
 import halide as hl
 
 $NAMESPACEOPEN$
-def $NESTING$apply_schedule_$SHORTNAME$ (pipeline, target) 
+def $NESTING$apply_schedule_$SHORTNAME$ (pipeline, target): 
 $BODY$
 
 $NAMESPACECLOSE$
@@ -1041,6 +1042,7 @@ void compile_multitarget(const std::string &fn_name,
             sub_out.erase(Output::registration);
             sub_out.erase(Output::schedule);
             sub_out.erase(Output::lua_schedule);
+            sub_out.erase(Output::python_schedule);
             sub_out.erase(Output::c_header);
             if (contains(sub_out, Output::compiler_log)) {
                 sub_out[Output::compiler_log] = temp_compiler_log_dir.add_temp_file(output_files.at(Output::compiler_log), suffix, target);

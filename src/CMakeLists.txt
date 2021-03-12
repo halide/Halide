@@ -365,6 +365,7 @@ add_custom_target(HalideIncludes ALL
 ##
 # Define the Halide library target.
 ##
+include_directories(${PYBIND11_INCLUDE_DIR})
 
 add_library(Halide
             ${SOURCE_FILES}
@@ -374,6 +375,8 @@ add_library(Halide
 add_library(Halide::Halide ALIAS Halide)
 
 target_link_libraries(Halide PRIVATE Halide::LLVM)
+target_link_libraries(Halide PRIVATE ${PYTHON_LIBRARY})
+target_link_libraries(Halide PRIVATE pybind11::embed)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
 target_compile_definitions(Halide
                            PRIVATE
