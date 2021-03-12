@@ -17,37 +17,29 @@ set(Halide_INSTALL_PLUGINDIR "${CMAKE_INSTALL_LIBDIR}"
 
 install(TARGETS Halide Halide_Generator Halide_RunGenMain
         EXPORT Halide_Targets
-
-        RUNTIME
-        DESTINATION ${CMAKE_INSTALL_BINDIR}
-        COMPONENT Halide_Runtime
-
-        LIBRARY
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        COMPONENT Halide_Runtime
+        RUNTIME COMPONENT Halide_Runtime
+        LIBRARY COMPONENT Halide_Runtime
         NAMELINK_COMPONENT Halide_Development
-
-        ARCHIVE
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        COMPONENT Halide_Development
-
+        ARCHIVE COMPONENT Halide_Development
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 if (TARGET Halide_Adams2019)
     install(TARGETS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016
             EXPORT Halide_Targets
-
-            LIBRARY
-            DESTINATION ${Halide_INSTALL_PLUGINDIR}
-            COMPONENT Halide_Runtime
+            LIBRARY DESTINATION ${Halide_INSTALL_PLUGINDIR} COMPONENT Halide_Runtime
             NAMELINK_COMPONENT Halide_Development)
 endif ()
 
+# Halide_LLVM
 foreach (dep IN ITEMS Halide_LLVM Halide_wabt)
     if (TARGET ${dep})
         install(TARGETS ${dep} EXPORT Halide_Targets)
     endif ()
 endforeach ()
+
+##
+# Library-type-agnostic interface targets
+##
 
 install(TARGETS Halide_Tools Halide_ImageIO Halide_LanguageOptions
         EXPORT Halide_Interfaces
@@ -145,27 +137,20 @@ endif ()
 ##
 
 if (BUILD_SHARED_LIBS)
-    set(LIB_TYPE shared)
+    set(type shared)
 else ()
-    set(LIB_TYPE static)
+    set(type static)
 endif ()
 
 # If Halide explicitly links against shared LLVM or if it is a static library
 # and we are not bundling our static dependencies, then end-users must have
 # the relevant system libraries installed.
 if (Halide_SHARED_LLVM OR (NOT BUILD_SHARED_LIBS AND NOT Halide_BUNDLE_LLVM))
-    set(depFile "${CMAKE_CURRENT_BINARY_DIR}/Halide-Deps-${LIB_TYPE}.cmake")
-    file(WRITE "${depFile}" "find_dependency(LLVM ${LLVM_PACKAGE_VERSION} CONFIG)\n")
+    set(depFile "${CMAKE_CURRENT_BINARY_DIR}/Halide-${type}-deps.cmake")
+    file(WRITE "${depFile}" "find_dependency(LLVM ${LLVM_PACKAGE_VERSION})\n")
 
     if (TARGET_WEBASSEMBLY)
-        file(APPEND "${depFile}" [[
-find_dependency(
-  LLD CONFIG
-  HINTS
-    "${LLVM_DIR}/../lld"
-    "${LLVM_DIR}/../lib/cmake/lld"
-)
-]])
+        file(APPEND "${depFile}" [[find_dependency(LLD HINTS "${LLVM_DIR}/../lld" "${LLVM_DIR}/../lib/cmake/lld")]])
     endif ()
 
     install(FILES "${depFile}"
@@ -175,14 +160,8 @@ endif ()
 
 install(EXPORT Halide_Targets
         DESTINATION ${Halide_INSTALL_CMAKEDIR}
-        NAMESPACE Halide::${LIB_TYPE}::
-        FILE Halide-Targets-ns-${LIB_TYPE}.cmake
-        COMPONENT Halide_Development)
-
-install(EXPORT Halide_Targets
-        DESTINATION ${Halide_INSTALL_CMAKEDIR}
         NAMESPACE Halide::
-        FILE Halide-Targets-${LIB_TYPE}.cmake
+        FILE Halide-${type}-targets.cmake
         COMPONENT Halide_Development)
 
 install(EXPORT Halide_Interfaces
@@ -192,8 +171,9 @@ install(EXPORT Halide_Interfaces
         COMPONENT Halide_Development)
 
 write_basic_package_version_file(
-        HalideConfigVersion.cmake
-        COMPATIBILITY SameMajorVersion)
+    HalideConfigVersion.cmake
+    COMPATIBILITY SameMajorVersion
+)
 
 configure_file(HalideConfig.cmake HalideConfig.cmake @ONLY)
 

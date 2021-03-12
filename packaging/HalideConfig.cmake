@@ -1,28 +1,51 @@
-cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.16)
 
-set(${CMAKE_FIND_PACKAGE_NAME}_known_components Halide PNG JPEG)
+macro(Halide_fail message)
+    set(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE "${message}")
+    set(${CMAKE_FIND_PACKAGE_NAME}_FOUND FALSE)
+    return()
+endmacro()
+
+macro(Halide_find_component_dependency comp dep)
+    set(Halide_quiet)
+    if (${CMAKE_FIND_PACKAGE_NAME}_FIND_QUIETLY)
+        set(Halide_quiet QUIET)
+    endif ()
+
+    set(Halide_required)
+    if (${CMAKE_FIND_PACKAGE_NAME}_FIND_REQUIRED_${comp})
+        set(Halide_required REQUIRED)
+    endif ()
+
+    find_package(${dep} ${ARGN} ${Halide_quiet} ${Halide_required})
+
+    if (NOT ${dep}_FOUND)
+        Halide_fail("${CMAKE_FIND_PACKAGE_NAME} could not be found because dependency ${dep} could not be found.")
+    endif ()
+endmacro()
+
+set(Halide_known_components Halide PNG JPEG static shared)
+set(Halide_components Halide PNG JPEG)
+
+foreach (Halide_comp IN LISTS Halide_known_components)
+    set(Halide_comp_${Halide_comp} NO)
+endforeach ()
 
 if (${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS)
-    set(${CMAKE_FIND_PACKAGE_NAME}_comps ${${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS})
-else ()
-    # Try to include all components optionally by default
-    set(${CMAKE_FIND_PACKAGE_NAME}_comps ${${CMAKE_FIND_PACKAGE_NAME}_known_components})
+    set(Halide_components ${${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS})
 endif ()
 
-# Allow people to specify explicitly that they only want Halide
-list(REMOVE_ITEM ${CMAKE_FIND_PACKAGE_NAME}_comps Halide)
-
 # Parse components for static/shared preference.
-foreach (comp IN ITEMS static shared)
-    if (comp IN_LIST ${CMAKE_FIND_PACKAGE_NAME}_comps)
-        set(${CMAKE_FIND_PACKAGE_NAME}_${comp} YES)
-        list(REMOVE_ITEM ${CMAKE_FIND_PACKAGE_NAME}_comps ${comp})
+foreach (Halide_comp IN LISTS Halide_components)
+    if (Halide_comp IN_LIST Halide_known_components)
+        set(Halide_comp_${Halide_comp} YES)
+    else ()
+        Halide_fail("Halide does not recognize component `${Halide_comp}`.")
     endif ()
 endforeach ()
 
-# Note when both static AND shared are requested
-if (${CMAKE_FIND_PACKAGE_NAME}_static AND ${CMAKE_FIND_PACKAGE_NAME}_shared)
-    set(${CMAKE_FIND_PACKAGE_NAME}_both TRUE)
+if (Halide_comp_static AND Halide_comp_shared)
+    Halide_fail("Halide `static` and `shared` components are mutually exclusive.")
 endif ()
 
 # Set configured variables
@@ -37,103 +60,66 @@ set(Halide_HOST_TARGET @Halide_HOST_TARGET@)
 set(Halide_ENABLE_EXCEPTIONS @Halide_ENABLE_EXCEPTIONS@)
 set(Halide_ENABLE_RTTI @Halide_ENABLE_RTTI@)
 
-# Load dependencies from installed configurations
+##
+## Find dependencies based on components
+##
+
 include(CMakeFindDependencyMacro)
+
 find_dependency(Threads)
 
-get_filename_component(_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
-file(GLOB CONFIG_FILES "${_DIR}/Halide-Deps-*.cmake")
-foreach (f IN LISTS CONFIG_FILES)
-    include(${f})
-endforeach ()
-
-# Load common targets that do not depend on shared/static distinction
-include("${CMAKE_CURRENT_LIST_DIR}/Halide-Interfaces.cmake")
-
-# Helper to load targets if they exist, report failure, and create aliases when a single type was requested
-macro(_Halide_include TYPE CAUSE)
-    if (NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/Halide-Targets-${TYPE}.cmake")
-        set(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE
-            "Could not find Halide ${TYPE} libraries. ${CAUSE}")
-        set(${CMAKE_FIND_PACKAGE_NAME}_FOUND FALSE)
-        return()
-    endif ()
-
-    # Load the namespaced targets
-    include("${CMAKE_CURRENT_LIST_DIR}/Halide-Targets-ns-${TYPE}.cmake")
-
-    if (NOT ${CMAKE_FIND_PACKAGE_NAME}_both)
-        if (CMAKE_VERSION VERSION_LESS 3.18)
-            # In CMake < 3.18, ALIAS targets may not refer to non-global targets, so we
-            # are forced to load copies of the targets in the plain Halide:: namespace
-            include("${CMAKE_CURRENT_LIST_DIR}/Halide-Targets-${TYPE}.cmake")
-        else ()
-            foreach (target IN ITEMS Halide Generator RunGenMain Adams2019 Li2018 Mullapudi2016)
-                if (TARGET Halide::${TYPE}::${target})
-                    add_library(Halide::${target} ALIAS Halide::${TYPE}::${target})
-                endif ()
-            endforeach ()
-        endif ()
-    endif ()
-endmacro()
-
-# Decide which types to load based on
-if (${CMAKE_FIND_PACKAGE_NAME}_static OR ${CMAKE_FIND_PACKAGE_NAME}_shared)
-    if (${CMAKE_FIND_PACKAGE_NAME}_shared)
-        _Halide_include("shared" "Required by 'shared' component.")
-    endif ()
-    if (${CMAKE_FIND_PACKAGE_NAME}_static)
-        _Halide_include("static" "Required by 'static' component.")
-    endif ()
-elseif (DEFINED Halide_SHARED_LIBS)
-    # Require whatever was requested
-    if (Halide_SHARED_LIBS)
-        _Halide_include("shared" "Required by Halide_SHARED_LIBS=${Halide_SHARED_LIBS}.")
-    else ()
-        _Halide_include("static" "Required by Halide_SHARED_LIBS=${Halide_SHARED_LIBS}.")
-    endif ()
-elseif (BUILD_SHARED_LIBS OR NOT DEFINED BUILD_SHARED_LIBS)
-    # Try shared first, then fall back to static.
-    # Halide prefers shared by default when BUILD_SHARED_LIBS is not defined,
-    # so this is mimicked here.
-    if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/Halide-Targets-shared.cmake")
-        _Halide_include("shared" "Searched for shared, static.")
-    else ()
-        _Halide_include("static" "Searched for shared, static.")
-    endif ()
-else ()
-    # Try static first, then fall back to shared
-    if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/Halide-Targets-static.cmake")
-        _Halide_include("static" "Searched for static, shared.")
-    else ()
-        _Halide_include("shared" "Searched for static, shared.")
-    endif ()
+if (Halide_comp_PNG)
+    Halide_find_component_dependency(PNG PNG)
 endif ()
 
-# Aliases are not created, so the helpers aren't available.
-if (NOT ${CMAKE_FIND_PACKAGE_NAME}_both)
+if (Halide_comp_JPEG)
+    Halide_find_component_dependency(JPEG JPEG)
+endif ()
+
+##
+## Select static or shared and load CMake scripts
+##
+
+set(Halide_static_targets "${CMAKE_CURRENT_LIST_DIR}/Halide-static-targets.cmake")
+set(Halide_shared_targets "${CMAKE_CURRENT_LIST_DIR}/Halide-shared-targets.cmake")
+
+set(Halide_static_deps "${CMAKE_CURRENT_LIST_DIR}/Halide-static-deps.cmake")
+set(Halide_shared_deps "${CMAKE_CURRENT_LIST_DIR}/Halide-shared-deps.cmake")
+
+macro(Halide_load_targets type)
+    if (NOT EXISTS "${Halide_${type}_targets}")
+        Halide_fail("Halide `${type}` libraries were requested but not found.")
+    endif ()
+
+    include("${CMAKE_CURRENT_LIST_DIR}/Halide-Interfaces.cmake")
+
+    include("${Halide_${type}_targets}")
+    if (EXISTS "${Halide_${type}_deps}")
+        include("${Halide_${type}_deps}")
+    endif ()
+
     include("${CMAKE_CURRENT_LIST_DIR}/HalideGeneratorHelpers.cmake")
     include("${CMAKE_CURRENT_LIST_DIR}/HalideTargetHelpers.cmake")
+endmacro()
+
+if (Halide_comp_static)
+    Halide_load_targets(static)
+elseif (Halide_comp_shared)
+    Halide_load_targets(shared)
+elseif (DEFINED Halide_SHARED_LIBS AND Halide_SHARED_LIBS)
+    Halide_load_targets(shared)
+elseif (DEFINED Halide_SHARED_LIBS AND NOT Halide_SHARED_LIBS)
+    Halide_load_targets(static)
+elseif (BUILD_SHARED_LIBS OR NOT DEFINED BUILD_SHARED_LIBS)
+    if (EXISTS "${Halide_shared_targets}")
+        Halide_load_targets(shared)
+    else ()
+        Halide_load_targets(static)
+    endif ()
+else ()
+    if (EXISTS "${Halide_static_targets}")
+        Halide_load_targets(static)
+    else ()
+        Halide_load_targets(shared)
+    endif ()
 endif ()
-
-# Load image library dependencies
-foreach (comp IN LISTS ${CMAKE_FIND_PACKAGE_NAME}_comps)
-    if (NOT ${comp} IN_LIST ${CMAKE_FIND_PACKAGE_NAME}_known_components)
-        set(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE
-            "Halide does not recognize requested component: ${comp}")
-        set(${CMAKE_FIND_PACKAGE_NAME}_FOUND FALSE)
-        return()
-    endif ()
-
-    # ${comp} is either PNG or JPEG, and this works for both packages
-    if (NOT TARGET ${comp}::${comp})
-        set(extraArgs "")
-        if (${CMAKE_FIND_PACKAGE_NAME}_FIND_QUIETLY)
-            list(APPEND extraArgs QUIET)
-        endif ()
-        if (${CMAKE_FIND_PACKAGE_NAME}_FIND_REQUIRED_${comp})
-            list(APPEND extraArgs REQUIRED)
-        endif ()
-        find_package(${comp} ${extraArgs})
-    endif ()
-endforeach ()
