@@ -139,14 +139,14 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         IRMatcher::WildConst<0> c0;
         IRMatcher::WildConst<1> c1;
 
-        Expr loop_var;
+        string loop_var;
 
         Expr visit(const Mul *op) override {
             Expr a = mutate(op->a), b = mutate(op->b);
-            if (op->type == Int(32)) {
+            if (op->type == Int(32) &&
+                expr_uses_var(a, loop_var)) {
                 auto rewrite = IRMatcher::rewriter(IRMatcher::mul(a, b), op->type);
-                if (rewrite(((loop_var + y) / c0) * c0, (loop_var / c0) * c0 + ((y + loop_var % c0) / c0) * c0, c0 != 0) ||
-                    rewrite(((loop_var - y) / c0) * c0, (loop_var / c0) * c0 + ((loop_var % c0 - y) / c0) * c0, c0 != 0)) {
+                if (rewrite((x / c0) * c0, x - x % c0, c0 != 0)) {
                     return rewrite.result;
                 }
             }
@@ -164,11 +164,6 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             if (op->type == Int(32)) {
                 auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b), op->type);
                 if (
-                    // Differences of quasi-affine functions
-                    rewrite((x + y) / c0 - (x + z) / c0, ((x % c0) + y) / c0 - ((x % c0) + z) / c0) ||
-                    rewrite(x / c0 - (x + z) / c0, 0 - ((x % c0) + z) / c0) ||
-                    rewrite((x + y) / c0 - x / c0, ((x % c0) + y) / c0) ||
-
                     // truncated cones have a constant upper or lower
                     // bound that isn't apparent when expressed in the
                     // form in the LHS below
@@ -186,7 +181,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
 
     public:
         PartiallyCancelDifferences(string v)
-            : loop_var(Variable::make(Int(32), v)) {
+            : loop_var(v) {
         }
     };
 
@@ -215,6 +210,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             e = common_subexpression_elimination(e);
             e = solve_expression(e, loop_var).result;
             e = PartiallyCancelDifferences(loop_var).mutate(e);
+            e = solve_expression(e, loop_var).result;
             e = simplify(e);
 
             const bool check_non_monotonic = debug::debug_level() > 0 || get_compiler_logger() != nullptr;
