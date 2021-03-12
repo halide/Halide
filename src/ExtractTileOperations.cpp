@@ -8,6 +8,9 @@
 namespace Halide {
 namespace Internal {
 
+using std::string;
+using std::vector;
+
 namespace {
 
 template<int Dim>
@@ -23,7 +26,7 @@ const auto wild_i32x = Variable::make(Int(32, 0), "*");
 
 Tile<2> is_2d_tile_index(const Expr &e) {
     // ramp(ramp(base, 1, 4), x4(stride), 4)
-    std::vector<Expr> matches;
+    vector<Expr> matches;
     if (const auto *r1 = e.as<Ramp>()) {
         if (const auto *r2 = r1->base.as<Ramp>()) {
             auto ramp_2d_pattern = Ramp::make(Ramp::make(wild_i32, wild_i32, r2->lanes), Broadcast::make(wild_i32, r2->lanes), r1->lanes);
@@ -36,7 +39,7 @@ Tile<2> is_2d_tile_index(const Expr &e) {
 }
 
 Tile<3> is_3d_tile_index(const Expr &e) {
-    std::vector<Expr> matches;
+    vector<Expr> matches;
     auto add_sub_pattern = (wild_i32x + wild_i32x) - wild_i32x;
     if (!expr_match(add_sub_pattern, e, matches)) { return {}; }
     // ramp(x16(base), x16(stride), 4) + x16(ramp(idx, 1, 4)) y: 4, x: 4, r: 4
@@ -89,11 +92,11 @@ struct NewMatmul {
 };
 
 NewMatmul
-convert_to_matmul(const Store *op, const std::string &new_name) {
+convert_to_matmul(const Store *op, const string &new_name) {
     // m[ramp(0, 1, S)] = VectorAdd(lhs[{XYR tile}] * xX(rhs[{YR tile}])) + m[ramp(0, 1, S)]
     const auto wild_i8x = Variable::make(Int(8, 0), "*");
     const auto wild_i16x = Variable::make(Int(16, 0), "*");
-    std::vector<Expr> matches;
+    vector<Expr> matches;
     const auto pattern1 = wild_i32x + wild_i32x;
     if (!expr_match(pattern1, op->value, matches)) { return {}; }
     const auto *reduce = matches[0].as<VectorReduce>();
@@ -143,7 +146,7 @@ convert_to_matmul(const Store *op, const std::string &new_name) {
     return {true, std::move(store), tile_x, tile_y, tile_r};
 }
 
-Stmt convert_to_zero(const Store *op, int tile_x, int tile_y, const std::string &new_name) {
+Stmt convert_to_zero(const Store *op, int tile_x, int tile_y, const string &new_name) {
     if (const auto *ramp = op->index.as<Ramp>()) {
         if (const auto *bcast = op->value.as<Broadcast>()) {
             if (is_const_one(ramp->stride) &&
@@ -161,11 +164,11 @@ Stmt convert_to_zero(const Store *op, int tile_x, int tile_y, const std::string 
     return {};
 }
 
-Stmt convert_to_tile_store(const Store *op, const std::string &amx_alloc, int tile_x, int tile_y) {
+Stmt convert_to_tile_store(const Store *op, const string &amx_name, int tile_x, int tile_y) {
     auto tile = is_2d_tile_index(op->index);
     if (tile.result && tile.extent[0] == tile_x && tile.extent[1] == tile_y) {
         auto out = Variable::make(Handle(), op->name);
-        auto tile_val = Load::make(Int(32, 256), amx_alloc, Ramp::make(0, 1, 256), {}, {}, const_true(256), {});
+        auto tile_val = Load::make(Int(32, 256), amx_name, Ramp::make(0, 1, 256), {}, {}, const_true(256), {});
         auto bytes = op->value.type().bytes();
         internal_assert(bytes == 4) << "AMX store only supported for int32 and float32, not for " << op->value.type() << "\n";
         // {tile_x, tile_y, var, base, stride}
@@ -178,10 +181,9 @@ Stmt convert_to_tile_store(const Store *op, const std::string &amx_alloc, int ti
 class ExtractTileOperations : public IRMutator {
     using IRMutator::visit;
 
-    std::string tile_name;
-    std::string amx_alloc;
-    std::vector<Stmt> pending_stores;
-    bool is_valid = true;
+    string tile_name;
+    string amx_name;
+    vector<Stmt> pending_stores;
     bool in_allocate = false;
     int found_tile_x = -1;
     int found_tile_y = -1;
@@ -191,22 +193,15 @@ class ExtractTileOperations : public IRMutator {
         if (op->memory_type == MemoryType::AMXTile &&
             op->type.is_int() &&
             op->type.bits() == 32) {
-            if (in_allocate) {
-                // Found two possible tile allocations
-                // FIXME: Handle this better
-                is_valid = false;
-                return op;
-            }
-            amx_alloc = op->name + ".amx";
-            tile_name = op->name;
+            // FIXME: Handle nested allocations better
+            user_assert(!in_allocate) << "Found two possible tile allocations for AMX allocation";
+            ScopedValue<string> old_amx_name(amx_name, op->name + ".amx");
+            ScopedValue<string> old_tile_name(tile_name, op->name);
             ScopedValue<bool> old_in_alloc(in_allocate, true);
             Stmt body = op->body;
 
             pending_stores.clear();
             body = mutate(body);
-            if (!is_valid) {
-                return op;
-            }
             if (found_tile_x < 0 || found_tile_y < 0 || found_tile_r < 0) {
                 return op;
             }
@@ -214,11 +209,8 @@ class ExtractTileOperations : public IRMutator {
                 // Really only need to go over the pending stores
                 body = mutate(body);
             }
-            if (!is_valid) {
-                return op;
-            }
 
-            return Allocate::make(amx_alloc, Int(32, 256), MemoryType::AMXTile, {1}, const_true(), body);
+            return Allocate::make(amx_name, Int(32, 256), MemoryType::AMXTile, {1}, const_true(), body);
         }
         return IRMutator::visit(op);
     }
@@ -227,7 +219,7 @@ class ExtractTileOperations : public IRMutator {
         if (op->name != tile_name) {
             return op;
         }
-        return Free::make(amx_alloc);
+        return Free::make(amx_name);
     }
 
     Stmt visit(const ProducerConsumer *op) override {
@@ -236,15 +228,13 @@ class ExtractTileOperations : public IRMutator {
         }
 
         auto body = mutate(op->body);
-        return ProducerConsumer::make(amx_alloc, op->is_producer, body);
+        return ProducerConsumer::make(amx_name, op->is_producer, body);
     }
 
     Expr visit(const Load *op) override {
-        if (op->name == tile_name) {
-            // Any tile load will be matched elsewhere, so a load here means that
-            // the AMX tile is used outside of a tile instruction.
-            is_valid = false;
-        }
+        // Any tile load will be matched elsewhere, so a load here means that
+        // the AMX tile is used outside of a tile instruction.
+        user_assert(op->name != tile_name) << "AMX tile allocation used outside a tile instruction";
         return IRMutator::visit(op);
     }
 
@@ -254,24 +244,18 @@ class ExtractTileOperations : public IRMutator {
             if (!load || load->name != tile_name) {
                 return op;
             }
-            auto store = convert_to_tile_store(op, amx_alloc, found_tile_x, found_tile_y);
-            if (store.defined()) {
-                return store;
-            } else {
-                // Found store of tile_name that is not a tile store.
-                is_valid = false;
-                return op;
-            }
+            auto store = convert_to_tile_store(op, amx_name, found_tile_x, found_tile_y);
+            user_assert(store.defined()) << "Store to AMX tile allocation of a non-tile value";
+            return store;
         }
 
-        auto matmul = convert_to_matmul(op, amx_alloc);
+        auto matmul = convert_to_matmul(op, amx_name);
         if (matmul.result) {
-            if ((found_tile_x > 0 && matmul.tile_x != found_tile_x) ||
-                (found_tile_r > 0 && matmul.tile_r != found_tile_r) ||
-                (found_tile_y > 0 && matmul.tile_y != found_tile_y)) {
-                is_valid = false;
-                return op;
-            }
+            user_assert(
+                (found_tile_x < 0 || matmul.tile_x == found_tile_x) &&
+                (found_tile_x < 0 || matmul.tile_x == found_tile_x) &&
+                (found_tile_x < 0 || matmul.tile_x == found_tile_x))
+                << "Found different tile sizes for AMX tile allocation";
             found_tile_x = matmul.tile_x;
             found_tile_y = matmul.tile_y;
             found_tile_r = matmul.tile_r;
@@ -283,13 +267,13 @@ class ExtractTileOperations : public IRMutator {
             return op;
         }
 
-        auto zero = convert_to_zero(op, found_tile_x, found_tile_y, amx_alloc);
+        auto zero = convert_to_zero(op, found_tile_x, found_tile_y, amx_name);
         if (zero.defined()) {
             return zero;
         }
 
         // Otherwise there is some other operation using the allocation, so we cannot use the AMX instructions
-        is_valid = false;
+        user_assert(false) << "Found non-tile operations for AMX tile allocation";
         return op;
     }
 };
