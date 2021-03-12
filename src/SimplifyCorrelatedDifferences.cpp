@@ -145,8 +145,8 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             Expr a = mutate(op->a), b = mutate(op->b);
             if (op->type == Int(32)) {
                 auto rewrite = IRMatcher::rewriter(IRMatcher::mul(a, b), op->type);
-                if (rewrite(((loop_var + y) / c0) * c0, (loop_var / c0) * c0 + ((y - loop_var % c0) / c0) * c0, c0 != 0) ||
-                    rewrite(((loop_var - y) / c0) * c0, (loop_var / c0) * c0 + ((0 - y - loop_var % c0) / c0) * c0, c0 != 0)) {
+                if (rewrite(((loop_var + y) / c0) * c0, (loop_var / c0) * c0 + ((y + loop_var % c0) / c0) * c0, c0 != 0) ||
+                    rewrite(((loop_var - y) / c0) * c0, (loop_var / c0) * c0 + ((loop_var % c0 - y) / c0) * c0, c0 != 0)) {
                     return rewrite.result;
                 }
             }
