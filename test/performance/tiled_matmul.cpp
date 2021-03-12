@@ -8,6 +8,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (!target.has_feature(Target::AVX512_SapphireRapids)) {
+        std::cout << "[SKIP] The tiled matmul test is only designed to test AMX support.\n";
+        return 0;
+    }
     const int row = 16;
     const int col = 16;
     const int acc = 16;
@@ -85,7 +90,6 @@ int main(int argc, char **argv) {
     Func result = mm.in();
 
     // Uncomment to check the asm
-    //Target target = get_jit_target_from_environment();
     //result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.ll", {A, B}, target);
     //result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
 
