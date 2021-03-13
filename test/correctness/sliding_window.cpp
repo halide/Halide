@@ -32,16 +32,18 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    {
+    for (auto store_in : {MemoryType::Heap, MemoryType::Register}) {
+        count = 0;
         Func f, g;
 
         f(x) = call_counter(x, 0);
         g(x) = f(x) + f(x - 1);
 
-        f.store_root().compute_at(g, x);
+        f.store_root().compute_at(g, x).store_in(store_in);
 
         // Test that sliding window works when specializing.
-        g.specialize(g.output_buffer().dim(0).min() == 0);
+        //g.specialize(g.output_buffer().dim(0).min() == 0);
+        g.output_buffer().dim(0).set_min(0).set_extent(100);
 
         Buffer<int> im = g.realize({100});
 
@@ -53,7 +55,7 @@ int main(int argc, char **argv) {
     }
 
     // Try two producers used by the same consumer.
-    {
+    for (auto store_in : {MemoryType::Heap, MemoryType::Register}) {
         count = 0;
         Func f, g, h;
 
@@ -61,8 +63,8 @@ int main(int argc, char **argv) {
         g(x) = call_counter(2 * x + 1, 0);
         h(x) = f(x) + f(x - 1) + g(x) + g(x - 1);
 
-        f.store_root().compute_at(h, x);
-        g.store_root().compute_at(h, x);
+        f.store_root().compute_at(h, x).store_in(store_in);
+        g.store_root().compute_at(h, x).store_in(store_in);
 
         Buffer<int> im = h.realize({100});
         if (count != 202) {
@@ -72,7 +74,7 @@ int main(int argc, char **argv) {
     }
 
     // Try a sequence of two sliding windows.
-    {
+    for (auto store_in : {MemoryType::Heap}) {
         count = 0;
         Func f, g, h;
 
@@ -80,8 +82,8 @@ int main(int argc, char **argv) {
         g(x) = f(x) + f(x - 1);
         h(x) = g(x) + g(x - 1);
 
-        f.store_root().compute_at(h, x);
-        g.store_root().compute_at(h, x);
+        f.store_root().compute_at(h, x).store_in(store_in);
+        g.store_root().compute_at(h, x).store_in(store_in);
 
         Buffer<int> im = h.realize({100});
         if (count != 102) {
@@ -91,14 +93,14 @@ int main(int argc, char **argv) {
     }
 
     // Try again where there's a containing stage
-    {
+    for (auto store_in : {MemoryType::Heap, MemoryType::Register}) {
         count = 0;
         Func f, g, h;
         f(x) = call_counter(x, 0);
         g(x) = f(x) + f(x - 1);
         h(x) = g(x);
 
-        f.store_root().compute_at(g, x);
+        f.store_root().compute_at(g, x).store_in(store_in);
         g.compute_at(h, x);
 
         Buffer<int> im = h.realize({100});
@@ -109,7 +111,7 @@ int main(int argc, char **argv) {
     }
 
     // Add an inner vectorized dimension.
-    {
+    for (auto store_in : {MemoryType::Heap, MemoryType::Register}) {
         count = 0;
         Func f, g, h;
         Var c;
@@ -119,6 +121,7 @@ int main(int argc, char **argv) {
 
         f.store_root()
             .compute_at(h, x)
+            .store_in(store_in)
             .reorder(c, x)
             .reorder_storage(c, x)
             .bound(c, 0, 4)
@@ -136,14 +139,14 @@ int main(int argc, char **argv) {
     }
 
     // Now try with a reduction
-    {
+    for (auto store_in : {MemoryType::Heap/*, MemoryType::Register*/}) {
         count = 0;
         RDom r(0, 100);
         Func f, g;
 
         f(x, y) = 0;
         f(r, y) = call_counter(r, y);
-        f.store_root().compute_at(g, y);
+        f.store_root().compute_at(g, y).store_in(store_in);
 
         g(x, y) = f(x, y) + f(x, y - 1);
 
@@ -223,14 +226,14 @@ int main(int argc, char **argv) {
         }
     }
 
-    {
+    for (auto store_in : {MemoryType::Heap, MemoryType::Register}) {
         // Sliding where we only need a new value every third iteration of the consumer.
         Func f, g;
 
         f(x) = call_counter(x, 0);
         g(x) = f(x / 3);
 
-        f.store_root().compute_at(g, x);
+        f.store_root().compute_at(g, x).store_in(store_in);
 
         count = 0;
         Buffer<int> im = g.realize({100});
@@ -242,7 +245,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    {
+    for (auto store_in : {MemoryType::Heap, MemoryType::Register}) {
         // Sliding where we only need a new value every third iteration of the consumer.
         // This test checks that we don't ask for excessive bounds.
         ImageParam f(Int(32), 1);
@@ -252,7 +255,7 @@ int main(int argc, char **argv) {
 
         Var xo;
         g.split(x, xo, x, 10);
-        f.in().store_at(g, xo).compute_at(g, x);
+        f.in().store_at(g, xo).compute_at(g, x).store_in(store_in);
 
         Buffer<int> buf(33);
         f.set(buf);
@@ -260,7 +263,7 @@ int main(int argc, char **argv) {
         Buffer<int> im = g.realize({98});
     }
 
-    {
+    for (auto store_in : {MemoryType::Heap, MemoryType::Register}) {
         // Sliding with an unrolled producer
         Var x, xi;
         Func f, g;
@@ -269,7 +272,7 @@ int main(int argc, char **argv) {
         g(x) = f(x) + f(x - 1);
 
         g.split(x, x, xi, 10);
-        f.store_root().compute_at(g, x).unroll(x);
+        f.store_root().compute_at(g, x).store_in(store_in).unroll(x);
 
         count = 0;
         Buffer<int> im = g.realize({100});
@@ -280,14 +283,14 @@ int main(int argc, char **argv) {
         }
     }
 
-    {
+    for (auto store_in : {MemoryType::Heap, MemoryType::Register}) {
         // Sliding with a vectorized producer and consumer.
         count = 0;
         Func f, g;
         f(x) = call_counter(x, 0);
         g(x) = f(x + 1) + f(x - 1);
 
-        f.store_root().compute_at(g, x).vectorize(x, 4);
+        f.store_root().compute_at(g, x).store_in(store_in).vectorize(x, 4);
         g.vectorize(x, 4);
 
         Buffer<int> im = g.realize({100});

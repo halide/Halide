@@ -119,6 +119,74 @@ bool find_produce(const Stmt &s, const string &func) {
     return finder.found;
 }
 
+class RollFunc : public IRMutator {
+public:
+    const Function &func;
+    int dim;
+    const string &loop_var;
+    const Interval &old_bounds;
+    const Interval &new_bounds;
+
+    using IRMutator::visit;
+
+    Stmt visit(const Provide *op) override {
+        if (op->name == func.name()) {
+            vector<Expr> values(op->values);
+            for (Expr &i : values) {
+                i = mutate(i);
+            }
+            vector<Expr> args = op->args;
+            for (Expr &i : args) {
+                i = mutate(i);
+            }
+            Expr is_new = old_bounds.min.same_as(new_bounds.min) ? args[dim] <= new_bounds.max : new_bounds.min <= args[dim];
+            args[dim] -= old_bounds.min;
+            vector<Expr> old_args = args;
+            old_args[dim] = substitute(loop_var, Variable::make(Int(32), loop_var) - 1, old_args[dim]);
+            for (int i = 0; i < (int)values.size(); i++) {
+                Type t = values[i].type();
+                Expr old_value =
+                    Call::make(t, op->name, old_args, Call::Halide, func.get_contents(), i);
+                values[i] = Call::make(t, Call::if_then_else, {is_new, values[i], old_value}, Call::PureIntrinsic);
+            }
+            return Provide::make(func.name(), values, args);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+    Expr visit(const Call *op) override {
+        if (op->call_type == Call::Halide && op->name == func.name()) {
+            vector<Expr> args = op->args;
+            for (Expr &i : args) {
+                i = mutate(i);
+            }
+            args[dim] -= old_bounds.min;
+            return Call::make(op->type, op->name, args, Call::Halide, op->func, op->value_index, op->image, op->param);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        string prefix = func.name() + ".s0." + func.args()[dim];
+        if (starts_with(op->name, prefix + ".min") || starts_with(op->name, prefix + ".max")) {
+            Expr value = mutate(op->value);
+            Stmt body = substitute(op->name, value, op->body);
+            body = mutate(body);
+            return LetStmt::make(op->name, value - old_bounds.min, body);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+public:
+    RollFunc(const Function &func, int dim, const string &loop_var,
+             const Interval &old_bounds, const Interval &new_bounds)
+        : func(func), dim(dim), loop_var(loop_var), old_bounds(old_bounds), new_bounds(new_bounds) {
+    }
+};
+
 // Perform sliding window optimization for a function over a
 // particular serial for loop
 class SlidingWindowOnFunctionAndLoop : public IRMutator {
@@ -372,6 +440,13 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             slid_dimensions.insert(dim_idx);
 
+            if (func.schedule().memory_type() == MemoryType::Register) {
+                this->dim_idx = dim_idx;
+                old_bounds = {min_required, max_required};
+                new_bounds = {new_min, new_max};
+                return op;
+            }
+
             // Now redefine the appropriate regions required
             internal_assert(replacements.empty());
             if (can_slide_up) {
@@ -493,6 +568,13 @@ public:
     }
 
     Expr new_loop_min;
+    int dim_idx;
+    Interval old_bounds;
+    Interval new_bounds;
+
+    Stmt translate_loop(const Stmt &s) {
+        return RollFunc(func, dim_idx, loop_var, old_bounds, new_bounds).mutate(s);
+    }
 };
 
 // In Stmt s, does the production of b depend on a?
@@ -619,6 +701,9 @@ class SlidingWindow : public IRMutator {
     // outermost.
     list<Function> sliding;
 
+    // Keep track of updated bounds for realizations.
+    map<string, pair<int, Interval>> new_bounds;
+
     using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
@@ -653,8 +738,13 @@ class SlidingWindow : public IRMutator {
         if (new_body.same_as(op->body)) {
             return op;
         } else {
+            vector<Range> bounds = op->bounds;
+            auto i = new_bounds.find(op->name);
+            if (i != new_bounds.end()) {
+                bounds[i->second.first] = {0, i->second.second.max - i->second.second.min + 1};
+            }
             return Realize::make(op->name, op->types, op->memory_type,
-                                 op->bounds, op->condition, new_body);
+                                 bounds, op->condition, new_body);
         }
     }
 
@@ -691,6 +781,12 @@ class SlidingWindow : public IRMutator {
 
             SlidingWindowOnFunctionAndLoop slider(func, name, prev_loop_min, slid_dimensions[func.name()]);
             body = slider.mutate(body);
+
+            if (func.schedule().memory_type() == MemoryType::Register &&
+                slider.old_bounds.has_lower_bound()) {
+                body = slider.translate_loop(body);
+                new_bounds[func.name()] = {slider.dim_idx, slider.old_bounds};
+            }
 
             if (slider.new_loop_min.defined()) {
                 Expr new_loop_min = slider.new_loop_min;
