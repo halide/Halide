@@ -77,7 +77,7 @@ add_custom_command(OUTPUT "${EC32}.bc"
                    DEPENDS "${EXTERNAL_CPP}"
                    VERBATIM)
 add_custom_command(OUTPUT "${EC32}.cpp"
-                   COMMAND binary2cpp external_code_extern_bitcode_32 < "${EC32}.bc" > "${EC32}.cpp"
+                   COMMAND $<TARGET_FILE:binary2cpp> external_code_extern_bitcode_32 < "${EC32}.bc" > "${EC32}.cpp"
                    DEPENDS "${EC32}.bc" binary2cpp
                    VERBATIM)
 
@@ -87,13 +87,13 @@ add_custom_command(OUTPUT "${EC64}.bc"
                    DEPENDS "${EXTERNAL_CPP}" binary2cpp
                    VERBATIM)
 add_custom_command(OUTPUT "${EC64}.cpp"
-                   COMMAND binary2cpp external_code_extern_bitcode_64 < "${EC64}.bc" > "${EC64}.cpp"
+                   COMMAND $<TARGET_FILE:binary2cpp> external_code_extern_bitcode_64 < "${EC64}.bc" > "${EC64}.cpp"
                    DEPENDS "${EC64}.bc" binary2cpp
                    VERBATIM)
 
 set(ECCPP "external_code_extern_cpp_source")
 add_custom_command(OUTPUT "${ECCPP}.cpp"
-                   COMMAND binary2cpp external_code_extern_cpp_source < "$<SHELL_PATH:${EXTERNAL_CPP}>" > "${ECCPP}.cpp"
+                   COMMAND $<TARGET_FILE:binary2cpp> external_code_extern_cpp_source < "$<SHELL_PATH:${EXTERNAL_CPP}>" > "${ECCPP}.cpp"
                    DEPENDS "${EXTERNAL_CPP}" binary2cpp
                    VERBATIM)
 
