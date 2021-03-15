@@ -47,7 +47,7 @@ option(Halide_CCACHE_BUILD "Set to ON for a ccache enabled build" OFF)
 if (Halide_CCACHE_BUILD)
     find_program(CCACHE_PROGRAM ccache)
     if (CCACHE_PROGRAM)
-        set(Halide_CCACHE_PARAMS CCACHE_CPP2=yes CCACHE_HASHDIR=yes
+        set(Halide_CCACHE_PARAMS CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines,time_macros
             CACHE STRING "Parameters to pass through to ccache")
         set(CMAKE_C_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
         set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
