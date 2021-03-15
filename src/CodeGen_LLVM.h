@@ -567,7 +567,7 @@ private:
 
     /** A helper routine for generating folded vector reductions. */
     template<typename Op>
-    bool try_to_fold_vector_reduce(Expr a, Expr b);
+    bool try_to_fold_vector_reduce(const Expr &a, Expr b);
 };
 
 }  // namespace Internal

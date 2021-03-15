@@ -1437,7 +1437,7 @@ void CodeGen_LLVM::visit(const Variable *op) {
 }
 
 template<typename Op>
-bool CodeGen_LLVM::try_to_fold_vector_reduce(Expr a, Expr b) {
+bool CodeGen_LLVM::try_to_fold_vector_reduce(const Expr &a, Expr b) {
     const VectorReduce *red = a.as<VectorReduce>();
     if (!red) {
         red = b.as<VectorReduce>();
