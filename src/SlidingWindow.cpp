@@ -175,18 +175,6 @@ public:
         return Call::make(op->type, op->name, args, Call::Halide, op->func, op->value_index, op->image, op->param);
     }
 
-    Stmt visit(const LetStmt *op) override {
-        string prefix = func.name() + ".s0." + func.args()[dim];
-        if (starts_with(op->name, prefix + ".min") || starts_with(op->name, prefix + ".max")) {
-            Expr value = mutate(op->value);
-            Stmt body = substitute(op->name, value, op->body);
-            body = mutate(body);
-            return LetStmt::make(op->name, value - old_bounds.min, body);
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
-
 public:
     RollFunc(const Function &func, int dim, const string &loop_var,
              const Interval &old_bounds, const Interval &new_bounds)
