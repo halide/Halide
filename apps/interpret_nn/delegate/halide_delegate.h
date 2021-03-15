@@ -17,7 +17,7 @@ struct TFL_CAPI_EXPORT HalideDelegateOptions {
 
 #ifdef __cplusplus
     HalideDelegateOptions()
-        : verbosity(1) {
+        : verbosity(0) {
     }
 #endif
 };
