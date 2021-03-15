@@ -91,20 +91,20 @@ void unpack_closure(const Closure &closure,
     int idx = 0;
     for (const auto &v : closure.vars) {
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-        LoadInst *load = builder->CreateLoad(ptr);
+        LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
         dst.push(v.first, load);
         load->setName(v.first);
     }
     for (const auto &b : closure.buffers) {
         {
             Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-            LoadInst *load = builder->CreateLoad(ptr);
+            LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
             dst.push(b.first, load);
             load->setName(b.first);
         }
         {
             Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-            LoadInst *load = builder->CreateLoad(ptr);
+            LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
             dst.push(b.first + ".buffer", load);
             load->setName(b.first + ".buffer");
         }
