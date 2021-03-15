@@ -291,6 +291,9 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               // Normalize comparison of ramps to a comparison of a ramp and a broadacst
               rewrite(ramp(x, y, lanes) < ramp(z, w, lanes), ramp(x - z, y - w, lanes) < 0))) ||
 
+              rewrite(ramp(x + c0, c1, c2) < broadcast(x + c3, c2), ramp(c0, c1, c2) < broadcast(c3, c2)) ||
+              rewrite(broadcast(x + c3, c2) < ramp(x + c0, c1, c2), broadcast(c3, c2) < ramp(c0, c1, c2)) ||
+
             (no_overflow_int(ty) && EVAL_IN_LAMBDA
              (rewrite(x * c0 < y * c1, x < y * fold(c1 / c0), c1 % c0 == 0 && c0 > 0) ||
               rewrite(x * c0 < y * c1, x * fold(c0 / c1) < y, c0 % c1 == 0 && c1 > 0) ||
