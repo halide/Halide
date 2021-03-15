@@ -127,45 +127,71 @@ public:
     const Interval &old_bounds;
     const Interval &new_bounds;
 
+    set<string> loops_to_rebase;
+    bool in_produce = false;
+
     using IRMutator::visit;
 
+    Stmt visit(const ProducerConsumer *op) override {
+        bool produce_func = op->name == func.name() && op->is_producer;
+        ScopedValue<bool> old_in_produce(in_produce, in_produce || produce_func);
+        return IRMutator::visit(op);
+    }
+
     Stmt visit(const Provide *op) override {
-        if (op->name == func.name()) {
-            vector<Expr> values(op->values);
-            for (Expr &i : values) {
-                i = mutate(i);
-            }
-            vector<Expr> args = op->args;
-            for (Expr &i : args) {
-                i = mutate(i);
-            }
-            Expr is_new = old_bounds.min.same_as(new_bounds.min) ? args[dim] <= new_bounds.max : new_bounds.min <= args[dim];
-            args[dim] -= old_bounds.min;
-            vector<Expr> old_args = args;
-            old_args[dim] = substitute(loop_var, Variable::make(Int(32), loop_var) - 1, old_args[dim]);
-            for (int i = 0; i < (int)values.size(); i++) {
-                Type t = values[i].type();
-                Expr old_value =
-                    Call::make(t, op->name, old_args, Call::Halide, func.get_contents(), i);
-                values[i] = Call::make(t, Call::if_then_else, {is_new, values[i], old_value}, Call::PureIntrinsic);
-            }
-            return Provide::make(func.name(), values, args);
-        } else {
+        if (!(in_produce && op->name == func.name())) {
             return IRMutator::visit(op);
         }
+        vector<Expr> values = op->values;
+        for (Expr &i : values) {
+            i = mutate(i);
+        }
+        vector<Expr> args = op->args;
+        for (Expr &i : args) {
+            i = mutate(i);
+        }
+        bool sliding_up = old_bounds.max.same_as(new_bounds.max);
+        Expr is_new = sliding_up ? new_bounds.min <= args[dim] : args[dim] <= new_bounds.max;
+        args[dim] -= old_bounds.min;
+        vector<Expr> old_args = args;
+        old_args[dim] = substitute(loop_var, Variable::make(Int(32), loop_var) - 1, old_args[dim]);
+        for (int i = 0; i < (int)values.size(); i++) {
+            Type t = values[i].type();
+            Expr old_value =
+                Call::make(t, op->name, old_args, Call::Halide, func.get_contents(), i);
+            values[i] = likely(values[i]);
+            values[i] = Call::make(t, Call::if_then_else, {is_new, values[i], old_value}, Call::PureIntrinsic);
+        }
+        if (const Variable *v = op->args[dim].as<Variable>()) {
+            // The subtractions above simplify more easily if the loop is rebased to 0.
+            loops_to_rebase.insert(v->name);
+        }
+        return Provide::make(func.name(), values, args);
     }
 
     Expr visit(const Call *op) override {
-        if (op->call_type == Call::Halide && op->name == func.name()) {
-            vector<Expr> args = op->args;
-            for (Expr &i : args) {
-                i = mutate(i);
-            }
-            args[dim] -= old_bounds.min;
-            return Call::make(op->type, op->name, args, Call::Halide, op->func, op->value_index, op->image, op->param);
-        } else {
+        if (!(op->call_type == Call::Halide && op->name == func.name())) {
             return IRMutator::visit(op);
         }
+        vector<Expr> args = op->args;
+        for (Expr &i : args) {
+            i = mutate(i);
+        }
+        args[dim] -= old_bounds.min;
+        return Call::make(op->type, op->name, args, Call::Halide, op->func, op->value_index, op->image, op->param);
+    }
+
+    Stmt visit(const For *op) override {
+        Stmt result = IRMutator::visit(op);
+        op = result.as<For>();
+        internal_assert(op);
+        if (loops_to_rebase.count(op->name)) {
+            string new_name = op->name + ".rebased";
+            Stmt body = substitute(op->name, Variable::make(Int(32), new_name) + op->min, op->body);
+            result = For::make(new_name, 0, op->extent, op->for_type, op->device_api, body);
+            loops_to_rebase.erase(op->name);
+        }
+        return result;
     }
 
     Stmt visit(const LetStmt *op) override {
@@ -441,6 +467,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             slid_dimensions.insert(dim_idx);
 
             if (func.schedule().memory_type() == MemoryType::Register) {
+                // If we're going to slide in registers, save the bounds
+                // for doing that later.
                 this->dim_idx = dim_idx;
                 old_bounds = {min_required, max_required};
                 new_bounds = {new_min, new_max};
@@ -702,7 +730,9 @@ class SlidingWindow : public IRMutator {
     list<Function> sliding;
 
     // Keep track of updated bounds for realizations.
-    map<string, pair<int, Interval>> new_bounds;
+    map<string, pair<int, Expr>> new_extents;
+
+    Scope<Expr> scope;
 
     using IRMutator::visit;
 
@@ -739,9 +769,9 @@ class SlidingWindow : public IRMutator {
             return op;
         } else {
             vector<Range> bounds = op->bounds;
-            auto i = new_bounds.find(op->name);
-            if (i != new_bounds.end()) {
-                bounds[i->second.first] = {0, i->second.second.max - i->second.second.min + 1};
+            auto i = new_extents.find(op->name);
+            if (i != new_extents.end()) {
+                bounds[i->second.first] = {0, i->second.second};
             }
             return Realize::make(op->name, op->types, op->memory_type,
                                  bounds, op->condition, new_body);
@@ -784,8 +814,11 @@ class SlidingWindow : public IRMutator {
 
             if (func.schedule().memory_type() == MemoryType::Register &&
                 slider.old_bounds.has_lower_bound()) {
+                // If we're sliding in registers, we need to rewrite the bounds
+                // of the realization, like storage folding would do.
                 body = slider.translate_loop(body);
-                new_bounds[func.name()] = {slider.dim_idx, slider.old_bounds};
+                Expr new_extent = slider.old_bounds.max - slider.old_bounds.min + 1;
+                new_extents[func.name()] = {slider.dim_idx, expand_expr(new_extent, scope)};
             }
 
             if (slider.new_loop_min.defined()) {
@@ -851,6 +884,11 @@ class SlidingWindow : public IRMutator {
         } else {
             return IfThenElse::make(op->condition, then_case, else_case);
         }
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope)));
+        return IRMutator::visit(op);
     }
 
 public:
