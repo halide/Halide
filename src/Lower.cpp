@@ -84,10 +84,12 @@ namespace {
 
 class LoweringLogger {
     Stmt last_written;
+
 public:
     void operator()(const string &message, const Stmt &s) {
         if (!s.same_as(last_written)) {
-            debug(2) << message << "\n" << s << "\n";
+            debug(2) << message << "\n"
+                     << s << "\n";
             last_written = s;
         } else {
             debug(2) << message << " (unchanged)\n\n";
