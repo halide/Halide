@@ -47,6 +47,7 @@
 #include "PurifyIndexMath.h"
 #include "Qualify.h"
 #include "RealizationOrder.h"
+#include "RebaseLoopsToZero.h"
 #include "RemoveDeadAllocations.h"
 #include "RemoveExternLoops.h"
 #include "RemoveUndef.h"
@@ -267,6 +268,11 @@ Module lower(const vector<Function> &output_funcs,
     s = simplify_correlated_differences(s);
     s = bound_small_allocations(s);
     debug(2) << "Lowering after bounding small realizations:\n"
+             << s << "\n\n";
+
+    debug(1) << "Rebasing loops to zero...\n";
+    s = rebase_loops_to_zero(s);
+    debug(2) << "Lowering after rebasing loops to zero:\n"
              << s << "\n\n";
 
     debug(1) << "Performing storage flattening...\n";

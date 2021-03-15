@@ -259,7 +259,7 @@ TUTORIAL_CXX_FLAGS ?= -std=c++11 -g -fno-omit-frame-pointer $(RTTI_CXX_FLAGS) -I
 # Also allow tests, via conditional compilation, to use the entire
 # capability of the CPU being compiled on via -march=native. This
 # presumes tests are run on the same machine they are compiled on.
-TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS) 
+TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS)
 TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide $(COMMON_LD_FLAGS)
 
 # In the tests, some of our expectations change depending on the llvm version
@@ -513,6 +513,7 @@ SOURCE_FILES = \
   RDom.cpp \
   Realization.cpp \
   RealizationOrder.cpp \
+  RebaseLoopsToZero.cpp \
   Reduction.cpp \
   RegionCosts.cpp \
   RemoveDeadAllocations.cpp \
@@ -689,6 +690,7 @@ HEADER_FILES = \
   Realization.h \
   RDom.h \
   RealizationOrder.h \
+  RebaseLoopsToZero.h \
   Reduction.h \
   RegionCosts.h \
   RemoveDeadAllocations.h \

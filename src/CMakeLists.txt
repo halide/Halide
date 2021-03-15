@@ -121,6 +121,7 @@ set(HEADER_FILES
     RDom.h
     Realization.h
     RealizationOrder.h
+    RebaseLoopsToZero.h
     Reduction.h
     RegionCosts.h
     RemoveDeadAllocations.h
@@ -277,6 +278,7 @@ set(SOURCE_FILES
     RDom.cpp
     Realization.cpp
     RealizationOrder.cpp
+    RebaseLoopsToZero.cpp
     Reduction.cpp
     RegionCosts.cpp
     RemoveDeadAllocations.cpp
