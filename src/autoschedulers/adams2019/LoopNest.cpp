@@ -1885,7 +1885,7 @@ void LoopNest::apply(LoopLevel here,
         if (here.is_root()) {
             loop_level = "_root()";
         } else {
-            loop_level = "_at(" + here.func() + ", " + conform_name(here.var().name()) + ")";
+            loop_level = "_at(" + conform_name(here.func()) + ", " + conform_name(here.var().name()) + ")";
         }
         for (const auto &c : children) {
             if (c->node != node) {

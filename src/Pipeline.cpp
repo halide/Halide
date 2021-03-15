@@ -214,6 +214,11 @@ AutoSchedulerFn Pipeline::find_autoscheduler(const std::string &autoscheduler_na
     return it->second;
 }
 
+std::string simplify_name(const std::string &s) {
+    // Trim the uniqueness $n suffixes on variables.
+    return s.substr(0, s.rfind('$'));
+}
+
 AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_name, const Target &target, const MachineParams &arch_params) {
     auto autoscheduler_fn = find_autoscheduler(autoscheduler_name);
     user_assert(autoscheduler_fn)
@@ -225,7 +230,7 @@ AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_na
 
     autoscheduler_fn(*this, target, arch_params, &autoscheduler_results);
 
-    std::string schedule_file_main = "apply_schedule_" + get_func(0).name();
+    std::string schedule_file_main = "apply_schedule_" + simplify_name(outputs()[0].name());
     std::string python_schedule_file = schedule_file_main + ".py";
     std::string lua_schedule_file = schedule_file_main + ".lua";
     debug(0) << "Writing schedule to " << python_schedule_file << "...\n";
@@ -240,7 +245,7 @@ AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_na
 
 void Pipeline::apply_lua_schedule(const Target &target) {
     printf("In Pipeline::apply_lua_schedule: pipeline address is %p\n", this);
-    std::string schedule_file_main = "apply_schedule_" + get_func(0).name();
+    std::string schedule_file_main = "apply_schedule_" + simplify_name(outputs()[0].name());
     string lua_schedule_file = schedule_file_main + ".lua";
     string path_to_lua_scheduler = get_env_variable("HL_LUA_SCHEDULER_PATH");
     if (path_to_lua_scheduler.empty())
@@ -278,7 +283,7 @@ void Pipeline::apply_lua_schedule(const Target &target) {
 }
 
 void Pipeline::apply_python_schedule(const Halide::Target &target) {
-    auto apply_schedule = "apply_schedule_" + get_func(0).name();
+    auto apply_schedule = "apply_schedule_" + simplify_name(outputs()[0].name());
 
     auto applicator = [&](){
         py::module m = py::module::import(apply_schedule.c_str());

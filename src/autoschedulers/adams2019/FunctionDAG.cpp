@@ -627,7 +627,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
         for (int s = 0; s <= (int)consumer.updates().size(); s++) {
             auto &stage = node.stages[s];
             stage.node = &node;
-            stage.name = consumer.name();
+            stage.name = conform_name(consumer.name());
             if (s > 0) {
                 stage.name += ".update(" + std::to_string(s - 1) + ")";
             }
