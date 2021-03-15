@@ -40,11 +40,52 @@ int main(int argc, char **argv) {
 
         f.store_root().compute_at(g, x);
 
+        // Test that sliding window works when specializing.
+        g.specialize(g.output_buffer().dim(0).min() == 0);
+
         Buffer<int> im = g.realize({100});
 
         // f should be able to tell that it only needs to compute each value once
         if (count != 101) {
             printf("f was called %d times instead of %d times\n", count, 101);
+            return -1;
+        }
+    }
+
+    // Try two producers used by the same consumer.
+    {
+        count = 0;
+        Func f, g, h;
+
+        f(x) = call_counter(2 * x + 0, 0);
+        g(x) = call_counter(2 * x + 1, 0);
+        h(x) = f(x) + f(x - 1) + g(x) + g(x - 1);
+
+        f.store_root().compute_at(h, x);
+        g.store_root().compute_at(h, x);
+
+        Buffer<int> im = h.realize({100});
+        if (count != 202) {
+            printf("f was called %d times instead of %d times\n", count, 202);
+            return -1;
+        }
+    }
+
+    // Try a sequence of two sliding windows.
+    {
+        count = 0;
+        Func f, g, h;
+
+        f(x) = call_counter(2 * x + 0, 0);
+        g(x) = f(x) + f(x - 1);
+        h(x) = g(x) + g(x - 1);
+
+        f.store_root().compute_at(h, x);
+        g.store_root().compute_at(h, x);
+
+        Buffer<int> im = h.realize({100});
+        if (count != 102) {
+            printf("f was called %d times instead of %d times\n", count, 102);
             return -1;
         }
     }
@@ -202,6 +243,24 @@ int main(int argc, char **argv) {
     }
 
     {
+        // Sliding where we only need a new value every third iteration of the consumer.
+        // This test checks that we don't ask for excessive bounds.
+        ImageParam f(Int(32), 1);
+        Func g;
+
+        g(x) = f(x / 3);
+
+        Var xo;
+        g.split(x, xo, x, 10);
+        f.in().store_at(g, xo).compute_at(g, x);
+
+        Buffer<int> buf(33);
+        f.set(buf);
+
+        Buffer<int> im = g.realize({98});
+    }
+
+    {
         // Sliding with an unrolled producer
         Var x, xi;
         Func f, g;
@@ -217,6 +276,102 @@ int main(int argc, char **argv) {
 
         if (count != 101) {
             printf("f was called %d times instead of %d times\n", count, 101);
+            return -1;
+        }
+    }
+
+    {
+        // Sliding with a vectorized producer and consumer.
+        count = 0;
+        Func f, g;
+        f(x) = call_counter(x, 0);
+        g(x) = f(x + 1) + f(x - 1);
+
+        f.store_root().compute_at(g, x).vectorize(x, 4);
+        g.vectorize(x, 4);
+
+        Buffer<int> im = g.realize({100});
+        if (count != 104) {
+            printf("f was called %d times instead of %d times\n", count, 104);
+            return -1;
+        }
+    }
+
+    {
+        // A sequence of stencils, all computed at the output.
+        count = 0;
+        Func f, g, h, u, v;
+        f(x, y) = call_counter(x, y);
+        g(x, y) = f(x, y - 1) + f(x, y + 1);
+        h(x, y) = g(x - 1, y) + g(x + 1, y);
+        u(x, y) = h(x, y - 1) + h(x, y + 1);
+        v(x, y) = u(x - 1, y) + u(x + 1, y);
+
+        u.compute_at(v, y);
+        h.store_root().compute_at(v, y);
+        g.store_root().compute_at(v, y);
+        f.store_root().compute_at(v, y);
+
+        v.realize({10, 10});
+        if (count != 14 * 14) {
+            printf("f was called %d times instead of %d times\n", count, 14 * 14);
+            return -1;
+        }
+    }
+
+    {
+        // A sequence of stencils, sliding computed at the output.
+        count = 0;
+        Func f, g, h, u, v;
+        f(x, y) = call_counter(x, y);
+        g(x, y) = f(x, y - 1) + f(x, y + 1);
+        h(x, y) = g(x - 1, y) + g(x + 1, y);
+        u(x, y) = h(x, y - 1) + h(x, y + 1);
+        v(x, y) = u(x - 1, y) + u(x + 1, y);
+
+        u.compute_at(v, y);
+        h.store_root().compute_at(v, y);
+        g.compute_at(h, y);
+        f.store_root().compute_at(v, y);
+
+        v.realize({10, 10});
+        if (count != 14 * 14) {
+            printf("f was called %d times instead of %d times\n", count, 14 * 14);
+            return -1;
+        }
+    }
+
+    {
+        // Sliding a func that has a boundary condition before the beginning
+        // of the loop. This needs an explicit warmup before we start sliding.
+        count = 0;
+        Func f, g;
+        f(x) = call_counter(x, 0);
+        g(x) = f(max(x, 3));
+
+        f.store_root().compute_at(g, x);
+
+        g.realize({10});
+        if (count != 7) {
+            printf("f was called %d times instead of %d times\n", count, 7);
+            return -1;
+        }
+    }
+
+    {
+        // Sliding a func that has a boundary condition on both sides.
+        count = 0;
+        Func f, g, h;
+        f(x) = call_counter(x, 0);
+        g(x) = f(clamp(x, 0, 9));
+        h(x) = g(x - 1) + g(x + 1);
+
+        f.store_root().compute_at(h, x);
+        g.store_root().compute_at(h, x);
+
+        h.realize({10});
+        if (count != 10) {
+            printf("f was called %d times instead of %d times\n", count, 10);
             return -1;
         }
     }
