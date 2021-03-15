@@ -196,7 +196,7 @@ ifeq ($(UNAME), Darwin)
 DELEGATE_LD_FLAGS += -Wl,-exported_symbols_list delegate/exported_symbols.osx
 else
 # Assume Desktop Linux
-DELEGATE_LD_FLAGS += -Wl,--version-script=delegate/exported_symbols.linux
+DELEGATE_LD_FLAGS += -Wl,--version-script=delegate/exported_symbols.ldscript
 DELEGATE_LD_FLAGS += -Wl,-soname,libHalideDelegate.so
 endif
 
@@ -204,7 +204,7 @@ else ifeq (arm-64-android,$(findstring arm-64-android,$(HL_TARGET)))
 
 # Don't include $(LDFLAGS) here, it includes pthreads, which we don't want
 DELEGATE_LD_FLAGS=-static-libstdc++
-DELEGATE_LD_FLAGS += -Wl,--version-script=delegate/exported_symbols.linux
+DELEGATE_LD_FLAGS += -Wl,--version-script=delegate/exported_symbols.ldscript
 DELEGATE_LD_FLAGS += -Wl,-soname,libHalideDelegate.so
 
 else
