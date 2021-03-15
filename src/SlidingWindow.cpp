@@ -127,7 +127,6 @@ public:
     const Interval &old_bounds;
     const Interval &new_bounds;
 
-    set<string> loops_to_rebase;
     bool in_produce = false;
 
     using IRMutator::visit;
@@ -159,12 +158,7 @@ public:
             Type t = values[i].type();
             Expr old_value =
                 Call::make(t, op->name, old_args, Call::Halide, func.get_contents(), i);
-            values[i] = likely(values[i]);
-            values[i] = Call::make(t, Call::if_then_else, {is_new, values[i], old_value}, Call::PureIntrinsic);
-        }
-        if (const Variable *v = op->args[dim].as<Variable>()) {
-            // The subtractions above simplify more easily if the loop is rebased to 0.
-            loops_to_rebase.insert(v->name);
+            values[i] = select(is_new, likely(values[i]), old_value);
         }
         return Provide::make(func.name(), values, args);
     }
@@ -179,19 +173,6 @@ public:
         }
         args[dim] -= old_bounds.min;
         return Call::make(op->type, op->name, args, Call::Halide, op->func, op->value_index, op->image, op->param);
-    }
-
-    Stmt visit(const For *op) override {
-        Stmt result = IRMutator::visit(op);
-        op = result.as<For>();
-        internal_assert(op);
-        if (loops_to_rebase.count(op->name)) {
-            string new_name = op->name + ".rebased";
-            Stmt body = substitute(op->name, Variable::make(Int(32), new_name) + op->min, op->body);
-            result = For::make(new_name, 0, op->extent, op->for_type, op->device_api, body);
-            loops_to_rebase.erase(op->name);
-        }
-        return result;
     }
 
     Stmt visit(const LetStmt *op) override {
