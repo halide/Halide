@@ -127,7 +127,7 @@ Expr saturating_sum(const Expr &init_val, Expr e, const std::string &name) {
     return saturating_sum(RDom(), init_val, std::move(e), name);
 }
 
-Expr saturating_sum(const RDom &r, const Expr& init_val, Expr e, const std::string &name) {
+Expr saturating_sum(const RDom &r, const Expr &init_val, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(common_subexpression_elimination(e));
 
