@@ -127,6 +127,7 @@ public:
     const Interval &old_bounds;
     const Interval &new_bounds;
 
+    set<string> loops_to_rebase;
     bool in_produce = false;
 
     using IRMutator::visit;
@@ -160,6 +161,10 @@ public:
                 Call::make(t, op->name, old_args, Call::Halide, func.get_contents(), i);
             values[i] = select(is_new, likely(values[i]), old_value);
         }
+        if (const Variable *v = op->args[dim].as<Variable>()) {
+            // The subtractions above simplify more easily if the loop is rebased to 0.
+            loops_to_rebase.insert(v->name);
+        }
         return Provide::make(func.name(), values, args);
     }
 
@@ -173,6 +178,19 @@ public:
         }
         args[dim] -= old_bounds.min;
         return Call::make(op->type, op->name, args, Call::Halide, op->func, op->value_index, op->image, op->param);
+    }
+
+    Stmt visit(const For *op) override {
+        Stmt result = IRMutator::visit(op);
+        op = result.as<For>();
+        internal_assert(op);
+        if (loops_to_rebase.count(op->name)) {
+            string new_name = op->name + ".rebased";
+            Stmt body = substitute(op->name, Variable::make(Int(32), new_name) + op->min, op->body);
+            result = For::make(new_name, 0, op->extent, op->for_type, op->device_api, body);
+            loops_to_rebase.erase(op->name);
+        }
+        return result;
     }
 
 public:
@@ -698,11 +716,6 @@ class SlidingWindow : public IRMutator {
     // outermost.
     list<Function> sliding;
 
-    // Keep track of updated bounds for realizations.
-    map<string, pair<int, Expr>> new_extents;
-
-    Scope<Expr> scope;
-
     using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
@@ -737,13 +750,8 @@ class SlidingWindow : public IRMutator {
         if (new_body.same_as(op->body)) {
             return op;
         } else {
-            vector<Range> bounds = op->bounds;
-            auto i = new_extents.find(op->name);
-            if (i != new_extents.end()) {
-                bounds[i->second.first] = {0, i->second.second};
-            }
             return Realize::make(op->name, op->types, op->memory_type,
-                                 bounds, op->condition, new_body);
+                                 op->bounds, op->condition, new_body);
         }
     }
 
@@ -786,8 +794,6 @@ class SlidingWindow : public IRMutator {
                 // If we're sliding in registers, we need to rewrite the bounds
                 // of the realization, like storage folding would do.
                 body = slider.translate_loop(body);
-                Expr new_extent = slider.old_bounds.max - slider.old_bounds.min + 1;
-                new_extents[func.name()] = {slider.dim_idx, expand_expr(new_extent, scope)};
             }
 
             if (slider.new_loop_min.defined()) {
@@ -853,11 +859,6 @@ class SlidingWindow : public IRMutator {
         } else {
             return IfThenElse::make(op->condition, then_case, else_case);
         }
-    }
-
-    Stmt visit(const LetStmt *op) override {
-        ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope)));
-        return IRMutator::visit(op);
     }
 
 public:
