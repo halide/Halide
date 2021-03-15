@@ -285,6 +285,9 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               rewrite(select(y, z, x + c0) < x + c1, y && (z < x + c1), c0 >= c1) ||
               rewrite(select(y, z, x + c0) < x + c1, !y || (z < x + c1), c0 < c1) ||
 
+              rewrite(c0 < select(x, c1, c2), select(x, fold(c0 < c1), fold(c0 < c2))) ||
+              rewrite(select(x, c1, c2) < c0, select(x, fold(c1 < c0), fold(c2 < c0))) ||
+
               // Normalize comparison of ramps to a comparison of a ramp and a broadacst
               rewrite(ramp(x, y, lanes) < ramp(z, w, lanes), ramp(x - z, y - w, lanes) < 0))) ||
 
