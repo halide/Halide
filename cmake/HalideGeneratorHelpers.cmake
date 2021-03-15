@@ -224,7 +224,7 @@ function(add_halide_library TARGET)
     endif ()
 
     add_custom_command(OUTPUT ${GENERATOR_OUTPUT_FILES}
-                       COMMAND ${generator_cmd}
+                       COMMAND $<TARGET_FILE:${generator_cmd}>
                        -n "${TARGET}"
                        -d "${GRADIENT_DESCENT}"
                        -g "${ARG_GENERATOR}"
@@ -269,7 +269,7 @@ function(_Halide_add_halide_runtime RT)
     endif ()
 
     add_custom_command(OUTPUT ${GEN_OUTS}
-                       COMMAND ${generator_cmd} -r "${TARGET}.runtime" -o . ${GEN_ARGS}
+                       COMMAND $<TARGET_FILE:${generator_cmd}> -r "${TARGET}.runtime" -o . ${GEN_ARGS}
                        # Defers reading the list of targets for which to generate a common runtime to CMake _generation_ time.
                        # This prevents issues where a lower GCD is required by a later Halide library linking to this runtime.
                        target=$<JOIN:$<TARGET_PROPERTY:${TARGET}.runtime,Halide_RT_TARGETS>,$<COMMA>>
