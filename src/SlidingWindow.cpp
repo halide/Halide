@@ -119,6 +119,12 @@ bool find_produce(const Stmt &s, const string &func) {
     return finder.found;
 }
 
+// This mutator rewrites calls and provides to a particular
+// func:
+// - Calls and Provides are shifted to be relative to the min.
+// - Provides additionally are rewritten to load values from the
+//   previous iteration of the loop if they were computed in the
+//   last iteration.
 class RollFunc : public IRMutator {
 public:
     const Function &func;
@@ -127,6 +133,8 @@ public:
     const Interval &old_bounds;
     const Interval &new_bounds;
 
+    // It helps simplify the shifted calls/provides to rebase the
+    // loops that are subtracted from to have a min of 0.
     set<string> loops_to_rebase;
     bool in_produce = false;
 
@@ -791,8 +799,6 @@ class SlidingWindow : public IRMutator {
 
             if (func.schedule().memory_type() == MemoryType::Register &&
                 slider.old_bounds.has_lower_bound()) {
-                // If we're sliding in registers, we need to rewrite the bounds
-                // of the realization, like storage folding would do.
                 body = slider.translate_loop(body);
             }
 
