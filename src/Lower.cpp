@@ -268,11 +268,6 @@ Module lower(const vector<Function> &output_funcs,
     s = bound_small_allocations(s);
     log("Lowering after bounding small realizations:", s);
 
-    debug(1) << "Rebasing loops to zero...\n";
-    s = rebase_loops_to_zero(s);
-    debug(2) << "Lowering after rebasing loops to zero:\n"
-             << s << "\n\n";
-
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
     log("Lowering after storage flattening:", s);
@@ -349,6 +344,11 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Trimming loops to the region over which they do something...\n";
     s = trim_no_ops(s);
     log("Lowering after loop trimming:", s);
+
+    debug(1) << "Rebasing loops to zero...\n";
+    s = rebase_loops_to_zero(s);
+    debug(2) << "Lowering after rebasing loops to zero:\n"
+             << s << "\n\n";
 
     debug(1) << "Hoisting loop invariant if statements...\n";
     s = hoist_loop_invariant_if_statements(s);
