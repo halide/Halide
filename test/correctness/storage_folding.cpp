@@ -385,6 +385,42 @@ int main(int argc, char **argv) {
         }
     }
 
+    {
+        custom_malloc_sizes.clear();
+        Func f, g, h;
+
+        // Two stages of upsampling is even trickier.
+        h(x, y) = x * y;
+        g(x, y) = h(x, y / 2) + h(x, y / 2 + 1);
+        f(x, y) = g(x, y / 2) + g(x, y / 2 + 1);
+
+        h.compute_at(f, y).store_root().fold_storage(y, 4);
+        g.compute_at(f, y).store_root().fold_storage(y, 2);
+
+        f.set_custom_allocator(my_malloc, my_free);
+
+        Buffer<int> im = f.realize({1000, 1000});
+
+        // Halide allocates one extra scalar, so we account for that.
+        size_t expected_size_g = 1000 * 4 * sizeof(int) + sizeof(int);
+        size_t expected_size_h = 1000 * 2 * sizeof(int) + sizeof(int);
+        if (!check_expected_mallocs({expected_size_g, expected_size_h})) {
+            return -1;
+        }
+
+        for (int y = 0; y < im.height(); y++) {
+            for (int x = 0; x < im.width(); x++) {
+                auto correct_h = [](int x, int y) { return x * y; };
+                auto correct_g = [=](int x, int y) { return correct_h(x, y / 2) + correct_h(x, y / 2 + 1); };
+                auto correct_f = [=](int x, int y) { return correct_g(x, y / 2) + correct_g(x, y / 2 + 1); };
+                if (im(x, y) != correct_f(x, y)) {
+                    printf("im(%d, %d) = %d instead of %d\n", x, y, im(x, y), correct_f(x, y));
+                    return -1;
+                }
+            }
+        }
+    }
+
     for (bool interleave : {false, true}) {
         Func f, g;
 

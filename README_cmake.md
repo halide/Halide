@@ -367,6 +367,7 @@ compiled.
 | `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                                           |
 | `Halide_USE_CODEMODEL_LARGE`             | `OFF`                 | Use the Large LLVM codemodel                                                                                     |
 | `Halide_TARGET`                          | _empty_               | The default target triple to use for `add_halide_library` (and the generator tests, by extension)                |
+| `Halide_CCACHE_BUILD`                    | `OFF`                 | Use ccache to accelerate rebuilds.                                                                               |
 
 The following options are only available when building Halide directly, ie. not
 through the [`add_subdirectory`][add_subdirectory] or
