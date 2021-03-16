@@ -461,16 +461,17 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             slid_dimensions.insert(dim_idx);
 
+            // If we want to slide in registers, we're done here, we just need to
+            // save the updated bounds for later.
             if (func.schedule().memory_type() == MemoryType::Register) {
-                // If we're going to slide in registers, save the bounds
-                // for doing that later.
                 this->dim_idx = dim_idx;
                 old_bounds = {min_required, max_required};
                 new_bounds = {new_min, new_max};
                 return op;
             }
 
-            // Now redefine the appropriate regions required
+            // If we aren't sliding in registers, we need to update the bounds of
+            // the producer to be only the bounds of the region newly computed.
             internal_assert(replacements.empty());
             if (can_slide_up) {
                 replacements[prefix + dim + ".min"] = new_min;
