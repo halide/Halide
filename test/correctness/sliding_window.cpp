@@ -283,24 +283,47 @@ int main(int argc, char **argv) {
         }
     }
 
-    for (auto store_in : {MemoryType::Heap, MemoryType::Register}) {
+    {
         // Sliding with a vectorized producer and consumer.
         count = 0;
         Func f, g;
         f(x) = call_counter(x, 0);
         g(x) = f(x + 1) + f(x - 1);
 
-        f.store_root().compute_at(g, x).store_in(store_in).vectorize(x, 4);
+        f.store_root().compute_at(g, x).vectorize(x, 4);
         g.vectorize(x, 4);
 
         Buffer<int> im = g.realize({100});
-        // TODO: We shouldn't need the extra calls for registers.
-        int correct = store_in == MemoryType::Register ? 152 : 104;
-        if (count != correct) {
-            printf("f was called %d times instead of %d times\n", count, correct);
+        if (count != 104) {
+            printf("f was called %d times instead of %d times\n", count, 104);
             return -1;
         }
     }
+
+    {
+        // Sliding with a vectorized producer and consumer, trying to rotate
+        // cleanly in registers.
+        count = 0;
+        Func f, g;
+        f(x) = call_counter(x, 0);
+        g(x) = f(x + 1) + f(x - 1);
+
+        // This currently requires a trick to get everything to be aligned
+        // nicely. This exploits the fact that ShiftInwards splits are
+        // aligned to the end of the original loop (and extending before the
+        // min if necessary).
+        Var xi("xi");
+        f.store_root().compute_at(g, x).store_in(MemoryType::Register)
+            .split(x, x, xi, 8).vectorize(xi, 4).unroll(xi);
+        g.vectorize(x, 4, TailStrategy::RoundUp);
+
+        Buffer<int> im = g.realize({100});
+        if (count != 102) {
+            printf("f was called %d times instead of %d times\n", count, 102);
+            return -1;
+        }
+    }
+    return 0;
 
     {
         // A sequence of stencils, all computed at the output.
