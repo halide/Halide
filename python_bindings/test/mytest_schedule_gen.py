@@ -1,7 +1,7 @@
 import halide as hl
 
 def main():
-    hl.load_plugin("autoschedule_li2018")
+    hl.load_plugin("autoschedule_adams2019")
 
     x = hl.Var('x')
     f_in = hl.Func('in')
@@ -16,17 +16,27 @@ def main():
     # Setup
     f_2.set_estimate(x, 0, 1000)
     p = hl.Pipeline(f_2)
-    target = hl.Target()
+    target = hl.Target('x86-64-linux-no_runtime')
     # Only first parameter is used (number of cores on CPU)
-    params = hl.MachineParams(32, 0, 0);
-    result = p.auto_schedule('Li2018', target, params)
+    params = hl.MachineParams(32, 16777216, 40);
+    result = p.auto_schedule('Adams2019', target, params)
+    print("Loop nest!")
+    f_2.print_loop_nest()
+
     print('Schedule:')
     print(result.schedule_source)
     print('Python Schedule:')
     print(result.python_schedule_source)
 
+    # applying the schedule
+    #print("Applying Python Schedule...")
+    #p.apply_python_schedule(target)
+
+    print("JIT Compiling...")
     p.compile_jit() # compile
-    buf = p.realize([1000]) # compute and get the buffer
+    buf = p.realize(1000) # compute and get the buffer
+    print(buf)
+    print('Done!')
 
 if __name__ == '__main__':
     main()

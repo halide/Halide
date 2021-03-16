@@ -81,10 +81,12 @@ struct CustomLoweringPass {
 struct JITExtern;
 
 struct AutoSchedulerResults {
+    AutoSchedulerResults(): scheduler_name(), target(), machine_params_string(), schedule_source(), python_schedule_source(), featurization() {}
     std::string scheduler_name;          // name of the autoscheduler used
     Target target;                       // Target specified to the autoscheduler
     std::string machine_params_string;   // MachineParams specified to the autoscheduler (in string form)
     std::string schedule_source;         // The C++ source code of the generated schedule
+    std::string python_schedule_source;  // The Python source code of the generated schedule
     std::vector<uint8_t> featurization;  // The featurization of the pipeline (if any)
 };
 
@@ -160,6 +162,8 @@ private:
     // sensibly match the value. Return Target() if not jitted.
     Target get_compiled_jit_target() const;
 
+    AutoSchedulerResults autoscheduler_results; // saving them for future use.
+
 public:
     /** Make an undefined Pipeline object. */
     Pipeline();
@@ -185,7 +189,7 @@ public:
     AutoSchedulerResults auto_schedule(const std::string &autoscheduler_name,
                                        const Target &target,
                                        const MachineParams &arch_params = MachineParams::generic());
-
+    
     /** Add a new the autoscheduler method with the given name. Does not affect the current default autoscheduler.
      * It is an error to call this with the same name multiple times. */
     static void add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler);

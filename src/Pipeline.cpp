@@ -2,6 +2,7 @@
 #include <atomic>
 #include <utility>
 
+
 #include "Argument.h"
 #include "CodeGen_Internal.h"
 #include "FindCalls.h"
@@ -208,18 +209,31 @@ AutoSchedulerFn Pipeline::find_autoscheduler(const std::string &autoscheduler_na
     return it->second;
 }
 
+std::string simplify_name(const std::string &s) {
+    // Trim the uniqueness $n suffixes on variables.
+    return s.substr(0, s.rfind('$'));
+}
+
 AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_name, const Target &target, const MachineParams &arch_params) {
     auto autoscheduler_fn = find_autoscheduler(autoscheduler_name);
     user_assert(autoscheduler_fn)
         << "Could not find autoscheduler named '" << autoscheduler_name << "'.\n"
         << "Did you remember to load the plugin?";
 
-    AutoSchedulerResults results;
-    results.target = target;
-    results.machine_params_string = arch_params.to_string();
+    autoscheduler_results.target = target;
+    autoscheduler_results.machine_params_string = arch_params.to_string();
 
-    autoscheduler_fn(*this, target, arch_params, &results);
-    return results;
+    autoscheduler_fn(*this, target, arch_params, &autoscheduler_results);
+
+    std::string schedule_file_main = "apply_schedule_" + simplify_name(outputs()[0].name());
+    std::string python_schedule_file = schedule_file_main + ".py";
+    debug(0) << "Writing schedule to " << python_schedule_file << "...\n";
+    std::string cpp_schedule_file = schedule_file_main + "_cpp.h";
+    compile_to({ {Output::python_schedule, python_schedule_file},
+                 {Output::schedule, cpp_schedule_file} },
+               infer_arguments(), "", target);
+    
+    return autoscheduler_results;
 }
 
 AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) {
@@ -259,7 +273,9 @@ void Pipeline::compile_to(const std::map<Output, std::string> &output_files,
                           const vector<Argument> &args,
                           const string &fn_name,
                           const Target &target) {
-    compile_to_module(args, fn_name, target).compile(output_files);
+    auto m = compile_to_module(args, fn_name, target);
+    m.set_auto_scheduler_results(autoscheduler_results); // we do this so that we can output fully formed Python and C++ schedules
+    m.compile(output_files);
 }
 
 void Pipeline::compile_to_bitcode(const string &filename,

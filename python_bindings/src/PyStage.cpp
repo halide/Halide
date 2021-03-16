@@ -10,6 +10,7 @@ void define_stage(py::module &m) {
         py::class_<Stage>(m, "Stage")
             .def("dump_argument_list", &Stage::dump_argument_list)
             .def("name", &Stage::name)
+            .def("get_schedule_dim_var_name", &Stage::get_schedule_dim_var_name, py::arg("i"))
 
             .def("rfactor", (Func(Stage::*)(std::vector<std::pair<RVar, Var>>)) & Stage::rfactor,
                  py::arg("preserved"))

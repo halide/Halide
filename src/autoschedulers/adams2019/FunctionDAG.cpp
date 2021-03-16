@@ -627,7 +627,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
         for (int s = 0; s <= (int)consumer.updates().size(); s++) {
             auto &stage = node.stages[s];
             stage.node = &node;
-            stage.name = consumer.name();
+            stage.name = conform_name(consumer.name());
             if (s > 0) {
                 stage.name += ".update(" + std::to_string(s - 1) + ")";
             }
@@ -708,6 +708,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                 Node::Loop l;
                 l.var = d.var;
                 l.accessor = stage.name + ".get_schedule().dims()[" + std::to_string(i) + "].var";
+                l.python_accessor = stage.name + ".get_schedule_dim_var_name(" + std::to_string(i) + ")"; // Python index same as C++
 
                 // We already have the right variable names in the stage scope
                 Interval in = stage_scope_with_concrete_rvar_bounds.get(l.var);
