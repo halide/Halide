@@ -516,7 +516,7 @@ private:
         };
         auto activation = ConvertTfLiteActivation(params->activation);
         return ::interpret_nn::make_unique<Conv2DOp>(input, filter, bias, output, stride,
-                                     dilation_factor, padding, activation);
+                                                     dilation_factor, padding, activation);
     }
 
     std::unique_ptr<Op> BuildDepthwiseConv2d(TfLiteContext *context, TfLiteNode *node) {
@@ -536,7 +536,7 @@ private:
         };
         auto activation = ConvertTfLiteActivation(params->activation);
         return ::interpret_nn::make_unique<DepthwiseConv2DOp>(input, filter, bias, output, stride,
-                                              dilation_factor, padding, activation);
+                                                              dilation_factor, padding, activation);
     }
 
     std::unique_ptr<Op> BuildFullyConnected(TfLiteContext *context, TfLiteNode *node) {
