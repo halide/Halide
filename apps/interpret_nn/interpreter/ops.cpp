@@ -77,11 +77,7 @@ QuantizedMulAndShift get_quantized_mul_and_shift_smaller_than_one(double double_
     return result;
 }
 
-struct MinMax {
-    int min, max;
-};
-
-MinMax get_quantized_min_max(ActivationFunction activation, int zero_point, double scale) {
+Interval get_quantized_min_max(ActivationFunction activation, int zero_point, double scale) {
     double real_activation_min = 0.0;
     double real_activation_max = 0.0;
     bool has_activation_min = false;
@@ -120,7 +116,7 @@ MinMax get_quantized_min_max(ActivationFunction activation, int zero_point, doub
     return {output_activation_min, output_activation_max};
 }
 
-MinMax get_output_range(ActivationFunction activation, Tensor *out) {
+Interval get_output_range(ActivationFunction activation, Tensor *out) {
     const int output_offset = out->quantization().zero.at(0);
     assert(output_offset >= 0 && output_offset <= 255);
 
