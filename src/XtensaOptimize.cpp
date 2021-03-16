@@ -736,6 +736,12 @@ private:
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x >> wild_i32)},
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x / wild_i32), Pattern::ExactLog2Op1},
 
+            // Implementation of this is incorrect, so needs to be fixed before enabling.
+            // {"halide_xtensa_sat_narrow_with_shift_i16", i16_sat(wild_i32x >> wild_u32)},
+            // {"halide_xtensa_sat_narrow_with_shift_i16", i16_sat(wild_i32x / wild_u32), Pattern::ExactLog2Op1},
+
+            // {"halide_xtensa_sat_narrow_with_shift_u16", u16_sat(wild_i32x >> wild_u32)},
+            // {"halide_xtensa_sat_narrow_with_shift_u16", u16_sat(wild_i32x / wild_u32), Pattern::ExactLog2Op1},
             {"halide_xtensa_narrow_i24_with_shift_i16", i16(wild_i24x >> wild_i24)},
             {"halide_xtensa_narrow_i24_with_shift_i16", i16(wild_i24x / wild_i24), Pattern::ExactLog2Op1},
 
@@ -893,8 +899,12 @@ private:
             {"halide_xtensa_convert_i48_high_i32", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_i48(wild_i48x, wild_i48x)), 3, 16, 64), Pattern::PassOnlyOp1},
             {"halide_xtensa_convert_i48_low_u32", halide_xtensa_slice_to_native_u32(u32(wild_i48x), 0, 16, 32)},
             {"halide_xtensa_convert_i48_high_u32", halide_xtensa_slice_to_native_u32(u32(wild_i48x), 1, 16, 32)},
-            {"halide_xtensa_convert_i16_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 0, wild_i32, wild_i32)},
-            {"halide_xtensa_convert_i16_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 1, wild_i32, wild_i32)},
+            {"halide_xtensa_convert_i16_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 0, 16, 32)},
+            {"halide_xtensa_convert_i16_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 1, 16, 32)},
+
+            // TODO(vksnk): fix this.
+            {"halide_xtensa_slice_to_native_i32x32_t", halide_xtensa_slice_to_native_i32(wild_i32x, wild_i32, 32, 64)},
+            {"halide_xtensa_slice_to_native_i32x32_t", halide_xtensa_slice_to_native_i32(wild_i32x, wild_i32, 32, 64)},
 
             {"halide_xtensa_convert_to_int32x16_t_from_uint1x16_t", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_u1(wild_u1x, wild_u1x, wild_u1x, wild_u1x)), 0, 16, 64), Pattern::PassOnlyOp0},
             {"halide_xtensa_convert_to_int32x16_t_from_uint1x16_t", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_u1(wild_u1x, wild_u1x, wild_u1x, wild_u1x)), 1, 16, 64), Pattern::PassOnlyOp1},
@@ -922,7 +932,6 @@ private:
         if (op->is_intrinsic()) {
             Expr lowered = lower_intrinsic(op);
             if (lowered.defined()) {
-                debug(0) << "Unhandled intrinsic - " << op->name << "\n";
                 return mutate(lowered);
             }
         }
@@ -1064,11 +1073,18 @@ class OptimizeShuffles : public IRMutator {
                 index_span = common_subexpression_elimination(index_span);
                 index_span = simplify(index_span);
 
-                if (can_prove(index_span < 64)) {
+                // The hardware supports shuffle/select out of two native vectors,
+                // so we set to the double of native vector width in bytes.
+                // TODO(vksnk): in some cases it might be possible to prove that
+                // all indices span only a single vector (instead of two which is
+                // assumed here, which may help to save one vector load.
+                const int lut_size_in_bytes = 128;
+                int lut_size = lut_size_in_bytes / op->type.element_of().bytes();
+                if (can_prove(index_span < lut_size)) {
                     // This is a lookup within an up to 64 element array. We
                     // can use dynamic_shuffle for this.
                     // TODO(vksnk): original code doesn't align/pad here, why?
-                    int const_extent = as_const_int(index_span) ? (((*as_const_int(index_span) + align) / align) * align) : 64;
+                    int const_extent = as_const_int(index_span) ? (((*as_const_int(index_span) + align) / align) * align) : lut_size;
                     Expr base = simplify(index_bounds.min);
 
                     // Load all of the possible indices loaded from the
@@ -1105,6 +1121,7 @@ public:
 class SplitVectorsToNativeSizes : public IRMutator {
 private:
     std::vector<std::pair<Type, Type>> types_to_split;
+    std::vector<Type> native_vector_types;
 
     using IRMutator::visit;
 
@@ -1117,6 +1134,35 @@ private:
             }
         }
         return 0;
+    }
+
+    int get_width_to_extend(const Type &type) {
+        if (!type.is_vector()) {
+            return 0;
+        }
+
+        for (const auto &t : native_vector_types) {
+            if ((t.code() == type.code()) && (t.bits() == type.bits()) && (type.lanes() < t.lanes())) {
+                return t.lanes();
+            }
+        }
+        return 0;
+    }
+
+    Expr pad(Expr e, int old_lanes, int new_lanes) {
+        return Call::make(e.type().with_lanes(new_lanes),
+                          "halide_xtensa_pad_to_native",
+                          {e, old_lanes},
+                          Call::PureExtern);
+        // TODO(vksnk): we should be able to use regular concats and slices
+        // but codegen support of non-uniform shuffles is limited right now.
+        // return Shuffle::make_concat({e, make_one(e.type().with_lanes(new_lanes - old_lanes))});
+    }
+
+    Expr slice(Expr e, Type t, int lanes) {
+        return Call::make(t, "halide_xtensa_slice_from_padded",
+                          {e, lanes}, Call::PureExtern);
+        // return Shuffle::make_slice(e, 0, 1, lanes);
     }
 
     Expr visit(const Broadcast *op) override {
@@ -1169,6 +1215,23 @@ private:
                               concat_args, Call::PureExtern);
         }
 
+        int width_to_extend = get_width_to_extend(op->type);
+        if (width_to_extend > 0) {
+            const int lanes = op->type.lanes();
+
+            Expr cond = mutate(op->condition);
+            Expr t = mutate(op->true_value);
+            Expr f = mutate(op->false_value);
+
+            Expr padded_cond = pad(cond, lanes, width_to_extend);
+            Expr padded_t = pad(t, lanes, width_to_extend);
+            Expr padded_f = pad(f, lanes, width_to_extend);
+
+            Expr r = Select::make(padded_cond, padded_t, padded_f);
+
+            return slice(r, op->type, lanes);
+        }
+
         return IRMutator::visit(op);
     }
 
@@ -1198,25 +1261,74 @@ private:
     //         return IRMutator::visit(op);
     //     }
 
-    //     Expr visit(const Ramp *op) override {
-    //         int native_lanes = get_native_vector_lanes_num(op->type);
-    //         if (native_lanes > 0) {
-    //             int split_to = op->type.lanes() / native_lanes;
-    //             Expr base = mutate(op->base);
-    //             Expr stride = mutate(op->stride);
+    // Expr visit(const Ramp *op) override {
+    //     int native_lanes = get_native_vector_lanes_num(op->type);
+    //     if (native_lanes > 0) {
+    //         int split_to = op->type.lanes() / native_lanes;
+    //         Expr base = mutate(op->base);
+    //         Expr stride = mutate(op->stride);
 
-    //             std::vector<Expr> concat_args;
-    //             for (int ix = 0; ix < split_to; ix++) {
-    //                 Expr r = Ramp::make(base + stride * (native_lanes * ix), stride, native_lanes);
-    //                 concat_args.push_back(std::move(r));
-    //             }
-    //             return Call::make(op->type,
-    //                               "halide_xtensa_concat_from_native",
-    //                               concat_args, Call::PureExtern);
+    //         std::vector<Expr> concat_args;
+    //         for (int ix = 0; ix < split_to; ix++) {
+    //             Expr r = Ramp::make(base + stride * (native_lanes * ix), stride, native_lanes);
+    //             concat_args.push_back(std::move(r));
     //         }
-
-    //         return IRMutator::visit(op);
+    //         return Call::make(op->type,
+    //                             "halide_xtensa_concat_from_native",
+    //                             concat_args, Call::PureExtern);
     //     }
+    //     int width_to_extend = get_width_to_extend(op->type);
+    //     if (width_to_extend > 0) {
+    //         Expr base = mutate(op->base);
+    //         Expr stride = mutate(op->stride);
+
+    //         const int lanes = op->type.lanes();
+    //         Expr r = Ramp::make(base, stride, width_to_extend);
+
+    //         return slice(r, op->type, lanes);
+    //     }
+
+    //     return IRMutator::visit(op);
+    // }
+
+    Expr visit(const Cast *op) override {
+        int to_native_lanes = get_native_vector_lanes_num(op->type);
+        int from_native_lanes = get_native_vector_lanes_num(op->value.type());
+        int native_lanes = std::max(to_native_lanes, from_native_lanes);
+
+        if ((to_native_lanes > 0) && (from_native_lanes > 0) && (native_lanes < op->type.lanes())) {
+            const int total_lanes = op->type.lanes();
+            int split_to = op->type.lanes() / native_lanes;
+
+            Expr value = mutate(op->value);
+
+            std::vector<Expr> concat_args;
+            for (int ix = 0; ix < split_to; ix++) {
+                Expr sliced = Call::make(value.type().with_lanes(native_lanes),
+                                         "halide_xtensa_slice_to_native",
+                                         {value, ix, native_lanes, total_lanes},
+                                         Call::PureExtern);
+                Expr r = Cast::make(op->type.with_lanes(native_lanes), sliced);
+                concat_args.push_back(std::move(r));
+            }
+            return Call::make(op->type,
+                              "halide_xtensa_concat_from_native",
+                              concat_args, Call::PureExtern);
+        }
+
+        int width_to_extend = std::max(get_width_to_extend(op->type), get_width_to_extend(op->value.type()));
+        if (width_to_extend > 0) {
+            Expr value = mutate(op->value);
+
+            const int lanes = op->type.lanes();
+            Expr padded = pad(value, lanes, width_to_extend);
+            Expr r = Cast::make(op->type.with_lanes(width_to_extend), padded);
+
+            return slice(r, op->type, lanes);
+        }
+
+        return IRMutator::visit(op);
+    }
 
     template<typename Op>
     Expr visit_binop(const Op *op) {
@@ -1243,6 +1355,21 @@ private:
             return Call::make(op->type,
                               "halide_xtensa_concat_from_native",
                               concat_args, Call::PureExtern);
+        }
+
+        // TODO(vksnk): bool handling is maybe sketchy.
+        int width_to_extend = op->type.is_bool() ? get_width_to_extend(op->a.type()) : get_width_to_extend(op->type);
+        if (width_to_extend > 0) {
+            Expr a = mutate(op->a);
+            Expr b = mutate(op->b);
+
+            const int lanes = op->type.lanes();
+
+            Expr padded_a = pad(a, lanes, width_to_extend);
+            Expr padded_b = pad(b, lanes, width_to_extend);
+            Expr r = Op::make(padded_a, padded_b);
+
+            return slice(r, op->type, lanes);
         }
 
         return IRMutator::visit(op);
@@ -1344,6 +1471,36 @@ private:
             }
         }
 
+        // TODO(vksnk): need to be careful here, because not everything can be
+        // padded safely.
+        int width_to_extend = get_width_to_extend(op->type);
+        bool is_safe_to_pad = true;
+        for (const auto &arg : op->args) {
+            is_safe_to_pad = is_safe_to_pad && (arg.type().is_scalar() || (op->type.lanes() == arg.type().lanes()));
+        }
+        std::set<std::string> safe_to_pad = {"halide_xtensa_dynamic_shuffle"};
+        is_safe_to_pad = is_safe_to_pad || safe_to_pad.count(op->name) > 0;
+        if (width_to_extend > 0 && is_safe_to_pad) {
+            vector<Expr> args;
+            const int lanes = op->type.lanes();
+
+            for (const auto &arg : op->args) {
+                Expr padded_arg;
+                if (arg.type().is_scalar()) {
+                    padded_arg = arg;
+                } else {
+                    Expr mutated_arg = mutate(arg);
+                    padded_arg = pad(mutated_arg, lanes, width_to_extend);
+                }
+
+                args.push_back(padded_arg);
+            }
+
+            Expr r = Call::make(op->type.with_lanes(width_to_extend), op->name, args, op->call_type);
+
+            return slice(r, op->type, lanes);
+        }
+
         return IRMutator::visit(op);
     }
 
@@ -1359,6 +1516,19 @@ public:
             {Type(Type::Int, 48, 64), Type(Type::Int, 48, 32)},
             {Type(Type::Int, 64, 32), Type(Type::Int, 64, 16)},
             {Type(Type::Int, 64, 64), Type(Type::Int, 64, 16)},
+            {Type(Type::Float, 32, 32), Type(Type::Float, 32, 16)},
+        };
+        native_vector_types = {
+            {Type(Type::Int, 8, 64)},
+            {Type(Type::UInt, 8, 64)},
+            {Type(Type::Int, 16, 32)},
+            {Type(Type::UInt, 16, 32)},
+            {Type(Type::Int, 32, 16)},
+            {Type(Type::UInt, 32, 16)},
+            {Type(Type::Int, 24, 64)},
+            {Type(Type::Int, 48, 32)},
+            {Type(Type::Int, 64, 16)},
+            {Type(Type::Float, 32, 16)},
         };
     }
 };
@@ -1377,6 +1547,18 @@ private:
             if (maybe_concat_call && (maybe_concat_call->name == "halide_xtensa_concat_from_native") && (maybe_concat_call->type.lanes() == total_lanes) && ((int)maybe_concat_call->args.size() == total_lanes / native_lanes)) {
                 return maybe_concat_call->args[slice_index];
             }
+
+            if (maybe_concat_call && (maybe_concat_call->name == "halide_xtensa_concat_from_native") && (maybe_concat_call->type.lanes() == total_lanes) && (maybe_concat_call->args[0].type().lanes() % native_lanes == 0)) {
+                int concat_group_size = maybe_concat_call->args[0].type().lanes() / native_lanes;
+                int new_index = slice_index % concat_group_size;
+                int concat_arg_index = slice_index / concat_group_size;
+
+                return Call::make(op->type,
+                                  "halide_xtensa_slice_to_native",
+                                  {maybe_concat_call->args[concat_arg_index], new_index, native_lanes,
+                                   maybe_concat_call->args[concat_arg_index].type().lanes()},
+                                  Call::PureExtern);
+            }
             const Shuffle *maybe_concat_shuffle = first_arg.as<Shuffle>();
             if (maybe_concat_shuffle && maybe_concat_shuffle->is_concat() && ((int)maybe_concat_shuffle->vectors.size() == total_lanes / native_lanes) && ((int)maybe_concat_shuffle->vectors[slice_index].type().lanes() == native_lanes)) {
                 return maybe_concat_shuffle->vectors[slice_index];
@@ -1391,6 +1573,45 @@ private:
                               Call::PureExtern);
         }
 
+        if (op->name == "halide_xtensa_pad_to_native") {
+            Expr first_arg = mutate(op->args[0]);
+            const Call *maybe_slice_call = first_arg.as<Call>();
+            int lanes_before_padding = op->args[1].as<IntImm>()->value;
+            if (maybe_slice_call &&
+                (maybe_slice_call->name == "halide_xtensa_slice_from_padded") && (maybe_slice_call->type.lanes() == lanes_before_padding) && (op->type.lanes() == maybe_slice_call->args[0].type().lanes())) {
+                return maybe_slice_call->args[0];
+            }
+
+            if (maybe_slice_call &&
+                (maybe_slice_call->name == "halide_xtensa_slice_from_padded") && (maybe_slice_call->type.lanes() == lanes_before_padding) && (op->type.lanes() > maybe_slice_call->args[0].type().lanes())) {
+                return Call::make(op->type,
+                                  "halide_xtensa_pad_to_native",
+                                  {maybe_slice_call->args[0], op->args[1]},
+                                  Call::PureExtern);
+            }
+
+            const Shuffle *maybe_shuffle = first_arg.as<Shuffle>();
+            if (maybe_shuffle && maybe_shuffle->is_slice() && (maybe_shuffle->slice_begin() == 0) && (maybe_shuffle->slice_stride() == 1) && (maybe_shuffle->vectors.size() == 1) && ((int)maybe_shuffle->indices.size() == lanes_before_padding) && (op->type.lanes() == maybe_shuffle->vectors[0].type().lanes())) {
+                return maybe_shuffle->vectors[0];
+            }
+            const Broadcast *maybe_broadcast = first_arg.as<Broadcast>();
+            if (maybe_broadcast) {
+                return Broadcast::make(maybe_broadcast->value, op->type.lanes());
+            }
+
+            const Ramp *maybe_ramp = first_arg.as<Ramp>();
+            if (maybe_ramp) {
+                return Ramp::make(maybe_ramp->base, maybe_ramp->stride, op->type.lanes());
+            }
+
+            if (first_arg.type().is_bool() && first_arg.type().is_scalar()) {
+                return first_arg;
+            }
+
+            return Call::make(op->type, op->name,
+                              {first_arg, op->args[1]},
+                              Call::PureExtern);
+        }
         return IRGraphMutator::visit(op);
     }
 
