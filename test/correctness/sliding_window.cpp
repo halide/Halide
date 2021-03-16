@@ -323,7 +323,6 @@ int main(int argc, char **argv) {
             return -1;
         }
     }
-    return 0;
 
     {
         // A sequence of stencils, all computed at the output.
