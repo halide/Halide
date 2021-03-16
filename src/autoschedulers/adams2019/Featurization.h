@@ -186,7 +186,7 @@ struct ScheduleFeatures {
     double num_realizations = 0;
 
     // The number of times a tile of the stage is computed. The
-    // pProduct of outer loops at compute_at site. Always at least as
+    // product of outer loops at compute_at site. Always at least as
     // large as num_realizations.
     double num_productions = 0;
 

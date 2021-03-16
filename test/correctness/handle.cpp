@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
         g.compute_root();
         h(x) = g(x);
 
-        Buffer<char *> im = h.realize(100);
+        Buffer<char *> im = h.realize({100});
 
         uint64_t handle = (uint64_t)(im(0));
         if (sizeof(char *) == 4) {

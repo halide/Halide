@@ -400,16 +400,20 @@ private:
             }
 
             // Assume no overflow for float, int32, and int64
-            if (!op->type.is_float() && (!op->type.is_int() || op->type.bits() < 32)) {
+            if (op->type.can_overflow()) {
                 if (interval.has_upper_bound()) {
-                    Expr no_overflow = (cast<int>(a.max) + cast<int>(b.max) == cast<int>(interval.max));
+                    // TODO(5682): Can't catch overflow of UInt(64) currently.
+                    Type t = op->type.is_uint() ? UInt(64) : Int(32);
+                    Expr no_overflow = (cast(t, a.max) + cast(t, b.max) == cast(t, interval.max));
                     if (!can_prove(no_overflow)) {
                         bounds_of_type(op->type);
                         return;
                     }
                 }
                 if (interval.has_lower_bound()) {
-                    Expr no_overflow = (cast<int>(a.min) + cast<int>(b.min) == cast<int>(interval.min));
+                    // TODO(5682): Can't catch overflow of UInt(64) currently.
+                    Type t = op->type.is_uint() ? UInt(64) : Int(32);
+                    Expr no_overflow = (cast(t, a.min) + cast(t, b.min) == cast(t, interval.min));
                     if (!can_prove(no_overflow)) {
                         bounds_of_type(op->type);
                         return;
@@ -440,7 +444,7 @@ private:
             }
 
             // Assume no overflow for float, int32, and int64
-            if (!op->type.is_float() && (!op->type.is_int() || op->type.bits() < 32)) {
+            if (op->type.can_overflow()) {
                 if (interval.has_upper_bound()) {
                     Expr no_overflow = (cast<int>(a.max) - cast<int>(b.min) == cast<int>(interval.max));
                     if (!can_prove(no_overflow)) {
@@ -518,11 +522,12 @@ private:
         }
 
         // Assume no overflow for float, int32, and int64
-        if (!op->type.is_float() && (!op->type.is_int() || op->type.bits() < 32)) {
+        if (op->type.can_overflow()) {
             if (a.is_bounded() && b.is_bounded()) {
                 // Try to prove it can't overflow. (Be sure to use uint32 for unsigned
                 // types so that the case of 65535*65535 won't misleadingly fail.)
-                Type t = op->type.is_uint() ? UInt(32) : Int(32);
+                // TODO(5682): Can't catch overflow of UInt(64) currently.
+                Type t = op->type.is_uint() ? UInt(64) : Int(32);
                 Expr test1 = (cast(t, a.min) * cast(t, b.min) == cast(t, a.min * b.min));
                 Expr test2 = (cast(t, a.min) * cast(t, b.max) == cast(t, a.min * b.max));
                 Expr test3 = (cast(t, a.max) * cast(t, b.min) == cast(t, a.max * b.min));
@@ -534,6 +539,16 @@ private:
                 bounds_of_type(op->type);
             }
         }
+    }
+
+    bool div_cannot_overflow(const Interval &a, const Interval &b, Type t) {
+        // No overflow if: not an allowed overflow int type, or `a` cannot be t.min() or
+        // `b` cannot be -1, because t.min() / -1 overflows for int16 and int8.
+        Expr neg_one = make_const(t, -1);
+        return !t.can_overflow_int() ||
+               (a.has_lower_bound() && can_prove(a.min != t.min())) ||
+               (b.has_upper_bound() && can_prove(b.max < neg_one)) ||
+               (b.has_lower_bound() && can_prove(b.min > neg_one));
     }
 
     void visit(const Div *op) override {
@@ -576,23 +591,32 @@ private:
         } else if (can_prove(b.min == b.max)) {
             Expr e1 = a.has_lower_bound() ? a.min / b.min : a.min;
             Expr e2 = a.has_upper_bound() ? a.max / b.max : a.max;
-            // TODO: handle real numbers with can_prove(b.min > 0) and can_prove(b.min < 0) as well - treating floating point as
-            // reals can be error prone when dealing with division near 0, so for now we only consider integers in the can_prove() path
-            if (op->type.is_uint() || is_positive_const(b.min) || (op->type.is_int() && can_prove(b.min >= 0))) {
-                interval = Interval(e1, e2);
-            } else if (is_negative_const(b.min) || (op->type.is_int() && can_prove(b.min <= 0))) {
-                if (e1.same_as(Interval::neg_inf())) {
-                    e1 = Interval::pos_inf();
+
+            Type t = op->type.element_of();
+
+            if (div_cannot_overflow(a, b, t)) {
+                // TODO: handle real numbers with can_prove(b.min > 0) and can_prove(b.min < 0) as well - treating floating point as
+                // reals can be error prone when dealing with division near 0, so for now we only consider integers in the can_prove() path
+                if (op->type.is_uint() || is_positive_const(b.min) || (op->type.is_int() && can_prove(b.min >= 0))) {
+                    interval = Interval(e1, e2);
+                } else if (is_negative_const(b.min) || (op->type.is_int() && can_prove(b.min <= 0))) {
+                    if (e1.same_as(Interval::neg_inf())) {
+                        e1 = Interval::pos_inf();
+                    }
+                    if (e2.same_as(Interval::pos_inf())) {
+                        e2 = Interval::neg_inf();
+                    }
+                    interval = Interval(e2, e1);
+                } else if (a.is_bounded()) {
+                    // Sign of b is unknown.
+                    Expr cmp = b.min > make_zero(b.min.type().element_of());
+                    interval = Interval(select(cmp, e1, e2), select(cmp, e2, e1));
+                } else {
+                    bounds_of_type(op->type);
                 }
-                if (e2.same_as(Interval::pos_inf())) {
-                    e2 = Interval::neg_inf();
-                }
-                interval = Interval(e2, e1);
-            } else if (a.is_bounded()) {
-                // Sign of b is unknown.
-                Expr cmp = b.min > make_zero(b.min.type().element_of());
-                interval = Interval(select(cmp, e1, e2), select(cmp, e2, e1));
             } else {
+                // Overflow is possible because a can be min value of type t and
+                // b can be -1.
                 bounds_of_type(op->type);
             }
         } else if (a.is_bounded()) {
@@ -621,13 +645,21 @@ private:
                     bounds_of_type(op->type);
                 }
             } else {
-                // Divisor is either strictly positive or strictly
-                // negative, so we can just take the extrema.
-                interval = Interval::nothing();
-                interval.include(a.min / b.min);
-                interval.include(a.max / b.min);
-                interval.include(a.min / b.max);
-                interval.include(a.max / b.max);
+                Type t = op->type.element_of();
+
+                if (div_cannot_overflow(a, b, t)) {
+                    // Divisor is either strictly positive or strictly
+                    // negative, so we can just take the extrema.
+                    interval = Interval::nothing();
+                    interval.include(a.min / b.min);
+                    interval.include(a.max / b.min);
+                    interval.include(a.min / b.max);
+                    interval.include(a.max / b.max);
+                } else {
+                    // Overflow is possible because a can be min value of type t and
+                    // b can be -1.
+                    bounds_of_type(op->type);
+                }
             }
         } else {
             bounds_of_type(op->type);
@@ -1039,7 +1071,14 @@ private:
         string var_name = unique_name('t');
         Expr var = Variable::make(op->base.type().element_of(), var_name);
         Expr lane = op->base + var * op->stride;
-        ScopedBinding<Interval> p(scope, var_name, Interval(make_const(var.type(), 0), make_const(var.type(), op->lanes - 1)));
+        Expr min_value = make_const(var.type(), 0);
+        Expr max_value = make_const(var.type(), op->lanes - 1);
+        if (!var.type().can_represent((int64_t)(op->lanes - 1))) {
+            // max_value will overflow.
+            min_value = var.type().min();
+            max_value = var.type().max();
+        }
+        ScopedBinding<Interval> p(scope, var_name, Interval(min_value, max_value));
         lane.accept(this);
     }
 
@@ -1425,6 +1464,22 @@ private:
         } else if (op->is_intrinsic(Call::memoize_expr)) {
             internal_assert(!op->args.empty());
             op->args[0].accept(this);
+        } else if (op->is_intrinsic(Call::scatter_gather)) {
+            // Take the union of the args
+            Interval result = Interval::nothing();
+            for (const Expr &e : op->args) {
+                e.accept(this);
+                result.include(interval);
+            }
+            interval = result;
+        } else if (op->is_intrinsic(Call::mux)) {
+            // Take the union of all args but the first
+            Interval result = Interval::nothing();
+            for (size_t i = 1; i < op->args.size(); i++) {
+                op->args[i].accept(this);
+                result.include(interval);
+            }
+            interval = result;
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
         } else {
@@ -3198,6 +3253,33 @@ void bounds_test() {
         ScopedBinding<Interval> yb(scope, "y", Interval(Interval::neg_inf(), -1));
         // Cannot change sign, only can decrease magnitude.
         check(scope, x << y, 0, Interval::pos_inf());
+    }
+    // Overflow testing (for types with defined overflow).
+    {
+        Type uint32 = UInt(32);
+        Expr a = Variable::make(uint32, "a");
+        Expr b = Variable::make(uint32, "b");
+        ScopedBinding<Interval> ab(scope, "a", Interval(UIntImm::make(uint32, 0), simplify(uint32.max() / 4 + 2)));
+        ScopedBinding<Interval> bb(scope, "b", Interval(UIntImm::make(uint32, 0), uint32.max()));
+        // Overflow should be detected
+        check(scope, a + b, Interval::neg_inf(), Interval::pos_inf());
+        check(scope, a * b, Interval::neg_inf(), Interval::pos_inf());
+    }
+    {
+        Type int16 = Int(16);
+        Expr a = Variable::make(int16, "a");
+        Expr b = Variable::make(int16, "b");
+        ScopedBinding<Interval> ab(scope, "a", Interval(int16.min(), int16.max()));
+        ScopedBinding<Interval> bb(scope, "b", Interval(IntImm::make(int16, -4), IntImm::make(int16, -1)));
+        check(scope, a * -1, int16.min(), int16.max());
+        // int16.min() / -1 should be caught as overflow.
+        check(scope, a / -1, int16.min(), int16.max());
+        check(scope, a / b, int16.min(), int16.max());
+    }
+    {
+        Expr zero = UIntImm::make(UInt(1), 0);
+        Expr one = UIntImm::make(UInt(1), 1);
+        check(scope, Ramp::make(zero, one, 3), zero, one);
     }
 
     // If we clamp something unbounded as one type, the bounds should

@@ -89,7 +89,7 @@ public:
  RDom r(0, 10);
  f(x) = x; // the initial value
  f(r) = f(r) * 2;
- Buffer<int> result = f.realize(10);
+ Buffer<int> result = f.realize({10});
  \endcode
  *
  * This function creates a single-dimensional buffer of size 10, in

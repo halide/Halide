@@ -1349,6 +1349,8 @@ WasmModuleContents::WasmModuleContents(
 #if WITH_WABT
     user_assert(LLVM_VERSION >= 110) << "Using the WebAssembly JIT is only supported under LLVM 11+.";
 
+    user_assert(!target.has_feature(Target::WasmThreads)) << "The Halide WebAssembly JIT doesn't support wasm threads yet.";
+
     wdebug(1) << "Compiling wasm function " << fn_name << "\n";
 
     // Compile halide into wasm bytecode.

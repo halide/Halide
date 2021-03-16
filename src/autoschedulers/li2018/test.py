@@ -26,7 +26,7 @@ def main():
     print(result.python_schedule_source)
 
     p.compile_jit() # compile
-    buf = p.realize(1000) # compute and get the buffer
+    buf = p.realize([1000]) # compute and get the buffer
 
 if __name__ == '__main__':
     main()

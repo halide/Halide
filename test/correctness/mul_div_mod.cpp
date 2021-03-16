@@ -303,7 +303,7 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
         break;
     };
 
-    Buffer<RT> r = f.realize(WIDTH, HEIGHT, target);
+    Buffer<RT> r = f.realize({WIDTH, HEIGHT}, target);
 
     int ecount = 0;
     for (i = 0; i < WIDTH; i++) {
@@ -388,7 +388,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
         break;
     };
 
-    Realization R = f.realize(WIDTH, HEIGHT, target);
+    Realization R = f.realize({WIDTH, HEIGHT}, target);
     Buffer<T> q(R[0]);
     Buffer<T> r(R[1]);
 
@@ -401,6 +401,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
             T ri = r(i, j);
 
             if (BIG(qi) * BIG(bi) + ri != ai && (ecount++) < 10) {
+                std::cerr << "\ndiv_mod failure for t=" << target << " w=" << vector_width << " scheduling=" << (int)scheduling << ":\n";
                 std::cerr << "(a/b)*b + a%b != a; a, b = " << (int64_t)ai
                           << ", " << (int64_t)bi
                           << "; q, r = " << (int64_t)qi
@@ -409,6 +410,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
             } else if (!(0 <= ri &&
                          (t.is_min((int64_t)bi) || ri < (T)std::abs((int64_t)bi))) &&
                        (ecount++) < 10) {
+                std::cerr << "\ndiv_mod failure for t=" << target << " w=" << vector_width << " scheduling=" << (int)scheduling << ":\n";
                 std::cerr << "ri is not in the range [0, |b|); a, b = " << (int64_t)ai
                           << ", " << (int64_t)bi
                           << "; q, r = " << (int64_t)qi
@@ -423,12 +425,14 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
                 Expr re = simplify(ae % be);
 
                 if (!Internal::equal(qe, Expr(qi)) && (ecount++) < 10) {
+                    std::cerr << "\ndiv_mod failure for t=" << target << " w=" << vector_width << " scheduling=" << (int)scheduling << ":\n";
                     std::cerr << "Compiled a/b != simplified a/b: " << (int64_t)ai
                               << "/" << (int64_t)bi
                               << " = " << (int64_t)qi
                               << " != " << qe << "\n";
                     success = false;
                 } else if (!Internal::equal(re, Expr(ri)) && (ecount++) < 10) {
+                    std::cerr << "\ndiv_mod failure for t=" << target << " w=" << vector_width << " scheduling=" << (int)scheduling << ":\n";
                     std::cerr << "Compiled a%b != simplified a%b: " << (int64_t)ai
                               << "%" << (int64_t)bi
                               << " = " << (int64_t)ri

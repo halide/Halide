@@ -5,9 +5,11 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
 
-    if (!t.features_any_of({Target::CUDACapability50,
-                            Target::CUDACapability61})) {
-        printf("[SKIP] CUDA with capability 5.0 or greater required\n");
+    int cap = t.get_cuda_capability_lower_bound();
+    if (cap < 50 || cap >= 80) {
+        printf("[SKIP] CUDA with capability between 5.0 and 7.5 required\n");
+        // TODO: Use the shfl.sync intrinsics for cuda 8.0 and above
+        // See issue #5630
         return 0;
     }
 
@@ -16,14 +18,16 @@ int main(int argc, char **argv) {
         Func f, g;
         Var x, y;
 
-        f(x, y) = x + y;
+        f(x, y) = cast<uint8_t>(x + y);
         g(x, y) = f(x - 1, y) + f(x + 1, y);
 
         Var xo, xi, yi, yo;
         g
             .gpu_tile(x, y, xi, yi, 32, 2, TailStrategy::RoundUp)
             .gpu_lanes(xi);
+
         f.compute_root();
+
         f
             .in(g)
             .compute_at(g, yi)
@@ -31,11 +35,11 @@ int main(int argc, char **argv) {
             .gpu_lanes(xi)
             .unroll(xo);
 
-        Buffer<int> out = g.realize(32, 4);
+        Buffer<uint8_t> out = g.realize({32, 4});
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
-                int correct = 2 * (x + y);
-                int actual = out(x, y);
+                uint8_t correct = 2 * (x + y);
+                uint8_t actual = out(x, y);
                 if (correct != actual) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, actual, correct);
@@ -76,7 +80,7 @@ int main(int argc, char **argv) {
             .gpu_lanes(y)
             .store_in(MemoryType::Register);
 
-        Buffer<float> out = c.realize(32, 32);
+        Buffer<float> out = c.realize({32, 32});
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
                 float correct = x + 100 * y;
@@ -125,7 +129,7 @@ int main(int argc, char **argv) {
             .vectorize(y, 2)
             .gpu_lanes(y);
 
-        Buffer<float> out = c.realize(64, 64);
+        Buffer<float> out = c.realize({64, 64});
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
                 float correct = x + 100 * y;
@@ -167,7 +171,7 @@ int main(int argc, char **argv) {
                 .gpu_lanes(x);
         }
 
-        Buffer<int> out = d.realize(24, 2);
+        Buffer<int> out = d.realize({24, 2});
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
                 int correct = 27 * (x + y);
@@ -205,7 +209,7 @@ int main(int argc, char **argv) {
                 .gpu_lanes(x);
         }
 
-        Buffer<int> out = d.realize(24, 2);
+        Buffer<int> out = d.realize({24, 2});
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
                 int correct = 27 * (x + y);
@@ -235,7 +239,7 @@ int main(int argc, char **argv) {
             .compute_at(b, yi)
             .gpu_lanes(x);
 
-        Buffer<int> out = b.realize(32, 32);
+        Buffer<int> out = b.realize({32, 32});
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
                 int correct = x + 2 * y;
@@ -298,7 +302,7 @@ int main(int argc, char **argv) {
             .set_min(0)
             .dim(1)
             .set_min(0);
-        Buffer<float> out = upy.realize(128, 128);
+        Buffer<float> out = upy.realize({128, 128});
 
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
@@ -356,7 +360,7 @@ int main(int argc, char **argv) {
             .gpu_lanes(xi)
             .unroll(x);
 
-        Buffer<float> out = s4.realize(64, 64);
+        Buffer<float> out = s4.realize({64, 64});
 
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
@@ -416,7 +420,7 @@ int main(int argc, char **argv) {
             .gpu_lanes(xi)
             .unroll(x);
 
-        Buffer<float> out = s4.realize(32, 32);
+        Buffer<float> out = s4.realize({32, 32});
 
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
@@ -476,7 +480,7 @@ int main(int argc, char **argv) {
             .gpu_lanes(xi)
             .unroll(xo);
 
-        Buffer<uint16_t> out = curved.realize(buf.width(), buf.height());
+        Buffer<uint16_t> out = curved.realize({buf.width(), buf.height()});
 
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
@@ -504,7 +508,7 @@ int main(int argc, char **argv) {
 
         Var xo, xi;
         f.gpu_tile(x, xo, xi, 32);
-        f.realize(1024);
+        f.realize({1024});
     }
 
     printf("Success!\n");

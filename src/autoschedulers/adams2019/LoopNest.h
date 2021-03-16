@@ -8,7 +8,9 @@
 
 #include "FunctionDAG.h"
 #include "PerfectHashMap.h"
+#include <map>
 #include <set>
+#include <utility>
 #include <vector>
 
 namespace Halide {
@@ -258,6 +260,18 @@ struct LoopNest {
                const LoopNest *parent,
                const LoopNest *compute_site) const;
 };
+
+// Find the deepest common ancestor of `a` and `b`.
+// `parents` is a map from loop nest to (parent, depth) tuples.
+// Assumes that `a` and `b` are found in `parents`, otherwise errors.
+const LoopNest *deepest_common_ancestor(const std::map<const LoopNest *, std::pair<const LoopNest *, int>> &parents,
+                                        const LoopNest *a, const LoopNest *b);
+
+// Compute the parent and depth of every loop nest node.
+// Stores in `parents` the children of `here` (keys) to tuples of (here, depth).
+// Recurses on all children of `here`.
+void compute_loop_nest_parents(std::map<const LoopNest *, std::pair<const LoopNest *, int>> &parents,
+                               const LoopNest *here, int depth);
 
 }  // namespace Autoscheduler
 }  // namespace Internal

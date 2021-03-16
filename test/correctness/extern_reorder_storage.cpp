@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     f.compute_root().reorder_storage(y, x);
 
     input.set(input_buffer);
-    Buffer<uint8_t> output = g.realize(W, H);
+    Buffer<uint8_t> output = g.realize({W, H});
     for (int i = 0; i < H; i++) {
         for (int j = 0; j < W; j++) {
             assert(output(j, i) == i + j);

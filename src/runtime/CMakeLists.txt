@@ -47,7 +47,6 @@ set(RUNTIME_CPP
     msan
     msan_stubs
     opencl
-    opengl
     opengl_egl_context
     opengl_glx_context
     openglcompute
@@ -112,6 +111,7 @@ set(RUNTIME_LL
     x86
     x86_avx
     x86_avx2
+    x86_avx512
     x86_sse41
     )
 
@@ -132,7 +132,6 @@ set(RUNTIME_HEADER_FILES
     HalideRuntimeHexagonHost.h
     HalideRuntimeMetal.h
     HalideRuntimeOpenCL.h
-    HalideRuntimeOpenGL.h
     HalideRuntimeOpenGLCompute.h
     HalideRuntimeQurt.h
     )

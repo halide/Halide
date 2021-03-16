@@ -1,5 +1,6 @@
 #include "Simplify_Internal.h"
 
+#include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "Substitute.h"
 
@@ -344,6 +345,8 @@ Stmt Simplify::visit(const Block *op) {
     Stmt rest = op->rest;
 
     if (const AssertStmt *first_assert = first.as<AssertStmt>()) {
+        bool unchanged = true;
+
         // Handle an entire sequence of asserts here to avoid a deeply
         // nested stack.  We won't be popping any knowledge until
         // after the end of this chain of asserts, so we can use a
@@ -362,6 +365,7 @@ Stmt Simplify::visit(const Block *op) {
         while ((rest_block = rest.as<Block>()) &&
                (first_assert = rest_block->first.as<AssertStmt>())) {
             first = mutate(first_assert);
+            unchanged &= first.same_as(first_assert);
             rest = rest_block->rest;
             result.push_back(first);
             if ((first_assert = first.as<AssertStmt>())) {
@@ -371,9 +375,15 @@ Stmt Simplify::visit(const Block *op) {
             }
         }
 
-        result.push_back(mutate(rest));
+        Stmt new_rest = mutate(rest);
+        unchanged &= new_rest.same_as(rest);
 
-        return Block::make(result);
+        if (unchanged) {
+            return op;
+        } else {
+            result.push_back(new_rest);
+            return Block::make(result);
+        }
 
     } else {
         rest = mutate(op->rest);
@@ -384,9 +394,11 @@ Stmt Simplify::visit(const Block *op) {
     const LetStmt *let_rest = rest.as<LetStmt>();
     const Block *block_rest = rest.as<Block>();
     const IfThenElse *if_first = first.as<IfThenElse>();
-    const IfThenElse *if_next =
-        rest.as<IfThenElse>() ? rest.as<IfThenElse>() : (block_rest ? block_rest->first.as<IfThenElse>() : nullptr);
+    const IfThenElse *if_next = block_rest ? block_rest->first.as<IfThenElse>() : rest.as<IfThenElse>();
     Stmt if_rest = block_rest ? block_rest->rest : Stmt();
+
+    const Store *store_first = first.as<Store>();
+    const Store *store_next = block_rest ? block_rest->first.as<Store>() : rest.as<Store>();
 
     if (is_no_op(first) &&
         is_no_op(rest)) {
@@ -411,11 +423,28 @@ Stmt Simplify::visit(const Block *op) {
         new_block = substitute(let_rest->name, new_var, new_block);
 
         return LetStmt::make(var_name, let_first->value, new_block);
+    } else if (store_first &&
+               store_next &&
+               store_first->name == store_next->name &&
+               equal(store_first->index, store_next->index) &&
+               equal(store_first->predicate, store_next->predicate) &&
+               is_pure(store_first->index) &&
+               is_pure(store_first->value) &&
+               is_pure(store_first->predicate) &&
+               !expr_uses_var(store_next->index, store_next->name) &&
+               !expr_uses_var(store_next->value, store_next->name) &&
+               !expr_uses_var(store_next->predicate, store_next->name)) {
+        // Second store clobbers first
+        if (block_rest) {
+            return Block::make(store_next, block_rest->rest);
+        } else {
+            return store_next;
+        }
     } else if (if_first &&
                if_next &&
                equal(if_first->condition, if_next->condition) &&
                is_pure(if_first->condition)) {
-        // Two ifs with matching conditions
+        // Two ifs with matching conditions.
         Stmt then_case = mutate(Block::make(if_first->then_case, if_next->then_case));
         Stmt else_case;
         if (if_first->else_case.defined() && if_next->else_case.defined()) {
@@ -442,7 +471,26 @@ Stmt Simplify::visit(const Block *op) {
         // inside the first one, because if it's true the
         // first one must also be true.
         Stmt then_case = mutate(Block::make(if_first->then_case, if_next));
-        Stmt else_case = mutate(if_first->else_case);
+        Stmt else_case = if_first->else_case;
+        Stmt result = IfThenElse::make(if_first->condition, then_case, else_case);
+        if (if_rest.defined()) {
+            result = Block::make(result, if_rest);
+        }
+        return result;
+    } else if (if_first &&
+               if_next &&
+               is_pure(if_first->condition) &&
+               is_pure(if_next->condition) &&
+               is_const_one(mutate(!(if_first->condition && if_next->condition), nullptr))) {
+        // Two ifs where the first condition being true implies the
+        // second is false.  The second if can be nested inside the
+        // else case of the first one, turning a block of if
+        // statements into an if-else chain.
+        Stmt then_case = if_first->then_case;
+        Stmt else_case = if_next;
+        if (if_first->else_case.defined()) {
+            else_case = Block::make(if_first->else_case, else_case);
+        }
         Stmt result = IfThenElse::make(if_first->condition, then_case, else_case);
         if (if_rest.defined()) {
             result = Block::make(result, if_rest);

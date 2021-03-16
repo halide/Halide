@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
 
         g.set_custom_allocator(my_malloc, my_free);
 
-        Buffer<int> im = g.realize(100, 1000);
+        Buffer<int> im = g.realize({100, 1000});
 
         size_t expected_size = 101 * 3 * sizeof(int) + sizeof(int);
         if (custom_malloc_size == 0 || custom_malloc_size != expected_size) {

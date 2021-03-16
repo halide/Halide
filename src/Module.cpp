@@ -626,10 +626,6 @@ std::map<std::string, std::string> Module::get_metadata_name_map() const {
 void Module::compile(const std::map<Output, std::string> &output_files) const {
     validate_outputs(output_files);
 
-    if (target().has_feature(Target::OpenGL)) {
-        user_warning << "WARNING: OpenGL is deprecated in Halide 11 and will be removed in Halide 12.\n";
-    }
-
     // output stmt and html prior to resolving submodules. We need to
     // clear the output after writing it, otherwise the output will
     // be overwritten by recursive calls after submodules are resolved.
@@ -790,7 +786,7 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
     }
 }
 
-std::map<Output, std::string> compile_standalone_runtime(const std::map<Output, std::string> &output_files, Target t) {
+std::map<Output, std::string> compile_standalone_runtime(const std::map<Output, std::string> &output_files, const Target &t) {
     validate_outputs(output_files);
 
     Module empty("standalone_runtime", t.without_feature(Target::NoRuntime).without_feature(Target::JIT));
@@ -807,7 +803,7 @@ std::map<Output, std::string> compile_standalone_runtime(const std::map<Output, 
     return actual_outputs;
 }
 
-void compile_standalone_runtime(const std::string &object_filename, Target t) {
+void compile_standalone_runtime(const std::string &object_filename, const Target &t) {
     compile_standalone_runtime({{Output::object, object_filename}}, t);
 }
 

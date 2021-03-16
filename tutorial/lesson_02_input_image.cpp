@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
     // error at runtime telling us we're trying to read out of bounds
     // on the input image.
     Halide::Buffer<uint8_t> output =
-        brighter.realize(input.width(), input.height(), input.channels());
+        brighter.realize({input.width(), input.height(), input.channels()});
 
     // Save the output for inspection. It should look like a bright parrot.
     save_image(output, "brighter.png");

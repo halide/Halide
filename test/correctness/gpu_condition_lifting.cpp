@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
         .gpu_blocks(yi)
         .gpu_blocks(z);
 
-    Buffer<int> imf = f.realize(10, 10, 10, target);
+    Buffer<int> imf = f.realize({10, 10, 10}, target);
 
     printf("Success!\n");
     return 0;

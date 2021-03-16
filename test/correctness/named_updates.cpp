@@ -56,8 +56,8 @@ int main(int argc, char **argv) {
         ref(5 * r) = 2;
     }
 
-    Buffer<int> result = f.realize(128);
-    Buffer<int> result_ref = ref.realize(128);
+    Buffer<int> result = f.realize({128});
+    Buffer<int> result_ref = ref.realize({128});
 
     RDom check(result);
     uint32_t error = evaluate<uint32_t>(

@@ -785,7 +785,7 @@ public:
      params.set(img, arg_img);
 
      Target t = get_jit_target_from_environment();
-     Buffer<int32_t> result = f.realize(10, 10, t, params);
+     Buffer<int32_t> result = f.realize({10, 10}, t, params);
      \endcode
      *
      * Alternatively, an initializer list can be used
@@ -800,7 +800,7 @@ public:
      <fill in arg_img...>
 
      Target t = get_jit_target_from_environment();
-     Buffer<int32_t> result = f.realize(10, 10, t, { { p, 17 }, { img, arg_img } });
+     Buffer<int32_t> result = f.realize({10, 10}, t, { { p, 17 }, { img, arg_img } });
      \endcode
      *
      * If the Func cannot be realized into a buffer of the given size
@@ -815,18 +815,26 @@ public:
      *
      */
     // @{
-    Realization realize(std::vector<int32_t> sizes, const Target &target = Target(),
+    Realization realize(std::vector<int32_t> sizes = {}, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
     Realization realize(int x_size, int y_size, int z_size, int w_size, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
     Realization realize(int x_size, int y_size, int z_size, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
     Realization realize(int x_size, int y_size, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
-    Realization realize(int x_size, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
-    Realization realize(const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
+
+    // Making this a template function is a trick: `{intliteral}` is a valid scalar initializer
+    // in C++, but we want it to match the vector call, not the (deprecated) scalar one.
+    template<typename T, typename = typename std::enable_if<std::is_same<T, int>::value>::type>
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
+    HALIDE_ALWAYS_INLINE Realization realize(T x_size, const Target &target = Target(),
+                                             const ParamMap &param_map = ParamMap::empty_map()) {
+        return realize(std::vector<int32_t>{x_size}, target, param_map);
+    }
     // @}
 
     /** Evaluate this function into an existing allocated buffer or
@@ -865,19 +873,6 @@ public:
     void infer_input_bounds(const std::vector<int32_t> &sizes,
                             const Target &target = get_jit_target_from_environment(),
                             const ParamMap &param_map = ParamMap::empty_map());
-    HALIDE_ATTRIBUTE_DEPRECATED("Call infer_input_bounds() with an explicit vector<int> instead")
-    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map());
-    // TODO: this is a temporary wrapper used to disambiguate the cases where
-    // a single-entry braced list would match the deprecated overload
-    // (rather than the vector overload); when the deprecated method is removed,
-    // this should be removed, too
-    void infer_input_bounds(const std::initializer_list<int> &sizes,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map()) {
-        infer_input_bounds(std::vector<int>{sizes}, target, param_map);
-    }
     void infer_input_bounds(Pipeline::RealizationArg outputs,
                             const Target &target = get_jit_target_from_environment(),
                             const ParamMap &param_map = ParamMap::empty_map());
@@ -1548,11 +1543,6 @@ public:
      * only by the auto scheduler if the function is a pipeline output. */
     Func &set_estimate(const Var &var, const Expr &min, const Expr &extent);
 
-    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    Func &estimate(const Var &var, const Expr &min, const Expr &extent) {
-        return set_estimate(var, min, extent);
-    }
-
     /** Set (min, extent) estimates for all dimensions in the Func
      * at once; this is equivalent to calling `set_estimate(args()[n], min, extent)`
      * repeatedly, but slightly terser. The size of the estimates vector
@@ -1978,16 +1968,6 @@ public:
                    TailStrategy tail = TailStrategy::Auto,
                    DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
-
-    /** Schedule for execution using coordinate-based hardware api.
-     * GLSL is an example of this. Conceptually, this is
-     * similar to parallelization over 'x' and 'y' (since GLSL shaders compute
-     * individual output pixels in parallel) and vectorization over 'c'
-     * (since GLSL/RS implicitly vectorizes the color channel). */
-    Func &shader(const Var &x, const Var &y, const Var &c, DeviceAPI device_api);
-
-    /** Schedule for execution as GLSL kernel. */
-    Func &glsl(const Var &x, const Var &y, const Var &c);
 
     /** Schedule for execution on Hexagon. When a loop is marked with
      * Hexagon, that loop is executed on a Hexagon DSP. */

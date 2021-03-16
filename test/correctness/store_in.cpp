@@ -40,7 +40,7 @@ void check(MemoryType t1, MemoryType t2, MemoryType t3) {
 
     mallocs = 0;
     f.set_custom_allocator(my_malloc, my_free);
-    f.realize(1024);
+    f.realize({1024});
     if (mallocs != expected_mallocs) {
         std::cerr << "Wrong number of mallocs for " << t1 << ", " << t2 << ", " << t3 << "\n"
                   << "Expected " << expected_mallocs << " got " << mallocs << "\n";

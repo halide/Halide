@@ -757,7 +757,7 @@ std::string halide_type_to_c_type(const Type &t) {
 
 int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
     const char kUsage[] =
-        "gengen \n"
+        "gengen\n"
         "  [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-d 1|0]\n"
         "  [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME] [-s AUTOSCHEDULER_NAME]\n"
         "       target=target-string[,target-string...] [generator_arg=value [...]]\n"
@@ -2242,7 +2242,8 @@ void generator_test() {
         tester.call_generate();
         tester.call_schedule();
 
-        Buffer<float> im = tester_instance.realize(1);
+        Buffer<float> im = tester_instance.realize({1});
+        internal_assert(im.dimensions() == 1);
         internal_assert(im.dim(0).extent() == 1);
         internal_assert(im(0) == 1475.25f) << "Expected 1475.25 but saw " << im(0);
     }

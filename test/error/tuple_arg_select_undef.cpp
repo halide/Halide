@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     // Different predicates for the undefs: should result in an error
     f(arg_0, arg_1) = {f(arg_0, arg_1)[0] + 10, f(arg_0, arg_1)[1] + 5};
 
-    f.realize(100, 100);
+    f.realize({100, 100});
 
     printf("Success!\n");
     return 0;

@@ -136,35 +136,43 @@ void define_func(py::module &m) {
                 },
                 py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target())
 
-            // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
                 "realize",
                 [](Func &f, int x_size, const Target &target) -> py::object {
-                    return realization_to_object(f.realize(x_size, target));
+                    PyErr_WarnEx(PyExc_DeprecationWarning,
+                                 "Call realize() with an explicit list of ints instead.",
+                                 1);
+                    return realization_to_object(f.realize(std::vector<int32_t>{x_size}, target));
                 },
                 py::arg("x_size"), py::arg("target") = Target())
 
-            // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
                 "realize",
                 [](Func &f, int x_size, int y_size, const Target &target) -> py::object {
-                    return realization_to_object(f.realize(x_size, y_size, target));
+                    PyErr_WarnEx(PyExc_DeprecationWarning,
+                                 "Call realize() with an explicit list of ints instead.",
+                                 1);
+                    return realization_to_object(f.realize({x_size, y_size}, target));
                 },
                 py::arg("x_size"), py::arg("y_size"), py::arg("target") = Target())
 
-            // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
                 "realize",
                 [](Func &f, int x_size, int y_size, int z_size, const Target &target) -> py::object {
-                    return realization_to_object(f.realize(x_size, y_size, z_size, target));
+                    PyErr_WarnEx(PyExc_DeprecationWarning,
+                                 "Call realize() with an explicit list of ints instead.",
+                                 1);
+                    return realization_to_object(f.realize({x_size, y_size, z_size}, target));
                 },
                 py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("target") = Target())
 
-            // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
                 "realize",
                 [](Func &f, int x_size, int y_size, int z_size, int w_size, const Target &target) -> py::object {
-                    return realization_to_object(f.realize(x_size, y_size, z_size, w_size, target));
+                    PyErr_WarnEx(PyExc_DeprecationWarning,
+                                 "Call realize() with an explicit list of ints instead.",
+                                 1);
+                    return realization_to_object(f.realize({x_size, y_size, z_size, w_size}, target));
                 },
                 py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("w_size"), py::arg("target") = Target())
 
@@ -274,28 +282,6 @@ void define_func(py::module &m) {
             .def("output_buffers", &Func::output_buffers)
 
             .def(
-                "infer_input_bounds", [](Func &f, int x_size, int y_size, int z_size, int w_size, const Target &target) -> void {
-                    PyErr_WarnEx(PyExc_DeprecationWarning,
-                                 "Call infer_input_bounds() with an explicit list of ints instead.",
-                                 1);
-                    std::vector<int32_t> sizes;
-                    if (x_size) {
-                        sizes.push_back(x_size);
-                    }
-                    if (y_size) {
-                        sizes.push_back(y_size);
-                    }
-                    if (z_size) {
-                        sizes.push_back(z_size);
-                    }
-                    if (w_size) {
-                        sizes.push_back(w_size);
-                    }
-                    f.infer_input_bounds(sizes, target);
-                },
-                py::arg("x_size") = 0, py::arg("y_size") = 0, py::arg("z_size") = 0, py::arg("w_size") = 0, py::arg("target") = get_jit_target_from_environment())
-
-            .def(
                 "infer_input_bounds", [](Func &f, const py::object &dst, const Target &target) -> void {
                     // dst could be Buffer<>, vector<Buffer>, or vector<int>
                     try {
@@ -342,10 +328,6 @@ void define_func(py::module &m) {
             .def("align_bounds", &Func::align_bounds, py::arg("var"), py::arg("modulus"), py::arg("remainder") = 0)
 
             .def("bound_extent", &Func::bound_extent, py::arg("var"), py::arg("extent"))
-
-            .def("shader", &Func::shader, py::arg("x"), py::arg("y"), py::arg("c"), py::arg("device_api"))
-
-            .def("glsl", &Func::glsl, py::arg("x"), py::arg("y"), py::arg("c"))
 
             .def("align_storage", &Func::align_storage, py::arg("dim"), py::arg("alignment"))
 

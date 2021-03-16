@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
     // might have an extent of zero. It's possible wasted work.
     f.bound(x, 0, 32).bound(y, 0, 32);
 
-    Buffer<int> im = f.realize(32, 32);
+    Buffer<int> im = f.realize({32, 32});
 
     // Check the result was what we expected
     for (int y = 0; y < 32; y++) {
@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
     g.parallel(y);
     // Avoid the race condition by not actually being parallel
     g.set_custom_do_par_for(&not_really_parallel_for);
-    g.realize(32, 32);
+    g.realize({32, 32});
 
     if (call_counter[3] != 1 || call_counter[4] != 32 * 32) {
         printf("Call counter for parallel call was %d, %d instead of %d, %d\n",
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
 
         Var xi, yi;
         h.gpu_tile(x, y, xi, yi, 8, 8);
-        h.realize(32, 32);
+        h.realize({32, 32});
 
         if (call_counter[5] != 1) {
             printf("Call counter for GPU call was %d instead of %d\n",

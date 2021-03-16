@@ -15,7 +15,6 @@ void define_enums(py::module &m) {
         .value("Default_GPU", DeviceAPI::Default_GPU)
         .value("CUDA", DeviceAPI::CUDA)
         .value("OpenCL", DeviceAPI::OpenCL)
-        .value("GLSL", DeviceAPI::GLSL)
         .value("OpenGLCompute", DeviceAPI::OpenGLCompute)
         .value("Metal", DeviceAPI::Metal)
         .value("Hexagon", DeviceAPI::Hexagon);
@@ -106,7 +105,6 @@ void define_enums(py::module &m) {
         .value("CLDoubles", Target::Feature::CLDoubles)
         .value("CLHalf", Target::Feature::CLHalf)
         .value("CLAtomics64", Target::Feature::CLAtomics64)
-        .value("OpenGL", Target::Feature::OpenGL)
         .value("OpenGLCompute", Target::Feature::OpenGLCompute)
         .value("EGL", Target::Feature::EGL)
         .value("UserContext", Target::Feature::UserContext)
@@ -129,6 +127,7 @@ void define_enums(py::module &m) {
         .value("AVX512_KNL", Target::Feature::AVX512_KNL)
         .value("AVX512_Skylake", Target::Feature::AVX512_Skylake)
         .value("AVX512_Cannonlake", Target::Feature::AVX512_Cannonlake)
+        .value("AVX512_SapphireRapids", Target::Feature::AVX512_SapphireRapids)
         .value("TraceLoads", Target::Feature::TraceLoads)
         .value("TraceStores", Target::Feature::TraceStores)
         .value("TraceRealizations", Target::Feature::TraceRealizations)

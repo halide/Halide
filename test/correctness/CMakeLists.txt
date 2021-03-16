@@ -135,6 +135,7 @@ tests(GROUPS correctness
       gpu_give_input_buffers_device_allocations.cpp
       gpu_jit_explicit_copy_to_device.cpp
       gpu_large_alloc.cpp
+      gpu_many_kernels.cpp
       gpu_mixed_dimensionality.cpp
       gpu_mixed_shared_mem_types.cpp
       gpu_multi_kernel.cpp
@@ -177,7 +178,9 @@ tests(GROUPS correctness
       interleave.cpp
       interleave_rgb.cpp
       interleave_x.cpp
+      interpreter.cpp
       interval.cpp
+      intrinsics.cpp
       introspection.cpp
       inverse.cpp
       isnan.cpp
@@ -216,6 +219,7 @@ tests(GROUPS correctness
       multipass_constraints.cpp
       multiple_outputs.cpp
       multiple_outputs_extern.cpp
+      multiple_scatter.cpp
       mux.cpp
       named_updates.cpp
       nested_shiftinwards.cpp

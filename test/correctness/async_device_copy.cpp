@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
             frames.in().store_root().compute_at(avg, r).copy_to_device();
         }
 
-        Buffer<int> out = avg.realize(1024, 1024);
+        Buffer<int> out = avg.realize({1024, 1024});
 
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {

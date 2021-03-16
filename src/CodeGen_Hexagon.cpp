@@ -41,7 +41,7 @@ namespace {
 class CodeGen_Hexagon : public CodeGen_Posix {
 public:
     /** Create a Hexagon code generator for the given Hexagon target. */
-    CodeGen_Hexagon(Target);
+    CodeGen_Hexagon(const Target &);
 
 protected:
     void compile_func(const LoweredFunc &f,
@@ -136,7 +136,7 @@ private:
     llvm::Value *vlut256(llvm::Value *lut, llvm::Value *indices, int min_index = 0, int max_index = 255);
 };
 
-CodeGen_Hexagon::CodeGen_Hexagon(Target t)
+CodeGen_Hexagon::CodeGen_Hexagon(const Target &t)
     : CodeGen_Posix(t) {
     user_assert(llvm_Hexagon_enabled)
         << "llvm build not configured with Hexagon target enabled.\n";
@@ -653,8 +653,10 @@ const HvxIntrinsic intrinsic_wrappers[] = {
 
     {INTRINSIC_128B(vroundhub), u8v1, "trunc_satub_rnd.vh", {i16v2}},
     {INTRINSIC_128B(vroundhb), i8v1, "trunc_satb_rnd.vh", {i16v2}},
+    {INTRINSIC_128B(vrounduhub), u8v1, "trunc_satub_rnd.vuh", {u16v2}},
     {INTRINSIC_128B(vroundwuh), u16v1, "trunc_satuh_rnd.vw", {i32v2}},
     {INTRINSIC_128B(vroundwh), i16v1, "trunc_sath_rnd.vw", {i32v2}},
+    {INTRINSIC_128B(vrounduwuh), u16v1, "trunc_satuh_rnd.vuw", {u32v2}},
 
     // vpack does not interleave its input.
     {INTRINSIC_128B(vpackhub_sat), u8v1, "pack_satub.vh", {i16v2}},
@@ -678,32 +680,30 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     // two vuh but do not widen.
     // To differentiate those from the widening ones, we encode the return type
     // in the name here.
-    {INTRINSIC_128B(vsububh), u16v2, "sub_vuh.vub.vub", {u8v1, u8v1}},
     {INTRINSIC_128B(vsububh), i16v2, "sub_vh.vub.vub", {u8v1, u8v1}},
     {INTRINSIC_128B(vsubhw), i32v2, "sub_vw.vh.vh", {i16v1, i16v1}},
-    {INTRINSIC_128B(vsubuhw), u32v2, "sub_vuw.vuh.vuh", {u16v1, u16v1}},
     {INTRINSIC_128B(vsubuhw), i32v2, "sub_vw.vuh.vuh", {u16v1, u16v1}},
 
     // Adds/subtract of unsigned values with saturation.
-    {INTRINSIC_128B(vaddubsat), u8v1, "satub_add.vub.vub", {u8v1, u8v1}},
-    {INTRINSIC_128B(vadduhsat), u16v1, "satuh_add.vuh.vuh", {u16v1, u16v1}},
-    {INTRINSIC_128B(vadduwsat), u32v1, "satuw_add.vuw.vuw", {u32v1, u32v1}},
-    {INTRINSIC_128B(vaddhsat), i16v1, "sath_add.vh.vh", {i16v1, i16v1}},
-    {INTRINSIC_128B(vaddwsat), i32v1, "satw_add.vw.vw", {i32v1, i32v1}},
-    {INTRINSIC_128B(vaddubsat_dv), u8v2, "satub_add.vub.vub.dv", {u8v2, u8v2}},
-    {INTRINSIC_128B(vadduhsat_dv), u16v2, "satuh_add.vuh.vuh.dv", {u16v2, u16v2}},
-    {INTRINSIC_128B(vadduwsat_dv), u32v2, "satuw_add.vuw.vuw.dv", {u32v2, u32v2}},
-    {INTRINSIC_128B(vaddhsat_dv), i16v2, "sath_add.vh.vh.dv", {i16v2, i16v2}},
-    {INTRINSIC_128B(vaddwsat_dv), i32v2, "satw_add.vw.vw.dv", {i32v2, i32v2}},
+    {INTRINSIC_128B(vaddubsat), u8v1, "sat_add.vub.vub", {u8v1, u8v1}},
+    {INTRINSIC_128B(vadduhsat), u16v1, "sat_add.vuh.vuh", {u16v1, u16v1}},
+    {INTRINSIC_128B(vadduwsat), u32v1, "sat_add.vuw.vuw", {u32v1, u32v1}},
+    {INTRINSIC_128B(vaddhsat), i16v1, "sat_add.vh.vh", {i16v1, i16v1}},
+    {INTRINSIC_128B(vaddwsat), i32v1, "sat_add.vw.vw", {i32v1, i32v1}},
+    {INTRINSIC_128B(vaddubsat_dv), u8v2, "sat_add.vub.vub.dv", {u8v2, u8v2}},
+    {INTRINSIC_128B(vadduhsat_dv), u16v2, "sat_add.vuh.vuh.dv", {u16v2, u16v2}},
+    {INTRINSIC_128B(vadduwsat_dv), u32v2, "sat_add.vuw.vuw.dv", {u32v2, u32v2}},
+    {INTRINSIC_128B(vaddhsat_dv), i16v2, "sat_add.vh.vh.dv", {i16v2, i16v2}},
+    {INTRINSIC_128B(vaddwsat_dv), i32v2, "sat_add.vw.vw.dv", {i32v2, i32v2}},
 
-    {INTRINSIC_128B(vsububsat), u8v1, "satub_sub.vub.vub", {u8v1, u8v1}},
-    {INTRINSIC_128B(vsubuhsat), u16v1, "satuh_sub.vuh.vuh", {u16v1, u16v1}},
-    {INTRINSIC_128B(vsubhsat), i16v1, "sath_sub.vh.vh", {i16v1, i16v1}},
-    {INTRINSIC_128B(vsubwsat), i32v1, "satw_sub.vw.vw", {i32v1, i32v1}},
-    {INTRINSIC_128B(vsububsat_dv), u8v2, "satub_sub.vub.vub.dv", {u8v2, u8v2}},
-    {INTRINSIC_128B(vsubuhsat_dv), u16v2, "satuh_sub.vuh.vuh.dv", {u16v2, u16v2}},
-    {INTRINSIC_128B(vsubhsat_dv), i16v2, "sath_sub.vh.vh.dv", {i16v2, i16v2}},
-    {INTRINSIC_128B(vsubwsat_dv), i32v2, "satw_sub.vw.vw.dv", {i32v2, i32v2}},
+    {INTRINSIC_128B(vsububsat), i8v1, "sat_sub.vub.vub", {u8v1, u8v1}},
+    {INTRINSIC_128B(vsubuhsat), i16v1, "sat_sub.vuh.vuh", {u16v1, u16v1}},
+    {INTRINSIC_128B(vsubhsat), i16v1, "sat_sub.vh.vh", {i16v1, i16v1}},
+    {INTRINSIC_128B(vsubwsat), i32v1, "sat_sub.vw.vw", {i32v1, i32v1}},
+    {INTRINSIC_128B(vsububsat_dv), i8v2, "sat_sub.vub.vub.dv", {u8v2, u8v2}},
+    {INTRINSIC_128B(vsubuhsat_dv), i16v2, "sat_sub.vuh.vuh.dv", {u16v2, u16v2}},
+    {INTRINSIC_128B(vsubhsat_dv), i16v2, "sat_sub.vh.vh.dv", {i16v2, i16v2}},
+    {INTRINSIC_128B(vsubwsat_dv), i32v2, "sat_sub.vw.vw.dv", {i32v2, i32v2}},
 
     // Absolute value:
     {INTRINSIC_128B(vabsh), u16v1, "abs.vh", {i16v1}},
@@ -719,19 +719,23 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     // Averaging:
     {INTRINSIC_128B(vavgub), u8v1, "avg.vub.vub", {u8v1, u8v1}},
     {INTRINSIC_128B(vavguh), u16v1, "avg.vuh.vuh", {u16v1, u16v1}},
+    {INTRINSIC_128B(vavguw), u32v1, "avg.vuw.vuw", {u32v1, u32v1}, HvxIntrinsic::v65OrLater},
+    {INTRINSIC_128B(vavgb), i8v1, "avg.vb.vb", {i8v1, i8v1}, HvxIntrinsic::v65OrLater},
     {INTRINSIC_128B(vavgh), i16v1, "avg.vh.vh", {i16v1, i16v1}},
     {INTRINSIC_128B(vavgw), i32v1, "avg.vw.vw", {i32v1, i32v1}},
 
     {INTRINSIC_128B(vavgubrnd), u8v1, "avg_rnd.vub.vub", {u8v1, u8v1}},
     {INTRINSIC_128B(vavguhrnd), u16v1, "avg_rnd.vuh.vuh", {u16v1, u16v1}},
+    {INTRINSIC_128B(vavguwrnd), u32v1, "avg_rnd.vuw.vuw", {u32v1, u32v1}, HvxIntrinsic::v65OrLater},
+    {INTRINSIC_128B(vavgbrnd), i8v1, "avg_rnd.vb.vb", {i8v1, i8v1}, HvxIntrinsic::v65OrLater},
     {INTRINSIC_128B(vavghrnd), i16v1, "avg_rnd.vh.vh", {i16v1, i16v1}},
     {INTRINSIC_128B(vavgwrnd), i32v1, "avg_rnd.vw.vw", {i32v1, i32v1}},
 
+     // This one is weird: i8_sat((u8 - u8)/2). It both saturates and averages.
     {INTRINSIC_128B(vnavgub), i8v1, "navg.vub.vub", {u8v1, u8v1}},
+    {INTRINSIC_128B(vnavgb), i8v1, "navg.vb.vb", {i8v1, i8v1}, HvxIntrinsic::v65OrLater},
     {INTRINSIC_128B(vnavgh), i16v1, "navg.vh.vh", {i16v1, i16v1}},
     {INTRINSIC_128B(vnavgw), i32v1, "navg.vw.vw", {i32v1, i32v1}},
-    {INTRINSIC_128B(vavgb), i8v1, "avg.vb.vb", {i8v1, i8v1}, HvxIntrinsic::v65OrLater},
-    {INTRINSIC_128B(vavguw), u32v1, "avg.vuw.vuw", {u32v1, u32v1}, HvxIntrinsic::v65OrLater},
 
     // Non-widening multiplication:
     {INTRINSIC_128B(vmpyih), i16v1, "mul.vh.vh", {i16v1, i16v1}},
@@ -804,12 +808,15 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     //{ vdmpyhb_dv_acc, i32v2, "acc_add_2mpy.vw.vh.b.dv", {i32v2, i16v2, i32} },
 
     // vtmpy
-    {INTRINSIC_128B(vtmpybus), i16v2, "add_3mpy.vub.b", {u8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
-    {INTRINSIC_128B(vtmpyb), i16v2, "add_3mpy.vb.b", {i8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
-    {INTRINSIC_128B(vtmpyhb), i32v2, "add_3mpy.vh.b", {u16v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
-    {INTRINSIC_128B(vtmpybus_acc), i16v2, "acc_add_3mpy.vh.vub.b", {i16v2, u8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
-    {INTRINSIC_128B(vtmpyb_acc), i16v2, "acc_add_3mpy.vh.vb.b", {i16v2, i8v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
-    {INTRINSIC_128B(vtmpyhb_acc), i32v2, "acc_add_3mpy.vw.vh.b", {i32v2, u16v2, i16}, HvxIntrinsic::BroadcastScalarsToWords},
+    // TODO: These (and many vdmpy variants) should have 16-bit scalars with BroadcastScalarsToWords, so
+    // we don't need to replicate the arguments in HexagonOptimize.cpp. However, this triggers opaque
+    // failures in LLVM.
+    {INTRINSIC_128B(vtmpybus), i16v2, "add_3mpy.vub.b", {u8v2, i32}},
+    {INTRINSIC_128B(vtmpyb), i16v2, "add_3mpy.vb.b", {i8v2, i32}},
+    {INTRINSIC_128B(vtmpyhb), i32v2, "add_3mpy.vh.b", {u16v2, i32}},
+    {INTRINSIC_128B(vtmpybus_acc), i16v2, "acc_add_3mpy.vh.vub.b", {i16v2, u8v2, i32}},
+    {INTRINSIC_128B(vtmpyb_acc), i16v2, "acc_add_3mpy.vh.vb.b", {i16v2, i8v2, i32}},
+    {INTRINSIC_128B(vtmpyhb_acc), i32v2, "acc_add_3mpy.vw.vh.b", {i32v2, u16v2, i32}},
 
     {INTRINSIC_128B(vrmpybus), i32v1, "add_4mpy.vub.b", {u8v1, i32}},
     {INTRINSIC_128B(vrmpyub), u32v1, "add_4mpy.vub.ub", {u8v1, u32}},
@@ -839,6 +846,14 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     {INTRINSIC_128B(vasrhv), i16v1, "shr.vh.vh", {i16v1, u16v1}},
     {INTRINSIC_128B(vasrwv), i32v1, "shr.vw.vw", {i32v1, u32v1}},
 
+    // Rounding shift right
+    {INTRINSIC_128B(vasrhubrndsat), u8v1, "trunc_satub_shr_rnd.vh", {i16v2, u16}},
+    {INTRINSIC_128B(vasrhbrndsat), i8v1, "trunc_satb_shr_rnd.vh", {i16v2, u16}},
+    {INTRINSIC_128B(vasruhubrndsat), u8v1, "trunc_satub_shr_rnd.vuh", {u16v2, u16}, HvxIntrinsic::v65OrLater},
+    {INTRINSIC_128B(vasrwuhrndsat), u16v1, "trunc_satuh_shr_rnd.vw", {i32v2, u32}},
+    {INTRINSIC_128B(vasrwhrndsat), i16v1, "trunc_sath_shr_rnd.vw", {i32v2, u32}},
+    {INTRINSIC_128B(vasruwuhrndsat), u16v1, "trunc_satuh_shr_rnd.vuw", {u32v2, u32}},
+
     {INTRINSIC_128B(vaslhv), u16v1, "shl.vuh.vh", {u16v1, u16v1}},
     {INTRINSIC_128B(vaslwv), u32v1, "shl.vuw.vw", {u32v1, u32v1}},
     {INTRINSIC_128B(vaslhv), i16v1, "shl.vh.vh", {i16v1, u16v1}},
@@ -862,7 +877,7 @@ const HvxIntrinsic intrinsic_wrappers[] = {
     {INTRINSIC_128B(vasrhubsat), u8v1, "trunc_satub_shr.vh.uh", {i16v2, u16}},
     {INTRINSIC_128B(vasrwuhsat), u16v1, "trunc_satuh_shr.vw.uw", {i32v2, u32}},
     {INTRINSIC_128B(vasrwhsat), i16v1, "trunc_sath_shr.vw.uw", {i32v2, u32}},
-    {INTRINSIC_128B(vror), u8v1, "vror",{u8v1, i32}},
+    {INTRINSIC_128B(vror), u8v1, "vror", {u8v1, i32}},
 
     // Bit counting
     {INTRINSIC_128B(vnormamth), u16v1, "cls.vh", {u16v1}},
@@ -1824,6 +1839,9 @@ string CodeGen_Hexagon::mattrs() const {
     std::stringstream attrs;
     attrs << "+hvx-length128b";
     attrs << ",+long-calls";
+    if (target.has_feature(Target::HVX)) {
+        attrs << ",+hvxv" << isa_version;
+    }
     return attrs.str();
 }
 
@@ -1888,6 +1906,11 @@ void CodeGen_Hexagon::visit(const Call *op) {
     // indicating if the intrinsic has signed variants or not.
     static std::map<string, std::pair<string, bool>> functions = {
         {Call::get_intrinsic_name(Call::absd), {"halide.hexagon.absd", true}},
+        {Call::get_intrinsic_name(Call::halving_add), {"halide.hexagon.avg", true}},
+        {Call::get_intrinsic_name(Call::rounding_halving_add), {"halide.hexagon.avg_rnd", true}},
+        {Call::get_intrinsic_name(Call::halving_sub), {"halide.hexagon.navg", true}},
+        {Call::get_intrinsic_name(Call::saturating_add), {"halide.hexagon.sat_add", true}},
+        {Call::get_intrinsic_name(Call::saturating_sub), {"halide.hexagon.sat_sub", true}},
     };
 
     if (is_native_interleave(op) || is_native_deinterleave(op)) {
@@ -2303,15 +2326,15 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
 
 }  // namespace
 
-CodeGen_Posix *new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
-    CodeGen_Hexagon *ret = new CodeGen_Hexagon(target);
+std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
+    std::unique_ptr<CodeGen_Posix> ret(std::make_unique<CodeGen_Hexagon>(target));
     ret->set_context(context);
     return ret;
 }
 
 #else  // WITH_HEXAGON
 
-CodeGen_Posix *new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
+std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
     user_error << "hexagon not enabled for this build of Halide.\n";
 }
 

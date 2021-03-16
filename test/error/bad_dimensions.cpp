@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     Buffer<uint8_t> b(10, 10, 3);
     im.set(b);
 
-    f.realize(10, 10);
+    f.realize({10, 10});
 
     printf("Success!\n");
     return 0;

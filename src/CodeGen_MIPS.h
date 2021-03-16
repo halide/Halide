@@ -15,7 +15,7 @@ class CodeGen_MIPS : public CodeGen_Posix {
 public:
     /** Create a mips code generator. Processor features can be
      * enabled using the appropriate flags in the target struct. */
-    CodeGen_MIPS(Target);
+    CodeGen_MIPS(const Target &);
 
     static void test();
 

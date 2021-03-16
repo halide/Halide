@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
         f(x, y) = a(x, y) + b(x, y) + 2;
         f.gpu_tile(x, y, tx, ty, 8, 8, TailStrategy::Auto, d);
 
-        Buffer<float> out = f.realize(100, 100);
+        Buffer<float> out = f.realize({100, 100});
 
         out.for_each_value([&](float f) {
             if (f != 7.0f) {

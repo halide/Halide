@@ -52,9 +52,9 @@ int main(int argc, char **argv) {
                                                    func_extra,
                                                    extra_scalar});
 
-    Buffer<int32_t> output = result.output.realize(kSize, kSize, 3);
-    Buffer<float> extra_buffer_output = result.extra_buffer_output.realize(kSize, kSize, 3);
-    Buffer<double> extra_func_output = result.extra_func_output.realize(kSize, kSize);
+    Buffer<int32_t> output = result.output.realize({kSize, kSize, 3});
+    Buffer<float> extra_buffer_output = result.extra_buffer_output.realize({kSize, kSize, 3});
+    Buffer<double> extra_func_output = result.extra_func_output.realize({kSize, kSize});
 
     output.for_each_element([&](int x, int y, int c) {
         assert(output(x, y, c) == input(x, y, c) + bias + extra_value);

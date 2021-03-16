@@ -1715,11 +1715,6 @@ public:
         return *this;
     }
 
-    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    GeneratorInput_Buffer<T> &estimate(const Var &var, const Expr &min, const Expr &extent) {
-        return set_estimate(var, min, extent);
-    }
-
     GeneratorInput_Buffer<T> &set_estimates(const Region &estimates) {
         this->check_gio_access();
         this->set_estimates_impl(estimates);
@@ -1878,11 +1873,6 @@ public:
         this->check_gio_access();
         this->set_estimate_impl(var, min, extent);
         return *this;
-    }
-
-    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    GeneratorInput_Func<T> &estimate(const Var &var, const Expr &min, const Expr &extent) {
-        return set_estimate(var, min, extent);
     }
 
     GeneratorInput_Func<T> &set_estimates(const Region &estimates) {
@@ -2196,12 +2186,6 @@ protected:
     }
 
 public:
-    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    GeneratorOutputBase &estimate(const Var &var, const Expr &min, const Expr &extent) {
-        this->as<Func>().set_estimate(var, min, extent);
-        return *this;
-    }
-
     /** Forward schedule-related methods to the underlying Func. */
     // @{
     HALIDE_FORWARD_METHOD(Func, add_trace_tag)
@@ -2220,7 +2204,6 @@ public:
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
     HALIDE_FORWARD_METHOD(Func, fold_storage)
     HALIDE_FORWARD_METHOD(Func, fuse)
-    HALIDE_FORWARD_METHOD(Func, glsl)
     HALIDE_FORWARD_METHOD(Func, gpu)
     HALIDE_FORWARD_METHOD(Func, gpu_blocks)
     HALIDE_FORWARD_METHOD(Func, gpu_single_thread)
@@ -2242,7 +2225,6 @@ public:
     HALIDE_FORWARD_METHOD_CONST(Func, rvars)
     HALIDE_FORWARD_METHOD(Func, serial)
     HALIDE_FORWARD_METHOD(Func, set_estimate)
-    HALIDE_FORWARD_METHOD(Func, shader)
     HALIDE_FORWARD_METHOD(Func, specialize)
     HALIDE_FORWARD_METHOD(Func, specialize_fail)
     HALIDE_FORWARD_METHOD(Func, split)
@@ -2613,11 +2595,6 @@ public:
             f.set_estimate(var, min, extent);
         }
         return *this;
-    }
-
-    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    GeneratorOutput_Func<T> &estimate(const Var &var, const Expr &min, const Expr &extent) {
-        return set_estimate(var, min, extent);
     }
 
     GeneratorOutput_Func<T> &set_estimates(const Region &estimates) {

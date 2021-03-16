@@ -157,6 +157,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     } else if (op->is_intrinsic(Call::shift_left) ||
                op->is_intrinsic(Call::shift_right)) {
         Expr a = mutate(op->args[0], nullptr);
+        // TODO: When simplifying b, it would be nice to specify the min/max useful bounds, so
+        // stronger simplifications could occur. For example, x >> min(-i8, 0) should be simplified
+        // to x >> -max(i8, 0) and then x << max(i8, 0). This isn't safe because -i8 can overflow.
         ExprInfo b_info;
         Expr b = mutate(op->args[1], &b_info);
 
@@ -209,6 +212,15 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             }
         }
 
+        // Rewrite shifts with negated RHSes as shifts of the other direction.
+        if (const Sub *sub = b.as<Sub>()) {
+            if (is_const_zero(sub->a)) {
+                result_op = Call::get_intrinsic_name(op->is_intrinsic(Call::shift_right) ? Call::shift_left : Call::shift_right);
+                b = sub->b;
+                return mutate(Call::make(op->type, result_op, {a, b}, Call::PureIntrinsic), bounds);
+            }
+        }
+
         if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
             internal_assert(result_op == op->name);
             return op;
@@ -240,6 +252,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             return Mod::make(a, make_const(a.type(), ib + 1));
         } else if (const_uint(b, &ub) &&
                    b.type().is_max(ub)) {
+            return a;
+        } else if (const_int(b, &ib) &&
+                   ib == -1) {
             return a;
         } else if (const_uint(b, &ub) &&
                    is_const_power_of_two_integer(make_const(a.type(), ub + 1), &bits)) {
@@ -604,6 +619,46 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                                             {std::move(cond_value), std::move(true_value), std::move(false_value)},
                                             op->call_type);
             }
+        }
+    } else if (op->is_intrinsic(Call::mux)) {
+        internal_assert(op->args.size() >= 2);
+        int num_values = (int)op->args.size() - 1;
+        if (num_values == 1) {
+            // Mux of a single value
+            return mutate(op->args[1], bounds);
+        }
+        ExprInfo index_info;
+        Expr index = mutate(op->args[0], &index_info);
+
+        // Check if the mux has statically resolved
+        if (index_info.min_defined &&
+            index_info.max_defined &&
+            index_info.min == index_info.max) {
+            if (index_info.min >= 0 && index_info.min < num_values) {
+                // In-range, return the (simplified) corresponding value.
+                return mutate(op->args[index_info.min + 1], bounds);
+            } else {
+                // It's out-of-range, so return the last value.
+                return mutate(op->args.back(), bounds);
+            }
+        }
+
+        // The logic above could be extended to also truncate the
+        // range of values in the case where the mux index has a
+        // constant bound. This seems unlikely to ever come up though.
+
+        bool unchanged = index.same_as(op->args[0]);
+        vector<Expr> mutated_args(op->args.size());
+        mutated_args[0] = index;
+        for (size_t i = 1; i < op->args.size(); ++i) {
+            mutated_args[i] = mutate(op->args[i], nullptr);
+            unchanged &= mutated_args[i].same_as(op->args[i]);
+        }
+
+        if (unchanged) {
+            return op;
+        } else {
+            return Call::make(op->type, Call::mux, mutated_args, op->call_type);
         }
     } else if (op->call_type == Call::PureExtern) {
         // TODO: This could probably be simplified into a single map-lookup

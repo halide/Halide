@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
     stencils[num_stencils - 1].print_loop_nest();
 
     // Run the schedule
-    p.realize(6204, 4604);
+    p.realize({6204, 4604});
 
     printf("Success!\n");
     return 0;

@@ -88,6 +88,8 @@
 #include "LoopNest.h"
 #include "NetworkSize.h"
 #include "PerfectHashMap.h"
+#include "State.h"
+#include "Timer.h"
 
 #ifdef _WIN32
 #include <io.h>
@@ -98,8 +100,6 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
-using std::map;
-using std::pair;
 using std::string;
 using std::vector;
 
@@ -1262,14 +1262,19 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     for (int i = 0; i < num_passes; i++) {
         ProgressBar tick;
 
+        Timer timer;
+
         auto pass = optimal_schedule_pass(dag, outputs, params, cost_model,
                                           rng, beam_size, memory_limit,
                                           i, num_passes, tick, permitted_hashes);
 
+        std::chrono::duration<double> total_time = timer.elapsed();
+        auto milli = std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count();
+
         tick.clear();
 
         if (aslog::aslog_level() == 0) {
-            aslog(0) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << "\n";
+            aslog(0) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << ", time (ms): " << milli << "\n";
         } else {
             aslog(0) << "Pass " << i << " result: ";
             pass->dump();
@@ -1286,6 +1291,9 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
 
     return best;
 }
+
+// Keep track of how many times we evaluated a state.
+int State::cost_calculations = 0;
 
 // The main entrypoint to generate a schedule for a pipeline.
 void generate_schedule(const std::vector<Function> &outputs,

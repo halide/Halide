@@ -62,7 +62,7 @@ bool test() {
         }
     }
 
-    Buffer<ITYPE> output_buf = output.realize(W_img, H_img);
+    Buffer<ITYPE> output_buf = output.realize({W_img, H_img});
 
     for (int y = 0; y < H_img; y++) {
         for (int x = 0; x < W_img; x++) {
