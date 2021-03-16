@@ -126,7 +126,6 @@ bool find_produce(const Stmt &s, const string &func) {
 //   previous iteration of the loop if they were computed in the
 //   last iteration.
 class RollFunc : public IRMutator {
-public:
     const Function &func;
     int dim;
     const string &loop_var;
