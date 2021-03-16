@@ -7,7 +7,7 @@
 
 #include "util/error_util.h"
 
-namespace interpret_nn {
+namespace hannk {
 
 inline std::vector<char> read_entire_file(const std::string &filename) {
     std::ifstream f(filename, std::ios::in | std::ios::binary);
@@ -39,6 +39,6 @@ inline void write_entire_file(const std::string &filename, const std::vector<cha
     write_entire_file(filename, source.data(), source.size());
 }
 
-}  // namespace interpret_nn
+}  // namespace hannk
 
 #endif  // FILE_UTIL_H_

@@ -2,7 +2,7 @@
 
 using namespace Halide;
 
-namespace interpret_nn {
+namespace hannk {
 
 void interpret_as_tensor(OutputImageParam p) {
     p.dim(0).set_stride(1).set_min(0);
@@ -83,4 +83,4 @@ Expr multiply_quantized(const Expr &x, const Expr &q, const Expr &shift) {
     return round_shift_right(multiply_2x_high(x, q), shift);
 }
 
-}  // namespace interpret_nn
+}  // namespace hannk

@@ -8,7 +8,7 @@
 #include "HalideRuntime.h"
 #include "util/error_util.h"
 
-namespace interpret_nn {
+namespace hannk {
 
 // Must be constexpr to allow use in case clauses.
 inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
@@ -240,6 +240,6 @@ struct DumpBuffer {
     }
 };
 
-}  // namespace interpret_nn
+}  // namespace hannk
 
 #endif  // BUFFER_UTIL_H

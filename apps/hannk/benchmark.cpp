@@ -10,7 +10,7 @@
 #include "util/error_util.h"
 #include "util/file_util.h"
 
-namespace interpret_nn {
+namespace hannk {
 
 void run_benchmark(const std::string &filename, const ScheduleOptions &options) {
     if (!options.trace) {
@@ -46,10 +46,10 @@ void run_benchmark(const std::string &filename, const ScheduleOptions &options) 
     }
 }
 
-}  // namespace interpret_nn
+}  // namespace hannk
 
 int main(int argc, char **argv) {
-    interpret_nn::ScheduleOptions options;
+    hannk::ScheduleOptions options;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--verbose")) {
@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
         if (!strncmp(argv[i], "--", 2)) {
             continue;
         }
-        interpret_nn::run_benchmark(argv[i], options);
+        hannk::run_benchmark(argv[i], options);
         std::cout << std::endl;
     }
 

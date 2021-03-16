@@ -10,7 +10,7 @@
 #include "interval.h"
 #include "util/error_util.h"
 
-namespace interpret_nn {
+namespace hannk {
 
 template<class T, class... Args>
 std::unique_ptr<T> make_unique(Args &&...args) {
@@ -138,7 +138,7 @@ public:
 
     Tensor(const Tensor &copy) = default;
 
-    interpret_nn::TensorType type() const {
+    hannk::TensorType type() const {
         return type_;
     }
     const std::string &name() const {
@@ -342,6 +342,6 @@ struct Model {
     Model &operator=(const Model &) = delete;
 };
 
-}  // namespace interpret_nn
+}  // namespace hannk
 
 #endif  // MODEL_H

@@ -7,7 +7,7 @@
 
 #include "HalideRuntime.h"
 
-namespace interpret_nn {
+namespace hannk {
 
 inline std::ostream &operator<<(std::ostream &stream, const halide_type_t &type) {
     if (type.code == halide_type_uint && type.bits == 1) {
@@ -122,11 +122,11 @@ public:
 #ifndef NDEBUG
 // In debug builds, include file-and-line
 #define LOG(SEVERITY) \
-    ::interpret_nn::internal::Logger(::interpret_nn::SEVERITY, __FILE__, __LINE__)
+    ::hannk::internal::Logger(::hannk::SEVERITY, __FILE__, __LINE__)
 #else
 // In nondebug builds, don't include file-and-line
 #define LOG(SEVERITY) \
-    ::interpret_nn::internal::Logger(::interpret_nn::SEVERITY)
+    ::hannk::internal::Logger(::hannk::SEVERITY)
 #endif
 
 /**
@@ -146,12 +146,12 @@ public:
 #ifndef NDEBUG
 // In debug builds, include file-and-line
 #define CHECK(condition) \
-    (condition) ? (void)0 : ::interpret_nn::internal::Voidifier() & ::interpret_nn::internal::Checker(__FILE__, __LINE__, #condition).ref()
+    (condition) ? (void)0 : ::hannk::internal::Voidifier() & ::hannk::internal::Checker(__FILE__, __LINE__, #condition).ref()
 #else
 // In nondebug builds, don't include file-and-line
 #define CHECK(condition) \
-    (condition) ? (void)0 : ::interpret_nn::internal::Voidifier() & ::interpret_nn::internal::Checker(#condition).ref()
+    (condition) ? (void)0 : ::hannk::internal::Voidifier() & ::hannk::internal::Checker(#condition).ref()
 #endif
-}  // namespace interpret_nn
+}  // namespace hannk
 
 #endif  // ERROR_UTIL_H_

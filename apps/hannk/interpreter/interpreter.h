@@ -8,7 +8,7 @@
 
 #include "interpreter/model.h"
 
-namespace interpret_nn {
+namespace hannk {
 
 struct ScheduleOptions {
     // How much parallelism to enable.
@@ -66,6 +66,6 @@ public:
     ModelInterpreter &operator=(ModelInterpreter &&) = default;
 };
 
-}  // namespace interpret_nn
+}  // namespace hannk
 
 #endif  // INTERPRETER_H_

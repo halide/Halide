@@ -5,7 +5,7 @@ using namespace Halide;
 using namespace Halide::BoundaryConditions;
 using namespace Halide::ConciseCasts;
 
-namespace interpret_nn {
+namespace hannk {
 
 int get_vector_reduction_factor(const Target &target, Type t) {
     if (target.has_feature(Target::ARMDotProd)) {
@@ -279,6 +279,6 @@ public:
     }
 };
 
-}  // namespace interpret_nn
+}  // namespace hannk
 
-HALIDE_REGISTER_GENERATOR(interpret_nn::Convolution, Convolution)
+HALIDE_REGISTER_GENERATOR(hannk::Convolution, Convolution)

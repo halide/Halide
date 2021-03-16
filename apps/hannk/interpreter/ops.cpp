@@ -13,7 +13,7 @@
 #include "fully_connected_uint8.h"
 #include "max_pool_uint8.h"
 
-namespace interpret_nn {
+namespace hannk {
 
 namespace {
 
@@ -767,4 +767,4 @@ void QuantizeOp::execute(const Box &crop) {
     }
 }
 
-}  // namespace interpret_nn
+}  // namespace hannk

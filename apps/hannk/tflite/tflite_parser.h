@@ -11,7 +11,7 @@ struct Model;
 
 }  // namespace tflite
 
-namespace interpret_nn {
+namespace hannk {
 
 // Translate from a tflite::Model to our own model representation.
 Model parse_tflite_model(const tflite::Model *model);
@@ -20,6 +20,6 @@ Model parse_tflite_model(const tflite::Model *model);
 // avoids the need for client to include any tflite-specific files.
 Model parse_tflite_model_from_buffer(const void *model);
 
-}  // namespace interpret_nn
+}  // namespace hannk
 
 #endif  // TFLITE_PARSER_H_

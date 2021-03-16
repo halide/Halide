@@ -1956,7 +1956,6 @@ TEST_APPS=\
 	fft \
 	hist \
 	interpolate \
-	hannk \
 	lens_blur \
 	linear_algebra \
 	local_laplacian \

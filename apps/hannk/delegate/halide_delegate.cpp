@@ -30,7 +30,7 @@
     KNOWN_OP(Reshape)         \
     KNOWN_OP(Quantize)
 
-namespace interpret_nn {
+namespace hannk {
 namespace {
 
 constexpr char kDelegateName[] = "HalideDelegate";
@@ -54,7 +54,7 @@ void TfLiteIntArrayFree(TfLiteIntArray *a) {
 
 struct TfLiteIntArrayDeleter {
     void operator()(TfLiteIntArray *a) {
-        ::interpret_nn::TfLiteIntArrayFree(a);
+        ::hannk::TfLiteIntArrayFree(a);
     }
 };
 
@@ -220,7 +220,7 @@ public:
             TF_LITE_KERNEL_LOG(context, "Init must not be called twice.");
             return kTfLiteError;
         }
-        model_ = ::interpret_nn::make_unique<Model>();
+        model_ = ::hannk::make_unique<Model>();
 
         std::vector<int> node_indices(params->nodes_to_replace->size);
         for (int i = 0; i < params->nodes_to_replace->size; i++) {
@@ -334,7 +334,7 @@ public:
         }
 #endif
 
-        interpreter_ = ::interpret_nn::make_unique<ModelInterpreter>(std::move(*model_));
+        interpreter_ = ::hannk::make_unique<ModelInterpreter>(std::move(*model_));
         model_.reset();
         return kTfLiteOk;
     }
@@ -417,7 +417,7 @@ private:
             return nullptr;
         }
         HalideDelegate *halide_delegate = (HalideDelegate *)params->delegate;
-        auto self = ::interpret_nn::make_unique<HalideDelegateKernel>(halide_delegate->options_);
+        auto self = ::hannk::make_unique<HalideDelegateKernel>(halide_delegate->options_);
         if (self->Init(context, params) != kTfLiteOk) {
             LOG(ERROR) << "HalideDelegate.init: NULL params";
             return nullptr;
@@ -460,7 +460,7 @@ private:
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteAddParams *params = (const TfLiteAddParams *)(node->builtin_data);
         auto activation = ConvertTfLiteActivation(params->activation);
-        return ::interpret_nn::make_unique<AddOp>(input1, input2, output, activation);
+        return ::hannk::make_unique<AddOp>(input1, input2, output, activation);
     }
 
     std::unique_ptr<Op> BuildAveragePool2d(TfLiteContext *context, TfLiteNode *node) {
@@ -477,7 +477,7 @@ private:
             params->filter_height,
         };
         auto activation = ConvertTfLiteActivation(params->activation);
-        return ::interpret_nn::make_unique<AveragePoolOp>(input, output, stride, filter_size, padding, activation);
+        return ::hannk::make_unique<AveragePoolOp>(input, output, stride, filter_size, padding, activation);
     }
 
     std::unique_ptr<Op> BuildConcatenation(TfLiteContext *context, TfLiteNode *node) {
@@ -496,7 +496,7 @@ private:
         // Now 'flip' the axis so that it refers to the right dimension in
         // the Tensor (since we reverse the dimension order)
         axis = (int)output->shape().size() - axis - 1;
-        return ::interpret_nn::make_unique<ConcatenationOp>(inputs, output, axis, activation);
+        return ::hannk::make_unique<ConcatenationOp>(inputs, output, axis, activation);
     }
 
     std::unique_ptr<Op> BuildConv2d(TfLiteContext *context, TfLiteNode *node) {
@@ -515,8 +515,8 @@ private:
             params->dilation_height_factor,
         };
         auto activation = ConvertTfLiteActivation(params->activation);
-        return ::interpret_nn::make_unique<Conv2DOp>(input, filter, bias, output, stride,
-                                                     dilation_factor, padding, activation);
+        return ::hannk::make_unique<Conv2DOp>(input, filter, bias, output, stride,
+                                              dilation_factor, padding, activation);
     }
 
     std::unique_ptr<Op> BuildDepthwiseConv2d(TfLiteContext *context, TfLiteNode *node) {
@@ -535,8 +535,8 @@ private:
             params->dilation_height_factor,
         };
         auto activation = ConvertTfLiteActivation(params->activation);
-        return ::interpret_nn::make_unique<DepthwiseConv2DOp>(input, filter, bias, output, stride,
-                                                              dilation_factor, padding, activation);
+        return ::hannk::make_unique<DepthwiseConv2DOp>(input, filter, bias, output, stride,
+                                                       dilation_factor, padding, activation);
     }
 
     std::unique_ptr<Op> BuildFullyConnected(TfLiteContext *context, TfLiteNode *node) {
@@ -546,7 +546,7 @@ private:
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteFullyConnectedParams *params = (const TfLiteFullyConnectedParams *)(node->builtin_data);
         auto activation = ConvertTfLiteActivation(params->activation);
-        return ::interpret_nn::make_unique<FullyConnectedOp>(input, filter, bias, output, activation);
+        return ::hannk::make_unique<FullyConnectedOp>(input, filter, bias, output, activation);
     }
 
     std::unique_ptr<Op> BuildMaxPool2d(TfLiteContext *context, TfLiteNode *node) {
@@ -563,14 +563,14 @@ private:
             params->filter_height,
         };
         auto activation = ConvertTfLiteActivation(params->activation);
-        return ::interpret_nn::make_unique<MaxPoolOp>(input, output, stride, filter_size, padding, activation);
+        return ::hannk::make_unique<MaxPoolOp>(input, output, stride, filter_size, padding, activation);
     }
 
     std::unique_ptr<Op> BuildPad(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto padding = GetTensorById(context, node->inputs->data[1]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return ::interpret_nn::make_unique<PadOp>(input, padding, output);
+        return ::hannk::make_unique<PadOp>(input, padding, output);
     }
 
     std::unique_ptr<Op> BuildReshape(TfLiteContext *context, TfLiteNode *node) {
@@ -579,13 +579,13 @@ private:
         const TfLiteReshapeParams *params = (const TfLiteReshapeParams *)(node->builtin_data);
         std::vector<int> new_shape;
         new_shape.assign(params->shape, params->shape + params->num_dimensions);
-        return ::interpret_nn::make_unique<ReshapeOp>(input, output, new_shape);
+        return ::hannk::make_unique<ReshapeOp>(input, output, new_shape);
     }
 
     std::unique_ptr<Op> BuildQuantize(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return ::interpret_nn::make_unique<QuantizeOp>(input, output);
+        return ::hannk::make_unique<QuantizeOp>(input, output);
     }
 
     const HalideDelegateOptions options_;
@@ -856,10 +856,10 @@ bool IsNodeSupported(TfLiteContext *context, TfLiteNode *node, TfLiteRegistratio
 }
 
 }  // namespace
-}  // namespace interpret_nn
+}  // namespace hannk
 
 TfLiteDelegate *HalideDelegateCreate(const HalideDelegateOptions *options) {
-    using interpret_nn::HalideDelegate;
+    using hannk::HalideDelegate;
 
     return new HalideDelegate(options);
 }
@@ -869,7 +869,7 @@ void HalideDelegateOptionsDefault(HalideDelegateOptions *opt) {
 }
 
 void HalideDelegateDelete(TfLiteDelegate *delegate) {
-    using interpret_nn::HalideDelegate;
+    using hannk::HalideDelegate;
 
     if (delegate) {
         HalideDelegate *halide_delegate = (HalideDelegate *)delegate;

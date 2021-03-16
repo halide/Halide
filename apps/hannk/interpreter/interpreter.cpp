@@ -4,7 +4,7 @@
 #include <cmath>
 #include <list>
 
-namespace interpret_nn {
+namespace hannk {
 
 namespace {
 
@@ -411,4 +411,4 @@ std::vector<Tensor *> ModelInterpreter::outputs() {
     return result;
 }
 
-}  // namespace interpret_nn
+}  // namespace hannk

@@ -1,6 +1,6 @@
 #include "interval.h"
 
-namespace interpret_nn {
+namespace hannk {
 
 bool is_subset_of(const Interval &a, const Interval &b) {
     return a.min >= b.min && a.max <= b.max;
@@ -128,4 +128,4 @@ bool is_empty(const Box &a) {
     return false;
 }
 
-}  // namespace interpret_nn
+}  // namespace hannk

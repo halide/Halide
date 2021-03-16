@@ -5,7 +5,7 @@ using namespace Halide;
 using namespace Halide::BoundaryConditions;
 using namespace Halide::ConciseCasts;
 
-namespace interpret_nn {
+namespace hannk {
 
 class Add : public Generator<Add> {
 public:
@@ -92,6 +92,6 @@ public:
     }
 };
 
-}  // namespace interpret_nn
+}  // namespace hannk
 
-HALIDE_REGISTER_GENERATOR(interpret_nn::Add, Add)
+HALIDE_REGISTER_GENERATOR(hannk::Add, Add)

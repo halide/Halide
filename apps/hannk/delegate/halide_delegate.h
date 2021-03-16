@@ -22,7 +22,7 @@ struct TFL_CAPI_EXPORT HalideDelegateOptions {
 #endif
 };
 
-// Return a delegate that uses Halide interpret_nn for ops execution.
+// Return a delegate that uses hannk for ops execution.
 // Must outlive the interpreter.
 TFL_CAPI_EXPORT
 TfLiteDelegate *HalideDelegateCreate(const HalideDelegateOptions *options);

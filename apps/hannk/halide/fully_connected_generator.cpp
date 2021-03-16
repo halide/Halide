@@ -5,7 +5,7 @@ using namespace Halide;
 using namespace Halide::BoundaryConditions;
 using namespace Halide::ConciseCasts;
 
-namespace interpret_nn {
+namespace hannk {
 
 class FullyConnected : public Generator<FullyConnected> {
 public:
@@ -56,6 +56,6 @@ public:
     }
 };
 
-}  // namespace interpret_nn
+}  // namespace hannk
 
-HALIDE_REGISTER_GENERATOR(interpret_nn::FullyConnected, FullyConnected)
+HALIDE_REGISTER_GENERATOR(hannk::FullyConnected, FullyConnected)

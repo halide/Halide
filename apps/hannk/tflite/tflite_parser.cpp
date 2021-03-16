@@ -8,7 +8,7 @@
 #include "tflite_schema_generated.h"
 #include "util/error_util.h"
 
-namespace interpret_nn {
+namespace hannk {
 
 namespace {
 
@@ -366,4 +366,4 @@ Model parse_tflite_model_from_buffer(const void *buffer) {
     return parse_tflite_model(tflite::GetModel(buffer));
 }
 
-}  // namespace interpret_nn
+}  // namespace hannk

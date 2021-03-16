@@ -5,7 +5,7 @@ using namespace Halide;
 using namespace Halide::BoundaryConditions;
 using namespace Halide::ConciseCasts;
 
-namespace interpret_nn {
+namespace hannk {
 
 class AveragePool : public Generator<AveragePool> {
 public:
@@ -64,6 +64,6 @@ public:
     }
 };
 
-}  // namespace interpret_nn
+}  // namespace hannk
 
-HALIDE_REGISTER_GENERATOR(interpret_nn::AveragePool, AveragePool)
+HALIDE_REGISTER_GENERATOR(hannk::AveragePool, AveragePool)

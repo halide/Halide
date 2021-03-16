@@ -5,7 +5,7 @@
 
 #include "Halide.h"
 
-namespace interpret_nn {
+namespace hannk {
 
 // A tensor has the same requirements as a buffer in Halide by default, except
 // the min of the innermost dimension must also be 0.
@@ -44,6 +44,6 @@ Halide::Expr round_shift_right(const Halide::Expr &x, const Halide::Expr &shift)
 Halide::Expr multiply_quantized(
     const Halide::Expr &x, const Halide::Expr &quantized_multiplier, const Halide::Expr &shift);
 
-}  // namespace interpret_nn
+}  // namespace hannk
 
 #endif  // COMMON_HALIDE_H_

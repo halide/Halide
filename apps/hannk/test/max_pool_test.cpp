@@ -1,6 +1,6 @@
 #include "op_test_helper.h"
 
-namespace interpret_nn {
+namespace hannk {
 namespace {
 
 template<typename T>
@@ -102,9 +102,9 @@ struct MaxPoolOpTestFactory : public op_test::TestCaseFactory {
 };
 
 }  // namespace
-}  // namespace interpret_nn
+}  // namespace hannk
 
 int main(int argc, char **argv) {
-    interpret_nn::MaxPoolOpTestFactory factory;
-    return interpret_nn::op_test::op_test_main(argc, argv, factory);
+    hannk::MaxPoolOpTestFactory factory;
+    return hannk::op_test::op_test_main(argc, argv, factory);
 }

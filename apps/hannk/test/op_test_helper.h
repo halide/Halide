@@ -10,7 +10,7 @@
 #include "util/buffer_util.h"
 #include "util/error_util.h"
 
-namespace interpret_nn {
+namespace hannk {
 namespace op_test {
 
 inline std::chrono::duration<double> bench(std::function<void()> f) {
@@ -267,6 +267,6 @@ int op_test_main(int argc, char **argv, TestCaseFactory &factory) {
 }
 
 }  // namespace op_test
-}  // namespace interpret_nn
+}  // namespace hannk
 
 #endif  // OP_TEST_HELPER_H

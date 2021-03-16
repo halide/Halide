@@ -3,7 +3,7 @@
 
 #include "interpreter/model.h"
 
-namespace interpret_nn {
+namespace hannk {
 
 enum class ActivationFunction {
     None = 0,
@@ -65,7 +65,7 @@ public:
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
-        return ::interpret_nn::make_unique<AddOp>(
+        return ::hannk::make_unique<AddOp>(
             apply(map, input(0)), apply(map, input(1)),
             apply(map, output()), activation_);
     }
@@ -87,7 +87,7 @@ public:
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
-        return ::interpret_nn::make_unique<AveragePoolOp>(
+        return ::hannk::make_unique<AveragePoolOp>(
             apply(map, input()), apply(map, output()), stride_,
             filter_size_, padding_, activation_);
     }
@@ -114,7 +114,7 @@ public:
         for (int i = 0; i < input_count(); i++) {
             inputs.push_back(apply(map, input(i)));
         }
-        return ::interpret_nn::make_unique<ConcatenationOp>(
+        return ::hannk::make_unique<ConcatenationOp>(
             inputs, apply(map, output()), axis_, activation_);
     }
 
@@ -148,7 +148,7 @@ public:
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
-        return ::interpret_nn::make_unique<Conv2DOp>(
+        return ::hannk::make_unique<Conv2DOp>(
             apply(map, input()), apply(map, filter()), apply(map, bias()),
             apply(map, output()), stride_, dilation_, padding_, activation_);
     }
@@ -197,7 +197,7 @@ public:
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
-        return ::interpret_nn::make_unique<DepthwiseConv2DOp>(
+        return ::hannk::make_unique<DepthwiseConv2DOp>(
             apply(map, input()), apply(map, filter()), apply(map, bias()),
             apply(map, output()), stride_, dilation_, padding_, activation_);
     }
@@ -234,7 +234,7 @@ public:
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
-        return ::interpret_nn::make_unique<FullyConnectedOp>(
+        return ::hannk::make_unique<FullyConnectedOp>(
             apply(map, input()), apply(map, filter()), apply(map, bias()),
             apply(map, output()), activation_);
     }
@@ -272,7 +272,7 @@ public:
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
-        return ::interpret_nn::make_unique<MaxPoolOp>(
+        return ::hannk::make_unique<MaxPoolOp>(
             apply(map, input()), apply(map, output()), stride_, filter_size_, padding_, activation_);
     }
 
@@ -290,7 +290,7 @@ public:
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
-        return ::interpret_nn::make_unique<PadOp>(
+        return ::hannk::make_unique<PadOp>(
             apply(map, input(0)), apply(map, input(1)), apply(map, output()));
     }
 
@@ -313,7 +313,7 @@ public:
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
-        return ::interpret_nn::make_unique<ReshapeOp>(apply(map, input()), apply(map, output()), new_shape_);
+        return ::hannk::make_unique<ReshapeOp>(apply(map, input()), apply(map, output()), new_shape_);
     }
 
     Bounds infer_bounds(const Box &crop) const;
@@ -333,7 +333,7 @@ public:
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
-        return ::interpret_nn::make_unique<QuantizeOp>(apply(map, input()), apply(map, output()));
+        return ::hannk::make_unique<QuantizeOp>(apply(map, input()), apply(map, output()));
     }
 
     void execute(const Box &crop);
@@ -343,6 +343,6 @@ public:
     }
 };
 
-}  // namespace interpret_nn
+}  // namespace hannk
 
 #endif  // OPS_H_

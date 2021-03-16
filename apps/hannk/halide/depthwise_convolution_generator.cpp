@@ -5,7 +5,7 @@ using namespace Halide;
 using namespace Halide::BoundaryConditions;
 using namespace Halide::ConciseCasts;
 
-namespace interpret_nn {
+namespace hannk {
 
 class DepthwiseConvolution : public Generator<DepthwiseConvolution> {
 public:
@@ -166,7 +166,7 @@ public:
     }
 };
 
-}  // namespace interpret_nn
+}  // namespace hannk
 
-HALIDE_REGISTER_GENERATOR(interpret_nn::DepthwiseConvolution,
+HALIDE_REGISTER_GENERATOR(hannk::DepthwiseConvolution,
                           DepthwiseConvolution)

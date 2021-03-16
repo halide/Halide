@@ -16,7 +16,7 @@
 #include "tensorflow/lite/c/c_api.h"
 #include "tensorflow/lite/c/common.h"
 
-namespace interpret_nn {
+namespace hannk {
 
 using Halide::Runtime::Buffer;
 
@@ -305,7 +305,7 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
     }
 }
 
-}  // namespace interpret_nn
+}  // namespace hannk
 
 int main(int argc, char **argv) {
     int seed = time(nullptr);
@@ -350,7 +350,7 @@ int main(int argc, char **argv) {
     std::cout << "Using threads: " << threads << "\n";
 
     void *delegate_lib = nullptr;
-    interpret_nn::DelegateFactory delegate_factory;
+    hannk::DelegateFactory delegate_factory;
     if (use_delegate) {
         delegate_lib = dlopen("libHalideDelegate.so", RTLD_NOW | RTLD_LOCAL);
         if (!delegate_lib) {
@@ -365,7 +365,7 @@ int main(int argc, char **argv) {
     }
 
     for (auto f : files) {
-        interpret_nn::run_all(f, seed, threads, verbosity, use_delegate ? &delegate_factory : nullptr);
+        hannk::run_all(f, seed, threads, verbosity, use_delegate ? &delegate_factory : nullptr);
         std::cout << "\n";
     }
 

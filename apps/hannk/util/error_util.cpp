@@ -8,7 +8,7 @@
 #include <android/log.h>
 #endif
 
-namespace interpret_nn {
+namespace hannk {
 namespace internal {
 
 namespace {
@@ -42,7 +42,7 @@ void Logger::finish() noexcept(false) {
     std::cerr << msg.str();
 
 #if defined(__ANDROID__)
-    __android_log_write(android_severity[(int)severity], "interpret_nn", msg.str().c_str());
+    __android_log_write(android_severity[(int)severity], "hannk", msg.str().c_str());
 #endif
 
     // TODO: call iOS-specific logger here?
@@ -71,4 +71,4 @@ Checker::~Checker() noexcept(false) {
 }
 
 }  // namespace internal
-}  // namespace interpret_nn
+}  // namespace hannk

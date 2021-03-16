@@ -6,7 +6,7 @@
 
 #include "HalideBuffer.h"
 
-namespace interpret_nn {
+namespace hannk {
 
 // This type (and Box below) mirrors Halide::Interval, but is not symbolic.
 struct Interval {
@@ -117,6 +117,6 @@ bool subtract(Box &a, const Box &b);
 
 bool is_empty(const Box &a);
 
-}  // namespace interpret_nn
+}  // namespace hannk
 
 #endif  // INTERVAL_H

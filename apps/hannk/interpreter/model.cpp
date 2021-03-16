@@ -4,7 +4,7 @@
 #include <cmath>
 #include <list>
 
-namespace interpret_nn {
+namespace hannk {
 
 size_t sizeof_tensor_type(TensorType t) {
     switch (t) {
@@ -63,7 +63,7 @@ const char *to_string(TensorType t) {
     case TensorType::Bool:
         return "bool";
     default:
-        CHECK(0) << "Unhandled interpret_nn::TensorType";
+        CHECK(0) << "Unhandled hannk::TensorType";
         return "";
     }
 }
@@ -164,4 +164,4 @@ void Tensor::dump(std::ostream &os) const {
        << (is_allocated() ? " allocated " : " ") << name() << std::endl;
 }
 
-}  // namespace interpret_nn
+}  // namespace hannk
