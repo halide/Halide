@@ -380,7 +380,11 @@ class TrimNoOps : public IRMutator {
             return Evaluate::make(0);
         } else if (is_const_zero(is_no_op.condition)) {
             // This loop is definitely needed
-            return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            if (body.same_as(op->body)) {
+                return op;
+            } else {
+                return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            }
         }
 
         // The condition is something interesting. Try to see if we
