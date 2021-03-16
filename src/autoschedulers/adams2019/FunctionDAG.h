@@ -437,7 +437,6 @@ struct FunctionDAG {
             // from its owner Func. Used for printing source code
             // equivalent to a computed schedule.
             string accessor;
-            string lua_accessor; // Same as above for Lua schedules
             string python_accessor; // Same as above for Python schedules
         };
 

@@ -750,14 +750,11 @@ struct State {
         aslog(0) << "State with cost " << cost << ":\n";
         root->dump("", nullptr);
         aslog(0) << schedule_source;
-        aslog(0) << "----- Lua schedule -----";
-        aslog(0) << lua_schedule_source;
         aslog(0) << "----- Python schedule -----";
         aslog(0) << python_schedule_source;
     }
 
     string schedule_source;
-    string lua_schedule_source;
     string python_schedule_source;
 
     // Apply the schedule represented by this state to a Halide
@@ -767,31 +764,28 @@ struct State {
         StageMap<std::unique_ptr<LoopNest::StageScheduleState>> state_map;
         root->apply(LoopLevel::root(), state_map, params.parallelism, 0, nullptr, nullptr);
 
-        std::ostringstream src, lua_src, python_src;
+        std::ostringstream src, python_src;
 
         // Print handles for all the Funcs
         int i = (int)(dag.nodes.size() - 1);
         for (const auto &n : dag.nodes) {
             if (!n.is_input) {
                 src << "Func " << conform_name(n.func.name()) << " = pipeline.get_func(" << i << ");\n";
-                lua_src        << conform_name(n.func.name()) << " = pipeline:get_func(" << i << ")\n";
                 python_src     << conform_name(n.func.name()) << " = pipeline.get_func(" << i << ")\n";
             }
             i--;
         }
 
         // Gather all Vars and RVars so that we can declare them in the emitted source
-        map<string, string> vars, rvars, lua_vars, lua_rvars, python_vars, python_rvars;
+        map<string, string> vars, rvars, python_vars, python_rvars;
         for (auto &p : state_map) {
             for (auto &v : p.second->vars) {
                 if (v.exists) {
                     if (v.var.is_rvar) {
                         rvars.emplace(v.var.name(), v.accessor);
-                        lua_rvars.emplace(v.var.name(), v.lua_accessor);
                         python_rvars.emplace(v.var.name(), v.python_accessor);
                     } else {
                         vars.emplace(v.var.name(), v.accessor);
-                        lua_vars.emplace(v.var.name(), v.lua_accessor);
                         python_vars.emplace(v.var.name(), v.python_accessor);
                     }
                 }
@@ -812,24 +806,6 @@ struct State {
                     src << "RVar " << conform_name(p.first) << "(\"" << p.first << "\");\n";
                 } else {
                     src << "RVar " << conform_name(p.first) << "(" << p.second << ");\n";
-                }
-            }
-        }
-        if (!lua_vars.empty()) {
-            for (const auto &p : lua_vars) {
-                if (p.second.empty()) {
-                    lua_src << conform_name(p.first) << " = Var_new(\"" << p.first << "\")\n";
-                } else {
-                    lua_src << conform_name(p.first) << " = Var_new(" << p.second << ")\n";
-                }
-            }
-        }
-        if (!lua_rvars.empty()) {
-            for (const auto &p : lua_rvars) {
-                if (p.second.empty()) {
-                    lua_src << conform_name(p.first) << " = Rvar_new(\"" << p.first << "\")\n";
-                } else {
-                    lua_src << conform_name(p.first) << " = Rvar_new(" << p.second << ")\n";
                 }
             }
         }
@@ -880,7 +856,6 @@ struct State {
 
             if (p.second->vars.size() > 1) {
                 p.second->schedule_source << "\n    .reorder(";
-                p.second->lua_schedule_source << "\n    :reorder(";
                 p.second->python_schedule_source << " \\\n    .reorder(";
                 bool first = true;
                 for (auto &v : p.second->vars) {
@@ -888,21 +863,17 @@ struct State {
                         vars.push_back(v.var);
                         if (!first) {
                             p.second->schedule_source << ", ";
-                            p.second->lua_schedule_source << ", ";
                             p.second->python_schedule_source << ", ";
                         } else {
                             p.second->schedule_source << "{";
-                            p.second->lua_schedule_source << " ";
                             p.second->python_schedule_source << " ";
                         }
                         first = false;
                         p.second->schedule_source << conform_name(v.var.name());
-                        p.second->lua_schedule_source << conform_name(v.var.name());
                         p.second->python_schedule_source << conform_name(v.var.name());
                     }
                 }
                 p.second->schedule_source << "})";
-                p.second->lua_schedule_source << " )";
                 p.second->python_schedule_source << " )";
                 stage.reorder(vars);
             }
@@ -917,9 +888,6 @@ struct State {
                     p.second->schedule_source << "\n    .fuse(" << conform_name(parallel_vars[i].name())
                                               << ", " << conform_name(parallel_vars[i - 1].name())
                                               << ", " << conform_name(parallel_vars[i].name()) << ")";
-                    p.second->lua_schedule_source << "\n    :fuse(" << conform_name(parallel_vars[i].name())
-                                              << ", " << conform_name(parallel_vars[i - 1].name())
-                                              << ", " << conform_name(parallel_vars[i].name()) << ")";
                     p.second->python_schedule_source << " \\\n    .fuse(" << conform_name(parallel_vars[i].name())
                                               << ", " << conform_name(parallel_vars[i - 1].name())
                                               << ", " << conform_name(parallel_vars[i].name()) << ")";
@@ -927,14 +895,12 @@ struct State {
                 }
                 if (!parallel_vars.empty()) {
                     p.second->schedule_source << "\n    .parallel(" << conform_name(parallel_vars.back().name()) << ")";
-                    p.second->lua_schedule_source << "\n    :parallel(" << conform_name(parallel_vars.back().name()) << ")";
                     p.second->python_schedule_source << " \\\n    .parallel(" << conform_name(parallel_vars.back().name()) << ")";
                     stage.parallel(parallel_vars.back());
                 }
             } else {
                 for (const auto &v : parallel_vars) {
                     p.second->schedule_source << "\n    .parallel(" << conform_name(v.name()) << ")";
-                    p.second->lua_schedule_source << "\n    :parallel(" << conform_name(v.name()) << ")";
                     p.second->python_schedule_source << " \\\n    .parallel(" << conform_name(v.name()) << ")";
                     stage.parallel(v);
                 }
@@ -947,22 +913,18 @@ struct State {
                     std::swap(storage_vars[i], storage_vars[i - 1]);
                 }
                 p.second->schedule_source << "\n    .reorder_storage(";
-                p.second->lua_schedule_source << "\n    :reorder_storage(";
                 p.second->python_schedule_source << " \\\n    .reorder_storage(";
                 bool first = true;
                 for (const auto &v : storage_vars) {
                     if (!first) {
                         p.second->schedule_source << ", ";
-                        p.second->lua_schedule_source << ", ";
                         p.second->python_schedule_source << ", ";
                     }
                     first = false;
                     p.second->schedule_source << conform_name(v.name());
-                    p.second->lua_schedule_source << conform_name(v.name());
                     p.second->python_schedule_source << conform_name(v.name());
                 }
                 p.second->schedule_source << ")";
-                p.second->lua_schedule_source << ")";
                 p.second->python_schedule_source << ")";
                 Func(p.first->node->func).reorder_storage(storage_vars);
             }
@@ -971,16 +933,12 @@ struct State {
             src << p.first->name
                 << p.second->schedule_source.str()
                 << ";\n";
-            lua_src << p.first->name
-                << p.second->lua_schedule_source.str()
-                << "\n";
             python_src << p.first->name
                 << p.second->python_schedule_source.str()
                 << "\n\n";
         }
         // Sanitize the names of things to make them legal source code.
         schedule_source = src.str();
-        lua_schedule_source = lua_src.str();
         python_schedule_source = python_src.str();
         auto sanitize = [](std::string& source) {
             bool in_quotes = false;
@@ -992,7 +950,6 @@ struct State {
             }
         };
         sanitize(schedule_source);
-        sanitize(lua_schedule_source);
         sanitize(python_schedule_source);
     }
 };
@@ -1415,17 +1372,6 @@ void generate_schedule(const std::vector<Function> &outputs,
         f.close();
         internal_assert(!f.fail()) << "Failed to write " << schedule_file;
     }
-    string lua_schedule_file = get_env_variable("HL_LUA_SCHEDULE_FILE");
-    if (!lua_schedule_file.empty()) {
-        user_warning << "HL_LUA_SCHEDULE_FILE is deprecated; use the schedule output from Generator instead\n";
-        aslog(1) << "Writing schedule to " << lua_schedule_file << "...\n";
-        std::ofstream f(lua_schedule_file);
-        f << "-- --- BEGIN machine-generated schedule\n"
-          << optimal->lua_schedule_source
-          << "-- --- END machine-generated schedule\n";
-        f.close();
-        internal_assert(!f.fail()) << "Failed to write " << lua_schedule_file;
-    }
     string python_schedule_file = get_env_variable("HL_PYTHON_SCHEDULE_FILE");
     if (!python_schedule_file.empty()) {
         user_warning << "HL_PYTHON_SCHEDULE_FILE is deprecated; use the schedule output from Generator instead\n";
@@ -1451,7 +1397,6 @@ void generate_schedule(const std::vector<Function> &outputs,
     if (auto_scheduler_results) {
         auto_scheduler_results->scheduler_name = "Adams2019";
         auto_scheduler_results->schedule_source = optimal->schedule_source;
-        auto_scheduler_results->lua_schedule_source = optimal->lua_schedule_source;
         auto_scheduler_results->python_schedule_source = optimal->python_schedule_source;
         {
             std::ostringstream out;

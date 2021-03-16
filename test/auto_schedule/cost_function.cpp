@@ -55,11 +55,6 @@ int main(int argc, char **argv) {
               << results.schedule_source
               << "\n******************************************\n\n";
 
-    std::cout << "\n\n******************************************\nLUA SCHEDULE:\n"
-              << "******************************************\n"
-              << results.lua_schedule_source
-              << "\n******************************************\n\n";
-
     std::cout << "\n\n******************************************\nPYTHON SCHEDULE:\n"
               << "******************************************\n"
               << results.python_schedule_source

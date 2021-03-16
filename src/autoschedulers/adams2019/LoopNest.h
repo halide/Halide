@@ -221,7 +221,6 @@ struct LoopNest {
             // Source code to access this Var/RVar. Used for printing
             // valid Halide source for this schedule.
             string accessor;
-            string lua_accessor; // same as above for Lua schedules
             string python_accessor; // same as above for Python schedules
 
             // Our estimate of the extent of this var. This is exact
@@ -248,7 +247,6 @@ struct LoopNest {
         std::vector<FuncVar> vars;
 
         std::ostringstream schedule_source;
-        std::ostringstream lua_schedule_source;
         std::ostringstream python_schedule_source;
     };
 

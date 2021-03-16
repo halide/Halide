@@ -768,7 +768,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &cerr) {
         " -e  A comma separated list of files to emit. Accepted values are:\n"
         "     [assembly, bitcode, c_header, c_source, cpp_stub, featurization,\n"
         "      llvm_assembly, object, python_extension, pytorch_wrapper, registration,\n"
-        "      schedule, lua_schedule, static_library, stmt, stmt_html, compiler_log].\n"
+        "      schedule, python_schedule, static_library, stmt, stmt_html, compiler_log].\n"
         "     If omitted, default value is [c_header, static_library, registration].\n"
         "\n"
         " -p  A comma-separated list of shared libraries that will be loaded before the\n"

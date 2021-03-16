@@ -227,11 +227,9 @@ AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_na
 
     std::string schedule_file_main = "apply_schedule_" + simplify_name(outputs()[0].name());
     std::string python_schedule_file = schedule_file_main + ".py";
-    std::string lua_schedule_file = schedule_file_main + ".lua";
     debug(0) << "Writing schedule to " << python_schedule_file << "...\n";
     std::string cpp_schedule_file = schedule_file_main + "_cpp.h";
     compile_to({ {Output::python_schedule, python_schedule_file},
-                 {Output::lua_schedule, lua_schedule_file},
                  {Output::schedule, cpp_schedule_file} },
                infer_arguments(), "", target);
     
@@ -276,7 +274,7 @@ void Pipeline::compile_to(const std::map<Output, std::string> &output_files,
                           const string &fn_name,
                           const Target &target) {
     auto m = compile_to_module(args, fn_name, target);
-    m.set_auto_scheduler_results(autoscheduler_results); // we do this so that we can output fully formed Python, Lua, and C++ schedules
+    m.set_auto_scheduler_results(autoscheduler_results); // we do this so that we can output fully formed Python and C++ schedules
     m.compile(output_files);
 }
 

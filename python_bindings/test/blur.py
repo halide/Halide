@@ -46,8 +46,8 @@ def get_blur(input_param):
     
     print('Schedule:')
     print(result.schedule_source)
-    print('Lua Schedule:')
-    print(result.lua_schedule_source)
+    print('Python Schedule:')
+    print(result.python_schedule_source)
 
     return blur_y
 
