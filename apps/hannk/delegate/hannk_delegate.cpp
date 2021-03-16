@@ -33,7 +33,7 @@
 namespace hannk {
 namespace {
 
-constexpr char kDelegateName[] = "HANNK";
+constexpr char kDelegateName[] = "HannkDelegate";
 constexpr int kDelegateVersion = 1;
 
 // -------------------- Some glue code adapted from tfite/c/common.c

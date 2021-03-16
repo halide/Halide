@@ -352,7 +352,7 @@ int main(int argc, char **argv) {
     void *delegate_lib = nullptr;
     hannk::DelegateFactory delegate_factory;
     if (use_delegate) {
-        delegate_lib = dlopen("libHalideDelegate.so", RTLD_NOW | RTLD_LOCAL);
+        delegate_lib = dlopen("libHannkDelegate.so", RTLD_NOW | RTLD_LOCAL);
         if (!delegate_lib) {
             std::cerr << "Unable to open Halide Delegate library: " << dlerror() << "\n";
             return 1;

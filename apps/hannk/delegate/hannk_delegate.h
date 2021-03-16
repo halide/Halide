@@ -1,5 +1,5 @@
-#ifndef DELEGATE_HALIDE_DELEGATE_H_
-#define DELEGATE_HALIDE_DELEGATE_H_
+#ifndef DELEGATE_HANNK_DELEGATE_H_
+#define DELEGATE_HANNK_DELEGATE_H_
 
 #include "tensorflow/lite/c/c_api.h"
 
@@ -7,8 +7,8 @@
 extern "C" {
 #endif  // __cplusplus
 
-// Use HalideDelegateOptionsDefault() for Default options.
-struct TFL_CAPI_EXPORT HalideDelegateOptions {
+// Use HannkDelegateOptionsDefault() for Default options.
+struct TFL_CAPI_EXPORT HannkDelegateOptions {
     // Verbosity to use.
     // 0 means "only bare minimum TFKERNEL logs, etc"
     // 1 means "also do LOG(INFO)"
@@ -16,7 +16,7 @@ struct TFL_CAPI_EXPORT HalideDelegateOptions {
     int verbosity;
 
 #ifdef __cplusplus
-    HalideDelegateOptions()
+    HannkDelegateOptions()
         : verbosity(0) {
     }
 #endif
@@ -25,18 +25,18 @@ struct TFL_CAPI_EXPORT HalideDelegateOptions {
 // Return a delegate that uses hannk for ops execution.
 // Must outlive the interpreter.
 TFL_CAPI_EXPORT
-TfLiteDelegate *HalideDelegateCreate(const HalideDelegateOptions *options);
+TfLiteDelegate *HannkDelegateCreate(const HannkDelegateOptions *options);
 
-// Returns HalideDelegateOptions populated with default values.
+// Returns HannkDelegateOptions populated with default values.
 TFL_CAPI_EXPORT
-void HalideDelegateOptionsDefault(HalideDelegateOptions *options);
+void HannkDelegateOptionsDefault(HannkDelegateOptions *options);
 
 // Do any needed cleanup and delete 'delegate'.
 TFL_CAPI_EXPORT
-void HalideDelegateDelete(TfLiteDelegate *delegate);
+void HannkDelegateDelete(TfLiteDelegate *delegate);
 
 #ifdef __cplusplus
 }
 #endif  // __cplusplus
 
-#endif  // DELEGATE_HALIDE_DELEGATE_H_
+#endif  // DELEGATE_HANNK_DELEGATE_H_

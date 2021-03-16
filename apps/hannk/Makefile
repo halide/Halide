@@ -174,11 +174,11 @@ TFLITE_PARSER_DEPS = \
 
 TFLITE_INCLUDES_FLAGS ?= -I$(HOME)/GitHub/tensorflow -I$(MAKEFILE_DIR)
 
-$(BIN)/%/halide_delegate.o: delegate/halide_delegate.cpp
+$(BIN)/%/hannk_delegate.o: delegate/hannk_delegate.cpp
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(TFLITE_INCLUDES_FLAGS) $(UTIL_CXXFLAGS) -c $< -o $@
 
-$(BIN)/%/halide_delegate_adaptor.o: delegate/halide_delegate_adaptor.cpp
+$(BIN)/%/hannk_delegate_adaptor.o: delegate/hannk_delegate_adaptor.cpp
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(TFLITE_INCLUDES_FLAGS) $(UTIL_CXXFLAGS) -c $< -o $@
 
@@ -191,7 +191,7 @@ DELEGATE_LD_FLAGS += -Wl,-exported_symbols_list delegate/exported_symbols.osx
 else
 # Assume Desktop Linux
 DELEGATE_LD_FLAGS += -Wl,--version-script=delegate/exported_symbols.ldscript
-DELEGATE_LD_FLAGS += -Wl,-soname,libHalideDelegate.so
+DELEGATE_LD_FLAGS += -Wl,-soname,libHannkDelegate.so
 endif
 
 else ifeq (arm-64-android,$(findstring arm-64-android,$(HL_TARGET)))
@@ -199,7 +199,7 @@ else ifeq (arm-64-android,$(findstring arm-64-android,$(HL_TARGET)))
 # Don't include $(LDFLAGS) here, it includes pthreads, which we don't want
 DELEGATE_LD_FLAGS=-static-libstdc++
 DELEGATE_LD_FLAGS += -Wl,--version-script=delegate/exported_symbols.ldscript
-DELEGATE_LD_FLAGS += -Wl,-soname,libHalideDelegate.so
+DELEGATE_LD_FLAGS += -Wl,-soname,libHannkDelegate.so
 
 else
 
@@ -210,15 +210,15 @@ DELEGATE_LD_FLAGS ?= ERROR_TODO
 endif
 
 # Note: delegates are apparently always .so on OSX (never .dylib)
-$(BIN)/%/libHalideDelegate.so: \
-		$(BIN)/%/halide_delegate.o \
-		$(BIN)/%/halide_delegate_adaptor.o \
+$(BIN)/%/libHannkDelegate.so: \
+		$(BIN)/%/hannk_delegate.o \
+		$(BIN)/%/hannk_delegate_adaptor.o \
 		$(INTERPRETER_DEPS) \
 		$(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) -shared $^ $(DELEGATE_LD_FLAGS) -o $@
 
-delegate: $(BIN)/$(HL_TARGET)/libHalideDelegate.so
+delegate: $(BIN)/$(HL_TARGET)/libHannkDelegate.so
 
 # ---------------------- test
 
@@ -325,7 +325,7 @@ ifneq (,$(findstring host,$(HL_TARGET)))
 TENSORFLOW_BASE ?= $(HOME)/GitHub/tensorflow
 TFLITE_INCLUDES ?= $(TENSORFLOW_BASE)
 TFLITE_SHARED_LIBRARY ?= $(TENSORFLOW_BASE)/bazel-bin/tensorflow/lite/c/libtensorflowlite_c.$(SHARED_EXT)
-# Point at the TFLite path, but also the exe directory (for libHalideDelegate.so)
+# Point at the TFLite path, but also the exe directory (for libHannkDelegate.so)
 TFLITE_LDFLAGS=-Wl,-rpath,$(dir $(TFLITE_SHARED_LIBRARY)),-rpath,$(dir $@)
 
 else ifeq (arm-64-android,$(findstring arm-64-android,$(HL_TARGET)))
@@ -355,7 +355,7 @@ endif
 
 
 # To build for Android, use `HL_TARGET=arm-64-android make compare_vs_tflite`
-$(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UTIL_DEPS) $(TFLITE_SHARED_LIBRARY) $(BIN)/$(HL_TARGET)/libHalideDelegate.so
+$(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UTIL_DEPS) $(TFLITE_SHARED_LIBRARY) $(BIN)/$(HL_TARGET)/libHannkDelegate.so
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -I$(TFLITE_INCLUDES) $(TFLITE_LDFLAGS) $(filter %.cpp %.o %.a %.so %.$(SHARED_EXT),$^) -o $@ $(LDFLAGS-$*)
 

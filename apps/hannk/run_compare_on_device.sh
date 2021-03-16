@@ -17,7 +17,7 @@ export HL_TARGET=${HL_TARGET:-arm-64-android}
 
 export TFLITE_SHARED_LIBRARY=${TFLITE_SHARED_LIBRARY:-${APP_DIR}/bin/tflite-android/jni/arm64-v8a/libtensorflowlite_jni.so}
 
-BUILD_TARGETS="bin/${HL_TARGET}/compare_vs_tflite bin/${HL_TARGET}/libHalideDelegate.so"
+BUILD_TARGETS="bin/${HL_TARGET}/compare_vs_tflite bin/${HL_TARGET}/libHannkDelegate.so"
 DEVICE_DIR=/data/local/tmp/halide/compare_vs_tflite
 BINARIES_TO_PUSH="${APP_DIR}/${BUILD_TARGET} ${APP_DIR}/${BUILD_TARGETS}"
 
