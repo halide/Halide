@@ -554,7 +554,11 @@ class HoistIfStatements : public IRMutator {
                 return IfThenElse::make(i->condition, s);
             }
         }
-        return LetStmt::make(op->name, op->value, body);
+        if (body.same_as(op->body)) {
+            return op;
+        } else {
+            return LetStmt::make(op->name, op->value, body);
+        }
     }
 
     Stmt visit(const For *op) override {
@@ -568,8 +572,12 @@ class HoistIfStatements : public IRMutator {
                 return IfThenElse::make(i->condition, s);
             }
         }
-        return For::make(op->name, op->min, op->extent,
-                         op->for_type, op->device_api, body);
+        if (body.same_as(op->body)) {
+            return op;
+        } else {
+            return For::make(op->name, op->min, op->extent,
+                             op->for_type, op->device_api, body);
+        }
     }
 
     Stmt visit(const ProducerConsumer *op) override {
@@ -581,7 +589,11 @@ class HoistIfStatements : public IRMutator {
                 return IfThenElse::make(i->condition, s);
             }
         }
-        return ProducerConsumer::make(op->name, op->is_producer, body);
+        if (body.same_as(op->body)) {
+            return op;
+        } else {
+            return ProducerConsumer::make(op->name, op->is_producer, body);
+        }
     }
 
     Stmt visit(const IfThenElse *op) override {
@@ -595,7 +607,12 @@ class HoistIfStatements : public IRMutator {
                 }
             }
         }
-        return IfThenElse::make(op->condition, then_case, mutate(op->else_case));
+        Stmt else_case = mutate(op->else_case);
+        if (then_case.same_as(op->then_case) && else_case.same_as(op->else_case)) {
+            return op;
+        } else {
+            return IfThenElse::make(op->condition, then_case, else_case);
+        }
     }
 
     Stmt visit(const Allocate *op) override {
@@ -609,9 +626,13 @@ class HoistIfStatements : public IRMutator {
                 return IfThenElse::make(i->condition, s);
             }
         }
-        return Allocate::make(op->name, op->type, op->memory_type,
-                              op->extents, op->condition, body,
-                              op->new_expr, op->free_function);
+        if (body.same_as(op->body)) {
+            return op;
+        } else {
+            return Allocate::make(op->name, op->type, op->memory_type,
+                                  op->extents, op->condition, body,
+                                  op->new_expr, op->free_function);
+        }
     }
 
     Stmt visit(const Block *op) override {
@@ -634,6 +655,8 @@ class HoistIfStatements : public IRMutator {
                 s = Block::make(s, b->rest);
             }
             return s;
+        } else if (first.same_as(op->first) && rest.same_as(op->rest)) {
+            return op;
         } else {
             return Block::make(first, rest);
         }
