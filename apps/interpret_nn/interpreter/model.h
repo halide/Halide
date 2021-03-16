@@ -20,8 +20,6 @@ std::unique_ptr<T> make_unique(Args &&...args) {
 template<typename T>
 using HalideBuffer = Halide::Runtime::Buffer<T>;
 
-// TODO: renamed to "TensorType" to avoid some warnings between this and the type()
-// method and to avoid confusion with Halide::Type. Yuck. Need a better name.
 enum class TensorType {
     // Note that these are deliberately ordered and valued to match tflite's
     // similar enum; there is no reason these types *must* have the same values,
