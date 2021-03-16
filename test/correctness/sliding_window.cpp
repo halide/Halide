@@ -239,9 +239,8 @@ int main(int argc, char **argv) {
         Buffer<int> im = g.realize({100});
 
         // f should be able to tell that it only needs to compute each value once
-        int correct = store_in == MemoryType::Register ? 100 : 34;
-        if (count != correct) {
-            printf("f was called %d times instead of %d times\n", count, correct);
+        if (count != 34) {
+            printf("f was called %d times instead of %d times\n", count, 34);
             return -1;
         }
     }
@@ -296,7 +295,7 @@ int main(int argc, char **argv) {
 
         Buffer<int> im = g.realize({100});
         // TODO: We shouldn't need the extra calls for registers.
-        int correct = store_in == MemoryType::Register ? 200 : 104;
+        int correct = store_in == MemoryType::Register ? 152 : 104;
         if (count != correct) {
             printf("f was called %d times instead of %d times\n", count, correct);
             return -1;
