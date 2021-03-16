@@ -36,7 +36,6 @@ all: build
 build: \
 	$(BIN)/$(HL_TARGET)/benchmark \
 	$(BIN)/$(HL_TARGET)/compare_vs_tflite \
-	$(BIN)/host/tflite_exploder \
 	build_test_ops
 
 test: test_ops
@@ -157,11 +156,6 @@ $(BIN)/schema/tflite_schema.fbs:
 $(BIN)/schema/tflite_schema_generated.h: $(BIN)/schema/tflite_schema.fbs
 	@mkdir -p $(@D)
 	$(FLATC) --cpp --no-includes -o $(@D) $<
-
-# This include extra API needed only by utilities that do flatbuffer surgery (eg tflite_exploder)
-$(BIN)/schema/tflite_schema_direct_generated.h: $(BIN)/schema/tflite_schema.fbs
-	@mkdir -p $(@D)
-	$(FLATC) --cpp --no-includes --gen-object-api --filename-suffix _direct_generated -o $(@D) $<
 
 TFLITE_SCHEMA_CXXFLAGS = -I$(BIN)/schema
 
@@ -298,11 +292,6 @@ test_ops: build_test_ops
 $(BIN)/%/benchmark: benchmark.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
-
-# Utility to explode a tflite pipeline into individual ops for testing.
-$(BIN)/%/tflite_exploder: tflite_exploder.cpp $(BIN)/schema/tflite_schema_direct_generated.h $(UTIL_DEPS)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(APP_CXXFLAGS) $(TFLITE_SCHEMA_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS)
 
 # compare_vs_tflite requires the tflite headers and library.
 #
