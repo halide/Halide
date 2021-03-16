@@ -313,8 +313,7 @@ int main(int argc, char **argv) {
         // aligned to the end of the original loop (and extending before the
         // min if necessary).
         Var xi("xi");
-        f.store_root().compute_at(g, x).store_in(MemoryType::Register)
-            .split(x, x, xi, 8).vectorize(xi, 4).unroll(xi);
+        f.store_root().compute_at(g, x).store_in(MemoryType::Register).split(x, x, xi, 8).vectorize(xi, 4).unroll(xi);
         g.vectorize(x, 4, TailStrategy::RoundUp);
 
         Buffer<int> im = g.realize({100});
