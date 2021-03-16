@@ -1,6 +1,3 @@
-#include <pybind11/embed.h>
-namespace py = pybind11;
-
 #include <algorithm>
 #include <atomic>
 #include <utility>
@@ -20,8 +17,6 @@ namespace py = pybind11;
 #include "PrintLoopNest.h"
 #include "RealizationOrder.h"
 #include "WasmExecutor.h"
-
-#include "/home/rioffe/projects/inteon/halogen/lua_scheduler/include/lua_scheduler/lua_scheduler.h"
 
 using namespace Halide::Internal;
 
@@ -243,61 +238,6 @@ AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_na
     return autoscheduler_results;
 }
 
-void Pipeline::apply_lua_schedule(const Target &target) {
-    printf("In Pipeline::apply_lua_schedule: pipeline address is %p\n", this);
-    std::string schedule_file_main = "apply_schedule_" + simplify_name(outputs()[0].name());
-    string lua_schedule_file = schedule_file_main + ".lua";
-    string path_to_lua_scheduler = get_env_variable("HL_LUA_SCHEDULER_PATH");
-    if (path_to_lua_scheduler.empty())
-        path_to_lua_scheduler = "liblua_scheduler.so";
-    std::cout << "lua scheduler is " << path_to_lua_scheduler << std::endl;
-    Halide::load_plugin(path_to_lua_scheduler);
-    static LuaScheduler* lua_scheduler = get_lua_scheduler(path_to_lua_scheduler);
-    string lua_entrypoint = schedule_file_main;
-    std::cout << "lua entrypoint: " << lua_entrypoint << std::endl;
-
-    if (lua_scheduler){
-        lua_scheduler->reset();
-        lua_scheduler->set_log_callback([](LuaSchedulerCallbackID id, const std::string & msg){
-            std::cout << "Lua: " << msg << "\n";
-        });
-        lua_scheduler->set_metadata({"lua", "0", "1", {}});
-        bool set_import_root_success = lua_scheduler->set_import_root("."); // look for luad_schedule file in the current directory.
-        if (!set_import_root_success) {
-            debug(0) << "Pipeline::apply_lua_schedule: set_import_root to . failed!\n";
-            throw;
-        }
-        bool load_file_success = lua_scheduler->load_file(lua_schedule_file);
-        if (!load_file_success) {
-            debug(0) << "Pipeline::apply_lua_schedule: load_file failed to load file " << lua_schedule_file << "\n";
-            throw;
-        }
-        lua_scheduler->set_entrypoint(lua_entrypoint);
-        bool apply_lua_schedule_success = lua_scheduler->apply_lua_schedule(*this, target);
-        if (!apply_lua_schedule_success) {
-            debug(0) << "Pipeline::apply_lua_schedule: apply_lua_schedule failed!\n";
-            throw;
-        }
-        debug(0) << "Pipeline::apply_lua_schedule: we are done here!\n";
-    }  
-}
-
-void Pipeline::apply_python_schedule(const Halide::Target &target) {
-    auto apply_schedule = "apply_schedule_" + simplify_name(outputs()[0].name());
-
-    auto applicator = [&](){
-        py::module m = py::module::import(apply_schedule.c_str());
-        m.attr(apply_schedule.c_str())(*this, target);
-    };
-     
-    try {
-        py::scoped_interpreter guard{};
-        applicator();
-    } catch(...) {
-        applicator();
-    }
-}
-
 AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) {
     return auto_schedule(get_default_autoscheduler_name(), target, arch_params);
 }
@@ -316,7 +256,6 @@ void Pipeline::set_default_autoscheduler_name(const std::string &autoscheduler_n
 }
 
 Func Pipeline::get_func(size_t index) {
-    printf("in Pipeline::get_func: pipeline address is %p\n", this);
     // Compute an environment
     std::map<string, Function> env;
     for (const Function &f : contents->outputs) {

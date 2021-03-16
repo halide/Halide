@@ -31,8 +31,8 @@ def main():
     print(result.python_schedule_source)
 
     # applying the schedule
-    #print("Applying Lua Schedule...")
-    #p.apply_lua_schedule(target)
+    #print("Applying Python Schedule...")
+    #p.apply_python_schedule(target)
 
     print("JIT Compiling...")
     p.compile_jit() # compile

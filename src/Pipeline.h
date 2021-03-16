@@ -191,12 +191,6 @@ public:
                                        const Target &target,
                                        const MachineParams &arch_params = MachineParams::generic());
     
-    /** Apply lua schedule to a pipeline - coming thru environment variable for now */
-    void apply_lua_schedule(const Halide::Target &target);
-
-    /** Apply python schedule to a pipeline */
-    void apply_python_schedule(const Halide::Target &target);
-
     /** Add a new the autoscheduler method with the given name. Does not affect the current default autoscheduler.
      * It is an error to call this with the same name multiple times. */
     static void add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler);

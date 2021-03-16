@@ -1,3 +1,4 @@
+#include <pybind11/embed.h>
 #include "PyPipeline.h"
 
 #include <utility>
@@ -53,9 +54,24 @@ void define_pipeline(py::module &m) {
                  py::arg("autoscheduler_name"), py::arg("target"), py::arg("machine_params") = MachineParams::generic())
             .def("auto_schedule", (AutoSchedulerResults(Pipeline::*)(const Target &, const MachineParams &)) & Pipeline::auto_schedule,
                  py::arg("target"), py::arg("machine_params") = MachineParams::generic())
-            .def("apply_lua_schedule", (void (Pipeline::*)(const Target&))&Pipeline::apply_lua_schedule, 
-                 py::arg("target"))
-            .def("apply_python_schedule", (void (Pipeline::*)(const Target&))&Pipeline::apply_python_schedule, 
+            .def("apply_python_schedule", [](Pipeline& pipeline, const Target& target) {
+                    auto simplify_name = [](const std::string &s) -> std::string {
+                        // Trim the uniqueness $n suffixes on variables.
+                        return s.substr(0, s.rfind('$'));
+                    };
+                    auto apply_schedule = "apply_schedule_" + simplify_name(pipeline.outputs()[0].name());
+
+                    auto applicator = [&](){
+                        py::module m = py::module::import(apply_schedule.c_str());
+                        m.attr(apply_schedule.c_str())(pipeline, target);
+                    };
+                    try {
+                        py::scoped_interpreter guard{};
+                        applicator();
+                    } catch(...) {
+                        applicator();
+                    }
+                 }, 
                  py::arg("target"))
 
             .def_static("set_default_autoscheduler_name", &Pipeline::set_default_autoscheduler_name,

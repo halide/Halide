@@ -30,8 +30,8 @@ def main():
     target = hl.Target('x86-64-linux-no_runtime')
     
     # applying the schedule
-    print("Applying python Schedule...")
-    #p.apply_lua_schedule(target)
+    print("Applying Python Schedule...")
+    #p.apply_python_schedule(target)
     ast.apply_schedule_test3(p, target)
     print("Loop nest!")
     consumer.print_loop_nest()

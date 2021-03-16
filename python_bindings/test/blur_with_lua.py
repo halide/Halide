@@ -25,8 +25,8 @@ def main():
     blur_y.print_loop_nest()
 
     # applying the schedule
-    print("Applying Lua Schedule...")
-    p.apply_lua_schedule(target)
+    print("Applying Python Schedule...")
+    p.apply_python_schedule(target)
     print("Loop nest!")
     blur_y.print_loop_nest()
 
