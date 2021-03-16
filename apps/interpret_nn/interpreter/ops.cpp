@@ -47,7 +47,6 @@ struct QuantizedMulAndShift {
     int multiplier, shift;
 };
 
-// Adapted from tflite
 QuantizedMulAndShift get_quantized_mul_and_shift(double double_multiplier) {
     if (double_multiplier == 0.) {
         return {0, 0};
@@ -71,7 +70,6 @@ QuantizedMulAndShift get_quantized_mul_and_shift(double double_multiplier) {
     return {(int)q_fixed, shift};
 }
 
-// Adapted from tflite
 QuantizedMulAndShift get_quantized_mul_and_shift_smaller_than_one(double double_multiplier) {
     assert(double_multiplier >= 0.0 && double_multiplier < 1.0);
     auto result = get_quantized_mul_and_shift(double_multiplier);
@@ -83,7 +81,6 @@ struct MinMax {
     int min, max;
 };
 
-// Adapted from tfmini
 MinMax get_quantized_min_max(ActivationFunction activation, int zero_point, double scale) {
     double real_activation_min = 0.0;
     double real_activation_max = 0.0;
