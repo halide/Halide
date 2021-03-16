@@ -83,7 +83,6 @@ struct Checker final {
     template<typename T>
     Checker &operator<<(const T &x) {
         logger << x;
-        ;
         return *this;
     }
 
