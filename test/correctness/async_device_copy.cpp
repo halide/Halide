@@ -4,14 +4,14 @@
 using namespace Halide;
 
 // Return zero, slowly
-Expr expensive_zero(Expr x, Expr y, Expr t, int n) {
+Expr expensive_zero(int seed, Expr x, Expr y, Expr t, int n) {
     // Count how many Fermat's last theorem counterexamples we can find using n trials.
     RDom r(0, n);
     Func a, b, c;
     Var z;
-    a(x, y, t, z) = random_int() % 1024;
-    b(x, y, t, z) = random_int() % 1024;
-    c(x, y, t, z) = random_int() % 1024;
+    a(x, y, t, z) = random_int(seed) % 1024;
+    b(x, y, t, z) = random_int(seed) % 1024;
+    c(x, y, t, z) = random_int(seed) % 1024;
     return sum(select(pow(a(x, y, t, r), 3) + pow(b(x, y, t, r), 3) == pow(c(x, y, t, r), 3), 1, 0));
 }
 
@@ -28,6 +28,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    // We want different tests tests every time, to increase coverage.
+    // We also report the seed to enable reproducing failures.
+    int seed = argc > 1 ? atoi(argv[1]) : time(nullptr);
+    std::cout << "Random seed: " << seed << "\n";
+
     // Compute frames on GPU/CPU, and then sum then on
     // CPU/GPU. async() lets us overlap the CPU computation with the
     // copies.
@@ -37,7 +42,7 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < 4; i++) {
         Func frames;
-        frames(x, y, t) = expensive_zero(x, y, t, 1) + ((x + y) % 8) + t;
+        frames(x, y, t) = expensive_zero(seed, x, y, t, 1) + ((x + y) % 8) + t;
 
         Func avg;
         avg(x, y) += frames(x, y, r);
