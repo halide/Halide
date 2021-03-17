@@ -515,6 +515,8 @@ void State::dump() const {
     aslog(0) << "State with cost " << cost << ":\n";
     root->dump("", nullptr);
     aslog(0) << schedule_source;
+    aslog(0) << "----- Python schedule -----";
+    aslog(0) << python_schedule_source;
 }
 
 // Apply the schedule represented by this state to a Halide
@@ -524,26 +526,29 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params) 
     StageMap<std::unique_ptr<LoopNest::StageScheduleState>> state_map;
     root->apply(LoopLevel::root(), state_map, params.parallelism, 0, nullptr, nullptr);
 
-    std::ostringstream src;
+    std::ostringstream src, python_src;
 
     // Print handles for all the Funcs
     int i = (int)(dag.nodes.size() - 1);
     for (const auto &n : dag.nodes) {
         if (!n.is_input) {
-            src << "Func " << n.func.name() << " = pipeline.get_func(" << i << ");\n";
+            src << "Func " << conform_name(n.func.name()) << " = pipeline.get_func(" << i << ");\n";
+            python_src     << conform_name(n.func.name()) << " = pipeline.get_func(" << i << ")\n";
         }
         i--;
     }
 
     // Gather all Vars and RVars so that we can declare them in the emitted source
-    map<string, string> vars, rvars;
+    map<string, string> vars, rvars, python_vars, python_rvars;
     for (auto &p : state_map) {
         for (auto &v : p.second->vars) {
             if (v.exists) {
                 if (v.var.is_rvar) {
                     rvars.emplace(v.var.name(), v.accessor);
+                    python_rvars.emplace(v.var.name(), v.python_accessor);
                 } else {
                     vars.emplace(v.var.name(), v.accessor);
+                    python_vars.emplace(v.var.name(), v.python_accessor);
                 }
             }
         }
@@ -551,18 +556,36 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params) 
     if (!vars.empty()) {
         for (const auto &p : vars) {
             if (p.second.empty()) {
-                src << "Var " << p.first << "(\"" << p.first << "\");\n";
+                src << "Var " << conform_name(p.first) << "(\"" << p.first << "\");\n";
             } else {
-                src << "Var " << p.first << "(" << p.second << ");\n";
+                src << "Var " << conform_name(p.first) << "(" << p.second << ");\n";
             }
         }
     }
     if (!rvars.empty()) {
         for (const auto &p : rvars) {
             if (p.second.empty()) {
-                src << "RVar " << p.first << "(\"" << p.first << "\");\n";
+                src << "RVar " << conform_name(p.first) << "(\"" << p.first << "\");\n";
             } else {
-                src << "RVar " << p.first << "(" << p.second << ");\n";
+                src << "RVar " << conform_name(p.first) << "(" << p.second << ");\n";
+            }
+        }
+    }
+   if (!python_vars.empty()) {
+        for (const auto &p : python_vars) {
+            if (p.second.empty()) {
+                python_src << conform_name(p.first) << " = hl.Var(\"" << p.first << "\")\n";
+            } else {
+                python_src << conform_name(p.first) << " = hl.Var(" << p.second << ")\n";
+            }
+        }
+    }
+    if (!python_rvars.empty()) {
+        for (const auto &p : python_rvars) {
+            if (p.second.empty()) {
+                python_src << conform_name(p.first) << " = hl.RVar(\"" << p.first << "\")\n";
+            } else {
+                python_src << conform_name(p.first) << " = hl.RVar(" << p.second << ")\n";
             }
         }
     }
@@ -595,20 +618,25 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params) 
 
         if (p.second->vars.size() > 1) {
             p.second->schedule_source << "\n    .reorder(";
+            p.second->python_schedule_source << " \\\n    .reorder(";
             bool first = true;
             for (auto &v : p.second->vars) {
                 if (v.exists) {
                     vars.push_back(v.var);
                     if (!first) {
                         p.second->schedule_source << ", ";
+                        p.second->python_schedule_source << ", ";
                     } else {
                         p.second->schedule_source << "{";
+                        p.second->python_schedule_source << " ";
                     }
                     first = false;
-                    p.second->schedule_source << v.var.name();
+                    p.second->schedule_source << conform_name(v.var.name());
+                    p.second->python_schedule_source << conform_name(v.var.name());
                 }
             }
             p.second->schedule_source << "})";
+            p.second->python_schedule_source << " )";
             stage.reorder(vars);
         }
 
@@ -619,18 +647,23 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params) 
             for (size_t i = 1; i < parallel_vars.size(); i++) {
                 // Outermost, and next outermost. Preserve the inner
                 // name to not invalidate any compute_ats.
-                p.second->schedule_source << "\n    .fuse(" << parallel_vars[i].name()
-                                          << ", " << parallel_vars[i - 1].name()
-                                          << ", " << parallel_vars[i].name() << ")";
+                p.second->schedule_source << "\n    .fuse(" << conform_name(parallel_vars[i].name())
+                                          << ", " << conform_name(parallel_vars[i - 1].name())
+                                          << ", " << conform_name(parallel_vars[i].name()) << ")";
+                p.second->python_schedule_source << " \\\n    .fuse(" << conform_name(parallel_vars[i].name())
+                                          << ", " << conform_name(parallel_vars[i - 1].name())
+                                          << ", " << conform_name(parallel_vars[i].name()) << ")";
                 stage.fuse(parallel_vars[i], parallel_vars[i - 1], parallel_vars[i]);
             }
             if (!parallel_vars.empty()) {
-                p.second->schedule_source << "\n    .parallel(" << parallel_vars.back().name() << ")";
+                p.second->schedule_source << "\n    .parallel(" << conform_name(parallel_vars.back().name()) << ")";
+                p.second->python_schedule_source << " \\\n    .parallel(" << conform_name(parallel_vars.back().name()) << ")";
                 stage.parallel(parallel_vars.back());
             }
         } else {
             for (const auto &v : parallel_vars) {
-                p.second->schedule_source << "\n    .parallel(" << v.name() << ")";
+                p.second->schedule_source << "\n    .parallel(" << conform_name(v.name()) << ")";
+                p.second->python_schedule_source << " \\\n    .parallel(" << conform_name(v.name()) << ")";
                 stage.parallel(v);
             }
         }
@@ -642,15 +675,19 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params) 
                 std::swap(storage_vars[i], storage_vars[i - 1]);
             }
             p.second->schedule_source << "\n    .reorder_storage(";
+            p.second->python_schedule_source << " \\\n    .reorder_storage(";
             bool first = true;
             for (const auto &v : storage_vars) {
                 if (!first) {
                     p.second->schedule_source << ", ";
+                    p.second->python_schedule_source << ", ";
                 }
                 first = false;
-                p.second->schedule_source << v.name();
+                p.second->schedule_source << conform_name(v.name());
+                p.second->python_schedule_source << conform_name(v.name());
             }
             p.second->schedule_source << ")";
+            p.second->python_schedule_source << ")";
             Func(p.first->node->func).reorder_storage(storage_vars);
         }
 
@@ -658,16 +695,24 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params) 
         src << p.first->name
             << p.second->schedule_source.str()
             << ";\n";
+        python_src << p.first->name
+            << p.second->python_schedule_source.str()
+            << "\n\n";
     }
     // Sanitize the names of things to make them legal source code.
     schedule_source = src.str();
-    bool in_quotes = false;
-    for (auto &c : schedule_source) {
-        in_quotes ^= (c == '"');
-        if (!in_quotes && c == '$') {
-            c = '_';
+    python_schedule_source = python_src.str();
+    auto sanitize = [](std::string& source) {
+        bool in_quotes = false;
+        for (auto &c : source) {
+            in_quotes ^= (c == '"');
+            if (!in_quotes && c == '$') {
+                c = '_';
+            }
         }
-    }
+    };
+    sanitize(schedule_source);
+    sanitize(python_schedule_source);
 }
 
 }  // namespace Autoscheduler

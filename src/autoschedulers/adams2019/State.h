@@ -33,6 +33,9 @@ struct State {
     // The C++ source code of the generated schedule for this State.
     // Computed if `apply_schedule` is called.
     string schedule_source;
+    // The Python source code of the generated schedule for this State.
+    // Computed if `apply_schedule` is called.
+    string python_schedule_source;
 
     // The number of times a cost is enqueued into the cost model,
     // for all states.
