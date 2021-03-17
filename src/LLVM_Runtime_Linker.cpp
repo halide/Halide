@@ -161,7 +161,7 @@ DECLARE_LL_INITMOD(ptx_dev)
 // Various conditional initmods follow (both LL and CPP).
 #ifdef WITH_METAL
 DECLARE_CPP_INITMOD(metal)
-#ifdef WITH_ARM
+#ifdef WITH_AARCH64
 DECLARE_CPP_INITMOD(metal_objc_arm)
 #else
 DECLARE_NO_INITMOD(metal_objc_arm)

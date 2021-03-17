@@ -81,6 +81,25 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
+namespace {
+
+class LoweringLogger {
+    Stmt last_written;
+
+public:
+    void operator()(const string &message, const Stmt &s) {
+        if (!s.same_as(last_written)) {
+            debug(2) << message << "\n"
+                     << s << "\n";
+            last_written = s;
+        } else {
+            debug(2) << message << " (unchanged)\n\n";
+        }
+    }
+};
+
+}  // namespace
+
 Module lower(const vector<Function> &output_funcs,
              const string &pipeline_name,
              const Target &t,
@@ -132,30 +151,27 @@ Module lower(const vector<Function> &output_funcs,
     // specializations' conditions
     simplify_specializations(env);
 
+    LoweringLogger log;
+
     debug(1) << "Creating initial loop nests...\n";
     bool any_memoized = false;
     Stmt s = schedule_functions(outputs, fused_groups, env, t, any_memoized);
-    debug(2) << "Lowering after creating initial loop nests:\n"
-             << s << "\n";
+    log("Lowering after creating initial loop nests:", s);
 
     if (any_memoized) {
         debug(1) << "Injecting memoization...\n";
         s = inject_memoization(s, env, pipeline_name, outputs);
-        debug(2) << "Lowering after injecting memoization:\n"
-                 << s << "\n";
+        log("Lowering after injecting memoization:", s);
     } else {
         debug(1) << "Skipping injecting memoization...\n";
     }
-
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, pipeline_name, trace_pipeline, env, outputs, t);
-    debug(2) << "Lowering after injecting tracing:\n"
-             << s << "\n";
+    log("Lowering after injecting tracing:", s);
 
     debug(1) << "Adding checks for parameters\n";
     s = add_parameter_checks(requirements, s, t);
-    debug(2) << "Lowering after injecting parameter checks:\n"
-             << s << "\n";
+    log("Lowering after injecting parameter checks:", s);
 
     // Compute the maximum and minimum possible value of each
     // function. Used in later bounds inference passes.
@@ -167,41 +183,34 @@ Module lower(const vector<Function> &output_funcs,
     // can still simplify Exprs).
     debug(1) << "Performing computation bounds inference...\n";
     s = bounds_inference(s, outputs, order, fused_groups, env, func_bounds, t);
-    debug(2) << "Lowering after computation bounds inference:\n"
-             << s << "\n";
+    log("Lowering after computation bounds inference:", s);
 
     debug(1) << "Removing extern loops...\n";
     s = remove_extern_loops(s);
-    debug(2) << "Lowering after removing extern loops:\n"
-             << s << "\n";
+    log("Lowering after removing extern loops:", s);
 
     debug(1) << "Performing sliding window optimization...\n";
     s = sliding_window(s, env);
-    debug(2) << "Lowering after sliding window:\n"
-             << s << "\n";
+    log("Lowering after sliding window:", s);
 
     // This uniquifies the variable names, so we're good to simplify
     // after this point. This lets later passes assume syntactic
     // equivalence means semantic equivalence.
     debug(1) << "Uniquifying variable names...\n";
     s = uniquify_variable_names(s);
-    debug(2) << "Lowering after uniquifying variable names:\n"
-             << s << "\n\n";
+    log("Lowering after uniquifying variable names:", s);
 
     debug(1) << "Simplifying...\n";
     s = simplify(s, false);  // Storage folding and allocation bounds inference needs .loop_max symbols
-    debug(2) << "Lowering after first simplification:\n"
-             << s << "\n\n";
+    log("Lowering after first simplification:", s);
 
     debug(1) << "Simplifying correlated differences...\n";
     s = simplify_correlated_differences(s);
-    debug(2) << "Lowering after simplifying correlated differences:\n"
-             << s << "\n";
+    log("Lowering after simplifying correlated differences:", s);
 
     debug(1) << "Performing allocation bounds inference...\n";
     s = allocation_bounds_inference(s, env, func_bounds);
-    debug(2) << "Lowering after allocation bounds inference:\n"
-             << s << "\n";
+    log("Lowering after allocation bounds inference:", s);
 
     bool will_inject_host_copies =
         (t.has_gpu_feature() ||
@@ -211,48 +220,39 @@ Module lower(const vector<Function> &output_funcs,
 
     debug(1) << "Adding checks for images\n";
     s = add_image_checks(s, outputs, t, order, env, func_bounds, will_inject_host_copies);
-    debug(2) << "Lowering after injecting image checks:\n"
-             << s << '\n';
+    log("Lowering after injecting image checks:", s);
 
     debug(1) << "Removing code that depends on undef values...\n";
     s = remove_undef(s);
-    debug(2) << "Lowering after removing code that depends on undef values:\n"
-             << s << "\n\n";
+    log("Lowering after removing code that depends on undef values:", s);
 
     debug(1) << "Performing storage folding optimization...\n";
     s = storage_folding(s, env);
-    debug(2) << "Lowering after storage folding:\n"
-             << s << "\n";
+    log("Lowering after storage folding:", s);
 
     debug(1) << "Injecting debug_to_file calls...\n";
     s = debug_to_file(s, outputs, env);
-    debug(2) << "Lowering after injecting debug_to_file calls:\n"
-             << s << "\n";
+    log("Lowering after injecting debug_to_file calls:", s);
 
     debug(1) << "Injecting prefetches...\n";
     s = inject_prefetch(s, env);
-    debug(2) << "Lowering after injecting prefetches:\n"
-             << s << "\n\n";
+    log("Lowering after injecting prefetches:", s);
 
     debug(1) << "Discarding safe promises...\n";
     s = lower_safe_promises(s);
-    debug(2) << "Lowering after discarding safe promises:\n"
-             << s << "\n\n";
+    log("Lowering after discarding safe promises:", s);
 
     debug(1) << "Dynamically skipping stages...\n";
     s = skip_stages(s, order);
-    debug(2) << "Lowering after dynamically skipping stages:\n"
-             << s << "\n\n";
+    log("Lowering after dynamically skipping stages:", s);
 
     debug(1) << "Forking asynchronous producers...\n";
     s = fork_async_producers(s, env);
-    debug(2) << "Lowering after forking asynchronous producers:\n"
-             << s << "\n";
+    log("Lowering after forking asynchronous producers:", s);
 
     debug(1) << "Destructuring tuple-valued realizations...\n";
     s = split_tuples(s, env);
-    debug(2) << "Lowering after destructuring tuple-valued realizations:\n"
-             << s << "\n\n";
+    log("Lowering after destructuring tuple-valued realizations:", s);
 
     // OpenGL relies on GPU var canonicalization occurring before
     // storage flattening.
@@ -260,36 +260,30 @@ Module lower(const vector<Function> &output_funcs,
         t.has_feature(Target::OpenGLCompute)) {
         debug(1) << "Canonicalizing GPU var names...\n";
         s = canonicalize_gpu_vars(s);
-        debug(2) << "Lowering after canonicalizing GPU var names:\n"
-                 << s << "\n";
+        log("Lowering after canonicalizing GPU var names:", s);
     }
 
     debug(1) << "Bounding small realizations...\n";
     s = simplify_correlated_differences(s);
     s = bound_small_allocations(s);
-    debug(2) << "Lowering after bounding small realizations:\n"
-             << s << "\n\n";
+    log("Lowering after bounding small realizations:", s);
 
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, outputs, env, t);
-    debug(2) << "Lowering after storage flattening:\n"
-             << s << "\n\n";
+    log("Lowering after storage flattening:", s);
 
     debug(1) << "Adding atomic mutex allocation...\n";
     s = add_atomic_mutex(s, env);
-    debug(2) << "Lowering after adding atomic mutex allocation:\n"
-             << s << "\n\n";
+    log("Lowering after adding atomic mutex allocation:", s);
 
     debug(1) << "Unpacking buffer arguments...\n";
     s = unpack_buffers(s);
-    debug(2) << "Lowering after unpacking buffer arguments...\n"
-             << s << "\n\n";
+    log("Lowering after unpacking buffer arguments:", s);
 
     if (any_memoized) {
         debug(1) << "Rewriting memoized allocations...\n";
         s = rewrite_memoized_allocations(s, env);
-        debug(2) << "Lowering after rewriting memoized allocations:\n"
-                 << s << "\n\n";
+        log("Lowering after rewriting memoized allocations:", s);
     } else {
         debug(1) << "Skipping rewriting memoized allocations...\n";
     }
@@ -297,112 +291,92 @@ Module lower(const vector<Function> &output_funcs,
     if (will_inject_host_copies) {
         debug(1) << "Selecting a GPU API for GPU loops...\n";
         s = select_gpu_api(s, t);
-        debug(2) << "Lowering after selecting a GPU API:\n"
-                 << s << "\n\n";
+        log("Lowering after selecting a GPU API:", s);
 
         debug(1) << "Injecting host <-> dev buffer copies...\n";
         s = inject_host_dev_buffer_copies(s, t);
-        debug(2) << "Lowering after injecting host <-> dev buffer copies:\n"
-                 << s << "\n\n";
+        log("Lowering after injecting host <-> dev buffer copies:", s);
 
         debug(1) << "Selecting a GPU API for extern stages...\n";
         s = select_gpu_api(s, t);
-        debug(2) << "Lowering after selecting a GPU API for extern stages:\n"
-                 << s << "\n\n";
+        log("Lowering after selecting a GPU API for extern stages:", s);
     }
 
     debug(1) << "Simplifying...\n";
     s = simplify(s);
     s = unify_duplicate_lets(s);
-    debug(2) << "Lowering after second simplifcation:\n"
-             << s << "\n\n";
+    log("Lowering after second simplifcation:", s);
 
     debug(1) << "Reduce prefetch dimension...\n";
     s = reduce_prefetch_dimension(s, t);
-    debug(2) << "Lowering after reduce prefetch dimension:\n"
-             << s << "\n";
+    log("Lowering after reduce prefetch dimension:", s);
 
     debug(1) << "Simplifying correlated differences...\n";
     s = simplify_correlated_differences(s);
-    debug(2) << "Lowering after simplifying correlated differences:\n"
-             << s << "\n";
+    log("Lowering after simplifying correlated differences:", s);
 
     debug(1) << "Unrolling...\n";
     s = unroll_loops(s);
-    s = simplify(s);
-    debug(2) << "Lowering after unrolling:\n"
-             << s << "\n\n";
+    log("Lowering after unrolling:", s);
 
     debug(1) << "Vectorizing...\n";
     s = vectorize_loops(s, env, t);
     s = simplify(s);
-    debug(2) << "Lowering after vectorizing:\n"
-             << s << "\n\n";
+    log("Lowering after vectorizing:", s);
 
     if (t.has_gpu_feature() ||
         t.has_feature(Target::OpenGLCompute)) {
         debug(1) << "Injecting per-block gpu synchronization...\n";
         s = fuse_gpu_thread_loops(s);
-        debug(2) << "Lowering after injecting per-block gpu synchronization:\n"
-                 << s << "\n\n";
+        log("Lowering after injecting per-block gpu synchronization:", s);
     }
 
     debug(1) << "Detecting vector interleavings...\n";
     s = rewrite_interleavings(s);
     s = simplify(s);
-    debug(2) << "Lowering after rewriting vector interleavings:\n"
-             << s << "\n\n";
+    log("Lowering after rewriting vector interleavings:", s);
 
     debug(1) << "Partitioning loops to simplify boundary conditions...\n";
     s = partition_loops(s);
     s = simplify(s);
-    debug(2) << "Lowering after partitioning loops:\n"
-             << s << "\n\n";
+    log("Lowering after partitioning loops:", s);
 
     debug(1) << "Trimming loops to the region over which they do something...\n";
     s = trim_no_ops(s);
-    debug(2) << "Lowering after loop trimming:\n"
-             << s << "\n\n";
+    log("Lowering after loop trimming:", s);
 
     debug(1) << "Hoisting loop invariant if statements...\n";
     s = hoist_loop_invariant_if_statements(s);
-    debug(2) << "Lowering after hoisting loop invariant if statements:\n"
-             << s << "\n\n";
+    log("Lowering after hoisting loop invariant if statements:", s);
 
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
-    debug(2) << "Lowering after injecting early frees:\n"
-             << s << "\n\n";
+    log("Lowering after injecting early frees:", s);
 
     if (t.has_feature(Target::FuzzFloatStores)) {
         debug(1) << "Fuzzing floating point stores...\n";
         s = fuzz_float_stores(s);
-        debug(2) << "Lowering after fuzzing floating point stores:\n"
-                 << s << "\n\n";
+        log("Lowering after fuzzing floating point stores:", s);
     }
 
     debug(1) << "Simplifying correlated differences...\n";
     s = simplify_correlated_differences(s);
-    debug(2) << "Lowering after simplifying correlated differences:\n"
-             << s << "\n";
+    log("Lowering after simplifying correlated differences:", s);
 
     debug(1) << "Bounding small allocations...\n";
     s = bound_small_allocations(s);
-    debug(2) << "Lowering after bounding small allocations:\n"
-             << s << "\n\n";
+    log("Lowering after bounding small allocations:", s);
 
     if (t.has_feature(Target::Profile)) {
         debug(1) << "Injecting profiling...\n";
         s = inject_profiling(s, pipeline_name);
-        debug(2) << "Lowering after injecting profiling:\n"
-                 << s << "\n\n";
+        log("Lowering after injecting profiling:", s);
     }
 
     if (t.has_feature(Target::CUDA)) {
         debug(1) << "Injecting warp shuffles...\n";
         s = lower_warp_shuffles(s);
-        debug(2) << "Lowering after injecting warp shuffles:\n"
-                 << s << "\n\n";
+        log("Lowering after injecting warp shuffles:", s);
     }
 
     debug(1) << "Simplifying...\n";
@@ -410,8 +384,7 @@ Module lower(const vector<Function> &output_funcs,
 
     debug(1) << "Lowering unsafe promises...\n";
     s = lower_unsafe_promises(s, t);
-    debug(2) << "Lowering after lowering unsafe promises:\n"
-             << s << "\n\n";
+    log("Lowering after lowering unsafe promises:", s);
 
 #if LLVM_VERSION >= 12
     if (t.has_feature(Target::AVX512_SapphireRapids)) {
@@ -424,20 +397,17 @@ Module lower(const vector<Function> &output_funcs,
 
     debug(1) << "Flattening nested ramps...\n";
     s = flatten_nested_ramps(s);
-    debug(2) << "Lowering after flattening nested ramps:\n"
-             << s << "\n\n";
+    log("Lowering after flattening nested ramps:", s);
 
     debug(1) << "Removing dead allocations and moving loop invariant code...\n";
     s = remove_dead_allocations(s);
     s = simplify(s);
     s = hoist_loop_invariant_values(s);
-    debug(2) << "Lowering after removing dead allocations and hoisting loop invariant values:\n"
-             << s << "\n\n";
+    log("Lowering after removing dead allocations and hoisting loop invariant values:", s);
 
     debug(1) << "Finding intrinsics...\n";
     s = find_intrinsics(s);
-    debug(2) << "Lowering after finding intrinsics:\n"
-             << s << "\n\n";
+    log("Lowering after finding intrinsics:", s);
 
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";
