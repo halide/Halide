@@ -1,17 +1,12 @@
-#include <iostream>
-
-#include "CodeGen_X86.h"
+#include "CodeGen_Posix.h"
 #include "ConciseCasts.h"
 #include "Debug.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "JITModule.h"
 #include "LLVM_Headers.h"
-#include "Param.h"
 #include "Simplify.h"
 #include "Util.h"
-#include "Var.h"
 
 namespace Halide {
 namespace Internal {
@@ -22,7 +17,10 @@ using std::vector;
 using namespace Halide::ConciseCasts;
 using namespace llvm;
 
+#if defined(WITH_X86)
+
 namespace {
+
 // Populate feature flags in a target according to those implied by
 // existing flags, so that instruction patterns can just check for the
 // oldest feature flag that supports an instruction.
@@ -46,19 +44,48 @@ Target complete_x86_target(Target t) {
     }
     return t;
 }
-}  // namespace
+
+/** A code generator that emits x86 code from a given Halide stmt. */
+class CodeGen_X86 : public CodeGen_Posix {
+public:
+    /** Create an x86 code generator. Processor features can be
+     * enabled using the appropriate flags in the target struct. */
+    CodeGen_X86(Target);
+
+protected:
+    string mcpu() const override;
+    string mattrs() const override;
+    bool use_soft_float_abi() const override;
+    int native_vector_bits() const override;
+
+    int vector_lanes_for_slice(const Type &t) const;
+
+    llvm::Type *llvm_type_of(const Type &t) const override;
+
+    using CodeGen_Posix::visit;
+
+    void init_module() override;
+
+    /** Nodes for which we want to emit specific sse/avx intrinsics */
+    // @{
+    void visit(const Add *) override;
+    void visit(const Sub *) override;
+    void visit(const Cast *) override;
+    void visit(const Call *) override;
+    void visit(const GT *) override;
+    void visit(const LT *) override;
+    void visit(const LE *) override;
+    void visit(const GE *) override;
+    void visit(const EQ *) override;
+    void visit(const NE *) override;
+    void visit(const Select *) override;
+    void codegen_vector_reduce(const VectorReduce *, const Expr &init) override;
+    // @}
+};
 
 CodeGen_X86::CodeGen_X86(Target t)
     : CodeGen_Posix(complete_x86_target(t)) {
-
-#if !defined(WITH_X86)
-    user_error << "x86 not enabled for this build of Halide.\n";
-#endif
-
-    user_assert(llvm_X86_enabled) << "llvm build not configured with X86 target enabled.\n";
 }
-
-namespace {
 
 const int max_intrinsic_args = 4;
 
@@ -160,8 +187,6 @@ const x86Intrinsic intrinsic_defs[] = {
 };
 // clang-format on
 
-}  // namespace
-
 void CodeGen_X86::init_module() {
     CodeGen_Posix::init_module();
 
@@ -171,7 +196,7 @@ void CodeGen_X86::init_module() {
         }
 
         Type ret_type = i.ret_type;
-        std::vector<Type> arg_types;
+        vector<Type> arg_types;
         arg_types.reserve(max_intrinsic_args);
         for (halide_type_t j : i.arg_types) {
             if (j.bits == 0) {
@@ -180,11 +205,11 @@ void CodeGen_X86::init_module() {
             arg_types.emplace_back(j);
         }
 
-        declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
+        auto *fn = declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
+        fn->addFnAttr(llvm::Attribute::ReadNone);
+        fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
 }
-
-namespace {
 
 // i32(i16_a)*i32(i16_b) +/- i32(i16_c)*i32(i16_d) can be done by
 // interleaving a, c, and b, d, and then using pmaddwd. We
@@ -229,8 +254,6 @@ bool should_use_pmaddwd(const Expr &a, const Expr &b, vector<Expr> &result) {
     }
     return false;
 }
-
-}  // namespace
 
 void CodeGen_X86::visit(const Add *op) {
     vector<Expr> matches;
@@ -558,8 +581,8 @@ string CodeGen_X86::mcpu() const {
 }
 
 string CodeGen_X86::mattrs() const {
-    std::string features;
-    std::string separator;
+    string features;
+    string separator;
     if (target.has_feature(Target::FMA)) {
         features += "+fma";
         separator = ",";
@@ -645,6 +668,21 @@ llvm::Type *CodeGen_X86::llvm_type_of(const Type &t) const {
         return CodeGen_Posix::llvm_type_of(t);
     }
 }
+
+}  // namespace
+
+std::unique_ptr<CodeGen_Posix> new_CodeGen_X86(const Target &target) {
+    return std::make_unique<CodeGen_X86>(target);
+}
+
+#else  // WITH_X86
+
+std::unique_ptr<CodeGen_Posix> new_CodeGen_X86(const Target &target) {
+    user_error << "x86 not enabled for this build of Halide.\n";
+    return nullptr;
+}
+
+#endif  // WITH_X86
 
 }  // namespace Internal
 }  // namespace Halide

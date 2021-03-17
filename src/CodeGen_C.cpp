@@ -323,8 +323,8 @@ CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const 
 
     if (is_header()) {
         // If it's a header, emit an include guard.
-        stream << "#ifndef HALIDE_" << print_name(guard) << "\n"
-               << "#define HALIDE_" << print_name(guard) << "\n"
+        stream << "#ifndef HALIDE_" << c_print_name(guard) << "\n"
+               << "#define HALIDE_" << c_print_name(guard) << "\n"
                << "#include <stdint.h>\n"
                << "\n"
                << "// Forward declarations of the types used in the interface\n"
@@ -1644,7 +1644,7 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     // Figure out the offset of the last pixel.
     size_t num_elems = 1;
     for (int d = 0; d < b.dimensions; d++) {
-        num_elems += b.dim[d].stride * (b.dim[d].extent - 1);
+        num_elems += b.dim[d].stride * (size_t)(b.dim[d].extent - 1);
     }
 
     // For now, we assume buffers that aren't scalar are constant,
@@ -1653,22 +1653,33 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     // used to store stateful module information in offloading runtimes.
     bool is_constant = buffer.dimensions() != 0;
 
-    // Emit the data
-    stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] HALIDE_ATTRIBUTE_ALIGN(32) = {\n";
-    stream << get_indent();
-    for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
-        if (i > 0) {
-            stream << ",";
-            if (i % 16 == 0) {
-                stream << "\n";
-                stream << get_indent();
-            } else {
-                stream << " ";
+    // If it is an GPU source kernel, we would like to see the actual output, not the
+    // uint8 representation. We use a string literal for this.
+    if (ends_with(name, "gpu_source_kernels")) {
+        stream << "static const char *" << name << "_string = R\"BUFCHARSOURCE(";
+        stream.write((char *)b.host, num_elems);
+        stream << ")BUFCHARSOURCE\";\n";
+
+        stream << "static const uint8_t *" << name << "_data HALIDE_ATTRIBUTE_ALIGN(32) = (const uint8_t *) "
+               << name << "_string;\n";
+    } else {
+        // Emit the data
+        stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] HALIDE_ATTRIBUTE_ALIGN(32) = {\n";
+        stream << get_indent();
+        for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
+            if (i > 0) {
+                stream << ",";
+                if (i % 16 == 0) {
+                    stream << "\n";
+                    stream << get_indent();
+                } else {
+                    stream << " ";
+                }
             }
+            stream << (int)(b.host[i]);
         }
-        stream << (int)(b.host[i]);
+        stream << "\n};\n";
     }
-    stream << "\n};\n";
 
     // Emit the shape (constant even for scalar buffers)
     stream << "static const halide_dimension_t " << name << "_buffer_shape[] = {";
@@ -1728,7 +1739,8 @@ string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
     auto cached = cache.find(rhs);
     if (cached == cache.end()) {
         id = unique_name('_');
-        stream << get_indent() << print_type(t, AppendSpace) << (output_kind == CPlusPlusImplementation ? "const " : "") << id << " = " << rhs << ";\n";
+        const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
+        stream << get_indent() << print_type(t, AppendSpace) << const_flag << id << " = " << rhs << ";\n";
         cache[rhs] = id;
     } else {
         id = cached->second;
@@ -2316,7 +2328,8 @@ void CodeGen_C::visit(const Load *op) {
         bool type_cast_needed = !(allocations.contains(op->name) &&
                                   allocations.get(op->name).type.element_of() == t.element_of());
         if (type_cast_needed) {
-            rhs << "((const " << print_type(t.element_of()) << " *)" << name << ")";
+            const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
+            rhs << "((" << const_flag << print_type(t.element_of()) << " *)" << name << ")";
         } else {
             rhs << name;
         }
@@ -2584,11 +2597,12 @@ void CodeGen_C::visit(const Allocate *op) {
         alloc.type = op->type;
         allocations.push(op->name, alloc);
         heap_allocations.push(op->name);
-        stream << op_type << "*" << op_name << " = (" << print_expr(op->new_expr) << ");\n";
+        string new_e = print_expr(op->new_expr);
+        stream << get_indent() << op_type << " *" << op_name << " = (" << op_type << "*)" << new_e << ";\n";
     } else {
         constant_size = op->constant_allocation_size();
         if (constant_size > 0) {
-            int64_t stack_bytes = constant_size * op->type.bytes();
+            int64_t stack_bytes = (int64_t)constant_size * op->type.bytes();
 
             if (stack_bytes > ((int64_t(1) << 31) - 1)) {
                 user_error << "Total size for allocation "

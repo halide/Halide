@@ -302,6 +302,11 @@ public:
     virtual void setup_images() {
         for (auto p : image_params) {
             p.reset();
+
+            const int alignment_bytes = 16;
+            p.set_host_alignment(alignment_bytes);
+            const int alignment = alignment_bytes / p.type().bytes();
+            p.dim(0).set_min((p.dim(0).min() / alignment) * alignment);
         }
     }
     virtual bool test_all() {

@@ -92,7 +92,7 @@ class UnrollLoops : public IRMutator {
                 }
             }
 
-            return iters;
+            return simplify(iters);
 
         } else {
             return IRMutator::visit(for_loop);

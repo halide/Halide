@@ -1,33 +1,37 @@
-#include "CodeGen_WebAssembly.h"
+#include "CodeGen_Posix.h"
 
-#include "ConciseCasts.h"
-#include "IRMatch.h"
-#include "IROperator.h"
 #include "LLVM_Headers.h"
-#include "Util.h"
-
 #include <sstream>
 
 namespace Halide {
 namespace Internal {
 
-using namespace Halide::ConciseCasts;
-using namespace llvm;
 using std::string;
-using std::vector;
+
+#if defined(WITH_WEBASSEMBLY)
+
+namespace {
+
+/** A code generator that emits WebAssembly code from a given Halide stmt. */
+class CodeGen_WebAssembly : public CodeGen_Posix {
+public:
+    CodeGen_WebAssembly(const Target &);
+
+protected:
+    using CodeGen_Posix::visit;
+
+    void init_module() override;
+
+    string mcpu() const override;
+    string mattrs() const override;
+    bool use_soft_float_abi() const override;
+    int native_vector_bits() const override;
+    bool use_pic() const override;
+};
 
 CodeGen_WebAssembly::CodeGen_WebAssembly(const Target &t)
     : CodeGen_Posix(t) {
-#if !defined(WITH_WEBASSEMBLY)
-    user_error << "llvm build not configured with WebAssembly target enabled.\n";
-#endif
-    // TODO: we should probably move this to LLVM 12 or 13, since LLVM11 won't support SIMD usefully enough for Halide
-    user_assert(LLVM_VERSION >= 110) << "Generating WebAssembly is only supported under LLVM 11+.";
-    user_assert(llvm_WebAssembly_enabled) << "llvm build not configured with WebAssembly target enabled.\n";
-    user_assert(target.bits == 32) << "Only wasm32 is supported.";
 }
-
-namespace {
 
 constexpr int max_intrinsic_args = 4;
 
@@ -66,8 +70,6 @@ const WasmIntrinsic intrinsic_defs[] = {
 };
 // clang-format on
 
-}  // namespace
-
 void CodeGen_WebAssembly::init_module() {
     CodeGen_Posix::init_module();
 
@@ -86,7 +88,9 @@ void CodeGen_WebAssembly::init_module() {
             arg_types.emplace_back(i);
         }
 
-        declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
+        auto *fn = declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
+        fn->addFnAttr(llvm::Attribute::ReadNone);
+        fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
 }
 
@@ -140,6 +144,23 @@ bool CodeGen_WebAssembly::use_pic() const {
 int CodeGen_WebAssembly::native_vector_bits() const {
     return 128;
 }
+
+}  // namespace
+
+std::unique_ptr<CodeGen_Posix> new_CodeGen_WebAssembly(const Target &target) {
+    user_assert(LLVM_VERSION >= 110) << "Generating WebAssembly is only supported under LLVM 11+.";
+    user_assert(target.bits == 32) << "Only wasm32 is supported.";
+    return std::make_unique<CodeGen_WebAssembly>(target);
+}
+
+#else  // WITH_WEBASSEMBLY
+
+std::unique_ptr<CodeGen_Posix> new_CodeGen_WebAssembly(const Target &target) {
+    user_error << "WebAssembly not enabled for this build of Halide.\n";
+    return nullptr;
+}
+
+#endif  // WITH_WEBASSEMBLY
 
 }  // namespace Internal
 }  // namespace Halide

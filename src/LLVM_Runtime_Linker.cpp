@@ -161,7 +161,7 @@ DECLARE_LL_INITMOD(ptx_dev)
 // Various conditional initmods follow (both LL and CPP).
 #ifdef WITH_METAL
 DECLARE_CPP_INITMOD(metal)
-#ifdef WITH_ARM
+#ifdef WITH_AARCH64
 DECLARE_CPP_INITMOD(metal_objc_arm)
 #else
 DECLARE_NO_INITMOD(metal_objc_arm)
@@ -643,6 +643,12 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     llvm::GlobalValue *llvm_used = modules[0]->getNamedGlobal("llvm.used");
     if (llvm_used) {
         llvm_used->eraseFromParent();
+    }
+
+    llvm::GlobalValue *llvm_compiler_used =
+        modules[0]->getNamedGlobal("llvm.compiler.used");
+    if (llvm_compiler_used) {
+        llvm_compiler_used->eraseFromParent();
     }
 
     // Also drop the dummy runtime api usage. We only needed it so

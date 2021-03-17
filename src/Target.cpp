@@ -381,6 +381,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sve2", Target::SVE2},
     {"arm_dot_prod", Target::ARMDotProd},
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
+    {"rvv", Target::RVV},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 

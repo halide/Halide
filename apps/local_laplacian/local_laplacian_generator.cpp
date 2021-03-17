@@ -148,7 +148,7 @@ public:
                 outGPyramid[j]
                     .store_at(output, yo)
                     .compute_at(output, y)
-                    .fold_storage(y, 8)
+                    .fold_storage(y, 4)
                     .vectorize(x, 8);
             }
             outGPyramid[0].compute_at(output, y).vectorize(x, 8);

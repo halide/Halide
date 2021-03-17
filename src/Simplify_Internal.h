@@ -36,6 +36,7 @@ public:
 
     struct ExprInfo {
         // We track constant integer bounds when they exist
+        // TODO: Use ConstantInterval?
         int64_t min = 0, max = 0;
         bool min_defined = false, max_defined = false;
         // And the alignment of integer variables
@@ -236,6 +237,10 @@ public:
         void learn_true(const Expr &fact);
         void learn_upper_bound(const Variable *v, int64_t val);
         void learn_lower_bound(const Variable *v, int64_t val);
+
+        // Replace exprs known to be truths or falsehoods with const_true or const_false.
+        Expr substitute_facts(const Expr &e);
+        Stmt substitute_facts(const Stmt &s);
 
         ScopedFact(Simplify *s)
             : simplify(s) {
