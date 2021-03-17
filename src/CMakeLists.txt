@@ -378,7 +378,7 @@ include(TargetExportScript)
 # https://github.com/halide/Halide/issues/4651
 target_export_script(Halide
                      APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
-                     GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.linux")
+                     GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.ldscript")
 
 set_target_properties(Halide PROPERTIES
                       POSITION_INDEPENDENT_CODE ON
