@@ -33,6 +33,7 @@ struct Flags {
     bool randomize_weights = false;
     string best_benchmark_path;
     string best_schedule_path;
+    string best_python_schedule_path;
 
     Flags(int argc, char **argv) {
         cmdline::parser a;
@@ -48,6 +49,7 @@ struct Flags {
         a.add<int>("num_cores");
         a.add<string>("best_benchmark");
         a.add<string>("best_schedule");
+        a.add<string>("best_python_schedule");
 
         a.parse_check(argc, argv);  // exits if parsing fails
 
@@ -58,6 +60,7 @@ struct Flags {
         randomize_weights = a.exist("randomize_weights") && a.get<bool>("randomize_weights");
         best_benchmark_path = a.get<string>("best_benchmark");
         best_schedule_path = a.get<string>("best_schedule");
+        best_python_schedule_path = a.get<string>("best_python_schedule");
 
         if (epochs <= 0) {
             std::cerr << "--epochs must be specified and > 0.\n";
@@ -350,17 +353,23 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
         f.close();
         assert(!f.fail());
     }
-    if (!flags.best_schedule_path.empty()) {
-        // best_path points to a .sample file; look for a .schedule.h file in the same dir
-        size_t dot = best_path.rfind('.');
-        assert(dot != string::npos && best_path.substr(dot) == ".sample");
-        string schedule_file = best_path.substr(0, dot) + ".schedule.h";
-        std::ifstream src(schedule_file);
-        std::ofstream dst(flags.best_schedule_path);
-        dst << src.rdbuf();
-        assert(!src.fail());
-        assert(!dst.fail());
-    }
+
+    auto copy_best_schedule = [&best_path](const std::string& schedule_path, const std::string& extension) {
+        if (!schedule_path.empty()) {
+            // best_path points to a .sample file; look for a .schedule.h file in the same dir
+            size_t dot = best_path.rfind('.');
+            assert(dot != string::npos && best_path.substr(dot) == ".sample");
+            string schedule_file = best_path.substr(0, dot) + ".schedule" + extension;
+            std::ifstream src(schedule_file);
+            std::ofstream dst(schedule_path);
+            dst << src.rdbuf();
+            assert(!src.fail());
+            assert(!dst.fail());
+        }
+    };
+
+    copy_best_schedule(flags.best_schedule_path, ".h");
+    copy_best_schedule(flags.best_python_schedule_path, ".py");
 
     return result;
 }

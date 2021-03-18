@@ -225,7 +225,8 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
                 --initial_weights=${WEIGHTS} \
                 --weights_out=${WEIGHTS} \
                 --best_benchmark=${SAMPLES}/best.${PIPELINE}.benchmark.txt \
-                --best_schedule=${SAMPLES}/best.${PIPELINE}.schedule.h
+                --best_schedule=${SAMPLES}/best.${PIPELINE}.schedule.h \
+                --best_python_schedule=${SAMPLES}/best.${PIPELINE}.schedule.py
     done
 
     echo Batch ${BATCH_ID} took ${SECONDS} seconds to compile, benchmark, and retrain

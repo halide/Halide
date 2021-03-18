@@ -27,6 +27,7 @@ function(add_halide_library TARGET)
         PYTORCH_WRAPPER
         REGISTRATION
         SCHEDULE
+        PYTHON_SCHEDULE
         STMT
         STMT_HTML)
 
@@ -40,6 +41,7 @@ function(add_halide_library TARGET)
     set(PYTORCH_WRAPPER_extension ".pytorch.h")
     set(REGISTRATION_extension ".registration.cpp")
     set(SCHEDULE_extension ".schedule.h")
+    set(PYTHON_SCHEDULE_extension ".schedule.py")
     set(STMT_extension ".stmt")
     set(STMT_HTML_extension ".stmt.html")
 

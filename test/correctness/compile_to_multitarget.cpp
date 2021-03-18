@@ -147,7 +147,14 @@ void test_compile_to_everything(Func j, bool do_object) {
     std::vector<std::string> files;
 
     // single-file outputs
-    for (const char *ext : {".h", ".halide_generated.cpp", ".halide_compiler_log", ".py.cpp", ".pytorch.h", ".registration.cpp", ".schedule.h", a}) {
+    for (const char *ext : {".h",
+                            ".halide_generated.cpp",
+                            ".halide_compiler_log",
+                            ".py.cpp",
+                            ".pytorch.h",
+                            ".registration.cpp",
+                            ".schedule.h",
+                            ".schedule.py", a}) {
         if (do_object && !strcmp(ext, a)) continue;
         files.push_back(fname + ext);
     }
