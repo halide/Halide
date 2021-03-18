@@ -54,7 +54,7 @@ std::map<Output, const OutputInfo> get_output_info(const Target &target) {
         {Output::pytorch_wrapper, {"pytorch_wrapper", ".pytorch.h", IsSingle}},
         {Output::registration, {"registration", ".registration.cpp", IsSingle}},
         {Output::schedule, {"schedule", ".schedule.h", IsSingle}},
-        {Output::python_schedule, {"python_schedule", ".py", IsSingle}},
+        {Output::python_schedule, {"python_schedule", ".schedule.py", IsSingle}},
         {Output::static_library, {"static_library", is_windows_coff ? ".lib" : ".a", IsSingle}},
         {Output::stmt, {"stmt", ".stmt", IsMulti}},
         {Output::stmt_html, {"stmt_html", ".stmt.html", IsMulti}},
