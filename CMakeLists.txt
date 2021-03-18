@@ -1,4 +1,8 @@
 cmake_minimum_required(VERSION 3.16...3.20)
+
+# Enables the use of CMAKE_MSVC_RUNTIME_LIBRARY to select the MSVC runtime
+cmake_policy(SET CMP0091 NEW)
+
 project(Halide VERSION 12.0.0)
 
 enable_testing()
