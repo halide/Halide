@@ -1181,7 +1181,7 @@ void compile_multitarget(const std::string &fn_name,
             }
         }
 
-        std::ofstream file(output_files.at(Output::schedule));
+        std::ofstream file(output_files.at(Output::python_schedule));
         emit_python_schedule_file(fn_name, targets, scheduler, machine_params, body.str(), file);
     }
 
