@@ -359,7 +359,7 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
             // best_path points to a .sample file; look for a .schedule.h file in the same dir
             size_t dot = best_path.rfind('.');
             assert(dot != string::npos && best_path.substr(dot) == ".sample");
-            string schedule_file = best_path.substr(0, dot) + ".schedule" + extension;
+            string schedule_file = best_path.substr(0, dot) + extension;
             std::ifstream src(schedule_file);
             std::ofstream dst(schedule_path);
             dst << src.rdbuf();
@@ -368,8 +368,8 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
         }
     };
 
-    copy_best_schedule(flags.best_schedule_path, ".h");
-    copy_best_schedule(flags.best_python_schedule_path, ".py");
+    copy_best_schedule(flags.best_schedule_path, ".schedule.h");
+    copy_best_schedule(flags.best_python_schedule_path, "_schedule.py");
 
     return result;
 }
