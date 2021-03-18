@@ -11,5 +11,6 @@ pillow
 
 # Keep versions of these requirements equal to the versions in Ubuntu 20.04 LTS
 # because newer versions fix bugs we work around.
+# TODO: what bugs? how are we working around them? is this still valid?
 imageio==2.4.1
-pybind11==2.6.1
+pybind11==2.6.2
