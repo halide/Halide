@@ -225,14 +225,6 @@ AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_na
 
     autoscheduler_fn(*this, target, arch_params, &autoscheduler_results);
 
-    std::string schedule_file_main = "apply_schedule_" + simplify_name(outputs()[0].name());
-    std::string python_schedule_file = schedule_file_main + ".py";
-    debug(0) << "Writing schedule to " << python_schedule_file << "...\n";
-    std::string cpp_schedule_file = schedule_file_main + "_cpp.h";
-    compile_to({ {Output::python_schedule, python_schedule_file},
-                 {Output::schedule, cpp_schedule_file} },
-               infer_arguments(), "", target);
-    
     return autoscheduler_results;
 }
 
