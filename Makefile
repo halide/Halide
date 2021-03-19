@@ -924,7 +924,7 @@ LIBHALIDE_SONAME_FLAGS=
 endif
 
 ifeq ($(UNAME), Linux)
-LIBHALIDE_EXPORTS=-Wl,--version-script=$(ROOT_DIR)/src/exported_symbols.linux
+LIBHALIDE_EXPORTS=-Wl,--version-script=$(ROOT_DIR)/src/exported_symbols.ldscript
 else
 LIBHALIDE_EXPORTS=-Wl,-exported_symbols_list $(ROOT_DIR)/src/exported_symbols.osx
 endif
