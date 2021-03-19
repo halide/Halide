@@ -96,6 +96,8 @@ inline std::ostream &operator<<(std::ostream &s, const Interval &i) {
     return s << "{" << i.min << ", " << i.max << "}";
 }
 
+// TODO: We really need an llvm::SmallVector-like thing here.
+// These are rarely more than size 4.
 using Box = std::vector<Interval>;
 
 // Check if b fully contains a.
