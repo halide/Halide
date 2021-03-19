@@ -1438,7 +1438,7 @@ private:
     Expr visit(const Call *op) override {
         int native_lanes = get_native_vector_lanes_num(op->type);
         if (native_lanes > 0) {
-            if (!(op->name == "halide_xtensa_interleave_i16") && !(op->name == "halide_xtensa_narrow_i24_with_shift_i16") && !(op->name == "halide_xtensa_dynamic_shuffle")) {
+            if (!(op->name == "halide_xtensa_interleave_i16") && !(op->name == "halide_xtensa_narrow_i24_with_shift_i16")) {
                 const int total_lanes = op->type.lanes();
                 int split_to = op->type.lanes() / native_lanes;
                 vector<Expr> args;
@@ -1452,6 +1452,10 @@ private:
                     for (size_t arg_index = 0; arg_index < op->args.size(); arg_index++) {
                         Expr sliced_arg;
                         if (args[arg_index].type().is_scalar()) {
+                            sliced_arg = args[arg_index];
+                        // dynamic_shuffle is tricky, we can actually slice an index,
+                        // but not the actual data vector.
+                        } else if ((op->name == "halide_xtensa_dynamic_shuffle") && arg_index == 0) {
                             sliced_arg = args[arg_index];
                         } else {
                             sliced_arg = Call::make(args[arg_index].type().with_lanes(native_lanes),
