@@ -620,6 +620,20 @@ HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_dynamic_shuffle(const uint16x64_t
   return IVP_SELNX16U(a.native_vector[1], a.native_vector[0], b);
 }
 
+HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_dynamic_shuffle(const int16x64_t& a, const int16x64_t& b) {
+  return int16x64_t(int16x64_t::from_native_vector,
+                    IVP_SELNX16(a.native_vector[1], a.native_vector[0], b.native_vector[0]),
+                    IVP_SELNX16(a.native_vector[1], a.native_vector[0], b.native_vector[1])
+                  );
+}
+
+HALIDE_ALWAYS_INLINE uint16x64_t halide_xtensa_dynamic_shuffle(const uint16x64_t& a, const int16x64_t& b) {
+  return uint16x64_t(uint16x64_t::from_native_vector,
+                    IVP_SELNX16U(a.native_vector[1], a.native_vector[0], b.native_vector[0]),
+                    IVP_SELNX16U(a.native_vector[1], a.native_vector[0], b.native_vector[1])
+                  );
+}
+
 HALIDE_ALWAYS_INLINE float32x16_t halide_xtensa_dynamic_shuffle(const float32x16_t& a, const int32x16_t& b) {
   return IVP_SHFLN_2XF32(a, b);
 }
@@ -1222,24 +1236,19 @@ HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_convert_concat_u16_to_u8(const uin
   xb_vec2Nx24 wide = IVP_CVT24U2NX16(xb_vecNx16U_rtor_xb_vecNx16(b), xb_vecNx16U_rtor_xb_vecNx16(a));
   return xb_vec2Nx8_rtor_xb_vec2Nx8U(IVP_PACKL2NX24(wide));
 }
-/*
-Disabled for now
-HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_convert_u8_low_u16(const uint8x64_t& src, int native_lanes, int total_lines) {
-    xb_vec2Nx24 wide = src * uint8x64_t(1);
-    return xb_vecNx16_rtor_xb_vecNx16U(IVP_CVT16U2NX24L(wide));
-}
 
-HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_convert_u8_high_u16(const uint8x64_t& src, int native_lanes, int total_lines) {
-    xb_vec2Nx24 wide = src * uint8x64_t(1);
-    return xb_vecNx16_rtor_xb_vecNx16U(IVP_CVT16U2NX24H(wide));
-}
-*/
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_convert_i8_low_i16(const int8x64_t& src, int native_lanes, int total_lines) {
-    return IVP_MOVNX16_FROM2NX8(IVP_SEL2NX8I(int8x64_t(0), src, IVP_SELI_8B_INTERLEAVE_1_LO));
+    const int16x32_t m = int16x32_t(1U << (8 - 1));
+    int16x32_t x =  IVP_MOVNX16_FROM2NX8(IVP_SEL2NX8I(int8x64_t(0), src, IVP_SELI_8B_INTERLEAVE_1_LO));
+    int16x32_t r = (x ^ m) - m;
+    return r;
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_convert_i8_high_i16(const int8x64_t& src, int native_lanes, int total_lines) {
-    return IVP_MOVNX16_FROM2NX8(IVP_SEL2NX8I(int8x64_t(0), src, IVP_SELI_8B_INTERLEAVE_1_HI));
+    const int16x32_t m = int16x32_t(1U << (8 - 1));
+    int16x32_t x =  IVP_MOVNX16_FROM2NX8(IVP_SEL2NX8I(int8x64_t(0), src, IVP_SELI_8B_INTERLEAVE_1_HI));
+    int16x32_t r = (x ^ m) - m;
+    return r;
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_convert_u8_low_i16(const uint8x64_t& src, int native_lanes, int total_lines) {
@@ -1720,7 +1729,7 @@ void CodeGen_Xtensa::visit(const Div *op) {
 
 void CodeGen_Xtensa::visit(const Max *op) {
     if (op->type.is_scalar()) {
-        print_expr(Call::make(op->type, "::halide_cpp_max", {op->a, op->b}, Call::Extern));
+        print_expr(Call::make(op->type, "::halide_cpp_max<" + print_type(op->type) + ">", {op->a, op->b}, Call::Extern));
     } else {
         ostringstream rhs;
         if (is_native_xtensa_vector<int8_t>(op->type)) {
@@ -1746,7 +1755,7 @@ void CodeGen_Xtensa::visit(const Max *op) {
 
 void CodeGen_Xtensa::visit(const Min *op) {
     if (op->type.is_scalar()) {
-        print_expr(Call::make(op->type, "::halide_cpp_min", {op->a, op->b}, Call::Extern));
+        print_expr(Call::make(op->type, "::halide_cpp_min<" + print_type(op->type) + ">", {op->a, op->b}, Call::Extern));
     } else {
         ostringstream rhs;
         if (is_native_xtensa_vector<int8_t>(op->type)) {

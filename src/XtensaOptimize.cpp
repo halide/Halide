@@ -1438,7 +1438,7 @@ private:
     Expr visit(const Call *op) override {
         int native_lanes = get_native_vector_lanes_num(op->type);
         if (native_lanes > 0) {
-            if (!(op->name == "halide_xtensa_interleave_i16") && !(op->name == "halide_xtensa_narrow_i24_with_shift_i16")) {
+            if (!(op->name == "halide_xtensa_interleave_i16") && !(op->name == "halide_xtensa_narrow_i24_with_shift_i16") && !(op->name == "halide_xtensa_dynamic_shuffle")) {
                 const int total_lanes = op->type.lanes();
                 int split_to = op->type.lanes() / native_lanes;
                 vector<Expr> args;
