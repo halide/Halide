@@ -285,6 +285,53 @@ void greedy_schedule(ScheduledOpVector &done, ScheduledOpList &todo, const Sched
     }
 }
 
+int gcd(int a, int b) {
+    if (a < b) {
+        std::swap(a, b);
+    }
+    while (b != 0) {
+        int tmp = b;
+        b = a % b;
+        a = tmp;
+    }
+    return a;
+}
+
+int lcm(int a, int b) {
+    return a * b / gcd(a, b);
+}
+
+// Split a box in a particular dimension. This is very similar to a split in a Halide
+// schedule. If shift_inwards is false, the tail strategy is to shrink the last iteration.
+std::vector<Box> split_box(const Box &box, int dim, const SplitInfo &split) {
+    int factor = lcm(split.alignment, split.min);
+    std::vector<Box> splits;
+    int x_min = box[dim].min;
+    int x_extent = box[dim].extent();
+    int x_max = x_min + x_extent - 1;
+    splits.reserve((x_extent + factor - 1) / factor);
+    Box split_x = box;
+    split_x[dim].set_extent(factor);
+    for (; split_x[dim].min <= x_max; split_x[dim] += factor) {
+        if (split_x[dim].max > x_max) {
+            // We need to fix up the last split.
+            // First, try reducing the max while satisfying the alignment.
+            split_x[dim].max -= (x_max - split_x[dim].max) / split.alignment;
+
+            // Now, clamp at the max.
+            split_x[dim].max = std::min(split_x[dim].max, x_max);
+
+            // If we're smaller than the min, shift the min over.
+            split_x[dim].min -= std::max(0, split.min - split_x[dim].extent());
+        }
+        assert(split_x[dim].min >= box[dim].min);
+        assert(split_x[dim].max <= box[dim].max);
+        assert(split_x[dim].extent() > 0);
+        splits.push_back(split_x);
+    }
+    return splits;
+}
+
 }  // namespace
 
 void ModelInterpreter::Schedule(ScheduleOptions options) {
@@ -310,7 +357,13 @@ void ModelInterpreter::Schedule(ScheduleOptions options) {
     if (options.target_working_set_size_bytes > 0) {
         for (std::list<ScheduledOp>::iterator i = schedule.begin(); i != schedule.end();) {
             // Split the op the way the op wants it done.
-            std::vector<Box> splits = i->op->split(i->crop);
+            std::vector<Box> splits = {i->crop};
+            std::vector<SplitInfo> split_info = i->op->get_split_info();
+            if (split_info.size() > 2) {
+                splits = split_box(i->crop, 2, split_info[2]);
+            } else if (i->crop.size() > 2) {
+                splits = split_box(i->crop, 2, SplitInfo::any_split());
+            }
 
             // Make a vector of scheduled ops.
             std::vector<ScheduledOp> split_ops;

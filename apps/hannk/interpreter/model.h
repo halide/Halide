@@ -245,6 +245,24 @@ using TensorMap = std::map<const Tensor *, Tensor *>;
 // cloning ops referring to different tensors.
 Tensor *apply(const TensorMap &map, const Tensor *t);
 
+// Required properties of a crop in a particular dimension.
+struct SplitInfo {
+    // Required alignment of crops in this dimension.
+    int alignment;
+
+    // Minimum extent of crops in this dimension.
+    int min;
+
+    SplitInfo() : SplitInfo(1, 1) {}
+    SplitInfo(int alignment, int min) : alignment(alignment), min(min) {}
+
+    static SplitInfo no_split() { return SplitInfo(); }
+    static SplitInfo any_split() { return SplitInfo(); }
+    static SplitInfo guard_with_if(int factor) { return SplitInfo(factor, 1); }
+    static SplitInfo shift_inwards(int factor) { return SplitInfo(1, factor); }
+    static SplitInfo round_up(int factor) { return SplitInfo(factor, factor); }
+};
+
 class Op {
 protected:
     std::vector<Tensor *> inputs_;
@@ -277,9 +295,9 @@ public:
     // Execute the op on a given crop.
     virtual void execute(const Box &crop) = 0;
 
-    // Given a crop, split the crop into smaller crops appropriate for this op.
-    virtual std::vector<Box> split(const Box &crop) const {
-        return {crop};
+    // Get information about how crops of this op can be split.
+    virtual std::vector<SplitInfo> get_split_info() const {
+        return {};
     }
 
     // Clone this op, replacing tensors using the mapping in tensor_map.

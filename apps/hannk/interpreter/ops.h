@@ -29,7 +29,6 @@ public:
     }
 
     Bounds infer_bounds(const Box &crop) const;
-    std::vector<Box> split(const Box &crop) const;
 };
 
 // This is an abstract helper op for pooling operations.
@@ -52,7 +51,7 @@ public:
     }
 
     Bounds infer_bounds(const Box &crop) const;
-    std::vector<Box> split(const Box &crop) const;
+    std::vector<SplitInfo> get_split_info() const;
 };
 
 class AddOp : public ElementwiseOp {
@@ -119,7 +118,7 @@ public:
     }
 
     Bounds infer_bounds(const Box &crop) const;
-    std::vector<Box> split(const Box &crop) const;
+    std::vector<SplitInfo> get_split_info() const;
 
     void execute(const Box &crop);
 
@@ -167,7 +166,7 @@ public:
     }
 
     Bounds infer_bounds(const Box &crop) const;
-    std::vector<Box> split(const Box &crop) const;
+    std::vector<SplitInfo> get_split_info() const;
 
     void execute(const Box &crop);
 
@@ -216,7 +215,7 @@ public:
     }
 
     Bounds infer_bounds(const Box &crop) const;
-    std::vector<Box> split(const Box &crop) const;
+    std::vector<SplitInfo> get_split_info() const;
 
     void execute(const Box &crop);
 
@@ -253,7 +252,7 @@ public:
     }
 
     Bounds infer_bounds(const Box &crop) const;
-    std::vector<Box> split(const Box &crop) const;
+    std::vector<SplitInfo> get_split_info() const;
 
     void execute(const Box &crop);
 
@@ -295,7 +294,7 @@ public:
     }
 
     Bounds infer_bounds(const Box &crop) const;
-    std::vector<Box> split(const Box &crop) const;
+    std::vector<SplitInfo> get_split_info() const;
 
     void execute(const Box &crop);
 
@@ -317,7 +316,7 @@ public:
     }
 
     Bounds infer_bounds(const Box &crop) const;
-    std::vector<Box> split(const Box &crop) const;
+    std::vector<SplitInfo> get_split_info() const;
 
     void execute(const Box &crop);
 

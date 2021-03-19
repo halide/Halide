@@ -17,32 +17,6 @@ namespace hannk {
 
 namespace {
 
-// Split a crop in a particular dimension. This is very similar to a split in a Halide
-// schedule. If shift_inwards is false, the tail strategy is to shrink the last iteration.
-std::vector<Box> split_crop(const Box &crop, int dim, int factor, bool shift_inwards = false) {
-    std::vector<Box> splits;
-    int x_min = crop[dim].min;
-    int x_extent = crop[dim].extent();
-    int x_max = x_min + x_extent - 1;
-    splits.reserve((x_extent + factor - 1) / factor);
-    Box split_x = crop;
-    split_x[dim].set_extent(factor);
-    for (int x = 0; x <= x_max; x += factor, split_x[dim] += factor) {
-        if (shift_inwards) {
-            if (split_x[dim].max >= crop[dim].max) {
-                split_x[dim] -= split_x[dim].max - crop[dim].max;
-            }
-            assert(split_x[dim].min >= crop[dim].min);
-            assert(split_x[dim].max <= crop[dim].max);
-        } else {
-            split_x[dim].max = std::min(split_x[dim].max, crop[dim].max);
-        }
-        assert(split_x[dim].extent() > 0);
-        splits.push_back(split_x);
-    }
-    return splits;
-}
-
 struct QuantizedMulAndShift {
     int multiplier, shift;
 };
@@ -149,11 +123,6 @@ Op::Bounds ElementwiseOp::infer_bounds(const Box &crop) const {
     return result;
 }
 
-std::vector<Box> ElementwiseOp::split(const Box &crop) const {
-    const int factor = 2;
-    return split_crop(crop, 2, factor);
-}
-
 Op::Bounds PoolOp::infer_bounds(const Box &crop) const {
     Box input_crop = crop;
 
@@ -172,9 +141,13 @@ Op::Bounds PoolOp::infer_bounds(const Box &crop) const {
     return result;
 }
 
-std::vector<Box> PoolOp::split(const Box &crop) const {
-    const int factor = 2;
-    return split_crop(crop, 2, factor);
+std::vector<SplitInfo> PoolOp::get_split_info() const {
+    return {
+        SplitInfo::any_split(),
+        SplitInfo::any_split(),
+        SplitInfo::any_split(),
+        SplitInfo::any_split(),
+    };
 }
 
 void AddOp::execute(const Box &crop) {
@@ -270,12 +243,11 @@ Op::Bounds ConcatenationOp::infer_bounds(const Box &crop) const {
     return result;
 }
 
-std::vector<Box> ConcatenationOp::split(const Box &crop) const {
-    assert(axis_ != 2);
-    // split this into individual lines, so it can get re-fused with any
-    // alignment.
-    const int factor = 1;
-    return split_crop(crop, 2, factor);
+std::vector<SplitInfo> ConcatenationOp::get_split_info() const {
+    // Allow any split on any dimension other than the concatenated dimension.
+    std::vector<SplitInfo> splits(output()->rank(), SplitInfo::any_split());
+    splits[axis_] = SplitInfo::no_split();
+    return splits;
 }
 
 void ConcatenationOp::execute(const Box &crop) {
@@ -337,9 +309,13 @@ Op::Bounds Conv2DOp::infer_bounds(const Box &crop) const {
     return result;
 }
 
-std::vector<Box> Conv2DOp::split(const Box &crop) const {
-    const int factor = 2;
-    return split_crop(crop, 2, factor);
+std::vector<SplitInfo> Conv2DOp::get_split_info() const {
+    return {
+        SplitInfo::no_split(),
+        SplitInfo::any_split(),
+        SplitInfo::any_split(),
+        SplitInfo::any_split()
+    };
 }
 
 void Conv2DOp::execute(const Box &crop) {
@@ -460,9 +436,13 @@ Op::Bounds DepthwiseConv2DOp::infer_bounds(const Box &crop) const {
     return result;
 }
 
-std::vector<Box> DepthwiseConv2DOp::split(const Box &crop) const {
-    const int factor = 2;
-    return split_crop(crop, 2, factor, true);
+std::vector<SplitInfo> DepthwiseConv2DOp::get_split_info() const {
+    return {
+        SplitInfo::no_split(),
+        SplitInfo::shift_inwards(2),
+        SplitInfo::shift_inwards(2),
+        SplitInfo::any_split()
+    };
 }
 
 void DepthwiseConv2DOp::execute(const Box &crop) {
@@ -563,8 +543,11 @@ Op::Bounds FullyConnectedOp::infer_bounds(const Box &crop) const {
     return result;
 }
 
-std::vector<Box> FullyConnectedOp::split(const Box &crop) const {
-    return {crop};
+std::vector<SplitInfo> FullyConnectedOp::get_split_info() const {
+    return {
+        SplitInfo::no_split(),
+        SplitInfo::any_split(),
+    };
 }
 
 void FullyConnectedOp::execute(const Box &crop) {
@@ -656,9 +639,8 @@ Op::Bounds PadOp::infer_bounds(const Box &crop) const {
     return result;
 }
 
-std::vector<Box> PadOp::split(const Box &crop) const {
-    const int factor = 2;
-    return split_crop(crop, 2, factor);
+std::vector<SplitInfo> PadOp::get_split_info() const {
+    return {(size_t)output()->rank(), SplitInfo::any_split()};
 }
 
 void PadOp::execute(const Box &crop) {
@@ -692,8 +674,8 @@ Op::Bounds ReshapeOp::infer_bounds(const Box &crop) const {
     return result;
 }
 
-std::vector<Box> ReshapeOp::split(const Box &crop) const {
-    return {crop};
+std::vector<SplitInfo> ReshapeOp::get_split_info() const {
+    return {};
 }
 
 void ReshapeOp::execute(const Box &crop) {
