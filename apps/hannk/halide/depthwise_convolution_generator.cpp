@@ -9,8 +9,8 @@ namespace hannk {
 
 class DepthwiseConvolution : public Generator<DepthwiseConvolution> {
 public:
-    // If true, the input is assumed to have one channel, and it is broadcasted.
-    GeneratorParam<bool> broadcast_channels_{"broadcast_channels", false};
+    // If positive, a constant inverse depth multiplier.
+    GeneratorParam<int> inv_depth_multiplier_{"inv_depth_multiplier", -1};
 
     // Unsigned 8-bit input tensor, indexed by c, x, y, b.
     Input<Buffer<uint8_t>> input_{"input", 4};
@@ -59,16 +59,17 @@ public:
         // subtracted.
         Func input_bounded = constant_exterior(input_, input_offset_);
 
+        Func filter_bounded = repeat_edge(filter_);
         Func bias_bounded = repeat_edge(bias_);
 
         // Apply the c multiplier.
         Func resampled_input("resampled_input");
-        Expr c_resampled = broadcast_channels_ ? 0 : c / depth_multiplier_;
+        Expr c_resampled = inv_depth_multiplier_ >= 0 ? c * inv_depth_multiplier_ : c / depth_multiplier_;
         resampled_input(c, x, y, b) = input_bounded(c_resampled, x, y, b);
 
         Func filter_zeroed("filter_zeroed");
         Func input_zeroed("input_zeroed");
-        filter_zeroed(c, x, y) = i16(filter_(c, x, y)) - i16(filter_offset_);
+        filter_zeroed(c, x, y) = i16(filter_bounded(c, x, y)) - i16(filter_offset_);
         input_zeroed(c, x, y, b) = i16(resampled_input(c, x, y, b)) - i16(input_offset_);
 
         // Do the convolution in 32-bit.
@@ -102,7 +103,7 @@ public:
         output_.dim(0).set_min(input_.dim(0).min() * depth_multiplier_);
         output_.dim(0).set_extent(input_.dim(0).extent() * depth_multiplier_);
 
-        if (broadcast_channels_) {
+        if (inv_depth_multiplier_ == 0) {
             // When we're broadcasting input channels, require that the input has only
             // one channel.
             input_.dim(0).set_extent(1);
@@ -113,6 +114,9 @@ public:
         // Tile the output, so we can try to re-use loads spatially when performing
         // convolution. This also helps because we can schedule the input and not
         // waste work for stride < kTileSize.
+        // We split co and reorder it outermost, so we can maximize locality of the
+        // filter. We even put it outside of the batch loop, so we can compute the
+        // boundary condition on the filter at co and reuse it across batches.
         const int kTileSize = 2;
         Var xo("xo"), yo("yo"), co("co");
         Expr output_channels = output_.dim(0).extent();
@@ -120,42 +124,40 @@ public:
             // TODO: some instances of this op have output width and/or height of 1,
             // so we must GuardWithIf or add a specialize() here. Or maybe pad?
             .tile(x, y, xo, yo, x, y, kTileSize, kTileSize, TailStrategy::GuardWithIf)
-            .reorder(x, y, c, xo, yo, b)
             .unroll(x)
             .unroll(y)
             .specialize(output_channels >= vector_size)
             .split(c, co, c, vector_size, TailStrategy::ShiftInwards)
-            .reorder(x, y, c, xo, co, yo, b)
+            .reorder(x, y, c, xo, yo, b, co)
             .vectorize(c);
 
-        output_.split(c, co, c, output_channels, TailStrategy::RoundUp)
-            .reorder(x, y, c, xo, co, yo, b);
+        output_.split(c, co, c, vector_size, TailStrategy::GuardWithIf)
+            .reorder(x, y, c, xo, yo, b, co)
+            .vectorize(c);
 
         convolved.compute_at(output_, xo)
             .store_in(MemoryType::Stack)
             .bound_extent(c, vector_size)
-            .reorder(x, y, c, b)
+            .bound_extent(x, kTileSize)
+            .bound_extent(y, kTileSize)
             .unroll(x)
             .unroll(y)
             .vectorize(c);
         convolved.update()
-            .reorder(x, y, c, r.x, r.y, b)
+            .reorder(x, y, r.x, r.y)
             .unroll(x)
             .unroll(y)
             .vectorize(c);
         convolved.update()
             .specialize(filter_width == 3 && filter_height == 3)
+            .reorder(r.x, x, y, r.y)
             .unroll(r.x);
 
         bias_bounded.compute_root();
 
-        // TODO: This gets recomputed often when the op is split up into small
-        // pieces.
-        filter_zeroed.compute_root();
-
-        // The reason broadcast_channels_ is a GeneratorParam and not a
+        // The reason inv_depth_multiplier_ is a GeneratorParam and not a
         // specialization is that we can't specialize the (lack of) compute_at here.
-        if (!broadcast_channels_) {
+        if (inv_depth_multiplier_ < 0) {
             resampled_input
                 .compute_at(output_, co)
                 .store_in(MemoryType::Stack)
@@ -165,6 +167,13 @@ public:
                 resampled_input.specialize(depth_multiplier_ == dm);
             }
         }
+
+        filter_bounded
+            .compute_at(output_, co)
+            .store_in(MemoryType::Stack)
+            .align_storage(Halide::_0, vector_size)
+            .specialize(output_channels >= vector_size)
+            .vectorize(Halide::_0, vector_size);
     }
 };
 
