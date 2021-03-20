@@ -86,7 +86,7 @@ struct DelegateFactory {
 
 }  // namespace
 
-void run_all(const std::string &filename, int seed, int threads, int verbosity, DelegateFactory *delegate_factory) {
+void run_all(const std::string &filename, int seed, int threads, int verbosity, DelegateFactory *delegate_factory, bool do_compare_results) {
     std::cout << "Comparing " << filename << "\n";
 
     std::vector<char> buffer = read_entire_file(filename);
@@ -264,6 +264,10 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
         std::cout << "\n";
     }
 
+    if (!do_compare_results) {
+        return;
+    }
+
     // ----- Now compare the outputs
     const auto compare_results = [](const RunResult &a, const RunResult &b, int verbosity) {
         CHECK(a.outputs.size() == b.outputs.size());
@@ -313,6 +317,7 @@ int main(int argc, char **argv) {
     bool use_delegate = true;
     int verbosity = 0;
     std::vector<const char *> files;
+    bool do_compare_results = true;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--seed")) {
@@ -325,6 +330,10 @@ int main(int argc, char **argv) {
         }
         if (!strcmp(argv[i], "--threads")) {
             threads = atoi(argv[++i]);
+            continue;
+        }
+        if (!strcmp(argv[i], "--compare")) {
+            do_compare_results = atoi(argv[++i]) != 0;
             continue;
         }
         if (!strcmp(argv[i], "--verbose")) {
@@ -365,7 +374,7 @@ int main(int argc, char **argv) {
     }
 
     for (auto f : files) {
-        hannk::run_all(f, seed, threads, verbosity, use_delegate ? &delegate_factory : nullptr);
+        hannk::run_all(f, seed, threads, verbosity, use_delegate ? &delegate_factory : nullptr, do_compare_results);
         std::cout << "\n";
     }
 

@@ -117,7 +117,9 @@ public:
         Var xo("xo"), yo("yo"), co("co");
         Expr output_channels = output_.dim(0).extent();
         output_.compute_root()
-            .tile(x, y, xo, yo, x, y, kTileSize, kTileSize, TailStrategy::ShiftInwards)
+            // TODO: some instances of this op have output width and/or height of 1,
+            // so we must GuardWithIf or add a specialize() here. Or maybe pad?
+            .tile(x, y, xo, yo, x, y, kTileSize, kTileSize, TailStrategy::GuardWithIf)
             .reorder(x, y, c, xo, yo, b)
             .unroll(x)
             .unroll(y)
