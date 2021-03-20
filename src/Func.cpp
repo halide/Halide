@@ -2255,15 +2255,17 @@ Func &Func::bound_extent(const Var &var, Expr extent) {
 
 Func &Func::align_bounds(const Var &var, Expr modulus, Expr remainder) {
     user_assert(modulus.defined()) << "modulus is undefined\n";
-    user_assert(remainder.defined()) << "remainder is undefined\n";
     user_assert(Int(32).can_represent(modulus.type())) << "Can't represent modulus as int32\n";
-    user_assert(Int(32).can_represent(remainder.type())) << "Can't represent remainder as int32\n";
 
     modulus = cast<int32_t>(modulus);
-    remainder = cast<int32_t>(remainder);
+    if (remainder.defined()) {
+        user_assert(Int(32).can_represent(remainder.type())) << "Can't represent remainder as int32\n";
 
-    // Reduce the remainder
-    remainder = remainder % modulus;
+        remainder = cast<int32_t>(remainder);
+
+        // Reduce the remainder
+        remainder = remainder % modulus;
+    }
 
     invalidate_cache();
 

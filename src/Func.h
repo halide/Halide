@@ -1551,7 +1551,9 @@ public:
      * f.align_bounds(x, 2, 1) forces the min to be odd and the extent
      * to be even. The region computed always contains the region that
      * would have been computed without this directive, so no
-     * assertions are injected. */
+     * assertions are injected. If your pass an undefined Expr() for remainder,
+     * only the extent will be modified as above; the min will remain untouched.
+     */
     Func &align_bounds(const Var &var, Expr modulus, Expr remainder = 0);
 
     /** Bound the extent of a Func's realization, but not its
