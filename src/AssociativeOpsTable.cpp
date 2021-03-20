@@ -122,24 +122,24 @@ struct TableKey {
 
 map<TableKey, vector<AssociativePattern>> pattern_tables;
 
-#define declare_vars(t, index)                                      \
-    Expr x##index = Variable::make(t, "x" + std::to_string(index)); \
-    Expr y##index = Variable::make(t, "y" + std::to_string(index)); \
-    Expr k##index = Variable::make(t, "k" + std::to_string(index)); \
-    Expr zero_##index = make_const(t, 0);                           \
-    Expr one_##index = make_const(t, 1);                            \
-    Expr neg_one_##index = make_const(t, -1);                       \
-    Expr tmax_##index = t.max();                                    \
-    Expr tmin_##index = t.min();
+#define declare_vars(t, index)                                        \
+    Expr x##index = Variable::make((t), "x" + std::to_string(index)); \
+    Expr y##index = Variable::make((t), "y" + std::to_string(index)); \
+    Expr k##index = Variable::make((t), "k" + std::to_string(index)); \
+    Expr zero_##index = make_const((t), 0);                           \
+    Expr one_##index = make_const((t), 1);                            \
+    Expr neg_one_##index = make_const((t), -1);                       \
+    Expr tmax_##index = (t).max();                                    \
+    Expr tmin_##index = (t).min();
 
-#define declare_vars_single(types)      \
-    internal_assert(types.size() == 1); \
-    declare_vars(types[0], 0)
+#define declare_vars_single(types)        \
+    internal_assert((types).size() == 1); \
+    declare_vars((types)[0], 0)
 
-#define declare_vars_double(types)      \
-    internal_assert(types.size() == 2); \
-    declare_vars(types[0], 0)           \
-        declare_vars(types[1], 1)
+#define declare_vars_double(types)        \
+    internal_assert((types).size() == 2); \
+    declare_vars((types)[0], 0)           \
+        declare_vars((types)[1], 1)
 
 void populate_ops_table_single_general_add(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);

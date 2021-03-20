@@ -62,7 +62,7 @@ bool test() {
         hist.compute_root();
     }
 
-    Buffer<HTYPE> histogram = g.realize(128);  // buckets 10-137
+    Buffer<HTYPE> histogram = g.realize({128});  // buckets 10-137
 
     for (int i = 10; i < 138; i++) {
         if (histogram(i - 10) != reference_hist[i]) {

@@ -1,6 +1,7 @@
 #include "HalideRuntimeMetal.h"
 #include "device_buffer_utils.h"
 #include "device_interface.h"
+#include "gpu_context_common.h"
 #include "printer.h"
 #include "scoped_spin_lock.h"
 
@@ -266,7 +267,7 @@ WEAK mtl_device *get_default_mtl_device() {
         // currently don't provide halide_get_symbol for iOS, only OSX)
         void *handle = dlsym(RTLD_DEFAULT, "MTLCopyAllDevices");
         if (handle != nullptr) {
-            typedef objc_id (*mtl_copy_all_devices_method)(void);
+            typedef objc_id (*mtl_copy_all_devices_method)();
             mtl_copy_all_devices_method method = (mtl_copy_all_devices_method)handle;
             objc_id devices = (objc_id)(*method)();
             if (devices != nullptr) {
@@ -288,15 +289,7 @@ struct device_handle {
     uint64_t offset;
 };
 
-// Structure to hold the state of a module attached to the context.
-// Also used as a linked-list to keep track of all the different
-// modules that are attached to a context in order to release them all
-// when then context is released.
-struct module_state {
-    mtl_library *library;
-    module_state *next;
-};
-WEAK module_state *state_list = nullptr;
+WEAK Halide::Internal::GPUCompilationCache<mtl_device *, mtl_library *> compilation_cache;
 
 // API Capabilities.  If more capabilities need to be checked,
 // this can be refactored to something more robust/general.
@@ -550,18 +543,6 @@ WEAK int halide_metal_device_free(void *user_context, halide_buffer_t *buf) {
 }
 
 WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, const char *source, int source_size) {
-    // Create the state object if necessary. This only happens once, regardless
-    // of how many times halide_initialize_kernels/halide_release is called.
-    // halide_release traverses this list and releases the module objects, but
-    // it does not modify the list nodes created/inserted here.
-    module_state **state = (module_state **)state_ptr;
-    if (!(*state)) {
-        *state = (module_state *)malloc(sizeof(module_state));
-        (*state)->library = nullptr;
-        (*state)->next = state_list;
-        state_list = *state;
-    }
-
     MetalContextHolder metal_context(user_context, true);
     if (metal_context.error != 0) {
         return metal_context.error;
@@ -571,23 +552,13 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    if ((*state)->library == nullptr) {
-#ifdef DEBUG_RUNTIME
-        uint64_t t_before_compile = halide_current_time_ns(user_context);
-#endif
-
-        debug(user_context) << "Metal - Allocating: new_library_with_source " << (*state)->library << "\n";
-        (*state)->library = new_library_with_source(metal_context.device, source, source_size);
-        if ((*state)->library == nullptr) {
-            error(user_context) << "Metal: new_library_with_source failed.\n";
-            return -1;
-        }
-
-#ifdef DEBUG_RUNTIME
-        uint64_t t_after_compile = halide_current_time_ns(user_context);
-        debug(user_context) << "Time for halide_metal_initialize_kernels compilation: " << (t_after_compile - t_before_compile) / 1.0e6 << " ms\n";
-#endif
+    mtl_library *library{};
+    if (!compilation_cache.kernel_state_setup(user_context, state_ptr, metal_context.device, library,
+                                              new_library_with_source, metal_context.device,
+                                              source, source_size)) {
+        return halide_error_code_generic_error;
     }
+    halide_assert(user_context, library != nullptr);
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -595,6 +566,13 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
 #endif
 
     return 0;
+}
+
+WEAK void halide_metal_finalize_kernels(void *user_context, void *state_ptr) {
+    MetalContextHolder metal_context(user_context, true);
+    if (metal_context.error == 0) {
+        compilation_cache.release_hold(user_context, metal_context.device, state_ptr);
+    }
 }
 
 namespace {
@@ -647,23 +625,11 @@ WEAK int halide_metal_device_release(void *user_context) {
         return error;
     }
 
-    if (device) {
+    if (acquired_device) {
         halide_metal_device_sync_internal(queue, nullptr);
 
-        // Unload the modules attached to this device. Note that the list
-        // nodes themselves are not freed, only the program objects are
-        // released. Subsequent calls to halide_init_kernels might re-create
-        // the program object using the same list node to store the program
-        // object.
-        module_state *state = state_list;
-        while (state) {
-            if (state->library) {
-                debug(user_context) << "Metal - Releasing: new_library_with_source " << state->library << "\n";
-                release_ns_object(state->library);
-                state->library = nullptr;
-            }
-            state = state->next;
-        }
+        debug(user_context) << "Calling delete context on device " << acquired_device << "\n";
+        compilation_cache.delete_context(user_context, acquired_device, release_ns_object);
 
         // Release the device itself, if we created it.
         if (acquired_device == device) {
@@ -762,11 +728,7 @@ WEAK int halide_metal_run(void *user_context,
                           int shared_mem_bytes,
                           size_t arg_sizes[],
                           void *args[],
-                          int8_t arg_is_buffer[],
-                          int num_attributes,
-                          float *vertex_buffer,
-                          int num_coords_dim0,
-                          int num_coords_dim1) {
+                          int8_t arg_is_buffer[]) {
 #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
@@ -788,10 +750,11 @@ WEAK int halide_metal_run(void *user_context,
         return -1;
     }
 
-    halide_assert(user_context, state_ptr);
-    module_state *state = (module_state *)state_ptr;
+    mtl_library *library{};
+    bool found = compilation_cache.lookup(metal_context.device, state_ptr, library);
+    halide_assert(user_context, found && library != nullptr);
 
-    mtl_function *function = new_function_with_name(state->library, entry_name, strlen(entry_name));
+    mtl_function *function = new_function_with_name(library, entry_name, strlen(entry_name));
     if (function == nullptr) {
         error(user_context) << "Metal: Could not get function " << entry_name << "from Metal library.\n";
         return -1;
@@ -1164,6 +1127,7 @@ WEAK const struct halide_device_interface_t *halide_metal_device_interface() {
 
 namespace {
 WEAK __attribute__((destructor)) void halide_metal_cleanup() {
+    compilation_cache.release_all(nullptr, release_ns_object);
     halide_metal_device_release(nullptr);
 }
 }  // namespace

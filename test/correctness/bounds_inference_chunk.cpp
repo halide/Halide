@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
 
     //f.trace();
 
-    Buffer<int> out = f.realize(32, 32);
+    Buffer<int> out = f.realize({32, 32});
 
     for (int y = 0; y < 32; y++) {
         for (int x = 0; x < 32; x++) {

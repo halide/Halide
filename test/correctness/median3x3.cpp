@@ -54,7 +54,7 @@ int main(int arch, char **argv) {
     }
 
     // Run the pipeline and verify the results are correct.
-    Buffer<uint8_t> out = median3x3.realize(W, H, target);
+    Buffer<uint8_t> out = median3x3.realize({W, H}, target);
 
     for (int y = 1; y < H - 1; y++) {
         for (int x = 1; x < W - 1; x++) {

@@ -30,11 +30,8 @@ extern int halide_d3d12compute_run(void *user_context,
                                    int blocksX, int blocksY, int blocksZ,
                                    int threadsX, int threadsY, int threadsZ,
                                    int shared_mem_bytes,
-                                   halide_type_t arg_types[], void *args[], int8_t arg_is_buffer[],
-                                   int num_attributes,
-                                   float *vertex_buffer,
-                                   int num_coords_dim0,
-                                   int num_coords_dim1);
+                                   halide_type_t arg_types[], void *args[], int8_t arg_is_buffer[]);
+extern void halide_d3d12compute_finalize_kernels(void *user_context, void *state_ptr);
 // @}
 
 /** Set the underlying ID3D12Resource for a halide_buffer_t. The memory backing

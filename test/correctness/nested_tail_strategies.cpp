@@ -43,16 +43,17 @@ void check(Func out, int line, std::vector<TailStrategy> tails) {
 
     for (int s : sizes_to_try) {
         largest_allocation = 0;
-        out.realize(s);
+        out.realize({s});
         size_t expected = (s + 1) * 4;
-        if (largest_allocation > expected) {
+        size_t tolerance = 3 * sizeof(int);
+        if (largest_allocation > expected + tolerance) {
             std::cerr << "Failure on line " << line << "\n"
                       << "with tail strategies: ";
             for (auto t : tails) {
                 std::cerr << t << " ";
             }
             std::cerr << "\n allocation of " << largest_allocation
-                      << " bytes is too large. Expected " << expected << "\n";
+                      << " bytes is too large. Expected " << expected + tolerance << "\n";
             abort();
         }
     }

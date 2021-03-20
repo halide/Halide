@@ -228,7 +228,7 @@ public:
 
     void test_correctness(Buffer<uint8_t> reference_output) {
         Buffer<uint8_t> output =
-            curved.realize(input.width(), input.height(), input.channels());
+            curved.realize({input.width(), input.height(), input.channels()});
 
         // Check against the reference output.
         for (int c = 0; c < input.channels(); c++) {

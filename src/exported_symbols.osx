@@ -1,0 +1,7 @@
+# Everything at global namespace beginning with halide_
+halide_*
+
+# Everything in Halide:: namespace (including nested namespace)
+__Z?6Halide*
+__Z??6Halide*
+__Z???6Halide*

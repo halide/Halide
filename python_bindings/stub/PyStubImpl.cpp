@@ -13,13 +13,18 @@
 
 #include "Halide.h"
 
-namespace py = pybind11;
+static_assert(PYBIND11_VERSION_MAJOR == 2 && PYBIND11_VERSION_MINOR >= 6,
+              "Halide requires PyBind 2.6+");
 
-using FactoryFunc = std::unique_ptr<Halide::Internal::GeneratorBase> (*)(const Halide::GeneratorContext &context);
+static_assert(PY_VERSION_HEX >= 0x03000000,
+              "We appear to be compiling against Python 2.x rather than 3.x, which is not supported.");
+
+namespace py = pybind11;
 
 namespace Halide {
 namespace PythonBindings {
 
+using GeneratorFactory = Internal::GeneratorFactory;
 using GeneratorParamsMap = Internal::GeneratorParamsMap;
 using Stub = Internal::GeneratorStub;
 using StubInput = Internal::StubInput;
@@ -84,35 +89,39 @@ StubInput to_stub_input(const py::object &o) {
     return StubInput(o.cast<Expr>());
 }
 
-void append_input(const py::object &value, std::vector<StubInput> &v) {
+std::vector<StubInput> to_stub_inputs(const py::object &value) {
     if (is_real_sequence(value)) {
+        std::vector<StubInput> v;
         for (const auto &o : py::reinterpret_borrow<py::sequence>(value)) {
             v.push_back(to_stub_input(o));
         }
+        return v;
     } else {
-        v.push_back(to_stub_input(value));
+        return {to_stub_input(value)};
     }
 }
 
-py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, const py::args &args, const py::kwargs &kwargs) {
+py::object generate_impl(const GeneratorFactory &factory, const GeneratorContext &context, const py::args &args, const py::kwargs &kwargs) {
     Stub stub(context, [factory](const GeneratorContext &context) -> std::unique_ptr<Halide::Internal::GeneratorBase> {
         return factory(context);
     });
     auto names = stub.get_names();
     _halide_user_assert(!names.outputs.empty())
         << "Generators that use build() (instead of generate()+Output<>) are not supported in the Python bindings.";
-    std::map<std::string, size_t> input_name_to_pos;
-    for (size_t i = 0; i < names.inputs.size(); ++i) {
-        input_name_to_pos[names.inputs[i]] = i;
-    }
 
     // Inputs can be specified by either positional or named args,
-    // and must all be specified.
+    // but may not be mixed. (i.e., if any inputs are specified as a named
+    // arg, they all must be specified that way; otherwise they must all be
+    // positional, in the order declared in the Generator.)
     //
     // GeneratorParams can only be specified by name, and are always optional.
-    //
-    std::vector<std::vector<StubInput>> inputs;
-    inputs.resize(names.inputs.size());
+
+    std::map<std::string, std::vector<StubInput>> kw_inputs;
+    for (const auto &name : names.inputs) {
+        _halide_user_assert(kw_inputs.count(name) == 0);  // internal error
+        kw_inputs[name] = std::vector<StubInput>{};
+    }
+    size_t kw_inputs_specified = 0;
 
     GeneratorParamsMap generator_params;
 
@@ -121,29 +130,46 @@ py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, c
         // If the kwarg is the name of a known input, stick it in the input
         // vector. If not, stick it in the GeneratorParamsMap (if it's invalid,
         // an error will be reported further downstream).
-        std::string key = kw.first.cast<std::string>();
+        std::string name = kw.first.cast<std::string>();
         py::handle value = kw.second;
-        auto it = input_name_to_pos.find(key);
-        if (it != input_name_to_pos.end()) {
-            append_input(py::cast<py::object>(value), inputs[it->second]);
+        auto it = kw_inputs.find(name);
+        if (it != kw_inputs.end()) {
+            _halide_user_assert(it->second.empty())
+                << "Generator Input named '" << it->first << "' was specified more than once.";
+            it->second = to_stub_inputs(py::cast<py::object>(value));
+            kw_inputs_specified++;
         } else {
             if (py::isinstance<LoopLevel>(value)) {
-                generator_params[key] = value.cast<LoopLevel>();
+                generator_params[name] = value.cast<LoopLevel>();
             } else {
-                generator_params[key] = py::str(value).cast<std::string>();
+                generator_params[name] = py::str(value).cast<std::string>();
             }
         }
     }
 
-    // Now, the positional args.
-    _halide_user_assert(args.size() <= names.inputs.size())
-        << "Expected at most " << names.inputs.size() << " positional args, but saw " << args.size() << ".";
-    for (size_t i = 0; i < args.size(); ++i) {
-        _halide_user_assert(inputs[i].empty())
-            << "Generator Input named '" << names.inputs[i] << "' was specified by both position and keyword.";
-        append_input(args[i], inputs[i]);
+    std::vector<std::vector<StubInput>> inputs;
+    inputs.reserve(names.inputs.size());
+
+    if (args.empty()) {
+        // No arguments specified positionally, so they must all be via keywords.
+        _halide_user_assert(kw_inputs_specified == names.inputs.size())
+            << "Expected exactly " << names.inputs.size() << " keyword args for inputs, but saw " << kw_inputs_specified << ".";
+        for (const auto &name : names.inputs) {
+            inputs.push_back(std::move(kw_inputs[name]));
+        }
+    } else {
+        // Some positional arguments, so all inputs must be positional (and none via keyword).
+        _halide_user_assert(kw_inputs_specified == 0)
+            << "Cannot use both positional and keyword arguments for inputs.";
+        _halide_user_assert(args.size() == names.inputs.size())
+            << "Expected exactly " << names.inputs.size() << " positional args for inputs, but saw " << args.size() << ".";
+        for (auto arg : args) {
+            inputs.push_back(to_stub_inputs(py::cast<py::object>(arg)));
+        }
     }
 
+    // Verify everything is there
+    _halide_user_assert(inputs.size() == names.inputs.size());
     for (size_t i = 0; i < inputs.size(); ++i) {
         _halide_user_assert(!inputs[i].empty())
             << "Generator Input named '" << names.inputs[i] << "' was not specified.";
@@ -171,7 +197,7 @@ py::object generate_impl(FactoryFunc factory, const GeneratorContext &context, c
     return std::move(py_outputs);
 }
 
-void pystub_init(pybind11::module &m, FactoryFunc factory) {
+void pystub_init(pybind11::module &m, const GeneratorFactory &factory) {
     m.def(
         "generate", [factory](const Halide::Target &target, const py::args &args, const py::kwargs &kwargs) -> py::object {
             return generate_impl(factory, Halide::GeneratorContext(target), args, kwargs);
@@ -183,7 +209,7 @@ void pystub_init(pybind11::module &m, FactoryFunc factory) {
 }  // namespace PythonBindings
 }  // namespace Halide
 
-extern "C" PyObject *_halide_pystub_impl(const char *module_name, FactoryFunc factory) {
+extern "C" PyObject *_halide_pystub_impl(const char *module_name, const Halide::Internal::GeneratorFactory &factory) {
     int major, minor;
     if (sscanf(Py_GetVersion(), "%i.%i", &major, &minor) != 2) {
         PyErr_SetString(PyExc_ImportError, "Can't parse Python version.");
@@ -197,7 +223,9 @@ extern "C" PyObject *_halide_pystub_impl(const char *module_name, FactoryFunc fa
                      major, minor);
         return nullptr;
     }
-    auto m = pybind11::module(module_name);
+
+    // TODO: do something meaningful with the PyModuleDef & add a doc string
+    auto m = pybind11::module_::create_extension_module(module_name, nullptr, new PyModuleDef());
     try {
         Halide::PythonBindings::install_error_handlers(m);
         Halide::PythonBindings::pystub_init(m, factory);

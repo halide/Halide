@@ -592,9 +592,7 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
                                   const char *entry_name, int blocksX, int blocksY,
                                   int blocksZ, int threadsX, int threadsY, int threadsZ,
                                   int shared_mem_bytes, halide_type_t arg_types[], void *args[],
-                                  int8_t arg_is_buffer[], int num_attributes,
-                                  float *vertex_buffer, int num_coords_dim0,
-                                  int num_coords_dim1) {
+                                  int8_t arg_is_buffer[]) {
 #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
@@ -604,10 +602,7 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
         << "entry: " << entry_name << ", "
         << "blocks: " << blocksX << "x" << blocksY << "x" << blocksZ << ", "
         << "threads: " << threadsX << "x" << threadsY << "x" << threadsZ << ", "
-        << "shmem: " << shared_mem_bytes << ", "
-        << "num_attributes: " << num_attributes << ", "
-        << "num_coords_dim0: " << num_coords_dim0 << ", "
-        << "num_coords_dim1: " << num_coords_dim1 << "\n";
+        << "shmem: " << shared_mem_bytes << "\n";
 
     if (!global_state.initialized) {
         error(user_context) << "OpenGL runtime not initialized (halide_openglcompute_run).";
@@ -784,7 +779,7 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
     const char *END_OF_KERNEL_MARKER = "\n// end of kernel ";
     const size_t END_OF_KERNEL_MARKER_LENGTH = strlen(END_OF_KERNEL_MARKER);
 
-    while (1) {
+    while (true) {
         const char *end_of_kernel_marker = strstr(src, END_OF_KERNEL_MARKER);
         if (!end_of_kernel_marker) {
             break;  // end of kernels sources is reached
@@ -902,6 +897,9 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
 #endif
 
     return 0;
+}
+
+WEAK void halide_openglcompute_finalize_kernels(void *user_context, void *state_ptr) {
 }
 
 WEAK int halide_openglcompute_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {

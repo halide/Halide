@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
     // a GPULanes loop. This used to break (the allocation would
     // disappear entirely).
 
-    Buffer<int> result = g.realize(123, 245);
+    Buffer<int> result = g.realize({123, 245});
 
     for (int y = 0; y < result.height(); y++) {
         for (int x = 0; x < result.width(); x++) {

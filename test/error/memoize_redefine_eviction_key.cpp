@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     f.compute_root().memoize(EvictionKey(1764));
 
     val.set(23.0f);
-    Buffer<float> out = g.realize(128, 128);
+    Buffer<float> out = g.realize({128, 128});
 
     printf("Success!\n");
     return 0;

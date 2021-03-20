@@ -1,6 +1,7 @@
 #include "HalideRuntimeCuda.h"
 #include "device_buffer_utils.h"
 #include "device_interface.h"
+#include "gpu_context_common.h"
 #include "mini_cuda.h"
 #include "printer.h"
 #include "scoped_mutex_lock.h"
@@ -12,15 +13,18 @@ namespace Internal {
 namespace Cuda {
 
 // Define the function pointers for the CUDA API.
-#define CUDA_FN(ret, fn, args) WEAK ret(CUDAAPI *fn) args;
-#define CUDA_FN_OPTIONAL(ret, fn, args) WEAK ret(CUDAAPI *fn) args;
-#define CUDA_FN_3020(ret, fn, fn_3020, args) WEAK ret(CUDAAPI *fn) args;
-#define CUDA_FN_4000(ret, fn, fn_4000, args) WEAK ret(CUDAAPI *fn) args;
+
+// clang-format off
+#define CUDA_FN(ret, fn, args)                  WEAK ret(CUDAAPI *fn) args;  // NOLINT(bugprone-macro-parentheses)
+#define CUDA_FN_OPTIONAL(ret, fn, args)         WEAK ret(CUDAAPI *fn) args;  // NOLINT(bugprone-macro-parentheses)
+#define CUDA_FN_3020(ret, fn, fn_3020, args)    WEAK ret(CUDAAPI *fn) args;  // NOLINT(bugprone-macro-parentheses)
+#define CUDA_FN_4000(ret, fn, fn_4000, args)    WEAK ret(CUDAAPI *fn) args;  // NOLINT(bugprone-macro-parentheses)
 #include "cuda_functions.h"
 #undef CUDA_FN
 #undef CUDA_FN_OPTIONAL
 #undef CUDA_FN_3020
 #undef CUDA_FN_4000
+// clang-format on
 
 // The default implementation of halide_cuda_get_symbol attempts to load
 // the CUDA shared library/DLL, and then get the symbol from it.
@@ -70,15 +74,17 @@ WEAK void load_libcuda(void *user_context) {
     debug(user_context) << "    load_libcuda (user_context: " << user_context << ")\n";
     halide_assert(user_context, cuInit == nullptr);
 
-#define CUDA_FN(ret, fn, args) fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn);
-#define CUDA_FN_OPTIONAL(ret, fn, args) fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn, true);
-#define CUDA_FN_3020(ret, fn, fn_3020, args) fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn_3020);
-#define CUDA_FN_4000(ret, fn, fn_4000, args) fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn_4000);
+// clang-format off
+#define CUDA_FN(ret, fn, args)               fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn);        // NOLINT(bugprone-macro-parentheses)
+#define CUDA_FN_OPTIONAL(ret, fn, args)      fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn, true);  // NOLINT(bugprone-macro-parentheses)
+#define CUDA_FN_3020(ret, fn, fn_3020, args) fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn_3020);   // NOLINT(bugprone-macro-parentheses)
+#define CUDA_FN_4000(ret, fn, fn_4000, args) fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn_4000);   // NOLINT(bugprone-macro-parentheses)
 #include "cuda_functions.h"
 #undef CUDA_FN
 #undef CUDA_FN_OPTIONAL
 #undef CUDA_FN_3020
 #undef CUDA_FN_4000
+    // clang-format on
 }
 
 // Call load_libcuda() if CUDA library has not been loaded.
@@ -239,43 +245,7 @@ public:
     }
 };
 
-// Halide allocates a device API controlled pointer slot as part of
-// each compiled module. The slot is used to store information to
-// avoid having to reload/recompile kernel code on each call into a
-// Halide filter. The cuda runtime uses this pointer to maintain a
-// linked list of contexts into which the module has been loaded.
-//
-// A global list of all registered filters is also kept so all modules
-// loaded on a given context can be unloaded and removed from the list
-// when halide_device_release is called on a specific context.
-//
-// The registered_filters struct is not freed as it is pointed to by the
-// Halide generated code. The module_state structs are freed.
-
-struct module_state {
-    CUcontext context;
-    CUmodule module;
-    module_state *next;
-};
-
-struct registered_filters {
-    module_state *modules;
-    registered_filters *next;
-};
-WEAK registered_filters *filters_list = nullptr;
-// This spinlock protects the above filters_list.
-WEAK halide_mutex filters_list_lock;
-
-WEAK module_state *find_module_for_context(const registered_filters *filters, CUcontext ctx) {
-    module_state *modules = filters->modules;
-    while (modules != nullptr) {
-        if (modules->context == ctx) {
-            return modules;
-        }
-        modules = modules->next;
-    }
-    return nullptr;
-}
+WEAK Halide::Internal::GPUCompilationCache<CUcontext, CUmodule> compilation_cache;
 
 WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
     // Initialize CUDA
@@ -505,6 +475,33 @@ WEAK bool validate_device_pointer(void *user_context, halide_buffer_t *buf, size
 #endif
 }
 
+WEAK CUmodule compile_kernel(void *user_context, const char *ptx_src, int size) {
+    debug(user_context) << "CUDA: compile_kernel cuModuleLoadData " << (void *)ptx_src << ", " << size << " -> ";
+
+    CUjit_option options[] = {CU_JIT_MAX_REGISTERS};
+    unsigned int max_regs_per_thread = 64;
+
+    // A hack to enable control over max register count for
+    // testing. This should be surfaced in the schedule somehow
+    // instead.
+    char *regs = getenv("HL_CUDA_JIT_MAX_REGISTERS");
+    if (regs) {
+        max_regs_per_thread = atoi(regs);
+    }
+    void *optionValues[] = {(void *)(uintptr_t)max_regs_per_thread};
+    CUmodule loaded_module;
+    CUresult err = cuModuleLoadDataEx(&loaded_module, ptx_src, 1, options, optionValues);
+
+    if (err != CUDA_SUCCESS) {
+        error(user_context) << "CUDA: cuModuleLoadData failed: "
+                            << get_error_name(err);
+        return nullptr;
+    } else {
+        debug(user_context) << (void *)(loaded_module) << "\n";
+    }
+    return loaded_module;
+}
+
 }  // namespace Cuda
 }  // namespace Internal
 }  // namespace Runtime
@@ -526,54 +523,12 @@ WEAK int halide_cuda_initialize_kernels(void *user_context, void **state_ptr, co
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    halide_assert(user_context, &filters_list_lock != nullptr);
-    {
-        ScopedMutexLock spinlock(&filters_list_lock);
-
-        // Create the state object if necessary. This only happens once, regardless
-        // of how many times halide_initialize_kernels/halide_release is called.
-        // halide_release traverses this list and releases the module objects, but
-        // it does not modify the list nodes created/inserted here.
-        registered_filters **filters = (registered_filters **)state_ptr;
-        if (!(*filters)) {
-            *filters = (registered_filters *)malloc(sizeof(registered_filters));
-            (*filters)->modules = nullptr;
-            (*filters)->next = filters_list;
-            filters_list = *filters;
-        }
-
-        // Create the module itself if necessary.
-        module_state *loaded_module = find_module_for_context(*filters, ctx.context);
-        if (loaded_module == nullptr) {
-            loaded_module = (module_state *)malloc(sizeof(module_state));
-            debug(user_context) << "    cuModuleLoadData " << (void *)ptx_src << ", " << size << " -> ";
-
-            CUjit_option options[] = {CU_JIT_MAX_REGISTERS};
-            unsigned int max_regs_per_thread = 64;
-
-            // A hack to enable control over max register count for
-            // testing. This should be surfaced in the schedule somehow
-            // instead.
-            char *regs = getenv("HL_CUDA_JIT_MAX_REGISTERS");
-            if (regs) {
-                max_regs_per_thread = atoi(regs);
-            }
-            void *optionValues[] = {(void *)(uintptr_t)max_regs_per_thread};
-            CUresult err = cuModuleLoadDataEx(&loaded_module->module, ptx_src, 1, options, optionValues);
-
-            if (err != CUDA_SUCCESS) {
-                free(loaded_module);
-                error(user_context) << "CUDA: cuModuleLoadData failed: "
-                                    << get_error_name(err);
-                return err;
-            } else {
-                debug(user_context) << (void *)(loaded_module->module) << "\n";
-            }
-            loaded_module->context = ctx.context;
-            loaded_module->next = (*filters)->modules;
-            (*filters)->modules = loaded_module;
-        }
-    }  // spinlock
+    CUmodule loaded_module;
+    if (!compilation_cache.kernel_state_setup(user_context, state_ptr, ctx.context, loaded_module,
+                                              compile_kernel, user_context, ptx_src, size)) {
+        return halide_error_code_generic_error;
+    }
+    halide_assert(user_context, loaded_module != nullptr);
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -581,6 +536,13 @@ WEAK int halide_cuda_initialize_kernels(void *user_context, void **state_ptr, co
 #endif
 
     return 0;
+}
+
+WEAK void halide_cuda_finalize_kernels(void *user_context, void *state_ptr) {
+    Context ctx(user_context);
+    if (ctx.error == 0) {
+        compilation_cache.release_hold(user_context, ctx.context, state_ptr);
+    }
 }
 
 WEAK int halide_cuda_release_unused_device_allocations(void *user_context) {
@@ -704,7 +666,7 @@ WEAK int halide_cuda_device_release(void *user_context) {
         << "CUDA: halide_cuda_device_release (user_context: " << user_context << ")\n";
 
     // If we haven't even loaded libcuda, don't load it just to quit.
-    if (!lib_cuda) {
+    if (!cuInit) {
         return 0;
     }
 
@@ -728,34 +690,7 @@ WEAK int halide_cuda_device_release(void *user_context) {
         // Dump the contents of the free list, ignoring errors.
         halide_cuda_release_unused_device_allocations(user_context);
 
-        {
-            ScopedMutexLock spinlock(&filters_list_lock);
-
-            // Unload the modules attached to this context. Note that the list
-            // nodes themselves are not freed, only the module objects are
-            // released. Subsequent calls to halide_init_kernels might re-create
-            // the program object using the same list node to store the module
-            // object.
-            registered_filters *filters = filters_list;
-            while (filters) {
-                module_state **prev_ptr = &filters->modules;
-                module_state *loaded_module = filters->modules;
-                while (loaded_module != nullptr) {
-                    if (loaded_module->context == ctx) {
-                        debug(user_context) << "    cuModuleUnload " << loaded_module->module << "\n";
-                        err = cuModuleUnload(loaded_module->module);
-                        halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
-                        *prev_ptr = loaded_module->next;
-                        free(loaded_module);
-                        loaded_module = *prev_ptr;
-                    } else {
-                        loaded_module = loaded_module->next;
-                        prev_ptr = &loaded_module->next;
-                    }
-                }
-                filters = filters->next;
-            }
-        }  // spinlock
+        compilation_cache.delete_context(user_context, ctx, cuModuleUnload);
 
         CUcontext old_ctx;
         cuCtxPopCurrent(&old_ctx);
@@ -919,12 +854,15 @@ WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
                             << (void *)src << " -> " << (void *)dst << ", " << c.chunk_size << " bytes\n";
         if (!from_host && to_host) {
             debug(user_context) << "cuMemcpyDtoH(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
+            copy_name = "cuMemcpyDtoH";
             err = cuMemcpyDtoH((void *)dst, (CUdeviceptr)src, c.chunk_size);
         } else if (from_host && !to_host) {
             debug(user_context) << "cuMemcpyHtoD(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
+            copy_name = "cuMemcpyHtoD";
             err = cuMemcpyHtoD((CUdeviceptr)dst, (void *)src, c.chunk_size);
         } else if (!from_host && !to_host) {
             debug(user_context) << "cuMemcpyDtoD(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
+            copy_name = "cuMemcpyDtoD";
             err = cuMemcpyDtoD((CUdeviceptr)dst, (CUdeviceptr)src, c.chunk_size);
         } else if (dst != src) {
             debug(user_context) << "memcpy(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
@@ -1107,11 +1045,7 @@ WEAK int halide_cuda_run(void *user_context,
                          int shared_mem_bytes,
                          size_t arg_sizes[],
                          void *args[],
-                         int8_t arg_is_buffer[],
-                         int num_attributes,
-                         float *vertex_buffer,
-                         int num_coords_dim0,
-                         int num_coords_dim1) {
+                         int8_t arg_is_buffer[]) {
 
     debug(user_context) << "CUDA: halide_cuda_run ("
                         << "user_context: " << user_context << ", "
@@ -1132,12 +1066,11 @@ WEAK int halide_cuda_run(void *user_context,
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    halide_assert(user_context, state_ptr);
-    module_state *loaded_module = find_module_for_context((registered_filters *)state_ptr, ctx.context);
-    halide_assert(user_context, loaded_module != nullptr);
-    CUmodule mod = loaded_module->module;
+    CUmodule mod{};
+    bool found = compilation_cache.lookup(ctx.context, state_ptr, mod);
+    halide_assert(user_context, found && mod != nullptr);
+
     debug(user_context) << "Got module " << mod << "\n";
-    halide_assert(user_context, mod);
     CUfunction f;
     err = cuModuleGetFunction(&f, mod, entry_name);
     debug(user_context) << "Got function " << f << "\n";
@@ -1264,7 +1197,7 @@ WEAK const halide_device_interface_t *halide_cuda_device_interface() {
 }
 
 WEAK int halide_cuda_compute_capability(void *user_context, int *major, int *minor) {
-    if (!lib_cuda) {
+    if (!lib_cuda && !cuInit) {
         // If cuda can't be found, we want to return 0, 0 and it's not
         // considered an error. So we should be very careful about
         // looking for libcuda without tripping any errors in the rest
@@ -1313,6 +1246,7 @@ WEAK int halide_cuda_compute_capability(void *user_context, int *major, int *min
 
 namespace {
 WEAK __attribute__((destructor)) void halide_cuda_cleanup() {
+    compilation_cache.release_all(nullptr, cuModuleUnload);
     halide_cuda_device_release(nullptr);
 }
 }  // namespace

@@ -9,7 +9,7 @@ def test_atomics():
     f[x] = 0
     f[hl.Expr(im[r])] += 1
     f.compute_root().update().atomic().parallel(r)
-    b = f.realize(5)
+    b = f.realize([5])
 
     ref = [0, 0, 0, 0, 0]
     for i in range(100):

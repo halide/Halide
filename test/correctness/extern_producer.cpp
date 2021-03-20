@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
         // Compute the source per tile of sink
         source.compute_at(sink, x);
 
-        Buffer<float> output = sink.realize(100, 100);
+        Buffer<float> output = sink.realize({100, 100});
 
         // Should be all zeroes.
         RDom r(output);
@@ -144,7 +144,7 @@ int main(int argc, char **argv) {
         // Compute the source per tile of sink
         multi.compute_at(sink_multi, x);
 
-        Buffer<float> output_multi = sink_multi.realize(100, 100);
+        Buffer<float> output_multi = sink_multi.realize({100, 100});
 
         // Should be all zeroes.
         RDom r(output_multi);

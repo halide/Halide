@@ -23,25 +23,18 @@ set(HEADER_FILES
     Buffer.h
     CanonicalizeGPUVars.h
     Closure.h
-    CodeGen_ARM.h
     CodeGen_C.h
     CodeGen_D3D12Compute_Dev.h
     CodeGen_GPU_Dev.h
-    CodeGen_GPU_Host.h
     CodeGen_Internal.h
     CodeGen_LLVM.h
     CodeGen_Metal_Dev.h
-    CodeGen_MIPS.h
     CodeGen_OpenCL_Dev.h
-    CodeGen_OpenGL_Dev.h
     CodeGen_OpenGLCompute_Dev.h
     CodeGen_Posix.h
-    CodeGen_PowerPC.h
     CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
-    CodeGen_RISCV.h
-    CodeGen_WebAssembly.h
-    CodeGen_X86.h
+    CodeGen_Targets.h
     CompilerLogger.h
     ConciseCasts.h
     CPlusPlusMangle.h
@@ -111,6 +104,7 @@ set(HEADER_FILES
     ModulusRemainder.h
     Monotonic.h
     ObjectInstanceRegistry.h
+    OffloadGPULoops.h
     OutputImageParam.h
     ParallelRVar.h
     Param.h
@@ -191,14 +185,12 @@ set(SOURCE_FILES
     CodeGen_C.cpp
     CodeGen_D3D12Compute_Dev.cpp
     CodeGen_GPU_Dev.cpp
-    CodeGen_GPU_Host.cpp
     CodeGen_Hexagon.cpp
     CodeGen_Internal.cpp
     CodeGen_LLVM.cpp
     CodeGen_Metal_Dev.cpp
     CodeGen_MIPS.cpp
     CodeGen_OpenCL_Dev.cpp
-    CodeGen_OpenGL_Dev.cpp
     CodeGen_OpenGLCompute_Dev.cpp
     CodeGen_Posix.cpp
     CodeGen_PowerPC.cpp
@@ -254,6 +246,7 @@ set(SOURCE_FILES
     IRPrinter.cpp
     IRVisitor.cpp
     JITModule.cpp
+    Lambda.cpp
     Lerp.cpp
     LICM.cpp
     LLVM_Output.cpp
@@ -267,6 +260,7 @@ set(SOURCE_FILES
     ModulusRemainder.cpp
     Monotonic.cpp
     ObjectInstanceRegistry.cpp
+    OffloadGPULoops.cpp
     OutputImageParam.cpp
     ParallelRVar.cpp
     Parameter.cpp
@@ -378,6 +372,13 @@ target_compile_definitions(Halide
                            $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>
                            $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:WITH_INTROSPECTION>)
 
+include(TargetExportScript)
+## TODO: implement something similar for Windows/link.exe
+# https://github.com/halide/Halide/issues/4651
+target_export_script(Halide
+                     APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
+                     GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.ldscript")
+
 set_target_properties(Halide PROPERTIES
                       POSITION_INDEPENDENT_CODE ON
                       VERSION ${Halide_VERSION}
@@ -460,6 +461,11 @@ endif ()
 option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
 if (TARGET_D3D12COMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_D3D12)
+endif ()
+
+option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
+if (TARGET_OPENGLCOMPUTE)
+    target_compile_definitions(Halide PRIVATE WITH_OPENGLCOMPUTE)
 endif ()
 
 ##

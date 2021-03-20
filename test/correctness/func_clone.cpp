@@ -76,7 +76,7 @@ int func_clone_test() {
         return -1;
     }
 
-    Buffer<int> im = g.realize(200, 200);
+    Buffer<int> im = g.realize({200, 200});
     auto func = [](int x, int y) { return x; };
     if (check_image(im, func)) {
         return -1;
@@ -115,7 +115,7 @@ int multiple_funcs_sharing_clone_test() {
         return -1;
     }
 
-    Realization r = p.realize(200, 200);
+    Realization r = p.realize({200, 200});
     Buffer<int> img1 = r[0];
     Buffer<int> img2 = r[1];
     Buffer<int> img3 = r[2];
@@ -174,7 +174,7 @@ int update_defined_after_clone_test() {
             return -1;
         }
 
-        Buffer<int> im = g.realize(200, 200);
+        Buffer<int> im = g.realize({200, 200});
         auto func = [](int x, int y) {
             return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
         };
@@ -201,7 +201,7 @@ int update_defined_after_clone_test() {
             return -1;
         }
 
-        Buffer<int> im = g.realize(200, 200);
+        Buffer<int> im = g.realize({200, 200});
         auto func = [](int x, int y) {
             return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
         };
@@ -254,7 +254,7 @@ int clone_depend_on_mutated_func_test() {
         return -1;
     }
 
-    Realization r = p.realize(25, 25);
+    Realization r = p.realize({25, 25});
     Buffer<int> img_d = r[0];
     Buffer<int> img_e = r[1];
     Buffer<int> img_f = r[2];
@@ -317,7 +317,7 @@ int clone_on_clone_test() {
         return -1;
     }
 
-    Realization r = p.realize(25, 25);
+    Realization r = p.realize({25, 25});
     Buffer<int> img_c = r[0];
     Buffer<int> img_d = r[1];
     Buffer<int> img_e = r[2];
@@ -361,7 +361,7 @@ int clone_reduction_test() {
     sum.compute_at(f, x);
 
     Pipeline p({f, g});
-    p.realize(128);
+    p.realize({128});
 
     return 0;
 }

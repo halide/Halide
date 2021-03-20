@@ -480,6 +480,7 @@ protected:
                 rewrite(halving_add(x + 1, y), rounding_halving_add(x, y)) ||
                 rewrite(halving_add(x - y, 1), rounding_halving_sub(x, y)) ||
                 rewrite(halving_sub(x + 1, y), rounding_halving_sub(x, y)) ||
+                rewrite(halving_add(x, 1), rounding_shift_right(x, 1)) ||
                 rewrite(shift_right(x + y, 1), halving_add(x, y)) ||
                 rewrite(shift_right(x - y, 1), halving_sub(x, y)) ||
                 rewrite(rounding_shift_right(x + y, 1), rounding_halving_add(x, y)) ||
@@ -623,38 +624,39 @@ Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
 
 Expr lower_saturating_add(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    return saturating_narrow(widening_add(a, b));
+    // Lower saturating add without using widening arithmetic, which may require
+    // types that aren't supported.
+    return simplify(clamp(a, a.type().min() - min(b, 0), a.type().max() - max(b, 0))) + b;
 }
 
 Expr lower_saturating_sub(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    return saturating_cast(a.type(), widening_sub(a, b));
+    // Lower saturating add without using widening arithmetic, which may require
+    // types that aren't supported.
+    return simplify(clamp(a, a.type().min() + max(b, 0), a.type().max() + min(b, 0))) - b;
 }
 
 Expr lower_halving_add(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    Expr result_2x = widening_add(a, b);
-    return Cast::make(a.type(), make_shift_right(result_2x, 1));
+    // Borrowed from http://aggregate.org/MAGIC/#Average%20of%20Integers
+    return (a & b) + make_shift_right((a ^ b), 1);
 }
 
 Expr lower_halving_sub(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    Expr result_2x = widening_sub(a, b);
-    return Cast::make(a.type(), make_shift_right(result_2x, 1));
+    return make_shift_right(a, 1) - make_shift_right(b, 1) - make_shift_right((b & 1) - (a & 1) + 1, 1);
 }
 
 // TODO: These should using rounding_shift_right, but lowering that
 // results in double widening and the simplifier doesn't fix it.
 Expr lower_rounding_halving_add(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    Expr result_2x = widening_add(a, b) + 1;
-    return Cast::make(a.type(), make_shift_right(result_2x, 1));
+    return make_shift_right(a, 1) + make_shift_right(b, 1) + make_shift_right((a & 1) + (b & 1) + 1, 1);
 }
 
 Expr lower_rounding_halving_sub(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    Expr result_2x = widening_sub(a, b) + 1;
-    return Cast::make(a.type(), make_shift_right(result_2x, 1));
+    return make_shift_right(a, 1) - make_shift_right(b, 1) + make_shift_right((a & 1) - (b & 1) + 1, 1);
 }
 
 Expr lower_mulhi_shr(const Type &result_type, const Expr &a, const Expr &b, const Expr &shift) {
@@ -676,6 +678,12 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::widening_sub)) {
         internal_assert(op->args.size() == 2);
         return lower_widening_sub(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::saturating_add)) {
+        internal_assert(op->args.size() == 2);
+        return lower_saturating_add(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::saturating_sub)) {
+        internal_assert(op->args.size() == 2);
+        return lower_saturating_sub(op->args[0], op->args[1]);
     } else if (op->is_intrinsic(Call::widening_shift_left)) {
         internal_assert(op->args.size() == 2);
         return lower_widening_shift_left(op->args[0], op->args[1]);
