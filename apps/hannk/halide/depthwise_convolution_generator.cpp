@@ -59,6 +59,7 @@ public:
         // subtracted.
         Func input_bounded = constant_exterior(input_, input_offset_);
 
+        Func filter_bounded = repeat_edge(filter_);
         Func bias_bounded = repeat_edge(bias_);
 
         // Apply the c multiplier.
@@ -68,7 +69,7 @@ public:
 
         Func filter_zeroed("filter_zeroed");
         Func input_zeroed("input_zeroed");
-        filter_zeroed(c, x, y) = i16(filter_(c, x, y)) - i16(filter_offset_);
+        filter_zeroed(c, x, y) = i16(filter_bounded(c, x, y)) - i16(filter_offset_);
         input_zeroed(c, x, y, b) = i16(resampled_input(c, x, y, b)) - i16(input_offset_);
 
         // Do the convolution in 32-bit.
@@ -113,6 +114,9 @@ public:
         // Tile the output, so we can try to re-use loads spatially when performing
         // convolution. This also helps because we can schedule the input and not
         // waste work for stride < kTileSize.
+        // We split co and reorder it outermost, so we can maximize locality of the
+        // filter. We even put it outside of the batch loop, so we can compute the
+        // boundary condition on the filter at co and reuse it across batches.
         const int kTileSize = 2;
         Var xo("xo"), yo("yo"), co("co");
         Expr output_channels = output_.dim(0).extent();
@@ -120,16 +124,15 @@ public:
             // TODO: some instances of this op have output width and/or height of 1,
             // so we must GuardWithIf or add a specialize() here. Or maybe pad?
             .tile(x, y, xo, yo, x, y, kTileSize, kTileSize, TailStrategy::GuardWithIf)
-            .reorder(x, y, c, xo, yo, b)
             .unroll(x)
             .unroll(y)
             .specialize(output_channels >= vector_size)
             .split(c, co, c, vector_size, TailStrategy::ShiftInwards)
-            .reorder(x, y, c, xo, yo, co, b)
+            .reorder(x, y, c, xo, yo, b, co)
             .vectorize(c);
 
         output_.split(c, co, c, vector_size, TailStrategy::GuardWithIf)
-            .reorder(x, y, c, xo, yo, co, b)
+            .reorder(x, y, c, xo, yo, b, co)
             .vectorize(c);
 
         convolved.compute_at(output_, xo)
@@ -164,6 +167,13 @@ public:
                 resampled_input.specialize(depth_multiplier_ == dm);
             }
         }
+
+        filter_bounded
+            .compute_at(output_, co)
+            .store_in(MemoryType::Stack)
+            .align_storage(Halide::_0, vector_size)
+            .specialize(output_channels >= vector_size)
+            .vectorize(Halide::_0, vector_size);
     }
 };
 
