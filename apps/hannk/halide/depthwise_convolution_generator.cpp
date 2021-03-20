@@ -88,9 +88,7 @@ public:
         // Saturate and narrow the output.
         Expr output =
             multiply_quantized(convolved(c, x, y, b), output_multiplier_, output_shift_);
-        // TODO: It might be wrong to narrow to 16 bits prior to adding the offset.
-        output = i16_sat(output) + output_offset_;
-        output_(c, x, y, b) = clamp(u8_sat(output), output_min_, output_max_);
+        output_(c, x, y, b) = clamp(saturating_add(u8_sat(i16_sat(output)), output_offset_), output_min_, output_max_);
 
         // Schedule.
         interpret_as_tensor(input_);
@@ -107,6 +105,7 @@ public:
             // When we're broadcasting input channels, require that the input has only
             // one channel.
             input_.dim(0).set_extent(1);
+            input_.dim(1).set_stride(1);
         }
 
         const int vector_size = natural_vector_size<uint8_t>();
@@ -126,12 +125,7 @@ public:
             .tile(x, y, xo, yo, x, y, kTileSize, kTileSize, TailStrategy::GuardWithIf)
             .unroll(x)
             .unroll(y)
-            .specialize(output_channels >= vector_size)
-            .split(c, co, c, vector_size, TailStrategy::ShiftInwards)
-            .reorder(x, y, c, xo, yo, b, co)
-            .vectorize(c);
-
-        output_.split(c, co, c, vector_size, TailStrategy::GuardWithIf)
+            .split(c, co, c, vector_size, TailStrategy::GuardWithIf)
             .reorder(x, y, c, xo, yo, b, co)
             .vectorize(c);
 
@@ -155,17 +149,24 @@ public:
 
         bias_bounded.compute_root();
 
-        // The reason inv_depth_multiplier_ is a GeneratorParam and not a
-        // specialization is that we can't specialize the (lack of) compute_at here.
         if (inv_depth_multiplier_ < 0) {
+            // The reason inv_depth_multiplier_ is a GeneratorParam and not a
+            // specialization is that we can't specialize the (lack of) compute_at here.
             resampled_input
-                .compute_at(output_, co)
+                .compute_at(output_, b)
                 .store_in(MemoryType::Stack)
                 .vectorize(c, vector_size, TailStrategy::GuardWithIf);
 
             for (int dm : {1, 3}) {
                 resampled_input.specialize(depth_multiplier_ == dm);
             }
+        } else if (inv_depth_multiplier_ == 0) {
+            // For the broadcasting case, we want to pull the boundary condition out
+            // of the inner loop before we broadcast the channels.
+            input_bounded
+                .compute_at(output_, b)
+                .store_in(MemoryType::Stack)
+                .vectorize(Halide::_0, vector_size, TailStrategy::GuardWithIf);
         }
 
         filter_bounded

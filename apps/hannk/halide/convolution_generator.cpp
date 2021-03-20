@@ -158,9 +158,7 @@ public:
         // Saturate and narrow the output.
         Expr output =
             multiply_quantized(convolved(c, x, y, b), output_multiplier_, output_shift_);
-        // TODO: It might be wrong to narrow to 16 bits prior to adding the offset.
-        output = i16_sat(output) + output_offset_;
-        output_(c, x, y, b) = clamp(u8_sat(output), output_min_, output_max_);
+        output_(c, x, y, b) = clamp(saturating_add(u8_sat(i16_sat(output)), output_offset_), output_min_, output_max_);
 
         // Schedule
         interpret_as_tensor(input_);
@@ -191,9 +189,9 @@ public:
         // output is bigger than a minimum size. So, we specialize for decreasing
         // tile sizes, and have a degenerate tile case to handle the rest.
         //
-        // TODO: this is actually faster in some cases if we just use vector_size=8
+        // TODO: this is actually faster in some cases if we just use accum_vector_size=8
         // (even on AVX2 / Skylake). Should investigate further.
-        const int vector_size = natural_vector_size<uint8_t>() / vector_reduction;
+        const int accum_vector_size = natural_vector_size<uint8_t>() / vector_reduction;
         Var xo("xo");
         Expr output_channels = output_.dim(0).extent();
         Expr output_width = output_.dim(1).extent();
@@ -201,27 +199,26 @@ public:
             int tile_c = i.first;
             int tile_x = i.second;
             output_
-                .specialize(output_channels >= tile_c * vector_size && output_width >= tile_x)
-                .tile(c, x, co, xo, c, x, tile_c * vector_size, tile_x, TailStrategy::ShiftInwards)
-                .split(c, c, ci, vector_size)
-                .reorder(ci, x, c, co, xo, y, b)
-                .vectorize(ci)
-                .unroll(x)
-                .unroll(c);
+                .specialize(output_channels >= tile_c * accum_vector_size && output_width >= tile_x)
+                .tile(c, x, co, xo, c, x, tile_c * accum_vector_size, tile_x, TailStrategy::ShiftInwards)
+                .reorder(x, c, co, xo, y, b)
+                .vectorize(c)
+                .unroll(x);
         }
 
         // In case there are no suitable tile sizes, just make a dummy split so the
         // rest of the schedule still works.
         output_
-            .tile(c, x, co, xo, c, x, vector_size, 1, TailStrategy::GuardWithIf)
-            .reorder(c, x, co, xo, y, b);
+            .tile(c, x, co, xo, c, x, accum_vector_size, 1, TailStrategy::GuardWithIf)
+            .reorder(c, x, co, xo, y, b)
+            .vectorize(c);
 
         // These GuardWithIf splits simplify for the constant-tile specializations,
         // but probably generate poor code for the general case.
         convolved.compute_at(output_, co)
             .store_in(MemoryType::Stack)
             .reorder(x, c, y, b)
-            .vectorize(c, vector_size)
+            .vectorize(c, accum_vector_size, TailStrategy::RoundUp)
             .unroll(x);
 
         // Specialize this to avoid computing sum_input when it isn't needed.
@@ -231,7 +228,7 @@ public:
         convolved.update()
             .split(r.z, rco, rci, vector_reduction)
             .reorder(rci, x, c, rco, r.x, r.y, y, b)
-            .vectorize(c, vector_size)
+            .vectorize(c, accum_vector_size, TailStrategy::RoundUp)
             .atomic()
             .vectorize(rci)
             .unroll(x);
@@ -246,9 +243,9 @@ public:
             .reorder(rci, c, rco, r.x, r.y)
             .atomic()
             .vectorize(rci, vector_reduction)
-            .vectorize(c, vector_size, TailStrategy::GuardWithIf);
+            .vectorize(c, accum_vector_size, TailStrategy::GuardWithIf);
         offset_c.update(1)
-            .vectorize(c, vector_size, TailStrategy::GuardWithIf);
+            .vectorize(c, accum_vector_size, TailStrategy::GuardWithIf);
 
         // Compute the sum of the input outside the loops over channels.
         sum_input.compute_at(output_, xo)
@@ -265,7 +262,7 @@ public:
         input_bounded.compute_at(output_, y)
             .store_in(MemoryType::Stack)
             .reorder(x, y, b, c)
-            .vectorize(c, vector_size * vector_reduction / 2, TailStrategy::GuardWithIf)
+            .vectorize(c, natural_vector_size<uint8_t>(), TailStrategy::GuardWithIf)
             .specialize(input_.dim(0).extent() == 3);
 
         // Pretranspose the filter, so we don't need to do it in the inner loop.
