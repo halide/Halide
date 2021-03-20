@@ -439,8 +439,8 @@ Op::Bounds DepthwiseConv2DOp::infer_bounds(const Box &crop) const {
 std::vector<SplitInfo> DepthwiseConv2DOp::get_split_info() const {
     return {
         SplitInfo::no_split(),
-        SplitInfo::shift_inwards(2),
-        SplitInfo::shift_inwards(2),
+        SplitInfo::guard_with_if(2),
+        SplitInfo::guard_with_if(2),
         SplitInfo::any_split()
     };
 }

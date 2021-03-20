@@ -321,7 +321,7 @@ std::vector<Box> split_box(const Box &box, int dim, const SplitInfo &split) {
             // Now, clamp at the max.
             split_x[dim].max = std::min(split_x[dim].max, x_max);
 
-            // If we're smaller than the min, shift the min over.
+            // If we're smaller than the min, shift the min over instead.
             split_x[dim].min -= std::max(0, split.min - split_x[dim].extent());
         }
         assert(split_x[dim].min >= box[dim].min);
