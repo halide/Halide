@@ -253,14 +253,28 @@ struct SplitInfo {
     // Minimum extent of crops in this dimension.
     int min;
 
-    SplitInfo() : SplitInfo(1, 1) {}
-    SplitInfo(int alignment, int min) : alignment(alignment), min(min) {}
+    SplitInfo()
+        : SplitInfo(1, 1) {
+    }
+    SplitInfo(int alignment, int min)
+        : alignment(alignment), min(min) {
+    }
 
-    static SplitInfo no_split() { return SplitInfo(); }
-    static SplitInfo any_split() { return SplitInfo(); }
-    static SplitInfo guard_with_if(int factor) { return SplitInfo(factor, 1); }
-    static SplitInfo shift_inwards(int factor) { return SplitInfo(1, factor); }
-    static SplitInfo round_up(int factor) { return SplitInfo(factor, factor); }
+    static SplitInfo no_split() {
+        return SplitInfo();
+    }
+    static SplitInfo any_split() {
+        return SplitInfo();
+    }
+    static SplitInfo guard_with_if(int factor) {
+        return SplitInfo(factor, 1);
+    }
+    static SplitInfo shift_inwards(int factor) {
+        return SplitInfo(1, factor);
+    }
+    static SplitInfo round_up(int factor) {
+        return SplitInfo(factor, factor);
+    }
 };
 
 class Op {
