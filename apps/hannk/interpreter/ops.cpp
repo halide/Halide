@@ -314,8 +314,7 @@ std::vector<SplitInfo> Conv2DOp::get_split_info() const {
         SplitInfo::no_split(),
         SplitInfo::any_split(),
         SplitInfo::any_split(),
-        SplitInfo::any_split()
-    };
+        SplitInfo::any_split()};
 }
 
 void Conv2DOp::execute(const Box &crop) {
@@ -441,8 +440,7 @@ std::vector<SplitInfo> DepthwiseConv2DOp::get_split_info() const {
         SplitInfo::no_split(),
         SplitInfo::guard_with_if(2),
         SplitInfo::guard_with_if(2),
-        SplitInfo::any_split()
-    };
+        SplitInfo::any_split()};
 }
 
 void DepthwiseConv2DOp::execute(const Box &crop) {

@@ -190,6 +190,9 @@ public:
         // things computed at the tile to have constant size. We can't assume the
         // output is bigger than a minimum size. So, we specialize for decreasing
         // tile sizes, and have a degenerate tile case to handle the rest.
+        //
+        // TODO: this is actually faster in some cases if we just use vector_size=8
+        // (even on AVX2 / Skylake). Should investigate further.
         const int vector_size = natural_vector_size<uint8_t>() / vector_reduction;
         Var xo("xo");
         Expr output_channels = output_.dim(0).extent();
@@ -200,7 +203,7 @@ public:
             output_
                 .specialize(output_channels >= tile_c * vector_size && output_width >= tile_x)
                 .tile(c, x, co, xo, c, x, tile_c * vector_size, tile_x, TailStrategy::ShiftInwards)
-                .split(c, c, ci, natural_vector_size<int16_t>())
+                .split(c, c, ci, vector_size)
                 .reorder(ci, x, c, co, xo, y, b)
                 .vectorize(ci)
                 .unroll(x)
@@ -210,7 +213,7 @@ public:
         // In case there are no suitable tile sizes, just make a dummy split so the
         // rest of the schedule still works.
         output_
-            .tile(c, x, co, xo, c, x, 1, 1, TailStrategy::RoundUp)
+            .tile(c, x, co, xo, c, x, vector_size, 1, TailStrategy::GuardWithIf)
             .reorder(c, x, co, xo, y, b);
 
         // These GuardWithIf splits simplify for the constant-tile specializations,
@@ -218,7 +221,7 @@ public:
         convolved.compute_at(output_, co)
             .store_in(MemoryType::Stack)
             .reorder(x, c, y, b)
-            .vectorize(c)
+            .vectorize(c, vector_size)
             .unroll(x);
 
         // Specialize this to avoid computing sum_input when it isn't needed.
@@ -228,7 +231,7 @@ public:
         convolved.update()
             .split(r.z, rco, rci, vector_reduction)
             .reorder(rci, x, c, rco, r.x, r.y, y, b)
-            .vectorize(c)
+            .vectorize(c, vector_size)
             .atomic()
             .vectorize(rci)
             .unroll(x);
