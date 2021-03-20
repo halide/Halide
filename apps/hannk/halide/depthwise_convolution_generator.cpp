@@ -9,8 +9,8 @@ namespace hannk {
 
 class DepthwiseConvolution : public Generator<DepthwiseConvolution> {
 public:
-    // If true, the input is assumed to have one channel, and it is broadcasted.
-    GeneratorParam<bool> broadcast_channels_{"broadcast_channels", false};
+    // If positive, a constant inverse depth multiplier.
+    GeneratorParam<int> inv_depth_multiplier_{"inv_depth_multiplier", -1};
 
     // Unsigned 8-bit input tensor, indexed by c, x, y, b.
     Input<Buffer<uint8_t>> input_{"input", 4};
@@ -63,7 +63,7 @@ public:
 
         // Apply the c multiplier.
         Func resampled_input("resampled_input");
-        Expr c_resampled = broadcast_channels_ ? 0 : c / depth_multiplier_;
+        Expr c_resampled = inv_depth_multiplier_ >= 0 ? c * inv_depth_multiplier_ : c / depth_multiplier_;
         resampled_input(c, x, y, b) = input_bounded(c_resampled, x, y, b);
 
         Func filter_zeroed("filter_zeroed");
@@ -102,7 +102,7 @@ public:
         output_.dim(0).set_min(input_.dim(0).min() * depth_multiplier_);
         output_.dim(0).set_extent(input_.dim(0).extent() * depth_multiplier_);
 
-        if (broadcast_channels_) {
+        if (inv_depth_multiplier_ == 0) {
             // When we're broadcasting input channels, require that the input has only
             // one channel.
             input_.dim(0).set_extent(1);
@@ -125,37 +125,36 @@ public:
             .unroll(y)
             .specialize(output_channels >= vector_size)
             .split(c, co, c, vector_size, TailStrategy::ShiftInwards)
-            .reorder(x, y, c, xo, co, yo, b)
+            .reorder(x, y, c, xo, yo, co, b)
             .vectorize(c);
 
-        output_.split(c, co, c, output_channels, TailStrategy::RoundUp)
-            .reorder(x, y, c, xo, co, yo, b);
+        output_.split(c, co, c, vector_size, TailStrategy::GuardWithIf)
+            .reorder(x, y, c, xo, yo, co, b)
+            .vectorize(c);
 
         convolved.compute_at(output_, xo)
             .store_in(MemoryType::Stack)
             .bound_extent(c, vector_size)
-            .reorder(x, y, c, b)
+            .bound_extent(x, kTileSize)
+            .bound_extent(y, kTileSize)
             .unroll(x)
             .unroll(y)
             .vectorize(c);
         convolved.update()
-            .reorder(x, y, c, r.x, r.y, b)
+            .reorder(x, y, r.x, r.y)
             .unroll(x)
             .unroll(y)
             .vectorize(c);
         convolved.update()
             .specialize(filter_width == 3 && filter_height == 3)
+            .reorder(r.x, x, y, r.y)
             .unroll(r.x);
 
         bias_bounded.compute_root();
 
-        // TODO: This gets recomputed often when the op is split up into small
-        // pieces.
-        filter_zeroed.compute_root();
-
-        // The reason broadcast_channels_ is a GeneratorParam and not a
+        // The reason inv_depth_multiplier_ is a GeneratorParam and not a
         // specialization is that we can't specialize the (lack of) compute_at here.
-        if (!broadcast_channels_) {
+        if (inv_depth_multiplier_ < 0) {
             resampled_input
                 .compute_at(output_, co)
                 .store_in(MemoryType::Stack)
