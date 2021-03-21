@@ -198,8 +198,8 @@ void AddOp::execute(const Box &crop) {
         }
 
         CHECK(0 == add_uint8_uint8(left_shift, in1_buf, in2_buf,
-                                   -in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
-                                   -in2_offset, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
+                                   in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
+                                   in2_offset, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
                                    output_offset, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
                                    output_range.min, output_range.max, output_buf));
     } else {
@@ -738,8 +738,8 @@ void QuantizeOp::execute(const Box &crop) {
         }
 
         CHECK(0 == add_uint8_uint8(left_shift, in_buf, in_buf,
-                                   -in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
-                                   -in2_offset, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
+                                   in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
+                                   in2_offset, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
                                    output_offset, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
                                    output_range.min, output_range.max, output_buf));
     } else {

@@ -41,8 +41,8 @@ public:
     Input<int> dilation_y_{"dilation_y", 1, 1, 4};
 
     // Parameters for pointwise operations on the output.
-    Input<int> output_multiplier_{"output_multiplier"};
-    Input<int> output_shift_{"output_shift"};
+    Input<int32_t> output_multiplier_{"output_multiplier"};
+    Input<uint32_t> output_shift_{"output_shift"};
     Input<uint8_t> output_offset_{"output_offset"};
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
@@ -88,7 +88,9 @@ public:
         // Saturate and narrow the output.
         Expr output =
             multiply_quantized(convolved(c, x, y, b), output_multiplier_, output_shift_);
-        output_(c, x, y, b) = clamp(saturating_add(u8_sat(i16_sat(output)), output_offset_), output_min_, output_max_);
+        output = i16_sat(output);
+        output = saturating_add(output, output_offset_);
+        output_(c, x, y, b) = clamp(u8_sat(output), output_min_, output_max_);
 
         // Schedule.
         interpret_as_tensor(input_);
