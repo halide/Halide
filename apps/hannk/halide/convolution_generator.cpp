@@ -260,12 +260,19 @@ public:
 
         // TODO: We only need this (and the boundary condition on c) when
         // filter.dim(0).extent() % 4 != 0 :(
-        // TODO: Specializing for 3 channels is lame.
         input_bounded.compute_at(output_, y)
-            .store_in(MemoryType::Stack)
-            .reorder(x, y, b, c)
-            .vectorize(c, natural_vector_size<uint8_t>(), TailStrategy::GuardWithIf)
-            .specialize(input_.dim(0).extent() == 3);
+            .store_in(MemoryType::Stack);
+
+        // For 3-channel inputs, we need to try to use interleaving loads/stores
+        // when available.
+        input_bounded.specialize(input_.dim(0).extent() == 3 && input_.dim(1).stride() == 3)
+            .reorder(c, x, y)
+            .unroll(c)
+            .vectorize(x, natural_vector_size<uint8_t>(), TailStrategy::RoundUp);
+
+        input_bounded
+            .reorder(x, y, c)
+            .vectorize(c, natural_vector_size<uint8_t>(), TailStrategy::GuardWithIf);
 
         // Pretranspose the filter, so we don't need to do it in the inner loop.
         // TODO: This gets recomputed often when the op is split up into small

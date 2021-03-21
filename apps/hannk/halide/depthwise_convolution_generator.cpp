@@ -100,13 +100,17 @@ public:
         require_same_min_extent(3, input_, output_);
         require_same_min_extent(0, bias_, output_);
         require_same_min_extent(0, filter_, output_);
-        output_.dim(0).set_min(input_.dim(0).min() * depth_multiplier_);
-        output_.dim(0).set_extent(input_.dim(0).extent() * depth_multiplier_);
 
-        if (inv_depth_multiplier_ == 0) {
+        if (inv_depth_multiplier_ < 0) {
+            output_.dim(0).set_min(input_.dim(0).min() * depth_multiplier_);
+            output_.dim(0).set_extent(input_.dim(0).extent() * depth_multiplier_);
+        } else if (inv_depth_multiplier_ != 0) {
+            input_.dim(0).set_min(output_.dim(0).min() * inv_depth_multiplier_);
+            input_.dim(0).set_extent(output_.dim(0).extent() * inv_depth_multiplier_);
+        } else {
             // When we're broadcasting input channels, require that the input has only
             // one channel.
-            input_.dim(0).set_extent(1);
+            input_.dim(0).set_min(0).set_extent(1);
             input_.dim(1).set_stride(1);
         }
 
@@ -168,7 +172,7 @@ public:
             input_bounded
                 .compute_at(output_, b)
                 .store_in(MemoryType::Stack)
-                .vectorize(Halide::_0, vector_size, TailStrategy::GuardWithIf);
+                .vectorize(Halide::_1, vector_size, TailStrategy::RoundUp);
         }
 
         filter_bounded
