@@ -1,7 +1,9 @@
 #include "super_simplify.h"
 #include "expr_util.h"
 #include "z3.h"
+#include <cstdint>
 #include <iostream>
+#include <sys/_types/_size_t.h>
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -55,13 +57,13 @@ pair<Expr, Expr> interpreter_expr_v2(vector<Expr> terms, vector<Expr> use_counts
         int s = (int) std::max(terms_int.size(), terms_bool.size());
 
         // (rootjalex): Force the use of leaves.
-        Expr arg1_int = max(min(arg1_idx, s), 0);
-        Expr arg2_int = max(min(arg2_idx, s), 0);
-        Expr arg3_int = max(min(arg3_idx, s), 0);
+        // Expr arg1_int = max(min(arg1_idx, s - 1), 0);
+        // Expr arg2_int = max(min(arg2_idx, s - 1), 0);
+        // Expr arg3_int = max(min(arg3_idx, s - 1), 0);
         // int opcodes outside the valid range are constants.
-        // Expr arg1_int = select(arg1_idx >= s, arg1_idx - s, arg1_idx);
-        // Expr arg2_int = select(arg2_idx >= s, arg2_idx - s, arg2_idx);
-        // Expr arg3_int = select(arg3_idx >= s, arg3_idx - s, arg3_idx);
+        Expr arg1_int = select(arg1_idx >= s, arg1_idx - s, arg1_idx);
+        Expr arg2_int = select(arg2_idx >= s, arg2_idx - s, arg2_idx);
+        Expr arg3_int = select(arg3_idx >= s, arg3_idx - s, arg3_idx);
 
         for (size_t j = 0; j < terms_int.size(); j++) {
             arg1_int = select(arg1_idx == (int) j, terms_int[j], arg1_int);
@@ -108,26 +110,29 @@ pair<Expr, Expr> interpreter_expr_v2(vector<Expr> terms, vector<Expr> use_counts
         result_int = select(op == 1, arg1_int + arg2_int, result_int);
         result_int = select(op == 2, arg1_int - arg2_int, result_int);
         result_int = select(op == 3, arg1_int * arg2_int, result_int);
-        result_int = select(op == 4, min(arg1_int, arg2_int), result_int);
-        result_int = select(op == 5, max(arg1_int, arg2_int), result_int);
-        result_bool = select(op == 6, arg1_int < arg2_int, result_bool);
-        result_bool = select(op == 7, arg1_int <= arg2_int, result_bool);
-        result_bool = select(op == 8, arg1_int == arg2_int, result_bool);
-        result_bool = select(op == 9, arg1_int != arg2_int, result_bool);
+
+        result_bool = select(op == 4, arg1_int < arg2_int, result_bool);
+        result_bool = select(op == 5, arg1_int <= arg2_int, result_bool);
+        result_bool = select(op == 6, arg1_int == arg2_int, result_bool);
+        result_bool = select(op == 7, arg1_int != arg2_int, result_bool);
 
         // TODO: switch 2 to any constant divisor already found in the input
-        result_int = select(op == 10, arg1_int / 2, result_int);
-        result_int = select(op == 11, arg1_int % 2, result_int);
+        result_int = select(op == 8, arg1_int / 2, result_int);
+        result_int = select(op == 9, arg1_int % 2, result_int);
 
         // Meaningful if arg1 is a bool
-        result_int = select(op == 12, select(arg1_bool, arg2_int, arg3_int), result_int);
-        result_bool = select(op == 13, arg1_bool && arg2_bool, result_bool);
-        result_bool = select(op == 14, arg1_bool || arg2_bool, result_bool);
-        result_bool = select(op == 15, !arg1_bool, result_bool);
-        result_bool = select(op == 16, arg1_bool, result_bool);
+        result_int = select(op == 10, select(arg1_bool, arg2_int, arg3_int), result_int);
+        result_bool = select(op == 11, arg1_bool && arg2_bool, result_bool);
+        result_bool = select(op == 12, arg1_bool || arg2_bool, result_bool);
+        result_bool = select(op == 13, !arg1_bool, result_bool);
+        result_bool = select(op == 14, arg1_bool, result_bool);
+
+        // rootjalex: mins and maxs are more likely in bounds code, try to make them more likely
+        result_int = select(op >= 15, min(arg1_int, arg2_int), result_int);
+        result_int = select(op >= 20, max(arg1_int, arg2_int), result_int);
 
         // Type-check it
-        program_is_valid = program_is_valid && (op <= 16 && op >= 0);
+        program_is_valid = program_is_valid && (op <= 25 && op >= 0);
 
         terms_int.push_back(result_int);
         terms_bool.push_back(result_bool);
@@ -140,7 +145,8 @@ pair<Expr, Expr> interpreter_expr_v2(vector<Expr> terms, vector<Expr> use_counts
     // We don't duplicate any wildcards and we strictly reduce the number of leaf nodes.
     // More precise filtering will be done later.
     // TODO(rootjalex): don't require leaves_used >= 1...
-    program_is_valid = program_is_valid && (leaves_used < max_leaves) && (leaves_used >= 1);
+    // TODO(rootjalex): don't have a max_leaves restriction? Or base it on current bounds_of_expr_in_scope.
+    program_is_valid = program_is_valid && (leaves_used < max_leaves);
 
     Expr result = (desired_type.is_bool()) ? terms_bool.back() : terms_int.back();
 
@@ -170,8 +176,35 @@ public:
     int result = 0;
 };
 
+int count_leaves(const Expr &expr) {
+    CountLeaves leaf_counter;
+    expr.accept(&leaf_counter);
+    return leaf_counter.result;
+}
+
+Scope<Interval> make_symbolic_scope(const Expr &expr) {
+    Scope<Interval> scope;
+
+    auto vars = find_vars(expr);
+
+    for (auto v : vars) {
+        if (const Variable *op = v.second.first.as<Variable>()) {
+            assert(op->name == v.first);
+            string min_name = op->name + ".min";
+            string max_name = op->name + ".max";
+            Expr vmin = Variable::make(v.second.first.type(), min_name);
+            Expr vmax = Variable::make(v.second.first.type(), max_name);
+            scope.push(op->name, Interval(vmin, vmax));
+        } else {
+            std::cerr << "find_vars returned non-Variable\n";
+            return scope;
+        }
+    }
+    return scope;
+}
+
 // Use CEGIS to construct an equivalent expression to the input of the given size.
-Expr generate_bound(Expr e, bool upper, int size) {
+Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
     // debug(0) << "\n-------------------------------------------\n";
     std::cerr << "generate_bound_" << (upper ? "upper" : "lower") << "(" << e << ")" << "\n";
 
@@ -203,27 +236,45 @@ Expr generate_bound(Expr e, bool upper, int size) {
     } ub_checker;
     e.accept(&ub_checker);
 
-    CountLeaves leaf_counter;
-    e.accept(&leaf_counter);
-
     auto vars = find_vars(e);
     vector<Expr> leaves;
     vector<Expr> use_counts;
 
-    // TODO(rootjalex): generate mins and maxs.
-
+    // This expr holds all of the bounds of the variables in the original expression.
     Expr variable_bounds = const_true();
+
+    map<string, Expr> var_intervals;
+
+    map<string, Expr> var_extremes;
+
+    Expr prime_bounds = const_true();
 
     for (auto v : vars) {
         if (const Variable *op = v.second.first.as<Variable>()) {
             assert(op->name == v.first);
-            Expr vmin = Variable::make(v.second.first.type(), op->name + ".min");
-            Expr vmax = Variable::make(v.second.first.type(), op->name + ".max");
+            string min_name = op->name + ".min";
+            string max_name = op->name + ".max";
+            string extreme_name = op->name + ".prime";
+            Expr vmin = Variable::make(v.second.first.type(), min_name);
+            Expr vmax = Variable::make(v.second.first.type(), max_name);
+            Expr v_extreme = Variable::make(v.second.first.type(), extreme_name);
+
+            // Save these vars
+            var_intervals[min_name] = vmin;
+            var_intervals[max_name] = vmax;
+            var_extremes[op->name] = v_extreme;
+
+            // The bounds are our leaves.
             leaves.emplace_back(vmin);
             leaves.emplace_back(vmax);
+
+            // TODO(rootjalex): This is arbitrary, be smarter.
+            use_counts.push_back(v.second.second * 10); // vmin
+            use_counts.push_back(v.second.second * 10); // vmax
+
+            // Construct the bounds.
             variable_bounds = variable_bounds && (v.second.first >= vmin) && (v.second.first <= vmax);
-            use_counts.push_back(v.second.second * 2); // vmin
-            use_counts.push_back(v.second.second * 2); // vmax
+            prime_bounds = (v_extreme >= vmin) && (v_extreme <= vmax);
         } else {
             std::cerr << "Found var that isn't a var:" << v.first << ": " << v.second.first << std::endl;
             return Expr();
@@ -249,35 +300,66 @@ Expr generate_bound(Expr e, bool upper, int size) {
         all_vars_zero[v.first] = make_zero(v.second.first.type());
     }
 
-    Expr program, program_works;
+    for (auto const &bound : var_intervals) {
+      all_vars_zero[bound.first] = make_zero(bound.second.type());
+    }
+
+    Expr program, program_works, program_tightness;
     {
-        auto p = interpreter_expr_v2(leaves, use_counts, symbolic_opcodes, e.type(), Int(32), leaf_counter.result * 5);
+        auto p = interpreter_expr(leaves, use_counts, symbolic_opcodes, e.type(), Int(32), max_leaves);
         program = p.first;
         if (upper) {
             program_works = (e <= program) && p.second;
         } else {
             program_works = (e >= program) && p.second;
         }
+        program_tightness = (e == program);
+        for (auto v: vars) {
+            string min_name = v.first + ".min";
+            string max_name = v.first + ".max";
+            Expr prime = var_extremes[v.first];
+            program_tightness = substitute(v.first, prime, substitute(min_name, prime, substitute(max_name, prime, program_tightness)));
+        }
+
+        // std::cout << program << " and " << p.second << std::endl;
         program = simplify(common_subexpression_elimination(program));
+        // std::cerr << "program works (before): " << program_works << std::endl;
         program_works = simplify(common_subexpression_elimination(program_works));
+        // std::cerr << "program works (after): " << program_works << std::endl;
     }
 
     std::mt19937 rng(0);
     std::uniform_int_distribution<int> random_int(-3, 3);
+
+
+    // TODO(rootjalex): remove this at some point.
+
+    size_t iters = 0;
+
+    size_t max_iters = 32;
 
     while (true) {
         if (counterexamples.size() > 100) {
           debug(0) << "TOO MANY COUNTEREXAMPLES, bailing for size=" << size << "\ne="<<e<<"\n";
           return Expr();
         }
+        if (iters++ > max_iters) {
+            debug(0) << "Gave up on iteration: " << iters << "\n";
+            return Expr();
+        }
 
         // First sythesize a counterexample to the current program.
+        // std::cerr << "program_works: " << program_works << std::endl;
         Expr current_program_works = substitute(current_program, program_works);
         map<string, Expr> counterexample = all_vars_zero;
 
-        debug(0) << "RHS expression:" << program << "\n";
+        // debug(0) << "RHS expression:" << program << "\n";
 
-        debug(0) << "works? " << current_program_works << "\n";
+        // debug(0) << "works? " << current_program_works << "\n";
+        debug(0) << "works? (simpl)" << simplify(current_program_works) << "\n";
+
+        Expr current_program_tightness = substitute(current_program, program_tightness);
+        debug(0) << "tightness? (simpl)" << simplify(current_program_tightness) << "\n";
 
         debug(0) << "Candidate RHS:\n"
                  << simplify(simplify(substitute_in_all_lets(substitute(current_program, program)))) << "\n";
@@ -293,8 +375,17 @@ Expr generate_bound(Expr e, bool upper, int size) {
                     it.second = random_int(rng);
                 }
             }
-            auto interpreted = simplify(substitute(rand_binding, ub_checker.safe && variable_bounds && !current_program_works));
+            auto attempt = substitute(rand_binding, ub_checker.safe && variable_bounds && !current_program_works);
+            auto interpreted = simplify(attempt);
             if (is_const_one(interpreted)) {
+                std::cerr << "found fuzzing counterexample!\n";
+                const char *prefix = "";
+                for (auto it : rand_binding) {
+                    std::cout << prefix << it.first << " = " << it.second;
+                    prefix = ", ";
+                }
+                std::cout << "\n";
+
                 counterexamples.push_back(rand_binding);
                 // We probably only want to add a couple
                 // counterexamples at a time
@@ -302,10 +393,14 @@ Expr generate_bound(Expr e, bool upper, int size) {
                 if (counterexamples_found_with_fuzzing >= 2) {
                     break;
                 }
+            } else {
+              // std::cerr << "Fuzzing attempt: " << interpreted << std::endl;
+              // std::cerr << "Before:" << attempt << std::endl;
             }
         }
 
         if (counterexamples_found_with_fuzzing == 0) {
+            std::cerr << "Checking satisfiability of: " << simplify(substitute_in_all_lets(current_program_works)) << std::endl;
             auto result = satisfy(ub_checker.safe && variable_bounds && !current_program_works, &counterexample,
                                   "finding counterexamples for " + z3_comment, z3_timeout);
             if (result == Z3Result::Unsat) {
@@ -345,19 +440,37 @@ Expr generate_bound(Expr e, bool upper, int size) {
 
         // Now synthesize a program that fits all the counterexamples
         Expr works_on_counterexamples = const_true();
+        Expr tightness_on_counterexamples = const_true();
+        int tightness_count = 0;
+
+        std::cerr << "Constructing tightness on counterexamples\n";
         for (auto &c : counterexamples) {
             works_on_counterexamples = works_on_counterexamples && substitute(c, program_works);
+            Expr temp_tightness = substitute(c, current_program_tightness && prime_bounds);
+            for (auto v: vars) {
+                string prime_name = v.first + ".prime";
+                string unique_name = prime_name + std::to_string(tightness_count);
+                Expr unique = Variable::make(v.second.first.type(), unique_name);
+                temp_tightness = substitute(prime_name, unique, temp_tightness);
+            }
+            tightness_count++;
+            tightness_on_counterexamples = tightness_on_counterexamples && temp_tightness;
         }
 
-        // std::cerr << "works_on_counterexamples" << works_on_counterexamples << std::endl;
-        if (satisfy(works_on_counterexamples, &current_program,
+        std::cerr << "Querying\n";
+        // std::cerr << "works_on_counterexamples" << simplify(works_on_counterexamples) << std::endl;
+        if (satisfy(works_on_counterexamples && tightness_on_counterexamples, &current_program,
                     "finding program for " + z3_comment) != Z3Result::Sat) {
             // Failed to synthesize a program
             debug(0) << "Failed to find a program in the integers\n";
             return Expr();
         }
 
+        std::cerr << "Successful query\n";
         // Now we have a new program.
+        Expr tightness_check = simplify(substitute(current_program, tightness_on_counterexamples));
+        std::cerr << "tightness check: " << tightness_check << std::endl;
+
 
         // If we start to have many many counterexamples, we should
         // double-check things are working as intended.
