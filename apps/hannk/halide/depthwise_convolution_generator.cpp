@@ -125,10 +125,19 @@ public:
         const int kTileSize = 2;
         Var xo("xo"), yo("yo"), co("co");
         Expr output_channels = output_.dim(0).extent();
-        output_.compute_root()
-            // TODO: some instances of this op have output width and/or height of 1,
-            // so we must GuardWithIf or add a specialize() here. Or maybe pad?
-            .tile(x, y, xo, yo, x, y, kTileSize, kTileSize, TailStrategy::GuardWithIf)
+        Expr output_width = output_.dim(1).extent();
+        Expr output_height = output_.dim(2).extent();
+        output_.compute_root().specialize(output_width >= kTileSize && output_height >= kTileSize)
+            .tile(x, y, xo, yo, x, y, kTileSize, kTileSize, TailStrategy::ShiftInwards)
+            .unroll(x)
+            .unroll(y)
+            .split(c, co, c, vector_size, TailStrategy::GuardWithIf)
+            .reorder(x, y, c, xo, yo, b, co)
+            .vectorize(c);
+
+        // Enable 1x1 outputs to work.
+        output_
+            .tile(x, y, xo, yo, x, y, 1, 1, TailStrategy::RoundUp)
             .unroll(x)
             .unroll(y)
             .split(c, co, c, vector_size, TailStrategy::GuardWithIf)
@@ -138,8 +147,6 @@ public:
         convolved.compute_at(output_, xo)
             .store_in(MemoryType::Register)
             .bound_extent(c, vector_size)
-            .bound_extent(x, kTileSize)
-            .bound_extent(y, kTileSize)
             .unroll(x)
             .unroll(y)
             .vectorize(c);
