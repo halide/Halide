@@ -146,7 +146,7 @@ pair<Expr, Expr> interpreter_expr_v2(vector<Expr> terms, vector<Expr> use_counts
     // More precise filtering will be done later.
     // TODO(rootjalex): don't require leaves_used >= 1...
     // TODO(rootjalex): don't have a max_leaves restriction? Or base it on current bounds_of_expr_in_scope.
-    program_is_valid = program_is_valid && (leaves_used < max_leaves);
+    program_is_valid = program_is_valid && (leaves_used <= max_leaves);
 
     Expr result = (desired_type.is_bool()) ? terms_bool.back() : terms_int.back();
 
@@ -304,7 +304,7 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
       all_vars_zero[bound.first] = make_zero(bound.second.type());
     }
 
-    Expr program, program_works, program_tightness;
+    Expr program, program_works;
     {
         auto p = interpreter_expr(leaves, use_counts, symbolic_opcodes, e.type(), Int(32), max_leaves);
         program = p.first;
@@ -312,13 +312,6 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
             program_works = (e <= program) && p.second;
         } else {
             program_works = (e >= program) && p.second;
-        }
-        program_tightness = (e == program);
-        for (auto v: vars) {
-            string min_name = v.first + ".min";
-            string max_name = v.first + ".max";
-            Expr prime = var_extremes[v.first];
-            program_tightness = substitute(v.first, prime, substitute(min_name, prime, substitute(max_name, prime, program_tightness)));
         }
 
         // std::cout << program << " and " << p.second << std::endl;
@@ -331,12 +324,12 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
     std::mt19937 rng(0);
     std::uniform_int_distribution<int> random_int(-3, 3);
 
-
     // TODO(rootjalex): remove this at some point.
 
     size_t iters = 0;
 
     size_t max_iters = 32;
+
 
     while (true) {
         if (counterexamples.size() > 100) {
@@ -353,16 +346,99 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
         Expr current_program_works = substitute(current_program, program_works);
         map<string, Expr> counterexample = all_vars_zero;
 
+        Expr candidate_RHS = simplify(simplify(substitute_in_all_lets(substitute(current_program, program))));
+
         // debug(0) << "RHS expression:" << program << "\n";
 
         // debug(0) << "works? " << current_program_works << "\n";
         debug(0) << "works? (simpl)" << simplify(current_program_works) << "\n";
 
-        Expr current_program_tightness = substitute(current_program, program_tightness);
-        debug(0) << "tightness? (simpl)" << simplify(current_program_tightness) << "\n";
+        debug(0) << "Candidate RHS:\n\t" << candidate_RHS << "\n";
 
-        debug(0) << "Candidate RHS:\n"
-                 << simplify(simplify(substitute_in_all_lets(substitute(current_program, program)))) << "\n";
+        if (!counterexamples.empty()) {
+            Expr opt_counterexample_RHS = (upper) ? e.type().min() : e.type().max();
+
+            for (auto &c : counterexamples) {
+                if (upper) {
+                    opt_counterexample_RHS = max(opt_counterexample_RHS, substitute(c, candidate_RHS));
+                } else {
+                    opt_counterexample_RHS = min(opt_counterexample_RHS, substitute(c, candidate_RHS));
+                }
+            }
+
+            opt_counterexample_RHS = simplify(opt_counterexample_RHS);
+
+            Expr program_tighter = (upper) ? (program < opt_counterexample_RHS) : (program > opt_counterexample_RHS);
+            Expr no_program_regression = (upper) ? (program <= opt_counterexample_RHS) : (program >= opt_counterexample_RHS);
+
+            // std::cerr << "program_tighter:\n\t" << program_tighter << "\n";
+
+            Expr is_tighter_somewhere = const_false();
+            Expr no_tightness_regressions = const_false();
+            Expr works_on_counterexamples = const_true();
+
+            for (auto &c : counterexamples) {
+                works_on_counterexamples = works_on_counterexamples && substitute(c, program_works);
+                is_tighter_somewhere = is_tighter_somewhere || substitute(c, program_tighter);
+                no_tightness_regressions = no_tightness_regressions && substitute(c, no_program_regression);
+            }
+
+            // TODO: should this just use current_program?
+            map<string, Expr> tighter_program;
+            bool found_tighter = false;
+
+            // Iteratively find a tighter RHS
+            while (true) {
+                auto z3_result = satisfy(works_on_counterexamples && is_tighter_somewhere && no_tightness_regressions, &tighter_program, "finding tighter program for " + z3_comment);
+
+                if (z3_result == Z3Result::Sat) {
+                    found_tighter = true;
+                    std::cerr << "Found tighter RHS\n";
+                    Expr temp = simplify(simplify(substitute_in_all_lets(substitute(tighter_program, program))));
+                    std::cerr << "\t" << temp << "\n";
+
+
+                    current_program_works = simplify(substitute(tighter_program, program_works));
+                    std::cerr << "works? (updated)" << current_program_works << "\n";
+                    
+                    // for (auto &c : counterexamples) {
+                    //     Expr t1 = substitute(c, simplify(substitute_in_all_lets(substitute(tighter_program, program_tighter))));
+                    //     std::cerr << "Counterexample tightness:" << t1 << std::endl;
+                    //     std::cerr << "previous: " << simplify(substitute(c, opt_counterexample_RHS)) << std::endl;
+                    //     std::cerr << "updated: " << simplify(substitute(c, temp)) << std::endl;
+                    // }
+
+                    std::cerr << "RHS update: " << opt_counterexample_RHS << "\t->\t" << temp << "\n";
+
+                    opt_counterexample_RHS = std::move(temp);
+
+                    program_tighter = (upper) ? (program < opt_counterexample_RHS) : (program > opt_counterexample_RHS);
+                    no_program_regression = (upper) ? (program <= opt_counterexample_RHS) : (program >= opt_counterexample_RHS);
+
+                    // Need to re-do the tightness criterion.
+                    // TODO: is there a smarter / faster way?
+                    is_tighter_somewhere = const_false();
+                    works_on_counterexamples = const_true();
+                    no_tightness_regressions = const_false();
+
+                    for (auto &c : counterexamples) {
+                        works_on_counterexamples = works_on_counterexamples && substitute(c, program_works);
+                        is_tighter_somewhere = is_tighter_somewhere || substitute(c, program_tighter);
+                        no_tightness_regressions = no_tightness_regressions && substitute(c, no_program_regression);
+                    }
+
+                    current_program = std::move(tighter_program);
+
+                    continue;
+                } else if (z3_result == Z3Result::Unsat) {
+                    std::cerr << "No tighter RHS on counterexamples\n";
+                    break;
+                } else {
+                    std::cerr << "z3 tightness query returned Unknown\n";
+                    break;
+                }
+            }
+        }
 
         // Start with just random fuzzing. If that fails, we'll ask Z3 for a counterexample.
         int counterexamples_found_with_fuzzing = 0;
@@ -440,26 +516,14 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
 
         // Now synthesize a program that fits all the counterexamples
         Expr works_on_counterexamples = const_true();
-        Expr tightness_on_counterexamples = const_true();
-        int tightness_count = 0;
 
-        std::cerr << "Constructing tightness on counterexamples\n";
         for (auto &c : counterexamples) {
             works_on_counterexamples = works_on_counterexamples && substitute(c, program_works);
-            Expr temp_tightness = substitute(c, current_program_tightness && prime_bounds);
-            for (auto v: vars) {
-                string prime_name = v.first + ".prime";
-                string unique_name = prime_name + std::to_string(tightness_count);
-                Expr unique = Variable::make(v.second.first.type(), unique_name);
-                temp_tightness = substitute(prime_name, unique, temp_tightness);
-            }
-            tightness_count++;
-            tightness_on_counterexamples = tightness_on_counterexamples && temp_tightness;
         }
 
         std::cerr << "Querying\n";
         // std::cerr << "works_on_counterexamples" << simplify(works_on_counterexamples) << std::endl;
-        if (satisfy(works_on_counterexamples && tightness_on_counterexamples, &current_program,
+        if (satisfy(works_on_counterexamples, &current_program,
                     "finding program for " + z3_comment) != Z3Result::Sat) {
             // Failed to synthesize a program
             debug(0) << "Failed to find a program in the integers\n";
@@ -468,8 +532,8 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
 
         std::cerr << "Successful query\n";
         // Now we have a new program.
-        Expr tightness_check = simplify(substitute(current_program, tightness_on_counterexamples));
-        std::cerr << "tightness check: " << tightness_check << std::endl;
+        // Expr tightness_check = simplify(substitute(current_program, tightness_on_counterexamples));
+        // std::cerr << "tightness check: " << tightness_check << std::endl;
 
 
         // If we start to have many many counterexamples, we should

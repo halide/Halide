@@ -14,36 +14,9 @@ using Halide::Var;
 using Halide::Expr;
 
 int main(int argc, char **argv) {
-
     Var x("x"), y("y"), e("e");
 
-    Expr j = min((x*10) + 10, e) - min(x*10, e);
-
-
-    Interval i = Halide::Internal::bounds_of_expr_in_scope(j, make_symbolic_scope(j));
-
-    std::cerr << i.min << ", " << i.max << std::endl;
-    std::cerr << simplify(i.min) << ", " << simplify(i.max) << std::endl << std::endl;
-
-    j = simplify(j);
-    std::cerr << j << std::endl;
-    i = Halide::Internal::bounds_of_expr_in_scope(j, make_symbolic_scope(j));
-
-    std::cerr << i.min << ", " << i.max << std::endl;
-    std::cerr << simplify(i.min) << ", " << simplify(i.max) << std::endl << std::endl;
-
-    i = find_constant_bounds(j, make_symbolic_scope(j));
-
-    std::cerr << i.min << ", " << i.max << std::endl;
-    std::cerr << simplify(i.min) << ", " << simplify(i.max) << std::endl;
-
-    return 1;
-    // out10.log
-    // Halide::Expr test = Halide::select(x > y, y, x);
-    // out11.log
-    // Expr test = (min((x*10) + 10, e) - max(min(x*10, e), min(e, 10) + -11));
-    // out13.log
-    Expr test = x + y;
+    Expr test = (min(x, e + -10) - max(min(x, e) + 11, min(e, 10)));
 
     Interval interval = Halide::Internal::bounds_of_expr_in_scope(test, make_symbolic_scope(test));
 
@@ -71,7 +44,7 @@ int main(int argc, char **argv) {
 
     std::cerr << "min leaves: " << min_leaf_count << std::endl;
 
-    for (int i = min_leaf_count; i < max_leaf_count; i++) {
+    for (int i = 0; i < max_leaf_count; i++) {
         Expr res = generate_bound(test, upper, i, max_leaf_count);
         if (res.defined()) {
             std::cout << "Found upper bound:" << res << std::endl;
