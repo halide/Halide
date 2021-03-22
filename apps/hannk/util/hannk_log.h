@@ -19,8 +19,9 @@ namespace internal {
 // build systems to replace it without weak-linkage
 // tricks or other shenanigans. Note that code shouldn't
 // call this directly (it's meant for internal use by Logger and Checker).
-// Note also that this call should not ever call exit, abort, etc.,
-// even if severity == FATAL; the caller is responsible for that.
+//
+// Note that calling with severity doesn't require the implementation to
+// call abort(), although it's fine to do so if you like.
 //
 // Note that in the default implementation, all severity values output to stderr, not stdout.
 void hannk_log(LogSeverity severity, const char *msg);
