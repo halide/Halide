@@ -220,7 +220,8 @@ public:
             const int tile_x = i.second;
             output_
                 .specialize(output_channels >= tile_c * accum_vector_size && output_width >= tile_x)
-                .tile(c, x, co, xo, c, x, tile_c * accum_vector_size, tile_x, TailStrategy::ShiftInwards)
+                .split(c, co, c, tile_c * accum_vector_size, TailStrategy::ShiftInwards)
+                .split(x, xo, x, tile_x, TailStrategy::ShiftInwards)
                 .reorder(x, c, co, xo, y, b)
                 .vectorize(c)
                 .unroll(x);
@@ -229,7 +230,8 @@ public:
         // In case there are no suitable tile sizes, just make a dummy split so the
         // rest of the schedule still works.
         output_
-            .tile(c, x, co, xo, c, x, accum_vector_size, 1, TailStrategy::GuardWithIf)
+            .split(c, co, c, accum_vector_size, TailStrategy::GuardWithIf)
+            .split(x, xo, x, 1)
             .reorder(c, x, co, xo, y, b)
             .vectorize(c);
 
@@ -237,7 +239,7 @@ public:
         // but probably generate poor code for the general case.
         convolved.compute_at(output_, co)
             .store_in(MemoryType::Stack)
-            .reorder(x, c, y, b)
+            .reorder(x, c)
             .vectorize(c, accum_vector_size, TailStrategy::RoundUp)
             .unroll(c, max_tile_c, TailStrategy::GuardWithIf)
             .unroll(x);
@@ -250,7 +252,7 @@ public:
         RVar rco, rci;
         convolved.update()
             .split(r.z, rco, rci, unroll_reduction)
-            .reorder(rci, c, x, rco, r.x, r.y, y, b)
+            .reorder(rci, c, x, rco, r.x, r.y)
             .vectorize(c, accum_vector_size, TailStrategy::RoundUp)
             .unroll(c, max_tile_c, TailStrategy::GuardWithIf)
             .atomic()
@@ -262,8 +264,7 @@ public:
             // If we're unrolling a full vector's worth of reduction from the
             // input, explicitly load a vector of it first. This enables targeting
             // broadcasting dot products, like ARM's udot.
-            input_bounded.in(convolved)
-                .compute_at(convolved, c)
+            input_bounded.in(convolved).compute_at(convolved, c)
                 .bound_extent(c, unroll_reduction)
                 .vectorize(c);
         }
@@ -285,8 +286,7 @@ public:
                 .vectorize(c, accum_vector_size, TailStrategy::RoundUp);
 
             // Compute the sum of the input outside the loops over channels.
-            sum_input.in()
-                .compute_at(output_, y)
+            sum_input.in().compute_at(output_, y)
                 .vectorize(x, accum_vector_size, TailStrategy::RoundUp);
             sum_input.compute_at(sum_input.in(), x)
                 .vectorize(x)
@@ -301,7 +301,7 @@ public:
         // and it's expensive.
         input_bounded.compute_at(output_, y)
             .store_in(MemoryType::Stack)
-            .reorder(c, x, y);
+            .reorder(c, x);
 
         // For 3-channel interleaved inputs, we need to try to use
         // interleaving loads/stores when available.
