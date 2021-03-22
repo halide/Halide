@@ -116,8 +116,13 @@ $(BIN)/%/error_util.o: util/error_util.cpp
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -c $< -o $@
 
+$(BIN)/%/hannk_log.o: util/hannk_log.cpp
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -c $< -o $@
+
 UTIL_DEPS = \
-	$(BIN)/%/error_util.o
+	$(BIN)/%/error_util.o \
+	$(BIN)/%/hannk_log.o
 
 # ---------------------- interpreter
 

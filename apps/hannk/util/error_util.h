@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "HalideRuntime.h"
+#include "util/hannk_log.h"
 
 namespace hannk {
 
@@ -38,15 +39,6 @@ inline std::ostream &operator<<(std::ostream &s, const std::vector<T> &v) {
     }
     return s << "}";
 }
-
-// Note: all severity values output to stderr, not stdout.
-// Note: ERROR does *not* trigger an exit()/abort() call. FATAL does.
-enum LogSeverity {
-    INFO = 0,
-    WARNING = 1,
-    ERROR = 2,
-    FATAL = 3,
-};
 
 namespace internal {
 

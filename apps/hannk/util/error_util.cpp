@@ -1,12 +1,6 @@
 #include "util/error_util.h"
 
-#include <cstdio>
 #include <cstdlib>
-#include <iostream>
-
-#if defined(__ANDROID__)
-#include <android/log.h>
-#endif
 
 namespace hannk {
 namespace internal {
@@ -14,10 +8,6 @@ namespace internal {
 namespace {
 
 const char *const severity_names[] = {"INFO", "WARNING", "ERROR", "FATAL"};
-
-#if defined(__ANDROID__)
-int const android_severity[] = {ANDROID_LOG_INFO, ANDROID_LOG_WARN, ANDROID_LOG_ERROR, ANDROID_LOG_FATAL};
-#endif
 
 }  // namespace
 
@@ -39,11 +29,7 @@ void Logger::finish() noexcept(false) {
         msg << '\n';
     }
 
-    std::cerr << msg.str();
-
-#if defined(__ANDROID__)
-    __android_log_write(android_severity[(int)severity], "hannk", msg.str().c_str());
-#endif
+    hannk_log(severity, msg.str().c_str());
 
     // TODO: call iOS-specific logger here?
     if (severity == FATAL) {
