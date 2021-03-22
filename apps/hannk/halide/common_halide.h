@@ -7,6 +7,13 @@
 
 namespace hannk {
 
+using Halide::Internal::saturating_add;
+using Halide::Internal::saturating_sub;
+using Halide::Internal::widening_add;
+using Halide::Internal::widening_sub;
+using Halide::Internal::widening_mul;
+using Halide::Internal::rounding_shift_right;
+
 // A tensor has the same requirements as a buffer in Halide by default, except
 // the min of the innermost dimension must also be 0.
 void interpret_as_tensor(Halide::OutputImageParam p);
@@ -33,10 +40,6 @@ Halide::Func constant_exterior_tensor(Halide::ImageParam p, Halide::Expr exterio
 // This function implements the same computation as the ARMv7 NEON VQRDMULH
 // instruction.
 Halide::Expr multiply_2x_high(const Halide::Expr &a, const Halide::Expr &b);
-
-// Correctly-rounded-to-nearest division by a power-of-two. Also known as
-// rounding arithmetic right shift.
-Halide::Expr round_shift_right(const Halide::Expr &x, const Halide::Expr &shift);
 
 // Performs right shift and multiply by a multiplier. Aims to be very close to
 // tflite's reference implementation. However, tflite is standardizing on left

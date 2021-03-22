@@ -40,11 +40,10 @@ Func constant_exterior_tensor(
     Expr in_bounds =
         min_x <= x && x < min_x + extent_x &&
         min_y <= y && y < min_y + extent_y;
-    Expr bounded("bounded");
-    bounded = t(clamp(c, min_c, min_c + extent_c - 1),
-                clamp(x, min_x, min_x + extent_x - 1),
-                clamp(y, min_y, min_y + extent_y - 1),
-                clamp(b, min_b, min_b + extent_b - 1));
+    Expr bounded = t(clamp(c, min_c, min_c + extent_c - 1),
+                     clamp(x, min_x, min_x + extent_x - 1),
+                     clamp(y, min_y, min_y + extent_y - 1),
+                     clamp(b, min_b, min_b + extent_b - 1));
 
     Func tensor_bounded("tensor_bounded");
     tensor_bounded(c, x, y, b) = select(in_bounds, bounded, exterior);
@@ -61,26 +60,13 @@ Func constant_exterior_tensor(ImageParam p, Expr exterior) {
 }
 
 Expr multiply_2x_high(const Expr &a, const Expr &b) {
-    // Exponent must satisfy 0 <= exponent <= 31
-    Type t = a.type();
-    Type wider = t.with_bits(t.bits() * 2);
-    Expr a_wide = cast(wider, a);
-    Expr b_wide = cast(wider, b);
-    Expr ab_wide = a_wide * b_wide;
-    // In Halide, integer division rounds to negative infinity, so division by a
-    // power of two is the same as a shift (unlike C).
-    int nudge = 1 << (t.bits() - 2);
-    Expr result = (ab_wide + nudge) >> (t.bits() - 1);
-    return saturating_cast(t, result);
-}
-
-Expr round_shift_right(const Expr &x, const Expr &exponent) {
-    // This is hard to pattern match due to CSE.
-    return Halide::Internal::rounding_shift_right(x, exponent);
+    Expr ab_wide = widening_mul(a, b);
+    Expr result = rounding_shift_right(ab_wide, a.type().bits() - 1);
+    return saturating_cast(a.type(), result);
 }
 
 Expr multiply_quantized(const Expr &x, const Expr &q, const Expr &shift) {
-    return round_shift_right(multiply_2x_high(x, q), shift);
+    return rounding_shift_right(multiply_2x_high(x, q), shift);
 }
 
 }  // namespace hannk
