@@ -74,15 +74,15 @@ struct ConcatenationOpTestFactory : public op_test::TestCaseFactory {
         }
         auto out = tensors[test_template.out];
 
-        auto r = make_unique<Concatenation_ReferenceOp<uint8_t>>();
+        auto r = ::hannk::make_unique<Concatenation_ReferenceOp<uint8_t>>();
         r->inputs = std::move(inputs_reference);
         r->outputs.push_back(out);
         r->axis = test_template.axis;
         r->activation = test_template.activation;
 
-        auto test = make_unique<op_test::TestCase>();
+        auto test = ::hannk::make_unique<op_test::TestCase>();
         test->name = "ConcatenationOp<uint8>/" + std::to_string(test_index - 1);
-        test->actual_op = make_unique<ConcatenationOp>(
+        test->actual_op = ::hannk::make_unique<ConcatenationOp>(
             std::move(inputs_actual),
             out.get(),
             test_template.axis,

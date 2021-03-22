@@ -70,7 +70,7 @@ struct ReshapeOpTestFactory : public op_test::TestCaseFactory {
         auto shape = tensors[test_template.shape];
         auto out = tensors[test_template.out];
 
-        auto r = make_unique<Reshape_ReferenceOp<uint8_t>>();
+        auto r = ::hannk::make_unique<Reshape_ReferenceOp<uint8_t>>();
         r->inputs.push_back(in);
         r->inputs.push_back(shape);
         r->outputs.push_back(out);
@@ -81,9 +81,9 @@ struct ReshapeOpTestFactory : public op_test::TestCaseFactory {
             shape_vals.push_back(shape_buf(i));
         }
 
-        auto test = make_unique<op_test::TestCase>();
+        auto test = ::hannk::make_unique<op_test::TestCase>();
         test->name = "ReshapeOp<uint8>/" + std::to_string(test_index - 1);
-        test->actual_op = make_unique<ReshapeOp>(
+        test->actual_op = ::hannk::make_unique<ReshapeOp>(
             in.get(),
             out.get(),
             shape_vals);

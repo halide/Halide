@@ -84,15 +84,15 @@ struct AddOpTestFactory : public op_test::TestCaseFactory {
         auto in2 = tensors[test_template.in2];
         auto out = tensors[test_template.out];
 
-        auto r = make_unique<Add_ReferenceOp<uint8_t>>();
+        auto r = ::hannk::make_unique<Add_ReferenceOp<uint8_t>>();
         r->inputs.push_back(in1);
         r->inputs.push_back(in2);
         r->outputs.push_back(out);
         r->activation = test_template.activation;
 
-        auto test = make_unique<op_test::TestCase>();
+        auto test = ::hannk::make_unique<op_test::TestCase>();
         test->name = "AddOp<uint8>/" + std::to_string(test_index - 1);
-        test->actual_op = make_unique<AddOp>(
+        test->actual_op = ::hannk::make_unique<AddOp>(
             in1.get(),
             in2.get(),
             out.get(),

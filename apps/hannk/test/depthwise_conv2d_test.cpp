@@ -182,7 +182,7 @@ struct DepthwiseConv2DOpTestFactory : public op_test::TestCaseFactory {
         assert(out);
         assert(in);
 
-        auto r = make_unique<DepthwiseConv2D_ReferenceOp<uint8_t>>();
+        auto r = ::hannk::make_unique<DepthwiseConv2D_ReferenceOp<uint8_t>>();
         r->inputs.push_back(in);
         r->inputs.push_back(filt);
         r->inputs.push_back(bias);
@@ -192,10 +192,10 @@ struct DepthwiseConv2DOpTestFactory : public op_test::TestCaseFactory {
         r->padding = test_template.padding;
         r->activation = test_template.activation;
 
-        auto test = make_unique<op_test::TestCase>();
+        auto test = ::hannk::make_unique<op_test::TestCase>();
         test->name = "DepthwiseConv2DOp<uint8>/" + std::to_string(test_index - 1);
 
-        test->actual_op = make_unique<DepthwiseConv2DOp>(
+        test->actual_op = ::hannk::make_unique<DepthwiseConv2DOp>(
             in.get(),
             filt.get(),
             bias.get(),

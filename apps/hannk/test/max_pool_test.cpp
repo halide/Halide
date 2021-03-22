@@ -78,7 +78,7 @@ struct MaxPoolOpTestFactory : public op_test::TestCaseFactory {
         auto in = tensors[test_template.in];
         auto out = tensors[test_template.out];
 
-        auto r = make_unique<MaxPool_ReferenceOp<uint8_t>>();
+        auto r = ::hannk::make_unique<MaxPool_ReferenceOp<uint8_t>>();
         r->inputs.push_back(in);
         r->outputs.push_back(out);
         r->stride = test_template.stride;
@@ -86,9 +86,9 @@ struct MaxPoolOpTestFactory : public op_test::TestCaseFactory {
         r->padding = test_template.padding;
         r->activation = test_template.activation;
 
-        auto test = make_unique<op_test::TestCase>();
+        auto test = ::hannk::make_unique<op_test::TestCase>();
         test->name = "MaxPoolOp<uint8>/" + std::to_string(test_index - 1);
-        test->actual_op = make_unique<MaxPoolOp>(
+        test->actual_op = ::hannk::make_unique<MaxPoolOp>(
             in.get(),
             out.get(),
             test_template.stride,

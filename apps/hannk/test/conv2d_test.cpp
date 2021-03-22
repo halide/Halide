@@ -222,7 +222,7 @@ struct Conv2DOpTestFactory : public op_test::TestCaseFactory {
         auto bias = tensors[test_template.bias];
         auto out = tensors[test_template.out];
 
-        auto r = make_unique<Conv2D_ReferenceOp<uint8_t>>();
+        auto r = ::hannk::make_unique<Conv2D_ReferenceOp<uint8_t>>();
         r->inputs.push_back(in);
         r->inputs.push_back(filt);
         r->inputs.push_back(bias);
@@ -232,10 +232,10 @@ struct Conv2DOpTestFactory : public op_test::TestCaseFactory {
         r->padding = test_template.padding;
         r->activation = test_template.activation;
 
-        auto test = make_unique<op_test::TestCase>();
+        auto test = ::hannk::make_unique<op_test::TestCase>();
         test->name = "Conv2DOp<uint8>/" + std::to_string(test_index - 1);
 
-        test->actual_op = make_unique<Conv2DOp>(
+        test->actual_op = ::hannk::make_unique<Conv2DOp>(
             in.get(),
             filt.get(),
             bias.get(),

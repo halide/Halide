@@ -78,14 +78,14 @@ struct PadOpTestFactory : public op_test::TestCaseFactory {
         auto pad = tensors[test_template.pad];
         auto out = tensors[test_template.out];
 
-        auto r = make_unique<Pad_ReferenceOp<uint8_t>>();
+        auto r = ::hannk::make_unique<Pad_ReferenceOp<uint8_t>>();
         r->inputs.push_back(in);
         r->inputs.push_back(pad);
         r->outputs.push_back(out);
 
-        auto test = make_unique<op_test::TestCase>();
+        auto test = ::hannk::make_unique<op_test::TestCase>();
         test->name = "PadOp<uint8>/" + std::to_string(test_index - 1);
-        test->actual_op = make_unique<PadOp>(
+        test->actual_op = ::hannk::make_unique<PadOp>(
             in.get(),
             pad.get(),
             out.get());

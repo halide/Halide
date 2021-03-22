@@ -71,13 +71,13 @@ struct QuantizeOpTestFactory : public op_test::TestCaseFactory {
         auto in = tensors[test_template.in];
         auto out = tensors[test_template.out];
 
-        auto r = make_unique<Quantize_ReferenceOp<uint8_t, uint8_t>>();
+        auto r = ::hannk::make_unique<Quantize_ReferenceOp<uint8_t, uint8_t>>();
         r->inputs.push_back(in);
         r->outputs.push_back(out);
 
-        auto test = make_unique<op_test::TestCase>();
+        auto test = ::hannk::make_unique<op_test::TestCase>();
         test->name = "QuantizeOp<uint8>/" + std::to_string(test_index - 1);
-        test->actual_op = make_unique<QuantizeOp>(
+        test->actual_op = ::hannk::make_unique<QuantizeOp>(
             in.get(),
             out.get());
         test->reference_op = std::move(r);
