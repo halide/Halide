@@ -244,7 +244,7 @@ public:
     virtual ~TestCaseFactory() = default;
 };
 
-int op_test_main(int argc, char **argv, TestCaseFactory &factory) {
+inline int op_test_main(int argc, char **argv, TestCaseFactory &factory) {
     int seed = time(nullptr);
     bool verbose = false;
 

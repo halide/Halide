@@ -186,7 +186,7 @@ struct FillWithRandom {
     }
 
 private:
-    static void fill_with_random_impl(Halide::Runtime::Buffer<T> &b, std::mt19937 &rng) {
+    inline static void fill_with_random_impl(Halide::Runtime::Buffer<T> &b, std::mt19937 &rng) {
         std::uniform_int_distribution<T> dis(std::numeric_limits<T>::min(),
                                              std::numeric_limits<T>::max());
         b.for_each_value([&rng, &dis](T &value) {
@@ -197,7 +197,7 @@ private:
 
 // Specializations must be at namespace scope, not class scope
 template<>
-/*static*/ void FillWithRandom<float>::fill_with_random_impl(Halide::Runtime::Buffer<float> &b, std::mt19937 &rng) {
+inline /*static*/ void FillWithRandom<float>::fill_with_random_impl(Halide::Runtime::Buffer<float> &b, std::mt19937 &rng) {
     // Floating point. We arbitrarily choose to use the range [0.0, 1.0].
     std::uniform_real_distribution<float> dis(0.0, 1.0);
     b.for_each_value([&rng, &dis](float &value) {
@@ -206,7 +206,7 @@ template<>
 }
 
 template<>
-/*static*/ void FillWithRandom<double>::fill_with_random_impl(Halide::Runtime::Buffer<double> &b, std::mt19937 &rng) {
+inline /*static*/ void FillWithRandom<double>::fill_with_random_impl(Halide::Runtime::Buffer<double> &b, std::mt19937 &rng) {
     // Floating point. We arbitrarily choose to use the range [0.0, 1.0].
     std::uniform_real_distribution<double> dis(0.0, 1.0);
     b.for_each_value([&rng, &dis](double &value) {
@@ -215,7 +215,7 @@ template<>
 }
 
 template<>
-/*static*/ void FillWithRandom<bool>::fill_with_random_impl(Halide::Runtime::Buffer<bool> &b, std::mt19937 &rng) {
+inline /*static*/ void FillWithRandom<bool>::fill_with_random_impl(Halide::Runtime::Buffer<bool> &b, std::mt19937 &rng) {
     std::uniform_int_distribution<int> dis(0, 1);
     b.for_each_value([&rng, &dis](bool &value) {
         value = static_cast<bool>(dis(rng));

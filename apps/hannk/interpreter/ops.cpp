@@ -710,7 +710,7 @@ void QuantizeOp::execute(const Box &crop) {
         const int in2_offset = 0;
         const int output_offset = out->quantization().zero.at(0);
         assert(in1_offset >= 0 && in1_offset <= 255);
-        assert(in2_offset >= 0 && in2_offset <= 255);
+        static_assert(in2_offset >= 0 && in2_offset <= 255, "");
         assert(output_offset >= 0 && output_offset <= 255);
 
         const float in1_scale = in->quantization().scale.at(0);
