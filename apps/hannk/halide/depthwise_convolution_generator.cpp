@@ -163,9 +163,10 @@ public:
                 .store_in(MemoryType::Stack)
                 .vectorize(c, vector_size, TailStrategy::GuardWithIf);
 
-            for (int dm : {1, 3}) {
+            for (int dm : {1}) {
                 resampled_input.specialize(depth_multiplier_ == dm);
             }
+            resampled_input.specialize_fail("unsupported depth multiplier");
         } else if (inv_depth_multiplier_ == 0) {
             // For the broadcasting case, we want to pull the boundary condition out
             // of the inner loop before we broadcast the channels.
