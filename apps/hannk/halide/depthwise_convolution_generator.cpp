@@ -128,21 +128,21 @@ public:
         Expr output_width = output_.dim(1).extent();
         Expr output_height = output_.dim(2).extent();
         output_.compute_root()
-            .specialize(output_width >= kTileSize && output_height >= kTileSize)
+            .specialize(output_channels >= vector_size && output_width >= kTileSize && output_height >= kTileSize)
             .tile(x, y, xo, yo, x, y, kTileSize, kTileSize, TailStrategy::ShiftInwards)
+            .split(c, co, c, vector_size, TailStrategy::ShiftInwards)
+            .reorder(x, y, c, xo, yo, b, co)
             .unroll(x)
             .unroll(y)
-            .split(c, co, c, vector_size, TailStrategy::GuardWithIf)
-            .reorder(x, y, c, xo, yo, b, co)
             .vectorize(c);
 
         // Enable 1x1 outputs to work.
         output_
             .tile(x, y, xo, yo, x, y, 1, 1, TailStrategy::RoundUp)
-            .unroll(x)
-            .unroll(y)
             .split(c, co, c, vector_size, TailStrategy::GuardWithIf)
             .reorder(x, y, c, xo, yo, b, co)
+            .unroll(x)
+            .unroll(y)
             .vectorize(c);
 
         convolved.compute_at(output_, xo)
