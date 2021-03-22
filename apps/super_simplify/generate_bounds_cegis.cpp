@@ -341,9 +341,9 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
 
     // TODO(rootjalex): remove this at some point.
 
-    size_t iters = 0;
+    // size_t iters = 0;
 
-    size_t max_iters = 32;
+    // size_t max_iters = 32;
 
 
     while (true) {
@@ -351,10 +351,10 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
           debug(0) << "TOO MANY COUNTEREXAMPLES, bailing for size=" << size << "\ne="<<e<<"\n";
           return Expr();
         }
-        if (iters++ > max_iters) {
-            debug(0) << "Gave up on iteration: " << iters << "\n";
-            return Expr();
-        }
+        // if (++iters > max_iters) {
+        //     debug(0) << "Gave up on iteration: " << iters << "\n";
+        //     return Expr();
+        // }
 
         // First sythesize a counterexample to the current program.
         // std::cerr << "program_works: " << program_works << std::endl;
@@ -389,7 +389,7 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
             // std::cerr << "program_tighter:\n\t" << program_tighter << "\n";
 
             Expr is_tighter_somewhere = const_false();
-            Expr no_tightness_regressions = const_false();
+            Expr no_tightness_regressions = const_true();
             Expr works_on_counterexamples = const_true();
 
             for (auto &c : counterexamples) {
@@ -405,10 +405,12 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
             // Iteratively find a tighter RHS
             while (true) {
                 {
-                  std::cerr << "Iteratively checking for:\n\t";
-                  std::cerr << common_subexpression_elimination(works_on_counterexamples && is_tighter_somewhere && no_tightness_regressions) << "\n\t";
-                  Expr ajr_iterative = simplify(common_subexpression_elimination(works_on_counterexamples && is_tighter_somewhere && no_tightness_regressions));
-                  std::cerr << ajr_iterative << "\n";
+                  // std::cerr << "Iteratively checking for:\n";
+                  // std::cerr << common_subexpression_elimination(works_on_counterexamples && is_tighter_somewhere && no_tightness_regressions) << "\n\t";
+                  // Expr ajr_iterative = simplify(common_subexpression_elimination(works_on_counterexamples && is_tighter_somewhere && no_tightness_regressions));
+                  // std::cerr << "WEC:\t" << simplify(common_subexpression_elimination(works_on_counterexamples)) << "\n";
+                  // std::cerr << "ITS:\t" << simplify(common_subexpression_elimination(is_tighter_somewhere)) << "\n";
+                  // std::cerr << "NTR:\t" << simplify(common_subexpression_elimination(no_tightness_regressions)) << "\n";
                 }
 
                 auto z3_result = satisfy(works_on_counterexamples && is_tighter_somewhere && no_tightness_regressions,
@@ -417,13 +419,13 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
 
                 if (z3_result == Z3Result::Sat) {
                     found_tighter = true;
-                    std::cerr << "Found tighter RHS\n";
+                    // std::cerr << "Found tighter RHS\n";
                     Expr temp = simplify(simplify(substitute_in_all_lets(substitute(tighter_program, program))));
-                    std::cerr << "\t" << temp << "\n";
+                    // std::cerr << "\t" << temp << "\n";
 
 
                     current_program_works = simplify(substitute(tighter_program, program_works));
-                    std::cerr << "works? (updated)" << current_program_works << "\n";
+                    // std::cerr << "works? (updated)" << current_program_works << "\n";
                     
                     // for (auto &c : counterexamples) {
                     //     Expr t1 = substitute(c, simplify(substitute_in_all_lets(substitute(tighter_program, program_tighter))));
@@ -432,7 +434,7 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
                     //     std::cerr << "updated: " << simplify(substitute(c, temp)) << std::endl;
                     // }
 
-                    std::cerr << "RHS update: " << opt_counterexample_RHS << "\t->\t" << temp << "\n";
+                    std::cerr << "RHS update:\n\t" << opt_counterexample_RHS << "\t->\t" << temp << "\n";
 
                     opt_counterexample_RHS = std::move(temp);
 
@@ -443,7 +445,7 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
                     // TODO: is there a smarter / faster way?
                     is_tighter_somewhere = const_false();
                     works_on_counterexamples = const_true();
-                    no_tightness_regressions = const_false();
+                    no_tightness_regressions = const_true();
 
                     for (auto &c : counterexamples) {
                         works_on_counterexamples = works_on_counterexamples && substitute(c, program_works);
@@ -503,8 +505,9 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
 
         // TODO(rootjalex): this might need to be moved.... where to put it? Talk to team about ordering.
         // update: it doesn't seem to help anyways, so don't use it for now.
-        // if (counterexamples_found_with_fuzzing == 0) {
-        if (false) {
+        // TODO(rootjalex): we don't use this as a first counterexample because the first program is garbage.
+        if (!counterexamples.empty() && counterexamples_found_with_fuzzing == 0) {
+        // if (false) {
             //  Find x s.t. LHS(x) < RHS(x, x), add [x, x, x] to counterexamples.
 
             // If looking for an upper bound, want something LT, if looking for lower, want something GT.
@@ -539,7 +542,7 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
                 std::cerr << "Found counterexample with tightness check: ";
                 print_counterexample(tightness_counterexample);
                 std::cerr << "Produces:\n\t";
-                
+
                 Expr temp_e = simplify(substitute(tightness_counterexample, e));
                 Expr temp_RHS = simplify(substitute(tightness_counterexample, candidate_RHS));
 
@@ -550,8 +553,8 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
                 }
 
                 counterexamples.push_back(tightness_counterexample);
-                counterexample_found_with_tightness = true;
-                continue; // Go back to querying for a tighter bound.
+                // counterexample_found_with_tightness = true;
+                // continue; // Go back to querying for a tighter bound.
 
             } else if (z3_result == Z3Result::Unknown) {
                 std::cerr << "var_subst tightness check failed with z3 Unknown.\n";
