@@ -7,8 +7,55 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
 
     ExprInfo t_bounds, f_bounds;
     Expr condition = mutate(op->condition, nullptr);
-    Expr true_value = mutate(op->true_value, &t_bounds);
-    Expr false_value = mutate(op->false_value, &f_bounds);
+
+    Expr true_value, false_value;
+    Expr false_value_when_true, true_value_when_false;
+    {
+        auto f = scoped_truth(condition);
+
+        true_value = mutate(op->true_value, &t_bounds);
+        Expr learned_true_value = f.substitute_facts(true_value);
+        if (!learned_true_value.same_as(true_value)) {
+            true_value = mutate(learned_true_value, &t_bounds);
+        }
+
+        false_value_when_true = mutate(op->false_value, nullptr);
+        Expr learned_false_value_when_true = f.substitute_facts(false_value_when_true);
+        if (!learned_false_value_when_true.same_as(false_value_when_true)) {
+            false_value_when_true = mutate(learned_false_value_when_true, nullptr);
+        }
+    }
+    {
+        auto f = scoped_falsehood(condition);
+
+        false_value = mutate(op->false_value, &f_bounds);
+        Expr learned_false_value = f.substitute_facts(false_value);
+        if (!learned_false_value.same_as(false_value)) {
+            false_value = mutate(learned_false_value, &f_bounds);
+        }
+
+        true_value_when_false = mutate(op->true_value, nullptr);
+        Expr learned_true_value_when_false = f.substitute_facts(true_value_when_false);
+        if (!learned_true_value_when_false.same_as(true_value_when_false)) {
+            true_value_when_false = mutate(learned_true_value_when_false, nullptr);
+        }
+    }
+
+    // If the false value when the condition is equal to the true value,
+    // the value is always equal to the false value. This simplifies
+    // things like select(x == 1, y, y*x) to y*x.
+    if (equal(false_value_when_true, true_value)) {
+        if (bounds) {
+            *bounds = f_bounds;
+        }
+        return false_value;
+    }
+    if (equal(true_value_when_false, false_value)) {
+        if (bounds) {
+            *bounds = t_bounds;
+        }
+        return true_value;
+    }
 
     if (bounds) {
         bounds->min_defined = t_bounds.min_defined && f_bounds.min_defined;
