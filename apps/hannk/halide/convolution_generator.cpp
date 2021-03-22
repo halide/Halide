@@ -85,23 +85,41 @@ public:
         // Some free variables, where x and y represent the spatial dimensions.
         Var x("x"), y("y"), c("c"), b("b");
 
+        // There are two codepaths below. On targets with widening 8-bit
+        // multiplies, we implement the reduction by expanding the subtraction
+        // of the offsets into 4 reductions involving 8-bit multiplies.
+        // On targets without widening 8-bit multiplication, it's faster
+        // to just subtract the offsets and use 16-bit multiplications.
+        const bool use_8bit_multiply =
+            get_target().arch != Target::X86 || get_target().has_feature(Target::AVX512_SapphireRapids);
+
         // Add a "zero" boundary condition to the input.
         Func input_bounded("input_bounded");
-        input_bounded(c, x, y, b) = constant_exterior(input_, input_offset_)(c, x, y, b);
+        Expr input_cxyb = constant_exterior(input_, input_offset_)(c, x, y, b);
+        if (!use_8bit_multiply) {
+            input_cxyb = i16(input_cxyb) - i16(input_offset_);
+        }
+        input_bounded(c, x, y, b) = input_cxyb;
         // And to c of the filter. This lets us align the inner reduction loop
         // however we want.
         Func filter_bounded =
             constant_exterior(filter_, filter_offset_, {{filter_.dim(0).min(), filter_.dim(0).extent()}});
+        Func bias_bounded = repeat_edge(bias_);
 
         // Align the reduction loop of filter.
         int vector_reduction = get_vector_reduction_factor(get_target(), UInt(8));
+        int unroll_reduction = std::max(4, vector_reduction);
 
         // Create a wrapper of the filter that we can reorder the storage of to be
         // more convenient for the inner loop.
         Var ci("ci"), co("co");
         Func filter_tiled("filter_tiled");
-        filter_tiled(ci, co, x, y, c) =
+        Expr filter_cxyb =
             memoize_tag(filter_bounded(co * vector_reduction + ci, x, y, c), guid_);
+        if (!use_8bit_multiply) {
+            filter_cxyb = i16(filter_cxyb) - i16(filter_offset_);
+        }
+        filter_tiled(ci, co, x, y, c) = filter_cxyb;
 
         // Set up the reduction loop and inputs.
         filter_.dim(0).set_min(0);
@@ -112,48 +130,55 @@ public:
         Expr filter_height = filter_.dim(2).extent();
         // Align the filter depth, which requires padding the input.
         filter_depth =
-            ((filter_depth + vector_reduction - 1) / vector_reduction) * vector_reduction;
+            ((filter_depth + unroll_reduction - 1) / unroll_reduction) * unroll_reduction;
         RDom r(0, filter_width, 0, filter_height, 0, filter_depth);
         Expr filter_rdxyc =
             filter_tiled(r.z % vector_reduction, r.z / vector_reduction, r.x, r.y, c);
         Expr input_rdxyc =
             input_bounded(r.z, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
 
-        // We want to compute the reduction:
-        // convolved(c, x, y, b) = bias_(c)
-        // convolved(c, x, y, b) +=
-        //    (i32(input_rdxyc) - i32(input_offset_)) *
-        //    (i32(filter_rdxyc) - i32(filter_offset_))
-        //
-        // However, this precludes using efficient dot product instructions. To
-        // fix this, expand the expression:
-        //
-        // convolved(c, x, y, b) = bias_(c)
-        // convolved(c, x, y, b) +=
-        //    i32(filter_rdxyc) * i32(input_rdxyc) -
-        //    i32(filter_rdxyc) * i32(input_offset_) -
-        //    i32(filter_offset_) * i32(input_rdxyc) +
-        //    i32(filter_offset_) * i32(input_offset_)
-        //
-        // We can then separate this into several reductions. First, the terms that
-        // depend only on c.
         Func offset_c("offset_c");
-        Expr r_size = filter_width * filter_height * filter_depth;
-        // We need the negative of this reduction, so compute the sum first, and then
-        // subtract it after.
-        offset_c(c) += i32(filter_rdxyc) * i32(input_offset_);
-        offset_c(c) =
-            bias_(c) + i32(filter_offset_) * i32(input_offset_) * r_size - offset_c(c);
-
-        // The sum of the input is used to compute the filter_offset * input term.
-        // TODO: This is separable, but a bit messy to optimize this way.
         Func sum_input("sum_input");
-        sum_input(x, y, b) += i32(input_rdxyc);
-
-        // Finally, the terms that depend on all of c, x, y, b.
         Func convolved("convolved");
-        convolved(c, x, y, b) = offset_c(c) - i32(filter_offset_) * sum_input(x, y, b);
-        convolved(c, x, y, b) += i32(filter_rdxyc) * i32(input_rdxyc);
+        if (use_8bit_multiply) {
+            // We want to compute the reduction:
+            // convolved(c, x, y, b) = bias_(c)
+            // convolved(c, x, y, b) +=
+            //    (i32(input_rdxyc) - i32(input_offset_)) *
+            //    (i32(filter_rdxyc) - i32(filter_offset_))
+            //
+            // However, this precludes using efficient dot product instructions. To
+            // fix this, expand the expression:
+            //
+            // convolved(c, x, y, b) = bias_(c)
+            // convolved(c, x, y, b) +=
+            //    i32(filter_rdxyc) * i32(input_rdxyc) -
+            //    i32(filter_rdxyc) * i32(input_offset_) -
+            //    i32(filter_offset_) * i32(input_rdxyc) +
+            //    i32(filter_offset_) * i32(input_offset_)
+            //
+            // We can then separate this into several reductions. First, the terms that
+            // depend only on c.
+            Expr r_size = filter_width * filter_height * filter_depth;
+            // We need the negative of this reduction, so compute the sum first, and then
+            // subtract it after.
+            offset_c(c) += i32(filter_rdxyc) * i32(input_offset_);
+            offset_c(c) =
+                bias_bounded(c) + i32(filter_offset_) * i32(input_offset_) * r_size - offset_c(c);
+
+            // The sum of the input is used to compute the filter_offset * input term.
+            // TODO: This is separable, but a bit messy to optimize this way.
+            sum_input(x, y, b) += i32(input_rdxyc);
+
+            // Finally, the terms that depend on all of c, x, y, b.
+            convolved(c, x, y, b) = offset_c(c) - i32(filter_offset_) * sum_input(x, y, b);
+            convolved(c, x, y, b) += i32(filter_rdxyc) * i32(input_rdxyc);
+        } else {
+            // Without 8-bit widening multiplies, we already subtracted the offsets,
+            // and just have a single reduction of 16-bit multiplies to compute.
+            convolved(c, x, y, b) = bias_bounded(c);
+            convolved(c, x, y, b) += i32(filter_rdxyc) * i32(input_rdxyc);
+        }
 
         // Saturate and narrow the output.
         Expr output =
@@ -190,10 +215,7 @@ public:
         // things computed at the tile to have constant size. We can't assume the
         // output is bigger than a minimum size. So, we specialize for decreasing
         // tile sizes, and have a degenerate tile case to handle the rest.
-        //
-        // TODO: this is actually faster in some cases if we just use accum_vector_size=8
-        // (even on AVX2 / Skylake). Should investigate further.
-        const int accum_vector_size = natural_vector_size<uint8_t>() / vector_reduction;
+        const int accum_vector_size = natural_vector_size<int32_t>();
         Var xo("xo");
         Expr output_channels = output_.dim(0).extent();
         Expr output_width = output_.dim(1).extent();
@@ -221,58 +243,77 @@ public:
             .store_in(MemoryType::Stack)
             .reorder(x, c, y, b)
             .vectorize(c, accum_vector_size, TailStrategy::RoundUp)
+            .unroll(c, 4, TailStrategy::GuardWithIf)
             .unroll(x);
 
-        // Specialize this to avoid computing sum_input when it isn't needed.
-        convolved.specialize(filter_offset_ == 0);
+        if (use_8bit_multiply) {
+            // Specialize this to avoid computing sum_input when it isn't needed.
+            convolved.specialize(filter_offset_ == 0);
+        }
 
         RVar rco, rci;
         convolved.update()
-            .split(r.z, rco, rci, vector_reduction)
+            .split(r.z, rco, rci, unroll_reduction)
             .reorder(rci, x, c, rco, r.x, r.y, y, b)
             .vectorize(c, accum_vector_size, TailStrategy::RoundUp)
-            .atomic()
-            .vectorize(rci)
-            .unroll(x);
-
-        // Precompute the channel offset at root.
-        // TODO: This gets recomputed often when the op is split up into small
-        // pieces.
-        offset_c.compute_root();
-        offset_c.update(0)
-            .specialize(input_offset_ != 0)
-            .split(r.z, rco, rci, vector_reduction)
-            .reorder(rci, c, rco, r.x, r.y)
+            .unroll(c, 4, TailStrategy::GuardWithIf)
             .atomic()
             .vectorize(rci, vector_reduction)
-            .vectorize(c, accum_vector_size, TailStrategy::GuardWithIf);
-        offset_c.update(1)
-            .vectorize(c, accum_vector_size, TailStrategy::GuardWithIf);
+            .unroll(rci)
+            .unroll(x);
 
-        // Compute the sum of the input outside the loops over channels.
-        sum_input.compute_at(output_, xo)
-            .vectorize(x);
-        sum_input.update()
-            .reorder(x, r.z, r.x, r.y, y, b)
-            .atomic()
-            .vectorize(r.z, vector_reduction)
-            .vectorize(x);
+        if (use_8bit_multiply) {
+            // Precompute the channel offset at root.
+            // TODO: This gets recomputed often when the op is split up into small
+            // pieces.
+            offset_c.compute_root();
+            offset_c.update(0)
+                .specialize(input_offset_ != 0)
+                .split(r.z, rco, rci, unroll_reduction)
+                .reorder(rci, c, rco, r.x, r.y)
+                .atomic()
+                .vectorize(rci, vector_reduction)
+                .unroll(rci)
+                .vectorize(c, accum_vector_size, TailStrategy::RoundUp);
+            offset_c.update(1)
+                .vectorize(c, accum_vector_size, TailStrategy::RoundUp);
 
-        // TODO: We only need this (and the boundary condition on c) when
-        // filter.dim(0).extent() % 4 != 0 :(
+            // Compute the sum of the input outside the loops over channels.
+            sum_input.in().compute_at(output_, y)
+                .vectorize(x, accum_vector_size, TailStrategy::RoundUp);
+            sum_input.compute_at(sum_input.in(), x)
+                .vectorize(x)
+                .update()
+                .reorder(r.z, r.x, r.y, x)
+                .atomic()
+                .vectorize(r.z, unroll_reduction)
+                .vectorize(x);
+        }
+
+        // TODO: We often don't need the boundary condition on the input,
+        // and it's expensive.
         input_bounded.compute_at(output_, y)
-            .store_in(MemoryType::Stack);
+            .store_in(MemoryType::Stack)
+            .reorder(c, x, y);
 
-        // For 3-channel inputs, we need to try to use interleaving loads/stores
-        // when available.
+        // For 3-channel interleaved inputs, we need to try to use
+        // interleaving loads/stores when available.
         input_bounded.specialize(input_.dim(0).extent() == 3 && input_.dim(1).stride() == 3)
-            .reorder(c, x, y)
             .unroll(c)
             .vectorize(x, natural_vector_size<uint8_t>(), TailStrategy::RoundUp);
 
-        input_bounded
-            .reorder(x, y, c)
-            .vectorize(c, natural_vector_size<uint8_t>(), TailStrategy::GuardWithIf);
+        // TODO: This is a mess. We need a better way to implement a
+        // straightforward boundary condition.
+        int vector_size_input =
+            use_8bit_multiply ? natural_vector_size<uint8_t>() : natural_vector_size<int16_t>();
+        for (int i = vector_size_input; i >= 4; i /= 2) {
+            // Use GuardWithIf here to avoid growing the bounds.
+            input_bounded.specialize(input_.dim(0).extent() >= i)
+                .vectorize(c, i, TailStrategy::GuardWithIf);
+        }
+
+        bias_bounded.compute_root()
+            .store_in(MemoryType::Stack);
 
         // Pretranspose the filter, so we don't need to do it in the inner loop.
         // TODO: This gets recomputed often when the op is split up into small
