@@ -15,7 +15,7 @@ namespace hannk {
 void run_benchmark(const std::string &filename, const ScheduleOptions &options) {
     if (!options.trace) {
         // In trace mode, don't send *anything* to stdout
-        std::cout << "Benchmarking " << filename << std::endl;
+        std::cout << "Benchmarking " << filename;
     }
 
     std::vector<char> buffer = read_entire_file(filename);
@@ -29,15 +29,17 @@ void run_benchmark(const std::string &filename, const ScheduleOptions &options) 
 
     if (!options.trace) {
         auto result = Halide::Tools::benchmark([&]() { interpreter.execute(); });
-        std::cout << "Time: " << result.wall_time * 1e6 << " us" << std::endl;
+        std::cout << ": " << result.wall_time * 1e6 << " us" << std::endl;
 
         halide_profiler_report(nullptr);
         halide_profiler_reset();
     } else {
+        std::cout << std::endl;
         interpreter.execute();
     }
 
     if (options.verbose) {
+        std::cout << std::endl;
         std::cout << "Outputs:\n";
         std::vector<Tensor *> outputs = interpreter.outputs();
         for (Tensor *t : outputs) {
@@ -77,7 +79,6 @@ int main(int argc, char **argv) {
             continue;
         }
         hannk::run_benchmark(argv[i], options);
-        std::cout << std::endl;
     }
 
     std::cout << "Done!\n";
