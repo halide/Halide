@@ -1162,6 +1162,13 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             if (!i.defined()) {
                 i = make_zero(op->type);
             }
+            if (const Shuffle *s = matches[0].as<Shuffle>()) {
+                if (s->is_broadcast()) {
+                    // LLVM wants the broadcast as the second operand for the broadcasting
+                    // variant of udot/sdot.
+                    std::swap(matches[0], matches[1]);
+                }
+            }
             value = call_overloaded_intrin(op->type, p.intrin, {i, matches[0], matches[1]});
             if (value) {
                 return;
