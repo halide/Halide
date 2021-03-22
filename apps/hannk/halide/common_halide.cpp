@@ -60,9 +60,15 @@ Func constant_exterior_tensor(ImageParam p, Expr exterior) {
 }
 
 Expr multiply_2x_high(const Expr &a, const Expr &b) {
+    // Exponent must satisfy 0 <= exponent <= 31
+    Type t = a.type();
     Expr ab_wide = widening_mul(a, b);
-    Expr result = rounding_shift_right(ab_wide, a.type().bits() - 1);
-    return saturating_cast(a.type(), result);
+    // In Halide, integer division rounds to negative infinity, so division by a
+    // power of two is the same as a shift (unlike C).
+    // TODO: Using rounding_shift_right here doesn't generate qrdmulh :(
+    int nudge = 1 << (t.bits() - 2);
+    Expr result = (ab_wide + nudge) >> (t.bits() - 1);
+    return saturating_cast(t, result);
 }
 
 Expr multiply_quantized(const Expr &x, const Expr &q, const Expr &shift) {
