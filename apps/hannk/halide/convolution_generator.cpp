@@ -25,24 +25,21 @@ int get_recommended_accumulators(const Target &target) {
     if (target.has_feature(Target::AVX512_Skylake) ||
         (target.arch == Target::ARM && target.bits == 64)) {
         // 32 registers total.
-        return 24;
+        return 20;
     } else {
         // 16 registers total.
         return 8;
     }
 }
 
-int smaller_power_of_two(int x) {
-    int log2_next = std::lround(std::ceil(std::log2(x) - 1.0f));
-    if (log2_next >= 0) {
-        return 1 << log2_next;
-    } else {
-        return 0;
-    }
-}
-
 class Convolution : public Generator<Convolution> {
 public:
+    // How much to unroll the reduction loop over channels. On some targets,
+    // loading a few scalars for one of the reduction inputs is fine, and avoids
+    // a large alignment requirement. However, on other targets, it is beneficial
+    // to load vectors, so making this value larger helps for big reductions.
+    GeneratorParam<int> unroll_reduction_{"unroll_reduction", 4};
+
     // Unsigned 8-bit input tensor, indexed by input_depth, input_x, input_y,
     // input_batch.
     Input<Buffer<uint8_t>> input_{"input", 4};
@@ -108,7 +105,7 @@ public:
 
         // Align the reduction loop of filter.
         int vector_reduction = get_vector_reduction_factor(get_target(), UInt(8));
-        int unroll_reduction = std::max(4, vector_reduction);
+        int unroll_reduction = std::max<int>(unroll_reduction_, vector_reduction);
 
         // Create a wrapper of the filter that we can reorder the storage of to be
         // more convenient for the inner loop.
@@ -172,13 +169,12 @@ public:
 
             // Finally, the terms that depend on all of c, x, y, b.
             convolved(c, x, y, b) = offset_c(c) - i32(filter_offset_) * sum_input(x, y, b);
-            convolved(c, x, y, b) += i32(filter_rdxyc) * i32(input_rdxyc);
         } else {
             // Without 8-bit widening multiplies, we already subtracted the offsets,
             // and just have a single reduction of 16-bit multiplies to compute.
             convolved(c, x, y, b) = bias_bounded(c);
-            convolved(c, x, y, b) += i32(filter_rdxyc) * i32(input_rdxyc);
         }
+        convolved(c, x, y, b) += i32(input_rdxyc) * i32(filter_rdxyc);
 
         // Saturate and narrow the output.
         Expr output =
@@ -203,13 +199,13 @@ public:
         // the total number of accumulators best for this target and figuring out
         // tile sizes.
         const int accumulators = get_recommended_accumulators(get_target());
-        const int tile_x = 4;
         std::vector<std::pair<int, int>> tile_sizes;
-        for (int tile_c = accumulators / tile_x; tile_c >= 1;
-             tile_c = smaller_power_of_two(tile_c)) {
+        const int max_tile_c = 4;
+        for (int tile_c = max_tile_c; tile_c >= 1; tile_c /= 2) {
+            int tile_x = std::min(8, accumulators / tile_c);
             tile_sizes.emplace_back(tile_c, tile_x);
         }
-        tile_sizes.emplace_back(4, 1);
+        tile_sizes.emplace_back(max_tile_c, 1);
 
         // We need to tile the output, but we can't use GuardWithIf because we need
         // things computed at the tile to have constant size. We can't assume the
@@ -220,8 +216,8 @@ public:
         Expr output_channels = output_.dim(0).extent();
         Expr output_width = output_.dim(1).extent();
         for (auto i : tile_sizes) {
-            int tile_c = i.first;
-            int tile_x = i.second;
+            const int tile_c = i.first;
+            const int tile_x = i.second;
             output_
                 .specialize(output_channels >= tile_c * accum_vector_size && output_width >= tile_x)
                 .tile(c, x, co, xo, c, x, tile_c * accum_vector_size, tile_x, TailStrategy::ShiftInwards)
@@ -243,7 +239,7 @@ public:
             .store_in(MemoryType::Stack)
             .reorder(x, c, y, b)
             .vectorize(c, accum_vector_size, TailStrategy::RoundUp)
-            .unroll(c, 4, TailStrategy::GuardWithIf)
+            .unroll(c, max_tile_c, TailStrategy::GuardWithIf)
             .unroll(x);
 
         if (use_8bit_multiply) {
@@ -254,13 +250,22 @@ public:
         RVar rco, rci;
         convolved.update()
             .split(r.z, rco, rci, unroll_reduction)
-            .reorder(rci, x, c, rco, r.x, r.y, y, b)
+            .reorder(rci, c, x, rco, r.x, r.y, y, b)
             .vectorize(c, accum_vector_size, TailStrategy::RoundUp)
-            .unroll(c, 4, TailStrategy::GuardWithIf)
+            .unroll(c, max_tile_c, TailStrategy::GuardWithIf)
             .atomic()
             .vectorize(rci, vector_reduction)
             .unroll(rci)
             .unroll(x);
+
+        if (unroll_reduction >= natural_vector_size<uint8_t>()) {
+            // If we're unrolling a full vector's worth of reduction from the
+            // input, explicitly load a vector of it first. This enables targeting
+            // broadcasting dot products, like ARM's udot.
+            input_bounded.in(convolved).compute_at(convolved, c)
+                .bound_extent(c, unroll_reduction)
+                .vectorize(c);
+        }
 
         if (use_8bit_multiply) {
             // Precompute the channel offset at root.
