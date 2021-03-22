@@ -1289,9 +1289,6 @@ void check_boolean() {
     check(min(select((x == 1), -1, x), x), select((x == 1), -1, x));
     check(min(select((x == -17), -1, x), x), x);
 
-    check(select(x == 1, y, x * y), x * y);
-    check(select(x != 1, x * y, y), x * y);
-
     check(min(select(x == 0, max(y, w), z), w), select(x == 0, w, min(w, z)));
     check(max(select(x == 0, y, min(z, w)), w), select(x == 0, max(w, y), w));
 
