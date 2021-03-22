@@ -55,7 +55,7 @@ TFL_CAPI_EXPORT TfLiteDelegate *tflite_plugin_create_delegate(char **options_key
     }
 
     if (options.verbosity >= 1) {
-        LOG(INFO) << "HannkDelegate: verbosity set to "
+        LOG(INFO) << "External HannkDelegate: verbosity set to "
                   << options.verbosity << ".";
     }
 
