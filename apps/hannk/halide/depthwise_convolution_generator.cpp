@@ -127,7 +127,8 @@ public:
         Expr output_channels = output_.dim(0).extent();
         Expr output_width = output_.dim(1).extent();
         Expr output_height = output_.dim(2).extent();
-        output_.compute_root().specialize(output_width >= kTileSize && output_height >= kTileSize)
+        output_.compute_root()
+            .specialize(output_width >= kTileSize && output_height >= kTileSize)
             .tile(x, y, xo, yo, x, y, kTileSize, kTileSize, TailStrategy::ShiftInwards)
             .unroll(x)
             .unroll(y)

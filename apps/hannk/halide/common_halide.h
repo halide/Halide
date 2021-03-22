@@ -7,12 +7,12 @@
 
 namespace hannk {
 
+using Halide::Internal::rounding_shift_right;
 using Halide::Internal::saturating_add;
 using Halide::Internal::saturating_sub;
 using Halide::Internal::widening_add;
-using Halide::Internal::widening_sub;
 using Halide::Internal::widening_mul;
-using Halide::Internal::rounding_shift_right;
+using Halide::Internal::widening_sub;
 
 // A tensor has the same requirements as a buffer in Halide by default, except
 // the min of the innermost dimension must also be 0.

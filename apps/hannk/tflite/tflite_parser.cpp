@@ -216,7 +216,7 @@ public:
         Tensor *bias = result_.tensors[op->inputs()->Get(2)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
         return ::hannk::make_unique<Conv2DOp>(input, filter, bias, output, stride,
-                                     dilation_factor, padding, activation);
+                                              dilation_factor, padding, activation);
     }
 
     std::unique_ptr<Op> parse_depthwise_conv2D(const tflite::Operator *op) {
