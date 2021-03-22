@@ -1,6 +1,7 @@
 #include "util/hannk_log.h"
 
 #include <cstdio>
+#include <cstdlib>
 
 #if defined(__ANDROID__)
 #include <android/log.h>
