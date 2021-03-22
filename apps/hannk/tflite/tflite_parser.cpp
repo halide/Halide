@@ -142,7 +142,7 @@ public:
         //     }
         // }
 
-        return make_unique<Tensor>(
+        return ::hannk::make_unique<Tensor>(
             t->name()->str(), type, std::move(shape),
             std::move(data), std::move(quantization));
     }
@@ -152,7 +152,7 @@ public:
         Tensor *input1 = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *input2 = result_.tensors[op->inputs()->Get(1)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
-        return make_unique<AddOp>(
+        return ::hannk::make_unique<AddOp>(
             input1, input2, output,
             parse_activation_function(options->fused_activation_function()));
     }
@@ -172,7 +172,7 @@ public:
             parse_activation_function(options->fused_activation_function());
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
-        return make_unique<AveragePoolOp>(
+        return ::hannk::make_unique<AveragePoolOp>(
             input, output, stride, filter_size, padding, activation);
     }
 
@@ -194,7 +194,7 @@ public:
         // Now 'flip' the axis so that it refers to the right dimension in
         // the Tensor (since we reverse the dimension order)
         axis = (int)output->shape().size() - axis - 1;
-        return make_unique<ConcatenationOp>(inputs, output, axis, activation);
+        return ::hannk::make_unique<ConcatenationOp>(inputs, output, axis, activation);
     }
 
     std::unique_ptr<Op> parse_conv2D(const tflite::Operator *op) {
@@ -215,7 +215,7 @@ public:
         Tensor *filter = result_.tensors[op->inputs()->Get(1)].get();
         Tensor *bias = result_.tensors[op->inputs()->Get(2)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
-        return make_unique<Conv2DOp>(input, filter, bias, output, stride,
+        return ::hannk::make_unique<Conv2DOp>(input, filter, bias, output, stride,
                                      dilation_factor, padding, activation);
     }
 
@@ -237,7 +237,7 @@ public:
         Tensor *filter = result_.tensors[op->inputs()->Get(1)].get();
         Tensor *bias = result_.tensors[op->inputs()->Get(2)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
-        return make_unique<DepthwiseConv2DOp>(
+        return ::hannk::make_unique<DepthwiseConv2DOp>(
             input, filter, bias, output, stride, dilation_factor,
             padding, activation);
     }
@@ -251,14 +251,14 @@ public:
         Tensor *filter = result_.tensors[op->inputs()->Get(1)].get();
         Tensor *bias = result_.tensors[op->inputs()->Get(2)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
-        return make_unique<FullyConnectedOp>(input, filter, bias, output, activation);
+        return ::hannk::make_unique<FullyConnectedOp>(input, filter, bias, output, activation);
     }
 
     std::unique_ptr<Op> parse_pad(const tflite::Operator *op) {
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *padding = result_.tensors[op->inputs()->Get(1)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
-        return make_unique<PadOp>(input, padding, output);
+        return ::hannk::make_unique<PadOp>(input, padding, output);
     }
 
     std::unique_ptr<Op> parse_reshape(const tflite::Operator *op) {
@@ -284,13 +284,13 @@ public:
         }
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
-        return make_unique<ReshapeOp>(input, output, new_shape);
+        return ::hannk::make_unique<ReshapeOp>(input, output, new_shape);
     }
 
     std::unique_ptr<Op> parse_quantize(const tflite::Operator *op) {
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
-        return make_unique<QuantizeOp>(input, output);
+        return ::hannk::make_unique<QuantizeOp>(input, output);
     }
 
     std::unique_ptr<Op> parse_op(const tflite::Operator *op) {
