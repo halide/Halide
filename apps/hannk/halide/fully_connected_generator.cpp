@@ -18,9 +18,9 @@ public:
     Input<uint8_t> filter_offset_{"filter_offset"};
 
     // Offset, quantization multiplier and shift for the output.
-    Input<int32_t> output_offset_{"output_offset"};
+    Input<uint8_t> output_offset_{"output_offset"};
     Input<int32_t> output_multiplier_{"output_multiplier"};
-    Input<int32_t> output_shift_{"output_shift"};
+    Input<uint32_t> output_shift_{"output_shift"};
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
@@ -43,7 +43,9 @@ public:
 
         // Saturate and narrow the output.
         Expr output =
-            multiply_quantized(multiplied(c, b), output_multiplier_, output_shift_) + output_offset_;
+            multiply_quantized(multiplied(c, b), output_multiplier_, output_shift_);
+        output = i16_sat(output);
+        output = saturating_add(output, output_offset_);
         output_(c, b) = clamp(u8_sat(output), output_min_, output_max_);
 
         // Schedule.

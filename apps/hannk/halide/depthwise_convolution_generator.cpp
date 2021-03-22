@@ -136,7 +136,7 @@ public:
             .vectorize(c);
 
         convolved.compute_at(output_, xo)
-            .store_in(MemoryType::Stack)
+            .store_in(MemoryType::Register)
             .bound_extent(c, vector_size)
             .bound_extent(x, kTileSize)
             .bound_extent(y, kTileSize)
