@@ -63,6 +63,10 @@ public:
         require_same_extent_cx(output_, input1_);
         require_same_extent_cx(output_, input2_);
 
+        // We need this, otherwise we get a bunch of conditionals of
+        // the form output.extent.0 == 0 in the code.
+        output_.dim(0).set_extent(max(output_.dim(0).extent(), 1));
+
         // Fuse C and X if we can. If there is no broadcasting, we can usually do
         // this. This means we don't need to worry about the vector size dividing
         // the number of channels.
@@ -70,13 +74,11 @@ public:
         output_
             .specialize(can_fuse_cx(output_) && can_fuse_cx(input1_) && can_fuse_cx(input2_))
             .fuse(c, x, cx)
-            .vectorize(cx, vector_size, TailStrategy::ShiftInwards);
+            .vectorize(cx, vector_size * 2, TailStrategy::GuardWithIf);
 
         // If not, just vectorize C.
-        Expr output_channels = output_.dim(0).extent();
         output_
-            .specialize(output_channels >= vector_size)
-            .vectorize(c, vector_size, TailStrategy::ShiftInwards);
+            .vectorize(c, vector_size, TailStrategy::GuardWithIf);
     }
 };
 
