@@ -123,18 +123,18 @@ Expr sum(const RDom &r, Expr e, const std::string &name) {
     return f(v.call_args);
 }
 
-Expr saturating_sum(const Expr &init_val, Expr e, const std::string &name) {
-    return saturating_sum(RDom(), init_val, std::move(e), name);
+Expr saturating_sum(Expr e, const std::string &name) {
+    return saturating_sum(RDom(), std::move(e), name);
 }
 
-Expr saturating_sum(const RDom &r, const Expr &init_val, Expr e, const std::string &name) {
+Expr saturating_sum(const RDom &r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(common_subexpression_elimination(e));
 
     user_assert(v.rdom.defined()) << "Expression passed to saturating_sum must reference a reduction domain";
 
     Func f(name);
-    f(v.free_vars) = init_val;
+    f(v.free_vars) = 0;
     f(v.free_vars) = Internal::saturating_add(f(v.free_vars), e);
     return f(v.call_args);
 }

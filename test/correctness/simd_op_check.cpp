@@ -536,19 +536,19 @@ public:
             {
                 // 16 bit, 2 element saturaing dot product
                 RDom r(0, 2);
-                check("vpdpwssds*zmm", 16, saturating_sum(i32(0), i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
-                check("vpdpwssds*ymm", 8, saturating_sum(i32(0), i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
-                check("vpdpwssds*xmm", 4, saturating_sum(i32(0), i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                check("vpdpwssds*zmm", 16, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                check("vpdpwssds*ymm", 8, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                check("vpdpwssds*xmm", 4, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
             }
             {
                 // 8 bit, 4 element saturating dot product
                 RDom r(0, 4);
-                check("vpdpbusds*zmm", 16, saturating_sum(i32(0), i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
-                check("vpdpbusds*zmm", 16, saturating_sum(i32(0), i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
-                check("vpdpbusds*ymm", 8, saturating_sum(i32(0), i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
-                check("vpdpbusds*ymm", 8, saturating_sum(i32(0), i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
-                check("vpdpbusds*xmm", 4, saturating_sum(i32(0), i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
-                check("vpdpbusds*xmm", 4, saturating_sum(i32(0), i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                check("vpdpbusds*zmm", 16, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusds*zmm", 16, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                check("vpdpbusds*ymm", 8, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusds*ymm", 8, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                check("vpdpbusds*xmm", 4, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusds*xmm", 4, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
             }
         }
     }
