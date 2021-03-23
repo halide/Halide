@@ -24,11 +24,14 @@
     KNOWN_OP(Concatenation)   \
     KNOWN_OP(Conv2d)          \
     KNOWN_OP(DepthwiseConv2d) \
-    KNOWN_OP(FullyConnected)  \
     KNOWN_OP(MaxPool2d)       \
     KNOWN_OP(Pad)             \
     KNOWN_OP(Reshape)         \
     KNOWN_OP(Quantize)
+
+// TODO(srj): FullyConnected will actually check-fail if you use it,
+// so leave it out of the ops we handle here for now.
+//    KNOWN_OP(FullyConnected)
 
 namespace hannk {
 namespace {
@@ -236,13 +239,7 @@ public:
         for (size_t tensor_id = 0; tensor_id < context->tensors_size; tensor_id++) {
             const TfLiteTensor &tensor = context->tensors[tensor_id];
             if (tensor.dims == nullptr) {
-                // Can't convert a TfLiteTensor with no dimension info.
-                // Sometimes TFLite hands us a TFLiteTensor that is completely
-                // empty (mostly zero, but with buffer_handle = -1 so it's not random
-                // memory). We can't convert one of these usefully (our tensor representation
-                // requires a useful set of dimensions) so we'll just skip them here.
-                // So far, none of these appear to get referenced later on, but if
-                // they did, GetTensorById would return null (and callers would crash).
+                // Can't convert a TfLiteTensor with no dimension info
                 LOG(INFO) << "Skipping tensor_id " << tensor_id << "\n";
                 continue;
             }
@@ -250,8 +247,8 @@ public:
             model_->tensors.emplace_back(t);
             assert(!tensor_id_to_tensor_ptr_.count(tensor_id));
             tensor_id_to_tensor_ptr_[tensor_id] = t;
-            if (options_.verbosity >= 2) {
-                LOG(INFO) << "tensor_id " << tensor_id << " -> " << (void*) t.get() << "\n";
+            if (options_.verbosity >= 1) {
+                LOG(INFO) << "tensor_id " << tensor_id << " -> " << (void *)t.get() << "\n";
             }
         }
 
@@ -460,7 +457,6 @@ private:
     Tensor *GetTensorById(TfLiteContext *context, int tensor_id) {
         auto it = tensor_id_to_tensor_ptr_.find(tensor_id);
         if (it == tensor_id_to_tensor_ptr_.end()) {
-            // TODO(srj): error handling here; callers don't check for null.
             LOG(ERROR) << "tensor_id not found: " << tensor_id;
             return nullptr;
         }
@@ -725,20 +721,21 @@ bool IsNodeSupported_DepthwiseConv2d(TfLiteContext *context, TfLiteNode *node, T
     return true;
 }
 
-bool IsNodeSupported_FullyConnected(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    // This is correct, we don't handle the params for v2 or later yet
-    if (!(registration->version <= 1)) {
-        return false;
-    }
-    if (!InputsHaveCorrectTypes(node, context, {k8BitMask, k8BitMask, (1 << kTfLiteInt32) | (1 << kTfLiteNoType)})) {
-        return false;
-    }
-    const TfLiteFullyConnectedParams *params = (const TfLiteFullyConnectedParams *)(node->builtin_data);
-    if (!IsActivationReluOrNone(params->activation)) {
-        return false;
-    }
-    return true;
-}
+// TODO(srj): unused for now
+// bool IsNodeSupported_FullyConnected(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+//     // This is correct, we don't handle the params for v2 or later yet
+//     if (!(registration->version <= 1)) {
+//         return false;
+//     }
+//     if (!InputsHaveCorrectTypes(node, context, {k8BitMask, k8BitMask, (1 << kTfLiteInt32) | (1 << kTfLiteNoType)})) {
+//         return false;
+//     }
+//     const TfLiteFullyConnectedParams *params = (const TfLiteFullyConnectedParams *)(node->builtin_data);
+//     if (!IsActivationReluOrNone(params->activation)) {
+//         return false;
+//     }
+//     return true;
+// }
 
 bool IsNodeSupported_MaxPool2d(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
     if (!(registration->version <= 2)) {
@@ -793,6 +790,7 @@ bool IsNodeSupported(TfLiteContext *context, TfLiteNode *node, TfLiteRegistratio
             continue;
         }
         const TfLiteTensor &tensor = context->tensors[tensor_id];
+        assert(tensor.dims);
         if (tensor.dims->size > 4) {
             return false;
         }
@@ -800,6 +798,7 @@ bool IsNodeSupported(TfLiteContext *context, TfLiteNode *node, TfLiteRegistratio
     for (int i = 0; i < node->outputs->size; ++i) {
         const int tensor_id = node->outputs->data[i];
         const TfLiteTensor &tensor = context->tensors[tensor_id];
+        assert(tensor.dims);
         if (tensor.dims->size > 4) {
             return false;
         }
@@ -853,7 +852,18 @@ bool IsNodeSupported(TfLiteContext *context, TfLiteNode *node, TfLiteRegistratio
         if (IsNodeSupported(context, node, registration)) {
             supported_nodes.push_back(node_index);
         } else {
-            LOG(INFO) << "NODE REJECTED: " << node_index << "\n";
+            // TODO: consider using a lambda to pass in the options_ struct
+            // so we can gate this via verbosity.
+            //
+            // NOTE: The TFLite C API doesn't provide a way to map builtin_code
+            // to a readable name; see lite/builtin_ops.h to find what sort
+            // of node(s) we are skipping here. (The names are available if
+            // we add a dependency on the generated schema file, but that's a
+            // dep we don't otherwise need or want here.)
+            LOG(INFO) << "Skipping unsupported node, index=" << node_index
+                      << " code=" << registration->builtin_code
+                      << " custom_name=(" << (registration->custom_name ? registration->custom_name : "nullptr") << ")"
+                      << "\n";
         }
     }
 
