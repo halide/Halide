@@ -82,6 +82,10 @@ $(BIN)/%/convolution_uint8.a: $(GENERATOR_BIN)/convolution.generator
 	@mkdir -p $(@D)
 	$< -g Convolution -f hannk::convolution_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
+$(BIN)/%/convolution_r16_uint8.a: $(GENERATOR_BIN)/convolution.generator
+	@mkdir -p $(@D)
+	$< -g Convolution unroll_reduction=16 -f hannk::convolution_r16_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
 $(BIN)/%/depthwise_convolution_uint8.a: $(GENERATOR_BIN)/depthwise_convolution.generator
 	@mkdir -p $(@D)
 	$< -g DepthwiseConvolution -f hannk::depthwise_convolution_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
@@ -111,6 +115,11 @@ OPS_HALIDE = \
 	$(BIN)/%/fully_connected_uint8.a \
 	$(BIN)/%/max_pool_uint8.a \
 	$(BIN)/%/runtime.a
+
+ifneq (,$(findstring arm,$(HL_TARGET)))
+OPS_HALIDE += \
+	$(BIN)/%/convolution_r16_uint8.a
+endif
 
 OPS_CXXFLAGS = -I$(BIN)/$*
 

@@ -8,6 +8,9 @@
 #include "add_uint8_uint8.h"
 #include "average_pool_uint8.h"
 #include "convolution_uint8.h"
+#if defined(__arm__) || defined(__aarch64__)
+#include "convolution_r16_uint8.h"
+#endif
 #include "depthwise_convolution_uint8.h"
 #include "depthwise_convolution_uint8_broadcast.h"
 #include "fully_connected_uint8.h"
@@ -449,12 +452,28 @@ void Conv2DOp::execute(const Box &crop) {
             }
         }
 
-        CHECK(
-            0 == convolution_uint8(input_buf, filter_buf, bias_buf, (uint8_t)input_offset,
-                                   (uint8_t)filter_offset, stride_[0], stride_[1],
-                                   dilation_[0], dilation_[1], output_multiplier,
-                                   output_shift, (uint8_t)output_offset,
-                                   output_range.min, output_range.max, guid_, output_buf));
+#if defined(__arm__) || defined(__aarch64__)
+        if (input_buf.dim(0).extent() >= 16) {
+            // For large reductions, use the big reduction version.
+            // TODO: We really ought to be able to do this with GuardWithIf
+            // and/or specialize.
+            CHECK(
+                0 == convolution_r16_uint8(input_buf, filter_buf, bias_buf, (uint8_t)input_offset,
+                                           (uint8_t)filter_offset, stride_[0], stride_[1],
+                                           dilation_[0], dilation_[1], output_multiplier,
+                                           output_shift, (uint8_t)output_offset,
+                                           output_range.min, output_range.max, guid_, output_buf));
+        }
+        else
+#endif
+        {
+            CHECK(
+                0 == convolution_uint8(input_buf, filter_buf, bias_buf, (uint8_t)input_offset,
+                                       (uint8_t)filter_offset, stride_[0], stride_[1],
+                                       dilation_[0], dilation_[1], output_multiplier,
+                                       output_shift, (uint8_t)output_offset,
+                                       output_range.min, output_range.max, guid_, output_buf));
+        }
     } else {
         CHECK(false);
     }
