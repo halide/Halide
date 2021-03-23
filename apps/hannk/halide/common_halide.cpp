@@ -25,7 +25,10 @@ void require_same_extent_cx(OutputImageParam first, OutputImageParam second) {
 }
 
 Expr can_fuse_cx(OutputImageParam p) {
-    return p.dim(0).min() == 0 && p.dim(1).stride() > 0 && p.dim(1).stride() == p.dim(0).extent();
+    return
+        p.dim(0).min() == 0 &&
+        p.dim(1).stride() > 0 &&
+        p.dim(1).stride() == p.dim(0).extent() * p.dim(0).stride();
 }
 
 Func constant_exterior_tensor(

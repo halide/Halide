@@ -17,6 +17,56 @@ namespace hannk {
 
 namespace {
 
+using Halide::Runtime::Buffer;
+
+// Check if dimension 0 and dimension 1 of buf can be fused.
+template <typename T>
+bool can_fuse(const Buffer<T> &buf, int d0, int d1) {
+    assert(d0 != d1);
+    return
+        d0 < buf.dimensions() &&
+        d1 < buf.dimensions() &&
+        buf.dim(d0).min() == 0 &&
+        buf.dim(d1).stride() > 0 &&
+        buf.dim(d1).stride() == buf.dim(d0).extent() * buf.dim(d0).stride();
+}
+template <typename T>
+bool can_fuse_cx(const Buffer<T> &buf) {
+    return can_fuse(buf, 0, 1);
+}
+template <typename T>
+bool can_fuse_xy(const Buffer<T> &buf) {
+    return can_fuse(buf, 1, 2);
+}
+
+// Fuse the first two dimensions of buf. d1 is deleted from the buffer.
+template <typename T>
+void fuse(Buffer<T> &buf, int d0, int d1) {
+    halide_dimension_t &dim0 = buf.raw_buffer()->dim[d0];
+    halide_dimension_t &dim1 = buf.raw_buffer()->dim[d1];
+    dim0.extent *= dim1.extent;
+    for (int d = d1; d + 1 < buf.dimensions(); d++) {
+        buf.raw_buffer()->dim[d] = buf.raw_buffer()->dim[d + 1];
+    }
+    buf.slice(buf.dimensions() - 1);
+}
+template <typename T>
+void fuse_cx(Buffer<T> &buf) {
+    fuse(buf, 0, 1);
+}
+template <typename T>
+void fuse_xy(Buffer<T> &buf) {
+    fuse(buf, 1, 2);
+}
+
+// Embed extent 1 dimensions until buf has the given rank.
+template <typename T>
+void pad_to_rank(Buffer<T> &buf, int rank) {
+    while (buf.dimensions() < rank) {
+        buf.embed(buf.dimensions(), 0);
+    }
+}
+
 struct QuantizedMulAndShift {
     int multiplier, shift;
 };
@@ -191,11 +241,14 @@ void AddOp::execute(const Box &crop) {
 
         const auto output_range = get_output_range(activation_, out);
 
-        while (output_buf.dimensions() < 4) {
-            in1_buf.embed(output_buf.dimensions());
-            in2_buf.embed(output_buf.dimensions());
-            output_buf.embed(output_buf.dimensions());
+        while (can_fuse_cx(in1_buf) && can_fuse_cx(in2_buf) && can_fuse_cx(output_buf)) {
+            fuse_cx(in1_buf);
+            fuse_cx(in2_buf);
+            fuse_cx(output_buf);
         }
+        pad_to_rank(in1_buf, 4);
+        pad_to_rank(in2_buf, 4);
+        pad_to_rank(output_buf, 4);
 
         CHECK(0 == add_uint8_uint8(left_shift, in1_buf, in2_buf,
                                    in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
@@ -358,23 +411,39 @@ void Conv2DOp::execute(const Box &crop) {
 
         const auto output_range = get_output_range(activation_, out);
 
-        if (padding_ == Padding::Same) {
-            const int input_width = input_buf.dim(1).extent();
-            const int input_height = input_buf.dim(2).extent();
-            const int filter_width = filter_buf.dim(1).extent();
-            const int filter_height = filter_buf.dim(2).extent();
-            const int output_width = output_buf.dim(1).extent();
-            const int output_height = output_buf.dim(2).extent();
+        const int filter_width = filter_buf.dim(1).extent();
+        const int filter_height = filter_buf.dim(2).extent();
+        const int output_width = output_buf.dim(1).extent();
+        const int output_height = output_buf.dim(2).extent();
+        if (filter_width == 1 && filter_height == 1) {
+            // For 1x1 filters, we can fuse x and y, which can help avoid overhead for
+            // small output sizes. However, we only want to do this when the output is
+            // small, because the schedule computes things at y.
+            // TODO: This shouldn't be necessary.
+            const int fuse_threshold = 100;
+            if (output_width * output_height < fuse_threshold) {
+                while (can_fuse_xy(input_buf) && can_fuse_xy(output_buf)) {
+                    fuse_xy(input_buf);
+                    fuse_xy(output_buf);
+                }
+                pad_to_rank(input_buf, 4);
+                pad_to_rank(output_buf, 4);
+            }
+        } else {
+            if (padding_ == Padding::Same) {
+                const int input_width = input_buf.dim(1).extent();
+                const int input_height = input_buf.dim(2).extent();
 
-            const int dilated_filter_width = dilation_[0] * (filter_width - 1) + 1;
-            const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
+                const int dilated_filter_width = dilation_[0] * (filter_width - 1) + 1;
+                const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
 
-            const int pad_width =
-                std::max(0, ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
-            const int pad_height =
-                std::max(0, ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
+                const int pad_width =
+                    std::max(0, ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
+                const int pad_height =
+                    std::max(0, ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
 
-            input_buf.translate({0, pad_width, pad_height, 0});
+                input_buf.translate({0, pad_width, pad_height, 0});
+            }
         }
 
         CHECK(
