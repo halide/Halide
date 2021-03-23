@@ -15,7 +15,7 @@ inline std::ostream &operator<<(std::ostream &stream, const halide_type_t &type)
         stream << "bool";
     } else {
         assert(type.code >= 0 && type.code <= 3);
-        static const char *const names[4] = {"int", "uint", "float", "handle"};
+        static const char *const names[5] = {"int", "uint", "float", "handle", "bfloat"};
         stream << names[type.code] << (int)type.bits;
     }
     if (type.lanes > 1) {
