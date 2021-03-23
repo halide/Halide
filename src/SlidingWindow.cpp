@@ -132,6 +132,8 @@ class RollFunc : public IRMutator {
     const Interval &old_bounds;
     const Interval &new_bounds;
 
+    Scope<Expr> scope;
+
     // It helps simplify the shifted calls/provides to rebase the
     // loops that are subtracted from to have a min of 0.
     set<string> loops_to_rebase;
@@ -161,7 +163,8 @@ class RollFunc : public IRMutator {
         Expr is_new = sliding_up ? new_bounds.min <= args[dim] : args[dim] <= new_bounds.max;
         args[dim] -= old_bounds.min;
         vector<Expr> old_args = args;
-        old_args[dim] = substitute(loop_var, Variable::make(Int(32), loop_var) - 1, old_args[dim]);
+        Expr old_arg_dim = expand_expr(old_args[dim], scope);
+        old_args[dim] = substitute(loop_var, Variable::make(Int(32), loop_var) - 1, old_arg_dim);
         for (int i = 0; i < (int)values.size(); i++) {
             Type t = values[i].type();
             Expr old_value =
@@ -198,6 +201,11 @@ class RollFunc : public IRMutator {
             loops_to_rebase.erase(op->name);
         }
         return result;
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope)));
+        return IRMutator::visit(op);
     }
 
 public:
