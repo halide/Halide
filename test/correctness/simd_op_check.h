@@ -30,6 +30,7 @@ public:
 
     ImageParam in_f32{Float(32), 1, "in_f32"};
     ImageParam in_f64{Float(64), 1, "in_f64"};
+    ImageParam in_f16{Float(16), 1, "in_f16"};
     ImageParam in_bf16{BFloat(16), 1, "in_bf16"};
     ImageParam in_i8{Int(8), 1, "in_i8"};
     ImageParam in_u8{UInt(8), 1, "in_u8"};
@@ -40,8 +41,8 @@ public:
     ImageParam in_i64{Int(64), 1, "in_i64"};
     ImageParam in_u64{UInt(64), 1, "in_u64"};
 
-    const std::vector<ImageParam> image_params{in_f32, in_f64, in_bf16, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
-    const std::vector<Argument> arg_types{in_f32, in_f64, in_bf16, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
+    const std::vector<ImageParam> image_params{in_f32, in_f64, in_f16, in_bf16, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
+    const std::vector<Argument> arg_types{in_f32, in_f64, in_f16, in_bf16, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
     int W;
     int H;
 
