@@ -33,7 +33,9 @@ struct DepthwiseConv2D_ReferenceOp : public op_test::ReferenceOp {
 
         const float input_scale = in->quantization().scale.at(0);
         const float filter_scale = filt->quantization().scale.at(0);
+#ifndef NDEBUG
         const float bias_scale = bias->quantization().scale.at(0);
+#endif
         const float output_scale = out->quantization().scale.at(0);
 
         const double input_product_scale = (double)input_scale * (double)filter_scale;
@@ -42,7 +44,9 @@ struct DepthwiseConv2D_ReferenceOp : public op_test::ReferenceOp {
 
         const double output_multiplier = input_product_scale / output_scale;
 
+#ifndef NDEBUG
         const int input_depth = input_buf.dim(0).extent();
+#endif
         const int input_width = input_buf.dim(1).extent();
         const int input_height = input_buf.dim(2).extent();
         const int filter_width = filter_buf.dim(1).extent();

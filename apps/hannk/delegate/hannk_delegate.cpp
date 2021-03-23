@@ -24,11 +24,14 @@
     KNOWN_OP(Concatenation)   \
     KNOWN_OP(Conv2d)          \
     KNOWN_OP(DepthwiseConv2d) \
-    KNOWN_OP(FullyConnected)  \
     KNOWN_OP(MaxPool2d)       \
     KNOWN_OP(Pad)             \
     KNOWN_OP(Reshape)         \
     KNOWN_OP(Quantize)
+
+// TODO(srj): FullyConnected will actually check-fail if you use it,
+// so leave it out of the ops we handle here for now.
+//    KNOWN_OP(FullyConnected)
 
 namespace hannk {
 namespace {
@@ -154,6 +157,7 @@ Padding ConvertTfLitePadding(TfLitePadding p) {
 }
 
 std::vector<halide_dimension_t> ConvertTfLiteShape(const TfLiteTensor &tensor, size_t *shape_size_out = nullptr) {
+    assert(tensor.dims);
     std::vector<halide_dimension_t> shape(tensor.dims->size);
     size_t shape_size = 1;
     for (int i = 0; i < (int)shape.size(); i++) {
@@ -234,12 +238,17 @@ public:
         // Pre-emptively map *all* the TFLiteTensors into our Tensor type.
         for (size_t tensor_id = 0; tensor_id < context->tensors_size; tensor_id++) {
             const TfLiteTensor &tensor = context->tensors[tensor_id];
+            if (tensor.dims == nullptr) {
+                // Can't convert a TfLiteTensor with no dimension info
+                LOG(INFO) << "Skipping tensor_id " << tensor_id << "\n";
+                continue;
+            }
             auto t = ConvertTfLiteTensor(tensor);
             model_->tensors.emplace_back(t);
             assert(!tensor_id_to_tensor_ptr_.count(tensor_id));
             tensor_id_to_tensor_ptr_[tensor_id] = t;
             if (options_.verbosity >= 1) {
-                // LOG(INFO) << "tensor_id " << tensor_id << " -> " << (void*) t.get() << "\n";
+                LOG(INFO) << "tensor_id " << tensor_id << " -> " << (void *)t.get() << "\n";
             }
         }
 
@@ -259,8 +268,8 @@ public:
             }
             auto t = GetTensorById(context, tensor_id);
             t->set_input(true);
-            if (options_.verbosity >= 1) {
-                // LOG(INFO) << "Delegate " << (void *)this << (t->is_constant() ? " Const" : "") << " Input tensor: " << tensor_id << "\n";
+            if (options_.verbosity >= 2) {
+                LOG(INFO) << "Delegate " << (void *)this << (t->is_constant() ? " Const" : "") << " Input tensor: " << tensor_id << "\n";
             }
         }
 
@@ -270,8 +279,8 @@ public:
             if (tensor_id == kTfLiteOptionalTensor) {
                 continue;
             }
-            if (options_.verbosity >= 1) {
-                // LOG(INFO) << "Delegate " << (void *)this << " Output tensor: " << tensor_id << "\n";
+            if (options_.verbosity >= 2) {
+                LOG(INFO) << "Delegate " << (void *)this << " Output tensor: " << tensor_id << "\n";
             }
             auto t = GetTensorById(context, tensor_id);
             t->set_output(true);
@@ -712,20 +721,21 @@ bool IsNodeSupported_DepthwiseConv2d(TfLiteContext *context, TfLiteNode *node, T
     return true;
 }
 
-bool IsNodeSupported_FullyConnected(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    // This is correct, we don't handle the params for v2 or later yet
-    if (!(registration->version <= 1)) {
-        return false;
-    }
-    if (!InputsHaveCorrectTypes(node, context, {k8BitMask, k8BitMask, (1 << kTfLiteInt32) | (1 << kTfLiteNoType)})) {
-        return false;
-    }
-    const TfLiteFullyConnectedParams *params = (const TfLiteFullyConnectedParams *)(node->builtin_data);
-    if (!IsActivationReluOrNone(params->activation)) {
-        return false;
-    }
-    return true;
-}
+// TODO(srj): unused for now
+// bool IsNodeSupported_FullyConnected(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+//     // This is correct, we don't handle the params for v2 or later yet
+//     if (!(registration->version <= 1)) {
+//         return false;
+//     }
+//     if (!InputsHaveCorrectTypes(node, context, {k8BitMask, k8BitMask, (1 << kTfLiteInt32) | (1 << kTfLiteNoType)})) {
+//         return false;
+//     }
+//     const TfLiteFullyConnectedParams *params = (const TfLiteFullyConnectedParams *)(node->builtin_data);
+//     if (!IsActivationReluOrNone(params->activation)) {
+//         return false;
+//     }
+//     return true;
+// }
 
 bool IsNodeSupported_MaxPool2d(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
     if (!(registration->version <= 2)) {
@@ -780,6 +790,7 @@ bool IsNodeSupported(TfLiteContext *context, TfLiteNode *node, TfLiteRegistratio
             continue;
         }
         const TfLiteTensor &tensor = context->tensors[tensor_id];
+        assert(tensor.dims);
         if (tensor.dims->size > 4) {
             return false;
         }
@@ -787,6 +798,7 @@ bool IsNodeSupported(TfLiteContext *context, TfLiteNode *node, TfLiteRegistratio
     for (int i = 0; i < node->outputs->size; ++i) {
         const int tensor_id = node->outputs->data[i];
         const TfLiteTensor &tensor = context->tensors[tensor_id];
+        assert(tensor.dims);
         if (tensor.dims->size > 4) {
             return false;
         }
@@ -840,7 +852,18 @@ bool IsNodeSupported(TfLiteContext *context, TfLiteNode *node, TfLiteRegistratio
         if (IsNodeSupported(context, node, registration)) {
             supported_nodes.push_back(node_index);
         } else {
-            LOG(INFO) << "NODE REJECTED: " << node_index << "\n";
+            // TODO: consider using a lambda to pass in the options_ struct
+            // so we can gate this via verbosity.
+            //
+            // NOTE: The TFLite C API doesn't provide a way to map builtin_code
+            // to a readable name; see lite/builtin_ops.h to find what sort
+            // of node(s) we are skipping here. (The names are available if
+            // we add a dependency on the generated schema file, but that's a
+            // dep we don't otherwise need or want here.)
+            LOG(INFO) << "Skipping unsupported node, index=" << node_index
+                      << " code=" << registration->builtin_code
+                      << " custom_name=(" << (registration->custom_name ? registration->custom_name : "nullptr") << ")"
+                      << "\n";
         }
     }
 
