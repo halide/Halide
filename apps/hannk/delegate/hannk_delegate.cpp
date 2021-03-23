@@ -154,6 +154,7 @@ Padding ConvertTfLitePadding(TfLitePadding p) {
 }
 
 std::vector<halide_dimension_t> ConvertTfLiteShape(const TfLiteTensor &tensor, size_t *shape_size_out = nullptr) {
+    assert(tensor.dims);
     std::vector<halide_dimension_t> shape(tensor.dims->size);
     size_t shape_size = 1;
     for (int i = 0; i < (int)shape.size(); i++) {
@@ -234,12 +235,23 @@ public:
         // Pre-emptively map *all* the TFLiteTensors into our Tensor type.
         for (size_t tensor_id = 0; tensor_id < context->tensors_size; tensor_id++) {
             const TfLiteTensor &tensor = context->tensors[tensor_id];
+            if (tensor.dims == nullptr) {
+                // Can't convert a TfLiteTensor with no dimension info.
+                // Sometimes TFLite hands us a TFLiteTensor that is completely
+                // empty (mostly zero, but with buffer_handle = -1 so it's not random
+                // memory). We can't convert one of these usefully (our tensor representation
+                // requires a useful set of dimensions) so we'll just skip them here.
+                // So far, none of these appear to get referenced later on, but if
+                // they did, GetTensorById would return null (and callers would crash).
+                LOG(INFO) << "Skipping tensor_id " << tensor_id << "\n";
+                continue;
+            }
             auto t = ConvertTfLiteTensor(tensor);
             model_->tensors.emplace_back(t);
             assert(!tensor_id_to_tensor_ptr_.count(tensor_id));
             tensor_id_to_tensor_ptr_[tensor_id] = t;
-            if (options_.verbosity >= 1) {
-                // LOG(INFO) << "tensor_id " << tensor_id << " -> " << (void*) t.get() << "\n";
+            if (options_.verbosity >= 2) {
+                LOG(INFO) << "tensor_id " << tensor_id << " -> " << (void*) t.get() << "\n";
             }
         }
 
@@ -259,8 +271,8 @@ public:
             }
             auto t = GetTensorById(context, tensor_id);
             t->set_input(true);
-            if (options_.verbosity >= 1) {
-                // LOG(INFO) << "Delegate " << (void *)this << (t->is_constant() ? " Const" : "") << " Input tensor: " << tensor_id << "\n";
+            if (options_.verbosity >= 2) {
+                LOG(INFO) << "Delegate " << (void *)this << (t->is_constant() ? " Const" : "") << " Input tensor: " << tensor_id << "\n";
             }
         }
 
@@ -270,8 +282,8 @@ public:
             if (tensor_id == kTfLiteOptionalTensor) {
                 continue;
             }
-            if (options_.verbosity >= 1) {
-                // LOG(INFO) << "Delegate " << (void *)this << " Output tensor: " << tensor_id << "\n";
+            if (options_.verbosity >= 2) {
+                LOG(INFO) << "Delegate " << (void *)this << " Output tensor: " << tensor_id << "\n";
             }
             auto t = GetTensorById(context, tensor_id);
             t->set_output(true);
@@ -448,6 +460,7 @@ private:
     Tensor *GetTensorById(TfLiteContext *context, int tensor_id) {
         auto it = tensor_id_to_tensor_ptr_.find(tensor_id);
         if (it == tensor_id_to_tensor_ptr_.end()) {
+            // TODO(srj): error handling here; callers don't check for null.
             LOG(ERROR) << "tensor_id not found: " << tensor_id;
             return nullptr;
         }
