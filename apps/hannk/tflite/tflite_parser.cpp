@@ -189,11 +189,11 @@ public:
         int axis = options->axis();
         // Handle negative values, which are legal
         if (axis < 0) {
-            axis = (int)output->shape().size() + axis;
+            axis = (int)output->rank() + axis;
         }
         // Now 'flip' the axis so that it refers to the right dimension in
         // the Tensor (since we reverse the dimension order)
-        axis = (int)output->shape().size() - axis - 1;
+        axis = (int)output->rank() - axis - 1;
         return ::hannk::make_unique<ConcatenationOp>(inputs, output, axis, activation);
     }
 
@@ -271,7 +271,7 @@ public:
                                    result_.tensors[op->inputs()->Get(1)].get() :
                                    nullptr;
         if (shape_tensor &&
-            shape_tensor->shape().size() == 1 &&
+            shape_tensor->rank() == 1 &&
             shape_tensor->type() == TensorType::Int32) {
             auto data = shape_tensor->data<int32_t>();
             for (int i = 0; i < data.dimensions(); i++) {
