@@ -20,27 +20,26 @@ namespace {
 using Halide::Runtime::Buffer;
 
 // Check if dimension 0 and dimension 1 of buf can be fused.
-template <typename T>
+template<typename T>
 bool can_fuse(const Buffer<T> &buf, int d0, int d1) {
     assert(d0 != d1);
-    return
-        d0 < buf.dimensions() &&
-        d1 < buf.dimensions() &&
-        buf.dim(d0).min() == 0 &&
-        buf.dim(d1).stride() > 0 &&
-        buf.dim(d1).stride() == buf.dim(d0).extent() * buf.dim(d0).stride();
+    return d0 < buf.dimensions() &&
+           d1 < buf.dimensions() &&
+           buf.dim(d0).min() == 0 &&
+           buf.dim(d1).stride() > 0 &&
+           buf.dim(d1).stride() == buf.dim(d0).extent() * buf.dim(d0).stride();
 }
-template <typename T>
+template<typename T>
 bool can_fuse_cx(const Buffer<T> &buf) {
     return can_fuse(buf, 0, 1);
 }
-template <typename T>
+template<typename T>
 bool can_fuse_xy(const Buffer<T> &buf) {
     return can_fuse(buf, 1, 2);
 }
 
 // Fuse the first two dimensions of buf. d1 is deleted from the buffer.
-template <typename T>
+template<typename T>
 void fuse(Buffer<T> &buf, int d0, int d1) {
     halide_dimension_t &dim0 = buf.raw_buffer()->dim[d0];
     halide_dimension_t &dim1 = buf.raw_buffer()->dim[d1];
@@ -50,17 +49,17 @@ void fuse(Buffer<T> &buf, int d0, int d1) {
     }
     buf.slice(buf.dimensions() - 1);
 }
-template <typename T>
+template<typename T>
 void fuse_cx(Buffer<T> &buf) {
     fuse(buf, 0, 1);
 }
-template <typename T>
+template<typename T>
 void fuse_xy(Buffer<T> &buf) {
     fuse(buf, 1, 2);
 }
 
 // Embed extent 1 dimensions until buf has the given rank.
-template <typename T>
+template<typename T>
 void pad_to_rank(Buffer<T> &buf, int rank) {
     while (buf.dimensions() < rank) {
         buf.embed(buf.dimensions(), 0);

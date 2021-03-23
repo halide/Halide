@@ -264,7 +264,8 @@ public:
             // If we're unrolling a full vector's worth of reduction from the
             // input, explicitly load a vector of it first. This enables targeting
             // broadcasting dot products, like ARM's udot.
-            input_bounded.in(convolved).compute_at(convolved, c)
+            input_bounded.in(convolved)
+                .compute_at(convolved, c)
                 .bound_extent(c, unroll_reduction)
                 .vectorize(c);
         }
@@ -286,7 +287,8 @@ public:
                 .vectorize(c, accum_vector_size, TailStrategy::RoundUp);
 
             // Compute the sum of the input outside the loops over channels.
-            sum_input.in().compute_at(output_, y)
+            sum_input.in()
+                .compute_at(output_, y)
                 .vectorize(x, accum_vector_size, TailStrategy::RoundUp);
             sum_input.compute_at(sum_input.in(), x)
                 .vectorize(x)
