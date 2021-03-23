@@ -59,7 +59,6 @@ public:
         // subtracted.
         Func input_bounded = constant_exterior(input_, input_offset_);
 
-        Func filter_bounded = repeat_edge(filter_);
         Func bias_bounded = repeat_edge(bias_);
 
         // Apply the c multiplier.
@@ -69,7 +68,7 @@ public:
 
         Func filter_zeroed("filter_zeroed");
         Func input_zeroed("input_zeroed");
-        filter_zeroed(c, x, y) = i16(filter_bounded(c, x, y)) - i16(filter_offset_);
+        filter_zeroed(c, x, y) = i16(filter_(c, x, y)) - i16(filter_offset_);
         input_zeroed(c, x, y, b) = i16(resampled_input(c, x, y, b)) - i16(input_offset_);
 
         // Do the convolution in 32-bit.
@@ -158,10 +157,12 @@ public:
             .vectorize(c);
         convolved.update()
             .specialize(filter_width == 3 && filter_height == 3)
-            .reorder(r.x, x, y, r.y)
-            .unroll(r.x);
+            .unroll(r.x)
+            .unroll(r.y);
 
-        bias_bounded.compute_root();
+        bias_bounded.compute_at(output_, co)
+            .store_in(MemoryType::Stack)
+            .vectorize(Halide::_0, natural_vector_size<int32_t>(), TailStrategy::GuardWithIf);
 
         if (inv_depth_multiplier_ < 0) {
             // The reason inv_depth_multiplier_ is a GeneratorParam and not a
@@ -184,7 +185,7 @@ public:
                 .vectorize(Halide::_1, vector_size, TailStrategy::RoundUp);
         }
 
-        filter_bounded
+        filter_.in()
             .compute_at(output_, co)
             .store_in(MemoryType::Stack)
             .align_storage(Halide::_0, vector_size)
