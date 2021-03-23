@@ -333,7 +333,9 @@ void Conv2DOp::execute(const Box &crop) {
 
         const int input_offset = in->quantization().zero.at(0);
         const int filter_offset = filt->quantization().zero.at(0);
+#ifndef NDEBUG
         const int bias_offset = bias()->quantization().zero.at(0);
+#endif
         const int output_offset = out->quantization().zero.at(0);
         assert(input_offset >= 0 && input_offset <= 255);
         assert(filter_offset >= 0 && filter_offset <= 255);
@@ -342,7 +344,9 @@ void Conv2DOp::execute(const Box &crop) {
 
         const float input_scale = in->quantization().scale.at(0);
         const float filter_scale = filt->quantization().scale.at(0);
+#ifndef NDEBUG
         const float bias_scale = bias()->quantization().scale.at(0);
+#endif
         const float output_scale = out->quantization().scale.at(0);
 
         const double input_product_scale = input_scale * filter_scale;
@@ -462,7 +466,9 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
 
         const int input_offset = in->quantization().zero.at(0);
         const int filter_offset = filt->quantization().zero.at(0);
+#ifndef NDEBUG
         const int bias_offset = bias()->quantization().zero.at(0);
+#endif
         const int output_offset = out->quantization().zero.at(0);
         assert(input_offset >= 0 && input_offset <= 255);
         assert(filter_offset >= 0 && filter_offset <= 255);
@@ -471,7 +477,9 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
 
         const float input_scale = in->quantization().scale.at(0);
         const float filter_scale = filt->quantization().scale.at(0);
+#ifndef NDEBUG
         const float bias_scale = bias()->quantization().scale.at(0);
+#endif
         const float output_scale = out->quantization().scale.at(0);
 
         const double input_product_scale = input_scale * filter_scale;
@@ -563,7 +571,9 @@ void FullyConnectedOp::execute(const Box &crop) {
 
         const int input_offset = in->quantization().zero.at(0);
         const int filter_offset = filt->quantization().zero.at(0);
+#ifndef NDEBUG
         const int bias_offset = bias()->quantization().zero.at(0);
+#endif
         const int output_offset = out->quantization().zero.at(0);
         assert(input_offset >= 0 && input_offset <= 255);
         assert(filter_offset >= 0 && filter_offset <= 255);
@@ -572,7 +582,9 @@ void FullyConnectedOp::execute(const Box &crop) {
 
         const float input_scale = in->quantization().scale.at(0);
         const float filter_scale = filt->quantization().scale.at(0);
+#ifndef NDEBUG
         const float bias_scale = bias()->quantization().scale.at(0);
+#endif
         const float output_scale = out->quantization().scale.at(0);
 
         const double input_product_scale = input_scale * filter_scale;
