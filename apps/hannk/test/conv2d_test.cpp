@@ -31,7 +31,9 @@ struct Conv2D_ReferenceOp : public op_test::ReferenceOp {
 
         const float input_scale = in->quantization().scale.at(0);
         const float filter_scale = filt->quantization().scale.at(0);
+#ifndef NDEBUG
         const float bias_scale = bias->quantization().scale.at(0);
+#endif
         const float output_scale = out->quantization().scale.at(0);
 
         const double input_product_scale = input_scale * filter_scale;

@@ -22,7 +22,11 @@ FLATBUFFERS_INCLUDE_PATH ?= /usr/local/Cellar/flatbuffers/1.12.0/include
 #
 # -fPIC is necessary for .so builds (at least on Linux); not necessary for the non-delegate
 # builds but easier to enable it for everything.
-CXXFLAGS += -Wno-unused-private-field -fno-exceptions -fPIC -fvisibility=hidden -fvisibility-inlines-hidden
+CXXFLAGS += -Wno-unused-private-field -fno-exceptions -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -Wunused-variable
+
+ifneq (,$(findstring -O,$(OPTIMIZE)))
+	CXXFLAGS += -DNDEBUG
+endif
 
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 
