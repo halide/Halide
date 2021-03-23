@@ -8,12 +8,12 @@ using namespace Halide::BoundaryConditions;
 
 class GaussianBlur : public Generator<GaussianBlur> {
 public:
-    Input<Buffer<uint8_t>> input{"input", 3};
+    Input<Buffer<uint8_t>> input{"input", 2};
     Input<float> sigma{"sigma"};
 
-    Output<Buffer<uint8_t>> output{"output", 3};
+    Output<Buffer<uint8_t>> output{"output", 2};
 
-    Var x{"x"}, y{"y"}, c{"c"};
+    Var x{"x"}, y{"y"};
 
     Func blur_cols_transpose(Func in, Expr height, Expr radius) {
         Func blur{"blur"};
@@ -27,22 +27,22 @@ public:
         Expr inv_scale = 1.0f / scale;
 
         // Pure definition: do nothing.
-        blur(x, y, c) = undef(t);
+        blur(x, y) = undef(t);
 
         // Update 0-2: set the top row of the result to the input.
-        blur(x, -1, c) = scale * cast(t, in(x, 0, c));  // Tracks output
-        blur(x, -2, c) = cast(t, 0);                    // Tracks derviative of the output
-        blur(x, -3, c) = cast(t, 0);                    // Tracks 2nd derivative of the output
+        blur(x, -1) = scale * cast(t, in(x, 0));  // Tracks output
+        blur(x, -2) = cast(t, 0);                    // Tracks derviative of the output
+        blur(x, -3) = cast(t, 0);                    // Tracks 2nd derivative of the output
 
-        RDom ry(0, 4, 0, height + radius * 3);
+        RDom ry(0, 3, 0, height + radius * 3);
 
         std::vector<Expr> lhs{-3, -2, ry.y};
 
         // Third derivative of an approximate Gaussian evaluated at ry.y
-        Expr v = ((cast<int16_t>(in(x, ry.y, c)) -
-                   in(x, ry.y - radius * 3, c)) +
-                  3 * (cast<int16_t>(in(x, ry.y - radius * 2, c)) -
-                       in(x, ry.y - radius, c)));
+        Expr v = ((cast<int16_t>(in(x, ry.y)) -
+                   in(x, ry.y - radius * 3)) +
+                  3 * (cast<int16_t>(in(x, ry.y - radius * 2)) -
+                       in(x, ry.y - radius)));
 
         // Sign-extend then treat it as a uint32 with wrap-around. We
         // know that the result can't possibly be negative in the end,
@@ -52,31 +52,30 @@ public:
 
         std::vector<Expr> rhs{
             // Update the second derivative using the third derviative
-            blur(x, -3, c) + v,
+            blur(x, -3) + v,
             // Update the first derivative using the second derivative
-            blur(x, -2, c) + blur(x, -3, c),
+            blur(x, -2) + blur(x, -3),
             // Update the previous output using the first derivative
-            blur(x, ry.y - 1, c) + blur(x, -2, c)};
+            blur(x, ry.y - 1) + blur(x, -2)};
 
         // Update 3
-        blur(x, mux(ry.x, lhs), c) = mux(ry.x, rhs);
+        blur(x, mux(ry.x, lhs)) = mux(ry.x, rhs);
 
         // Transpose the blur and normalize.
         Func transpose("transpose");
 
-        transpose(x, y, c) = cast<uint8_t>(round(clamp(blur(y, x + (radius * 3) / 2 - 1, c) * inv_scale, 0.0f, 255.0f)));
+        transpose(x, y) = cast<uint8_t>(round(clamp(blur(y, x + (radius * 3) / 2 - 1) * inv_scale, 0.0f, 255.0f)));
 
         const int vec = get_target().natural_vector_size<uint8_t>();
 
         // CPU schedule.  Split the transpose into tiles of
-        // rows. Parallelize over channels and strips.
+        // rows. Parallelize over strips.
         Var xo, yo, xi, yi, strip;
         transpose.compute_root()
             .tile(x, y, xo, yo, x, y, vec, vec)
             .vectorize(x)
-            .reorder(x, y, xo, yo, c)
-            .parallel(yo)
-            .parallel(c);
+            .reorder(x, y, xo, yo)
+            .parallel(yo);
 
         // Run the filter on each row of tiles (which corresponds to a strip of
         // columns in the input).
@@ -129,8 +128,6 @@ public:
         Func blur = blur_cols_transpose(blury_T, width, radius);
 
         output = blur;
-
-        output.dim(2).set_bounds(0, 3);
     }
 };
 
@@ -143,12 +140,12 @@ using namespace Halide::BoundaryConditions;
 
 class GaussianBlurDirect : public Generator<GaussianBlurDirect> {
 public:
-    Input<Buffer<uint8_t>> input{"input", 3};
+    Input<Buffer<uint8_t>> input{"input", 2};
     Input<float> sigma{"sigma"};
 
-    Output<Buffer<uint8_t>> output{"output", 3};
+    Output<Buffer<uint8_t>> output{"output", 2};
 
-    Var x{"x"}, y{"y"}, c{"c"};
+    Var x{"x"}, y{"y"};
 
     void generate() {
 
@@ -187,16 +184,16 @@ public:
         Func clamped = BoundaryConditions::repeat_edge(input, {{0, width}, {0, height}});
 
         Func blur_y("blur_y"), blur_y_32("blur_y_32"), blur_x("blur_x"), blur_x_32("blur_x_32");
-        blur_y_32(x, y, c) +=
+        blur_y_32(x, y) +=
             (cast<int32_t>(kernel_normalized_2(r)) *
-             (cast<int16_t>(clamped(x, y + r, c)) +
-              clamped(x, y - r, c)));
-        blur_y(x, y, c) = cast<uint8_t>((blur_y_32(x, y, c) + scale) / (2 * scale));
-        blur_x_32(x, y, c) +=
+             (cast<int16_t>(clamped(x, y + r)) +
+              clamped(x, y - r)));
+        blur_y(x, y) = cast<uint8_t>((blur_y_32(x, y) + scale) / (2 * scale));
+        blur_x_32(x, y) +=
             (cast<int32_t>(kernel_normalized_2(r)) *
-             (cast<int16_t>(blur_y(x + r, y, c)) +
-              blur_y(x - r, y, c)));
-        blur_x(x, y, c) = cast<uint8_t>((blur_x_32(x, y, c) + scale) / (2 * scale));
+             (cast<int16_t>(blur_y(x + r, y)) +
+              blur_y(x - r, y)));
+        blur_x(x, y) = cast<uint8_t>((blur_x_32(x, y) + scale) / (2 * scale));
 
         output = blur_x;
 
@@ -204,35 +201,13 @@ public:
 
         Var yo, yi;
         blur_x.compute_root()
-            .reorder(x, c, y)
+            .reorder(x, y)
             .split(y, yo, yi, 64, TailStrategy::GuardWithIf)
             .vectorize(x, vec)
             .parallel(yo);
 
-        /*
-        blur_x_32
-            .compute_at(blur_x, x)
-            .vectorize(x)
-            .update()
-            .reorder(r, x, y, c)
-            .atomic()
-            .vectorize(r, 2)
-            .vectorize(x);
-        */
-
-        blur_y.compute_at(blur_x, c)
+        blur_y.compute_at(blur_x, yo)
             .vectorize(x, vec);
-
-        /*
-        blur_y_32
-            .compute_at(blur_y, x)
-            .vectorize(x)
-            .update()
-            .reorder(r, x, y, c)
-            .atomic()
-            .vectorize(r, 2)
-            .vectorize(x);
-        */
 
         clamped.store_at(blur_x, yo)
             .compute_at(blur_y, y)
