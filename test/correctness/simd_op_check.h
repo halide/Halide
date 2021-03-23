@@ -171,7 +171,6 @@ public:
                     Internal::Function f(op->func);
                     if (f.has_update_definition()) {
                         inline_reduction = f;
-                        override_associativity_test = op->name.find("saturating_sum") != std::string::npos;
                         result = true;
                     }
                 }
@@ -180,7 +179,6 @@ public:
 
         public:
             Internal::Function inline_reduction;
-            bool override_associativity_test = false;
             bool result = false;
         } has_inline_reduction;
         e.accept(&has_inline_reduction);
@@ -210,7 +208,7 @@ public:
             g.compute_at(f, x)
                 .update()
                 .split(x, xo, xi, vector_width)
-                .atomic(has_inline_reduction.override_associativity_test)
+                .atomic(true)
                 .vectorize(g.rvars()[0])
                 .vectorize(xi);
         }
