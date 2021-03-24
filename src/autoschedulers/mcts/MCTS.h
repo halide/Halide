@@ -23,6 +23,9 @@ TODO(rootjalex): add more details
 
 
 namespace MCTS {
+    // Defined in AutoSchedule.cpp
+    double get_exploration_percent();
+    uint32_t get_min_iterations();
 
     // State must comply with interface in MCStateInterface.h
     // TODO(rootjalex): Should we do the Action template? needs default (empty) action.
@@ -77,109 +80,126 @@ namespace MCTS {
         }
         */
 
+        size_t n_valid_nodes = 0;
+        size_t n_invalid_nodes = 0;
+
         // Node corresponds to best action to take immediately from this state,
         // and includes enough information to iteratively apply it's decisions.
-        State solve(const State &starter_state, int seed = 1) {
+        State solve(const State &starter_state, uint32_t n_decisions, int seed = 1) {
             std::mt19937 rng((uint32_t)seed);
 
             // TODO(rootjalex): replace with std::make_shared
             NodePtr root_node = NodePtr(new Node(starter_state, Action::Default(), /* parent */ nullptr, rng));
             State current_state = starter_state; // track the current best state.
 
-            NodePtr best_node = nullptr;
+            const double percent_to_explore = get_exploration_percent();
+            const uint32_t min_iterations = get_min_iterations();
 
-            iterations = 0;
+            // TODO: be smarter about decision allocation?
+            internal_assert(max_iterations >= n_decisions) << "Must have enough iterations for the number of decisions made\n";
+            // const uint32_t n_iterations_per_decision = max_iterations / n_decisions;
 
-            size_t n_valid_nodes = 0;
+            // uint32_t n_iterations_per_decision = max_iterations / 2;
 
-            // TODO(rootjalex): set up timer set up
+            for (uint32_t d = 0; d < n_decisions; d++) {
+                uint32_t n_iterations_per_decision = ceil(percent_to_explore * root_node->get_n_branches()) + min_iterations;
+                internal_assert (n_iterations_per_decision != 0) << "accidentally gave 0 iterations: " << root_node->get_n_branches() << "\n";
+                // std::cerr << "Decision: " << d << " has " << n_iterations_per_decision << " iterations available, for " << root_node->get_n_branches() << " branches\n";
+                std::tie(current_state, root_node) = make_decision(root_node, current_state, n_iterations_per_decision, num_simulations);
+                // Clear the parent of the new root_node
+                // TODO: figure out what to do here? Need some sort of back-tracking probably.
+                internal_assert(root_node) << "make_decision could not find a decision to make\n";
+                root_node->clear_parent(); // delete parent pointer, it's now garbage.
+                // n_iterations_per_decision = n_iterations_per_decision / 2 + 1; // make it at least 1
+            }
 
-            // Breaks if no more states to explore, or time or iterations are up.
-            while (true) {
-                // std::cerr << "Iteration: " << iterations << std::endl;
-                // std::cerr << "\tNumber valids: " << n_valid_nodes << std::endl;
+            std::cerr << "Iterations:" << iterations << std::endl;
+            std::cerr << "Valids:" << n_valid_nodes << std::endl;
+            std::cerr << "Invalids:" << n_invalid_nodes << std::endl;
+            // std::cerr << "Explorations:" << n_explores << std::endl;
+            // std::cerr << "Exploitations:" << n_exploitations << std::endl;
 
-                // TODO(rootjalex): is there a faster way to track from the root?
-                //                  this could be expensive for large Pipelines
-                // std::cerr << "\tTrack from root:" << root_node << std::endl;
-                // is_leaf checks if there are no more valid actions *or* if the state is terminal.
-                while (!root_node->is_leaf() && root_node->is_fully_expanded()) {
-                    root_node = get_best_value_child(root_node);
-                    current_state = current_state.take_action(root_node->get_action());
-                    internal_assert(root_node) << "get_best_value_child returned nullptr\n";
-                    root_node->clear_parent(); // delete parent pointer, it's now garbage.
+            return current_state;
+        }
+
+        // size_t n_explores = 0;
+        // size_t n_exploitations = 0;
+
+        std::pair<State, NodePtr> make_decision(const NodePtr root_node, const State &root_state, uint32_t n_iterations, uint32_t n_simulations) {
+            internal_assert(!root_state.is_terminal()) << "make_decision was given an end state\n";
+            // Only one decision to make, don't waste any time:
+            if (root_node->get_n_branches() == 1) {
+                // This should be the only child.
+                NodePtr rollout_node = root_node->choose_only_random_child();
+                return {root_state.take_action(rollout_node->get_action()), rollout_node};
+            }
+
+            for (uint32_t i = 0; i < n_iterations; i++) {
+                // TODO: decide expansion method??
+                // NodePtr rollout_node = root_node->choose_any_random_child();
+                // NodePtr rollout_node = root_node->choose_weighted_random_child();
+                // NodePtr rollout_node = (root_node->is_fully_expanded()) ? get_best_value_child(root_node) : root_node->choose_new_random_child();
+                // NodePtr rollout_node = nullptr;
+                // if (root_node->is_fully_expanded()) {
+                //     rollout_node = get_best_value_child(root_node);
+                //     n_exploitations++;
+                // } else {
+                //     rollout_node = root_node->choose_new_random_child();
+                //     n_explores++;
+                // }
+
+                NodePtr rollout_node = nullptr;
+                if (i < root_node->get_n_branches()) {
+                    rollout_node = root_node->choose_specific_child(i);
+                } else {
+                    rollout_node = get_best_value_child(root_node);
                 }
 
-                if (current_state.is_terminal()) {
-                    // Stop our iterations, we found it.
-                    break;
+                if (!rollout_node) {
+                    // TODO: this probably should be an error.
+                    return {root_state, nullptr};
                 }
-
-                // Start at root and find best valued node that has been expanded.
-                NodePtr node = root_node;
-
-                // std::cerr << "\tChosen node has: " << node->get_n_branches() << " but only " << node->get_num_children() << " explored" << std::endl;
-
-                // Node is either a terminal, or has more actions that can be tried.
-                // Expand if it has more actions to be taken.
-                // std::cerr << "\tExpanding:" << node << std::endl;
-                if (!node->is_fully_expanded()) {
-                    // TODO(rootjalex): this needs to be expanded if we want to go all the way to leaves.
-                    // Explore any child.
-                    node = node->choose_any_random_child();
-                    internal_assert(node) << "choose_new_random_child returned nullptr\n";
-                }
-
-                // std::cerr << "\tSimulating:" << node << std::endl;
-
-                // TODO(rootjalex): need proper simulation (until ending).
-                // TODO(rootjalex): Luke wanted intermediate option: set num_simulations = 0
                 // TODO(rootjalex): make this decision a configurable choice.
-                for (uint32_t i = 0; (i < num_simulations) && (!node->is_leaf()); i++) {
-                    // Explore any child.
-                    // node = node->choose_any_random_child();
-                    // Nope, explore intelligently.
-                    node = node->choose_weighted_random_child();
-                    internal_assert(node) << "simulation returned nullptr\n";
+                for (uint32_t j = 0; (j < n_simulations) && (!rollout_node->is_leaf()); j++) {
+                    // Make weighted random rollouts
+                    rollout_node = rollout_node->choose_weighted_random_child();
+                    internal_assert(rollout_node) << "simulation returned nullptr\n";
                 }
 
-                node->increment_visits();
+                // Propagate visit count up the parent chain.
+                rollout_node->increment_visits();
 
-                if (!(node->is_leaf() && !node->is_terminal())) {
+                if (!(rollout_node->is_leaf() && !rollout_node->is_terminal())) {
                     // Otherwise state is invalid.
-                    double node_cost = node->get_state().calculate_cost();
+                    // double node_cost = rollout_node->get_state().calculate_cost();
+                    // TODO(rootjalex): make sure that this is actually faster than the above.
+                    double node_cost = rollout_node->get_action().get_cost();
                     // Back propagation. node_cost is passed by value,
                     // because the policy for backprop is handled via the State class.
                     // e.g. it might make node_cost the minimum of values, or the average, etc.
-                    bool continue_updating = node->update(node_cost);
+                    bool continue_updating = rollout_node->update(node_cost);
 
                     if (continue_updating) {
                         // This messy backprop is due to the fact that
                         // node is shared but we don't have shared ptrs
                         // to parent nodes, as that would cause loops.
-                        Node *parent_ptr = node->get_parent();
+                        Node *parent_ptr = rollout_node->get_parent();
+                        // This order of operations makes sure that the root_node is updated, but nothing past that.
                         while (parent_ptr && parent_ptr->update(node_cost) && parent_ptr != root_node.get()) {
                             parent_ptr = parent_ptr->get_parent();
                         }
                     }
 
-                    // TODO(rootjalex): reference code uses get_most_visited_child of the root. Why the heck?
                     n_valid_nodes++;
+                } else {
+                    n_invalid_nodes++;
                 }
-
-                // TODO(rootjalex): check timing here
-                iterations++;
-
-                if (!use_timer && iterations >= max_iterations) {
-                    break;
-                }
-                // std::cerr << "iteration:" << iterations << std::endl;
             }
-
-            std::cerr << "Iterations:" << iterations << std::endl;
-            std::cerr << "Valids:" << n_valid_nodes << std::endl;
-
-            return choose_best_decisions(current_state, root_node);
+            // TODO: other methods for choosing the best child?
+            NodePtr best_node = get_min_value_child(root_node);
+            internal_assert(root_node) << "make_decision found nullptr\n";
+            // TODO: clear parent of best_node?
+            return {root_state.take_action(best_node->get_action()), best_node};
         }
 
         State choose_best_decisions(const State &starter_state, NodePtr root) {
@@ -231,6 +251,8 @@ namespace MCTS {
             
             const int num_children = parent_node->get_num_children();
 
+            internal_assert(num_children != 0) << "get_best_value_child called on a node with 0 children.\n";
+
             // To see formula, go to: "Exploration and exploitation"
             // at: https://en.wikipedia.org/wiki/Monte_Carlo_tree_search#cite_note-Kocsis-Szepesvari-16
 
@@ -268,7 +290,7 @@ namespace MCTS {
 
             // std::cerr << "\tBest node has score of: " << best_uct_score << std::endl;
             // std::cerr << "Num children: " << num_children << std::endl;
-            internal_assert(best_node) << "get_best_value_child ended with a nullptr node\n";
+            internal_assert(best_node) << "get_best_value_child ended with a nullptr node\n" << "\tWith: " << num_children << " children.\n";
 
             return best_node;
         }

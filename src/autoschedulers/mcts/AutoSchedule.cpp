@@ -126,6 +126,24 @@ namespace MCTS {
         bool drop_it = (r % 100) >= t;
         return drop_it;
     }
+
+    double get_exploration_percent() {
+        std::string exploration_str = Halide::Internal::get_env_variable("HL_MCTS_EXPLORATION");
+        if (!exploration_str.empty()) {
+            return std::stod(exploration_str.c_str());
+        } else {
+            return .05;
+        }
+    }
+
+    uint32_t get_min_iterations() {
+        std::string min_iters_str = Halide::Internal::get_env_variable("HL_MCTS_MIN_ITERS");
+        if (!min_iters_str.empty()) {
+            return atoi(min_iters_str.c_str());
+        } else {
+            return 8;
+        }
+    }
 }
 
 namespace Halide {
@@ -240,7 +258,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     string mcts_iterations_str = get_env_variable("HL_MCTS_ITERS");
     string mcts_simulations_str = get_env_variable("HL_MCTS_N_SIMS");
     const uint32_t n_simulations = mcts_simulations_str.empty() ? dag.nodes.size() * 2 : std::stoul(mcts_simulations_str.c_str());
-    const uint32_t n_iterations = mcts_iterations_str.empty() ? dag.nodes.size() * 64 : std::stoul(mcts_iterations_str.c_str());
+    const uint32_t n_iterations = mcts_iterations_str.empty() ? dag.nodes.size() * 32 : std::stoul(mcts_iterations_str.c_str());
 
     auto solver = MCTS::Solver<CPU_State, CPU_Action>::MakeIterationSolver(n_iterations, n_simulations);
 
@@ -253,10 +271,10 @@ void generate_schedule(const std::vector<Function> &outputs,
     std::string schedule_source;
 
     try {
-        CPU_State optimal = solver.solve(start_state, seed);
+        CPU_State optimal = solver.solve(start_state, /* n_decisions*/ dag.nodes.size() * 2, seed);
         cost = optimal.calculate_cost();
         schedule_source = optimal.apply_schedule();
-        std::cerr << "is_terminal?" << optimal.is_terminal() << std::endl;
+        std::cerr << "is_terminal? " << optimal.is_terminal() << std::endl;
         std::cerr << "n states generated: " << MCTS::state_count << std::endl;
     } catch (const std::bad_alloc& e) {
         std::cerr << "Allocation failed: " << e.what() << std::endl;
@@ -322,7 +340,6 @@ struct mcts {
         for (const Func &f : p.outputs()) {
             outputs.push_back(f.function());
         }
-        std::cerr << "hello" << std::endl;
         Autoscheduler::generate_schedule(outputs, target, params, results);
     }
 };

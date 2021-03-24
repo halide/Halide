@@ -221,6 +221,17 @@ namespace MCTS {
             return add_child_with_action(chosen_action);
         }
 
+        // This child should not have been explored before.
+        SharedPtr choose_specific_child(uint32_t index) {
+            assert(index < possible_actions.size());
+            return add_child_with_action(possible_actions[index]);
+        }
+
+        SharedPtr choose_only_random_child() {
+            assert(possible_actions.size() == 1);
+            return add_child_with_action(possible_actions[0]);
+        }
+
         // (potentially) update the state's value.
         bool update(double &cost_value) {
             return state.update(cost_value);
