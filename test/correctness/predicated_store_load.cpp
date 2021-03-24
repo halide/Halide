@@ -47,12 +47,6 @@ class CheckPredicatedStoreLoad : public IRMutator {
 public:
     CheckPredicatedStoreLoad(const Target &target, int store, int load)
         : expected_store_count(store), expected_load_count(load) {
-        // TODO: disabling for now due to trunk LLVM breakage.
-        // See: https://github.com/halide/Halide/issues/3534
-        if (target.arch == Target::X86) {
-            expected_store_count = 0;
-            expected_load_count = 0;
-        }
     }
     using IRMutator::mutate;
 
@@ -95,7 +89,7 @@ int vectorized_predicated_store_scalarized_predicated_load_test(const Target &t)
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
-        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 3, 9));
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 2, 6));
     }
 
     Buffer<int> im = f.realize({170, 170});
@@ -160,7 +154,7 @@ int multiple_vectorized_predicate_test(const Target &t) {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
-        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 3, 6));
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 1, 2));
     }
 
     Buffer<int> im = f.realize({size, size});
@@ -192,7 +186,7 @@ int scalar_load_test(const Target &t) {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
-        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 1, 2));
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 0, 0));
     }
 
     Buffer<int> im = f.realize({160, 160});
@@ -226,7 +220,7 @@ int scalar_store_test(const Target &t) {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
-        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 1, 1));
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 0, 0));
     }
 
     Buffer<int> im = f.realize({160, 160});
@@ -325,7 +319,7 @@ int vectorized_predicated_predicate_with_pure_call_test(const Target &t) {
         f.update(0).hexagon().vectorize(r.x, 32);
     } else if (t.arch == Target::X86) {
         f.update(0).vectorize(r.x, 32);
-        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 3, 6));
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 2, 4));
     }
 
     Buffer<int> im = f.realize({160, 160});
@@ -402,7 +396,7 @@ int vectorized_predicated_load_lut_test(const Target &t) {
     // Ignore the race condition so we can have predicated vectorized
     // LUT loads on both LHS and RHS of the predicated vectorized store
     dst.update().allow_race_conditions().vectorize(r, vector_size);
-    dst.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 1, 3));
+    dst.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 1, 2));
 
     dst.realize({dst_len});
 
