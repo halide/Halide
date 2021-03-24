@@ -139,7 +139,7 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
         // Save the outputs
         for (Tensor *t : interpreter.outputs()) {
             if (verbosity) {
-                std::cout << "HALIDE output is " << t->name() << " type " << to_string(t->type()) << "\n";
+                std::cout << "HALIDE output is " << t->name() << " type " << t->type() << "\n";
             }
             // Make a copy since the Buffer might reference memory owned by the interpreter
             halide_result.outputs.emplace_back(t->buffer().copy());

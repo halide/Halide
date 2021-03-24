@@ -13,9 +13,9 @@ struct Pad_ReferenceOp : public op_test::ReferenceOp {
         Tensor *out = outputs.at(0).get();
 
         CHECK(
-            in->type() == to_tensor_type<T>() &&
-            pad->type() == TensorType::Int32 &&
-            out->type() == to_tensor_type<T>());
+            in->is_type<T>() &&
+            pad->is_type<int32_t>() &&
+            out->is_type<T>());
 
         auto in_buf = in->buffer<const T>();
         auto pad_buf = pad->buffer<const int32_t>();
@@ -53,10 +53,10 @@ struct PadOpTestFactory : public op_test::TestCaseFactory {
 
     PadOpTestFactory() {
         init_tensors({
-            {"input", TensorType::UInt8, {16, 48, 48, 1}, 1.0, 0},
+            {"input", halide_type_of<uint8_t>(), {16, 48, 48, 1}, 1.0, 0},
             // padding must be of shape {2, N}, where N = rank(input)
-            {"padding", TensorType::Int32, {2, 4}, 1.0, 0, fill_padding},
-            {"output", TensorType::UInt8, {32, 48, 48, 1}, 1.0, 0},
+            {"padding", halide_type_of<int32_t>(), {2, 4}, 1.0, 0, fill_padding},
+            {"output", halide_type_of<uint8_t>(), {32, 48, 48, 1}, 1.0, 0},
         });
     }
 

@@ -207,9 +207,9 @@ void AddOp::execute(const Box &crop) {
     const Tensor *in2 = input(1);
     Tensor *out = output();
 
-    if (in1->type() == TensorType::UInt8 &&
-        in2->type() == TensorType::UInt8 &&
-        out->type() == TensorType::UInt8) {
+    if (in1->is_type<uint8_t>() &&
+        in2->is_type<uint8_t>() &&
+        out->is_type<uint8_t>()) {
         auto in1_buf = in1->buffer<const uint8_t>();
         auto in2_buf = in2->buffer<const uint8_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
@@ -266,7 +266,7 @@ void AveragePoolOp::execute(const Box &crop) {
     const Tensor *in = input();
     Tensor *out = output();
 
-    if (in->type() == TensorType::UInt8 && out->type() == TensorType::UInt8) {
+    if (in->is_type<uint8_t>() && out->is_type<uint8_t>()) {
         auto input_buf = in->buffer<const uint8_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
 
@@ -377,9 +377,9 @@ void Conv2DOp::execute(const Box &crop) {
     const Tensor *filt = filter();
     Tensor *out = output();
 
-    if (in->type() == TensorType::UInt8 &&
-        filt->type() == TensorType::UInt8 &&
-        out->type() == TensorType::UInt8) {
+    if (in->is_type<uint8_t>() &&
+        filt->is_type<uint8_t>() &&
+        out->is_type<uint8_t>()) {
         // TODO: reduce code duplication between here and DepthwiseConv2D
         auto input_buf = in->buffer<const uint8_t>();
         auto filter_buf = filt->buffer<const uint8_t>();
@@ -538,9 +538,9 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
     const Tensor *filt = filter();
     Tensor *out = output();
 
-    if (in->type() == TensorType::UInt8 &&
-        filt->type() == TensorType::UInt8 &&
-        out->type() == TensorType::UInt8) {
+    if (in->is_type<uint8_t>() &&
+        filt->is_type<uint8_t>() &&
+        out->is_type<uint8_t>()) {
         // TODO: reduce code duplication between here and Conv2D
         auto input_buf = in->buffer<const uint8_t>();
         auto filter_buf = filt->buffer<const uint8_t>().sliced(3, 0);
@@ -647,9 +647,9 @@ void FullyConnectedOp::execute(const Box &crop) {
     const Tensor *filt = filter();
     Tensor *out = output();
 
-    if (in->type() == TensorType::UInt8 &&
-        filt->type() == TensorType::UInt8 &&
-        out->type() == TensorType::UInt8) {
+    if (in->is_type<uint8_t>() &&
+        filt->is_type<uint8_t>() &&
+        out->is_type<uint8_t>()) {
         auto input_buf = in->buffer<const uint8_t>();
         auto filter_buf = filt->buffer<const uint8_t>();
         auto bias_buf = bias()->buffer<const int32_t>();
@@ -700,7 +700,7 @@ void MaxPoolOp::execute(const Box &crop) {
     const Tensor *in = input();
     Tensor *out = output();
 
-    if (in->type() == TensorType::UInt8 && out->type() == TensorType::UInt8) {
+    if (in->is_type<uint8_t>() && out->is_type<uint8_t>()) {
         auto input_buf = in->buffer<const uint8_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
 
@@ -744,7 +744,7 @@ void PadOp::execute(const Box &crop) {
     auto padding = input(1)->buffer<const int32_t>();
     Tensor *out = output();
 
-    if (sizeof_tensor_type(out->type()) == 1) {
+    if (out->type().bytes() == 1) {
         auto input_buf = in->buffer<const uint8_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
 
@@ -790,7 +790,7 @@ void ReshapeOp::execute(const Box &crop) {
     // TODO: This should probably just be implemented by aliasing two of the tensors.
     assert(input_buf.number_of_elements() == output_buf.number_of_elements());
     // TODO: This should also check the strides are dense.
-    size_t output_size = output_buf.number_of_elements() * sizeof_tensor_type(out->type());
+    size_t output_size = output_buf.number_of_elements() * out->type().bytes();
     memcpy(output_buf.data(), input_buf.data(), output_size);
 }
 
@@ -798,7 +798,7 @@ void QuantizeOp::execute(const Box &crop) {
     const Tensor *in = input();
     Tensor *out = output();
 
-    if (in->type() == TensorType::UInt8 && out->type() == TensorType::UInt8) {
+    if (in->is_type<uint8_t>() && out->is_type<uint8_t>()) {
         // We're going to implement this by just doing an Add with itself, but with
         // the quantization parameters to produce 0 for the other op.
         auto in_buf = in->buffer<const uint8_t>();

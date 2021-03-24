@@ -105,7 +105,7 @@ protected:
 
     struct TensorData {
         std::string name;
-        TensorType type;
+        halide_type_t type;
         std::vector<int> shape;
         float scale;
         int zero_point;
@@ -116,13 +116,12 @@ protected:
         tensors.clear();
         tensor_init_fns.clear();
         for (const auto &td : tds) {
-            HalideBuffer<void> buffer(to_halide_type(td.type), td.shape);
+            HalideBuffer<void> buffer(td.type, td.shape);
             QuantizationInfo quantization;
             quantization.dimension = 0;  // TODO -- do we use this?
             quantization.scale.push_back(td.scale);
             quantization.zero.push_back(td.zero_point);
             tensors.push_back(std::make_shared<Tensor>(td.name,
-                                                       td.type,
                                                        std::move(buffer),
                                                        std::move(quantization)));
 

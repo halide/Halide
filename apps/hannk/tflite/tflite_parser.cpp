@@ -47,34 +47,33 @@ public:
         }
     }
 
-    static TensorType parse_type(tflite::TensorType t) {
+    static halide_type_t parse_type(tflite::TensorType t) {
         switch (t) {
-        case tflite::TensorType_FLOAT32:
-            return TensorType::Float32;
-        case tflite::TensorType_FLOAT16:
-            return TensorType::Float16;
-        case tflite::TensorType_INT32:
-            return TensorType::Int32;
-        case tflite::TensorType_UINT8:
-            return TensorType::UInt8;
-        case tflite::TensorType_INT64:
-            return TensorType::Int64;
-        case tflite::TensorType_STRING:
-            return TensorType::String;
         case tflite::TensorType_BOOL:
-            return TensorType::Bool;
-        case tflite::TensorType_INT16:
-            return TensorType::Int16;
-        case tflite::TensorType_COMPLEX64:
-            return TensorType::Complex64;
-        case tflite::TensorType_INT8:
-            return TensorType::Int8;
+            return halide_type_t(halide_type_uint, 1);
+        case tflite::TensorType_FLOAT16:
+            return halide_type_t(halide_type_float, 16);
+        case tflite::TensorType_FLOAT32:
+            return halide_type_t(halide_type_float, 32);
         case tflite::TensorType_FLOAT64:
-            return TensorType::Float64;
+            return halide_type_t(halide_type_float, 64);
+        case tflite::TensorType_INT16:
+            return halide_type_t(halide_type_int, 16);
+        case tflite::TensorType_INT32:
+            return halide_type_t(halide_type_int, 32);
+        case tflite::TensorType_INT64:
+            return halide_type_t(halide_type_int, 64);
+        case tflite::TensorType_INT8:
+            return halide_type_t(halide_type_int, 8);
+        case tflite::TensorType_UINT8:
+            return halide_type_t(halide_type_uint, 8);
+
+        case tflite::TensorType_STRING:
+        case tflite::TensorType_COMPLEX64:
         case tflite::TensorType_COMPLEX128:
-            return TensorType::Complex128;
         default:
-            CHECK(0) << "Unknown tflite::TensorType";
+            CHECK(0) << "Unhandled type in ConvertTfLiteType";
+            return halide_type_t();
         }
     }
 
@@ -97,7 +96,7 @@ public:
             shape.push_back(t->shape()->Get(shape_size - 1 - i));
         }
 
-        TensorType type = parse_type(t->type());
+        halide_type_t type = parse_type(t->type());
 
         QuantizationInfo quantization;
         if (t->quantization()) {
@@ -117,7 +116,7 @@ public:
         // if (type == TensorType::Int8) {
         //     // Convert Int8 buffers to UInt8 buffers by adjusting the quantization info.
         //     // TODO: Is this correct??
-        //     type = TensorType::UInt8;
+        //     type = halide_type_of<uint8_t>();
         //     if (quantization.scale.size() == 0) {
         //         quantization.scale.push_back(1);
         //     }
@@ -137,18 +136,16 @@ public:
                 // Construct a HalideBuffer that points to it (but does not copy or own it).
                 const void *data = static_cast<const void *>(tflite_buffer->Data());
                 assert(data);
-                HalideBuffer<void> buffer(to_halide_type(type), const_cast<void *>(data), shape);
+                HalideBuffer<void> buffer(type, const_cast<void *>(data), shape);
                 assert(tflite_buffer->size() == buffer.size_in_bytes());
 
-                return ::hannk::make_unique<Tensor>(
-                    t->name()->str(), type, std::move(buffer), std::move(quantization));
+                return ::hannk::make_unique<Tensor>(t->name()->str(), std::move(buffer), std::move(quantization));
             }
         }
 
         // Create an "unallocated" Buffer, which points to null.
-        HalideBuffer<void> buffer(to_halide_type(type), nullptr, shape);
-        return ::hannk::make_unique<Tensor>(
-            t->name()->str(), type, std::move(buffer), std::move(quantization));
+        HalideBuffer<void> buffer(type, nullptr, shape);
+        return ::hannk::make_unique<Tensor>(t->name()->str(), std::move(buffer), std::move(quantization));
     }
 
     std::unique_ptr<Op> parse_add(const tflite::Operator *op) {
@@ -276,7 +273,7 @@ public:
                                    nullptr;
         if (shape_tensor &&
             shape_tensor->rank() == 1 &&
-            shape_tensor->type() == TensorType::Int32) {
+            shape_tensor->is_type<int32_t>()) {
             const auto &data = shape_tensor->buffer<const int32_t>();
             for (int i = 0; i < data.dimensions(); i++) {
                 new_shape.push_back(data(i));

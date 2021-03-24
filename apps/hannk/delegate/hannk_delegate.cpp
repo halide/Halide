@@ -92,36 +92,33 @@ struct HannkDelegate final : public TfLiteDelegate {
 
 // -------------------- HannkDelegateKernel
 
-TensorType ConvertTfLiteType(TfLiteType t) {
-    // Note that TfLiteType has different numerical values from the
-    // similar enum found in tflite flatbuffers.
+halide_type_t ConvertTfLiteType(TfLiteType t) {
     switch (t) {
-    case kTfLiteFloat32:
-        return TensorType::Float32;
-    case kTfLiteFloat16:
-        return TensorType::Float16;
-    case kTfLiteInt32:
-        return TensorType::Int32;
-    case kTfLiteUInt8:
-        return TensorType::UInt8;
-    case kTfLiteInt64:
-        return TensorType::Int64;
-    case kTfLiteString:
-        return TensorType::String;
     case kTfLiteBool:
-        return TensorType::Bool;
-    case kTfLiteInt16:
-        return TensorType::Int16;
-    case kTfLiteComplex64:
-        return TensorType::Complex64;
-    case kTfLiteInt8:
-        return TensorType::Int8;
+        return halide_type_t(halide_type_uint, 1);
+    case kTfLiteFloat16:
+        return halide_type_t(halide_type_float, 16);
+    case kTfLiteFloat32:
+        return halide_type_t(halide_type_float, 32);
     case kTfLiteFloat64:
-        return TensorType::Float64;
-    case kTfLiteNoType:
-        CHECK(0) << "kTfLiteNoType is not supported";
+        return halide_type_t(halide_type_float, 64);
+    case kTfLiteInt16:
+        return halide_type_t(halide_type_int, 16);
+    case kTfLiteInt32:
+        return halide_type_t(halide_type_int, 32);
+    case kTfLiteInt64:
+        return halide_type_t(halide_type_int, 64);
+    case kTfLiteInt8:
+        return halide_type_t(halide_type_int, 8);
+    case kTfLiteUInt8:
+        return halide_type_t(halide_type_uint, 8);
+
+    case kTfLiteString:
+    case kTfLiteComplex64:
+    case kTfLiteComplex128:
     default:
-        CHECK(0) << "Unknown TfLiteType";
+        CHECK(0) << "Unhandled type in ConvertTfLiteType";
+        return halide_type_t();
     }
 }
 
@@ -170,7 +167,7 @@ std::vector<int> ConvertTfLiteShape(const TfLiteTensor &tensor) {
 std::shared_ptr<Tensor> ConvertTfLiteTensor(const TfLiteTensor &tensor) {
     auto shape = ConvertTfLiteShape(tensor);
 
-    TensorType type = ConvertTfLiteType(tensor.type);
+    halide_type_t type = ConvertTfLiteType(tensor.type);
 
     QuantizationInfo quantization;
     if (tensor.quantization.type == kTfLiteAffineQuantization) {
@@ -197,16 +194,15 @@ std::shared_ptr<Tensor> ConvertTfLiteTensor(const TfLiteTensor &tensor) {
         // Construct a HalideBuffer that points to read_only_data (but does not copy or own it).
         // Since TFLite will ensure that the TfLiteTensor remains valid while we're using it,
         // this should be completely safe
-        HalideBuffer<void> buffer(to_halide_type(type), const_cast<void *>(read_only_data), shape);
+        HalideBuffer<void> buffer(type, const_cast<void *>(read_only_data), shape);
         assert(tensor.bytes == buffer.size_in_bytes());
 
-        return std::make_shared<Tensor>(
-            name, type, std::move(buffer), std::move(quantization));
+        return std::make_shared<Tensor>(name, std::move(buffer), std::move(quantization));
     }
 
     // Create an "unallocated" Buffer, which points to null.
-    HalideBuffer<void> buffer(to_halide_type(type), nullptr, shape);
-    return std::make_shared<Tensor>(name, type, std::move(buffer), std::move(quantization));
+    HalideBuffer<void> buffer(type, nullptr, shape);
+    return std::make_shared<Tensor>(name, std::move(buffer), std::move(quantization));
 }
 
 class HannkDelegateKernel final {

@@ -12,8 +12,8 @@ struct MaxPool_ReferenceOp : public op_test::ReferenceOp {
         Tensor *out = outputs.at(0).get();
 
         CHECK(
-            in->type() == to_tensor_type<T>() &&
-            out->type() == to_tensor_type<T>());
+            in->is_type<T>() &&
+            out->is_type<T>());
 
         auto in_buf = in->buffer<const T>();
         auto out_buf = out->buffer<T>();
@@ -52,8 +52,8 @@ struct MaxPool_ReferenceOp : public op_test::ReferenceOp {
 struct MaxPoolOpTestFactory : public op_test::TestCaseFactory {
     MaxPoolOpTestFactory() {
         init_tensors({
-            {"input", TensorType::UInt8, {16, 48, 48, 1}, 1.0, 0},
-            {"output", TensorType::UInt8, {16, 48, 48, 1}, 1.0, 0},
+            {"input", halide_type_of<uint8_t>(), {16, 48, 48, 1}, 1.0, 0},
+            {"output", halide_type_of<uint8_t>(), {16, 48, 48, 1}, 1.0, 0},
         });
     }
 

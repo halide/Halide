@@ -15,10 +15,10 @@ struct Conv2D_ReferenceOp : public op_test::ReferenceOp {
 
         // TODO: is bias always int32?
         CHECK(
-            in->type() == to_tensor_type<T>() &&
-            filt->type() == to_tensor_type<T>() &&
-            bias->type() == TensorType::Int32 &&
-            out->type() == to_tensor_type<T>());
+            in->is_type<T>() &&
+            filt->is_type<T>() &&
+            bias->is_type<int32_t>() &&
+            out->is_type<T>());
 
         auto input_buf = in->buffer<const T>();
         auto filter_buf = filt->buffer<const T>();
@@ -62,7 +62,7 @@ struct Conv2D_ReferenceOp : public op_test::ReferenceOp {
             input_buf.translate({0, pad_width, pad_height, 0});
         }
 
-        CHECK(out->type() == TensorType::UInt8) << "This reference implementation is only tested for uint8";
+        CHECK(out->is_type<uint8_t>()) << "This reference implementation is only tested for uint8";
 
         const auto out_range = op_test::get_output_range<T>(activation, out);
         output_buf.for_each_element([&](int output_c, int x, int y, int b) {
@@ -188,12 +188,12 @@ struct Conv2DOpTestFactory : public op_test::TestCaseFactory {
     }
     Conv2DOpTestFactory() {
         init_tensors({
-            {"input", TensorType::UInt8, {3, 224, 224, 1}, 0.0078125, 128},
-            {"filter_mobilenet", TensorType::UInt8, {3, 3, 3, 32}, 0.03396892548, 122, fill_filter_mobilenet},
-            {"bias_mobilenet", TensorType::Int32, {32}, 0.0002653822303, 0, fill_bias_mobilenet},
-            {"output", TensorType::UInt8, {32, 112, 112, 1}, 0.02352847718, 0},
-            {"filter_random", TensorType::UInt8, {3, 3, 3, 32}, 0.03396892548, 122, fill_tensor_with_random},
-            {"bias_random", TensorType::Int32, {32}, 0.0002653822303, 0, fill_tensor_with_random_bias},
+            {"input", halide_type_of<uint8_t>(), {3, 224, 224, 1}, 0.0078125, 128},
+            {"filter_mobilenet", halide_type_of<uint8_t>(), {3, 3, 3, 32}, 0.03396892548, 122, fill_filter_mobilenet},
+            {"bias_mobilenet", halide_type_of<int32_t>(), {32}, 0.0002653822303, 0, fill_bias_mobilenet},
+            {"output", halide_type_of<uint8_t>(), {32, 112, 112, 1}, 0.02352847718, 0},
+            {"filter_random", halide_type_of<uint8_t>(), {3, 3, 3, 32}, 0.03396892548, 122, fill_tensor_with_random},
+            {"bias_random", halide_type_of<int32_t>(), {32}, 0.0002653822303, 0, fill_tensor_with_random_bias},
         });
     }
 
