@@ -2255,18 +2255,15 @@ Func &Func::bound_extent(const Var &var, Expr extent) {
 
 Func &Func::align_bounds(const Var &var, Expr modulus, Expr remainder) {
     user_assert(modulus.defined()) << "modulus is undefined\n";
+    user_assert(remainder.defined()) << "remainder is undefined\n";
     user_assert(Int(32).can_represent(modulus.type())) << "Can't represent modulus as int32\n";
+    user_assert(Int(32).can_represent(remainder.type())) << "Can't represent remainder as int32\n";
 
     modulus = cast<int32_t>(modulus);
-    if (remainder.defined()) {
-        user_assert(Int(32).can_represent(remainder.type())) << "Can't represent remainder as int32\n";
+    remainder = cast<int32_t>(remainder);
 
-        remainder = cast<int32_t>(remainder);
-
-        // Reduce the remainder
-        remainder = remainder % modulus;
-    }
-
+    // Reduce the remainder
+    remainder = remainder % modulus;
     invalidate_cache();
 
     bool found = func.is_pure_arg(var.name());
@@ -2277,6 +2274,26 @@ Func &Func::align_bounds(const Var &var, Expr modulus, Expr remainder) {
         << " is not one of the pure variables of " << name() << ".\n";
 
     Bound b = {var.name(), Expr(), Expr(), modulus, remainder};
+    func.schedule().bounds().push_back(b);
+    return *this;
+}
+
+Func &Func::align_extent(const Var &var, Expr modulus) {
+    user_assert(modulus.defined()) << "modulus is undefined\n";
+    user_assert(Int(32).can_represent(modulus.type())) << "Can't represent modulus as int32\n";
+
+    modulus = cast<int32_t>(modulus);
+
+    invalidate_cache();
+
+    bool found = func.is_pure_arg(var.name());
+    user_assert(found)
+        << "Can't align extent of variable " << var.name()
+        << " of function " << name()
+        << " because " << var.name()
+        << " is not one of the pure variables of " << name() << ".\n";
+
+    Bound b = {var.name(), Expr(), Expr(), modulus, Expr()};
     func.schedule().bounds().push_back(b);
     return *this;
 }

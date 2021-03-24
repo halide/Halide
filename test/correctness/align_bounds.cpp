@@ -159,7 +159,7 @@ int main(int argc, char **argv) {
         h(x) = g(x - p) + g(x + p);
 
         f.compute_root();
-        g.compute_root().align_bounds(x, 32, Expr()).trace_realizations();
+        g.compute_root().align_extent(x, 32).trace_realizations();
 
         p.set(3);
         h.set_custom_trace(my_trace);
