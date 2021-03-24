@@ -20,81 +20,6 @@ std::unique_ptr<T> make_unique(Args &&...args) {
 template<typename T>
 using HalideBuffer = Halide::Runtime::Buffer<T>;
 
-enum class TensorType {
-    // Note that these are deliberately ordered and valued to match tflite's
-    // similar enum; there is no reason these types *must* have the same values,
-    // but as the values arbitrary otherwise, we might as well match.
-    Float32 = 0,
-    Float16 = 1,
-    Int32 = 2,
-    UInt8 = 3,
-    Int64 = 4,
-    String = 5,
-    Bool = 6,
-    Int16 = 7,
-    Complex64 = 8,
-    Int8 = 9,
-    Float64 = 10,
-    Complex128 = 11,
-};
-
-size_t sizeof_tensor_type(TensorType t);
-const char *to_string(TensorType t);
-halide_type_t to_halide_type(TensorType t);
-
-template<typename T>
-inline TensorType to_tensor_type() {
-    if (std::is_const<T>::value) {
-        return to_tensor_type<typename std::remove_const<T>::type>();
-    }
-    CHECK(0) << "Type is not convertible to TensorType";
-    // unreachable
-}
-
-template<>
-inline TensorType to_tensor_type<float>() {
-    return TensorType::Float32;
-}
-template<>
-inline TensorType to_tensor_type<int32_t>() {
-    return TensorType::Int32;
-}
-template<>
-inline TensorType to_tensor_type<uint8_t>() {
-    return TensorType::UInt8;
-}
-template<>
-inline TensorType to_tensor_type<int64_t>() {
-    return TensorType::Int64;
-}
-template<>
-inline TensorType to_tensor_type<std::string>() {
-    return TensorType::String;
-}
-template<>
-inline TensorType to_tensor_type<bool>() {
-    return TensorType::Bool;
-}
-template<>
-inline TensorType to_tensor_type<int16_t>() {
-    return TensorType::Int16;
-}
-template<>
-inline TensorType to_tensor_type<int8_t>() {
-    return TensorType::Int8;
-}
-template<>
-inline TensorType to_tensor_type<double>() {
-    return TensorType::Float64;
-}
-// TODO
-//template<> inline TensorType to_tensor_type<float16>() { return TensorType::Float16; }
-
-template<typename T>
-inline bool is_type(TensorType t) {
-    return t == to_tensor_type<T>();
-}
-
 struct QuantizationInfo {
     std::vector<float> scale;
     std::vector<int32_t> zero;
@@ -107,7 +32,6 @@ inline std::ostream &operator<<(std::ostream &s, const QuantizationInfo &q) {
 
 class Tensor {
     std::string name_;
-    TensorType type_;
     HalideBuffer<void> buffer_;
     QuantizationInfo quantization_;
     bool is_constant_ = false;
@@ -115,9 +39,8 @@ class Tensor {
     bool is_output_ = false;
 
 public:
-    Tensor(std::string name, TensorType type, HalideBuffer<void> buffer, QuantizationInfo quantization)
+    Tensor(std::string name, HalideBuffer<void> buffer, QuantizationInfo quantization)
         : name_(std::move(name)),
-          type_(type),
           buffer_(std::move(buffer)),
           quantization_(std::move(quantization)) {
         is_constant_ = buffer_.data() != nullptr;
@@ -125,8 +48,13 @@ public:
 
     Tensor(const Tensor &copy) = default;
 
-    hannk::TensorType type() const {
-        return type_;
+    halide_type_t type() const {
+        return buffer_.type();
+    }
+
+    template<typename T>
+    bool is_type() const {
+        return buffer_.type() == halide_type_of<T>();
     }
 
     const std::string &name() const {

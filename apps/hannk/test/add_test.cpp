@@ -13,9 +13,9 @@ struct Add_ReferenceOp : public op_test::ReferenceOp {
         Tensor *out = outputs.at(0).get();
 
         CHECK(
-            in1->type() == to_tensor_type<T>() &&
-            in2->type() == to_tensor_type<T>() &&
-            out->type() == to_tensor_type<T>());
+            in1->is_type<T>() &&
+            in2->is_type<T>() &&
+            out->is_type<T>());
 
         auto in1_buf = in1->buffer<const T>();
         auto in2_buf = in2->buffer<const T>();
@@ -52,9 +52,9 @@ struct Add_ReferenceOp : public op_test::ReferenceOp {
 struct AddOpTestFactory : public op_test::TestCaseFactory {
     AddOpTestFactory() {
         init_tensors({
-            {"MobilenetV2/expanded_conv_2/project/add_fold", TensorType::UInt8, {24, 56, 56, 1}, 0.401493, 136},
-            {"MobilenetV2/expanded_conv_1/project/add_fold", TensorType::UInt8, {24, 56, 56, 1}, 0.275834, 119},
-            {"MobilenetV2/expanded_conv_2/add", TensorType::UInt8, {24, 56, 56, 1}, 0.432169, 133},
+            {"MobilenetV2/expanded_conv_2/project/add_fold", halide_type_of<uint8_t>(), {24, 56, 56, 1}, 0.401493, 136},
+            {"MobilenetV2/expanded_conv_1/project/add_fold", halide_type_of<uint8_t>(), {24, 56, 56, 1}, 0.275834, 119},
+            {"MobilenetV2/expanded_conv_2/add", halide_type_of<uint8_t>(), {24, 56, 56, 1}, 0.432169, 133},
         });
     }
 

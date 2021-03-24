@@ -9,7 +9,7 @@ struct Concatenation_ReferenceOp : public op_test::ReferenceOp {
 
     void execute() override {
         Tensor *out = outputs.at(0).get();
-        CHECK(out->type() == to_tensor_type<T>());
+        CHECK(out->is_type<T>());
 
         auto out_buf = out->buffer<T>();
         const int dims = out_buf.dimensions();
@@ -18,7 +18,7 @@ struct Concatenation_ReferenceOp : public op_test::ReferenceOp {
         int pos_out_offset = 0;
         for (size_t i = 0; i < inputs.size(); i++) {
             const Tensor *in = inputs.at(i).get();
-            CHECK(in->type() == to_tensor_type<T>());
+            CHECK(in->is_type<T>());
             auto in_buf = in->buffer<const T>();
             CHECK(in_buf.dimensions() == dims);
             for (int j = 0; j < dims; j++) {
@@ -43,9 +43,9 @@ struct Concatenation_ReferenceOp : public op_test::ReferenceOp {
 struct ConcatenationOpTestFactory : public op_test::TestCaseFactory {
     ConcatenationOpTestFactory() {
         init_tensors({
-            {"input1", TensorType::UInt8, {128, 16, 16, 1}, 1.0, 0},
-            {"input2", TensorType::UInt8, {128, 16, 16, 1}, 1.0, 0},
-            {"output", TensorType::UInt8, {256, 16, 16, 1}, 1.0, 0},
+            {"input1", halide_type_of<uint8_t>(), {128, 16, 16, 1}, 1.0, 0},
+            {"input2", halide_type_of<uint8_t>(), {128, 16, 16, 1}, 1.0, 0},
+            {"output", halide_type_of<uint8_t>(), {256, 16, 16, 1}, 1.0, 0},
         });
     }
 

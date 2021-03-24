@@ -15,10 +15,10 @@ struct FullyConnected_ReferenceOp : public op_test::ReferenceOp {
 
         // TODO: is bias always int32?
         CHECK(
-            in->type() == to_tensor_type<T>() &&
-            filt->type() == to_tensor_type<T>() &&
-            bias->type() == TensorType::Int32 &&
-            out->type() == to_tensor_type<T>());
+            in->is_type<T>() &&
+            filt->is_type<T>() &&
+            bias->is_type<int32_t>() &&
+            out->is_type<T>());
 
         auto input_buf = in->buffer<const T>();
         auto filter_buf = filt->buffer<const T>();
@@ -42,7 +42,7 @@ struct FullyConnected_ReferenceOp : public op_test::ReferenceOp {
 
         const double output_multiplier = input_product_scale / output_scale;
 
-        CHECK(out->type() == TensorType::UInt8) << "This reference implementation is only tested for uint8";
+        CHECK(out->is_type<uint8_t>()) << "This reference implementation is only tested for uint8";
 
         const int filter_depth = filter_buf.dim(0).extent();
 
@@ -81,10 +81,10 @@ struct FullyConnectedOpTestFactory : public op_test::TestCaseFactory {
 
     FullyConnectedOpTestFactory() {
         init_tensors({
-            {"input", TensorType::UInt8, {1280, 1}, 0.02352941222, 0},
-            {"filter", TensorType::UInt8, {1280, 1000}, 0.001603011042, 0},
-            {"bias", TensorType::Int32, {1000}, 0.0000377179058, 0, fill_tensor_with_random_bias},
-            {"output", TensorType::UInt8, {1000, 1}, 0.08106886595, 0},
+            {"input", halide_type_of<uint8_t>(), {1280, 1}, 0.02352941222, 0},
+            {"filter", halide_type_of<uint8_t>(), {1280, 1000}, 0.001603011042, 0},
+            {"bias", halide_type_of<int32_t>(), {1000}, 0.0000377179058, 0, fill_tensor_with_random_bias},
+            {"output", halide_type_of<uint8_t>(), {1000, 1}, 0.08106886595, 0},
         });
     }
 

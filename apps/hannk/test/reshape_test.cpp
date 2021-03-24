@@ -13,9 +13,9 @@ struct Reshape_ReferenceOp : public op_test::ReferenceOp {
         Tensor *out = outputs.at(0).get();
 
         CHECK(
-            in->type() == to_tensor_type<T>() &&
-            shape->type() == TensorType::Int32 &&
-            out->type() == to_tensor_type<T>());
+            in->is_type<T>() &&
+            shape->is_type<int32_t>() &&
+            out->is_type<T>());
 
         auto in_buf = in->buffer<const T>();
         auto shape_buf = shape->buffer<const int32_t>();
@@ -45,10 +45,10 @@ struct ReshapeOpTestFactory : public op_test::TestCaseFactory {
 
     ReshapeOpTestFactory() {
         init_tensors({
-            {"input", TensorType::UInt8, {64, 4, 3, 1}, 1.0, 0},
+            {"input", halide_type_of<uint8_t>(), {64, 4, 3, 1}, 1.0, 0},
             // shape must be of shape {N}, where N = rank(output)
-            {"shape", TensorType::Int32, {2}, 1.0, 0, fill_shape},
-            {"output", TensorType::UInt8, {768, 1}, 1.0, 0},
+            {"shape", halide_type_of<int32_t>(), {2}, 1.0, 0, fill_shape},
+            {"output", halide_type_of<uint8_t>(), {768, 1}, 1.0, 0},
         });
     }
 

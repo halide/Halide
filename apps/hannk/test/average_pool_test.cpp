@@ -12,8 +12,8 @@ struct AveragePool_ReferenceOp : public op_test::ReferenceOp {
         Tensor *out = outputs.at(0).get();
 
         CHECK(
-            in->type() == to_tensor_type<T>() &&
-            out->type() == to_tensor_type<T>());
+            in->is_type<T>() &&
+            out->is_type<T>());
 
         auto in_buf = in->buffer<const T>();
         auto out_buf = out->buffer<T>();
@@ -55,8 +55,8 @@ struct AveragePool_ReferenceOp : public op_test::ReferenceOp {
 struct AveragePoolOpTestFactory : public op_test::TestCaseFactory {
     AveragePoolOpTestFactory() {
         init_tensors({
-            {"MobilenetV2/Conv_1/Relu6", TensorType::UInt8, {1280, 7, 7, 1}, 0.023528, 0},
-            {"MobilenetV2/Logits/AvgPool", TensorType::UInt8, {1280, 1, 1, 1}, 0.023528, 0},
+            {"MobilenetV2/Conv_1/Relu6", halide_type_of<uint8_t>(), {1280, 7, 7, 1}, 0.023528, 0},
+            {"MobilenetV2/Logits/AvgPool", halide_type_of<uint8_t>(), {1280, 1, 1, 1}, 0.023528, 0},
         });
     }
 

@@ -91,7 +91,7 @@ void begin_trace_execute(const Model &m, std::vector<int32_t> &parent_ids) {
         const Tensor *t = tensors[i];
         std::stringstream tag;
         tag << "func_type_and_dim: ";
-        halide_type_t type = to_halide_type(t->type());
+        halide_type_t type = t->type();
         tag << 1 << " " << (int)type.code << " " << (int)type.bits << " " << (int)type.lanes;
         tag << " " << t->rank();
         const auto &b = t->buffer();

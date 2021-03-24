@@ -12,8 +12,8 @@ struct Quantize_ReferenceOp : public op_test::ReferenceOp {
         Tensor *out = outputs.at(0).get();
 
         CHECK(
-            in->type() == to_tensor_type<InT>() &&
-            out->type() == to_tensor_type<OutT>());
+            in->is_type<InT>() &&
+            out->is_type<OutT>());
 
         auto in_buf = in->buffer<const InT>();
         auto out_buf = out->buffer<OutT>();
@@ -46,8 +46,8 @@ struct Quantize_ReferenceOp : public op_test::ReferenceOp {
 struct QuantizeOpTestFactory : public op_test::TestCaseFactory {
     QuantizeOpTestFactory() {
         init_tensors({
-            {"input", TensorType::UInt8, {1000, 1}, 0.00390625, 128},
-            {"output", TensorType::UInt8, {1000, 1}, 0.00390625, 0},
+            {"input", halide_type_of<uint8_t>(), {1000, 1}, 0.00390625, 128},
+            {"output", halide_type_of<uint8_t>(), {1000, 1}, 0.00390625, 0},
         });
     }
 
