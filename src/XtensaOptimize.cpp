@@ -576,9 +576,14 @@ private:
                 {"halide_xtensa_widen_pair_mul_i48", wild_i32x * wild_i32x + wild_i32x * wild_i32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_pair_mul_u48", wild_u32x * wild_u32x + wild_u32x * wild_u32x, Pattern::NarrowOps | Pattern::AccumulatorOutput48},
 
+                {"halide_xtensa_widen_pair_mul_i48", i48(wild_i16x) * i48(wild_i16x) + i48(wild_i16x) * i48(wild_i16x)},
+                {"halide_xtensa_widen_pair_mul_u48", i48(wild_u16x) * i48(wild_u16x) + i48(wild_u16x) * i48(wild_u16x)},
+
                 // Multiply-add to accumulator type.
                 {"halide_xtensa_widen_pair_mul_add_i48", i32(halide_xtensa_widen_mul_add_i48(wild_i48x, wild_i16x, wild_i16x)) + i32(halide_xtensa_widen_mul_i48(wild_i16x, wild_i16x)), Pattern::AccumulatorOutput48},
+                {"halide_xtensa_widen_pair_mul_add_i48", halide_xtensa_widen_mul_add_i48(wild_i48x, wild_i16x, wild_i16x) + halide_xtensa_widen_mul_i48(wild_i16x, wild_i16x)},
                 {"halide_xtensa_widen_mul_add_i48", i32(wild_i48x) + i32(halide_xtensa_widen_mul_i48(wild_i16x, wild_i16x)), Pattern::AccumulatorOutput48},
+                {"halide_xtensa_widen_mul_add_i48", wild_i48x + halide_xtensa_widen_mul_i48(wild_i16x, wild_i16x)},
 
                 {"halide_xtensa_widen_mul_add_vu8_si16_i24", i16(wild_i24x) + i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})), Pattern::AccumulatorOutput24},
 
@@ -641,6 +646,7 @@ private:
             static const std::vector<Pattern> scalar_muls = {};
 
             static const std::vector<Pattern> muls = {
+                {"halide_xtensa_widen_mul_i48", i48(wild_i16x) * i48(wild_i16x)},
                 {"halide_xtensa_widen_mul_vu8_si16_i24", wild_i16x * bc(wild_i16x), Pattern::NarrowUnsignedOp0 | Pattern::AccumulatorOutput24},
 
                 {"halide_xtensa_widen_zzzzz", i24(concat({wild_i8x64, wild_i8x64, wild_i8x64, wild_i8x64})) * i24(repeat_each_element(wild_i8x4, 64))},
@@ -875,6 +881,10 @@ private:
              call("halide_xtensa_widen_pair_mul_add_i24", wild_i24x, {call("halide_xtensa_widen_pair_mul_add_i24", wild_i24x, {wild_i24x, wild_i8x, wild_i8, wild_i8x, wild_i8}), wild_i8x, wild_i8, wild_i8x, wild_i8})},
             {"halide_xtensa_widen_pair_mul_add_i24",
              call("halide_xtensa_widen_mul_add_i24", wild_i24x, {call("halide_xtensa_widen_mul_add_i24", wild_i24x, {wild_i24x, wild_i8x, wild_i8}), wild_i8x, wild_i8})},
+
+            {"halide_xtensa_widen_pair_mul_add_i48",
+             call("halide_xtensa_widen_mul_add_i48", wild_i48x,
+                  {call("halide_xtensa_widen_mul_add_i48", wild_i48x, {wild_i48x, wild_i16x, wild_i16x}), wild_i16x, wild_i16x})},
 
             // NOTE(vksnk): looked like a good idea, but seems to be slower. Need to double-check.
             // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(i32(wild_i48x))},
@@ -1120,17 +1130,16 @@ public:
 
 class SplitVectorsToNativeSizes : public IRMutator {
 private:
-    std::vector<std::pair<Type, Type>> types_to_split;
     std::vector<Type> native_vector_types;
 
     using IRMutator::visit;
 
-    // Checks the list of types_to_split and returns native vector width for this
-    // type if found and 0 otherwise.
+    // Checks the list of native_vector_types and returns native vector width if the given type
+    // is multiple of it.
     int get_native_vector_lanes_num(const Type &type) {
-        for (const auto &t : types_to_split) {
-            if (t.first == type) {
-                return t.second.lanes();
+        for (const auto &t : native_vector_types) {
+            if ((t.code() == type.code()) && (t.bits() == type.bits()) && (type.lanes() > t.lanes()) && (type.lanes() % t.lanes() == 0)) {
+                return t.lanes();
             }
         }
         return 0;
@@ -1453,8 +1462,8 @@ private:
                         Expr sliced_arg;
                         if (args[arg_index].type().is_scalar()) {
                             sliced_arg = args[arg_index];
-                        // dynamic_shuffle is tricky, we can actually slice an index,
-                        // but not the actual data vector.
+                            // dynamic_shuffle is tricky, we can actually slice an index,
+                            // but not the actual data vector.
                         } else if ((op->name == "halide_xtensa_dynamic_shuffle") && arg_index == 0) {
                             sliced_arg = args[arg_index];
                         } else {
@@ -1510,18 +1519,6 @@ private:
 
 public:
     SplitVectorsToNativeSizes() {
-        types_to_split = {
-            {Type(Type::Int, 16, 64), Type(Type::Int, 16, 32)},
-            {Type(Type::UInt, 16, 64), Type(Type::UInt, 16, 32)},
-            {Type(Type::Int, 32, 32), Type(Type::Int, 32, 16)},
-            {Type(Type::UInt, 32, 32), Type(Type::UInt, 32, 16)},
-            {Type(Type::Int, 32, 64), Type(Type::Int, 32, 16)},
-            {Type(Type::UInt, 32, 64), Type(Type::UInt, 32, 16)},
-            {Type(Type::Int, 48, 64), Type(Type::Int, 48, 32)},
-            {Type(Type::Int, 64, 32), Type(Type::Int, 64, 16)},
-            {Type(Type::Int, 64, 64), Type(Type::Int, 64, 16)},
-            {Type(Type::Float, 32, 32), Type(Type::Float, 32, 16)},
-        };
         native_vector_types = {
             {Type(Type::Int, 8, 64)},
             {Type(Type::UInt, 8, 64)},
@@ -1532,6 +1529,7 @@ public:
             {Type(Type::Int, 24, 64)},
             {Type(Type::Int, 48, 32)},
             {Type(Type::Int, 64, 16)},
+            {Type(Type::Float, 16, 32)},
             {Type(Type::Float, 32, 16)},
         };
     }
@@ -1563,9 +1561,24 @@ private:
                                    maybe_concat_call->args[concat_arg_index].type().lanes()},
                                   Call::PureExtern);
             }
+
             const Shuffle *maybe_concat_shuffle = first_arg.as<Shuffle>();
             if (maybe_concat_shuffle && maybe_concat_shuffle->is_concat() && ((int)maybe_concat_shuffle->vectors.size() == total_lanes / native_lanes) && ((int)maybe_concat_shuffle->vectors[slice_index].type().lanes() == native_lanes)) {
                 return maybe_concat_shuffle->vectors[slice_index];
+            }
+
+            // TODO(vksnk): this looks very similar to above, maybe it's time to move to Shuffle::concat everywhere.
+            if (maybe_concat_shuffle && maybe_concat_shuffle->is_concat() && (maybe_concat_shuffle->vectors[0].type().lanes() % native_lanes == 0)) {
+                internal_assert(total_lanes == maybe_concat_shuffle->type.lanes());
+                int concat_group_size = maybe_concat_shuffle->vectors[0].type().lanes() / native_lanes;
+                int new_index = slice_index % concat_group_size;
+                int concat_arg_index = slice_index / concat_group_size;
+
+                return Call::make(op->type,
+                                  "halide_xtensa_slice_to_native",
+                                  {maybe_concat_shuffle->vectors[concat_arg_index], new_index, native_lanes,
+                                   maybe_concat_shuffle->vectors[concat_arg_index].type().lanes()},
+                                  Call::PureExtern);
             }
 
             if (first_arg.type().is_bool() && first_arg.type().is_scalar()) {
@@ -1619,6 +1632,36 @@ private:
         return IRGraphMutator::visit(op);
     }
 
+    Expr visit(const Shuffle *op) override {
+        if (op->is_slice() && op->slice_stride() == 1 && op->vectors.size() == 1) {
+            Expr mutated = mutate(op->vectors[0]);
+            const Call *maybe_call = mutated.as<Call>();
+            if (maybe_call && maybe_call->name == "halide_xtensa_concat_from_native") {
+                int offset = 0;
+                for (int ix = 0; ix < (int)maybe_call->args.size(); ix++) {
+                    if (offset == op->slice_begin()) {
+                        std::vector<Expr> new_args;
+                        int count = 0;
+                        while (count < op->type.lanes()) {
+                            new_args.push_back(maybe_call->args[ix]);
+                            count += maybe_call->args[ix].type().lanes();
+                            ix++;
+                        }
+                        if (count == op->type.lanes()) {
+                            return Call::make(op->type,
+                                              "halide_xtensa_concat_from_native",
+                                              new_args, Call::PureExtern);
+                        }
+                        break;
+                    }
+                    offset += maybe_call->args[ix].type().lanes();
+                }
+            }
+        }
+
+        return IRGraphMutator::visit(op);
+    }
+
 public:
     SimplifySliceConcat() {
     }
@@ -1645,12 +1688,13 @@ Stmt match_xtensa_patterns(Stmt s) {
     s = SplitVectorsToNativeSizes().mutate(s);
     s = SimplifySliceConcat().mutate(s);
     // Extra run to replace cast + concat, etc.
-    s = MatchXtensaPatterns().mutate(s);
+    for (int ix = 0; ix < 10; ix++) {
+        s = MatchXtensaPatterns().mutate(s);
+    }
     // NOTE(vksnk): looks like we shouldn't do simplification in the end.
     // s = simplify(common_subexpression_elimination(s));
     s = DualQuadMulMutator().mutate(s);
     s = common_subexpression_elimination(s);
-
     return s;
 }
 
