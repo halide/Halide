@@ -463,8 +463,7 @@ void Conv2DOp::execute(const Box &crop) {
                                            dilation_[0], dilation_[1], output_multiplier,
                                            output_shift, (uint8_t)output_offset,
                                            output_range.min, output_range.max, guid_, output_buf));
-        }
-        else
+        } else
 #endif
         {
             CHECK(
