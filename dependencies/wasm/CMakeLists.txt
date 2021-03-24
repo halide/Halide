@@ -18,9 +18,7 @@ if (CMAKE_SIZEOF_VOID_P EQUAL 4)
 endif ()
 
 if (WITH_WABT)
-    # TODO: temporary, until #1628 gets included in a tagged build
-    set(WABT_VER master)
-    # set(WABT_VER 1.0.21)
+    set(WABT_VER 1.0.22)
 
     message(STATUS "Fetching WABT ${WABT_VER}...")
     FetchContent_Declare(wabt
