@@ -329,28 +329,40 @@ class FindSimplifications : public IRVisitor {
         }
     }
 
-    void visit(const Select *op) override {
-        op->condition.accept(this);
+    void visit_select(const Expr &condition, const Expr &old, const Expr &true_value, const Expr &false_value) {
+        condition.accept(this);
 
-        bool likely_t = has_uncaptured_likely_tag(op->true_value);
-        bool likely_f = has_uncaptured_likely_tag(op->false_value);
+        bool likely_t = has_uncaptured_likely_tag(true_value);
+        bool likely_f = has_uncaptured_likely_tag(false_value);
 
         if (!likely_t && !likely_f) {
-            likely_t = has_likely_tag(op->true_value);
-            likely_f = has_likely_tag(op->false_value);
+            likely_t = has_likely_tag(true_value);
+            likely_f = has_likely_tag(false_value);
         }
 
         if (!likely_t) {
-            op->false_value.accept(this);
+            false_value.accept(this);
         }
         if (!likely_f) {
-            op->true_value.accept(this);
+            true_value.accept(this);
         }
 
         if (likely_t && !likely_f) {
-            new_simplification(op->condition, op, op->true_value, op->false_value);
+            new_simplification(condition, old, true_value, false_value);
         } else if (likely_f && !likely_t) {
-            new_simplification(!op->condition, op, op->false_value, op->true_value);
+            new_simplification(!condition, old, false_value, true_value);
+        }
+    }
+
+    void visit(const Select *op) override {
+        visit_select(op->condition, op, op->true_value, op->false_value);
+    }
+
+    void visit(const Call *op) override {
+        if (op->is_intrinsic(Call::if_then_else)) {
+            visit_select(op->args[0], op, op->args[1], op->args[2]);
+        } else {
+            IRVisitor::visit(op);
         }
     }
 
