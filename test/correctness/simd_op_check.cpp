@@ -1664,25 +1664,32 @@ public:
         if (use_wasm_simd128) {
             for (int w = 1; w <= 4; w <<= 1) {
                 // create arbitrary 16-byte constant
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // (But will be soon in LLVM13, revisit soon)
-                // if (Halide::Internal::get_llvm_version() >= 130) {
-                //      check("v128.constant", 16 * w, u8_1 * u8(42 + x));
-                // }
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    check("v128.const", 16 * w, u8_1 * u8(42 + x));
+                }
 
                 // Create vector with identical lanes
                 // (Note that later LLVMs will use 64-bit constants for some smaller splats)
                 check("i8x16.splat", 16 * w, u8_1 * u8(42));
-                if (Halide::Internal::get_llvm_version() >= 120) {
-                    check("i64x2.splat", 8 * w, u16_1 * u16(42));
-                    check("i64x2.splat", 4 * w, u32_1 * u32(42));
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    // LLVM13 likes to emit all of these as v128.const
+                    check("v128.const", 8 * w, u16_1 * u16(42));
+                    check("v128.const", 4 * w, u32_1 * u32(42));
+                    check("v128.const", 2 * w, u64_1 * u64(42));
+                    check("v128.const", 8 * w, f32_1 * f32(42));
+                    check("v128.const", 4 * w, f64_1 * f64(42));
                 } else {
-                    check("i16x8.splat", 8 * w, u16_1 * u16(42));
-                    check("i32x4.splat", 4 * w, u32_1 * u32(42));
+                    if (Halide::Internal::get_llvm_version() == 120) {
+                        check("i64x2.splat", 8 * w, u16_1 * u16(42));
+                        check("i64x2.splat", 4 * w, u32_1 * u32(42));
+                    } else {
+                        check("i16x8.splat", 8 * w, u16_1 * u16(42));
+                        check("i32x4.splat", 4 * w, u32_1 * u32(42));
+                    }
+                    check("i64x2.splat", 2 * w, u64_1 * u64(42));
+                    check("f32x4.splat", 8 * w, f32_1 * f32(42));
+                    check("f64x2.splat", 4 * w, f64_1 * f64(42));
                 }
-                check("i64x2.splat", 2 * w, u64_1 * u64(42));
-                check("f32x4.splat", 8 * w, f32_1 * f32(42));
-                check("f64x2.splat", 4 * w, f64_1 * f64(42));
 
                 // Extract lane as a scalar (extract_lane)
                 // Replace lane value (replace_lane)
@@ -1762,17 +1769,18 @@ public:
                 // check("i32x4.extadd_pairwise_i16x8_u", ???, ???);
 
                 // Saturating integer addition
-                check("i8x16.add_saturate_s", 16 * w, i8_sat(i16(i8_1) + i16(i8_2)));
-                check("i8x16.add_saturate_u", 16 * w, u8_sat(u16(u8_1) + u16(u8_2)));
-                check("i16x8.add_saturate_s", 8 * w, i16_sat(i32(i16_1) + i32(i16_2)));
-                check("i16x8.add_saturate_u", 8 * w, u16_sat(u32(u16_1) + u32(u16_2)));
+                std::string sat = Halide::Internal::get_llvm_version() >= 130 ? "sat" : "saturate";
+                check("i8x16.add_" + sat + "_s", 16 * w, i8_sat(i16(i8_1) + i16(i8_2)));
+                check("i8x16.add_" + sat + "_u", 16 * w, u8_sat(u16(u8_1) + u16(u8_2)));
+                check("i16x8.add_" + sat + "_s", 8 * w, i16_sat(i32(i16_1) + i32(i16_2)));
+                check("i16x8.add_" + sat + "_u", 8 * w, u16_sat(u32(u16_1) + u32(u16_2)));
 
                 // Saturating integer subtraction
-                check("i8x16.sub_saturate_s", 16 * w, i8_sat(i16(i8_1) - i16(i8_2)));
-                check("i16x8.sub_saturate_s", 8 * w, i16_sat(i32(i16_1) - i32(i16_2)));
+                check("i8x16.sub_" + sat + "_s", 16 * w, i8_sat(i16(i8_1) - i16(i8_2)));
+                check("i16x8.sub_" + sat + "_s", 8 * w, i16_sat(i32(i16_1) - i32(i16_2)));
                 // N.B. Saturating subtracts are expressed by widening to a *signed* type
-                check("i8x16.sub_saturate_u", 16 * w, u8_sat(i16(u8_1) - i16(u8_2)));
-                check("i16x8.sub_saturate_u", 8 * w, u16_sat(i32(u16_1) - i32(u16_2)));
+                check("i8x16.sub_" + sat + "_u", 16 * w, u8_sat(i16(u8_1) - i16(u8_2)));
+                check("i16x8.sub_" + sat + "_u", 8 * w, u16_sat(i32(u16_1) - i32(u16_2)));
 
                 // Saturating integer Q-format rounding multiplication
                 // TODO: see arm's qrdmulh, probably
