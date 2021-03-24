@@ -11,7 +11,7 @@ struct Concatenation_ReferenceOp : public op_test::ReferenceOp {
         Tensor *out = outputs.at(0).get();
         CHECK(out->type() == to_tensor_type<T>());
 
-        auto out_buf = out->data<T>();
+        auto out_buf = out->buffer<T>();
         const int dims = out_buf.dimensions();
         assert(axis >= 0 && axis < dims);
 
@@ -19,7 +19,7 @@ struct Concatenation_ReferenceOp : public op_test::ReferenceOp {
         for (size_t i = 0; i < inputs.size(); i++) {
             const Tensor *in = inputs.at(i).get();
             CHECK(in->type() == to_tensor_type<T>());
-            auto in_buf = in->data<const T>();
+            auto in_buf = in->buffer<const T>();
             CHECK(in_buf.dimensions() == dims);
             for (int j = 0; j < dims; j++) {
                 if (j != axis) {

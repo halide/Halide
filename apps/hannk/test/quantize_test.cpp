@@ -15,8 +15,8 @@ struct Quantize_ReferenceOp : public op_test::ReferenceOp {
             in->type() == to_tensor_type<InT>() &&
             out->type() == to_tensor_type<OutT>());
 
-        auto in_buf = in->data<InT>();
-        auto out_buf = out->data<OutT>();
+        auto in_buf = in->buffer<const InT>();
+        auto out_buf = out->buffer<OutT>();
         check_shapes_match(in_buf, out_buf);
 
         const int in_offset = in->quantization().zero.at(0);

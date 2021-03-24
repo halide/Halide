@@ -105,35 +105,22 @@ inline std::ostream &operator<<(std::ostream &s, const QuantizationInfo &q) {
     return s << "{" << q.scale << ", " << q.zero << ", " << q.dimension << "}";
 }
 
-inline Box without_strides(const std::vector<halide_dimension_t> &shape) {
-    Box result;
-    result.reserve(shape.size());
-    for (const halide_dimension_t &i : shape) {
-        result.emplace_back(i);
-    }
-    return result;
-}
-
 class Tensor {
     std::string name_;
     TensorType type_;
-    std::vector<halide_dimension_t> shape_;
-    std::vector<uint8_t> data_;
+    HalideBuffer<void> buffer_;
     QuantizationInfo quantization_;
     bool is_constant_ = false;
     bool is_input_ = false;
     bool is_output_ = false;
 
 public:
-    explicit Tensor(std::string name, TensorType type,
-                    std::vector<halide_dimension_t> shape,
-                    std::vector<uint8_t> data, QuantizationInfo quantization)
+    Tensor(std::string name, TensorType type, HalideBuffer<void> buffer, QuantizationInfo quantization)
         : name_(std::move(name)),
           type_(type),
-          shape_(std::move(shape)),
-          data_(std::move(data)),
+          buffer_(std::move(buffer)),
           quantization_(std::move(quantization)) {
-        is_constant_ = data_.size() != 0;
+        is_constant_ = buffer_.data() != nullptr;
     }
 
     Tensor(const Tensor &copy) = default;
@@ -141,21 +128,42 @@ public:
     hannk::TensorType type() const {
         return type_;
     }
+
     const std::string &name() const {
         return name_;
     }
-    const std::vector<halide_dimension_t> &shape() const {
-        return shape_;
+
+    // TODO: not a good name. Maybe bounds()?
+    Box box() const {
+        const int dimensions = buffer_.dimensions();
+
+        Box result;
+        result.reserve(dimensions);
+        for (int d = 0; d < dimensions; d++) {
+            const auto dim = buffer_.dim(d);
+            result.emplace_back(dim.min(), dim.max());
+        }
+        return result;
     }
-    const halide_dimension_t &dim(int i) const {
-        return shape_[i];
+
+    // TODO: not a good name.
+    Interval interval(int i) const {
+        const auto &d = buffer_.dim(i);
+        return Interval(d.min(), d.max());
     }
+
+    int extent(int i) const {
+        return buffer_.dim(i).extent();
+    }
+
     int rank() const {
-        return shape_.size();
+        return buffer_.dimensions();
     }
+
     const QuantizationInfo &quantization() const {
         return quantization_;
     }
+
     bool is_constant() const {
         return is_constant_;
     }
@@ -163,6 +171,7 @@ public:
     bool is_input() const {
         return is_input_;
     }
+
     bool is_output() const {
         return is_output_;
     }
@@ -170,52 +179,33 @@ public:
     void set_input(bool is_input) {
         is_input_ = is_input;
     }
+
     void set_output(bool is_output) {
         is_output_ = is_output;
     }
 
-    template<class T>
-    HalideBuffer<T> data() {
-        if (std::is_void<T>::value) {
-            return HalideBuffer<T>(
-                to_halide_type(type_),
-                reinterpret_cast<T *>(data_.data()),
-                shape_.size(), shape_.data());
-        } else {
-            assert(is_type<T>(type_));
-            return HalideBuffer<T>(
-                reinterpret_cast<T *>(data_.data()),
-                shape_.size(), shape_.data());
-        }
+    template<class T = void>
+    const HalideBuffer<T> &buffer() {
+        return buffer_.as<T>();
     }
 
-    template<class T>
-    HalideBuffer<const T> data() const {
-        if (std::is_void<T>::value) {
-            return HalideBuffer<const T>(
-                to_halide_type(type_),
-                reinterpret_cast<const T *>(data_.data()),
-                shape_.size(), shape_.data());
-        } else {
-            assert(is_type<T>(type_));
-            return HalideBuffer<const T>(
-                reinterpret_cast<const T *>(data_.data()),
-                shape_.size(), shape_.data());
-        }
+    template<class T = void>
+    const HalideBuffer<const T> &buffer() const {
+        return buffer_.as_const().as<const T>();
     }
 
-    template<class T>
-    HalideBuffer<T> data(const Box &crop) {
-        HalideBuffer<T> buf = data<T>();
+    template<class T = void>
+    HalideBuffer<T> buffer(const Box &crop) {
+        HalideBuffer<T> buf = buffer_.as<T>();
         for (int i = 0; i < (int)crop.size(); i++) {
             buf.crop(i, crop[i].min, crop[i].extent());
         }
         return buf;
     }
 
-    template<class T>
-    HalideBuffer<const T> data(const Box &crop) const {
-        HalideBuffer<const T> buf = data<T>();
+    template<class T = void>
+    HalideBuffer<const T> buffer(const Box &crop) const {
+        HalideBuffer<const T> buf = buffer_.as<const T>();
         for (int i = 0; i < (int)crop.size(); i++) {
             buf.crop(i, crop[i].min, crop[i].extent());
         }
@@ -223,11 +213,13 @@ public:
     }
 
     bool is_allocated() const {
-        return !data_.empty();
+        return buffer_.data() != nullptr;
     }
-    void allocate();
-    void free() {
-        data_.resize(0);
+
+    void allocate() {
+        if (!buffer_.data()) {
+            buffer_ = HalideBuffer<void>::make_with_shape_of(buffer_);
+        }
     }
 
     void dump(std::ostream &os) const;
@@ -293,7 +285,7 @@ public:
     // Get the shape of the complete output of this op.
     virtual Box get_full_crop() {
         if (output_count() == 1) {
-            return without_strides(output(0)->shape());
+            return output(0)->box();
         } else {
             CHECK(0) << "More than one output requires get_full_crop override.";
             return Box();

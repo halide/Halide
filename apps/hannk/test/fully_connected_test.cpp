@@ -20,10 +20,10 @@ struct FullyConnected_ReferenceOp : public op_test::ReferenceOp {
             bias->type() == TensorType::Int32 &&
             out->type() == to_tensor_type<T>());
 
-        auto input_buf = in->data<T>();
-        auto filter_buf = filt->data<T>();
-        auto bias_buf = bias->data<int32_t>();
-        auto output_buf = out->data<T>();
+        auto input_buf = in->buffer<const T>();
+        auto filter_buf = filt->buffer<const T>();
+        auto bias_buf = bias->buffer<const int32_t>();
+        auto output_buf = out->buffer<T>();
 
         const int input_offset = in->quantization().zero.at(0);
         const int filter_offset = filt->quantization().zero.at(0);
@@ -71,7 +71,7 @@ struct FullyConnectedOpTestFactory : public op_test::TestCaseFactory {
     static void fill_tensor_with_random_bias(Tensor &t, int seed) {
         // bias is an int32, but using values outside the int16 range tends to
         // overflow and make uninteresting results.
-        auto buf = t.data<int32_t>();
+        auto buf = t.buffer<int32_t>();
         std::mt19937 rng(seed);
         std::uniform_int_distribution<int32_t> dis(-32767, 32767);
         buf.for_each_value([&rng, &dis](int32_t &value) {

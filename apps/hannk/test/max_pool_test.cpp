@@ -15,8 +15,8 @@ struct MaxPool_ReferenceOp : public op_test::ReferenceOp {
             in->type() == to_tensor_type<T>() &&
             out->type() == to_tensor_type<T>());
 
-        auto in_buf = in->data<T>();
-        auto out_buf = out->data<T>();
+        auto in_buf = in->buffer<const T>();
+        auto out_buf = out->buffer<T>();
 
         // TODO: does this need to handle Padding::Same?
         CHECK(padding == Padding::Valid) << "MaxPoolOp doesn't handle all paddings yet";

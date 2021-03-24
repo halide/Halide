@@ -20,10 +20,10 @@ struct Conv2D_ReferenceOp : public op_test::ReferenceOp {
             bias->type() == TensorType::Int32 &&
             out->type() == to_tensor_type<T>());
 
-        auto input_buf = in->data<T>();
-        auto filter_buf = filt->data<T>();
-        auto bias_buf = bias->data<int32_t>();
-        auto output_buf = out->data<T>();
+        auto input_buf = in->buffer<const T>();
+        auto filter_buf = filt->buffer<const T>();
+        auto bias_buf = bias->buffer<const int32_t>();
+        auto output_buf = out->buffer<T>();
 
         const int input_offset = in->quantization().zero.at(0);
         const int filter_offset = filt->quantization().zero.at(0);
@@ -97,7 +97,7 @@ struct Conv2DOpTestFactory : public op_test::TestCaseFactory {
     static void fill_tensor_with_random_bias(Tensor &t, int seed) {
         // bias is an int32, but using values outside the int16 range tends to
         // overflow and make uninteresting results.
-        auto buf = t.data<int32_t>();
+        auto buf = t.buffer<int32_t>();
         std::mt19937 rng(seed);
         std::uniform_int_distribution<int32_t> dis(-32767, 32767);
         buf.for_each_value([&rng, &dis](int32_t &value) {
@@ -165,7 +165,7 @@ struct Conv2DOpTestFactory : public op_test::TestCaseFactory {
             108, 118, 131, 102, 115, 114, 123, 133, 118, 107, 99, 114, 132, 122, 117,
             127, 133, 125, 113, 126, 124, 139, 111, 116, 131, 111, 117, 128, 120, 125,
             132, 119, 108, 122, 123, 120, 118, 121, 122};
-        auto buf = t.data<uint8_t>();
+        auto buf = t.buffer<uint8_t>();
         assert(buf.size_in_bytes() == sizeof(filter_data));
         memcpy(buf.data(), filter_data, sizeof(filter_data));
     }
@@ -182,7 +182,7 @@ struct Conv2DOpTestFactory : public op_test::TestCaseFactory {
             0, 0, 229, 251, 255, 255, 189, 44, 0, 0, 40, 45, 0, 0, 113,
             2, 0, 0, 98, 41, 0, 0, 74, 1, 0, 0, 216, 35, 0, 0,
             74, 217, 255, 255, 149, 68, 0, 0};
-        auto buf = t.data<int32_t>();
+        auto buf = t.buffer<int32_t>();
         assert(buf.size_in_bytes() == sizeof(bias_data));
         memcpy(buf.data(), bias_data, sizeof(bias_data));
     }

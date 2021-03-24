@@ -117,7 +117,7 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
             }
             int seed_here = seed++;
             seeds[t->name()] = seed_here;
-            auto input_buf = t->data<void>();
+            auto input_buf = t->buffer();
             dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
             if (verbosity) {
                 std::cout << "HALIDE input " << t->name() << " inited with seed = " << seed_here << " type " << input_buf.type() << "\n";
@@ -142,7 +142,7 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
                 std::cout << "HALIDE output is " << t->name() << " type " << to_string(t->type()) << "\n";
             }
             // Make a copy since the Buffer might reference memory owned by the interpreter
-            halide_result.outputs.emplace_back(t->data<const void>().copy());
+            halide_result.outputs.emplace_back(t->buffer().copy());
         }
     }
 

@@ -99,7 +99,7 @@ protected:
     int num_failures = 0;
 
     static void fill_tensor_with_random(Tensor &t, int seed) {
-        auto buf = t.data<void>();
+        auto buf = t.buffer();
         dynamic_type_dispatch<FillWithRandom>(buf.type(), buf, seed);
     }
 
@@ -116,25 +116,15 @@ protected:
         tensors.clear();
         tensor_init_fns.clear();
         for (const auto &td : tds) {
-            std::vector<halide_dimension_t> shape(td.shape.size());
-            size_t shape_size = 1;
-            for (size_t i = 0; i < shape.size(); i++) {
-                shape[i].min = 0;
-                shape[i].extent = td.shape.at(i);
-                shape[i].stride = shape_size;
-                shape_size *= shape[i].extent;
-            }
-            std::vector<uint8_t> data;
+            HalideBuffer<void> buffer(to_halide_type(td.type), td.shape);
             QuantizationInfo quantization;
             quantization.dimension = 0;  // TODO -- do we use this?
             quantization.scale.push_back(td.scale);
             quantization.zero.push_back(td.zero_point);
             tensors.push_back(std::make_shared<Tensor>(td.name,
                                                        td.type,
-                                                       std::move(shape),
-                                                       std::move(data),
+                                                       std::move(buffer),
                                                        std::move(quantization)));
-            tensors.back()->allocate();
 
             if (td.init_fn == nullptr) {
                 tensor_init_fns.push_back(fill_tensor_with_random);
@@ -169,7 +159,7 @@ protected:
 
         const auto save_outputs = [&test](std::vector<Halide::Runtime::Buffer<const void>> &outputs) {
             for (auto &t : test->reference_op->outputs) {
-                outputs.emplace_back(t->data<const void>().copy());
+                outputs.emplace_back(t->buffer().copy());
             }
         };
 

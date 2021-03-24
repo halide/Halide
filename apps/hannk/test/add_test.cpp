@@ -17,9 +17,9 @@ struct Add_ReferenceOp : public op_test::ReferenceOp {
             in2->type() == to_tensor_type<T>() &&
             out->type() == to_tensor_type<T>());
 
-        auto in1_buf = in1->data<T>();
-        auto in2_buf = in2->data<T>();
-        auto out_buf = out->data<T>();
+        auto in1_buf = in1->buffer<const T>();
+        auto in2_buf = in2->buffer<const T>();
+        auto out_buf = out->buffer<T>();
 
         const int in1_offset = in1->quantization().zero.at(0);
         const int in2_offset = in2->quantization().zero.at(0);
