@@ -353,33 +353,24 @@ int main(int argc, char **argv) {
     }
 
     {
-        // Test that transposition works when vectorizing either dimension:
+        // Test transposition
         Func square("square");
         square(x, y) = cast(UInt(16), 5 * x + y);
 
-        Func trans1("trans1");
-        trans1(x, y) = square(y, x);
-
-        Func trans2("trans2");
-        trans2(x, y) = square(y, x);
+        Func trans("trans2");
+        trans(x, y) = square(y, x);
 
         square.compute_root()
             .bound(x, 0, 8)
             .bound(y, 0, 8);
 
-        trans1.compute_root()
-            .bound(x, 0, 8)
-            .bound(y, 0, 8)
-            .vectorize(x)
-            .unroll(y);
-
-        trans2.compute_root()
+        trans.compute_root()
             .bound(x, 0, 8)
             .bound(y, 0, 8)
             .unroll(x)
             .vectorize(y);
 
-        trans1.output_buffer()
+        trans.output_buffer()
             .dim(0)
             .set_min(0)
             .set_stride(1)
@@ -389,29 +380,12 @@ int main(int argc, char **argv) {
             .set_stride(8)
             .set_extent(8);
 
-        trans2.output_buffer()
-            .dim(0)
-            .set_min(0)
-            .set_stride(1)
-            .set_extent(8)
-            .dim(1)
-            .set_min(0)
-            .set_stride(8)
-            .set_extent(8);
-
-        Buffer<uint16_t> result6(8, 8);
         Buffer<uint16_t> result7(8, 8);
-        trans1.realize(result6);
-        trans2.realize(result7);
+        trans.realize(result7);
 
         for (int x = 0; x < 8; x++) {
             for (int y = 0; y < 8; y++) {
                 int correct = 5 * y + x;
-                if (result6(x, y) != correct) {
-                    printf("result(%d) = %d instead of %d\n", x, result6(x, y), correct);
-                    return -1;
-                }
-
                 if (result7(x, y) != correct) {
                     printf("result(%d) = %d instead of %d\n", x, result7(x, y), correct);
                     return -1;
@@ -419,8 +393,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        check_interleave_count(trans1, 1);
-        check_interleave_count(trans2, 1);
+        check_interleave_count(trans, 1);
     }
 
     printf("Success!\n");
