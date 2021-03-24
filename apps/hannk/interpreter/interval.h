@@ -15,14 +15,11 @@ struct Interval {
     Interval()
         : min(0), max(0) {
     }
-    Interval(int point)
+    explicit Interval(int point)
         : min(point), max(1) {
     }
     Interval(int min, int max)
         : min(min), max(max) {
-    }
-    Interval(halide_dimension_t dim)
-        : min(dim.min), max(dim.min + dim.extent - 1) {
     }
 
     bool empty() const {

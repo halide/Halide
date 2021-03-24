@@ -17,9 +17,9 @@ struct Reshape_ReferenceOp : public op_test::ReferenceOp {
             shape->type() == TensorType::Int32 &&
             out->type() == to_tensor_type<T>());
 
-        auto in_buf = in->data<T>();
-        auto shape_buf = shape->data<int32_t>();
-        auto out_buf = out->data<T>();
+        auto in_buf = in->buffer<const T>();
+        auto shape_buf = shape->buffer<const int32_t>();
+        auto out_buf = out->buffer<T>();
 
         CHECK(shape_buf.dimensions() == 1);
         CHECK(shape_buf.dim(0).extent() == out_buf.dimensions());
@@ -38,7 +38,7 @@ struct Reshape_ReferenceOp : public op_test::ReferenceOp {
 
 struct ReshapeOpTestFactory : public op_test::TestCaseFactory {
     static void fill_shape(Tensor &t, int seed) {
-        auto buf = t.data<int32_t>();
+        auto buf = t.buffer<int32_t>();
         buf(0) = 768;
         buf(1) = 1;
     }
@@ -76,7 +76,7 @@ struct ReshapeOpTestFactory : public op_test::TestCaseFactory {
         r->outputs.push_back(out);
 
         std::vector<int> shape_vals;
-        auto shape_buf = shape->data<int32_t>();
+        auto shape_buf = shape->buffer<const int32_t>();
         for (int i = 0; i < shape_buf.dim(0).extent(); i++) {
             shape_vals.push_back(shape_buf(i));
         }

@@ -90,26 +90,14 @@ public:
     }
 
     std::unique_ptr<Tensor> parse_tensor(const tflite::Tensor *t) {
-        const auto *buffers = model_->buffers();
-        std::vector<uint8_t> data;
-        if (t->buffer() != 0) {
-            auto buffer = buffers->Get(t->buffer())->data();
-            if (buffer) {
-                data.assign(buffer->cbegin(), buffer->cend());
-            }
-        }
-
-        std::vector<halide_dimension_t> shape(t->shape()->size());
-        size_t shape_size = 1;
-        for (int i = 0; i < (int)shape.size(); i++) {
-            shape[i].min = 0;
-            shape[i].extent = t->shape()->Get(shape.size() - 1 - i);
-            shape[i].stride = shape_size;
-            shape_size *= shape[i].extent;
+        const int shape_size = t->shape()->size();
+        std::vector<int> shape;
+        shape.reserve(shape_size);
+        for (int i = 0; i < shape_size; i++) {
+            shape.push_back(t->shape()->Get(shape_size - 1 - i));
         }
 
         TensorType type = parse_type(t->type());
-        assert(data.empty() || data.size() == shape_size * sizeof_tensor_type(type));
 
         QuantizationInfo quantization;
         if (t->quantization()) {
@@ -142,9 +130,25 @@ public:
         //     }
         // }
 
+        if (t->buffer() != 0) {
+            const auto *tflite_buffer = model_->buffers()->Get(t->buffer())->data();
+            if (tflite_buffer) {
+                // tflite_buffer->Data() points at read-only data in the flatbuffer.
+                // Construct a HalideBuffer that points to it (but does not copy or own it).
+                const void *data = static_cast<const void *>(tflite_buffer->Data());
+                assert(data);
+                HalideBuffer<void> buffer(to_halide_type(type), const_cast<void *>(data), shape);
+                assert(tflite_buffer->size() == buffer.size_in_bytes());
+
+                return ::hannk::make_unique<Tensor>(
+                    t->name()->str(), type, std::move(buffer), std::move(quantization));
+            }
+        }
+
+        // Create an "unallocated" Buffer, which points to null.
+        HalideBuffer<void> buffer(to_halide_type(type), nullptr, shape);
         return ::hannk::make_unique<Tensor>(
-            t->name()->str(), type, std::move(shape),
-            std::move(data), std::move(quantization));
+            t->name()->str(), type, std::move(buffer), std::move(quantization));
     }
 
     std::unique_ptr<Op> parse_add(const tflite::Operator *op) {
@@ -273,7 +277,7 @@ public:
         if (shape_tensor &&
             shape_tensor->rank() == 1 &&
             shape_tensor->type() == TensorType::Int32) {
-            auto data = shape_tensor->data<int32_t>();
+            const auto &data = shape_tensor->buffer<const int32_t>();
             for (int i = 0; i < data.dimensions(); i++) {
                 new_shape.push_back(data(i));
             }

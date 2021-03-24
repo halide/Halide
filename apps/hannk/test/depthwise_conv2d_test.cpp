@@ -20,10 +20,10 @@ struct DepthwiseConv2D_ReferenceOp : public op_test::ReferenceOp {
             bias->type() == TensorType::Int32 &&
             out->type() == to_tensor_type<T>());
 
-        auto input_buf = in->data<T>();
-        auto filter_buf = filt->data<T>();
-        auto bias_buf = bias->data<int32_t>();
-        auto output_buf = out->data<T>();
+        auto input_buf = in->buffer<const T>();
+        auto filter_buf = filt->buffer<const T>();
+        auto bias_buf = bias->buffer<const int32_t>();
+        auto output_buf = out->buffer<T>();
 
         int depth_multiplier = output_buf.dim(0).extent() / input_buf.dim(0).extent();
 
@@ -101,7 +101,7 @@ struct DepthwiseConv2DOpTestFactory : public op_test::TestCaseFactory {
     static void fill_tensor_with_random_bias(Tensor &t, int seed) {
         // bias is an int32, but using values outside the int16 range tends to
         // overflow and make uninteresting results.
-        auto buf = t.data<int32_t>();
+        auto buf = t.buffer<int32_t>();
         std::mt19937 rng(seed);
         std::uniform_int_distribution<int32_t> dis(-32767, 32767);
         buf.for_each_value([&rng, &dis](int32_t &value) {
@@ -126,7 +126,7 @@ struct DepthwiseConv2DOpTestFactory : public op_test::TestCaseFactory {
             106, 165, 166, 136, 165, 168, 166, 165, 172, 165, 164, 166, 164, 165, 165, 165, 165, 165, 165, 43,
             160, 165, 163, 172, 165, 164, 165, 165, 97, 156, 165, 165, 98, 165, 160, 106, 165, 165, 166, 165,
             165, 165, 165, 165, 165, 163, 167, 165};
-        auto buf = t.data<uint8_t>();
+        auto buf = t.buffer<uint8_t>();
         assert(buf.size_in_bytes() == sizeof(filter_data));
         memcpy(buf.data(), filter_data, sizeof(filter_data));
     }
@@ -140,7 +140,7 @@ struct DepthwiseConv2DOpTestFactory : public op_test::TestCaseFactory {
             0, 88, 255, 255, 255, 127, 0, 0, 0, 96, 1, 0, 0, 19, 0, 0, 0, 65, 255, 255, 255, 122, 1, 0, 0, 126,
             1, 0, 0, 1, 0, 0, 0, 167, 1, 0, 0, 190, 255, 255, 255, 254, 0, 0, 0, 175, 255, 255, 255, 73, 253,
             255, 255};
-        auto buf = t.data<int32_t>();
+        auto buf = t.buffer<int32_t>();
         assert(buf.size_in_bytes() == sizeof(bias_data));
         memcpy(buf.data(), bias_data, sizeof(bias_data));
     }

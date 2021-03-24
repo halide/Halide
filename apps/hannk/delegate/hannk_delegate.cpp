@@ -156,36 +156,21 @@ Padding ConvertTfLitePadding(TfLitePadding p) {
     }
 }
 
-std::vector<halide_dimension_t> ConvertTfLiteShape(const TfLiteTensor &tensor, size_t *shape_size_out = nullptr) {
+std::vector<int> ConvertTfLiteShape(const TfLiteTensor &tensor) {
     assert(tensor.dims);
-    std::vector<halide_dimension_t> shape(tensor.dims->size);
-    size_t shape_size = 1;
-    for (int i = 0; i < (int)shape.size(); i++) {
-        shape[i].min = 0;
-        shape[i].extent = tensor.dims->data[shape.size() - 1 - i];
-        shape[i].stride = shape_size;
-        shape_size *= shape[i].extent;
-    }
-    if (shape_size_out) {
-        *shape_size_out = shape_size;
+    const int shape_size = tensor.dims->size;
+    std::vector<int> shape;
+    shape.reserve(shape_size);
+    for (int i = 0; i < shape_size; i++) {
+        shape.push_back(tensor.dims->data[shape_size - 1 - i]);
     }
     return shape;
 }
 
 std::shared_ptr<Tensor> ConvertTfLiteTensor(const TfLiteTensor &tensor) {
-    // TODO: this always makes a copy of the tensor data; we should be able to just
-    // shadow it. Needs some refactoring in Tensor (at least) to make work.
-    std::vector<uint8_t> data;
-    if (tensor.allocation_type == kTfLiteMmapRo) {
-        const uint8_t *d = (const uint8_t *)tensor.data.data;
-        data.assign(d, d + tensor.bytes);
-    }
-
-    size_t shape_size;
-    auto shape = ConvertTfLiteShape(tensor, &shape_size);
+    auto shape = ConvertTfLiteShape(tensor);
 
     TensorType type = ConvertTfLiteType(tensor.type);
-    assert(data.empty() || data.size() == shape_size * sizeof_tensor_type(type));
 
     QuantizationInfo quantization;
     if (tensor.quantization.type == kTfLiteAffineQuantization) {
@@ -205,8 +190,23 @@ std::shared_ptr<Tensor> ConvertTfLiteTensor(const TfLiteTensor &tensor) {
     // for unique or non-empty names in our code, so let's just map that to
     // an empty string.
     const char *name = tensor.name ? tensor.name : "";
-    return std::make_shared<Tensor>(name, type, std::move(shape),
-                                    std::move(data), std::move(quantization));
+
+    if (tensor.allocation_type == kTfLiteMmapRo) {
+        const void *read_only_data = (const uint8_t *)tensor.data.data;
+        assert(read_only_data != nullptr);
+        // Construct a HalideBuffer that points to read_only_data (but does not copy or own it).
+        // Since TFLite will ensure that the TfLiteTensor remains valid while we're using it,
+        // this should be completely safe
+        HalideBuffer<void> buffer(to_halide_type(type), const_cast<void *>(read_only_data), shape);
+        assert(tensor.bytes == buffer.size_in_bytes());
+
+        return std::make_shared<Tensor>(
+            name, type, std::move(buffer), std::move(quantization));
+    }
+
+    // Create an "unallocated" Buffer, which points to null.
+    HalideBuffer<void> buffer(to_halide_type(type), nullptr, shape);
+    return std::make_shared<Tensor>(name, type, std::move(buffer), std::move(quantization));
 }
 
 class HannkDelegateKernel final {
@@ -374,7 +374,7 @@ public:
                 continue;
             }
             assert(t->is_input() && !t->is_constant() && t->is_allocated());
-            auto buf = t->data<void>();
+            auto buf = t->buffer();
             assert(buf.size_in_bytes() == tensor.bytes);
 
             memcpy(buf.data(), tensor.data.data, tensor.bytes);
@@ -394,7 +394,7 @@ public:
             assert(tensor.allocation_type != kTfLiteMmapRo);
             auto t = GetTensorById(context, tensor_id);
             assert(t->is_output() && !t->is_constant() && t->is_allocated());
-            auto buf = t->data<const void>();
+            auto buf = t->buffer();
             assert(buf.size_in_bytes() == tensor.bytes);
 
             memcpy(tensor.data.data, buf.data(), tensor.bytes);
@@ -500,11 +500,11 @@ private:
         int axis = params->axis;
         // Handle negative values, which are legal
         if (axis < 0) {
-            axis = (int)output->shape().size() + axis;
+            axis = (int)output->rank() + axis;
         }
         // Now 'flip' the axis so that it refers to the right dimension in
         // the Tensor (since we reverse the dimension order)
-        axis = (int)output->shape().size() - axis - 1;
+        axis = (int)output->rank() - axis - 1;
         return ::hannk::make_unique<ConcatenationOp>(inputs, output, axis, activation);
     }
 

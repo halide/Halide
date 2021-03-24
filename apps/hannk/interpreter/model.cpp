@@ -141,27 +141,21 @@ void Model::dump(std::ostream &os) {
     os << std::endl;
 }
 
-void Tensor::allocate() {
-    size_t shape_size = 1;
-    for (halide_dimension_t &i : shape_) {
-        if (i.stride != 0) {
-            CHECK((size_t)i.stride == shape_size);
-        } else {
-            i.stride = shape_size;
-        }
-        shape_size *= i.extent;
-    }
-    shape_size *= sizeof_tensor_type(type());
-    if (data_.empty()) {
-        data_.resize(shape_size);
-    } else {
-        CHECK(data_.size() == shape_size);
-    }
-}
-
 void Tensor::dump(std::ostream &os) const {
-    os << "  " << to_string(type()) << " x " << shape()
-       << (is_allocated() ? " allocated " : " ") << name() << std::endl;
+    os << "  \"" << name() << "\" : "
+       << "  " << to_string(type()) << " x ";
+
+    const auto *b = buffer_.raw_buffer();
+    os << '{';
+    for (int i = 0; i < b->dimensions; i++) {
+        if (i > 0) {
+            os << ", ";
+        }
+        os << b->dim[i];
+    }
+    os << '}';
+
+    os << (is_allocated() ? " allocated " : " ") << name() << std::endl;
 }
 
 }  // namespace hannk

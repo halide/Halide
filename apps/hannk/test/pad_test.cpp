@@ -17,9 +17,9 @@ struct Pad_ReferenceOp : public op_test::ReferenceOp {
             pad->type() == TensorType::Int32 &&
             out->type() == to_tensor_type<T>());
 
-        auto in_buf = in->data<T>();
-        auto pad_buf = pad->data<int32_t>();
-        auto out_buf = out->data<T>();
+        auto in_buf = in->buffer<const T>();
+        auto pad_buf = pad->buffer<const int32_t>();
+        auto out_buf = out->buffer<T>();
 
         const int dims = in_buf.dimensions();
         CHECK(out_buf.dimensions() == dims);
@@ -45,7 +45,7 @@ struct Pad_ReferenceOp : public op_test::ReferenceOp {
 
 struct PadOpTestFactory : public op_test::TestCaseFactory {
     static void fill_padding(Tensor &t, int seed) {
-        auto buf = t.data<int32_t>();
+        auto buf = t.buffer<int32_t>();
         buf.fill(0);
         buf(0, 0) = 4;   // add 4 values before startof dim(0)
         buf(1, 0) = 12;  // add 12 values after end of dim(0)

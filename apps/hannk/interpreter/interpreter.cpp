@@ -37,8 +37,8 @@ void trace_loads_stores(int32_t parent_id, const Tensor *t, Box box, bool load) 
 
     event.event = load ? halide_trace_load : halide_trace_store;
 
-    box = intersect(box, without_strides(t->shape()));
-    HalideBuffer<const void> buf = t->data<void>(box);
+    box = intersect(box, t->box());
+    HalideBuffer<const void> buf = t->buffer(box);
 
     event.type = buf.type();
 
@@ -94,8 +94,10 @@ void begin_trace_execute(const Model &m, std::vector<int32_t> &parent_ids) {
         halide_type_t type = to_halide_type(t->type());
         tag << 1 << " " << (int)type.code << " " << (int)type.bits << " " << (int)type.lanes;
         tag << " " << t->rank();
-        for (int d = 0; d < t->rank(); d++) {
-            tag << " " << t->dim(d).min << " " << t->dim(d).extent;
+        const auto &b = t->buffer();
+        for (int d = 0; d < b.dimensions(); d++) {
+            const auto &dim = b.dim(d);
+            tag << " " << dim.min() << " " << dim.extent();
         }
         std::string tag_str = tag.str();
         trace.trace_tag = tag_str.c_str();
@@ -117,8 +119,7 @@ void trace_op(const ScheduledOp &op, std::vector<int32_t> &parent_ids) {
         const Tensor *t = op.op->output(i);
         trace.func = t->name().c_str();
         trace.parent_id = parent_ids.back();
-        const auto &shape = t->shape();
-        std::vector<int32_t> coords(shape.size() * 2);
+        std::vector<int32_t> coords(t->rank() * 2);
         for (int j = 0; j < (int)bounds.outputs[i].size(); j++) {
             coords[j * 2 + 0] = bounds.outputs[i][j].min;
             coords[j * 2 + 1] = bounds.outputs[i][j].extent();
