@@ -1626,7 +1626,7 @@ public:
         Expr i64_1 = in_i64(x), i64_2 = in_i64(x + 16), i64_3 = in_i64(x + 32);
         Expr u64_1 = in_u64(x), u64_2 = in_u64(x + 16), u64_3 = in_u64(x + 32);
         Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
-
+#if 0
         check("f32.sqrt", 1, sqrt(f32_1));
         check("f32.min", 1, min(f32_1, f32_2));
         check("f32.max", 1, max(f32_1, f32_2));
@@ -1648,7 +1648,7 @@ public:
             check("i64.trunc_sat_f64_s", 1, i64(f64_1));
             check("i64.trunc_sat_f64_u", 1, u64(f64_1));
         }
-
+#endif
         if (use_wasm_sign_ext) {
             // TODO(https://github.com/halide/Halide/issues/5130):
             // current LLVM doesn't reliably emit i32.extend8_s here --
@@ -1657,12 +1657,13 @@ public:
             // check("i32.extend8_s", 1, i32(i8(x) ^ 1));
             // check("i32.extend16_s", 1, i32(i16(x) ^ 1));
             // check("i64.extend8_s", 1, i64(i8(x) ^ 1));
-            // check("i64.extend16_s", 1, i32(i16(x) ^ 1));
+            // check("i64.extend16_s", 1, i64(i16(x) ^ 1));
             // check("i64.extend32_s", 1, i64(i32(x) ^ 1));
         }
 
         if (use_wasm_simd128) {
             for (int w = 1; w <= 4; w <<= 1) {
+#if 0
                 // create arbitrary 16-byte constant
                 if (Halide::Internal::get_llvm_version() >= 130) {
                     check("v128.const", 16 * w, u8_1 * u8(42 + x));
@@ -1712,6 +1713,9 @@ public:
                 // (This fails to generate, but that's not entirely surprising -- I don't
                 // think we ever attempt to emit the most general-purpose swizzles in Halide
                 // code, so this may or may not be a defect.)
+                //
+                // TODO: this currently emits a bunch of extract_lane / replace_lane ops,
+                // so we should definitely try to do better.
                 // check("v8x16.swizzle", 16*w, in_u8(in_u8(x+32)));
 
                 // Integer addition
@@ -1732,35 +1736,36 @@ public:
                 check("i16x8.mul", 8 * w, i16_1 * i16_2);
                 check("i32x4.mul", 4 * w, i32_1 * i32_2);
                 check("i64x2.mul", 2 * w, i64_1 * i64_2);
+#endif
 
+#if 0
                 // Integer dot product (16 -> 32)
                 // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // {
-                //     RDom r(0, 4);
-                //     check("i32x4.dot_i16x8_s", 2 * w, sum(i32(in_i16(x * 4 + r)) * in_i16(x * 4 + r + 32)));
-                // }
+                {
+                    RDom r(0, 4);
+                    //check("i32x4.dot_i16x8_s", 2 * w, sum(i32(in_i16(x * 4 + r)) * in_i16(x * 4 + r + 32)));
+                    check("i32x4.dot_i16x8_s", 2 * w, sum(i32(in_i16(x+r)) * in_i16(x+r + 1)));
+                }
+#endif
 
+#if 0
                 // Integer negation
                 check("i8x16.neg", 16 * w, -i8_1);
                 check("i16x8.neg", 8 * w, -i16_1);
                 check("i32x4.neg", 4 * w, -i32_1);
                 check("i64x2.neg", 2 * w, -i64_1);
+#endif
 
-                // Extended integer multiplication
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i16x8.extmul_low_i8x16_s", ???, ???);
-                // check("i16x8.extmul_high_i8x16_s", ???, ???);
-                // check("i16x8.extmul_low_i8x16_u", ???, ???);
-                // check("i16x8.extmul_high_i8x16_u", ???, ???);
-                // check("i32x4.extmul_low_i16x8_s", ???, ???);
-                // check("i32x4.extmul_high_i16x8_s", ???, ???);
-                // check("i32x4.extmul_low_i16x8_u", ???, ???);
-                // check("i32x4.extmul_high_i16x8_u", ???, ???);
-                // check("i64x2.extmul_low_i32x4_s", ???, ???);
-                // check("i64x2.extmul_high_i32x4_s", ???, ???);
-                // check("i64x2.extmul_low_i32x4_u", ???, ???);
-                // check("i64x2.extmul_high_i32x4_u", ???, ???);
-
+                // Extended (widening) integer multiplication
+                check("i16x8.extmul_low_i8x16_s", 8 * w, i16(i8_1) * i8_2);
+                check("i32x4.extmul_low_i16x8_s", 4 * w, i32(i16_1) * i16_2);
+                check("i64x2.extmul_low_i32x4_s", 2 * w, i64(i32_1) * i32_2);
+                if (w > 1) {
+                    check("i16x8.extmul_high_i8x16_s", 8 * w, i16(i8_1) * i8_2);
+                    check("i32x4.extmul_high_i16x8_s", 4 * w, i32(i16_1) * i16_2);
+                    check("i64x2.extmul_high_i32x4_s", 2 * w, i64(i32_1) * i32_2);
+                }
+#if 0
                 // Extended pairwise integer addition
                 // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
                 // check("i16x8.extadd_pairwise_i8x16_s", ???, ???);
@@ -2122,6 +2127,7 @@ public:
                 // check("i64x2.extend_high_i32x4_s", 2*w, i64(i32_1));
                 // check("i64x2.extend_low_i32x4_u", 2*w, u64(u32_1));
                 // check("i64x2.extend_high_i32x4_u", 2*w, u64(u32_1));
+#endif
             }
         }
     }

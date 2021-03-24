@@ -112,6 +112,9 @@ public:
 
         if (!found_it) {
             error_msg << "Failed: " << msg.str() << "\n";
+asm_file.close();
+std::cerr<<error_msg.str();
+exit(1);
         }
 
         asm_file.close();

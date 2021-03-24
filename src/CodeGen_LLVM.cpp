@@ -2521,6 +2521,7 @@ void CodeGen_LLVM::visit(const Call *op) {
     internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
 
+debug(0) << "CALL " << op->name << " isvec " << (int)op->type.is_vector()<<"\n";
     if (op->type.is_vector()) {
         value = call_overloaded_intrin(op->type, op->name, op->args);
         if (value) {
@@ -4686,7 +4687,7 @@ void CodeGen_LLVM::declare_intrin_overload(const std::string &name, const Type &
 }
 
 Value *CodeGen_LLVM::call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args) {
-    constexpr int debug_level = 4;
+    constexpr int debug_level = 0;
 
     debug(debug_level) << "call_overloaded_intrin: " << result_type << " " << name << "(";
     const char *comma = "";
