@@ -172,9 +172,12 @@ using int16x32_t = xb_vecNx16;
 using uint16x32_t = xb_vecNx16U;
 using int24_t = xb_int24;
 using int24x64_t = xb_vec2Nx24;
+using uint24x64_t = xb_vec2Nx24;
 using int32x16_t = xb_vecN_2x32v;
 using uint32x16_t = xb_vecN_2x32Uv;
+using int48_t = xb_int48;
 using int48x32_t = xb_vecNx48;
+using uint48x32_t = xb_vecNx48;
 using int64x16_t = xb_vecN_2x64w;
 using uint1x16_t = vboolN_2;
 using uint1x32_t = vboolN;
@@ -204,7 +207,6 @@ struct MultipleOfNativeVector {
   }
 };
 
-// TODO(vksnk): generate these definitions.
 using int8x128_t = MultipleOfNativeVector<int8x64_t, 2>;
 using int8x256_t = MultipleOfNativeVector<int8x64_t, 4>;
 using uint8x128_t = MultipleOfNativeVector<uint8x64_t, 2>;
@@ -214,11 +216,11 @@ using uint16x64_t = MultipleOfNativeVector<uint16x32_t, 2>;
 using int16x128_t = MultipleOfNativeVector<int16x32_t, 4>;
 using uint16x128_t = MultipleOfNativeVector<uint16x32_t, 4>;
 using int24x128_t = MultipleOfNativeVector<int24x64_t, 2>;
-using int24x256_t = MultipleOfNativeVector<int24x64_t, 4>;
 using int32x32_t = MultipleOfNativeVector<int32x16_t, 2>;
 using uint32x32_t = MultipleOfNativeVector<uint32x16_t, 2>;
 using int32x64_t = MultipleOfNativeVector<int32x16_t, 4>;
 using uint32x64_t = MultipleOfNativeVector<uint32x16_t, 4>;
+using int48x64_t = MultipleOfNativeVector<int48x32_t, 2>;
 using float32x32_t = MultipleOfNativeVector<float32x16_t, 2>;
 using float32x64_t = MultipleOfNativeVector<float32x16_t, 4>;
 
@@ -1005,6 +1007,10 @@ HALIDE_ALWAYS_INLINE int16x32_t convert_to_int16x32_t_from_int32x32_t(const int3
   return IVP_PACKLNX48(wide);
 }
 
+HALIDE_ALWAYS_INLINE int48x32_t convert_to_int48x32_t_from_int32x32_t(const int32x32_t& src) {
+  return IVP_CVT48SNX32(src.native_vector[1], src.native_vector[0]);
+}
+
 HALIDE_ALWAYS_INLINE int16x32_t convert_to_int16x32_t_from_uint32x32_t(const uint32x32_t& src) {
   xb_vecNx48 wide = IVP_CVT48UNX32(src.native_vector[1], src.native_vector[0]);
   return IVP_PACKLNX48(wide);
@@ -1129,40 +1135,21 @@ HALIDE_ALWAYS_INLINE int16x32_t convert_to_int16x32_t_from_float32x32_t(const fl
     return convert_to_int16x32_t_from_int32x32_t(tmp);
 }
 
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_to_native(const int16x64_t& src, int index, int native_lanes, int total_lanes) {
-  return src.native_vector[index];
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_to_native(const int16x32_t& src, int index, int native_lanes, int total_lanes) {
-  return src;
-}
 
 HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_concat_from_native(const int16x32_t& a, const int16x32_t& b) {
     return int16x64_t(int16x64_t::from_native_vector, a, b);
-}
-
-HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_slice_to_native(const uint16x64_t& src, int index, int native_lanes, int total_lanes) {
-  return src.native_vector[index];
-}
-
-HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_slice_to_native(const uint16x32_t& src, int index, int native_lanes, int total_lanes) {
-  return src;
 }
 
 HALIDE_ALWAYS_INLINE uint16x64_t halide_xtensa_concat_from_native(const uint16x32_t& a, const uint16x32_t& b) {
     return uint16x64_t(uint16x64_t::from_native_vector, a, b);
 }
 
-HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_slice_to_native(const int32x32_t& src, int index, int native_lanes, int total_lanes) {
-  return src.native_vector[index];
+HALIDE_ALWAYS_INLINE int48x64_t halide_xtensa_concat_from_native(const int48x32_t& a, const int48x32_t& b) {
+    return int48x64_t(int48x64_t::from_native_vector, a, b);
 }
 
 HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_concat_from_native(const int32x16_t& a, const int32x16_t& b) {
     return int32x32_t(int32x32_t::from_native_vector, a, b);
-}
-
-HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_slice_to_native(const int32x64_t& src, int index, int native_lanes, int total_lanes) {
-  return src.native_vector[index];
 }
 
 HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_slice_to_native_i32x32_t(const int32x64_t& src, int index) {
@@ -1171,19 +1158,6 @@ HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_slice_to_native_i32x32_t(const int
 
 HALIDE_ALWAYS_INLINE int32x64_t halide_xtensa_concat_from_native(const int32x16_t& a, const int32x16_t& b, const int32x16_t& c, const int32x16_t& d) {
     return int32x64_t(int32x64_t::from_native_vector, a, b, c, d);
-}
-
-HALIDE_ALWAYS_INLINE uint32x16_t halide_xtensa_slice_to_native(const uint32x32_t& src, int index, int native_lanes, int total_lanes) {
-  return src.native_vector[index];
-}
-
-HALIDE_ALWAYS_INLINE uint1x16_t halide_xtensa_slice_to_native(const uint1x32_t& src, int index, int native_lanes, int total_lanes) {
-  return (index == 0)?IVP_EXTRACTBLN(src):IVP_EXTRACTBHN(src);
-}
-
-
-HALIDE_ALWAYS_INLINE float32x16_t halide_xtensa_slice_to_native(const float32x32_t& src, int index, int native_lanes, int total_lanes) {
-  return src.native_vector[index];
 }
 
 HALIDE_ALWAYS_INLINE uint32x32_t halide_xtensa_concat_from_native(const uint32x16_t& a, const uint32x16_t& b) {
@@ -1345,42 +1319,68 @@ class ScopedDmaInitializer {
         stream << native_typedef_decl;
         stream << std::flush;
 
-        std::set<Type> native_xtensa_vectors = {
+        std::set<Type> native_vector_types = {
+            Type(Type::Int, 8, 64),
+            Type(Type::UInt, 8, 64),
+            Type(Type::Int, 16, 32),
+            Type(Type::UInt, 16, 32),
+            Type(Type::Int, 32, 16),
+            Type(Type::UInt, 32, 16),
+            Type(Type::Int, 24, 64),
+            Type(Type::UInt, 24, 64),
+            Type(Type::Int, 48, 32),
+            Type(Type::UInt, 48, 32),
+            Type(Type::Int, 64, 16),
+            Type(Type::Float, 16, 32),
+            Type(Type::Float, 32, 16),
+        };
+
+        std::set<Type> predefined_vectors = {
             Int(8, 4),
             UInt(8, 4),
-            Int(8, 64),
-            UInt(8, 64),
             Int(8, 128),
             UInt(8, 128),
             Int(8, 256),
             UInt(8, 256),
-            Int(16, 32),
-            UInt(16, 32),
             Int(16, 64),
             UInt(16, 64),
             Int(16, 128),
             UInt(16, 128),
-            Int(24, 64),
-            UInt(24, 64),
             Int(24, 128),
             UInt(24, 128),
-            Int(24, 256),
-            UInt(24, 256),
-            Int(32, 16),
-            UInt(32, 16),
             Int(32, 32),
             UInt(32, 32),
             Int(32, 64),
             UInt(32, 64),
-            Float(32, 16),
             Float(32, 32),
             Int(48, 32),
             UInt(48, 32),
+            Int(48, 64),
+            UInt(48, 64),
         };
 
+        std::set<Type> multiple_of_native_types;
+        for (const auto &type : vector_types) {
+            if (predefined_vectors.count(type) > 0) {
+                continue;
+            }
+            for (const auto &native_vector : native_vector_types) {
+                if ((native_vector.code() == type.code()) && (native_vector.bits() == type.bits()) && (type.lanes() > native_vector.lanes()) && (type.lanes() % native_vector.lanes() == 0)) {
+                    stream << "using " << print_type(type) << " = MultipleOfNativeVector<" << print_type(native_vector) << ", " << type.lanes() / native_vector.lanes() << ">;\n";
+                    multiple_of_native_types.insert(type);
+                    break;
+                }
+            }
+        }
+
         std::set<Type> filtered_vector_types;
-        std::set_difference(vector_types.begin(), vector_types.end(), native_xtensa_vectors.begin(), native_xtensa_vectors.end(),
-                            std::inserter(filtered_vector_types, filtered_vector_types.end()));
+        for (const auto &t : vector_types) {
+            if ((native_vector_types.count(t) > 0) || (predefined_vectors.count(t) > 0) || (multiple_of_native_types.count(t) > 0)) {
+                continue;
+            }
+            filtered_vector_types.insert(t);
+        }
+
         CodeGen_C::add_vector_typedefs(filtered_vector_types);
     }
 }
@@ -1574,6 +1574,11 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
             << print_type(op->type) << ", " << print_type(op->type.element_of())
             << ", " << op->args[0].type().lanes() << ", " << op->type.lanes()
             << ">(" << args[0] << ", " << args[1] << ")";
+        return rhs.str();
+    }
+
+    if (op->name == "halide_xtensa_slice_to_native") {
+        rhs << args[0] << ".native_vector[" << args[1] << "]";
         return rhs.str();
     }
 
@@ -2184,6 +2189,7 @@ void CodeGen_Xtensa::visit(const For *op) {
 
     // NOTE(vksnk): poor man's profiling below.
     // if (current_loop_level == 1) {
+    //     open_scope();
     //     stream << get_indent() << "int cycles_start, cycles_stop, cyclesAV; (void)cycles_stop; (void)cyclesAV;\n";
     //     stream << get_indent() << "cycles_start = GetCycleCount();\n";
     // }
@@ -2211,6 +2217,9 @@ void CodeGen_Xtensa::visit(const For *op) {
     //     stream << get_indent() << "cycles_stop = GetCycleCount();\n";
     //     stream << get_indent() << "cyclesAV = cycles_stop - cycles_start;\n";
     //     stream << get_indent() << "printf(\"" << op->name << ": %d\\n\", cyclesAV);\n";
+    // }
+    // if (current_loop_level == 1) {
+    //     close_scope("profiler" + print_name(op->name));
     // }
     current_loop_level--;
 }

@@ -35,11 +35,12 @@ enum class ValType {
     Int16 = 6,
     Int24 = 7,
     Int32 = 8,
-    Int64 = 9,
-    Float16 = 10,
-    Float32 = 11,
-    Float64 = 12,
-    All = 13,  // General type (including all previous types)
+    Int48 = 9,
+    Int64 = 10,
+    Float16 = 11,
+    Float32 = 12,
+    Float64 = 13,
+    All = 14,  // General type (including all previous types)
 };
 
 ValType convert_halide_type_to_val_type(const Type &halide_t) {
@@ -65,9 +66,11 @@ ValType convert_halide_type_to_val_type(const Type &halide_t) {
         } else if (halide_t.bits() == 16) {
             val_t = ValType::Int16;
         } else if (halide_t.bits() == 24) {
-            val_t = ValType::Int16;
+            val_t = ValType::Int24;
         } else if (halide_t.bits() == 32) {
             val_t = ValType::Int32;
+        } else if (halide_t.bits() == 48) {
+            val_t = ValType::Int48;
         } else {
             internal_assert(halide_t.bits() == 64);
             val_t = ValType::Int64;
