@@ -1412,6 +1412,13 @@ public:
             check(arm32 ? "vsubl.s32" : "ssubl", 2 * w, i64(i32_1) - i64(i32_2));
             check(arm32 ? "vsubl.u32" : "usubl", 2 * w, u64(u32_1) - u64(u32_2));
 
+            check(arm32 ? "vsubl.s8" : "ssubl", 8 * w, i16(i8_1) - i16(in_i8(0)));
+            check(arm32 ? "vsubl.u8" : "usubl", 8 * w, u16(u8_1) - u16(in_u8(0)));
+            check(arm32 ? "vsubl.s16" : "ssubl", 4 * w, i32(i16_1) - i32(in_i16(0)));
+            check(arm32 ? "vsubl.u16" : "usubl", 4 * w, u32(u16_1) - u32(in_u16(0)));
+            check(arm32 ? "vsubl.s32" : "ssubl", 2 * w, i64(i32_1) - i64(in_i32(0)));
+            check(arm32 ? "vsubl.u32" : "usubl", 2 * w, u64(u32_1) - u64(in_u32(0)));
+
             // VSUBW    I       -       Subtract Wide
             check(arm32 ? "vsubw.s8" : "ssubw", 8 * w, i16_1 - i8_1);
             check(arm32 ? "vsubw.u8" : "usubw", 8 * w, u16_1 - u8_1);
