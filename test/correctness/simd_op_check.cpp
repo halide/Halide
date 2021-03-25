@@ -1767,11 +1767,38 @@ public:
                 }
 
                 // Extended pairwise integer addition
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i16x8.extadd_pairwise_i8x16_s", ???, ???);
-                // check("i16x8.extadd_pairwise_i8x16_u", ???, ???);
-                // check("i32x4.extadd_pairwise_i16x8_s", ???, ???);
-                // check("i32x4.extadd_pairwise_i16x8_u", ???, ???);
+
+                        // check(arm32 ? "vpaddl.s8" : "saddlp", 16, sum_(i16(in_i8(f * x + r))));
+                        // check(arm32 ? "vpaddl.u8" : "uaddlp", 16, sum_(i16(in_u8(f * x + r))));
+                        // check(arm32 ? "vpaddl.u8" : "uaddlp", 16, sum_(u16(in_u8(f * x + r))));
+
+                        // check(arm32 ? "vpaddl.s16" : "saddlp", 8, sum_(i32(in_i16(f * x + r))));
+                        // check(arm32 ? "vpaddl.u16" : "uaddlp", 8, sum_(i32(in_u16(f * x + r))));
+                        // check(arm32 ? "vpaddl.u16" : "uaddlp", 8, sum_(u32(in_u16(f * x + r))));
+
+                        // check(arm32 ? "vpaddl.s32" : "saddlp", 4, sum_(i64(in_i32(f * x + r))));
+                        // check(arm32 ? "vpaddl.u32" : "uaddlp", 4, sum_(i64(in_u32(f * x + r))));
+                        // check(arm32 ? "vpaddl.u32" : "uaddlp", 4, sum_(u64(in_u32(f * x + r))));
+                for (int f : {2, 4}) {
+                    RDom r(0, f);
+
+                    // A summation reduction that starts at something
+                    // non-trivial, to avoid llvm simplifying accumulating
+                    // widening summations into just widening summations.
+                    auto sum_ = [&](Expr e) {
+                        Func f;
+                        f(x) = cast(e.type(), 123);
+                        f(x) += e;
+                        return f(x);
+                    };
+
+                    check("i16x8.extadd_pairwise_i8x16_s", 8 * w, sum_(i16(in_i8(f * x + r))));
+                    // check("i16x8.extadd_pairwise_i8x16_u", 8 * w, sum_(i16(in_u8(f * x + r))));
+                    // check("i16x8.extadd_pairwise_i8x16_u", 8 * w, sum_(u16(in_u8(f * x + r))));
+                    // check("i16x8.extadd_pairwise_i8x16_u", ???, ???);
+                    // check("i32x4.extadd_pairwise_i16x8_s", ???, ???);
+                    // check("i32x4.extadd_pairwise_i16x8_u", ???, ???);
+                }
 
                 // Saturating integer addition
                 std::string sat = Halide::Internal::get_llvm_version() >= 130 ? "sat" : "saturate";
