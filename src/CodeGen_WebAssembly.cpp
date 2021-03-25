@@ -1,7 +1,8 @@
-#include "CodeGen_Posix.h"
-
-#include "LLVM_Headers.h"
 #include <sstream>
+
+#include "CodeGen_Posix.h"
+#include "IROperator.h"
+#include "LLVM_Headers.h"
 
 namespace Halide {
 namespace Internal {
@@ -27,6 +28,7 @@ protected:
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
     bool use_pic() const override;
+    void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
 };
 
 CodeGen_WebAssembly::CodeGen_WebAssembly(const Target &t)
@@ -113,6 +115,59 @@ void CodeGen_WebAssembly::init_module() {
         fn->addFnAttr(llvm::Attribute::ReadNone);
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
+}
+
+void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
+    const int factor = op->value.type().lanes() / op->type.lanes();
+
+    const char *intrin = nullptr;
+    std::vector<Expr> intrin_args;
+    Expr accumulator = init;
+    if (op->op == VectorReduce::Add && factor == 2) {
+        Type narrow_type = op->type.narrow().with_lanes(op->value.type().lanes());
+        Expr narrow = lossless_cast(narrow_type, op->value);
+        if (!narrow.defined() && op->type.is_int()) {
+            // We can also safely accumulate from a uint into a
+            // wider int, because the addition uses at most one
+            // extra bit.
+            narrow = lossless_cast(narrow_type.with_code(Type::UInt), op->value);
+        }
+        if (narrow.defined()) {
+            intrin = "pairwise_widening_add";
+            intrin_args = {narrow};
+        }
+        // wasm has no non-widening pairwise_add
+    }
+
+    if (intrin) {
+        value = call_overloaded_intrin(op->type, intrin, intrin_args);
+        if (value) {
+            if (accumulator.defined()) {
+                // We still have an initial value to take care of
+                string n = unique_name('t');
+                sym_push(n, value);
+                Expr v = Variable::make(accumulator.type(), n);
+                switch (op->op) {
+                case VectorReduce::Add:
+                    accumulator += v;
+                    break;
+                case VectorReduce::Min:
+                    accumulator = Halide::min(accumulator, v);
+                    break;
+                case VectorReduce::Max:
+                    accumulator = Halide::max(accumulator, v);
+                    break;
+                default:
+                    internal_error << "unreachable";
+                }
+                codegen(accumulator);
+                sym_pop(n);
+            }
+            return;
+        }
+    }
+
+    CodeGen_Posix::codegen_vector_reduce(op, init);
 }
 
 string CodeGen_WebAssembly::mcpu() const {
