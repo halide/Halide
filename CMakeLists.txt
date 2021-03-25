@@ -42,6 +42,11 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Increase the stack size for MSVC builds:
+if(MSVC)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:8388608")
+endif()
+
 # Build Halide with ccache if the package is present
 option(Halide_CCACHE_BUILD "Set to ON for a ccache enabled build" OFF)
 if (Halide_CCACHE_BUILD)
@@ -60,6 +65,7 @@ if (Halide_CCACHE_BUILD)
         message(FATAL_ERROR "Unable to find the program ccache. Set Halide_CCACHE_BUILD to OFF")
     endif ()
 endif ()
+
 
 ##
 # Import dependencies
