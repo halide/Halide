@@ -67,17 +67,11 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"llvm.wasm.avgr.unsigned.v8i16", UInt(16, 8), "rounding_halving_add", {UInt(16, 8), UInt(16, 8)}, Target::WasmSimd128},
 
 #if LLVM_VERSION >= 130
-    {"widening_mul_i8x8", Int(16, 8), "widening_mul", {Int(8, 8), Int(8, 8)}, Target::WasmSimd128},
     {"widening_mul_i8x16", Int(16, 16), "widening_mul", {Int(8, 16), Int(8, 16)}, Target::WasmSimd128},
-    {"widening_mul_i16x4", Int(32, 4), "widening_mul", {Int(16, 4), Int(16, 4)}, Target::WasmSimd128},
     {"widening_mul_i16x8", Int(32, 8), "widening_mul", {Int(16, 8), Int(16, 8)}, Target::WasmSimd128},
-    {"widening_mul_i32x2", Int(64, 2), "widening_mul", {Int(32, 2), Int(32, 2)}, Target::WasmSimd128},
     {"widening_mul_i32x4", Int(64, 4), "widening_mul", {Int(32, 4), Int(32, 4)}, Target::WasmSimd128},
-    {"widening_mul_u8x8", UInt(16, 8), "widening_mul", {UInt(8, 8), UInt(8, 8)}, Target::WasmSimd128},
     {"widening_mul_u8x16", UInt(16, 16), "widening_mul", {UInt(8, 16), UInt(8, 16)}, Target::WasmSimd128},
-    {"widening_mul_u16x4", UInt(32, 4), "widening_mul", {UInt(16, 4), UInt(16, 4)}, Target::WasmSimd128},
     {"widening_mul_u16x8", UInt(32, 8), "widening_mul", {UInt(16, 8), UInt(16, 8)}, Target::WasmSimd128},
-    {"widening_mul_u32x2", UInt(64, 2), "widening_mul", {UInt(32, 2), UInt(32, 2)}, Target::WasmSimd128},
     {"widening_mul_u32x4", UInt(64, 4), "widening_mul", {UInt(32, 4), UInt(32, 4)}, Target::WasmSimd128},
 #endif
 
