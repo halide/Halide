@@ -345,6 +345,9 @@ add_subdirectory(runtime)
 # Build the Halide mono-header.
 ##
 
+set(CXX_COMPILER_IS_GNU_OR_CLANG $<CXX_COMPILER_ID:GNU,Clang,AppleClang>)
+set(CXX_COMPILER_IS_GNU_OR_CLANG_AND_NOT_CLANGCL $<AND:${CXX_COMPILER_IS_GNU_OR_CLANG},$<NOT:$<STREQUAL:${CMAKE_CXX_SIMULATE_ID},MSVC>>>)
+
 set(HALIDE_H "${Halide_BINARY_DIR}/include/Halide.h")
 set(LICENSE_PATH "${Halide_SOURCE_DIR}/LICENSE.txt")
 add_custom_command(OUTPUT "${Halide_BINARY_DIR}/include/Halide.h"
@@ -372,7 +375,7 @@ target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
 target_compile_definitions(Halide
                            PRIVATE
                            $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>
-                           $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:WITH_INTROSPECTION>)
+                           $<${CXX_COMPILER_IS_GNU_OR_CLANG_AND_NOT_CLANGCL}:WITH_INTROSPECTION>)
 
 include(TargetExportScript)
 ## TODO: implement something similar for Windows/link.exe
@@ -406,10 +409,10 @@ target_include_directories(Halide INTERFACE ${Halide_INCLUDE_PATH})
 
 target_compile_options(Halide
                        PRIVATE
-                       $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall>
-                       $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-function>
-                       $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wcast-qual>
-                       $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wignored-qualifiers>
+                       $<${CXX_COMPILER_IS_GNU_OR_CLANG_AND_NOT_CLANGCL}:-Wall>
+                       $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-unused-function>
+                       $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wcast-qual>
+                       $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wignored-qualifiers>
 
                        $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Woverloaded-virtual>
                        $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wsuggest-override>

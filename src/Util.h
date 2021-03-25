@@ -44,11 +44,6 @@
 #define HALIDE_NO_USER_CODE_INLINE HALIDE_NEVER_INLINE
 #endif
 
-// On windows, Halide needs a larger stack than the default MSVC provides
-#ifdef _MSC_VER
-#pragma comment(linker, "/STACK:8388608,1048576")
-#endif
-
 namespace Halide {
 
 /** Load a plugin in the form of a dynamic library (e.g. for custom autoschedulers).
