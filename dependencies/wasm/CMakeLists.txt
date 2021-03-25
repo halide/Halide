@@ -71,7 +71,10 @@ if (WITH_WASM_SHELL)
     # We want to deliberately choose a stable version (rather than top-of-tree);
     # this might be a canary version (if needed to get the updates to v8 that we need)
     # but should be carefully tested before landing.
-    set(WASM_SHELL_VERSION 8.8.97)
+    #
+    # Note that V8 8.9.238 is the first version claiming to implement the final simd spec;
+    # see https://github.com/WebAssembly/simd/blob/master/proposals/simd/ImplementationStatus.md
+    set(WASM_SHELL_VERSION 8.9.238)
     set(WASM_SHELL_URL "https://storage.googleapis.com/chromium-v8/official/canary/v8-${WASM_SHELL_PLATFORM}-rel-${WASM_SHELL_VERSION}.zip")
     message(STATUS "Fetching WASM_SHELL ${WASM_SHELL_URL}...")
     FetchContent_Declare(wasm_shell URL "${WASM_SHELL_URL}")
