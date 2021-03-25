@@ -18,7 +18,7 @@ public:
 
     Func blur_cols_transpose(Func in, Expr height, bool first_pass) {
         Expr diameter = 2 * radius + 1;
-        Expr inv_scale = 1.f / diameter;
+        Expr inv_diameter = 1.f / diameter;
         RDom r_init(-radius, diameter);
         RDom ry(1, height - 1);
 
@@ -32,6 +32,30 @@ public:
         // Blur in y
         std::vector<Func> blurs, dithered;
         for (Type t : {UInt(16), UInt(32)}) {
+
+            const bool should_dither = true;
+
+            auto normalize = [&](Expr num) {
+                if (!should_dither) {
+                    // Exact integer division using tricks in the spirit of Hacker's Delight.
+                    Type wide = t.with_bits(t.bits() * 2);
+                    Expr shift = 31 - count_leading_zeros(diameter);
+                    Expr wide_one = cast(wide, 1);
+                    Expr mul = (wide_one << (t.bits() + shift + 1)) / diameter - (1 << t.bits()) + 1;
+                    num += diameter / 2;
+                    Expr e = cast(wide, num);
+                    e *= mul;
+                    e = e >> t.bits();
+                    e = cast(t, e);
+                    e += (num - e) / 2;
+                    e = e >> shift;
+                    e = cast<uint8_t>(e);
+                    return e;
+                } else {
+                    return cast<uint8_t>(floor(num * inv_diameter + random_float()));
+                }
+            };
+
             Func blur{"blur_" + std::to_string(t.bits())};
             blur(x, y) = undef(t);
             blur(x, 0) = cast(t, 0);
@@ -53,8 +77,7 @@ public:
             blurs.push_back(blur);
 
             Func dither;
-            dither(x, y) = cast<uint8_t>(floor(blur(x, y) * inv_scale + random_float()));
-            //dither(x, y) = cast<uint8_t>(blur(x, y));
+            dither(x, y) = normalize(blur(x, y));
             dithered.push_back(dither);
         }
 
