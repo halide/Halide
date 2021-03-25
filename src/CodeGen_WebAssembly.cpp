@@ -1,15 +1,18 @@
+#include <functional>
 #include <sstream>
 
 #include "CodeGen_Posix.h"
+#include "ConciseCasts.h"
+#include "IRMatch.h"
 #include "IROperator.h"
 #include "LLVM_Headers.h"
 
 namespace Halide {
 namespace Internal {
 
-using std::string;
-
 #if defined(WITH_WEBASSEMBLY)
+
+using namespace Halide::ConciseCasts;
 
 namespace {
 
@@ -23,8 +26,8 @@ protected:
 
     void init_module() override;
 
-    string mcpu() const override;
-    string mattrs() const override;
+    std::string mcpu() const override;
+    std::string mattrs() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
     bool use_pic() const override;
@@ -69,6 +72,7 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"llvm.wasm.avgr.unsigned.v8i16", UInt(16, 8), "rounding_halving_add", {UInt(16, 8), UInt(16, 8)}, Target::WasmSimd128},
 
 #if LLVM_VERSION >= 130
+    // With some work, some of these could possibly be adapted to work under earlier versions of LLVM.
     {"widening_mul_i8x16", Int(16, 16), "widening_mul", {Int(8, 16), Int(8, 16)}, Target::WasmSimd128},
     {"widening_mul_i16x8", Int(32, 8), "widening_mul", {Int(16, 8), Int(16, 8)}, Target::WasmSimd128},
     {"widening_mul_i32x4", Int(64, 4), "widening_mul", {Int(32, 4), Int(32, 4)}, Target::WasmSimd128},
@@ -80,6 +84,10 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"llvm.wasm.extadd.pairwise.unsigned.v8i16", UInt(16, 8), "pairwise_widening_add", {UInt(8, 16)}, Target::WasmSimd128},
     {"llvm.wasm.extadd.pairwise.signed.v4i32", Int(32, 4), "pairwise_widening_add", {Int(16, 8)}, Target::WasmSimd128},
     {"llvm.wasm.extadd.pairwise.unsigned.v4i32", UInt(32, 4), "pairwise_widening_add", {UInt(16, 8)}, Target::WasmSimd128},
+    // There isn't an op for u8x16 -> i16x8, but we can just the u8x16 -> u16x8 op and treat the result as i16x8,
+    // since the result will be the same for our purposes here
+    {"llvm.wasm.extadd.pairwise.unsigned.v8i16", Int(16, 8), "pairwise_widening_add", {UInt(8, 16)}, Target::WasmSimd128},
+    {"llvm.wasm.extadd.pairwise.unsigned.v4i32", Int(32, 4), "pairwise_widening_add", {UInt(16, 8)}, Target::WasmSimd128},
 #endif
 
     // TODO: LLVM should support this directly, but doesn't yet.
@@ -118,65 +126,113 @@ void CodeGen_WebAssembly::init_module() {
 }
 
 void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
+#if LLVM_VERSION >= 130
+    struct Pattern {
+        VectorReduce::Operator reduce_op;
+        int factor;
+        Expr pattern;
+        const char *intrin;
+        Type narrow_type;
+        uint32_t flags;
+        enum {
+            None = 0,
+            CombineInit = 1 << 0,
+        };
+        Target::Feature required_feature;
+    };
+    // clang-format off
+    static const Pattern patterns[] = {
+        {VectorReduce::Add, 2, i16(wild_i8x_), "pairwise_widening_add", Int(8), Pattern::None, Target::WasmSimd128},
+        {VectorReduce::Add, 2, u16(wild_u8x_), "pairwise_widening_add", UInt(8), Pattern::None, Target::WasmSimd128},
+        {VectorReduce::Add, 2, i16(wild_u8x_), "pairwise_widening_add", UInt(8), Pattern::None, Target::WasmSimd128},
+
+        {VectorReduce::Add, 2, i32(wild_i16x_), "pairwise_widening_add", Int(16), Pattern::None, Target::WasmSimd128},
+        {VectorReduce::Add, 2, u32(wild_u16x_), "pairwise_widening_add", UInt(16), Pattern::None, Target::WasmSimd128},
+        {VectorReduce::Add, 2, i32(wild_u16x_), "pairwise_widening_add", UInt(16), Pattern::None, Target::WasmSimd128},
+    };
+    // clang-format on
+
+    // Other values will be added soon, so this switch isn't actually pointless
+    using ValuePtr = llvm::Value *;
+    std::function<ValuePtr(ValuePtr, ValuePtr)> binop = nullptr;
+    switch (op->op) {
+    case VectorReduce::Add:
+        binop = [this](ValuePtr x, ValuePtr y) -> ValuePtr { return this->builder->CreateAdd(x, y); };
+        break;
+    default:
+        break;
+    }
+
     const int factor = op->value.type().lanes() / op->type.lanes();
-
-    const char *intrin = nullptr;
-    std::vector<Expr> intrin_args;
-    Expr accumulator = init;
-    if (op->op == VectorReduce::Add && factor == 2) {
-        Type narrow_type = op->type.narrow().with_lanes(op->value.type().lanes());
-        Expr narrow = lossless_cast(narrow_type, op->value);
-        if (!narrow.defined() && op->type.is_int()) {
-            // We can also safely accumulate from a uint into a
-            // wider int, because the addition uses at most one
-            // extra bit.
-            narrow = lossless_cast(narrow_type.with_code(Type::UInt), op->value);
+    std::vector<Expr> matches;
+    for (const Pattern &p : patterns) {
+        if (op->op != p.reduce_op || (factor % p.factor) != 0) {
+            continue;
         }
-        if (narrow.defined()) {
-            intrin = "pairwise_widening_add";
-            intrin_args = {narrow};
+        if (!target.has_feature(p.required_feature)) {
+            continue;
         }
-        // wasm has no non-widening pairwise_add
-    }
-
-    if (intrin) {
-        value = call_overloaded_intrin(op->type, intrin, intrin_args);
-        if (value) {
-            if (accumulator.defined()) {
-                // We still have an initial value to take care of
-                string n = unique_name('t');
-                sym_push(n, value);
-                Expr v = Variable::make(accumulator.type(), n);
-                switch (op->op) {
-                case VectorReduce::Add:
-                    accumulator += v;
-                    break;
-                case VectorReduce::Min:
-                    accumulator = Halide::min(accumulator, v);
-                    break;
-                case VectorReduce::Max:
-                    accumulator = Halide::max(accumulator, v);
-                    break;
-                default:
-                    internal_error << "unreachable";
-                }
-                codegen(accumulator);
-                sym_pop(n);
+        if (expr_match(p.pattern, op->value, matches)) {
+            if (factor != p.factor) {
+                Expr equiv = VectorReduce::make(op->op, op->value, op->value.type().lanes() / p.factor);
+                equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
+                codegen_vector_reduce(equiv.as<VectorReduce>(), init);
+                return;
             }
-            return;
+
+            if (const Shuffle *s = matches[0].as<Shuffle>()) {
+                if (s->is_broadcast() && matches.size() == 2) {
+                    // LLVM wants the broadcast as the second operand for the broadcasting
+                    // variant of udot/sdot.
+                    std::swap(matches[0], matches[1]);
+                }
+            }
+            if (p.narrow_type.bits() > 0) {
+                bool all_defined = true;
+                for (Expr &e : matches) {
+                    e = lossless_cast(p.narrow_type.with_lanes(e.type().lanes()), e);
+                    all_defined &= e.defined();
+                }
+                if (!all_defined) {
+                    continue;
+                }
+            }
+            if (p.flags & Pattern::CombineInit) {
+                // The intrinsic accepts the first value as an accumulator.
+                // Insert in in the front of the vector. (No current wasm code does this;
+                // left here as it might be useful for subsequent work.)
+                Expr init_safe = init.defined() ? init : make_zero(op->type);
+                matches.insert(matches.begin(), 1, init_safe);
+                value = call_overloaded_intrin(op->type, p.intrin, matches);
+                if (value) {
+                    return;
+                }
+            } else {
+                value = call_overloaded_intrin(op->type, p.intrin, matches);
+                if (value) {
+                    if (init.defined()) {
+                        internal_assert(binop != nullptr) << "unsupported op";
+                        ValuePtr x = value;
+                        ValuePtr y = codegen(init);
+                        value = binop(x, y);
+                    }
+                    return;
+                }
+            }
         }
     }
+#endif  // LLVM_VERSION >= 130
 
     CodeGen_Posix::codegen_vector_reduce(op, init);
 }
 
-string CodeGen_WebAssembly::mcpu() const {
+std::string CodeGen_WebAssembly::mcpu() const {
     return "";
 }
 
-string CodeGen_WebAssembly::mattrs() const {
+std::string CodeGen_WebAssembly::mattrs() const {
     std::ostringstream s;
-    string sep;
+    std::string sep;
 
     if (target.has_feature(Target::WasmSignExt)) {
         s << sep << "+sign-ext";
