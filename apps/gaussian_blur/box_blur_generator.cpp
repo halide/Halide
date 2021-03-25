@@ -22,10 +22,6 @@ public:
         RDom r_init(-radius, diameter);
         RDom ry(1, height - 1);
 
-        Func blur{"blur"};
-
-        Type t = UInt(32);
-
         Func wrap("wrap");
         wrap(x, y) = in(x, y);
 
@@ -34,54 +30,75 @@ public:
         transpose(x, y) = wrap(y, x);
 
         // Blur in y
-        blur(x, y) = undef(t);
+        std::vector<Func> blurs, dithered;
+        for (Type t : {UInt(16), UInt(32)}) {
+            Func blur{"blur_" + std::to_string(t.bits())};
+            blur(x, y) = undef(t);
+            blur(x, 0) = cast(t, 0);
+            blur(x, 0) += cast(t, transpose(x, r_init));
 
-        blur(x, 0) = cast(t, 0);
-        blur(x, 0) += cast(t, transpose(x, r_init));
+            // Derivative of a box
+            Expr v =
+                (cast(Int(16), transpose(x, ry + radius)) -
+                 transpose(x, ry - radius - 1));
 
-        // Derivative of a box
-        Expr v =
-            (cast(Int(first_pass ? 16 : 32), transpose(x, ry + radius)) -
-             transpose(x, ry - radius - 1));
+            // It's a 9-bit signed integer. Sign-extend then treat it as a
+            // uint16/32 with wrap-around. We know that the result can't
+            // possibly be negative in the end, so this gives us an extra
+            // bit of headroom while accumulating.
+            v = cast(t, cast(Int(t.bits()), v));
 
-        // It's a 9-bit signed integer. Sign-extend then treat it as a
-        // uint16/32 with wrap-around. We know that the result can't
-        // possibly be negative in the end, so this gives us an extra
-        // bit of headroom while accumulating.
-        v = cast(t, cast(Int(32), v));
+            blur(x, ry) = blur(x, ry - 1) + v;
 
-        blur(x, ry) = blur(x, ry - 1) + v;
+            blurs.push_back(blur);
+
+            Func dither;
+            dither(x, y) = cast<uint8_t>(floor(blur(x, y) * inv_scale + random_float()));
+            //dither(x, y) = cast<uint8_t>(blur(x, y));
+            dithered.push_back(dither);
+        }
 
         const int vec = get_target().natural_vector_size<uint16_t>();
 
         Func out;
-        out(x, y) = cast<uint8_t>(clamp(floor(cast<int32_t>(blur(x, y)) * inv_scale + random_float()), 0, 255));
+        out(x, y) = select(diameter < 256, dithered[0](x, y), dithered[1](x, y));
 
         // Schedule.  Split the transpose into tiles of
         // rows. Parallelize strips.
-        Var xo, yo, xi, yi;
+        Var xo, yo, xi, yi, xoo;
         out
             .compute_root()
             .split(x, xo, xi, vec)
             .reorder(xi, y, xo)
             .vectorize(xi)
-            .parallel(xo);
+            .parallel(xo)
+            .split(xo, xoo, xo, 1, TailStrategy::RoundUp)
+            .parallel(xoo);
 
         // Run the filter on each row of tiles (which corresponds to a strip of
         // columns in the input).
-        blur.compute_at(out, xo)
-            .store_in(MemoryType::Stack);
+        for (int i = 0; i < 2; i++) {
+            Func blur = blurs[i];
+            Func dither = dithered[i];
+            blur.compute_at(out, xo)
+                .store_in(MemoryType::Stack);
 
-        blur.update(0).vectorize(x);
-        blur.update(1).vectorize(x);
+            blur.update(0).vectorize(x);
+            blur.update(1).vectorize(x);
 
-        // Vectorize computations within the strips.
-        blur.update(2)
-            .reorder(x, ry)
-            .vectorize(x);
+            // Vectorize computations within the strips.
+            blur.update(2)
+                .reorder(x, ry)
+                .vectorize(x);
+
+            dither
+                .compute_at(out, y)
+                .vectorize(x);
+        }
 
         transpose
             .compute_at(out, xo)
+            .store_in(MemoryType::Stack)
             .split(y, yo, yi, vec)
             .unroll(x)
             .vectorize(yi);
@@ -91,6 +108,8 @@ public:
             .store_in(MemoryType::Register)
             .vectorize(x)
             .unroll(y);
+
+        out.specialize(diameter < 256);
 
         return out;
     }
