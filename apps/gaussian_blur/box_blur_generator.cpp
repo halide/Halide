@@ -68,11 +68,10 @@ public:
         Var xo, yo, xi, yi, xoo;
         out
             .compute_root()
-            .split(x, xo, xi, vec)
-            .reorder(xi, y, xo)
+            .split(x, xoo, xo, vec * 2)
+            .split(xo, xo, xi, vec)
+            .reorder(xi, y, xo, xoo)
             .vectorize(xi)
-            .parallel(xo)
-            .split(xo, xoo, xo, 1, TailStrategy::RoundUp)
             .parallel(xoo);
 
         // Run the filter on each row of tiles (which corresponds to a strip of
