@@ -4,6 +4,19 @@ using namespace Halide;
 
 namespace hannk {
 
+int get_register_count(const Target &target) {
+    switch (target.arch) {
+        case Target::X86:
+            return target.has_feature(Target::AVX512_Skylake) ? 32 : 16;
+        case Target::ARM:
+            return target.bits == 64 ? 32 : 16;
+        case Target::Hexagon:
+            return 32;
+        default:
+            return 32;
+    }
+}
+
 void interpret_as_tensor(OutputImageParam p) {
     p.dim(0).set_stride(1).set_min(0);
 }

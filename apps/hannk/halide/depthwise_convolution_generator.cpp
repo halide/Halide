@@ -113,7 +113,10 @@ public:
             input_.dim(1).set_stride(1);
         }
 
-        const int vector_size = natural_vector_size<uint8_t>();
+        int vector_size = natural_vector_size<uint8_t>();
+        if (get_register_count(target) < 32) {
+            vector_size /= 2;
+        }
 
         // Tile the output, so we can try to re-use loads spatially when performing
         // convolution. This also helps because we can schedule the input and not

@@ -22,12 +22,9 @@ int get_vector_reduction_factor(const Target &target, Type t) {
 }
 
 int get_recommended_accumulators(const Target &target) {
-    if (target.has_feature(Target::AVX512_Skylake) ||
-        (target.arch == Target::ARM && target.bits == 64)) {
-        // 32 registers total.
+    if (get_register_count(target) >= 32) {
         return 20;
     } else {
-        // 16 registers total.
         return 8;
     }
 }
