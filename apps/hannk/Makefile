@@ -120,7 +120,7 @@ OPS_CXXFLAGS = -I$(BIN)/$*
 
 ifneq (,$(findstring arm_dot_prod,$(HL_TARGET)))
 OPS_HALIDE += $(BIN)/%/convolution_r16_uint8.a
-OPS_CXX_FLAGS += -DCONV_R16
+OPS_CXXFLAGS += -DCONV_R16
 endif
 
 # ---------------------- util
