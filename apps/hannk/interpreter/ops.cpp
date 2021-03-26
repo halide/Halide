@@ -8,7 +8,7 @@
 #include "add_uint8_uint8.h"
 #include "average_pool_uint8.h"
 #include "convolution_uint8.h"
-#if defined(__arm__) || defined(__aarch64__)
+#ifdef CONV_R16
 #include "convolution_r16_uint8.h"
 #endif
 #include "depthwise_convolution_uint8.h"
@@ -452,7 +452,7 @@ void Conv2DOp::execute(const Box &crop) {
             }
         }
 
-#if defined(__arm__) || defined(__aarch64__)
+#ifdef CONV_R16
         if (input_buf.dim(0).extent() >= 16) {
             // For large reductions, use the big reduction version.
             // TODO: We really ought to be able to do this with GuardWithIf
