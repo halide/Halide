@@ -372,21 +372,11 @@ class SerializeLoops : public IRMutator {
 class PredicateLoadStore : public IRMutator {
     string var;
     Expr vector_predicate;
-    const Target &target;
     int lanes;
     bool valid;
     bool vectorized;
 
     using IRMutator::visit;
-
-    bool should_predicate_store_load(int bit_size) {
-        if (target.arch == Target::X86 && bit_size < 32) {
-            // On x86, predicated loads/stores smaller than 32-bits
-            // are *horribly* slow.
-            return false;
-        }
-        return true;
-    }
 
     Expr merge_predicate(Expr pred, const Expr &new_pred) {
         if (pred.type().lanes() == new_pred.type().lanes()) {
@@ -398,7 +388,6 @@ class PredicateLoadStore : public IRMutator {
     }
 
     Expr visit(const Load *op) override {
-        valid = valid && should_predicate_store_load(op->type.bits());
         valid = valid && op->predicate.type().lanes() == lanes;
         if (!valid) {
             return op;
@@ -427,7 +416,6 @@ class PredicateLoadStore : public IRMutator {
     }
 
     Stmt visit(const Store *op) override {
-        valid = valid && should_predicate_store_load(op->value.type().bits());
         valid = valid && op->predicate.type().lanes() == lanes;
         if (!valid) {
             return op;
@@ -465,8 +453,8 @@ class PredicateLoadStore : public IRMutator {
     }
 
 public:
-    PredicateLoadStore(string v, const Expr &vpred, const Target &t)
-        : var(std::move(v)), vector_predicate(vpred), target(t),
+    PredicateLoadStore(string v, const Expr &vpred)
+        : var(std::move(v)), vector_predicate(vpred),
           lanes(vpred.type().lanes()), valid(true), vectorized(false) {
         internal_assert(lanes > 1);
     }
@@ -857,12 +845,12 @@ class VectorSubs : public IRMutator {
 
             Stmt predicated_stmt;
             if (vectorize_predicate) {
-                PredicateLoadStore p(vectorized_vars.front().name, cond, target);
+                PredicateLoadStore p(vectorized_vars.front().name, cond);
                 predicated_stmt = p.mutate(then_case);
                 vectorize_predicate = p.is_vectorized();
             }
             if (vectorize_predicate && else_case.defined()) {
-                PredicateLoadStore p(vectorized_vars.front().name, !cond, target);
+                PredicateLoadStore p(vectorized_vars.front().name, !cond);
                 predicated_stmt = Block::make(predicated_stmt, p.mutate(else_case));
                 vectorize_predicate = p.is_vectorized();
             }
