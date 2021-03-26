@@ -1,3 +1,4 @@
+
 #ifndef SIMD_OP_CHECK_H
 #define SIMD_OP_CHECK_H
 
@@ -281,6 +282,10 @@ public:
                 }
 
                 error_file.close();
+
+                // Occasionally useful for debugging: stop at the first failure.
+                // std::cerr << error_msg.str();
+                // exit(-1);
             }
         }
 

@@ -93,16 +93,15 @@ const WasmIntrinsic intrinsic_defs[] = {
 
     // Basically like ARM's SQRDMULH
     {"llvm.wasm.q15mulr.sat.signed", Int(16, 8), "q15mulr_sat_s", {Int(16, 8), Int(16, 8)}, Target::WasmSimd128},
-#endif
 
-    // TODO: LLVM should support this directly, but doesn't yet.
-    // To make this work, we need to be able to call the intrinsics with two vecs.
-    // @abadams sez: "The way I've had to do this in the past is with force-inlined implementations
-    // that accept the wider vec, e.g. see packsswbx16 in src/runtime/x86.ll"
-    // {Target::WasmSimd128, false, Int(8, 16), 0, "llvm.wasm.narrow.signed.v16i8.v8i16", i8(wild_i16x_)},
-    // {Target::WasmSimd128, false, Int(16, 8), 0, "llvm.wasm.narrow.signed.v8i16.v4i32", i16(wild_i32x_)},
-    // {Target::WasmSimd128, false, UInt(8, 16), 0, "llvm.wasm.narrow.unsigned.v16i8.v8i16", u8(wild_u16x_)},
-    // {Target::WasmSimd128, false, UInt(16, 8), 0, "llvm.wasm.narrow.unsigned.v8i16.v4i32", u16(wild_u32x_)},
+    // Note that the inputs are *always* treated as signed, regardless of the output
+    {"saturating_narrow_i16x16_to_i8x16", Int(8, 16), "saturating_narrow", {Int(16, 16)}, Target::WasmSimd128},
+    {"saturating_narrow_i16x16_to_u8x16", UInt(8, 16), "saturating_narrow", {Int(16, 16)}, Target::WasmSimd128},
+    {"saturating_narrow_i32x8_to_i16x8", Int(16, 8), "saturating_narrow", {Int(32, 8)}, Target::WasmSimd128},
+    {"saturating_narrow_i32x8_to_u16x8", UInt(16, 8), "saturating_narrow", {Int(32, 8)}, Target::WasmSimd128},
+    {"saturating_narrow_u16x16_to_u8x16", UInt(8, 16), "saturating_narrow", {UInt(16, 16)}, Target::WasmSimd128},
+    {"saturating_narrow_u32x8_to_u16x8", UInt(16, 8), "saturating_narrow", {UInt(32, 8)}, Target::WasmSimd128},
+#endif
 };
 // clang-format on
 
@@ -141,6 +140,12 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
     // clang-format off
     static const Pattern patterns[] = {
         {"q15mulr_sat_s", i16_sat(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), u16(15))), Target::WasmSimd128},
+        {"saturating_narrow", i8_sat(wild_i16x_), Target::WasmSimd128},
+        {"saturating_narrow", u8_sat(wild_i16x_), Target::WasmSimd128},
+        {"saturating_narrow", i16_sat(wild_i32x_), Target::WasmSimd128},
+        {"saturating_narrow", u16_sat(wild_i32x_), Target::WasmSimd128},
+        {"saturating_narrow", u8_sat(wild_u16x_), Target::WasmSimd128},
+        {"saturating_narrow", u16_sat(wild_u32x_), Target::WasmSimd128},
     };
     // clang-format on
 
