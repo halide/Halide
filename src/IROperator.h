@@ -1379,8 +1379,8 @@ Expr likely(Expr e);
  * found in an innermost loop. */
 Expr likely_if_innermost(Expr e);
 
-/** Expressions tagged with this intrinsic are suggestions to
- * vectorization that vectorization should be implemented with
+/** Expressions tagged with this intrinsic are suggestions that
+ * vectorization of loops with guard ifs should be implemented with
  * non-faulting predicated loads and stores, instead of scalarizing
  * an if statement. */
 Expr predicate(Expr e);
