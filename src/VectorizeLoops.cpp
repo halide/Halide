@@ -841,7 +841,7 @@ class VectorSubs : public IRMutator {
             // We have an if statement with a vector condition,
             // which would mean control flow divergence within the
             // SIMD lanes.
-            bool vectorize_predicate = predicate && !uses_gpu_vars(cond) && vectorized_vars.size() > 0;
+            bool vectorize_predicate = predicate && !uses_gpu_vars(cond) && !vectorized_vars.empty();
 
             Stmt predicated_stmt;
             if (vectorize_predicate) {
