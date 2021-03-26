@@ -311,6 +311,12 @@ Stmt remove_likelies(const Stmt &s);
  * the tagged expression. If not, returns the expression. */
 Expr strip_tags(const Expr &e);
 
+/** Expressions tagged with this intrinsic are suggestions that
+ * vectorization of loops with guard ifs should be implemented with
+ * non-faulting predicated loads and stores, instead of scalarizing
+ * an if statement. */
+Expr predicate(Expr e);
+
 // Secondary args to print can be Exprs or const char *
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {
 }
@@ -1378,12 +1384,6 @@ Expr likely(Expr e);
 /** Equivalent to likely, but only triggers a loop partitioning if
  * found in an innermost loop. */
 Expr likely_if_innermost(Expr e);
-
-/** Expressions tagged with this intrinsic are suggestions that
- * vectorization of loops with guard ifs should be implemented with
- * non-faulting predicated loads and stores, instead of scalarizing
- * an if statement. */
-Expr predicate(Expr e);
 
 /** Cast an expression to the halide type corresponding to the C++
  * type T. As part of the cast, clamp to the minimum and maximum
