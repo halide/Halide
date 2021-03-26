@@ -8,25 +8,15 @@ using namespace Halide::ConciseCasts;
 namespace hannk {
 
 int get_vector_reduction_factor(const Target &target, Type t) {
-    if (target.has_feature(Target::ARMDotProd)) {
-        // ARM dot products can do 4-way reductions.
-        return 4;
-    }
-    if (target.arch == Target::Hexagon) {
-        // Hexagon can reduce 32-bits of inputs at once.
+    if (target.arch == Target::Hexagon ||
+        target.has_feature(Target::ARMDotProd)) {
+        // Hexagon and ARM with dot products can reduce 32-bits
+        // of output at once.
         return 32 / t.bits();
     }
 
     // Most targets can do 2-way horizontal reductions well.
     return 2;
-}
-
-int get_recommended_accumulators(const Target &target) {
-    if (get_register_count(target) >= 32) {
-        return 20;
-    } else {
-        return 8;
-    }
 }
 
 class Convolution : public Generator<Convolution> {
@@ -123,8 +113,7 @@ public:
         Expr filter_width = filter_.dim(1).extent();
         Expr filter_height = filter_.dim(2).extent();
         // Align the filter depth, which requires padding the input.
-        filter_depth =
-            ((filter_depth + unroll_reduction - 1) / unroll_reduction) * unroll_reduction;
+        filter_depth = align_up(filter_depth, unroll_reduction);
         RDom r(0, filter_width, 0, filter_height, 0, filter_depth);
         Expr filter_rdxyc =
             filter_tiled(r.z % vector_reduction, r.z / vector_reduction, r.x, r.y, c);
@@ -195,7 +184,7 @@ public:
         // Figure out how big the tiles we should optimize for should be by getting
         // the total number of accumulators best for this target and figuring out
         // tile sizes.
-        const int accumulators = get_recommended_accumulators(get_target());
+        const int accumulators = get_register_count(get_target()) >= 32 ? 20 : 8;
         std::vector<std::pair<int, int>> tile_sizes;
         const int max_tile_c = 4;
         for (int tile_c = max_tile_c; tile_c >= 1; tile_c /= 2) {

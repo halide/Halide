@@ -13,7 +13,7 @@ int get_register_count(const Target &target) {
         case Target::Hexagon:
             return 32;
         default:
-            return 32;
+            return 16;
     }
 }
 
@@ -72,6 +72,14 @@ Func constant_exterior_tensor(ImageParam p, Expr exterior) {
                                     p.dim(1).min(), p.dim(1).extent(),
                                     p.dim(2).min(), p.dim(2).extent(),
                                     p.dim(3).min(), p.dim(3).extent());
+}
+
+Expr align_down(const Expr &x, const Expr &n) {
+    return (x / n) * n;
+}
+
+Expr align_up(const Expr &x, const Expr &n) {
+    return ((x + n - 1) / n) * n;
 }
 
 Expr multiply_2x_high(const Expr &a, const Expr &b) {

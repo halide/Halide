@@ -40,6 +40,10 @@ Halide::Func constant_exterior_tensor(
     Halide::Expr min_b, Halide::Expr extent_b);
 Halide::Func constant_exterior_tensor(Halide::ImageParam p, Halide::Expr exterior);
 
+// Round x down or up to the nearest multiple of n.
+Halide::Expr align_down(const Halide::Expr &x, const Halide::Expr &n);
+Halide::Expr align_up(const Halide::Expr &x, const Halide::Expr &n);
+
 // This function implements the same computation as the ARMv7 NEON VQRDMULH
 // instruction.
 Halide::Expr multiply_2x_high(const Halide::Expr &a, const Halide::Expr &b);
