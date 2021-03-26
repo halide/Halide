@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    {
+    for (TailStrategy tail_strategy : {TailStrategy::GuardWithIf, TailStrategy::Predicate}) {
         // Another way in which a larger static allocation is
         // preferable to a smaller dynamic one is when you compute
         // something at a split guarded by an if. In the very last
@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
 
         f(x) = x;
         g(x) = f(x);
-        g.split(x, xo, xi, 8, TailStrategy::GuardWithIf);
+        g.split(x, xo, xi, 8, tail_strategy);
 
         f.compute_at(g, xo);
         // In the tail case, the amount of g required is min(8, some

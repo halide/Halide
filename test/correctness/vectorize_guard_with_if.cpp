@@ -30,6 +30,8 @@ int main(int argc, char **argv) {
         f.set_custom_trace(&my_trace);
         f.trace_stores();
 
+        num_vector_stores = 0;
+        num_scalar_stores = 0;
         Buffer<int> result = f.realize({w});
 
         if (num_vector_stores != expected_vector_stores) {
