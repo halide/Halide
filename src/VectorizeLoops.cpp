@@ -482,9 +482,8 @@ class VectorSubs : public IRMutator {
     // is updated when vectorized_vars list is updated.
     std::map<string, Expr> replacements;
 
-    const Target &target;
-
-    bool in_hexagon;  // Are we inside the hexagon loop?
+    // Are we generating predicated statements or scalarizing?
+    bool predicating;
 
     // A scope containing lets and letstmts whose values became
     // vectors. Contains are original, non-vectorized expressions.
@@ -810,24 +809,14 @@ class VectorSubs : public IRMutator {
         return (op->condition.type().lanes() > 1) ? scalarize(op) : op;
     }
 
-    bool should_predicate_store_load() {
-        // On targets with good predicated loads/stores, we should
-        // just always use them.
-        if (target.arch == Target::Hexagon || in_hexagon) {
-            return true;
-        }
-        return false;
-    }
-
     Stmt visit(const IfThenElse *op) override {
         Expr cond = mutate(op->condition);
         int lanes = cond.type().lanes();
 
-        bool predicate = should_predicate_store_load();
-        if (const Call *pred = Call::as_intrinsic(cond, {Call::predicate})) {
+        const Call *pred = Call::as_intrinsic(cond, {Call::predicate});
+        ScopedValue<bool> old_predicating(predicating, predicating || pred != nullptr);
+        if (pred) {
             cond = pred->args[0];
-            // The program explicitly asked for predicated loads/stores.
-            predicate = true;
         }
 
         debug(3) << "Vectorizing \n"
@@ -841,7 +830,7 @@ class VectorSubs : public IRMutator {
             // We have an if statement with a vector condition,
             // which would mean control flow divergence within the
             // SIMD lanes.
-            bool vectorize_predicate = predicate && !uses_gpu_vars(cond) && !vectorized_vars.empty();
+            bool vectorize_predicate = predicating && !uses_gpu_vars(cond) && !vectorized_vars.empty();
 
             Stmt predicated_stmt;
             if (vectorize_predicate) {
@@ -1331,8 +1320,14 @@ class VectorSubs : public IRMutator {
     }
 
 public:
-    VectorSubs(const VectorizedVar &vv, bool in_hexagon, const Target &t)
-        : target(t), in_hexagon(in_hexagon) {
+    VectorSubs(const VectorizedVar &vv, bool in_hexagon, const Target &t) {
+        // On targets with good predicated loads/stores, we should
+        // just always use them.
+        if (t.arch == Target::Hexagon || in_hexagon) {
+            predicating = true;
+        } else {
+            predicating = false;
+        }
         vectorized_vars.push_back(vv);
         update_replacements();
     }
