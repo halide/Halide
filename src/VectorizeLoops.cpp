@@ -1623,7 +1623,7 @@ class RemoveUnnecessaryAtomics : public IRMutator {
 class RemovePredicateHints : public IRMutator {
     using IRMutator::visit;
 
-    Expr visit(const Call *op) {
+    Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::predicate)) {
             return op->args[0];
         } else {
