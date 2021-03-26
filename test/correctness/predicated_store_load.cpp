@@ -45,7 +45,7 @@ class CheckPredicatedStoreLoad : public IRMutator {
     int expected_load_count;
 
 public:
-    CheckPredicatedStoreLoad(const Target &target, int store, int load)
+    CheckPredicatedStoreLoad(int store, int load)
         : expected_store_count(store), expected_load_count(load) {
     }
     using IRMutator::mutate;
@@ -89,7 +89,7 @@ int vectorized_predicated_store_scalarized_predicated_load_test(const Target &t)
     if (t.has_feature(Target::HVX)) {
         f.update(0).hexagon();
     }
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 0, 0));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(0, 0));
 
     Buffer<int> im = f.realize({170, 170});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -116,7 +116,7 @@ int vectorized_dense_load_with_stride_minus_one_test(const Target &t) {
     if (t.has_feature(Target::HVX)) {
         f.hexagon();
     }
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 2, 4));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(2, 4));
 
     Buffer<int> im = f.realize({size, size});
     auto func = [&im_ref, &im](int x, int y, int z) {
@@ -152,7 +152,7 @@ int multiple_vectorized_predicate_test(const Target &t) {
     if (t.has_feature(Target::HVX)) {
         f.update(0).hexagon();
     }
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 0, 0));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(0, 0));
 
     Buffer<int> im = f.realize({size, size});
     auto func = [&im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -183,7 +183,7 @@ int scalar_load_test(const Target &t) {
     if (t.has_feature(Target::HVX)) {
         f.update(0).hexagon();
     }
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 0, 0));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(0, 0));
 
     Buffer<int> im = f.realize({160, 160});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -216,7 +216,7 @@ int scalar_store_test(const Target &t) {
     if (t.has_feature(Target::HVX)) {
         f.update(0).hexagon();
     }
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 0, 0));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(0, 0));
 
     Buffer<int> im = f.realize({160, 160});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -249,7 +249,7 @@ int not_dependent_on_vectorized_var_test(const Target &t) {
     if (t.has_feature(Target::HVX)) {
         f.update(0).hexagon();
     }
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 0, 0));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(0, 0));
 
     Buffer<int> im = f.realize({160, 160, 160});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -281,7 +281,7 @@ int no_op_store_test(const Target &t) {
         f.update(0).hexagon();
         f.update(1).hexagon();
     }
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 0, 0));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(0, 0));
 
     Buffer<int> im = f.realize({240, 240});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -312,7 +312,7 @@ int vectorized_predicated_predicate_with_pure_call_test(const Target &t) {
     if (t.has_feature(Target::HVX)) {
         f.update(0).hexagon();
     }
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 0, 0));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(0, 0));
 
     Buffer<int> im = f.realize({160, 160});
     auto func = [im_ref](int x, int y, int z) { return im_ref(x, y, z); };
@@ -349,7 +349,7 @@ int vectorized_predicated_load_const_index_test(const Target &t) {
     if (t.has_feature(Target::HVX)) {
         f.update().hexagon();
     }
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 1, 2));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 2));
 
     Buffer<int> im = f.realize({100, 100});
     auto func = [im_ref](int x, int y) { return im_ref(x, y); };
@@ -387,7 +387,7 @@ int vectorized_predicated_load_lut_test(const Target &t) {
     // Ignore the race condition so we can have predicated vectorized
     // LUT loads on both LHS and RHS of the predicated vectorized store
     dst.update().allow_race_conditions().vectorize(r, vector_size, TailStrategy::Predicate);
-    dst.add_custom_lowering_pass(new CheckPredicatedStoreLoad(t, 1, 2));
+    dst.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 2));
 
     dst.realize({dst_len});
 
