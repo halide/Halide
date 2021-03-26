@@ -73,7 +73,7 @@ int main(int argc, char **argv) {
         TailStrategy::RoundUp,
         TailStrategy::GuardWithIf,
         TailStrategy::Predicate,
-        TailStrategy::ShiftInwards
+        TailStrategy::ShiftInwards,
     };
 
     // Two stages. First stage computed at tiles of second.
