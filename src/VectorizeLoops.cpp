@@ -381,8 +381,8 @@ class PredicateLoadStore : public IRMutator {
 
     bool should_predicate_store_load(int bit_size) {
         if (target.arch == Target::X86 && bit_size < 32) {
-            // Should only attempt to predicate store/load if the lane size is
-            // no less than 4
+            // On x86, predicated loads/stores smaller than 32-bits
+            // are *horribly* slow.
             return false;
         }
         return true;

@@ -31,8 +31,8 @@ bool test() {
     int W = vec_width * 2 - 1;
     int H = 10000;
 
-    for (TailStrategy tail_strategy : {TailStrategy::ShiftInwards, TailStrategy::GuardWithIf, TailStrategy::Predicate}) {
-
+    // On some targets, TailStrategy::Predicate is too slow to test.
+    for (TailStrategy tail_strategy : {TailStrategy::ShiftInwards, TailStrategy::GuardWithIf}) {
         Buffer<A> input(W, H + 20);
         for (int y = 0; y < H + 20; y++) {
             for (int x = 0; x < W; x++) {
