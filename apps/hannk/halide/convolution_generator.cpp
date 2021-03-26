@@ -312,7 +312,7 @@ public:
         // straightforward boundary condition.
         int vector_size_input =
             use_8bit_multiply ? natural_vector_size<uint8_t>() : natural_vector_size<int16_t>();
-        for (int i = vector_size_input; i >= 4; i /= 2) {
+        for (int i = vector_size_input; i >= unroll_reduction; i /= 2) {
             // Use GuardWithIf here to avoid growing the bounds.
             input_bounded.specialize(input_.dim(0).extent() >= i)
                 .vectorize(c, i, TailStrategy::GuardWithIf);
