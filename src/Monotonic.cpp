@@ -470,8 +470,7 @@ class DerivativeBounds : public IRVisitor {
 
     void visit(const Call *op) override {
         // Some functions are known to be monotonic
-        if (op->is_intrinsic(Call::likely) ||
-            op->is_intrinsic(Call::likely_if_innermost) ||
+        if (Call::as_tag(op) ||
             op->is_intrinsic(Call::return_second)) {
             op->args.back().accept(this);
             return;

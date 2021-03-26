@@ -1035,6 +1035,13 @@ Stmt remove_likelies(const Stmt &s) {
     return RemoveLikelies().mutate(s);
 }
 
+Expr strip_tags(const Expr &e) {
+    if (const Call *tag = Call::as_tag(e)) {
+        return tag->args[0];
+    }
+    return e;
+}
+
 Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args) {
     return Internal::Call::make(Int(32),
                                 "halide_error_requirement_failed",
@@ -2461,6 +2468,12 @@ Expr likely(Expr e) {
 Expr likely_if_innermost(Expr e) {
     Type t = e.type();
     return Internal::Call::make(t, Internal::Call::likely_if_innermost,
+                                {std::move(e)}, Internal::Call::PureIntrinsic);
+}
+
+Expr predicate(Expr e) {
+    Type t = e.type();
+    return Internal::Call::make(t, Internal::Call::predicate,
                                 {std::move(e)}, Internal::Call::PureIntrinsic);
 }
 

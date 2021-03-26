@@ -147,6 +147,9 @@ std::ostream &operator<<(std::ostream &out, const TailStrategy &t) {
     case TailStrategy::GuardWithIf:
         out << "GuardWithIf";
         break;
+    case TailStrategy::Predicate:
+        out << "Predicate";
+        break;
     case TailStrategy::ShiftInwards:
         out << "ShiftInwards";
         break;
