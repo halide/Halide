@@ -372,11 +372,33 @@ class SerializeLoops : public IRMutator {
 class PredicateLoadStore : public IRMutator {
     string var;
     Expr vector_predicate;
+    bool is_explicit;
+    bool in_hexagon;
+    const Target &target;
     int lanes;
     bool valid;
     bool vectorized;
 
     using IRMutator::visit;
+
+    bool should_predicate_store_load(int bit_size) {
+        if (is_explicit) {
+            return true;
+        } else if (in_hexagon) {
+            internal_assert(target.has_feature(Target::HVX))
+                << "We are inside a hexagon loop, but the target doesn't have hexagon's features\n";
+            return true;
+        } else if (target.arch == Target::X86) {
+            // Should only attempt to predicate store/load if the lane size is
+            // no less than 4
+            // TODO: disabling for now due to trunk LLVM breakage.
+            // See: https://github.com/halide/Halide/issues/3534
+            // return (bit_size == 32) && (lanes >= 4);
+            return false;
+        }
+        // For other architecture, do not predicate vector load/store
+        return false;
+    }
 
     Expr merge_predicate(Expr pred, const Expr &new_pred) {
         if (pred.type().lanes() == new_pred.type().lanes()) {
@@ -389,6 +411,7 @@ class PredicateLoadStore : public IRMutator {
 
     Expr visit(const Load *op) override {
         valid = valid && op->predicate.type().lanes() == lanes;
+        valid = valid && should_predicate_store_load(op->type.bits());
         if (!valid) {
             return op;
         }
@@ -417,6 +440,7 @@ class PredicateLoadStore : public IRMutator {
 
     Stmt visit(const Store *op) override {
         valid = valid && op->predicate.type().lanes() == lanes;
+        valid = valid && should_predicate_store_load(op->value.type().bits());
         if (!valid) {
             return op;
         }
@@ -453,9 +477,9 @@ class PredicateLoadStore : public IRMutator {
     }
 
 public:
-    PredicateLoadStore(string v, const Expr &vpred)
-        : var(std::move(v)), vector_predicate(vpred),
-          lanes(vpred.type().lanes()), valid(true), vectorized(false) {
+    PredicateLoadStore(string v, const Expr &vpred, bool is_explicit, bool in_hexagon, const Target &t)
+        : var(std::move(v)), vector_predicate(vpred), is_explicit(is_explicit), in_hexagon(in_hexagon),
+          target(t), lanes(vpred.type().lanes()), valid(true), vectorized(false) {
         internal_assert(lanes > 1);
     }
 
@@ -482,8 +506,9 @@ class VectorSubs : public IRMutator {
     // is updated when vectorized_vars list is updated.
     std::map<string, Expr> replacements;
 
-    // Are we generating predicated statements or scalarizing?
-    bool predicating;
+    const Target &target;
+
+    bool in_hexagon;  // Are we inside the hexagon loop?
 
     // A scope containing lets and letstmts whose values became
     // vectors. Contains are original, non-vectorized expressions.
@@ -813,9 +838,9 @@ class VectorSubs : public IRMutator {
         Expr cond = mutate(op->condition);
         int lanes = cond.type().lanes();
 
-        const Call *pred = Call::as_intrinsic(cond, {Call::predicate});
-        ScopedValue<bool> old_predicating(predicating, predicating || pred != nullptr);
-        if (pred) {
+        bool explicit_predicate = false;
+        if (const Call *pred = Call::as_intrinsic(cond, {Call::predicate})) {
+            explicit_predicate = true;
             cond = pred->args[0];
         }
 
@@ -830,16 +855,18 @@ class VectorSubs : public IRMutator {
             // We have an if statement with a vector condition,
             // which would mean control flow divergence within the
             // SIMD lanes.
-            bool vectorize_predicate = predicating && !uses_gpu_vars(cond) && !vectorized_vars.empty();
+
+            bool vectorize_predicate =
+                explicit_predicate || !(uses_gpu_vars(cond) || (vectorized_vars.size() > 1));
 
             Stmt predicated_stmt;
             if (vectorize_predicate) {
-                PredicateLoadStore p(vectorized_vars.front().name, cond);
+                PredicateLoadStore p(vectorized_vars.front().name, cond, explicit_predicate, in_hexagon, target);
                 predicated_stmt = p.mutate(then_case);
                 vectorize_predicate = p.is_vectorized();
             }
             if (vectorize_predicate && else_case.defined()) {
-                PredicateLoadStore p(vectorized_vars.front().name, !cond);
+                PredicateLoadStore p(vectorized_vars.front().name, !cond, explicit_predicate, in_hexagon, target);
                 predicated_stmt = Block::make(predicated_stmt, p.mutate(else_case));
                 vectorize_predicate = p.is_vectorized();
             }
@@ -1320,14 +1347,8 @@ class VectorSubs : public IRMutator {
     }
 
 public:
-    VectorSubs(const VectorizedVar &vv, bool in_hexagon, const Target &t) {
-        // On targets with good predicated loads/stores, we should
-        // just always use them.
-        if (t.arch == Target::Hexagon || in_hexagon) {
-            predicating = true;
-        } else {
-            predicating = false;
-        }
+    VectorSubs(const VectorizedVar &vv, bool in_hexagon, const Target &t)
+        : target(t), in_hexagon(in_hexagon) {
         vectorized_vars.push_back(vv);
         update_replacements();
     }
