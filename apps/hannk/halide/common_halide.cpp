@@ -31,18 +31,6 @@ void require_same_min_extent(int d, OutputImageParam first, OutputImageParam sec
     second.dim(d).set_extent(first.dim(d).extent());
 }
 
-void require_same_extent_cx(OutputImageParam first, OutputImageParam second) {
-    for (int d = 0; d < 2; d++) {
-        require_same_min_extent(d, first, second);
-    }
-}
-
-Expr can_fuse_cx(OutputImageParam p) {
-    return p.dim(0).min() == 0 &&
-           p.dim(1).stride() > 0 &&
-           p.dim(1).stride() == p.dim(0).extent() * p.dim(0).stride();
-}
-
 Func constant_exterior_tensor(
     Func t, Expr exterior,
     Expr min_c, Expr extent_c,
