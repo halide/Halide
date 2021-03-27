@@ -590,7 +590,7 @@ private:
     std::unique_ptr<Op> BuildQuantize(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return ::hannk::make_unique<QuantizeOp>(input, output);
+        return ::hannk::make_unique<AddOp>(input, nullptr, output, ActivationFunction::None);
     }
 
     const HannkDelegateOptions options_;

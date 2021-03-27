@@ -325,23 +325,6 @@ public:
     }
 };
 
-class QuantizeOp : public ElementwiseOp {
-public:
-    QuantizeOp(Tensor *input, Tensor *output)
-        : ElementwiseOp({input}, output) {
-    }
-
-    std::unique_ptr<Op> clone(const TensorMap &map) const {
-        return ::hannk::make_unique<QuantizeOp>(apply(map, input()), apply(map, output()));
-    }
-
-    void execute(const Box &crop);
-
-    void dump(std::ostream &os) const {
-        os << "  Quantize " << output()->name() << std::endl;
-    }
-};
-
 }  // namespace hannk
 
 #endif  // OPS_H_

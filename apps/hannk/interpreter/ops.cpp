@@ -208,21 +208,21 @@ void AddOp::execute(const Box &crop) {
     Tensor *out = output();
 
     if (in1->is_type<uint8_t>() &&
-        in2->is_type<uint8_t>() &&
+        (!in2 || in2->is_type<uint8_t>()) &&
         out->is_type<uint8_t>()) {
         auto in1_buf = in1->buffer<const uint8_t>();
-        auto in2_buf = in2->buffer<const uint8_t>();
+        auto in2_buf = in2 ? in2->buffer<const uint8_t>() : in1_buf;
         auto output_buf = out->buffer<uint8_t>(crop);
 
         const int in1_offset = in1->quantization().zero.at(0);
-        const int in2_offset = in2->quantization().zero.at(0);
+        const int in2_offset = in2 ? in2->quantization().zero.at(0) : 0;
         const int output_offset = out->quantization().zero.at(0);
         assert(in1_offset >= 0 && in1_offset <= 255);
         assert(in2_offset >= 0 && in2_offset <= 255);
         assert(output_offset >= 0 && output_offset <= 255);
 
         const float in1_scale = in1->quantization().scale.at(0);
-        const float in2_scale = in2->quantization().scale.at(0);
+        const float in2_scale = in2 ? in2->quantization().scale.at(0) : 0.0f;
         const float output_scale = out->quantization().scale.at(0);
 
         const int left_shift = 20;  // 20 for 8-bit, 15 for 16-bit
@@ -792,57 +792,6 @@ void ReshapeOp::execute(const Box &crop) {
     // TODO: This should also check the strides are dense.
     size_t output_size = output_buf.number_of_elements() * out->type().bytes();
     memcpy(output_buf.data(), input_buf.data(), output_size);
-}
-
-void QuantizeOp::execute(const Box &crop) {
-    const Tensor *in = input();
-    Tensor *out = output();
-
-    if (in->is_type<uint8_t>() && out->is_type<uint8_t>()) {
-        // We're going to implement this by just doing an Add with itself, but with
-        // the quantization parameters to produce 0 for the other op.
-        auto in_buf = in->buffer<const uint8_t>();
-        auto output_buf = out->buffer<uint8_t>(crop);
-
-        const int in1_offset = in->quantization().zero.at(0);
-        const int in2_offset = 0;
-        const int output_offset = out->quantization().zero.at(0);
-        assert(in1_offset >= 0 && in1_offset <= 255);
-        static_assert(in2_offset >= 0 && in2_offset <= 255, "");
-        assert(output_offset >= 0 && output_offset <= 255);
-
-        const float in1_scale = in->quantization().scale.at(0);
-        const float in2_scale = 0.0f;
-        const float output_scale = out->quantization().scale.at(0);
-
-        const int left_shift = 20;  // 20 for 8-bit, 15 for 16-bit
-        const double twice_max_input_scale = 2 * std::max(in1_scale, in2_scale);
-        const double real_in1_multiplier = in1_scale / twice_max_input_scale;
-        const double real_in2_multiplier = in2_scale / twice_max_input_scale;
-        const double real_output_multiplier = twice_max_input_scale / ((1 << left_shift) * output_scale);
-
-        const auto in1_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in1_multiplier);
-        const auto in2_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in2_multiplier);
-        const auto output_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_output_multiplier);
-        assert(in1_mul_and_shift.shift <= 0);
-        assert(in2_mul_and_shift.shift <= 0);
-        assert(output_mul_and_shift.shift <= 0);
-
-        const auto output_range = get_output_range(ActivationFunction::None, out);
-
-        while (output_buf.dimensions() < 4) {
-            in_buf.embed(output_buf.dimensions());
-            output_buf.embed(output_buf.dimensions());
-        }
-
-        CHECK(0 == add_uint8_uint8(left_shift, in_buf, in_buf,
-                                   in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
-                                   in2_offset, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
-                                   output_offset, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
-                                   output_range.min, output_range.max, output_buf));
-    } else {
-        CHECK(false);
-    }
 }
 
 }  // namespace hannk

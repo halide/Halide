@@ -291,7 +291,7 @@ public:
     std::unique_ptr<Op> parse_quantize(const tflite::Operator *op) {
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
-        return ::hannk::make_unique<QuantizeOp>(input, output);
+        return ::hannk::make_unique<AddOp>(input, nullptr, output, ActivationFunction::None);
     }
 
     std::unique_ptr<Op> parse_op(const tflite::Operator *op) {
