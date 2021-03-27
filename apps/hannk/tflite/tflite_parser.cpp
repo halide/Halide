@@ -154,7 +154,17 @@ public:
         Tensor *input2 = result_.tensors[op->inputs()->Get(1)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
         return ::hannk::make_unique<AddOp>(
-            input1, input2, output,
+            input1, input2, output, 1,
+            parse_activation_function(options->fused_activation_function()));
+    }
+
+    std::unique_ptr<Op> parse_sub(const tflite::Operator *op) {
+        const auto options = op->builtin_options_as_SubOptions();
+        Tensor *input1 = result_.tensors[op->inputs()->Get(0)].get();
+        Tensor *input2 = result_.tensors[op->inputs()->Get(1)].get();
+        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        return ::hannk::make_unique<AddOp>(
+            input1, input2, output, -1,
             parse_activation_function(options->fused_activation_function()));
     }
 
@@ -291,7 +301,7 @@ public:
     std::unique_ptr<Op> parse_quantize(const tflite::Operator *op) {
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
-        return ::hannk::make_unique<AddOp>(input, nullptr, output, ActivationFunction::None);
+        return ::hannk::make_unique<AddOp>(input, nullptr, output, 0, ActivationFunction::None);
     }
 
     std::unique_ptr<Op> parse_op(const tflite::Operator *op) {
@@ -304,6 +314,8 @@ public:
         switch (builtin_code) {
         case tflite::BuiltinOperator_ADD:
             return parse_add(op);
+        case tflite::BuiltinOperator_SUB:
+            return parse_sub(op);
         case tflite::BuiltinOperator_AVERAGE_POOL_2D:
             return parse_average_pool2D(op);
         case tflite::BuiltinOperator_CONCATENATION:

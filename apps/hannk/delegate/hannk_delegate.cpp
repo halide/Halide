@@ -20,6 +20,7 @@
 // Use a List-Of-X approach here to ensure that places we handle ops are kept in sync
 #define ALL_KNOWN_OPS         \
     KNOWN_OP(Add)             \
+    KNOWN_OP(Sub)             \
     KNOWN_OP(AveragePool2d)   \
     KNOWN_OP(Concatenation)   \
     KNOWN_OP(Conv2d)          \
@@ -465,7 +466,16 @@ private:
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteAddParams *params = (const TfLiteAddParams *)(node->builtin_data);
         auto activation = ConvertTfLiteActivation(params->activation);
-        return ::hannk::make_unique<AddOp>(input1, input2, output, activation);
+        return ::hannk::make_unique<AddOp>(input1, input2, output, 1, activation);
+    }
+
+    std::unique_ptr<Op> BuildSub(TfLiteContext *context, TfLiteNode *node) {
+        auto input1 = GetTensorById(context, node->inputs->data[0]);
+        auto input2 = GetTensorById(context, node->inputs->data[1]);
+        auto output = GetTensorById(context, node->outputs->data[0]);
+        const TfLiteAddParams *params = (const TfLiteAddParams *)(node->builtin_data);
+        auto activation = ConvertTfLiteActivation(params->activation);
+        return ::hannk::make_unique<AddOp>(input1, input2, output, -1, activation);
     }
 
     std::unique_ptr<Op> BuildAveragePool2d(TfLiteContext *context, TfLiteNode *node) {
@@ -590,7 +600,7 @@ private:
     std::unique_ptr<Op> BuildQuantize(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return ::hannk::make_unique<AddOp>(input, nullptr, output, ActivationFunction::None);
+        return ::hannk::make_unique<AddOp>(input, nullptr, output, 0, ActivationFunction::None);
     }
 
     const HannkDelegateOptions options_;
@@ -661,6 +671,10 @@ bool IsNodeSupported_Add(TfLiteContext *context, TfLiteNode *node, TfLiteRegistr
         return false;
     }
     return true;
+}
+
+bool IsNodeSupported_Sub(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    return IsNodeSupported_Add(context, node, registration);
 }
 
 bool IsNodeSupported_AveragePool2d(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {

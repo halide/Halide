@@ -297,7 +297,6 @@ test_ops: build_test_ops
 	$(BIN)/$(HL_TARGET)/fully_connected_test
 	$(BIN)/$(HL_TARGET)/max_pool_test
 	$(BIN)/$(HL_TARGET)/pad_test
-	$(BIN)/$(HL_TARGET)/quantize_test
 	$(BIN)/$(HL_TARGET)/reshape_test
 
 # ---------------------- toplevel executables

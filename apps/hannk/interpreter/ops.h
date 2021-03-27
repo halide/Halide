@@ -55,24 +55,33 @@ public:
 };
 
 class AddOp : public ElementwiseOp {
+    int input2_sign_;
     ActivationFunction activation_;
 
 public:
-    explicit AddOp(Tensor *input1, Tensor *input2, Tensor *output,
+    explicit AddOp(Tensor *input1, Tensor *input2, Tensor *output, int input2_sign,
                    ActivationFunction activation)
-        : ElementwiseOp({input1, input2}, output), activation_(activation) {
+        : ElementwiseOp({input1, input2}, output), input2_sign_(input2_sign), activation_(activation) {
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
         return ::hannk::make_unique<AddOp>(
             apply(map, input(0)), apply(map, input(1)),
-            apply(map, output()), activation_);
+            apply(map, output()), input2_sign_, activation_);
     }
 
     void execute(const Box &crop);
 
     void dump(std::ostream &os) const {
-        os << "  Add " << output()->name() << std::endl;
+        const char *name;
+        if (input(1) == nullptr) {
+            name = "Quantize";
+        } else if (input2_sign_ > 0) {
+            name = "Add";
+        } else {
+            name = "Sub";
+        }
+        os << "  " << name << " " << output()->name() << std::endl;
     }
 };
 

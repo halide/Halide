@@ -7,6 +7,8 @@ template<typename T>
 struct Add_ReferenceOp : public op_test::ReferenceOp {
     Add_ReferenceOp() = default;
 
+    int in2_sign = 1;
+
     void execute() override {
         const Tensor *in1 = inputs.at(0).get();
         const Tensor *in2 = inputs.at(1).get();
@@ -38,7 +40,7 @@ struct Add_ReferenceOp : public op_test::ReferenceOp {
         out_buf.for_each_element([&](int c, int x, int y, int b) {
             const double in1_val = in1_buf(c, x, y, b);
             const double in2_val = in2_buf(c, x, y, b);
-            const double raw_sum = (in1_val - in1_offset) * in1_multiplier + (in2_val - in2_offset) * in2_multiplier;
+            const double raw_sum = (in1_val - in1_offset) * in1_multiplier + in2_sign * (in2_val - in2_offset) * in2_multiplier;
             double raw_out = raw_sum * out_multiplier + out_offset;
             if (std::is_integral<T>::value) {
                 raw_out = std::round(raw_out);
@@ -60,17 +62,18 @@ struct AddOpTestFactory : public op_test::TestCaseFactory {
 
     struct AddOpTestTemplate {
         int in1, in2, out;
+        int in2_sign;
         ActivationFunction activation;
     };
     std::vector<AddOpTestTemplate> test_templates = {
         // First case is taken from Mobilenet.
-        {0, 1, 2, ActivationFunction::None},
+        {0, 1, 2, 1, ActivationFunction::None},
         // The rest are just permutations to test the test harness...
-        {0, 2, 1, ActivationFunction::None},
-        {1, 0, 2, ActivationFunction::None},
-        {1, 2, 0, ActivationFunction::None},
-        {2, 0, 1, ActivationFunction::None},
-        {2, 1, 0, ActivationFunction::None},
+        {0, 2, 1, 1, ActivationFunction::None},
+        {1, 0, 2, 1, ActivationFunction::None},
+        {1, 2, 0, 1, ActivationFunction::None},
+        {2, 0, 1, 1, ActivationFunction::None},
+        {2, 1, 0, 1, ActivationFunction::None},
     };
     size_t test_index = 0;
 
@@ -88,6 +91,7 @@ struct AddOpTestFactory : public op_test::TestCaseFactory {
         r->inputs.push_back(in1);
         r->inputs.push_back(in2);
         r->outputs.push_back(out);
+        r->in2_sign = test_template.in2_sign;
         r->activation = test_template.activation;
 
         auto test = ::hannk::make_unique<op_test::TestCase>();
@@ -96,6 +100,7 @@ struct AddOpTestFactory : public op_test::TestCaseFactory {
             in1.get(),
             in2.get(),
             out.get(),
+            test_template.in2_sign,
             test_template.activation);
         test->reference_op = std::move(r);
 

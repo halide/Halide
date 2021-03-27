@@ -231,15 +231,14 @@ void AddOp::execute(const Box &crop) {
         const double real_in2_multiplier = in2_scale / twice_max_input_scale;
         const double real_output_multiplier = twice_max_input_scale / ((1 << left_shift) * output_scale);
 
-        const auto in1_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in1_multiplier);
-        const auto in2_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in2_multiplier);
-        const auto output_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_output_multiplier);
+        auto in1_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in1_multiplier);
+        auto in2_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in2_multiplier);
+        auto output_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_output_multiplier);
         assert(in1_mul_and_shift.shift <= 0);
         assert(in2_mul_and_shift.shift <= 0);
         assert(output_mul_and_shift.shift <= 0);
 
-        // TODO: for SubOp:
-        // mul_and_shift2.multiplier *= -1;
+        in2_mul_and_shift.multiplier *= input2_sign_;
 
         const auto output_range = get_output_range(activation_, out);
 
