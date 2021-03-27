@@ -2188,6 +2188,7 @@ public:
     // @{
     HALIDE_FORWARD_METHOD(Func, add_trace_tag)
     HALIDE_FORWARD_METHOD(Func, align_bounds)
+    HALIDE_FORWARD_METHOD(Func, align_extent)
     HALIDE_FORWARD_METHOD(Func, align_storage)
     HALIDE_FORWARD_METHOD_CONST(Func, args)
     HALIDE_FORWARD_METHOD(Func, bound)
