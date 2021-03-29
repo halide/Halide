@@ -139,13 +139,13 @@ void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Ex
     };
     // clang-format off
     static const Pattern patterns[] = {
-        {VectorReduce::Add, 2, i16(wild_i8x_), "pairwise_widening_add", Int(8), Target::WasmSimd128},
-        {VectorReduce::Add, 2, u16(wild_u8x_), "pairwise_widening_add", UInt(8), Target::WasmSimd128},
-        {VectorReduce::Add, 2, i16(wild_u8x_), "pairwise_widening_add", UInt(8), Target::WasmSimd128},
+        {VectorReduce::Add, 2, i16(wild_i8x_), "pairwise_widening_add", Target::WasmSimd128},
+        {VectorReduce::Add, 2, u16(wild_u8x_), "pairwise_widening_add", Target::WasmSimd128},
+        {VectorReduce::Add, 2, i16(wild_u8x_), "pairwise_widening_add", Target::WasmSimd128},
 
-        {VectorReduce::Add, 2, i32(wild_i16x_), "pairwise_widening_add", Int(16), Target::WasmSimd128},
-        {VectorReduce::Add, 2, u32(wild_u16x_), "pairwise_widening_add", UInt(16), Target::WasmSimd128},
-        {VectorReduce::Add, 2, i32(wild_u16x_), "pairwise_widening_add", UInt(16), Target::WasmSimd128},
+        {VectorReduce::Add, 2, i32(wild_i16x_), "pairwise_widening_add", Target::WasmSimd128},
+        {VectorReduce::Add, 2, u32(wild_u16x_), "pairwise_widening_add", Target::WasmSimd128},
+        {VectorReduce::Add, 2, i32(wild_u16x_), "pairwise_widening_add", Target::WasmSimd128},
     };
     // clang-format on
 
