@@ -1037,7 +1037,7 @@ Stmt remove_likelies(const Stmt &s) {
 
 Expr strip_tags(const Expr &e) {
     if (const Call *tag = Call::as_tag(e)) {
-        return tag->args[0];
+        return strip_tags(tag->args[0]);
     }
     return e;
 }
