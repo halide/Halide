@@ -94,32 +94,27 @@ public:
         std::string asm_filename = output_directory + "check_" + name + ".s";
         f.compile_to_assembly(asm_filename, arg_types, target);
 
+        std::ifstream asm_file;
+        asm_file.open(asm_filename);
+
         bool found_it = false;
 
         std::ostringstream msg;
         msg << op << " did not generate for target=" << target.to_string() << " vector_width=" << vector_width << ". Instead we got:\n";
 
-        {
-            std::ifstream asm_file;
-            asm_file.open(asm_filename);
+        std::string line;
+        while (getline(asm_file, line)) {
+            msg << line << "\n";
 
-            std::string line;
-            while (getline(asm_file, line)) {
-                msg << line << "\n";
-
-                // Check for the op in question
-                found_it |= wildcard_search(op, line) && !wildcard_search("_" + op, line);
-            }
-            asm_file.close();
+            // Check for the op in question
+            found_it |= wildcard_search(op, line) && !wildcard_search("_" + op, line);
         }
 
         if (!found_it) {
             error_msg << "Failed: " << msg.str() << "\n";
-
-            // Occasionally useful for debugging: stop at the first failure.
-            // std::cerr << error_msg.str();
-            // exit(-1);
         }
+
+        asm_file.close();
 
         // Also compile the error checking Func (to be sure it compiles without error)
         std::string fn_name = "test_" + name;
