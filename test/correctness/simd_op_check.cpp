@@ -1737,7 +1737,7 @@ public:
                 check("i64x2.mul", 2 * w, i64_1 * i64_2);
 
                 // Integer dot product (16 -> 32)
-                for (int f : {4, 8}) {
+                for (int f : {2, 4, 8}) {
                     RDom r(0, f);
                     for (int v : {1, 2, 4}) {
                         check("i32x4.dot_i16x8_s", w * v, sum(i32(in_i16(f * x + r)) * in_i16(f * x + r + 32)));
