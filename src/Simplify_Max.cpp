@@ -173,6 +173,17 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
              rewrite(max(x, max(min(x, y), z)), max(x, z)) ||
              rewrite(max(x, max(min(y, x), z)), max(x, z)) ||
 
+             rewrite(max(select(x, min(y, z), w), z), select(x, z, max(w, z))) ||
+             rewrite(max(select(x, min(z, y), w), z), select(x, z, max(w, z))) ||
+             rewrite(max(z, select(x, min(y, z), w)), select(x, z, max(z, w))) ||
+             rewrite(max(z, select(x, min(z, y), w)), select(x, z, max(z, w))) ||
+             rewrite(max(select(x, y, min(w, z)), z), select(x, max(y, z), z)) ||
+             rewrite(max(select(x, y, min(z, w)), z), select(x, max(y, z), z)) ||
+             rewrite(max(z, select(x, y, min(w, z))), select(x, max(z, y), z)) ||
+             rewrite(max(z, select(x, y, min(z, w))), select(x, max(z, y), z)) ||
+
+             rewrite(max(select(x, y, z), select(x, w, u)), select(x, max(y, w), max(z, u))) ||
+
              (no_overflow(op->type) &&
               (rewrite(max(max(x, y) + c0, x), max(x, y + c0), c0 < 0) ||
                rewrite(max(max(x, y) + c0, x), max(x, y) + c0, c0 > 0) ||
@@ -267,8 +278,6 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
                rewrite(max(x / c0, y / c0 + c1), min(x, y + fold(c1 * c0)) / c0, c0 < 0 && !overflows(c1 * c0)) ||
 
                rewrite(max(((x + c0) / c1) * c1, x + c2), ((x + c0) / c1) * c1, c1 > 0 && c0 + 1 >= c1 + c2) ||
-
-               rewrite(max(select(x, y, z), select(x, w, u)), select(x, max(y, w), max(z, u))) ||
 
                rewrite(max(c0 - x, c1), c0 - min(x, fold(c0 - c1))))))) {
 
