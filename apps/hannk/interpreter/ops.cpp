@@ -20,11 +20,9 @@ namespace hannk {
 
 namespace {
 
-using Halide::Runtime::Buffer;
-
 // Check if dimension 0 and dimension 1 of buf can be fused.
 template<typename T>
-bool can_fuse(const Buffer<T> &buf, int d0, int d1) {
+bool can_fuse(const HalideBuffer<T> &buf, int d0, int d1) {
     assert(d0 != d1);
     return d0 < buf.dimensions() &&
            d1 < buf.dimensions() &&
@@ -33,17 +31,17 @@ bool can_fuse(const Buffer<T> &buf, int d0, int d1) {
            buf.dim(d1).stride() == buf.dim(d0).extent() * buf.dim(d0).stride();
 }
 template<typename T>
-bool can_fuse_cx(const Buffer<T> &buf) {
+bool can_fuse_cx(const HalideBuffer<T> &buf) {
     return can_fuse(buf, 0, 1);
 }
 template<typename T>
-bool can_fuse_xy(const Buffer<T> &buf) {
+bool can_fuse_xy(const HalideBuffer<T> &buf) {
     return can_fuse(buf, 1, 2);
 }
 
 // Fuse the first two dimensions of buf. d1 is deleted from the buffer.
 template<typename T>
-void fuse(Buffer<T> &buf, int d0, int d1) {
+void fuse(HalideBuffer<T> &buf, int d0, int d1) {
     halide_dimension_t &dim0 = buf.raw_buffer()->dim[d0];
     halide_dimension_t &dim1 = buf.raw_buffer()->dim[d1];
     dim0.extent *= dim1.extent;
@@ -53,20 +51,24 @@ void fuse(Buffer<T> &buf, int d0, int d1) {
     buf.slice(buf.dimensions() - 1);
 }
 template<typename T>
-void fuse_cx(Buffer<T> &buf) {
+void fuse_cx(HalideBuffer<T> &buf) {
     fuse(buf, 0, 1);
 }
 template<typename T>
-void fuse_xy(Buffer<T> &buf) {
+void fuse_xy(HalideBuffer<T> &buf) {
     fuse(buf, 1, 2);
 }
 
 // Embed extent 1 dimensions until buf has the given rank.
 template<typename T>
-void pad_to_rank(Buffer<T> &buf, int rank) {
+void pad_to_rank(HalideBuffer<T> &buf, int rank) {
     while (buf.dimensions() < rank) {
         buf.embed(buf.dimensions(), 0);
     }
+}
+
+bool is_alias(const HalideBuffer<const void> &a, const HalideBuffer<const void> &b) {
+    return !(a.begin() >= b.end() || a.end() <= b.begin());
 }
 
 struct QuantizedMulAndShift {
@@ -104,42 +106,22 @@ QuantizedMulAndShift get_quantized_mul_and_shift_smaller_than_one(double double_
 }
 
 Interval get_quantized_min_max(ActivationFunction activation, int zero_point, double scale) {
-    double real_activation_min = 0.0;
-    double real_activation_max = 0.0;
-    bool has_activation_min = false;
-    bool has_activation_max = false;
+    int min = 0;
+    int max = 255;
     if (activation == ActivationFunction::None) {
         // nothing
     } else if (activation == ActivationFunction::Relu) {
-        real_activation_min = 0.0;
-        has_activation_min = true;
+        min = zero_point;
     } else if (activation == ActivationFunction::Relu6) {
-        real_activation_min = 0.0;
-        has_activation_min = true;
-        real_activation_max = 6.0;
-        has_activation_max = true;
+        min = zero_point;
+        max = zero_point + (int)std::round(6.0 / scale);
     } else if (activation == ActivationFunction::ReluN1To1) {
-        real_activation_min = -1.0;
-        has_activation_min = true;
-        real_activation_max = 1.0;
-        has_activation_max = true;
+        min = zero_point + (int)std::round(-1.0 / scale);
+        max = zero_point + (int)std::round(1.0 / scale);
     } else {
         CHECK(false) << "Unsupported quantized activation function type.";
     }
-    int output_activation_min = 0;
-    int output_activation_max = 255;
-    if (has_activation_min) {
-        output_activation_min = std::max(
-            output_activation_min,
-            zero_point + (int)std::round(real_activation_min / scale));
-    }
-    if (has_activation_max) {
-        output_activation_max = std::min(
-            output_activation_max,
-            zero_point + (int)std::round(real_activation_max / scale));
-    }
-
-    return {output_activation_min, output_activation_max};
+    return {std::max(min, 0), std::min(max, 255)};
 }
 
 Interval get_output_range(ActivationFunction activation, Tensor *out) {
@@ -740,22 +722,42 @@ std::vector<SplitInfo> PadOp::get_split_info() const {
 
 void PadOp::execute(const Box &crop) {
     const Tensor *in = input(0);
-    auto padding = input(1)->buffer<const int32_t>();
     Tensor *out = output();
 
     if (out->type().bytes() == 1) {
         auto input_buf = in->buffer<const uint8_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
 
-        for (int d = 0; d < output_buf.dimensions(); d++) {
-            input_buf.translate(d, padding(0, d));
+        if (input(1)) {
+            auto padding = input(1)->buffer<const int32_t>();
+            for (int d = 0; d < output_buf.dimensions(); d++) {
+                input_buf.translate(d, padding(0, d));
+            }
         }
 
         uint8_t pad_value = in->quantization().zero.at(0);
 
-        // TODO: TFlite's padding is ~2x faster than this.
-        output_buf.fill(pad_value);
-        output_buf.copy_from(input_buf);
+        if (is_alias(input_buf, output_buf)) {
+            // This is an in-place padding.
+        } else {
+            output_buf.copy_from(input_buf);
+        }
+        for (int d = 0; d < output_buf.dimensions(); ++d) {
+            // TODO: This still redundantly fills regions that are out of
+            // bounds in more than one dimension.
+            int input_min = input_buf.dim(d).min();
+            int output_min = output_buf.dim(d).min();
+            if (output_min < input_min) {
+                auto before = output_buf.cropped(d, output_min, input_min - output_min);
+                before.fill(pad_value);
+            }
+            int input_max = input_buf.dim(d).max();
+            int output_max = output_buf.dim(d).max();
+            if (output_max > input_max) {
+                auto after = output_buf.cropped(d, input_max + 1, output_max - input_max);
+                after.fill(pad_value);
+            }
+        }
     } else {
         CHECK(false);
     }
@@ -788,7 +790,6 @@ void ReshapeOp::execute(const Box &crop) {
 
     // TODO: This should probably just be implemented by aliasing two of the tensors.
     assert(input_buf.number_of_elements() == output_buf.number_of_elements());
-    // TODO: This should also check the strides are dense.
     size_t output_size = output_buf.number_of_elements() * out->type().bytes();
     memcpy(output_buf.data(), input_buf.data(), output_size);
 }
