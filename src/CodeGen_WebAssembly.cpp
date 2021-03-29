@@ -10,6 +10,9 @@
 namespace Halide {
 namespace Internal {
 
+using std::string;
+using std::vector;
+
 #if defined(WITH_WEBASSEMBLY)
 
 using namespace Halide::ConciseCasts;
@@ -26,8 +29,8 @@ protected:
 
     void init_module() override;
 
-    std::string mcpu() const override;
-    std::string mattrs() const override;
+    string mcpu() const override;
+    string mattrs() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
     bool use_pic() const override;
@@ -115,7 +118,7 @@ void CodeGen_WebAssembly::init_module() {
         }
 
         Type ret_type = i.ret_type;
-        std::vector<Type> arg_types;
+        vector<Type> arg_types;
         arg_types.reserve(max_intrinsic_args);
         for (halide_type_t i : i.arg_types) {
             if (i.bits == 0) {
@@ -170,23 +173,17 @@ void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Ex
         int factor;
         Expr pattern;
         const char *intrin;
-        Type narrow_type;
-        uint32_t flags;
-        enum {
-            None = 0,
-            CombineInit = 1 << 0,
-        };
         Target::Feature required_feature;
     };
     // clang-format off
     static const Pattern patterns[] = {
-        {VectorReduce::Add, 2, i16(wild_i8x_), "pairwise_widening_add", Int(8), Pattern::None, Target::WasmSimd128},
-        {VectorReduce::Add, 2, u16(wild_u8x_), "pairwise_widening_add", UInt(8), Pattern::None, Target::WasmSimd128},
-        {VectorReduce::Add, 2, i16(wild_u8x_), "pairwise_widening_add", UInt(8), Pattern::None, Target::WasmSimd128},
+        {VectorReduce::Add, 2, i16(wild_i8x_), "pairwise_widening_add", Int(8), Target::WasmSimd128},
+        {VectorReduce::Add, 2, u16(wild_u8x_), "pairwise_widening_add", UInt(8), Target::WasmSimd128},
+        {VectorReduce::Add, 2, i16(wild_u8x_), "pairwise_widening_add", UInt(8), Target::WasmSimd128},
 
-        {VectorReduce::Add, 2, i32(wild_i16x_), "pairwise_widening_add", Int(16), Pattern::None, Target::WasmSimd128},
-        {VectorReduce::Add, 2, u32(wild_u16x_), "pairwise_widening_add", UInt(16), Pattern::None, Target::WasmSimd128},
-        {VectorReduce::Add, 2, i32(wild_u16x_), "pairwise_widening_add", UInt(16), Pattern::None, Target::WasmSimd128},
+        {VectorReduce::Add, 2, i32(wild_i16x_), "pairwise_widening_add", Int(16), Target::WasmSimd128},
+        {VectorReduce::Add, 2, u32(wild_u16x_), "pairwise_widening_add", UInt(16), Target::WasmSimd128},
+        {VectorReduce::Add, 2, i32(wild_u16x_), "pairwise_widening_add", UInt(16), Target::WasmSimd128},
     };
     // clang-format on
 
@@ -202,7 +199,7 @@ void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Ex
     }
 
     const int factor = op->value.type().lanes() / op->type.lanes();
-    std::vector<Expr> matches;
+    vector<Expr> matches;
     for (const Pattern &p : patterns) {
         if (op->op != p.reduce_op || (factor % p.factor) != 0) {
             continue;
@@ -225,37 +222,15 @@ void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Ex
                     std::swap(matches[0], matches[1]);
                 }
             }
-            if (p.narrow_type.bits() > 0) {
-                bool all_defined = true;
-                for (Expr &e : matches) {
-                    e = lossless_cast(p.narrow_type.with_lanes(e.type().lanes()), e);
-                    all_defined &= e.defined();
+            value = call_overloaded_intrin(op->type, p.intrin, matches);
+            if (value) {
+                if (init.defined()) {
+                    internal_assert(binop != nullptr) << "unsupported op";
+                    ValuePtr x = value;
+                    ValuePtr y = codegen(init);
+                    value = binop(x, y);
                 }
-                if (!all_defined) {
-                    continue;
-                }
-            }
-            if (p.flags & Pattern::CombineInit) {
-                // The intrinsic accepts the first value as an accumulator.
-                // Insert in in the front of the vector. (No current wasm code does this;
-                // left here as it might be useful for subsequent work.)
-                Expr init_safe = init.defined() ? init : make_zero(op->type);
-                matches.insert(matches.begin(), 1, init_safe);
-                value = call_overloaded_intrin(op->type, p.intrin, matches);
-                if (value) {
-                    return;
-                }
-            } else {
-                value = call_overloaded_intrin(op->type, p.intrin, matches);
-                if (value) {
-                    if (init.defined()) {
-                        internal_assert(binop != nullptr) << "unsupported op";
-                        ValuePtr x = value;
-                        ValuePtr y = codegen(init);
-                        value = binop(x, y);
-                    }
-                    return;
-                }
+                return;
             }
         }
     }
@@ -264,13 +239,13 @@ void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Ex
     CodeGen_Posix::codegen_vector_reduce(op, init);
 }
 
-std::string CodeGen_WebAssembly::mcpu() const {
+string CodeGen_WebAssembly::mcpu() const {
     return "";
 }
 
-std::string CodeGen_WebAssembly::mattrs() const {
+string CodeGen_WebAssembly::mattrs() const {
     std::ostringstream s;
-    std::string sep;
+    string sep;
 
     if (target.has_feature(Target::WasmSignExt)) {
         s << sep << "+sign-ext";
