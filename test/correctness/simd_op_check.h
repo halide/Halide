@@ -1,4 +1,3 @@
-
 #ifndef SIMD_OP_CHECK_H
 #define SIMD_OP_CHECK_H
 
