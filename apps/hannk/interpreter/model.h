@@ -30,6 +30,43 @@ inline std::ostream &operator<<(std::ostream &s, const QuantizationInfo &q) {
     return s << "{" << q.scale << ", " << q.zero << ", " << q.dimension << "}";
 }
 
+// Storage for a tensor.
+class TensorStorage {
+    HalideBuffer<void> buffer_;
+
+public:
+    TensorStorage();
+    TensorStorage(HalideBuffer<void> buffer);
+    TensorStorage &operator=(const TensorStorage &) = delete;
+    TensorStorage(TensorStorage &&) = default;
+    TensorStorage &operator=(TensorStorage &&) = default;
+
+    // Grow the bounds of the storage to accommodate a new user.
+    // The type and dimensionality must match the existing storage.
+    void add_use(halide_type_t, const Box &bounds);
+
+    halide_type_t type() const {
+        return buffer_.type();
+    }
+
+    int rank() const {
+        return buffer_.dimensions();
+    }
+
+    template<class T = void>
+    const HalideBuffer<T> &buffer() {
+        return buffer_.as<T>();
+    }
+
+    template<class T = void>
+    const HalideBuffer<const T> &buffer() const {
+        return buffer_.as_const().as<const T>();
+    }
+
+    bool is_allocated() const;
+    void allocate();
+};
+
 class Tensor {
     std::string name_;
     HalideBuffer<void> buffer_;
@@ -38,15 +75,17 @@ class Tensor {
     bool is_input_ = false;
     bool is_output_ = false;
 
-public:
-    Tensor(std::string name, HalideBuffer<void> buffer, QuantizationInfo quantization)
-        : name_(std::move(name)),
-          buffer_(std::move(buffer)),
-          quantization_(std::move(quantization)) {
-        is_constant_ = buffer_.data() != nullptr;
-    }
+    // Possibly shared storage for this tensor.
+    std::shared_ptr<TensorStorage> storage_;
 
+public:
+    Tensor() = delete;
+    Tensor(std::string name, HalideBuffer<void> buffer, QuantizationInfo quantization);
+    Tensor(std::string name, halide_type_t type, const Box &bounds, QuantizationInfo quantization);
     Tensor(const Tensor &copy) = default;
+    Tensor(Tensor &&) = default;
+    Tensor &operator=(const Tensor &) = delete;
+    Tensor &operator=(Tensor &&) = default;
 
     halide_type_t type() const {
         return buffer_.type();
@@ -140,22 +179,14 @@ public:
         return buf;
     }
 
-    bool is_allocated() const {
-        return buffer_.data() != nullptr;
-    }
+    bool is_allocated() const;
+    void allocate();
 
-    void allocate() {
-        if (!buffer_.data()) {
-            buffer_ = HalideBuffer<void>::make_with_shape_of(buffer_);
-        }
-    }
+    std::shared_ptr<TensorStorage> storage();
+
+    void set_alias_of(Tensor *t);
 
     void dump(std::ostream &os) const;
-
-    Tensor() = delete;
-    Tensor &operator=(const Tensor &) = delete;
-    Tensor(Tensor &&) = default;
-    Tensor &operator=(Tensor &&) = default;
 };
 
 // A mapping from old tensors to new tensors, when cloning an op.
@@ -198,6 +229,8 @@ struct SplitInfo {
     }
 };
 
+class OpVisitor;
+
 class Op {
 protected:
     std::vector<Tensor *> inputs_;
@@ -238,6 +271,8 @@ public:
     // Clone this op, replacing tensors using the mapping in tensor_map.
     virtual std::unique_ptr<Op> clone(const TensorMap &tensor_map) const = 0;
 
+    virtual void accept(OpVisitor *v) = 0;
+
     virtual void dump(std::ostream &os) const = 0;
 
     int input_count() const {
@@ -271,6 +306,19 @@ public:
         return output(0);
     }
 
+    void set_input(int idx, Tensor *t) {
+        inputs_[idx] = t;
+    }
+    void set_output(int idx, Tensor *t) {
+        outputs_[idx] = t;
+    }
+    void set_input(Tensor *t) {
+        set_input(0, t);
+    }
+    void set_output(Tensor *t) {
+        set_output(0, t);
+    }
+
     // Movable but not copyable.
     Op() = delete;
     Op(const Op &) = delete;
@@ -282,6 +330,12 @@ public:
 struct Model {
     std::vector<std::shared_ptr<Tensor>> tensors;
     std::vector<std::unique_ptr<Op>> ops;
+
+    // Add a tensor after an existing tensor.
+    void insert(std::shared_ptr<Tensor> to_insert, const Tensor *after = nullptr);
+    void insert(std::unique_ptr<Op> to_insert, const Op *before = nullptr);
+
+    void accept(OpVisitor *v);
 
     void dump(std::ostream &os);
 

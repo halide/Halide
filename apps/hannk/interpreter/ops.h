@@ -70,6 +70,8 @@ public:
             apply(map, output()), input2_sign_, activation_);
     }
 
+    void accept(OpVisitor *v);
+
     void execute(const Box &crop);
 
     void dump(std::ostream &os) const {
@@ -100,6 +102,8 @@ public:
             filter_size_, padding_, activation_);
     }
 
+    void accept(OpVisitor *v);
+
     void execute(const Box &crop);
 
     void dump(std::ostream &os) const {
@@ -125,6 +129,8 @@ public:
         return ::hannk::make_unique<ConcatenationOp>(
             inputs, apply(map, output()), axis_, activation_);
     }
+
+    void accept(OpVisitor *v);
 
     Bounds infer_bounds(const Box &crop) const;
     std::vector<SplitInfo> get_split_info() const;
@@ -161,6 +167,8 @@ public:
             apply(map, output()), stride_, dilation_, padding_, activation_);
     }
 
+    void accept(OpVisitor *v);
+
     const Tensor *filter() const {
         return Op::input(1);
     }
@@ -174,6 +182,7 @@ public:
         return Op::input(2);
     }
 
+    Box input_required(const Box &crop) const;
     Bounds infer_bounds(const Box &crop) const;
     std::vector<SplitInfo> get_split_info() const;
 
@@ -210,6 +219,8 @@ public:
             apply(map, output()), stride_, dilation_, padding_, activation_);
     }
 
+    void accept(OpVisitor *v);
+
     const Tensor *filter() const {
         return Op::input(1);
     }
@@ -223,6 +234,7 @@ public:
         return Op::input(2);
     }
 
+    Box input_required(const Box &crop) const;
     Bounds infer_bounds(const Box &crop) const;
     std::vector<SplitInfo> get_split_info() const;
 
@@ -246,6 +258,8 @@ public:
             apply(map, input()), apply(map, filter()), apply(map, bias()),
             apply(map, output()), activation_);
     }
+
+    void accept(OpVisitor *v);
 
     const Tensor *filter() const {
         return Op::input(1);
@@ -284,6 +298,8 @@ public:
             apply(map, input()), apply(map, output()), stride_, filter_size_, padding_, activation_);
     }
 
+    void accept(OpVisitor *v);
+
     void execute(const Box &crop);
 
     void dump(std::ostream &os) const {
@@ -301,6 +317,8 @@ public:
         return ::hannk::make_unique<PadOp>(
             apply(map, input(0)), apply(map, input(1)), apply(map, output()));
     }
+
+    void accept(OpVisitor *v);
 
     Bounds infer_bounds(const Box &crop) const;
     std::vector<SplitInfo> get_split_info() const;
@@ -324,6 +342,8 @@ public:
         return ::hannk::make_unique<ReshapeOp>(apply(map, input()), apply(map, output()), new_shape_);
     }
 
+    void accept(OpVisitor *v);
+
     Bounds infer_bounds(const Box &crop) const;
     std::vector<SplitInfo> get_split_info() const;
 
@@ -332,6 +352,19 @@ public:
     void dump(std::ostream &os) const {
         os << "  Reshape " << output()->name() << std::endl;
     }
+};
+
+class OpVisitor {
+public:
+    virtual void visit(AddOp *op) {}
+    virtual void visit(AveragePoolOp *op) {}
+    virtual void visit(ConcatenationOp *op) {}
+    virtual void visit(Conv2DOp *op) {}
+    virtual void visit(DepthwiseConv2DOp *op) {}
+    virtual void visit(FullyConnectedOp *op) {}
+    virtual void visit(MaxPoolOp *op) {}
+    virtual void visit(PadOp *op) {}
+    virtual void visit(ReshapeOp *op) {}
 };
 
 }  // namespace hannk

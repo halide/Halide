@@ -161,16 +161,13 @@ Op::Bounds PoolOp::infer_bounds(const Box &crop) const {
     Box input_crop = crop;
 
     input_crop[0] = crop[0];
-    for (int dim = 1; dim <= 2; dim++) {
-        input_crop[dim] *= stride_[dim - 1];
-    }
-
+    input_crop[1] *= stride_[0];
+    input_crop[2] *= stride_[1];
     input_crop[1].max += filter_size_[0] - 1;
     input_crop[2].max += filter_size_[1] - 1;
-    input_crop = intersect(input_crop, input()->box());
 
     Bounds result;
-    result.inputs.emplace_back(input_crop);
+    result.inputs = {input_crop};
     result.outputs = {crop};
     return result;
 }
@@ -303,15 +300,13 @@ void ConcatenationOp::execute(const Box &crop) {
     }
 }
 
-Op::Bounds Conv2DOp::infer_bounds(const Box &crop) const {
+Box Conv2DOp::input_required(const Box &crop) const {
     Box input_crop = crop;
     Box filter_shape = filter()->box();
 
-    for (int dim = 1; dim <= 2; dim++) {
-        input_crop[dim] *= stride_[dim - 1];
-    }
-
-    input_crop[0] = filter_shape[3];
+    input_crop[0] = filter_shape[0];
+    input_crop[1] *= stride_[0];
+    input_crop[2] *= stride_[1];
     input_crop[1].max += dilation_[0] * (filter_shape[1].extent() - 1);
     input_crop[2].max += dilation_[1] * (filter_shape[2].extent() - 1);
 
@@ -334,12 +329,16 @@ Op::Bounds Conv2DOp::infer_bounds(const Box &crop) const {
         input_crop[1] += pad_width;
         input_crop[2] += pad_height;
     }
-    input_crop = intersect(input_crop, input()->box());
+    return input_crop;
+}
 
+Op::Bounds Conv2DOp::infer_bounds(const Box &crop) const {
     Bounds result;
-    result.inputs.emplace_back(input_crop);
-    result.inputs.emplace_back(std::move(filter_shape));
-    result.inputs.emplace_back(bias()->box());
+    result.inputs = {
+        input_required(crop),
+        filter()->box(),
+        bias()->box(),
+    };
     result.outputs = {crop};
 
     return result;
@@ -463,16 +462,13 @@ int DepthwiseConv2DOp::depth_multiplier() const {
     return output()->extent(0) / input()->extent(0);
 }
 
-Op::Bounds DepthwiseConv2DOp::infer_bounds(const Box &crop) const {
+Box DepthwiseConv2DOp::input_required(const Box &crop) const {
     Box input_crop = crop;
     Box filter_shape = filter()->box();
 
-    input_crop[0] = crop[0];
-    input_crop[0] /= depth_multiplier();
-    for (int dim = 1; dim <= 2; dim++) {
-        input_crop[dim] *= stride_[dim - 1];
-    }
-
+    input_crop[0] = crop[0] / depth_multiplier();
+    input_crop[1] *= stride_[0];
+    input_crop[2] *= stride_[1];
     input_crop[1].max += dilation_[0] * (filter_shape[1].extent() - 1);
     input_crop[2].max += dilation_[1] * (filter_shape[2].extent() - 1);
 
@@ -495,13 +491,16 @@ Op::Bounds DepthwiseConv2DOp::infer_bounds(const Box &crop) const {
         input_crop[1] += pad_width;
         input_crop[2] += pad_height;
     }
+    return input_crop;
+}
 
-    input_crop = intersect(input_crop, input()->box());
-
+Op::Bounds DepthwiseConv2DOp::infer_bounds(const Box &crop) const {
     Bounds result;
-    result.inputs.emplace_back(input_crop);
-    result.inputs.emplace_back(std::move(filter_shape));
-    result.inputs.emplace_back(bias()->box());
+    result.inputs = {
+        input_required(crop),
+        filter()->box(),
+        bias()->box(),
+    };
     result.outputs = {crop};
     return result;
 }
@@ -700,18 +699,22 @@ void MaxPoolOp::execute(const Box &crop) {
 }
 
 Op::Bounds PadOp::infer_bounds(const Box &crop) const {
-    auto padding = input(1)->buffer<const int32_t>();
-
     Bounds result;
+    if (input(1)) {
+        auto padding = input(1)->buffer<const int32_t>();
 
-    Box padded_crop = crop;
-    for (int d = 0; d < output()->rank(); d++) {
-        padded_crop[d] += padding(0, d);
+        Box padded_crop = crop;
+        for (int d = 0; d < output()->rank(); d++) {
+            padded_crop[d] += padding(0, d);
+        }
+
+        result.inputs.emplace_back(
+            intersect(padded_crop, input(0)->box()));
+        result.inputs.emplace_back(input(1)->box());
+    } else {
+        result.inputs.emplace_back(crop);
+        result.inputs.emplace_back(Box());
     }
-
-    result.inputs.emplace_back(
-        intersect(padded_crop, input(0)->box()));
-    result.inputs.emplace_back(input(1)->box());
     result.outputs.emplace_back(crop);
     return result;
 }
@@ -788,10 +791,51 @@ void ReshapeOp::execute(const Box &crop) {
     //     assert(new_shape_.at(d) == output_buf.dim(d).extent());
     // }
 
-    // TODO: This should probably just be implemented by aliasing two of the tensors.
     assert(input_buf.number_of_elements() == output_buf.number_of_elements());
     size_t output_size = output_buf.number_of_elements() * out->type().bytes();
-    memcpy(output_buf.data(), input_buf.data(), output_size);
+    if (is_alias(input_buf, output_buf)) {
+        assert(input_buf.begin() == output_buf.begin());
+        assert(input_buf.end() == output_buf.end());
+    } else {
+        // TODO: This should also check the strides are dense.
+        memcpy(output_buf.data(), input_buf.data(), output_size);
+    }
+}
+
+void AddOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void AveragePoolOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void ConcatenationOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void Conv2DOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void DepthwiseConv2DOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void FullyConnectedOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void MaxPoolOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void PadOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void ReshapeOp::accept(OpVisitor *v) {
+    v->visit(this);
 }
 
 }  // namespace hannk

@@ -151,6 +151,10 @@ $(BIN)/%/ops.o: interpreter/ops.cpp $(OPS_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(OPS_CXXFLAGS) -c $< -o $@
 
+$(BIN)/%/transforms.o: interpreter/transforms.cpp
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -c $< -o $@
+
 $(BIN)/%/interval.o: interpreter/interval.cpp $(OPS_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -c $< -o $@
@@ -159,6 +163,7 @@ INTERPRETER_DEPS = \
 	$(BIN)/%/interpreter.o \
 	$(BIN)/%/interval.o \
 	$(BIN)/%/model.o \
+	$(BIN)/%/transforms.o \
 	$(BIN)/%/ops.o \
 	$(OPS_HALIDE)
 
