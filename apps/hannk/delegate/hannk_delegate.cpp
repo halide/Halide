@@ -165,7 +165,7 @@ std::vector<int> ConvertTfLiteShape(const TfLiteTensor &tensor) {
     return shape;
 }
 
-std::shared_ptr<Tensor> ConvertTfLiteTensor(const TfLiteTensor &tensor) {
+std::unique_ptr<Tensor> ConvertTfLiteTensor(const TfLiteTensor &tensor) {
     auto shape = ConvertTfLiteShape(tensor);
 
     halide_type_t type = ConvertTfLiteType(tensor.type);
@@ -198,12 +198,12 @@ std::shared_ptr<Tensor> ConvertTfLiteTensor(const TfLiteTensor &tensor) {
         HalideBuffer<void> buffer(type, const_cast<void *>(read_only_data), shape);
         assert(tensor.bytes == buffer.size_in_bytes());
 
-        return std::make_shared<Tensor>(name, std::move(buffer), std::move(quantization));
+        return ::hannk::make_unique<Tensor>(name, std::move(buffer), std::move(quantization));
     }
 
     // Create an "unallocated" Buffer, which points to null.
     HalideBuffer<void> buffer(type, nullptr, shape);
-    return std::make_shared<Tensor>(name, std::move(buffer), std::move(quantization));
+    return ::hannk::make_unique<Tensor>(name, std::move(buffer), std::move(quantization));
 }
 
 class HannkDelegateKernel final {

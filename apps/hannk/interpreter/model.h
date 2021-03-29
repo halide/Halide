@@ -2,6 +2,7 @@
 #define MODEL_H
 
 #include <iostream>
+#include <list>
 #include <map>
 #include <string>
 #include <vector>
@@ -67,6 +68,8 @@ public:
     void allocate();
 };
 
+class Op;
+
 class Tensor {
     std::string name_;
     HalideBuffer<void> buffer_;
@@ -78,11 +81,14 @@ class Tensor {
     // Possibly shared storage for this tensor.
     std::shared_ptr<TensorStorage> storage_;
 
+    std::list<Op*> producers_;
+    std::list<Op*> consumers_;
+
 public:
     Tensor() = delete;
     Tensor(std::string name, HalideBuffer<void> buffer, QuantizationInfo quantization);
     Tensor(std::string name, halide_type_t type, const Box &bounds, QuantizationInfo quantization);
-    Tensor(const Tensor &copy) = default;
+    Tensor(const Tensor &copy);
     Tensor(Tensor &&) = default;
     Tensor &operator=(const Tensor &) = delete;
     Tensor &operator=(Tensor &&) = default;
@@ -186,6 +192,13 @@ public:
 
     void set_alias_of(Tensor *t);
 
+    void add_consumer(Op *op);
+    void add_producer(Op *op);
+    void remove_consumer(Op *op);
+    void remove_producer(Op *op);
+
+    void replace_all_consumers_with(Tensor *other);
+
     void dump(std::ostream &os) const;
 };
 
@@ -232,16 +245,15 @@ struct SplitInfo {
 class OpVisitor;
 
 class Op {
-protected:
+private:
     std::vector<Tensor *> inputs_;
     std::vector<Tensor *> outputs_;
 
-    explicit Op(std::vector<Tensor *> inputs, std::vector<Tensor *> outputs)
-        : inputs_(std::move(inputs)), outputs_(std::move(outputs)) {
-    }
+protected:
+    Op(std::vector<Tensor *> inputs, std::vector<Tensor *> outputs);
 
 public:
-    virtual ~Op() = default;
+    virtual ~Op();
 
     // Get the shape of the complete output of this op.
     virtual Box get_full_crop() {
@@ -306,18 +318,10 @@ public:
         return output(0);
     }
 
-    void set_input(int idx, Tensor *t) {
-        inputs_[idx] = t;
-    }
-    void set_output(int idx, Tensor *t) {
-        outputs_[idx] = t;
-    }
-    void set_input(Tensor *t) {
-        set_input(0, t);
-    }
-    void set_output(Tensor *t) {
-        set_output(0, t);
-    }
+    void set_input(int idx, Tensor *t);
+    void set_output(int idx, Tensor *t);
+    void set_input(Tensor *t);
+    void set_output(Tensor *t);
 
     // Movable but not copyable.
     Op() = delete;
@@ -328,11 +332,11 @@ public:
 };
 
 struct Model {
-    std::vector<std::shared_ptr<Tensor>> tensors;
+    std::vector<std::unique_ptr<Tensor>> tensors;
     std::vector<std::unique_ptr<Op>> ops;
 
     // Add a tensor after an existing tensor.
-    void insert(std::shared_ptr<Tensor> to_insert, const Tensor *after = nullptr);
+    void insert(std::unique_ptr<Tensor> to_insert, const Tensor *after = nullptr);
     void insert(std::unique_ptr<Op> to_insert, const Op *before = nullptr);
 
     void accept(OpVisitor *v);

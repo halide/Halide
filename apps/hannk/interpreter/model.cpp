@@ -77,6 +77,35 @@ Tensor::Tensor(std::string name, halide_type_t type, const Box &bounds, Quantiza
     : Tensor(name, make_buffer(type, bounds), quantization) {
 }
 
+Tensor::Tensor(const Tensor &copy)
+    : name_(copy.name()), buffer_(make_buffer(copy.type(), copy.box())),
+      quantization_(copy.quantization_), is_constant_(copy.is_constant_),
+      is_input_(copy.is_input_), is_output_(copy.is_output_), storage_(copy.storage_) {
+    if (copy.is_allocated()) {
+        allocate();
+        // This should have used the same buffer as the copy's storage.
+        assert(buffer_.data() == copy.buffer_.data());
+    } else {
+        assert(!storage_.buffer_.data());
+    }
+}
+
+void Tensor::add_consumer(Op *op) {
+    consumers_.push_back(op);
+}
+
+void Tensor::add_producer(Op *op) {
+    producers_.push_back(op);
+}
+
+void Tensor::remove_consumer(Op *op) {
+    consumers_.remove(op);
+}
+
+void Tensor::remove_producer(Op *op) {
+    producers_.remove(op);
+}
+
 std::shared_ptr<TensorStorage> Tensor::storage() {
     if (!storage_) {
         storage_ = std::make_shared<TensorStorage>(buffer_);
@@ -108,6 +137,19 @@ void Tensor::set_alias_of(Tensor *t) {
     storage_->add_use(type(), box());
 }
 
+void Tensor::replace_all_consumers_with(Tensor *other) {
+    // We need to make a copy of the list of consumers so it doesn't get invalidated
+    // by set_input below.
+    auto consumers = consumers_;
+    for (Op *i : consumers) {
+        for (int j = 0; j < i->input_count(); j++) {
+            if (i->input(j) == this) {
+                i->set_input(j, other);
+            }
+        }
+    }
+}
+
 void Tensor::dump(std::ostream &os) const {
     os << "  \"" << name() << "\" : "
        << "  " << buffer_.type() << " x ";
@@ -129,19 +171,64 @@ void Tensor::dump(std::ostream &os) const {
     }
 }
 
-Model::Model(const Model &copy) {
-    // First, just copy all the tensors (shared pointers).
-    tensors = copy.tensors;
+Op::Op(std::vector<Tensor *> inputs, std::vector<Tensor *> outputs)
+    : inputs_(std::move(inputs)), outputs_(std::move(outputs)) {
+    for (auto &i : inputs_) {
+        if (!i) continue;
+        i->add_consumer(this);
+    }
+    for (auto &i : outputs_) {
+        if (!i) continue;
+        i->add_producer(this);
+    }
+}
 
-    // Next, clone the non-allocated tensors. These might get intermediate state
-    // while being executed.
+Op::~Op() {
+    for (auto &i : inputs_) {
+        if (!i) continue;
+        i->remove_consumer(this);
+    }
+    for (auto &i : outputs_) {
+        if (!i) continue;
+        i->remove_producer(this);
+    }
+}
+
+void Op::set_input(int idx, Tensor *t) {
+    if (inputs_[idx]) {
+        inputs_[idx]->remove_consumer(this);
+    }
+    inputs_[idx] = t;
+    if (inputs_[idx]) {
+        inputs_[idx]->add_consumer(this);
+    }
+}
+
+void Op::set_output(int idx, Tensor *t) {
+    if (outputs_[idx]) {
+        outputs_[idx]->remove_producer(this);
+    }
+    outputs_[idx] = t;
+    if (outputs_[idx]) {
+        outputs_[idx]->add_producer(this);
+    }
+}
+
+void Op::set_input(Tensor *t) {
+    set_input(0, t);
+}
+
+void Op::set_output(Tensor *t) {
+    set_output(0, t);
+}
+
+Model::Model(const Model &copy) {
+    // Clone the tensors, making a mapping from old tensor to new tensor.
     TensorMap map;
-    for (auto &i : tensors) {
-        if (!i->is_allocated()) {
-            auto cloned = std::make_shared<Tensor>(*i);
-            map[i.get()] = cloned.get();
-            i = cloned;
-        }
+    for (const auto &i : copy.tensors) {
+        auto cloned = ::hannk::make_unique<Tensor>(*i);
+        map[i.get()] = cloned.get();
+        tensors.push_back(std::move(cloned));
     }
 
     // Now copy the ops, using the tensor map we made above.
@@ -150,14 +237,14 @@ Model::Model(const Model &copy) {
     }
 }
 
-void Model::insert(std::shared_ptr<Tensor> to_insert, const Tensor *after) {
+void Model::insert(std::unique_ptr<Tensor> to_insert, const Tensor *after) {
     for (auto i = tensors.begin(); i != tensors.end(); ++i) {
         if (i->get() == after) {
-            tensors.insert(++i, to_insert);
+            tensors.insert(++i, std::move(to_insert));
             return;
         }
     }
-    tensors.push_back(to_insert);
+    tensors.push_back(std::move(to_insert));
 }
 
 void Model::insert(std::unique_ptr<Op> to_insert, const Op *before) {

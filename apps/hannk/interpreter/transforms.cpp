@@ -142,13 +142,15 @@ class PadForConv : public OpVisitor {
         if (!is_subset_of(required, input->box())) {
             // Make a PadOp and a new tensor for the padded result.
             std::string padded_name = input->name() + "_padded";
-            std::shared_ptr<Tensor> padded =
-                std::make_shared<Tensor>(padded_name, input->type(), required, input->quantization());
-            std::unique_ptr<Op> pad = ::hannk::make_unique<PadOp>(input, nullptr, padded.get());
+            std::unique_ptr<Tensor> padded =
+                ::hannk::make_unique<Tensor>(padded_name, input->type(), required, input->quantization());
+            // Replace all uses with the padded result, including this op.
+            input->replace_all_consumers_with(padded.get());
+            assert(op->input() == padded.get());
 
             // Add the new tensor, op, and update the input.
-            pad_ops.emplace_back(std::move(pad), padded);
-            op->set_input(padded.get());
+            std::unique_ptr<Op> pad = ::hannk::make_unique<PadOp>(input, nullptr, padded.get());
+            pad_ops.emplace_back(std::move(pad), std::move(padded));
         }
     }
 
@@ -163,7 +165,7 @@ class PadForConv : public OpVisitor {
     }
 
 public:
-    std::vector<std::pair<std::unique_ptr<Op>, std::shared_ptr<Tensor>>> pad_ops;
+    std::vector<std::pair<std::unique_ptr<Op>, std::unique_ptr<Tensor>>> pad_ops;
 };
 
 // Find pad ops consumed by ops that can handle padding internally
@@ -175,14 +177,8 @@ class RemovePadOps : public OpVisitor {
         Tensor *input = op->input();
         Tensor *output = op->output();
 
-        for (auto &i : model_->ops) {
-            for (int j = 0; j < i->input_count(); j++) {
-                if (i->input(j) == output) {
-                    // TODO: Check that the consumers can handle padding
-                    i->set_input(j, input);
-                }
-            }
-        }
+        // TODO: Check that the consumers can handle padding themselves?
+        output->replace_all_consumers_with(input);
     }
 
 public:
@@ -198,7 +194,7 @@ void pad_for_conv(Model *m) {
     m->accept(&v);
     for (auto &i : v.pad_ops) {
         m->insert(std::move(i.first));
-        m->insert(i.second);
+        m->insert(std::move(i.second));
     }
 }
 
