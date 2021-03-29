@@ -99,8 +99,6 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"saturating_narrow_i16x16_to_u8x16", UInt(8, 16), "saturating_narrow", {Int(16, 16)}, Target::WasmSimd128},
     {"saturating_narrow_i32x8_to_i16x8", Int(16, 8), "saturating_narrow", {Int(32, 8)}, Target::WasmSimd128},
     {"saturating_narrow_i32x8_to_u16x8", UInt(16, 8), "saturating_narrow", {Int(32, 8)}, Target::WasmSimd128},
-    {"saturating_narrow_u16x16_to_u8x16", UInt(8, 16), "saturating_narrow", {UInt(16, 16)}, Target::WasmSimd128},
-    {"saturating_narrow_u32x8_to_u16x8", UInt(16, 8), "saturating_narrow", {UInt(32, 8)}, Target::WasmSimd128},
 #endif
 };
 // clang-format on
@@ -144,8 +142,6 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
         {"saturating_narrow", u8_sat(wild_i16x_), Target::WasmSimd128},
         {"saturating_narrow", i16_sat(wild_i32x_), Target::WasmSimd128},
         {"saturating_narrow", u16_sat(wild_i32x_), Target::WasmSimd128},
-        {"saturating_narrow", u8_sat(wild_u16x_), Target::WasmSimd128},
-        {"saturating_narrow", u16_sat(wild_u32x_), Target::WasmSimd128},
     };
     // clang-format on
 

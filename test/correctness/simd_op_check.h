@@ -116,10 +116,6 @@ public:
 
         if (!found_it) {
             error_msg << "Failed: " << msg.str() << "\n";
-
-            // Occasionally useful for debugging: stop at the first failure.
-            // std::cerr << error_msg.str();
-            // exit(-1);
         }
 
         // Also compile the error checking Func (to be sure it compiles without error)
@@ -282,10 +278,6 @@ public:
                 }
 
                 error_file.close();
-
-                // Occasionally useful for debugging: stop at the first failure.
-                // std::cerr << error_msg.str();
-                // exit(-1);
             }
         }
 
