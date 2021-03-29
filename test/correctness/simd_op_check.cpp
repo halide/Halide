@@ -1749,29 +1749,51 @@ public:
                 check("i32x4.neg", 4 * w, -i32_1);
                 check("i64x2.neg", 2 * w, -i64_1);
 
-                // Extended (widening) integer multiplication
-                check("i16x8.extmul_low_i8x16_s", 8 * w, i16(i8_1) * i8_2);
-                check("i32x4.extmul_low_i16x8_s", 4 * w, i32(i16_1) * i16_2);
-                check("i64x2.extmul_low_i32x4_s", 2 * w, i64(i32_1) * i32_2);
-                check("i16x8.extmul_low_i8x16_u", 8 * w, u16(u8_1) * u8_2);
-                check("i32x4.extmul_low_i16x8_u", 4 * w, u32(u16_1) * u16_2);
-                check("i64x2.extmul_low_i32x4_u", 2 * w, u64(u32_1) * u32_2);
-                if (w > 1) {
-                    // Need a register wider than 128 bits for us to generate these
-                    check("i16x8.extmul_high_i8x16_s", 8 * w, i16(i8_1) * i8_2);
-                    check("i32x4.extmul_high_i16x8_s", 4 * w, i32(i16_1) * i16_2);
-                    check("i64x2.extmul_high_i32x4_s", 2 * w, i64(i32_1) * i32_2);
-                    check("i16x8.extmul_high_i8x16_u", 8 * w, u16(u8_1) * u8_2);
-                    check("i32x4.extmul_high_i16x8_u", 4 * w, u32(u16_1) * u16_2);
-                    check("i64x2.extmul_high_i32x4_u", 2 * w, u64(u32_1) * u32_2);
-                }
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    // At present, we only attempt to generate these for LLVM >= 13.
 
-                // Extended pairwise integer addition
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i16x8.extadd_pairwise_i8x16_s", ???, ???);
-                // check("i16x8.extadd_pairwise_i8x16_u", ???, ???);
-                // check("i32x4.extadd_pairwise_i16x8_s", ???, ???);
-                // check("i32x4.extadd_pairwise_i16x8_u", ???, ???);
+                    // Extended (widening) integer multiplication
+                    check("i16x8.extmul_low_i8x16_s", 8 * w, i16(i8_1) * i8_2);
+                    check("i32x4.extmul_low_i16x8_s", 4 * w, i32(i16_1) * i16_2);
+                    check("i64x2.extmul_low_i32x4_s", 2 * w, i64(i32_1) * i32_2);
+                    check("i16x8.extmul_low_i8x16_u", 8 * w, u16(u8_1) * u8_2);
+                    check("i32x4.extmul_low_i16x8_u", 4 * w, u32(u16_1) * u16_2);
+                    check("i64x2.extmul_low_i32x4_u", 2 * w, u64(u32_1) * u32_2);
+                    if (w > 1) {
+                        // Need a register wider than 128 bits for us to generate these
+                        check("i16x8.extmul_high_i8x16_s", 8 * w, i16(i8_1) * i8_2);
+                        check("i32x4.extmul_high_i16x8_s", 4 * w, i32(i16_1) * i16_2);
+                        check("i64x2.extmul_high_i32x4_s", 2 * w, i64(i32_1) * i32_2);
+                        check("i16x8.extmul_high_i8x16_u", 8 * w, u16(u8_1) * u8_2);
+                        check("i32x4.extmul_high_i16x8_u", 4 * w, u32(u16_1) * u16_2);
+                        check("i64x2.extmul_high_i32x4_u", 2 * w, u64(u32_1) * u32_2);
+                    }
+
+                    // Extended pairwise integer addition
+                    for (int f : {2, 4}) {
+                        RDom r(0, f);
+
+                        // A summation reduction that starts at something
+                        // non-trivial, to avoid llvm simplifying accumulating
+                        // widening summations into just widening summations.
+                        auto sum_ = [&](Expr e) {
+                            Func f;
+                            f(x) = cast(e.type(), 123);
+                            f(x) += e;
+                            return f(x);
+                        };
+
+                        check("i16x8.extadd_pairwise_i8x16_s", 8 * w, sum_(i16(in_i8(f * x + r))));
+                        check("i16x8.extadd_pairwise_i8x16_u", 8 * w, sum_(u16(in_u8(f * x + r))));
+                        // The u8->i16 op uses the unsigned variant
+                        check("i16x8.extadd_pairwise_i8x16_u", 8 * w, sum_(i16(in_u8(f * x + r))));
+
+                        check("i32x4.extadd_pairwise_i16x8_s", 8 * w, sum_(i32(in_i16(f * x + r))));
+                        check("i32x4.extadd_pairwise_i16x8_u", 8 * w, sum_(u32(in_u16(f * x + r))));
+                        // The u16->i32 op uses the unsigned variant
+                        check("i32x4.extadd_pairwise_i16x8_u", 8 * w, sum_(i32(in_u16(f * x + r))));
+                    }
+                }
 
                 // Saturating integer addition
                 std::string sat = Halide::Internal::get_llvm_version() >= 130 ? "sat" : "saturate";
