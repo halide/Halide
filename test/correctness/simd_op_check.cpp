@@ -1736,11 +1736,13 @@ public:
                 check("i32x4.mul", 4 * w, i32_1 * i32_2);
                 check("i64x2.mul", 2 * w, i64_1 * i64_2);
 
-                // Integer dot product (16 -> 32)
-                for (int f : {2, 4, 8}) {
-                    RDom r(0, f);
-                    for (int v : {1, 2, 4}) {
-                        check("i32x4.dot_i16x8_s", w * v, sum(i32(in_i16(f * x + r)) * in_i16(f * x + r + 32)));
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    // Integer dot product (16 -> 32)
+                    for (int f : {2, 4, 8}) {
+                        RDom r(0, f);
+                        for (int v : {1, 2, 4}) {
+                            check("i32x4.dot_i16x8_s", w * v, sum(i32(in_i16(f * x + r)) * in_i16(f * x + r + 32)));
+                        }
                     }
                 }
 
