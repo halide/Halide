@@ -22,7 +22,7 @@ HalideBuffer<void> make_buffer(halide_type_t type, const Box &bounds) {
     for (int i = 0; i < (int)bounds.size(); i++) {
         extents[i] = bounds[i].extent();
     }
-    HalideBuffer<void> buffer(type, extents);
+    HalideBuffer<void> buffer(type, nullptr, extents);
     for (int i = 0; i < (int)bounds.size(); i++) {
         buffer.translate(i, bounds[i].min);
     }
@@ -165,10 +165,16 @@ void Tensor::dump(std::ostream &os) const {
     os << '}';
 
     if (is_allocated()) {
-        os << " allocated " << name() << std::endl;
+        os << " allocated " << name();
     } else {
-        os << " " << name() << std::endl;
+        os << " " << name();
     }
+
+    if (is_constant()) {
+        os << " constant";
+    }
+
+    os << std::endl;
 }
 
 Op::Op(std::vector<Tensor *> inputs, std::vector<Tensor *> outputs)
@@ -265,6 +271,15 @@ void Model::insert(std::unique_ptr<Op> to_insert, const Op *before) {
         }
     }
     ops.push_back(std::move(to_insert));
+}
+
+void Model::remove(const Op *op) {
+    for (auto i = ops.begin(); i != ops.end(); ++i) {
+        if (i->get() == op) {
+            ops.erase(i);
+            return;
+        }
+    }
 }
 
 void Model::accept(OpVisitor *v) {

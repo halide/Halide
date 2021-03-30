@@ -141,6 +141,11 @@ public:
         return is_constant_;
     }
 
+    void set_constant() {
+        assert(is_allocated());
+        is_constant_ = true;
+    }
+
     bool is_input() const {
         return is_input_;
     }
@@ -338,6 +343,7 @@ struct Model {
     // Add a tensor after an existing tensor.
     void insert(std::unique_ptr<Tensor> to_insert, const Tensor *after = nullptr);
     void insert(std::unique_ptr<Op> to_insert, const Op *before = nullptr);
+    void remove(const Op *op);
 
     void accept(OpVisitor *v);
 
