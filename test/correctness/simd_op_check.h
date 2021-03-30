@@ -214,7 +214,7 @@ public:
             g.compute_at(f, x)
                 .update()
                 .split(x, xo, xi, vector_width)
-                .atomic()
+                .atomic(true)
                 .vectorize(g.rvars()[0])
                 .vectorize(xi);
         }
