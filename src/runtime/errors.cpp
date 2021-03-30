@@ -27,38 +27,42 @@ WEAK int halide_error_explicit_bounds_too_small(void *user_context, const char *
     return halide_error_code_explicit_bounds_too_small;
 }
 
-WEAK int halide_error_bad_type(void *user_context, const char *func_name,
+WEAK int halide_error_bad_type(void *user_context, const char *func_name, const char *pipeline_name,
                                uint32_t type_given_bits, uint32_t correct_type_bits) {
     halide_type_t correct_type, type_given;
     memcpy(&correct_type, &correct_type_bits, sizeof(uint32_t));
     memcpy(&type_given, &type_given_bits, sizeof(uint32_t));
     error(user_context)
         << func_name << " has type " << correct_type
-        << " but type of the buffer passed in is " << type_given;
+        << " but type of the buffer passed in is " << type_given
+        << ", when running pipeline " << pipeline_name;
     return halide_error_code_bad_type;
 }
 
-WEAK int halide_error_bad_dimensions(void *user_context, const char *func_name,
+WEAK int halide_error_bad_dimensions(void *user_context, const char *func_name, const char *pipeline_name,
                                      int32_t dimensions_given, int32_t correct_dimensions) {
     error(user_context)
         << func_name << " requires a buffer of exactly " << correct_dimensions
-        << " dimensions, but the buffer passed in has " << dimensions_given << " dimensions";
+        << " dimensions, but the buffer passed in has " << dimensions_given << " dimensions"
+        << ", when running pipeline " << pipeline_name;
     return halide_error_code_bad_dimensions;
 }
 
-WEAK int halide_error_access_out_of_bounds(void *user_context, const char *func_name,
+WEAK int halide_error_access_out_of_bounds(void *user_context, const char *func_name, const char *pipeline_name,
                                            int dimension, int min_touched, int max_touched,
                                            int min_valid, int max_valid) {
     if (min_touched < min_valid) {
         error(user_context)
             << func_name << " is accessed at " << min_touched
             << ", which is before the min (" << min_valid
-            << ") in dimension " << dimension;
+            << ") in dimension " << dimension
+            << ", when running pipeline " << pipeline_name;
     } else if (max_touched > max_valid) {
         error(user_context)
             << func_name << " is accessed at " << max_touched
             << ", which is beyond the max (" << max_valid
-            << ") in dimension " << dimension;
+            << ") in dimension " << dimension
+            << ", when running pipeline " << pipeline_name;
     }
     return halide_error_code_access_out_of_bounds;
 }

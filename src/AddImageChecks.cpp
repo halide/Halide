@@ -149,6 +149,7 @@ Stmt add_image_checks_inner(Stmt s,
                             const Target &t,
                             const vector<string> &order,
                             const map<string, Function> &env,
+                            const string &pipeline_name,
                             const FuncValueBounds &fb,
                             bool will_inject_host_copies) {
 
@@ -328,7 +329,7 @@ Stmt add_image_checks_inner(Stmt s,
             uint32_t correct_type_bits = ((halide_type_t)type).as_u32();
             Expr correct_type_expr = make_const(UInt(32), correct_type_bits);
             Expr error = Call::make(Int(32), "halide_error_bad_type",
-                                    {error_name, type_var, correct_type_expr},
+                                    {error_name, pipeline_name, type_var, correct_type_expr},
                                     Call::Extern);
             Stmt type_check = AssertStmt::make(type_var == correct_type_expr, error);
             asserts_type_checks.push_back(type_check);
@@ -339,7 +340,7 @@ Stmt add_image_checks_inner(Stmt s,
             string dimensions_name = name + ".dimensions";
             Expr dimensions_given = Variable::make(Int(32), dimensions_name, image, param, rdom);
             Expr error = Call::make(Int(32), "halide_error_bad_dimensions",
-                                    {error_name,
+                                    {error_name, pipeline_name,
                                      dimensions_given, make_const(Int(32), dimensions)},
                                     Call::Extern);
             asserts_type_checks.push_back(
@@ -395,7 +396,7 @@ Stmt add_image_checks_inner(Stmt s,
             Expr oob_condition = actual_min <= min_required_var && actual_max >= max_required;
 
             Expr oob_error = Call::make(Int(32), "halide_error_access_out_of_bounds",
-                                        {error_name, j, min_required_var, max_required, actual_min, actual_max},
+                                        {error_name, pipeline_name, j, min_required_var, max_required, actual_min, actual_max},
                                         Call::Extern);
 
             asserts_required.push_back(AssertStmt::make(oob_condition, oob_error));
@@ -721,6 +722,7 @@ Stmt add_image_checks(const Stmt &s,
                       const Target &t,
                       const vector<string> &order,
                       const map<string, Function> &env,
+                      const string &pipeline_name,
                       const FuncValueBounds &fb,
                       bool will_inject_host_copies) {
 
@@ -732,7 +734,7 @@ Stmt add_image_checks(const Stmt &s,
         Stmt visit(const Block *op) override {
             const Evaluate *e = op->first.as<Evaluate>();
             if (e && Call::as_intrinsic(e->value, {Call::add_image_checks_marker})) {
-                return add_image_checks_inner(op->rest, outputs, t, order, env, fb, will_inject_host_copies);
+                return add_image_checks_inner(op->rest, outputs, t, order, env, pipeline_name, fb, will_inject_host_copies);
             } else {
                 return IRMutator::visit(op);
             }
@@ -742,6 +744,7 @@ Stmt add_image_checks(const Stmt &s,
         const Target &t;
         const vector<string> &order;
         const map<string, Function> &env;
+        const string &pipeline_name;
         const FuncValueBounds &fb;
         bool will_inject_host_copies;
 
@@ -750,11 +753,12 @@ Stmt add_image_checks(const Stmt &s,
                  const Target &t,
                  const vector<string> &order,
                  const map<string, Function> &env,
+                 const string &pipeline_name,
                  const FuncValueBounds &fb,
                  bool will_inject_host_copies)
-            : outputs(outputs), t(t), order(order), env(env), fb(fb), will_inject_host_copies(will_inject_host_copies) {
+            : outputs(outputs), t(t), order(order), env(env), pipeline_name(pipeline_name), fb(fb), will_inject_host_copies(will_inject_host_copies) {
         }
-    } injector(outputs, t, order, env, fb, will_inject_host_copies);
+    } injector(outputs, t, order, env, pipeline_name, fb, will_inject_host_copies);
 
     return injector.mutate(s);
 }

@@ -219,7 +219,7 @@ Module lower(const vector<Function> &output_funcs,
          (t.arch != Target::Hexagon && (t.has_feature(Target::HVX))));
 
     debug(1) << "Adding checks for images\n";
-    s = add_image_checks(s, outputs, t, order, env, func_bounds, will_inject_host_copies);
+    s = add_image_checks(s, outputs, t, order, env, pipeline_name, func_bounds, will_inject_host_copies);
     log("Lowering after injecting image checks:", s);
 
     debug(1) << "Removing code that depends on undef values...\n";
