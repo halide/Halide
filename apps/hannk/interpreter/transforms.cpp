@@ -151,27 +151,49 @@ class PadForConv : public OpVisitor {
 
         if (!is_subset_of(required, input->box())) {
             // Make a PadOp and a new tensor for the padded result.
-            std::string padded_name = input->name() + "_padded";
             std::unique_ptr<Tensor> padded =
-                ::hannk::make_unique<Tensor>(padded_name, input->type(), required, input->quantization());
+                ::hannk::make_unique<Tensor>(input->name() + "_padded", input->type(), required, input->quantization());
             op->set_input(padded.get());
 
             // Add the new tensor, op, and update the input.
             std::unique_ptr<Op> pad = ::hannk::make_unique<PadOp>(input, nullptr, padded.get());
-            pad_ops.emplace_back(std::move(pad), std::move(padded));
+            new_ops.emplace_back(std::move(pad), std::move(padded));
         }
     }
 
     void visit(Conv2DOp *op) {
         Box required = op->input_required(op->output()->box());
         assert(required[0].min == 0);
-        // TODO: Figure out how to get all this logic into one place.
+        // TODO: Figure out how to get all this logic into one place. We really need
+        // to figure out how to get the unrolled reduction cases for conv working with
+        // a GuardWithIf so we only ever require the same unroll factor of 4.
         if (required[0].extent() >= 16) {
             required[0].set_extent((required[0].extent() + 15) & ~15);
         } else {
             required[0].set_extent((required[0].extent() + 3) & ~3);
         }
         pad_for_op(op, required, 0);
+
+        Tensor *filter = op->filter();
+        if (op->filter()->rank() == 4) {
+            Box tiled_shape = op->filter_required();
+
+            halide_type_t type = op->filter_type();
+            QuantizationInfo quantization = filter->quantization();
+            if (type.bits > filter->type().bits) {
+                // We're widening the filter. Subtract the offset.
+                std::fill(quantization.zero.begin(), quantization.zero.end(), 0);
+            }
+            // We also need to tile the filter.
+            // TODO: Maybe also dequantize to 16-bit?
+            std::unique_ptr<Tensor> tiled =
+                ::hannk::make_unique<Tensor>(filter->name() + "_tiled", type, tiled_shape, quantization);
+            // Maybe more than one op uses this same filter...?
+            filter->replace_all_consumers_with(tiled.get());
+
+            std::unique_ptr<Op> tile = ::hannk::make_unique<TileConvFilterOp>(filter, tiled.get());
+            new_ops.emplace_back(std::move(tile), std::move(tiled));
+        }
     }
 
     void visit(DepthwiseConv2DOp *op) {
@@ -180,7 +202,7 @@ class PadForConv : public OpVisitor {
     }
 
 public:
-    std::vector<std::pair<std::unique_ptr<Op>, std::unique_ptr<Tensor>>> pad_ops;
+    std::vector<std::pair<std::unique_ptr<Op>, std::unique_ptr<Tensor>>> new_ops;
 };
 
 }  // namespace
@@ -188,7 +210,7 @@ public:
 void pad_for_conv(Model *m) {
     PadForConv v;
     m->accept(&v);
-    for (auto &i : v.pad_ops) {
+    for (auto &i : v.new_ops) {
         m->insert(std::move(i.first));
         m->insert(std::move(i.second));
     }
@@ -201,7 +223,6 @@ bool can_execute(const Op *op) {
         if (!op->input(i)->is_constant()) {
             return false;
         }
-        op->input(i)->dump(std::cout);
         assert(op->input(i)->is_allocated());
     }
     return true;

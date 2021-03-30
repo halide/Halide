@@ -19,8 +19,6 @@ enum class Padding {
     Valid,
 };
 
-int get_guid();
-
 // This is an abstract helper op for elementwise operations.
 class ElementwiseOp : public Op {
 public:
@@ -147,7 +145,6 @@ class Conv2DOp : public Op {
     std::vector<int> dilation_;
     Padding padding_;
     ActivationFunction activation_;
-    int guid_;
 
 public:
     Conv2DOp(Tensor *input, Tensor *filter, Tensor *bias, Tensor *output,
@@ -158,7 +155,6 @@ public:
           dilation_(std::move(dilation)),
           padding_(padding),
           activation_(activation) {
-        guid_ = get_guid();
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
@@ -178,10 +174,15 @@ public:
     Tensor *filter() {
         return Op::input(1);
     }
+    void set_filter(Tensor *filter) {
+        Op::set_input(1, filter);
+    }
     Tensor *bias() {
         return Op::input(2);
     }
 
+    halide_type_t filter_type() const;
+    Box filter_required() const;
     Box input_required(const Box &crop) const;
     Bounds infer_bounds(const Box &crop) const;
     std::vector<SplitInfo> get_split_info() const;
@@ -354,6 +355,28 @@ public:
     }
 };
 
+class TileConvFilterOp : public Op {
+public:
+    TileConvFilterOp(Tensor *input, Tensor *output)
+        : Op({input}, {output}) {
+    }
+
+    std::unique_ptr<Op> clone(const TensorMap &map) const {
+        return ::hannk::make_unique<TileConvFilterOp>(apply(map, input()), apply(map, output()));
+    }
+
+    void accept(OpVisitor *v);
+
+    Bounds infer_bounds(const Box &crop) const;
+    std::vector<SplitInfo> get_split_info() const;
+
+    void execute(const Box &crop);
+
+    void dump(std::ostream &os) const {
+        os << "  TileConvFilterOp " << output()->name() << std::endl;
+    }
+};
+
 class OpVisitor {
 public:
     virtual void visit(AddOp *op) {}
@@ -365,6 +388,7 @@ public:
     virtual void visit(MaxPoolOp *op) {}
     virtual void visit(PadOp *op) {}
     virtual void visit(ReshapeOp *op) {}
+    virtual void visit(TileConvFilterOp *op) {}
 };
 
 }  // namespace hannk

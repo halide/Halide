@@ -33,7 +33,7 @@ public:
 
     // A 4D array of 8-bit filter coefficients indexed by filter_depth, filter_x,
     // filter_y, filter_batch (aka. output_depth).
-    Input<Buffer<uint8_t>> filter_{"filter", 4};
+    Input<Buffer<>> filter_{"filter", 5};
 
     // A 1D array of 32-bit biases. The bias should be added to the c
     // dimension of the output (i.e., # filter batches).
@@ -59,9 +59,24 @@ public:
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
-    Input<int> guid_{"guid"};
-
     Output<Buffer<uint8_t>> output_{"output", 4};
+
+    // There are two codepaths in this generator. On targets with widening
+    // 8-bit multiplies, we implement the reduction by expanding the subtraction
+    // of the offsets into 4 reductions involving 8-bit multiplies. On targets
+    // without widening 8-bit multiplication, it's faster to just subtract the
+    // offsets and use 16-bit multiplications.
+    bool use_8bit_multiply() const {
+        return get_target().arch != Target::X86 || get_target().has_feature(Target::AVX512_SapphireRapids);
+    }
+
+    void configure() {
+        if (use_8bit_multiply()) {
+            filter_.set_type(UInt(8));
+        } else {
+            filter_.set_type(Int(16));
+        }
+    }
 
     void generate() {
         // The algorithm.
@@ -69,24 +84,13 @@ public:
         // Some free variables, where x and y represent the spatial dimensions.
         Var x("x"), y("y"), c("c"), b("b");
 
-        // There are two codepaths below. On targets with widening 8-bit
-        // multiplies, we implement the reduction by expanding the subtraction
-        // of the offsets into 4 reductions involving 8-bit multiplies.
-        // On targets without widening 8-bit multiplication, it's faster
-        // to just subtract the offsets and use 16-bit multiplications.
-        const bool use_8bit_multiply =
-            get_target().arch != Target::X86 || get_target().has_feature(Target::AVX512_SapphireRapids);
-
         Func input("input");
         Expr input_cxyb = input_(c, x, y, b);
-        if (!use_8bit_multiply) {
+        if (!use_8bit_multiply()) {
             input_cxyb = i16(input_cxyb) - i16(input_offset_);
         }
         input(c, x, y, b) = input_cxyb;
-        // And to c of the filter. This lets us align the inner reduction loop
-        // however we want.
-        Func filter_bounded =
-            constant_exterior(filter_, filter_offset_, {{filter_.dim(0).min(), filter_.dim(0).extent()}});
+
         Func bias_bounded = repeat_edge(bias_);
 
         // Align the reduction loop of filter.
@@ -96,33 +100,34 @@ public:
         // Create a wrapper of the filter that we can reorder the storage of to be
         // more convenient for the inner loop.
         Var ci("ci"), co("co");
-        Func filter_tiled("filter_tiled");
-        Expr filter_cxyb =
-            memoize_tag(filter_bounded(co * vector_reduction + ci, x, y, c), guid_);
-        if (!use_8bit_multiply) {
+        Func filter("filter");
+        Expr filter_cxyb = filter_(ci, c, co, x, y);
+        if (!use_8bit_multiply()) {
             filter_cxyb = i16(filter_cxyb) - i16(filter_offset_);
         }
-        filter_tiled(ci, co, x, y, c) = filter_cxyb;
+        filter(ci, c, co, x, y) = filter_cxyb;
 
         // Set up the reduction loop and inputs.
-        filter_.dim(0).set_min(0);
-        filter_.dim(1).set_min(0);
+        filter_.dim(0).set_min(0).set_extent(vector_reduction);
+        filter_.dim(1).set_stride(vector_reduction);
         filter_.dim(2).set_min(0);
-        Expr filter_depth = filter_.dim(0).extent();
-        Expr filter_width = filter_.dim(1).extent();
-        Expr filter_height = filter_.dim(2).extent();
+        filter_.dim(3).set_min(0);
+        filter_.dim(4).set_min(0);
+        Expr filter_depth = filter_.dim(0).extent() * filter_.dim(2).extent();
+        Expr filter_width = filter_.dim(3).extent();
+        Expr filter_height = filter_.dim(4).extent();
         // Align the filter depth, which requires padding the input.
         filter_depth = align_up(filter_depth, unroll_reduction);
         RDom r(0, filter_width, 0, filter_height, 0, filter_depth);
         Expr filter_rdxyc =
-            filter_tiled(r.z % vector_reduction, r.z / vector_reduction, r.x, r.y, c);
+            filter(r.z % vector_reduction, c, r.z / vector_reduction, r.x, r.y);
         Expr input_rdxyc =
             input(r.z, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
 
         Func offset_c("offset_c");
         Func sum_input("sum_input");
         Func convolved("convolved");
-        if (use_8bit_multiply) {
+        if (use_8bit_multiply()) {
             // We want to compute the reduction:
             // convolved(c, x, y, b) = bias_(c)
             // convolved(c, x, y, b) +=
@@ -170,11 +175,9 @@ public:
 
         // Schedule
         interpret_as_tensor(input_);
-        interpret_as_tensor(filter_);
         interpret_as_tensor(bias_);
         interpret_as_tensor(output_);
         require_same_min_extent(3, input_, output_);
-        require_same_min_extent(3, filter_, 0, output_);
         require_same_min_extent(0, bias_, output_);
 
         output_.compute_root();
@@ -228,7 +231,7 @@ public:
             .unroll(c, max_tile_c, TailStrategy::GuardWithIf)
             .unroll(x);
 
-        if (use_8bit_multiply) {
+        if (use_8bit_multiply()) {
             // Specialize this to avoid computing sum_input when it isn't needed.
             convolved.specialize(filter_offset_ == 0);
         }
@@ -244,7 +247,7 @@ public:
             .unroll(rci)
             .unroll(x);
 
-        if (unroll_reduction >= natural_vector_size<uint8_t>() || !use_8bit_multiply) {
+        if (unroll_reduction >= natural_vector_size<uint8_t>() || !use_8bit_multiply()) {
             // If we're unrolling a full vector's worth of reduction from the
             // input, explicitly load a vector of it first. This enables targeting
             // broadcasting dot products, like ARM's udot.
@@ -254,7 +257,7 @@ public:
                 .vectorize(c);
         }
 
-        if (use_8bit_multiply) {
+        if (use_8bit_multiply()) {
             // Precompute the channel offset at root.
             // TODO: This gets recomputed often when the op is split up into small
             // pieces.
@@ -282,18 +285,6 @@ public:
 
         bias_bounded.compute_root()
             .store_in(MemoryType::Stack);
-
-        // Pretranspose the filter, so we don't need to do it in the inner loop.
-        // TODO: This gets recomputed often when the op is split up into small
-        // pieces.
-        filter_tiled
-            .compute_root()
-            .memoize()
-            .reorder_storage(ci, c, co, x, y)
-            .reorder(ci, c, x, y, co)
-            .bound(ci, 0, vector_reduction)
-            .align_storage(ci, vector_reduction)
-            .vectorize(ci);
     }
 };
 

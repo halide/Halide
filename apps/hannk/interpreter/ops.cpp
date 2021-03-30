@@ -141,12 +141,6 @@ Interval get_output_range(ActivationFunction activation, Tensor *out) {
 
 }  // namespace
 
-std::atomic<int> next_guid(0);
-
-int get_guid() {
-    return next_guid++;
-}
-
 Op::Bounds ElementwiseOp::infer_bounds(const Box &crop) const {
     Bounds result;
     for (int i = 0; i < input_count(); i++) {
@@ -301,6 +295,35 @@ void ConcatenationOp::execute(const Box &crop) {
     }
 }
 
+halide_type_t Conv2DOp::filter_type() const {
+    const halide_filter_metadata_t *metadata = convolution_uint8_metadata();
+    return metadata->arguments[1].type;
+}
+
+Box Conv2DOp::filter_required() const {
+    if (filter()->is_type<uint8_t>()) {
+        HalideBuffer<uint8_t> input_buf, output_buf;
+        HalideBuffer<int32_t> bias_buf;
+        Halide::Runtime::Buffer<void, 5> filter_buf(filter_type(), 1, 0, 0, 0, 0);
+        filter_buf.deallocate();
+
+        CHECK(0 == convolution_uint8(input_buf, filter_buf, bias_buf, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf));
+
+        const int tile_factor = filter_buf.dim(0).extent();
+        // TODO: Get this from the pipeline somehow.
+        const int tile_alignment = 8;
+        return {
+            {0, tile_factor - 1},
+            {0, align_up(filter()->extent(3), tile_alignment) - 1},
+            {0, ceil_div(filter()->extent(0), tile_factor) - 1},
+            {filter()->interval(1)},
+            {filter()->interval(2)},
+        };
+    } else {
+        CHECK(false);
+    }
+}
+
 Box Conv2DOp::input_required(const Box &crop) const {
     Box input_crop = crop;
     Box filter_shape = filter()->box();
@@ -359,11 +382,10 @@ void Conv2DOp::execute(const Box &crop) {
     Tensor *out = output();
 
     if (in->is_type<uint8_t>() &&
-        filt->is_type<uint8_t>() &&
         out->is_type<uint8_t>()) {
         // TODO: reduce code duplication between here and DepthwiseConv2D
         auto input_buf = in->buffer<const uint8_t>();
-        auto filter_buf = filt->buffer<const uint8_t>();
+        auto filter_buf = filt->buffer<const void>();
         auto bias_buf = bias()->buffer<const int32_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
 
@@ -421,7 +443,7 @@ void Conv2DOp::execute(const Box &crop) {
                                            (uint8_t)filter_offset, stride_[0], stride_[1],
                                            dilation_[0], dilation_[1], output_multiplier,
                                            output_shift, (uint8_t)output_offset,
-                                           output_range.min, output_range.max, guid_, output_buf));
+                                           output_range.min, output_range.max, output_buf));
         } else
 #endif
         {
@@ -430,7 +452,7 @@ void Conv2DOp::execute(const Box &crop) {
                                        (uint8_t)filter_offset, stride_[0], stride_[1],
                                        dilation_[0], dilation_[1], output_multiplier,
                                        output_shift, (uint8_t)output_offset,
-                                       output_range.min, output_range.max, guid_, output_buf));
+                                       output_range.min, output_range.max, output_buf));
         }
     } else {
         CHECK(false);
@@ -760,6 +782,29 @@ void ReshapeOp::execute(const Box &crop) {
     }
 }
 
+Op::Bounds TileConvFilterOp::infer_bounds(const Box &crop) const {
+    assert(crop[0].min == 0);
+    Box input = {
+        crop[2] * crop[0].extent(),
+        crop[3],
+        crop[4],
+        crop[1],
+    };
+    Bounds result;
+    result.inputs = {input};
+    result.outputs = {crop};
+    return result;
+}
+
+std::vector<SplitInfo> TileConvFilterOp::get_split_info() const {
+    return {};
+}
+
+void TileConvFilterOp::execute(const Box &crop) {
+    //const Tensor *in = input();
+    //Tensor *out = output();
+}
+
 void AddOp::accept(OpVisitor *v) {
     v->visit(this);
 }
@@ -793,6 +838,10 @@ void PadOp::accept(OpVisitor *v) {
 }
 
 void ReshapeOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void TileConvFilterOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 
