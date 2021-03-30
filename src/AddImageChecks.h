@@ -30,6 +30,7 @@ Stmt add_image_checks(const Stmt &s,
                       const Target &t,
                       const std::vector<std::string> &order,
                       const std::map<std::string, Function> &env,
+                      const std::string &pipeline_name,
                       const FuncValueBounds &fb,
                       bool will_inject_host_copies);
 
