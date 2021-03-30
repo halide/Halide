@@ -2137,9 +2137,8 @@ public:
                 check("f32x4.convert_i32x4_u", 8 * w, cast<float>(u32_1));
 
                 // Integer to double-precision floating point
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("f64x2.convert_low_i32x4_s", 4 * w, cast<double>(i32_1));
-                // check("f64x2.convert_low_i32x4_u", 4 * w, cast<double>(u32_1));
+                check("f64x2.convert_low_i32x4_s", 2 * w, cast<double>(i32_1));
+                check("f64x2.convert_low_i32x4_u", 2 * w, cast<double>(u32_1));
 
                 // Single-precision floating point to integer with saturation
                 check("i32x4.trunc_sat_f32x4_s", 4 * w, cast<int32_t>(f32_1));
@@ -2155,8 +2154,7 @@ public:
                 // check("f32x4.demote_f64x2_zero", 4 * w, ???);
 
                 // Single-precision floating point to double-precision
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("f64x2.promote_low_f32x4", 4 * w, ???);
+                check("f64x2.promote_low_f32x4", 2 * w, cast<double>(f32_1));
 
                 // Integer to integer narrowing
                 check("i8x16.narrow_i16x8_s", 16 * w, i8_sat(i16_1));
