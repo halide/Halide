@@ -279,6 +279,9 @@ ostream &operator<<(ostream &out, const VectorReduce::Operator &op) {
     case VectorReduce::Add:
         out << "Add";
         break;
+    case VectorReduce::SaturatingAdd:
+        out << "SaturatingAdd";
+        break;
     case VectorReduce::Mul:
         out << "Mul";
         break;

@@ -74,6 +74,14 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
                 bounds->max *= factor;
             }
             break;
+        case VectorReduce::SaturatingAdd:
+            if (bounds->min_defined) {
+                bounds->min = saturating_mul(bounds->min, factor);
+            }
+            if (bounds->max_defined) {
+                bounds->max = saturating_mul(bounds->max, factor);
+            }
+            break;
         case VectorReduce::Mul:
             // Don't try to infer anything about bounds. Leave the
             // alignment unchanged even though we could theoretically
