@@ -34,6 +34,8 @@ protected:
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
     bool use_pic() const override;
+
+    void visit(const Cast *) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
 };
 
@@ -92,6 +94,9 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"llvm.wasm.extadd.pairwise.unsigned.v8i16", Int(16, 8), "pairwise_widening_add", {UInt(8, 16)}, Target::WasmSimd128},
     {"llvm.wasm.extadd.pairwise.unsigned.v4i32", Int(32, 4), "pairwise_widening_add", {UInt(16, 8)}, Target::WasmSimd128},
 
+    // Basically like ARM's SQRDMULH
+    {"llvm.wasm.q15mulr.sat.signed", Int(16, 8), "q15mulr_sat_s", {Int(16, 8), Int(16, 8)}, Target::WasmSimd128},
+
     {"llvm.wasm.dot", Int(32, 4), "dot_product", {Int(16, 8), Int(16, 8)}, Target::WasmSimd128},
 #endif
 
@@ -128,6 +133,39 @@ void CodeGen_WebAssembly::init_module() {
         fn->addFnAttr(llvm::Attribute::ReadNone);
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
+}
+
+void CodeGen_WebAssembly::visit(const Cast *op) {
+#if LLVM_VERSION >= 130
+    struct Pattern {
+        std::string intrin;  ///< Name of the intrinsic
+        Expr pattern;        ///< The pattern to match against
+        Target::Feature required_feature;
+    };
+
+    // clang-format off
+    static const Pattern patterns[] = {
+        {"q15mulr_sat_s", i16_sat(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), u16(15))), Target::WasmSimd128},
+    };
+    // clang-format on
+
+    if (op->type.is_vector()) {
+        std::vector<Expr> matches;
+        for (const Pattern &p : patterns) {
+            if (!target.has_feature(p.required_feature)) {
+                continue;
+            }
+            if (expr_match(p.pattern, op, matches)) {
+                value = call_overloaded_intrin(op->type, p.intrin, matches);
+                if (value) {
+                    return;
+                }
+            }
+        }
+    }
+#endif  // LLVM_VERSION >= 130
+
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
