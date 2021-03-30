@@ -28,7 +28,6 @@
 namespace Halide {
 namespace Internal {
 
-namespace {
 inline int64_t saturating_mul(int64_t a, int64_t b) {
     if (mul_would_overflow(64, a, b)) {
         if ((a > 0) == (b > 0)) {
@@ -40,7 +39,6 @@ inline int64_t saturating_mul(int64_t a, int64_t b) {
         return a * b;
     }
 }
-}  // namespace
 
 class Simplify : public VariadicVisitor<Simplify, Expr, Stmt> {
     using Super = VariadicVisitor<Simplify, Expr, Stmt>;
