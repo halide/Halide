@@ -157,9 +157,7 @@ class PadForConv : public OpVisitor {
             std::string padded_name = input->name() + "_padded";
             std::unique_ptr<Tensor> padded =
                 ::hannk::make_unique<Tensor>(padded_name, input->type(), required, input->quantization());
-            // Replace all uses with the padded result, including this op.
-            input->replace_all_consumers_with(padded.get());
-            assert(op->input() == padded.get());
+            op->set_input(padded.get());
 
             // Add the new tensor, op, and update the input.
             std::unique_ptr<Op> pad = ::hannk::make_unique<PadOp>(input, nullptr, padded.get());
@@ -176,6 +174,9 @@ class PadForConv : public OpVisitor {
         } else {
             required[0].set_extent((required[0].extent() + 3) & ~3);
         }
+        // TODO: This should be aligning to the size of an int32 vector on targets
+        // that use 8-bit multiplies.
+        required[1].set_extent((required[1].extent() + 3) & ~3);
         pad_for_op(op, required, 0);
     }
 
