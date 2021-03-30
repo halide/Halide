@@ -36,6 +36,7 @@ namespace Halide {
  */
 //@{
 Expr sum(Expr, const std::string &s = "sum");
+Expr saturating_sum(Expr, const std::string &s = "saturating_sum");
 Expr product(Expr, const std::string &s = "product");
 Expr maximum(Expr, const std::string &s = "maximum");
 Expr minimum(Expr, const std::string &s = "minimum");
@@ -52,6 +53,7 @@ Expr minimum(Expr, const std::string &s = "minimum");
 */
 // @{
 Expr sum(const RDom &, Expr, const std::string &s = "sum");
+Expr saturating_sum(const RDom &r, Expr e, const std::string &s = "saturating_sum");
 Expr product(const RDom &, Expr, const std::string &s = "product");
 Expr maximum(const RDom &, Expr, const std::string &s = "maximum");
 Expr minimum(const RDom &, Expr, const std::string &s = "minimum");

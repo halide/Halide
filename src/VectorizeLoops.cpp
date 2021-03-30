@@ -1093,6 +1093,12 @@ class VectorSubs : public IRMutator {
                         reduce_op = VectorReduce::Or;
                     }
                 }
+            } else if (const Call *call_op = store->value.as<Call>()) {
+                if (call_op->is_intrinsic(Call::saturating_add)) {
+                    a = call_op->args[0];
+                    b = call_op->args[1];
+                    reduce_op = VectorReduce::SaturatingAdd;
+                }
             }
 
             if (!a.defined() || !b.defined()) {
@@ -1175,6 +1181,8 @@ class VectorSubs : public IRMutator {
                     return a && b;
                 case VectorReduce::Or:
                     return a || b;
+                case VectorReduce::SaturatingAdd:
+                    return saturating_add(a, b);
                 }
                 return Expr();
             };
