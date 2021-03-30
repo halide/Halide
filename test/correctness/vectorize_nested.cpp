@@ -29,29 +29,30 @@ int vectorize_2d_round_up() {
     return 0;
 }
 
-int vectorize_2d_guard_with_if() {
-    const int width = 33;
-    const int height = 22;
+int vectorize_2d_guard_with_if_and_predicate() {
+    for (TailStrategy tail_strategy : {TailStrategy::GuardWithIf, TailStrategy::Predicate}) {
+        const int width = 33;
+        const int height = 22;
 
-    Func f("f");
-    Var x("x"), y("y"), xi("xi"), yi("yi");
+        Func f("f");
+        Var x("x"), y("y"), xi("xi"), yi("yi");
 
-    f(x, y) = 3 * x + y;
+        f(x, y) = 3 * x + y;
 
-    f.compute_root()
-        .tile(x, y, x, y, xi, yi, 8, 4, TailStrategy::GuardWithIf)
-        .vectorize(xi)
-        .vectorize(yi);
+        f.compute_root()
+            .tile(x, y, x, y, xi, yi, 8, 4, tail_strategy)
+            .vectorize(xi)
+            .vectorize(yi);
 
-    Buffer<int> result = f.realize({width, height});
+        Buffer<int> result = f.realize({width, height});
 
-    auto cmp_func = [](int x, int y) {
-        return 3 * x + y;
-    };
-    if (check_image(result, cmp_func)) {
-        return -1;
+        auto cmp_func = [](int x, int y) {
+            return 3 * x + y;
+        };
+        if (check_image(result, cmp_func)) {
+            return -1;
+        }
     }
-
     return 0;
 }
 
@@ -197,7 +198,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    if (vectorize_2d_guard_with_if()) {
+    if (vectorize_2d_guard_with_if_and_predicate()) {
         printf("vectorize_2d_guard_with_if failed\n");
         return -1;
     }

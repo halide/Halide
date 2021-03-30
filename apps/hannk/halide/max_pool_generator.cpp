@@ -51,8 +51,7 @@ public:
         Expr output_channels = output_.dim(0).extent();
         const int vector_size = natural_vector_size<uint8_t>();
         output_.compute_root()
-            .specialize(output_channels >= vector_size)
-            .vectorize(c, vector_size, TailStrategy::ShiftInwards);
+            .vectorize(c, vector_size, TailStrategy::Predicate);
     }
 };
 

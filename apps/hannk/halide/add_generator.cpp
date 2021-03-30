@@ -60,7 +60,7 @@ public:
         interpret_as_tensor(input1_);
         interpret_as_tensor(input2_);
 
-        output_.vectorize(c, vector_size * 2, TailStrategy::GuardWithIf);
+        output_.vectorize(c, vector_size * 2, TailStrategy::Predicate);
     }
 };
 

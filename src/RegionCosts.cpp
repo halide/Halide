@@ -229,9 +229,8 @@ class ExprCost : public IRVisitor {
                        call->is_intrinsic(Call::count_leading_zeros) ||
                        call->is_intrinsic(Call::count_trailing_zeros)) {
                 arith += 5;
-            } else if (call->is_intrinsic(Call::likely) ||
-                       call->is_intrinsic(Call::likely_if_innermost)) {
-                // Likely does not result in actual operations.
+            } else if (Call::as_tag(call)) {
+                // Tags do not result in actual operations.
             } else {
                 // For other intrinsics, use 1 for the arithmetic cost.
                 arith += 1;

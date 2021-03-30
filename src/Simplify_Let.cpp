@@ -174,9 +174,9 @@ Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {
                 Expr op_b = var_a ? new_var : shuffle->vectors[1];
                 replacement = substitute(f.new_name, Shuffle::make_concat({op_a, op_b}), replacement);
                 f.new_value = var_a ? shuffle->vectors[1] : shuffle->vectors[0];
-            } else if (const Call *likely = Call::as_intrinsic(f.new_value, {Call::likely, Call::likely_if_innermost})) {
-                replacement = substitute(f.new_name, Call::make(likely->type, likely->name, {new_var}, Call::PureIntrinsic), replacement);
-                f.new_value = likely->args[0];
+            } else if (const Call *tag = Call::as_tag(f.new_value)) {
+                replacement = substitute(f.new_name, Call::make(tag->type, tag->name, {new_var}, Call::PureIntrinsic), replacement);
+                f.new_value = tag->args[0];
             } else {
                 break;
             }
