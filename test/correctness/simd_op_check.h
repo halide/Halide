@@ -24,6 +24,7 @@ public:
     std::string filter{"*"};
     std::string output_directory{Internal::get_test_tmp_dir()};
     std::vector<Task> tasks;
+    std::mt19937 rng;
 
     Target target;
 
@@ -54,6 +55,11 @@ public:
         num_threads = Internal::ThreadPool<void>::num_processors_online();
     }
     virtual ~SimdOpCheckTest() = default;
+
+    void set_seed(int seed) {
+        rng.seed(seed);
+    }
+
     size_t get_num_threads() const {
         return num_threads;
     }
@@ -230,7 +236,6 @@ public:
 
             error.infer_input_bounds({}, run_target);
             // Fill the inputs with noise
-            std::mt19937 rng(123);
             for (auto p : image_params) {
                 Halide::Buffer<> buf = p.get();
                 if (!buf.defined()) continue;
