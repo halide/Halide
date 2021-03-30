@@ -77,6 +77,10 @@ Expr align_up(const Expr &x, const Expr &n) {
     return ((x + n - 1) / n) * n;
 }
 
+Expr align(const Expr &x, const Expr &n) {
+    return align_down(x, n);
+}
+
 Expr multiply_2x_high(const Expr &a, const Expr &b) {
     // Exponent must satisfy 0 <= exponent <= 31
     Type t = a.type();

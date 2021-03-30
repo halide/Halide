@@ -99,18 +99,9 @@ public:
         // more convenient for the inner loop.
         Var ci("ci"), co("co");
         Func filter("filter");
-        Expr filter_cxyb = filter_(ci, c, co, x, y);
-        if (!use_8bit_multiply(target)) {
-            filter_cxyb = i16(filter_cxyb) - i16(filter_offset_);
-        }
-        filter(ci, c, co, x, y) = filter_cxyb;
+        filter(ci, c, co, x, y) = filter_(ci, c, co, x, y);
 
         // Set up the reduction loop and inputs.
-        filter_.dim(0).set_min(0).set_extent(vector_reduction);
-        filter_.dim(1).set_stride(vector_reduction);
-        filter_.dim(2).set_min(0);
-        filter_.dim(3).set_min(0);
-        filter_.dim(4).set_min(0);
         Expr filter_depth = filter_.dim(0).extent() * filter_.dim(2).extent();
         Expr filter_width = filter_.dim(3).extent();
         Expr filter_height = filter_.dim(4).extent();
@@ -283,6 +274,23 @@ public:
 
         bias_bounded.compute_root()
             .store_in(MemoryType::Stack);
+
+        // We have a lot of requirements of the filter.
+        const int filter_alignment = natural_vector_size(filter_.type());
+        filter_.set_host_alignment(natural_vector_size<uint8_t>());
+        filter_.dim(0)
+            .set_min(0)
+            .set_extent(vector_reduction)
+            .set_stride(1);
+        filter_.dim(1)
+            .set_min(0)
+            .set_extent(align(filter_.dim(1).extent(), accum_vector_size))
+            .set_stride(vector_reduction);
+        for (int d : {2, 3, 4}) {
+            filter_.dim(d)
+                .set_min(0)
+                .set_stride(align(filter_.dim(d).stride(), filter_alignment));
+        }
     }
 };
 
