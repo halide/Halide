@@ -16,6 +16,10 @@ void remove_dead_ops(Model *m);
 // bounds.
 void pad_for_conv(Model *m);
 
+// Execute ops that are constant, and mark the results
+// constant as well.
+void fold_constants(Model *m);
+
 }  // namespace hannk
 
 #endif  // IN_PLACE_H_

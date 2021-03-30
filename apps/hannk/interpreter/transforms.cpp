@@ -194,4 +194,45 @@ void pad_for_conv(Model *m) {
     }
 }
 
+namespace {
+
+bool can_execute(const Op *op) {
+    for (int i = 0; i < op->input_count(); i++) {
+        if (!op->input(i)->is_constant()) {
+            return false;
+        }
+        op->input(i)->dump(std::cout);
+        assert(op->input(i)->is_allocated());
+    }
+    return true;
+}
+
+}  // namespace
+
+void fold_constants(Model *m) {
+    std::vector<const Op *> to_remove;
+    for (auto &i : m->ops) {
+        if (can_execute(&*i)) {
+            // Allocate all the outputs.
+            for (int j = 0; j < i->output_count(); j++) {
+                i->output(j)->allocate();
+            }
+
+            // Run the op.
+            i->execute(i->get_full_crop());
+
+            // Mark the outputs constant.
+            for (int j = 0; j < i->output_count(); j++) {
+                i->output(j)->set_constant();
+            }
+
+            to_remove.push_back(&*i);
+        }
+    }
+
+    for (const Op *i : to_remove) {
+        m->remove(i);
+    }
+}
+
 }  // namespace hannk
