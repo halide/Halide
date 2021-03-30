@@ -57,9 +57,6 @@ void remove_dead_ops(Model *m) {
         }
     }
 
-    // TODO: The code below causes crashes.
-    return;
-
     // Remove tensors not used by any op.
     for (int i = 0; i < (int)m->tensors.size();) {
         bool dead = true;
