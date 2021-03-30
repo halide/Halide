@@ -1809,9 +1809,12 @@ public:
                 check("i8x16.sub_" + sat + "_u", 16 * w, u8_sat(i16(u8_1) - i16(u8_2)));
                 check("i16x8.sub_" + sat + "_u", 8 * w, u16_sat(i32(u16_1) - i32(u16_2)));
 
-                // Saturating integer Q-format rounding multiplication
-                // TODO: see arm's qrdmulh, probably
-                // check("i16x8.q15mulr_sat_s", ???, ???);
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    // Saturating integer Q-format rounding multiplication
+                    // Note: division in Halide always rounds down (not towards
+                    // zero). Otherwise these patterns would be more complicated.
+                    check("i16x8.q15mulr_sat_s", 8 * w, i16_sat((i32(i16_1) * i32(i16_2) + (1 << 14)) / (1 << 15)));
+                }
 
                 // Lane-wise integer minimum
                 check("i8x16.min_s", 16 * w, min(i8_1, i8_2));
@@ -1936,12 +1939,17 @@ public:
                 // check("i8x16.popcnt", 8 * w, popcount(i32_1));
                 // check("i8x16.popcnt", 8 * w, popcount(u32_1));
 
-                // Any lane true
-                // All lanes true
-                // TODO: does Halide have any idiom that obviously generates these?
+                // Any lane true -- for VectorReduce::Or on 8-bit data
+                // All lanes true  -- for VectorReduce::And on 8-bit data
+                // TODO: does Halide have any idiom that could usefully use these?
+                // - v128.any_true could be used for VectorReduce::Or with type bool.
+                // - i8x16.all_true could be used for VectorReduce::And with type bool.
+                // - the other all_true variants seem unlikely to be obviously useful in Halide.
 
                 // Bitmask extraction
-                // TODO:
+                // TODO: does Halide have any idiom that could usefully use these?
+                // They all extract the high bit of each lane and return a scalar mask of them.
+                // These all seem unlikely to be obviously useful in Halide.
                 // check("i8x16.bitmask", 16 * w, ???);
                 // check("i16x8.bitmask", 8 * w, ???);
                 // check("i32x4.bitmask", 4 * w, ???);
@@ -2004,6 +2012,8 @@ public:
 
                 // Load and Zero-Pad
                 // TODO
+                // check("v128.load32_zero", 2 * w, in_u32(0));
+                // check("v128.load64_zero", 2 * w, in_u64(0));
 
                 // Load vector with identical lanes
                 if (Halide::Internal::get_llvm_version() >= 120) {
