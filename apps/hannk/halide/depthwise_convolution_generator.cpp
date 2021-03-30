@@ -141,7 +141,7 @@ public:
         // Enable 1x1 outputs to work.
         output_
             .tile(x, y, xo, yo, x, y, 1, 1, TailStrategy::RoundUp)
-            .split(c, co, c, vector_size, TailStrategy::GuardWithIf)
+            .split(c, co, c, vector_size, TailStrategy::Predicate)
             .reorder(x, y, c, xo, yo, b, co)
             .unroll(x)
             .unroll(y)
