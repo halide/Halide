@@ -7,6 +7,8 @@ using namespace Halide::ConciseCasts;
 
 namespace hannk {
 
+Var x("x"), y("y"), c("c"), b("b");
+
 int get_vector_reduction_factor(const Target &target, Type t) {
     if (target.arch == Target::Hexagon ||
         target.has_feature(Target::ARMDotProd)) {
@@ -17,6 +19,15 @@ int get_vector_reduction_factor(const Target &target, Type t) {
 
     // Most targets can do 2-way horizontal reductions well.
     return 2;
+}
+
+// There are two codepaths in this generator. On targets with widening
+// 8-bit multiplies, we implement the reduction by expanding the subtraction
+// of the offsets into 4 reductions involving 8-bit multiplies. On targets
+// without widening 8-bit multiplication, it's faster to just subtract the
+// offsets and use 16-bit multiplications.
+bool use_8bit_multiply(const Target &target) {
+    return target.arch != Target::X86 || target.has_feature(Target::AVX512_SapphireRapids);
 }
 
 class Convolution : public Generator<Convolution> {
@@ -61,17 +72,8 @@ public:
 
     Output<Buffer<uint8_t>> output_{"output", 4};
 
-    // There are two codepaths in this generator. On targets with widening
-    // 8-bit multiplies, we implement the reduction by expanding the subtraction
-    // of the offsets into 4 reductions involving 8-bit multiplies. On targets
-    // without widening 8-bit multiplication, it's faster to just subtract the
-    // offsets and use 16-bit multiplications.
-    bool use_8bit_multiply() const {
-        return get_target().arch != Target::X86 || get_target().has_feature(Target::AVX512_SapphireRapids);
-    }
-
     void configure() {
-        if (use_8bit_multiply()) {
+        if (use_8bit_multiply(target)) {
             filter_.set_type(UInt(8));
         } else {
             filter_.set_type(Int(16));
@@ -80,13 +82,9 @@ public:
 
     void generate() {
         // The algorithm.
-
-        // Some free variables, where x and y represent the spatial dimensions.
-        Var x("x"), y("y"), c("c"), b("b");
-
         Func input("input");
         Expr input_cxyb = input_(c, x, y, b);
-        if (!use_8bit_multiply()) {
+        if (!use_8bit_multiply(target)) {
             input_cxyb = i16(input_cxyb) - i16(input_offset_);
         }
         input(c, x, y, b) = input_cxyb;
@@ -94,7 +92,7 @@ public:
         Func bias_bounded = repeat_edge(bias_);
 
         // Align the reduction loop of filter.
-        int vector_reduction = get_vector_reduction_factor(get_target(), UInt(8));
+        int vector_reduction = get_vector_reduction_factor(target, UInt(8));
         int unroll_reduction = std::max<int>(unroll_reduction_, vector_reduction);
 
         // Create a wrapper of the filter that we can reorder the storage of to be
@@ -102,7 +100,7 @@ public:
         Var ci("ci"), co("co");
         Func filter("filter");
         Expr filter_cxyb = filter_(ci, c, co, x, y);
-        if (!use_8bit_multiply()) {
+        if (!use_8bit_multiply(target)) {
             filter_cxyb = i16(filter_cxyb) - i16(filter_offset_);
         }
         filter(ci, c, co, x, y) = filter_cxyb;
@@ -127,7 +125,7 @@ public:
         Func offset_c("offset_c");
         Func sum_input("sum_input");
         Func convolved("convolved");
-        if (use_8bit_multiply()) {
+        if (use_8bit_multiply(target)) {
             // We want to compute the reduction:
             // convolved(c, x, y, b) = bias_(c)
             // convolved(c, x, y, b) +=
@@ -185,7 +183,7 @@ public:
         // Figure out how big the tiles we should optimize for should be by getting
         // the total number of accumulators best for this target and figuring out
         // tile sizes.
-        const int accumulators = get_register_count(get_target()) >= 32 ? 20 : 8;
+        const int accumulators = get_register_count(target) >= 32 ? 20 : 8;
         std::vector<std::pair<int, int>> tile_sizes;
         const int max_tile_c = 4;
         for (int tile_c = max_tile_c; tile_c >= 1; tile_c /= 2) {
@@ -231,7 +229,7 @@ public:
             .unroll(c, max_tile_c, TailStrategy::GuardWithIf)
             .unroll(x);
 
-        if (use_8bit_multiply()) {
+        if (use_8bit_multiply(target)) {
             // Specialize this to avoid computing sum_input when it isn't needed.
             convolved.specialize(filter_offset_ == 0);
         }
@@ -247,7 +245,7 @@ public:
             .unroll(rci)
             .unroll(x);
 
-        if (unroll_reduction >= natural_vector_size<uint8_t>() || !use_8bit_multiply()) {
+        if (unroll_reduction >= natural_vector_size<uint8_t>() || !use_8bit_multiply(target)) {
             // If we're unrolling a full vector's worth of reduction from the
             // input, explicitly load a vector of it first. This enables targeting
             // broadcasting dot products, like ARM's udot.
@@ -257,7 +255,7 @@ public:
                 .vectorize(c);
         }
 
-        if (use_8bit_multiply()) {
+        if (use_8bit_multiply(target)) {
             // Precompute the channel offset at root.
             // TODO: This gets recomputed often when the op is split up into small
             // pieces.
@@ -288,6 +286,44 @@ public:
     }
 };
 
+class TileConvolutionFilter : public Generator<TileConvolutionFilter> {
+public:
+    Input<Buffer<uint8_t>> input_{"input", 4};
+    Input<uint8_t> input_offset_{"input_offset"};
+    Input<uint8_t> output_offset_{"output_offset"};
+
+    Output<Buffer<>> output_{"output", 5};
+
+    void configure() {
+        if (use_8bit_multiply(target)) {
+            output_.set_type(UInt(8));
+        } else {
+            output_.set_type(Int(16));
+        }
+    }
+
+    void generate() {
+        Func input_bounded = constant_exterior(input_, input_offset_);
+
+        int vector_reduction = get_vector_reduction_factor(target, UInt(8));
+
+        Var ci("ci"), co("co");
+        Expr filter_cxyb = input_bounded(co * vector_reduction + ci, x, y, c);
+        Type t = output_.type();
+        output_(ci, co, x, y, c) =
+            filter_cxyb + (cast(t, output_offset_) - cast(t, input_offset_));
+
+        output_.dim(0).set_min(0).set_extent(vector_reduction);
+
+        output_
+            .compute_root()
+            .reorder_storage(ci, c, co, x, y)
+            .reorder(ci, c, x, y, co)
+            .vectorize(ci);
+    }
+};
+
 }  // namespace hannk
 
 HALIDE_REGISTER_GENERATOR(hannk::Convolution, Convolution)
+HALIDE_REGISTER_GENERATOR(hannk::TileConvolutionFilter, TileConvolutionFilter)

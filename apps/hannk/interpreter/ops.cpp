@@ -16,6 +16,7 @@
 #include "depthwise_convolution_uint8_broadcast.h"
 #include "fully_connected_uint8.h"
 #include "max_pool_uint8.h"
+#include "tile_convolution_filter_uint8.h"
 
 namespace hannk {
 
@@ -805,8 +806,20 @@ std::vector<SplitInfo> TileConvFilterOp::get_split_info() const {
 }
 
 void TileConvFilterOp::execute(const Box &crop) {
-    //const Tensor *in = input();
-    //Tensor *out = output();
+    const Tensor *in = input();
+    Tensor *out = output();
+
+    if (in->is_type<uint8_t>()) {
+        auto input_buf = in->buffer<const uint8_t>();
+        auto output_buf = out->buffer<void>(crop);
+
+        int input_offset = in->quantization().zero.at(0);
+        int output_offset = out->quantization().zero.at(0);
+
+        CHECK(0 == tile_convolution_filter_uint8(input_buf, input_offset, output_offset, output_buf));
+    } else {
+        CHECK(false);
+    }
 }
 
 void AddOp::accept(OpVisitor *v) {

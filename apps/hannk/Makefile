@@ -106,6 +106,10 @@ $(BIN)/%/max_pool_uint8.a: $(GENERATOR_BIN)/max_pool.generator
 	@mkdir -p $(@D)
 	$< -g MaxPool -f hannk::max_pool_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
+$(BIN)/%/tile_convolution_filter_uint8.a: $(GENERATOR_BIN)/convolution.generator
+	@mkdir -p $(@D)
+	$< -g TileConvolutionFilter -f hannk::tile_convolution_filter_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
 	$< -r runtime -o $(BIN)/$* target=$(HL_TARGET)
@@ -119,6 +123,7 @@ OPS_HALIDE = \
 	$(BIN)/%/depthwise_convolution_uint8_broadcast.a \
 	$(BIN)/%/fully_connected_uint8.a \
 	$(BIN)/%/max_pool_uint8.a \
+	$(BIN)/%/tile_convolution_filter_uint8.a \
 	$(BIN)/%/runtime.a
 
 OPS_CXXFLAGS = -I$(BIN)/$*
