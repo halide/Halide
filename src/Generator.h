@@ -1448,6 +1448,8 @@ public:
 
     virtual ~GIOBase() = default;
 
+    void set_type(const Type &type);
+
 protected:
     GIOBase(size_t array_size,
             const std::string &name,
