@@ -174,7 +174,8 @@
  * You can dynamically add Inputs and Outputs to your Generator via adding a
  * configure() method; if present, it will be called before generate(). It can
  * examine GeneratorParams but it may not examine predeclared Inputs or Outputs;
- * the only thing it should do is call add_input<>() and/or add_output<>().
+ * the only thing it should do is call add_input<>() and/or add_output<>(), or call
+ * set_type() on an Input or Output with an unspecified type.
  * Added inputs will be appended (in order) after predeclared Inputs but before
  * any Outputs; added outputs will be appended after predeclared Outputs.
  *
