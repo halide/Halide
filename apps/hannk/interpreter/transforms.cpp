@@ -174,9 +174,6 @@ class PadForConv : public OpVisitor {
         } else {
             required[0].set_extent((required[0].extent() + 3) & ~3);
         }
-        // TODO: This should be aligning to the size of an int32 vector on targets
-        // that use 8-bit multiplies.
-        required[1].set_extent((required[1].extent() + 3) & ~3);
         pad_for_op(op, required, 0);
     }
 

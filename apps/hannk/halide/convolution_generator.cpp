@@ -271,10 +271,7 @@ public:
                 .vectorize(c, accum_vector_size, TailStrategy::RoundUp);
 
             // Compute the sum of the input outside the loops over channels.
-            sum_input.in()
-                .compute_at(output_, y)
-                .vectorize(x, accum_vector_size, TailStrategy::RoundUp);
-            sum_input.compute_at(sum_input.in(), x)
+            sum_input.compute_at(output_, xo)
                 .vectorize(x)
                 .update()
                 .reorder(r.z, r.x, r.y, x)

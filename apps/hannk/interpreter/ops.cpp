@@ -400,37 +400,15 @@ void Conv2DOp::execute(const Box &crop) {
 
         const int filter_width = filter_buf.dim(1).extent();
         const int filter_height = filter_buf.dim(2).extent();
-        const int output_width = output_buf.dim(1).extent();
-        const int output_height = output_buf.dim(2).extent();
         if (filter_width == 1 && filter_height == 1) {
             // For 1x1 filters, we can fuse x and y, which can help avoid overhead for
-            // small output sizes. However, we only want to do this when the output is
-            // small, because the schedule computes things at y.
-            // TODO: This shouldn't be necessary.
-            const int fuse_threshold = 100;
-            if (output_width * output_height < fuse_threshold) {
-                while (can_fuse_xy(input_buf) && can_fuse_xy(output_buf)) {
-                    fuse_xy(input_buf);
-                    fuse_xy(output_buf);
-                }
-                pad_to_rank(input_buf, 4);
-                pad_to_rank(output_buf, 4);
+            // small output sizes.
+            while (can_fuse_xy(input_buf) && can_fuse_xy(output_buf)) {
+                fuse_xy(input_buf);
+                fuse_xy(output_buf);
             }
-        } else {
-            if (padding_ == Padding::Same) {
-                const int input_width = input_buf.dim(1).extent();
-                const int input_height = input_buf.dim(2).extent();
-
-                const int dilated_filter_width = dilation_[0] * (filter_width - 1) + 1;
-                const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
-
-                const int pad_width =
-                    std::max(0, ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
-                const int pad_height =
-                    std::max(0, ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
-
-                input_buf.translate({0, pad_width, pad_height, 0});
-            }
+            pad_to_rank(input_buf, 4);
+            pad_to_rank(output_buf, 4);
         }
 
 #ifdef CONV_R16
@@ -561,31 +539,6 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
         const int output_shift = -mul_and_shift.shift;
 
         const auto output_range = get_output_range(activation_, out);
-
-        // batches must match
-        assert(input_buf.dim(3).extent() == output_buf.dim(3).extent());
-
-        // output_depth must match
-        assert(filter_buf.dim(0).extent() == output_buf.dim(0).extent());
-
-        if (padding_ == Padding::Same) {
-            const int input_width = input_buf.dim(1).extent();
-            const int input_height = input_buf.dim(2).extent();
-            const int filter_width = filter_buf.dim(1).extent();
-            const int filter_height = filter_buf.dim(2).extent();
-            const int output_width = output_buf.dim(1).extent();
-            const int output_height = output_buf.dim(2).extent();
-
-            const int dilated_filter_width = dilation_[0] * (filter_width - 1) + 1;
-            const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
-
-            const int pad_width =
-                std::max(0, ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
-            const int pad_height =
-                std::max(0, ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
-
-            input_buf.translate({0, pad_width, pad_height, 0});
-        }
 
         if (depth_multiplier >= output_buf.dim(0).extent()) {
             CHECK(
