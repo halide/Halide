@@ -11,6 +11,7 @@
 #ifdef CONV_R16
 #include "convolution_r16_uint8.h"
 #endif
+#include "copy_uint8_uint8.h"
 #include "depthwise_convolution_uint8.h"
 #include "depthwise_convolution_uint8_broadcast.h"
 #include "fully_connected_uint8.h"
@@ -741,25 +742,26 @@ void PadOp::execute(const Box &crop) {
         uint8_t pad_value = in->quantization().zero.at(0);
 
         if (is_alias(input_buf, output_buf)) {
-            // This is an in-place padding.
+            // This is an in-place padding. Just fill in the
+            // padded areas.
+            for (int d = 0; d < output_buf.dimensions(); ++d) {
+                // TODO: This still redundantly fills regions that are out of
+                // bounds in more than one dimension.
+                int input_min = input_buf.dim(d).min();
+                int output_min = output_buf.dim(d).min();
+                if (output_min < input_min) {
+                    auto before = output_buf.cropped(d, output_min, input_min - output_min);
+                    before.fill(pad_value);
+                }
+                int input_max = input_buf.dim(d).max();
+                int output_max = output_buf.dim(d).max();
+                if (output_max > input_max) {
+                    auto after = output_buf.cropped(d, input_max + 1, output_max - input_max);
+                    after.fill(pad_value);
+                }
+            }
         } else {
-            output_buf.copy_from(input_buf);
-        }
-        for (int d = 0; d < output_buf.dimensions(); ++d) {
-            // TODO: This still redundantly fills regions that are out of
-            // bounds in more than one dimension.
-            int input_min = input_buf.dim(d).min();
-            int output_min = output_buf.dim(d).min();
-            if (output_min < input_min) {
-                auto before = output_buf.cropped(d, output_min, input_min - output_min);
-                before.fill(pad_value);
-            }
-            int input_max = input_buf.dim(d).max();
-            int output_max = output_buf.dim(d).max();
-            if (output_max > input_max) {
-                auto after = output_buf.cropped(d, input_max + 1, output_max - input_max);
-                after.fill(pad_value);
-            }
+            CHECK(0 == copy_uint8_uint8(input_buf, pad_value, output_buf));
         }
     } else {
         CHECK(false);

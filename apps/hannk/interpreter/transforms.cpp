@@ -84,6 +84,16 @@ namespace {
 void maybe_alias_tensors(Model *m, Tensor *input, Tensor *output) {
     assert(input->rank() == output->rank());
 
+    // We can't change the shape of an input or output tensor.
+    if ((input->is_input() || input->is_output()) &&
+        !is_subset_of(output->box(), input->box())) {
+        return;
+    }
+    if ((output->is_input() || output->is_output()) &&
+        !is_subset_of(input->box(), output->box())) {
+        return;
+    }
+
     bool output_written = false;
     for (const auto &i : m->ops) {
         if (is_output(i.get(), input)) {
