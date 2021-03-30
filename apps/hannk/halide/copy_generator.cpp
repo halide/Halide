@@ -16,18 +16,15 @@ public:
     void generate() {
         Var c("c"), x("x"), y("y"), b("b");
 
-        Func input_bounded("input_bounded");
-        input_bounded(c, x, y, b) = constant_exterior(input_, pad_value_)(c, x, y, b);
-
-        output_(c, x, y, b) = input_bounded(c, x, y, b);
+        output_(c, x, y, b) = constant_exterior(input_, pad_value_)(c, x, y, b);
 
         // Schedule.
         const int vector_size_u8 = natural_vector_size<uint8_t>();
 
-        // Handle 3 channel -> 4 channel padding as a special case.
         Expr input_channels = input_.dim(0).extent();
         Expr output_channels = output_.dim(0).extent();
 
+        // Handle 3 channel -> 4 channel padding as a special case.
         output_.specialize(is_interleaved(input_, 3) && is_interleaved(output_, 4))
             .vectorize(x, vector_size_u8, TailStrategy::GuardWithIf)
             .unroll(c);
