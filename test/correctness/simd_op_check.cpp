@@ -2142,11 +2142,10 @@ public:
                 // check("f64x2.promote_low_f32x4", 4 * w, ???);
 
                 // Integer to integer narrowing
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i8x16.narrow_i16x8_s", 16*w, i8(i16_1));
-                // check("i8x16.narrow_i16x8_u", 16*w, u8(u16_1));
-                // check("i16x8.narrow_i32x4_s", 8*w, i16(i32_1));
-                // check("i16x8.narrow_i32x4_u", 8*w, u8(u16_1));
+                check("i8x16.narrow_i16x8_s", 16 * w, i8_sat(i16_1));
+                check("i8x16.narrow_i16x8_u", 16 * w, u8_sat(i16_1));
+                check("i16x8.narrow_i32x4_s", 8 * w, i16_sat(i32_1));
+                check("i16x8.narrow_i32x4_u", 8 * w, u16_sat(i32_1));
 
                 // Integer to integer widening
                 // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
