@@ -97,7 +97,7 @@ If you want to build it yourself, first check it out from GitHub:
 ```
 
 (If you want to build LLVM 10.x, use branch `llvmorg-10.0.1`; for current trunk,
-use `master`)
+use `main`)
 
 Then build it like so:
 
