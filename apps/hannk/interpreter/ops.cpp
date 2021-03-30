@@ -759,6 +759,8 @@ void PadOp::execute(const Box &crop) {
                     auto after = output_buf.cropped(d, input_max + 1, output_max - input_max);
                     after.fill(pad_value);
                 }
+                input_min = std::max(input_min, output_min);
+                input_max = std::min(input_max, output_max);
                 output_buf.crop(d, input_min, input_max - input_min + 1);
             }
         } else {

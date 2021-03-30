@@ -82,7 +82,10 @@ namespace {
 
 // We can alias two tensors if the input is not used after the output is written.
 void maybe_alias_tensors(Model *m, Tensor *input, Tensor *output) {
-    assert(input->rank() == output->rank());
+    if (input->rank() != output->rank()) {
+        // TODO: We should be able to alias reshapes.
+        return;
+    }
 
     // We can't change the shape of an input or output tensor.
     if ((input->is_input() || input->is_output()) &&
