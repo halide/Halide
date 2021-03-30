@@ -312,7 +312,8 @@ Stmt add_image_checks_inner(Stmt s,
         maybe_return_condition = maybe_return_condition || inference_mode;
 
         // Come up with a name to refer to this buffer in the error messages
-        string error_name = (is_output_buffer ? "Output" : "Input");
+        string error_name = "In pipeline: " + pipeline_name + ", ";
+        error_name += (is_output_buffer ? "Output" : "Input");
         error_name += " buffer " + name;
 
         if (!is_output_buffer && t.has_feature(Target::MSAN)) {
