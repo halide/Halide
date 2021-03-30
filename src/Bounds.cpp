@@ -1580,6 +1580,7 @@ private:
                 interval.min *= factor;
             }
             break;
+        case VectorReduce::SaturatingAdd:
         case VectorReduce::Mul:
             // Technically there are some things we could say
             // here. E.g. if all the lanes are positive then we're

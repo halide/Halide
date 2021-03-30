@@ -535,6 +535,7 @@ class DerivativeBounds : public IRVisitor {
         op->value.accept(this);
         switch (op->op) {
         case VectorReduce::Add:
+        case VectorReduce::SaturatingAdd:
             result = multiply(result, op->value.type().lanes() / op->type.lanes());
             break;
         case VectorReduce::Min:

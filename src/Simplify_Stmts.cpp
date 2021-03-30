@@ -180,7 +180,12 @@ Stmt Simplify::visit(const For *op) {
         bounds_and_alignment_info.push(op->name, min_bounds);
     }
 
-    Stmt new_body = mutate(op->body);
+    Stmt new_body;
+    {
+        // If we're in the loop, the extent must be greater than 0.
+        ScopedFact fact = scoped_truth(0 < new_extent);
+        new_body = mutate(op->body);
+    }
 
     if (bounds_tracked) {
         bounds_and_alignment_info.pop(op->name);

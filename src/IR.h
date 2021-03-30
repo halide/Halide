@@ -872,6 +872,7 @@ struct VectorReduce : public ExprNode<VectorReduce> {
     // operators.
     typedef enum {
         Add,
+        SaturatingAdd,
         Mul,
         Min,
         Max,

@@ -443,7 +443,8 @@ struct Bound {
 
     /** If defined, the number of iterations will be a multiple of
      * "modulus", and the first iteration will be at a value congruent
-     * to "remainder" modulo "modulus". Set by Func::align_bounds. */
+     * to "remainder" modulo "modulus". Set by Func::align_bounds and
+     * Func::align_extent. */
     Expr modulus, remainder;
 };
 
@@ -568,7 +569,7 @@ public:
 
     /** You may explicitly bound some of the dimensions of a function,
      * or constrain them to lie on multiples of a given factor. See
-     * \ref Func::bound and \ref Func::align_bounds */
+     * \ref Func::bound and \ref Func::align_bounds and \ref Func::align_extent. */
     // @{
     const std::vector<Bound> &bounds() const;
     std::vector<Bound> &bounds();
