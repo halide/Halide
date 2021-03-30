@@ -1216,8 +1216,8 @@ public:
         stream << std::flush;
 
         for (const auto &t : vector_types) {
-            string name = type_to_c_type(t, false, false);
-            string scalar_name = type_to_c_type(t.element_of(), false, false);
+            string name = print_type(t, DoNotAppendSpace);
+            string scalar_name = print_type(t.element_of(), DoNotAppendSpace);
             stream << "#if halide_cpp_use_native_vector(" << scalar_name << ", " << t.lanes() << ")\n";
             stream << "using " << name << " = NativeVector<" << scalar_name << ", " << t.lanes() << ">;\n";
             stream << "using " << name << "_ops = NativeVectorOps<" << scalar_name << ", " << t.lanes() << ">;\n";
@@ -2612,6 +2612,7 @@ void CodeGen_C::visit(const Allocate *op) {
                 size_id = print_expr(make_const(size_id_type, constant_size));
 
                 if (op->memory_type == MemoryType::Stack ||
+                    op->memory_type == MemoryType::Register ||
                     (op->memory_type == MemoryType::Auto &&
                      can_allocation_fit_on_stack(stack_bytes))) {
                     on_stack = true;
