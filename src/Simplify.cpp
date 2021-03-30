@@ -417,7 +417,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
                 }
                 s[p.second] = make_const(p.first, (int)(rng() & 0xffff) - 0x7fff);
             }
-            Expr probe = strip_tags(simplify(substitute(s, e)));
+            Expr probe = unwrap_tags(simplify(substitute(s, e)));
             if (!is_const_one(probe)) {
                 // Found a counter-example, or something that fails to fold
                 return false;

@@ -309,7 +309,7 @@ Stmt remove_likelies(const Stmt &s);
 
 /** If the expression is a tag helper call, remove it and return
  * the tagged expression. If not, returns the expression. */
-Expr strip_tags(const Expr &e);
+Expr unwrap_tags(const Expr &e);
 
 /** Expressions tagged with this intrinsic are suggestions that
  * vectorization of loops with guard ifs should be implemented with

@@ -15,7 +15,7 @@ Stmt Simplify::visit(const IfThenElse *op) {
     Expr condition = mutate(op->condition, nullptr);
 
     // Remove tags
-    Expr unwrapped_condition = strip_tags(condition);
+    Expr unwrapped_condition = unwrap_tags(condition);
 
     // If (true) ...
     if (is_const_one(unwrapped_condition)) {

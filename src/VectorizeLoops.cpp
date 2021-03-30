@@ -894,7 +894,7 @@ class VectorSubs : public IRMutator {
                     // that's going to scalarize, because it's no
                     // longer likely.
                     Stmt without_likelies =
-                        IfThenElse::make(strip_tags(op->condition),
+                        IfThenElse::make(unwrap_tags(op->condition),
                                          op->then_case, op->else_case);
                     Stmt stmt =
                         IfThenElse::make(all_true,

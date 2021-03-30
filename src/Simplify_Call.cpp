@@ -605,7 +605,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         Expr cond_value = mutate(op->args[0], nullptr);
 
         // Ignore tags for our purposes here
-        Expr cond = strip_tags(cond_value);
+        Expr cond = unwrap_tags(cond_value);
 
         if (is_const_one(cond)) {
             return mutate(op->args[1], bounds);
