@@ -744,9 +744,9 @@ void PadOp::execute(const Box &crop) {
         if (is_alias(input_buf, output_buf)) {
             // This is an in-place padding. Just fill in the
             // padded areas.
-            for (int d = 0; d < output_buf.dimensions(); ++d) {
-                // TODO: This still redundantly fills regions that are out of
-                // bounds in more than one dimension.
+            // Fill dimensions outermost to innermost, to increase the
+            // area which should vectorize cleanly.
+            for (int d = output_buf.dimensions() - 1; d >= 0; d--) {
                 int input_min = input_buf.dim(d).min();
                 int output_min = output_buf.dim(d).min();
                 if (output_min < input_min) {
@@ -759,6 +759,7 @@ void PadOp::execute(const Box &crop) {
                     auto after = output_buf.cropped(d, input_max + 1, output_max - input_max);
                     after.fill(pad_value);
                 }
+                output_buf.crop(d, input_min, input_max - input_min + 1);
             }
         } else {
             CHECK(0 == copy_uint8_uint8(input_buf, pad_value, output_buf));
