@@ -1752,6 +1752,18 @@ void GIOBase::set_type(const Type &type) {
     types_ = {type};
 }
 
+void GIOBase::set_dimensions(int dims) {
+    generator->check_exact_phase(GeneratorBase::ConfigureCalled);
+    user_assert(!dims_defined()) << "set_dimensions() may only be called on an Input or Output that has no dimensionality specified.";
+    dims_ = dims;
+}
+
+void GIOBase::set_array_size(int size) {
+    generator->check_exact_phase(GeneratorBase::ConfigureCalled);
+    user_assert(!array_size_defined()) << "set_array_size() may only be called on an Input or Output that has no array size specified.";
+    array_size_ = size;
+}
+
 bool GIOBase::dims_defined() const {
     return dims_ != -1;
 }

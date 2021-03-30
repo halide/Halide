@@ -6,10 +6,10 @@ class Configure : public Halide::Generator<Configure> {
 public:
     GeneratorParam<int> num_extra_buffer_inputs{"num_extra_buffer_inputs", 3};
 
-    Input<Buffer<>> input{"input", 3};
+    Input<Buffer<>> input{"input"};
     Input<int> bias{"bias"};
 
-    Output<Buffer<int>> output{"output", 3};
+    Output<Buffer<>> output{"output"};
 
     void configure() {
         configure_calls++;
@@ -39,6 +39,11 @@ public:
         // set_type() iff the type is unspecified. (This allows you to base the type on,
         // e.g., the value in get_target(), or the value of any GeneratorParam.)
         input.set_type(Int(32));
+        output.set_type(Int(32));
+
+        // Ditto for set_dimensions.
+        input.set_dimensions(3);
+        output.set_dimensions(3);
 
         // Will fail: it is not legal to call set_type on an Input or Output that
         // already has a type specified.
@@ -59,8 +64,9 @@ public:
     void generate() {
         assert(configure_calls == 1);
 
-        // Will fail: it is not legal to call set_type() from anywhere but configure().
+        // Will fail: it is not legal to call set_type(), etc from anywhere but configure().
         // input.set_type(Int(32));
+        // input.set_dimensions(3);
 
         // Attempting to call add_input() outside of the configure method will fail.
         // auto *this_will_fail = add_input<Buffer<>>("untyped_uint8", UInt(8), 2);
