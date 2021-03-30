@@ -16,9 +16,6 @@ void remove_dead_ops(Model *m);
 // bounds.
 void pad_for_conv(Model *m);
 
-// Remove pad ops when consuming ops don't need it.
-void remove_pad_ops(Model *m);
-
 }  // namespace hannk
 
 #endif  // IN_PLACE_H_

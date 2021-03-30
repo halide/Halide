@@ -156,6 +156,13 @@ class PadForConv : public OpVisitor {
 
     void visit(Conv2DOp *op) {
         Box required = op->input_required(op->output()->box());
+        assert(required[0].min == 0);
+        // TODO: Figure out how to get all this logic into one place.
+        if (required[0].extent() >= 16) {
+            required[0].set_extent((required[0].extent() + 15) & ~15);
+        } else {
+            required[0].set_extent((required[0].extent() + 3) & ~3);
+        }
         pad_for_op(op, required, 0);
     }
 
@@ -168,25 +175,6 @@ public:
     std::vector<std::pair<std::unique_ptr<Op>, std::unique_ptr<Tensor>>> pad_ops;
 };
 
-// Find pad ops consumed by ops that can handle padding internally
-// and remove them.
-class RemovePadOps : public OpVisitor {
-    Model *model_;
-
-    void visit(PadOp *op) {
-        Tensor *input = op->input();
-        Tensor *output = op->output();
-
-        // TODO: Check that the consumers can handle padding themselves?
-        output->replace_all_consumers_with(input);
-    }
-
-public:
-    RemovePadOps(Model *model)
-        : model_(model) {
-    }
-};
-
 }  // namespace
 
 void pad_for_conv(Model *m) {
@@ -196,11 +184,6 @@ void pad_for_conv(Model *m) {
         m->insert(std::move(i.first));
         m->insert(std::move(i.second));
     }
-}
-
-void remove_pad_ops(Model *m) {
-    RemovePadOps v(m);
-    m->accept(&v);
 }
 
 }  // namespace hannk

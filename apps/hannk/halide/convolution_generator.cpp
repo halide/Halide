@@ -77,13 +77,12 @@ public:
         const bool use_8bit_multiply =
             get_target().arch != Target::X86 || get_target().has_feature(Target::AVX512_SapphireRapids);
 
-        // Add a "zero" boundary condition to the input.
-        Func input_bounded("input_bounded");
-        Expr input_cxyb = constant_exterior(input_, input_offset_)(c, x, y, b);
+        Func input("input");
+        Expr input_cxyb = input_(c, x, y, b);
         if (!use_8bit_multiply) {
             input_cxyb = i16(input_cxyb) - i16(input_offset_);
         }
-        input_bounded(c, x, y, b) = input_cxyb;
+        input(c, x, y, b) = input_cxyb;
         // And to c of the filter. This lets us align the inner reduction loop
         // however we want.
         Func filter_bounded =
@@ -118,7 +117,7 @@ public:
         Expr filter_rdxyc =
             filter_tiled(r.z % vector_reduction, r.z / vector_reduction, r.x, r.y, c);
         Expr input_rdxyc =
-            input_bounded(r.z, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
+            input(r.z, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
 
         Func offset_c("offset_c");
         Func sum_input("sum_input");
@@ -175,7 +174,6 @@ public:
         interpret_as_tensor(bias_);
         interpret_as_tensor(output_);
         require_same_min_extent(3, input_, output_);
-        require_same_min_extent(0, filter_, input_);
         require_same_min_extent(3, filter_, 0, output_);
         require_same_min_extent(0, bias_, output_);
 
@@ -246,11 +244,11 @@ public:
             .unroll(rci)
             .unroll(x);
 
-        if (unroll_reduction >= natural_vector_size<uint8_t>()) {
+        if (unroll_reduction >= natural_vector_size<uint8_t>() || !use_8bit_multiply) {
             // If we're unrolling a full vector's worth of reduction from the
             // input, explicitly load a vector of it first. This enables targeting
             // broadcasting dot products, like ARM's udot.
-            input_bounded.in(convolved)
+            input.in(convolved)
                 .compute_at(convolved, c)
                 .bound_extent(c, unroll_reduction)
                 .vectorize(c);
@@ -283,28 +281,6 @@ public:
                 .atomic()
                 .vectorize(r.z, unroll_reduction)
                 .vectorize(x);
-        }
-
-        // TODO: We often don't need the boundary condition on the input,
-        // and it's expensive.
-        input_bounded.compute_at(output_, y)
-            .store_in(MemoryType::Stack)
-            .reorder(c, x);
-
-        // For 3-channel interleaved inputs, we need to try to use
-        // interleaving loads/stores when available.
-        input_bounded.specialize(input_.dim(0).extent() == 3 && input_.dim(1).stride() == 3)
-            .unroll(c)
-            .vectorize(x, natural_vector_size<uint8_t>(), TailStrategy::RoundUp);
-
-        // TODO: This is a mess. We need a better way to implement a
-        // straightforward boundary condition.
-        int vector_size_input =
-            use_8bit_multiply ? natural_vector_size<uint8_t>() : natural_vector_size<int16_t>();
-        for (int i = vector_size_input; i >= unroll_reduction; i /= 2) {
-            // Use GuardWithIf here to avoid growing the bounds.
-            input_bounded.specialize(input_.dim(0).extent() >= i)
-                .vectorize(c, i, TailStrategy::GuardWithIf);
         }
 
         bias_bounded.compute_root()

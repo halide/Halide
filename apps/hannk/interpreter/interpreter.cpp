@@ -343,14 +343,8 @@ ModelInterpreter::ModelInterpreter(Model m, ScheduleOptions options)
 }
 
 void ModelInterpreter::legalize() {
-#if 1
     pad_for_conv(&model_);
-#else
-    remove_pad_ops(&model_);
-#endif
-
     in_place(&model_);
-
     remove_dead_ops(&model_);
 }
 

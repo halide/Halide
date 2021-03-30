@@ -55,16 +55,12 @@ public:
         // Some free variables, where x and y represent the spatial dimensions.
         Var x("x"), y("y"), c("c"), b("b");
 
-        // Pad x and y with the value that produces zero after the input offset is
-        // subtracted.
-        Func input_bounded = constant_exterior(input_, input_offset_);
-
         Func bias_bounded = repeat_edge(bias_);
 
         // Apply the c multiplier.
         Func resampled_input("resampled_input");
         Expr c_resampled = inv_depth_multiplier_ >= 0 ? c * inv_depth_multiplier_ : c / depth_multiplier_;
-        resampled_input(c, x, y, b) = input_bounded(c_resampled, x, y, b);
+        resampled_input(c, x, y, b) = input_(c_resampled, x, y, b);
 
         Func filter_zeroed("filter_zeroed");
         Func input_zeroed("input_zeroed");
@@ -170,6 +166,7 @@ public:
         if (inv_depth_multiplier_ < 0) {
             // The reason inv_depth_multiplier_ is a GeneratorParam and not a
             // specialization is that we can't specialize the (lack of) compute_at here.
+            // TODO: Remove this compute_at for the case depth_multiplier = 1.
             resampled_input
                 .compute_at(output_, b)
                 .store_in(MemoryType::Stack)
@@ -179,13 +176,6 @@ public:
                 resampled_input.specialize(depth_multiplier_ == dm);
             }
             resampled_input.specialize_fail("unsupported depth multiplier");
-        } else if (inv_depth_multiplier_ == 0) {
-            // For the broadcasting case, we want to pull the boundary condition out
-            // of the inner loop before we broadcast the channels.
-            input_bounded
-                .compute_at(output_, b)
-                .store_in(MemoryType::Stack)
-                .vectorize(Halide::_1, vector_size, TailStrategy::RoundUp);
         }
 
         filter_.in()
