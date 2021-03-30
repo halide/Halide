@@ -34,6 +34,8 @@ protected:
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
     bool use_pic() const override;
+
+    void visit(const Cast *) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
 };
 
@@ -91,6 +93,10 @@ const WasmIntrinsic intrinsic_defs[] = {
     // since the result will be the same for our purposes here
     {"llvm.wasm.extadd.pairwise.unsigned.v8i16", Int(16, 8), "pairwise_widening_add", {UInt(8, 16)}, Target::WasmSimd128},
     {"llvm.wasm.extadd.pairwise.unsigned.v4i32", Int(32, 4), "pairwise_widening_add", {UInt(16, 8)}, Target::WasmSimd128},
+
+    {"i32_to_double_s", Float(64, 4), "int_to_double", {Int(32, 4)}, Target::WasmSimd128},
+    {"i32_to_double_u", Float(64, 4), "int_to_double", {UInt(32, 4)}, Target::WasmSimd128},
+    {"float_to_double", Float(64, 4), "float_to_double", {Float(32, 4)}, Target::WasmSimd128},
 #endif
 
     // TODO: LLVM should support this directly, but doesn't yet.
@@ -126,6 +132,41 @@ void CodeGen_WebAssembly::init_module() {
         fn->addFnAttr(llvm::Attribute::ReadNone);
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
+}
+
+void CodeGen_WebAssembly::visit(const Cast *op) {
+#if LLVM_VERSION >= 130
+    struct Pattern {
+        std::string intrin;  ///< Name of the intrinsic
+        Expr pattern;        ///< The pattern to match against
+        Target::Feature required_feature;
+    };
+
+    // clang-format off
+    static const Pattern patterns[] = {
+        {"int_to_double", f64(wild_i32x_), Target::WasmSimd128},
+        {"int_to_double", f64(wild_u32x_), Target::WasmSimd128},
+        {"float_to_double", f64(wild_f32x_), Target::WasmSimd128},
+    };
+    // clang-format on
+
+    if (op->type.is_vector()) {
+        std::vector<Expr> matches;
+        for (const Pattern &p : patterns) {
+            if (!target.has_feature(p.required_feature)) {
+                continue;
+            }
+            if (expr_match(p.pattern, op, matches)) {
+                value = call_overloaded_intrin(op->type, p.intrin, matches);
+                if (value) {
+                    return;
+                }
+            }
+        }
+    }
+#endif  // LLVM_VERSION >= 130
+
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
