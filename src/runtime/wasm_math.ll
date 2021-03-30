@@ -170,3 +170,4 @@ define weak_odr <4 x double> @float_to_double(<4 x float> %x) nounwind alwaysinl
   %3 = tail call <2 x double> @llvm.wasm.promote.low(<4 x float> %1)
   %4 = shufflevector <2 x double> %2, <2 x double> %3, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
   ret <4 x double> %4
+}
