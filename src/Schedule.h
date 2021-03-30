@@ -55,8 +55,7 @@ enum class TailStrategy {
      * condition, and factored out into a loop epilogue if possible.
      * Pros: no redundant re-evaluation; does not constrain input our
      * output sizes. Cons: increases code size due to separate
-     * tail-case handling; vectorization will scalarize in the tail
-     * case to handle the if statement. */
+     * tail-case handling. */
     Predicate,
 
     /** Prevent evaluation beyond the original extent by shifting
