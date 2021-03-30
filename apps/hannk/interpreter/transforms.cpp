@@ -174,6 +174,7 @@ class PadForConv : public OpVisitor {
         }
         pad_for_op(op, required, 0);
 
+        // We also need to tile the filter.
         Tensor *filter = op->filter();
         if (op->filter()->rank() == 4) {
             Box tiled_shape = op->filter_required();
@@ -184,8 +185,6 @@ class PadForConv : public OpVisitor {
                 // We're widening the filter. Subtract the offset.
                 std::fill(quantization.zero.begin(), quantization.zero.end(), 0);
             }
-            // We also need to tile the filter.
-            // TODO: Maybe also dequantize to 16-bit?
             std::unique_ptr<Tensor> tiled =
                 ::hannk::make_unique<Tensor>(filter->name() + "_tiled", type, tiled_shape, quantization);
             // Maybe more than one op uses this same filter...?
