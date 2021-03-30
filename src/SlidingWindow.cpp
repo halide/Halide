@@ -119,6 +119,102 @@ bool find_produce(const Stmt &s, const string &func) {
     return finder.found;
 }
 
+// This mutator rewrites calls and provides to a particular
+// func:
+// - Calls and Provides are shifted to be relative to the min.
+// - Provides additionally are rewritten to load values from the
+//   previous iteration of the loop if they were computed in the
+//   last iteration.
+class RollFunc : public IRMutator {
+    const Function &func;
+    int dim;
+    const string &loop_var;
+    const Interval &old_bounds;
+    const Interval &new_bounds;
+
+    Scope<Expr> scope;
+
+    // It helps simplify the shifted calls/provides to rebase the
+    // loops that are subtracted from to have a min of 0.
+    set<string> loops_to_rebase;
+    bool in_produce = false;
+
+    using IRMutator::visit;
+
+    Stmt visit(const ProducerConsumer *op) override {
+        bool produce_func = op->name == func.name() && op->is_producer;
+        ScopedValue<bool> old_in_produce(in_produce, in_produce || produce_func);
+        return IRMutator::visit(op);
+    }
+
+    Stmt visit(const Provide *op) override {
+        if (!(in_produce && op->name == func.name())) {
+            return IRMutator::visit(op);
+        }
+        vector<Expr> values = op->values;
+        for (Expr &i : values) {
+            i = mutate(i);
+        }
+        vector<Expr> args = op->args;
+        for (Expr &i : args) {
+            i = mutate(i);
+        }
+        bool sliding_up = old_bounds.max.same_as(new_bounds.max);
+        Expr is_new = sliding_up ? new_bounds.min <= args[dim] : args[dim] <= new_bounds.max;
+        args[dim] -= old_bounds.min;
+        vector<Expr> old_args = args;
+        Expr old_arg_dim = expand_expr(old_args[dim], scope);
+        old_args[dim] = substitute(loop_var, Variable::make(Int(32), loop_var) - 1, old_arg_dim);
+        for (int i = 0; i < (int)values.size(); i++) {
+            Type t = values[i].type();
+            Expr old_value =
+                Call::make(t, op->name, old_args, Call::Halide, func.get_contents(), i);
+            values[i] = Call::make(values[i].type(), Call::if_then_else, {is_new, values[i], likely(old_value)}, Call::PureIntrinsic);
+        }
+        if (const Variable *v = op->args[dim].as<Variable>()) {
+            // The subtractions above simplify more easily if the loop is rebased to 0.
+            loops_to_rebase.insert(v->name);
+        }
+        return Provide::make(func.name(), values, args);
+    }
+
+    Expr visit(const Call *op) override {
+        if (!(op->call_type == Call::Halide && op->name == func.name())) {
+            return IRMutator::visit(op);
+        }
+        vector<Expr> args = op->args;
+        for (Expr &i : args) {
+            i = mutate(i);
+        }
+        args[dim] -= old_bounds.min;
+        return Call::make(op->type, op->name, args, Call::Halide, op->func, op->value_index, op->image, op->param);
+    }
+
+    Stmt visit(const For *op) override {
+        Stmt result = IRMutator::visit(op);
+        op = result.as<For>();
+        internal_assert(op);
+        if (loops_to_rebase.count(op->name)) {
+            string new_name = op->name + ".rebased";
+            Stmt body = substitute(op->name, Variable::make(Int(32), new_name) + op->min, op->body);
+            result = For::make(new_name, 0, op->extent, op->for_type, op->device_api, body);
+            loops_to_rebase.erase(op->name);
+        }
+        return result;
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        ScopedBinding<Expr> bind(scope, op->name, simplify(expand_expr(op->value, scope)));
+        return IRMutator::visit(op);
+    }
+
+public:
+    RollFunc(const Function &func, int dim, const string &loop_var,
+             const Interval &old_bounds, const Interval &new_bounds)
+        : func(func), dim(dim), loop_var(loop_var), old_bounds(old_bounds), new_bounds(new_bounds) {
+    }
+};
+
 // Perform sliding window optimization for a function over a
 // particular serial for loop
 class SlidingWindowOnFunctionAndLoop : public IRMutator {
@@ -372,7 +468,17 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             slid_dimensions.insert(dim_idx);
 
-            // Now redefine the appropriate regions required
+            // If we want to slide in registers, we're done here, we just need to
+            // save the updated bounds for later.
+            if (func.schedule().memory_type() == MemoryType::Register) {
+                this->dim_idx = dim_idx;
+                old_bounds = {min_required, max_required};
+                new_bounds = {new_min, new_max};
+                return op;
+            }
+
+            // If we aren't sliding in registers, we need to update the bounds of
+            // the producer to be only the bounds of the region newly computed.
             internal_assert(replacements.empty());
             if (can_slide_up) {
                 replacements[prefix + dim + ".min"] = new_min;
@@ -493,6 +599,13 @@ public:
     }
 
     Expr new_loop_min;
+    int dim_idx;
+    Interval old_bounds;
+    Interval new_bounds;
+
+    Stmt translate_loop(const Stmt &s) {
+        return RollFunc(func, dim_idx, loop_var, old_bounds, new_bounds).mutate(s);
+    }
 };
 
 // In Stmt s, does the production of b depend on a?
@@ -691,6 +804,11 @@ class SlidingWindow : public IRMutator {
 
             SlidingWindowOnFunctionAndLoop slider(func, name, prev_loop_min, slid_dimensions[func.name()]);
             body = slider.mutate(body);
+
+            if (func.schedule().memory_type() == MemoryType::Register &&
+                slider.old_bounds.has_lower_bound()) {
+                body = slider.translate_loop(body);
+            }
 
             if (slider.new_loop_min.defined()) {
                 Expr new_loop_min = slider.new_loop_min;

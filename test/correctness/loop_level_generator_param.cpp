@@ -50,10 +50,10 @@ private:
     void visit(const Call *op) override {
         IRVisitor::visit(op);
         if (op->name == "sin_f32") {
-            _halide_user_assert(inside_for_loop == inner_loop_level)
+            _halide_user_assert(starts_with(inside_for_loop, inner_loop_level))
                 << "call sin_f32: expected " << inner_loop_level << ", actual: " << inside_for_loop;
         } else if (op->name == "cos_f32") {
-            _halide_user_assert(inside_for_loop == outer_loop_level)
+            _halide_user_assert(starts_with(inside_for_loop, outer_loop_level))
                 << "call cos_f32: expected " << outer_loop_level << ", actual: " << inside_for_loop;
         }
     }
@@ -62,10 +62,10 @@ private:
         IRVisitor::visit(op);
         std::string op_name = strip_uniquified_names(op->name);
         if (op_name == "inner") {
-            _halide_user_assert(inside_for_loop == inner_loop_level)
+            _halide_user_assert(starts_with(inside_for_loop, inner_loop_level))
                 << "inside_for_loop: expected " << inner_loop_level << ", actual: " << inside_for_loop;
         } else if (op_name == "outer") {
-            _halide_user_assert(inside_for_loop == outer_loop_level)
+            _halide_user_assert(starts_with(inside_for_loop, outer_loop_level))
                 << "inside_for_loop: expected " << outer_loop_level << ", actual: " << inside_for_loop;
         } else {
             _halide_user_assert(0) << "store at: " << op_name << " inside_for_loop: " << inside_for_loop;

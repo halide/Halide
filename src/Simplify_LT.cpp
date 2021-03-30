@@ -285,9 +285,43 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               rewrite(select(y, z, x + c0) < x + c1, y && (z < x + c1), c0 >= c1) ||
               rewrite(select(y, z, x + c0) < x + c1, !y || (z < x + c1), c0 < c1) ||
 
-              // Normalize comparison of ramps to a comparison of a ramp and a broadacst
-              rewrite(ramp(x, y, lanes) < ramp(z, w, lanes), ramp(x - z, y - w, lanes) < 0))) ||
+              rewrite(c0 < select(x, c1, c2), select(x, fold(c0 < c1), fold(c0 < c2))) ||
+              rewrite(select(x, c1, c2) < c0, select(x, fold(c1 < c0), fold(c2 < c0))) ||
 
+              // Normalize comparison of ramps to a comparison of a ramp and a broadacst
+              rewrite(ramp(x, y, lanes) < ramp(z, w, lanes), ramp(x - z, y - w, lanes) < 0) ||
+
+              // Rules of the form:
+              // rewrite(ramp(x, y, lanes) < broadcast(z, lanes), ramp(x - z, y, lanes) < 0) ||
+              // where x and z cancel usefully
+              rewrite(ramp(x + z, y, lanes) < broadcast(x + w, lanes), ramp(z, y, lanes) < broadcast(w, lanes)) ||
+              rewrite(ramp(z + x, y, lanes) < broadcast(x + w, lanes), ramp(z, y, lanes) < broadcast(w, lanes)) ||
+              rewrite(ramp(x + z, y, lanes) < broadcast(w + x, lanes), ramp(z, y, lanes) < broadcast(w, lanes)) ||
+              rewrite(ramp(z + x, y, lanes) < broadcast(w + x, lanes), ramp(z, y, lanes) < broadcast(w, lanes)) ||
+
+              // z = 0
+              rewrite(ramp(x, y, lanes) < broadcast(x + w, lanes), ramp(0, y, lanes) < broadcast(w, lanes)) ||
+              rewrite(ramp(x, y, lanes) < broadcast(w + x, lanes), ramp(0, y, lanes) < broadcast(w, lanes)) ||
+
+              // w = 0
+              rewrite(ramp(x + z, y, lanes) < broadcast(x, lanes), ramp(z, y, lanes) < 0) ||
+              rewrite(ramp(z + x, y, lanes) < broadcast(x, lanes), ramp(z, y, lanes) < 0) ||
+
+              // With the args flipped
+              rewrite(broadcast(x + w, lanes) < ramp(x + z, y, lanes), broadcast(w, lanes) < ramp(z, y, lanes)) ||
+              rewrite(broadcast(x + w, lanes) < ramp(z + x, y, lanes), broadcast(w, lanes) < ramp(z, y, lanes)) ||
+              rewrite(broadcast(w + x, lanes) < ramp(x + z, y, lanes), broadcast(w, lanes) < ramp(z, y, lanes)) ||
+              rewrite(broadcast(w + x, lanes) < ramp(z + x, y, lanes), broadcast(w, lanes) < ramp(z, y, lanes)) ||
+
+              // z = 0
+              rewrite(broadcast(x + w, lanes) < ramp(x, y, lanes), broadcast(w, lanes) < ramp(0, y, lanes)) ||
+              rewrite(broadcast(w + x, lanes) < ramp(x, y, lanes), broadcast(w, lanes) < ramp(0, y, lanes)) ||
+
+              // w = 0
+              rewrite(broadcast(x, lanes) < ramp(x + z, y, lanes), 0 < ramp(z, y, lanes)) ||
+              rewrite(broadcast(x, lanes) < ramp(z + x, y, lanes), 0 < ramp(z, y, lanes)) ||
+
+              false)) ||
             (no_overflow_int(ty) && EVAL_IN_LAMBDA
              (rewrite(x * c0 < y * c1, x < y * fold(c1 / c0), c1 % c0 == 0 && c0 > 0) ||
               rewrite(x * c0 < y * c1, x * fold(c0 / c1) < y, c0 % c1 == 0 && c1 > 0) ||
