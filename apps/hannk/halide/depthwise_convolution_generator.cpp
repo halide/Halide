@@ -112,12 +112,18 @@ public:
         // boundary condition on the filter at co and reuse it across batches.
         const int kTileW = 2;
         const int kTileH = 2;
+        // When the output is small, the overhead from shift inwards can be large.
+        // Only tile when the input is at least this many tiles to avoid this.
+        const int kMinTiles = 4;
         Var xo("xo"), yo("yo"), co("co");
         Expr output_channels = output_.dim(0).extent();
         Expr output_width = output_.dim(1).extent();
         Expr output_height = output_.dim(2).extent();
+        Expr use_tiles =
+            (output_width >= kTileW * kMinTiles || output_width % kTileW == 0) &&
+            (output_height >= kTileH * kMinTiles || output_height % kTileH == 0);
         output_.compute_root()
-            .specialize(output_channels >= vector_size && output_width >= kTileW && output_height >= kTileH)
+            .specialize(output_channels >= vector_size && use_tiles)
             .tile(x, y, xo, yo, x, y, kTileW, kTileH, TailStrategy::ShiftInwards)
             .split(c, co, c, vector_size, TailStrategy::ShiftInwards)
             .reorder(x, y, c, xo, yo, b, co)
@@ -128,10 +134,18 @@ public:
         // Enable 1x1 outputs to work.
         output_
             .tile(x, y, xo, yo, x, y, 1, 1, TailStrategy::RoundUp)
+            .unroll(x)
+            .unroll(y);
+
+        // Vectorize c, using predication only for small numbers of channels.
+        output_
+            .specialize(output_channels >= vector_size)
+            .split(c, co, c, vector_size, TailStrategy::ShiftInwards)
+            .reorder(x, y, c, xo, yo, b, co)
+            .vectorize(c);
+        output_
             .split(c, co, c, vector_size, TailStrategy::Predicate)
             .reorder(x, y, c, xo, yo, b, co)
-            .unroll(x)
-            .unroll(y)
             .vectorize(c);
 
         convolved.compute_at(output_, xo)
