@@ -33,8 +33,12 @@ public:
         for (int i = vector_size_u8; i >= 4; i /= 2) {
             output_
                 .specialize(output_channels >= i)
+                .vectorize(c, i, TailStrategy::ShiftInwards)
                 .reorder(x, y, c, b)
-                .vectorize(c, i, TailStrategy::ShiftInwards);
+                // TODO: This is ridiculous but it helps.
+                .specialize(output_channels < 100)
+                .reorder(c, x, y, b);
+
         }
 
         // In the general case, use GuardWithIf and reorder c

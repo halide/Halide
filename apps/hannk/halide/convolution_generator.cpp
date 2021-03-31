@@ -325,7 +325,6 @@ public:
 
         output_
             .compute_root()
-            .reorder_storage(ci, c, co, x, y)
             .reorder(ci, c, x, y, co)
             .vectorize(ci);
     }
