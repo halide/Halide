@@ -88,7 +88,7 @@ $(BIN)/%/convolution_r16_uint8.a: $(GENERATOR_BIN)/convolution.generator
 
 $(BIN)/%/copy_uint8_uint8.a: $(GENERATOR_BIN)/copy.generator
 	@mkdir -p $(@D)
-	$< -g Copy -f hannk::copy_uint8_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+	$< -g Copy -f hannk::copy_uint8_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_bounds_query-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
 $(BIN)/%/depthwise_convolution_uint8.a: $(GENERATOR_BIN)/depthwise_convolution.generator
 	@mkdir -p $(@D)
@@ -97,6 +97,10 @@ $(BIN)/%/depthwise_convolution_uint8.a: $(GENERATOR_BIN)/depthwise_convolution.g
 $(BIN)/%/depthwise_convolution_uint8_broadcast.a: $(GENERATOR_BIN)/depthwise_convolution.generator
 	@mkdir -p $(@D)
 	$< -g DepthwiseConvolution inv_depth_multiplier=0 -f hannk::depthwise_convolution_uint8_broadcast -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
+$(BIN)/%/fill_uint8.a: $(GENERATOR_BIN)/fill.generator
+	@mkdir -p $(@D)
+	$< -g Fill -f hannk::fill_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_bounds_query-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
 $(BIN)/%/fully_connected_uint8.a: $(GENERATOR_BIN)/fully_connected.generator
 	@mkdir -p $(@D)
@@ -121,6 +125,7 @@ OPS_HALIDE = \
 	$(BIN)/%/copy_uint8_uint8.a \
 	$(BIN)/%/depthwise_convolution_uint8.a \
 	$(BIN)/%/depthwise_convolution_uint8_broadcast.a \
+	$(BIN)/%/fill_uint8.a \
 	$(BIN)/%/fully_connected_uint8.a \
 	$(BIN)/%/max_pool_uint8.a \
 	$(BIN)/%/tile_convolution_filter_uint8.a \

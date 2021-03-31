@@ -14,6 +14,7 @@
 #include "copy_uint8_uint8.h"
 #include "depthwise_convolution_uint8.h"
 #include "depthwise_convolution_uint8_broadcast.h"
+#include "fill_uint8.h"
 #include "fully_connected_uint8.h"
 #include "max_pool_uint8.h"
 #include "tile_convolution_filter_uint8.h"
@@ -722,6 +723,14 @@ void PadOp::execute(const Box &crop) {
         uint8_t pad_value = in->quantization().zero.at(0);
 
         if (is_alias(input_buf, output_buf)) {
+            while (can_fuse_cx(output_buf)) {
+                fuse_cx(output_buf);
+            }
+            while (can_fuse_xy(output_buf)) {
+                fuse_xy(output_buf);
+            }
+            pad_to_rank(output_buf, 4);
+
             // This is an in-place padding. Just fill in the
             // padded areas.
             // Fill dimensions outermost to innermost, to increase the
@@ -731,13 +740,13 @@ void PadOp::execute(const Box &crop) {
                 int output_min = output_buf.dim(d).min();
                 if (output_min < input_min) {
                     auto before = output_buf.cropped(d, output_min, input_min - output_min);
-                    before.fill(pad_value);
+                    CHECK(0 == fill_uint8(pad_value, before));
                 }
                 int input_max = input_buf.dim(d).max();
                 int output_max = output_buf.dim(d).max();
                 if (output_max > input_max) {
                     auto after = output_buf.cropped(d, input_max + 1, output_max - input_max);
-                    after.fill(pad_value);
+                    CHECK(0 == fill_uint8(pad_value, after));
                 }
                 input_min = std::max(input_min, output_min);
                 input_max = std::min(input_max, output_max);
