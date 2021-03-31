@@ -38,16 +38,15 @@ public:
     // to load vectors, so making this value larger helps for big reductions.
     GeneratorParam<int> unroll_reduction_{"unroll_reduction", 4};
 
-    // Unsigned 8-bit input tensor, indexed by input_depth, input_x, input_y,
-    // input_batch.
+    // Unsigned 8-bit input tensor, indexed by c, x, y, b.
     Input<Buffer<uint8_t>> input_{"input", 4};
 
-    // A 4D array of 8-bit filter coefficients indexed by filter_depth, filter_x,
-    // filter_y, filter_batch (aka. output_depth).
+    // A 5D array of 8-bit filter coefficients indexed by
+    // ci % n, co, ci / n, x, y, where n = vector_reduction (below).
     Input<Buffer<>> filter_{"filter", 5};
 
     // A 1D array of 32-bit biases. The bias should be added to the c
-    // dimension of the output (i.e., # filter batches).
+    // dimension of the output.
     Input<Buffer<int32_t>> bias_{"bias", 1};
 
     // Offsets for the input and filter.
@@ -88,8 +87,6 @@ public:
             input_cxyb = i16(input_cxyb) - i16(input_offset_);
         }
         input(c, x, y, b) = input_cxyb;
-
-        Func bias_bounded = repeat_edge(bias_);
 
         // Align the reduction loop of filter.
         int vector_reduction = get_vector_reduction_factor(target, UInt(8));
@@ -140,7 +137,7 @@ public:
             // subtract it after.
             offset_c(c) += i32(filter_rdxyc) * i32(input_offset_);
             offset_c(c) =
-                bias_bounded(c) + i32(filter_offset_) * i32(input_offset_) * r_size - offset_c(c);
+                bias_(c) + i32(filter_offset_) * i32(input_offset_) * r_size - offset_c(c);
 
             // The sum of the input is used to compute the filter_offset * input term.
             // TODO: This is separable, but a bit messy to optimize this way.
@@ -151,15 +148,14 @@ public:
         } else {
             // Without 8-bit widening multiplies, we already subtracted the offsets,
             // and just have a single reduction of 16-bit multiplies to compute.
-            convolved(c, x, y, b) = bias_bounded(c);
+            convolved(c, x, y, b) = bias_(c);
         }
         convolved(c, x, y, b) += i32(input_rdxyc) * i32(filter_rdxyc);
 
         // Saturate and narrow the output.
         Expr output =
             multiply_quantized(convolved(c, x, y, b), output_multiplier_, output_shift_);
-        output = i16_sat(output);
-        output = saturating_add(output, output_offset_);
+        output = saturating_add(i16_sat(output), output_offset_);
         output_(c, x, y, b) = clamp(u8_sat(output), output_min_, output_max_);
 
         // Schedule
@@ -272,7 +268,8 @@ public:
                 .vectorize(x);
         }
 
-        bias_bounded.compute_root()
+        // TODO: Pad this outside and let it constant fold.
+        bias_.in().compute_root()
             .store_in(MemoryType::Stack);
 
         // We have a lot of requirements of the filter.
@@ -313,16 +310,19 @@ public:
     void generate() {
         Func input_bounded = constant_exterior(input_, input_offset_);
 
-        int vector_reduction = get_vector_reduction_factor(target, UInt(8));
+        const int vector_reduction = get_vector_reduction_factor(target, UInt(8));
 
         Var ci("ci"), co("co");
-        Expr filter_cxyb = input_bounded(co * vector_reduction + ci, x, y, c);
         Type t = output_.type();
-        output_(ci, co, x, y, c) =
-            filter_cxyb + (cast(t, output_offset_) - cast(t, input_offset_));
+        Expr filter_cxyb =
+            input_bounded(co * vector_reduction + ci, x, y, c) - cast(t, input_offset_);
+        output_(ci, co, x, y, c) = filter_cxyb + output_offset_;
 
+        // Schedule.
         output_.dim(0).set_min(0).set_extent(vector_reduction);
 
+        // TODO: We probably don't care about the performance of this, but if we do,
+        // we could optimize this more.
         output_
             .compute_root()
             .reorder(ci, c, x, y, co)

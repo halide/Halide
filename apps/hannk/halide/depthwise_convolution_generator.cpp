@@ -12,17 +12,16 @@ public:
     // If positive, a constant inverse depth multiplier.
     GeneratorParam<int> inv_depth_multiplier_{"inv_depth_multiplier", -1};
 
-    // Unsigned 8-bit input tensor, indexed by c, x, y, b.
+    // Unsigned 8-bit input tensor, indexed by ci, x, y, b.
     Input<Buffer<uint8_t>> input_{"input", 4};
 
-    // A 3D array of 8-bit filter coefficients indexed by c, x, y.
+    // A 3D array of 8-bit filter coefficients indexed by co, x, y.
     Input<Buffer<uint8_t>> filter_{"filter", 3};
 
-    // A 1D array of 32-bit biases indexed by c.
+    // A 1D array of 32-bit biases indexed by co.
     Input<Buffer<int32_t>> bias_{"bias", 1};
 
-    // The c multiplier specifies the ratio between the output c and the
-    // input c.
+    // The depth multiplier specifies the ratio between co and ci.
     Input<int> depth_multiplier_{"depth_multiplier"};
 
     // Offsets for the input and filter.
@@ -55,8 +54,6 @@ public:
         // Some free variables, where x and y represent the spatial dimensions.
         Var x("x"), y("y"), c("c"), b("b");
 
-        Func bias_bounded = repeat_edge(bias_);
-
         // Apply the c multiplier.
         Func resampled_input("resampled_input");
         Expr c_resampled = inv_depth_multiplier_ >= 0 ? c * inv_depth_multiplier_ : c / depth_multiplier_;
@@ -77,14 +74,13 @@ public:
         Expr input_drxyb =
             input_zeroed(c, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
         Func convolved("convolved");
-        convolved(c, x, y, b) = bias_bounded(c);
+        convolved(c, x, y, b) = bias_(c);
         convolved(c, x, y, b) += i32(filter_drxy) * i32(input_drxyb);
 
         // Saturate and narrow the output.
         Expr output =
             multiply_quantized(convolved(c, x, y, b), output_multiplier_, output_shift_);
-        output = i16_sat(output);
-        output = saturating_add(output, output_offset_);
+        output = saturating_add(i16_sat(output), output_offset_);
         output_(c, x, y, b) = clamp(u8_sat(output), output_min_, output_max_);
 
         // Schedule.
@@ -96,16 +92,10 @@ public:
         require_same_min_extent(0, bias_, output_);
         require_same_min_extent(0, filter_, output_);
 
-        if (inv_depth_multiplier_ < 0) {
-            output_.dim(0).set_min(input_.dim(0).min() * depth_multiplier_);
-            output_.dim(0).set_extent(input_.dim(0).extent() * depth_multiplier_);
-        } else if (inv_depth_multiplier_ != 0) {
-            input_.dim(0).set_min(output_.dim(0).min() * inv_depth_multiplier_);
-            input_.dim(0).set_extent(max(input_.dim(0).extent(), output_.dim(0).extent() * inv_depth_multiplier_));
-        } else {
+        if (inv_depth_multiplier_ == 0) {
             // When we're broadcasting input channels, require that the input has only
             // one channel.
-            input_.dim(0).set_min(0).set_extent(1);
+            input_.dim(0).set_extent(1);
             input_.dim(1).set_stride(1);
         }
 
@@ -159,9 +149,11 @@ public:
             .unroll(r.x)
             .unroll(r.y);
 
-        bias_bounded.compute_at(output_, co)
-            .store_in(MemoryType::Stack)
-            .vectorize(Halide::_0, natural_vector_size<int32_t>(), TailStrategy::GuardWithIf);
+        // TODO: This is a padded wrapper on a constant buffer, we could
+        // pad it and constant fold it outside.
+        using Halide::_0;
+        bias_.in().compute_at(output_, co)
+            .store_in(MemoryType::Stack);
 
         if (inv_depth_multiplier_ < 0) {
             // The reason inv_depth_multiplier_ is a GeneratorParam and not a
@@ -177,8 +169,9 @@ public:
         filter_zeroed
             .compute_at(output_, co)
             .store_in(MemoryType::Stack)
-            .align_storage(x, natural_vector_size<int16_t>())
-            .vectorize(x, natural_vector_size<int16_t>(), TailStrategy::GuardWithIf);
+            .align_storage(c, natural_vector_size<int16_t>())
+            .vectorize(c, natural_vector_size<int16_t>(), TailStrategy::GuardWithIf)
+            .unroll(c, 2, TailStrategy::GuardWithIf);
     }
 };
 

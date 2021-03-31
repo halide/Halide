@@ -7,24 +7,24 @@ namespace hannk {
 
 class Fill : public Generator<Fill> {
 public:
-    Input<uint8_t> pad_value_{"pad_value"};
+    // Value to fill the output with.
+    Input<uint8_t> value_{"value"};
 
     Output<Buffer<uint8_t>> output_{"output", 4};
 
     void generate() {
         Var c("c"), x("x"), y("y"), b("b");
 
-        output_(c, x, y, b) = pad_value_;
+        output_(c, x, y, b) = value_;
 
         // Schedule.
         const int vector_size_u8 = natural_vector_size<uint8_t>();
-
-        Expr output_channels = output_.dim(0).extent();
 
         output_.specialize(is_interleaved(output_, 4))
             .vectorize(x, vector_size_u8, TailStrategy::GuardWithIf)
             .unroll(c);
 
+        Expr output_channels = output_.dim(0).extent();
         for (int i = vector_size_u8; i >= 4; i /= 2) {
             output_
                 .specialize(output_channels >= i)

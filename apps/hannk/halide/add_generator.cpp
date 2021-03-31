@@ -12,7 +12,7 @@ public:
     // Left shift for both inputs.
     Input<uint32_t> left_shift_{"left_shift"};
 
-    // Input images.
+    // Input buffers.
     Input<Buffer<uint8_t>> input1_{"input1", 4};
     Input<Buffer<uint8_t>> input2_{"input2", 4};
 
@@ -48,8 +48,7 @@ public:
         input2 = multiply_quantized(input2, input2_multiplier_, input2_shift_);
 
         Expr output = multiply_quantized(input1 + input2, output_multiplier_, output_shift_);
-        output = i16_sat(output);
-        output = saturating_add(output, output_offset_);
+        output = saturating_add(i16_sat(output), output_offset_);
         output_(c, x, y, b) = clamp(u8_sat(output), output_min_, output_max_);
 
         // Schedule.
