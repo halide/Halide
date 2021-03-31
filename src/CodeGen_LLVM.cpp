@@ -3150,8 +3150,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         llvm::DataLayout d(module.get());
         value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(halide_buffer_t_type));
     } else if (op->is_intrinsic(Call::strict_float)) {
-        internal_assert(!Call::as_intrinsic(op->args[0], {Call::strict_float}))
-            << "There should be no calls of the form strict_float(strict_float(x)) after simplification.";
         IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
         llvm::FastMathFlags safe_flags;
         safe_flags.clear();

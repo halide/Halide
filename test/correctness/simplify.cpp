@@ -1763,6 +1763,8 @@ void check_math() {
     check(Halide::trunc(-1.6f), -1.0f);
     check(Halide::floor(round(x)), round(x));
     check(Halide::ceil(ceil(x)), ceil(x));
+
+    check(strict_float(strict_float(x)), strict_float(x));
 }
 
 void check_overflow() {
