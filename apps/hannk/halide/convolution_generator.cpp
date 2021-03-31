@@ -8,6 +8,7 @@ using namespace Halide::ConciseCasts;
 namespace hannk {
 
 Var x("x"), y("y"), c("c"), b("b");
+Var ci("ci"), co("co");
 
 int get_vector_reduction_factor(const Target &target, Type t) {
     if (target.arch == Target::Hexagon ||
@@ -81,7 +82,7 @@ public:
 
     void generate() {
         // The algorithm.
-        Func input("input");
+        Func input("input_wrapper");
         Expr input_cxyb = input_(c, x, y, b);
         if (!use_8bit_multiply(target)) {
             input_cxyb = i16(input_cxyb) - i16(input_offset_);
@@ -92,12 +93,6 @@ public:
         int vector_reduction = get_vector_reduction_factor(target, UInt(8));
         int unroll_reduction = std::max<int>(unroll_reduction_, vector_reduction);
 
-        // Create a wrapper of the filter that we can reorder the storage of to be
-        // more convenient for the inner loop.
-        Var ci("ci"), co("co");
-        Func filter("filter");
-        filter(ci, c, co, x, y) = filter_(ci, c, co, x, y);
-
         // Set up the reduction loop and inputs.
         Expr filter_depth = filter_.dim(0).extent() * filter_.dim(2).extent();
         Expr filter_width = filter_.dim(3).extent();
@@ -106,7 +101,7 @@ public:
         filter_depth = align_up(filter_depth, unroll_reduction);
         RDom r(0, filter_width, 0, filter_height, 0, filter_depth);
         Expr filter_rdxyc =
-            filter(r.z % vector_reduction, c, r.z / vector_reduction, r.x, r.y);
+            filter_(r.z % vector_reduction, c, r.z / vector_reduction, r.x, r.y);
         Expr input_rdxyc =
             input(r.z, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
 
@@ -312,7 +307,6 @@ public:
 
         const int vector_reduction = get_vector_reduction_factor(target, UInt(8));
 
-        Var ci("ci"), co("co");
         Type t = output_.type();
         Expr filter_cxyb =
             input_bounded(co * vector_reduction + ci, x, y, c) - cast(t, input_offset_);
