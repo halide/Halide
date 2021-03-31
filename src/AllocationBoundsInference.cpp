@@ -83,16 +83,20 @@ class AllocationInference : public IRMutator {
                 extent = simplify((max - min) + 1);
             }
             if (bound.modulus.defined()) {
-                internal_assert(bound.remainder.defined());
-                min -= bound.remainder;
-                min = (min / bound.modulus) * bound.modulus;
-                min += bound.remainder;
-                Expr max_plus_one = max + 1;
-                max_plus_one -= bound.remainder;
-                max_plus_one = ((max_plus_one + bound.modulus - 1) / bound.modulus) * bound.modulus;
-                max_plus_one += bound.remainder;
-                extent = simplify(max_plus_one - min);
-                max = max_plus_one - 1;
+                if (bound.remainder.defined()) {
+                    min -= bound.remainder;
+                    min = (min / bound.modulus) * bound.modulus;
+                    min += bound.remainder;
+                    Expr max_plus_one = max + 1;
+                    max_plus_one -= bound.remainder;
+                    max_plus_one = ((max_plus_one + bound.modulus - 1) / bound.modulus) * bound.modulus;
+                    max_plus_one += bound.remainder;
+                    extent = simplify(max_plus_one - min);
+                    max = max_plus_one - 1;
+                } else {
+                    extent = simplify(((extent + bound.modulus - 1) / bound.modulus) * bound.modulus);
+                    max = simplify(min + extent - 1);
+                }
             }
 
             Expr min_var = Variable::make(Int(32), min_name);

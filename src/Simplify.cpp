@@ -149,11 +149,9 @@ void Simplify::ScopedFact::learn_false(const Expr &fact) {
                 learn_upper_bound(v, i.max - 1);
             }
         }
-    } else if (const Call *c = fact.as<Call>()) {
-        if (c->is_intrinsic(Call::likely) || c->is_intrinsic(Call::likely_if_innermost)) {
-            learn_false(c->args[0]);
-            return;
-        }
+    } else if (const Call *c = Call::as_tag(fact)) {
+        learn_false(c->args[0]);
+        return;
     } else if (const Or *o = fact.as<Or>()) {
         // Both must be false
         learn_false(o->a);
@@ -286,11 +284,9 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
                 learn_lower_bound(v, i.min);
             }
         }
-    } else if (const Call *c = fact.as<Call>()) {
-        if (c->is_intrinsic(Call::likely) || c->is_intrinsic(Call::likely_if_innermost)) {
-            learn_true(c->args[0]);
-            return;
-        }
+    } else if (const Call *c = Call::as_tag(fact)) {
+        learn_true(c->args[0]);
+        return;
     } else if (const And *a = fact.as<And>()) {
         // Both must be true
         learn_true(a->a);
@@ -421,13 +417,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
                 }
                 s[p.second] = make_const(p.first, (int)(rng() & 0xffff) - 0x7fff);
             }
-            Expr probe = simplify(substitute(s, e));
-            if (const Call *c = probe.as<Call>()) {
-                if (c->is_intrinsic(Call::likely) ||
-                    c->is_intrinsic(Call::likely_if_innermost)) {
-                    probe = c->args[0];
-                }
-            }
+            Expr probe = unwrap_tags(simplify(substitute(s, e)));
             if (!is_const_one(probe)) {
                 // Found a counter-example, or something that fails to fold
                 return false;
