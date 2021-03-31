@@ -241,7 +241,7 @@ int main(int argc, char **argv) {
         from_f16.compile_to_assembly("/dev/stdout", {}, Target("host-no_asserts-no_bounds_query-no_runtime-disable_llvm_loop_unroll-disable_llvm_loop_vectorize"));
     }
 
-    // Check inifinity handling for both float16_t and Halide codegen.
+    // Check infinity handling for both float16_t and Halide codegen.
     {
         std::pair<int, bool> test_cases[] =
           {{1, false}, {16, true}, {256, true}};
