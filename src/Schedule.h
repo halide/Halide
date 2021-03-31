@@ -48,6 +48,16 @@ enum class TailStrategy {
      * case to handle the if statement. */
     GuardWithIf,
 
+    /** Guard the inner loop with an if statement that prevents
+     * evaluation beyond the original extent, with a hint that the
+     * if statement should be implemented with predicated operations.
+     * Always legal. The if statement is treated like a boundary
+     * condition, and factored out into a loop epilogue if possible.
+     * Pros: no redundant re-evaluation; does not constrain input our
+     * output sizes. Cons: increases code size due to separate
+     * tail-case handling. */
+    Predicate,
+
     /** Prevent evaluation beyond the original extent by shifting
      * the tail case inwards, re-evaluating some points near the
      * end. Only legal for pure variables in pure definitions. If
@@ -432,7 +442,8 @@ struct Bound {
 
     /** If defined, the number of iterations will be a multiple of
      * "modulus", and the first iteration will be at a value congruent
-     * to "remainder" modulo "modulus". Set by Func::align_bounds. */
+     * to "remainder" modulo "modulus". Set by Func::align_bounds and
+     * Func::align_extent. */
     Expr modulus, remainder;
 };
 
@@ -557,7 +568,7 @@ public:
 
     /** You may explicitly bound some of the dimensions of a function,
      * or constrain them to lie on multiples of a given factor. See
-     * \ref Func::bound and \ref Func::align_bounds */
+     * \ref Func::bound and \ref Func::align_bounds and \ref Func::align_extent. */
     // @{
     const std::vector<Bound> &bounds() const;
     std::vector<Bound> &bounds();

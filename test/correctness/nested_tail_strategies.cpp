@@ -69,7 +69,12 @@ int main(int argc, char **argv) {
     // producer-consumer pipelines. The bounds being tight sometimes
     // depends on the simplifier being able to cancel out things.
 
-    TailStrategy tails[] = {TailStrategy::RoundUp, TailStrategy::GuardWithIf, TailStrategy::ShiftInwards};
+    TailStrategy tails[] = {
+        TailStrategy::RoundUp,
+        TailStrategy::GuardWithIf,
+        TailStrategy::Predicate,
+        TailStrategy::ShiftInwards,
+    };
 
     // Two stages. First stage computed at tiles of second.
     for (auto t1 : tails) {

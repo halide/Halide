@@ -47,6 +47,7 @@
 #include "PurifyIndexMath.h"
 #include "Qualify.h"
 #include "RealizationOrder.h"
+#include "RebaseLoopsToZero.h"
 #include "RemoveDeadAllocations.h"
 #include "RemoveExternLoops.h"
 #include "RemoveUndef.h"
@@ -344,6 +345,11 @@ Module lower(const vector<Function> &output_funcs,
     s = trim_no_ops(s);
     log("Lowering after loop trimming:", s);
 
+    debug(1) << "Rebasing loops to zero...\n";
+    s = rebase_loops_to_zero(s);
+    debug(2) << "Lowering after rebasing loops to zero:\n"
+             << s << "\n\n";
+
     debug(1) << "Hoisting loop invariant if statements...\n";
     s = hoist_loop_invariant_if_statements(s);
     log("Lowering after hoisting loop invariant if statements:", s);
@@ -402,18 +408,6 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";
 
-    if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
-        debug(1) << "Splitting off Hexagon offload...\n";
-        s = inject_hexagon_rpc(s, t, result_module);
-        debug(2) << "Lowering after splitting off Hexagon offload:\n"
-                 << s << "\n";
-    } else {
-        debug(1) << "Skipping Hexagon offload...\n";
-    }
-
-    // TODO: Several tests depend on these custom passes running before
-    // inject_gpu_offload. We should either make this consistent with
-    // inject_hexagon_rpc above, or find a way to avoid this dependency.
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {
             debug(1) << "Running custom lowering pass " << i << "...\n";
@@ -421,6 +415,15 @@ Module lower(const vector<Function> &output_funcs,
             debug(1) << "Lowering after custom pass " << i << ":\n"
                      << s << "\n\n";
         }
+    }
+
+    if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
+        debug(1) << "Splitting off Hexagon offload...\n";
+        s = inject_hexagon_rpc(s, t, result_module);
+        debug(2) << "Lowering after splitting off Hexagon offload:\n"
+                 << s << "\n";
+    } else {
+        debug(1) << "Skipping Hexagon offload...\n";
     }
 
     if (t.has_gpu_feature()) {
