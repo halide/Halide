@@ -151,8 +151,7 @@ void Tensor::replace_all_consumers_with(Tensor *other) {
 }
 
 void Tensor::dump(std::ostream &os) const {
-    os << "  \"" << name() << "\" : "
-       << "  " << buffer_.type() << " x ";
+    os << "  " << buffer_.type() << " x ";
 
     const auto *b = buffer_.raw_buffer();
     os << '{';
@@ -165,16 +164,13 @@ void Tensor::dump(std::ostream &os) const {
     os << '}';
 
     if (is_allocated()) {
-        os << " allocated " << name();
-    } else {
-        os << " " << name();
+        os << " allocated";
     }
-
     if (is_constant()) {
         os << " constant";
     }
 
-    os << std::endl;
+    os << " " << name() << std::endl;
 }
 
 Op::Op(std::vector<Tensor *> inputs, std::vector<Tensor *> outputs)
