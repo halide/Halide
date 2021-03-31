@@ -244,9 +244,9 @@ int main(int argc, char **argv) {
     // Check inifinity handling for both float16_t and Halide codegen.
     {
         std::pair<int, bool> test_cases[] =
-          { { 1, false }, {16, true}, {256, true} };
+          {{1, false}, {16, true}, {256, true}};
 
-        for (const auto& test_case : test_cases) {
+        for (const auto &test_case : test_cases) {
             float16_t max_pos_val = float16_t::make_from_bits(0x7bff);
             float16_t min_neg_val = float16_t::make_from_bits(0xfbff);
             float16_t increment(test_case.first);
@@ -258,7 +258,7 @@ int main(int argc, char **argv) {
                                      "positive infinity", "maximum positive value")) {
                 return -1;
             }
-                                     
+
             float16_t min_minus_increment(min_neg_val - increment);
             if (!check_infinity_case(test_case.second, min_minus_increment,
                                      "float16_t minimum value minus", test_case.first,
@@ -266,7 +266,6 @@ int main(int argc, char **argv) {
                                      "negative infinity", "maximum negative value")) {
                 return -1;
             }
-
 
             Param<float16_t> a("a"), b("b");
             a.set(max_pos_val);
