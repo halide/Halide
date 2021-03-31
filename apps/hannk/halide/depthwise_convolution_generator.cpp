@@ -151,7 +151,6 @@ public:
 
         // TODO: This is a padded wrapper on a constant buffer, we could
         // pad it and constant fold it outside.
-        using Halide::_0;
         bias_.in().compute_at(output_, co)
             .store_in(MemoryType::Stack);
 
