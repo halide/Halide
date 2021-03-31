@@ -427,8 +427,9 @@ void Conv2DOp::execute(const Box &crop) {
 
         const auto output_range = get_output_range(activation_, out);
 
-        const int filter_width = filter_buf.dim(1).extent();
-        const int filter_height = filter_buf.dim(2).extent();
+        assert(filter_buf.dimensions() == 5);
+        const int filter_width = filter_buf.dim(3).extent();
+        const int filter_height = filter_buf.dim(4).extent();
         if (filter_width == 1 && filter_height == 1) {
             // For 1x1 filters, we can fuse x and y, which can help avoid overhead for
             // small output sizes.
