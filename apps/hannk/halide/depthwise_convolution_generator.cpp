@@ -55,12 +55,15 @@ public:
         // Some free variables, where x and y represent the spatial dimensions.
         Var x("x"), y("y"), c("c"), b("b");
 
+        // Add a boundary condition to c of the input.
+        Func input_bounded = repeat_edge(input_, {{input_.dim(0).min(), input_.dim(0).extent()}});
+
         Func bias_bounded = repeat_edge(bias_);
 
         // Apply the c multiplier.
         Func resampled_input("resampled_input");
         Expr c_resampled = inv_depth_multiplier_ >= 0 ? c * inv_depth_multiplier_ : c / depth_multiplier_;
-        resampled_input(c, x, y, b) = input_(c_resampled, x, y, b);
+        resampled_input(c, x, y, b) = input_bounded(c_resampled, x, y, b);
 
         Func filter_zeroed("filter_zeroed");
         Func input_zeroed("input_zeroed");
@@ -166,24 +169,17 @@ public:
         if (inv_depth_multiplier_ < 0) {
             // The reason inv_depth_multiplier_ is a GeneratorParam and not a
             // specialization is that we can't specialize the (lack of) compute_at here.
-            // TODO: Remove this compute_at for the case depth_multiplier = 1.
             resampled_input
                 .compute_at(output_, b)
                 .store_in(MemoryType::Stack)
                 .vectorize(c, vector_size, TailStrategy::GuardWithIf);
-
-            for (int dm : {1}) {
-                resampled_input.specialize(depth_multiplier_ == dm);
-            }
-            resampled_input.specialize_fail("unsupported depth multiplier");
         }
 
-        filter_.in()
+        filter_zeroed
             .compute_at(output_, co)
             .store_in(MemoryType::Stack)
-            .align_storage(Halide::_0, vector_size)
-            .specialize(output_channels >= vector_size)
-            .vectorize(Halide::_0, vector_size);
+            .align_storage(x, natural_vector_size<int16_t>())
+            .vectorize(x, natural_vector_size<int16_t>(), TailStrategy::GuardWithIf);
     }
 };
 

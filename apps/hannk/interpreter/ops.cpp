@@ -13,7 +13,8 @@
 #endif
 #include "copy_uint8_uint8.h"
 #include "depthwise_convolution_uint8.h"
-#include "depthwise_convolution_uint8_broadcast.h"
+#include "depthwise_convolution_broadcast_uint8.h"
+#include "depthwise_convolution_dm1_uint8.h"
 #include "fill_uint8.h"
 #include "fully_connected_uint8.h"
 #include "max_pool_uint8.h"
@@ -570,7 +571,14 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
 
         if (depth_multiplier >= output_buf.dim(0).extent()) {
             CHECK(
-                0 == depthwise_convolution_uint8_broadcast(
+                0 == depthwise_convolution_broadcast_uint8(
+                         input_buf, filter_buf, bias_buf, depth_multiplier,
+                         (uint8_t)input_offset, (uint8_t)filter_offset, stride_[0], stride_[1],
+                         dilation_[0], dilation_[1], output_multiplier, output_shift,
+                         (uint8_t)output_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
+        } else if (depth_multiplier == 1) {
+            CHECK(
+                0 == depthwise_convolution_dm1_uint8(
                          input_buf, filter_buf, bias_buf, depth_multiplier,
                          (uint8_t)input_offset, (uint8_t)filter_offset, stride_[0], stride_[1],
                          dilation_[0], dilation_[1], output_multiplier, output_shift,
