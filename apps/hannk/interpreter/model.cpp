@@ -50,8 +50,7 @@ void Model::dump(std::ostream &os) {
 }
 
 void Tensor::dump(std::ostream &os) const {
-    os << "  \"" << name() << "\" : "
-       << "  " << buffer_.type() << " x ";
+    os << "  " << buffer_.type() << " x ";
 
     const auto *b = buffer_.raw_buffer();
     os << '{';
@@ -63,7 +62,14 @@ void Tensor::dump(std::ostream &os) const {
     }
     os << '}';
 
-    os << (is_allocated() ? " allocated " : " ") << name() << std::endl;
+    if (is_allocated()) {
+        os << " allocated";
+    }
+    if (is_constant()) {
+        os << " constant";
+    }
+
+    os << " " << name() << std::endl;
 }
 
 }  // namespace hannk
