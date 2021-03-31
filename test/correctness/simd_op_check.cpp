@@ -533,6 +533,23 @@ public:
                 check("vpdpbusd*xmm", 4, sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
                 check("vpdpbusd*xmm", 4, sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
             }
+            {
+                // 16 bit, 2 element saturaing dot product
+                RDom r(0, 2);
+                check("vpdpwssds*zmm", 16, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                check("vpdpwssds*ymm", 8, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                check("vpdpwssds*xmm", 4, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+            }
+            {
+                // 8 bit, 4 element saturating dot product
+                RDom r(0, 4);
+                check("vpdpbusds*zmm", 16, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusds*zmm", 16, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                check("vpdpbusds*ymm", 8, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusds*ymm", 8, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                check("vpdpbusds*xmm", 4, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusds*xmm", 4, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+            }
         }
     }
 
@@ -1736,12 +1753,15 @@ public:
                 check("i32x4.mul", 4 * w, i32_1 * i32_2);
                 check("i64x2.mul", 2 * w, i64_1 * i64_2);
 
-                // Integer dot product (16 -> 32)
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // {
-                //     RDom r(0, 4);
-                //     check("i32x4.dot_i16x8_s", 2 * w, sum(i32(in_i16(x * 4 + r)) * in_i16(x * 4 + r + 32)));
-                // }
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    // Integer dot product (16 -> 32)
+                    for (int f : {2, 4, 8}) {
+                        RDom r(0, f);
+                        for (int v : {1, 2, 4}) {
+                            check("i32x4.dot_i16x8_s", w * v, sum(i32(in_i16(f * x + r)) * in_i16(f * x + r + 32)));
+                        }
+                    }
+                }
 
                 // Integer negation
                 check("i8x16.neg", 16 * w, -i8_1);
@@ -2117,9 +2137,8 @@ public:
                 check("f32x4.convert_i32x4_u", 8 * w, cast<float>(u32_1));
 
                 // Integer to double-precision floating point
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("f64x2.convert_low_i32x4_s", 4 * w, cast<double>(i32_1));
-                // check("f64x2.convert_low_i32x4_u", 4 * w, cast<double>(u32_1));
+                check("f64x2.convert_low_i32x4_s", 2 * w, cast<double>(i32_1));
+                check("f64x2.convert_low_i32x4_u", 2 * w, cast<double>(u32_1));
 
                 // Single-precision floating point to integer with saturation
                 check("i32x4.trunc_sat_f32x4_s", 4 * w, cast<int32_t>(f32_1));
@@ -2135,8 +2154,7 @@ public:
                 // check("f32x4.demote_f64x2_zero", 4 * w, ???);
 
                 // Single-precision floating point to double-precision
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("f64x2.promote_low_f32x4", 4 * w, ???);
+                check("f64x2.promote_low_f32x4", 2 * w, cast<double>(f32_1));
 
                 // Integer to integer narrowing
                 check("i8x16.narrow_i16x8_s", 16 * w, i8_sat(i16_1));

@@ -588,8 +588,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                               {arg, lower, upper},
                               Call::Intrinsic);
         }
-    } else if (op->is_intrinsic(Call::likely) ||
-               op->is_intrinsic(Call::likely_if_innermost)) {
+    } else if (Call::as_tag(op)) {
         // The bounds of the result are the bounds of the arg
         internal_assert(op->args.size() == 1);
         Expr arg = mutate(op->args[0], bounds);
@@ -605,14 +604,8 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         internal_assert(op->args.size() == 3);
         Expr cond_value = mutate(op->args[0], nullptr);
 
-        // Ignore likelies for our purposes here
-        Expr cond = cond_value;
-        if (const Call *c = cond.as<Call>()) {
-            if (c->is_intrinsic(Call::likely) ||
-                op->is_intrinsic(Call::likely_if_innermost)) {
-                cond = c->args[0];
-            }
-        }
+        // Ignore tags for our purposes here
+        Expr cond = unwrap_tags(cond_value);
 
         if (is_const_one(cond)) {
             return mutate(op->args[1], bounds);

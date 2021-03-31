@@ -94,6 +94,10 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"llvm.wasm.extadd.pairwise.unsigned.v8i16", Int(16, 8), "pairwise_widening_add", {UInt(8, 16)}, Target::WasmSimd128},
     {"llvm.wasm.extadd.pairwise.unsigned.v4i32", Int(32, 4), "pairwise_widening_add", {UInt(16, 8)}, Target::WasmSimd128},
 
+    {"i32_to_double_s", Float(64, 4), "int_to_double", {Int(32, 4)}, Target::WasmSimd128},
+    {"i32_to_double_u", Float(64, 4), "int_to_double", {UInt(32, 4)}, Target::WasmSimd128},
+    {"float_to_double", Float(64, 4), "float_to_double", {Float(32, 4)}, Target::WasmSimd128},
+
     // Basically like ARM's SQRDMULH
     {"llvm.wasm.q15mulr.sat.signed", Int(16, 8), "q15mulr_sat_s", {Int(16, 8), Int(16, 8)}, Target::WasmSimd128},
 
@@ -102,6 +106,8 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"saturating_narrow_i16x16_to_u8x16", UInt(8, 16), "saturating_narrow", {Int(16, 16)}, Target::WasmSimd128},
     {"saturating_narrow_i32x8_to_i16x8", Int(16, 8), "saturating_narrow", {Int(32, 8)}, Target::WasmSimd128},
     {"saturating_narrow_i32x8_to_u16x8", UInt(16, 8), "saturating_narrow", {Int(32, 8)}, Target::WasmSimd128},
+
+    {"llvm.wasm.dot", Int(32, 4), "dot_product", {Int(16, 8), Int(16, 8)}, Target::WasmSimd128},
 #endif
 };
 // clang-format on
@@ -145,6 +151,9 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
         {"saturating_narrow", u8_sat(wild_i16x_), Target::WasmSimd128},
         {"saturating_narrow", i16_sat(wild_i32x_), Target::WasmSimd128},
         {"saturating_narrow", u16_sat(wild_i32x_), Target::WasmSimd128},
+        {"int_to_double", f64(wild_i32x_), Target::WasmSimd128},
+        {"int_to_double", f64(wild_u32x_), Target::WasmSimd128},
+        {"float_to_double", f64(wild_f32x_), Target::WasmSimd128},
     };
     // clang-format on
 
@@ -185,6 +194,8 @@ void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Ex
         {VectorReduce::Add, 2, i32(wild_i16x_), "pairwise_widening_add", Target::WasmSimd128},
         {VectorReduce::Add, 2, u32(wild_u16x_), "pairwise_widening_add", Target::WasmSimd128},
         {VectorReduce::Add, 2, i32(wild_u16x_), "pairwise_widening_add", Target::WasmSimd128},
+
+        {VectorReduce::Add, 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "dot_product", Target::WasmSimd128},
     };
     // clang-format on
 

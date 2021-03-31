@@ -48,6 +48,16 @@ enum class TailStrategy {
      * case to handle the if statement. */
     GuardWithIf,
 
+    /** Guard the inner loop with an if statement that prevents
+     * evaluation beyond the original extent, with a hint that the
+     * if statement should be implemented with predicated operations.
+     * Always legal. The if statement is treated like a boundary
+     * condition, and factored out into a loop epilogue if possible.
+     * Pros: no redundant re-evaluation; does not constrain input our
+     * output sizes. Cons: increases code size due to separate
+     * tail-case handling. */
+    Predicate,
+
     /** Prevent evaluation beyond the original extent by shifting
      * the tail case inwards, re-evaluating some points near the
      * end. Only legal for pure variables in pure definitions. If

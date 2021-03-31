@@ -1166,7 +1166,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             accumulate(op->args[0], adjoint * (make_one(op->type) - op->args[2]));
             accumulate(op->args[1], adjoint * op->args[2]);
             accumulate(op->args[2], adjoint * (op->args[1] - op->args[0]));
-        } else if (op->is_intrinsic(Call::likely)) {
+        } else if (Call::as_tag(op)) {
             accumulate(op->args[0], adjoint);
         } else if (op->is_intrinsic(Call::return_second)) {
             accumulate(op->args[0], make_const(op->type, 0.0));
