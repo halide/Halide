@@ -29,13 +29,18 @@ public:
             .vectorize(x, vector_size_u8, TailStrategy::GuardWithIf)
             .unroll(c);
 
+        // Handle cases with a small number of channels.
         for (int i = vector_size_u8; i >= 4; i /= 2) {
             output_
-                .specialize(input_channels >= i && output_channels >= i)
+                .specialize(output_channels >= i)
+                .reorder(x, y, c, b)
                 .vectorize(c, i, TailStrategy::ShiftInwards);
         }
 
+        // In the general case, use GuardWithIf and reorder c
+        // away from the inner loop to reduce the if overhead.
         output_
+            .reorder(x, y, c, b)
             .vectorize(c, vector_size_u8, TailStrategy::GuardWithIf);
     }
 };
