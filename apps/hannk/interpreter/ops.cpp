@@ -353,9 +353,9 @@ Box Conv2DOp::input_required(const Box &crop) const {
         const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
 
         const int pad_width =
-            std::max(0, ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
+            std::max(0, ((output_width - 1) * stride_[0] + dilated_filter_width - 1 - input_width) / 2);
         const int pad_height =
-            std::max(0, ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
+            std::max(0, ((output_height - 1) * stride_[1] + dilated_filter_height - 1 - input_height) / 2);
 
         input_crop[1].max += pad_width;
         input_crop[2].max += pad_height;
@@ -498,9 +498,9 @@ Box DepthwiseConv2DOp::input_required(const Box &crop) const {
         const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
 
         const int pad_width =
-            std::max(0, ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
+            std::max(0, ((output_width - 1) * stride_[0] + dilated_filter_width - 1 - input_width) / 2);
         const int pad_height =
-            std::max(0, ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
+            std::max(0, ((output_height - 1) * stride_[1] + dilated_filter_height - 1 - input_height) / 2);
 
         input_crop[1].max += pad_width;
         input_crop[2].max += pad_height;
