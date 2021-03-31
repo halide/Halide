@@ -111,7 +111,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     }
 
     if (op->is_intrinsic(Call::strict_float)) {
-        if (const Call *call = Call::as_intrinsic(op->args[0], {Call::strict_float})) {
+        if (Call::as_intrinsic(op->args[0], {Call::strict_float})) {
             // Always simplify strict_float(strict_float(x)) -> strict_float(x).
             Expr arg = mutate(op->args[0], nullptr);
             return arg.same_as(op->args[0]) ? op->args[0] : arg;
