@@ -106,18 +106,19 @@ public:
 
         // Tile the output, so we can try to re-use loads spatially when performing
         // convolution. This also helps because we can schedule the input and not
-        // waste work for stride < kTileSize.
+        // waste work for strides less than the tile size.
         // We split co and reorder it outermost, so we can maximize locality of the
         // filter. We even put it outside of the batch loop, so we can compute the
         // boundary condition on the filter at co and reuse it across batches.
-        const int kTileSize = 2;
+        const int kTileW = 2;
+        const int kTileH = 2;
         Var xo("xo"), yo("yo"), co("co");
         Expr output_channels = output_.dim(0).extent();
         Expr output_width = output_.dim(1).extent();
         Expr output_height = output_.dim(2).extent();
         output_.compute_root()
-            .specialize(output_channels >= vector_size && output_width >= kTileSize && output_height >= kTileSize)
-            .tile(x, y, xo, yo, x, y, kTileSize, kTileSize, TailStrategy::ShiftInwards)
+            .specialize(output_channels >= vector_size && output_width >= kTileW && output_height >= kTileH)
+            .tile(x, y, xo, yo, x, y, kTileW, kTileH, TailStrategy::ShiftInwards)
             .split(c, co, c, vector_size, TailStrategy::ShiftInwards)
             .reorder(x, y, c, xo, yo, b, co)
             .unroll(x)
