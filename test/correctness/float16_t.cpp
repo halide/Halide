@@ -8,7 +8,7 @@ bool check_infinity_case(bool use_first, float16_t value, const char *value_name
                          int increment, float16_t expected_first, float16_t expected_second,
                          const char *first_name, const char *second_name) {
     if (value != (use_first ? expected_first : expected_second)) {
-      printf("%s %d is %x, not %s.\n", value_name, increment, value.to_bits(),
+        printf("%s %d is %x, not %s.\n", value_name, increment, value.to_bits(),
                (use_first ? first_name : second_name));
         return false;
     }
@@ -244,7 +244,7 @@ int main(int argc, char **argv) {
     // Check infinity handling for both float16_t and Halide codegen.
     {
         std::pair<int, bool> test_cases[] =
-          {{1, false}, {16, true}, {256, true}};
+            {{1, false}, {16, true}, {256, true}};
 
         for (const auto &test_case : test_cases) {
             float16_t max_pos_val = float16_t::make_from_bits(0x7bff);
