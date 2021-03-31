@@ -468,7 +468,9 @@ void Conv2DOp::execute(const Box &crop) {
 }
 
 int DepthwiseConv2DOp::depth_multiplier() const {
-    return output()->extent(0) / input()->extent(0);
+    int input_channels = input()->extent(0);
+    int output_channels = output()->extent(0);
+    return output_channels / std::min(input_channels, output_channels);
 }
 
 Box DepthwiseConv2DOp::input_required(const Box &crop) const {
@@ -476,6 +478,9 @@ Box DepthwiseConv2DOp::input_required(const Box &crop) const {
     Box filter_shape = filter()->box();
 
     input_crop[0] = crop[0] / depth_multiplier();
+    if (input_crop[0].extent() > 1) {
+        input_crop[0].set_extent(std::max(input_crop[0].extent(), 16));
+    }
     input_crop[1] *= stride_[0];
     input_crop[2] *= stride_[1];
     input_crop[1].max += dilation_[0] * (filter_shape[1].extent() - 1);

@@ -55,15 +55,12 @@ public:
         // Some free variables, where x and y represent the spatial dimensions.
         Var x("x"), y("y"), c("c"), b("b");
 
-        // Add a boundary condition to c of the input.
-        Func input_bounded = repeat_edge(input_, {{input_.dim(0).min(), input_.dim(0).extent()}});
-
         Func bias_bounded = repeat_edge(bias_);
 
         // Apply the c multiplier.
         Func resampled_input("resampled_input");
         Expr c_resampled = inv_depth_multiplier_ >= 0 ? c * inv_depth_multiplier_ : c / depth_multiplier_;
-        resampled_input(c, x, y, b) = input_bounded(c_resampled, x, y, b);
+        resampled_input(c, x, y, b) = input_(c_resampled, x, y, b);
 
         Func filter_zeroed("filter_zeroed");
         Func input_zeroed("input_zeroed");
@@ -104,7 +101,7 @@ public:
             output_.dim(0).set_extent(input_.dim(0).extent() * depth_multiplier_);
         } else if (inv_depth_multiplier_ != 0) {
             input_.dim(0).set_min(output_.dim(0).min() * inv_depth_multiplier_);
-            input_.dim(0).set_extent(output_.dim(0).extent() * inv_depth_multiplier_);
+            input_.dim(0).set_extent(max(input_.dim(0).extent(), output_.dim(0).extent() * inv_depth_multiplier_));
         } else {
             // When we're broadcasting input channels, require that the input has only
             // one channel.
@@ -173,6 +170,8 @@ public:
                 .compute_at(output_, b)
                 .store_in(MemoryType::Stack)
                 .vectorize(c, vector_size, TailStrategy::GuardWithIf);
+
+            resampled_input.specialize(depth_multiplier_ == 1);
         }
 
         filter_zeroed
