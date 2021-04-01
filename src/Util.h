@@ -15,11 +15,11 @@
 
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <limits>
 #include <string>
 #include <utility>
 #include <vector>
-#include <functional>
 
 #include "runtime/HalideRuntime.h"
 
