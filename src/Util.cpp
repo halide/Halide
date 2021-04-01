@@ -584,11 +584,22 @@ namespace {
 struct DeferredFunction {
     const std::function<void()> *run;
     LPVOID fiber;
+#ifdef HALIDE_WITH_EXCEPTIONS
+    std::exception_ptr fiber_exception = nullptr; // NOLINT - clang-tidy complains this isn't thrown
+#endif
 };
 
 void generic_fiber_entry_point(void *argument) {
     auto *action = reinterpret_cast<DeferredFunction *>(argument);
-    (*action->run)();
+#ifdef HALIDE_WITH_EXCEPTIONS
+    try {
+#endif
+        (*action->run)();
+#ifdef HALIDE_WITH_EXCEPTIONS
+    } catch (...) {
+        action->fiber_exception = std::current_exception();
+    }
+#endif
     SwitchToFiber(action->fiber);
 }
 
@@ -598,11 +609,14 @@ void generic_fiber_entry_point(void *argument) {
 
 void run_with_large_stack(const std::function<void()> &action) {
 #if _WIN32
-    SIZE_T required_stack = 8 * 1024 * 1024;
+    constexpr SIZE_T required_stack = 8 * 1024 * 1024;
+
+    // Only exists for its address, which is used to compute remaining stack space.
+    ULONG_PTR approx_stack_pos;
 
     ULONG_PTR stack_low, stack_high;
     GetCurrentThreadStackLimits(&stack_low, &stack_high);
-    ptrdiff_t stack_remaining = (char *)&stack_high - (char *)stack_low;
+    ptrdiff_t stack_remaining = (char *)&approx_stack_pos - (char *)stack_low;
 
     if (stack_remaining < required_stack) {
         debug(1) << "Insufficient stack space (" << stack_remaining << " bytes). Switching to fiber with " << required_stack << "-byte stack.\n";
@@ -620,6 +634,13 @@ void run_with_large_stack(const std::function<void()> &action) {
         DeleteFiber(lower_fiber);
 
         debug(1) << "Returned from fiber.\n";
+
+#ifdef HALIDE_WITH_EXCEPTIONS
+        if (func.fiber_exception) {
+            debug(1) << "Fiber threw exception. Rethrowing...\n";
+            std::rethrow_exception(func.fiber_exception);
+        }
+#endif
 
         if (!was_a_fiber) {
             BOOL success = ConvertFiberToThread();
