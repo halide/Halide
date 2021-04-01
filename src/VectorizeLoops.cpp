@@ -488,6 +488,8 @@ public:
     }
 };
 
+Stmt vectorize_statement(const Stmt &stmt, const Target &t);
+
 struct VectorizedVar {
     string name;
     Expr min;
@@ -896,10 +898,19 @@ class VectorSubs : public IRMutator {
                     Stmt without_likelies =
                         IfThenElse::make(unwrap_tags(op->condition),
                                          op->then_case, op->else_case);
+
+                    // scalarize() will put back all vectorized loops around the statement as serial,
+                    // but it still may happen that there are vectorized loops inside of the statement
+                    // itself which we may want to handle. All the context is invalid though, so
+                    // we just start anew for this specific statement.
+                    // NOTE(vksnk): is it possible that we want to scalarize only some of the vectorized loops
+                    // instead of all of them (for example, only for variables which appear in likely?).
+                    Stmt scalarized = scalarize(without_likelies, false);
+                    scalarized = vectorize_statement(scalarized, target);
                     Stmt stmt =
                         IfThenElse::make(all_true,
                                          then_case,
-                                         scalarize(without_likelies));
+                                         scalarized);
                     debug(4) << "...With all_true likely: \n"
                              << stmt << "\n";
                     return stmt;
@@ -1263,11 +1274,13 @@ class VectorSubs : public IRMutator {
         return scalarize(op);
     }
 
-    Stmt scalarize(Stmt s) {
+    Stmt scalarize(Stmt s, bool serialize_inner_loops = true) {
         // Wrap a serial loop around it. Maybe LLVM will have
         // better luck vectorizing it.
 
-        s = SerializeLoops().mutate(s);
+        if (serialize_inner_loops) {
+            s = SerializeLoops().mutate(s);
+        }
         // We'll need the original scalar versions of any containing lets.
         for (size_t i = containing_lets.size(); i > 0; i--) {
             const auto &l = containing_lets[i - 1];
@@ -1644,14 +1657,17 @@ class RemovePredicateHints : public IRMutator {
     }
 };
 
-}  // namespace
+Stmt vectorize_statement(const Stmt &stmt, const Target &t) {
+    return VectorizeLoops(t).mutate(stmt);
+}
 
+}  // namespace
 Stmt vectorize_loops(const Stmt &stmt, const map<string, Function> &env, const Target &t) {
     // Limit the scope of atomic nodes to just the necessary stuff.
     // TODO: Should this be an earlier pass? It's probably a good idea
     // for non-vectorizing stuff too.
     Stmt s = LiftVectorizableExprsOutOfAllAtomicNodes(env).mutate(stmt);
-    s = VectorizeLoops(t).mutate(s);
+    s = vectorize_statement(s, t);
     s = RemoveUnnecessaryAtomics().mutate(s);
     s = RemovePredicateHints().mutate(s);
     return s;
