@@ -234,7 +234,6 @@ public:
             // TODO: Maybe we should do this in a separate op. We already pad it
             // separately, we just don't dequantize it to 16-bit.
             input.compute_at(output_, y)
-                .store_in(MemoryType::Stack)
                 .reorder(c, x);
 
             input.specialize(is_interleaved(input_, 4))
