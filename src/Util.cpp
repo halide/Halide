@@ -589,7 +589,7 @@ struct DeferredFunction {
 #endif
 };
 
-void generic_fiber_entry_point(void *argument) {
+void WINAPI generic_fiber_entry_point(LPVOID argument) {
     auto *action = reinterpret_cast<DeferredFunction *>(argument);
 #ifdef HALIDE_WITH_EXCEPTIONS
     try {
