@@ -4,7 +4,7 @@
 int main() {
     try {
         Halide::Internal::run_with_large_stack([]() {
-            throw Halide::RuntimeError("Exception from run_with_large_stack");
+            throw Halide::RuntimeError("Error from run_with_large_stack");
         });
     } catch (const Halide::RuntimeError &ex) {
         std::cerr << ex.what() << "\n";
