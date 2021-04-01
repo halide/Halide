@@ -227,7 +227,26 @@ public:
             .unroll(rci)
             .unroll(x);
 
-        if (unroll_reduction >= natural_vector_size<uint8_t>() || !use_8bit_multiply(target)) {
+        if (!use_8bit_multiply(target) && get_target().arch == Target::X86) {
+            // On x86, widening subtracts eat up a lot of the already scarce
+            // registers, so precomputing this outside the inner loop helps
+            // a lot.
+            // TODO: Maybe we should do this in a separate op. We already pad it
+            // separately, we just don't dequantize it to 16-bit.
+            input.compute_at(output_, y)
+                .store_in(MemoryType::Stack)
+                .reorder(c, x);
+
+            input.specialize(is_interleaved(input_, 4))
+                .vectorize(c, 4, TailStrategy::RoundUp)
+                .vectorize(x, natural_vector_size<int32_t>(), TailStrategy::GuardWithIf);
+
+            for (int i = natural_vector_size<int16_t>(); i >= unroll_reduction; i /= 2) {
+                // Use GuardWithIf here to avoid growing the bounds.
+                input.specialize(input_.dim(0).extent() >= i)
+                    .vectorize(c, i, TailStrategy::GuardWithIf);
+            }
+        } else if (unroll_reduction >= natural_vector_size<uint8_t>()) {
             // If we're unrolling a full vector's worth of reduction from the
             // input, explicitly load a vector of it first. This enables targeting
             // broadcasting dot products, like ARM's udot.
