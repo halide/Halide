@@ -195,7 +195,7 @@ extern "C" int halide_msan_annotate_memory_is_initialized(void *user_context, co
     } else if (annotate_stage == AnnotateIntermediateBuffer) {
         if (expect_intermediate_buffer_error) {
             if (len != 99) {
-                fprintf(stderr, "Failure: Expected error message of len=80, saw %d bytes\n", (unsigned int)len);
+                fprintf(stderr, "Failure: Expected error message of len=99, saw %d bytes\n", (unsigned int)len);
                 exit(-1);
             }
             return 0;  // stay in this state
