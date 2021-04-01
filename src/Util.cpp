@@ -585,7 +585,7 @@ struct DeferredFunction {
     const std::function<void()> *run;
     LPVOID fiber;
 #ifdef HALIDE_WITH_EXCEPTIONS
-    std::exception_ptr fiber_exception = nullptr; // NOLINT - clang-tidy complains this isn't thrown
+    std::exception_ptr fiber_exception = nullptr;  // NOLINT - clang-tidy complains this isn't thrown
 #endif
 };
 
