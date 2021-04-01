@@ -1,8 +1,3 @@
-#ifdef _WINDOWS
-#define NOMINMAX
-#include <windows.h>
-#endif
-
 #include <algorithm>
 #include <chrono>
 #include <iostream>
@@ -523,59 +518,6 @@ void lower_impl(const vector<Function> &output_funcs,
         std::chrono::duration<double> diff = time_end - time_start;
         logger->record_compilation_time(CompilerLogger::Phase::HalideLowering, diff.count());
     }
-}
-
-#ifdef _WINDOWS
-
-struct DeferredFunction {
-    const std::function<void()> *run;
-    LPVOID fiber;
-};
-
-void generic_fiber_entry_point(void *argument) {
-    auto *action = reinterpret_cast<DeferredFunction *>(argument);
-    (*action->run)();
-    SwitchToFiber(action->fiber);
-}
-
-#endif
-
-void call_with_stack_requirement(const std::function<void()> &action) {
-#if _WINDOWS
-    SIZE_T required_stack = 8 * 1024 * 1024;
-
-    ULONG_PTR stack_low, stack_high;
-    GetCurrentThreadStackLimits(&stack_low, &stack_high);
-    ptrdiff_t stack_remaining = (char *)&stack_high - (char *)stack_low;
-
-    if (stack_remaining < required_stack) {
-        debug(1) << "Insufficient stack space (" << stack_remaining << " bytes). Switching to fiber with " << required_stack << "-byte stack.\n";
-
-        auto was_a_fiber = IsThreadAFiber();
-
-        auto *main_fiber = was_a_fiber ? GetCurrentFiber() : ConvertThreadToFiber(nullptr);
-        internal_assert(main_fiber) << "ConvertThreadToFiber failed with code: " << GetLastError() << "\n";
-
-        DeferredFunction func{&action, main_fiber};
-        auto *lower_fiber = CreateFiber(required_stack, generic_fiber_entry_point, &func);
-        internal_assert(lower_fiber) << "CreateFiber failed with code: " << GetLastError() << "\n";
-
-        SwitchToFiber(lower_fiber);
-        DeleteFiber(lower_fiber);
-
-        debug(1) << "Returned from fiber.\n";
-
-        if (!was_a_fiber) {
-            BOOL success = ConvertFiberToThread();
-            internal_assert(success) << "ConvertFiberToThread failed with code: " << GetLastError() << "\n";
-        }
-
-        return;
-    }
-
-#endif
-
-    action();
 }
 
 }  // namespace

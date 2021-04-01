@@ -19,6 +19,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <functional>
 
 #include "runtime/HalideRuntime.h"
 
@@ -463,6 +464,11 @@ std::string c_print_name(const std::string &name);
  * only for internal tests which need to verify behavior; please don't use this outside
  * of Halide tests. */
 int get_llvm_version();
+
+/** Call the given action in a platform-specific context that provides at least
+ * 8MB of stack space. Currently only has any effect on Windows where it uses
+ * a Fiber. */
+void call_with_stack_requirement(const std::function<void()> &action);
 
 }  // namespace Internal
 }  // namespace Halide
