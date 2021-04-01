@@ -26,18 +26,18 @@ private:
     void visit(const Call *op) override {
         IRVisitor::visit(op);
         if (op->name == "sin_f32") {
-            _halide_user_assert(inside_for_loop == inner_loop_level);
+            _halide_user_assert(starts_with(inside_for_loop, inner_loop_level));
         } else if (op->name == "cos_f32") {
-            _halide_user_assert(inside_for_loop == outer_loop_level);
+            _halide_user_assert(starts_with(inside_for_loop, outer_loop_level));
         }
     }
 
     void visit(const Store *op) override {
         IRVisitor::visit(op);
         if (op->name.substr(0, 5) == "inner") {
-            _halide_user_assert(inside_for_loop == inner_loop_level);
+            _halide_user_assert(starts_with(inside_for_loop, inner_loop_level));
         } else if (op->name.substr(0, 5) == "outer") {
-            _halide_user_assert(inside_for_loop == outer_loop_level);
+            _halide_user_assert(starts_with(inside_for_loop, outer_loop_level));
         } else {
             _halide_user_assert(0);
         }

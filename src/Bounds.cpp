@@ -1232,9 +1232,7 @@ private:
 
             interval.min = Interval::make_max(interval.min, lower.min);
             interval.max = Interval::make_min(interval.max, upper.max);
-        } else if (op->is_intrinsic(Call::likely) ||
-                   op->is_intrinsic(Call::likely_if_innermost)) {
-            internal_assert(op->args.size() == 1);
+        } else if (Call::as_tag(op)) {
             op->args[0].accept(this);
         } else if (op->is_intrinsic(Call::return_second)) {
             internal_assert(op->args.size() == 2);
@@ -1582,6 +1580,7 @@ private:
                 interval.min *= factor;
             }
             break;
+        case VectorReduce::SaturatingAdd:
         case VectorReduce::Mul:
             // Technically there are some things we could say
             // here. E.g. if all the lanes are positive then we're
@@ -2476,10 +2475,8 @@ private:
             for (const auto &pair : cases) {
                 Expr c = pair.first;
                 Stmt body = pair.second;
-                const Call *call = c.as<Call>();
-                if (call && (call->is_intrinsic(Call::likely) ||
-                             call->is_intrinsic(Call::likely_if_innermost) ||
-                             call->is_intrinsic(Call::strict_float))) {
+                const Call *call = Call::as_tag(c);
+                if (call) {
                     c = call->args[0];
                 }
 

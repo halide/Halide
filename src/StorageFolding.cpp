@@ -542,6 +542,16 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr min = simplify(common_subexpression_elimination(box[dim].min));
             Expr max = simplify(common_subexpression_elimination(box[dim].max));
 
+            if (is_const(min) || is_const(max)) {
+                debug(3) << "\nNot considering folding " << func.name()
+                         << " over for loop over " << op->name
+                         << " dimension " << i - 1 << "\n"
+                         << " because the min or max are constants."
+                         << "Min: " << min << "\n"
+                         << "Max: " << max << "\n";
+                continue;
+            }
+
             Expr min_provided, max_provided, min_required, max_required;
             if (func.schedule().async() && !explicit_only) {
                 if (!provided.empty()) {

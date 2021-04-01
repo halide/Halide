@@ -1419,12 +1419,11 @@ void CodeGen_LLVM::visit(const Variable *op) {
 }
 
 template<typename Op>
-bool CodeGen_LLVM::try_to_fold_vector_reduce(const Op *op) {
-    const VectorReduce *red = op->a.template as<VectorReduce>();
-    Expr b = op->b;
+bool CodeGen_LLVM::try_to_fold_vector_reduce(const Expr &a, Expr b) {
+    const VectorReduce *red = a.as<VectorReduce>();
     if (!red) {
-        red = op->b.template as<VectorReduce>();
-        b = op->a;
+        red = b.as<VectorReduce>();
+        b = a;
     }
     if (red &&
         ((std::is_same<Op, Add>::value && red->op == VectorReduce::Add) ||
@@ -1432,7 +1431,8 @@ bool CodeGen_LLVM::try_to_fold_vector_reduce(const Op *op) {
          (std::is_same<Op, Max>::value && red->op == VectorReduce::Max) ||
          (std::is_same<Op, Mul>::value && red->op == VectorReduce::Mul) ||
          (std::is_same<Op, And>::value && red->op == VectorReduce::And) ||
-         (std::is_same<Op, Or>::value && red->op == VectorReduce::Or))) {
+         (std::is_same<Op, Or>::value && red->op == VectorReduce::Or) ||
+         (std::is_same<Op, Call>::value && red->op == VectorReduce::SaturatingAdd))) {
         codegen_vector_reduce(red, b);
         return true;
     }
@@ -1447,7 +1447,7 @@ void CodeGen_LLVM::visit(const Add *op) {
     }
 
     // Some backends can fold the add into a vector reduce
-    if (try_to_fold_vector_reduce(op)) {
+    if (try_to_fold_vector_reduce<Add>(op->a, op->b)) {
         return;
     }
 
@@ -1491,7 +1491,7 @@ void CodeGen_LLVM::visit(const Mul *op) {
         return;
     }
 
-    if (try_to_fold_vector_reduce(op)) {
+    if (try_to_fold_vector_reduce<Mul>(op->a, op->b)) {
         return;
     }
 
@@ -1551,7 +1551,7 @@ void CodeGen_LLVM::visit(const Min *op) {
         return;
     }
 
-    if (try_to_fold_vector_reduce(op)) {
+    if (try_to_fold_vector_reduce<Min>(op->a, op->b)) {
         return;
     }
 
@@ -1571,7 +1571,7 @@ void CodeGen_LLVM::visit(const Max *op) {
         return;
     }
 
-    if (try_to_fold_vector_reduce(op)) {
+    if (try_to_fold_vector_reduce<Max>(op->a, op->b)) {
         return;
     }
 
@@ -1690,7 +1690,7 @@ void CodeGen_LLVM::visit(const GE *op) {
 }
 
 void CodeGen_LLVM::visit(const And *op) {
-    if (try_to_fold_vector_reduce(op)) {
+    if (try_to_fold_vector_reduce<And>(op->a, op->b)) {
         return;
     }
 
@@ -1700,7 +1700,7 @@ void CodeGen_LLVM::visit(const And *op) {
 }
 
 void CodeGen_LLVM::visit(const Or *op) {
-    if (try_to_fold_vector_reduce(op)) {
+    if (try_to_fold_vector_reduce<Or>(op->a, op->b)) {
         return;
     }
 
@@ -2779,24 +2779,30 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::saturating_add) || op->is_intrinsic(Call::saturating_sub)) {
         internal_assert(op->args.size() == 2);
-        std::string intrin;
-        if (op->type.is_int()) {
-            intrin = "llvm.s";
-        } else {
-            internal_assert(op->type.is_uint());
-            intrin = "llvm.u";
+
+        // Try to fold the vector reduce for a call to saturating_add
+        const bool folded = try_to_fold_vector_reduce<Call>(op->args[0], op->args[1]);
+
+        if (!folded) {
+            std::string intrin;
+            if (op->type.is_int()) {
+                intrin = "llvm.s";
+            } else {
+                internal_assert(op->type.is_uint());
+                intrin = "llvm.u";
+            }
+            if (op->is_intrinsic(Call::saturating_add)) {
+                intrin += "add.sat.";
+            } else {
+                internal_assert(op->is_intrinsic(Call::saturating_sub));
+                intrin += "sub.sat.";
+            }
+            if (op->type.lanes() > 1) {
+                intrin += "v" + std::to_string(op->type.lanes());
+            }
+            intrin += "i" + std::to_string(op->type.bits());
+            value = call_intrin(op->type, op->type.lanes(), intrin, op->args);
         }
-        if (op->is_intrinsic(Call::saturating_add)) {
-            intrin += "add.sat.";
-        } else {
-            internal_assert(op->is_intrinsic(Call::saturating_sub));
-            intrin += "sub.sat.";
-        }
-        if (op->type.lanes() > 1) {
-            intrin += "v" + std::to_string(op->type.lanes());
-        }
-        intrin += "i" + std::to_string(op->type.bits());
-        value = call_intrin(op->type, op->type.lanes(), intrin, op->args);
     } else if (op->is_intrinsic(Call::stringify)) {
         internal_assert(!op->args.empty());
 
@@ -4343,6 +4349,9 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
         break;
     case VectorReduce::Or:
         binop = Or::make;
+        break;
+    case VectorReduce::SaturatingAdd:
+        binop = saturating_add;
         break;
     }
 
