@@ -138,3 +138,36 @@ define weak_odr <8 x i16> @saturating_narrow_i32x8_to_u16x8(<8 x i32> %x) nounwi
   %3 = tail call <8 x i16> @llvm.wasm.narrow.unsigned.v8i16.v4i32(<4 x i32> %1, <4 x i32> %2)
   ret <8 x i16> %3
 }
+
+; Integer to double-precision floating point
+
+declare <2 x double> @llvm.wasm.convert.low.signed(<4 x i32>)
+declare <2 x double> @llvm.wasm.convert.low.unsigned(<4 x i32>)
+
+define weak_odr <4 x double> @i32_to_double_s(<4 x i32> %x) nounwind alwaysinline {
+  %1 = shufflevector <4 x i32> %x, <4 x i32> undef, <4 x i32> <i32 2, i32 3, i32 undef, i32 undef>
+  %2 = tail call <2 x double> @llvm.wasm.convert.low.signed(<4 x i32> %x)
+  %3 = tail call <2 x double> @llvm.wasm.convert.low.signed(<4 x i32> %1)
+  %4 = shufflevector <2 x double> %2, <2 x double> %3, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+  ret <4 x double> %4
+}
+
+define weak_odr <4 x double> @i32_to_double_u(<4 x i32> %x) nounwind alwaysinline {
+  %1 = shufflevector <4 x i32> %x, <4 x i32> undef, <4 x i32> <i32 2, i32 3, i32 undef, i32 undef>
+  %2 = tail call <2 x double> @llvm.wasm.convert.low.unsigned(<4 x i32> %x)
+  %3 = tail call <2 x double> @llvm.wasm.convert.low.unsigned(<4 x i32> %1)
+  %4 = shufflevector <2 x double> %2, <2 x double> %3, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+  ret <4 x double> %4
+}
+
+; single to double-precision floating point
+
+declare <2 x double> @llvm.wasm.promote.low(<4 x float>)
+
+define weak_odr <4 x double> @float_to_double(<4 x float> %x) nounwind alwaysinline {
+  %1 = shufflevector <4 x float> %x, <4 x float> undef, <4 x i32> <i32 2, i32 3, i32 undef, i32 undef>
+  %2 = tail call <2 x double> @llvm.wasm.promote.low(<4 x float> %x)
+  %3 = tail call <2 x double> @llvm.wasm.promote.low(<4 x float> %1)
+  %4 = shufflevector <2 x double> %2, <2 x double> %3, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+  ret <4 x double> %4
+}

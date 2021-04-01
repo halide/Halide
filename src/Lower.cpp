@@ -408,18 +408,6 @@ Module lower(const vector<Function> &output_funcs,
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";
 
-    if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
-        debug(1) << "Splitting off Hexagon offload...\n";
-        s = inject_hexagon_rpc(s, t, result_module);
-        debug(2) << "Lowering after splitting off Hexagon offload:\n"
-                 << s << "\n";
-    } else {
-        debug(1) << "Skipping Hexagon offload...\n";
-    }
-
-    // TODO: Several tests depend on these custom passes running before
-    // inject_gpu_offload. We should either make this consistent with
-    // inject_hexagon_rpc above, or find a way to avoid this dependency.
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {
             debug(1) << "Running custom lowering pass " << i << "...\n";
@@ -427,6 +415,15 @@ Module lower(const vector<Function> &output_funcs,
             debug(1) << "Lowering after custom pass " << i << ":\n"
                      << s << "\n\n";
         }
+    }
+
+    if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
+        debug(1) << "Splitting off Hexagon offload...\n";
+        s = inject_hexagon_rpc(s, t, result_module);
+        debug(2) << "Lowering after splitting off Hexagon offload:\n"
+                 << s << "\n";
+    } else {
+        debug(1) << "Skipping Hexagon offload...\n";
     }
 
     if (t.has_gpu_feature()) {

@@ -14,12 +14,8 @@ using std::vector;
 Stmt Simplify::visit(const IfThenElse *op) {
     Expr condition = mutate(op->condition, nullptr);
 
-    // If (likely(true)) ...
-    const Call *likely = Call::as_intrinsic(condition, {Call::likely, Call::likely_if_innermost});
-    Expr unwrapped_condition = condition;
-    if (likely) {
-        unwrapped_condition = likely->args[0];
-    }
+    // Remove tags
+    Expr unwrapped_condition = unwrap_tags(condition);
 
     // If (true) ...
     if (is_const_one(unwrapped_condition)) {
