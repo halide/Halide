@@ -581,26 +581,26 @@ int get_llvm_version() {
 
 namespace {
 
-struct DeferredFunction {
-    const std::function<void()> *run;
-    LPVOID fiber;
+struct GenericFiberArgs {
+    const std::function<void()> &run;
+    LPVOID main_fiber;
 #ifdef HALIDE_WITH_EXCEPTIONS
-    std::exception_ptr fiber_exception = nullptr;  // NOLINT - clang-tidy complains this isn't thrown
+    std::exception_ptr exception = nullptr;  // NOLINT - clang-tidy complains this isn't thrown
 #endif
 };
 
 void WINAPI generic_fiber_entry_point(LPVOID argument) {
-    auto *action = reinterpret_cast<DeferredFunction *>(argument);
+    auto *action = reinterpret_cast<GenericFiberArgs *>(argument);
 #ifdef HALIDE_WITH_EXCEPTIONS
     try {
 #endif
-        (*action->run)();
+        action->run();
 #ifdef HALIDE_WITH_EXCEPTIONS
     } catch (...) {
-        action->fiber_exception = std::current_exception();
+        action->exception = std::current_exception();
     }
 #endif
-    SwitchToFiber(action->fiber);
+    SwitchToFiber(action->main_fiber);
 }
 
 }  // namespace
@@ -626,8 +626,8 @@ void run_with_large_stack(const std::function<void()> &action) {
         auto *main_fiber = was_a_fiber ? GetCurrentFiber() : ConvertThreadToFiber(nullptr);
         internal_assert(main_fiber) << "ConvertThreadToFiber failed with code: " << GetLastError() << "\n";
 
-        DeferredFunction func{&action, main_fiber};
-        auto *lower_fiber = CreateFiber(required_stack, generic_fiber_entry_point, &func);
+        GenericFiberArgs fiber_args{action, main_fiber};
+        auto *lower_fiber = CreateFiber(required_stack, generic_fiber_entry_point, &fiber_args);
         internal_assert(lower_fiber) << "CreateFiber failed with code: " << GetLastError() << "\n";
 
         SwitchToFiber(lower_fiber);
@@ -636,9 +636,9 @@ void run_with_large_stack(const std::function<void()> &action) {
         debug(1) << "Returned from fiber.\n";
 
 #ifdef HALIDE_WITH_EXCEPTIONS
-        if (func.fiber_exception) {
+        if (fiber_args.exception) {
             debug(1) << "Fiber threw exception. Rethrowing...\n";
-            std::rethrow_exception(func.fiber_exception);
+            std::rethrow_exception(fiber_args.exception);
         }
 #endif
 
