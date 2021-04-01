@@ -1,6 +1,19 @@
 #include "Halide.h"
 
+#include <limits>
+
 using namespace Halide;
+
+bool check_infinity_case(bool use_first, float16_t value, const char *value_name,
+                         int increment, float16_t expected_first, float16_t expected_second,
+                         const char *first_name, const char *second_name) {
+    if (value != (use_first ? expected_first : expected_second)) {
+        printf("%s %d is %x, not %s.\n", value_name, increment, value.to_bits(),
+               (use_first ? first_name : second_name));
+        return false;
+    }
+    return true;
+}
 
 int main(int argc, char **argv) {
     Var x;
@@ -226,6 +239,83 @@ int main(int argc, char **argv) {
         from_f16.compute_root().vectorize(x, 8, TailStrategy::RoundUp);
 
         from_f16.compile_to_assembly("/dev/stdout", {}, Target("host-no_asserts-no_bounds_query-no_runtime-disable_llvm_loop_unroll-disable_llvm_loop_vectorize"));
+    }
+
+    // Check infinity handling for both float16_t and Halide codegen.
+    {
+        std::pair<int, bool> test_cases[] =
+            {{1, false}, {16, true}, {256, true}};
+
+        for (const auto &test_case : test_cases) {
+            float16_t max_pos_val = float16_t::make_from_bits(0x7bff);
+            float16_t min_neg_val = float16_t::make_from_bits(0xfbff);
+            float16_t increment(test_case.first);
+
+            float16_t max_plus_increment(max_pos_val + increment);
+            if (!check_infinity_case(test_case.second, max_plus_increment,
+                                     "float16_t maximum value plus", test_case.first,
+                                     float16_t::make_infinity(), max_pos_val,
+                                     "positive infinity", "maximum positive value")) {
+                return -1;
+            }
+
+            float16_t min_minus_increment(min_neg_val - increment);
+            if (!check_infinity_case(test_case.second, min_minus_increment,
+                                     "float16_t minimum value minus", test_case.first,
+                                     float16_t::make_negative_infinity(), min_neg_val,
+                                     "negative infinity", "maximum negative value")) {
+                return -1;
+            }
+
+            Param<float16_t> a("a"), b("b");
+            a.set(max_pos_val);
+            b.set(increment);
+            float16_t c = evaluate<float16_t>(a + b);
+            if (!check_infinity_case(test_case.second, c,
+                                     "Halide float16_t maximum value plus", test_case.first,
+                                     float16_t::make_infinity(), max_pos_val,
+                                     "positive infinity", "maximum positive value")) {
+                return -1;
+            }
+
+            a.set(min_neg_val);
+            c = evaluate<float16_t>(a - b);
+            if (!check_infinity_case(test_case.second, c,
+                                     "Halide float16_t minimum value minus", test_case.first,
+                                     float16_t::make_negative_infinity(), min_neg_val,
+                                     "negative infinity", "maximum negative value")) {
+                return -1;
+            }
+
+            float pos_inf = std::numeric_limits<float>::infinity();
+            float16_t fp16_pos_inf(pos_inf);
+            if (fp16_pos_inf != float16_t::make_infinity()) {
+                printf("Conversion of 32-bit positive infinity to 16-bit float is %x, not positive infinity.\n", fp16_pos_inf.to_bits());
+                return -1;
+            }
+
+            float neg_inf = -std::numeric_limits<float>::infinity();
+            float16_t fp16_neg_inf(neg_inf);
+            if (fp16_neg_inf != float16_t::make_negative_infinity()) {
+                printf("Conversion of 32-bit negative infinity to 16-bit float is %x, not negative infinity.\n", fp16_neg_inf.to_bits());
+                return -1;
+            }
+
+            Param<float> f_in("f_in");
+            f_in.set(pos_inf);
+            c = evaluate<float16_t>(cast(Float(16), f_in));
+            if (c != float16_t::make_infinity()) {
+                printf("Halide conversion of 32-bit positive infinity to 16-bit float is %x, not positive infinity.\n", c.to_bits());
+                return -1;
+            }
+
+            f_in.set(neg_inf);
+            c = evaluate<float16_t>(cast(Float(16), f_in));
+            if (c != float16_t::make_negative_infinity()) {
+                printf("Halide conversion of 32-bit negative infinity to 16-bit float is %x, not negative infinity.\n", c.to_bits());
+                return -1;
+            }
+        }
     }
 
     printf("Success!\n");
