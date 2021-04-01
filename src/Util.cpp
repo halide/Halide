@@ -596,7 +596,7 @@ void generic_fiber_entry_point(void *argument) {
 
 #endif
 
-void call_with_stack_requirement(const std::function<void()> &action) {
+void run_with_large_stack(const std::function<void()> &action) {
 #if _WIN32
     SIZE_T required_stack = 8 * 1024 * 1024;
 

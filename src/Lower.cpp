@@ -531,7 +531,7 @@ Module lower(const vector<Function> &output_funcs,
              bool trace_pipeline,
              const vector<IRMutator *> &custom_passes) {
     Module result_module{extract_namespaces(pipeline_name), t};
-    call_with_stack_requirement([&]() {
+    run_with_large_stack([&]() {
         lower_impl(output_funcs, pipeline_name, t, args, linkage_type, requirements, trace_pipeline, custom_passes, result_module);
     });
     return result_module;

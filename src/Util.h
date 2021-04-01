@@ -468,7 +468,7 @@ int get_llvm_version();
 /** Call the given action in a platform-specific context that provides at least
  * 8MB of stack space. Currently only has any effect on Windows where it uses
  * a Fiber. */
-void call_with_stack_requirement(const std::function<void()> &action);
+void run_with_large_stack(const std::function<void()> &action);
 
 }  // namespace Internal
 }  // namespace Halide
