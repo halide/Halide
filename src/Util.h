@@ -44,11 +44,6 @@
 #define HALIDE_NO_USER_CODE_INLINE HALIDE_NEVER_INLINE
 #endif
 
-// On windows, Halide needs a larger stack than the default MSVC provides
-#ifdef _MSC_VER
-#pragma comment(linker, "/STACK:8388608,1048576")
-#endif
-
 namespace Halide {
 
 /** Load a plugin in the form of a dynamic library (e.g. for custom autoschedulers).
@@ -211,6 +206,9 @@ struct all_are_convertible : meta_and<std::is_convertible<Args, To>...> {};
 
 /** Returns base name and fills in namespaces, outermost one first in vector. */
 std::string extract_namespaces(const std::string &name, std::vector<std::string> &namespaces);
+
+/** Overload that returns base name only */
+std::string extract_namespaces(const std::string &name);
 
 struct FileStat {
     uint64_t file_size;

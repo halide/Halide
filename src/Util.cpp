@@ -288,6 +288,11 @@ std::string extract_namespaces(const std::string &name, std::vector<std::string>
     return result;
 }
 
+std::string extract_namespaces(const std::string &name) {
+    std::vector<std::string> unused;
+    return extract_namespaces(name, unused);
+}
+
 bool file_exists(const std::string &name) {
 #ifdef _MSC_VER
     return _access(name.c_str(), 0) == 0;
