@@ -223,7 +223,7 @@ int vectorize_inner_of_scalarization() {
         }
 
     public:
-        explicit CheckForScalarizedLoop(bool *fx, bool* fy)
+        explicit CheckForScalarizedLoop(bool *fx, bool *fy)
             : x_loop_found(fx), y_loop_found(fy) {
         }
 
