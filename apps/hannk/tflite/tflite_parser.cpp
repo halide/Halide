@@ -192,6 +192,7 @@ public:
             op->builtin_options_as_ConcatenationOptions();
         ActivationFunction activation =
             parse_activation_function(options->fused_activation_function());
+        CHECK(activation == ActivationFunction::None);
         std::vector<Tensor *> inputs;
         for (auto i = op->inputs()->cbegin(); i != op->inputs()->cend(); ++i) {
             inputs.push_back(result_.tensors[*i].get());
@@ -205,7 +206,7 @@ public:
         // Now 'flip' the axis so that it refers to the right dimension in
         // the Tensor (since we reverse the dimension order)
         axis = (int)output->rank() - axis - 1;
-        return ::hannk::make_unique<ConcatenationOp>(inputs, output, axis, activation);
+        return ::hannk::make_unique<ConcatenationOp>(inputs, output, axis);
     }
 
     std::unique_ptr<Op> parse_conv2D(const tflite::Operator *op) {

@@ -86,13 +86,25 @@ $(BIN)/%/convolution_r16_uint8.a: $(GENERATOR_BIN)/convolution.generator
 	@mkdir -p $(@D)
 	$< -g Convolution unroll_reduction=16 -f hannk::convolution_r16_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
+$(BIN)/%/copy_uint8_uint8.a: $(GENERATOR_BIN)/copy.generator
+	@mkdir -p $(@D)
+	$< -g Copy -f hannk::copy_uint8_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_bounds_query-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
 $(BIN)/%/depthwise_convolution_uint8.a: $(GENERATOR_BIN)/depthwise_convolution.generator
 	@mkdir -p $(@D)
 	$< -g DepthwiseConvolution -f hannk::depthwise_convolution_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/depthwise_convolution_uint8_broadcast.a: $(GENERATOR_BIN)/depthwise_convolution.generator
+$(BIN)/%/depthwise_convolution_broadcast_uint8.a: $(GENERATOR_BIN)/depthwise_convolution.generator
 	@mkdir -p $(@D)
-	$< -g DepthwiseConvolution inv_depth_multiplier=0 -f hannk::depthwise_convolution_uint8_broadcast -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+	$< -g DepthwiseConvolution inv_depth_multiplier=0 -f hannk::depthwise_convolution_broadcast_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
+$(BIN)/%/depthwise_convolution_dm1_uint8.a: $(GENERATOR_BIN)/depthwise_convolution.generator
+	@mkdir -p $(@D)
+	$< -g DepthwiseConvolution inv_depth_multiplier=1 -f hannk::depthwise_convolution_dm1_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
+$(BIN)/%/fill_uint8.a: $(GENERATOR_BIN)/fill.generator
+	@mkdir -p $(@D)
+	$< -g Fill -f hannk::fill_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_bounds_query-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
 $(BIN)/%/fully_connected_uint8.a: $(GENERATOR_BIN)/fully_connected.generator
 	@mkdir -p $(@D)
@@ -102,6 +114,10 @@ $(BIN)/%/max_pool_uint8.a: $(GENERATOR_BIN)/max_pool.generator
 	@mkdir -p $(@D)
 	$< -g MaxPool -f hannk::max_pool_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
+$(BIN)/%/tile_convolution_filter_uint8.a: $(GENERATOR_BIN)/convolution.generator
+	@mkdir -p $(@D)
+	$< -g TileConvolutionFilter -f hannk::tile_convolution_filter_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
 	$< -r runtime -o $(BIN)/$* target=$(HL_TARGET)
@@ -110,10 +126,14 @@ OPS_HALIDE = \
 	$(BIN)/%/add_uint8_uint8.a \
 	$(BIN)/%/average_pool_uint8.a \
 	$(BIN)/%/convolution_uint8.a \
+	$(BIN)/%/copy_uint8_uint8.a \
 	$(BIN)/%/depthwise_convolution_uint8.a \
-	$(BIN)/%/depthwise_convolution_uint8_broadcast.a \
+	$(BIN)/%/depthwise_convolution_broadcast_uint8.a \
+	$(BIN)/%/depthwise_convolution_dm1_uint8.a \
+	$(BIN)/%/fill_uint8.a \
 	$(BIN)/%/fully_connected_uint8.a \
 	$(BIN)/%/max_pool_uint8.a \
+	$(BIN)/%/tile_convolution_filter_uint8.a \
 	$(BIN)/%/runtime.a
 
 OPS_CXXFLAGS = -I$(BIN)/$*
@@ -151,6 +171,10 @@ $(BIN)/%/ops.o: interpreter/ops.cpp $(OPS_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(OPS_CXXFLAGS) -c $< -o $@
 
+$(BIN)/%/transforms.o: interpreter/transforms.cpp
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -c $< -o $@
+
 $(BIN)/%/interval.o: interpreter/interval.cpp $(OPS_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -c $< -o $@
@@ -159,6 +183,7 @@ INTERPRETER_DEPS = \
 	$(BIN)/%/interpreter.o \
 	$(BIN)/%/interval.o \
 	$(BIN)/%/model.o \
+	$(BIN)/%/transforms.o \
 	$(BIN)/%/ops.o \
 	$(OPS_HALIDE)
 
@@ -241,39 +266,39 @@ delegate: $(BIN)/$(HL_TARGET)/libHannkDelegate.so
 # ---------------------- test
 
 # unit tests for each op (not yet complete)
-$(BIN)/%/add_test: test/add_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE) $(UTIL_DEPS)
+$(BIN)/%/add_test: test/add_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-$(BIN)/%/average_pool_test: test/average_pool_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE) $(UTIL_DEPS)
+$(BIN)/%/average_pool_test: test/average_pool_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-$(BIN)/%/concatenation_test: test/concatenation_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE) $(UTIL_DEPS)
+$(BIN)/%/concatenation_test: test/concatenation_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-$(BIN)/%/conv2d_test: test/conv2d_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE) $(UTIL_DEPS)
+$(BIN)/%/conv2d_test: test/conv2d_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-$(BIN)/%/depthwise_conv2d_test: test/depthwise_conv2d_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE) $(UTIL_DEPS)
+$(BIN)/%/depthwise_conv2d_test: test/depthwise_conv2d_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-$(BIN)/%/fully_connected_test: test/fully_connected_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE) $(UTIL_DEPS)
+$(BIN)/%/fully_connected_test: test/fully_connected_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-$(BIN)/%/max_pool_test: test/max_pool_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE) $(UTIL_DEPS)
+$(BIN)/%/max_pool_test: test/max_pool_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-$(BIN)/%/pad_test: test/pad_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE) $(UTIL_DEPS)
+$(BIN)/%/pad_test: test/pad_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-$(BIN)/%/reshape_test: test/reshape_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE) $(UTIL_DEPS)
+$(BIN)/%/reshape_test: test/reshape_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 

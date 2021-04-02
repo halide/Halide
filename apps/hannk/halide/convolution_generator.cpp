@@ -7,6 +7,9 @@ using namespace Halide::ConciseCasts;
 
 namespace hannk {
 
+Var x("x"), y("y"), c("c"), b("b");
+Var ci("ci"), co("co");
+
 int get_vector_reduction_factor(const Target &target, Type t) {
     if (target.arch == Target::Hexagon ||
         target.has_feature(Target::ARMDotProd)) {
@@ -19,6 +22,15 @@ int get_vector_reduction_factor(const Target &target, Type t) {
     return 2;
 }
 
+// There are two codepaths in this generator. On targets with widening
+// 8-bit multiplies, we implement the reduction by expanding the subtraction
+// of the offsets into 4 reductions involving 8-bit multiplies. On targets
+// without widening 8-bit multiplication, it's faster to just subtract the
+// offsets and use 16-bit multiplications.
+bool use_8bit_multiply(const Target &target) {
+    return target.arch != Target::X86 || target.has_feature(Target::AVX512_SapphireRapids);
+}
+
 class Convolution : public Generator<Convolution> {
 public:
     // How much to unroll the reduction loop over channels. On some targets,
@@ -27,16 +39,15 @@ public:
     // to load vectors, so making this value larger helps for big reductions.
     GeneratorParam<int> unroll_reduction_{"unroll_reduction", 4};
 
-    // Unsigned 8-bit input tensor, indexed by input_depth, input_x, input_y,
-    // input_batch.
+    // Unsigned 8-bit input tensor, indexed by c, x, y, b.
     Input<Buffer<uint8_t>> input_{"input", 4};
 
-    // A 4D array of 8-bit filter coefficients indexed by filter_depth, filter_x,
-    // filter_y, filter_batch (aka. output_depth).
-    Input<Buffer<uint8_t>> filter_{"filter", 4};
+    // A 5D array of 8-bit filter coefficients indexed by
+    // ci % n, co, ci / n, x, y, where n = vector_reduction (below).
+    Input<Buffer<>> filter_{"filter", 5};
 
     // A 1D array of 32-bit biases. The bias should be added to the c
-    // dimension of the output (i.e., # filter batches).
+    // dimension of the output.
     Input<Buffer<int32_t>> bias_{"bias", 1};
 
     // Offsets for the input and filter.
@@ -59,71 +70,45 @@ public:
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
-    Input<int> guid_{"guid"};
-
     Output<Buffer<uint8_t>> output_{"output", 4};
+
+    void configure() {
+        if (use_8bit_multiply(target)) {
+            filter_.set_type(UInt(8));
+        } else {
+            filter_.set_type(Int(16));
+        }
+    }
 
     void generate() {
         // The algorithm.
-
-        // Some free variables, where x and y represent the spatial dimensions.
-        Var x("x"), y("y"), c("c"), b("b");
-
-        // There are two codepaths below. On targets with widening 8-bit
-        // multiplies, we implement the reduction by expanding the subtraction
-        // of the offsets into 4 reductions involving 8-bit multiplies.
-        // On targets without widening 8-bit multiplication, it's faster
-        // to just subtract the offsets and use 16-bit multiplications.
-        const bool use_8bit_multiply =
-            get_target().arch != Target::X86 || get_target().has_feature(Target::AVX512_SapphireRapids);
-
-        // Add a "zero" boundary condition to the input.
-        Func input_bounded("input_bounded");
-        Expr input_cxyb = constant_exterior(input_, input_offset_)(c, x, y, b);
-        if (!use_8bit_multiply) {
+        Func input("input_wrapper");
+        Expr input_cxyb = input_(c, x, y, b);
+        if (!use_8bit_multiply(target)) {
             input_cxyb = i16(input_cxyb) - i16(input_offset_);
         }
-        input_bounded(c, x, y, b) = input_cxyb;
-        // And to c of the filter. This lets us align the inner reduction loop
-        // however we want.
-        Func filter_bounded =
-            constant_exterior(filter_, filter_offset_, {{filter_.dim(0).min(), filter_.dim(0).extent()}});
-        Func bias_bounded = repeat_edge(bias_);
+        input(c, x, y, b) = input_cxyb;
 
         // Align the reduction loop of filter.
-        int vector_reduction = get_vector_reduction_factor(get_target(), UInt(8));
+        int vector_reduction = get_vector_reduction_factor(target, UInt(8));
         int unroll_reduction = std::max<int>(unroll_reduction_, vector_reduction);
 
-        // Create a wrapper of the filter that we can reorder the storage of to be
-        // more convenient for the inner loop.
-        Var ci("ci"), co("co");
-        Func filter_tiled("filter_tiled");
-        Expr filter_cxyb =
-            memoize_tag(filter_bounded(co * vector_reduction + ci, x, y, c), guid_);
-        if (!use_8bit_multiply) {
-            filter_cxyb = i16(filter_cxyb) - i16(filter_offset_);
-        }
-        filter_tiled(ci, co, x, y, c) = filter_cxyb;
-
         // Set up the reduction loop and inputs.
-        filter_.dim(0).set_min(0);
-        filter_.dim(1).set_min(0);
-        filter_.dim(2).set_min(0);
-        Expr filter_depth = filter_.dim(0).extent();
-        Expr filter_width = filter_.dim(1).extent();
-        Expr filter_height = filter_.dim(2).extent();
+        Expr filter_depth = filter_.dim(0).extent() * filter_.dim(2).extent();
+        Expr filter_width = filter_.dim(3).extent();
+        Expr filter_height = filter_.dim(4).extent();
         // Align the filter depth, which requires padding the input.
         filter_depth = align_up(filter_depth, unroll_reduction);
         RDom r(0, filter_width, 0, filter_height, 0, filter_depth);
         Expr filter_rdxyc =
-            filter_tiled(r.z % vector_reduction, r.z / vector_reduction, r.x, r.y, c);
+            filter_(r.z % vector_reduction, c, r.z / vector_reduction, r.x, r.y);
         Expr input_rdxyc =
-            input_bounded(r.z, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
+            input(r.z, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
 
         Func offset_c("offset_c");
         Func sum_input("sum_input");
         Func convolved("convolved");
-        if (use_8bit_multiply) {
+        if (use_8bit_multiply(target)) {
             // We want to compute the reduction:
             // convolved(c, x, y, b) = bias_(c)
             // convolved(c, x, y, b) +=
@@ -147,7 +132,7 @@ public:
             // subtract it after.
             offset_c(c) += i32(filter_rdxyc) * i32(input_offset_);
             offset_c(c) =
-                bias_bounded(c) + i32(filter_offset_) * i32(input_offset_) * r_size - offset_c(c);
+                bias_(c) + i32(filter_offset_) * i32(input_offset_) * r_size - offset_c(c);
 
             // The sum of the input is used to compute the filter_offset * input term.
             // TODO: This is separable, but a bit messy to optimize this way.
@@ -158,25 +143,21 @@ public:
         } else {
             // Without 8-bit widening multiplies, we already subtracted the offsets,
             // and just have a single reduction of 16-bit multiplies to compute.
-            convolved(c, x, y, b) = bias_bounded(c);
+            convolved(c, x, y, b) = bias_(c);
         }
         convolved(c, x, y, b) += i32(input_rdxyc) * i32(filter_rdxyc);
 
         // Saturate and narrow the output.
         Expr output =
             multiply_quantized(convolved(c, x, y, b), output_multiplier_, output_shift_);
-        output = i16_sat(output);
-        output = saturating_add(output, output_offset_);
+        output = saturating_add(i16_sat(output), output_offset_);
         output_(c, x, y, b) = clamp(u8_sat(output), output_min_, output_max_);
 
         // Schedule
         interpret_as_tensor(input_);
-        interpret_as_tensor(filter_);
         interpret_as_tensor(bias_);
         interpret_as_tensor(output_);
         require_same_min_extent(3, input_, output_);
-        require_same_min_extent(0, filter_, input_);
-        require_same_min_extent(3, filter_, 0, output_);
         require_same_min_extent(0, bias_, output_);
 
         output_.compute_root();
@@ -184,7 +165,7 @@ public:
         // Figure out how big the tiles we should optimize for should be by getting
         // the total number of accumulators best for this target and figuring out
         // tile sizes.
-        const int accumulators = get_register_count(get_target()) >= 32 ? 20 : 8;
+        const int accumulators = get_register_count(target) >= 32 ? 20 : 8;
         std::vector<std::pair<int, int>> tile_sizes;
         const int max_tile_c = 4;
         for (int tile_c = max_tile_c; tile_c >= 1; tile_c /= 2) {
@@ -230,7 +211,7 @@ public:
             .unroll(c, max_tile_c, TailStrategy::GuardWithIf)
             .unroll(x);
 
-        if (use_8bit_multiply) {
+        if (use_8bit_multiply(target)) {
             // Specialize this to avoid computing sum_input when it isn't needed.
             convolved.specialize(filter_offset_ == 0);
         }
@@ -246,17 +227,35 @@ public:
             .unroll(rci)
             .unroll(x);
 
-        if (unroll_reduction >= natural_vector_size<uint8_t>()) {
+        if (!use_8bit_multiply(target) && get_target().arch == Target::X86) {
+            // On x86, widening subtracts eat up a lot of the already scarce
+            // registers, so precomputing this outside the inner loop helps
+            // a lot.
+            // TODO: Maybe we should do this in a separate op. We already pad it
+            // separately, we just don't dequantize it to 16-bit.
+            input.compute_at(output_, y)
+                .reorder(c, x);
+
+            input.specialize(is_interleaved(input_, 4))
+                .vectorize(c, 4, TailStrategy::RoundUp)
+                .vectorize(x, natural_vector_size<int32_t>(), TailStrategy::GuardWithIf);
+
+            for (int i = natural_vector_size<int16_t>(); i >= unroll_reduction; i /= 2) {
+                // Use GuardWithIf here to avoid growing the bounds.
+                input.specialize(input_.dim(0).extent() >= i)
+                    .vectorize(c, i, TailStrategy::GuardWithIf);
+            }
+        } else if (unroll_reduction >= natural_vector_size<uint8_t>()) {
             // If we're unrolling a full vector's worth of reduction from the
             // input, explicitly load a vector of it first. This enables targeting
             // broadcasting dot products, like ARM's udot.
-            input_bounded.in(convolved)
+            input.in(convolved)
                 .compute_at(convolved, c)
                 .bound_extent(c, unroll_reduction)
                 .vectorize(c);
         }
 
-        if (use_8bit_multiply) {
+        if (use_8bit_multiply(target)) {
             // Precompute the channel offset at root.
             // TODO: This gets recomputed often when the op is split up into small
             // pieces.
@@ -273,10 +272,7 @@ public:
                 .vectorize(c, accum_vector_size, TailStrategy::RoundUp);
 
             // Compute the sum of the input outside the loops over channels.
-            sum_input.in()
-                .compute_at(output_, y)
-                .vectorize(x, accum_vector_size, TailStrategy::RoundUp);
-            sum_input.compute_at(sum_input.in(), x)
+            sum_input.compute_at(output_, xo)
                 .vectorize(x)
                 .update()
                 .reorder(r.z, r.x, r.y, x)
@@ -285,41 +281,56 @@ public:
                 .vectorize(x);
         }
 
-        // TODO: We often don't need the boundary condition on the input,
-        // and it's expensive.
-        input_bounded.compute_at(output_, y)
-            .store_in(MemoryType::Stack)
-            .reorder(c, x);
-
-        // For 3-channel interleaved inputs, we need to try to use
-        // interleaving loads/stores when available.
-        input_bounded.specialize(input_.dim(0).extent() == 3 && input_.dim(1).stride() == 3)
-            .unroll(c)
-            .vectorize(x, natural_vector_size<uint8_t>(), TailStrategy::RoundUp);
-
-        // TODO: This is a mess. We need a better way to implement a
-        // straightforward boundary condition.
-        int vector_size_input =
-            use_8bit_multiply ? natural_vector_size<uint8_t>() : natural_vector_size<int16_t>();
-        for (int i = vector_size_input; i >= unroll_reduction; i /= 2) {
-            // Use GuardWithIf here to avoid growing the bounds.
-            input_bounded.specialize(input_.dim(0).extent() >= i)
-                .vectorize(c, i, TailStrategy::GuardWithIf);
-        }
-
-        bias_bounded.compute_root()
+        // TODO: Pad this outside and let it constant fold.
+        bias_.in().compute_root()
             .store_in(MemoryType::Stack);
 
-        // Pretranspose the filter, so we don't need to do it in the inner loop.
-        // TODO: This gets recomputed often when the op is split up into small
-        // pieces.
-        filter_tiled
+        // We have a lot of requirements of the filter.
+        filter_.set_host_alignment(natural_vector_size<uint8_t>());
+        filter_.dim(0)
+            .set_min(0)
+            .set_extent(vector_reduction)
+            .set_stride(1);
+        filter_.dim(1)
+            .set_min(0)
+            .set_extent(align(filter_.dim(1).extent(), accum_vector_size))
+            .set_stride(vector_reduction);
+    }
+};
+
+class TileConvolutionFilter : public Generator<TileConvolutionFilter> {
+public:
+    Input<Buffer<uint8_t>> input_{"input", 4};
+    Input<uint8_t> input_offset_{"input_offset"};
+    Input<uint8_t> output_offset_{"output_offset"};
+
+    Output<Buffer<>> output_{"output", 5};
+
+    void configure() {
+        if (use_8bit_multiply(target)) {
+            output_.set_type(UInt(8));
+        } else {
+            output_.set_type(Int(16));
+        }
+    }
+
+    void generate() {
+        Func input_bounded = constant_exterior(input_, input_offset_);
+
+        const int vector_reduction = get_vector_reduction_factor(target, UInt(8));
+
+        Expr filter_cxyb =
+            i16(input_bounded(co * vector_reduction + ci, x, y, c)) - i16(input_offset_);
+        output_(ci, c, co, x, y) = cast(output_.type(), filter_cxyb + output_offset_);
+
+        // Schedule.
+        output_.dim(0).set_min(0).set_extent(vector_reduction);
+
+        // TODO: We probably don't care about the performance of this, but if we do,
+        // we could optimize this more.
+        output_
             .compute_root()
-            .memoize()
-            .reorder_storage(ci, c, co, x, y)
             .reorder(ci, c, x, y, co)
-            .bound(ci, 0, vector_reduction)
-            .align_storage(ci, vector_reduction)
             .vectorize(ci);
     }
 };
@@ -327,3 +338,4 @@ public:
 }  // namespace hannk
 
 HALIDE_REGISTER_GENERATOR(hannk::Convolution, Convolution)
+HALIDE_REGISTER_GENERATOR(hannk::TileConvolutionFilter, TileConvolutionFilter)

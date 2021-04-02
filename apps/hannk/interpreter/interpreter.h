@@ -36,13 +36,11 @@ class ModelInterpreter {
 
     std::vector<ScheduledOp> schedule_;
 
-    void Schedule(ScheduleOptions options);
+    void legalize();
+    void schedule(ScheduleOptions options);
 
 public:
-    explicit ModelInterpreter(Model m, ScheduleOptions options = ScheduleOptions())
-        : model_(std::move(m)), trace_(options.trace) {
-        Schedule(options);
-    }
+    explicit ModelInterpreter(Model m, ScheduleOptions options = ScheduleOptions());
 
     // Return the Tensor in the current Model with the given name.
     // If none with that name, return null. Tensor is still owned by the Model.

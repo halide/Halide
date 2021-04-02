@@ -49,11 +49,15 @@ struct PadOpTestFactory : public op_test::TestCaseFactory {
         buf.fill(0);
         buf(0, 0) = 4;   // add 4 values before startof dim(0)
         buf(1, 0) = 12;  // add 12 values after end of dim(0)
+        buf(0, 1) = 1;   // add 4 values before startof dim(0)
+        buf(1, 1) = 1;  // add 12 values after end of dim(0)
+        buf(0, 2) = 2;   // add 4 values before startof dim(0)
+        buf(1, 2) = 2;  // add 12 values after end of dim(0)
     }
 
     PadOpTestFactory() {
         init_tensors({
-            {"input", halide_type_of<uint8_t>(), {16, 48, 48, 1}, 1.0, 0},
+            {"input", halide_type_of<uint8_t>(), {16, 46, 44, 1}, 1.0, 0},
             // padding must be of shape {2, N}, where N = rank(input)
             {"padding", halide_type_of<int32_t>(), {2, 4}, 1.0, 0, fill_padding},
             {"output", halide_type_of<uint8_t>(), {32, 48, 48, 1}, 1.0, 0},

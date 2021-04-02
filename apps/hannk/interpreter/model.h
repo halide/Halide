@@ -2,6 +2,7 @@
 #define MODEL_H
 
 #include <iostream>
+#include <list>
 #include <map>
 #include <string>
 #include <vector>
@@ -30,6 +31,45 @@ inline std::ostream &operator<<(std::ostream &s, const QuantizationInfo &q) {
     return s << "{" << q.scale << ", " << q.zero << ", " << q.dimension << "}";
 }
 
+// Storage for a tensor.
+class TensorStorage {
+    HalideBuffer<void> buffer_;
+
+public:
+    TensorStorage();
+    TensorStorage(HalideBuffer<void> buffer);
+    TensorStorage &operator=(const TensorStorage &) = delete;
+    TensorStorage(TensorStorage &&) = default;
+    TensorStorage &operator=(TensorStorage &&) = default;
+
+    // Grow the bounds of the storage to accommodate a new user.
+    // The type and dimensionality must match the existing storage.
+    void add_use(halide_type_t, const Box &bounds);
+
+    halide_type_t type() const {
+        return buffer_.type();
+    }
+
+    int rank() const {
+        return buffer_.dimensions();
+    }
+
+    template<class T = void>
+    const HalideBuffer<T> &buffer() {
+        return buffer_.as<T>();
+    }
+
+    template<class T = void>
+    const HalideBuffer<const T> &buffer() const {
+        return buffer_.as_const().as<const T>();
+    }
+
+    bool is_allocated() const;
+    void allocate();
+};
+
+class Op;
+
 class Tensor {
     std::string name_;
     HalideBuffer<void> buffer_;
@@ -38,15 +78,21 @@ class Tensor {
     bool is_input_ = false;
     bool is_output_ = false;
 
-public:
-    Tensor(std::string name, HalideBuffer<void> buffer, QuantizationInfo quantization)
-        : name_(std::move(name)),
-          buffer_(std::move(buffer)),
-          quantization_(std::move(quantization)) {
-        is_constant_ = buffer_.data() != nullptr;
-    }
+    // Possibly shared storage for this tensor.
+    std::shared_ptr<TensorStorage> storage_;
+    std::vector<int> storage_offset_;
 
-    Tensor(const Tensor &copy) = default;
+    std::list<Op*> producers_;
+    std::list<Op*> consumers_;
+
+public:
+    Tensor() = delete;
+    Tensor(std::string name, HalideBuffer<void> buffer, QuantizationInfo quantization = QuantizationInfo());
+    Tensor(std::string name, halide_type_t type, const Box &bounds, QuantizationInfo quantization = QuantizationInfo());
+    Tensor(const Tensor &copy);
+    Tensor(Tensor &&) = default;
+    Tensor &operator=(const Tensor &) = delete;
+    Tensor &operator=(Tensor &&) = default;
 
     halide_type_t type() const {
         return buffer_.type();
@@ -96,6 +142,10 @@ public:
         return is_constant_;
     }
 
+    void set_constant(bool constant = true) {
+        is_constant_ = constant;
+    }
+
     bool is_input() const {
         return is_input_;
     }
@@ -140,22 +190,21 @@ public:
         return buf;
     }
 
-    bool is_allocated() const {
-        return buffer_.data() != nullptr;
-    }
+    bool is_allocated() const;
+    void allocate();
 
-    void allocate() {
-        if (!buffer_.data()) {
-            buffer_ = HalideBuffer<void>::make_with_shape_of(buffer_);
-        }
-    }
+    std::shared_ptr<TensorStorage> storage();
+
+    void set_alias_of(Tensor *t, std::vector<int> offset = {});
+
+    void add_consumer(Op *op);
+    void add_producer(Op *op);
+    void remove_consumer(Op *op);
+    void remove_producer(Op *op);
+
+    void replace_all_consumers_with(Tensor *other);
 
     void dump(std::ostream &os) const;
-
-    Tensor() = delete;
-    Tensor &operator=(const Tensor &) = delete;
-    Tensor(Tensor &&) = default;
-    Tensor &operator=(Tensor &&) = default;
 };
 
 // A mapping from old tensors to new tensors, when cloning an op.
@@ -198,17 +247,18 @@ struct SplitInfo {
     }
 };
 
+class OpVisitor;
+
 class Op {
-protected:
+private:
     std::vector<Tensor *> inputs_;
     std::vector<Tensor *> outputs_;
 
-    explicit Op(std::vector<Tensor *> inputs, std::vector<Tensor *> outputs)
-        : inputs_(std::move(inputs)), outputs_(std::move(outputs)) {
-    }
+protected:
+    Op(std::vector<Tensor *> inputs, std::vector<Tensor *> outputs);
 
 public:
-    virtual ~Op() = default;
+    virtual ~Op();
 
     // Get the shape of the complete output of this op.
     virtual Box get_full_crop() {
@@ -237,6 +287,8 @@ public:
 
     // Clone this op, replacing tensors using the mapping in tensor_map.
     virtual std::unique_ptr<Op> clone(const TensorMap &tensor_map) const = 0;
+
+    virtual void accept(OpVisitor *v) = 0;
 
     virtual void dump(std::ostream &os) const = 0;
 
@@ -271,6 +323,11 @@ public:
         return output(0);
     }
 
+    void set_input(int idx, Tensor *t);
+    void set_output(int idx, Tensor *t);
+    void set_input(Tensor *t);
+    void set_output(Tensor *t);
+
     // Movable but not copyable.
     Op() = delete;
     Op(const Op &) = delete;
@@ -280,8 +337,15 @@ public:
 };
 
 struct Model {
-    std::vector<std::shared_ptr<Tensor>> tensors;
+    std::vector<std::unique_ptr<Tensor>> tensors;
     std::vector<std::unique_ptr<Op>> ops;
+
+    // Add a tensor after an existing tensor.
+    void insert(std::unique_ptr<Tensor> to_insert, const Tensor *after = nullptr);
+    void insert(std::unique_ptr<Op> to_insert, const Op *before = nullptr);
+    void remove(const Op *op);
+
+    void accept(OpVisitor *v);
 
     void dump(std::ostream &os);
 

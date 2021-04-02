@@ -19,8 +19,6 @@ enum class Padding {
     Valid,
 };
 
-int get_guid();
-
 // This is an abstract helper op for elementwise operations.
 class ElementwiseOp : public Op {
 public:
@@ -70,6 +68,8 @@ public:
             apply(map, output()), input2_sign_, activation_);
     }
 
+    void accept(OpVisitor *v);
+
     void execute(const Box &crop);
 
     void dump(std::ostream &os) const {
@@ -100,6 +100,8 @@ public:
             filter_size_, padding_, activation_);
     }
 
+    void accept(OpVisitor *v);
+
     void execute(const Box &crop);
 
     void dump(std::ostream &os) const {
@@ -109,13 +111,13 @@ public:
 
 class ConcatenationOp : public Op {
     int axis_;
-    ActivationFunction activation_;
 
 public:
-    ConcatenationOp(std::vector<Tensor *> inputs, Tensor *output,
-                    int axis, ActivationFunction activation)
-        : Op(std::move(inputs), {output}), axis_(axis), activation_(activation) {
+    ConcatenationOp(std::vector<Tensor *> inputs, Tensor *output, int axis)
+        : Op(std::move(inputs), {output}), axis_(axis) {
     }
+
+    int axis() const { return axis_; }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
         std::vector<Tensor *> inputs;
@@ -123,8 +125,10 @@ public:
             inputs.push_back(apply(map, input(i)));
         }
         return ::hannk::make_unique<ConcatenationOp>(
-            inputs, apply(map, output()), axis_, activation_);
+            inputs, apply(map, output()), axis_);
     }
+
+    void accept(OpVisitor *v);
 
     Bounds infer_bounds(const Box &crop) const;
     std::vector<SplitInfo> get_split_info() const;
@@ -141,7 +145,6 @@ class Conv2DOp : public Op {
     std::vector<int> dilation_;
     Padding padding_;
     ActivationFunction activation_;
-    int guid_;
 
 public:
     Conv2DOp(Tensor *input, Tensor *filter, Tensor *bias, Tensor *output,
@@ -152,7 +155,6 @@ public:
           dilation_(std::move(dilation)),
           padding_(padding),
           activation_(activation) {
-        guid_ = get_guid();
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
@@ -160,6 +162,8 @@ public:
             apply(map, input()), apply(map, filter()), apply(map, bias()),
             apply(map, output()), stride_, dilation_, padding_, activation_);
     }
+
+    void accept(OpVisitor *v);
 
     const Tensor *filter() const {
         return Op::input(1);
@@ -170,10 +174,16 @@ public:
     Tensor *filter() {
         return Op::input(1);
     }
+    void set_filter(Tensor *filter) {
+        Op::set_input(1, filter);
+    }
     Tensor *bias() {
         return Op::input(2);
     }
 
+    halide_type_t filter_type() const;
+    Box filter_required() const;
+    Box input_required(const Box &crop) const;
     Bounds infer_bounds(const Box &crop) const;
     std::vector<SplitInfo> get_split_info() const;
 
@@ -210,6 +220,8 @@ public:
             apply(map, output()), stride_, dilation_, padding_, activation_);
     }
 
+    void accept(OpVisitor *v);
+
     const Tensor *filter() const {
         return Op::input(1);
     }
@@ -223,6 +235,7 @@ public:
         return Op::input(2);
     }
 
+    Box input_required(const Box &crop) const;
     Bounds infer_bounds(const Box &crop) const;
     std::vector<SplitInfo> get_split_info() const;
 
@@ -246,6 +259,8 @@ public:
             apply(map, input()), apply(map, filter()), apply(map, bias()),
             apply(map, output()), activation_);
     }
+
+    void accept(OpVisitor *v);
 
     const Tensor *filter() const {
         return Op::input(1);
@@ -284,6 +299,8 @@ public:
             apply(map, input()), apply(map, output()), stride_, filter_size_, padding_, activation_);
     }
 
+    void accept(OpVisitor *v);
+
     void execute(const Box &crop);
 
     void dump(std::ostream &os) const {
@@ -301,6 +318,8 @@ public:
         return ::hannk::make_unique<PadOp>(
             apply(map, input(0)), apply(map, input(1)), apply(map, output()));
     }
+
+    void accept(OpVisitor *v);
 
     Bounds infer_bounds(const Box &crop) const;
     std::vector<SplitInfo> get_split_info() const;
@@ -324,6 +343,8 @@ public:
         return ::hannk::make_unique<ReshapeOp>(apply(map, input()), apply(map, output()), new_shape_);
     }
 
+    void accept(OpVisitor *v);
+
     Bounds infer_bounds(const Box &crop) const;
     std::vector<SplitInfo> get_split_info() const;
 
@@ -332,6 +353,42 @@ public:
     void dump(std::ostream &os) const {
         os << "  Reshape " << output()->name() << std::endl;
     }
+};
+
+class TileConvFilterOp : public Op {
+public:
+    TileConvFilterOp(Tensor *input, Tensor *output)
+        : Op({input}, {output}) {
+    }
+
+    std::unique_ptr<Op> clone(const TensorMap &map) const {
+        return ::hannk::make_unique<TileConvFilterOp>(apply(map, input()), apply(map, output()));
+    }
+
+    void accept(OpVisitor *v);
+
+    Bounds infer_bounds(const Box &crop) const;
+    std::vector<SplitInfo> get_split_info() const;
+
+    void execute(const Box &crop);
+
+    void dump(std::ostream &os) const {
+        os << "  TileConvFilterOp " << output()->name() << std::endl;
+    }
+};
+
+class OpVisitor {
+public:
+    virtual void visit(AddOp *op) {}
+    virtual void visit(AveragePoolOp *op) {}
+    virtual void visit(ConcatenationOp *op) {}
+    virtual void visit(Conv2DOp *op) {}
+    virtual void visit(DepthwiseConv2DOp *op) {}
+    virtual void visit(FullyConnectedOp *op) {}
+    virtual void visit(MaxPoolOp *op) {}
+    virtual void visit(PadOp *op) {}
+    virtual void visit(ReshapeOp *op) {}
+    virtual void visit(TileConvFilterOp *op) {}
 };
 
 }  // namespace hannk

@@ -25,6 +25,8 @@ void interpret_as_tensor(Halide::OutputImageParam p);
 void require_same_min_extent(int dim, Halide::OutputImageParam first, Halide::OutputImageParam second);
 void require_same_min_extent(int first_dim, Halide::OutputImageParam first, int second_dim, Halide::OutputImageParam second);
 
+Halide::Expr is_interleaved(Halide::OutputImageParam p, int channels);
+
 // A boundary condition, without likelies that cause loop partitioning.
 Halide::Func constant_exterior_tensor(
     Halide::Func t, Halide::Expr exterior,
@@ -37,6 +39,7 @@ Halide::Func constant_exterior_tensor(Halide::ImageParam p, Halide::Expr exterio
 // Round x down or up to the nearest multiple of n.
 Halide::Expr align_down(const Halide::Expr &x, const Halide::Expr &n);
 Halide::Expr align_up(const Halide::Expr &x, const Halide::Expr &n);
+Halide::Expr align(const Halide::Expr &x, const Halide::Expr &n);
 
 // This function implements the same computation as the ARMv7 NEON VQRDMULH
 // instruction.

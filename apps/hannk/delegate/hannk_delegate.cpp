@@ -165,7 +165,7 @@ std::vector<int> ConvertTfLiteShape(const TfLiteTensor &tensor) {
     return shape;
 }
 
-std::shared_ptr<Tensor> ConvertTfLiteTensor(const TfLiteTensor &tensor) {
+std::unique_ptr<Tensor> ConvertTfLiteTensor(const TfLiteTensor &tensor) {
     auto shape = ConvertTfLiteShape(tensor);
 
     halide_type_t type = ConvertTfLiteType(tensor.type);
@@ -198,12 +198,12 @@ std::shared_ptr<Tensor> ConvertTfLiteTensor(const TfLiteTensor &tensor) {
         HalideBuffer<void> buffer(type, const_cast<void *>(read_only_data), shape);
         assert(tensor.bytes == buffer.size_in_bytes());
 
-        return std::make_shared<Tensor>(name, std::move(buffer), std::move(quantization));
+        return ::hannk::make_unique<Tensor>(name, std::move(buffer), std::move(quantization));
     }
 
     // Create an "unallocated" Buffer, which points to null.
     HalideBuffer<void> buffer(type, nullptr, shape);
-    return std::make_shared<Tensor>(name, std::move(buffer), std::move(quantization));
+    return ::hannk::make_unique<Tensor>(name, std::move(buffer), std::move(quantization));
 }
 
 class HannkDelegateKernel final {
@@ -241,12 +241,12 @@ public:
                 continue;
             }
             auto t = ConvertTfLiteTensor(tensor);
-            model_->tensors.emplace_back(t);
             assert(!tensor_id_to_tensor_ptr_.count(tensor_id));
-            tensor_id_to_tensor_ptr_[tensor_id] = t;
+            tensor_id_to_tensor_ptr_[tensor_id] = t.get();
             if (options_.verbosity >= 1) {
                 LOG(INFO) << "tensor_id " << tensor_id << " -> " << (void *)t.get() << "\n";
             }
+            model_->tensors.push_back(std::move(t));
         }
 
         // Be careful with params->input_tensors and params->output_tensors here;
@@ -457,7 +457,7 @@ private:
             LOG(ERROR) << "tensor_id not found: " << tensor_id;
             return nullptr;
         }
-        return it->second.get();
+        return it->second;
     }
 
     std::unique_ptr<Op> BuildAdd(TfLiteContext *context, TfLiteNode *node) {
@@ -503,6 +503,7 @@ private:
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteConcatenationParams *params = (const TfLiteConcatenationParams *)(node->builtin_data);
         auto activation = ConvertTfLiteActivation(params->activation);
+        CHECK(activation == ActivationFunction::None);
         int axis = params->axis;
         // Handle negative values, which are legal
         if (axis < 0) {
@@ -511,7 +512,7 @@ private:
         // Now 'flip' the axis so that it refers to the right dimension in
         // the Tensor (since we reverse the dimension order)
         axis = (int)output->rank() - axis - 1;
-        return ::hannk::make_unique<ConcatenationOp>(inputs, output, axis, activation);
+        return ::hannk::make_unique<ConcatenationOp>(inputs, output, axis);
     }
 
     std::unique_ptr<Op> BuildConv2d(TfLiteContext *context, TfLiteNode *node) {
@@ -607,7 +608,7 @@ private:
     std::unique_ptr<Model> model_;
     std::unique_ptr<ModelInterpreter> interpreter_;
     // TODO: unordered_map might be a better choice.
-    std::map<int, std::shared_ptr<Tensor>> tensor_id_to_tensor_ptr_;
+    std::map<int, Tensor*> tensor_id_to_tensor_ptr_;
 };
 
 bool InputsHaveCorrectTypes(const TfLiteNode *node,

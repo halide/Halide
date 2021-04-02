@@ -1,4 +1,5 @@
 #include "interpreter/interpreter.h"
+#include "interpreter/transforms.h"
 #include "util/error_util.h"
 
 #include <cmath>
@@ -211,7 +212,7 @@ bool can_execute(const ScheduledOpVector &done, const ScheduledOp &op) {
     // We need all of the input rectangles to be covered in the done list.
     for (int i = 0; i < op.op->input_count(); i++) {
         const Tensor *input = op.op->input(i);
-        if (input->is_constant())
+        if (!input || input->is_constant())
             continue;
         Box required = bounds.inputs[i];
         Box remaining = subtract_done(required, input, done);
@@ -335,7 +336,20 @@ std::vector<Box> split_box(const Box &box, int dim, const SplitInfo &split) {
 
 }  // namespace
 
-void ModelInterpreter::Schedule(ScheduleOptions options) {
+ModelInterpreter::ModelInterpreter(Model m, ScheduleOptions options)
+    : model_(std::move(m)), trace_(options.trace) {
+    legalize();
+    schedule(options);
+}
+
+void ModelInterpreter::legalize() {
+    pad_for_conv(&model_);
+    in_place(&model_);
+    fold_constants(&model_);
+    remove_dead_ops(&model_);
+}
+
+void ModelInterpreter::schedule(ScheduleOptions options) {
     schedule_.clear();
 
     // First, generate a naive schedule that executes each op entirely before
@@ -433,8 +447,6 @@ void ModelInterpreter::execute() {
 }
 
 Tensor *ModelInterpreter::get_tensor(const std::string &name) {
-    CHECK(!model_.tensors.empty());
-
     for (const auto &t : model_.tensors) {
         if (t->name() == name) {
             return t.get();

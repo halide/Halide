@@ -31,6 +31,13 @@ void require_same_min_extent(int d, OutputImageParam first, OutputImageParam sec
     second.dim(d).set_extent(first.dim(d).extent());
 }
 
+Expr is_interleaved(OutputImageParam p, int channels) {
+    return
+        p.dim(0).min() == 0 &&
+        p.dim(0).extent() == channels &&
+        p.dim(1).stride() == channels;
+}
+
 Func constant_exterior_tensor(
     Func t, Expr exterior,
     Expr min_c, Expr extent_c,
@@ -68,6 +75,10 @@ Expr align_down(const Expr &x, const Expr &n) {
 
 Expr align_up(const Expr &x, const Expr &n) {
     return ((x + n - 1) / n) * n;
+}
+
+Expr align(const Expr &x, const Expr &n) {
+    return align_down(x, n);
 }
 
 Expr multiply_2x_high(const Expr &a, const Expr &b) {

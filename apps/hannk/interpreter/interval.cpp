@@ -128,4 +128,21 @@ bool is_empty(const Box &a) {
     return false;
 }
 
+// TODO: These don't handle negative numbers correctly.
+int ceil_div(int a, int b) {
+    return (a + b - 1) / b;
+}
+
+int floor_div(int a, int b) {
+    return a / b;
+}
+
+int align_up(int x, int n) {
+    return ceil_div(x, n) * n;
+}
+
+int align_down(int x, int n) {
+    return floor_div(x, n) * n;
+}
+
 }  // namespace hannk

@@ -12,17 +12,16 @@ public:
     // If positive, a constant inverse depth multiplier.
     GeneratorParam<int> inv_depth_multiplier_{"inv_depth_multiplier", -1};
 
-    // Unsigned 8-bit input tensor, indexed by c, x, y, b.
+    // Unsigned 8-bit input tensor, indexed by ci, x, y, b.
     Input<Buffer<uint8_t>> input_{"input", 4};
 
-    // A 3D array of 8-bit filter coefficients indexed by c, x, y.
+    // A 3D array of 8-bit filter coefficients indexed by co, x, y.
     Input<Buffer<uint8_t>> filter_{"filter", 3};
 
-    // A 1D array of 32-bit biases indexed by c.
+    // A 1D array of 32-bit biases indexed by co.
     Input<Buffer<int32_t>> bias_{"bias", 1};
 
-    // The c multiplier specifies the ratio between the output c and the
-    // input c.
+    // The depth multiplier specifies the ratio between co and ci.
     Input<int> depth_multiplier_{"depth_multiplier"};
 
     // Offsets for the input and filter.
@@ -55,16 +54,10 @@ public:
         // Some free variables, where x and y represent the spatial dimensions.
         Var x("x"), y("y"), c("c"), b("b");
 
-        // Pad x and y with the value that produces zero after the input offset is
-        // subtracted.
-        Func input_bounded = constant_exterior(input_, input_offset_);
-
-        Func bias_bounded = repeat_edge(bias_);
-
         // Apply the c multiplier.
         Func resampled_input("resampled_input");
         Expr c_resampled = inv_depth_multiplier_ >= 0 ? c * inv_depth_multiplier_ : c / depth_multiplier_;
-        resampled_input(c, x, y, b) = input_bounded(c_resampled, x, y, b);
+        resampled_input(c, x, y, b) = input_(c_resampled, x, y, b);
 
         Func filter_zeroed("filter_zeroed");
         Func input_zeroed("input_zeroed");
@@ -81,14 +74,13 @@ public:
         Expr input_drxyb =
             input_zeroed(c, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
         Func convolved("convolved");
-        convolved(c, x, y, b) = bias_bounded(c);
+        convolved(c, x, y, b) = bias_(c);
         convolved(c, x, y, b) += i32(filter_drxy) * i32(input_drxyb);
 
         // Saturate and narrow the output.
         Expr output =
             multiply_quantized(convolved(c, x, y, b), output_multiplier_, output_shift_);
-        output = i16_sat(output);
-        output = saturating_add(output, output_offset_);
+        output = saturating_add(i16_sat(output), output_offset_);
         output_(c, x, y, b) = clamp(u8_sat(output), output_min_, output_max_);
 
         // Schedule.
@@ -100,16 +92,10 @@ public:
         require_same_min_extent(0, bias_, output_);
         require_same_min_extent(0, filter_, output_);
 
-        if (inv_depth_multiplier_ < 0) {
-            output_.dim(0).set_min(input_.dim(0).min() * depth_multiplier_);
-            output_.dim(0).set_extent(input_.dim(0).extent() * depth_multiplier_);
-        } else if (inv_depth_multiplier_ != 0) {
-            input_.dim(0).set_min(output_.dim(0).min() * inv_depth_multiplier_);
-            input_.dim(0).set_extent(output_.dim(0).extent() * inv_depth_multiplier_);
-        } else {
+        if (inv_depth_multiplier_ == 0) {
             // When we're broadcasting input channels, require that the input has only
             // one channel.
-            input_.dim(0).set_min(0).set_extent(1);
+            input_.dim(0).set_extent(1);
             input_.dim(1).set_stride(1);
         }
 
@@ -120,18 +106,25 @@ public:
 
         // Tile the output, so we can try to re-use loads spatially when performing
         // convolution. This also helps because we can schedule the input and not
-        // waste work for stride < kTileSize.
+        // waste work for strides less than the tile size.
         // We split co and reorder it outermost, so we can maximize locality of the
         // filter. We even put it outside of the batch loop, so we can compute the
         // boundary condition on the filter at co and reuse it across batches.
-        const int kTileSize = 2;
+        const int kTileW = 2;
+        const int kTileH = 2;
+        // When the output is small, the overhead from shift inwards can be large.
+        // Only tile when the input is at least this many tiles to avoid this.
+        const int kMinTiles = 4;
         Var xo("xo"), yo("yo"), co("co");
         Expr output_channels = output_.dim(0).extent();
         Expr output_width = output_.dim(1).extent();
         Expr output_height = output_.dim(2).extent();
+        Expr use_tiles =
+            (output_width >= kTileW * kMinTiles || output_width % kTileW == 0) &&
+            (output_height >= kTileH * kMinTiles || output_height % kTileH == 0);
         output_.compute_root()
-            .specialize(output_channels >= vector_size && output_width >= kTileSize && output_height >= kTileSize)
-            .tile(x, y, xo, yo, x, y, kTileSize, kTileSize, TailStrategy::ShiftInwards)
+            .specialize(output_channels >= vector_size && use_tiles)
+            .tile(x, y, xo, yo, x, y, kTileW, kTileH, TailStrategy::ShiftInwards)
             .split(c, co, c, vector_size, TailStrategy::ShiftInwards)
             .reorder(x, y, c, xo, yo, b, co)
             .unroll(x)
@@ -141,10 +134,18 @@ public:
         // Enable 1x1 outputs to work.
         output_
             .tile(x, y, xo, yo, x, y, 1, 1, TailStrategy::RoundUp)
+            .unroll(x)
+            .unroll(y);
+
+        // Vectorize c, using predication only for small numbers of channels.
+        output_
+            .specialize(output_channels >= vector_size)
+            .split(c, co, c, vector_size, TailStrategy::ShiftInwards)
+            .reorder(x, y, c, xo, yo, b, co)
+            .vectorize(c);
+        output_
             .split(c, co, c, vector_size, TailStrategy::Predicate)
             .reorder(x, y, c, xo, yo, b, co)
-            .unroll(x)
-            .unroll(y)
             .vectorize(c);
 
         convolved.compute_at(output_, xo)
@@ -163,9 +164,10 @@ public:
             .unroll(r.x)
             .unroll(r.y);
 
-        bias_bounded.compute_at(output_, co)
-            .store_in(MemoryType::Stack)
-            .vectorize(Halide::_0, natural_vector_size<int32_t>(), TailStrategy::GuardWithIf);
+        // TODO: This is a padded wrapper on a constant buffer, we could
+        // pad it and constant fold it outside.
+        bias_.in().compute_at(output_, co)
+            .store_in(MemoryType::Stack);
 
         if (inv_depth_multiplier_ < 0) {
             // The reason inv_depth_multiplier_ is a GeneratorParam and not a
@@ -175,25 +177,15 @@ public:
                 .store_in(MemoryType::Stack)
                 .vectorize(c, vector_size, TailStrategy::GuardWithIf);
 
-            for (int dm : {1}) {
-                resampled_input.specialize(depth_multiplier_ == dm);
-            }
-            resampled_input.specialize_fail("unsupported depth multiplier");
-        } else if (inv_depth_multiplier_ == 0) {
-            // For the broadcasting case, we want to pull the boundary condition out
-            // of the inner loop before we broadcast the channels.
-            input_bounded
-                .compute_at(output_, b)
-                .store_in(MemoryType::Stack)
-                .vectorize(Halide::_1, vector_size, TailStrategy::RoundUp);
+            resampled_input.specialize(depth_multiplier_ == 1);
         }
 
-        filter_.in()
+        filter_zeroed
             .compute_at(output_, co)
             .store_in(MemoryType::Stack)
-            .align_storage(Halide::_0, vector_size)
-            .specialize(output_channels >= vector_size)
-            .vectorize(Halide::_0, vector_size);
+            .align_storage(c, natural_vector_size<int16_t>())
+            .vectorize(c, natural_vector_size<int16_t>(), TailStrategy::GuardWithIf)
+            .unroll(c, 2, TailStrategy::GuardWithIf);
     }
 };
 

@@ -11,10 +11,14 @@
 #ifdef CONV_R16
 #include "convolution_r16_uint8.h"
 #endif
+#include "copy_uint8_uint8.h"
 #include "depthwise_convolution_uint8.h"
-#include "depthwise_convolution_uint8_broadcast.h"
+#include "depthwise_convolution_broadcast_uint8.h"
+#include "depthwise_convolution_dm1_uint8.h"
+#include "fill_uint8.h"
 #include "fully_connected_uint8.h"
 #include "max_pool_uint8.h"
+#include "tile_convolution_filter_uint8.h"
 
 namespace hannk {
 
@@ -140,12 +144,6 @@ Interval get_output_range(ActivationFunction activation, Tensor *out) {
 
 }  // namespace
 
-std::atomic<int> next_guid(0);
-
-int get_guid() {
-    return next_guid++;
-}
-
 Op::Bounds ElementwiseOp::infer_bounds(const Box &crop) const {
     Bounds result;
     for (int i = 0; i < input_count(); i++) {
@@ -161,16 +159,13 @@ Op::Bounds PoolOp::infer_bounds(const Box &crop) const {
     Box input_crop = crop;
 
     input_crop[0] = crop[0];
-    for (int dim = 1; dim <= 2; dim++) {
-        input_crop[dim] *= stride_[dim - 1];
-    }
-
+    input_crop[1] *= stride_[0];
+    input_crop[2] *= stride_[1];
     input_crop[1].max += filter_size_[0] - 1;
     input_crop[2].max += filter_size_[1] - 1;
-    input_crop = intersect(input_crop, input()->box());
 
     Bounds result;
-    result.inputs.emplace_back(input_crop);
+    result.inputs = {input_crop};
     result.outputs = {crop};
     return result;
 }
@@ -298,48 +293,66 @@ void ConcatenationOp::execute(const Box &crop) {
             // TODO: Maybe we could just copy whole buffers?
             auto input_j = input_buf.sliced(axis_, j);
             auto output_j = output_buf.sliced(axis_, output_i++);
-            output_j.copy_from(input_j);
+            if (!is_alias(input_j, output_j)) {
+                output_j.copy_from(input_j);
+            }
         }
     }
 }
 
-Op::Bounds Conv2DOp::infer_bounds(const Box &crop) const {
+halide_type_t Conv2DOp::filter_type() const {
+    const halide_filter_metadata_t *metadata = convolution_uint8_metadata();
+    return metadata->arguments[1].type;
+}
+
+Box Conv2DOp::filter_required() const {
+    if (filter()->is_type<uint8_t>()) {
+        // Pass minimal sized buffers to learn about the alignment requirements.
+        HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
+        HalideBuffer<int32_t> bias_buf(nullptr, 1);
+        Halide::Runtime::Buffer<void, 5> filter_buf(filter_type(), 1, 1, 1, 1, 1);
+        // TODO: How to initialize the above buffer without allocating?
+        filter_buf.deallocate();
+        HalideBuffer<uint8_t> output_buf;
+
+        CHECK(0 == convolution_uint8(input_buf, filter_buf, bias_buf, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf));
+
+        const int vector_reduction = filter_buf.dim(0).extent();
+        const int unroll_reduction = filter()->extent(0) >= 16 ? 16 : 4;
+        const int vector_alignment = filter_buf.dim(1).extent();
+        const int channel_alignment = unroll_reduction / vector_reduction;
+        return {
+            {0, vector_reduction - 1},
+            {0, align_up(filter()->extent(3), vector_alignment) - 1},
+            {0, align_up(ceil_div(filter()->extent(0), vector_reduction), channel_alignment) - 1},
+            {filter()->interval(1)},
+            {filter()->interval(2)},
+        };
+    } else {
+        CHECK(false);
+    }
+}
+
+Box Conv2DOp::input_required(const Box &crop) const {
     Box input_crop = crop;
     Box filter_shape = filter()->box();
 
-    for (int dim = 1; dim <= 2; dim++) {
-        input_crop[dim] *= stride_[dim - 1];
-    }
-
-    input_crop[0] = filter_shape[3];
+    input_crop[0] = filter_shape[0];
+    input_crop[1] *= stride_[0];
+    input_crop[2] *= stride_[1];
     input_crop[1].max += dilation_[0] * (filter_shape[1].extent() - 1);
     input_crop[2].max += dilation_[1] * (filter_shape[2].extent() - 1);
 
-    if (padding_ == Padding::Same) {
-        const int input_width = input()->extent(1);
-        const int input_height = input()->extent(2);
-        const int filter_width = filter()->extent(1);
-        const int filter_height = filter()->extent(2);
-        const int output_width = output()->extent(1);
-        const int output_height = output()->extent(2);
+    return input_crop;
+}
 
-        const int dilated_filter_width = dilation_[0] * (filter_width - 1) + 1;
-        const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
-
-        const int pad_width =
-            std::max(0, ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
-        const int pad_height =
-            std::max(0, ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
-
-        input_crop[1] += pad_width;
-        input_crop[2] += pad_height;
-    }
-    input_crop = intersect(input_crop, input()->box());
-
+Op::Bounds Conv2DOp::infer_bounds(const Box &crop) const {
     Bounds result;
-    result.inputs.emplace_back(input_crop);
-    result.inputs.emplace_back(std::move(filter_shape));
-    result.inputs.emplace_back(bias()->box());
+    result.inputs = {
+        input_required(crop),
+        filter()->box(),
+        bias()->box(),
+    };
     result.outputs = {crop};
 
     return result;
@@ -359,11 +372,10 @@ void Conv2DOp::execute(const Box &crop) {
     Tensor *out = output();
 
     if (in->is_type<uint8_t>() &&
-        filt->is_type<uint8_t>() &&
         out->is_type<uint8_t>()) {
         // TODO: reduce code duplication between here and DepthwiseConv2D
         auto input_buf = in->buffer<const uint8_t>();
-        auto filter_buf = filt->buffer<const uint8_t>();
+        auto filter_buf = filt->buffer<const void>();
         auto bias_buf = bias()->buffer<const int32_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
 
@@ -398,39 +410,18 @@ void Conv2DOp::execute(const Box &crop) {
 
         const auto output_range = get_output_range(activation_, out);
 
-        const int filter_width = filter_buf.dim(1).extent();
-        const int filter_height = filter_buf.dim(2).extent();
-        const int output_width = output_buf.dim(1).extent();
-        const int output_height = output_buf.dim(2).extent();
+        assert(filter_buf.dimensions() == 5);
+        const int filter_width = filter_buf.dim(3).extent();
+        const int filter_height = filter_buf.dim(4).extent();
         if (filter_width == 1 && filter_height == 1) {
             // For 1x1 filters, we can fuse x and y, which can help avoid overhead for
-            // small output sizes. However, we only want to do this when the output is
-            // small, because the schedule computes things at y.
-            // TODO: This shouldn't be necessary.
-            const int fuse_threshold = 100;
-            if (output_width * output_height < fuse_threshold) {
-                while (can_fuse_xy(input_buf) && can_fuse_xy(output_buf)) {
-                    fuse_xy(input_buf);
-                    fuse_xy(output_buf);
-                }
-                pad_to_rank(input_buf, 4);
-                pad_to_rank(output_buf, 4);
+            // small output sizes.
+            while (can_fuse_xy(input_buf) && can_fuse_xy(output_buf)) {
+                fuse_xy(input_buf);
+                fuse_xy(output_buf);
             }
-        } else {
-            if (padding_ == Padding::Same) {
-                const int input_width = input_buf.dim(1).extent();
-                const int input_height = input_buf.dim(2).extent();
-
-                const int dilated_filter_width = dilation_[0] * (filter_width - 1) + 1;
-                const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
-
-                const int pad_width =
-                    std::max(0, ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
-                const int pad_height =
-                    std::max(0, ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
-
-                input_buf.translate({0, pad_width, pad_height, 0});
-            }
+            pad_to_rank(input_buf, 4);
+            pad_to_rank(output_buf, 4);
         }
 
 #ifdef CONV_R16
@@ -443,7 +434,7 @@ void Conv2DOp::execute(const Box &crop) {
                                            (uint8_t)filter_offset, stride_[0], stride_[1],
                                            dilation_[0], dilation_[1], output_multiplier,
                                            output_shift, (uint8_t)output_offset,
-                                           output_range.min, output_range.max, guid_, output_buf));
+                                           output_range.min, output_range.max, output_buf));
         } else
 #endif
         {
@@ -452,7 +443,7 @@ void Conv2DOp::execute(const Box &crop) {
                                        (uint8_t)filter_offset, stride_[0], stride_[1],
                                        dilation_[0], dilation_[1], output_multiplier,
                                        output_shift, (uint8_t)output_offset,
-                                       output_range.min, output_range.max, guid_, output_buf));
+                                       output_range.min, output_range.max, output_buf));
         }
     } else {
         CHECK(false);
@@ -460,48 +451,38 @@ void Conv2DOp::execute(const Box &crop) {
 }
 
 int DepthwiseConv2DOp::depth_multiplier() const {
-    return output()->extent(0) / input()->extent(0);
+    int input_channels = input()->extent(0);
+    int output_channels = output()->extent(0);
+    return output_channels / std::min(input_channels, output_channels);
 }
 
-Op::Bounds DepthwiseConv2DOp::infer_bounds(const Box &crop) const {
+Box DepthwiseConv2DOp::input_required(const Box &crop) const {
     Box input_crop = crop;
     Box filter_shape = filter()->box();
 
-    input_crop[0] = crop[0];
-    input_crop[0] /= depth_multiplier();
-    for (int dim = 1; dim <= 2; dim++) {
-        input_crop[dim] *= stride_[dim - 1];
+    input_crop[0] = crop[0] / depth_multiplier();
+    if (input_crop[0].extent() > 1) {
+        // TODO: We need padding on the input for a native SIMD vector,
+        // don't hardcode this constant.
+        input_crop[0].set_extent(std::max(input_crop[0].extent(), 16));
+    } else {
+        // Don't pad when broadcasting.
     }
-
+    input_crop[1] *= stride_[0];
+    input_crop[2] *= stride_[1];
     input_crop[1].max += dilation_[0] * (filter_shape[1].extent() - 1);
     input_crop[2].max += dilation_[1] * (filter_shape[2].extent() - 1);
 
-    if (padding_ == Padding::Same) {
-        const int input_width = input()->extent(1);
-        const int input_height = input()->extent(2);
-        const int filter_width = filter()->extent(1);
-        const int filter_height = filter()->extent(2);
-        const int output_width = output()->extent(1);
-        const int output_height = output()->extent(2);
+    return input_crop;
+}
 
-        const int dilated_filter_width = dilation_[0] * (filter_width - 1) + 1;
-        const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
-
-        const int pad_width =
-            std::max(0, ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
-        const int pad_height =
-            std::max(0, ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
-
-        input_crop[1] += pad_width;
-        input_crop[2] += pad_height;
-    }
-
-    input_crop = intersect(input_crop, input()->box());
-
+Op::Bounds DepthwiseConv2DOp::infer_bounds(const Box &crop) const {
     Bounds result;
-    result.inputs.emplace_back(input_crop);
-    result.inputs.emplace_back(std::move(filter_shape));
-    result.inputs.emplace_back(bias()->box());
+    result.inputs = {
+        input_required(crop),
+        filter()->box(),
+        bias()->box(),
+    };
     result.outputs = {crop};
     return result;
 }
@@ -562,34 +543,16 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
 
         const auto output_range = get_output_range(activation_, out);
 
-        // batches must match
-        assert(input_buf.dim(3).extent() == output_buf.dim(3).extent());
-
-        // output_depth must match
-        assert(filter_buf.dim(0).extent() == output_buf.dim(0).extent());
-
-        if (padding_ == Padding::Same) {
-            const int input_width = input_buf.dim(1).extent();
-            const int input_height = input_buf.dim(2).extent();
-            const int filter_width = filter_buf.dim(1).extent();
-            const int filter_height = filter_buf.dim(2).extent();
-            const int output_width = output_buf.dim(1).extent();
-            const int output_height = output_buf.dim(2).extent();
-
-            const int dilated_filter_width = dilation_[0] * (filter_width - 1) + 1;
-            const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
-
-            const int pad_width =
-                std::max(0, ((output_width - 1) * stride_[0] + dilated_filter_width - input_width) / 2);
-            const int pad_height =
-                std::max(0, ((output_height - 1) * stride_[1] + dilated_filter_height - input_height) / 2);
-
-            input_buf.translate({0, pad_width, pad_height, 0});
-        }
-
         if (depth_multiplier >= output_buf.dim(0).extent()) {
             CHECK(
-                0 == depthwise_convolution_uint8_broadcast(
+                0 == depthwise_convolution_broadcast_uint8(
+                         input_buf, filter_buf, bias_buf, depth_multiplier,
+                         (uint8_t)input_offset, (uint8_t)filter_offset, stride_[0], stride_[1],
+                         dilation_[0], dilation_[1], output_multiplier, output_shift,
+                         (uint8_t)output_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
+        } else if (depth_multiplier == 1) {
+            CHECK(
+                0 == depthwise_convolution_dm1_uint8(
                          input_buf, filter_buf, bias_buf, depth_multiplier,
                          (uint8_t)input_offset, (uint8_t)filter_offset, stride_[0], stride_[1],
                          dilation_[0], dilation_[1], output_multiplier, output_shift,
@@ -700,18 +663,22 @@ void MaxPoolOp::execute(const Box &crop) {
 }
 
 Op::Bounds PadOp::infer_bounds(const Box &crop) const {
-    auto padding = input(1)->buffer<const int32_t>();
-
     Bounds result;
+    if (input(1)) {
+        auto padding = input(1)->buffer<const int32_t>();
 
-    Box padded_crop = crop;
-    for (int d = 0; d < output()->rank(); d++) {
-        padded_crop[d] += padding(0, d);
+        Box padded_crop = crop;
+        for (int d = 0; d < output()->rank(); d++) {
+            padded_crop[d] += padding(0, d);
+        }
+
+        result.inputs.emplace_back(
+            intersect(padded_crop, input(0)->box()));
+        result.inputs.emplace_back(input(1)->box());
+    } else {
+        result.inputs.emplace_back(crop);
+        result.inputs.emplace_back(Box());
     }
-
-    result.inputs.emplace_back(
-        intersect(padded_crop, input(0)->box()));
-    result.inputs.emplace_back(input(1)->box());
     result.outputs.emplace_back(crop);
     return result;
 }
@@ -738,25 +705,29 @@ void PadOp::execute(const Box &crop) {
         uint8_t pad_value = in->quantization().zero.at(0);
 
         if (is_alias(input_buf, output_buf)) {
-            // This is an in-place padding.
+            // This is an in-place padding. Just fill in the
+            // padded areas.
+            // Fill dimensions outermost to innermost, to increase the
+            // area which should vectorize cleanly.
+            for (int d = output_buf.dimensions() - 1; d >= 0; d--) {
+                int input_min = input_buf.dim(d).min();
+                int output_min = output_buf.dim(d).min();
+                if (output_min < input_min) {
+                    auto before = output_buf.cropped(d, output_min, input_min - output_min);
+                    CHECK(0 == fill_uint8(pad_value, before));
+                }
+                int input_max = input_buf.dim(d).max();
+                int output_max = output_buf.dim(d).max();
+                if (output_max > input_max) {
+                    auto after = output_buf.cropped(d, input_max + 1, output_max - input_max);
+                    CHECK(0 == fill_uint8(pad_value, after));
+                }
+                input_min = std::max(input_min, output_min);
+                input_max = std::min(input_max, output_max);
+                output_buf.crop(d, input_min, input_max - input_min + 1);
+            }
         } else {
-            output_buf.copy_from(input_buf);
-        }
-        for (int d = 0; d < output_buf.dimensions(); ++d) {
-            // TODO: This still redundantly fills regions that are out of
-            // bounds in more than one dimension.
-            int input_min = input_buf.dim(d).min();
-            int output_min = output_buf.dim(d).min();
-            if (output_min < input_min) {
-                auto before = output_buf.cropped(d, output_min, input_min - output_min);
-                before.fill(pad_value);
-            }
-            int input_max = input_buf.dim(d).max();
-            int output_max = output_buf.dim(d).max();
-            if (output_max > input_max) {
-                auto after = output_buf.cropped(d, input_max + 1, output_max - input_max);
-                after.fill(pad_value);
-            }
+            CHECK(0 == copy_uint8_uint8(input_buf, pad_value, output_buf));
         }
     } else {
         CHECK(false);
@@ -788,10 +759,90 @@ void ReshapeOp::execute(const Box &crop) {
     //     assert(new_shape_.at(d) == output_buf.dim(d).extent());
     // }
 
-    // TODO: This should probably just be implemented by aliasing two of the tensors.
     assert(input_buf.number_of_elements() == output_buf.number_of_elements());
     size_t output_size = output_buf.number_of_elements() * out->type().bytes();
-    memcpy(output_buf.data(), input_buf.data(), output_size);
+    if (is_alias(input_buf, output_buf)) {
+        assert(input_buf.begin() == output_buf.begin());
+        assert(input_buf.end() == output_buf.end());
+    } else {
+        // TODO: This should also check the strides are dense.
+        memcpy(output_buf.data(), input_buf.data(), output_size);
+    }
+}
+
+Op::Bounds TileConvFilterOp::infer_bounds(const Box &crop) const {
+    assert(crop[0].min == 0);
+    Box input = {
+        crop[2] * crop[0].extent(),
+        crop[3],
+        crop[4],
+        crop[1],
+    };
+    Bounds result;
+    result.inputs = {input};
+    result.outputs = {crop};
+    return result;
+}
+
+std::vector<SplitInfo> TileConvFilterOp::get_split_info() const {
+    return {};
+}
+
+void TileConvFilterOp::execute(const Box &crop) {
+    const Tensor *in = input();
+    Tensor *out = output();
+
+    if (in->is_type<uint8_t>()) {
+        auto input_buf = in->buffer<const uint8_t>();
+        auto output_buf = out->buffer<void>(crop);
+
+        int input_offset = in->quantization().zero.at(0);
+        int output_offset = out->quantization().zero.at(0);
+
+        CHECK(0 == tile_convolution_filter_uint8(input_buf, input_offset, output_offset, output_buf));
+    } else {
+        CHECK(false);
+    }
+}
+
+void AddOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void AveragePoolOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void ConcatenationOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void Conv2DOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void DepthwiseConv2DOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void FullyConnectedOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void MaxPoolOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void PadOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void ReshapeOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void TileConvFilterOp::accept(OpVisitor *v) {
+    v->visit(this);
 }
 
 }  // namespace hannk
