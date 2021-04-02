@@ -490,7 +490,9 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     for (const auto &f : input.functions()) {
         const auto names = get_mangled_names(f, get_target());
 
-        compile_func(f, names.simple_name, names.extern_name);
+        run_with_large_stack([&]() {
+            compile_func(f, names.simple_name, names.extern_name);
+        });
 
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
