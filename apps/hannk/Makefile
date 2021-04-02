@@ -28,6 +28,17 @@ ifneq (,$(findstring -O,$(OPTIMIZE)))
 	CXXFLAGS += -DNDEBUG
 endif
 
+PROBABLY_DESKTOP =
+ifneq (,$(findstring host,$(HL_TARGET)))
+	PROBABLY_DESKTOP = yes
+endif
+ifneq (,$(findstring linux,$(HL_TARGET)))
+	PROBABLY_DESKTOP = yes
+endif
+ifneq (,$(findstring osx,$(HL_TARGET)))
+	PROBABLY_DESKTOP = yes
+endif
+
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 
 .PHONY: all build clean test delegate
@@ -225,7 +236,7 @@ $(BIN)/%/hannk_delegate_adaptor.o: delegate/hannk_delegate_adaptor.cpp
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(TFLITE_INCLUDES_FLAGS) $(UTIL_CXXFLAGS) -c $< -o $@
 
-ifneq (,$(findstring host,$(HL_TARGET)))
+ifdef PROBABLY_DESKTOP
 
 DELEGATE_LD_FLAGS=$(LDFLAGS)
 
@@ -283,7 +294,7 @@ $(BIN)/%/benchmark: benchmark.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UT
 # static or shared form), so we pull a prebuilt version (which is what they recommend
 # anyway). For Android we pull the libtensorflowlite_jni.so build.
 
-ifneq (,$(findstring host,$(HL_TARGET)))
+ifdef PROBABLY_DESKTOP
 
 # Normally, TENSORFLOW_BASE is the only symbol you need to define.
 # (This seems like a plausible default.)
@@ -331,7 +342,8 @@ endif
 
 
 # To build for Android, use `HL_TARGET=arm-64-android make compare_vs_tflite`
-$(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UTIL_DEPS) $(TFLITE_SHARED_LIBRARY) $(BIN)/$(HL_TARGET)/libHannkDelegate.so
+$(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp \
+		$(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UTIL_DEPS) $(TFLITE_SHARED_LIBRARY) $(BIN)/$(HL_TARGET)/libHannkDelegate.so
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -I$(TFLITE_INCLUDES) $(TFLITE_LDFLAGS) $(filter %.cpp %.o %.a %.so %.$(SHARED_EXT),$^) -o $@ $(LDFLAGS-$*)
 
