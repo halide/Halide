@@ -447,8 +447,6 @@ void ModelInterpreter::execute() {
 }
 
 Tensor *ModelInterpreter::get_tensor(const std::string &name) {
-    CHECK(!model_.tensors.empty());
-
     for (const auto &t : model_.tensors) {
         if (t->name() == name) {
             return t.get();
