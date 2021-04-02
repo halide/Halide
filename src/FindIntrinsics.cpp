@@ -589,7 +589,7 @@ Expr lower_widening_sub(const Expr &a, const Expr &b) {
     if (wide.is_uint()) {
         wide = wide.with_code(halide_type_int);
     }
-    return cast(wide, a) - cast(wide, b);
+    return Cast::make(wide, a) - Cast::make(wide, b);
 }
 
 Expr lower_widening_shift_left(const Expr &a, const Expr &b) {

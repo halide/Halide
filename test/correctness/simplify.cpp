@@ -1289,6 +1289,9 @@ void check_boolean() {
     check(min(select((x == 1), -1, x), x), select((x == 1), -1, x));
     check(min(select((x == -17), -1, x), x), x);
 
+    check(min(select(x == 0, max(y, w), z), w), select(x == 0, w, min(w, z)));
+    check(max(select(x == 0, y, min(z, w)), w), select(x == 0, max(w, y), w));
+
     check((1 - xf) * 6 < 3, 0.5f < xf);
 
     check(!f, t);
@@ -1760,6 +1763,8 @@ void check_math() {
     check(Halide::trunc(-1.6f), -1.0f);
     check(Halide::floor(round(x)), round(x));
     check(Halide::ceil(ceil(x)), ceil(x));
+
+    check(strict_float(strict_float(x)), strict_float(x));
 }
 
 void check_overflow() {
@@ -2243,6 +2248,12 @@ int main(int argc, char **argv) {
         check(slice(concat_vectors({vec_x, vec_y, vec_z}), 0, 2, 16), slice(concat_vectors({vec_x}), 0, 2, 16));
         check(slice(concat_vectors({vec_x, vec_y, vec_z}), 32, 2, 22), slice(concat_vectors({vec_y, vec_z}), 0, 2, 22));
         check(slice(concat_vectors({vec_x, vec_y, vec_z}), 33, 2, 16), slice(concat_vectors({vec_y}), 1, 2, 16));
+    }
+
+    {
+        Stmt body = AssertStmt::make(x > 0, y);
+        check(For::make("t", 0, x, ForType::Serial, DeviceAPI::None, body),
+              Evaluate::make(0));
     }
 
     // Check a bounds-related fuzz tester failure found in issue https://github.com/halide/Halide/issues/3764

@@ -97,9 +97,7 @@ class LiftLoopInvariants : public IRMutator {
             }
         }
         if (const Call *call = e.as<Call>()) {
-            if (call->is_intrinsic(Call::strict_float) ||
-                call->is_intrinsic(Call::likely) ||
-                call->is_intrinsic(Call::likely_if_innermost) ||
+            if (Call::as_tag(call) ||
                 call->is_intrinsic(Call::reinterpret)) {
                 // Don't lift these intrinsics. They're free.
                 return should_lift(call->args[0]);

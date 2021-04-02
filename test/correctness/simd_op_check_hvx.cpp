@@ -732,6 +732,10 @@ int main(int argc, char **argv) {
         test_hvx.filter = getenv("HL_SIMD_OP_CHECK_FILTER");
     }
 
+    const int seed = argc > 2 ? atoi(argv[2]) : time(nullptr);
+    std::cout << "simd_op_check test seed: " << seed << "\n";
+    test_hvx.set_seed(seed);
+
     // Remove some features like simd_op_check.cpp used to do.
 
     // TODO: multithreading here is the cause of https://github.com/halide/Halide/issues/3669;
