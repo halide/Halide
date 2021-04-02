@@ -343,25 +343,6 @@ Box Conv2DOp::input_required(const Box &crop) const {
     input_crop[1].max += dilation_[0] * (filter_shape[1].extent() - 1);
     input_crop[2].max += dilation_[1] * (filter_shape[2].extent() - 1);
 
-    if (padding_ == Padding::Same) {
-        const int input_width = input()->extent(1);
-        const int input_height = input()->extent(2);
-        const int filter_width = filter()->extent(1);
-        const int filter_height = filter()->extent(2);
-        const int output_width = output()->extent(1);
-        const int output_height = output()->extent(2);
-
-        const int dilated_filter_width = dilation_[0] * (filter_width - 1) + 1;
-        const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
-
-        const int pad_width =
-            std::max(0, ((output_width - 1) * stride_[0] + dilated_filter_width - 1 - input_width) / 2);
-        const int pad_height =
-            std::max(0, ((output_height - 1) * stride_[1] + dilated_filter_height - 1 - input_height) / 2);
-
-        input_crop[1].max += pad_width;
-        input_crop[2].max += pad_height;
-    }
     return input_crop;
 }
 
@@ -481,32 +462,17 @@ Box DepthwiseConv2DOp::input_required(const Box &crop) const {
 
     input_crop[0] = crop[0] / depth_multiplier();
     if (input_crop[0].extent() > 1) {
+        // TODO: We need padding on the input for a native SIMD vector,
+        // don't hardcode this constant.
         input_crop[0].set_extent(std::max(input_crop[0].extent(), 16));
+    } else {
+        // Don't pad when broadcasting.
     }
     input_crop[1] *= stride_[0];
     input_crop[2] *= stride_[1];
     input_crop[1].max += dilation_[0] * (filter_shape[1].extent() - 1);
     input_crop[2].max += dilation_[1] * (filter_shape[2].extent() - 1);
 
-    if (padding_ == Padding::Same) {
-        const int input_width = input()->extent(1);
-        const int input_height = input()->extent(2);
-        const int filter_width = filter()->extent(1);
-        const int filter_height = filter()->extent(2);
-        const int output_width = output()->extent(1);
-        const int output_height = output()->extent(2);
-
-        const int dilated_filter_width = dilation_[0] * (filter_width - 1) + 1;
-        const int dilated_filter_height = dilation_[1] * (filter_height - 1) + 1;
-
-        const int pad_width =
-            std::max(0, ((output_width - 1) * stride_[0] + dilated_filter_width - 1 - input_width) / 2);
-        const int pad_height =
-            std::max(0, ((output_height - 1) * stride_[1] + dilated_filter_height - 1 - input_height) / 2);
-
-        input_crop[1].max += pad_width;
-        input_crop[2].max += pad_height;
-    }
     return input_crop;
 }
 

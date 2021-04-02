@@ -39,7 +39,6 @@ public:
                 // TODO: This is ridiculous but it helps.
                 .specialize(output_channels < 100)
                 .reorder(c, x, y, b);
-
         }
 
         // In the general case, use GuardWithIf and reorder c
