@@ -125,16 +125,27 @@ void Tensor::allocate() {
     storage()->allocate();
     HalideBuffer<void> buffer = storage()->buffer();
     for (int i = 0; i < buffer.dimensions(); i++) {
-        assert(buffer.dim(i).min() <= buffer_.dim(i).min());
-        assert(buffer.dim(i).max() >= buffer_.dim(i).max());
-        buffer.crop(i, buffer_.dim(i).min(), buffer_.dim(i).extent());
+        Interval dim_i(buffer_.dim(i).min(), buffer_.dim(i).max());
+        if (i < (int)storage_offset_.size()) {
+            dim_i += storage_offset_[i];
+        }
+        assert(buffer.dim(i).min() <= dim_i.min);
+        assert(buffer.dim(i).max() >= dim_i.max);
+        buffer.crop(i, dim_i.min, dim_i.extent());
+        buffer.translate(i, -dim_i.min);
     }
     buffer_ = buffer;
 }
 
-void Tensor::set_alias_of(Tensor *t) {
+void Tensor::set_alias_of(Tensor *t, std::vector<int> storage_offset) {
     storage_ = t->storage();
-    storage_->add_use(type(), box());
+    storage_offset_ = std::move(storage_offset);
+
+    Box bounds = box();
+    for (int i = 0; i < (int)storage_offset_.size(); i++) {
+        bounds[i] += storage_offset_[i];
+    }
+    storage_->add_use(type(), bounds);
 }
 
 void Tensor::replace_all_consumers_with(Tensor *other) {

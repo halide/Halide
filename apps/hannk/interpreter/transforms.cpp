@@ -79,7 +79,7 @@ namespace {
 
 // We can alias two tensors if the input is not used after the output is written,
 // and we meet a number of other requirements.
-void maybe_alias_tensors(Model *m, Tensor *input, Tensor *output) {
+void maybe_alias_tensors(Model *m, Tensor *input, Tensor *output, std::vector<int> offset = {}) {
     if (input->rank() != output->rank()) {
         // TODO: We should be able to alias reshapes.
         return;
@@ -91,12 +91,16 @@ void maybe_alias_tensors(Model *m, Tensor *input, Tensor *output) {
     }
 
     // We can't change the shape of an input or output tensor.
+    Box output_box_with_offset = output->box();
+    for (int i = 0; i < (int)offset.size(); ++i) {
+        output_box_with_offset[i] += offset[i];
+    }
     if ((input->is_input() || input->is_output()) &&
-        !is_subset_of(output->box(), input->box())) {
+        !is_subset_of(output_box_with_offset, input->box())) {
         return;
     }
     if ((output->is_input() || output->is_output()) &&
-        !is_subset_of(input->box(), output->box())) {
+        !is_subset_of(input->box(), output_box_with_offset)) {
         return;
     }
 
@@ -113,7 +117,7 @@ void maybe_alias_tensors(Model *m, Tensor *input, Tensor *output) {
         }
     }
 
-    input->set_alias_of(output);
+    input->set_alias_of(output, offset);
 }
 
 // Try to alias outputs to inputs when it is safe.
@@ -127,8 +131,28 @@ class InPlace : public OpVisitor {
         maybe_alias_tensors(model_, op->input(1), op->output());
     }
 
+    void visit(ConcatenationOp *op) {
+        std::vector<int> offset(op->axis() + 1, 0);
+        for (int i = 0; i < op->input_count(); i++) {
+            maybe_alias_tensors(model_, op->input(i), op->output(), offset);
+            offset[op->axis()] += op->input(i)->extent(op->axis());
+        }
+    }
+
     void visit(PadOp *op) {
-        maybe_alias_tensors(model_, op->input(), op->output());
+        if (!op->input(1) || !op->input(1)->is_constant()) {
+            return;
+        }
+        assert(op->input(1)->is_allocated());
+
+        auto padding = op->input(1)->buffer<const int32_t>();
+
+        std::vector<int> offset(padding.extent(1));
+        for (int d = 0; d < padding.extent(1); d++) {
+            offset[d] = padding(0, d);
+        }
+
+        maybe_alias_tensors(model_, op->input(), op->output(), offset);
     }
 
     void visit(ReshapeOp *op) {
@@ -161,9 +185,20 @@ class PadForConv : public OpVisitor {
                 ::hannk::make_unique<Tensor>(input->name() + "_padded", input->type(), required, input->quantization());
             op->set_input(padded.get());
 
+            HalideBuffer<int32_t> padding_data(2, input->rank());
+            for (int i = 0; i < input->rank(); i++) {
+                padding_data(0, i) = (required[i].extent() - input->extent(i)) / 2;
+                padding_data(1, i) = (required[i].extent() - input->extent(i) + 1) / 2;
+            }
+            std::unique_ptr<Tensor> padding =
+                ::hannk::make_unique<Tensor>(input->name() + "_padding", padding_data);
+
             // Add the new tensor, op, and update the input.
-            std::unique_ptr<Op> pad = ::hannk::make_unique<PadOp>(input, nullptr, padded.get());
-            new_ops.emplace_back(std::move(pad), std::move(padded));
+            std::unique_ptr<Op> pad = ::hannk::make_unique<PadOp>(input, padding.get(), padded.get());
+            std::vector<std::unique_ptr<Tensor>> new_tensors;
+            new_tensors.push_back(std::move(padded));
+            new_tensors.push_back(std::move(padding));
+            new_ops.emplace_back(std::move(pad), std::move(new_tensors));
         }
     }
 
@@ -197,7 +232,9 @@ class PadForConv : public OpVisitor {
             filter->replace_all_consumers_with(tiled.get());
 
             std::unique_ptr<Op> tile = ::hannk::make_unique<TileConvFilterOp>(filter, tiled.get());
-            new_ops.emplace_back(std::move(tile), std::move(tiled));
+            std::vector<std::unique_ptr<Tensor>> new_tensors;
+            new_tensors.push_back(std::move(tiled));
+            new_ops.emplace_back(std::move(tile), std::move(new_tensors));
         }
     }
 
@@ -207,7 +244,7 @@ class PadForConv : public OpVisitor {
     }
 
 public:
-    std::vector<std::pair<std::unique_ptr<Op>, std::unique_ptr<Tensor>>> new_ops;
+    std::vector<std::pair<std::unique_ptr<Op>, std::vector<std::unique_ptr<Tensor>>>> new_ops;
 };
 
 }  // namespace
@@ -217,7 +254,9 @@ void pad_for_conv(Model *m) {
     m->accept(&v);
     for (auto &i : v.new_ops) {
         m->insert(std::move(i.first));
-        m->insert(std::move(i.second));
+        for (auto &j : i.second) {
+            m->insert(std::move(j));
+        }
     }
 }
 

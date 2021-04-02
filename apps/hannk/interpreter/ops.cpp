@@ -293,7 +293,9 @@ void ConcatenationOp::execute(const Box &crop) {
             // TODO: Maybe we could just copy whole buffers?
             auto input_j = input_buf.sliced(axis_, j);
             auto output_j = output_buf.sliced(axis_, output_i++);
-            output_j.copy_from(input_j);
+            if (!is_alias(input_j, output_j)) {
+                output_j.copy_from(input_j);
+            }
         }
     }
 }

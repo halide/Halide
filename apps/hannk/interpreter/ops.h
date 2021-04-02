@@ -117,6 +117,8 @@ public:
         : Op(std::move(inputs), {output}), axis_(axis) {
     }
 
+    int axis() const { return axis_; }
+
     std::unique_ptr<Op> clone(const TensorMap &map) const {
         std::vector<Tensor *> inputs;
         for (int i = 0; i < input_count(); i++) {
