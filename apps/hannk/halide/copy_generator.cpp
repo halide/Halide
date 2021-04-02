@@ -25,16 +25,17 @@ public:
         Expr output_channels = output_.dim(0).extent();
 
         // Handle 3 channel -> 4 channel padding as a special case.
+        // TODO: vectorize c instead of unroll c.
         output_.specialize(is_interleaved(input_, 3) && is_interleaved(output_, 4))
             .vectorize(x, vector_size_u8, TailStrategy::GuardWithIf)
             .unroll(c);
 
         // Handle cases with a small number of channels.
         for (int i = vector_size_u8; i >= 4; i /= 2) {
-            output_
-                .specialize(output_channels >= i)
+            output_.specialize(output_channels >= i)
                 .vectorize(c, i, TailStrategy::ShiftInwards)
                 .reorder(x, y, c, b)
+                .specialize(input_channels == output_channels)
                 // TODO: This is ridiculous but it helps.
                 .specialize(output_channels < 100)
                 .reorder(c, x, y, b);
@@ -45,7 +46,8 @@ public:
         // away from the inner loop to reduce the if overhead.
         output_
             .reorder(x, y, c, b)
-            .vectorize(c, vector_size_u8, TailStrategy::GuardWithIf);
+            .vectorize(c, vector_size_u8, TailStrategy::GuardWithIf)
+            .specialize(input_channels == output_channels);
     }
 };
 

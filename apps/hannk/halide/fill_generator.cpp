@@ -22,7 +22,7 @@ public:
 
         output_.specialize(is_interleaved(output_, 4))
             .vectorize(x, vector_size_u8, TailStrategy::GuardWithIf)
-            .unroll(c);
+            .vectorize(c);
 
         Expr output_channels = output_.dim(0).extent();
         for (int i = vector_size_u8; i >= 4; i /= 2) {
@@ -31,8 +31,7 @@ public:
                 .vectorize(c, i, TailStrategy::ShiftInwards);
         }
 
-        output_
-            .vectorize(c, vector_size_u8, TailStrategy::GuardWithIf);
+        output_.vectorize(c, vector_size_u8, TailStrategy::GuardWithIf);
     }
 };
 
