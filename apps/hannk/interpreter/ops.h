@@ -111,12 +111,10 @@ public:
 
 class ConcatenationOp : public Op {
     int axis_;
-    ActivationFunction activation_;
 
 public:
-    ConcatenationOp(std::vector<Tensor *> inputs, Tensor *output,
-                    int axis, ActivationFunction activation)
-        : Op(std::move(inputs), {output}), axis_(axis), activation_(activation) {
+    ConcatenationOp(std::vector<Tensor *> inputs, Tensor *output, int axis)
+        : Op(std::move(inputs), {output}), axis_(axis) {
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
@@ -125,7 +123,7 @@ public:
             inputs.push_back(apply(map, input(i)));
         }
         return ::hannk::make_unique<ConcatenationOp>(
-            inputs, apply(map, output()), axis_, activation_);
+            inputs, apply(map, output()), axis_);
     }
 
     void accept(OpVisitor *v);

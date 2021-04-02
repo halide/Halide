@@ -503,6 +503,7 @@ private:
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteConcatenationParams *params = (const TfLiteConcatenationParams *)(node->builtin_data);
         auto activation = ConvertTfLiteActivation(params->activation);
+        CHECK(activation == ActivationFunction::None);
         int axis = params->axis;
         // Handle negative values, which are legal
         if (axis < 0) {
@@ -511,7 +512,7 @@ private:
         // Now 'flip' the axis so that it refers to the right dimension in
         // the Tensor (since we reverse the dimension order)
         axis = (int)output->rank() - axis - 1;
-        return ::hannk::make_unique<ConcatenationOp>(inputs, output, axis, activation);
+        return ::hannk::make_unique<ConcatenationOp>(inputs, output, axis);
     }
 
     std::unique_ptr<Op> BuildConv2d(TfLiteContext *context, TfLiteNode *node) {
