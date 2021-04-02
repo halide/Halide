@@ -84,7 +84,7 @@ Tensor::Tensor(const Tensor &copy)
         // This should have used the same buffer as the copy's storage.
         assert(buffer_.data() == copy.buffer_.data());
     } else {
-        assert(!storage_.buffer_.data());
+        assert(!buffer_.data());
     }
 }
 

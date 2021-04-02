@@ -379,6 +379,8 @@ public:
 
 class OpVisitor {
 public:
+    virtual ~OpVisitor() = default;
+
     virtual void visit(AddOp *op) {}
     virtual void visit(AveragePoolOp *op) {}
     virtual void visit(ConcatenationOp *op) {}
