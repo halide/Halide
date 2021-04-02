@@ -28,6 +28,18 @@
 namespace Halide {
 namespace Internal {
 
+inline int64_t saturating_mul(int64_t a, int64_t b) {
+    if (mul_would_overflow(64, a, b)) {
+        if ((a > 0) == (b > 0)) {
+            return INT64_MAX;
+        } else {
+            return INT64_MIN;
+        }
+    } else {
+        return a * b;
+    }
+}
+
 class Simplify : public VariadicVisitor<Simplify, Expr, Stmt> {
     using Super = VariadicVisitor<Simplify, Expr, Stmt>;
 
@@ -36,6 +48,7 @@ public:
 
     struct ExprInfo {
         // We track constant integer bounds when they exist
+        // TODO: Use ConstantInterval?
         int64_t min = 0, max = 0;
         bool min_defined = false, max_defined = false;
         // And the alignment of integer variables

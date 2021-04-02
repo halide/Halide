@@ -1216,8 +1216,8 @@ public:
         stream << std::flush;
 
         for (const auto &t : vector_types) {
-            string name = type_to_c_type(t, false, false);
-            string scalar_name = type_to_c_type(t.element_of(), false, false);
+            string name = print_type(t, DoNotAppendSpace);
+            string scalar_name = print_type(t.element_of(), DoNotAppendSpace);
             stream << "#if halide_cpp_use_native_vector(" << scalar_name << ", " << t.lanes() << ")\n";
             stream << "using " << name << " = NativeVector<" << scalar_name << ", " << t.lanes() << ">;\n";
             stream << "using " << name << "_ops = NativeVectorOps<" << scalar_name << ", " << t.lanes() << ">;\n";
@@ -1653,22 +1653,33 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     // used to store stateful module information in offloading runtimes.
     bool is_constant = buffer.dimensions() != 0;
 
-    // Emit the data
-    stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] HALIDE_ATTRIBUTE_ALIGN(32) = {\n";
-    stream << get_indent();
-    for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
-        if (i > 0) {
-            stream << ",";
-            if (i % 16 == 0) {
-                stream << "\n";
-                stream << get_indent();
-            } else {
-                stream << " ";
+    // If it is an GPU source kernel, we would like to see the actual output, not the
+    // uint8 representation. We use a string literal for this.
+    if (ends_with(name, "gpu_source_kernels")) {
+        stream << "static const char *" << name << "_string = R\"BUFCHARSOURCE(";
+        stream.write((char *)b.host, num_elems);
+        stream << ")BUFCHARSOURCE\";\n";
+
+        stream << "static const uint8_t *" << name << "_data HALIDE_ATTRIBUTE_ALIGN(32) = (const uint8_t *) "
+               << name << "_string;\n";
+    } else {
+        // Emit the data
+        stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] HALIDE_ATTRIBUTE_ALIGN(32) = {\n";
+        stream << get_indent();
+        for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
+            if (i > 0) {
+                stream << ",";
+                if (i % 16 == 0) {
+                    stream << "\n";
+                    stream << get_indent();
+                } else {
+                    stream << " ";
+                }
             }
+            stream << (int)(b.host[i]);
         }
-        stream << (int)(b.host[i]);
+        stream << "\n};\n";
     }
-    stream << "\n};\n";
 
     // Emit the shape (constant even for scalar buffers)
     stream << "static const halide_dimension_t " << name << "_buffer_shape[] = {";
@@ -2586,7 +2597,8 @@ void CodeGen_C::visit(const Allocate *op) {
         alloc.type = op->type;
         allocations.push(op->name, alloc);
         heap_allocations.push(op->name);
-        stream << op_type << "*" << op_name << " = (" << print_expr(op->new_expr) << ");\n";
+        string new_e = print_expr(op->new_expr);
+        stream << get_indent() << op_type << " *" << op_name << " = (" << op_type << "*)" << new_e << ";\n";
     } else {
         constant_size = op->constant_allocation_size();
         if (constant_size > 0) {
@@ -2600,6 +2612,7 @@ void CodeGen_C::visit(const Allocate *op) {
                 size_id = print_expr(make_const(size_id_type, constant_size));
 
                 if (op->memory_type == MemoryType::Stack ||
+                    op->memory_type == MemoryType::Register ||
                     (op->memory_type == MemoryType::Auto &&
                      can_allocation_fit_on_stack(stack_bytes))) {
                     on_stack = true;

@@ -121,6 +121,7 @@ set(HEADER_FILES
     RDom.h
     Realization.h
     RealizationOrder.h
+    RebaseLoopsToZero.h
     Reduction.h
     RegionCosts.h
     RemoveDeadAllocations.h
@@ -277,6 +278,7 @@ set(SOURCE_FILES
     RDom.cpp
     Realization.cpp
     RealizationOrder.cpp
+    RebaseLoopsToZero.cpp
     Reduction.cpp
     RegionCosts.cpp
     RemoveDeadAllocations.cpp
@@ -377,7 +379,7 @@ include(TargetExportScript)
 # https://github.com/halide/Halide/issues/4651
 target_export_script(Halide
                      APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
-                     GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.linux")
+                     GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.ldscript")
 
 set_target_properties(Halide PROPERTIES
                       POSITION_INDEPENDENT_CODE ON

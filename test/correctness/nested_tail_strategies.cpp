@@ -45,14 +45,15 @@ void check(Func out, int line, std::vector<TailStrategy> tails) {
         largest_allocation = 0;
         out.realize({s});
         size_t expected = (s + 1) * 4;
-        if (largest_allocation > expected) {
+        size_t tolerance = 3 * sizeof(int);
+        if (largest_allocation > expected + tolerance) {
             std::cerr << "Failure on line " << line << "\n"
                       << "with tail strategies: ";
             for (auto t : tails) {
                 std::cerr << t << " ";
             }
             std::cerr << "\n allocation of " << largest_allocation
-                      << " bytes is too large. Expected " << expected << "\n";
+                      << " bytes is too large. Expected " << expected + tolerance << "\n";
             abort();
         }
     }
@@ -68,7 +69,12 @@ int main(int argc, char **argv) {
     // producer-consumer pipelines. The bounds being tight sometimes
     // depends on the simplifier being able to cancel out things.
 
-    TailStrategy tails[] = {TailStrategy::RoundUp, TailStrategy::GuardWithIf, TailStrategy::ShiftInwards};
+    TailStrategy tails[] = {
+        TailStrategy::RoundUp,
+        TailStrategy::GuardWithIf,
+        TailStrategy::Predicate,
+        TailStrategy::ShiftInwards,
+    };
 
     // Two stages. First stage computed at tiles of second.
     for (auto t1 : tails) {

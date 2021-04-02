@@ -533,6 +533,23 @@ public:
                 check("vpdpbusd*xmm", 4, sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
                 check("vpdpbusd*xmm", 4, sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
             }
+            {
+                // 16 bit, 2 element saturaing dot product
+                RDom r(0, 2);
+                check("vpdpwssds*zmm", 16, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                check("vpdpwssds*ymm", 8, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+                check("vpdpwssds*xmm", 4, saturating_sum(i32(in_i16(2 * x + r)) * in_i16(2 * x + r + 32)));
+            }
+            {
+                // 8 bit, 4 element saturating dot product
+                RDom r(0, 4);
+                check("vpdpbusds*zmm", 16, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusds*zmm", 16, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                check("vpdpbusds*ymm", 8, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusds*ymm", 8, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+                check("vpdpbusds*xmm", 4, saturating_sum(i32(in_u8(4 * x + r)) * in_i8(4 * x + r + 32)));
+                check("vpdpbusds*xmm", 4, saturating_sum(i32(in_i8(4 * x + r)) * in_u8(4 * x + r + 32)));
+            }
         }
     }
 
@@ -802,31 +819,34 @@ public:
             }
 
             // VLD2     X       -       Load Two-Element Structures
-            check(arm32 ? "vld2.32" : "ld2", 4 * w, in_i32(x * 2) + in_i32(x * 2 + 1));
-            check(arm32 ? "vld2.32" : "ld2", 4 * w, in_u32(x * 2) + in_u32(x * 2 + 1));
-            check(arm32 ? "vld2.32" : "ld2", 4 * w, in_f32(x * 2) + in_f32(x * 2 + 1));
-            check(arm32 ? "vld2.8" : "ld2", 8 * w, in_i8(x * 2) + in_i8(x * 2 + 1));
-            check(arm32 ? "vld2.8" : "ld2", 8 * w, in_u8(x * 2) + in_u8(x * 2 + 1));
-            check(arm32 ? "vld2.16" : "ld2", 4 * w, in_i16(x * 2) + in_i16(x * 2 + 1));
-            check(arm32 ? "vld2.16" : "ld2", 4 * w, in_u16(x * 2) + in_u16(x * 2 + 1));
+            // These need to be vectorized at least 2 native vectors wide,
+            // so we get a full vectors' worth that we know is safe to
+            // access.
+            check(arm32 ? "vld2.8" : "ld2", 32 * w, in_i8(x * 2) + in_i8(x * 2 + 1));
+            check(arm32 ? "vld2.8" : "ld2", 32 * w, in_u8(x * 2) + in_u8(x * 2 + 1));
+            check(arm32 ? "vld2.16" : "ld2", 16 * w, in_i16(x * 2) + in_i16(x * 2 + 1));
+            check(arm32 ? "vld2.16" : "ld2", 16 * w, in_u16(x * 2) + in_u16(x * 2 + 1));
+            check(arm32 ? "vld2.32" : "ld2", 8 * w, in_i32(x * 2) + in_i32(x * 2 + 1));
+            check(arm32 ? "vld2.32" : "ld2", 8 * w, in_u32(x * 2) + in_u32(x * 2 + 1));
+            check(arm32 ? "vld2.32" : "ld2", 8 * w, in_f32(x * 2) + in_f32(x * 2 + 1));
 
             // VLD3     X       -       Load Three-Element Structures
-            check(arm32 ? "vld3.32" : "ld3", 4 * w, in_i32(x * 3 + y));
-            check(arm32 ? "vld3.32" : "ld3", 4 * w, in_u32(x * 3 + y));
-            check(arm32 ? "vld3.32" : "ld3", 4 * w, in_f32(x * 3 + y));
-            check(arm32 ? "vld3.8" : "ld3", 8 * w, in_i8(x * 3 + y));
-            check(arm32 ? "vld3.8" : "ld3", 8 * w, in_u8(x * 3 + y));
-            check(arm32 ? "vld3.16" : "ld3", 4 * w, in_i16(x * 3 + y));
-            check(arm32 ? "vld3.16" : "ld3", 4 * w, in_u16(x * 3 + y));
+            check(arm32 ? "vld3.8" : "ld3", 32 * w, in_i8(x * 3));
+            check(arm32 ? "vld3.8" : "ld3", 32 * w, in_u8(x * 3));
+            check(arm32 ? "vld3.16" : "ld3", 16 * w, in_i16(x * 3));
+            check(arm32 ? "vld3.16" : "ld3", 16 * w, in_u16(x * 3));
+            check(arm32 ? "vld3.32" : "ld3", 8 * w, in_i32(x * 3));
+            check(arm32 ? "vld3.32" : "ld3", 8 * w, in_u32(x * 3));
+            check(arm32 ? "vld3.32" : "ld3", 8 * w, in_f32(x * 3));
 
             // VLD4     X       -       Load Four-Element Structures
-            check(arm32 ? "vld4.32" : "ld4", 4 * w, in_i32(x * 4 + y));
-            check(arm32 ? "vld4.32" : "ld4", 4 * w, in_u32(x * 4 + y));
-            check(arm32 ? "vld4.32" : "ld4", 4 * w, in_f32(x * 4 + y));
-            check(arm32 ? "vld4.8" : "ld4", 8 * w, in_i8(x * 4 + y));
-            check(arm32 ? "vld4.8" : "ld4", 8 * w, in_u8(x * 4 + y));
-            check(arm32 ? "vld4.16" : "ld4", 4 * w, in_i16(x * 4 + y));
-            check(arm32 ? "vld4.16" : "ld4", 4 * w, in_u16(x * 4 + y));
+            check(arm32 ? "vld4.8" : "ld4", 32 * w, in_i8(x * 4));
+            check(arm32 ? "vld4.8" : "ld4", 32 * w, in_u8(x * 4));
+            check(arm32 ? "vld4.16" : "ld4", 16 * w, in_i16(x * 4));
+            check(arm32 ? "vld4.16" : "ld4", 16 * w, in_u16(x * 4));
+            check(arm32 ? "vld4.32" : "ld4", 8 * w, in_i32(x * 4));
+            check(arm32 ? "vld4.32" : "ld4", 8 * w, in_u32(x * 4));
+            check(arm32 ? "vld4.32" : "ld4", 8 * w, in_f32(x * 4));
 
             // VLDM     X       F, D    Load Multiple Registers
             // VLDR     X       F, D    Load Single Register
@@ -1392,6 +1412,13 @@ public:
             check(arm32 ? "vsubl.s32" : "ssubl", 2 * w, i64(i32_1) - i64(i32_2));
             check(arm32 ? "vsubl.u32" : "usubl", 2 * w, u64(u32_1) - u64(u32_2));
 
+            check(arm32 ? "vsubl.s8" : "ssubl", 8 * w, i16(i8_1) - i16(in_i8(0)));
+            check(arm32 ? "vsubl.u8" : "usubl", 8 * w, u16(u8_1) - u16(in_u8(0)));
+            check(arm32 ? "vsubl.s16" : "ssubl", 4 * w, i32(i16_1) - i32(in_i16(0)));
+            check(arm32 ? "vsubl.u16" : "usubl", 4 * w, u32(u16_1) - u32(in_u16(0)));
+            check(arm32 ? "vsubl.s32" : "ssubl", 2 * w, i64(i32_1) - i64(in_i32(0)));
+            check(arm32 ? "vsubl.u32" : "usubl", 2 * w, u64(u32_1) - u64(in_u32(0)));
+
             // VSUBW    I       -       Subtract Wide
             check(arm32 ? "vsubw.s8" : "ssubw", 8 * w, i16_1 - i8_1);
             check(arm32 ? "vsubw.u8" : "usubw", 8 * w, u16_1 - u8_1);
@@ -1647,32 +1674,39 @@ public:
             // check("i32.extend8_s", 1, i32(i8(x) ^ 1));
             // check("i32.extend16_s", 1, i32(i16(x) ^ 1));
             // check("i64.extend8_s", 1, i64(i8(x) ^ 1));
-            // check("i64.extend16_s", 1, i32(i16(x) ^ 1));
+            // check("i64.extend16_s", 1, i64(i16(x) ^ 1));
             // check("i64.extend32_s", 1, i64(i32(x) ^ 1));
         }
 
         if (use_wasm_simd128) {
             for (int w = 1; w <= 4; w <<= 1) {
                 // create arbitrary 16-byte constant
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // (But will be soon in LLVM13, revisit soon)
-                // if (Halide::Internal::get_llvm_version() >= 130) {
-                //      check("v128.constant", 16 * w, u8_1 * u8(42 + x));
-                // }
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    check("v128.const", 16 * w, u8_1 * u8(42 + x));
+                }
 
                 // Create vector with identical lanes
                 // (Note that later LLVMs will use 64-bit constants for some smaller splats)
                 check("i8x16.splat", 16 * w, u8_1 * u8(42));
-                if (Halide::Internal::get_llvm_version() >= 120) {
-                    check("i64x2.splat", 8 * w, u16_1 * u16(42));
-                    check("i64x2.splat", 4 * w, u32_1 * u32(42));
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    // LLVM13 likes to emit all of these as v128.const
+                    check("v128.const", 8 * w, u16_1 * u16(42));
+                    check("v128.const", 4 * w, u32_1 * u32(42));
+                    check("v128.const", 2 * w, u64_1 * u64(42));
+                    check("v128.const", 8 * w, f32_1 * f32(42));
+                    check("v128.const", 4 * w, f64_1 * f64(42));
                 } else {
-                    check("i16x8.splat", 8 * w, u16_1 * u16(42));
-                    check("i32x4.splat", 4 * w, u32_1 * u32(42));
+                    if (Halide::Internal::get_llvm_version() == 120) {
+                        check("i64x2.splat", 8 * w, u16_1 * u16(42));
+                        check("i64x2.splat", 4 * w, u32_1 * u32(42));
+                    } else {
+                        check("i16x8.splat", 8 * w, u16_1 * u16(42));
+                        check("i32x4.splat", 4 * w, u32_1 * u32(42));
+                    }
+                    check("i64x2.splat", 2 * w, u64_1 * u64(42));
+                    check("f32x4.splat", 8 * w, f32_1 * f32(42));
+                    check("f64x2.splat", 4 * w, f64_1 * f64(42));
                 }
-                check("i64x2.splat", 2 * w, u64_1 * u64(42));
-                check("f32x4.splat", 8 * w, f32_1 * f32(42));
-                check("f64x2.splat", 4 * w, f64_1 * f64(42));
 
                 // Extract lane as a scalar (extract_lane)
                 // Replace lane value (replace_lane)
@@ -1695,6 +1729,9 @@ public:
                 // (This fails to generate, but that's not entirely surprising -- I don't
                 // think we ever attempt to emit the most general-purpose swizzles in Halide
                 // code, so this may or may not be a defect.)
+                //
+                // TODO: this currently emits a bunch of extract_lane / replace_lane ops,
+                // so we should definitely try to do better.
                 // check("v8x16.swizzle", 16*w, in_u8(in_u8(x+32)));
 
                 // Integer addition
@@ -1716,12 +1753,15 @@ public:
                 check("i32x4.mul", 4 * w, i32_1 * i32_2);
                 check("i64x2.mul", 2 * w, i64_1 * i64_2);
 
-                // Integer dot product (16 -> 32)
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // {
-                //     RDom r(0, 4);
-                //     check("i32x4.dot_i16x8_s", 2 * w, sum(i32(in_i16(x * 4 + r)) * in_i16(x * 4 + r + 32)));
-                // }
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    // Integer dot product (16 -> 32)
+                    for (int f : {2, 4, 8}) {
+                        RDom r(0, f);
+                        for (int v : {1, 2, 4}) {
+                            check("i32x4.dot_i16x8_s", w * v, sum(i32(in_i16(f * x + r)) * in_i16(f * x + r + 32)));
+                        }
+                    }
+                }
 
                 // Integer negation
                 check("i8x16.neg", 16 * w, -i8_1);
@@ -1729,44 +1769,72 @@ public:
                 check("i32x4.neg", 4 * w, -i32_1);
                 check("i64x2.neg", 2 * w, -i64_1);
 
-                // Extended integer multiplication
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i16x8.extmul_low_i8x16_s", ???, ???);
-                // check("i16x8.extmul_high_i8x16_s", ???, ???);
-                // check("i16x8.extmul_low_i8x16_u", ???, ???);
-                // check("i16x8.extmul_high_i8x16_u", ???, ???);
-                // check("i32x4.extmul_low_i16x8_s", ???, ???);
-                // check("i32x4.extmul_high_i16x8_s", ???, ???);
-                // check("i32x4.extmul_low_i16x8_u", ???, ???);
-                // check("i32x4.extmul_high_i16x8_u", ???, ???);
-                // check("i64x2.extmul_low_i32x4_s", ???, ???);
-                // check("i64x2.extmul_high_i32x4_s", ???, ???);
-                // check("i64x2.extmul_low_i32x4_u", ???, ???);
-                // check("i64x2.extmul_high_i32x4_u", ???, ???);
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    // At present, we only attempt to generate these for LLVM >= 13.
 
-                // Extended pairwise integer addition
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i16x8.extadd_pairwise_i8x16_s", ???, ???);
-                // check("i16x8.extadd_pairwise_i8x16_u", ???, ???);
-                // check("i32x4.extadd_pairwise_i16x8_s", ???, ???);
-                // check("i32x4.extadd_pairwise_i16x8_u", ???, ???);
+                    // Extended (widening) integer multiplication
+                    check("i16x8.extmul_low_i8x16_s", 8 * w, i16(i8_1) * i8_2);
+                    check("i32x4.extmul_low_i16x8_s", 4 * w, i32(i16_1) * i16_2);
+                    check("i64x2.extmul_low_i32x4_s", 2 * w, i64(i32_1) * i32_2);
+                    check("i16x8.extmul_low_i8x16_u", 8 * w, u16(u8_1) * u8_2);
+                    check("i32x4.extmul_low_i16x8_u", 4 * w, u32(u16_1) * u16_2);
+                    check("i64x2.extmul_low_i32x4_u", 2 * w, u64(u32_1) * u32_2);
+                    if (w > 1) {
+                        // Need a register wider than 128 bits for us to generate these
+                        check("i16x8.extmul_high_i8x16_s", 8 * w, i16(i8_1) * i8_2);
+                        check("i32x4.extmul_high_i16x8_s", 4 * w, i32(i16_1) * i16_2);
+                        check("i64x2.extmul_high_i32x4_s", 2 * w, i64(i32_1) * i32_2);
+                        check("i16x8.extmul_high_i8x16_u", 8 * w, u16(u8_1) * u8_2);
+                        check("i32x4.extmul_high_i16x8_u", 4 * w, u32(u16_1) * u16_2);
+                        check("i64x2.extmul_high_i32x4_u", 2 * w, u64(u32_1) * u32_2);
+                    }
+
+                    // Extended pairwise integer addition
+                    for (int f : {2, 4}) {
+                        RDom r(0, f);
+
+                        // A summation reduction that starts at something
+                        // non-trivial, to avoid llvm simplifying accumulating
+                        // widening summations into just widening summations.
+                        auto sum_ = [&](Expr e) {
+                            Func f;
+                            f(x) = cast(e.type(), 123);
+                            f(x) += e;
+                            return f(x);
+                        };
+
+                        check("i16x8.extadd_pairwise_i8x16_s", 8 * w, sum_(i16(in_i8(f * x + r))));
+                        check("i16x8.extadd_pairwise_i8x16_u", 8 * w, sum_(u16(in_u8(f * x + r))));
+                        // The u8->i16 op uses the unsigned variant
+                        check("i16x8.extadd_pairwise_i8x16_u", 8 * w, sum_(i16(in_u8(f * x + r))));
+
+                        check("i32x4.extadd_pairwise_i16x8_s", 8 * w, sum_(i32(in_i16(f * x + r))));
+                        check("i32x4.extadd_pairwise_i16x8_u", 8 * w, sum_(u32(in_u16(f * x + r))));
+                        // The u16->i32 op uses the unsigned variant
+                        check("i32x4.extadd_pairwise_i16x8_u", 8 * w, sum_(i32(in_u16(f * x + r))));
+                    }
+                }
 
                 // Saturating integer addition
-                check("i8x16.add_saturate_s", 16 * w, i8_sat(i16(i8_1) + i16(i8_2)));
-                check("i8x16.add_saturate_u", 16 * w, u8_sat(u16(u8_1) + u16(u8_2)));
-                check("i16x8.add_saturate_s", 8 * w, i16_sat(i32(i16_1) + i32(i16_2)));
-                check("i16x8.add_saturate_u", 8 * w, u16_sat(u32(u16_1) + u32(u16_2)));
+                std::string sat = Halide::Internal::get_llvm_version() >= 130 ? "sat" : "saturate";
+                check("i8x16.add_" + sat + "_s", 16 * w, i8_sat(i16(i8_1) + i16(i8_2)));
+                check("i8x16.add_" + sat + "_u", 16 * w, u8_sat(u16(u8_1) + u16(u8_2)));
+                check("i16x8.add_" + sat + "_s", 8 * w, i16_sat(i32(i16_1) + i32(i16_2)));
+                check("i16x8.add_" + sat + "_u", 8 * w, u16_sat(u32(u16_1) + u32(u16_2)));
 
                 // Saturating integer subtraction
-                check("i8x16.sub_saturate_s", 16 * w, i8_sat(i16(i8_1) - i16(i8_2)));
-                check("i16x8.sub_saturate_s", 8 * w, i16_sat(i32(i16_1) - i32(i16_2)));
+                check("i8x16.sub_" + sat + "_s", 16 * w, i8_sat(i16(i8_1) - i16(i8_2)));
+                check("i16x8.sub_" + sat + "_s", 8 * w, i16_sat(i32(i16_1) - i32(i16_2)));
                 // N.B. Saturating subtracts are expressed by widening to a *signed* type
-                check("i8x16.sub_saturate_u", 16 * w, u8_sat(i16(u8_1) - i16(u8_2)));
-                check("i16x8.sub_saturate_u", 8 * w, u16_sat(i32(u16_1) - i32(u16_2)));
+                check("i8x16.sub_" + sat + "_u", 16 * w, u8_sat(i16(u8_1) - i16(u8_2)));
+                check("i16x8.sub_" + sat + "_u", 8 * w, u16_sat(i32(u16_1) - i32(u16_2)));
 
-                // Saturating integer Q-format rounding multiplication
-                // TODO: see arm's qrdmulh, probably
-                // check("i16x8.q15mulr_sat_s", ???, ???);
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    // Saturating integer Q-format rounding multiplication
+                    // Note: division in Halide always rounds down (not towards
+                    // zero). Otherwise these patterns would be more complicated.
+                    check("i16x8.q15mulr_sat_s", 8 * w, i16_sat((i32(i16_1) * i32(i16_2) + (1 << 14)) / (1 << 15)));
+                }
 
                 // Lane-wise integer minimum
                 check("i8x16.min_s", 16 * w, min(i8_1, i8_2));
@@ -1891,12 +1959,17 @@ public:
                 // check("i8x16.popcnt", 8 * w, popcount(i32_1));
                 // check("i8x16.popcnt", 8 * w, popcount(u32_1));
 
-                // Any lane true
-                // All lanes true
-                // TODO: does Halide have any idiom that obviously generates these?
+                // Any lane true -- for VectorReduce::Or on 8-bit data
+                // All lanes true  -- for VectorReduce::And on 8-bit data
+                // TODO: does Halide have any idiom that could usefully use these?
+                // - v128.any_true could be used for VectorReduce::Or with type bool.
+                // - i8x16.all_true could be used for VectorReduce::And with type bool.
+                // - the other all_true variants seem unlikely to be obviously useful in Halide.
 
                 // Bitmask extraction
-                // TODO:
+                // TODO: does Halide have any idiom that could usefully use these?
+                // They all extract the high bit of each lane and return a scalar mask of them.
+                // These all seem unlikely to be obviously useful in Halide.
                 // check("i8x16.bitmask", 16 * w, ???);
                 // check("i16x8.bitmask", 8 * w, ???);
                 // check("i32x4.bitmask", 4 * w, ???);
@@ -1959,6 +2032,8 @@ public:
 
                 // Load and Zero-Pad
                 // TODO
+                // check("v128.load32_zero", 2 * w, in_u32(0));
+                // check("v128.load64_zero", 2 * w, in_u64(0));
 
                 // Load vector with identical lanes
                 if (Halide::Internal::get_llvm_version() >= 120) {
@@ -2062,9 +2137,8 @@ public:
                 check("f32x4.convert_i32x4_u", 8 * w, cast<float>(u32_1));
 
                 // Integer to double-precision floating point
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("f64x2.convert_low_i32x4_s", 4 * w, cast<double>(i32_1));
-                // check("f64x2.convert_low_i32x4_u", 4 * w, cast<double>(u32_1));
+                check("f64x2.convert_low_i32x4_s", 2 * w, cast<double>(i32_1));
+                check("f64x2.convert_low_i32x4_u", 2 * w, cast<double>(u32_1));
 
                 // Single-precision floating point to integer with saturation
                 check("i32x4.trunc_sat_f32x4_s", 4 * w, cast<int32_t>(f32_1));
@@ -2080,15 +2154,13 @@ public:
                 // check("f32x4.demote_f64x2_zero", 4 * w, ???);
 
                 // Single-precision floating point to double-precision
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("f64x2.promote_low_f32x4", 4 * w, ???);
+                check("f64x2.promote_low_f32x4", 2 * w, cast<double>(f32_1));
 
                 // Integer to integer narrowing
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i8x16.narrow_i16x8_s", 16*w, i8(i16_1));
-                // check("i8x16.narrow_i16x8_u", 16*w, u8(u16_1));
-                // check("i16x8.narrow_i32x4_s", 8*w, i16(i32_1));
-                // check("i16x8.narrow_i32x4_u", 8*w, u8(u16_1));
+                check("i8x16.narrow_i16x8_s", 16 * w, i8_sat(i16_1));
+                check("i8x16.narrow_i16x8_u", 16 * w, u8_sat(i16_1));
+                check("i16x8.narrow_i32x4_s", 8 * w, i16_sat(i32_1));
+                check("i16x8.narrow_i32x4_u", 8 * w, u16_sat(i32_1));
 
                 // Integer to integer widening
                 // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
@@ -2146,6 +2218,10 @@ int main(int argc, char **argv) {
     if (getenv("HL_SIMD_OP_CHECK_FILTER")) {
         test.filter = getenv("HL_SIMD_OP_CHECK_FILTER");
     }
+
+    const int seed = argc > 2 ? atoi(argv[2]) : time(nullptr);
+    std::cout << "simd_op_check test seed: " << seed << "\n";
+    test.set_seed(seed);
 
     // TODO: multithreading here is the cause of https://github.com/halide/Halide/issues/3669;
     // the fundamental issue is that we make one set of ImageParams to construct many

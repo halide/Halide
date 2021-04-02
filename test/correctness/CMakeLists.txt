@@ -14,11 +14,6 @@ tests(GROUPS correctness
       atomic_tuples.cpp
       atomics.cpp
       autodiff.cpp
-      autotune_bug.cpp
-      autotune_bug_2.cpp
-      autotune_bug_3.cpp
-      autotune_bug_4.cpp
-      autotune_bug_5.cpp
       bad_likely.cpp
       bit_counting.cpp
       bitwise_ops.cpp

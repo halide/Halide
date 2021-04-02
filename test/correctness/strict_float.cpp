@@ -270,7 +270,12 @@ int main(int argc, char **argv) {
     in.set(transposed);
     run_all_conditions("random transposed", transposed);
 
-    // Ascending, best case for error.
+    // Originally the comments stipulated that ascending
+    // was best case and descending was worst case, neither
+    // of which are strictly true. Main idea is to compare
+    // the relative error of two significantly different orders.
+
+    // Ascending.
     std::sort(vals.begin(), vals.end());
     in.set(vals);
     run_all_conditions("sorted ascending", vals);
@@ -278,7 +283,7 @@ int main(int argc, char **argv) {
     in.set(transposed);
     run_all_conditions("sorted ascending transposed", transposed);
 
-    // Descending, worst case for error.
+    // Descending.
     std::sort(vals.begin(), vals.end(), std::greater<float>());
     in.set(vals);
     run_all_conditions("sorted descending", vals);

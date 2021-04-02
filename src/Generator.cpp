@@ -1736,7 +1736,7 @@ const std::vector<Type> &GIOBase::types() const {
             check_matching_types(f.at(0).output_types());
         }
     }
-    user_assert(types_defined()) << "Type is not defined for " << input_or_output() << " '" << name() << "'; you may need to specify '" << name() << ".type' as a GeneratorParam.\n";
+    user_assert(types_defined()) << "Type is not defined for " << input_or_output() << " '" << name() << "'; you may need to specify '" << name() << ".type' as a GeneratorParam, or call set_type() from the configure() method.\n";
     return types_;
 }
 
@@ -1744,6 +1744,24 @@ Type GIOBase::type() const {
     const auto &t = types();
     internal_assert(t.size() == 1) << "Expected types_.size() == 1, saw " << t.size() << " for " << name() << "\n";
     return t.at(0);
+}
+
+void GIOBase::set_type(const Type &type) {
+    generator->check_exact_phase(GeneratorBase::ConfigureCalled);
+    user_assert(!types_defined()) << "set_type() may only be called on an Input or Output that has no type specified.";
+    types_ = {type};
+}
+
+void GIOBase::set_dimensions(int dims) {
+    generator->check_exact_phase(GeneratorBase::ConfigureCalled);
+    user_assert(!dims_defined()) << "set_dimensions() may only be called on an Input or Output that has no dimensionality specified.";
+    dims_ = dims;
+}
+
+void GIOBase::set_array_size(int size) {
+    generator->check_exact_phase(GeneratorBase::ConfigureCalled);
+    user_assert(!array_size_defined()) << "set_array_size() may only be called on an Input or Output that has no array size specified.";
+    array_size_ = size;
 }
 
 bool GIOBase::dims_defined() const {
