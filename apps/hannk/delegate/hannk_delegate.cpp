@@ -243,10 +243,10 @@ public:
             auto t = ConvertTfLiteTensor(tensor);
             assert(!tensor_id_to_tensor_ptr_.count(tensor_id));
             tensor_id_to_tensor_ptr_[tensor_id] = t.get();
-            model_->tensors.push_back(std::move(t));
             if (options_.verbosity >= 1) {
                 LOG(INFO) << "tensor_id " << tensor_id << " -> " << (void *)t.get() << "\n";
             }
+            model_->tensors.push_back(std::move(t));
         }
 
         // Be careful with params->input_tensors and params->output_tensors here;
