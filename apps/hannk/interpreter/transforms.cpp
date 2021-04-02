@@ -90,15 +90,15 @@ namespace {
 
 // We can alias two tensors if the input is not used after the output is written,
 // and we meet a number of other requirements.
-void maybe_alias_tensors(Model *m, Tensor *input, Tensor *output, std::vector<int> offset = {}) {
+bool maybe_alias_tensors(Model *m, Tensor *input, Tensor *output, std::vector<int> offset = {}) {
     if (input->rank() != output->rank()) {
         // TODO: We should be able to alias reshapes.
-        return;
+        return false;
     }
 
     if (input->type().bytes() != output->type().bytes()) {
         // We can't alias tensors with types of different size.
-        return;
+        return false;
     }
 
     // We can't change the shape of an input or output tensor.
@@ -108,11 +108,11 @@ void maybe_alias_tensors(Model *m, Tensor *input, Tensor *output, std::vector<in
     }
     if ((input->is_input() || input->is_output()) &&
         !is_subset_of(output_box_with_offset, input->box())) {
-        return;
+        return false;
     }
     if ((output->is_input() || output->is_output()) &&
         !is_subset_of(input->box(), output_box_with_offset)) {
-        return;
+        return false;
     }
 
     bool output_written = false;
@@ -120,7 +120,7 @@ void maybe_alias_tensors(Model *m, Tensor *input, Tensor *output, std::vector<in
         if (is_output(i.get(), input)) {
             if (output_written) {
                 // We've already written the output, so we can't alias these tensors.
-                return;
+                return false;
             }
         }
         if (is_output(i.get(), output)) {
@@ -129,6 +129,7 @@ void maybe_alias_tensors(Model *m, Tensor *input, Tensor *output, std::vector<in
     }
 
     input->set_alias_of(output, offset);
+    return true;
 }
 
 // Try to alias outputs to inputs when it is safe.
@@ -138,8 +139,9 @@ class InPlace : public OpVisitor {
     using OpVisitor::visit;
 
     void visit(AddOp *op) {
-        maybe_alias_tensors(model_, op->input(0), op->output());
-        maybe_alias_tensors(model_, op->input(1), op->output());
+        if (!maybe_alias_tensors(model_, op->input(0), op->output())) {
+            maybe_alias_tensors(model_, op->input(1), op->output());
+        }
     }
 
     void visit(ConcatenationOp *op) {
@@ -197,7 +199,9 @@ class PadForConv : public OpVisitor {
             op->set_input(padded.get());
 
             HalideBuffer<int32_t> padding_data(2, input->rank());
-            for (int i = 0; i < input->rank(); i++) {
+            // Center the crop, except for the channel dimension.
+            // TODO: Is this always correct?
+            for (int i = 1; i < input->rank(); i++) {
                 padding_data(0, i) = (required[i].extent() - input->extent(i)) / 2;
                 padding_data(1, i) = (required[i].extent() - input->extent(i) + 1) / 2;
             }
