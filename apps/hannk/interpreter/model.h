@@ -141,9 +141,8 @@ public:
         return is_constant_;
     }
 
-    void set_constant() {
-        assert(is_allocated());
-        is_constant_ = true;
+    void set_constant(bool constant = true) {
+        is_constant_ = constant;
     }
 
     bool is_input() const {
