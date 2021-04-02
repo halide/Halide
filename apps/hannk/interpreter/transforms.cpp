@@ -77,10 +77,16 @@ void remove_dead_ops(Model *m) {
 
 namespace {
 
-// We can alias two tensors if the input is not used after the output is written.
+// We can alias two tensors if the input is not used after the output is written,
+// and we meet a number of other requirements.
 void maybe_alias_tensors(Model *m, Tensor *input, Tensor *output) {
     if (input->rank() != output->rank()) {
         // TODO: We should be able to alias reshapes.
+        return;
+    }
+
+    if (input->type().bytes() != output->type().bytes()) {
+        // We can't alias tensors with types of different size.
         return;
     }
 
