@@ -241,9 +241,9 @@ public:
                 continue;
             }
             auto t = ConvertTfLiteTensor(tensor);
-            model_->tensors.emplace_back(t);
             assert(!tensor_id_to_tensor_ptr_.count(tensor_id));
-            tensor_id_to_tensor_ptr_[tensor_id] = t;
+            tensor_id_to_tensor_ptr_[tensor_id] = t.get();
+            model_->tensors.push_back(std::move(t));
             if (options_.verbosity >= 1) {
                 LOG(INFO) << "tensor_id " << tensor_id << " -> " << (void *)t.get() << "\n";
             }
@@ -457,7 +457,7 @@ private:
             LOG(ERROR) << "tensor_id not found: " << tensor_id;
             return nullptr;
         }
-        return it->second.get();
+        return it->second;
     }
 
     std::unique_ptr<Op> BuildAdd(TfLiteContext *context, TfLiteNode *node) {
@@ -608,7 +608,7 @@ private:
     std::unique_ptr<Model> model_;
     std::unique_ptr<ModelInterpreter> interpreter_;
     // TODO: unordered_map might be a better choice.
-    std::map<int, std::shared_ptr<Tensor>> tensor_id_to_tensor_ptr_;
+    std::map<int, Tensor*> tensor_id_to_tensor_ptr_;
 };
 
 bool InputsHaveCorrectTypes(const TfLiteNode *node,
