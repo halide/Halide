@@ -203,6 +203,8 @@ class PadForConv : public OpVisitor {
             HalideBuffer<int32_t> padding_data(2, input->rank());
             // Center the crop, except for the channel dimension.
             // TODO: Is this always correct?
+            padding_data(0, 0) = 0;
+            padding_data(1, 0) = 0;
             for (int i = 1; i < input->rank(); i++) {
                 padding_data(0, i) = (required[i].extent() - input->extent(i)) / 2;
                 padding_data(1, i) = (required[i].extent() - input->extent(i) + 1) / 2;

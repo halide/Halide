@@ -697,7 +697,7 @@ void PadOp::execute(const Box &crop) {
 
         if (input(1)) {
             auto padding = input(1)->buffer<const int32_t>();
-            for (int d = 0; d < output_buf.dimensions(); d++) {
+            for (int d = 0; d < std::min(padding.extent(1), output_buf.dimensions()); d++) {
                 input_buf.translate(d, padding(0, d));
             }
         }
