@@ -739,14 +739,6 @@ void PadOp::execute(const Box &crop) {
         uint8_t pad_value = in->quantization().zero.at(0);
 
         if (is_alias(input_buf, output_buf)) {
-            while (can_fuse_cx(output_buf)) {
-                fuse_cx(output_buf);
-            }
-            while (can_fuse_xy(output_buf)) {
-                fuse_xy(output_buf);
-            }
-            pad_to_rank(output_buf, 4);
-
             // This is an in-place padding. Just fill in the
             // padded areas.
             // Fill dimensions outermost to innermost, to increase the

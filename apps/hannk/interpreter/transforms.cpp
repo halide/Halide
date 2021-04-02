@@ -101,17 +101,19 @@ bool maybe_alias_tensors(Model *m, Tensor *input, Tensor *output, std::vector<in
         return false;
     }
 
-    // We can't change the shape of an input or output tensor.
-    Box output_box_with_offset = output->box();
-    for (int i = 0; i < (int)offset.size(); ++i) {
-        output_box_with_offset[i] += offset[i];
-    }
-    if ((input->is_input() || input->is_output()) &&
-        !is_subset_of(output_box_with_offset, input->box())) {
+    // We can't alias an input that is an input or output.
+    // TODO: We could, if we don't change the shape.
+    if (input->is_input() || input->is_output()) {
         return false;
     }
-    if ((output->is_input() || output->is_output()) &&
-        !is_subset_of(input->box(), output_box_with_offset)) {
+
+    // We can't grow the bounds of the output tensor.
+    // TODO: We could, if we allowed non-zero mins.
+    Box input_box_with_offset = input->box();
+    for (int i = 0; i < (int)offset.size(); ++i) {
+        input_box_with_offset[i] += offset[i];
+    }
+    if (!is_subset_of(input_box_with_offset, output->box())) {
         return false;
     }
 

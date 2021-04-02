@@ -45,12 +45,10 @@ void TensorStorage::add_use(halide_type_t type, const Box &bounds) {
         assert(buffer_.dimensions() == (int)bounds.size());
         assert(!buffer_.data());
 
-        // Take the union of the existing buffer and the new bounds.
+        // Check that the storage is big enough for this buffer.
         for (int i = 0; i < rank(); i++) {
-            int new_min = std::min(buffer_.dim(i).min(), bounds[i].min);
-            int new_max = std::max(buffer_.dim(i).max(), bounds[i].max);
-            buffer_.raw_buffer()->dim[i].min = new_min;
-            buffer_.raw_buffer()->dim[i].extent = new_max - new_min + 1;
+            assert(bounds[i].min >= buffer_.dim(i).min());
+            assert(bounds[i].max <= buffer_.dim(i).max());
         }
     }
 }
@@ -133,6 +131,8 @@ void Tensor::allocate() {
         assert(buffer.dim(i).max() >= dim_i.max);
         buffer.crop(i, dim_i.min, dim_i.extent());
         buffer.translate(i, -dim_i.min);
+        assert(buffer.dim(i).min() == buffer_.dim(i).min());
+        assert(buffer.dim(i).max() == buffer_.dim(i).max());
     }
     buffer_ = buffer;
 }
