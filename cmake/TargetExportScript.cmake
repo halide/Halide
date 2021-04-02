@@ -12,8 +12,8 @@ function(target_export_script TARGET)
     set(dummy_source [[ int main() { return 0; } ]])
     set(is_shared "$<STREQUAL:$<TARGET_PROPERTY:TYPE>,SHARED_LIBRARY>")
 
-    # CMake doesn't recognize MSVC/link.exe's unknown-option warning.
-    set(extra_errors FAIL_REGEX "LNK4044: unrecognized option")
+    # CMake doesn't recognize MSVC/ldd link.exe's unknown-option warnings
+    set(extra_errors FAIL_REGEX "LNK4044: unrecognized option|warning : ignoring unknown argument")
 
     ## More linkers support the GNU syntax (ld, lld, gold), so try it first.
     set(version_script "LINKER:--version-script=${ARG_GNU_LD}")
