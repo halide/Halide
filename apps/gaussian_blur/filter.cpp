@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
         printf("Gaussian blur (recursive) (%d): %gms\n", r, best_manual * 1e3);
     }
     */
-    /*
+
     for (int r = 1; r <= 512; r *= 2) {
         // Assume a padded input
         Halide::Runtime::Buffer<uint8_t> scratch(nullptr, 0, 0);
@@ -65,33 +65,52 @@ int main(int argc, char **argv) {
 
         convert_and_save_image(output, "out_" + std::to_string(r) + ".png");
     }
-    */
 
     for (int r = 1; r <= 512; r *= 2) {
         const int N = 8;
-        // Assume a padded input
-        Halide::Runtime::Buffer<uint32_t> scratch1(N, output.width() + 2 * r + 1);
-        Halide::Runtime::Buffer<uint32_t> scratch2(N, output.width() + 2 * r + 1);
-        scratch1.set_min(0, -1);
-        scratch2.set_min(0, -1);
-        scratch1.fill(0);
-        scratch2.fill(0);
-        printf("%d kilobytes of scratch\n", (int)((scratch1.size_in_bytes() + scratch2.size_in_bytes()) / 1024));
 
-        double best_manual = benchmark(20, 20, [&]() {
-            bool valid = false;
-            for (int y = 0; y < output.height(); y += N) {
-                // FIXME: Shouldn't need a +N on the width of the padded slice
-                Halide::Runtime::Buffer<uint8_t> in_slice =
-                    padded.cropped(0, -r, output.width() + 2 * r + 2 * N).cropped(1, y - r - 1, N + 2 * r + 1);
-                Halide::Runtime::Buffer<uint8_t> out_slice = output.cropped(1, y, N);
-                in_slice.set_min(0, -1);
-                out_slice.set_min(0, 0);
-                box_blur_incremental(in_slice, scratch1, valid, r, output.width(), scratch2, out_slice);
-                out_slice.device_sync();
-                valid = true;
-                std::swap(scratch1, scratch2);
-            }
+        double best_manual = benchmark(100, 20, [&]() {
+            int slices = 16;
+            int slice_size = (output.height() + slices - 1) / slices;
+            slice_size = (slice_size + N - 1) / N * N;
+
+            struct Task {
+                int N, r, slice_size;
+                Halide::Runtime::Buffer<uint8_t> &padded;
+                Halide::Runtime::Buffer<uint8_t> &output;
+            } task{N, r, slice_size, padded, output};
+
+            auto one_strip = [](void *ucon, int s, uint8_t *closure) {
+                Task *t = (Task *)closure;
+                const int N = t->N;
+                const int w = t->output.width();
+                const int r = t->r;
+                Halide::Runtime::Buffer<uint32_t> scratch1(N, w + 2 * r + 1);
+                Halide::Runtime::Buffer<uint32_t> scratch2(N, w + 2 * r + 1);
+                scratch1.set_min(0, -1);
+                scratch2.set_min(0, -1);
+                int y_start = std::min(s * t->slice_size, t->output.height() - t->slice_size);
+                int y_end = y_start + t->slice_size;
+                bool valid = false;
+                for (int y = y_start; y < y_end; y += N) {
+                    // FIXME: Shouldn't need a +N on the width of the padded slice
+                    Halide::Runtime::Buffer<uint8_t> in_slice =
+                        t->padded
+                            .cropped(0, -r, w + 2 * r + 2 * N)
+                            .cropped(1, y - r - 1, N + 2 * r + 1);
+                    Halide::Runtime::Buffer<uint8_t> out_slice =
+                        t->output.cropped(1, y, N);
+                    in_slice.set_min(0, -1);
+                    out_slice.set_min(0, 0);
+                    box_blur_incremental(in_slice, scratch1, valid, r, w, scratch2, out_slice);
+                    out_slice.device_sync();
+                    valid = true;
+                    std::swap(scratch1, scratch2);
+                }
+                return 0;
+            };
+
+            halide_do_par_for(nullptr, one_strip, 0, slices, (uint8_t *)&task);
         });
         printf("Box blur (incremental) (%d): %gms\n", r, best_manual * 1e3);
 

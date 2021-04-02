@@ -228,7 +228,7 @@ public:
 
 HALIDE_REGISTER_GENERATOR(BoxBlurLog, box_blur_log)
 
-// This generator is only responsible for producing 8 scanlines of output
+// This generator is only responsible for producing N scanlines of output
 class BoxBlurIncremental : public Generator<BoxBlurIncremental> {
 public:
     const int N = 8;
@@ -241,9 +241,6 @@ public:
     Input<Buffer<uint32_t>> prev_blur_y{"prev_blur_y", 2};
     Input<bool> prev_blur_y_valid{"prev_blur_y_valid"};
     Input<int> radius{"radius"};
-
-    // TODO: We need to track and update a row-major blur_y separately from the col-major sum scan in x
-
     Input<int> width{"width"};
 
     Output<Buffer<uint32_t>> blur_y{"blur_y", 2};
