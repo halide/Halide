@@ -286,7 +286,6 @@ public:
             .store_in(MemoryType::Stack);
 
         // We have a lot of requirements of the filter.
-        const int filter_alignment = natural_vector_size(filter_.type());
         filter_.set_host_alignment(natural_vector_size<uint8_t>());
         filter_.dim(0)
             .set_min(0)
@@ -296,11 +295,6 @@ public:
             .set_min(0)
             .set_extent(align(filter_.dim(1).extent(), accum_vector_size))
             .set_stride(vector_reduction);
-        for (int d : {2, 3, 4}) {
-            filter_.dim(d)
-                .set_min(0)
-                .set_stride(align(filter_.dim(d).stride(), filter_alignment));
-        }
     }
 };
 
@@ -325,10 +319,9 @@ public:
 
         const int vector_reduction = get_vector_reduction_factor(target, UInt(8));
 
-        Type t = output_.type();
         Expr filter_cxyb =
-            input_bounded(co * vector_reduction + ci, x, y, c) - cast(t, input_offset_);
-        output_(ci, co, x, y, c) = filter_cxyb + output_offset_;
+            i16(input_bounded(co * vector_reduction + ci, x, y, c)) - i16(input_offset_);
+        output_(ci, c, co, x, y) = cast(output_.type(), filter_cxyb + output_offset_);
 
         // Schedule.
         output_.dim(0).set_min(0).set_extent(vector_reduction);
