@@ -904,7 +904,8 @@ class VectorSubs : public IRMutator {
                     // itself which we may want to handle. All the context is invalid though, so
                     // we just start anew for this specific statement.
                     // NOTE(vksnk): is it possible that we want to scalarize only some of the vectorized loops
-                    // instead of all of them (for example, only for variables which appear in likely?).
+                    // outside of the current IfThenElse(likely()) node instead of all of them (for example, 
+                    // only for variables which appear in likely?).
                     Stmt scalarized = scalarize(without_likelies, false);
                     scalarized = vectorize_statement(scalarized, target);
                     Stmt stmt =
