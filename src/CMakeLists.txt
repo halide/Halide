@@ -345,9 +345,6 @@ add_subdirectory(runtime)
 # Build the Halide mono-header.
 ##
 
-set(CXX_COMPILER_IS_GNU_OR_CLANG $<CXX_COMPILER_ID:GNU,Clang,AppleClang>)
-set(CXX_COMPILER_IS_GNU_OR_CLANG_AND_NOT_CLANGCL $<AND:${CXX_COMPILER_IS_GNU_OR_CLANG},$<NOT:$<STREQUAL:${CMAKE_CXX_SIMULATE_ID},MSVC>>>)
-
 set(HALIDE_H "${Halide_BINARY_DIR}/include/Halide.h")
 set(LICENSE_PATH "${Halide_SOURCE_DIR}/LICENSE.txt")
 add_custom_command(OUTPUT "${Halide_BINARY_DIR}/include/Halide.h"
@@ -362,6 +359,9 @@ add_custom_target(HalideIncludes ALL
 ##
 # Define the Halide library target.
 ##
+
+set(CXX_COMPILER_IS_GNU_OR_CLANG $<CXX_COMPILER_ID:GNU,Clang,AppleClang>)
+set(CXX_COMPILER_IS_GNU_OR_CLANG_AND_NOT_CLANGCL $<AND:${CXX_COMPILER_IS_GNU_OR_CLANG},$<NOT:$<STREQUAL:${CMAKE_CXX_SIMULATE_ID},MSVC>>>)
 
 add_library(Halide
             ${SOURCE_FILES}
