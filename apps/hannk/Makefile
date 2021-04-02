@@ -266,39 +266,39 @@ delegate: $(BIN)/$(HL_TARGET)/libHannkDelegate.so
 # ---------------------- test
 
 # unit tests for each op (not yet complete)
-$(BIN)/%/add_test: test/add_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE) $(UTIL_DEPS)
+$(BIN)/%/add_test: test/add_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-$(BIN)/%/average_pool_test: test/average_pool_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE) $(UTIL_DEPS)
+$(BIN)/%/average_pool_test: test/average_pool_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-$(BIN)/%/concatenation_test: test/concatenation_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE) $(UTIL_DEPS)
+$(BIN)/%/concatenation_test: test/concatenation_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-$(BIN)/%/conv2d_test: test/conv2d_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE) $(UTIL_DEPS)
+$(BIN)/%/conv2d_test: test/conv2d_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-$(BIN)/%/depthwise_conv2d_test: test/depthwise_conv2d_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE) $(UTIL_DEPS)
+$(BIN)/%/depthwise_conv2d_test: test/depthwise_conv2d_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-$(BIN)/%/fully_connected_test: test/fully_connected_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE) $(UTIL_DEPS)
+$(BIN)/%/fully_connected_test: test/fully_connected_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-$(BIN)/%/max_pool_test: test/max_pool_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE) $(UTIL_DEPS)
+$(BIN)/%/max_pool_test: test/max_pool_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-$(BIN)/%/pad_test: test/pad_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE) $(UTIL_DEPS)
+$(BIN)/%/pad_test: test/pad_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-$(BIN)/%/reshape_test: test/reshape_test.cpp $(BIN)/%/model.o $(BIN)/%/interval.o $(BIN)/%/ops.o $(OPS_HALIDE) $(UTIL_DEPS)
+$(BIN)/%/reshape_test: test/reshape_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
