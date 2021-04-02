@@ -30,7 +30,7 @@ endif
 
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 
-.PHONY: all build clean test build_test_ops delegate
+.PHONY: all build clean test delegate
 all: build
 
 # .SECONDARY with no prerequisites causes all targets to be treated as secondary
@@ -39,10 +39,10 @@ all: build
 
 build: \
 	$(BIN)/$(HL_TARGET)/benchmark \
-	$(BIN)/$(HL_TARGET)/compare_vs_tflite \
-	build_test_ops
+	$(BIN)/$(HL_TARGET)/compare_vs_tflite
 
-test: test_ops
+test: compare_vs_tflite
+	$(BIN)/$(HL_TARGET)/compare_vs_tflite test/*/*
 
 clean:
 	rm -rf $(BIN)
@@ -262,67 +262,6 @@ $(BIN)/%/libHannkDelegate.so: \
 	$(CXX-$*) -shared $^ $(DELEGATE_LD_FLAGS) -o $@
 
 delegate: $(BIN)/$(HL_TARGET)/libHannkDelegate.so
-
-# ---------------------- test
-
-# unit tests for each op (not yet complete)
-$(BIN)/%/add_test: test/add_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
-
-$(BIN)/%/average_pool_test: test/average_pool_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
-
-$(BIN)/%/concatenation_test: test/concatenation_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
-
-$(BIN)/%/conv2d_test: test/conv2d_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
-
-$(BIN)/%/depthwise_conv2d_test: test/depthwise_conv2d_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
-
-$(BIN)/%/fully_connected_test: test/fully_connected_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
-
-$(BIN)/%/max_pool_test: test/max_pool_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
-
-$(BIN)/%/pad_test: test/pad_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
-
-$(BIN)/%/reshape_test: test/reshape_test.cpp $(INTERPRETER_DEPS) $(UTIL_DEPS)
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
-
-build_test_ops: \
-	$(BIN)/$(HL_TARGET)/add_test \
-	$(BIN)/$(HL_TARGET)/average_pool_test \
-	$(BIN)/$(HL_TARGET)/concatenation_test \
-	$(BIN)/$(HL_TARGET)/conv2d_test \
-	$(BIN)/$(HL_TARGET)/depthwise_conv2d_test \
-	$(BIN)/$(HL_TARGET)/fully_connected_test \
-	$(BIN)/$(HL_TARGET)/max_pool_test \
-	$(BIN)/$(HL_TARGET)/pad_test \
-	$(BIN)/$(HL_TARGET)/reshape_test
-
-test_ops: build_test_ops
-	$(BIN)/$(HL_TARGET)/add_test
-	$(BIN)/$(HL_TARGET)/average_pool_test
-	$(BIN)/$(HL_TARGET)/concatenation_test
-	$(BIN)/$(HL_TARGET)/conv2d_test
-	$(BIN)/$(HL_TARGET)/depthwise_conv2d_test
-	$(BIN)/$(HL_TARGET)/fully_connected_test
-	$(BIN)/$(HL_TARGET)/max_pool_test
-	$(BIN)/$(HL_TARGET)/pad_test
-	$(BIN)/$(HL_TARGET)/reshape_test
 
 # ---------------------- toplevel executables
 
