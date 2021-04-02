@@ -35,10 +35,16 @@ void remove_dead_ops(Model *m) {
     for (int i = (int)m->ops.size() - 1; i >= 0; --i) {
         Op *op = m->ops[i].get();
         bool dead = true;
+        for (int j = 0; dead && j < op->input_count(); j++) {
+            if (op->input(j)->is_input() || op->input(j)->is_output()) {
+                dead = false;
+                break;
+            }
+        }
         for (int j = 0; dead && j < op->output_count(); j++) {
             // An op isn't dead if its output is an output
             // of the graph.
-            if (op->output(j)->is_output()) {
+            if (op->output(j)->is_input() || op->output(j)->is_output()) {
                 dead = false;
                 break;
             }
@@ -60,7 +66,12 @@ void remove_dead_ops(Model *m) {
     // Remove tensors not used by any op.
     for (int i = 0; i < (int)m->tensors.size();) {
         bool dead = true;
-        for (int j = 0; j < (int)m->ops.size(); ++j) {
+        if (m->tensors[i]->is_input() || m->tensors[i]->is_output()) {
+            // TODO: Many tensors are marked inputs/outputs that are also
+            // dead. Find a workaround for this...
+            dead = false;
+        }
+        for (int j = 0; dead && j < (int)m->ops.size(); ++j) {
             if (is_used(m->ops[j].get(), m->tensors[i].get())) {
                 dead = false;
                 break;
