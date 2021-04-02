@@ -26,18 +26,27 @@ $(BIN)/%/box_blur.a: $(GENERATOR_BIN)/box_blur.generator
 
 $(BIN)/%/box_blur_log.a: $(GENERATOR_BIN)/box_blur.generator
 	@mkdir -p $(@D)
-	$< -g box_blur_log -f box_blur_log -e $(GENERATOR_OUTPUTS) -o $(BIN)/$* target=$*-no_runtime 
+	$< -g box_blur_log -f box_blur_log -e $(GENERATOR_OUTPUTS) -o $(BIN)/$* target=$*-no_runtime
+
+$(BIN)/%/box_blur_incremental.a: $(GENERATOR_BIN)/box_blur.generator
+	@mkdir -p $(@D)
+	$< -g box_blur_incremental -f box_blur_incremental -e $(GENERATOR_OUTPUTS) -o $(BIN)/$* target=$*-no_runtime 
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/gaussian_blur.generator 
 	@mkdir -p $(@D)
 	$< -r runtime -o $(BIN)/$* target=$*
 
-$(BIN)/%/filter: filter.cpp \
+LIBS= \
 	$(BIN)/%/gaussian_blur.a \
 	$(BIN)/%/gaussian_blur_direct.a \
 	$(BIN)/%/box_blur.a \
 	$(BIN)/%/box_blur_log.a \
+	$(BIN)/%/box_blur_incremental.a \
 	$(BIN)/%/runtime.a
+
+.PRECIOUS: $(LIBS)
+
+$(BIN)/%/filter: filter.cpp $(LIBS) 
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 

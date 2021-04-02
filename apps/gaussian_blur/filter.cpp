@@ -6,6 +6,7 @@
 #include "HalideRuntime.h"
 
 #include "box_blur.h"
+#include "box_blur_incremental.h"
 #include "box_blur_log.h"
 #include "gaussian_blur.h"
 #include "gaussian_blur_direct.h"
@@ -48,8 +49,8 @@ int main(int argc, char **argv) {
         printf("Gaussian blur (recursive) (%d): %gms\n", r, best_manual * 1e3);
     }
     */
-
-    for (int r = 1; r <= 1024; r *= 2) {
+    /*
+    for (int r = 1; r <= 512; r *= 2) {
         // Assume a padded input
         Halide::Runtime::Buffer<uint8_t> scratch(nullptr, 0, 0);
         box_blur(input, r, output.width(), output.height(), scratch, output);
@@ -61,8 +62,43 @@ int main(int argc, char **argv) {
             output.device_sync();
         });
         printf("Box blur (recursive) (%d): %gms\n", r, best_manual * 1e3);
+
+        convert_and_save_image(output, "out_" + std::to_string(r) + ".png");
+    }
+    */
+
+    for (int r = 1; r <= 512; r *= 2) {
+        const int N = 8;
+        // Assume a padded input
+        Halide::Runtime::Buffer<uint32_t> scratch1(N, output.width() + 2 * r + 1);
+        Halide::Runtime::Buffer<uint32_t> scratch2(N, output.width() + 2 * r + 1);
+        scratch1.set_min(0, -1);
+        scratch2.set_min(0, -1);
+        scratch1.fill(0);
+        scratch2.fill(0);
+        printf("%d kilobytes of scratch\n", (int)((scratch1.size_in_bytes() + scratch2.size_in_bytes()) / 1024));
+
+        double best_manual = benchmark(20, 20, [&]() {
+            bool valid = false;
+            for (int y = 0; y < output.height(); y += N) {
+                // FIXME: Shouldn't need a +N on the width of the padded slice
+                Halide::Runtime::Buffer<uint8_t> in_slice =
+                    padded.cropped(0, -r, output.width() + 2 * r + 2 * N).cropped(1, y - r - 1, N + 2 * r + 1);
+                Halide::Runtime::Buffer<uint8_t> out_slice = output.cropped(1, y, N);
+                in_slice.set_min(0, -1);
+                out_slice.set_min(0, 0);
+                box_blur_incremental(in_slice, scratch1, valid, r, output.width(), scratch2, out_slice);
+                out_slice.device_sync();
+                valid = true;
+                std::swap(scratch1, scratch2);
+            }
+        });
+        printf("Box blur (incremental) (%d): %gms\n", r, best_manual * 1e3);
+
+        convert_and_save_image(output, "out_" + std::to_string(r) + ".png");
     }
 
+    /*
     for (int r = 1; r < 256; r *= 2) {
 
         double best_manual = benchmark(10, 10, [&]() {
@@ -73,5 +109,6 @@ int main(int argc, char **argv) {
     }
 
     printf("Success!\n");
+    */
     return 0;
 }

@@ -227,3 +227,177 @@ public:
 };
 
 HALIDE_REGISTER_GENERATOR(BoxBlurLog, box_blur_log)
+
+// This generator is only responsible for producing 8 scanlines of output
+class BoxBlurIncremental : public Generator<BoxBlurIncremental> {
+public:
+    const int N = 8;
+
+    // The 8-bit input
+    Input<Buffer<uint8_t>> input{"input", 2};
+
+    // The input, already blurred in y and sum-scanned in x, for the N scanlines above the
+    // one we're responsible for producing. Stored transposed.
+    Input<Buffer<uint32_t>> prev_blur_y{"prev_blur_y", 2};
+    Input<bool> prev_blur_y_valid{"prev_blur_y_valid"};
+    Input<int> radius{"radius"};
+
+    // TODO: We need to track and update a row-major blur_y separately from the col-major sum scan in x
+
+    Input<int> width{"width"};
+
+    Output<Buffer<uint32_t>> blur_y{"blur_y", 2};
+    Output<Buffer<uint8_t>> output{"output", 2};
+
+    void generate() {
+        Expr diameter = cast<uint32_t>(2 * radius + 1);
+
+        // First update prev_blur_y
+        Func delta{"delta"};
+        Var x{"x"}, y{"y"};
+        delta(x, y) = cast<int16_t>(input(x, y + diameter - 1)) - input(x, y - 1);
+
+        // Sum scan it
+        RDom r_scan(1, N - 1);
+        delta(x, r_scan) += delta(x, r_scan - 1);
+
+        Func transpose{"transpose"};
+        transpose(x, y) = delta(y, x);
+
+        // The input, blurred in y and sum-scanned in x at this output
+        blur_y(x, y) = undef<uint32_t>();
+        blur_y(x, -1) = cast<uint32_t>(0);
+
+        RDom r(0, width + 2 * radius);
+        r.where(prev_blur_y_valid);
+        blur_y(x, r) = ((prev_blur_y(N - 1, r) - prev_blur_y(N - 1, r - 1)) +
+                        cast<uint32_t>(cast<int32_t>(transpose(x, r))) +
+                        blur_y(x, r - 1));
+
+        Func blur_y_direct{"blur_y_direct"};
+        RDom rb(0, cast<int>(diameter));
+        blur_y_direct(x, y) = undef<uint32_t>();
+        blur_y_direct(x, 0) = sum(cast<uint32_t>(input(x, rb)));
+        blur_y_direct(x, r_scan) =
+            (blur_y_direct(x, r_scan - 1) +
+             cast<uint32_t>(cast<int32_t>((cast<int16_t>(input(x, r_scan + diameter - 1)) -
+                                           input(x, r_scan - 1)))));
+        Func blur_y_direct_transpose{"blur_y_direct_transpose"};
+        blur_y_direct_transpose(x, y) = blur_y_direct(y, x);
+
+        RDom r_init(0, width + 2 * radius);
+        r_init.where(!prev_blur_y_valid);
+        blur_y(x, r_init) = blur_y(x, r_init - 1) + blur_y_direct_transpose(x, r_init);
+
+        Func dithered{"dithered"};
+        Expr result_32 = blur_y(x, y + diameter - 1) - blur_y(x, y - 1);
+
+        bool should_dither = false;
+        auto normalize = [&](Expr num) {
+            Expr den = diameter * diameter;
+            if (!should_dither) {
+                /*
+                  Exact integer version. For 32-bit ints it's actually slower than just
+                  converting to float.
+
+                Type t = num.type();
+                Type wide = t.with_bits(t.bits() * 2);
+                Expr shift = 31 - count_leading_zeros(den);
+                Expr wide_one = cast(wide, 1);
+                num += den / 2;
+                Expr e = cast(wide, num);
+                Expr mul = (wide_one << (t.bits() + shift + 1)) / den - (wide_one << t.bits()) + wide_one;
+                e *= mul;
+                e = e >> t.bits();
+                e = cast(t, e);
+                e += (num - e) / 2;
+                e = e >> shift;
+                return cast<uint8_t>(e);
+                */
+                return cast<uint8_t>(round(num * (1.0f / den)));
+            } else {
+                return cast<uint8_t>(floor(num * (1.0f / den) + random_float()));
+            }
+        };
+
+        dithered(x, y) = normalize(result_32);
+
+        output(x, y) = dithered(y, x);
+
+        Var xi, yi;
+        RVar ry, ryi;
+        blur_y
+            .dim(0)
+            .set_bounds(0, N);
+        blur_y
+            .compute_root()
+            .bound(x, 0, N);
+        blur_y
+            .update(0)
+            .vectorize(x);
+        blur_y
+            .update(1)
+            .split(r, ry, ryi, N * 2)
+            .reorder(x, ryi, ry)
+            .vectorize(x);
+        blur_y
+            .update(2)
+            .split(r_init, ry, ryi, N * 1)
+            .reorder(x, ryi, ry)
+            .vectorize(x);
+        delta
+            .compute_at(blur_y, ry)
+            .bound_extent(x, N * 2)
+            .vectorize(x)
+            .unroll(y);
+        delta
+            .update()
+            .vectorize(x)
+            .unroll(r_scan);
+        transpose
+            .compute_at(blur_y, ry)
+            .bound_extent(y, N * 2)
+            .vectorize(y)
+            .unroll(x);
+
+        blur_y_direct
+            .compute_at(blur_y, ry)
+            .bound_extent(x, N * 1)
+            .vectorize(x)
+            .unroll(y);
+        blur_y_direct
+            .update(0)
+            .vectorize(x);
+        blur_y_direct
+            .update(1)
+            .unroll(r_scan)
+            .vectorize(x);
+        blur_y_direct_transpose
+            .compute_at(blur_y, ry)
+            .bound_extent(y, N * 1)
+            .vectorize(y)
+            .unroll(x);
+
+        output
+            .dim(1)
+            .set_bounds(0, N);
+        output
+            .compute_root()
+            .bound(y, 0, N)
+            .split(x, x, xi, N * 1)
+            .reorder(xi, y, x)
+            .vectorize(xi)
+            .unroll(y);
+        dithered
+            .compute_at(output, x)
+            .vectorize(x)
+            .unroll(y);
+        dithered.in()
+            .compute_at(output, x)
+            .reorder_storage(y, x)
+            .vectorize(x)
+            .unroll(y);
+    }
+};
+
+HALIDE_REGISTER_GENERATOR(BoxBlurIncremental, box_blur_incremental)
