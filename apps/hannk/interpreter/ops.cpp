@@ -75,6 +75,17 @@ bool is_alias(const HalideBuffer<const void> &a, const HalideBuffer<const void> 
     return !(a.begin() >= b.end() || a.end() <= b.begin());
 }
 
+template <typename T, typename U>
+void crop_to_union(HalideBuffer<T> &a, HalideBuffer<U> &b) {
+    assert(a.dimensions() == b.dimensions());
+    for (int d = 0; d < a.dimensions(); d++) {
+        int min = std::max(a.dim(d).min(), b.dim(d).min());
+        int max = std::min(a.dim(d).max(), b.dim(d).max());
+        a.crop(d, min, max - min + 1);
+        b.crop(d, min, max - min + 1);
+    }
+}
+
 struct QuantizedMulAndShift {
     int multiplier, shift;
 };
@@ -128,11 +139,11 @@ Interval get_quantized_min_max(ActivationFunction activation, int zero_point, do
     return {std::max(min, 0), std::min(max, 255)};
 }
 
-Interval get_output_range(ActivationFunction activation, Tensor *out) {
-    const int output_offset = out->quantization().zero.at(0);
+Interval get_output_range(ActivationFunction activation, const QuantizationInfo &quantization) {
+    const int output_offset = quantization.zero.at(0);
     assert(output_offset >= 0 && output_offset <= 255);
 
-    const float output_scale = out->quantization().scale.at(0);
+    const float output_scale = quantization.scale.at(0);
 
     const auto output_range = get_quantized_min_max(activation, output_offset, output_scale);
     assert(output_range.min >= 0 && output_range.min <= 255);
@@ -140,6 +151,67 @@ Interval get_output_range(ActivationFunction activation, Tensor *out) {
     assert(output_range.min <= output_range.max);
 
     return output_range;
+}
+
+void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
+         HalideBuffer<const uint8_t> in2, const QuantizationInfo &in2q, int in2sign,
+         HalideBuffer<uint8_t> out, const QuantizationInfo &outq, ActivationFunction activation) {
+    const int in1_offset = in1q.zero.at(0);
+    const int in2_offset = in2q.zero.at(0);
+    const int out_offset = outq.zero.at(0);
+    assert(in1_offset >= 0 && in1_offset <= 255);
+    assert(in2_offset >= 0 && in2_offset <= 255);
+    assert(out_offset >= 0 && out_offset <= 255);
+
+    const float in1_scale = in1q.scale.at(0);
+    const float in2_scale = in2q.scale.at(0);
+    const float out_scale = outq.scale.at(0);
+
+    const int left_shift = 20;  // 20 for 8-bit, 15 for 16-bit
+    const double twice_max_input_scale = 2 * std::max(in1_scale, in2_scale);
+    const double real_in1_multiplier = in1_scale / twice_max_input_scale;
+    const double real_in2_multiplier = in2_scale / twice_max_input_scale;
+    const double real_out_multiplier = twice_max_input_scale / ((1 << left_shift) * out_scale);
+
+    auto in1_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in1_multiplier);
+    auto in2_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in2_multiplier);
+    auto out_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_out_multiplier);
+    assert(in1_mul_and_shift.shift <= 0);
+    assert(in2_mul_and_shift.shift <= 0);
+    assert(out_mul_and_shift.shift <= 0);
+
+    in2_mul_and_shift.multiplier *= in2sign;
+
+    const auto out_range = get_output_range(activation, outq);
+
+    while (can_fuse_cx(in1) && can_fuse_cx(in2) && can_fuse_cx(out)) {
+        fuse_cx(in1);
+        fuse_cx(in2);
+        fuse_cx(out);
+    }
+    pad_to_rank(in1, 4);
+    pad_to_rank(in2, 4);
+    pad_to_rank(out, 4);
+
+    CHECK(0 == add_uint8_uint8(left_shift, in1, in2,
+                               in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
+                               in2_offset, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
+                               out_offset, out_mul_and_shift.multiplier, -out_mul_and_shift.shift,
+                               out_range.min, out_range.max, out));
+}
+
+void requantize(const HalideBuffer<const uint8_t> &in, const QuantizationInfo &inq,
+                HalideBuffer<uint8_t> out, const QuantizationInfo &outq) {
+    if (inq == outq) {
+        // Some of these are just copies, or no-ops.
+        if (is_alias(in, out)) {
+            return;
+        } else {
+            out.copy_from(in);
+        }
+    } else {
+        add(in, inq, in, inq, 0, out, outq, ActivationFunction::None);
+    }
 }
 
 }  // namespace
@@ -187,52 +259,13 @@ void AddOp::execute(const Box &crop) {
     if (in1->is_type<uint8_t>() &&
         (!in2 || in2->is_type<uint8_t>()) &&
         out->is_type<uint8_t>()) {
-        auto in1_buf = in1->buffer<const uint8_t>();
-        auto in2_buf = in2 ? in2->buffer<const uint8_t>() : in1_buf;
-        auto output_buf = out->buffer<uint8_t>(crop);
-
-        const int in1_offset = in1->quantization().zero.at(0);
-        const int in2_offset = in2 ? in2->quantization().zero.at(0) : 0;
-        const int output_offset = out->quantization().zero.at(0);
-        assert(in1_offset >= 0 && in1_offset <= 255);
-        assert(in2_offset >= 0 && in2_offset <= 255);
-        assert(output_offset >= 0 && output_offset <= 255);
-
-        const float in1_scale = in1->quantization().scale.at(0);
-        const float in2_scale = in2 ? in2->quantization().scale.at(0) : 0.0f;
-        const float output_scale = out->quantization().scale.at(0);
-
-        const int left_shift = 20;  // 20 for 8-bit, 15 for 16-bit
-        const double twice_max_input_scale = 2 * std::max(in1_scale, in2_scale);
-        const double real_in1_multiplier = in1_scale / twice_max_input_scale;
-        const double real_in2_multiplier = in2_scale / twice_max_input_scale;
-        const double real_output_multiplier = twice_max_input_scale / ((1 << left_shift) * output_scale);
-
-        auto in1_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in1_multiplier);
-        auto in2_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in2_multiplier);
-        auto output_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_output_multiplier);
-        assert(in1_mul_and_shift.shift <= 0);
-        assert(in2_mul_and_shift.shift <= 0);
-        assert(output_mul_and_shift.shift <= 0);
-
-        in2_mul_and_shift.multiplier *= input2_sign_;
-
-        const auto output_range = get_output_range(activation_, out);
-
-        while (can_fuse_cx(in1_buf) && can_fuse_cx(in2_buf) && can_fuse_cx(output_buf)) {
-            fuse_cx(in1_buf);
-            fuse_cx(in2_buf);
-            fuse_cx(output_buf);
+        if (!in2) {
+            in2 = in1;
+            input2_sign_ = 0;
         }
-        pad_to_rank(in1_buf, 4);
-        pad_to_rank(in2_buf, 4);
-        pad_to_rank(output_buf, 4);
-
-        CHECK(0 == add_uint8_uint8(left_shift, in1_buf, in2_buf,
-                                   in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
-                                   in2_offset, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
-                                   output_offset, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
-                                   output_range.min, output_range.max, output_buf));
+        add(in1->buffer<const uint8_t>(), in1->quantization(),
+            in2->buffer<const uint8_t>(), in2->quantization(), input2_sign_,
+            out->buffer<uint8_t>(), out->quantization(), activation_);
     } else {
         CHECK(false);
     }
@@ -246,7 +279,7 @@ void AveragePoolOp::execute(const Box &crop) {
         auto input_buf = in->buffer<const uint8_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
 
-        const auto output_range = get_output_range(activation_, out);
+        const auto output_range = get_output_range(activation_, out->quantization());
 
         // TODO: does this need to handle Padding::Same?
         CHECK(padding_ == Padding::Valid) << "AveragePoolOp doesn't handle all paddings yet";
@@ -282,21 +315,18 @@ std::vector<SplitInfo> ConcatenationOp::get_split_info() const {
 }
 
 void ConcatenationOp::execute(const Box &crop) {
-    Tensor *out = output();
+    HalideBuffer<void> output_buf = output()->buffer(crop);
 
-    auto output_buf = out->buffer(crop);
-
-    int output_i = output_buf.dim(axis_).min();
+    int concatenated_i = 0;
     for (int i = 0; i < input_count(); i++) {
-        auto input_buf = input(i)->buffer(crop);
-        for (int j = input_buf.dim(axis_).min(); j <= input_buf.dim(axis_).max(); j++) {
-            // TODO: Maybe we could just copy whole buffers?
-            auto input_j = input_buf.sliced(axis_, j);
-            auto output_j = output_buf.sliced(axis_, output_i++);
-            if (!is_alias(input_j, output_j)) {
-                output_j.copy_from(input_j);
-            }
-        }
+        HalideBuffer<const void> input_buf = input(i)->buffer();
+        assert(input_buf.dim(axis_).min() == 0);
+        input_buf.translate(axis_, concatenated_i);
+        concatenated_i += input_buf.dim(axis_).extent();
+
+        HalideBuffer<void> output_crop = output_buf;
+        crop_to_union(output_crop, input_buf);
+        requantize(input_buf, input(i)->quantization(), output_crop, output()->quantization());
     }
 }
 
@@ -408,7 +438,7 @@ void Conv2DOp::execute(const Box &crop) {
         // convolution_uint8() expects a positive shift.
         const int output_shift = -mul_and_shift.shift;
 
-        const auto output_range = get_output_range(activation_, out);
+        const auto output_range = get_output_range(activation_, out->quantization());
 
         assert(filter_buf.dimensions() == 5);
         const int filter_width = filter_buf.dim(3).extent();
@@ -541,7 +571,7 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
         // depthwise_convolution_uint8() expects a positive shift.
         const int output_shift = -mul_and_shift.shift;
 
-        const auto output_range = get_output_range(activation_, out);
+        const auto output_range = get_output_range(activation_, out->quantization());
 
         if (depth_multiplier >= output_buf.dim(0).extent()) {
             CHECK(
@@ -634,7 +664,7 @@ void FullyConnectedOp::execute(const Box &crop) {
         const int output_multiplier = mul_and_shift.multiplier;
         const int output_shift = -mul_and_shift.shift;
 
-        const auto output_range = get_output_range(activation_, out);
+        const auto output_range = get_output_range(activation_, out->quantization());
 
         CHECK(
             0 == fully_connected_uint8(
@@ -657,7 +687,7 @@ void MaxPoolOp::execute(const Box &crop) {
         // TODO: does this need to handle Padding::Same?
         CHECK(padding_ == Padding::Valid) << "AveragePoolOp doesn't handle all paddings yet";
 
-        const auto output_range = get_output_range(activation_, out);
+        const auto output_range = get_output_range(activation_, out->quantization());
 
         CHECK(
             0 == max_pool_uint8(input_buf, stride_[0], stride_[1],
