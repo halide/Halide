@@ -168,7 +168,8 @@ public:
             parse_activation_function(options->fused_activation_function()));
     }
 
-    std::unique_ptr<Op> parse_average_pool2D(const tflite::Operator *op) {
+    template <typename T>
+    std::unique_ptr<Op> parse_pool2D(const tflite::Operator *op) {
         const auto options = op->builtin_options_as_Pool2DOptions();
         Padding padding = parse_padding(options->padding());
         std::vector<int> stride = {
@@ -183,7 +184,7 @@ public:
             parse_activation_function(options->fused_activation_function());
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
-        return ::hannk::make_unique<AveragePoolOp>(
+        return ::hannk::make_unique<T>(
             input, output, stride, filter_size, padding, activation);
     }
 
@@ -327,7 +328,9 @@ public:
         case tflite::BuiltinOperator_SUB:
             return parse_sub(op);
         case tflite::BuiltinOperator_AVERAGE_POOL_2D:
-            return parse_average_pool2D(op);
+            return parse_pool2D<AveragePoolOp>(op);
+        case tflite::BuiltinOperator_MAX_POOL_2D:
+            return parse_pool2D<MaxPoolOp>(op);
         case tflite::BuiltinOperator_CONCATENATION:
             return parse_concatenation(op);
         case tflite::BuiltinOperator_CONV_2D:

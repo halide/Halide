@@ -631,9 +631,6 @@ void MaxPoolOp::execute(const Box &crop) {
         auto input_buf = in->buffer<const uint8_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
 
-        // TODO: does this need to handle Padding::Same?
-        CHECK(padding_ == Padding::Valid) << "AveragePoolOp doesn't handle all paddings yet";
-
         const auto output_range = get_output_range(activation_, out->quantization());
 
         CHECK(

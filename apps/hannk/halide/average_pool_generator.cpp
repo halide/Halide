@@ -33,9 +33,9 @@ public:
         input_bounded(c, x, y, b) = constant_exterior(input_, 0)(c, x, y, b);
 
         Func sum("sum");
-        RDom filter_dom(0, filter_width_, 0, filter_height_);
+        RDom r(0, filter_width_, 0, filter_height_);
         sum(c, x, y, b) += u16(
-            input_bounded(c, x * stride_x_ + filter_dom.x, y * stride_y_ + filter_dom.y, b));
+            input_bounded(c, x * stride_x_ + r.x, y * stride_y_ + r.y, b));
 
         Func average("average");
         // TODO: We should probably specialize/optimize for the case
@@ -50,13 +50,10 @@ public:
         output_(c, x, y, b) = clamp(average(c, x, y, b), output_min_, output_max_);
 
         // Schedule.
-        interpret_as_tensor(input_);
-        interpret_as_tensor(output_);
         require_same_min_extent(0, input_, output_);
         require_same_min_extent(3, input_, output_);
 
         // TODO: Optimize more.
-        Expr output_channels = output_.dim(0).extent();
         const int vector_size = natural_vector_size<uint8_t>();
         output_.compute_root()
             .vectorize(c, vector_size, TailStrategy::Predicate);
