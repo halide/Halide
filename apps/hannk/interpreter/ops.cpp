@@ -153,15 +153,35 @@ Interval get_output_range(ActivationFunction activation, const QuantizationInfo 
     return output_range;
 }
 
+struct MultiplyParams {
+    int a_offset;
+    int b_offset;
+    int c_offset;
+    QuantizedMulAndShift c;
+};
+
+MultiplyParams get_quantized_multiply_params(const QuantizationInfo &a, const QuantizationInfo &b, const QuantizationInfo &c) {
+    MultiplyParams result;
+    result.a_offset = a.zero.at(0);
+    result.b_offset = b.zero.at(0);
+    result.c_offset = c.zero.at(0);
+
+    const float a_scale = a.scale.at(0);
+    const float b_scale = b.scale.at(0);
+    const float c_scale = c.scale.at(0);
+    const double ab_scale = a_scale * b_scale;
+    result.c = get_quantized_mul_and_shift_smaller_than_one(ab_scale / c_scale);
+    result.c.shift = -result.c.shift;
+
+    return result;
+}
+
 void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
          HalideBuffer<const uint8_t> in2, const QuantizationInfo &in2q, int in2sign,
          HalideBuffer<uint8_t> out, const QuantizationInfo &outq, ActivationFunction activation) {
     const int in1_offset = in1q.zero.at(0);
     const int in2_offset = in2q.zero.at(0);
     const int out_offset = outq.zero.at(0);
-    assert(in1_offset >= 0 && in1_offset <= 255);
-    assert(in2_offset >= 0 && in2_offset <= 255);
-    assert(out_offset >= 0 && out_offset <= 255);
 
     const float in1_scale = in1q.scale.at(0);
     const float in2_scale = in2q.scale.at(0);
@@ -210,6 +230,8 @@ void requantize(const HalideBuffer<const uint8_t> &in, const QuantizationInfo &i
             out.copy_from(in);
         }
     } else {
+        // TODO: Maybe a dedicated pipeline for this would be better. It
+        // could be a little faster, and avoid some quantization error.
         add(in, inq, in, inq, 0, out, outq, ActivationFunction::None);
     }
 }
@@ -409,34 +431,8 @@ void Conv2DOp::execute(const Box &crop) {
         auto bias_buf = bias()->buffer<const int32_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
 
-        const int input_offset = in->quantization().zero.at(0);
-        const int filter_offset = filt->quantization().zero.at(0);
-#ifndef NDEBUG
-        const int bias_offset = bias()->quantization().zero.at(0);
-#endif
-        const int output_offset = out->quantization().zero.at(0);
-        assert(input_offset >= 0 && input_offset <= 255);
-        assert(filter_offset >= 0 && filter_offset <= 255);
-        assert(bias_offset == 0);
-        assert(output_offset >= 0 && output_offset <= 255);
-
-        const float input_scale = in->quantization().scale.at(0);
-        const float filter_scale = filt->quantization().scale.at(0);
-#ifndef NDEBUG
-        const float bias_scale = bias()->quantization().scale.at(0);
-#endif
-        const float output_scale = out->quantization().scale.at(0);
-
-        const double input_product_scale = input_scale * filter_scale;
-        assert(std::abs(input_product_scale - bias_scale) <=
-               std::min(input_product_scale, (double)bias_scale) * 1e-6);
-
-        const double real_multiplier = input_product_scale / output_scale;
-        const auto mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_multiplier);
-        const int output_multiplier = mul_and_shift.multiplier;
-        // get_quantized_mul_and_shift_smaller_than_one() returns a negative shift;
-        // convolution_uint8() expects a positive shift.
-        const int output_shift = -mul_and_shift.shift;
+        MultiplyParams params =
+            get_quantized_multiply_params(in->quantization(), filt->quantization(), out->quantization());
 
         const auto output_range = get_output_range(activation_, out->quantization());
 
@@ -460,19 +456,19 @@ void Conv2DOp::execute(const Box &crop) {
             // TODO: We really ought to be able to do this with GuardWithIf
             // and/or specialize.
             CHECK(
-                0 == convolution_r16_uint8(input_buf, filter_buf, bias_buf, (uint8_t)input_offset,
-                                           (uint8_t)filter_offset, stride_[0], stride_[1],
-                                           dilation_[0], dilation_[1], output_multiplier,
-                                           output_shift, (uint8_t)output_offset,
+                0 == convolution_r16_uint8(input_buf, filter_buf, bias_buf, (uint8_t)params.a_offset,
+                                           (uint8_t)params.b_offset, stride_[0], stride_[1],
+                                           dilation_[0], dilation_[1], params.c.multiplier,
+                                           params.c.shift, (uint8_t)params.c_offset,
                                            output_range.min, output_range.max, output_buf));
         } else
 #endif
         {
             CHECK(
-                0 == convolution_uint8(input_buf, filter_buf, bias_buf, (uint8_t)input_offset,
-                                       (uint8_t)filter_offset, stride_[0], stride_[1],
-                                       dilation_[0], dilation_[1], output_multiplier,
-                                       output_shift, (uint8_t)output_offset,
+                0 == convolution_uint8(input_buf, filter_buf, bias_buf, (uint8_t)params.a_offset,
+                                       (uint8_t)params.b_offset, stride_[0], stride_[1],
+                                       dilation_[0], dilation_[1], params.c.multiplier,
+                                       params.c.shift, (uint8_t)params.c_offset,
                                        output_range.min, output_range.max, output_buf));
         }
     } else {
@@ -542,34 +538,8 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
         int depth_multiplier = this->depth_multiplier();
         assert(depth_multiplier * input_buf.dim(0).extent() == output_buf.dim(0).extent());
 
-        const int input_offset = in->quantization().zero.at(0);
-        const int filter_offset = filt->quantization().zero.at(0);
-#ifndef NDEBUG
-        const int bias_offset = bias()->quantization().zero.at(0);
-#endif
-        const int output_offset = out->quantization().zero.at(0);
-        assert(input_offset >= 0 && input_offset <= 255);
-        assert(filter_offset >= 0 && filter_offset <= 255);
-        assert(bias_offset == 0);
-        assert(output_offset >= 0 && output_offset <= 255);
-
-        const float input_scale = in->quantization().scale.at(0);
-        const float filter_scale = filt->quantization().scale.at(0);
-#ifndef NDEBUG
-        const float bias_scale = bias()->quantization().scale.at(0);
-#endif
-        const float output_scale = out->quantization().scale.at(0);
-
-        const double input_product_scale = input_scale * filter_scale;
-        assert(std::abs(input_product_scale - bias_scale) <=
-               std::min(input_product_scale, (double)bias_scale) * 1e-6);
-
-        const double real_multiplier = input_product_scale / output_scale;
-        const auto mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_multiplier);
-        const int output_multiplier = mul_and_shift.multiplier;
-        // get_quantized_mul_and_shift_smaller_than_one() returns a negative shift;
-        // depthwise_convolution_uint8() expects a positive shift.
-        const int output_shift = -mul_and_shift.shift;
+        MultiplyParams params =
+            get_quantized_multiply_params(in->quantization(), filt->quantization(), out->quantization());
 
         const auto output_range = get_output_range(activation_, out->quantization());
 
@@ -577,23 +547,23 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
             CHECK(
                 0 == depthwise_convolution_broadcast_uint8(
                          input_buf, filter_buf, bias_buf, depth_multiplier,
-                         (uint8_t)input_offset, (uint8_t)filter_offset, stride_[0], stride_[1],
-                         dilation_[0], dilation_[1], output_multiplier, output_shift,
-                         (uint8_t)output_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
+                         (uint8_t)params.a_offset, (uint8_t)params.b_offset, stride_[0], stride_[1],
+                         dilation_[0], dilation_[1], params.c.multiplier, params.c.shift,
+                         (uint8_t)params.c_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
         } else if (depth_multiplier == 1) {
             CHECK(
                 0 == depthwise_convolution_dm1_uint8(
                          input_buf, filter_buf, bias_buf, depth_multiplier,
-                         (uint8_t)input_offset, (uint8_t)filter_offset, stride_[0], stride_[1],
-                         dilation_[0], dilation_[1], output_multiplier, output_shift,
-                         (uint8_t)output_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
+                         (uint8_t)params.a_offset, (uint8_t)params.b_offset, stride_[0], stride_[1],
+                         dilation_[0], dilation_[1], params.c.multiplier, params.c.shift,
+                         (uint8_t)params.c_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
         } else {
             CHECK(
                 0 == depthwise_convolution_uint8(
                          input_buf, filter_buf, bias_buf, depth_multiplier,
-                         (uint8_t)input_offset, (uint8_t)filter_offset, stride_[0], stride_[1],
-                         dilation_[0], dilation_[1], output_multiplier, output_shift,
-                         (uint8_t)output_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
+                         (uint8_t)params.a_offset, (uint8_t)params.b_offset, stride_[0], stride_[1],
+                         dilation_[0], dilation_[1], params.c.multiplier, params.c.shift,
+                         (uint8_t)params.c_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
         }
     } else {
         CHECK(false);
@@ -637,39 +607,15 @@ void FullyConnectedOp::execute(const Box &crop) {
             input_buf = input_buf.sliced(2, input_buf.dim(2).min());
         }
 
-        const int input_offset = in->quantization().zero.at(0);
-        const int filter_offset = filt->quantization().zero.at(0);
-#ifndef NDEBUG
-        const int bias_offset = bias()->quantization().zero.at(0);
-#endif
-        const int output_offset = out->quantization().zero.at(0);
-        assert(input_offset >= 0 && input_offset <= 255);
-        assert(filter_offset >= 0 && filter_offset <= 255);
-        assert(bias_offset == 0);
-        assert(output_offset >= 0 && output_offset <= 255);
-
-        const float input_scale = in->quantization().scale.at(0);
-        const float filter_scale = filt->quantization().scale.at(0);
-#ifndef NDEBUG
-        const float bias_scale = bias()->quantization().scale.at(0);
-#endif
-        const float output_scale = out->quantization().scale.at(0);
-
-        const double input_product_scale = input_scale * filter_scale;
-        assert(std::abs(input_product_scale - bias_scale) <=
-               std::min(input_product_scale, (double)bias_scale) * 1e-6);
-
-        const double real_multiplier = input_product_scale / output_scale;
-        const auto mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_multiplier);
-        const int output_multiplier = mul_and_shift.multiplier;
-        const int output_shift = -mul_and_shift.shift;
+        MultiplyParams params =
+            get_quantized_multiply_params(in->quantization(), filt->quantization(), out->quantization());
 
         const auto output_range = get_output_range(activation_, out->quantization());
 
         CHECK(
             0 == fully_connected_uint8(
-                     input_buf, filter_buf, bias_buf, (uint8_t)input_offset, (uint8_t)filter_offset,
-                     (uint8_t)output_offset, output_multiplier, output_shift, (uint8_t)output_range.min,
+                     input_buf, filter_buf, bias_buf, (uint8_t)params.a_offset, (uint8_t)params.b_offset,
+                     (uint8_t)params.c_offset, params.c.multiplier, params.c.shift, (uint8_t)output_range.min,
                      (uint8_t)output_range.max, output_buf));
     } else {
         CHECK(false);
