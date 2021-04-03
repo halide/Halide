@@ -47,6 +47,9 @@ public:
         input1 = multiply_quantized(input1, input1_multiplier_, input1_shift_);
         input2 = multiply_quantized(input2, input2_multiplier_, input2_shift_);
 
+        // Treat input1 + input2 * 0 as a special case.
+        input2 = select(input2_multiplier_ != 0, input2, 0);
+
         Expr output = multiply_quantized(input1 + input2, output_multiplier_, output_shift_);
         output = saturating_add(i16_sat(output), output_offset_);
         output_(c, x, y, b) = clamp(u8_sat(output), output_min_, output_max_);
@@ -54,12 +57,8 @@ public:
         // Schedule.
         const int vector_size = natural_vector_size<uint8_t>();
 
-        // Require that the operands are tensors.
-        interpret_as_tensor(output_);
-        interpret_as_tensor(input1_);
-        interpret_as_tensor(input2_);
-
-        output_.vectorize(c, vector_size * 2, TailStrategy::Predicate);
+        output_.vectorize(c, vector_size, TailStrategy::Predicate)
+            .specialize(input2_multiplier_ != 0);
     }
 };
 

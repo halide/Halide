@@ -37,15 +37,12 @@ public:
         RDom rc(weights_.dim(0).min(), weights_.dim(0).extent());
         Func multiplied("multiplied");
         multiplied(c, b) = bias_(c);
-        // TODO: I don't think this is quite right vs. tflite implementation.
-        // Recheck carefully.
-        multiplied(c, b) += i32(weights_zeroed(rc, c)) * i32(input_zeroed(c, b));
+        multiplied(c, b) += i32(weights_zeroed(rc, c)) * i32(input_zeroed(rc, b));
 
         // Saturate and narrow the output.
         Expr output =
             multiply_quantized(multiplied(c, b), output_multiplier_, output_shift_);
-        output = i16_sat(output);
-        output = saturating_add(output, output_offset_);
+        output = saturating_add(i16_sat(output), output_offset_);
         output_(c, b) = clamp(u8_sat(output), output_min_, output_max_);
 
         // Schedule.

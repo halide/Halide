@@ -101,7 +101,9 @@ public:
 
         int vector_size = natural_vector_size<uint8_t>();
         if (get_register_count(target) < 32) {
-            vector_size /= 2;
+            // If we are compiling without simd, vector_size can be 1.
+            // Don't let it go to zero.
+            vector_size = std::max(vector_size / 2, 1);
         }
 
         // Tile the output, so we can try to re-use loads spatially when performing

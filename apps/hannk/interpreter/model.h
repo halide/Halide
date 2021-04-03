@@ -25,6 +25,10 @@ struct QuantizationInfo {
     std::vector<float> scale;
     std::vector<int32_t> zero;
     int32_t dimension = -1;
+
+    bool operator==(const QuantizationInfo &r) const {
+        return dimension == r.dimension && scale == r.scale && zero == r.zero;
+    }
 };
 
 inline std::ostream &operator<<(std::ostream &s, const QuantizationInfo &q) {
