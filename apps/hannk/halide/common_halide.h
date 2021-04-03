@@ -52,6 +52,8 @@ Halide::Expr multiply_quantized(
     const Halide::Expr &x, const Halide::Expr &quantized_multiplier, const Halide::Expr &shift);
 
 // Approximately compute (2^(x>>log2_precision_x))<<log2_precision_result.
+// This approximation is a piecewise linear curve passing through each exact
+// power of 2.
 Halide::Expr approx_exp2(const Halide::Expr &x, const Halide::Expr &log2_precision_x, int log2_precision_result);
 
 }  // namespace hannk

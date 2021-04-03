@@ -28,7 +28,8 @@
     KNOWN_OP(MaxPool2d)       \
     KNOWN_OP(Pad)             \
     KNOWN_OP(Reshape)         \
-    KNOWN_OP(Quantize)
+    KNOWN_OP(Quantize)        \
+    KNOWN_OP(Softmax)
 
 // TODO(srj): FullyConnected will actually check-fail if you use it,
 // so leave it out of the ops we handle here for now.
@@ -604,6 +605,13 @@ private:
         return ::hannk::make_unique<AddOp>(input, nullptr, output, 0, ActivationFunction::None);
     }
 
+    std::unique_ptr<Op> BuildSoftmax(TfLiteContext *context, TfLiteNode *node) {
+        auto input = GetTensorById(context, node->inputs->data[0]);
+        auto output = GetTensorById(context, node->outputs->data[0]);
+        const TfLiteSoftmaxParams *params = (const TfLiteSoftmaxParams *)(node->builtin_data);
+        return ::hannk::make_unique<SoftmaxOp>(input, output, params->beta);
+    }
+
     const HannkDelegateOptions options_;
     std::unique_ptr<Model> model_;
     std::unique_ptr<ModelInterpreter> interpreter_;
@@ -784,6 +792,16 @@ bool IsNodeSupported_Reshape(TfLiteContext *context, TfLiteNode *node, TfLiteReg
 }
 
 bool IsNodeSupported_Quantize(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    if (!(registration->version <= 2)) {
+        return false;
+    }
+    if (!InputsHaveCorrectTypes(node, context, {k8BitMask})) {
+        return false;
+    }
+    return true;
+}
+
+bool IsNodeSupported_Softmax(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
     if (!(registration->version <= 2)) {
         return false;
     }

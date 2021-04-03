@@ -782,10 +782,9 @@ void SoftmaxOp::execute(const Box &crop) {
 
         const int left_shift = 22;
         const double real_in_multiplier = in_scale / (1 << left_shift);
-        const double real_output_multiplier = 1.0 / output_scale;
 
         auto in_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in_multiplier);
-        auto output_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_output_multiplier);
+        auto output_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(output_scale);
         assert(in_mul_and_shift.shift <= 0);
         assert(output_mul_and_shift.shift <= 0);
 
