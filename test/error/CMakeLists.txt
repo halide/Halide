@@ -69,6 +69,7 @@ tests(GROUPS error
       reuse_var_in_schedule.cpp
       reused_args.cpp
       rfactor_inner_dim_non_commutative.cpp
+      run_with_large_stack_throws.cpp
       specialize_fail.cpp
       split_inner_wrong_tail_strategy.cpp
       thread_id_outside_block_id.cpp
