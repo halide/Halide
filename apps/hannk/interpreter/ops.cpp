@@ -599,6 +599,14 @@ void FullyConnectedOp::execute(const Box &crop) {
         auto bias_buf = bias()->buffer<const int32_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
 
+        // Some networks pass higher dimensional buffers with single element
+        // trailing dimensions.
+        // TODO: Clean this up earlier.
+        while (input_buf.dimensions() > 2) {
+            assert(input_buf.dim(2).extent() == 1);
+            input_buf = input_buf.sliced(2, input_buf.dim(2).min());
+        }
+
         const int input_offset = in->quantization().zero.at(0);
         const int filter_offset = filt->quantization().zero.at(0);
 #ifndef NDEBUG
@@ -628,13 +636,11 @@ void FullyConnectedOp::execute(const Box &crop) {
 
         const auto output_range = get_output_range(activation_, out);
 
-        CHECK(false) << "FullyConnectedOp isn't complete yet and probably isn't correct.";
-
         CHECK(
             0 == fully_connected_uint8(
-                     input_buf, filter_buf, bias_buf,
-                     (uint8_t)input_offset, (uint8_t)filter_offset, output_multiplier, output_shift,
-                     (uint8_t)output_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
+                     input_buf, filter_buf, bias_buf, (uint8_t)input_offset, (uint8_t)filter_offset,
+                     (uint8_t)output_offset, output_multiplier, output_shift, (uint8_t)output_range.min,
+                     (uint8_t)output_range.max, output_buf));
     } else {
         CHECK(false);
     }
