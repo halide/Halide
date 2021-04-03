@@ -355,6 +355,29 @@ public:
     }
 };
 
+class SoftmaxOp : public ElementwiseOp {
+    float beta_;
+
+public:
+    SoftmaxOp(Tensor *input, Tensor *output, float beta)
+        : ElementwiseOp({input}, output), beta_(beta) {
+    }
+
+    std::unique_ptr<Op> clone(const TensorMap &map) const {
+        return ::hannk::make_unique<SoftmaxOp>(apply(map, input()), apply(map, output()), beta_);
+    }
+
+    void accept(OpVisitor *v);
+
+    std::vector<SplitInfo> get_split_info() const;
+
+    void execute(const Box &crop);
+
+    void dump(std::ostream &os) const {
+        os << "  Softmax " << output()->name() << std::endl;
+    }
+};
+
 class TileConvFilterOp : public Op {
 public:
     TileConvFilterOp(Tensor *input, Tensor *output)
@@ -390,6 +413,7 @@ public:
     virtual void visit(MaxPoolOp *op) {}
     virtual void visit(PadOp *op) {}
     virtual void visit(ReshapeOp *op) {}
+    virtual void visit(SoftmaxOp *op) {}
     virtual void visit(TileConvFilterOp *op) {}
 };
 

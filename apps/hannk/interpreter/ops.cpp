@@ -18,6 +18,7 @@
 #include "fill_uint8.h"
 #include "fully_connected_uint8.h"
 #include "max_pool_uint8.h"
+#include "softmax_uint8.h"
 #include "tile_convolution_filter_uint8.h"
 
 namespace hannk {
@@ -770,6 +771,51 @@ void ReshapeOp::execute(const Box &crop) {
     }
 }
 
+std::vector<SplitInfo> SoftmaxOp::get_split_info() const {
+    // Allow any split on any dimension other than the last dimension, where we
+    // compute a reduction.
+    std::vector<SplitInfo> splits(output()->rank(), SplitInfo::any_split());
+    splits.back() = SplitInfo::no_split();
+    return splits;
+}
+
+void SoftmaxOp::execute(const Box &crop) {
+    const Tensor *in = input();
+    Tensor *out = output();
+
+    if (in->is_type<uint8_t>() && out->is_type<uint8_t>()) {
+        auto in_buf = in->buffer<const uint8_t>();
+        auto output_buf = out->buffer<uint8_t>(crop);
+
+        const float beta2 = beta_ * std::log2(std::exp(1.0f));
+
+        // We don't need the input offset because this op exploits the
+        // identity exp(x_i)/sum(exp(x_i)) == exp(x_i + C)/sum(exp(x_i + C))
+        const int output_offset = out->quantization().zero.at(0);
+        assert(in_offset >= 0 && in_offset <= 255);
+        assert(output_offset >= 0 && output_offset <= 255);
+
+        const float in_scale = in->quantization().scale.at(0) * beta2;
+        const float output_scale = out->quantization().scale.at(0);
+
+        const int left_shift = 22;
+        const double real_in_multiplier = in_scale / (1 << left_shift);
+        const double real_output_multiplier = 1.0 / output_scale;
+
+        auto in_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in_multiplier);
+        auto output_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_output_multiplier);
+        assert(in_mul_and_shift.shift <= 0);
+        assert(output_mul_and_shift.shift <= 0);
+
+        CHECK(0 == softmax_uint8(left_shift, in_buf,
+                                 in_mul_and_shift.multiplier, -in_mul_and_shift.shift,
+                                 output_offset, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
+                                 output_buf));
+    } else {
+        CHECK(false);
+    }
+}
+
 Op::Bounds TileConvFilterOp::infer_bounds(const Box &crop) const {
     assert(crop[0].min == 0);
     Box input = {
@@ -834,6 +880,10 @@ void MaxPoolOp::accept(OpVisitor *v) {
 }
 
 void PadOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void SoftmaxOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 

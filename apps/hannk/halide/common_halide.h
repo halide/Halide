@@ -51,6 +51,9 @@ Halide::Expr multiply_2x_high(const Halide::Expr &a, const Halide::Expr &b);
 Halide::Expr multiply_quantized(
     const Halide::Expr &x, const Halide::Expr &quantized_multiplier, const Halide::Expr &shift);
 
+// Approximately compute (2^(x>>log2_precision_x))<<log2_precision_result.
+Halide::Expr approx_exp2(const Halide::Expr &x, const Halide::Expr &log2_precision_x, int log2_precision_result);
+
 }  // namespace hannk
 
 #endif  // COMMON_HALIDE_H_

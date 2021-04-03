@@ -66,6 +66,10 @@ $(GENERATOR_BIN)/common_halide.o: halide/common_halide.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+$(GENERATOR_BIN)/common_halide_test: halide/common_halide_test.cpp $(GENERATOR_BIN)/common_halide.o
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -I. -g $(filter %.cpp %.o,$^) -o $@ $(LIBHALIDE_LDFLAGS)
+
 $(GENERATOR_BIN)/%.generator: halide/%_generator.cpp $(GENERATOR_BIN)/common_halide.o $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter %.cpp %.o,$^) -o $@ $(LIBHALIDE_LDFLAGS)
@@ -114,6 +118,10 @@ $(BIN)/%/max_pool_uint8.a: $(GENERATOR_BIN)/max_pool.generator
 	@mkdir -p $(@D)
 	$< -g MaxPool -f hannk::max_pool_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
+$(BIN)/%/softmax_uint8.a: $(GENERATOR_BIN)/softmax.generator
+	@mkdir -p $(@D)
+	$< -g Softmax -f hannk::softmax_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
 $(BIN)/%/tile_convolution_filter_uint8.a: $(GENERATOR_BIN)/convolution.generator
 	@mkdir -p $(@D)
 	$< -g TileConvolutionFilter -f hannk::tile_convolution_filter_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
@@ -133,6 +141,7 @@ OPS_HALIDE = \
 	$(BIN)/%/fill_uint8.a \
 	$(BIN)/%/fully_connected_uint8.a \
 	$(BIN)/%/max_pool_uint8.a \
+	$(BIN)/%/softmax_uint8.a \
 	$(BIN)/%/tile_convolution_filter_uint8.a \
 	$(BIN)/%/runtime.a
 

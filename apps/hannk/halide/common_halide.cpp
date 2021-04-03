@@ -1,6 +1,7 @@
 #include "common_halide.h"
 
 using namespace Halide;
+using namespace Halide::ConciseCasts;
 
 namespace hannk {
 
@@ -95,6 +96,14 @@ Expr multiply_2x_high(const Expr &a, const Expr &b) {
 
 Expr multiply_quantized(const Expr &x, const Expr &q, const Expr &shift) {
     return rounding_shift_right(multiply_2x_high(x, q), shift);
+}
+
+Expr approx_exp2(const Expr &x, const Expr &log2_precision_x, int log2_precision_result) {
+    Expr precision_x = 1 << log2_precision_x;
+    Expr floor_x = clamp(x >> log2_precision_x, -31, 31);
+    Expr frac_x = x - (floor_x << log2_precision_x);
+    Expr exp_floor_x = (1 << log2_precision_result) << floor_x;
+    return exp_floor_x + i32(rounding_shift_right(i64(exp_floor_x) * frac_x, log2_precision_x));
 }
 
 }  // namespace hannk

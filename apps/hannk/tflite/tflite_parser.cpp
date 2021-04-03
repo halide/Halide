@@ -299,6 +299,15 @@ public:
         return ::hannk::make_unique<ReshapeOp>(input, output, new_shape);
     }
 
+    std::unique_ptr<Op> parse_softmax(const tflite::Operator *op) {
+        const tflite::SoftmaxOptions *options =
+            op->builtin_options_as_SoftmaxOptions();
+        float beta = options->beta();
+        Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
+        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        return ::hannk::make_unique<SoftmaxOp>(input, output, beta);
+    }
+
     std::unique_ptr<Op> parse_quantize(const tflite::Operator *op) {
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
@@ -333,6 +342,8 @@ public:
             return parse_quantize(op);
         case tflite::BuiltinOperator_FULLY_CONNECTED:
             return parse_fully_connected(op);
+        case tflite::BuiltinOperator_SOFTMAX:
+            return parse_softmax(op);
         default:
             CHECK(0) << "Unsupported op "
                      << tflite::EnumNameBuiltinOperator(builtin_code);
