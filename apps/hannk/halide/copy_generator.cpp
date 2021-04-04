@@ -47,6 +47,12 @@ public:
             .reorder(x, y, c, b)
             .vectorize(c, vector_size_u8, TailStrategy::GuardWithIf)
             .specialize(input_channels == output_channels);
+
+        // Don't support padding on the batch dimension. This reduces
+        // the amount of code generated.
+        // TODO: Maybe we should only handle 2 or 3 dimensions in Halide
+        // to further reduce code size.
+        require_same_min_extent(3, input_, output_);
     }
 };
 

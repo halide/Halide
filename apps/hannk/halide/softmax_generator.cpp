@@ -60,14 +60,14 @@ public:
         max_x.compute_at(output_, y)
             .update()
             .atomic()
-            .vectorize(rx, natural_vector_size<uint8_t>());
+            .vectorize(rx, natural_vector_size<uint8_t>(), TailStrategy::GuardWithIf);
 
         sum_exp_row.compute_at(output_, y)
             .update()
             .atomic()
-            .vectorize(rx, natural_vector_size<uint8_t>());
+            .vectorize(rx, natural_vector_size<uint8_t>(), TailStrategy::GuardWithIf);
 
-        output_.vectorize(x, natural_vector_size<uint8_t>());
+        output_.vectorize(x, natural_vector_size<uint8_t>(), TailStrategy::Predicate);
     }
 };
 
