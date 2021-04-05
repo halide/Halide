@@ -167,12 +167,12 @@ Interval get_quantized_min_max(ActivationFunction activation, int zero_point, do
 }
 
 Interval get_output_range(ActivationFunction activation, const QuantizationInfo &quantization) {
-    const int output_offset = quantization.zero.at(0);
-    assert(output_offset >= 0 && output_offset <= 255);
+    const int output_zero = quantization.zero.at(0);
+    assert(output_zero >= 0 && output_zero <= 255);
 
     const float output_scale = quantization.scale.at(0);
 
-    const auto output_range = get_quantized_min_max(activation, output_offset, output_scale);
+    const auto output_range = get_quantized_min_max(activation, output_zero, output_scale);
     assert(output_range.min >= 0 && output_range.min <= 255);
     assert(output_range.max >= 0 && output_range.max <= 255);
     assert(output_range.min <= output_range.max);
@@ -181,17 +181,17 @@ Interval get_output_range(ActivationFunction activation, const QuantizationInfo 
 }
 
 struct MultiplyParams {
-    int a_offset;
-    int b_offset;
-    int c_offset;
+    int a_zero;
+    int b_zero;
+    int c_zero;
     QuantizedMulAndShift c;
 };
 
 MultiplyParams get_quantized_multiply_params(const QuantizationInfo &a, const QuantizationInfo &b, const QuantizationInfo &c) {
     MultiplyParams result;
-    result.a_offset = a.zero.at(0);
-    result.b_offset = b.zero.at(0);
-    result.c_offset = c.zero.at(0);
+    result.a_zero = a.zero.at(0);
+    result.b_zero = b.zero.at(0);
+    result.c_zero = c.zero.at(0);
 
     const float a_scale = a.scale.at(0);
     const float b_scale = b.scale.at(0);
@@ -206,9 +206,9 @@ MultiplyParams get_quantized_multiply_params(const QuantizationInfo &a, const Qu
 void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
          HalideBuffer<const uint8_t> in2, const QuantizationInfo &in2q, int in2sign,
          HalideBuffer<uint8_t> out, const QuantizationInfo &outq, ActivationFunction activation) {
-    const int in1_offset = in1q.zero.at(0);
-    const int in2_offset = in2q.zero.at(0);
-    const int out_offset = outq.zero.at(0);
+    const int in1_zero = in1q.zero.at(0);
+    const int in2_zero = in2q.zero.at(0);
+    const int out_zero = outq.zero.at(0);
 
     const float in1_scale = in1q.scale.at(0);
     const float in2_scale = in2q.scale.at(0);
@@ -234,9 +234,9 @@ void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
     optimize_elementwise_shapes(in1, in2, out, 4);
 
     CHECK(0 == add_uint8_uint8(left_shift, in1, in2,
-                               in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
-                               in2_offset, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
-                               out_offset, out_mul_and_shift.multiplier, -out_mul_and_shift.shift,
+                               in1_zero, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
+                               in2_zero, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
+                               out_zero, out_mul_and_shift.multiplier, -out_mul_and_shift.shift,
                                out_range.min, out_range.max, out));
 }
 
@@ -442,19 +442,19 @@ void Conv2DOp::execute(const Box &crop) {
             // TODO: We really ought to be able to do this with GuardWithIf
             // and/or specialize.
             CHECK(
-                0 == convolution_r16_uint8(input_buf, filter_buf, bias_buf, (uint8_t)params.a_offset,
-                                           (uint8_t)params.b_offset, stride_[0], stride_[1],
+                0 == convolution_r16_uint8(input_buf, filter_buf, bias_buf, (uint8_t)params.a_zero,
+                                           (uint8_t)params.b_zero, stride_[0], stride_[1],
                                            dilation_[0], dilation_[1], params.c.multiplier,
-                                           params.c.shift, (uint8_t)params.c_offset,
+                                           params.c.shift, (uint8_t)params.c_zero,
                                            output_range.min, output_range.max, output_buf));
         } else
 #endif
         {
             CHECK(
-                0 == convolution_uint8(input_buf, filter_buf, bias_buf, (uint8_t)params.a_offset,
-                                       (uint8_t)params.b_offset, stride_[0], stride_[1],
+                0 == convolution_uint8(input_buf, filter_buf, bias_buf, (uint8_t)params.a_zero,
+                                       (uint8_t)params.b_zero, stride_[0], stride_[1],
                                        dilation_[0], dilation_[1], params.c.multiplier,
-                                       params.c.shift, (uint8_t)params.c_offset,
+                                       params.c.shift, (uint8_t)params.c_zero,
                                        output_range.min, output_range.max, output_buf));
         }
     } else {
@@ -533,23 +533,23 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
             CHECK(
                 0 == depthwise_convolution_broadcast_uint8(
                          input_buf, filter_buf, bias_buf, depth_multiplier,
-                         (uint8_t)params.a_offset, (uint8_t)params.b_offset, stride_[0], stride_[1],
+                         (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride_[0], stride_[1],
                          dilation_[0], dilation_[1], params.c.multiplier, params.c.shift,
-                         (uint8_t)params.c_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
+                         (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
         } else if (depth_multiplier == 1) {
             CHECK(
                 0 == depthwise_convolution_dm1_uint8(
                          input_buf, filter_buf, bias_buf, depth_multiplier,
-                         (uint8_t)params.a_offset, (uint8_t)params.b_offset, stride_[0], stride_[1],
+                         (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride_[0], stride_[1],
                          dilation_[0], dilation_[1], params.c.multiplier, params.c.shift,
-                         (uint8_t)params.c_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
+                         (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
         } else {
             CHECK(
                 0 == depthwise_convolution_uint8(
                          input_buf, filter_buf, bias_buf, depth_multiplier,
-                         (uint8_t)params.a_offset, (uint8_t)params.b_offset, stride_[0], stride_[1],
+                         (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride_[0], stride_[1],
                          dilation_[0], dilation_[1], params.c.multiplier, params.c.shift,
-                         (uint8_t)params.c_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
+                         (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
         }
     } else {
         CHECK(false) << "Unsupported type " << out->type() << "\n";
@@ -601,8 +601,8 @@ void FullyConnectedOp::execute(const Box &crop) {
 
         CHECK(
             0 == fully_connected_uint8(
-                     input_buf, filter_buf, bias_buf, (uint8_t)params.a_offset, (uint8_t)params.b_offset,
-                     (uint8_t)params.c_offset, params.c.multiplier, params.c.shift, (uint8_t)output_range.min,
+                     input_buf, filter_buf, bias_buf, (uint8_t)params.a_zero, (uint8_t)params.b_zero,
+                     (uint8_t)params.c_zero, params.c.multiplier, params.c.shift, (uint8_t)output_range.min,
                      (uint8_t)output_range.max, output_buf));
     } else {
         CHECK(false) << "Unsupported type " << out->type() << "\n";
@@ -625,13 +625,13 @@ void L2NormalizationOp::execute(const Box &crop) {
         auto in_buf = in->buffer<const uint8_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
 
-        const int input_offset = in->quantization().zero.at(0);
-        assert(input_offset >= 0 && input_offset <= 255);
+        const int input_zero = in->quantization().zero.at(0);
+        assert(input_zero >= 0 && input_zero <= 255);
 
         assert(out->quantization().scale.at(0) == 1.0f / 128.0f);
         assert(out->quantization().zero.at(0) == 128);
 
-        CHECK(0 == l2_normalization_uint8(in_buf, input_offset, output_buf));
+        CHECK(0 == l2_normalization_uint8(in_buf, input_zero, output_buf));
     } else {
         CHECK(false) << "Unsupported type " << out->type() << "\n";
     }
@@ -820,10 +820,10 @@ void SoftmaxOp::execute(const Box &crop) {
         // It's a easier to compute 2^(x*(B*log2(e))) than e^(x*B).
         const float beta2 = beta_ * std::log2(std::exp(1.0f));
 
-        // We don't need the input offset because this op exploits the
+        // We don't need the input zero point because this op exploits the
         // identity exp(x_i)/sum(exp(x_i)) == exp(x_i + C)/sum(exp(x_i + C))
-        const int output_offset = out->quantization().zero.at(0);
-        assert(output_offset >= 0 && output_offset <= 255);
+        const int output_zero = out->quantization().zero.at(0);
+        assert(output_zero >= 0 && output_zero <= 255);
 
         const float in_scale = in->quantization().scale.at(0) * beta2;
         const float output_scale = out->quantization().scale.at(0);
@@ -838,7 +838,7 @@ void SoftmaxOp::execute(const Box &crop) {
 
         CHECK(0 == softmax_uint8(left_shift, in_buf,
                                  in_mul_and_shift.multiplier, -in_mul_and_shift.shift,
-                                 output_offset, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
+                                 output_zero, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
                                  output_buf));
     } else {
         CHECK(false) << "Unsupported type " << out->type() << "\n";
@@ -871,10 +871,10 @@ void TileConvFilterOp::execute(const Box &crop) {
         auto input_buf = in->buffer<const uint8_t>();
         auto output_buf = out->buffer<void>(crop);
 
-        int input_offset = in->quantization().zero.at(0);
-        int output_offset = out->quantization().zero.at(0);
+        int input_zero = in->quantization().zero.at(0);
+        int output_zero = out->quantization().zero.at(0);
 
-        CHECK(0 == tile_convolution_filter_uint8(input_buf, input_offset, output_offset, output_buf));
+        CHECK(0 == tile_convolution_filter_uint8(input_buf, input_zero, output_zero, output_buf));
     } else {
         CHECK(false) << "Unsupported type " << in->type() << "\n";
     }

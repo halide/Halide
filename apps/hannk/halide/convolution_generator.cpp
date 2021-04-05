@@ -50,9 +50,9 @@ public:
     // dimension of the output.
     Input<Buffer<int32_t>> bias_{"bias", 1};
 
-    // Offsets for the input and filter.
-    Input<uint8_t> input_offset_{"input_offset"};
-    Input<uint8_t> filter_offset_{"filter_offset"};
+    // Zero points for the input and filter.
+    Input<uint8_t> input_zero_{"input_zero"};
+    Input<uint8_t> filter_zero_{"filter_zero"};
 
     // The stride specifies how the input [x, y] is sub-subsampled. For every
     // spatial location [x, y] in the output buffer, the input buffer is sampled
@@ -63,10 +63,9 @@ public:
     Input<int> dilation_x_{"dilation_x"};
     Input<int> dilation_y_{"dilation_y"};
 
-    // Parameters for pointwise operations on the output.
     Input<int32_t> output_multiplier_{"output_multiplier"};
     Input<uint32_t> output_shift_{"output_shift"};
-    Input<uint8_t> output_offset_{"output_offset"};
+    Input<uint8_t> output_zero_{"output_zero"};
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
@@ -85,7 +84,7 @@ public:
         Func input("input_wrapper");
         Expr input_cxyb = input_(c, x, y, b);
         if (!use_8bit_multiply(target)) {
-            input_cxyb = i16(input_cxyb) - i16(input_offset_);
+            input_cxyb = i16(input_cxyb) - i16(input_zero_);
         }
         input(c, x, y, b) = input_cxyb;
 
@@ -112,8 +111,8 @@ public:
             // We want to compute the reduction:
             // convolved(c, x, y, b) = bias_(c)
             // convolved(c, x, y, b) +=
-            //    (i32(input_rdxyc) - i32(input_offset_)) *
-            //    (i32(filter_rdxyc) - i32(filter_offset_))
+            //    (i32(input_rdxyc) - i32(input_zero_)) *
+            //    (i32(filter_rdxyc) - i32(filter_zero_))
             //
             // However, this precludes using efficient dot product instructions. To
             // fix this, expand the expression:
@@ -121,25 +120,25 @@ public:
             // convolved(c, x, y, b) = bias_(c)
             // convolved(c, x, y, b) +=
             //    i32(filter_rdxyc) * i32(input_rdxyc) -
-            //    i32(filter_rdxyc) * i32(input_offset_) -
-            //    i32(filter_offset_) * i32(input_rdxyc) +
-            //    i32(filter_offset_) * i32(input_offset_)
+            //    i32(filter_rdxyc) * i32(input_zero_) -
+            //    i32(filter_zero_) * i32(input_rdxyc) +
+            //    i32(filter_zero_) * i32(input_zero_)
             //
             // We can then separate this into several reductions. First, the terms that
             // depend only on c.
             Expr r_size = filter_width * filter_height * filter_depth;
             // We need the negative of this reduction, so compute the sum first, and then
             // subtract it after.
-            offset_c(c) += i32(filter_rdxyc) * i32(input_offset_);
+            offset_c(c) += i32(filter_rdxyc) * i32(input_zero_);
             offset_c(c) =
-                bias_(c) + i32(filter_offset_) * i32(input_offset_) * r_size - offset_c(c);
+                bias_(c) + i32(filter_zero_) * i32(input_zero_) * r_size - offset_c(c);
 
-            // The sum of the input is used to compute the filter_offset * input term.
+            // The sum of the input is used to compute the filter_zero * input term.
             // TODO: This is separable, but a bit messy to optimize this way.
             sum_input(x, y, b) += i32(input_rdxyc);
 
             // Finally, the terms that depend on all of c, x, y, b.
-            convolved(c, x, y, b) = offset_c(c) - i32(filter_offset_) * sum_input(x, y, b);
+            convolved(c, x, y, b) = offset_c(c) - i32(filter_zero_) * sum_input(x, y, b);
         } else {
             // Without 8-bit widening multiplies, we already subtracted the offsets,
             // and just have a single reduction of 16-bit multiplies to compute.
@@ -150,7 +149,7 @@ public:
         // Saturate and narrow the output.
         Expr output =
             multiply_quantized(convolved(c, x, y, b), output_multiplier_, output_shift_);
-        output = saturating_add(i16_sat(output), output_offset_);
+        output = saturating_add(i16_sat(output), output_zero_);
         output_(c, x, y, b) = clamp(u8_sat(output), output_min_, output_max_);
 
         // Schedule
@@ -213,7 +212,7 @@ public:
 
         if (use_8bit_multiply(target)) {
             // Specialize this to avoid computing sum_input when it isn't needed.
-            convolved.specialize(filter_offset_ == 0);
+            convolved.specialize(filter_zero_ == 0);
         }
 
         RVar rco, rci;
@@ -261,7 +260,7 @@ public:
             // pieces.
             offset_c.compute_root();
             offset_c.update(0)
-                .specialize(input_offset_ != 0)
+                .specialize(input_zero_ != 0)
                 .split(r.z, rco, rci, unroll_reduction)
                 .reorder(rci, c, rco, r.x, r.y)
                 .atomic()
@@ -300,8 +299,8 @@ public:
 class TileConvolutionFilter : public Generator<TileConvolutionFilter> {
 public:
     Input<Buffer<uint8_t>> input_{"input", 4};
-    Input<uint8_t> input_offset_{"input_offset"};
-    Input<uint8_t> output_offset_{"output_offset"};
+    Input<uint8_t> input_zero_{"input_zero"};
+    Input<uint8_t> output_zero_{"output_zero"};
 
     Output<Buffer<>> output_{"output", 5};
 
@@ -314,13 +313,13 @@ public:
     }
 
     void generate() {
-        Func input_bounded = constant_exterior(input_, input_offset_);
+        Func input_bounded = constant_exterior(input_, input_zero_);
 
         const int vector_reduction = get_vector_reduction_factor(target, UInt(8));
 
         Expr filter_cxyb =
-            i16(input_bounded(co * vector_reduction + ci, x, y, c)) - i16(input_offset_);
-        output_(ci, c, co, x, y) = cast(output_.type(), filter_cxyb + output_offset_);
+            i16(input_bounded(co * vector_reduction + ci, x, y, c)) - i16(input_zero_);
+        output_(ci, c, co, x, y) = cast(output_.type(), filter_cxyb + output_zero_);
 
         // Schedule.
         output_.dim(0).set_min(0).set_extent(vector_reduction);

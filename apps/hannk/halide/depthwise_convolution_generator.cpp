@@ -24,9 +24,9 @@ public:
     // The depth multiplier specifies the ratio between co and ci.
     Input<int> depth_multiplier_{"depth_multiplier"};
 
-    // Offsets for the input and filter.
-    Input<uint8_t> input_offset_{"input_offset"};
-    Input<uint8_t> filter_offset_{"filter_offset"};
+    // Zero points for the input and filter.
+    Input<uint8_t> input_zero_{"input_zero"};
+    Input<uint8_t> filter_zero_{"filter_zero"};
 
     // The stride specifies how the input [x, y] are sub-subsampled. For every
     // spatial location [x, y] in the output buffer, the input buffer is sampled
@@ -39,10 +39,9 @@ public:
     Input<int> dilation_x_{"dilation_x"};
     Input<int> dilation_y_{"dilation_y"};
 
-    // Parameters for pointwise operations on the output.
     Input<int32_t> output_multiplier_{"output_multiplier"};
     Input<uint32_t> output_shift_{"output_shift"};
-    Input<uint8_t> output_offset_{"output_offset"};
+    Input<uint8_t> output_zero_{"output_zero"};
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
@@ -61,8 +60,8 @@ public:
 
         Func filter_zeroed("filter_zeroed");
         Func input_zeroed("input_zeroed");
-        filter_zeroed(c, x, y) = i16(filter_(c, x, y)) - i16(filter_offset_);
-        input_zeroed(c, x, y, b) = i16(resampled_input(c, x, y, b)) - i16(input_offset_);
+        filter_zeroed(c, x, y) = i16(filter_(c, x, y)) - i16(filter_zero_);
+        input_zeroed(c, x, y, b) = i16(resampled_input(c, x, y, b)) - i16(input_zero_);
 
         // Do the convolution in 32-bit.
         filter_.dim(1).set_min(0);
@@ -80,7 +79,7 @@ public:
         // Saturate and narrow the output.
         Expr output =
             multiply_quantized(convolved(c, x, y, b), output_multiplier_, output_shift_);
-        output = saturating_add(i16_sat(output), output_offset_);
+        output = saturating_add(i16_sat(output), output_zero_);
         output_(c, x, y, b) = clamp(u8_sat(output), output_min_, output_max_);
 
         // Schedule.
