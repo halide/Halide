@@ -1,0 +1,8 @@
+(let t511.s = min((casted.s0.x.x*1000), (casted.extent.0 + -1000)) in (max((casted.min.0 + t511.s), -999) - min((casted.min.0 + t511.s), 1999)))
+x + y
+y - x
+select(x > y, y, x)
+(min((x*10) + 10, e) - max(min(x*10, e), min(e, 10) + -11))
+(min(x, e + -16) - max(min(x, e), min(e, 16) + -16))
+(min(x, e + -10) - max(min(x, e) + 11, min(e, 10)))
+(min((x*10) + 10, e) - select(0 < x, min(x*10, e), (x*10) + -1))

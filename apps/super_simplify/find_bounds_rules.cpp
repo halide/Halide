@@ -16,7 +16,7 @@ using Halide::Expr;
 int main(int argc, char **argv) {
     Var x("x"), y("y"), e("e");
 
-    Expr test = (min(x, e + -10) - max(min(x, e) + 11, min(e, 10)));
+    Expr test = x + y;
 
     Interval interval = Halide::Internal::bounds_of_expr_in_scope(test, make_symbolic_scope(test));
 

@@ -212,10 +212,82 @@ void print_counterexample(map<string, Expr> counterexample) {
     std::cout << "\n";
 }
 
+
+// TODO(rootjalex): figure out return values
+//  Find x s.t. LHS(x) < RHS(x, x), add [x, x, x] to counterexamples.
+bool found_tightness_counterexample(const Expr &original, const Expr &candidate_RHS, vector<map<string, Expr>> &counterexamples,
+                                   map<string, Expr> &tightness_counterexample, map<string, Expr> &intervals_to_vars, bool upper,
+                                   map<string, pair<Expr, int>> &vars, std::string z3_comment, int z3_timeout) {
+    
+  // TODO(rootjalex): we don't use this as a first counterexample because the first program is garbage.
+  // if (!counterexamples.empty()) {
+  // if (false) {
+        //  Find x s.t. LHS(x) < RHS(x, x), add [x, x, x] to counterexamples.
+
+        // If looking for an upper bound, want something LT, if looking for lower, want something GT.
+        Expr not_tight_program = (upper) ? (original < candidate_RHS) : (original > candidate_RHS);
+
+        Expr not_tight_with_subst = substitute(intervals_to_vars, not_tight_program);
+
+        std::cerr << "Querying for tightness on:\n\t" << not_tight_with_subst << "\n";
+
+        auto z3_result = satisfy(not_tight_with_subst, &tightness_counterexample,
+                                  "finding var_subst tightness counterexamples for " + z3_comment, z3_timeout);
+
+        // Unsat means bound is tight, otherwise we have a counterexample that states the bound is not tight.
+        if (z3_result == Z3Result::Sat) {
+            // Found a counterexample to tightness (probably?).
+        
+            for (auto v : vars) {
+                if (const Variable *op = v.second.first.as<Variable>()) {
+                    assert(op->name == v.first);
+                    string min_name = op->name + ".min";
+                    string max_name = op->name + ".max";
+
+                    // Add [x, x, x] to counterexamples.
+                    tightness_counterexample[min_name] = tightness_counterexample[op->name];
+                    tightness_counterexample[max_name] = tightness_counterexample[op->name];
+                } else {
+                    std::cerr << "Found var that isn't a var:" << v.first << ": " << v.second.first << std::endl;
+                    return false;
+                }
+            }
+
+            std::cerr << "Found counterexample with tightness check: ";
+            print_counterexample(tightness_counterexample);
+            std::cerr << "Produces:\n\t";
+
+            Expr temp_e = simplify(substitute(tightness_counterexample, original));
+            Expr temp_RHS = simplify(substitute(tightness_counterexample, candidate_RHS));
+
+            if (upper) {
+                std::cerr << temp_e << " < " << temp_RHS << "\n";
+            } else {
+                std::cerr << temp_e << " > " << temp_RHS << "\n";
+            }
+
+            // tightness_counterexample["$RHS"] = temp_RHS;
+
+            return true;
+        } else if (z3_result == Z3Result::Unknown) {
+            std::cerr << "var_subst tightness check failed with z3 Unknown.\n";
+        } else {
+            std::cerr << "Tightness query failed to find CE\n";
+        }
+    // }
+    return false;
+}
+
+
+
+
+
+
 // Use CEGIS to construct an equivalent expression to the input of the given size.
 Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
     // debug(0) << "\n-------------------------------------------\n";
     std::cerr << "generate_bound_" << (upper ? "upper" : "lower") << "(" << e << ")" << "\n";
+    std::cerr << "\t(" << upper << ", " << size << ", " << max_leaves << ")\n";
 
     int z3_timeout = 10; // seconds
 
@@ -228,17 +300,18 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
 
     // We may assume there's no undefined behavior in the existing
     // left-hand-side.
+    // TODO(rootjalex): fix this, it's no longer accurate.
     class CheckForUB : public IRVisitor {
         using IRVisitor::visit;
-        void visit(const Mod *op) override {
-            safe = safe && (op->b != 0);
-        }
-        void visit(const Div *op) override {
-            safe = safe && (op->b != 0);
-        }
-        void visit(const Let *op) override {
-            assert(false && "CheckForUB not written to handle Lets");
-        }
+        // void visit(const Mod *op) override {
+        //     safe = safe && (op->b != 0);
+        // }
+        // void visit(const Div *op) override {
+        //     safe = safe && (op->b != 0);
+        // }
+        // void visit(const Let *op) override {
+        //     assert(false && "CheckForUB not written to handle Lets");
+        // }
 
     public:
         Expr safe = const_true();
@@ -391,11 +464,16 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
             Expr is_tighter_somewhere = const_false();
             Expr no_tightness_regressions = const_true();
             Expr works_on_counterexamples = const_true();
+            Expr strong_regression_req = const_true();
 
             for (auto &c : counterexamples) {
                 works_on_counterexamples = works_on_counterexamples && substitute(c, program_works);
                 is_tighter_somewhere = is_tighter_somewhere || substitute(c, program_tighter);
                 no_tightness_regressions = no_tightness_regressions && substitute(c, no_program_regression);
+                // auto strong_regression = c.find("$RHS");
+                // if (strong_regression != c.end()) {
+                //     strong_regression_req = strong_regression_req && (substitute(c, program) < strong_regression->second);
+                // }
             }
 
             // TODO: should this just use current_program?
@@ -413,7 +491,7 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
                   // std::cerr << "NTR:\t" << simplify(common_subexpression_elimination(no_tightness_regressions)) << "\n";
                 }
 
-                auto z3_result = satisfy(works_on_counterexamples && is_tighter_somewhere && no_tightness_regressions,
+                auto z3_result = satisfy(works_on_counterexamples && is_tighter_somewhere && no_tightness_regressions && strong_regression_req,
                                          &tighter_program, "finding tighter program for " + z3_comment, z3_timeout);
 
 
@@ -446,11 +524,16 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
                     is_tighter_somewhere = const_false();
                     works_on_counterexamples = const_true();
                     no_tightness_regressions = const_true();
+                    strong_regression_req = const_true();
 
                     for (auto &c : counterexamples) {
                         works_on_counterexamples = works_on_counterexamples && substitute(c, program_works);
                         is_tighter_somewhere = is_tighter_somewhere || substitute(c, program_tighter);
                         no_tightness_regressions = no_tightness_regressions && substitute(c, no_program_regression);
+                        // auto strong_regression = c.find("$RHS");
+                        // if (strong_regression != c.end()) {
+                        //     strong_regression_req = strong_regression_req && (substitute(c, program) < strong_regression->second);
+                        // }
                     }
 
                     // Update state for next passes.
@@ -500,87 +583,29 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
             }
         }
 
-        bool counterexample_found_with_tightness = false;
-        map<string, Expr> tightness_counterexample = all_vars_zero;
-
-        // TODO(rootjalex): this might need to be moved.... where to put it? Talk to team about ordering.
-        // update: it doesn't seem to help anyways, so don't use it for now.
-        // TODO(rootjalex): we don't use this as a first counterexample because the first program is garbage.
-        if (!counterexamples.empty() && counterexamples_found_with_fuzzing == 0) {
-        // if (false) {
-            //  Find x s.t. LHS(x) < RHS(x, x), add [x, x, x] to counterexamples.
-
-            // If looking for an upper bound, want something LT, if looking for lower, want something GT.
-            Expr not_tight_program = (upper) ? (e < candidate_RHS) : (e > candidate_RHS);
-
-            Expr not_tight_with_subst = substitute(intervals_to_vars, not_tight_program);
-
-            std::cerr << "Querying for tightness on:\n\t" << not_tight_with_subst << "\n";
-
-            auto z3_result = satisfy(not_tight_with_subst, &tightness_counterexample,
-                                     "finding var_subst tightness counterexamples for " + z3_comment, z3_timeout);
-
-            // Unsat means bound is tight, otherwise we have a counterexample that states the bound is not tight.
-            if (z3_result == Z3Result::Sat) {
-                // Found a counterexample to tightness (probably?).
-
-                for (auto v : vars) {
-                    if (const Variable *op = v.second.first.as<Variable>()) {
-                        assert(op->name == v.first);
-                        string min_name = op->name + ".min";
-                        string max_name = op->name + ".max";
-
-                        // Add [x, x, x] to counterexamples.
-                        tightness_counterexample[min_name] = tightness_counterexample[op->name];
-                        tightness_counterexample[max_name] = tightness_counterexample[op->name];
-                    } else {
-                        std::cerr << "Found var that isn't a var:" << v.first << ": " << v.second.first << std::endl;
-                        return Expr();
-                    }
-                }
-
-                std::cerr << "Found counterexample with tightness check: ";
-                print_counterexample(tightness_counterexample);
-                std::cerr << "Produces:\n\t";
-
-                Expr temp_e = simplify(substitute(tightness_counterexample, e));
-                Expr temp_RHS = simplify(substitute(tightness_counterexample, candidate_RHS));
-
-                if (upper) {
-                    std::cerr << temp_e << " < " << temp_RHS << "\n";
-                } else {
-                    std::cerr << temp_e << " > " << temp_RHS << "\n";
-                }
-
-                counterexamples.push_back(tightness_counterexample);
-                // counterexample_found_with_tightness = true;
-                // continue; // Go back to querying for a tighter bound.
-
-            } else if (z3_result == Z3Result::Unknown) {
-                std::cerr << "var_subst tightness check failed with z3 Unknown.\n";
-                return Expr();
-            } else {
-                std::cerr << "Tightness query failed to find CE\n";
-            }
-        }
-
-
-
-        if (counterexamples_found_with_fuzzing == 0 && !counterexample_found_with_tightness) {
+        if (counterexamples_found_with_fuzzing == 0) {
             std::cerr << "Checking satisfiability of: " << simplify(substitute_in_all_lets(current_program_works)) << std::endl;
             auto result = satisfy(ub_checker.safe && variable_bounds && !current_program_works, &counterexample,
                                   "finding counterexamples for " + z3_comment, z3_timeout);
             if (result == Z3Result::Unsat) {
                 // Woo!
-                Expr e = simplify(substitute_in_all_lets(common_subexpression_elimination(substitute(current_program, program))));
+                Expr RHS = simplify(substitute_in_all_lets(common_subexpression_elimination(substitute(current_program, program))));
                 // TODO: Figure out why I need to simplify twice
                 // here. There are still exprs for which the
                 // simplifier requires repeated applications, and
                 // it's not supposed to.
-                e = simplify(e);
+                RHS = simplify(RHS);
 
-                std::cout << "*** Success: " << e << " -> " << result << "\n\n";
-                return e;
+                map<string, Expr> tightness_counterexample = all_vars_zero;
+
+                if (found_tightness_counterexample(e, RHS, counterexamples, tightness_counterexample, intervals_to_vars, upper, vars, z3_comment, z3_timeout)) {
+                    std::cerr << "*** Found sub-optimal bound: " << e << " -> " << RHS << "\n\n";
+                    counterexamples.push_back(tightness_counterexample);
+                    continue; // TODO(rootjalex): should this be a continue???
+                } else {
+                    std::cout << "*** Success: " << e << " -> " << RHS << "\n\n";
+                    return RHS;
+                }
             } else if (result == Z3Result::Sat) {
                 
                 std::cout << "Counterexample: ";
