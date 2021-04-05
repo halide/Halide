@@ -376,6 +376,7 @@ target_compile_definitions(Halide
                            PRIVATE
                            $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>
                            $<${CXX_COMPILER_IS_GNU_OR_CLANG_AND_NOT_CLANGCL}:WITH_INTROSPECTION>)
+target_compile_features(Halide PUBLIC cxx_std_11)
 
 include(TargetExportScript)
 ## TODO: implement something similar for Windows/link.exe
@@ -407,39 +408,76 @@ target_include_directories(Halide INTERFACE ${Halide_INCLUDE_PATH})
 # Set compiler options for libHalide
 ##
 
-target_compile_options(Halide
-                       PRIVATE
-                       $<${CXX_COMPILER_IS_GNU_OR_CLANG_AND_NOT_CLANGCL}:-Wall>
-                       $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-unused-function>
-                       $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wcast-qual>
-                       $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wignored-qualifiers>
+target_compile_options(
+        Halide
+        PRIVATE
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wall>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wcast-qual>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wignored-qualifiers>
 
-                       $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Woverloaded-virtual>
-                       $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wsuggest-override>
-                       $<$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang>:-Winconsistent-missing-override>
-                       $<$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang>:-Winconsistent-missing-destructor-override>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-c++98-compat-pedantic>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-c++98-compat>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-cast-align>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-comma>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-covered-switch-default>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-deprecated-declarations>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-documentation-unknown-command>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-documentation>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-double-promotion>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-exit-time-destructors>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-extra-semi-stmt>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-extra-semi>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-float-conversion>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-float-equal>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-global-constructors>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-implicit-float-conversion>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-implicit-int-conversion>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-implicit-int-float-conversion>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-missing-field-initializers>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-missing-prototypes>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-nonportable-system-include-path>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-old-style-cast>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-reserved-id-macro>  # can't have an underscore followed by a capital letter
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-return-std-move-in-c++11>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-shadow-field-in-constructor>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-shadow-field>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-shadow>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-shorten-64-to-32>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-sign-conversion>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-switch-enum>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-undef>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-undefined-func-template>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-unused-function>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-unused-member-function>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-unused-parameter>
+        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-unused-template>
 
-                       $<$<CXX_COMPILER_ID:MSVC>:/W3>
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4018>  # disable "signed/unsigned mismatch"
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4503>  # disable "decorated name length exceeded, name was truncated"
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4267>  # disable "conversion from 'size_t' to 'int', possible loss of data"
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4800>  # forcing value to bool 'true' or 'false' (performance warning)
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4244>  # 4244: conversion, possible loss of data
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4267>  # 4267: conversion, possible loss of data
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4800>  # 4800: BOOL -> true or false
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4996>  # 4996: compiler encountered deprecated declaration
+        $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Woverloaded-virtual>
+        $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wsuggest-override>
+        $<$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang>:-Winconsistent-missing-override>
+        $<$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang>:-Winconsistent-missing-destructor-override>
 
-                       # Injected from recent LLVM:
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4141>  # 'inline' used more than once
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4146>  # unary minus applied to unsigned type
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4291>  # No matching operator delete found
+        $<$<CXX_COMPILER_ID:MSVC>:/W3>
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4018>  # disable "signed/unsigned mismatch"
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4503>  # disable "decorated name length exceeded, name was truncated"
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4267>  # disable "conversion from 'size_t' to 'int', possible loss of data"
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4800>  # forcing value to bool 'true' or 'false' (performance warning)
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4244>  # 4244: conversion, possible loss of data
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4267>  # 4267: conversion, possible loss of data
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4800>  # 4800: BOOL -> true or false
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4996>  # 4996: compiler encountered deprecated declaration
 
-                       # We could expose the /MP flag to all targets, but that might end up saturating the build
-                       # since multiple MSBuild projects might get built in parallel, each of which compiling their
-                       # source files in parallel; the Halide library itself is a "knot" point of the build graph,
-                       # so compiling its files in parallel should not oversubscribe the system
-                       $<$<CXX_COMPILER_ID:MSVC>:/MP>
-                       )
+        # Injected from recent LLVM:
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4141>  # 'inline' used more than once
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4146>  # unary minus applied to unsigned type
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4291>  # No matching operator delete found
+
+        # We could expose the /MP flag to all targets, but that might end up saturating the build
+        # since multiple MSBuild projects might get built in parallel, each of which compiling their
+        # source files in parallel; the Halide library itself is a "knot" point of the build graph,
+        # so compiling its files in parallel should not oversubscribe the system
+        $<$<CXX_COMPILER_ID:MSVC>:/MP>
+)
 
 target_compile_definitions(Halide
                            PRIVATE
