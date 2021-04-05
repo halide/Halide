@@ -10,7 +10,7 @@ double relative_error(double x, double y) {
 }
 
 bool test_approx_exp2() {
-    const int extent = 32768;
+    const int extent = 50000;
     const int offset = extent / 2;
     const int scale = std::numeric_limits<int>::max() / offset;
     const int log2_precision_results[] = {0, 1, 2, 3, 8, 16};
@@ -39,7 +39,8 @@ bool test_approx_exp2() {
                 if (std::numeric_limits<int>::min() <= exact && exact <= std::numeric_limits<int>::max()) {
                     double result_xy = result(x, y);
                     if (relative_error(exact, result_xy) > tolerance && std::abs(exact - result_xy) > 1) {
-                        std::cout << "Failure(" << exact_x << " " << y << " " << log2_precision_result << "): " << exact << " !~= " << result_xy << "\n";
+                        std::cout << "Failure(" << exact_x << " " << y << " " << log2_precision_result << "): "
+                                  << exact << " !~= " << result_xy << "\n";
                     }
                 } else {
                     // The result would have overflowed.
@@ -55,5 +56,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    std::cout << "Success!\n";
     return 0;
 }

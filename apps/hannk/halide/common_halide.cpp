@@ -83,8 +83,7 @@ Expr align(const Expr &x, const Expr &n) {
 }
 
 Expr multiply_2x_high(const Expr &a, const Expr &b) {
-    // Exponent must satisfy 0 <= exponent <= 31
-    Type t = a.type();
+    Type t = a.type().bits() > b.type().bits() ? a.type() : b.type();
     Expr ab_wide = widening_mul(a, b);
     // In Halide, integer division rounds to negative infinity, so division by a
     // power of two is the same as a shift (unlike C).
@@ -98,12 +97,40 @@ Expr multiply_quantized(const Expr &x, const Expr &q, const Expr &shift) {
     return rounding_shift_right(multiply_2x_high(x, q), shift);
 }
 
+Expr approx_log2(const Expr &x, int log2_precision) {
+    int precision = 1 << log2_precision;
+
+    //   floor(log2(x)) = B - clz(x) => log2(x) ~ B - clz(x)
+    //   B = sizeof(x)*8 - 1
+    //   clz(x) = count_leading_zeros(x)
+    int log2_max_x = x.type().bits() - 1;
+    Expr floor_log2 = log2_max_x - i16(count_leading_zeros(x));
+
+    // Use the bits after the leading bit to linearly interpolate to the next
+    // power of 2. In other words, we want the slope of the line between
+    // floor(log2(x)) and floor(log2(x)) + 1.
+    Expr frac =
+        cast<int>((x >> (floor_log2 - log2_precision)) % precision);
+
+    // For x <= 0, return any negative value. If count_leading_zeros returns
+    // x.type().bits(), which appears to be the case on every platform we
+    // target, both sides of this select are the same (if log2_precision = 0).
+    return select(x > 0, precision * cast<int>(floor_log2) + frac,
+                  cast<int>(-1));
+}
+
 Expr approx_exp2(const Expr &x, const Expr &log2_precision_x, int log2_precision_result) {
     Expr precision_x = 1 << log2_precision_x;
+
+    // Compute floor(x / precision_x) and frac(x / precision_x)
     Expr floor_x = clamp(x >> log2_precision_x, -31, 31);
     Expr frac_x = x - (floor_x << log2_precision_x);
+
+    // Compute 2^floor(x / precision_x)*precision_result
     Expr exp_floor_x = (1 << log2_precision_result) << floor_x;
-    return exp_floor_x + i32(rounding_shift_right(i64(exp_floor_x) * frac_x, log2_precision_x));
+
+    // Linearly interpolate to the next power of 2 using frac_x.
+    return exp_floor_x + multiply_2x_high(exp_floor_x, frac_x << (31 - log2_precision_x));
 }
 
 }  // namespace hannk
