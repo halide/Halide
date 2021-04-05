@@ -4,10 +4,28 @@ namespace Halide {
 namespace Internal {
 
 Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
-    // We generally don't track bounds through casts, with the
-    // exception of casts that constant-fold to a signed integer, so
-    // we don't need the bounds of the value.
-    Expr value = mutate(op->value, nullptr);
+    Expr value = mutate(op->value, bounds);
+
+    if (bounds && op->value.type().bits() > 0) {
+        if (!bounds->min_defined) {
+            bounds->min_defined = const_int(op->value.type().min(), &bounds->min);
+        }
+        if (bounds->min_defined) {
+            int64_t type_min;
+            if (!const_int(op->value.type().min(), &type_min) || !op->type.can_represent(type_min)) {
+                bounds->min_defined = false;
+            }
+        }
+        if (!bounds->max_defined) {
+            bounds->max_defined = const_int(op->value.type().max(), &bounds->max);
+        }
+        if (bounds->max_defined) {
+            int64_t type_max;
+            if (!const_int(op->value.type().max(), &type_max) || !op->type.can_represent(type_max)) {
+                bounds->max_defined = false;
+            }
+        }
+    }
 
     if (may_simplify(op->type) && may_simplify(op->value.type())) {
         const Cast *cast = value.as<Cast>();

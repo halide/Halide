@@ -362,6 +362,18 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             return mutate(unbroadcast, bounds);
         }
 
+        if (bounds) {
+            bounds->min = 0;
+            bounds->min_defined = true;
+            if (a_bounds.min_defined && a_bounds.max_defined) {
+                if (a_bounds.min != std::numeric_limits<int64_t>::min() &&
+                    a_bounds.max != std::numeric_limits<int64_t>::min()) {
+                    bounds->max_defined = true;
+                    bounds->max = std::max(std::abs(a_bounds.min), std::abs(a_bounds.max));
+                }
+            }
+        }
+
         Type ta = a.type();
         int64_t ia = 0;
         double fa = 0;
