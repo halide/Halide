@@ -360,8 +360,8 @@ add_custom_target(HalideIncludes ALL
 # Define the Halide library target.
 ##
 
-set(CXX_COMPILER_IS_GNU_OR_CLANG $<CXX_COMPILER_ID:GNU,Clang,AppleClang>)
-set(CXX_COMPILER_IS_GNU_OR_CLANG_AND_NOT_CLANGCL $<AND:${CXX_COMPILER_IS_GNU_OR_CLANG},$<NOT:$<STREQUAL:${CMAKE_CXX_SIMULATE_ID},MSVC>>>)
+set(CXX_COMPILER_IS_GNU_OR_CLANG_AND_NOT_CLANGCL
+    $<AND:$<CXX_COMPILER_ID:GNU,Clang,AppleClang>,$<NOT:$<STREQUAL:${CMAKE_CXX_SIMULATE_ID},MSVC>>>)
 
 add_library(Halide
             ${SOURCE_FILES}
@@ -411,46 +411,46 @@ target_include_directories(Halide INTERFACE ${Halide_INCLUDE_PATH})
 target_compile_options(
         Halide
         PRIVATE
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wall>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wcast-qual>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wignored-qualifiers>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wcast-qual>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wignored-qualifiers>
 
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-c++98-compat-pedantic>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-c++98-compat>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-cast-align>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-comma>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-covered-switch-default>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-deprecated-declarations>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-documentation-unknown-command>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-documentation>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-double-promotion>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-exit-time-destructors>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-extra-semi-stmt>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-extra-semi>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-float-conversion>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-float-equal>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-global-constructors>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-implicit-float-conversion>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-implicit-int-conversion>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-implicit-int-float-conversion>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-missing-field-initializers>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-missing-prototypes>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-nonportable-system-include-path>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-old-style-cast>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-reserved-id-macro>  # can't have an underscore followed by a capital letter
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-return-std-move-in-c++11>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-shadow-field-in-constructor>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-shadow-field>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-shadow>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-shorten-64-to-32>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-sign-conversion>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-switch-enum>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-undef>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-undefined-func-template>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-unused-function>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-unused-member-function>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-unused-parameter>
-        $<${CXX_COMPILER_IS_GNU_OR_CLANG}:-Wno-unused-template>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-c++98-compat-pedantic>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-c++98-compat>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-cast-align>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-comma>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-covered-switch-default>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-deprecated-declarations>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-documentation-unknown-command>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-documentation>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-double-promotion>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-exit-time-destructors>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-extra-semi-stmt>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-extra-semi>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-conversion>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-equal>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-global-constructors>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-implicit-float-conversion>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-implicit-int-conversion>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-implicit-int-float-conversion>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-missing-field-initializers>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-missing-prototypes>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-nonportable-system-include-path>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-old-style-cast>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-reserved-id-macro>  # can't have an underscore followed by a capital letter
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-return-std-move-in-c++11>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-shadow-field-in-constructor>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-shadow-field>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-shadow>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-shorten-64-to-32>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-sign-conversion>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-switch-enum>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-undef>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-undefined-func-template>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-function>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-member-function>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-parameter>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-template>
 
         $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Woverloaded-virtual>
         $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wsuggest-override>
