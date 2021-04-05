@@ -420,6 +420,14 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
             return mutate(rewrite.result, bounds);
         }
         // clang-format on
+
+        if (no_overflow_int(ty) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_LT.inc"
+                )) {
+            return mutate(rewrite.result, bounds);
+        }
     }
 
     if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -443,7 +451,18 @@ Expr Simplify::visit(const LE *op, ExprInfo *bounds) {
 
     Expr mutated = mutate(!(op->b < op->a), bounds);
     if (const LE *le = mutated.as<LE>()) {
-        if (le->a.same_as(op->a) && le->b.same_as(op->b)) {
+        Expr a = le->a, b = le->b;
+        auto rewrite = IRMatcher::rewriter(IRMatcher::le(a, b), op->type, a.type());
+
+        if (no_overflow_int(a.type()) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_LE.inc"
+                )) {
+            return mutate(rewrite.result, bounds);
+        }
+
+        if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
         }
     }

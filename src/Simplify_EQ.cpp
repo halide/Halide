@@ -114,9 +114,21 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         rewrite(x == 0, x == 0)) {
 
         const EQ *eq = rewrite.result.as<EQ>();
+        Expr a, b;
+        if (eq) {
+            a = eq->a;
+            b = eq->b;
+        }
         if (eq &&
-            eq->a.same_as(op->a) &&
-            eq->b.same_as(op->b)) {
+            no_overflow_int(eq->a.type()) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_EQ.inc"
+                )) {
+            return mutate(rewrite.result, bounds);
+        } else if (eq &&
+                   eq->a.same_as(op->a) &&
+                   eq->b.same_as(op->b)) {
             return op;
         } else {
             return rewrite.result;

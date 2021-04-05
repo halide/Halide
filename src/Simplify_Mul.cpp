@@ -97,6 +97,14 @@ Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
             false) {
             return mutate(rewrite.result, bounds);
         }
+
+        if (no_overflow_int(op->type) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_Mul.inc"
+                )) {
+            return mutate(rewrite.result, bounds);
+        }
     }
 
     const Shuffle *shuffle_a = a.as<Shuffle>();

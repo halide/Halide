@@ -178,6 +178,14 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
                 return hoist_slice_vector<Add>(Add::make(a, b));
             }
         }
+
+        if (no_overflow_int(op->type) &&
+            use_synthesized_rules &&
+            (
+#include "Simplify_Add.inc"
+                )) {
+            return mutate(rewrite.result, bounds);
+        }
     }
 
     if (a.same_as(op->a) && b.same_as(op->b)) {

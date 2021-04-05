@@ -19,8 +19,26 @@ using std::vector;
 int Simplify::debug_indent = 0;
 #endif
 
+namespace {
+
+bool get_use_synthesized_rules_from_environment() {
+    static string env_var_value = get_env_variable("HL_USE_SYNTHESIZED_RULES");
+    static bool enable = env_var_value == "1";
+    static bool disable = env_var_value == "0";
+    if (enable == disable) {
+        // Nag people to set this one way or the other, to avoid
+        // running the wrong experiment by mistake.
+        user_warning << "HL_USE_SYNTHESIZED_RULES unset\n";
+    }
+    return enable;
+}
+
+}  // namespace
+
 Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai)
     : remove_dead_lets(r), no_float_simplify(false) {
+
+    use_synthesized_rules = get_use_synthesized_rules_from_environment();
 
     // Only respect the constant bounds from the containing scope.
     for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
