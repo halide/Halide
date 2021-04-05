@@ -34,10 +34,10 @@ public:
     // [x * stride, y * stride] is a valid spatial location in the input buffer.
     // Generally, this means setting the output buffer's [width, height] to be
     // the input buffer's [width, height] / stride.
-    Input<int> stride_x_{"stride_x", 1, 1, 4};
-    Input<int> stride_y_{"stride_y", 1, 1, 4};
-    Input<int> dilation_x_{"dilation_x", 1, 1, 4};
-    Input<int> dilation_y_{"dilation_y", 1, 1, 4};
+    Input<int> stride_x_{"stride_x"};
+    Input<int> stride_y_{"stride_y"};
+    Input<int> dilation_x_{"dilation_x"};
+    Input<int> dilation_y_{"dilation_y"};
 
     // Parameters for pointwise operations on the output.
     Input<int32_t> output_multiplier_{"output_multiplier"};

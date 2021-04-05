@@ -5,6 +5,7 @@ using namespace Halide;
 
 namespace hannk {
 
+// TODO: It might be better to implement this in C++ and not Halide. It's a trivial pipeline.
 class Fill : public Generator<Fill> {
 public:
     // Value to fill the output with.

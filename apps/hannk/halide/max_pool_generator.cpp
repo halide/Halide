@@ -15,10 +15,10 @@ public:
     // The stride specifies how the input [x, y] are sub-subsampled. For every
     // spatial location [x, y] in the output buffer, the input buffer is sampled
     // spatially at [x * stride, y * stride].
-    Input<int> stride_x_{"stride_x", 1, 1, 16};
-    Input<int> stride_y_{"stride_y", 1, 1, 16};
-    Input<int> filter_width_{"filter_width", 1, 1, 16};
-    Input<int> filter_height_{"filter_height", 1, 1, 16};
+    Input<int> stride_x_{"stride_x"};
+    Input<int> stride_y_{"stride_y"};
+    Input<int> filter_width_{"filter_width"};
+    Input<int> filter_height_{"filter_height"};
 
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
