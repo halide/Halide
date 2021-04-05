@@ -60,7 +60,7 @@ public:
         // TODO: Maybe it's worth avoiding this (scalar) division on some
         // targets, maybe Newton's method?
         Func inv_sum_exp_row("inv_sum_exp_row");
-        Expr numerator(1ull << (exp_precision + 31));
+        Expr numerator = cast<uint64_t>(1) << (exp_precision + 31);
         inv_sum_exp_row(y) =
             i32_sat((numerator + sum_exp_row(y) / 2) / sum_exp_row(y));
 
