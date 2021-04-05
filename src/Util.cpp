@@ -102,9 +102,8 @@ std::string get_env_variable(char const *env_var_name) {
     if (lvl) {
         return std::string(lvl);
     }
-#endif
-
     return "";
+#endif
 }
 
 string running_program_name() {
@@ -529,7 +528,7 @@ struct TickStackEntry {
     int line;
 };
 
-vector<TickStackEntry> tick_stack;
+static vector<TickStackEntry> tick_stack;
 
 void halide_tic_impl(const char *file, int line) {
     string f = file;
@@ -609,7 +608,7 @@ void WINAPI generic_fiber_entry_point(LPVOID argument) {
 
 void run_with_large_stack(const std::function<void()> &action) {
 #if _WIN32
-    constexpr SIZE_T required_stack = 8 * 1024 * 1024;
+    constexpr auto required_stack = 8 * 1024 * 1024;
 
     // Only exists for its address, which is used to compute remaining stack space.
     ULONG_PTR approx_stack_pos;
