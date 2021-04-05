@@ -40,7 +40,7 @@ if [ ${#GENERATOR_ARGS_SETS_ARRAY[@]} -eq 0 ]; then
     GENERATOR_ARGS_SETS_ARRAY=( '' )
 fi
 
-COMPILATION_TIMEOUT=600s
+COMPILATION_TIMEOUT=600000000s
 BENCHMARKING_TIMEOUT=10s
 
 if [ -z ${HL_TARGET} ]; then
@@ -96,9 +96,15 @@ NUM_CORES=80
 EPOCHS=200
 NUM_GPUS=$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)
 
+RANDOMIZE_TILINGS="${RANDOMIZE_TILINGS:-1}"
+USE_FREEZE="${USE_FREEZE:-1}"
+
+echo "Randomize tilings = ${RANDOMIZE_TILINGS}"
+echo "Use freeze = ${USE_FREEZE}"
 echo "# GPUs = ${NUM_GPUS}"
 
 USE_BENCHMARK_QUEUE="${USE_BENCHMARK_QUEUE:-1}"
+USE_BENCHMARK_QUEUE=1
 BENCHMARK_QUEUE_DIR=${SAMPLES}/benchmark_queue
 
 ENABLE_BEAM_SEARCH=${ENABLE_BEAM_SEARCH:-1}
@@ -168,8 +174,8 @@ make_featurization() {
         HL_SEED=${RANDOM_DROPOUT_SEED} \
         HL_WEIGHTS_DIR=${WEIGHTS} \
         HL_MEMOIZE_BLOCKS=1 \
-        HL_RANDOMIZE_TILINGS=1 \
-        HL_FREEZE_INLINE_COMPUTE_ROOT=1 \
+        HL_RANDOMIZE_TILINGS=${RANDOMIZE_TILINGS} \
+        HL_FREEZE_INLINE_COMPUTE_ROOT=${USE_FREEZE} \
         HL_RANDOM_DROPOUT=${dropout} \
         HL_BEAM_SIZE=${beam} \
         HL_SHARED_MEMORY_LIMIT=${shared_memory_limit} \
@@ -368,7 +374,7 @@ benchmark_sample() {
     ${AUTOSCHED_BIN}/featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample || echo "featurization_to_sample failed for ${D} (probably because benchmarking failed)"
 
     rm ${D}/${FNAME}.featurization
-    rm ${D}/bench
+    #rm ${D}/bench
     rm ${D}/${FNAME}.schedule.h
     rm ${D}/${FNAME}.stmt
 
@@ -509,6 +515,7 @@ if [[ $TRAIN_ONLY != 1 ]]; then
         echo "Starting PID: ${benchmark_loop_pid}"
     fi
 
+    BATCH_ID=8851377
     for ((BATCH_IDX=0;BATCH_IDX<${NUM_BATCHES};BATCH_IDX++)); do
         if [[ $BENCHMARK_QUEUE_ENABLED == 1 && $RETRAIN_AFTER_EACH_BATCH == 1 ]]; then
             echo "Starting benchmark queue"
@@ -517,19 +524,21 @@ if [[ $TRAIN_ONLY != 1 ]]; then
             echo "Starting PID: ${benchmark_loop_pid}"
         fi
 
-        while [[ 1 ]]; do
-            BATCH_ID=$(od -vAn -N3 -tu4 < /dev/urandom | awk '{print $1}')
+        #while [[ 1 ]]; do
+            #BATCH_ID=$(od -vAn -N3 -tu4 < /dev/urandom | awk '{print $1}')
 
-            if [ ! -d "${SAMPLES}/batch_${BATCH_ID}_0" ]; then
-                break
-            fi
-        done
+            #if [ ! -d "${SAMPLES}/batch_${BATCH_ID}_0" ]; then
+                #break
+            #fi
+        #done
 
+        #BATCH_ID=5204565
+        #BATCH_ID=8851377
         echo "Starting compiling of new batch with id: ${BATCH_ID}"
 
         for ((EXTRA_ARGS_IDX=0;EXTRA_ARGS_IDX<${#GENERATOR_ARGS_SETS_ARRAY[@]};EXTRA_ARGS_IDX++)); do
             # Compile a batch of samples using the generator in parallel
-            BATCH=batch_${BATCH_ID}_${EXTRA_ARGS_IDX}
+            BATCH=batch_${BATCH_ID}_${EXTRA_ARGS_IDX}_${RANDOMIZE_TILINGS}_${USE_FREEZE}
             DIR=${SAMPLES}/${BATCH}
 
             # Copy the weights being used into the batch folder so that we can repro failures
@@ -571,12 +580,12 @@ if [[ $TRAIN_ONLY != 1 ]]; then
                 waitlist+=("$!")
             done
 
-            wait "${waitlist[@]}"
-            COMPILE_TIME=$((SECONDS-CUR_SECONDS))
-            echo "Compile time for batch: ${COMPILE_TIME}"
-
             # benchmark them serially using rungen
             if [[ $USE_BENCHMARK_QUEUE == 0 ]]; then
+                wait "${waitlist[@]}"
+                COMPILE_TIME=$((SECONDS-CUR_SECONDS))
+                echo "Compile time for batch: ${COMPILE_TIME}"
+
                 CUR_SECONDS="$SECONDS"
                 for ((SAMPLE_ID=0;SAMPLE_ID<${BATCH_SIZE};SAMPLE_ID=SAMPLE_ID+NUM_GPUS)); do
                     for ((INDEX=0;INDEX<NUM_GPUS;INDEX++)); do
@@ -595,6 +604,7 @@ if [[ $TRAIN_ONLY != 1 ]]; then
 
         if [[ ${RETRAIN_AFTER_EACH_BATCH} == 1 ]]; then
             if [[ $BENCHMARK_QUEUE_ENABLED == 1 ]]; then
+                wait "${waitlist[@]}"
                 echo "Waiting for benchmarking to complete"
                 echo "Waiting PID: ${benchmark_loop_pid}"
                 wait "${benchmark_loop_pid}"
@@ -605,9 +615,11 @@ if [[ $TRAIN_ONLY != 1 ]]; then
             #TRAIN_TIME=$((SECONDS-CUR_SECONDS))
             #echo "Train time for batch with ID = ${BATCH_ID}: ${TRAIN_TIME}"
         fi
+        BATCH_ID=$((BATCH_ID+1))
     done
 
     if [[ ${BENCHMARK_QUEUE_ENABLED} == 1 && ${RETRAIN_AFTER_EACH_BATCH} == 0 ]]; then
+        wait "${waitlist[@]}"
         echo "Waiting for benchmarking to complete"
         echo "Waiting PID: ${benchmark_loop_pid}"
         wait "${benchmark_loop_pid}"
@@ -619,9 +631,10 @@ if [[ ${RETRAIN_AFTER_EACH_BATCH} == 1 ]]; then
 fi
 
 # retrain model weights on all samples seen so far
-echo Retraining model...
+#echo Retraining model...
 
 #CUR_SECONDS="$SECONDS"
+#SAMPLES="/tmp/tmp.fFK27Z4goh/autotuned_samples"
 #retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE} ${LEARNING_RATE}
 #TRAIN_TIME=$((SECONDS-CUR_SECONDS))
 #echo "Num batches = ${NUM_BATCHES}. Train time: ${TRAIN_TIME}"

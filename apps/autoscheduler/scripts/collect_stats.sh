@@ -11,7 +11,7 @@ find_halide HALIDE_ROOT
 
 SAMPLES_DIR=${1}
 
-APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer cuda_mat_mul iir_blur bgu depthwise_separable_conv"
+APPS="bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer cuda_mat_mul iir_blur bgu depthwise_separable_conv basic_demosaic"
 
 echo "App, Average Greedy Autoschedule Time (s), Average Beam Search Autoschedule Time (s), Average Greedy Compile Time (s), Average Beam Search Total Compile Time (s), Average Number of States Added (Greedy), Average Number of States Added (Beam Search), Average Number of Featurizations Computed (Greedy), Average Number of Featurizations Computed (Beam Search), Average Number of Schedules Enqueued by Cost Model (Greedy), Average Number of Schedules Enqueued by Cost Model (Beam Search), Average Number of Memoization Hits (Greedy), Average Number of Memoization Misses (Greedy), Average Number of Memoization Hits (Beam Search), Average Number of Memoization Misses (Beam Search), Average Featurization Time (Greedy) (ms), Average Featurization Time (Beam Search) (ms), Average Cost Model Evaluation Time (Greedy) (ms), Average Cost Model Evaluation Time (Beam Search) (ms), Average Number of Tilings Generated (Greedy), Average Number of Tilings Accepted (Greedy), Average Number of Tilings Generated (Beam Search), Average Number of Tilings Accepted (Beam Search), Average Time Per Batch (s), Best Schedule Found (ms), r-squared"
 
@@ -57,13 +57,14 @@ for app in $APPS; do
     if [[ -n $output ]]; then
         grep "Best runtime" ${FILE} | tail -n 1 | awk '{if (NR == 0) printf(", ?"); else printf(", %f", $4);}'
     else
-        echo ", ?"
+        printf ", ?"
     fi
 
     grep "r-squared" ${FILE} | tail -n 1 | awk '{if ($NF == "-2147483647") printf(", ?\n"); else printf(", %f\n", $NF);}'
 done
 
 echo
+exit
 
 echo "Best Run Times"
 for app in $APPS; do

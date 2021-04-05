@@ -850,6 +850,7 @@ void State::fuse_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, c
         }
     }
 
+    bool marked = false;
     for (size_t block_i = 0; block_i < 3; ++block_i) {
         for (size_t i = 1; i < block_var_assignments[block_i].size(); ++i) {
             auto inner_i = block_var_assignments[block_i][0];
@@ -866,6 +867,23 @@ void State::fuse_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, c
             auto inner_i = block_var_assignments[block_i][0];
             state->schedule_source << "\n    .gpu_blocks(" << parallel_vars[inner_i].name() << ")";
             stage.gpu_blocks(parallel_vars[inner_i]);
+            state->parallel = true;
+            marked = true;
+        }
+    }
+
+    if (!marked) {
+        bool all_one = true;
+        for (auto extent : parallel_extents) {
+            all_one = all_one && extent == 1;
+        }
+
+        // If all the parallel extents = 1, just mark the innermost parallel_var
+        // as .gpu_block()
+        if (all_one) {
+            int i = parallel_vars.size() - 1;
+            state->schedule_source << "\n    .gpu_blocks(" << parallel_vars[i].name() << ")";
+            stage.gpu_blocks(parallel_vars[i]);
             state->parallel = true;
         }
     }
