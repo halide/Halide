@@ -252,7 +252,7 @@ struct WildConstInt {
             halide_scalar_value_t val;
             halide_type_t type;
             state.get_bound_const(i, val, type);
-            return e.type == type && value == val.u.i64;
+            return (halide_type_t)e.type == type && value == val.u.i64;
         }
         state.set_bound_const(i, value, e.type);
         return true;
@@ -318,7 +318,7 @@ struct WildConstUInt {
             halide_scalar_value_t val;
             halide_type_t type;
             state.get_bound_const(i, val, type);
-            return e.type == type && value == val.u.u64;
+            return (halide_type_t)e.type == type && value == val.u.u64;
         }
         state.set_bound_const(i, value, e.type);
         return true;
@@ -371,7 +371,7 @@ struct WildConstFloat {
             halide_scalar_value_t val;
             halide_type_t type;
             state.get_bound_const(i, val, type);
-            return e.type == type && value == val.u.f64;
+            return (halide_type_t)e.type == type && value == val.u.f64;
         }
         state.set_bound_const(i, value, e.type);
         return true;
