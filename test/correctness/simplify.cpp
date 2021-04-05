@@ -1873,7 +1873,9 @@ void check_overflow() {
     // Check that assert conditions generated with Target::LargeBuffers simplify away.
     Expr stride = Variable::make(Int(32), "stride");
     Expr extent = Variable::make(Int(32), "extent");
-    check(abs(cast<int64_t>(extent) * cast<int64_t>(stride)) <= Expr(9223372036854775807ull), const_true());
+    Expr actual_size = cast<int64_t>(stride) * cast<int64_t>(extent);
+    Expr max_size = make_const(Int(64), (((uint64_t)1) << 63) - 1);
+    check(-max_size <= actual_size && actual_size <= max_size, const_true());
 }
 
 template<typename T>

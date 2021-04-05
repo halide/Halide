@@ -423,12 +423,13 @@ Stmt add_image_checks_inner(Stmt s,
             // is used in the schedule to combine multiple extents,
             // but it is here for extra safety. On 64-bit targets with the
             // LargeBuffers feature, the maximum size is 2^63 - 1.
-            Expr max_size = make_const(UInt(64), t.maximum_buffer_size());
-            Expr max_extent = make_const(UInt(64), 0x7fffffff);
-            Expr actual_size = abs(cast<int64_t>(actual_extent) * actual_stride);
+            Expr max_size = make_const(Int(64), t.maximum_buffer_size());
+            Expr actual_size = cast<int64_t>(actual_extent) * actual_stride;
             Expr allocation_size_error = Call::make(Int(32), "halide_error_buffer_allocation_too_large",
                                                     {name, actual_size, max_size}, Call::Extern);
-            Stmt check = AssertStmt::make(actual_size <= max_size, allocation_size_error);
+            // We can't use abs here, because the simplifier can't prove
+            // this is always true when LargeBuffers is set.
+            Stmt check = AssertStmt::make(-max_size <= actual_size && actual_size <= max_size, allocation_size_error);
             dims_no_overflow_asserts.push_back(check);
 
             // Don't repeat extents check for secondary buffers as extents must be the same as for the first one.
