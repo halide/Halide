@@ -113,6 +113,14 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
     casts.emplace_back("qrdmulh", i16_sat(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), u16(15))));
     casts.emplace_back("qrdmulh", i32_sat(rounding_shift_right(widening_mul(wild_i32x_, wild_i32x_), u32(31))));
 
+    // The lower saturation for the above two rules is not actually needed, the simplifier
+    // might have removed it. I think the upper saturation is not needed for the non-rounding
+    // version either, but the simplifier doesn't remove those?
+    casts.emplace_back("qdmulh", i16(min(widening_mul(wild_i16x_, wild_i16x_) >> u16(15), Int(16).max())));
+    casts.emplace_back("qdmulh", i32(min(widening_mul(wild_i32x_, wild_i32x_) >> u32(31), Int(32).max())));
+    casts.emplace_back("qrdmulh", i16(min(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), u16(15)), Int(16).max())));
+    casts.emplace_back("qrdmulh", i32(min(rounding_shift_right(widening_mul(wild_i32x_, wild_i32x_), u32(31)), Int(32).max())));
+
     // RSHRN - Rounding shift right narrow (by immediate in [1, output bits])
     casts.emplace_back("rounding_shift_right_narrow", i8(rounding_shift_right(wild_i16x_, bc(wild_u16_))));
     casts.emplace_back("rounding_shift_right_narrow", u8(rounding_shift_right(wild_u16x_, bc(wild_u16_))));

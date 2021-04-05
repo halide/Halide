@@ -312,9 +312,9 @@ public:
         // tests. However, if the pipeline does widen, we want to generate
         // different instructions that have a built in interleaving that
         // we can cancel with the deinterleaving from widening.
-        check("v*.ub = vsat(v*.h,v*.h)", hvx_width / 1, u8_sat(i16(i8_1) << 1));
-        check("v*.uh = vasr(v*.w,v*.w,r*):sat", hvx_width / 2, u16_sat(i32(i16_1) << 1));
-        check("v*.h = vsat(v*.w,v*.w)", hvx_width / 2, i16_sat(i32(i16_1) << 1));
+        check("v*.ub = vsat(v*.h,v*.h)", hvx_width / 1, u8_sat(i16(i8_1) + 256));
+        check("v*.uh = vasr(v*.w,v*.w,r*):sat", hvx_width / 2, u16_sat(i32(i16_1) + 256));
+        check("v*.h = vsat(v*.w,v*.w)", hvx_width / 2, i16_sat(i32(i16_1) + 256));
 
         // Also check double saturating narrows.
         check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width / 1, u8_sat(i32_1));

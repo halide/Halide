@@ -38,8 +38,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::add(a, b), op->type);
 
-        if (rewrite(c0 + c1, fold(c0 + c1)) ||
-            rewrite(IRMatcher::Overflow() + x, a) ||
+        if (rewrite(IRMatcher::Overflow() + x, a) ||
             rewrite(x + IRMatcher::Overflow(), b) ||
             rewrite(x + 0, x) ||
             rewrite(0 + x, x)) {
@@ -48,7 +47,8 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
 
         // clang-format off
         if (EVAL_IN_LAMBDA
-            (rewrite(x + x, x * 2) ||
+            (rewrite(c0 + c1, fold(c0 + c1)) ||
+             rewrite(x + x, x * 2) ||
              rewrite(ramp(x, y, c0) + ramp(z, w, c0), ramp(x + z, y + w, c0)) ||
              rewrite(ramp(x, y, c0) + broadcast(z, c0), ramp(x + z, y, c0)) ||
              rewrite(broadcast(x, c0) + broadcast(y, c1), broadcast(x + broadcast(y, fold(c1/c0)), c0), c1 % c0 == 0) ||

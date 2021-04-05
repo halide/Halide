@@ -34,8 +34,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::sub(a, b), op->type);
 
-        if (rewrite(c0 - c1, fold(c0 - c1)) ||
-            rewrite(IRMatcher::Overflow() - x, a) ||
+        if (rewrite(IRMatcher::Overflow() - x, a) ||
             rewrite(x - IRMatcher::Overflow(), b) ||
             rewrite(x - 0, x)) {
             return rewrite.result;
@@ -43,7 +42,8 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
 
         // clang-format off
         if (EVAL_IN_LAMBDA
-            ((!op->type.is_uint() && rewrite(x - c0, x + fold(-c0), !overflows(-c0))) ||
+            (rewrite(c0 - c1, fold(c0 - c1)) ||
+             (!op->type.is_uint() && rewrite(x - c0, x + fold(-c0), !overflows(-c0))) ||
              rewrite(x - x, 0) || // We want to remutate this just to get better bounds
              rewrite(ramp(x, y, c0) - ramp(z, w, c0), ramp(x - z, y - w, c0)) ||
              rewrite(ramp(x, y, c0) - broadcast(z, c0), ramp(x - z, y, c0)) ||

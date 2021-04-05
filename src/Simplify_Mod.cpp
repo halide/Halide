@@ -62,20 +62,19 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
         int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::mod(a, b), op->type);
 
-        if (rewrite(c0 % c1, fold(c0 % c1)) ||
-            rewrite(IRMatcher::Overflow() % x, a) ||
-            rewrite(x % IRMatcher::Overflow(), b) ||
-            rewrite(0 % x, 0) ||
-            rewrite(x % x, 0) ||
-            rewrite(x % 0, 0) ||
-            (!op->type.is_float() &&
-             rewrite(x % 1, 0))) {
+        if (rewrite(IRMatcher::Overflow() % x, a) ||
+            rewrite(x % IRMatcher::Overflow(), b)) {
             return rewrite.result;
         }
 
         // clang-format off
         if (EVAL_IN_LAMBDA
-            (rewrite(broadcast(x, c0) % broadcast(y, c0), broadcast(x % y, c0)) ||
+            (rewrite(c0 % c1, fold(c0 % c1)) ||
+             rewrite(0 % x, 0) ||
+             rewrite(x % x, 0) ||
+             rewrite(x % 0, 0) ||
+             (!op->type.is_float() && rewrite(x % 1, 0)) ||
+             rewrite(broadcast(x, c0) % broadcast(y, c0), broadcast(x % y, c0)) ||
              (no_overflow_int(op->type) &&
               (rewrite((x * c0) % c1, (x * fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)) ||
                rewrite((x + c0) % c1, (x + fold(c0 % c1)) % c1, c1 > 0 && (c0 >= c1 || c0 < 0)) ||

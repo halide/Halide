@@ -849,15 +849,22 @@ private:
             // Scalar multiply keep high half, with multiplication by 2.
             {"halide.hexagon.trunc_satw_mpy2.vh.h", i16_sat(widening_mul(wild_i16x, wild_i16) >> wild_u32)},
             {"halide.hexagon.trunc_satw_mpy2.vh.h", i16_sat(widening_mul(wild_i16, wild_i16x) >> wild_u32), Pattern::SwapOps01},
+            {"halide.hexagon.trunc_satw_mpy2.vh.h", i16(min(widening_mul(wild_i16x, wild_i16) >> wild_u32, Int(16).max()))},
+            {"halide.hexagon.trunc_satw_mpy2.vh.h", i16(min(widening_mul(wild_i16, wild_i16x) >> wild_u32, Int(32).max())), Pattern::SwapOps01},
 
             // Scalar and vector multiply keep high half, with multiplication by 2, and rounding.
             {"halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16_sat(rounding_shift_right(widening_mul(wild_i16x, wild_i16), wild_u32))},
             {"halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16_sat(rounding_shift_right(widening_mul(wild_i16, wild_i16x), wild_u32)), Pattern::SwapOps01},
             {"halide.hexagon.trunc_satw_mpy2_rnd.vh.vh", i16_sat(rounding_shift_right(widening_mul(wild_i16x, wild_i16x), wild_u32))},
             {"halide.hexagon.trunc_satdw_mpy2_rnd.vw.vw", i32_sat(rounding_shift_right(widening_mul(wild_i32x, wild_i32x), wild_u64))},
+            {"halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16(min(rounding_shift_right(widening_mul(wild_i16x, wild_i16), wild_u32), Int(16).max()))},
+            {"halide.hexagon.trunc_satw_mpy2_rnd.vh.h", i16(min(rounding_shift_right(widening_mul(wild_i16, wild_i16x), wild_u32), Int(16).max())), Pattern::SwapOps01},
+            {"halide.hexagon.trunc_satw_mpy2_rnd.vh.vh", i16(min(rounding_shift_right(widening_mul(wild_i16x, wild_i16x), wild_u32), Int(16).max()))},
+            {"halide.hexagon.trunc_satdw_mpy2_rnd.vw.vw", i32(min(rounding_shift_right(widening_mul(wild_i32x, wild_i32x), wild_u64), Int(32).max()))},
 
             // Vector multiply keep high half, with multiplication by 2.
             {"halide.hexagon.trunc_satdw_mpy2.vw.vw", i32_sat(widening_mul(wild_i32x, wild_i32x) >> wild_u64)},
+            {"halide.hexagon.trunc_satdw_mpy2.vw.vw", i32(min(widening_mul(wild_i32x, wild_i32x) >> wild_u64, Int(32).max()))},
         };
 
         static const vector<Pattern> casts = {
