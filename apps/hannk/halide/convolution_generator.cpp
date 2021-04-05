@@ -285,8 +285,7 @@ public:
         bias_.in().compute_root()
             .store_in(MemoryType::Stack);
 
-        // We have a lot of requirements of the filter.
-        filter_.set_host_alignment(natural_vector_size<uint8_t>());
+        // TODO: Maybe we should align everything here.
         filter_.dim(0)
             .set_min(0)
             .set_extent(vector_reduction)
