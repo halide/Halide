@@ -54,6 +54,22 @@ public:
         // And the alignment of integer variables
         ModulusRemainder alignment;
 
+        void set_bounds_of_type(const Type &t) {
+            if (t.is_int()) {
+                min = min_int(t.bits());
+                min_defined = true;
+                max = max_int(t.bits());
+                max_defined = true;
+            } else if (t.is_uint()) {
+                min = 0;
+                min_defined = true;
+                if (t.bits() < 64) {
+                    max = max_uint(t.bits());
+                    max_defined = true;
+                }
+            }
+        }
+
         void trim_bounds_using_alignment() {
             if (alignment.modulus == 0) {
                 min_defined = max_defined = true;

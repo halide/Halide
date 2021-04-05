@@ -221,6 +221,8 @@ Expr Simplify::visit(const Variable *op, ExprInfo *bounds) {
         if (b.min_defined && b.max_defined && b.min == b.max) {
             return make_const(op->type, b.min);
         }
+    } else if (bounds) {
+        bounds->set_bounds_of_type(op->type);
     }
 
     if (var_info.contains(op->name)) {

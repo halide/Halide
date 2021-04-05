@@ -105,6 +105,10 @@ Expr lift_elementwise_broadcasts(Type type, const std::string &name, std::vector
 }  // namespace
 
 Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
+    if (bounds) {
+        bounds->set_bounds_of_type(op->type);
+    }
+
     // Calls implicitly depend on host, dev, mins, and strides of the buffer referenced
     if (op->call_type == Call::Image || op->call_type == Call::Halide) {
         found_buffer_reference(op->name, op->args.size());
@@ -360,6 +364,18 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a}, op->call_type);
         if (unbroadcast.defined()) {
             return mutate(unbroadcast, bounds);
+        }
+
+        if (bounds) {
+            bounds->min = 0;
+            bounds->min_defined = true;
+            if (a_bounds.min_defined && a_bounds.max_defined) {
+                if (a_bounds.min != std::numeric_limits<int64_t>::min() &&
+                    a_bounds.max != std::numeric_limits<int64_t>::min()) {
+                    bounds->max_defined = true;
+                    bounds->max = std::max(std::abs(a_bounds.min), std::abs(a_bounds.max));
+                }
+            }
         }
 
         Type ta = a.type();

@@ -6,7 +6,8 @@ namespace Halide {
 
 using std::ostringstream;
 
-namespace {
+namespace Internal {
+
 uint64_t max_uint(int bits) {
     uint64_t max_val = 0xffffffffffffffffULL;
     return max_val >> (64 - bits);
@@ -21,16 +22,16 @@ int64_t min_int(int bits) {
     return -max_int(bits) - 1;
 }
 
-}  // namespace
+}  // namespace Internal
 
 /** Return an expression which is the maximum value of this type */
 Halide::Expr Type::max() const {
     if (is_vector()) {
         return Internal::Broadcast::make(element_of().max(), lanes());
     } else if (is_int()) {
-        return Internal::IntImm::make(*this, max_int(bits()));
+        return Internal::IntImm::make(*this, Internal::max_int(bits()));
     } else if (is_uint()) {
-        return Internal::UIntImm::make(*this, max_uint(bits()));
+        return Internal::UIntImm::make(*this, Internal::max_uint(bits()));
     } else {
         internal_assert(is_float());
         if (bits() == 16) {
@@ -52,7 +53,7 @@ Halide::Expr Type::min() const {
     if (is_vector()) {
         return Internal::Broadcast::make(element_of().min(), lanes());
     } else if (is_int()) {
-        return Internal::IntImm::make(*this, min_int(bits()));
+        return Internal::IntImm::make(*this, Internal::min_int(bits()));
     } else if (is_uint()) {
         return Internal::UIntImm::make(*this, 0);
     } else {
@@ -77,9 +78,9 @@ bool Type::is_max(int64_t x) const {
 
 bool Type::is_max(uint64_t x) const {
     if (is_int()) {
-        return x == (uint64_t)max_int(bits());
+        return x == (uint64_t)Internal::max_int(bits());
     } else if (is_uint()) {
-        return x == max_uint(bits());
+        return x == Internal::max_uint(bits());
     } else {
         return false;
     }
@@ -87,7 +88,7 @@ bool Type::is_max(uint64_t x) const {
 
 bool Type::is_min(int64_t x) const {
     if (is_int()) {
-        return x == min_int(bits());
+        return x == Internal::min_int(bits());
     } else if (is_uint()) {
         return x == 0;
     } else {
@@ -128,9 +129,9 @@ bool Type::can_represent(Type other) const {
 
 bool Type::can_represent(int64_t x) const {
     if (is_int()) {
-        return x >= min_int(bits()) && x <= max_int(bits());
+        return x >= Internal::min_int(bits()) && x <= Internal::max_int(bits());
     } else if (is_uint()) {
-        return x >= 0 && (uint64_t)x <= max_uint(bits());
+        return x >= 0 && (uint64_t)x <= Internal::max_uint(bits());
     } else if (is_bfloat()) {
         switch (bits()) {
         case 16:
@@ -160,9 +161,9 @@ bool Type::can_represent(int64_t x) const {
 
 bool Type::can_represent(uint64_t x) const {
     if (is_int()) {
-        return x <= (uint64_t)(max_int(bits()));
+        return x <= (uint64_t)(Internal::max_int(bits()));
     } else if (is_uint()) {
-        return x <= max_uint(bits());
+        return x <= Internal::max_uint(bits());
     } else if (is_bfloat()) {
         switch (bits()) {
         case 16:
@@ -189,10 +190,10 @@ bool Type::can_represent(uint64_t x) const {
 bool Type::can_represent(double x) const {
     if (is_int()) {
         int64_t i = Internal::safe_numeric_cast<int64_t>(x);
-        return (x >= min_int(bits())) && (x <= max_int(bits())) && (x == (double)i);
+        return (x >= Internal::min_int(bits())) && (x <= Internal::max_int(bits())) && (x == (double)i);
     } else if (is_uint()) {
         uint64_t u = Internal::safe_numeric_cast<uint64_t>(x);
-        return (x >= 0) && (x <= max_uint(bits())) && (x == (double)u);
+        return (x >= 0) && (x <= Internal::max_uint(bits())) && (x == (double)u);
     } else if (is_bfloat()) {
         switch (bits()) {
         case 16:

@@ -1869,6 +1869,11 @@ void check_overflow() {
             }
         }
     }
+
+    // Check that assert conditions generated with Target::LargeBuffers simplify away.
+    Expr stride = Variable::make(Int(32), "stride");
+    Expr extent = Variable::make(Int(32), "extent");
+    check(abs(cast<int64_t>(extent) * cast<int64_t>(stride)) <= Expr(9223372036854775807ull), const_true());
 }
 
 template<typename T>
@@ -2065,7 +2070,7 @@ int main(int argc, char **argv) {
     // overflow at another.
     {
         Expr e = x;
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 30; i++) {
             e = max(e, 1) / 2;
         }
         check(e, e);

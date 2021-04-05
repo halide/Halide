@@ -259,6 +259,14 @@ struct halide_handle_traits {
 
 namespace Halide {
 
+namespace Internal {
+
+uint64_t max_uint(int bits);
+int64_t max_int(int bits);
+int64_t min_int(int bits);
+
+}  // namespace Internal
+
 struct Expr;
 
 /** Types in the halide type system. They can be ints, unsigned ints,
