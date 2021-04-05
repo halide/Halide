@@ -1,8 +1,7 @@
 include ../support/Makefile.inc
 
 OBJECTS = $(BIN)/parser.o $(BIN)/z3.o $(BIN)/expr_util.o $(BIN)/reduction_order.o \
-					$(BIN)/synthesize_predicate.o $(BIN)/super_simplify.o $(BIN)/generate_bounds_cegis.o \
-					$(BIN)/ExprToJuliaLP.o
+					$(BIN)/synthesize_predicate.o $(BIN)/super_simplify.o
 
 all: $(BIN)/find_rules $(BIN)/synthesize_predicates $(BIN)/filter_rewrite_rules $(BIN)/super_simplify
 
@@ -17,18 +16,6 @@ $(BIN)/%.o: %.cpp %.h
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BIN)/find_rules: find_rules.cpp $(OBJECTS) $(LIB_HALIDE)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $< $(OBJECTS) -o $@ $(LDFLAGS) -lHalide
-
-$(BIN)/find_bounds_rules: find_bounds_rules.cpp $(OBJECTS) $(LIB_HALIDE)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $< $(OBJECTS) -o $@ $(LDFLAGS) -lHalide
-
-$(BIN)/make_julia_lp: make_julia_lp.cpp $(OBJECTS) $(LIB_HALIDE)
-	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $< $(OBJECTS) -o $@ $(LDFLAGS) -lHalide
-
-$(BIN)/find_bounds_tool: find_bounds_tool.cpp $(OBJECTS) $(LIB_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< $(OBJECTS) -o $@ $(LDFLAGS) -lHalide
 
