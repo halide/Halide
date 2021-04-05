@@ -125,6 +125,10 @@ $(BIN)/%/fully_connected_uint8.a: $(GENERATOR_BIN)/fully_connected.generator
 	@mkdir -p $(@D)
 	$< -g FullyConnected -f hannk::fully_connected_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
+$(BIN)/%/l2_normalization_uint8.a: $(GENERATOR_BIN)/l2_normalization.generator
+	@mkdir -p $(@D)
+	$< -g L2Normalization -f hannk::l2_normalization_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
 $(BIN)/%/max_pool_uint8.a: $(GENERATOR_BIN)/max_pool.generator
 	@mkdir -p $(@D)
 	$< -g MaxPool -f hannk::max_pool_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
@@ -151,6 +155,7 @@ OPS_HALIDE = \
 	$(BIN)/%/depthwise_convolution_dm1_uint8.a \
 	$(BIN)/%/fill_uint8.a \
 	$(BIN)/%/fully_connected_uint8.a \
+	$(BIN)/%/l2_normalization_uint8.a \
 	$(BIN)/%/max_pool_uint8.a \
 	$(BIN)/%/softmax_uint8.a \
 	$(BIN)/%/tile_convolution_filter_uint8.a \

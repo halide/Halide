@@ -148,28 +148,23 @@ public:
         return ::hannk::make_unique<Tensor>(t->name()->str(), std::move(buffer), std::move(quantization));
     }
 
-    std::unique_ptr<Op> parse_add(const tflite::Operator *op) {
-        const auto options = op->builtin_options_as_AddOptions();
-        Tensor *input1 = result_.tensors[op->inputs()->Get(0)].get();
-        Tensor *input2 = result_.tensors[op->inputs()->Get(1)].get();
+    std::unique_ptr<Op> parse_binary(const tflite::Operator *op, BinaryOp::Operator type) {
+        Tensor *a = result_.tensors[op->inputs()->Get(0)].get();
+        Tensor *b = result_.tensors[op->inputs()->Get(1)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
-        return ::hannk::make_unique<AddOp>(
-            input1, input2, output, 1,
-            parse_activation_function(options->fused_activation_function()));
+        return ::hannk::make_unique<BinaryOp>(a, b, output, type, ActivationFunction::None);
     }
 
-    std::unique_ptr<Op> parse_sub(const tflite::Operator *op) {
-        const auto options = op->builtin_options_as_SubOptions();
-        Tensor *input1 = result_.tensors[op->inputs()->Get(0)].get();
-        Tensor *input2 = result_.tensors[op->inputs()->Get(1)].get();
-        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
-        return ::hannk::make_unique<AddOp>(
-            input1, input2, output, -1,
-            parse_activation_function(options->fused_activation_function()));
-    }
+    // We can't do this with templates...
+    #define PARSE_BINARY_WITH_ACTIVATION(op, Op) \
+        ::hannk::make_unique<BinaryOp>( \
+            result_.tensors[op->inputs()->Get(0)].get(), \
+            result_.tensors[op->inputs()->Get(1)].get(), \
+            result_.tensors[op->outputs()->Get(0)].get(), \
+            BinaryOp::Op, \
+            parse_activation_function(op->builtin_options_as_##Op##Options()->fused_activation_function())); \
 
-    template <typename T>
-    std::unique_ptr<Op> parse_pool2D(const tflite::Operator *op) {
+    std::unique_ptr<Op> parse_pool2D(const tflite::Operator *op, PoolOp::Operator reduce_op) {
         const auto options = op->builtin_options_as_Pool2DOptions();
         Padding padding = parse_padding(options->padding());
         std::vector<int> stride = {
@@ -184,8 +179,8 @@ public:
             parse_activation_function(options->fused_activation_function());
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
-        return ::hannk::make_unique<T>(
-            input, output, stride, filter_size, padding, activation);
+        return ::hannk::make_unique<PoolOp>(
+            input, output, stride, filter_size, padding, reduce_op, activation);
     }
 
     std::unique_ptr<Op> parse_concatenation(const tflite::Operator *op) {
@@ -280,20 +275,9 @@ public:
         std::vector<int> new_shape;
         // If there are two inputs, and the second is an int32 vector, it should
         // be used to specify the new shape (instead of ReshapeOptions).
-        Tensor *shape_tensor = op->inputs()->size() == 2 ?
-                                   result_.tensors[op->inputs()->Get(1)].get() :
-                                   nullptr;
-        if (shape_tensor &&
-            shape_tensor->rank() == 1 &&
-            shape_tensor->is_type<int32_t>()) {
-            const auto &data = shape_tensor->buffer<const int32_t>();
-            for (int i = 0; i < data.dimensions(); i++) {
-                new_shape.push_back(data(i));
-            }
-        } else {
-            if (options) {
-                new_shape.assign(options->new_shape()->cbegin(), options->new_shape()->cend());
-            }
+        CHECK(options) << "Dynamic reshape not supported\n";
+        if (options) {
+            new_shape.assign(options->new_shape()->cbegin(), options->new_shape()->cend());
         }
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
@@ -309,10 +293,10 @@ public:
         return ::hannk::make_unique<SoftmaxOp>(input, output, beta);
     }
 
-    std::unique_ptr<Op> parse_quantize(const tflite::Operator *op) {
+    std::unique_ptr<Op> parse_l2_normalization(const tflite::Operator *op) {
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
-        return ::hannk::make_unique<AddOp>(input, nullptr, output, 0, ActivationFunction::None);
+        return ::hannk::make_unique<L2NormalizationOp>(input, output);
     }
 
     std::unique_ptr<Op> parse_op(const tflite::Operator *op) {
@@ -324,13 +308,13 @@ public:
         auto builtin_code = get_builtin_code(opcode);
         switch (builtin_code) {
         case tflite::BuiltinOperator_ADD:
-            return parse_add(op);
+            return PARSE_BINARY_WITH_ACTIVATION(op, Add);
         case tflite::BuiltinOperator_SUB:
-            return parse_sub(op);
+            return PARSE_BINARY_WITH_ACTIVATION(op, Sub);
         case tflite::BuiltinOperator_AVERAGE_POOL_2D:
-            return parse_pool2D<AveragePoolOp>(op);
+            return parse_pool2D(op, PoolOp::Average);
         case tflite::BuiltinOperator_MAX_POOL_2D:
-            return parse_pool2D<MaxPoolOp>(op);
+            return parse_pool2D(op, PoolOp::Max);
         case tflite::BuiltinOperator_CONCATENATION:
             return parse_concatenation(op);
         case tflite::BuiltinOperator_CONV_2D:
@@ -341,12 +325,13 @@ public:
             return parse_pad(op);
         case tflite::BuiltinOperator_RESHAPE:
             return parse_reshape(op);
-        case tflite::BuiltinOperator_QUANTIZE:
-            return parse_quantize(op);
         case tflite::BuiltinOperator_FULLY_CONNECTED:
             return parse_fully_connected(op);
         case tflite::BuiltinOperator_SOFTMAX:
             return parse_softmax(op);
+        case tflite::BuiltinOperator_L2_NORMALIZATION:
+            return parse_l2_normalization(op);
+
         default:
             CHECK(0) << "Unsupported op "
                      << tflite::EnumNameBuiltinOperator(builtin_code);

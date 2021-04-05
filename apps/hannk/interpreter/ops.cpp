@@ -19,6 +19,7 @@
 #include "fully_connected_uint8.h"
 #include "max_pool_uint8.h"
 #include "softmax_uint8.h"
+#include "l2_normalization_uint8.h"
 #include "tile_convolution_filter_uint8.h"
 
 namespace hannk {
@@ -70,6 +71,31 @@ void pad_to_rank(HalideBuffer<T> &buf, int rank) {
     while (buf.dimensions() < rank) {
         buf.embed(buf.dimensions(), 0);
     }
+}
+
+template <typename Ta, typename Tb>
+void optimize_elementwise_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b, int rank) {
+    while (can_fuse_cx(a) && can_fuse_cx(b) &&
+           a.dim(0).extent() == b.dim(0).extent()) {
+        fuse_cx(a);
+        fuse_cx(b);
+    }
+    pad_to_rank(a, rank);
+    pad_to_rank(b, rank);
+}
+
+template <typename Ta, typename Tb, typename Tc>
+void optimize_elementwise_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b, HalideBuffer<Tc> &c, int rank) {
+    while (can_fuse_cx(a) && can_fuse_cx(b) && can_fuse_cx(c) &&
+           a.dim(0).extent() == c.dim(0).extent() &&
+           b.dim(0).extent() == c.dim(0).extent()) {
+        fuse_cx(a);
+        fuse_cx(b);
+        fuse_cx(c);
+    }
+    pad_to_rank(a, rank);
+    pad_to_rank(b, rank);
+    pad_to_rank(c, rank);
 }
 
 bool is_alias(const HalideBuffer<const void> &a, const HalideBuffer<const void> &b) {
@@ -205,14 +231,7 @@ void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
 
     const auto out_range = get_output_range(activation, outq);
 
-    while (can_fuse_cx(in1) && can_fuse_cx(in2) && can_fuse_cx(out)) {
-        fuse_cx(in1);
-        fuse_cx(in2);
-        fuse_cx(out);
-    }
-    pad_to_rank(in1, 4);
-    pad_to_rank(in2, 4);
-    pad_to_rank(out, 4);
+    optimize_elementwise_shapes(in1, in2, out, 4);
 
     CHECK(0 == add_uint8_uint8(left_shift, in1, in2,
                                in1_offset, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
@@ -250,67 +269,34 @@ Op::Bounds ElementwiseOp::infer_bounds(const Box &crop) const {
     return result;
 }
 
-Op::Bounds PoolOp::infer_bounds(const Box &crop) const {
-    Box input_crop = crop;
-
-    input_crop[0] = crop[0];
-    input_crop[1] *= stride_[0];
-    input_crop[2] *= stride_[1];
-    input_crop[1].max += filter_size_[0] - 1;
-    input_crop[2].max += filter_size_[1] - 1;
-
-    Bounds result;
-    result.inputs = {input_crop};
-    result.outputs = {crop};
-    return result;
+const char *BinaryOp::to_string(BinaryOp::Operator op) {
+    switch (op) {
+    case Add: return "Add";
+    case Sub: return "Sub";
+    default:
+        CHECK(false) << "Unsupported binary op\n";
+        return nullptr;
+    }
 }
 
-std::vector<SplitInfo> PoolOp::get_split_info() const {
-    return {
-        SplitInfo::any_split(),
-        SplitInfo::any_split(),
-        SplitInfo::any_split(),
-        SplitInfo::any_split(),
-    };
-}
-
-void AddOp::execute(const Box &crop) {
+void BinaryOp::execute(const Box &crop) {
     const Tensor *in1 = input(0);
     const Tensor *in2 = input(1);
     Tensor *out = output();
 
     if (in1->is_type<uint8_t>() &&
-        (!in2 || in2->is_type<uint8_t>()) &&
+        in2->is_type<uint8_t>() &&
         out->is_type<uint8_t>()) {
-        if (!in2) {
-            in2 = in1;
-            input2_sign_ = 0;
+        switch (op_) {
+        case Add:
+        case Sub:
+            add(in1->buffer<const uint8_t>(), in1->quantization(),
+                in2->buffer<const uint8_t>(), in2->quantization(), op_ == Add ? 1 : -1,
+                out->buffer<uint8_t>(), out->quantization(), activation_);
+            break;
         }
-        add(in1->buffer<const uint8_t>(), in1->quantization(),
-            in2->buffer<const uint8_t>(), in2->quantization(), input2_sign_,
-            out->buffer<uint8_t>(), out->quantization(), activation_);
     } else {
-        CHECK(false);
-    }
-}
-
-void AveragePoolOp::execute(const Box &crop) {
-    const Tensor *in = input();
-    Tensor *out = output();
-
-    if (in->is_type<uint8_t>() && out->is_type<uint8_t>()) {
-        auto input_buf = in->buffer<const uint8_t>();
-        auto output_buf = out->buffer<uint8_t>(crop);
-
-        const auto output_range = get_output_range(activation_, out->quantization());
-
-        // TODO: does this need to handle Padding::Same?
-        CHECK(padding_ == Padding::Valid) << "AveragePoolOp doesn't handle all paddings yet";
-
-        CHECK(
-            0 == average_pool_uint8(input_buf, stride_[0], stride_[1],
-                                    filter_size_[0], filter_size_[1],
-                                    output_range.min, output_range.max, output_buf));
+        CHECK(false) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -318,8 +304,7 @@ Op::Bounds ConcatenationOp::infer_bounds(const Box &crop) const {
     // We need everything from the concatenated dimension, everything else
     // is the same as the crop.
     // TODO: It's possible that if the concatenated dimension is cropped
-    // from the out, we could reduce the bounds required of some of the
-    // ins.
+    // from the out, we could reduce the bounds required of some of the ins.
     Bounds result;
     for (int i = 0; i < input_count(); i++) {
         result.inputs.emplace_back(crop);
@@ -382,7 +367,7 @@ Box Conv2DOp::filter_required() const {
             {filter()->interval(2)},
         };
     } else {
-        CHECK(false);
+        CHECK(false) << "Unsupported type " << filter()->type() << "\n";
     }
 }
 
@@ -473,7 +458,7 @@ void Conv2DOp::execute(const Box &crop) {
                                        output_range.min, output_range.max, output_buf));
         }
     } else {
-        CHECK(false);
+        CHECK(false) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -491,7 +476,7 @@ Box DepthwiseConv2DOp::input_required(const Box &crop) const {
     if (input_crop[0].extent() > 1) {
         // TODO: We need padding on the input for a native SIMD vector,
         // don't hardcode this constant.
-        input_crop[0].set_extent(std::max(input_crop[0].extent(), 16));
+        input_crop[0].set_extent(std::max(input_crop[0].extent(), 32));
     } else {
         // Don't pad when broadcasting.
     }
@@ -567,7 +552,7 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
                          (uint8_t)params.c_offset, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
         }
     } else {
-        CHECK(false);
+        CHECK(false) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -600,12 +585,13 @@ void FullyConnectedOp::execute(const Box &crop) {
         auto bias_buf = bias()->buffer<const int32_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
 
-        // Some networks pass higher dimensional buffers with single element
-        // trailing dimensions.
-        // TODO: Clean this up earlier.
+        // TODO: This should be handled explicitly with a reshape.
+        // It's annoying tflite doesn't require this. This means
+        // that we can't arbitrarily insert padding of the strides
+        // for tensors consumed by this op.
         while (input_buf.dimensions() > 2) {
-            assert(input_buf.dim(2).extent() == 1);
-            input_buf = input_buf.sliced(2, input_buf.dim(2).min());
+            CHECK(can_fuse_cx(input_buf)) << "Unfusable fully connected input\n";
+            fuse_cx(input_buf);
         }
 
         MultiplyParams params =
@@ -619,26 +605,35 @@ void FullyConnectedOp::execute(const Box &crop) {
                      (uint8_t)params.c_offset, params.c.multiplier, params.c.shift, (uint8_t)output_range.min,
                      (uint8_t)output_range.max, output_buf));
     } else {
-        CHECK(false);
+        CHECK(false) << "Unsupported type " << out->type() << "\n";
     }
 }
 
-void MaxPoolOp::execute(const Box &crop) {
+std::vector<SplitInfo> L2NormalizationOp::get_split_info() const {
+    // Allow any split on any dimension other than the first dimension, where we
+    // compute a reduction.
+    std::vector<SplitInfo> splits(output()->rank(), SplitInfo::any_split());
+    splits.front() = SplitInfo::no_split();
+    return splits;
+}
+
+void L2NormalizationOp::execute(const Box &crop) {
     const Tensor *in = input();
     Tensor *out = output();
 
     if (in->is_type<uint8_t>() && out->is_type<uint8_t>()) {
-        auto input_buf = in->buffer<const uint8_t>();
+        auto in_buf = in->buffer<const uint8_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
 
-        const auto output_range = get_output_range(activation_, out->quantization());
+        const int input_offset = in->quantization().zero.at(0);
+        assert(input_offset >= 0 && input_offset <= 255);
 
-        CHECK(
-            0 == max_pool_uint8(input_buf, stride_[0], stride_[1],
-                                filter_size_[0], filter_size_[1],
-                                output_range.min, output_range.max, output_buf));
+        assert(out->quantization().scale.at(0) == 1.0f / 128.0f);
+        assert(out->quantization().zero.at(0) == 128);
+
+        CHECK(0 == l2_normalization_uint8(in_buf, input_offset, output_buf));
     } else {
-        CHECK(false);
+        CHECK(false) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -684,33 +679,89 @@ void PadOp::execute(const Box &crop) {
 
         uint8_t pad_value = in->quantization().zero.at(0);
 
-        if (is_alias(input_buf, output_buf)) {
-            // This is an in-place padding. Just fill in the
-            // padded areas.
-            // Fill dimensions outermost to innermost, to increase the
-            // area which should vectorize cleanly.
-            for (int d = output_buf.dimensions() - 1; d >= 0; d--) {
-                int input_min = input_buf.dim(d).min();
-                int output_min = output_buf.dim(d).min();
-                if (output_min < input_min) {
-                    auto before = output_buf.cropped(d, output_min, input_min - output_min);
-                    CHECK(0 == fill_uint8(pad_value, before));
-                }
-                int input_max = input_buf.dim(d).max();
-                int output_max = output_buf.dim(d).max();
-                if (output_max > input_max) {
-                    auto after = output_buf.cropped(d, input_max + 1, output_max - input_max);
-                    CHECK(0 == fill_uint8(pad_value, after));
-                }
-                input_min = std::max(input_min, output_min);
-                input_max = std::min(input_max, output_max);
-                output_buf.crop(d, input_min, input_max - input_min + 1);
+        for (int d = output_buf.dimensions() - 1; d >= 0; d--) {
+            int input_min = input_buf.dim(d).min();
+            int output_min = output_buf.dim(d).min();
+            if (output_min < input_min) {
+                auto before = output_buf.cropped(d, output_min, input_min - output_min);
+                CHECK(0 == fill_uint8(pad_value, before));
+            } else {
+                input_min = output_min;
             }
-        } else {
-            CHECK(0 == copy_uint8_uint8(input_buf, pad_value, output_buf));
+            int input_max = input_buf.dim(d).max();
+            int output_max = output_buf.dim(d).max();
+            if (output_max > input_max) {
+                auto after = output_buf.cropped(d, input_max + 1, output_max - input_max);
+                CHECK(0 == fill_uint8(pad_value, after));
+            } else {
+                input_max = output_max;
+            }
+            output_buf.crop(d, input_min, input_max - input_min + 1);
+        }
+        if (!is_alias(input_buf, output_buf)) {
+            CHECK(0 == copy_uint8_uint8(input_buf, output_buf));
         }
     } else {
-        CHECK(false);
+        CHECK(false) << "Unsupported type " << out->type() << "\n";
+    }
+}
+
+Op::Bounds PoolOp::infer_bounds(const Box &crop) const {
+    Box input_crop = crop;
+
+    input_crop[0] = crop[0];
+    input_crop[1] *= stride_[0];
+    input_crop[2] *= stride_[1];
+    input_crop[1].max += filter_size_[0] - 1;
+    input_crop[2].max += filter_size_[1] - 1;
+
+    Bounds result;
+    result.inputs = {input_crop};
+    result.outputs = {crop};
+    return result;
+}
+
+std::vector<SplitInfo> PoolOp::get_split_info() const {
+    std::vector<SplitInfo> splits(output()->rank(), SplitInfo::any_split());
+    return splits;
+}
+
+const char *PoolOp::to_string(PoolOp::Operator op) {
+    switch (op) {
+    case Average: return "Average";
+    case Max: return "Max";
+    default:
+        CHECK(false) << "Unsupported pool op\n";
+        return nullptr;
+    }
+}
+
+void PoolOp::execute(const Box &crop) {
+    const Tensor *in = input();
+    Tensor *out = output();
+
+    if (in->is_type<uint8_t>() && out->is_type<uint8_t>()) {
+        auto input_buf = in->buffer<const uint8_t>();
+        auto output_buf = out->buffer<uint8_t>(crop);
+
+        const auto output_range = get_output_range(activation_, out->quantization());
+
+        switch (op_) {
+        case Average:
+            CHECK(
+                0 == average_pool_uint8(input_buf, stride_[0], stride_[1],
+                                        filter_size_[0], filter_size_[1],
+                                        output_range.min, output_range.max, output_buf));
+            break;
+        case Max:
+            CHECK(
+                0 == max_pool_uint8(input_buf, stride_[0], stride_[1],
+                                    filter_size_[0], filter_size_[1],
+                                    output_range.min, output_range.max, output_buf));
+            break;
+        }
+    } else {
+        CHECK(false) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -751,10 +802,10 @@ void ReshapeOp::execute(const Box &crop) {
 }
 
 std::vector<SplitInfo> SoftmaxOp::get_split_info() const {
-    // Allow any split on any dimension other than the last dimension, where we
+    // Allow any split on any dimension other than the first dimension, where we
     // compute a reduction.
     std::vector<SplitInfo> splits(output()->rank(), SplitInfo::any_split());
-    splits.back() = SplitInfo::no_split();
+    splits.front() = SplitInfo::no_split();
     return splits;
 }
 
@@ -766,12 +817,12 @@ void SoftmaxOp::execute(const Box &crop) {
         auto in_buf = in->buffer<const uint8_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
 
+        // It's a easier to compute 2^(x*(B*log2(e))) than e^(x*B).
         const float beta2 = beta_ * std::log2(std::exp(1.0f));
 
         // We don't need the input offset because this op exploits the
         // identity exp(x_i)/sum(exp(x_i)) == exp(x_i + C)/sum(exp(x_i + C))
         const int output_offset = out->quantization().zero.at(0);
-        assert(in_offset >= 0 && in_offset <= 255);
         assert(output_offset >= 0 && output_offset <= 255);
 
         const float in_scale = in->quantization().scale.at(0) * beta2;
@@ -790,7 +841,7 @@ void SoftmaxOp::execute(const Box &crop) {
                                  output_offset, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
                                  output_buf));
     } else {
-        CHECK(false);
+        CHECK(false) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -825,15 +876,11 @@ void TileConvFilterOp::execute(const Box &crop) {
 
         CHECK(0 == tile_convolution_filter_uint8(input_buf, input_offset, output_offset, output_buf));
     } else {
-        CHECK(false);
+        CHECK(false) << "Unsupported type " << in->type() << "\n";
     }
 }
 
-void AddOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void AveragePoolOp::accept(OpVisitor *v) {
+void BinaryOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 
@@ -853,11 +900,15 @@ void FullyConnectedOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 
-void MaxPoolOp::accept(OpVisitor *v) {
+void L2NormalizationOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 
 void PadOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void PoolOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 

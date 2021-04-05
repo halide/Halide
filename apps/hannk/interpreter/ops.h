@@ -29,43 +29,28 @@ public:
     Bounds infer_bounds(const Box &crop) const;
 };
 
-// This is an abstract helper op for pooling operations.
-class PoolOp : public Op {
-protected:
-    std::vector<int> stride_;
-    std::vector<int> filter_size_;
-    Padding padding_;
+class BinaryOp : public ElementwiseOp {
+public:
+    enum Operator {
+        Add,
+        Sub,
+    };
+
+    static const char *to_string(Operator op);
+
+private:
+    Operator op_;
     ActivationFunction activation_;
 
 public:
-    PoolOp(Tensor *input, Tensor *output, std::vector<int> stride,
-           std::vector<int> filter_size, Padding padding,
-           ActivationFunction activation)
-        : Op({input}, {output}),
-          stride_(std::move(stride)),
-          filter_size_(std::move(filter_size)),
-          padding_(padding),
-          activation_(activation) {
-    }
-
-    Bounds infer_bounds(const Box &crop) const;
-    std::vector<SplitInfo> get_split_info() const;
-};
-
-class AddOp : public ElementwiseOp {
-    int input2_sign_;
-    ActivationFunction activation_;
-
-public:
-    explicit AddOp(Tensor *input1, Tensor *input2, Tensor *output, int input2_sign,
-                   ActivationFunction activation)
-        : ElementwiseOp({input1, input2}, output), input2_sign_(input2_sign), activation_(activation) {
+    BinaryOp(Tensor *a, Tensor *b, Tensor *output, Operator op, ActivationFunction activation)
+        : ElementwiseOp({a, b}, output), op_(op), activation_(activation) {
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
-        return ::hannk::make_unique<AddOp>(
+        return ::hannk::make_unique<BinaryOp>(
             apply(map, input(0)), apply(map, input(1)),
-            apply(map, output()), input2_sign_, activation_);
+            apply(map, output()), op_, activation_);
     }
 
     void accept(OpVisitor *v);
@@ -73,39 +58,7 @@ public:
     void execute(const Box &crop);
 
     void dump(std::ostream &os) const {
-        const char *name;
-        if (input(1) == nullptr) {
-            name = "Quantize";
-        } else if (input2_sign_ > 0) {
-            name = "Add";
-        } else {
-            name = "Sub";
-        }
-        os << "  " << name << " " << output()->name() << std::endl;
-    }
-};
-
-class AveragePoolOp : public PoolOp {
-public:
-    AveragePoolOp(Tensor *input, Tensor *output, std::vector<int> stride,
-                  std::vector<int> filter_size, Padding padding,
-                  ActivationFunction activation)
-        : PoolOp(input, output, std::move(stride),
-                 std::move(filter_size), padding, activation) {
-    }
-
-    std::unique_ptr<Op> clone(const TensorMap &map) const {
-        return ::hannk::make_unique<AveragePoolOp>(
-            apply(map, input()), apply(map, output()), stride_,
-            filter_size_, padding_, activation_);
-    }
-
-    void accept(OpVisitor *v);
-
-    void execute(const Box &crop);
-
-    void dump(std::ostream &os) const {
-        os << "  AveragePool " << output()->name() << std::endl;
+        os << "  " << to_string(op_) << " " << output()->name() << std::endl;
     }
 };
 
@@ -285,26 +238,24 @@ public:
     }
 };
 
-class MaxPoolOp : public PoolOp {
+class L2NormalizationOp : public ElementwiseOp {
 public:
-    MaxPoolOp(Tensor *input, Tensor *output, std::vector<int> stride,
-              std::vector<int> filter_size, Padding padding,
-              ActivationFunction activation)
-        : PoolOp(input, output, std::move(stride),
-                 std::move(filter_size), padding, activation) {
+    L2NormalizationOp(Tensor *input, Tensor *output)
+        : ElementwiseOp({input}, output) {
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
-        return ::hannk::make_unique<MaxPoolOp>(
-            apply(map, input()), apply(map, output()), stride_, filter_size_, padding_, activation_);
+        return ::hannk::make_unique<L2NormalizationOp>(apply(map, input()), apply(map, output()));
     }
 
     void accept(OpVisitor *v);
 
+    std::vector<SplitInfo> get_split_info() const;
+
     void execute(const Box &crop);
 
     void dump(std::ostream &os) const {
-        os << "  MaxPool " << output()->name() << std::endl;
+        os << "  L2Normalization " << output()->name() << std::endl;
     }
 };
 
@@ -328,6 +279,51 @@ public:
 
     void dump(std::ostream &os) const {
         os << "  Pad " << output()->name() << std::endl;
+    }
+};
+
+class PoolOp : public Op {
+public:
+    enum Operator {
+        Average,
+        Max,
+    };
+
+    static const char *to_string(Operator op);
+
+protected:
+    std::vector<int> stride_;
+    std::vector<int> filter_size_;
+    Padding padding_;
+    Operator op_;
+    ActivationFunction activation_;
+
+public:
+    PoolOp(Tensor *input, Tensor *output, std::vector<int> stride,
+           std::vector<int> filter_size, Padding padding, Operator op,
+           ActivationFunction activation)
+        : Op({input}, {output}),
+          stride_(std::move(stride)),
+          filter_size_(std::move(filter_size)),
+          padding_(padding),
+          op_(op),
+          activation_(activation) {
+    }
+
+    std::unique_ptr<Op> clone(const TensorMap &map) const {
+        return ::hannk::make_unique<PoolOp>(
+            apply(map, input()), apply(map, output()), stride_, filter_size_, padding_, op_, activation_);
+    }
+
+    Bounds infer_bounds(const Box &crop) const;
+    std::vector<SplitInfo> get_split_info() const;
+
+    void accept(OpVisitor *v);
+
+    void execute(const Box &crop);
+
+    void dump(std::ostream &os) const {
+        os << "  " << to_string(op_) << "Pool " << output()->name() << std::endl;
     }
 };
 
@@ -404,14 +400,14 @@ class OpVisitor {
 public:
     virtual ~OpVisitor() = default;
 
-    virtual void visit(AddOp *op) {}
-    virtual void visit(AveragePoolOp *op) {}
+    virtual void visit(BinaryOp *op) {}
     virtual void visit(ConcatenationOp *op) {}
     virtual void visit(Conv2DOp *op) {}
     virtual void visit(DepthwiseConv2DOp *op) {}
     virtual void visit(FullyConnectedOp *op) {}
-    virtual void visit(MaxPoolOp *op) {}
+    virtual void visit(L2NormalizationOp *op) {}
     virtual void visit(PadOp *op) {}
+    virtual void visit(PoolOp *op) {}
     virtual void visit(ReshapeOp *op) {}
     virtual void visit(SoftmaxOp *op) {}
     virtual void visit(TileConvFilterOp *op) {}

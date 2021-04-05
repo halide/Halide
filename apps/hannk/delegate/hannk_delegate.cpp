@@ -26,10 +26,11 @@
     KNOWN_OP(Conv2d)          \
     KNOWN_OP(DepthwiseConv2d) \
     KNOWN_OP(MaxPool2d)       \
+    KNOWN_OP(FullyConnected)  \
     KNOWN_OP(Pad)             \
     KNOWN_OP(Reshape)         \
-    KNOWN_OP(Quantize)        \
-    KNOWN_OP(Softmax)
+    KNOWN_OP(Softmax)         \
+    KNOWN_OP(L2Normalization)
 
 // TODO(srj): FullyConnected will actually check-fail if you use it,
 // so leave it out of the ops we handle here for now.
@@ -467,7 +468,7 @@ private:
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteAddParams *params = (const TfLiteAddParams *)(node->builtin_data);
         auto activation = ConvertTfLiteActivation(params->activation);
-        return ::hannk::make_unique<AddOp>(input1, input2, output, 1, activation);
+        return ::hannk::make_unique<BinaryOp>(input1, input2, output, BinaryOp::Add, activation);
     }
 
     std::unique_ptr<Op> BuildSub(TfLiteContext *context, TfLiteNode *node) {
@@ -476,10 +477,10 @@ private:
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteAddParams *params = (const TfLiteAddParams *)(node->builtin_data);
         auto activation = ConvertTfLiteActivation(params->activation);
-        return ::hannk::make_unique<AddOp>(input1, input2, output, -1, activation);
+        return ::hannk::make_unique<BinaryOp>(input1, input2, output, BinaryOp::Sub, activation);
     }
 
-    std::unique_ptr<Op> BuildAveragePool2d(TfLiteContext *context, TfLiteNode *node) {
+    std::unique_ptr<Op> BuildPool2d(TfLiteContext *context, TfLiteNode *node, PoolOp::Operator reduce_op) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLitePoolParams *params = (const TfLitePoolParams *)(node->builtin_data);
@@ -493,7 +494,15 @@ private:
             params->filter_height,
         };
         auto activation = ConvertTfLiteActivation(params->activation);
-        return ::hannk::make_unique<AveragePoolOp>(input, output, stride, filter_size, padding, activation);
+        return ::hannk::make_unique<PoolOp>(input, output, stride, filter_size, padding, reduce_op, activation);
+    }
+
+    std::unique_ptr<Op> BuildAveragePool2d(TfLiteContext *context, TfLiteNode *node) {
+        return BuildPool2d(context, node, PoolOp::Average);
+    }
+
+    std::unique_ptr<Op> BuildMaxPool2d(TfLiteContext *context, TfLiteNode *node) {
+        return BuildPool2d(context, node, PoolOp::Max);
     }
 
     std::unique_ptr<Op> BuildConcatenation(TfLiteContext *context, TfLiteNode *node) {
@@ -566,23 +575,6 @@ private:
         return ::hannk::make_unique<FullyConnectedOp>(input, filter, bias, output, activation);
     }
 
-    std::unique_ptr<Op> BuildMaxPool2d(TfLiteContext *context, TfLiteNode *node) {
-        auto input = GetTensorById(context, node->inputs->data[0]);
-        auto output = GetTensorById(context, node->outputs->data[0]);
-        const TfLitePoolParams *params = (const TfLitePoolParams *)(node->builtin_data);
-        auto padding = ConvertTfLitePadding(params->padding);
-        const std::vector<int> stride = {
-            params->stride_width,
-            params->stride_height,
-        };
-        const std::vector<int> filter_size = {
-            params->filter_width,
-            params->filter_height,
-        };
-        auto activation = ConvertTfLiteActivation(params->activation);
-        return ::hannk::make_unique<MaxPoolOp>(input, output, stride, filter_size, padding, activation);
-    }
-
     std::unique_ptr<Op> BuildPad(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto padding = GetTensorById(context, node->inputs->data[1]);
@@ -599,17 +591,17 @@ private:
         return ::hannk::make_unique<ReshapeOp>(input, output, new_shape);
     }
 
-    std::unique_ptr<Op> BuildQuantize(TfLiteContext *context, TfLiteNode *node) {
-        auto input = GetTensorById(context, node->inputs->data[0]);
-        auto output = GetTensorById(context, node->outputs->data[0]);
-        return ::hannk::make_unique<AddOp>(input, nullptr, output, 0, ActivationFunction::None);
-    }
-
     std::unique_ptr<Op> BuildSoftmax(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteSoftmaxParams *params = (const TfLiteSoftmaxParams *)(node->builtin_data);
         return ::hannk::make_unique<SoftmaxOp>(input, output, params->beta);
+    }
+
+    std::unique_ptr<Op> BuildL2Normalization(TfLiteContext *context, TfLiteNode *node) {
+        auto input = GetTensorById(context, node->inputs->data[0]);
+        auto output = GetTensorById(context, node->outputs->data[0]);
+        return ::hannk::make_unique<L2NormalizationOp>(input, output);
     }
 
     const HannkDelegateOptions options_;
@@ -686,20 +678,6 @@ bool IsNodeSupported_Sub(TfLiteContext *context, TfLiteNode *node, TfLiteRegistr
     return IsNodeSupported_Add(context, node, registration);
 }
 
-bool IsNodeSupported_AveragePool2d(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    if (!(registration->version <= 2)) {
-        return false;
-    }
-    if (!InputsHaveCorrectTypes(node, context, {k8BitMask})) {
-        return false;
-    }
-    const TfLitePoolParams *params = (const TfLitePoolParams *)(node->builtin_data);
-    if (!IsActivationReluOrNone(params->activation)) {
-        return false;
-    }
-    return true;
-}
-
 bool IsNodeSupported_Concatenation(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
     if (!(registration->version <= 2)) {
         return false;
@@ -740,23 +718,22 @@ bool IsNodeSupported_DepthwiseConv2d(TfLiteContext *context, TfLiteNode *node, T
     return true;
 }
 
-// TODO(srj): unused for now
-// bool IsNodeSupported_FullyConnected(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-//     // This is correct, we don't handle the params for v2 or later yet
-//     if (!(registration->version <= 1)) {
-//         return false;
-//     }
-//     if (!InputsHaveCorrectTypes(node, context, {k8BitMask, k8BitMask, (1 << kTfLiteInt32) | (1 << kTfLiteNoType)})) {
-//         return false;
-//     }
-//     const TfLiteFullyConnectedParams *params = (const TfLiteFullyConnectedParams *)(node->builtin_data);
-//     if (!IsActivationReluOrNone(params->activation)) {
-//         return false;
-//     }
-//     return true;
-// }
+bool IsNodeSupported_FullyConnected(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    // This is correct, we don't handle the params for v2 or later yet
+    if (!(registration->version <= 1)) {
+        return false;
+    }
+    if (!InputsHaveCorrectTypes(node, context, {k8BitMask, k8BitMask, (1 << kTfLiteInt32) | (1 << kTfLiteNoType)})) {
+        return false;
+    }
+    const TfLiteFullyConnectedParams *params = (const TfLiteFullyConnectedParams *)(node->builtin_data);
+    if (!IsActivationReluOrNone(params->activation)) {
+        return false;
+    }
+    return true;
+}
 
-bool IsNodeSupported_MaxPool2d(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+bool IsNodeSupported_Pool2d(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
     if (!(registration->version <= 2)) {
         return false;
     }
@@ -768,6 +745,14 @@ bool IsNodeSupported_MaxPool2d(TfLiteContext *context, TfLiteNode *node, TfLiteR
         return false;
     }
     return true;
+}
+
+bool IsNodeSupported_AveragePool2d(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    return IsNodeSupported_Pool2d(context, node, registration);
+}
+
+bool IsNodeSupported_MaxPool2d(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    return IsNodeSupported_Pool2d(context, node, registration);
 }
 
 bool IsNodeSupported_Pad(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
@@ -791,7 +776,7 @@ bool IsNodeSupported_Reshape(TfLiteContext *context, TfLiteNode *node, TfLiteReg
     return true;
 }
 
-bool IsNodeSupported_Quantize(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+bool IsNodeSupported_Softmax(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
     if (!(registration->version <= 2)) {
         return false;
     }
@@ -801,7 +786,7 @@ bool IsNodeSupported_Quantize(TfLiteContext *context, TfLiteNode *node, TfLiteRe
     return true;
 }
 
-bool IsNodeSupported_Softmax(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+bool IsNodeSupported_L2Normalization(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
     if (!(registration->version <= 2)) {
         return false;
     }

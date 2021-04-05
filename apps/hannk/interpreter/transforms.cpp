@@ -140,10 +140,17 @@ class InPlace : public OpVisitor {
 
     using OpVisitor::visit;
 
-    void visit(AddOp *op) {
-        if (!maybe_alias_tensors(model_, op->input(0), op->output())) {
-            maybe_alias_tensors(model_, op->input(1), op->output());
+    void maybe_alias_elementwise(ElementwiseOp *op) {
+        for (int i = 0; i < op->input_count(); i++) {
+            if (maybe_alias_tensors(model_, op->input(i), op->output())) {
+                // We can only alias one of the inputs to the output.
+                return;
+            }
         }
+    }
+
+    void visit(BinaryOp *op) {
+        maybe_alias_elementwise(op);
     }
 
     void visit(ConcatenationOp *op) {
