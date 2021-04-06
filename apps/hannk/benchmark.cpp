@@ -15,7 +15,7 @@ namespace hannk {
 void run_benchmark(const std::string &filename, const ScheduleOptions &options) {
     if (!options.trace) {
         // In trace mode, don't send *anything* to stdout
-        std::cout << "Benchmarking " << filename;
+        std::cout << filename;
     }
 
     std::vector<char> buffer = read_entire_file(filename);
