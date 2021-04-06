@@ -25,10 +25,12 @@ uint16_t float_to_float16(float value) {
     }
 
     int exp;
+    // Get exponent, with bias already subtracted.
     std::frexp(value, &exp);
     if (exp > 16) {
-        // Too large, return infinity
-        return bits | 0x7c00;
+        // Too large, return infinity. Per initialization, bits only
+        // contains the sign bit, so this is +/-inf.
+        return bits | float16_t::exponent_mask;
     } else if (exp < -13) {
         // Too small, clamp to 2^-24
         value = std::ldexp(value, 24);
