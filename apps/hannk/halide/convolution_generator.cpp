@@ -292,6 +292,9 @@ public:
             .set_min(0)
             .set_extent(align(filter_.dim(1).extent(), accum_vector_size))
             .set_stride(vector_reduction);
+        for (int d = 2; d < filter_.dimensions(); d++) {
+            filter_.dim(d).set_min(0);
+        }
     }
 };
 
