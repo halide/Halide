@@ -291,12 +291,7 @@ public:
         Max,
     };
 
-    struct PaddingValues {
-        int width, height;
-    };
-
     static const char *to_string(Operator op);
-    void compute_padding_values();
 
 protected:
     std::vector<int> stride_;
@@ -304,7 +299,6 @@ protected:
     Padding padding_;
     Operator op_;
     ActivationFunction activation_;
-    PaddingValues padding_values_;
 
 public:
     PoolOp(Tensor *input, Tensor *output, std::vector<int> stride,
@@ -316,7 +310,6 @@ public:
           padding_(padding),
           op_(op),
           activation_(activation) {
-        compute_padding_values();
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
