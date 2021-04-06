@@ -245,9 +245,10 @@ public:
         Tensor *filter = result_.tensors[op->inputs()->Get(1)].get();
         Tensor *bias = result_.tensors[op->inputs()->Get(2)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        int depth_multiplier = output->extent(0) / input->extent(0);
         return ::hannk::make_unique<DepthwiseConv2DOp>(
-            input, filter, bias, output, stride, dilation_factor,
-            padding, activation);
+            input, filter, bias, output, depth_multiplier,
+            stride, dilation_factor, padding, activation);
     }
 
     std::unique_ptr<Op> parse_fully_connected(const tflite::Operator *op) {

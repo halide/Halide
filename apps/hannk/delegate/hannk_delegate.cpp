@@ -547,7 +547,7 @@ private:
         auto bias = GetTensorById(context, node->inputs->data[2]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteDepthwiseConvParams *params = (const TfLiteDepthwiseConvParams *)(node->builtin_data);
-        auto padding = ConvertTfLitePadding(params->padding);
+        int depth_multiplier = output->extent(0) / input->extent(0);
         const std::vector<int> stride = {
             params->stride_width,
             params->stride_height,
@@ -556,9 +556,10 @@ private:
             params->dilation_width_factor,
             params->dilation_height_factor,
         };
+        auto padding = ConvertTfLitePadding(params->padding);
         auto activation = ConvertTfLiteActivation(params->activation);
-        return ::hannk::make_unique<DepthwiseConv2DOp>(input, filter, bias, output, stride,
-                                                       dilation_factor, padding, activation);
+        return ::hannk::make_unique<DepthwiseConv2DOp>(input, filter, bias, output, depth_multiplier,
+                                                       stride, dilation_factor, padding, activation);
     }
 
     std::unique_ptr<Op> BuildFullyConnected(TfLiteContext *context, TfLiteNode *node) {

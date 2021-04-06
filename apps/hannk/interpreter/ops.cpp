@@ -464,17 +464,11 @@ void Conv2DOp::execute(const Box &crop) {
     }
 }
 
-int DepthwiseConv2DOp::depth_multiplier() const {
-    int input_channels = input()->extent(0);
-    int output_channels = output()->extent(0);
-    return output_channels / std::min(input_channels, output_channels);
-}
-
 Box DepthwiseConv2DOp::input_required(const Box &crop) const {
     Box input_crop = crop;
     Box filter_shape = filter()->box();
 
-    input_crop[0] = crop[0] / depth_multiplier();
+    input_crop[0] = crop[0] / depth_multiplier_;
     if (input_crop[0].extent() > 1) {
         // TODO: We need padding on the input for a native SIMD vector,
         // don't hardcode this constant.
@@ -523,32 +517,31 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
         auto bias_buf = bias()->buffer<const int32_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
 
-        int depth_multiplier = this->depth_multiplier();
-        assert(depth_multiplier * input_buf.dim(0).extent() == output_buf.dim(0).extent());
+        assert(depth_multiplier_ * input_buf.dim(0).extent() == output_buf.dim(0).extent());
 
         MultiplyParams params =
             get_quantized_multiply_params(in->quantization(), filt->quantization(), out->quantization());
 
         const auto output_range = get_output_range(activation_, out->quantization());
 
-        if (depth_multiplier >= output_buf.dim(0).extent()) {
+        if (depth_multiplier_ >= output_buf.dim(0).extent()) {
             CHECK(
                 0 == depthwise_convolution_broadcast_uint8(
-                         input_buf, filter_buf, bias_buf, depth_multiplier,
+                         input_buf, filter_buf, bias_buf, depth_multiplier_,
                          (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride_[0], stride_[1],
                          dilation_[0], dilation_[1], params.c.multiplier, params.c.shift,
                          (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
-        } else if (depth_multiplier == 1) {
+        } else if (depth_multiplier_ == 1) {
             CHECK(
                 0 == depthwise_convolution_dm1_uint8(
-                         input_buf, filter_buf, bias_buf, depth_multiplier,
+                         input_buf, filter_buf, bias_buf, depth_multiplier_,
                          (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride_[0], stride_[1],
                          dilation_[0], dilation_[1], params.c.multiplier, params.c.shift,
                          (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
         } else {
             CHECK(
                 0 == depthwise_convolution_uint8(
-                         input_buf, filter_buf, bias_buf, depth_multiplier,
+                         input_buf, filter_buf, bias_buf, depth_multiplier_,
                          (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride_[0], stride_[1],
                          dilation_[0], dilation_[1], params.c.multiplier, params.c.shift,
                          (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
