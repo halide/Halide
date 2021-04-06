@@ -20,6 +20,9 @@ public:
     Input<int> filter_width_{"filter_width"};
     Input<int> filter_height_{"filter_height"};
 
+    Input<int> padding_width_{"padding_width"};
+    Input<int> padding_height_{"padding_height"};
+
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
@@ -35,7 +38,7 @@ public:
         Func sum("sum");
         RDom r(0, filter_width_, 0, filter_height_);
         sum(c, x, y, b) += u16(
-            input_bounded(c, x * stride_x_ + r.x, y * stride_y_ + r.y, b));
+            input_bounded(c, x * stride_x_ + r.x - padding_width_, y * stride_y_ + r.y - padding_height_, b));
 
         Func average("average");
         // TODO: We should probably specialize/optimize for the case
