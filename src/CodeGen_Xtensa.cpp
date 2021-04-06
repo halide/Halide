@@ -285,7 +285,7 @@ HALIDE_ALWAYS_INLINE int32x64_t dense_ramp<int32x64_t>(int32_t base) {
 
 template <typename VectorType, typename BaseType, int Lanes>
 HALIDE_ALWAYS_INLINE VectorType aligned_load(const void *base, int32_t offset) {
-    return *((const VectorType *)((BaseType*)base + offset));
+    return *((const VectorType *)((const BaseType*)base + offset));
 }
 
 template <>
@@ -438,7 +438,7 @@ HALIDE_ALWAYS_INLINE uint1x32_t halide_xtensa_pad_to_native<uint1x16_t, uint1x32
 
 template<>
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int8x4_t load<int8x4_t, int8_t, 4>(const void *base, int32_t offset) {
-    return *((const int8x4_t*)((int8_t*)base + offset));
+    return *((const int8x4_t*)((const int8_t*)base + offset));
 }
 
 template<>
@@ -754,7 +754,7 @@ HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_quad_mul_add_i24(
                                             ) {
   int24x64_t r = acc;
   const int8_t scalar_coef[] = {s3, s2, s1, s0};
-  xb_int32pr * __restrict coef = (xb_int32pr*)scalar_coef;
+  const xb_int32pr * __restrict coef = (const xb_int32pr*)scalar_coef;
   IVP_MULQA2N8XR8(r, a0, a1, a2, a3, coef[0]);
   return r;
 }
@@ -907,12 +907,6 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_narrow_with_shift_i16(const int32x
 HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_narrow_with_shift_u16(const int32x32_t& a, int shift) {
   xb_vecNx48 wide = IVP_CVT48SNX32(a.native_vector[1], a.native_vector[0]);
   return xb_vecNx16_rtor_xb_vecNx16U(IVP_PACKVRNRNX48(wide, shift));
-}
-
-// This is incorrect and needs to be fixed.
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_sat_narrow_with_shift_i16(const int32x32_t& a, int shift) {
-  xb_vecNx48 wide = IVP_CVT48SNX32(a.native_vector[1], a.native_vector[0]);
-  return IVP_PACKVNX48(wide, shift);
 }
 
 HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_narrow_high_i32(const int64x16_t& a) {
@@ -1273,6 +1267,14 @@ HALIDE_ALWAYS_INLINE uint1x32_t halide_xtensa_concat_from_native(const uint1x16_
         return IVP_JOINBN_2(b, a);
 }
 
+HALIDE_ALWAYS_INLINE uint1x64_t halide_xtensa_concat_from_native(const uint1x32_t& a, const uint1x32_t& b) {
+        return IVP_JOINBN(b, a);
+}
+
+HALIDE_ALWAYS_INLINE uint1x64_t halide_xtensa_concat_from_native(const uint1x16_t& a, const uint1x16_t& b, const uint1x16_t& c, const uint1x16_t& d) {
+    return halide_xtensa_concat_from_native(halide_xtensa_concat_from_native(a, b), halide_xtensa_concat_from_native(c, d));
+}
+
 HALIDE_ALWAYS_INLINE float32x32_t halide_xtensa_concat_from_native(const float32x16_t& a, const float32x16_t& b) {
     return float32x32_t(float32x32_t::from_native_vector, a, b);
 }
@@ -1337,7 +1339,6 @@ class ScopedDmaInitializer {
 
         std::set<Type> predefined_vectors = {
             Int(8, 4),
-            UInt(8, 4),
             Int(8, 128),
             UInt(8, 128),
             Int(8, 256),
@@ -1778,7 +1779,7 @@ void CodeGen_Xtensa::visit(const Min *op) {
         } else if (is_native_xtensa_vector<float>(op->type)) {
             rhs << "IVP_MINN_2XF32(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         } else {
-            rhs << print_type(op->type) << "::max(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
+            rhs << print_type(op->type) << "::min(" << print_expr(op->a) << ", " << print_expr(op->b) << ")";
         }
         print_assignment(op->type, rhs.str());
     }
@@ -1861,9 +1862,15 @@ void CodeGen_Xtensa::visit(const Broadcast *op) {
             // TODO(vsknk): why it this extra cast to scalar is needed?
             rhs = print_type(vector_type) + "((" + print_type(op->type.with_lanes(1)) + ")" + id_value + ")";
         } else if (op->lanes > 1) {
-            if (op->type.is_bool() && op->type.lanes() == 32) {
+            if (op->type.is_bool()) {
                 // TODO(vksnk): figure out how to broadcast bool.
-                rhs = id_value + "? (int16x32_t(1) == int16x32_t(1)) : (int16x32_t(1) == int16x32_t(0))";
+                if (op->type.lanes() == 16) {
+                    rhs = id_value + "? (int32x16_t(1) == int32x16_t(1)) : (int32x16_t(1) == int32x16_t(0))";
+                } else if (op->type.lanes() == 32) {
+                    rhs = id_value + "? (int16x32_t(1) == int16x32_t(1)) : (int16x32_t(1) == int16x32_t(0))";
+                } else if (op->type.lanes() == 64) {
+                    rhs = id_value + "? (int8x64_t(1) == int8x64_t(1)) : (int8x64_t(1) == int8x64_t(0))";
+                }
             } else {
                 rhs = id_value;
             }
@@ -1873,6 +1880,27 @@ void CodeGen_Xtensa::visit(const Broadcast *op) {
     }
 
     print_assignment(vector_type, rhs);
+}
+
+void CodeGen_Xtensa::visit(const LE *op) {
+    string sa = print_expr(op->a);
+    string sb = print_expr(op->b);
+
+    if (is_native_xtensa_vector<int8_t>(op->a.type())) {
+        print_assignment(op->type, "IVP_LE2NX8(" + sa + ", " + sb + ")");
+    } else if (is_native_xtensa_vector<uint8_t>(op->a.type())) {
+        print_assignment(op->type, "IVP_LEU2NX8U(" + sa + ", " + sb + ")");
+    } else if (is_native_xtensa_vector<int16_t>(op->a.type())) {
+        print_assignment(op->type, "IVP_LENX16(" + sa + ", " + sb + ")");
+    } else if (is_native_xtensa_vector<uint16_t>(op->a.type())) {
+        print_assignment(op->type, "IVP_LEUNX16U(" + sa + ", " + sb + ")");
+    } else if (is_native_xtensa_vector<int32_t>(op->a.type())) {
+        print_assignment(op->type, "IVP_LEN_2X32(" + sa + ", " + sb + ")");
+    } else if (is_native_xtensa_vector<uint32_t>(op->a.type())) {
+        print_assignment(op->type, "IVP_LEUN_2X32U(" + sa + ", " + sb + ")");
+    } else {
+        visit_binop(op->type, op->a, op->b, "<");
+    }
 }
 
 void CodeGen_Xtensa::visit(const LT *op) {
@@ -1921,8 +1949,16 @@ void CodeGen_Xtensa::visit(const Or *op) {
     string sa = print_expr(op->a);
     string sb = print_expr(op->b);
 
-    if (op->a.type().is_bool() && (op->a.type().lanes() == 32)) {
-        print_assignment(op->type, "IVP_ORBN(" + sa + ", " + sb + ")");
+    if (op->a.type().is_bool() && op->type.is_vector()) {
+        if (op->a.type().lanes() == 16) {
+            print_assignment(op->type, "IVP_ORBN_2(" + sa + ", " + sb + ")");
+        } else if (op->a.type().lanes() == 32) {
+            print_assignment(op->type, "IVP_ORBN(" + sa + ", " + sb + ")");
+        } else if (op->a.type().lanes() == 64) {
+            print_assignment(op->type, "IVP_ORB2N(" + sa + ", " + sb + ")");
+        } else {
+            internal_assert(false) << "Unhandled boolean type in the || op\n";
+        }
     } else {
         visit_binop(op->type, op->a, op->b, "||");
     }

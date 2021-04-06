@@ -45,6 +45,7 @@ protected:
     void visit(const Cast *op) override;
     void visit(const Load *op) override;
     void visit(const EQ *op) override;
+    void visit(const LE *op) override;
     void visit(const LT *op) override;
     void visit(const GT *op) override;
     void visit(const Or *op) override;

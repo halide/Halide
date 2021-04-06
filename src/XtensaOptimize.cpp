@@ -608,7 +608,8 @@ private:
                 {"halide_xtensa_widen_add_i24", i16(wild_i24x) + wild_i8x, Pattern::AccumulatorOutput24},
                 {"halide_xtensa_widen_add_i24", i16(wild_i24x) + wild_i16x, Pattern::AccumulatorOutput24 | Pattern::NarrowOp1},
 
-                {"halide_xtensa_widen_mul_add_i64", wild_i64x * wild_i64x + wild_i64x, Pattern::NarrowOps | Pattern::AccumulatorOutput64},
+                {"halide_xtensa_widen_mul_add_i64", widening_mul(wild_i32x, wild_i32x) + bc(wild_i64), Pattern::NarrowOp2 | Pattern::AccumulatorOutput64},
+                {"halide_xtensa_widen_mul_add_i64", widening_mul(wild_i32x, wild_i32x) + wild_i64x, Pattern::NarrowOp2 | Pattern::AccumulatorOutput64},
             };
 
             Expr new_expr = apply_commutative_patterns(op, adds, this);
@@ -732,15 +733,15 @@ private:
             // Narrowing with shifting.
             {"halide_xtensa_narrow_i48_with_shift_i16", i16(i32(wild_i48x) >> wild_i32)},
             {"halide_xtensa_narrow_i48_with_shift_i16", i16(i32(wild_i48x) / wild_i32), Pattern::ExactLog2Op1},
-
             {"halide_xtensa_narrow_i48_with_shift_u16", u16(u32(wild_i48x) >> wild_u32)},
             {"halide_xtensa_narrow_i48_with_shift_u16", u16(u32(wild_i48x) / wild_u32), Pattern::ExactLog2Op1},
 
             {"halide_xtensa_narrow_with_shift_i16", i16(wild_i32x >> wild_i32)},
             {"halide_xtensa_narrow_with_shift_i16", i16(wild_i32x / wild_i32), Pattern::ExactLog2Op1},
-
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x >> wild_i32)},
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x / wild_i32), Pattern::ExactLog2Op1},
+
+            // {"halide_xtensa_sat_narrow_i16", i16_sat(wild_i32x)},
 
             // Implementation of this is incorrect, so needs to be fixed before enabling.
             // {"halide_xtensa_sat_narrow_with_shift_i16", i16_sat(wild_i32x >> wild_u32)},
@@ -759,6 +760,13 @@ private:
 
             {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x >> bc(wild_i64))},
             {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x / bc(wild_i64)), Pattern::ExactLog2Op1},
+            {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x >> bc(wild_u64))},
+            {"halide_xtensa_sat_narrow_shift_i32", i32_sat(wild_i64x / bc(wild_u64)), Pattern::ExactLog2Op1},
+
+            {"halide_xtensa_narrow_shift_i32", i32(wild_i64x >> bc(wild_i64))},
+            {"halide_xtensa_narrow_shift_i32", i32(wild_i64x / bc(wild_i64)), Pattern::ExactLog2Op1},
+            {"halide_xtensa_narrow_shift_i32", i32(wild_i64x >> bc(wild_u64))},
+            {"halide_xtensa_narrow_shift_i32", i32(wild_i64x / bc(wild_u64)), Pattern::ExactLog2Op1},
 
             {"halide_xtensa_sat_narrow_i24x_with_shift_u8", u8_sat(i16(wild_i24x) >> bc(wild_i16))},
             {"halide_xtensa_sat_narrow_i24x_with_shift_u8", u8_sat(i16(wild_i24x) / bc(wild_i16)), Pattern::ExactLog2Op1},
@@ -1583,6 +1591,11 @@ private:
 
             if (first_arg.type().is_bool() && first_arg.type().is_scalar()) {
                 return first_arg;
+            }
+
+            const Broadcast *maybe_broadcast = first_arg.as<Broadcast>();
+            if (maybe_broadcast) {
+                return Broadcast::make(maybe_broadcast->value, op->type.lanes());
             }
 
             return Call::make(op->type, op->name,
