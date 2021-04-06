@@ -8,7 +8,7 @@ using namespace Halide::ConciseCasts;
 namespace hannk {
 
 Var x("x"), y("y"), c("c"), b("b");
-Var ci("ci"), co("co"), bi("bi"), bo("bo");
+Var ci("ci"), co("co");
 
 int get_vector_reduction_factor(const Target &target, Type t) {
     if (target.arch == Target::Hexagon ||
@@ -283,7 +283,10 @@ public:
         // TODO: Pad this outside and let it constant fold.
         bias_.in().compute_root().store_in(MemoryType::Stack);
 
-        // TODO: Maybe we should align everything here.
+        // TODO: It looks like our loads aren't getting aligned, despite all of these
+        // requirements.
+        const int filter_alignment = vector_reduction * accum_vector_size;
+        filter_.set_host_alignment(filter_alignment * filter_.type().bytes());
         filter_.dim(0)
             .set_min(0)
             .set_extent(vector_reduction)
@@ -294,9 +297,11 @@ public:
             .set_stride(vector_reduction);
         filter_.dim(2)
             .set_min(0)
-            .set_stride(vector_reduction * accum_vector_size);
+            .set_stride(filter_alignment);
         for (int d = 3; d < filter_.dimensions(); d++) {
-            filter_.dim(d).set_min(0);
+            filter_.dim(d)
+                .set_min(0)
+                .set_stride(align(filter_.dim(d).stride(), filter_alignment));
         }
     }
 };
@@ -332,14 +337,14 @@ public:
         // Schedule.
         output_.dim(0).set_min(0).set_extent(vector_reduction);
         output_.dim(1).set_min(0).set_extent(vector_tile).set_stride(vector_reduction);
+        output_.dim(2).set_min(0).set_stride(vector_tile * vector_reduction);
 
         // TODO: We probably don't care about the performance of this, but if we do,
         // we could optimize this more.
         output_
             .compute_root()
             .reorder(ci, bi, bo, x, y, co)
-            .vectorize(ci)
-            .vectorize(bi);
+            .vectorize(ci);
     }
 };
 
