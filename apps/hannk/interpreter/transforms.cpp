@@ -197,7 +197,7 @@ void in_place(Model *m) {
 namespace {
 
 // Find ops that need padding and add an explicit pad op.
-class PadForConv : public OpVisitor {
+class PadForOps : public OpVisitor {
     void pad_for_op(Op *op, const Box &required, int in = 0) {
         Tensor *input = op->input(in);
 
@@ -269,14 +269,24 @@ class PadForConv : public OpVisitor {
         pad_for_op(op, required, 0);
     }
 
+    void visit(PoolOp *op) {
+        if (op->op() == PoolOp::Average && op->padding() == Padding::Same) {
+            // Pooling ops that normalize can't be padded :(.
+            return;
+        }
+
+        Box required = op->input_required(op->output()->box());
+        pad_for_op(op, required, 0);
+    }
+
 public:
     std::vector<std::pair<std::unique_ptr<Op>, std::vector<std::unique_ptr<Tensor>>>> new_ops;
 };
 
 }  // namespace
 
-void pad_for_conv(Model *m) {
-    PadForConv v;
+void pad_for_ops(Model *m) {
+    PadForOps v;
     m->accept(&v);
     for (auto &i : v.new_ops) {
         m->insert(std::move(i.first));

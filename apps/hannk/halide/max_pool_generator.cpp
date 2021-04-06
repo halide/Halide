@@ -29,27 +29,25 @@ public:
         // The algorithm.
         Var c("c"), x("x"), y("y"), b("b");
 
-        Func input_bounded("input_bounded");
-        input_bounded(c, x, y, b) =
-            constant_exterior(input_, output_min_)(c, x, y, b);
-
         Func maximum("maximum");
         RDom r(0, filter_width_, 0, filter_height_);
         maximum(c, x, y, b) = output_min_;
         maximum(c, x, y, b) =
-            max(maximum(c, x, y, b),
-                input_bounded(c, x * stride_x_ + r.x, y * stride_y_ + r.y, b));
+            max(maximum(c, x, y, b), input_(c, x * stride_x_ + r.x, y * stride_y_ + r.y, b));
 
         output_(c, x, y, b) = min(maximum(c, x, y, b), output_max_);
 
         // Schedule.
-        require_same_min_extent(0, input_, output_);
-        require_same_min_extent(3, input_, output_);
 
         // TODO: Optimize more.
+        output_.compute_root();
+
         const int vector_size = natural_vector_size<uint8_t>();
-        output_.compute_root()
-            .vectorize(c, vector_size, TailStrategy::Predicate);
+        Expr output_channels = output_.dim(0).extent();
+        for (int i : {4, 2, 1}) {
+            output_.specialize(output_channels >= vector_size * i)
+                .vectorize(c, vector_size * i, TailStrategy::ShiftInwards);
+        }
     }
 };
 

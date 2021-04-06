@@ -712,17 +712,18 @@ int compute_padding(int stride, int in_size, int filter_size, int out_size) {
 
 }  // namespace
 
-Op::Bounds PoolOp::infer_bounds(const Box &crop) const {
+Box PoolOp::input_required(const Box &crop) const {
     Box input_crop = crop;
-
-    input_crop[0] = crop[0];
     input_crop[1] *= stride_[0];
     input_crop[2] *= stride_[1];
     input_crop[1].max += filter_size_[0] - 1;
     input_crop[2].max += filter_size_[1] - 1;
+    return input_crop;
+}
 
+Op::Bounds PoolOp::infer_bounds(const Box &crop) const {
     Bounds result;
-    result.inputs = {input_crop};
+    result.inputs = {input_required(crop)};
     result.outputs = {crop};
     return result;
 }

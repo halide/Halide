@@ -317,6 +317,10 @@ public:
             apply(map, input()), apply(map, output()), stride_, filter_size_, padding_, op_, activation_);
     }
 
+    Operator op() const { return op_; }
+    Padding padding() const { return padding_; }
+
+    Box input_required(const Box &crop) const;
     Bounds infer_bounds(const Box &crop) const;
     std::vector<SplitInfo> get_split_info() const;
 
