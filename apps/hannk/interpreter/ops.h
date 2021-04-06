@@ -22,7 +22,7 @@ enum class Padding {
 // This is an abstract helper op for elementwise operations.
 class ElementwiseOp : public Op {
 public:
-    explicit ElementwiseOp(std::vector<Tensor *> inputs, Tensor *output)
+    ElementwiseOp(std::vector<Tensor *> inputs, Tensor *output)
         : Op(std::move(inputs), {output}) {
     }
 
@@ -263,7 +263,7 @@ public:
 
 class PadOp : public Op {
 public:
-    explicit PadOp(Tensor *input, Tensor *padding, Tensor *output)
+    PadOp(Tensor *input, Tensor *padding, Tensor *output)
         : Op({input, padding}, {output}) {
     }
 
