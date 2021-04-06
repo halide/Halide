@@ -345,7 +345,7 @@ int main(int argc, char **argv) {
         // producer.store_root().compute_at(consumer, y):
         // - Temporary memory allocated: 10 floats
         // - Loads: 64
-        // - Stores: 39
+        // - Stores: 41
         // - Calls to sin: 25
 
         // Note that my claimed amount of memory allocated doesn't
@@ -446,7 +446,7 @@ int main(int argc, char **argv) {
         // producer.store_root().compute_at(consumer, x):
         // - Temporary memory allocated: 10 floats
         // - Loads: 48
-        // - Stores: 56
+        // - Stores: 41
         // - Calls to sin: 25
     }
 

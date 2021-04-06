@@ -1979,8 +1979,9 @@ public:
                 check("i8x16.eq", 16 * w, i8_1 == i8_2);
                 check("i16x8.eq", 8 * w, i16_1 == i16_2);
                 check("i32x4.eq", 4 * w, i32_1 == i32_2);
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i64x2.eq", 2 * w, i64_1 == i64_2);
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    check("i64x2.eq", 2 * w, i64_1 == i64_2);
+                }
                 check("f32x4.eq", 4 * w, f32_1 == f32_2);
                 check("f64x2.eq", 2 * w, f64_1 == f64_2);
 
@@ -1988,8 +1989,9 @@ public:
                 check("i8x16.ne", 16 * w, i8_1 != i8_2);
                 check("i16x8.ne", 8 * w, i16_1 != i16_2);
                 check("i32x4.ne", 4 * w, i32_1 != i32_2);
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i64x2.ne", 2 * w, i64_1 != i64_2);
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    check("i64x2.ne", 2 * w, i64_1 != i64_2);
+                }
                 check("f32x4.ne", 4 * w, f32_1 != f32_2);
                 check("f64x2.ne", 2 * w, f64_1 != f64_2);
 
@@ -2000,8 +2002,9 @@ public:
                 check("i16x8.lt_u", 8 * w, u16_1 < u16_2);
                 check("i32x4.lt_s", 4 * w, i32_1 < i32_2);
                 check("i32x4.lt_u", 4 * w, u32_1 < u32_2);
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i64x2.lt_s", 2 * w, i64_1 < i64_2);
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    check("i64x2.lt_s", 2 * w, i64_1 < i64_2);
+                }
                 check("f32x4.lt", 4 * w, f32_1 < f32_2);
                 check("f64x2.lt", 2 * w, f64_1 < f64_2);
 
@@ -2012,8 +2015,9 @@ public:
                 check("i16x8.le_u", 8 * w, u16_1 <= u16_2);
                 check("i32x4.le_s", 4 * w, i32_1 <= i32_2);
                 check("i32x4.le_u", 4 * w, u32_1 <= u32_2);
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i64x2.le_s", 2 * w, i64_1 <= i64_2);
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    check("i64x2.le_s", 2 * w, i64_1 <= i64_2);
+                }
                 check("f32x4.le", 4 * w, f32_1 <= f32_2);
                 check("f64x2.le", 2 * w, f64_1 <= f64_2);
 
@@ -2137,8 +2141,10 @@ public:
                 check("f32x4.convert_i32x4_u", 8 * w, cast<float>(u32_1));
 
                 // Integer to double-precision floating point
-                check("f64x2.convert_low_i32x4_s", 2 * w, cast<double>(i32_1));
-                check("f64x2.convert_low_i32x4_u", 2 * w, cast<double>(u32_1));
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    check("f64x2.convert_low_i32x4_s", 2 * w, cast<double>(i32_1));
+                    check("f64x2.convert_low_i32x4_u", 2 * w, cast<double>(u32_1));
+                }
 
                 // Single-precision floating point to integer with saturation
                 check("i32x4.trunc_sat_f32x4_s", 4 * w, cast<int32_t>(f32_1));
@@ -2154,13 +2160,17 @@ public:
                 // check("f32x4.demote_f64x2_zero", 4 * w, ???);
 
                 // Single-precision floating point to double-precision
-                check("f64x2.promote_low_f32x4", 2 * w, cast<double>(f32_1));
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    check("f64x2.promote_low_f32x4", 2 * w, cast<double>(f32_1));
+                }
 
                 // Integer to integer narrowing
-                check("i8x16.narrow_i16x8_s", 16 * w, i8_sat(i16_1));
-                check("i8x16.narrow_i16x8_u", 16 * w, u8_sat(i16_1));
-                check("i16x8.narrow_i32x4_s", 8 * w, i16_sat(i32_1));
-                check("i16x8.narrow_i32x4_u", 8 * w, u16_sat(i32_1));
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    check("i8x16.narrow_i16x8_s", 16 * w, i8_sat(i16_1));
+                    check("i8x16.narrow_i16x8_u", 16 * w, u8_sat(i16_1));
+                    check("i16x8.narrow_i32x4_s", 8 * w, i16_sat(i32_1));
+                    check("i16x8.narrow_i32x4_u", 8 * w, u16_sat(i32_1));
+                }
 
                 // Integer to integer widening
                 // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
