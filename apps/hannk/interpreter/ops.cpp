@@ -350,7 +350,7 @@ Box Conv2DOp::filter_required() const {
         // Pass minimal sized buffers to learn about the alignment requirements.
         HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
         HalideBuffer<int32_t> bias_buf(nullptr, 1);
-        Halide::Runtime::Buffer<void, 5> filter_buf(filter_type(), 1, 1, 1, 1, 1);
+        Halide::Runtime::Buffer<void, 5> filter_buf(filter_type(), 1, 1, 1, 1, 1, 1);
         // TODO: How to initialize the above buffer without allocating?
         filter_buf.deallocate();
         HalideBuffer<uint8_t> output_buf;
@@ -358,13 +358,14 @@ Box Conv2DOp::filter_required() const {
         CHECK(0 == convolution_uint8(input_buf, filter_buf, bias_buf, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf));
 
         const int vector_reduction = filter_buf.dim(0).extent();
+        const int vector_tile = filter_buf.dim(1).extent();
         const int unroll_reduction = filter()->extent(0) >= 16 ? 16 : 4;
-        const int vector_alignment = filter_buf.dim(1).extent();
         const int channel_alignment = unroll_reduction / vector_reduction;
         return {
             {0, vector_reduction - 1},
-            {0, align_up(filter()->extent(3), vector_alignment) - 1},
+            {0, vector_tile - 1},
             {0, align_up(ceil_div(filter()->extent(0), vector_reduction), channel_alignment) - 1},
+            {0, ceil_div(filter()->extent(3), vector_tile) - 1},
             {filter()->interval(1)},
             {filter()->interval(2)},
         };

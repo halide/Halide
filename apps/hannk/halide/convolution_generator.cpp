@@ -8,7 +8,7 @@ using namespace Halide::ConciseCasts;
 namespace hannk {
 
 Var x("x"), y("y"), c("c"), b("b");
-Var ci("ci"), co("co");
+Var ci("ci"), co("co"), bi("bi"), bo("bo");
 
 int get_vector_reduction_factor(const Target &target, Type t) {
     if (target.arch == Target::Hexagon ||
@@ -44,7 +44,7 @@ public:
 
     // A 5D array of 8-bit filter coefficients indexed by
     // ci % n, co, ci / n, x, y, where n = vector_reduction (below).
-    Input<Buffer<>> filter_{"filter", 5};
+    Input<Buffer<>> filter_{"filter", 6};
 
     // A 1D array of 32-bit biases. The bias should be added to the c
     // dimension of the output.
@@ -89,18 +89,19 @@ public:
         input(c, x, y, b) = input_cxyb;
 
         // Align the reduction loop of filter.
-        int vector_reduction = get_vector_reduction_factor(target, UInt(8));
-        int unroll_reduction = std::max<int>(unroll_reduction_, vector_reduction);
+        const int vector_reduction = get_vector_reduction_factor(target, UInt(8));
+        const int unroll_reduction = std::max<int>(unroll_reduction_, vector_reduction);
+        const int accum_vector_size = natural_vector_size<int32_t>();
 
         // Set up the reduction loop and inputs.
         Expr filter_depth = filter_.dim(0).extent() * filter_.dim(2).extent();
-        Expr filter_width = filter_.dim(3).extent();
-        Expr filter_height = filter_.dim(4).extent();
+        Expr filter_width = filter_.dim(4).extent();
+        Expr filter_height = filter_.dim(5).extent();
         // Align the filter depth, which requires padding the input.
         filter_depth = align_up(filter_depth, unroll_reduction);
         RDom r(0, filter_width, 0, filter_height, 0, filter_depth);
         Expr filter_rdxyc =
-            filter_(r.z % vector_reduction, c, r.z / vector_reduction, r.x, r.y);
+            filter_(r.z % vector_reduction, c % accum_vector_size, r.z / vector_reduction, c / accum_vector_size, r.x, r.y);
         Expr input_rdxyc =
             input(r.z, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
 
@@ -177,7 +178,6 @@ public:
         // things computed at the tile to have constant size. We can't assume the
         // output is bigger than a minimum size. So, we specialize for decreasing
         // tile sizes, and have a degenerate tile case to handle the rest.
-        const int accum_vector_size = natural_vector_size<int32_t>();
         Var xo("xo");
         Expr output_channels = output_.dim(0).extent();
         Expr output_width = output_.dim(1).extent();
@@ -185,8 +185,8 @@ public:
             const int tile_c = i.first;
             const int tile_x = i.second;
             output_
-                .specialize(output_channels >= tile_c * accum_vector_size && output_width >= tile_x)
-                .split(c, co, c, tile_c * accum_vector_size, TailStrategy::ShiftInwards)
+                .specialize(output_channels % (tile_c * accum_vector_size) == 0 && output_width >= tile_x)
+                .split(c, co, c, tile_c * accum_vector_size, TailStrategy::RoundUp)
                 .split(x, xo, x, tile_x, TailStrategy::ShiftInwards)
                 .reorder(x, c, co, xo, y, b)
                 .vectorize(c)
@@ -290,9 +290,12 @@ public:
             .set_stride(1);
         filter_.dim(1)
             .set_min(0)
-            .set_extent(align(filter_.dim(1).extent(), accum_vector_size))
+            .set_extent(accum_vector_size)
             .set_stride(vector_reduction);
-        for (int d = 2; d < filter_.dimensions(); d++) {
+        filter_.dim(2)
+            .set_min(0)
+            .set_stride(vector_reduction * accum_vector_size);
+        for (int d = 3; d < filter_.dimensions(); d++) {
             filter_.dim(d).set_min(0);
         }
     }
@@ -304,7 +307,7 @@ public:
     Input<uint8_t> input_zero_{"input_zero"};
     Input<uint8_t> output_zero_{"output_zero"};
 
-    Output<Buffer<>> output_{"output", 5};
+    Output<Buffer<>> output_{"output", 6};
 
     void configure() {
         if (use_8bit_multiply(target)) {
@@ -318,20 +321,25 @@ public:
         Func input_bounded = constant_exterior(input_, input_zero_);
 
         const int vector_reduction = get_vector_reduction_factor(target, UInt(8));
+        const int vector_tile = natural_vector_size<int32_t>();
+
+        Var bi("bi"), bo("bo");
 
         Expr filter_cxyb =
-            i16(input_bounded(co * vector_reduction + ci, x, y, c)) - i16(input_zero_);
-        output_(ci, c, co, x, y) = cast(output_.type(), filter_cxyb + output_zero_);
+            i16(input_bounded(co * vector_reduction + ci, x, y, bo * vector_tile + bi)) - i16(input_zero_);
+        output_(ci, bi, co, bo, x, y) = cast(output_.type(), filter_cxyb + output_zero_);
 
         // Schedule.
         output_.dim(0).set_min(0).set_extent(vector_reduction);
+        output_.dim(1).set_min(0).set_extent(vector_tile).set_stride(vector_reduction);
 
         // TODO: We probably don't care about the performance of this, but if we do,
         // we could optimize this more.
         output_
             .compute_root()
-            .reorder(ci, c, x, y, co)
-            .vectorize(ci);
+            .reorder(ci, bi, bo, x, y, co)
+            .vectorize(ci)
+            .vectorize(bi);
     }
 };
 
