@@ -353,15 +353,11 @@ add_custom_command(OUTPUT "${Halide_BINARY_DIR}/include/Halide.h"
                    DEPENDS build_halide_h "${LICENSE_PATH}" ${HEADER_FILES}
                    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
                    VERBATIM)
-add_custom_target(HalideIncludes ALL
-                  DEPENDS "${Halide_BINARY_DIR}/include/Halide.h")
+add_custom_target(HalideIncludes ALL DEPENDS "${Halide_BINARY_DIR}/include/Halide.h")
 
 ##
 # Define the Halide library target.
 ##
-
-set(CXX_COMPILER_IS_GNU_OR_CLANG_AND_NOT_CLANGCL
-    $<AND:$<CXX_COMPILER_ID:GNU,Clang,AppleClang>,$<NOT:$<STREQUAL:${CMAKE_CXX_SIMULATE_ID},MSVC>>>)
 
 add_library(Halide
             ${SOURCE_FILES}
@@ -372,10 +368,7 @@ add_library(Halide::Halide ALIAS Halide)
 
 target_link_libraries(Halide PRIVATE Halide::LLVM)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
-target_compile_definitions(Halide
-                           PRIVATE
-                           $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>
-                           $<${CXX_COMPILER_IS_GNU_OR_CLANG_AND_NOT_CLANGCL}:WITH_INTROSPECTION>)
+target_compile_definitions(Halide PRIVATE $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>)
 target_compile_features(Halide PUBLIC cxx_std_11)
 
 include(TargetExportScript)
@@ -390,19 +383,18 @@ set_target_properties(Halide PROPERTIES
                       VERSION ${Halide_VERSION}
                       SOVERSION ${Halide_VERSION_MAJOR})
 
+target_include_directories(Halide INTERFACE "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
 add_dependencies(Halide HalideIncludes)
+
+option(Halide_WITH_INTROSPECTION "Enable use of debugging symbols for default Func, Var, etc. names" ON)
+if (Halide_WITH_INTROSPECTION)
+    target_compile_definitions(Halide PRIVATE WITH_INTROSPECTION)
+endif ()
 
 if (TARGET wabt-obj)
     target_link_libraries(Halide PRIVATE wabt-obj)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
 endif ()
-
-##
-# Include paths for libHalide
-##
-
-set(Halide_INCLUDE_PATH "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
-target_include_directories(Halide INTERFACE ${Halide_INCLUDE_PATH})
 
 ##
 # Set compiler options for libHalide
