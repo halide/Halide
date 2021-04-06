@@ -31,9 +31,10 @@ HalideBuffer<void> make_buffer(halide_type_t type, const Box &bounds) {
 
 }  // namespace
 
-
-TensorStorage::TensorStorage() {}
-TensorStorage::TensorStorage(HalideBuffer<void> buffer) : buffer_(buffer) {
+TensorStorage::TensorStorage() {
+}
+TensorStorage::TensorStorage(HalideBuffer<void> buffer)
+    : buffer_(buffer) {
     assert(!buffer_.data());
 }
 
@@ -62,7 +63,6 @@ void TensorStorage::allocate() {
         buffer_ = HalideBuffer<void>::make_with_shape_of(buffer_);
     }
 }
-
 
 Tensor::Tensor(std::string name, HalideBuffer<void> buffer, QuantizationInfo quantization)
     : name_(std::move(name)),

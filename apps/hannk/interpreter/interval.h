@@ -124,7 +124,6 @@ int floor_div(int a, int b);
 int align_up(int x, int n);
 int align_down(int x, int n);
 
-
 }  // namespace hannk
 
 #endif  // INTERVAL_H

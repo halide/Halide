@@ -608,7 +608,7 @@ private:
     std::unique_ptr<Model> model_;
     std::unique_ptr<ModelInterpreter> interpreter_;
     // TODO: unordered_map might be a better choice.
-    std::map<int, Tensor*> tensor_id_to_tensor_ptr_;
+    std::map<int, Tensor *> tensor_id_to_tensor_ptr_;
 };
 
 bool InputsHaveCorrectTypes(const TfLiteNode *node,

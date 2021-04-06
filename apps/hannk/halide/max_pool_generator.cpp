@@ -20,6 +20,9 @@ public:
     Input<int> filter_width_{"filter_width"};
     Input<int> filter_height_{"filter_height"};
 
+    Input<int> padding_width_{"padding_width"};
+    Input<int> padding_height_{"padding_height"};
+
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
@@ -38,7 +41,7 @@ public:
         maximum(c, x, y, b) = output_min_;
         maximum(c, x, y, b) =
             max(maximum(c, x, y, b),
-                input_bounded(c, x * stride_x_ + r.x, y * stride_y_ + r.y, b));
+                input_bounded(c, x * stride_x_ + r.x - padding_width_, y * stride_y_ + r.y - padding_height_, b));
 
         output_(c, x, y, b) = min(maximum(c, x, y, b), output_max_);
 

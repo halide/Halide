@@ -70,7 +70,9 @@ public:
         : Op(std::move(inputs), {output}), axis_(axis) {
     }
 
-    int axis() const { return axis_; }
+    int axis() const {
+        return axis_;
+    }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
         std::vector<Tensor *> inputs;
@@ -289,7 +291,12 @@ public:
         Max,
     };
 
+    struct PaddingValues {
+        int width, height;
+    };
+
     static const char *to_string(Operator op);
+    void compute_padding_values();
 
 protected:
     std::vector<int> stride_;
@@ -297,6 +304,7 @@ protected:
     Padding padding_;
     Operator op_;
     ActivationFunction activation_;
+    PaddingValues padding_values_;
 
 public:
     PoolOp(Tensor *input, Tensor *output, std::vector<int> stride,
@@ -308,6 +316,7 @@ public:
           padding_(padding),
           op_(op),
           activation_(activation) {
+        compute_padding_values();
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
@@ -400,17 +409,28 @@ class OpVisitor {
 public:
     virtual ~OpVisitor() = default;
 
-    virtual void visit(BinaryOp *op) {}
-    virtual void visit(ConcatenationOp *op) {}
-    virtual void visit(Conv2DOp *op) {}
-    virtual void visit(DepthwiseConv2DOp *op) {}
-    virtual void visit(FullyConnectedOp *op) {}
-    virtual void visit(L2NormalizationOp *op) {}
-    virtual void visit(PadOp *op) {}
-    virtual void visit(PoolOp *op) {}
-    virtual void visit(ReshapeOp *op) {}
-    virtual void visit(SoftmaxOp *op) {}
-    virtual void visit(TileConvFilterOp *op) {}
+    virtual void visit(BinaryOp *op) {
+    }
+    virtual void visit(ConcatenationOp *op) {
+    }
+    virtual void visit(Conv2DOp *op) {
+    }
+    virtual void visit(DepthwiseConv2DOp *op) {
+    }
+    virtual void visit(FullyConnectedOp *op) {
+    }
+    virtual void visit(L2NormalizationOp *op) {
+    }
+    virtual void visit(PadOp *op) {
+    }
+    virtual void visit(PoolOp *op) {
+    }
+    virtual void visit(ReshapeOp *op) {
+    }
+    virtual void visit(SoftmaxOp *op) {
+    }
+    virtual void visit(TileConvFilterOp *op) {
+    }
 };
 
 }  // namespace hannk

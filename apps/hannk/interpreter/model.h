@@ -86,8 +86,8 @@ class Tensor {
     std::shared_ptr<TensorStorage> storage_;
     std::vector<int> storage_offset_;
 
-    std::list<Op*> producers_;
-    std::list<Op*> consumers_;
+    std::list<Op *> producers_;
+    std::list<Op *> consumers_;
 
 public:
     Tensor() = delete;

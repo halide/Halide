@@ -167,8 +167,7 @@ public:
 
         // TODO: This is a padded wrapper on a constant buffer, we could
         // pad it and constant fold it outside.
-        bias_.in().compute_at(output_, co)
-            .store_in(MemoryType::Stack);
+        bias_.in().compute_at(output_, co).store_in(MemoryType::Stack);
 
         if (inv_depth_multiplier_ < 0) {
             // The reason inv_depth_multiplier_ is a GeneratorParam and not a

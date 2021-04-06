@@ -281,8 +281,7 @@ public:
         }
 
         // TODO: Pad this outside and let it constant fold.
-        bias_.in().compute_root()
-            .store_in(MemoryType::Stack);
+        bias_.in().compute_root().store_in(MemoryType::Stack);
 
         // TODO: Maybe we should align everything here.
         filter_.dim(0)
