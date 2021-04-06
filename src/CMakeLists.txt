@@ -417,8 +417,6 @@ target_compile_options(
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-documentation>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-double-promotion>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-exit-time-destructors>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-extra-semi-stmt>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-extra-semi>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-conversion>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-equal>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-global-constructors>
@@ -440,6 +438,7 @@ target_compile_options(
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-undef>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-undefined-func-template>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-function>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-macros>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-member-function>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-parameter>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-template>

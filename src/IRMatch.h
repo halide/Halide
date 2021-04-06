@@ -2206,7 +2206,7 @@ struct CanProve {
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = condition.type().lanes();
-    };
+    }
 };
 
 template<typename A, typename Prover>
@@ -2243,7 +2243,7 @@ struct IsFloat {
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = t.lanes();
-    };
+    }
 };
 
 template<typename A>
@@ -2281,7 +2281,7 @@ struct IsInt {
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = t.lanes();
-    };
+    }
 };
 
 template<typename A>
@@ -2323,7 +2323,7 @@ struct IsUInt {
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = t.lanes();
-    };
+    }
 };
 
 template<typename A>
@@ -2364,7 +2364,7 @@ struct IsScalar {
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = t.lanes();
-    };
+    }
 };
 
 template<typename A>
@@ -2399,7 +2399,7 @@ struct IsMaxValue {
         }
         ty.code = halide_type_uint;
         ty.bits = 1;
-    };
+    }
 };
 
 template<typename A>
@@ -2436,7 +2436,7 @@ struct IsMinValue {
         }
         ty.code = halide_type_uint;
         ty.bits = 1;
-    };
+    }
 };
 
 template<typename A>

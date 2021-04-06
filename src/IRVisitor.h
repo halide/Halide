@@ -160,7 +160,7 @@ private:
     ExprRet dispatch_expr(const BaseExprNode *node, Args &&...args) {
         if (node == nullptr) {
             return ExprRet{};
-        };
+        }
         switch (node->node_type) {
         case IRNodeType::IntImm:
             return ((T *)this)->visit((const IntImm *)node, std::forward<Args>(args)...);
@@ -250,7 +250,7 @@ private:
     StmtRet dispatch_stmt(const BaseStmtNode *node, Args &&...args) {
         if (node == nullptr) {
             return StmtRet{};
-        };
+        }
         switch (node->node_type) {
         case IRNodeType::IntImm:
         case IRNodeType::UIntImm:
