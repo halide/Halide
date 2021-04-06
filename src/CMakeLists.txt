@@ -462,13 +462,15 @@ target_compile_options(
         $<$<CXX_COMPILER_ID:MSVC>:/wd4141>  # 'inline' used more than once
         $<$<CXX_COMPILER_ID:MSVC>:/wd4146>  # unary minus applied to unsigned type
         $<$<CXX_COMPILER_ID:MSVC>:/wd4291>  # No matching operator delete found
-
-        # We could expose the /MP flag to all targets, but that might end up saturating the build
-        # since multiple MSBuild projects might get built in parallel, each of which compiling their
-        # source files in parallel; the Halide library itself is a "knot" point of the build graph,
-        # so compiling its files in parallel should not oversubscribe the system
-        $<$<CXX_COMPILER_ID:MSVC>:/MP>
 )
+
+if (CMAKE_GENERATOR MATCHES "Visual Studio")
+    # We could expose the /MP flag to all targets, but that might end up saturating the build
+    # since multiple MSBuild projects might get built in parallel, each of which compiling their
+    # source files in parallel; the Halide library itself is a "knot" point of the build graph,
+    # so compiling its files in parallel should not oversubscribe the system
+    target_compile_options(Halide PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/MP>)
+endif ()
 
 target_compile_definitions(Halide
                            PRIVATE
