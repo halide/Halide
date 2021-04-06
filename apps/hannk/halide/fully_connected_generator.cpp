@@ -44,12 +44,24 @@ public:
         output_(c, b) = clamp(u8_sat(output), output_min_, output_max_);
 
         // Schedule.
-        require_same_min_extent(1, input_, output_);
-        require_same_min_extent(0, input_, filter_);
-        require_same_min_extent(0, bias_, output_);
 
-        // TODO: Schedule.
-        output_.compute_root();
+        // This schedule is pretty weird. It assumes we can vectorize 8-bit data
+        // by 4, which means 32-bit loads and stores to/from vectors.
+        Expr output_channels = output_.dim(0).extent();
+        output_.compute_root()
+            .specialize(output_channels >= 4)
+            .vectorize(c, 4, TailStrategy::ShiftInwards);
+
+        // And then we do full vector reductions.
+        // TODO: We could rfactor this to do reductions on vectors first, followed
+        // by only one total vector reduction.
+        const int vector_size = natural_vector_size<uint8_t>() * 2;
+        multiplied.compute_at(output_, c)
+            .update()
+            .atomic()
+            .reorder(c, rc)
+            .unroll(c)
+            .vectorize(rc, vector_size);
     }
 };
 
