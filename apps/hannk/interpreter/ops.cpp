@@ -708,6 +708,55 @@ void PadOp::execute(const Box &crop) {
     }
 }
 
+namespace {
+
+int compute_padding(int stride, int in_size, int filter_size, int out_size) {
+    const int effective_filter_size = (filter_size - 1) + 1;
+    const int total_padding = std::max(0, ((out_size - 1) * stride + effective_filter_size - in_size));
+    return total_padding / 2;
+}
+
+int compute_out_size(Padding padding, int image_size, int filter_size, int stride) {
+    switch (padding) {
+    case Padding::Same: {
+        return (image_size + stride - 1) / stride;
+    }
+    case Padding::Valid: {
+        const int effective_filter_size = (filter_size - 1) + 1;
+        return (image_size + stride - effective_filter_size) / stride;
+    }
+    default:
+        return 0;
+    }
+}
+
+}  // namespace
+
+void PoolOp::compute_padding_values() {
+    const Tensor *in = input();
+    Tensor *out = output();
+
+    auto input_buf = in->buffer<void>();
+    auto output_buf = out->buffer<void>();
+
+    const int in_width = input_buf.dim(1).extent();
+    const int in_height = input_buf.dim(2).extent();
+    const int out_width = output_buf.dim(1).extent();
+    const int out_height = output_buf.dim(2).extent();
+
+    const int out_width_padded = compute_out_size(padding_, in_width, filter_size_[0], stride_[0]);
+    const int out_height_padded = compute_out_size(padding_, in_height, filter_size_[1], stride_[1]);
+
+    // TODO: logic for compute_out_size() is adapted from general code that applied to Conv2D/DConv2D as well;
+    // it's not clear whether or not we could expect a different output size, since we have no dilation factor
+    // here. Leaving in this CHECK() for now.
+    CHECK(out_width == out_width_padded);
+    CHECK(out_height == out_height_padded);
+
+    padding_values_.width = compute_padding(stride_[0], in_width, filter_size_[0], out_width_padded);
+    padding_values_.height = compute_padding(stride_[1], in_height, filter_size_[1], out_height_padded);
+}
+
 Op::Bounds PoolOp::infer_bounds(const Box &crop) const {
     Box input_crop = crop;
 
@@ -755,12 +804,14 @@ void PoolOp::execute(const Box &crop) {
             CHECK(
                 0 == average_pool_uint8(input_buf, stride_[0], stride_[1],
                                         filter_size_[0], filter_size_[1],
+                                        padding_values_.width, padding_values_.height,
                                         output_range.min, output_range.max, output_buf));
             break;
         case Max:
             CHECK(
                 0 == max_pool_uint8(input_buf, stride_[0], stride_[1],
                                     filter_size_[0], filter_size_[1],
+                                    padding_values_.width, padding_values_.height,
                                     output_range.min, output_range.max, output_buf));
             break;
         }
