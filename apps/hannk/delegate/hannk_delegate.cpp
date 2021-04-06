@@ -350,10 +350,6 @@ public:
     // Eval() will be called at least once. It can expect that prepare() will
     // have been called for the current set of tensor shape(s).
     TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node) {
-        if (options_.verbosity >= 1) {
-            LOG(INFO) << "Delegate " << (void *)this << " Eval\n";
-        }
-
         if (interpreter_ == nullptr) {
             TF_LITE_KERNEL_LOG(context, "interpreter_ is not built in Eval");
             return kTfLiteError;
