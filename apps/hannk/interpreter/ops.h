@@ -70,7 +70,9 @@ public:
         : Op(std::move(inputs), {output}), axis_(axis) {
     }
 
-    int axis() const { return axis_; }
+    int axis() const {
+        return axis_;
+    }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
         std::vector<Tensor *> inputs;
@@ -400,17 +402,28 @@ class OpVisitor {
 public:
     virtual ~OpVisitor() = default;
 
-    virtual void visit(BinaryOp *op) {}
-    virtual void visit(ConcatenationOp *op) {}
-    virtual void visit(Conv2DOp *op) {}
-    virtual void visit(DepthwiseConv2DOp *op) {}
-    virtual void visit(FullyConnectedOp *op) {}
-    virtual void visit(L2NormalizationOp *op) {}
-    virtual void visit(PadOp *op) {}
-    virtual void visit(PoolOp *op) {}
-    virtual void visit(ReshapeOp *op) {}
-    virtual void visit(SoftmaxOp *op) {}
-    virtual void visit(TileConvFilterOp *op) {}
+    virtual void visit(BinaryOp *op) {
+    }
+    virtual void visit(ConcatenationOp *op) {
+    }
+    virtual void visit(Conv2DOp *op) {
+    }
+    virtual void visit(DepthwiseConv2DOp *op) {
+    }
+    virtual void visit(FullyConnectedOp *op) {
+    }
+    virtual void visit(L2NormalizationOp *op) {
+    }
+    virtual void visit(PadOp *op) {
+    }
+    virtual void visit(PoolOp *op) {
+    }
+    virtual void visit(ReshapeOp *op) {
+    }
+    virtual void visit(SoftmaxOp *op) {
+    }
+    virtual void visit(TileConvFilterOp *op) {
+    }
 };
 
 }  // namespace hannk

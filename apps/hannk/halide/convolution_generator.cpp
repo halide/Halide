@@ -282,8 +282,7 @@ public:
         }
 
         // TODO: Pad this outside and let it constant fold.
-        bias_.in().compute_root()
-            .store_in(MemoryType::Stack);
+        bias_.in().compute_root().store_in(MemoryType::Stack);
 
         // We have a lot of requirements of the filter.
         filter_.set_host_alignment(natural_vector_size<uint8_t>());

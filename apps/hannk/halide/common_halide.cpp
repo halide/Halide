@@ -7,14 +7,14 @@ namespace hannk {
 
 int get_register_count(const Target &target) {
     switch (target.arch) {
-        case Target::X86:
-            return target.has_feature(Target::AVX512_Skylake) ? 32 : 16;
-        case Target::ARM:
-            return target.bits == 64 ? 32 : 16;
-        case Target::Hexagon:
-            return 32;
-        default:
-            return 16;
+    case Target::X86:
+        return target.has_feature(Target::AVX512_Skylake) ? 32 : 16;
+    case Target::ARM:
+        return target.bits == 64 ? 32 : 16;
+    case Target::Hexagon:
+        return 32;
+    default:
+        return 16;
     }
 }
 
@@ -33,10 +33,9 @@ void require_same_min_extent(int d, OutputImageParam first, OutputImageParam sec
 }
 
 Expr is_interleaved(OutputImageParam p, int channels) {
-    return
-        p.dim(0).min() == 0 &&
-        p.dim(0).extent() == channels &&
-        p.dim(1).stride() == channels;
+    return p.dim(0).min() == 0 &&
+           p.dim(0).extent() == channels &&
+           p.dim(1).stride() == channels;
 }
 
 Func constant_exterior_tensor(

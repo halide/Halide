@@ -12,14 +12,14 @@
 #include "convolution_r16_uint8.h"
 #endif
 #include "copy_uint8_uint8.h"
-#include "depthwise_convolution_uint8.h"
 #include "depthwise_convolution_broadcast_uint8.h"
 #include "depthwise_convolution_dm1_uint8.h"
+#include "depthwise_convolution_uint8.h"
 #include "fill_uint8.h"
 #include "fully_connected_uint8.h"
+#include "l2_normalization_uint8.h"
 #include "max_pool_uint8.h"
 #include "softmax_uint8.h"
-#include "l2_normalization_uint8.h"
 #include "tile_convolution_filter_uint8.h"
 
 namespace hannk {
@@ -73,7 +73,7 @@ void pad_to_rank(HalideBuffer<T> &buf, int rank) {
     }
 }
 
-template <typename Ta, typename Tb>
+template<typename Ta, typename Tb>
 void optimize_elementwise_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b, int rank) {
     while (can_fuse_cx(a) && can_fuse_cx(b) &&
            a.dim(0).extent() == b.dim(0).extent()) {
@@ -84,7 +84,7 @@ void optimize_elementwise_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b, int r
     pad_to_rank(b, rank);
 }
 
-template <typename Ta, typename Tb, typename Tc>
+template<typename Ta, typename Tb, typename Tc>
 void optimize_elementwise_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b, HalideBuffer<Tc> &c, int rank) {
     while (can_fuse_cx(a) && can_fuse_cx(b) && can_fuse_cx(c) &&
            a.dim(0).extent() == c.dim(0).extent() &&
@@ -102,7 +102,7 @@ bool is_alias(const HalideBuffer<const void> &a, const HalideBuffer<const void> 
     return !(a.begin() >= b.end() || a.end() <= b.begin());
 }
 
-template <typename T, typename U>
+template<typename T, typename U>
 void crop_to_union(HalideBuffer<T> &a, HalideBuffer<U> &b) {
     assert(a.dimensions() == b.dimensions());
     for (int d = 0; d < a.dimensions(); d++) {
@@ -271,8 +271,10 @@ Op::Bounds ElementwiseOp::infer_bounds(const Box &crop) const {
 
 const char *BinaryOp::to_string(BinaryOp::Operator op) {
     switch (op) {
-    case Add: return "Add";
-    case Sub: return "Sub";
+    case Add:
+        return "Add";
+    case Sub:
+        return "Sub";
     default:
         CHECK(false) << "Unsupported binary op\n";
         return nullptr;
@@ -728,8 +730,10 @@ std::vector<SplitInfo> PoolOp::get_split_info() const {
 
 const char *PoolOp::to_string(PoolOp::Operator op) {
     switch (op) {
-    case Average: return "Average";
-    case Max: return "Max";
+    case Average:
+        return "Average";
+    case Max:
+        return "Max";
     default:
         CHECK(false) << "Unsupported pool op\n";
         return nullptr;

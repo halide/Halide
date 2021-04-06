@@ -155,14 +155,14 @@ public:
         return ::hannk::make_unique<BinaryOp>(a, b, output, type, ActivationFunction::None);
     }
 
-    // We can't do this with templates...
-    #define PARSE_BINARY_WITH_ACTIVATION(op, Op) \
-        ::hannk::make_unique<BinaryOp>( \
-            result_.tensors[op->inputs()->Get(0)].get(), \
-            result_.tensors[op->inputs()->Get(1)].get(), \
-            result_.tensors[op->outputs()->Get(0)].get(), \
-            BinaryOp::Op, \
-            parse_activation_function(op->builtin_options_as_##Op##Options()->fused_activation_function())); \
+// We can't do this with templates...
+#define PARSE_BINARY_WITH_ACTIVATION(op, Op)          \
+    ::hannk::make_unique<BinaryOp>(                   \
+        result_.tensors[op->inputs()->Get(0)].get(),  \
+        result_.tensors[op->inputs()->Get(1)].get(),  \
+        result_.tensors[op->outputs()->Get(0)].get(), \
+        BinaryOp::Op,                                 \
+        parse_activation_function(op->builtin_options_as_##Op##Options()->fused_activation_function()));
 
     std::unique_ptr<Op> parse_pool2D(const tflite::Operator *op, PoolOp::Operator reduce_op) {
         const auto options = op->builtin_options_as_Pool2DOptions();
