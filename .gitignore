@@ -6,6 +6,7 @@ CMakeUserPresets.json
 /apps/HelloMatlab/blurred.png
 /apps/HelloMatlab/iir_blur.mex
 bin/*
+build_wasm/*
 build/*
 share/*
 python_bindings/bin/*
