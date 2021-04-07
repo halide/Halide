@@ -73,17 +73,6 @@ void pad_to_rank(HalideBuffer<T> &buf, int rank) {
     }
 }
 
-template<typename Ta, typename Tb>
-void optimize_elementwise_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b, int rank) {
-    while (can_fuse_cx(a) && can_fuse_cx(b) &&
-           a.dim(0).extent() == b.dim(0).extent()) {
-        fuse_cx(a);
-        fuse_cx(b);
-    }
-    pad_to_rank(a, rank);
-    pad_to_rank(b, rank);
-}
-
 template<typename Ta, typename Tb, typename Tc>
 void optimize_elementwise_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b, HalideBuffer<Tc> &c, int rank) {
     while (can_fuse_cx(a) && can_fuse_cx(b) && can_fuse_cx(c) &&
@@ -386,7 +375,8 @@ std::vector<SplitInfo> Conv2DOp::get_split_info() const {
         SplitInfo::no_split(),
         SplitInfo::any_split(),
         SplitInfo::any_split(),
-        SplitInfo::any_split()};
+        SplitInfo::any_split(),
+    };
 }
 
 void Conv2DOp::execute(const Box &crop) {
@@ -407,9 +397,9 @@ void Conv2DOp::execute(const Box &crop) {
 
         const auto output_range = get_output_range(activation_, out->quantization());
 
-        assert(filter_buf.dimensions() == 5);
-        const int filter_width = filter_buf.dim(3).extent();
-        const int filter_height = filter_buf.dim(4).extent();
+        assert(filter_buf.dimensions() == 6);
+        const int filter_width = filter_buf.dim(4).extent();
+        const int filter_height = filter_buf.dim(5).extent();
         if (filter_width == 1 && filter_height == 1) {
             // For 1x1 filters, we can fuse x and y, which can help avoid overhead for
             // small output sizes.
@@ -452,7 +442,8 @@ std::vector<SplitInfo> DepthwiseConv2DOp::get_split_info() const {
         SplitInfo::no_split(),
         SplitInfo::guard_with_if(2),
         SplitInfo::guard_with_if(2),
-        SplitInfo::any_split()};
+        SplitInfo::any_split(),
+    };
 }
 
 BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {

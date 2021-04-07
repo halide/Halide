@@ -72,14 +72,12 @@ Expr approx_log2(const Expr &x, int log2_precision) {
     // Use the bits after the leading bit to linearly interpolate to the next
     // power of 2. In other words, we want the slope of the line between
     // floor(log2(x)) and floor(log2(x)) + 1.
-    Expr frac =
-        cast<int>((x >> (floor_log2 - log2_precision)) % precision);
+    Expr frac = cast<int>((x >> (floor_log2 - log2_precision)) % precision);
 
     // For x <= 0, return any negative value. If count_leading_zeros returns
     // x.type().bits(), which appears to be the case on every platform we
     // target, both sides of this select are the same (if log2_precision = 0).
-    return select(x > 0, precision * cast<int>(floor_log2) + frac,
-                  cast<int>(-1));
+    return select(x > 0, precision * cast<int>(floor_log2) + frac, cast<int>(-1));
 }
 
 Expr approx_exp2(const Expr &x, const Expr &log2_precision_x, int log2_precision_result) {

@@ -80,7 +80,7 @@ public:
             inputs.push_back(apply(map, input(i)));
         }
         return ::hannk::make_unique<ConcatenationOp>(
-            inputs, apply(map, output()), axis_);
+            std::move(inputs), apply(map, output()), axis_);
     }
 
     void accept(OpVisitor *v);
