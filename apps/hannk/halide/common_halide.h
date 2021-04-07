@@ -23,18 +23,8 @@ void interpret_as_tensor(Halide::OutputImageParam p);
 
 // Require dimension dim have the same min and extent.
 void require_same_min_extent(int dim, Halide::OutputImageParam first, Halide::OutputImageParam second);
-void require_same_min_extent(int first_dim, Halide::OutputImageParam first, int second_dim, Halide::OutputImageParam second);
 
 Halide::Expr is_interleaved(Halide::OutputImageParam p, int channels);
-
-// A boundary condition, without likelies that cause loop partitioning.
-Halide::Func constant_exterior_tensor(
-    Halide::Func t, Halide::Expr exterior,
-    Halide::Expr min_c, Halide::Expr extent_c,
-    Halide::Expr min_x, Halide::Expr extent_x,
-    Halide::Expr min_y, Halide::Expr extent_y,
-    Halide::Expr min_b, Halide::Expr extent_b);
-Halide::Func constant_exterior_tensor(Halide::ImageParam p, Halide::Expr exterior);
 
 // Round x down or up to the nearest multiple of n.
 Halide::Expr align_down(const Halide::Expr &x, const Halide::Expr &n);
