@@ -657,9 +657,13 @@ void PadOp::execute(const Box &crop) {
 
         uint8_t pad_value = in->quantization().zero.at(0);
 
-        // copy can handle padding dimension 0, which can be much faster than filling
-        // small dimension 0 paddings.
-        for (int d = output_buf.dimensions() - 1; d >= 1; d--) {
+        int fill_min_dim = 0;
+        if (input_buf.dim(0).extent() == 3 && output_buf.dim(0).extent() == 4) {
+            // copy can handle padding dimension 0, which is much faster than
+            // filling the extra channel for interleaved 3/4 channel paddings.
+            fill_min_dim = 1;
+        }
+        for (int d = output_buf.dimensions() - 1; d >= fill_min_dim; d--) {
             int input_min = input_buf.dim(d).min();
             int output_min = output_buf.dim(d).min();
             int input_max = input_buf.dim(d).max();
