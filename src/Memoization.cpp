@@ -215,7 +215,7 @@ public:
     // for the target function. Make sure it takes 4 bytes in cache key.
     Expr key_size() {
         return cast<int32_t>(key_size_expr);
-    };
+    }
 
     // Code to fill in the Allocation named key_name with the byte of
     // the key. The Allocation is guaranteed to be 1d, of type uint8_t

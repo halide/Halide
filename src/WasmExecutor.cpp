@@ -1586,11 +1586,11 @@ WasmModule WasmModule::compile(
 #if !defined(WITH_WABT)
     user_error << "Cannot run JITted WebAssembly without configuring a WebAssembly engine.";
     return WasmModule();
-#endif
-
+#else
     WasmModule wasm_module;
     wasm_module.contents = new WasmModuleContents(module, arguments, fn_name, jit_externs, extern_deps);
     return wasm_module;
+#endif
 }
 
 /** Run generated previously compiled wasm code with a set of arguments. */
