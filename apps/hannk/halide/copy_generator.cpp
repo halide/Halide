@@ -11,12 +11,19 @@ class Copy : public Generator<Copy> {
 public:
     Input<Buffer<>> input_{"input", 4};
 
+    Input<int> pad_value_{"pad_value"};
+
     Output<Buffer<>> output_{"output", 4};
 
     void generate() {
         Var c("c"), x("x"), y("y"), b("b");
 
-        output_(c, x, y, b) = cast(output_.type(), input_(c, x, y, b));
+        // This pipeline only supports padding dimension 0.
+        Expr pad_value = cast(input_.type(), pad_value_);
+        Func input_bounded =
+            constant_exterior(input_, pad_value, {{input_.dim(0).min(), input_.dim(0).extent()}});
+
+        output_(c, x, y, b) = cast(output_.type(), input_bounded(c, x, y, b));
 
         // Schedule.
         const int vector_size =

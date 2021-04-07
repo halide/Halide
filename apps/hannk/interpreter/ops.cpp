@@ -657,17 +657,19 @@ void PadOp::execute(const Box &crop) {
 
         uint8_t pad_value = in->quantization().zero.at(0);
 
-        for (int d = output_buf.dimensions() - 1; d >= 0; d--) {
+        // copy can handle padding dimension 0, which can be much faster than filling
+        // small dimension 0 paddings.
+        for (int d = output_buf.dimensions() - 1; d >= 1; d--) {
             int input_min = input_buf.dim(d).min();
             int output_min = output_buf.dim(d).min();
+            int input_max = input_buf.dim(d).max();
+            int output_max = output_buf.dim(d).max();
             if (output_min < input_min) {
                 auto before = output_buf.cropped(d, output_min, input_min - output_min);
                 CHECK(0 == fill_uint8(pad_value, before));
             } else {
                 input_min = output_min;
             }
-            int input_max = input_buf.dim(d).max();
-            int output_max = output_buf.dim(d).max();
             if (output_max > input_max) {
                 auto after = output_buf.cropped(d, input_max + 1, output_max - input_max);
                 CHECK(0 == fill_uint8(pad_value, after));
@@ -676,8 +678,10 @@ void PadOp::execute(const Box &crop) {
             }
             output_buf.crop(d, input_min, input_max - input_min + 1);
         }
-        if (!is_alias(input_buf, output_buf)) {
-            CHECK(0 == copy_uint8_uint8(input_buf, output_buf));
+        if (!is_alias(input_buf, output_buf) ||
+            input_buf.dim(0).min() > output_buf.dim(0).min() ||
+            input_buf.dim(0).max() < output_buf.dim(0).max()) {
+            CHECK(0 == copy_uint8_uint8(input_buf, pad_value, output_buf));
         }
     } else {
         CHECK(false) << "Unsupported type " << out->type() << "\n";
