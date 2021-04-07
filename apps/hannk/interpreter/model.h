@@ -106,11 +106,6 @@ public:
         return buffer_.type();
     }
 
-    template<typename T>
-    bool is_type() const {
-        return buffer_.type() == halide_type_of<T>();
-    }
-
     const std::string &name() const {
         return name_;
     }

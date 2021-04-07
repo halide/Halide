@@ -281,9 +281,9 @@ void BinaryOp::execute(const Box &crop) {
     const Tensor *in2 = input(1);
     Tensor *out = output();
 
-    if (in1->is_type<uint8_t>() &&
-        in2->is_type<uint8_t>() &&
-        out->is_type<uint8_t>()) {
+    if (in1->type() == halide_type_of<uint8_t>() &&
+        in2->type() == halide_type_of<uint8_t>() &&
+        out->type() == halide_type_of<uint8_t>()) {
         switch (op_) {
         case Add:
         case Sub:
@@ -334,7 +334,8 @@ void ConcatenationOp::execute(const Box &crop) {
 }
 
 halide_type_t Conv2DOp::filter_type() const {
-    if (input()->is_type<uint8_t>() && output()->is_type<uint8_t>()) {
+    if (input()->type() == halide_type_of<uint8_t>() &&
+        output()->type() == halide_type_of<uint8_t>()) {
         const halide_filter_metadata_t *metadata = convolution_uint8_metadata();
         return metadata->arguments[1].type;
     } else {
@@ -393,8 +394,8 @@ void Conv2DOp::execute(const Box &crop) {
     const Tensor *filt = filter();
     Tensor *out = output();
 
-    if (in->is_type<uint8_t>() &&
-        out->is_type<uint8_t>()) {
+    if (in->type() == halide_type_of<uint8_t>() &&
+        out->type() == halide_type_of<uint8_t>()) {
         // TODO: reduce code duplication between here and DepthwiseConv2D
         auto input_buf = in->buffer<const uint8_t>();
         auto filter_buf = filt->buffer<const void>();
@@ -487,9 +488,9 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
     const Tensor *filt = filter();
     Tensor *out = output();
 
-    if (in->is_type<uint8_t>() &&
-        filt->is_type<uint8_t>() &&
-        out->is_type<uint8_t>()) {
+    if (in->type() == halide_type_of<uint8_t>() &&
+        filt->type() == halide_type_of<uint8_t>() &&
+        out->type() == halide_type_of<uint8_t>()) {
         // TODO: reduce code duplication between here and Conv2D
         auto input_buf = in->buffer<const uint8_t>();
         auto filter_buf = filt->buffer<const uint8_t>().sliced(3, 0);
@@ -555,9 +556,9 @@ void FullyConnectedOp::execute(const Box &crop) {
     const Tensor *filt = filter();
     Tensor *out = output();
 
-    if (in->is_type<uint8_t>() &&
-        filt->is_type<uint8_t>() &&
-        out->is_type<uint8_t>()) {
+    if (in->type() == halide_type_of<uint8_t>() &&
+        filt->type() == halide_type_of<uint8_t>() &&
+        out->type() == halide_type_of<uint8_t>()) {
         auto input_buf = in->buffer<const uint8_t>();
         auto filter_buf = filt->buffer<const uint8_t>();
         auto bias_buf = bias()->buffer<const int32_t>();
@@ -607,7 +608,8 @@ void L2NormalizationOp::execute(const Box &crop) {
     const Tensor *in = input();
     Tensor *out = output();
 
-    if (in->is_type<uint8_t>() && out->is_type<uint8_t>()) {
+    if (in->type() == halide_type_of<uint8_t>() &&
+        out->type() == halide_type_of<uint8_t>()) {
         auto in_buf = in->buffer<const uint8_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
 
@@ -739,7 +741,8 @@ void PoolOp::execute(const Box &crop) {
     const Tensor *in = input();
     Tensor *out = output();
 
-    if (in->is_type<uint8_t>() && out->is_type<uint8_t>()) {
+    if (in->type() == halide_type_of<uint8_t>() &&
+        out->type() == halide_type_of<uint8_t>()) {
         auto input_buf = in->buffer<const uint8_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
 
@@ -826,7 +829,8 @@ void SoftmaxOp::execute(const Box &crop) {
     const Tensor *in = input();
     Tensor *out = output();
 
-    if (in->is_type<uint8_t>() && out->is_type<uint8_t>()) {
+    if (in->type() == halide_type_of<uint8_t>() &&
+        out->type() == halide_type_of<uint8_t>()) {
         auto in_buf = in->buffer<const uint8_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
 
@@ -874,7 +878,7 @@ void TileConvFilterOp::execute(const Box &crop) {
     const Tensor *in = input();
     Tensor *out = output();
 
-    if (in->is_type<uint8_t>()) {
+    if (in->type() == halide_type_of<uint8_t>()) {
         auto input_buf = in->buffer<const uint8_t>();
         auto output_buf = out->buffer<void>(crop);
 
