@@ -407,6 +407,12 @@ target_compile_options(
 
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wcast-qual>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wignored-qualifiers>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Woverloaded-virtual>
+
+        $<$<CXX_COMPILER_ID:GNU>:-Wsuggest-override>
+
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-destructor-override>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-override>
 
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-deprecated-declarations>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-double-promotion>
@@ -444,15 +450,6 @@ target_compile_options(
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-undefined-func-template>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-member-function>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-template>
-
-        $<$<COMPILE_LANG_AND_ID:C,GNU>:-Wno-missing-prototypes>
-
-        $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Woverloaded-virtual>
-
-        $<$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang>:-Winconsistent-missing-destructor-override>
-        $<$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang>:-Winconsistent-missing-override>
-
-        $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wsuggest-override>
 
         $<$<CXX_COMPILER_ID:MSVC>:/W3>
         $<$<CXX_COMPILER_ID:MSVC>:/wd4018>  # 4018: disable "signed/unsigned mismatch"
