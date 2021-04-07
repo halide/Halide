@@ -283,8 +283,6 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
 
             return Call::make(op->type, Call::if_then_else,
                               {condition, load, make_zero(op->type)}, Call::Intrinsic);
-
-            return load;
         } else {
             // It's a predicated vector gather. Just scalarize. We'd
             // prefer to keep it in a loop, but that would require
