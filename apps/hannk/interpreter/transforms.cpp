@@ -109,11 +109,11 @@ bool maybe_alias_tensors(Model *m, Tensor *input, Tensor *output, std::vector<in
 
     // We can't grow the bounds of the output tensor.
     // TODO: We could, if we allowed non-zero mins.
-    Box input_box_with_offset = input->box();
+    Box input_bounds_with_offset = input->bounds();
     for (int i = 0; i < (int)offset.size(); ++i) {
-        input_box_with_offset[i] += offset[i];
+        input_bounds_with_offset[i] += offset[i];
     }
-    if (!is_subset_of(input_box_with_offset, output->box())) {
+    if (!is_subset_of(input_bounds_with_offset, output->bounds())) {
         return false;
     }
 
@@ -202,9 +202,9 @@ class PadForOps : public OpVisitor {
         Tensor *input = op->input(input_idx);
         Tensor *output = op->output(output_idx);
         BoundsMap deps = op->map_bounds(input_idx, output_idx);
-        Box required = deps.evaluate(output->box());
+        Box required = deps.evaluate(output->bounds());
 
-        if (!is_subset_of(required, input->box())) {
+        if (!is_subset_of(required, input->bounds())) {
             // Make a PadOp and a new tensor for the padded result.
             std::unique_ptr<Tensor> padded =
                 ::hannk::make_unique<Tensor>(input->name() + "_padded", input->type(), required, input->quantization());
@@ -238,7 +238,7 @@ class PadForOps : public OpVisitor {
         Tensor *filter = op->filter();
         if (op->filter()->rank() == 4) {
             BoundsMap bounds = op->map_bounds(1, 0);
-            Box tiled_shape = bounds.evaluate(op->output()->box());
+            Box tiled_shape = bounds.evaluate(op->output()->bounds());
 
             halide_type_t type = op->filter_type();
             QuantizationInfo quantization = filter->quantization();
@@ -312,7 +312,7 @@ void fold_constants(Model *m) {
             }
 
             // Run the whole op.
-            i->execute(i->output()->box());
+            i->execute(i->output()->bounds());
 
             // Mark the outputs constant.
             for (int j = 0; j < i->output_count(); j++) {

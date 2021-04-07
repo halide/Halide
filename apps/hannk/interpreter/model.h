@@ -35,7 +35,9 @@ inline std::ostream &operator<<(std::ostream &s, const QuantizationInfo &q) {
     return s << "{" << q.scale << ", " << q.zero << ", " << q.dimension << "}";
 }
 
-// Storage for a tensor.
+// Storage for a tensor. This can be shared among several tensors aliasing
+// the same memory. All aliases use the strides of the buffer in this storage
+// buffer.
 class TensorStorage {
     HalideBuffer<void> buffer_;
 
@@ -84,8 +86,10 @@ class Tensor {
 
     // Possibly shared storage for this tensor.
     std::shared_ptr<TensorStorage> storage_;
+    // The offset of this tensor into the storage buffer.
     std::vector<int> storage_offset_;
 
+    // A list of ops that use this tensor as an output or an input, respectively.
     std::list<Op *> producers_;
     std::list<Op *> consumers_;
 
@@ -111,21 +115,19 @@ public:
         return name_;
     }
 
-    // TODO: not a good name. Maybe bounds()?
-    Box box() const {
+    Box bounds() const {
         const int dimensions = buffer_.dimensions();
 
         Box result;
         result.reserve(dimensions);
         for (int d = 0; d < dimensions; d++) {
-            const auto dim = buffer_.dim(d);
+            const auto &dim = buffer_.dim(d);
             result.emplace_back(dim.min(), dim.max());
         }
         return result;
     }
 
-    // TODO: not a good name.
-    Interval interval(int i) const {
+    Interval bounds(int i) const {
         const auto &d = buffer_.dim(i);
         return Interval(d.min(), d.max());
     }

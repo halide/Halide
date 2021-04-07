@@ -372,8 +372,8 @@ BoundsMap Conv2DOp::map_bounds(int input_idx, int output_idx) const {
             .constant(1, vector_tile)
             .constant(2, align_up(ceil_div(filter()->extent(0), vector_reduction), channel_alignment))
             .upsample(3, 0, vector_tile)
-            .constant(4, filter()->interval(1))
-            .constant(5, filter()->interval(2));
+            .constant(4, filter()->bounds(1))
+            .constant(5, filter()->bounds(2));
     } else {
         assert(input_idx == 2);
         return BoundsMap(1, 4).elementwise(0, 0);
@@ -473,8 +473,8 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
     } else if (input_idx == 1) {
         return BoundsMap(3, 4)
             .elementwise(0, 0)
-            .constant(1, filter()->interval(1))
-            .constant(2, filter()->interval(2));
+            .constant(1, filter()->bounds(1))
+            .constant(2, filter()->bounds(2));
     } else if (input_idx == 2) {
         return BoundsMap(1, 4).elementwise(0, 0);
     } else {
@@ -779,7 +779,7 @@ std::vector<SplitInfo> ReshapeOp::get_split_info() const {
 BoundsMap ReshapeOp::map_bounds(int input_idx, int output_idx) const {
     assert(input_idx == 0);
     assert(output_idx == 0);
-    return BoundsMap::all(input()->box(), output()->rank());
+    return BoundsMap::all(input()->bounds(), output()->rank());
 }
 
 void ReshapeOp::execute(const Box &crop) {
@@ -867,7 +867,7 @@ BoundsMap TileConvFilterOp::map_bounds(int input_idx, int output_idx) const {
     assert(output_idx == 0);
     // TODO: Maybe we could say more here, but it usually doesn't
     // matter because this op usually gets constant folded.
-    return BoundsMap::all(input()->box(), output()->rank());
+    return BoundsMap::all(input()->bounds(), output()->rank());
 }
 
 void TileConvFilterOp::execute(const Box &crop) {

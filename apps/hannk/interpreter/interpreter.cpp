@@ -26,7 +26,7 @@ void trace_loads_stores(HalideBuffer<const void> buf, halide_trace_event_t &even
     }
 }
 
-void trace_loads_stores(int32_t parent_id, const Tensor *t, Box box, bool load) {
+void trace_loads_stores(int32_t parent_id, const Tensor *t, Box bounds, bool load) {
     halide_trace_event_t event = {
         0,
     };
@@ -38,14 +38,14 @@ void trace_loads_stores(int32_t parent_id, const Tensor *t, Box box, bool load) 
 
     event.event = load ? halide_trace_load : halide_trace_store;
 
-    box = intersect(box, t->box());
-    HalideBuffer<const void> buf = t->buffer(box);
+    bounds = intersect(bounds, t->bounds());
+    HalideBuffer<const void> buf = t->buffer(bounds);
 
     event.type = buf.type();
 
-    std::vector<int32_t> coords(box.size(), 0);
+    std::vector<int32_t> coords(bounds.size(), 0);
     event.coordinates = coords.data();
-    event.dimensions = box.size();
+    event.dimensions = bounds.size();
 
     assert(event.type.bits <= 64);
     uint8_t value[8] = {
@@ -60,12 +60,12 @@ void trace_loads_stores(int32_t parent_id, const Tensor *t, Box box, bool load) 
     halide_trace(nullptr, &event);
 }
 
-void trace_loads(int32_t parent_id, const Tensor *t, const Box &box) {
-    return trace_loads_stores(parent_id, t, box, true);
+void trace_loads(int32_t parent_id, const Tensor *t, const Box &bounds) {
+    return trace_loads_stores(parent_id, t, bounds, true);
 }
 
-void trace_stores(int32_t parent_id, const Tensor *t, const Box &box) {
-    return trace_loads_stores(parent_id, t, box, false);
+void trace_stores(int32_t parent_id, const Tensor *t, const Box &bounds) {
+    return trace_loads_stores(parent_id, t, bounds, false);
 }
 
 void begin_trace_execute(const Model &m, std::vector<int32_t> &parent_ids) {
@@ -186,7 +186,7 @@ void ModelInterpreter::execute() {
     }
 
     for (auto &i : model_.ops) {
-        Box crop = i->output()->box();
+        Box crop = i->output()->bounds();
         i->execute(crop);
 
         if (trace_) {

@@ -76,7 +76,7 @@ Tensor::Tensor(std::string name, halide_type_t type, const Box &bounds, Quantiza
 }
 
 Tensor::Tensor(const Tensor &copy)
-    : name_(copy.name()), buffer_(make_buffer(copy.type(), copy.box())),
+    : name_(copy.name()), buffer_(make_buffer(copy.type(), copy.bounds())),
       quantization_(copy.quantization_), is_constant_(copy.is_constant_),
       is_input_(copy.is_input_), is_output_(copy.is_output_), storage_(copy.storage_) {
     if (copy.is_allocated()) {
@@ -141,11 +141,11 @@ void Tensor::set_alias_of(Tensor *t, std::vector<int> storage_offset) {
     storage_ = t->storage();
     storage_offset_ = std::move(storage_offset);
 
-    Box bounds = box();
+    Box offset_bounds = bounds();
     for (int i = 0; i < (int)storage_offset_.size(); i++) {
-        bounds[i] += storage_offset_[i];
+        offset_bounds[i] += storage_offset_[i];
     }
-    storage_->add_use(type(), bounds);
+    storage_->add_use(type(), offset_bounds);
 }
 
 void Tensor::replace_all_consumers_with(Tensor *other) {

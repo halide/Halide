@@ -12,7 +12,7 @@
 
 namespace hannk {
 
-void run_benchmark(const std::string &filename, const ScheduleOptions &options) {
+void run_benchmark(const std::string &filename, const InterpreterOptions &options) {
     if (!options.trace) {
         // In trace mode, don't send *anything* to stdout
         std::cout << filename;
@@ -51,7 +51,7 @@ void run_benchmark(const std::string &filename, const ScheduleOptions &options) 
 }  // namespace hannk
 
 int main(int argc, char **argv) {
-    hannk::ScheduleOptions options;
+    hannk::InterpreterOptions options;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--verbose")) {
@@ -60,11 +60,6 @@ int main(int argc, char **argv) {
         }
         if (!strcmp(argv[i], "--trace")) {
             options.trace = true;
-            continue;
-        }
-        // TODO: Make this a numeric parameter.
-        if (!strcmp(argv[i], "--working_set")) {
-            options.target_working_set_size_bytes = 1024 * 512;
             continue;
         }
     }
