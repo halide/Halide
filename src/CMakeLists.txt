@@ -434,6 +434,7 @@ target_compile_options(
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-float-conversion>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-int-conversion>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-int-float-conversion>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-missing-prototypes>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-nonportable-system-include-path>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-reserved-id-macro>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-return-std-move-in-c++11>
@@ -444,7 +445,7 @@ target_compile_options(
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-member-function>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-template>
 
-        $<$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>:-Wno-missing-prototypes>
+        $<$<COMPILE_LANG_AND_ID:C,GNU>:-Wno-missing-prototypes>
 
         $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Woverloaded-virtual>
 
