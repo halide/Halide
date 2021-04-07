@@ -198,8 +198,11 @@ namespace {
 
 // Find ops that need padding and add an explicit pad op.
 class PadForOps : public OpVisitor {
-    void pad_for_op(Op *op, const Box &required, int in = 0) {
-        Tensor *input = op->input(in);
+    void pad_for_op(Op *op, int input_idx, int output_idx) {
+        Tensor *input = op->input(input_idx);
+        Tensor *output = op->output(output_idx);
+        BoundsMap deps = op->map_bounds(input_idx, output_idx);
+        Box required = deps.evaluate(output->box());
 
         if (!is_subset_of(required, input->box())) {
             // Make a PadOp and a new tensor for the padded result.
@@ -229,22 +232,13 @@ class PadForOps : public OpVisitor {
     }
 
     void visit(Conv2DOp *op) {
-        Box required = op->input_required(op->output()->box());
-        assert(required[0].min == 0);
-        // TODO: Figure out how to get all this logic into one place. We really need
-        // to figure out how to get the unrolled reduction cases for conv working with
-        // a GuardWithIf so we only ever require the same unroll factor of 4.
-        if (required[0].extent() >= 16) {
-            required[0].set_extent((required[0].extent() + 15) & ~15);
-        } else {
-            required[0].set_extent((required[0].extent() + 3) & ~3);
-        }
-        pad_for_op(op, required, 0);
+        pad_for_op(op, 0, 0);
 
         // We also need to tile the filter.
         Tensor *filter = op->filter();
         if (op->filter()->rank() == 4) {
-            Box tiled_shape = op->filter_required();
+            BoundsMap bounds = op->map_bounds(1, 0);
+            Box tiled_shape = bounds.evaluate(op->output()->box());
 
             halide_type_t type = op->filter_type();
             QuantizationInfo quantization = filter->quantization();
@@ -265,8 +259,7 @@ class PadForOps : public OpVisitor {
     }
 
     void visit(DepthwiseConv2DOp *op) {
-        Box required = op->input_required(op->output()->box());
-        pad_for_op(op, required, 0);
+        pad_for_op(op, 0, 0);
     }
 
     void visit(PoolOp *op) {
@@ -275,8 +268,7 @@ class PadForOps : public OpVisitor {
             return;
         }
 
-        Box required = op->input_required(op->output()->box());
-        pad_for_op(op, required, 0);
+        pad_for_op(op, 0, 0);
     }
 
 public:
@@ -319,8 +311,8 @@ void fold_constants(Model *m) {
                 i->output(j)->allocate();
             }
 
-            // Run the op.
-            i->execute(i->get_full_crop());
+            // Run the whole op.
+            i->execute(i->output()->box());
 
             // Mark the outputs constant.
             for (int j = 0; j < i->output_count(); j++) {

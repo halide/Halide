@@ -251,6 +251,197 @@ struct SplitInfo {
     }
 };
 
+// A mapping from an output x to required input coordinates [min, max].
+// [min, max] = x * stride / up_stride + bounds
+struct DimMap {
+    int stride;
+    int up_stride;
+    Interval bounds;
+
+    DimMap(int stride, int up_stride, const Interval &bounds)
+        : stride(stride), up_stride(up_stride), bounds(bounds) {
+    }
+
+    Interval evaluate(Interval result) const {
+        result *= stride;
+        result /= up_stride;
+        result += bounds;
+        return result;
+    }
+    Interval evaluate(int at) const {
+        Interval result(at);
+        result *= stride;
+        result /= up_stride;
+        result += bounds;
+        return result;
+    }
+
+    bool is_elementwise() const {
+        return stride == 1 && up_stride == 1 && bounds.extent() == 1;
+    }
+
+    bool is_upsample() const {
+        return stride == 1 && up_stride > 1;
+    }
+
+    bool is_downsample() const {
+        return stride > 1 && up_stride == 1;
+    }
+
+    bool is_constant() const {
+        return stride == 0;
+    }
+
+    // A dependency where the input `bounds` do not depend on the output.
+    static DimMap constant(int extent) {
+        return DimMap(0, 1, Interval(0, extent - 1));
+    }
+
+    static DimMap constant(const Interval &bounds) {
+        return DimMap(0, 1, bounds);
+    }
+
+    static DimMap elementwise(int offset = 0) {
+        return DimMap(1, 1, Interval(offset));
+    }
+
+    static DimMap stencil(const Interval &filter) {
+        return DimMap(1, 1, filter);
+    }
+
+    static DimMap downsample(int factor, const Interval &filter) {
+        return DimMap(factor, 1, filter);
+    }
+
+    static DimMap upsample(int factor) {
+        return DimMap(1, factor, Interval(0, 0));
+    }
+
+    static DimMap upsample(int factor, const Interval &filter) {
+        return DimMap(1, factor, filter);
+    }
+};
+
+class BoundsMap {
+    int dims_in_;
+    int dims_out_;
+    std::vector<DimMap> data_;
+
+public:
+    BoundsMap(int dims_in, int dims_out)
+        : dims_in_(dims_in), dims_out_(dims_out), data_(dims_in * (dims_out + 1), {0, 1, {0, 0}}) {
+    }
+
+    DimMap &at(int dim_in, int dim_out) {
+        return data_[dim_in * (dims_out_ + 1) + dim_out];
+    }
+    const DimMap &at(int dim_in, int dim_out) const {
+        return data_[dim_in * (dims_out_ + 1) + dim_out];
+    }
+
+    DimMap &at(int dim_in) {
+        DimMap &result = at(dim_in, dims_out_);
+        assert(result.stride == 0);
+        return result;
+    }
+    const DimMap &at(int dim_in) const {
+        const DimMap &result = at(dim_in, dims_out_);
+        assert(result.stride == 0);
+        return result;
+    }
+
+    Interval evaluate(int dim_in, const Box &output) const {
+        Interval result = at(dim_in).bounds;
+        for (int i = 0; i < (int)output.size(); i++) {
+            result += at(dim_in, i).evaluate(output[i]);
+        }
+        return result;
+    }
+
+    Box evaluate(const Box &output) const {
+        Box input(dims_in_);
+        for (int i = 0; i < dims_in_; i++) {
+            input[i] = evaluate(i, output);
+        }
+        return input;
+    }
+
+    // Check if this bounds map is solely an elementwise mapping from dim_in to dim_out.
+    bool is_elementwise(int dim_in, int dim_out) const {
+        bool result = true;;
+        for (int i = 0; i < dims_out_ + 1; i++) {
+            const DimMap &map = at(dim_in, i);
+            result = result && (i == dim_out ? map.is_elementwise() : map.is_constant());
+        }
+        return result;
+    }
+
+    bool is_constant(int dim_in, int dim_out) const {
+        bool result = true;;
+        for (int i = 0; i < dims_out_ + 1; i++) {
+            const DimMap &map = at(dim_in, i);
+            result = result && (i == dim_out ? map.is_elementwise() : map.is_constant());
+        }
+        return result;
+    }
+
+    // Add bounds for an elementwise mapping of x of dim_in to y of dim_out,
+    // where x maps to y + offset.
+    BoundsMap &elementwise(int dim_in, int dim_out, int offset = 0) {
+        at(dim_in, dim_out) = DimMap::elementwise(offset);
+        return *this;
+    }
+
+    BoundsMap &stencil(int dim_in, int dim_out, const Interval &filter) {
+        at(dim_in, dim_out) = DimMap::stencil(filter);
+        return *this;
+    }
+
+    BoundsMap &upsample(int dim_in, int dim_out, int factor) {
+        at(dim_in, dim_out) = DimMap::upsample(factor);
+        return *this;
+    }
+
+    BoundsMap &upsample(int dim_in, int dim_out, int factor, const Interval &filter) {
+        at(dim_in, dim_out) = DimMap::upsample(factor, filter);
+        return *this;
+    }
+
+    BoundsMap &downsample(int dim_in, int dim_out, int factor, const Interval &filter) {
+        at(dim_in, dim_out) = DimMap::downsample(factor, filter);
+        return *this;
+    }
+
+    BoundsMap &constant(int dim_in, int extent) {
+        at(dim_in) = DimMap::constant(extent);
+        return *this;
+    }
+
+    BoundsMap &constant(int dim_in, const Interval &bounds) {
+        at(dim_in) = DimMap::constant(bounds);
+        return *this;
+    }
+
+    // Producing an element of the output requires the corresponding element of
+    // the input.
+    static BoundsMap elementwise(int rank) {
+        BoundsMap result(rank, rank);
+        for (int i = 0; i < rank; i++) {
+            result.elementwise(i, i);
+        }
+        return result;
+    }
+
+    // Producing any point of any output dimension requires all of the input.
+    static BoundsMap all(const Box &bounds_in, int dims_out) {
+        BoundsMap result(bounds_in.size(), dims_out);
+        for (int j = 0; j < (int)bounds_in.size(); j++) {
+            result.constant(j, bounds_in[j]);
+        }
+        return result;
+    }
+};
+
 class OpVisitor;
 
 class Op {
@@ -264,22 +455,16 @@ protected:
 public:
     virtual ~Op();
 
-    // Get the shape of the complete output of this op.
-    virtual Box get_full_crop() {
+    // Get the bounds required of all inputs and outputs given a crop.
+    virtual BoundsMap map_bounds(int input_idx, int output_idx) const = 0;
+    BoundsMap map_bounds(int input_idx) const {
         if (output_count() == 1) {
-            return output(0)->box();
+            return map_bounds(input_idx, 0);
         } else {
-            CHECK(0) << "More than one output requires get_full_crop override.";
-            return Box();
+            LOG(FATAL) << "More than one output requires get_full_crop override.";
+            return BoundsMap(0, 0);
         }
     }
-
-    // Get the bounds required of all inputs and outputs given a crop.
-    struct Bounds {
-        std::vector<Box> inputs;
-        std::vector<Box> outputs;
-    };
-    virtual Bounds infer_bounds(const Box &crop) const = 0;
 
     // Execute the op on a given crop.
     virtual void execute(const Box &crop) = 0;

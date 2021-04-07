@@ -16,7 +16,7 @@ struct Interval {
         : min(0), max(0) {
     }
     explicit Interval(int point)
-        : min(point), max(1) {
+        : min(point), max(point) {
     }
     Interval(int min, int max)
         : min(min), max(max) {
@@ -57,6 +57,12 @@ struct Interval {
         return *this;
     }
 
+    Interval &operator+=(const Interval &x) {
+        min += x.min;
+        max += x.max;
+        return *this;
+    }
+
     Interval operator*(int scale) const {
         Interval result(*this);
         result *= scale;
@@ -69,15 +75,21 @@ struct Interval {
         return result;
     }
 
-    Interval operator+(int scale) const {
+    Interval operator+(int offset) const {
         Interval result(*this);
-        result += scale;
+        result += offset;
         return result;
     }
 
-    Interval operator-(int scale) const {
+    Interval operator-(int offset) const {
         Interval result(*this);
-        result -= scale;
+        result -= offset;
+        return result;
+    }
+
+    Interval operator+(const Interval &x) const {
+        Interval result(*this);
+        result += x;
         return result;
     }
 
@@ -109,10 +121,6 @@ Interval Union(const Interval &a, const Interval &b);
 Box Union(const Box &a, const Box &b);
 Interval intersect(const Interval &a, Interval &b);
 Box intersect(Box a, const Box &b);
-
-// Try to remove the values of b from a. This can fail if the result is not a single interval.
-bool subtract(Interval &a, const Interval &b);
-bool subtract(Box &a, const Box &b);
 
 bool is_empty(const Box &a);
 

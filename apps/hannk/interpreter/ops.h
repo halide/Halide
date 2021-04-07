@@ -26,7 +26,7 @@ public:
         : Op(std::move(inputs), {output}) {
     }
 
-    Bounds infer_bounds(const Box &crop) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
 };
 
 class BinaryOp : public ElementwiseOp {
@@ -85,7 +85,7 @@ public:
 
     void accept(OpVisitor *v);
 
-    Bounds infer_bounds(const Box &crop) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;
 
     void execute(const Box &crop);
@@ -137,9 +137,7 @@ public:
     }
 
     halide_type_t filter_type() const;
-    Box filter_required() const;
-    Box input_required(const Box &crop) const;
-    Bounds infer_bounds(const Box &crop) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;
 
     void execute(const Box &crop);
@@ -190,8 +188,7 @@ public:
         return Op::input(2);
     }
 
-    Box input_required(const Box &crop) const;
-    Bounds infer_bounds(const Box &crop) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;
 
     void execute(const Box &crop);
@@ -230,7 +227,7 @@ public:
         return Op::input(2);
     }
 
-    Bounds infer_bounds(const Box &crop) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;
 
     void execute(const Box &crop);
@@ -252,6 +249,7 @@ public:
 
     void accept(OpVisitor *v);
 
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;
 
     void execute(const Box &crop);
@@ -274,7 +272,7 @@ public:
 
     void accept(OpVisitor *v);
 
-    Bounds infer_bounds(const Box &crop) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;
 
     void execute(const Box &crop);
@@ -320,8 +318,7 @@ public:
     Operator op() const { return op_; }
     Padding padding() const { return padding_; }
 
-    Box input_required(const Box &crop) const;
-    Bounds infer_bounds(const Box &crop) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;
 
     void accept(OpVisitor *v);
@@ -347,7 +344,7 @@ public:
 
     void accept(OpVisitor *v);
 
-    Bounds infer_bounds(const Box &crop) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;
 
     void execute(const Box &crop);
@@ -371,6 +368,7 @@ public:
 
     void accept(OpVisitor *v);
 
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;
 
     void execute(const Box &crop);
@@ -392,7 +390,7 @@ public:
 
     void accept(OpVisitor *v);
 
-    Bounds infer_bounds(const Box &crop) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;
 
     void execute(const Box &crop);

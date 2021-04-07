@@ -258,15 +258,10 @@ void requantize(const HalideBuffer<const uint8_t> &in, const QuantizationInfo &i
 
 }  // namespace
 
-Op::Bounds ElementwiseOp::infer_bounds(const Box &crop) const {
-    Bounds result;
-    for (int i = 0; i < input_count(); i++) {
-        result.inputs.emplace_back(crop);
-    }
-    for (int i = 0; i < output_count(); i++) {
-        result.outputs.emplace_back(crop);
-    }
-    return result;
+BoundsMap ElementwiseOp::map_bounds(int input_idx, int output_idx) const {
+    int rank = output()->rank();
+    assert(rank == input(in)->rank());
+    return BoundsMap::elementwise(rank);
 }
 
 const char *BinaryOp::to_string(BinaryOp::Operator op) {
@@ -302,26 +297,24 @@ void BinaryOp::execute(const Box &crop) {
     }
 }
 
-Op::Bounds ConcatenationOp::infer_bounds(const Box &crop) const {
-    // We need everything from the concatenated dimension, everything else
-    // is the same as the crop.
-    // TODO: It's possible that if the concatenated dimension is cropped
-    // from the out, we could reduce the bounds required of some of the ins.
-    Bounds result;
-    for (int i = 0; i < input_count(); i++) {
-        result.inputs.emplace_back(crop);
-        result.inputs.back()[axis_] = input(i)->interval(axis_);
-    }
-    result.outputs.emplace_back(crop);
-    result.outputs.back()[axis_] = output()->interval(axis_);
-    return result;
-}
-
 std::vector<SplitInfo> ConcatenationOp::get_split_info() const {
     // Allow any split on any dimension other than the concatenated dimension.
     std::vector<SplitInfo> splits(output()->rank(), SplitInfo::any_split());
     splits[axis_] = SplitInfo::no_split();
     return splits;
+}
+
+BoundsMap ConcatenationOp::map_bounds(int input_idx, int output_idx) const {
+    int rank = output()->rank();
+    assert(rank == input(in)->rank());
+
+    int offset = 0;
+    for (int i = 0; i < input_idx; i++) {
+        offset += input(i)->extent(axis_);
+    }
+    BoundsMap result = BoundsMap::elementwise(rank);
+    result.at(axis_, axis_).bounds += offset;
+    return result;
 }
 
 void ConcatenationOp::execute(const Box &crop) {
@@ -341,62 +334,50 @@ void ConcatenationOp::execute(const Box &crop) {
 }
 
 halide_type_t Conv2DOp::filter_type() const {
-    const halide_filter_metadata_t *metadata = convolution_uint8_metadata();
-    return metadata->arguments[1].type;
+    if (input()->is_type<uint8_t>() && output()->is_type<uint8_t>()) {
+        const halide_filter_metadata_t *metadata = convolution_uint8_metadata();
+        return metadata->arguments[1].type;
+    } else {
+        CHECK(false) << "Unsupported type " << output()->type() << "\n";
+    }
 }
 
-Box Conv2DOp::filter_required() const {
-    if (filter()->is_type<uint8_t>()) {
+BoundsMap Conv2DOp::map_bounds(int input_idx, int output_idx) const {
+#ifdef CONV_R16
+    const int unroll_reduction = filter()->extent(0) >= 16 ? 16 : 4;
+#else
+    const int unroll_reduction = 4;
+#endif
+    if (input_idx == 0) {
+        return BoundsMap(4, output()->rank())
+            .constant(0, align_up(input()->extent(0), unroll_reduction))
+            .downsample(1, 1, stride_[0], Interval(0, dilation_[0] * (filter()->extent(1) - 1)))
+            .downsample(2, 2, stride_[1], Interval(0, dilation_[1] * (filter()->extent(2) - 1)))
+            .elementwise(3, 3);
+    } else if (input_idx == 1) {
         // Pass minimal sized buffers to learn about the alignment requirements.
         HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
         HalideBuffer<int32_t> bias_buf(nullptr, 1);
-        Halide::Runtime::Buffer<void, 5> filter_buf(filter_type(), 1, 1, 1, 1, 1, 1);
+        HalideBuffer<void> filter_buf(filter_type(), 1, 1, 1, 1, 1, 1);
         // TODO: How to initialize the above buffer without allocating?
         filter_buf.deallocate();
         HalideBuffer<uint8_t> output_buf;
-
         CHECK(0 == convolution_uint8(input_buf, filter_buf, bias_buf, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf));
 
         const int vector_reduction = filter_buf.dim(0).extent();
         const int vector_tile = filter_buf.dim(1).extent();
-        const int unroll_reduction = filter()->extent(0) >= 16 ? 16 : 4;
         const int channel_alignment = unroll_reduction / vector_reduction;
-        return {
-            {0, vector_reduction - 1},
-            {0, vector_tile - 1},
-            {0, align_up(ceil_div(filter()->extent(0), vector_reduction), channel_alignment) - 1},
-            {0, ceil_div(filter()->extent(3), vector_tile) - 1},
-            {filter()->interval(1)},
-            {filter()->interval(2)},
-        };
+        return BoundsMap(6, 4)
+            .constant(0, vector_reduction)
+            .constant(1, vector_tile)
+            .constant(2, align_up(ceil_div(filter()->extent(0), vector_reduction), channel_alignment))
+            .upsample(3, 0, vector_tile)
+            .constant(4, filter()->interval(1))
+            .constant(5, filter()->interval(2));
     } else {
-        CHECK(false) << "Unsupported type " << filter()->type() << "\n";
+        assert(input_idx == 2);
+        return BoundsMap(1, 4).elementwise(0, 0);
     }
-}
-
-Box Conv2DOp::input_required(const Box &crop) const {
-    Box input_crop = crop;
-    Box filter_shape = filter()->box();
-
-    input_crop[0] = filter_shape[0];
-    input_crop[1] *= stride_[0];
-    input_crop[2] *= stride_[1];
-    input_crop[1].max += dilation_[0] * (filter_shape[1].extent() - 1);
-    input_crop[2].max += dilation_[1] * (filter_shape[2].extent() - 1);
-
-    return input_crop;
-}
-
-Op::Bounds Conv2DOp::infer_bounds(const Box &crop) const {
-    Bounds result;
-    result.inputs = {
-        input_required(crop),
-        filter()->box(),
-        bias()->box(),
-    };
-    result.outputs = {crop};
-
-    return result;
 }
 
 std::vector<SplitInfo> Conv2DOp::get_split_info() const {
@@ -465,43 +446,40 @@ void Conv2DOp::execute(const Box &crop) {
     }
 }
 
-Box DepthwiseConv2DOp::input_required(const Box &crop) const {
-    Box input_crop = crop;
-    Box filter_shape = filter()->box();
-
-    input_crop[0] = crop[0] / depth_multiplier_;
-    if (input_crop[0].extent() > 1) {
-        // TODO: We need padding on the input for a native SIMD vector,
-        // don't hardcode this constant.
-        input_crop[0].set_extent(std::max(input_crop[0].extent(), 32));
-    } else {
-        // Don't pad when broadcasting.
-    }
-    input_crop[1] *= stride_[0];
-    input_crop[2] *= stride_[1];
-    input_crop[1].max += dilation_[0] * (filter_shape[1].extent() - 1);
-    input_crop[2].max += dilation_[1] * (filter_shape[2].extent() - 1);
-
-    return input_crop;
-}
-
-Op::Bounds DepthwiseConv2DOp::infer_bounds(const Box &crop) const {
-    Bounds result;
-    result.inputs = {
-        input_required(crop),
-        filter()->box(),
-        bias()->box(),
-    };
-    result.outputs = {crop};
-    return result;
-}
-
 std::vector<SplitInfo> DepthwiseConv2DOp::get_split_info() const {
     return {
         SplitInfo::no_split(),
         SplitInfo::guard_with_if(2),
         SplitInfo::guard_with_if(2),
         SplitInfo::any_split()};
+}
+
+BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
+    assert(output_idx == 0);
+    if (input_idx == 0) {
+        BoundsMap result(4, 4);
+        if (depth_multiplier_ == 1) {
+            // TODO: Handle this padding for SIMD width elsewhere. Either fix depthwise
+            // so it doesn't need this, or pass alignment information somewhere else.
+            result.constant(0, align_up(input()->extent(0), 16));
+        } else {
+            result.upsample(0, 0, depth_multiplier_);
+        }
+        result
+            .downsample(1, 1, stride_[0], Interval(0, dilation_[0] * (filter()->extent(1) - 1)))
+            .downsample(2, 2, stride_[1], Interval(0, dilation_[1] * (filter()->extent(2) - 1)))
+            .elementwise(3, 3);
+        return result;
+    } else if (input_idx == 1) {
+        return BoundsMap(3, 4)
+            .elementwise(0, 0)
+            .constant(1, filter()->interval(1))
+            .constant(2, filter()->interval(2));
+    } else if (input_idx == 2) {
+        return BoundsMap(1, 4).elementwise(0, 0);
+    } else {
+        return BoundsMap(0, 4);
+    }
 }
 
 void DepthwiseConv2DOp::execute(const Box &crop) {
@@ -552,20 +530,24 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
     }
 }
 
-Op::Bounds FullyConnectedOp::infer_bounds(const Box &crop) const {
-    Bounds result;
-    result.inputs.emplace_back(input()->box());
-    result.inputs.emplace_back(filter()->box());
-    result.inputs.emplace_back(bias()->box());
-    result.outputs.emplace_back(output()->box());
-    return result;
-}
-
 std::vector<SplitInfo> FullyConnectedOp::get_split_info() const {
     return {
         SplitInfo::no_split(),
         SplitInfo::any_split(),
     };
+}
+
+BoundsMap FullyConnectedOp::map_bounds(int input_idx, int output_idx) const {
+    assert(output_idx == 0);
+    if (input_idx == 0) {
+        return BoundsMap(2, 2).constant(0, input()->extent(0)).elementwise(1, 1);
+    } else if (input_idx == 1) {
+        return BoundsMap(2, 2).constant(0, filter()->extent(0)).elementwise(1, 0);
+    } else if (input_idx == 2) {
+        return BoundsMap(1, 2).elementwise(0, 0);
+    } else {
+        return BoundsMap(0, 2);
+    }
 }
 
 void FullyConnectedOp::execute(const Box &crop) {
@@ -613,6 +595,14 @@ std::vector<SplitInfo> L2NormalizationOp::get_split_info() const {
     return splits;
 }
 
+BoundsMap L2NormalizationOp::map_bounds(int input_idx, int output_idx) const {
+    assert(input_idx == 0);
+    assert(output_idx == 0);
+    return BoundsMap(2, 2)
+        .constant(0, input()->extent(0))
+        .elementwise(1, 1);
+}
+
 void L2NormalizationOp::execute(const Box &crop) {
     const Tensor *in = input();
     Tensor *out = output();
@@ -633,29 +623,28 @@ void L2NormalizationOp::execute(const Box &crop) {
     }
 }
 
-Op::Bounds PadOp::infer_bounds(const Box &crop) const {
-    Bounds result;
-    if (input(1)) {
-        auto padding = input(1)->buffer<const int32_t>();
-
-        Box padded_crop = crop;
-        for (int d = 0; d < output()->rank(); d++) {
-            padded_crop[d] += padding(0, d);
-        }
-
-        result.inputs.emplace_back(
-            intersect(padded_crop, input(0)->box()));
-        result.inputs.emplace_back(input(1)->box());
-    } else {
-        result.inputs.emplace_back(crop);
-        result.inputs.emplace_back(Box());
-    }
-    result.outputs.emplace_back(crop);
-    return result;
-}
-
 std::vector<SplitInfo> PadOp::get_split_info() const {
     return {(size_t)output()->rank(), SplitInfo::any_split()};
+}
+
+BoundsMap PadOp::map_bounds(int input_idx, int output_idx) const {
+    assert(output_idx == 0);
+    const int rank = output()->rank();
+    if (input_idx == 0) {
+        if (input(1)) {
+            BoundsMap result(rank, rank);
+            auto padding = input(1)->buffer<const int32_t>();
+            for (int d = 0; d < output()->rank(); d++) {
+                result.elementwise(d, d, padding(0, d));
+            }
+            return result;
+        } else {
+            return BoundsMap::elementwise(rank);
+        }
+    } else {
+        assert(input_idx == 1);
+        return BoundsMap(1, rank).constant(0, rank);
+    }
 }
 
 void PadOp::execute(const Box &crop) {
@@ -668,7 +657,7 @@ void PadOp::execute(const Box &crop) {
 
         if (input(1)) {
             auto padding = input(1)->buffer<const int32_t>();
-            for (int d = 0; d < std::min(padding.extent(1), output_buf.dimensions()); d++) {
+            for (int d = 0; d < output_buf.dimensions(); d++) {
                 input_buf.translate(d, padding(0, d));
             }
         }
@@ -712,22 +701,6 @@ int compute_padding(int stride, int in_size, int filter_size, int out_size) {
 
 }  // namespace
 
-Box PoolOp::input_required(const Box &crop) const {
-    Box input_crop = crop;
-    input_crop[1] *= stride_[0];
-    input_crop[2] *= stride_[1];
-    input_crop[1].max += filter_size_[0] - 1;
-    input_crop[2].max += filter_size_[1] - 1;
-    return input_crop;
-}
-
-Op::Bounds PoolOp::infer_bounds(const Box &crop) const {
-    Bounds result;
-    result.inputs = {input_required(crop)};
-    result.outputs = {crop};
-    return result;
-}
-
 std::vector<SplitInfo> PoolOp::get_split_info() const {
     std::vector<SplitInfo> splits(output()->rank(), SplitInfo::any_split());
     return splits;
@@ -743,6 +716,23 @@ const char *PoolOp::to_string(PoolOp::Operator op) {
         CHECK(false) << "Unsupported pool op\n";
         return nullptr;
     }
+}
+
+BoundsMap PoolOp::map_bounds(int input_idx, int output_idx) const {
+    assert(output_idx == 0);
+/*
+    const int in_width = input_buf.dim(1).extent();
+    const int in_height = input_buf.dim(2).extent();
+    const int out_width = output_buf.dim(1).extent();
+    const int out_height = output_buf.dim(2).extent();
+    input_buf.translate(1, compute_padding(stride_[0], in_width, filter_size_[0], out_width));
+    input_buf.translate(2, compute_padding(stride_[1], in_height, filter_size_[1], out_height));
+*/
+    return BoundsMap(4, 4)
+        .elementwise(0, 0)
+        .downsample(1, 1, stride_[0], Interval(0, filter_size_[0] - 1))
+        .downsample(2, 2, stride_[1], Interval(0, filter_size_[1] - 1))
+        .elementwise(3, 3);
 }
 
 void PoolOp::execute(const Box &crop) {
@@ -781,16 +771,15 @@ void PoolOp::execute(const Box &crop) {
     }
 }
 
-// TODO: Maybe this is only a reshape in some dimensions, in which case we might be able to split it.
-Op::Bounds ReshapeOp::infer_bounds(const Box &crop) const {
-    Bounds result;
-    result.inputs = {input()->box()};
-    result.outputs = {crop};
-    return result;
-}
-
 std::vector<SplitInfo> ReshapeOp::get_split_info() const {
     return {};
+}
+
+// TODO: Maybe this is only a reshape in some dimensions, in which case we might be able to split it.
+BoundsMap ReshapeOp::map_bounds(int input_idx, int output_idx) const {
+    assert(input_idx == 0);
+    assert(output_idx == 0);
+    return BoundsMap::all(input()->box(), output()->rank());
 }
 
 void ReshapeOp::execute(const Box &crop) {
@@ -823,6 +812,14 @@ std::vector<SplitInfo> SoftmaxOp::get_split_info() const {
     std::vector<SplitInfo> splits(output()->rank(), SplitInfo::any_split());
     splits.front() = SplitInfo::no_split();
     return splits;
+}
+
+BoundsMap SoftmaxOp::map_bounds(int input_idx, int output_idx) const {
+    assert(input_idx == 0);
+    assert(output_idx == 0);
+    return BoundsMap(2, 2)
+        .constant(0, input()->extent(0))
+        .elementwise(1, 1);
 }
 
 void SoftmaxOp::execute(const Box &crop) {
@@ -861,22 +858,16 @@ void SoftmaxOp::execute(const Box &crop) {
     }
 }
 
-Op::Bounds TileConvFilterOp::infer_bounds(const Box &crop) const {
-    assert(crop[0].min == 0);
-    Box input = {
-        crop[2] * crop[0].extent(),
-        crop[3],
-        crop[4],
-        crop[1],
-    };
-    Bounds result;
-    result.inputs = {input};
-    result.outputs = {crop};
-    return result;
-}
-
 std::vector<SplitInfo> TileConvFilterOp::get_split_info() const {
     return {};
+}
+
+BoundsMap TileConvFilterOp::map_bounds(int input_idx, int output_idx) const {
+    assert(input_idx == 0);
+    assert(output_idx == 0);
+    // TODO: Maybe we could say more here, but it usually doesn't
+    // matter because this op usually gets constant folded.
+    return BoundsMap::all(input()->box(), output()->rank());
 }
 
 void TileConvFilterOp::execute(const Box &crop) {

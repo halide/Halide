@@ -1,5 +1,5 @@
-#ifndef IN_PLACE_H_
-#define IN_PLACE_H_
+#ifndef TRANSFORMS_H_
+#define TRANSFORMS_H_
 
 #include "interpreter/ops.h"
 
@@ -21,4 +21,4 @@ void fold_constants(Model *m);
 
 }  // namespace hannk
 
-#endif  // IN_PLACE_H_
+#endif  // TRANSFORMS_H_
