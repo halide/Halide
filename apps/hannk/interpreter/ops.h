@@ -1,5 +1,5 @@
-#ifndef OPS_H_
-#define OPS_H_
+#ifndef HANNK_OPS_H_
+#define HANNK_OPS_H_
 
 #include "interpreter/model.h"
 
@@ -430,4 +430,4 @@ public:
 
 }  // namespace hannk
 
-#endif  // OPS_H_
+#endif  // HANNK_OPS_H_

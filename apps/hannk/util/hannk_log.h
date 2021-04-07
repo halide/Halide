@@ -1,5 +1,5 @@
-#ifndef HANNK_LOG_H_
-#define HANNK_LOG_H_
+#ifndef HANNK_LOG_H
+#define HANNK_LOG_H
 
 namespace hannk {
 
@@ -29,4 +29,4 @@ void hannk_log(LogSeverity severity, const char *msg);
 }  // namespace internal
 }  // namespace hannk
 
-#endif  // HANNK_LOG_H_
+#endif  // HANNK_LOG_H

@@ -1,5 +1,5 @@
-#ifndef INTERVAL_H
-#define INTERVAL_H
+#ifndef HANNK_INTERVAL_H
+#define HANNK_INTERVAL_H
 
 #include <iostream>
 #include <vector>
@@ -134,4 +134,4 @@ int align_down(int x, int n);
 
 }  // namespace hannk
 
-#endif  // INTERVAL_H
+#endif  // HANNK_INTERVAL_H

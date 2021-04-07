@@ -1,5 +1,5 @@
-#ifndef MODEL_H
-#define MODEL_H
+#ifndef HANNK_MODEL_H
+#define HANNK_MODEL_H
 
 #include <iostream>
 #include <list>
@@ -550,4 +550,4 @@ struct Model {
 
 }  // namespace hannk
 
-#endif  // MODEL_H
+#endif  // HANNK_MODEL_H

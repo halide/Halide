@@ -1,5 +1,5 @@
-#ifndef FILE_UTIL_H_
-#define FILE_UTIL_H_
+#ifndef HANNK_FILE_UTIL_H
+#define HANNK_FILE_UTIL_H
 
 #include <fstream>
 #include <memory>
@@ -41,4 +41,4 @@ inline void write_entire_file(const std::string &filename, const std::vector<cha
 
 }  // namespace hannk
 
-#endif  // FILE_UTIL_H_
+#endif  // HANNK_FILE_UTIL_H

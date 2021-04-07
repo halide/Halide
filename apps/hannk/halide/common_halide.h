@@ -1,7 +1,7 @@
 // A collection of utility functions shared by the halide generators.
 
-#ifndef COMMON_HALIDE_H_
-#define COMMON_HALIDE_H_
+#ifndef HANNK_COMMON_HALIDE_H
+#define HANNK_COMMON_HALIDE_H
 
 #include "Halide.h"
 
@@ -61,4 +61,4 @@ Halide::Expr approx_exp2(const Halide::Expr &x, const Halide::Expr &log2_precisi
 
 }  // namespace hannk
 
-#endif  // COMMON_HALIDE_H_
+#endif  // HANNK_COMMON_HALIDE_H

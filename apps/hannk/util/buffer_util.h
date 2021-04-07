@@ -1,5 +1,5 @@
-#ifndef BUFFER_UTIL_H
-#define BUFFER_UTIL_H
+#ifndef HANNK_BUFFER_UTIL_H
+#define HANNK_BUFFER_UTIL_H
 
 #include <iostream>
 #include <random>
@@ -242,4 +242,4 @@ struct DumpBuffer {
 
 }  // namespace hannk
 
-#endif  // BUFFER_UTIL_H
+#endif  // HANNK_BUFFER_UTIL_H

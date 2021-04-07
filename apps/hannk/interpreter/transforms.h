@@ -1,5 +1,5 @@
-#ifndef TRANSFORMS_H_
-#define TRANSFORMS_H_
+#ifndef HANNK_TRANSFORMS_H
+#define HANNK_TRANSFORMS_H
 
 #include "interpreter/ops.h"
 
@@ -21,4 +21,4 @@ void fold_constants(Model *m);
 
 }  // namespace hannk
 
-#endif  // TRANSFORMS_H_
+#endif  // HANNK_TRANSFORMS_H

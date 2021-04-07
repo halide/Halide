@@ -1,5 +1,5 @@
-#ifndef DELEGATE_HANNK_DELEGATE_H_
-#define DELEGATE_HANNK_DELEGATE_H_
+#ifndef HANNK_DELEGATE_H
+#define HANNK_DELEGATE_H
 
 #include "tensorflow/lite/c/c_api.h"
 
@@ -39,4 +39,4 @@ void HannkDelegateDelete(TfLiteDelegate *delegate);
 }
 #endif  // __cplusplus
 
-#endif  // DELEGATE_HANNK_DELEGATE_H_
+#endif  // HANNK_DELEGATE_H

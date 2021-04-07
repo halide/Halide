@@ -1,5 +1,5 @@
-#ifndef ERROR_UTIL_H_
-#define ERROR_UTIL_H_
+#ifndef HANNK_ERROR_UTIL_H
+#define HANNK_ERROR_UTIL_H
 
 #include <cassert>
 #include <sstream>
@@ -146,4 +146,4 @@ public:
 #endif
 }  // namespace hannk
 
-#endif  // ERROR_UTIL_H_
+#endif  // HANNK_ERROR_UTIL_H

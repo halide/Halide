@@ -1,5 +1,5 @@
-#ifndef TFLITE_PARSER_H_
-#define TFLITE_PARSER_H_
+#ifndef HANNK_TFLITE_PARSER_H
+#define HANNK_TFLITE_PARSER_H
 
 #include <memory>
 
@@ -22,4 +22,4 @@ Model parse_tflite_model_from_buffer(const void *model);
 
 }  // namespace hannk
 
-#endif  // TFLITE_PARSER_H_
+#endif  // HANNK_TFLITE_PARSER_H

@@ -1,5 +1,5 @@
-#ifndef INTERPRETER_H_
-#define INTERPRETER_H_
+#ifndef HANNK_INTERPRETER_H
+#define HANNK_INTERPRETER_H
 
 #include <map>
 #include <string>
@@ -51,4 +51,4 @@ public:
 
 }  // namespace hannk
 
-#endif  // INTERPRETER_H_
+#endif  // HANNK_INTERPRETER_H
