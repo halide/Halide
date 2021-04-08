@@ -73,7 +73,7 @@ int get_vector_num_elements(llvm::Type *);
 llvm::Type *get_vector_element_type(llvm::Type *);
 
 #if LLVM_VERSION >= 110
-const llvm::ElementCount element_count(int e);
+llvm::ElementCount element_count(int e);
 #else
 int element_count(int e);
 #endif

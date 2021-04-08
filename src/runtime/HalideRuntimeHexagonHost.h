@@ -80,7 +80,7 @@ typedef enum halide_hexagon_power_mode_t {
 } halide_hexagon_power_mode_t;
 
 /** More detailed power settings to control Hexagon.
- * @param set_mips - Set to TRUE to requst MIPS
+ * @param set_mips - Set to TRUE to request MIPS
  * @param mipsPerThread - mips requested per thread, to establish a minimal clock frequency per HW thread
  * @param mipsTotal - Total mips requested, to establish total number of MIPS required across all HW threads
  * @param set_bus_bw - Set to TRUE to request bus_bw

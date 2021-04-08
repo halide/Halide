@@ -91,20 +91,20 @@ void unpack_closure(const Closure &closure,
     int idx = 0;
     for (const auto &v : closure.vars) {
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-        LoadInst *load = builder->CreateLoad(ptr);
+        LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
         dst.push(v.first, load);
         load->setName(v.first);
     }
     for (const auto &b : closure.buffers) {
         {
             Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-            LoadInst *load = builder->CreateLoad(ptr);
+            LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
             dst.push(b.first, load);
             load->setName(b.first);
         }
         {
             Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-            LoadInst *load = builder->CreateLoad(ptr);
+            LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
             dst.push(b.first + ".buffer", load);
             load->setName(b.first + ".buffer");
         }
@@ -165,11 +165,11 @@ llvm::Type *get_vector_element_type(llvm::Type *t) {
 }
 
 #if LLVM_VERSION >= 120
-const llvm::ElementCount element_count(int e) {
+llvm::ElementCount element_count(int e) {
     return llvm::ElementCount::getFixed(e);
 }
 #elif LLVM_VERSION >= 110
-const llvm::ElementCount element_count(int e) {
+llvm::ElementCount element_count(int e) {
     return llvm::ElementCount(e, /*scalable*/ false);
 }
 #else
@@ -670,6 +670,8 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     get_md_bool(module.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi);
     get_md_string(module.getModuleFlag("halide_mcpu"), mcpu);
     get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
+    std::string mabi;
+    get_md_string(module.getModuleFlag("halide_mabi"), mabi);
     bool use_pic = true;
     get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
 
@@ -690,6 +692,7 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
     options.RelaxELFRelocations = false;
+    options.MCOptions.ABIName = mabi;
 }
 
 void clone_target_options(const llvm::Module &from, llvm::Module &to) {
@@ -758,7 +761,11 @@ void set_function_attributes_for_target(llvm::Function *fn, const Target &t) {
 void embed_bitcode(llvm::Module *M, const string &halide_command) {
     // Save llvm.compiler.used and remote it.
     SmallVector<Constant *, 2> used_array;
+#if LLVM_VERSION >= 130
+    SmallVector<GlobalValue *, 4> used_globals;
+#else
     SmallPtrSet<GlobalValue *, 4> used_globals;
+#endif
     llvm::Type *used_element_type = llvm::Type::getInt8Ty(M->getContext())->getPointerTo(0);
     GlobalVariable *used = collectUsedGlobalVariables(*M, used_globals, true);
     for (auto *GV : used_globals) {

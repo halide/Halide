@@ -578,14 +578,20 @@ public:
                     }
 
                     if (bound.modulus.defined()) {
-                        min_required -= bound.remainder;
-                        min_required = (min_required / bound.modulus) * bound.modulus;
-                        min_required += bound.remainder;
-                        Expr max_plus_one = max_required + 1;
-                        max_plus_one -= bound.remainder;
-                        max_plus_one = ((max_plus_one + bound.modulus - 1) / bound.modulus) * bound.modulus;
-                        max_plus_one += bound.remainder;
-                        max_required = max_plus_one - 1;
+                        if (bound.remainder.defined()) {
+                            min_required -= bound.remainder;
+                            min_required = (min_required / bound.modulus) * bound.modulus;
+                            min_required += bound.remainder;
+                            Expr max_plus_one = max_required + 1;
+                            max_plus_one -= bound.remainder;
+                            max_plus_one = ((max_plus_one + bound.modulus - 1) / bound.modulus) * bound.modulus;
+                            max_plus_one += bound.remainder;
+                            max_required = max_plus_one - 1;
+                        } else {
+                            Expr extent = (max_required - min_required) + 1;
+                            extent = simplify(((extent + bound.modulus - 1) / bound.modulus) * bound.modulus);
+                            max_required = simplify(min_required + extent - 1);
+                        }
                         s = LetStmt::make(min_var, min_required, s);
                         s = LetStmt::make(max_var, max_required, s);
                     }
@@ -1033,7 +1039,7 @@ public:
         // bounds inference results so that we don't needlessly
         // complicate our bounds expressions.
         vector<pair<string, Expr>> wrappers;
-        while (1) {
+        while (true) {
             if (const LetStmt *let = body.as<LetStmt>()) {
                 if (depends_on_bounds_inference(let->value)) {
                     break;

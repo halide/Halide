@@ -43,7 +43,7 @@ int main(int argc, const char **argv) {
     printf("unsigned char %s[] = {\n", target);
     int count = 0;
     int line_break = 0;
-    while (1) {
+    while (true) {
         int c = getchar();
         if (c == EOF) {
             break;

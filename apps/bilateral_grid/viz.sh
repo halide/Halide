@@ -3,6 +3,7 @@ echo HL_AVCONV is ${HL_AVCONV}
 export HL_TRACE_FILE=/dev/stdout
 export HL_NUMTHREADS=4
 rm -f $1/bilateral_grid.mp4
+set -euo pipefail
 make $1/filter_viz && \
 $1/filter_viz ../images/gray_small.png $1/out_small.png 0.2 0 | \
 ../../bin/HalideTraceViz --size 1920 1080 | \

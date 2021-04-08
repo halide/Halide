@@ -387,6 +387,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sve2", Target::SVE2},
     {"arm_dot_prod", Target::ARMDotProd},
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
+    {"rvv", Target::RVV},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -932,10 +933,6 @@ int Target::natural_vector_size(const Halide::Type &t) const {
         }
     } else if (arch == Target::WebAssembly) {
         if (has_feature(Halide::Target::WasmSimd128)) {
-            if (t.bits() == 64) {
-                // int64 and float64 aren't supported in simd128.
-                return 1;
-            }
             // 128-bit vectors for other types.
             return 16 / data_size;
         } else {

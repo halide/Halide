@@ -4,13 +4,6 @@ set halide_source=%~1
 set halide_build_root=%~2
 set halide_arch=%~3
 
-REM TODO: this temporary, until release branches for Halide are created.
-REM Remove as soon as that is done.
-if "%Halide_VERSION%" == "" (
-    echo Must set specific Halide_VERSION for packaging
-    goto error
-)
-
 if not exist "%VCPKG_ROOT%\.vcpkg-root" (
     echo Must define VCPKG_ROOT to be the root of the VCPKG install
     goto error
@@ -23,6 +16,11 @@ if not exist "%LLVM_DIR%\LLVMConfig.cmake" (
 
 if not exist "%Clang_DIR%\ClangConfig.cmake" (
     echo Must set specific Clang_DIR for packaging
+    goto error
+)
+
+if not exist "%LLD_DIR%\LLDConfig.cmake" (
+    echo Must set specific LLD_DIR for packaging
     goto error
 )
 
@@ -46,10 +44,9 @@ cmake -G "Visual Studio 16 2019" -Thost=x64 -A "%halide_arch%" ^
       "-DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake" ^
       "-DLLVM_DIR=%LLVM_DIR%" ^
       "-DClang_DIR=%Clang_DIR%" ^
-      "-DHalide_VERSION=%Halide_VERSION%" ^
+      "-DLLD_DIR=%LLD_DIR%" ^
       -DBUILD_SHARED_LIBS=YES ^
       -DWITH_TESTS=NO ^
-      -DWITH_APPS=NO ^
       -DWITH_TUTORIALS=NO ^
       -DWITH_DOCS=YES ^
       -DWITH_UTILS=NO ^
@@ -68,8 +65,11 @@ cmake --build "%halide_build_root%" --config Release
 if ERRORLEVEL 1 goto error
 
 pushd "%halide_build_root%"
-cpack -C "Release"
-if ERRORLEVEL 1 goto error
+cpack -G ZIP -C "Release"
+if ERRORLEVEL 1 (
+    popd
+    goto error
+)
 popd
 
 exit /b

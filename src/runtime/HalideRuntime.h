@@ -187,7 +187,7 @@ typedef bool (*halide_semaphore_try_acquire_t)(struct halide_semaphore_t *, int)
 
 /** A task representing a serial for loop evaluated over some range.
  * Note that task_parent is a pass through argument that should be
- * passed to any dependent taks that are invokved using halide_do_parallel_tasks
+ * passed to any dependent taks that are invoked using halide_do_parallel_tasks
  * underneath this call. */
 typedef int (*halide_loop_task_t)(void *user_context, int min, int extent,
                                   uint8_t *closure, void *task_parent);
@@ -929,7 +929,7 @@ extern void halide_memoization_cache_evict(void *user_context, uint64_t eviction
  * the case where halide_memoization_cache_lookup is handling multiple
  * buffers.  (This corresponds to memoizing a Tuple in Halide.) Note
  * that the host pointer must be sufficient to get to all information
- * the relase operation needs. The default Halide cache impleemntation
+ * the release operation needs. The default Halide cache impleemntation
  * accomplishes this by storing extra data before the start of the user
  * modifiable host storage.
  *
@@ -1328,13 +1328,14 @@ typedef enum halide_target_feature_t {
     halide_target_feature_wasm_simd128,           ///< Enable +simd128 instructions for WebAssembly codegen.
     halide_target_feature_wasm_signext,           ///< Enable +sign-ext instructions for WebAssembly codegen.
     halide_target_feature_wasm_sat_float_to_int,  ///< Enable saturating (nontrapping) float-to-int instructions for WebAssembly codegen.
-    halide_target_feature_wasm_threads,           ///< Enable the thread pool for WebAssembly codegen. (Also enables +atomics)
+    halide_target_feature_wasm_threads,           ///< Enable use of threads in WebAssembly codegen. Requires the use of a wasm runtime that provides pthread-compatible wrappers (typically, Emscripten with the -pthreads flag). Unsupported under WASI.
     halide_target_feature_wasm_bulk_memory,       ///< Enable +bulk-memory instructions for WebAssembly codegen.
     halide_target_feature_sve,                    ///< Enable ARM Scalable Vector Extensions
     halide_target_feature_sve2,                   ///< Enable ARM Scalable Vector Extensions v2
     halide_target_feature_egl,                    ///< Force use of EGL support.
     halide_target_feature_arm_dot_prod,           ///< Enable ARMv8.2-a dotprod extension (i.e. udot and sdot instructions)
     halide_llvm_large_code_model,                 ///< Use the LLVM large code model to compile
+    halide_target_feature_rvv,                    ///< Enable RISCV "V" Vector Extension
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 

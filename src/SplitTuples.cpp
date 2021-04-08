@@ -81,15 +81,11 @@ class SplitTuples : public IRMutator {
     }
 
     Stmt visit(const For *op) override {
-        map<string, set<int>> old_func_value_indices = func_value_indices;
-
         FindCallValueIndices find;
         op->body.accept(&find);
 
-        func_value_indices = find.func_value_indices;
-        Stmt stmt = IRMutator::visit(op);
-        func_value_indices = old_func_value_indices;
-        return stmt;
+        ScopedValue<map<string, set<int>>> func_value_indices_v(func_value_indices, find.func_value_indices);
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const Prefetch *op) override {
@@ -117,18 +113,25 @@ class SplitTuples : public IRMutator {
             internal_assert(it != env.end());
             Function f = it->second;
             string name = op->name;
+            bool changed = false;
             if (f.outputs() > 1) {
                 name += "." + std::to_string(op->value_index);
+                changed = true;
             }
             vector<Expr> args;
             for (const Expr &e : op->args) {
                 args.push_back(mutate(e));
+                changed = changed || !args.back().same_as(e);
             }
             // It's safe to hook up the pointer to the function
             // unconditionally. This expr never gets held by a
             // Function, so there can't be a cycle. We do this even
             // for scalar provides.
-            return Call::make(op->type, name, args, op->call_type, f.get_contents());
+            if (changed) {
+                return Call::make(op->type, name, args, op->call_type, f.get_contents());
+            } else {
+                return op;
+            }
         } else {
             return IRMutator::visit(op);
         }

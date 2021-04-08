@@ -1,5 +1,13 @@
 #include "Introspection.h"
 
+#if defined(_MSC_VER)
+#undef WITH_INTROSPECTION
+#elif defined(__has_include)
+#if !__has_include(<execinfo.h>)
+#undef WITH_INTROSPECTION
+#endif
+#endif
+
 #ifdef WITH_INTROSPECTION
 
 #include "Debug.h"
@@ -999,7 +1007,7 @@ private:
 
     void parse_debug_abbrev(const llvm::DataExtractor &e, llvm_offset_t off = 0) {
         entry_formats.clear();
-        while (1) {
+        while (true) {
             EntryFormat fmt;
             fmt.code = e.getULEB128(&off);
             if (!fmt.code) {
@@ -1013,7 +1021,7 @@ private:
               " tag = %lu\n"
               " has_children = %u\n", fmt.code, fmt.tag, fmt.has_children);
             */
-            while (1) {
+            while (true) {
                 uint64_t name = e.getULEB128(&off);
                 uint64_t form = e.getULEB128(&off);
                 if (!name && !form) {
@@ -1041,7 +1049,7 @@ private:
         // offset of a variable.
         const int no_location = 0x80000000;
 
-        while (1) {
+        while (true) {
             uint64_t start_of_unit_header = off;
 
             // Parse compilation unit header
@@ -1909,7 +1917,7 @@ private:
         llvm_offset_t off = 0;
 
         // For every compilation unit
-        while (1) {
+        while (true) {
             // Parse the header
             uint32_t unit_length = e.getU32(&off);
 
@@ -2186,7 +2194,7 @@ private:
         unsigned shift = 0;
         uint8_t byte = 0;
 
-        while (1) {
+        while (true) {
             internal_assert(shift < 57);
             byte = *ptr++;
             result |= (uint64_t)(byte & 0x7f) << shift;
@@ -2210,7 +2218,7 @@ private:
         unsigned shift = 0;
         uint8_t byte = 0;
 
-        while (1) {
+        while (true) {
             internal_assert(shift < 57);
             byte = *ptr++;
             result |= (uint64_t)(byte & 0x7f) << shift;

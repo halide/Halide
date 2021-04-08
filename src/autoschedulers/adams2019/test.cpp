@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
 
     Var x("x"), y("y");
 
-    if (1) {
+    if (true) {
         // In a point-wise pipeline, everything should be fully fused.
         Func f("f"), g("g"), h("h");
         f(x, y) = (x + y) * (x + y);
@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
         Pipeline(h).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         // In a pipeline with huge expensive stencils and low memory costs, nothing should be fused
         Func f("f"), g("g"), h("h");
         f(x, y) = (x + y) * (x + 2 * y) * (x + 3 * y) * (x + 4 * y) * (x + 5 * y);
@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
         Pipeline(h).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         // In a pipeline with moderate isotropic stencils, there should be some square tiling
         Func f("f"), h("h");
         f(x, y) = (x + y) * (x + 2 * y) * (x + 3 * y);
@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
     }
 
     // Smaller footprint stencil -> smaller tiles
-    if (1) {
+    if (true) {
         Func f("f"), g("g"), h("h");
         f(x, y) = (x + y) * (x + 2 * y) * (x + 3 * y);
         h(x, y) = (f(x - 1, y - 1) + f(x, y - 1) + f(x + 1, y - 1) +
@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
     }
 
     // A stencil chain
-    if (1) {
+    if (true) {
         const int N = 8;
         Func f[N];
         f[0](x, y) = (x + y) * (x + 2 * y) * (x + 3 * y);
@@ -94,7 +94,7 @@ int main(int argc, char **argv) {
     }
 
     // An outer product
-    if (1) {
+    if (true) {
         Buffer<float> a(2048), b(2048);
         Func f;
         f(x, y) = a(x) * b(y);
@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
     }
 
     // A separable downsample that models the start of local_laplacian
-    if (1) {
+    if (true) {
         Buffer<float> in(2048, 2048);
         Var k;
         Func orig("orig"), expensive("expensive"), downy("downy"), downx("downx");
@@ -124,7 +124,7 @@ int main(int argc, char **argv) {
     }
 
     // A Func with multiple stages, some of which include additional loops
-    if (1) {
+    if (true) {
         Buffer<float> a(1024, 1024);
         Func f("multiple_stages"), g("g"), h("h");
         Var x, y;
@@ -142,7 +142,7 @@ int main(int argc, char **argv) {
         Pipeline(g).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         // A scan with pointwise stages before and after
         Buffer<float> a(1024, 1024);
         Func before[5];
@@ -166,7 +166,7 @@ int main(int argc, char **argv) {
         Pipeline(after[4]).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         Func f_u8("f_u8");
         Func f_u64_1("f_u64_1");
         Func f_u64_2("f_u64_2");
@@ -186,7 +186,7 @@ int main(int argc, char **argv) {
         Pipeline(f_u64_2).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         Buffer<float> im_a(1024, 1024, "a"), im_b(1024, 1024, "b");
         im_a.fill(0.0f);
         im_b.fill(0.0f);
@@ -205,7 +205,7 @@ int main(int argc, char **argv) {
         Pipeline(out).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         // A scan in x followed by a downsample in y, with pointwise stuff in between
         const int N = 3;
         Buffer<float> a(1024, 1024);
@@ -235,7 +235,7 @@ int main(int argc, char **argv) {
         Pipeline(p3[N - 1]).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         // A gather that only uses a small portion of a potentially
         // large LUT. The number of points computed should be less
         // than points computed minimum, and the LUT should be
@@ -255,7 +255,7 @@ int main(int argc, char **argv) {
         Pipeline(out).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         // A schedule where it's insane to not compute inside an rvar
         Func f("f"), g("g");
         f(x, y) = x;
@@ -270,7 +270,7 @@ int main(int argc, char **argv) {
         Pipeline(g).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         // A pipeline where the vectorized dimension should alternate index
         Func f("f"), g("g"), h("h");
         f(x, y) = x * y;
@@ -285,7 +285,7 @@ int main(int argc, char **argv) {
         Pipeline(h).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         // A no-win scenario in which a Func is going to be read from
         // lots of times using a vector gather no matter how it is
         // scheduled.
@@ -303,7 +303,7 @@ int main(int argc, char **argv) {
         Pipeline({a, b}).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         // Boring memcpy
         ImageParam im(Float(32), 2);
         Func f("f"), g("g");
@@ -314,7 +314,7 @@ int main(int argc, char **argv) {
         Pipeline(g).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         // A load from a tiny input image
         ImageParam im(Float(32), 2);
         Func f("f");
@@ -324,7 +324,7 @@ int main(int argc, char **argv) {
         Pipeline(f).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         // Lots of dimensions
         ImageParam im(Float(32), 7);
         Func f("f");
@@ -341,7 +341,7 @@ int main(int argc, char **argv) {
         Pipeline(f).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         // Long transpose chain.
         ImageParam im(Float(32), 2);
         Func f("f"), g("g"), h("h");
@@ -360,7 +360,7 @@ int main(int argc, char **argv) {
         Pipeline({out1, out2}).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         ImageParam im(Float(32), 2);
         // An inlinable Func used at the start and at the end of a long stencil chain.
         const int N = 8;
@@ -385,7 +385,7 @@ int main(int argc, char **argv) {
         Pipeline(g).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         Func f("f"), g("g"), h("h");
 
         f(x, y) = x + y;
@@ -399,7 +399,7 @@ int main(int argc, char **argv) {
         Pipeline(h).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         // Vectorizing a pure var in an update using RoundUp
 
         Func f("f"), g("g");
@@ -414,7 +414,7 @@ int main(int argc, char **argv) {
         Pipeline(g).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         ImageParam im(Float(32), 2);
 
         // A convolution pyramid
@@ -446,7 +446,7 @@ int main(int argc, char **argv) {
         Pipeline(out).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         ImageParam im(Float(32), 2);
 
         Func f("f");
@@ -464,7 +464,7 @@ int main(int argc, char **argv) {
         Pipeline(casted).auto_schedule(target, params);
     }
 
-    if (1) {
+    if (true) {
         ImageParam im(Int(32), 2);
 
         Func f("f"), hist("hist"), output("output");
