@@ -1899,7 +1899,7 @@ void CodeGen_Xtensa::visit(const LE *op) {
     } else if (is_native_xtensa_vector<uint32_t>(op->a.type())) {
         print_assignment(op->type, "IVP_LEUN_2X32U(" + sa + ", " + sb + ")");
     } else {
-        visit_binop(op->type, op->a, op->b, "<");
+        CodeGen_C::visit(op);
     }
 }
 
@@ -1920,7 +1920,7 @@ void CodeGen_Xtensa::visit(const LT *op) {
     } else if (is_native_xtensa_vector<uint32_t>(op->a.type())) {
         print_assignment(op->type, "IVP_LTUN_2X32U(" + sa + ", " + sb + ")");
     } else {
-        visit_binop(op->type, op->a, op->b, "<");
+        CodeGen_C::visit(op);
     }
 }
 
@@ -1941,7 +1941,7 @@ void CodeGen_Xtensa::visit(const GT *op) {
     } else if (is_native_xtensa_vector<uint32_t>(op->a.type())) {
         print_assignment(op->type, "IVP_GTUN_2X32U(" + sa + ", " + sb + ")");
     } else {
-        visit_binop(op->type, op->a, op->b, ">");
+        CodeGen_C::visit(op);
     }
 }
 
@@ -1960,7 +1960,7 @@ void CodeGen_Xtensa::visit(const Or *op) {
             internal_assert(false) << "Unhandled boolean type in the || op\n";
         }
     } else {
-        visit_binop(op->type, op->a, op->b, "||");
+        CodeGen_C::visit(op);
     }
 }
 
@@ -1981,7 +1981,7 @@ void CodeGen_Xtensa::visit(const EQ *op) {
     } else if (is_native_xtensa_vector<uint32_t>(op->a.type())) {
         print_assignment(op->type, "IVP_EQN_2X32U(" + sa + ", " + sb + ")");
     } else {
-        visit_binop(op->type, op->a, op->b, "==");
+        CodeGen_C::visit(op);
     }
 }
 
