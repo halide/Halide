@@ -34,13 +34,13 @@ int main(int argc, char **argv) {
             if (!target.has_feature(Target::OpenGLCompute)) {
                 f.vectorize(xi, 4);
             }
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        } else if (target.has_feature(Target::HVX)) {
             f.hexagon().vectorize(x, 128);
         } else {
             f.vectorize(x, 8);
         }
 
-        Buffer<uint8_t> output = f.realize(input.width(), input.height(), target);
+        Buffer<uint8_t> output = f.realize({input.width(), input.height()}, target);
 
         for (int y = 0; y < input.height(); y++) {
             for (int x = 0; x < input.width(); x++) {
@@ -70,13 +70,13 @@ int main(int argc, char **argv) {
             if (!target.has_feature(Target::OpenGLCompute)) {
                 f.vectorize(xi, 4);
             }
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        } else if (target.has_feature(Target::HVX)) {
             f.hexagon().vectorize(x, 128);
         } else {
             f.vectorize(x, 8);
         }
 
-        Buffer<uint8_t> output = f.realize(input.width(), input.height(), target);
+        Buffer<uint8_t> output = f.realize({input.width(), input.height()}, target);
 
         for (int y = 0; y < input.height(); y++) {
             for (int x = 0; x < input.width(); x++) {
@@ -104,13 +104,13 @@ int main(int argc, char **argv) {
             if (!target.has_feature(Target::OpenGLCompute)) {
                 f.vectorize(xi, 4);
             }
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        } else if (target.has_feature(Target::HVX)) {
             f.hexagon().vectorize(x, 128);
         } else {
             f.vectorize(x, 128);
         }
 
-        Buffer<uint8_t> output = f.realize(input.width(), input.height(), target);
+        Buffer<uint8_t> output = f.realize({input.width(), input.height()}, target);
 
         for (int y = 0; y < input.height(); y++) {
             for (int x = 0; x < input.width(); x++) {
@@ -136,13 +136,13 @@ int main(int argc, char **argv) {
             if (!target.has_feature(Target::OpenGLCompute)) {
                 f.vectorize(xi, 4);
             }
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        } else if (target.has_feature(Target::HVX)) {
             f.hexagon().vectorize(x, 128);
         } else {
             f.vectorize(x, 8);
         }
 
-        Buffer<uint8_t> output = f.realize(input.width(), input.height(), target);
+        Buffer<uint8_t> output = f.realize({input.width(), input.height()}, target);
 
         for (int y = 0; y < input.height(); y++) {
             for (int x = 0; x < input.width(); x++) {
@@ -196,14 +196,14 @@ int main(int argc, char **argv) {
                 if (!target.has_feature(Target::OpenGLCompute)) {
                     gpu.vectorize(xi, 4);
                 }
-            } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+            } else if (target.has_feature(Target::HVX)) {
                 gpu.hexagon().vectorize(x, 128);
             } else {
                 // Just test vectorization
                 gpu.vectorize(x, 8);
             }
 
-            Realization r = out.realize(input.width(), input.height(), target);
+            Realization r = out.realize({input.width(), input.height()}, target);
             Buffer<uint32_t> cpu_output = r[0];
             Buffer<uint32_t> gpu_output = r[1];
 

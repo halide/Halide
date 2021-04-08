@@ -12,6 +12,8 @@ using std::vector;
 namespace Halide {
 namespace Internal {
 
+namespace {
+
 class UnrollLoops : public IRMutator {
     using IRMutator::visit;
 
@@ -90,7 +92,7 @@ class UnrollLoops : public IRMutator {
                 }
             }
 
-            return iters;
+            return simplify(iters);
 
         } else {
             return IRMutator::visit(for_loop);
@@ -112,6 +114,8 @@ public:
         permit_failed_unroll = get_env_variable("HL_PERMIT_FAILED_UNROLL") == "1";
     }
 };
+
+}  // namespace
 
 Stmt unroll_loops(const Stmt &s) {
     return UnrollLoops().mutate(s);

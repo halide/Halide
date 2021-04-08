@@ -85,53 +85,76 @@ else
 SHARED_EXT=so
 endif
 
-# To run apps on android that support this, build a separate toolchain from the Android NDK
-# using the make-standalone-toolchain.sh script:
-#$ build/tools/make-standalone-toolchain.sh --arch=arm64 --platform=android-21 --install-dir=$ANDROID_ARM64_TOOLCHAIN
-#$ build/tools/make-standalone-toolchain.sh --arch=arm --platform=android-21 --install-dir=$ANDROID_ARM_TOOLCHAIN
+# We expect $ANDROID_NDK_ROOT to be defined by an env var.
+# We require at least NDK r19b or later.
+ANDROID_NDK_ROOT ?= /path/to/android_ndk_root
+
+# e.g. 'darwin' or 'linux'
+ANDROID_NDK_HOST_PLATFORM ?= $(shell echo `uname` | tr '[:upper:]' '[:lower:]')
+
+# The minimum Android API version to compile against. (This is *not* the same as the NDK version.)
+# 26 - Android 8 (aka Oreo)
+ANDROID_API_VERSION ?= 26
+
 CXX-host ?= $(CXX)
 CXX-host-opencl ?= $(CXX)
-CXX-host-opengl ?= $(CXX)
 CXX-host-cuda ?= $(CXX)
 CXX-host-metal ?= $(CXX)
 CXX-host-hvx_128 ?= $(CXX)
 CXX-host-hvx_64 ?= $(CXX)
-CXX-$(HL_TARGET) ?= $(CXX)
-CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
-CXX-arm-32-android ?= $(ANDROID_ARM_TOOLCHAIN)/bin/arm-linux-androideabi-c++
+CXX-host-hvx ?= $(CXX)
+CXX-arm-64-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/aarch64-linux-android${ANDROID_API_VERSION}-clang++
+CXX-arm-32-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/armv7a-linux-androideabi${ANDROID_API_VERSION}-clang++
+CXX-arm-64-profile-android ?= $(CXX-arm-64-android)
+CXX-arm-32-profile-android ?= $(CXX-arm-32-android)
 
 CXXFLAGS-host ?= $(CXXFLAGS)
 CXXFLAGS-host-opencl ?= $(CXXFLAGS)
-CXXFLAGS-host-opengl ?= $(CXXFLAGS)
 CXXFLAGS-host-cuda ?= $(CXXFLAGS)
 CXXFLAGS-host-metal ?= $(CXXFLAGS)
 CXXFLAGS-host-hvx_128 ?= $(CXXFLAGS)
 CXXFLAGS-host-hvx_64 ?= $(CXXFLAGS)
-CXXFLAGS-$(HL_TARGET) ?= $(CXXFLAGS)
 CXXFLAGS-arm-64-android ?= $(CXXFLAGS)
 CXXFLAGS-arm-32-android ?= $(CXXFLAGS)
 
 LDFLAGS-host ?= $(LDFLAGS)
 LDFLAGS-host-opencl ?= $(LDFLAGS)
-LDFLAGS-host-opengl ?= $(LDFLAGS)
 LDFLAGS-host-cuda ?= $(LDFLAGS)
 LDFLAGS-host-metal ?= $(LDFLAGS)
 LDFLAGS-host-hvx_128 ?= $(LDFLAGS)
 LDFLAGS-host-hvx_64 ?= $(LDFLAGS)
+# Use the statically-linked version of libc++ on Android by default, for simplicity
+# of deployment. (Despite the name, this applies to libc++, not libstdc++)
+LDFLAGS-arm-64-android ?= -llog -fPIE -pie -static-libstdc++
+LDFLAGS-arm-32-android ?= -llog -fPIE -pie -static-libstdc++
+
+# Put HL_TARGET variants of all of these last, to avoid conflict with the android variants
+# if building with `HL_TARGET=arm-64-android make foo`
+CXX-$(HL_TARGET) ?= $(CXX)
+CXXFLAGS-$(HL_TARGET) ?= $(CXXFLAGS)
 LDFLAGS-$(HL_TARGET) ?= $(LDFLAGS)
-LDFLAGS-arm-64-android ?= -llog -fPIE -pie
-LDFLAGS-arm-32-android ?= -llog -fPIE -pie
 
 LIB_HALIDE_STATIC = $(HALIDE_DISTRIB_PATH)/lib/libHalide.a
 
-LIB_HALIDE = $(HALIDE_DISTRIB_PATH)/bin/libHalide.$(SHARED_EXT)
+LIB_HALIDE = $(HALIDE_DISTRIB_PATH)/lib/libHalide.$(SHARED_EXT)
 
-GENERATOR_DEPS ?= $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
+GENERATOR_DEPS ?= $(LIB_AUTOSCHEDULER) $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
 GENERATOR_DEPS_STATIC ?= $(LIB_HALIDE_STATIC) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
 
 # Generators which use autoscheduler plugin need to specify the linker where to find libHalide.so required by the plugin.
 LIBHALIDE_LDFLAGS ?= -Wl,-rpath,$(dir $(LIB_HALIDE)) -L $(dir $(LIB_HALIDE)) -lHalide $(LDFLAGS)
-LIBHALIDE_LDFLAGS_STATIC ?=  -L $(dir $(LIB_HALIDE_STATIC)) -lHalide $(LDFLAGS)
+LIBHALIDE_LDFLAGS_STATIC ?= $(LIB_HALIDE_STATIC) $(LDFLAGS)
+
+# Autoschedulers. Mullapudi2016 is currently the default, because it's fast.
+AUTOSCHEDULER ?= mullapudi2016
+ifneq ($(AUTOSCHEDULER),)
+LIB_AUTOSCHEDULER ?= $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(SHARED_EXT)
+ifeq ($(UNAME), Darwin)
+LIBHALIDE_LDFLAGS +=  -Wl,-force_load $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(SHARED_EXT)
+else
+LIBHALIDE_LDFLAGS +=  -Wl,--no-as-needed -lautoschedule_$(AUTOSCHEDULER) -Wl,--as-needed
+endif
+endif
 
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
@@ -158,15 +181,6 @@ IMAGE_IO_LIBS = $(LIBPNG_LIBS) $(LIBJPEG_LIBS)
 IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
 
 IMAGE_IO_FLAGS = $(IMAGE_IO_LIBS) $(IMAGE_IO_CXX_FLAGS)
-
-PLATFORM_OPENGL_LDFLAGS=-lGL -lX11
-ifeq ($(UNAME), Darwin)
-PLATFORM_OPENGL_LDFLAGS=-framework OpenGL
-endif
-
-ifneq (, $(findstring opengl,$(HL_TARGET)))
-  OPENGL_LDFLAGS=$(PLATFORM_OPENGL_LDFLAGS)
-endif
 
 ifneq (, $(findstring metal,$(HL_TARGET)))
   LDFLAGS += -framework Metal -framework Foundation

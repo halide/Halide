@@ -20,6 +20,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
     }
 
     if (may_simplify(op->type)) {
+        int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::select(condition, true_value, false_value), op->type);
 
         // clang-format off
@@ -42,7 +43,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
 
         // clang-format off
         if (EVAL_IN_LAMBDA
-            (rewrite(select(broadcast(x), y, z), select(x, y, z)) ||
+            (rewrite(select(broadcast(x, lanes), y, z), select(x, y, z)) ||
              rewrite(select(x != y, z, w), select(x == y, w, z)) ||
              rewrite(select(x <= y, z, w), select(y < x, w, z)) ||
              rewrite(select(x, select(y, z, w), z), select(x && !y, w, z)) ||
@@ -100,6 +101,49 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x < y, y, x), max(x, y)) ||
              rewrite(select(x < 0, x * y, 0), min(x, 0) * y) ||
              rewrite(select(x < 0, 0, x * y), max(x, 0) * y) ||
+
+             rewrite(select(x, min(y, w), min(z, w)), min(select(x, y, z), w)) ||
+             rewrite(select(x, min(y, w), min(w, z)), min(select(x, y, z), w)) ||
+             rewrite(select(x, min(w, y), min(z, w)), min(w, select(x, y, z))) ||
+             rewrite(select(x, min(w, y), min(w, z)), min(w, select(x, y, z))) ||
+             rewrite(select(x, max(y, w), max(z, w)), max(select(x, y, z), w)) ||
+             rewrite(select(x, max(y, w), max(w, z)), max(select(x, y, z), w)) ||
+             rewrite(select(x, max(w, y), max(z, w)), max(w, select(x, y, z))) ||
+             rewrite(select(x, max(w, y), max(w, z)), max(w, select(x, y, z))) ||
+
+             rewrite(select(x, select(y, z, min(w, z)), min(u, z)), min(select(x, select(y, z, w), u), z)) ||
+             rewrite(select(x, select(y, min(w, z), z), min(u, z)), min(select(x, select(y, w, z), u), z)) ||
+             rewrite(select(x, min(u, z), select(y, z, min(w, z))), min(select(x, u, select(y, z, w)), z)) ||
+             rewrite(select(x, min(u, z), select(y, min(w, z), z)), min(select(x, u, select(y, w, z)), z)) ||
+             rewrite(select(x, select(y, z, min(w, z)), min(z, u)), min(select(x, select(y, z, w), u), z)) ||
+             rewrite(select(x, select(y, min(w, z), z), min(z, u)), min(select(x, select(y, w, z), u), z)) ||
+             rewrite(select(x, min(z, u), select(y, z, min(w, z))), min(select(x, u, select(y, z, w)), z)) ||
+             rewrite(select(x, min(z, u), select(y, min(w, z), z)), min(select(x, u, select(y, w, z)), z)) ||
+             rewrite(select(x, select(y, z, min(z, w)), min(u, z)), min(select(x, select(y, z, w), u), z)) ||
+             rewrite(select(x, select(y, min(z, w), z), min(u, z)), min(select(x, select(y, w, z), u), z)) ||
+             rewrite(select(x, min(u, z), select(y, z, min(z, w))), min(select(x, u, select(y, z, w)), z)) ||
+             rewrite(select(x, min(u, z), select(y, min(z, w), z)), min(select(x, u, select(y, w, z)), z)) ||
+             rewrite(select(x, select(y, z, min(z, w)), min(z, u)), min(select(x, select(y, z, w), u), z)) ||
+             rewrite(select(x, select(y, min(z, w), z), min(z, u)), min(select(x, select(y, w, z), u), z)) ||
+             rewrite(select(x, min(z, u), select(y, z, min(z, w))), min(select(x, u, select(y, z, w)), z)) ||
+             rewrite(select(x, min(z, u), select(y, min(z, w), z)), min(select(x, u, select(y, w, z)), z)) ||
+
+             rewrite(select(x, select(y, z, max(w, z)), max(u, z)), max(select(x, select(y, z, w), u), z)) ||
+             rewrite(select(x, select(y, max(w, z), z), max(u, z)), max(select(x, select(y, w, z), u), z)) ||
+             rewrite(select(x, max(u, z), select(y, z, max(w, z))), max(select(x, u, select(y, z, w)), z)) ||
+             rewrite(select(x, max(u, z), select(y, max(w, z), z)), max(select(x, u, select(y, w, z)), z)) ||
+             rewrite(select(x, select(y, z, max(w, z)), max(z, u)), max(select(x, select(y, z, w), u), z)) ||
+             rewrite(select(x, select(y, max(w, z), z), max(z, u)), max(select(x, select(y, w, z), u), z)) ||
+             rewrite(select(x, max(z, u), select(y, z, max(w, z))), max(select(x, u, select(y, z, w)), z)) ||
+             rewrite(select(x, max(z, u), select(y, max(w, z), z)), max(select(x, u, select(y, w, z)), z)) ||
+             rewrite(select(x, select(y, z, max(z, w)), max(u, z)), max(select(x, select(y, z, w), u), z)) ||
+             rewrite(select(x, select(y, max(z, w), z), max(u, z)), max(select(x, select(y, w, z), u), z)) ||
+             rewrite(select(x, max(u, z), select(y, z, max(z, w))), max(select(x, u, select(y, z, w)), z)) ||
+             rewrite(select(x, max(u, z), select(y, max(z, w), z)), max(select(x, u, select(y, w, z)), z)) ||
+             rewrite(select(x, select(y, z, max(z, w)), max(z, u)), max(select(x, select(y, z, w), u), z)) ||
+             rewrite(select(x, select(y, max(z, w), z), max(z, u)), max(select(x, select(y, w, z), u), z)) ||
+             rewrite(select(x, max(z, u), select(y, z, max(z, w))), max(select(x, u, select(y, z, w)), z)) ||
+             rewrite(select(x, max(z, u), select(y, max(z, w), z)), max(select(x, u, select(y, w, z)), z)) ||
 
              // Note that in the rules below we know y is not a
              // constant because it appears on the LHS of an

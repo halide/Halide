@@ -14,7 +14,7 @@
 #ifdef _MSC_VER
 #include <io.h>
 #else
-#include <stdlib.h>
+#include <cstdlib>
 #include <unistd.h>
 #endif
 #include <sys/stat.h>
@@ -39,6 +39,38 @@
 #include <mach-o/dyld.h>
 #endif
 
+#ifdef _WIN32
+namespace {
+
+std::string from_utf16(LPCWSTR pStr) {
+    int len = wcslen(pStr);
+
+    int mblen = WideCharToMultiByte(CP_UTF8, 0, pStr, len, nullptr, 0, nullptr, nullptr);
+    internal_assert(mblen) << "WideCharToMultiByte() failed; error " << GetLastError() << "\n";
+
+    std::string str(mblen, 0);
+
+    mblen = WideCharToMultiByte(CP_UTF8, 0, pStr, len, &str[0], (int)str.size(), nullptr, nullptr);
+    internal_assert(mblen) << "WideCharToMultiByte() failed; error " << GetLastError() << "\n";
+
+    return str;
+}
+
+std::wstring from_utf8(const std::string &str) {
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), nullptr, 0);
+    internal_assert(wlen) << "MultiByteToWideChar() failed; error " << GetLastError() << "\n";
+
+    std::wstring wstr(wlen, 0);
+
+    wlen = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), &wstr[0], (int)wstr.size());
+    internal_assert(wlen) << "MultiByteToWideChar() failed; error " << GetLastError() << "\n";
+
+    return wstr;
+}
+
+}  // namespace
+#endif
+
 namespace Halide {
 namespace Internal {
 
@@ -54,7 +86,7 @@ std::string get_env_variable(char const *env_var_name) {
 #ifdef _MSC_VER
     // call getenv_s without a buffer to determine the correct string length:
     size_t length = 0;
-    if ((getenv_s(&length, NULL, 0, env_var_name) != 0) || (length == 0)) {
+    if ((getenv_s(&length, nullptr, 0, env_var_name) != 0) || (length == 0)) {
         return "";
     }
     // call it again to retrieve the value of the environment variable;
@@ -67,10 +99,11 @@ std::string get_env_variable(char const *env_var_name) {
     return lvl;
 #else
     char *lvl = getenv(env_var_name);
-    if (lvl) return std::string(lvl);
-#endif
-
+    if (lvl) {
+        return std::string(lvl);
+    }
     return "";
+#endif
 }
 
 string running_program_name() {
@@ -90,7 +123,7 @@ string running_program_name() {
         path[len] = '\0';
 #endif
         string tmp = std::string(path);
-        program_name = tmp.substr(tmp.find_last_of("/") + 1);
+        program_name = tmp.substr(tmp.find_last_of('/') + 1);
     } else {
         return "";
     }
@@ -128,7 +161,9 @@ int unique_count(size_t h) {
 // construction.
 
 string unique_name(char prefix) {
-    if (prefix == '$') prefix = '_';
+    if (prefix == '$') {
+        prefix = '_';
+    }
     return prefix + std::to_string(unique_count((size_t)(prefix)));
 }
 
@@ -178,18 +213,26 @@ string unique_name(const std::string &prefix) {
 }
 
 bool starts_with(const string &str, const string &prefix) {
-    if (str.size() < prefix.size()) return false;
+    if (str.size() < prefix.size()) {
+        return false;
+    }
     for (size_t i = 0; i < prefix.size(); i++) {
-        if (str[i] != prefix[i]) return false;
+        if (str[i] != prefix[i]) {
+            return false;
+        }
     }
     return true;
 }
 
 bool ends_with(const string &str, const string &suffix) {
-    if (str.size() < suffix.size()) return false;
+    if (str.size() < suffix.size()) {
+        return false;
+    }
     size_t off = str.size() - suffix.size();
     for (size_t i = 0; i < suffix.size(); i++) {
-        if (str[off + i] != suffix[i]) return false;
+        if (str[off + i] != suffix[i]) {
+            return false;
+        }
     }
     return true;
 }
@@ -244,6 +287,11 @@ std::string extract_namespaces(const std::string &name, std::vector<std::string>
     return result;
 }
 
+std::string extract_namespaces(const std::string &name) {
+    std::vector<std::string> unused;
+    return extract_namespaces(name, unused);
+}
+
 bool file_exists(const std::string &name) {
 #ifdef _MSC_VER
     return _access(name.c_str(), 0) == 0;
@@ -277,8 +325,9 @@ void ensure_no_file_exists(const std::string &name) {
 
 void dir_rmdir(const std::string &name) {
 #ifdef _MSC_VER
-    BOOL r = RemoveDirectoryA(name.c_str());
-    internal_assert(r != 0) << "Unable to remove dir: " << name << ":" << GetLastError() << "\n";
+    std::wstring wname = from_utf8(name);
+    internal_assert(RemoveDirectoryW(wname.c_str()))
+        << "RemoveDirectoryW() failed to remove " << name << "; error " << GetLastError() << "\n";
 #else
     int r = ::rmdir(name.c_str());
     internal_assert(r == 0) << "Unable to remove dir: " << name << "\n";
@@ -322,10 +371,14 @@ std::string get_windows_tmp_dir() {
     if (!tmp_dir.empty()) {
         return tmp_dir;
     }
-    char local_app_data_path[MAX_PATH];
-    DWORD ret = SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, local_app_data_path);
-    internal_assert(ret == 0) << "Unable to get Local AppData folder.";
-    std::string tmp = local_app_data_path;
+
+    PWSTR wlocal_path;
+    HRESULT ret = SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &wlocal_path);
+    internal_assert(ret == S_OK) << "Unable to get Local AppData folder; error " << GetLastError() << "\n";
+
+    std::string tmp = from_utf16(wlocal_path);
+    CoTaskMemFree(wlocal_path);
+
     tmp = replace_all(tmp, "\\", "/");
     if (tmp.back() != '/') tmp += '/';
     tmp += "Temp/";
@@ -336,19 +389,22 @@ std::string get_windows_tmp_dir() {
 #endif
 
 std::string file_make_temp(const std::string &prefix, const std::string &suffix) {
-    internal_assert(prefix.find("/") == string::npos &&
-                    prefix.find("\\") == string::npos &&
-                    suffix.find("/") == string::npos &&
-                    suffix.find("\\") == string::npos);
+    internal_assert(prefix.find('/') == string::npos &&
+                    prefix.find('\\') == string::npos &&
+                    suffix.find('/') == string::npos &&
+                    suffix.find('\\') == string::npos);
 #ifdef _WIN32
     // Windows implementations of mkstemp() try to create the file in the root
-    // directory, which is... problematic.
-    std::string tmp_dir = get_windows_tmp_dir();
-    char tmp_file[MAX_PATH];
-    // Note that GetTempFileNameA() actually creates the file.
-    DWORD ret = GetTempFileNameA(tmp_dir.c_str(), prefix.c_str(), 0, tmp_file);
-    internal_assert(ret != 0);
-    return std::string(tmp_file);
+    // directory Unfortunately, that requires ADMIN privileges, which are not
+    // guaranteed here.
+    std::wstring tmp_dir = from_utf8(get_windows_tmp_dir());
+    std::wstring wprefix = from_utf8(prefix);
+
+    WCHAR tmp_file[MAX_PATH];
+    // Note that GetTempFileNameW() actually creates the file.
+    DWORD ret = GetTempFileNameW(tmp_dir.c_str(), wprefix.c_str(), 0, tmp_file);
+    internal_assert(ret != 0) << "GetTempFileNameW() failed; error " << GetLastError() << "\n";
+    return from_utf16(tmp_file);
 #else
     std::string templ = "/tmp/" + prefix + "XXXXXX" + suffix;
     // Copy into a temporary buffer, since mkstemp modifies the buffer in place.
@@ -385,8 +441,9 @@ std::string dir_make_temp() {
             name << (int)guid.Data4[i];
         }
         std::string dir = tmp_dir + name.str();
-        BOOL result = CreateDirectoryA(dir.c_str(), nullptr);
-        if (result) {
+        std::wstring wdir = from_utf8(dir);
+        BOOL success = CreateDirectoryW(wdir.c_str(), nullptr);
+        if (success) {
             debug(1) << "temp dir is: " << dir << "\n";
             return dir;
         }
@@ -471,7 +528,7 @@ struct TickStackEntry {
     int line;
 };
 
-vector<TickStackEntry> tick_stack;
+static vector<TickStackEntry> tick_stack;
 
 void halide_tic_impl(const char *file, int line) {
     string f = file;
@@ -519,6 +576,84 @@ int get_llvm_version() {
     return LLVM_VERSION;
 }
 
+#ifdef _WIN32
+
+namespace {
+
+struct GenericFiberArgs {
+    const std::function<void()> &run;
+    LPVOID main_fiber;
+#ifdef HALIDE_WITH_EXCEPTIONS
+    std::exception_ptr exception = nullptr;  // NOLINT - clang-tidy complains this isn't thrown
+#endif
+};
+
+void WINAPI generic_fiber_entry_point(LPVOID argument) {
+    auto *action = reinterpret_cast<GenericFiberArgs *>(argument);
+#ifdef HALIDE_WITH_EXCEPTIONS
+    try {
+#endif
+        action->run();
+#ifdef HALIDE_WITH_EXCEPTIONS
+    } catch (...) {
+        action->exception = std::current_exception();
+    }
+#endif
+    SwitchToFiber(action->main_fiber);
+}
+
+}  // namespace
+
+#endif
+
+void run_with_large_stack(const std::function<void()> &action) {
+#if _WIN32
+    constexpr auto required_stack = 8 * 1024 * 1024;
+
+    // Only exists for its address, which is used to compute remaining stack space.
+    ULONG_PTR approx_stack_pos;
+
+    ULONG_PTR stack_low, stack_high;
+    GetCurrentThreadStackLimits(&stack_low, &stack_high);
+    ptrdiff_t stack_remaining = (char *)&approx_stack_pos - (char *)stack_low;
+
+    if (stack_remaining < required_stack) {
+        debug(1) << "Insufficient stack space (" << stack_remaining << " bytes). Switching to fiber with " << required_stack << "-byte stack.\n";
+
+        auto was_a_fiber = IsThreadAFiber();
+
+        auto *main_fiber = was_a_fiber ? GetCurrentFiber() : ConvertThreadToFiber(nullptr);
+        internal_assert(main_fiber) << "ConvertThreadToFiber failed with code: " << GetLastError() << "\n";
+
+        GenericFiberArgs fiber_args{action, main_fiber};
+        auto *lower_fiber = CreateFiber(required_stack, generic_fiber_entry_point, &fiber_args);
+        internal_assert(lower_fiber) << "CreateFiber failed with code: " << GetLastError() << "\n";
+
+        SwitchToFiber(lower_fiber);
+        DeleteFiber(lower_fiber);
+
+        debug(1) << "Returned from fiber.\n";
+
+#ifdef HALIDE_WITH_EXCEPTIONS
+        if (fiber_args.exception) {
+            debug(1) << "Fiber threw exception. Rethrowing...\n";
+            std::rethrow_exception(fiber_args.exception);
+        }
+#endif
+
+        if (!was_a_fiber) {
+            BOOL success = ConvertFiberToThread();
+            internal_assert(success) << "ConvertFiberToThread failed with code: " << GetLastError() << "\n";
+        }
+
+        return;
+    }
+
+#endif
+
+    action();
+}
+
 }  // namespace Internal
 
 void load_plugin(const std::string &lib_name) {
@@ -528,28 +663,23 @@ void load_plugin(const std::string &lib_name) {
         lib_path += ".dll";
     }
 
-    int wide_len = MultiByteToWideChar(CP_UTF8, 0, lib_path.c_str(), -1, nullptr, 0);
-    if (wide_len < 1) {
-        user_error << "Failed to load: " << lib_path << " (unconvertible character)\n";
-    }
+    std::wstring wide_lib = from_utf8(lib_path);
+    HMODULE library = LoadLibraryW(wide_lib.c_str());
+    if (!library) {
+        DWORD error = GetLastError();
+        LPWSTR message = nullptr;
+        FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                       nullptr, error, 0, reinterpret_cast<LPWSTR>(&message), 0, nullptr);
 
-    std::vector<wchar_t> wide_lib(wide_len);
-    wide_len = MultiByteToWideChar(CP_UTF8, 0, lib_path.c_str(), -1, wide_lib.data(), wide_len);
-    if (wide_len < 1) {
-        user_error << "Failed to load: " << lib_path << " (unconvertible character)\n";
-    }
+        user_assert(message)
+            << "Failed to load: " << lib_path << ".\n"
+            << "FormatMessage failed while processing error in LoadLibraryW (errno "
+            << error << ").\n";
 
-    if (!LoadLibraryW(wide_lib.data())) {
-        DWORD last_err = GetLastError();
-        LPVOID last_err_msg;
-        FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
-                           FORMAT_MESSAGE_IGNORE_INSERTS,
-                       nullptr, last_err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                       reinterpret_cast<LPSTR>(&last_err_msg), 0, nullptr);
-        std::string err_msg(static_cast<char *>(last_err_msg));
-        LocalFree(last_err_msg);
+        std::string err_msg = from_utf16(message);
+        LocalFree(message);
         user_error << "Failed to load: " << lib_path << ";\n"
-                   << "LoadLibraryW failed with error " << last_err << ": "
+                   << "LoadLibraryW failed with error " << error << ": "
                    << err_msg << "\n";
     }
 #else

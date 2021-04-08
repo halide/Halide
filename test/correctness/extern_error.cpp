@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     Func f;
     f.define_extern("extern_error", args, Float(32), 1);
     f.set_error_handler(&my_halide_error);
-    f.realize(100);
+    f.realize({100});
 
     if (!error_occurred || !extern_error_called) {
         printf("There was supposed to be an error\n");

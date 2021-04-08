@@ -121,7 +121,7 @@ public:
         }
         template<typename T, typename... Args,
                  typename = typename std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>::type>
-        RealizationArg(Buffer<T> &a, Args &&... args) {
+        RealizationArg(Buffer<T> &a, Args &&...args) {
             buffer_list.reset(new std::vector<Buffer<>>({a, args...}));
         }
         RealizationArg(RealizationArg &&from) = default;
@@ -148,9 +148,6 @@ private:
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
 
-    static void auto_schedule_Mullapudi2016(const Pipeline &pipeline, const Target &target,
-                                            const MachineParams &arch_params, AutoSchedulerResults *outputs);
-
     static std::map<std::string, AutoSchedulerFn> &get_autoscheduler_map();
 
     static std::string &get_default_autoscheduler_name();
@@ -158,6 +155,10 @@ private:
     static AutoSchedulerFn find_autoscheduler(const std::string &autoscheduler_name);
 
     int call_jit_code(const Target &target, const JITCallArgs &args);
+
+    // Get the value of contents->jit_target, but reality-check that the contents
+    // sensibly match the value. Return Target() if not jitted.
+    Target get_compiled_jit_target() const;
 
 public:
     /** Make an undefined Pipeline object. */
@@ -312,12 +313,30 @@ public:
                                                const std::vector<Argument> &args,
                                                const std::vector<Target> &targets);
 
+    /** Like compile_to_multitarget_static_library(), except that the object files
+     * are all output as object files (rather than bundled into a static library).
+     *
+     * `suffixes` is an optional list of strings to use for as the suffix for each object
+     * file. If nonempty, it must be the same length as `targets`. (If empty, Target::to_string()
+     * will be used for each suffix.)
+     *
+     * Note that if `targets.size()` > 1, the wrapper code (to select the subtarget)
+     * will be generated with the filename `${filename_prefix}_wrapper.o`
+     *
+     * Note that if `targets.size()` > 1 and `no_runtime` is not specified, the runtime
+     * will be generated with the filename `${filename_prefix}_runtime.o`
+     */
+    void compile_to_multitarget_object_files(const std::string &filename_prefix,
+                                             const std::vector<Argument> &args,
+                                             const std::vector<Target> &targets,
+                                             const std::vector<std::string> &suffixes);
+
     /** Create an internal representation of lowered code as a self
      * contained Module suitable for further compilation. */
     Module compile_to_module(const std::vector<Argument> &args,
                              const std::string &fn_name,
                              const Target &target = get_target_from_environment(),
-                             const LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
+                             LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
 
     /** Eagerly jit compile the function to machine code. This
      * normally happens on the first call to realize. If you're
@@ -466,18 +485,26 @@ public:
 
     /** See Func::realize */
     // @{
-    Realization realize(std::vector<int32_t> sizes, const Target &target = Target(),
+    Realization realize(std::vector<int32_t> sizes = {}, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
     Realization realize(int x_size, int y_size, int z_size, int w_size, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
     Realization realize(int x_size, int y_size, int z_size, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
     Realization realize(int x_size, int y_size, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
-    Realization realize(int x_size, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
-    Realization realize(const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
+
+    // Making this a template function is a trick: `{intliteral}` is a valid scalar initializer
+    // in C++, but we want it to match the vector call, not the (deprecated) scalar one.
+    template<typename T, typename = typename std::enable_if<std::is_same<T, int>::value>::type>
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
+    HALIDE_ALWAYS_INLINE Realization realize(T x_size, const Target &target = Target(),
+                                             const ParamMap &param_map = ParamMap::empty_map()) {
+        return realize(std::vector<int32_t>{x_size}, target, param_map);
+    }
     // @}
 
     /** Evaluate this Pipeline into an existing allocated buffer or
@@ -498,9 +525,11 @@ public:
      * of the appropriate size and binding them to the unbound
      * ImageParams. */
     // @{
-    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
+    void infer_input_bounds(const std::vector<int32_t> &sizes,
+                            const Target &target = get_jit_target_from_environment(),
                             const ParamMap &param_map = ParamMap::empty_map());
     void infer_input_bounds(RealizationArg output,
+                            const Target &target = get_jit_target_from_environment(),
                             const ParamMap &param_map = ParamMap::empty_map());
     // @}
 
@@ -535,7 +564,7 @@ public:
     void trace_pipeline();
 
     template<typename... Args>
-    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&... args) {
+    inline HALIDE_NO_USER_CODE_INLINE void add_requirement(const Expr &condition, Args &&...args) {
         std::vector<Expr> collected_args;
         Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
         add_requirement(condition, collected_args);
@@ -590,7 +619,9 @@ public:
         stream << " (*)(";
         bool comma = false;
         for (const auto &t : sig.arg_types_) {
-            if (comma) stream << ", ";
+            if (comma) {
+                stream << ", ";
+            }
             stream << t;
             comma = true;
         }

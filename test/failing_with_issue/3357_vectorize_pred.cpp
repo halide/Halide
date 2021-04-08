@@ -60,8 +60,8 @@ bool test(int vec_width) {
     g(r.x, r.y) = e;
     f.update(0).vectorize(r.x);
 
-    Buffer<A> outputg = g.realize(W, H);
-    Buffer<A> outputf = f.realize(W, H);
+    Buffer<A> outputg = g.realize({W, H});
+    Buffer<A> outputf = f.realize({W, H});
 
     double t_g = benchmark([&]() {
         g.realize(outputg);

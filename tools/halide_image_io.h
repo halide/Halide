@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdarg>
 #include <cstddef>
 #include <cstdio>
@@ -171,11 +172,11 @@ inline uint8_t convert(const int64_t &in) {
 }
 template<>
 inline uint8_t convert(const float &in) {
-    return (uint8_t)(in * 255.0f + 0.5f);
+    return (uint8_t)std::lround(in * 255.0f);
 }
 template<>
 inline uint8_t convert(const double &in) {
-    return (uint8_t)(in * 255.0 + 0.5);
+    return (uint8_t)std::lround(in * 255.0);
 }
 
 // Convert to u16
@@ -217,11 +218,11 @@ inline uint16_t convert(const int64_t &in) {
 }
 template<>
 inline uint16_t convert(const float &in) {
-    return (uint16_t)(in * 65535.0f + 0.5f);
+    return (uint16_t)std::lround(in * 65535.0f);
 }
 template<>
 inline uint16_t convert(const double &in) {
-    return (uint16_t)(in * 65535.0 + 0.5);
+    return (uint16_t)std::lround(in * 65535.0);
 }
 
 // Convert to u32
@@ -263,11 +264,11 @@ inline uint32_t convert(const int64_t &in) {
 }
 template<>
 inline uint32_t convert(const float &in) {
-    return (uint32_t)(in * 4294967295.0 + 0.5);
+    return (uint32_t)std::llround(in * 4294967295.0);
 }
 template<>
 inline uint32_t convert(const double &in) {
-    return (uint32_t)(in * 4294967295.0 + 0.5f);
+    return (uint32_t)std::llround(in * 4294967295.0);
 }
 
 // Convert to u64
@@ -309,11 +310,11 @@ inline uint64_t convert(const int64_t &in) {
 }
 template<>
 inline uint64_t convert(const float &in) {
-    return convert<uint64_t, uint32_t>((uint32_t)(in * 4294967295.0 + 0.5));
+    return convert<uint64_t, uint32_t>((uint32_t)std::llround(in * 4294967295.0));
 }
 template<>
 inline uint64_t convert(const double &in) {
-    return convert<uint64_t, uint32_t>((uint32_t)(in * 4294967295.0 + 0.5));
+    return convert<uint64_t, uint32_t>((uint32_t)std::llround(in * 4294967295.0));
 }
 
 // Convert to i8
@@ -766,7 +767,7 @@ bool load_png(const std::string &filename, ImageType *im) {
     }
 
     /* initialize stuff */
-    png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
     if (!check(png_ptr != nullptr, "png_create_read_struct failed")) {
         return false;
     }
@@ -812,7 +813,7 @@ bool load_png(const std::string &filename, ImageType *im) {
         copy_to_image(row.data(), y, im);
     }
 
-    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+    png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 
     return true;
 }
@@ -856,7 +857,7 @@ bool save_png(ImageType &im, const std::string &filename) {
     }
 
     // initialize stuff
-    png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
     if (!check(png_ptr != nullptr, "[write_png_file] png_create_write_struct failed")) {
         return false;
     }
@@ -892,7 +893,7 @@ bool save_png(ImageType &im, const std::string &filename) {
         copy_from_image(im, y, row.data());
         png_write_row(png_ptr, row.data());
     }
-    png_write_end(png_ptr, NULL);
+    png_write_end(png_ptr, nullptr);
     png_destroy_write_struct(&png_ptr, &info_ptr);
 
     return true;
@@ -1280,7 +1281,7 @@ bool save_tmp(ImageType &im, const std::string &filename) {
     for (int i = 0; i < im.dimensions(); ++i) {
         header[i] = im.dim(i).extent();
     }
-    auto *table = tmp_code_to_halide_type();
+    const auto *table = tmp_code_to_halide_type();
     for (int i = 0; i < kNumTmpCodes; i++) {
         if (im.type() == table[i]) {
             header[4] = i;
@@ -1588,8 +1589,9 @@ bool save_mat(ImageType &im, const std::string &filename) {
     }
 
     uint32_t name_size = (int)name.size();
-    while (name.size() & 0x7)
+    while (name.size() & 0x7) {
         name += '\0';
+    }
 
     char header[128] = "MATLAB 5.0 MAT-file, produced by Halide";
     int len = strlen(header);
@@ -1763,7 +1765,9 @@ struct ElemWriter {
     }
 
     void operator()(const ElemType &elem) {
-        if (!ok) return;
+        if (!ok) {
+            return;
+        }
 
         *next++ = elem;
         if (next == &buf[BUFFER_SIZE]) {
@@ -1772,7 +1776,9 @@ struct ElemWriter {
     }
 
     void flush() {
-        if (!ok) return;
+        if (!ok) {
+            return;
+        }
 
         if (next > buf) {
             if (!f->write_bytes(buf, (next - buf) * sizeof(ElemType))) {
@@ -2012,7 +2018,7 @@ FormatInfo best_save_format(const ImageType &im, const std::set<FormatInfo> &inf
     FormatInfo best{};
     const halide_type_t im_type = im.type();
     const int im_dimensions = im.dimensions();
-    for (auto &f : info) {
+    for (const auto &f : info) {
         int score = 0;
         // If format has too-few dimensions, that's very bad.
         score += std::max(0, im_dimensions - f.dimensions) * 1024;
@@ -2061,7 +2067,6 @@ struct ImageTypeConversion {
         const auto converter = [](DstElemType &dst_elem, SrcElemType src_elem) {
             dst_elem = Internal::convert<DstElemType>(src_elem);
         };
-        // TODO: do we need src.copy_to_host() here?
         dst.for_each_value(converter, src);
         dst.set_host_dirty();
 
@@ -2343,6 +2348,9 @@ void save_image(ImageType &im, const std::string &filename) {
 // (Note that the input image is unaffected!)
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckFail>
 void convert_and_save_image(ImageType &im, const std::string &filename) {
+    // We'll be doing any conversion on the CPU
+    im.copy_to_host();
+
     std::set<FormatInfo> info;
     (void)save_query<ImageType, check>(filename, &info);
     const FormatInfo best = Internal::best_save_format(im, info);

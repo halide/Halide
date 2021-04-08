@@ -31,7 +31,7 @@ static void test_abs() {
     Node converted = convert_node(abs_node, node_inputs);
 
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<float> output = converted.outputs[0].rep.realize(200);
+    Halide::Buffer<float> output = converted.outputs[0].rep.realize({200});
     for (int i = 0; i < 200; ++i) {
         EXPECT_EQ(output(i), std::abs(input(i)));
     }
@@ -57,7 +57,7 @@ static void test_activation_function() {
     Node converted = convert_node(relu_node, node_inputs);
 
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<float> output = converted.outputs[0].rep.realize(200);
+    Halide::Buffer<float> output = converted.outputs[0].rep.realize({200});
     for (int i = 0; i < 200; ++i) {
         EXPECT_EQ(output(i), std::max(input(i), 0.0f));
     }
@@ -86,7 +86,7 @@ static void test_cast() {
     Node converted = convert_node(cast_node, node_inputs);
 
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<float> output = converted.outputs[0].rep.realize(200);
+    Halide::Buffer<float> output = converted.outputs[0].rep.realize({200});
     for (int i = 0; i < 200; ++i) {
         EXPECT_EQ(output(i), static_cast<float>(input(i)));
     }
@@ -118,7 +118,7 @@ static void test_add() {
     Node converted = convert_node(add_node, node_inputs);
 
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<float> output = converted.outputs[0].rep.realize(200);
+    Halide::Buffer<float> output = converted.outputs[0].rep.realize({200});
     for (int i = 0; i < 200; ++i) {
         EXPECT_NEAR(output(i), in1(i) + in2(i), 1e-6);
     }
@@ -187,7 +187,7 @@ static void test_gemm() {
     Node converted = convert_node(add_node, node_inputs);
 
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<float> output = converted.outputs[0].rep.realize(32, 64);
+    Halide::Buffer<float> output = converted.outputs[0].rep.realize({32, 64});
 
     for (int i = 0; i < 32; ++i) {
         for (int j = 0; j < 64; ++j) {
@@ -288,7 +288,7 @@ static void test_sum() {
     Node converted = convert_node(sum_node, node_inputs);
 
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<float> output = converted.outputs[0].rep.realize(1, 3, 1, 11);
+    Halide::Buffer<float> output = converted.outputs[0].rep.realize({1, 3, 1, 11});
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 11; ++j) {
             float expected = 0.0f;
@@ -332,7 +332,7 @@ static void test_where_broadcast() {
 
     Node converted = convert_node(where_node, node_inputs);
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<float> output = converted.outputs[0].rep.realize(2, 2, 2);
+    Halide::Buffer<float> output = converted.outputs[0].rep.realize({2, 2, 2});
 
     for (int i = 0; i < 2; ++i) {
         for (int j = 0; j < 2; ++j) {
@@ -376,7 +376,7 @@ static void test_concat() {
     Node converted = convert_node(concat_node, node_inputs);
 
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<float> output = converted.outputs[0].rep.realize(7 + 5, 3);
+    Halide::Buffer<float> output = converted.outputs[0].rep.realize({7 + 5, 3});
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 7; ++j) {
             EXPECT_EQ(in1(j, i), output(j, i));
@@ -406,7 +406,7 @@ static void test_constant_fill() {
 
     Node converted = convert_node(concat_node, {});
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<uint16_t> output = converted.outputs[0].rep.realize(3, 4);
+    Halide::Buffer<uint16_t> output = converted.outputs[0].rep.realize({3, 4});
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 4; ++j) {
             EXPECT_EQ(2u, output(i, j));
@@ -493,7 +493,7 @@ static void test_model() {
     EXPECT_EQ(21, output_size());
 
     Tensor shape = converted.outputs.at("output_shape");
-    Halide::Buffer<int64_t> output_shape = shape.rep.realize(2);
+    Halide::Buffer<int64_t> output_shape = shape.rep.realize({2});
     EXPECT_EQ(3, output_shape(0));
     EXPECT_EQ(7, output_shape(1));
 }

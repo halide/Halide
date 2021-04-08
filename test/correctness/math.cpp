@@ -134,10 +134,10 @@ struct TestArgs {
         test_##name(x) = name(in(x));                                                        \
         if (target.has_gpu_feature()) {                                                      \
             test_##name.gpu_tile(x, xi, 8);                                                  \
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {              \
+        } else if (target.has_feature(Target::HVX)) {                                        \
             test_##name.hexagon();                                                           \
         }                                                                                    \
-        Buffer<type_ret> result = test_##name.realize(in.extent(0), target);                 \
+        Buffer<type_ret> result = test_##name.realize({in.extent(0)}, target);               \
         for (int i = 0; i < in.extent(0); i++) {                                             \
             type_ret c_result = c_name(in(i));                                               \
             if (!relatively_equal(c_result, result(i), target)) {                            \
@@ -161,10 +161,10 @@ struct TestArgs {
         test_##name(x) = name(in(0, x), in(1, x));                                                  \
         if (target.has_gpu_feature()) {                                                             \
             test_##name.gpu_tile(x, xi, 8);                                                         \
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {                     \
+        } else if (target.has_feature(Target::HVX)) {                                               \
             test_##name.hexagon();                                                                  \
         }                                                                                           \
-        Buffer<type_ret> result = test_##name.realize(in.height(), target);                         \
+        Buffer<type_ret> result = test_##name.realize({in.height()}, target);                       \
         for (int i = 0; i < in.height(); i++) {                                                     \
             type_ret c_result = c_name(in(0, i), in(1, i));                                         \
             if (!relatively_equal(c_result, result(i), target)) {                                   \

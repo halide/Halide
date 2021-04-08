@@ -1,5 +1,7 @@
 #include "PyPipeline.h"
 
+#include <utility>
+
 #include "PyTuple.h"
 
 namespace Halide {
@@ -83,7 +85,9 @@ void define_pipeline(py::module &m) {
                  py::arg("filename"), py::arg("arguments"), py::arg("format") = StmtOutputFormat::Text, py::arg("target") = get_target_from_environment())
 
             .def("compile_to_multitarget_static_library", &Pipeline::compile_to_multitarget_static_library,
-                 py::arg("filename_prefix"), py::arg("arguments"), py::arg("targets") = get_target_from_environment())
+                 py::arg("filename_prefix"), py::arg("arguments"), py::arg("targets"))
+            .def("compile_to_multitarget_object_files", &Pipeline::compile_to_multitarget_object_files,
+                 py::arg("filename_prefix"), py::arg("arguments"), py::arg("targets"), py::arg("suffixes"))
 
             .def("compile_to_module", &Pipeline::compile_to_module,
                  py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment(), py::arg("linkage") = LinkageType::ExternalPlusMetadata)
@@ -105,54 +109,76 @@ void define_pipeline(py::module &m) {
 
             .def(
                 "realize", [](Pipeline &p, std::vector<int32_t> sizes, const Target &target) -> py::object {
-                    return realization_to_object(p.realize(sizes, target));
+                    return realization_to_object(p.realize(std::move(sizes), target));
                 },
                 py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target())
 
-            // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
                 "realize", [](Pipeline &p, int x_size, const Target &target) -> py::object {
-                    return realization_to_object(p.realize(x_size, target));
+                    PyErr_WarnEx(PyExc_DeprecationWarning,
+                                 "Call realize() with an explicit list of ints instead.",
+                                 1);
+                    return realization_to_object(p.realize(std::vector<int32_t>{x_size}, target));
                 },
                 py::arg("x_size"), py::arg("target") = Target())
 
-            // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
                 "realize", [](Pipeline &p, int x_size, int y_size, const Target &target) -> py::object {
-                    return realization_to_object(p.realize(x_size, y_size, target));
+                    PyErr_WarnEx(PyExc_DeprecationWarning,
+                                 "Call realize() with an explicit list of ints instead.",
+                                 1);
+                    return realization_to_object(p.realize({x_size, y_size}, target));
                 },
                 py::arg("x_size"), py::arg("y_size"), py::arg("target") = Target())
 
-            // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
                 "realize", [](Pipeline &p, int x_size, int y_size, int z_size, const Target &target) -> py::object {
-                    return realization_to_object(p.realize(x_size, y_size, z_size, target));
+                    PyErr_WarnEx(PyExc_DeprecationWarning,
+                                 "Call realize() with an explicit list of ints instead.",
+                                 1);
+                    return realization_to_object(p.realize({x_size, y_size, z_size}, target));
                 },
                 py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("target") = Target())
 
-            // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
                 "realize", [](Pipeline &p, int x_size, int y_size, int z_size, int w_size, const Target &target) -> py::object {
-                    return realization_to_object(p.realize(x_size, y_size, z_size, w_size, target));
+                    PyErr_WarnEx(PyExc_DeprecationWarning,
+                                 "Call realize() with an explicit list of ints instead.",
+                                 1);
+                    return realization_to_object(p.realize({x_size, y_size, z_size, w_size}, target));
                 },
                 py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("w_size"), py::arg("target") = Target())
 
             .def(
-                "infer_input_bounds", [](Pipeline &p, int x_size, int y_size, int z_size, int w_size) -> void {
-                    p.infer_input_bounds(x_size, y_size, z_size, w_size);
-                },
-                py::arg("x_size") = 0, py::arg("y_size") = 0, py::arg("z_size") = 0, py::arg("w_size") = 0)
+                "infer_input_bounds", [](Pipeline &p, const py::object &dst, const Target &target) -> void {
+                    // dst could be Buffer<>, vector<Buffer>, or vector<int>
+                    try {
+                        Buffer<> b = dst.cast<Buffer<>>();
+                        p.infer_input_bounds(b, target);
+                        return;
+                    } catch (...) {
+                        // fall thru
+                    }
 
-            .def(
-                "infer_input_bounds", [](Pipeline &p, Buffer<> buffer) -> void {
-                    p.infer_input_bounds(Realization(buffer));
+                    try {
+                        std::vector<Buffer<>> v = dst.cast<std::vector<Buffer<>>>();
+                        p.infer_input_bounds(Realization(v), target);
+                        return;
+                    } catch (...) {
+                        // fall thru
+                    }
+
+                    try {
+                        std::vector<int32_t> v = dst.cast<std::vector<int32_t>>();
+                        p.infer_input_bounds(v, target);
+                        return;
+                    } catch (...) {
+                        // fall thru
+                    }
+
+                    throw py::value_error("Invalid arguments to infer_input_bounds");
                 },
-                py::arg("dst"))
-            .def(
-                "infer_input_bounds", [](Pipeline &p, std::vector<Buffer<>> buffers) -> void {
-                    p.infer_input_bounds(Realization(buffers));
-                },
-                py::arg("dst"))
+                py::arg("dst"), py::arg("target") = get_jit_target_from_environment())
 
             .def("infer_arguments", [](Pipeline &p) -> std::vector<Argument> {
                 return p.infer_arguments();

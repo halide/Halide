@@ -36,6 +36,14 @@ public:
     Output<Buffer<>> untyped_buffer_output{"untyped_buffer_output"};
     Output<Buffer<uint8_t>> static_compiled_buffer_output{"static_compiled_buffer_output", 3};
 
+    void configure() {
+        // Pointers returned by add_input() are managed by the Generator;
+        // user code must not free them. We can stash them in member variables
+        // as-is or in containers, like so:
+        extra_func_input = add_input<Func>("extra_func_input", UInt(16), 3);
+        extra_func_output = add_output<Func>("extra_func_output", Float(64), 2);
+    }
+
     void generate() {
         simple_output(x, y, c) = cast<float>(simple_input(x, y, c));
         typed_buffer_output(x, y, c) = cast<float>(typed_buffer_input(x, y, c));
@@ -62,6 +70,8 @@ public:
         // and not produce another input for the Stub or AOT filter.
         Buffer<uint8_t> static_compiled_buffer = make_image<uint8_t>(42);
         static_compiled_buffer_output = static_compiled_buffer;
+
+        (*extra_func_output)(x, y) = cast<double>((*extra_func_input)(x, y, 0) + 1);
     }
 
     void schedule() {
@@ -73,6 +83,9 @@ private:
     Var x{"x"}, y{"y"}, c{"c"};
 
     Func intermediate{"intermediate"};
+
+    Input<Func> *extra_func_input;
+    Output<Func> *extra_func_output;
 };
 
 }  // namespace

@@ -29,7 +29,7 @@ def main():
 
     # Previously we've realized gradient like so:
     #
-    # gradient.realize(8, 8)
+    # gradient.realize([8, 8])
     #
     # This does three things internally:
     # 1) Generates code than can evaluate gradient over an arbitrary

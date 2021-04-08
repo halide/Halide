@@ -4,9 +4,16 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] Mullapudi2016 autoscheduler does not support WebAssembly.\n");
+        printf("[SKIP] Autoschedulers do not support WebAssembly.\n");
         return 0;
     }
+
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <autoscheduler-lib>\n", argv[0]);
+        return 1;
+    }
+
+    load_plugin(argv[1]);
 
     int W = 6400;
     int H = 4800;
@@ -52,7 +59,7 @@ int main(int argc, char **argv) {
     stencils[num_stencils - 1].print_loop_nest();
 
     // Run the schedule
-    p.realize(6204, 4604);
+    p.realize({6204, 4604});
 
     printf("Success!\n");
     return 0;

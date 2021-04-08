@@ -14,12 +14,6 @@ tests(GROUPS correctness
       atomic_tuples.cpp
       atomics.cpp
       autodiff.cpp
-      autoschedule_small_pure_update.cpp
-      autotune_bug.cpp
-      autotune_bug_2.cpp
-      autotune_bug_3.cpp
-      autotune_bug_4.cpp
-      autotune_bug_5.cpp
       bad_likely.cpp
       bit_counting.cpp
       bitwise_ops.cpp
@@ -79,6 +73,7 @@ tests(GROUPS correctness
       deferred_loop_level.cpp
       deinterleave4.cpp
       device_buffer_copy.cpp
+      device_copy_at_inner_loop.cpp
       device_crop.cpp
       device_slice.cpp
       dilate3x3.cpp
@@ -124,6 +119,7 @@ tests(GROUPS correctness
       gameoflife.cpp
       gather.cpp
       gpu_allocation_cache.cpp
+      gpu_arg_types.cpp
       gpu_assertion_in_kernel.cpp
       gpu_bounds_inference_failure.cpp
       gpu_condition_lifting.cpp
@@ -135,10 +131,12 @@ tests(GROUPS correctness
       gpu_give_input_buffers_device_allocations.cpp
       gpu_jit_explicit_copy_to_device.cpp
       gpu_large_alloc.cpp
+      gpu_many_kernels.cpp
       gpu_mixed_dimensionality.cpp
       gpu_mixed_shared_mem_types.cpp
       gpu_multi_kernel.cpp
       gpu_non_contiguous_copy.cpp
+      gpu_non_monotonic_shared_mem_size.cpp
       gpu_object_lifetime_1.cpp
       gpu_object_lifetime_2.cpp
       gpu_object_lifetime_3.cpp
@@ -147,6 +145,7 @@ tests(GROUPS correctness
       gpu_specialize.cpp
       gpu_store_in_register_with_no_lanes_loop.cpp
       gpu_sum_scan.cpp
+      gpu_texture.cpp
       gpu_thread_barrier.cpp
       gpu_transpose.cpp
       gpu_vectorized_shared_memory.cpp
@@ -175,7 +174,9 @@ tests(GROUPS correctness
       interleave.cpp
       interleave_rgb.cpp
       interleave_x.cpp
+      interpreter.cpp
       interval.cpp
+      intrinsics.cpp
       introspection.cpp
       inverse.cpp
       isnan.cpp
@@ -193,6 +194,7 @@ tests(GROUPS correctness
       logical.cpp
       loop_invariant_extern_calls.cpp
       loop_level_generator_param.cpp
+      lossless_cast.cpp
       lots_of_dimensions.cpp
       lots_of_loop_invariants.cpp
       make_struct.cpp
@@ -213,6 +215,7 @@ tests(GROUPS correctness
       multipass_constraints.cpp
       multiple_outputs.cpp
       multiple_outputs_extern.cpp
+      multiple_scatter.cpp
       mux.cpp
       named_updates.cpp
       nested_shiftinwards.cpp
@@ -240,6 +243,7 @@ tests(GROUPS correctness
       partial_realization.cpp
       partition_loops.cpp
       partition_loops_bug.cpp
+      partition_max_filter.cpp
       pipeline_set_jit_externs_func.cpp
       plain_c_includes.c
       popc_clz_ctz_bounds.cpp
@@ -332,6 +336,7 @@ tests(GROUPS correctness
       vector_tile.cpp
       vectorize_guard_with_if.cpp
       vectorize_mixed_widths.cpp
+      vectorize_nested.cpp
       vectorize_varying_allocation_size.cpp
       vectorized_gpu_allocation.cpp
       vectorized_initialization.cpp
@@ -344,44 +349,43 @@ tests(GROUPS correctness
 target_link_libraries(correctness_image_io PRIVATE Halide::ImageIO)
 
 # Tests which use external funcs need to enable exports.
-foreach (TEST IN ITEMS
-         correctness_async
-         correctness_atomics
-         correctness_c_function
-         correctness_compute_at_split_rvar
-         correctness_concat
-         correctness_custom_lowering_pass
-         correctness_extern_bounds_inference
-         correctness_extern_consumer
-         correctness_extern_consumer_tiled
-         correctness_extern_error
-         correctness_extern_output_expansion
-         correctness_extern_partial
-         correctness_extern_producer
-         correctness_extern_reorder_storage
-         correctness_extern_sort
-         correctness_extern_stage
-         correctness_extern_stage_on_device
-         correctness_handle
-         correctness_image_of_lists
-         correctness_lazy_convolution
-         correctness_loop_invariant_extern_calls
-         correctness_make_struct
-         correctness_many_small_extern_stages
-         correctness_memoize
-         correctness_memoize_cloned
-         correctness_multiple_outputs_extern
-         correctness_non_nesting_extern_bounds_query
-         correctness_parallel_fork
-         correctness_pipeline_set_jit_externs_func
-         correctness_process_some_tiles
-         correctness_side_effects
-         correctness_skip_stages
-         correctness_skip_stages_external_array_functions
-         correctness_sliding_backwards
-         correctness_sliding_over_guard_with_if
-         correctness_sliding_reduction
-         correctness_sliding_window
-         correctness_storage_folding)
-    set_target_properties(${TEST} PROPERTIES ENABLE_EXPORTS TRUE)
-endforeach ()
+set_target_properties(correctness_async
+                      correctness_atomics
+                      correctness_c_function
+                      correctness_compute_at_split_rvar
+                      correctness_concat
+                      correctness_custom_lowering_pass
+                      correctness_extern_bounds_inference
+                      correctness_extern_consumer
+                      correctness_extern_consumer_tiled
+                      correctness_extern_error
+                      correctness_extern_output_expansion
+                      correctness_extern_partial
+                      correctness_extern_producer
+                      correctness_extern_reorder_storage
+                      correctness_extern_sort
+                      correctness_extern_stage
+                      correctness_extern_stage_on_device
+                      correctness_handle
+                      correctness_image_of_lists
+                      correctness_lazy_convolution
+                      correctness_loop_invariant_extern_calls
+                      correctness_make_struct
+                      correctness_many_small_extern_stages
+                      correctness_memoize
+                      correctness_memoize_cloned
+                      correctness_multiple_outputs_extern
+                      correctness_non_nesting_extern_bounds_query
+                      correctness_parallel_fork
+                      correctness_pipeline_set_jit_externs_func
+                      correctness_process_some_tiles
+                      correctness_side_effects
+                      correctness_skip_stages
+                      correctness_skip_stages_external_array_functions
+                      correctness_sliding_backwards
+                      correctness_sliding_over_guard_with_if
+                      correctness_sliding_reduction
+                      correctness_sliding_window
+                      correctness_storage_folding
+                      PROPERTIES ENABLE_EXPORTS TRUE)
+

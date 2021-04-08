@@ -6,7 +6,7 @@
  */
 
 #include <bitset>
-#include <stdint.h>
+#include <cstdint>
 #include <string>
 
 #include "DeviceAPI.h"
@@ -31,7 +31,7 @@ struct Target {
         NoOS,
         Fuchsia,
         WebAssemblyRuntime
-    } os;
+    } os = OSUnknown;
 
     /** The architecture used by the target. Determines the
      * instruction set to use.
@@ -45,10 +45,10 @@ struct Target {
         POWERPC,
         WebAssembly,
         RISCV
-    } arch;
+    } arch = ArchUnknown;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
-    int bits;
+    int bits = 0;
 
     /** Optional features a target can have.
      * Corresponds to feature_name_map in Target.cpp.
@@ -75,11 +75,13 @@ struct Target {
         CUDACapability35 = halide_target_feature_cuda_capability35,
         CUDACapability50 = halide_target_feature_cuda_capability50,
         CUDACapability61 = halide_target_feature_cuda_capability61,
+        CUDACapability70 = halide_target_feature_cuda_capability70,
+        CUDACapability75 = halide_target_feature_cuda_capability75,
+        CUDACapability80 = halide_target_feature_cuda_capability80,
         OpenCL = halide_target_feature_opencl,
         CLDoubles = halide_target_feature_cl_doubles,
         CLHalf = halide_target_feature_cl_half,
         CLAtomics64 = halide_target_feature_cl_atomic64,
-        OpenGL = halide_target_feature_opengl,
         OpenGLCompute = halide_target_feature_openglcompute,
         EGL = halide_target_feature_egl,
         UserContext = halide_target_feature_user_context,
@@ -90,8 +92,8 @@ struct Target {
         CPlusPlusMangling = halide_target_feature_c_plus_plus_mangling,
         LargeBuffers = halide_target_feature_large_buffers,
         HexagonDma = halide_target_feature_hexagon_dma,
-        HVX_64 = halide_target_feature_hvx_64,
         HVX_128 = halide_target_feature_hvx_128,
+        HVX = HVX_128,
         HVX_v62 = halide_target_feature_hvx_v62,
         HVX_v65 = halide_target_feature_hvx_v65,
         HVX_v66 = halide_target_feature_hvx_v66,
@@ -103,6 +105,7 @@ struct Target {
         AVX512_KNL = halide_target_feature_avx512_knl,
         AVX512_Skylake = halide_target_feature_avx512_skylake,
         AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,
+        AVX512_SapphireRapids = halide_target_feature_avx512_sapphirerapids,
         TraceLoads = halide_target_feature_trace_loads,
         TraceStores = halide_target_feature_trace_stores,
         TraceRealizations = halide_target_feature_trace_realizations,
@@ -117,14 +120,16 @@ struct Target {
         WasmSimd128 = halide_target_feature_wasm_simd128,
         WasmSignExt = halide_target_feature_wasm_signext,
         WasmSatFloatToInt = halide_target_feature_wasm_sat_float_to_int,
+        WasmThreads = halide_target_feature_wasm_threads,
+        WasmBulkMemory = halide_target_feature_wasm_bulk_memory,
         SVE = halide_target_feature_sve,
         SVE2 = halide_target_feature_sve2,
         ARMDotProd = halide_target_feature_arm_dot_prod,
+        LLVMLargeCodeModel = halide_llvm_large_code_model,
+        RVV = halide_target_feature_rvv,
         FeatureEnd = halide_target_feature_end
     };
-    Target()
-        : os(OSUnknown), arch(ArchUnknown), bits(0) {
-    }
+    Target() = default;
     Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>())
         : os(o), arch(a), bits(b) {
         for (const auto &f : initial_features) {
@@ -149,6 +154,10 @@ struct Target {
 
     /** Check if a target string is valid. */
     static bool validate_target_string(const std::string &s);
+
+    /** Return true if any of the arch/bits/os fields are "unknown"/0;
+        return false otherwise. */
+    bool has_unknowns() const;
 
     void set_feature(Feature f, bool value = true);
 
@@ -268,6 +277,11 @@ struct Target {
             return (((uint64_t)1) << 31) - 1;
         }
     }
+
+    /** Get the minimum cuda capability found as an integer. Returns
+     * 20 (our minimum supported cuda compute capability) if no cuda
+     * features are set. */
+    int get_cuda_capability_lower_bound() const;
 
     /** Was libHalide compiled with support for this target? */
     bool supported() const;

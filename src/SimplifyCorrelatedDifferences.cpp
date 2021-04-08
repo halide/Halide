@@ -16,7 +16,6 @@ namespace Halide {
 namespace Internal {
 namespace {
 
-using std::pair;
 using std::string;
 using std::vector;
 
@@ -25,7 +24,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
 
     string loop_var;
 
-    Scope<Monotonic> monotonic;
+    Scope<ConstantInterval> monotonic;
 
     struct OuterLet {
         string name;
@@ -39,11 +38,11 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         // Visit an entire chain of lets in a single method to conserve stack space.
         struct Frame {
             const LetStmtOrLet *op;
-            ScopedBinding<Monotonic> binding;
+            ScopedBinding<ConstantInterval> binding;
             Expr new_value;
-            Frame(const LetStmtOrLet *op, const string &loop_var, Scope<Monotonic> &scope)
+            Frame(const LetStmtOrLet *op, const string &loop_var, Scope<ConstantInterval> &scope)
                 : op(op),
-                  binding(scope, op->name, is_monotonic(op->value, loop_var, scope)) {
+                  binding(scope, op->name, derivative_bounds(op->value, loop_var, scope)) {
             }
             Frame(const LetStmtOrLet *op)
                 : op(op) {
@@ -60,7 +59,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
         // same name. If we decide not to add an inner let, but do add
         // the outer one, then later references to it will be
         // incorrect. Second, if we don't add something that happens
-        // to be non-monotonic, then is_monotonic finds a variable
+        // to be non-monotonic, then derivative_bounds finds a variable
         // that references it in a later let, it will think it's a
         // constant, not an unknown.
         do {
@@ -119,7 +118,7 @@ class SimplifyCorrelatedDifferences : public IRMutator {
             tmp_lets.swap(lets);
             loop_var = op->name;
             {
-                ScopedBinding<Monotonic> bind(monotonic, loop_var, Monotonic::Increasing);
+                ScopedBinding<ConstantInterval> bind(monotonic, loop_var, ConstantInterval::single_point(1));
                 s = IRMutator::visit(op);
             }
             loop_var.clear();

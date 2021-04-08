@@ -1,17 +1,7 @@
-cmake_minimum_required(VERSION 3.16)
-project(Halide VERSION 1.0.0)
+cmake_minimum_required(VERSION 3.16...3.20)
+project(Halide VERSION 12.0.0)
 
 enable_testing()
-
-##
-# Top level configuration
-##
-
-if (NOT "$ENV{HL_TARGET}" STREQUAL "")
-    set(Halide_TARGET "$ENV{HL_TARGET}" CACHE STRING "The target to use when compiling AOT tests")
-else ()
-    set(Halide_TARGET "host" CACHE STRING "The target to use when compiling AOT tests")
-endif ()
 
 ##
 # Set up project-wide properties
@@ -19,6 +9,9 @@ endif ()
 
 # Make our custom helpers available throughout the project via include().
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
+include(HalideGeneratorHelpers)
+include(MakeShellPath)
+include(CMakeDependentOption)
 
 # Build Halide as a shared lib by default, but still honor command-line settings.
 if (NOT DEFINED BUILD_SHARED_LIBS)
@@ -34,20 +27,39 @@ endif ()
 # Windows has file name length restrictions and lacks an RPATH mechanism.
 # We work around this by setting a path max and putting all exes / dlls in
 # the same output directory.
-if (${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+if (CMAKE_SYSTEM_NAME MATCHES "Windows")
     set(CMAKE_OBJECT_PATH_MAX 260)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin")
 
-    message("Windows: setting CMAKE_OBJECT_PATH_MAX to ${CMAKE_OBJECT_PATH_MAX}")
+    message(STATUS "Windows: setting CMAKE_OBJECT_PATH_MAX to ${CMAKE_OBJECT_PATH_MAX}")
 endif ()
 
-# Export all symbols on Windows to match GCC/Clang behavior on Linux / macOS
+# Export all symbols on Windows to match GCC/Clang behavior on Linux/macOS
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 # Require standard C++14
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Build Halide with ccache if the package is present
+option(Halide_CCACHE_BUILD "Set to ON for a ccache enabled build" OFF)
+if (Halide_CCACHE_BUILD)
+    find_program(CCACHE_PROGRAM ccache)
+    if (CCACHE_PROGRAM)
+        # TODO: ccache recommends setting CCACHE_SLOPPINESS=pch_defines,time_macros to
+        # enable precompiled header caching. Our timing found it slightly faster with
+        # just CCACHE_SLOPPINESS=pch_defines, so that's what we're using. Maybe revisit
+        # if issues occur (but we don't use any of the time macros so should be irrelevant).
+        set(Halide_CCACHE_PARAMS CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines
+            CACHE STRING "Parameters to pass through to ccache")
+        set(CMAKE_C_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
+        set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
+        message(STATUS "Enabling ccache usage for building.")
+    else ()
+        message(FATAL_ERROR "Unable to find the program ccache. Set Halide_CCACHE_BUILD to OFF")
+    endif ()
+endif ()
 
 ##
 # Import dependencies
@@ -63,14 +75,7 @@ add_subdirectory(src)
 add_subdirectory(tools)
 
 ##
-# Add helper functions to the build
-##
-
-include(HalideGeneratorHelpers)
-include(MakeShellPath)
-
-##
-# Add tests, apps, tutorials, etc. if we're not being imported into another CMake project.
+# Add tests, tutorials, etc. if we're not being imported into another CMake project.
 ##
 
 if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
@@ -84,28 +89,20 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
     option(WITH_PYTHON_BINDINGS "Build Python bindings" ON)
     if (WITH_PYTHON_BINDINGS)
-        if (HALIDE_ENABLE_RTTI AND HALIDE_ENABLE_EXCEPTIONS)
+        if (Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS)
             message(STATUS "Building Python bindings enabled")
             add_subdirectory(python_bindings)
         else ()
-            if (NOT HALIDE_ENABLE_RTTI)
+            if (NOT Halide_ENABLE_RTTI)
                 message(WARNING "Building Python bindings disabled: must compile with RTTI")
             endif ()
-            if (NOT HALIDE_ENABLE_EXCEPTIONS)
+            if (NOT Halide_ENABLE_EXCEPTIONS)
                 message(WARNING "Building Python bindings disabled: must compile with exceptions")
             endif ()
             set(WITH_PYTHON_BINDINGS OFF CACHE BOOL "Build Python bindings" FORCE)
         endif ()
     else ()
         message(STATUS "Building Python bindings disabled")
-    endif ()
-
-    option(WITH_APPS "Build apps" ON)
-    if (WITH_APPS)
-        message(STATUS "Building apps enabled")
-        add_subdirectory(apps)
-    else ()
-        message(STATUS "Building apps disabled")
     endif ()
 
     option(WITH_TUTORIALS "Build tutorials" ON)

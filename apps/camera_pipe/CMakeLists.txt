@@ -22,7 +22,7 @@ target_link_libraries(camera_pipe.generator
 add_halide_library(camera_pipe FROM camera_pipe.generator)
 add_halide_library(camera_pipe_auto_schedule FROM camera_pipe.generator
                    GENERATOR camera_pipe
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Mullapudi2016)
 
 # Main executable
 add_executable(camera_pipe_process process.cpp)
@@ -39,7 +39,7 @@ if (EXISTS ${IMAGE})
     add_test(NAME camera_pipe_process
              COMMAND camera_pipe_process bayer_raw.png 3700 2.0 50 1.0 5 out.png)
     set_tests_properties(camera_pipe_process PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS camera_pipe
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()

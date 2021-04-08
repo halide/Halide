@@ -282,20 +282,21 @@ class FindSimplifications : public IRVisitor {
         bool likely_a = has_uncaptured_likely_tag(op->a);
         bool likely_b = has_uncaptured_likely_tag(op->b);
 
+        // If one side has an uncaptured likely, don't hunt for
+        // simplifications in the other side.
+        if (!likely_a) {
+            op->b.accept(this);
+        }
+        if (!likely_b) {
+            op->a.accept(this);
+        }
+
         // Prefer the side that has an uncaptured top-level likely
         // call. If neither does, prefer the side that contains any
         // likely call at all.
         if (!likely_a && !likely_b) {
             likely_a = has_likely_tag(op->a);
             likely_b = has_likely_tag(op->b);
-        }
-
-        // Don't hunt for simplifications in unlikely paths
-        if (!likely_a) {
-            op->b.accept(this);
-        }
-        if (!likely_b) {
-            op->a.accept(this);
         }
 
         if (likely_b && !likely_a) {
@@ -309,16 +310,16 @@ class FindSimplifications : public IRVisitor {
         bool likely_a = has_uncaptured_likely_tag(op->a);
         bool likely_b = has_uncaptured_likely_tag(op->b);
 
-        if (!likely_a && !likely_b) {
-            likely_a = has_likely_tag(op->a);
-            likely_b = has_likely_tag(op->b);
-        }
-
         if (!likely_a) {
             op->b.accept(this);
         }
         if (!likely_b) {
             op->a.accept(this);
+        }
+
+        if (!likely_a && !likely_b) {
+            likely_a = has_likely_tag(op->a);
+            likely_b = has_likely_tag(op->b);
         }
 
         if (likely_b && !likely_a) {
@@ -328,28 +329,40 @@ class FindSimplifications : public IRVisitor {
         }
     }
 
-    void visit(const Select *op) override {
-        op->condition.accept(this);
+    void visit_select(const Expr &condition, const Expr &old, const Expr &true_value, const Expr &false_value) {
+        condition.accept(this);
 
-        bool likely_t = has_uncaptured_likely_tag(op->true_value);
-        bool likely_f = has_uncaptured_likely_tag(op->false_value);
+        bool likely_t = has_uncaptured_likely_tag(true_value);
+        bool likely_f = has_uncaptured_likely_tag(false_value);
 
         if (!likely_t && !likely_f) {
-            likely_t = has_likely_tag(op->true_value);
-            likely_f = has_likely_tag(op->false_value);
+            likely_t = has_likely_tag(true_value);
+            likely_f = has_likely_tag(false_value);
         }
 
         if (!likely_t) {
-            op->false_value.accept(this);
+            false_value.accept(this);
         }
         if (!likely_f) {
-            op->true_value.accept(this);
+            true_value.accept(this);
         }
 
         if (likely_t && !likely_f) {
-            new_simplification(op->condition, op, op->true_value, op->false_value);
+            new_simplification(condition, old, true_value, false_value);
         } else if (likely_f && !likely_t) {
-            new_simplification(!op->condition, op, op->false_value, op->true_value);
+            new_simplification(!condition, old, false_value, true_value);
+        }
+    }
+
+    void visit(const Select *op) override {
+        visit_select(op->condition, op, op->true_value, op->false_value);
+    }
+
+    void visit(const Call *op) override {
+        if (op->is_intrinsic(Call::if_then_else)) {
+            visit_select(op->args[0], op, op->args[1], op->args[2]);
+        } else {
+            IRVisitor::visit(op);
         }
     }
 
@@ -360,8 +373,7 @@ class FindSimplifications : public IRVisitor {
         // statement is marked as likely, treat it as likely true and
         // partition accordingly.
         IRVisitor::visit(op);
-        const Call *call = op->condition.as<Call>();
-        if (call && call->is_intrinsic(Call::likely)) {
+        if (has_uncaptured_likely_tag(op->condition)) {
             new_simplification(op->condition, op->condition, const_true(), const_false());
         }
     }
@@ -491,15 +503,9 @@ class PartitionLoops : public IRMutator {
                                                            CodeGen_GPU_Dev::is_gpu_var(op->name));
 
         // If we're inside GPU kernel, and the body contains thread
-        // barriers or warp shuffles, it's not safe to partition parallel loops.
-        if (is_parallel(op->for_type) && in_gpu_loop && contains_warp_synchronous_logic(op)) {
+        // barriers or warp shuffles, it's not safe to partition loops.
+        if (in_gpu_loop && contains_warp_synchronous_logic(op)) {
             return IRMutator::visit(op);
-        }
-
-        // We shouldn't partition GLSL loops - they have control-flow
-        // constraints.
-        if (op->device_api == DeviceAPI::GLSL) {
-            return op;
         }
 
         // Find simplifications in this loop body
@@ -577,10 +583,10 @@ class PartitionLoops : public IRMutator {
         // we can prove the epilogue starts after the prologue ends,
         // we're OK.
         bool can_simplify_prologue = true;
-        for (Expr min_val : min_vals) {
-            for (Expr max_val : max_vals) {
+        for (const Expr &min_val : min_vals) {
+            for (const Expr &max_val : max_vals) {
                 Expr test = simplify(common_subexpression_elimination(min_val - 1 < max_val + 1));
-                if (!is_one(test)) {
+                if (!is_const_one(test)) {
                     can_simplify_prologue = false;
                 }
             }
@@ -777,11 +783,6 @@ class RenormalizeGPULoops : public IRMutator {
     vector<pair<string, Expr>> lifted_lets;
 
     Stmt visit(const For *op) override {
-        if (op->device_api == DeviceAPI::GLSL) {
-            // The partitioner did not enter GLSL loops
-            return op;
-        }
-
         bool old_in_gpu_loop = in_gpu_loop;
         Stmt stmt;
 
@@ -801,7 +802,7 @@ class RenormalizeGPULoops : public IRMutator {
 
         if (in_gpu_loop && !old_in_gpu_loop) {
             // This was the outermost GPU loop. Dump any lifted lets here.
-            while (lifted_lets.size()) {
+            while (!lifted_lets.empty()) {
                 stmt = LetStmt::make(lifted_lets.back().first,
                                      lifted_lets.back().second,
                                      stmt);
@@ -991,10 +992,25 @@ class CollapseSelects : public IRMutator {
     }
 };
 
-class ContainsLoop : public IRVisitor {
+class ContainsHotLoop : public IRVisitor {
     using IRVisitor::visit;
     void visit(const For *op) override {
         result = true;
+    }
+
+    void visit(const IfThenElse *op) override {
+        op->then_case.accept(this);
+
+        // Don't count loops that appear in cold paths
+        const Call *c = op->condition.as<Call>();
+        bool else_case_is_cold =
+            (c &&
+             (c->is_intrinsic(Call::likely_if_innermost) ||
+              c->is_intrinsic(Call::likely)));
+        if (op->else_case.defined() &&
+            !else_case_is_cold) {
+            op->else_case.accept(this);
+        }
     }
 
 public:
@@ -1020,7 +1036,7 @@ class LowerLikelyIfInnermost : public IRMutator {
     }
 
     Stmt visit(const For *op) override {
-        ContainsLoop c;
+        ContainsHotLoop c;
         op->body.accept(&c);
         inside_innermost_loop = !c.result;
         Stmt stmt = IRMutator::visit(op);

@@ -29,8 +29,6 @@ typedef __PTRDIFF_TYPE__ ptrdiff_t;
 
 typedef ptrdiff_t ssize_t;
 
-#define NULL 0
-
 // --------------
 
 // In Halide runtime code, most functions should just be WEAK, whether or not
@@ -107,6 +105,7 @@ ssize_t write(int fd, const void *buf, size_t bytes);
 int remove(const char *pathname);
 int ioctl(int fd, unsigned long request, ...);
 char *strncpy(char *dst, const char *src, size_t n);
+void abort();
 
 // Below are prototypes for various functions called by generated code
 // and parts of the runtime but not exposed to users:
@@ -130,7 +129,7 @@ WEAK char *halide_type_to_string(char *dst, char *end, const halide_type_t *arg)
 WEAK void *halide_get_symbol(const char *name);
 // Platform specific implementations of dlopen/dlsym.
 WEAK void *halide_load_library(const char *name);
-// If lib is NULL, this call should be equivalent to halide_get_symbol(name).
+// If lib is nullptr, this call should be equivalent to halide_get_symbol(name).
 WEAK void *halide_get_library_symbol(void *lib, const char *name);
 
 WEAK int halide_start_clock(void *user_context);
@@ -183,17 +182,16 @@ struct halide_pseudostack_slot_t {
     size_t size;
 };
 
+WEAK void halide_use_jit_module();
+WEAK void halide_release_jit_module();
+
+WEAK_INLINE int halide_malloc_alignment();
+
+void halide_thread_yield();
+
 }  // extern "C"
 
-// A convenient namespace for weak functions that are internal to the
-// halide runtime.
-namespace Halide {
-namespace Runtime {
-namespace Internal {
-
-extern WEAK void halide_use_jit_module();
-extern WEAK void halide_release_jit_module();
-
+namespace {
 template<typename T>
 ALWAYS_INLINE void swap(T &a, T &b) {
     T t = a;
@@ -211,33 +209,32 @@ ALWAYS_INLINE T min(const T &a, const T &b) {
     return a < b ? a : b;
 }
 
-template<typename T, typename U>
-ALWAYS_INLINE T reinterpret(const U &x) {
-    T ret;
-    memcpy(&ret, &x, min(sizeof(T), sizeof(U)));
-    return ret;
+}  // namespace
+
+// A namespace for runtime modules to store their internal state
+// in. Should not be for things communicated between runtime modules,
+// because it's possible for them to be compiled with different c++
+// name mangling due to mixing and matching target triples.
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+// Empty
 }
-
-extern WEAK_INLINE int halide_malloc_alignment();
-extern WEAK_INLINE void halide_abort();
-
-void halide_thread_yield();
-
-}  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
+using namespace Halide::Runtime::Internal;
 
 /** A macro that calls halide_print if the supplied condition is
  * false, then aborts. Used for unrecoverable errors, or
  * should-never-happen errors. */
 #define _halide_stringify(x) #x
 #define _halide_expand_and_stringify(x) _halide_stringify(x)
-#define halide_assert(user_context, cond)                                                                              \
-    if (!(cond)) {                                                                                                     \
-        halide_print(user_context, __FILE__ ":" _halide_expand_and_stringify(__LINE__) " Assert failed: " #cond "\n"); \
-        halide_abort();                                                                                                \
-    }
-
-using namespace Halide::Runtime::Internal;
+#define halide_assert(user_context, cond)                                                                                  \
+    do {                                                                                                                   \
+        if (!(cond)) {                                                                                                     \
+            halide_print(user_context, __FILE__ ":" _halide_expand_and_stringify(__LINE__) " Assert failed: " #cond "\n"); \
+            abort();                                                                                                       \
+        }                                                                                                                  \
+    } while (0)
 
 #endif

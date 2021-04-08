@@ -1,5 +1,6 @@
 #include "BoundsInference.h"
 #include "Bounds.h"
+#include "ExprUsesVar.h"
 #include "ExternFuncArgument.h"
 #include "Function.h"
 #include "IREquality.h"
@@ -50,10 +51,8 @@ class DependsOnBoundsInference : public IRVisitor {
     }
 
 public:
-    bool result;
-    DependsOnBoundsInference()
-        : result(false) {
-    }
+    bool result = false;
+    DependsOnBoundsInference() = default;
 };
 
 bool depends_on_bounds_inference(const Expr &e) {
@@ -81,17 +80,33 @@ public:
 
 private:
     string var;
-    Scope<Interval> scope;
+    bool found = false;
 
     using IRVisitor::visit;
 
     void visit(const LetStmt *op) override {
-        Interval in = bounds_of_expr_in_scope(op->value, scope);
         if (op->name == var) {
-            result = in;
-        } else {
-            ScopedBinding<Interval> p(scope, op->name, in);
+            result = Interval::single_point(op->value);
+            found = true;
+        } else if (!found) {
             op->body.accept(this);
+            if (found) {
+                if (expr_uses_var(result.min, op->name)) {
+                    result.min = Let::make(op->name, op->value, result.min);
+                }
+                if (expr_uses_var(result.max, op->name)) {
+                    result.max = Let::make(op->name, op->value, result.max);
+                }
+            }
+        }
+    }
+
+    void visit(const Block *op) override {
+        // We're most likely to find our var at the end of a
+        // block. The start of the block could be unrelated producers.
+        op->rest.accept(this);
+        if (!found) {
+            op->first.accept(this);
         }
     }
 
@@ -103,9 +118,19 @@ private:
 
         if (op->name == var) {
             result = in;
-        } else {
-            ScopedBinding<Interval> p(scope, op->name, in);
+            found = true;
+        } else if (!found) {
             op->body.accept(this);
+            if (found) {
+                Scope<Interval> scope;
+                scope.push(op->name, in);
+                if (expr_uses_var(result.min, op->name)) {
+                    result.min = bounds_of_expr_in_scope(result.min, scope).min;
+                }
+                if (expr_uses_var(result.max, op->name)) {
+                    result.max = bounds_of_expr_in_scope(result.max, scope).max;
+                }
+            }
         }
     }
 };
@@ -173,7 +198,6 @@ bool is_fused_with_others(const vector<vector<Function>> &fused_groups,
     }
     return false;
 }
-}  // namespace
 
 class BoundsInference : public IRMutator {
 public:
@@ -554,14 +578,20 @@ public:
                     }
 
                     if (bound.modulus.defined()) {
-                        min_required -= bound.remainder;
-                        min_required = (min_required / bound.modulus) * bound.modulus;
-                        min_required += bound.remainder;
-                        Expr max_plus_one = max_required + 1;
-                        max_plus_one -= bound.remainder;
-                        max_plus_one = ((max_plus_one + bound.modulus - 1) / bound.modulus) * bound.modulus;
-                        max_plus_one += bound.remainder;
-                        max_required = max_plus_one - 1;
+                        if (bound.remainder.defined()) {
+                            min_required -= bound.remainder;
+                            min_required = (min_required / bound.modulus) * bound.modulus;
+                            min_required += bound.remainder;
+                            Expr max_plus_one = max_required + 1;
+                            max_plus_one -= bound.remainder;
+                            max_plus_one = ((max_plus_one + bound.modulus - 1) / bound.modulus) * bound.modulus;
+                            max_plus_one += bound.remainder;
+                            max_required = max_plus_one - 1;
+                        } else {
+                            Expr extent = (max_required - min_required) + 1;
+                            extent = simplify(((extent + bound.modulus - 1) / bound.modulus) * bound.modulus);
+                            max_required = simplify(min_required + extent - 1);
+                        }
                         s = LetStmt::make(min_var, min_required, s);
                         s = LetStmt::make(max_var, max_required, s);
                     }
@@ -808,7 +838,9 @@ public:
         // this is straight-forward.
         for (size_t i = 0; i < f.size(); i++) {
 
-            if (inlined[i]) continue;
+            if (inlined[i]) {
+                continue;
+            }
 
             Stage s;
             s.func = f[i];
@@ -954,7 +986,7 @@ public:
         }
 
         // The region required of the each output is expanded to include the size of the output buffer.
-        for (Function output : outputs) {
+        for (const Function &output : outputs) {
             Box output_box;
             string buffer_name = output.name();
             if (output.outputs() > 1) {
@@ -981,7 +1013,9 @@ public:
             }
             for (size_t i = 0; i < stages.size(); i++) {
                 Stage &s = stages[i];
-                if (!s.func.same_as(output)) continue;
+                if (!s.func.same_as(output)) {
+                    continue;
+                }
                 s.bounds[{s.name, s.stage}] = output_box;
             }
         }
@@ -1005,7 +1039,7 @@ public:
         // bounds inference results so that we don't needlessly
         // complicate our bounds expressions.
         vector<pair<string, Expr>> wrappers;
-        while (1) {
+        while (true) {
             if (const LetStmt *let = body.as<LetStmt>()) {
                 if (depends_on_bounds_inference(let->value)) {
                     break;
@@ -1225,6 +1259,8 @@ public:
         return stmt;
     }
 };
+
+}  // namespace
 
 Stmt bounds_inference(Stmt s,
                       const vector<Function> &outputs,

@@ -1,12 +1,12 @@
 // Halide tutorial lesson 7: Multi-stage pipelines
 
 // On linux, you can compile and run it like so:
-// g++ lesson_07*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -ljpeg -lpthread -ldl -o lesson_07
-// LD_LIBRARY_PATH=../bin ./lesson_07
+// g++ lesson_07*.cpp -g -std=c++11 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -lpthread -ldl -o lesson_07
+// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_07
 
 // On os x:
-// g++ lesson_07*.cpp -g -std=c++11 -I ../include -I ../tools -L ../bin -lHalide `libpng-config --cflags --ldflags` -ljpeg -o lesson_07
-// DYLD_LIBRARY_PATH=../bin ./lesson_07
+// g++ lesson_07*.cpp -g -std=c++11 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> -L <path/to/libHalide.so> -lHalide `libpng-config --cflags --ldflags` -ljpeg -o lesson_07
+// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_07
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
 
         // Now let's realize it...
 
-        // Buffer<uint8_t> result = output.realize(input.width(), input.height(), 3);
+        // Buffer<uint8_t> result = output.realize({input.width(), input.height(), 3});
 
         // Except that the line above is not going to work. Uncomment
         // it to see what happens.
@@ -158,7 +158,7 @@ int main(int argc, char **argv) {
 
         // This time it's safe to evaluate the output over the same
         // domain as the input, because we have a boundary condition.
-        Buffer<uint8_t> result = output.realize(input.width(), input.height(), 3);
+        Buffer<uint8_t> result = output.realize({input.width(), input.height(), 3});
 
         // Save the result. It should look like a slightly blurry
         // parrot, but this time it will be the same size as the

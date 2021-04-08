@@ -3,7 +3,9 @@
 #include <sstream>
 #include <utility>
 
+#include "CodeGen_C.h"
 #include "CodeGen_D3D12Compute_Dev.h"
+#include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "Debug.h"
 #include "DeviceArgument.h"
@@ -23,7 +25,97 @@ using std::vector;
 
 static ostringstream nil;
 
-CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_Dev(Target t)
+namespace {
+
+class CodeGen_D3D12Compute_Dev : public CodeGen_GPU_Dev {
+public:
+    CodeGen_D3D12Compute_Dev(const Target &target);
+
+    /** Compile a GPU kernel into the module. This may be called many times
+     * with different kernels, which will all be accumulated into a single
+     * source module shared by a given Halide pipeline. */
+    void add_kernel(Stmt stmt,
+                    const std::string &name,
+                    const std::vector<DeviceArgument> &args) override;
+
+    /** (Re)initialize the GPU kernel module. This is separate from compile,
+     * since a GPU device module will often have many kernels compiled into it
+     * for a single pipeline. */
+    void init_module() override;
+
+    std::vector<char> compile_to_src() override;
+
+    std::string get_current_kernel_name() override;
+
+    void dump() override;
+
+    std::string print_gpu_name(const std::string &name) override;
+
+    std::string api_unique_name() override {
+        return "d3d12compute";
+    }
+
+    bool kernel_run_takes_types() const override {
+        return true;
+    }
+
+protected:
+    friend struct StoragePackUnpack;
+
+    class CodeGen_D3D12Compute_C : public CodeGen_C {
+    public:
+        CodeGen_D3D12Compute_C(std::ostream &s, const Target &t)
+            : CodeGen_C(s, t) {
+            integer_suffix_style = IntegerSuffixStyle::HLSL;
+        }
+        void add_kernel(Stmt stmt,
+                        const std::string &name,
+                        const std::vector<DeviceArgument> &args);
+
+    protected:
+        friend struct StoragePackUnpack;
+
+        std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
+        std::string print_storage_type(Type type);
+        std::string print_type_maybe_storage(Type type, bool storage, AppendSpaceIfNeeded space);
+        std::string print_reinterpret(Type type, const Expr &e) override;
+        std::string print_extern_call(const Call *op) override;
+
+        std::string print_vanilla_cast(Type type, const std::string &value_expr);
+        std::string print_reinforced_cast(Type type, const std::string &value_expr);
+        std::string print_cast(Type target_type, Type source_type, const std::string &value_expr);
+        std::string print_reinterpret_cast(Type type, const std::string &value_expr);
+
+        std::string print_assignment(Type t, const std::string &rhs) override;
+
+        using CodeGen_C::visit;
+        void visit(const Evaluate *op) override;
+        void visit(const Min *) override;
+        void visit(const Max *) override;
+        void visit(const Div *) override;
+        void visit(const Mod *) override;
+        void visit(const For *) override;
+        void visit(const Ramp *op) override;
+        void visit(const Broadcast *op) override;
+        void visit(const Call *op) override;
+        void visit(const Load *op) override;
+        void visit(const Store *op) override;
+        void visit(const Select *op) override;
+        void visit(const Allocate *op) override;
+        void visit(const Free *op) override;
+        void visit(const Cast *op) override;
+        void visit(const Atomic *op) override;
+        void visit(const FloatImm *op) override;
+
+        Scope<> groupshared_allocations;
+    };
+
+    std::ostringstream src_stream;
+    std::string cur_kernel_name;
+    CodeGen_D3D12Compute_C d3d12compute_c;
+};
+
+CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_Dev(const Target &t)
     : d3d12compute_c(src_stream, t) {
 }
 
@@ -153,7 +245,9 @@ string simt_intrinsic(const string &name) {
 }  // namespace
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Evaluate *op) {
-    if (is_const(op->value)) return;
+    if (is_const(op->value)) {
+        return;
+    }
     print_expr(op->value);
 }
 
@@ -216,7 +310,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const For *loop) {
     internal_assert((loop->for_type == ForType::GPUBlock) ||
                     (loop->for_type == ForType::GPUThread))
         << "kernel loop must be either gpu block or gpu thread\n";
-    internal_assert(is_zero(loop->min));
+    internal_assert(is_const_zero(loop->min));
 
     stream << get_indent() << print_type(Int(32)) << " " << print_name(loop->name)
            << " = " << simt_intrinsic(loop->name) << ";\n";
@@ -251,8 +345,9 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Broadcast *op
         << "(";
     for (int i = 0; i < op->lanes; ++i) {
         rhs << id_value;
-        if (i < op->lanes - 1)
+        if (i < op->lanes - 1) {
             rhs << ", ";
+        }
     }
     rhs << ")";
 
@@ -263,7 +358,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Call *op) {
     if (op->is_intrinsic(Call::gpu_thread_barrier)) {
         internal_assert(op->args.size() == 1) << "gpu_thread_barrier() intrinsic must specify memory fence type.\n";
 
-        auto fence_type_ptr = as_const_int(op->args[0]);
+        const auto *fence_type_ptr = as_const_int(op->args[0]);
         internal_assert(fence_type_ptr) << "gpu_thread_barrier() parameter is not a constant integer.\n";
         auto fence_type = *fence_type_ptr;
 
@@ -298,7 +393,7 @@ Expr is_ramp_one(const Expr &e) {
         return Expr();
     }
 
-    if (is_one(r->stride)) {
+    if (is_const_one(r->stride)) {
         return r->base;
     }
 
@@ -444,35 +539,20 @@ struct StoragePackUnpack {
 };
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
-    user_assert(is_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated load is not supported inside D3D12Compute kernel.\n";
 
     // elements in a threadgroup shared buffer are always 32bits:
-    // must reinterpret (and maybe unpack) bits...
+    // must reinterpret (and maybe unpack) bits.
+    bool shared_promotion_required = false;
+    string promotion_str = "";
     if (groupshared_allocations.contains(op->name)) {
-        ostringstream rhs;
         internal_assert(allocations.contains(op->name));
-        // no ramps when accessing shared memory...
-        Expr ramp_base = is_ramp_one(op->index);
-        internal_assert(!ramp_base.defined());
-        internal_assert(op->type.lanes() == 1);
-
-        string id_index = print_expr(op->index);
-        internal_assert(op->type.bits() <= 32);
-        Type promoted = op->type.with_bits(32);
-        if (promoted == op->type) {
-            rhs << print_name(op->name)
-                << "[" << id_index << "]";
-        } else {
-            rhs << "as" << print_type(promoted)
-                << "("
-                << print_name(op->name)
-                << "[" << id_index << "]"
-                << ")";
+        Type promoted_type = op->type.with_bits(32).with_lanes(1);
+        if (promoted_type != op->type) {
+            shared_promotion_required = true;
+            // NOTE(marcos): might need to resort to StoragePackUnpack::unpack_load() here
+            promotion_str = "as" + print_type(promoted_type);
         }
-
-        // NOTE(marcos): might need to resort to StoragePackUnpack::unpack_load() here...
-        print_assignment(op->type, rhs.str());
-        return;
     }
 
     // If we're loading a contiguous ramp, "unroll" the ramp into loads:
@@ -485,13 +565,20 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
             << "(";
         const int lanes = op->type.lanes();
         for (int i = 0; i < lanes; ++i) {
+            if (shared_promotion_required) {
+                rhs << promotion_str << "(";
+            }
             rhs << print_name(op->name)
                 << "["
                 << print_expr(ramp_base)
                 << "+" << i
                 << "]";
-            if (i < lanes - 1)
+            if (shared_promotion_required) {
+                rhs << ")";
+            }
+            if (i < lanes - 1) {
                 rhs << ", ";
+            }
         }
         rhs << ")";
 
@@ -509,14 +596,28 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
     ostringstream rhs;
     if (type_cast_needed) {
         ostringstream element;
+        // Vector cases handled below
+        if (shared_promotion_required && !op->index.type().is_vector()) {
+            element << promotion_str << "(";
+        }
         element << print_name(op->name)
                 << "[" << id_index << "]";
+        if (shared_promotion_required && !op->index.type().is_vector()) {
+            element << ")";
+        }
         Type target_type = op->type;
         Type source_type = allocations.get(op->name).type;
         rhs << print_cast(target_type, source_type, element.str());
     } else {
+        // Vector cases handled below
+        if (shared_promotion_required && !op->index.type().is_vector()) {
+            rhs << promotion_str << "(";
+        }
         rhs << print_name(op->name);
         rhs << "[" << id_index << "]";
+        if (shared_promotion_required && !op->index.type().is_vector()) {
+            rhs << ")";
+        }
     }
 
     std::map<string, string>::iterator cached = cache.find(rhs.str());
@@ -541,10 +642,16 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
         for (int i = 0; i < op->type.lanes(); ++i) {
             stream << get_indent() << id << "[" << i << "] = "
                    << print_type(op->type.element_of())
-                   << "("
-                   << print_name(op->name)
-                   << "[" << id_index << "[" << i << "]]"
-                   << ");\n";
+                   << "(";
+            if (shared_promotion_required) {
+                stream << promotion_str << "(";
+            }
+            stream << print_name(op->name)
+                   << "[" << id_index << "[" << i << "]]";
+            if (shared_promotion_required) {
+                stream << ")";
+            }
+            stream << ");\n";
         }
     } else {
         print_assignment(op->type, rhs.str());
@@ -552,23 +659,22 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Load *op) {
 }
 
 void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
-    user_assert(is_one(op->predicate)) << "Predicated store is not supported inside D3D12Compute kernel.\n";
+    user_assert(is_const_one(op->predicate)) << "Predicated store is not supported inside D3D12Compute kernel.\n";
 
     Type value_type = op->value.type();
 
     // elements in a threadgroup shared buffer are always 32bits:
-    // must reinterpret (and maybe pack) bits...
+    // must reinterpret (and maybe pack) bits.
+    bool shared_promotion_required = false;
+    string promotion_str = "";
     if (groupshared_allocations.contains(op->name)) {
-        internal_assert(value_type.bits() <= 32);
-        ostringstream rhs;
-        rhs << print_name(op->name)
-            << "[" << print_expr(op->index) << "]"
-            << " = "
-            << print_reinterpret(allocations.get(op->name).type, op->value)
-            << ";\n";
-        // NOTE(marcos): might need to resort to StoragePackUnpack::pack_store() here...
-        stream << get_indent() << rhs.str();
-        return;
+        internal_assert(allocations.contains(op->name));
+        Type promoted_type = allocations.get(op->name).type;
+        if (promoted_type != op->value.type()) {
+            shared_promotion_required = true;
+            // NOTE(marcos): might need to resort to StoragePackUnpack::pack_store() here
+            promotion_str = "as" + print_type(promoted_type);
+        }
     }
 
     // If we're writing a contiguous ramp, "unroll" the ramp into stores:
@@ -585,12 +691,18 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
                 << print_expr(ramp_base)
                 << " + " << i
                 << "]"
-                << " = "
-                << print_expr(op->value)
+                << " = ";
+            if (shared_promotion_required) {
+                rhs << promotion_str << "(";
+            }
+            rhs << print_expr(op->value)
                 << "["
                 << i
-                << "]"
-                << ";\n";
+                << "]";
+            if (shared_promotion_required) {
+                rhs << ")";
+            }
+            rhs << ";\n";
             stream << get_indent() << rhs.str();
         }
     } else if (op->index.type().is_vector()) {
@@ -603,17 +715,30 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Store *op) {
                 << "["
                 << print_expr(op->index) << "[" << i << "]"
                 << "]"
-                << " = "
-                << print_expr(op->value) << "[" << i << "];\n";
+                << " = ";
+            if (shared_promotion_required) {
+                rhs << promotion_str << "(";
+            }
+            rhs << print_expr(op->value) << "[" << i << "]";
+            if (shared_promotion_required) {
+                rhs << ")";
+            }
+            rhs << ";\n";
             stream << get_indent() << rhs.str();
         }
     } else {
         ostringstream rhs;
         rhs << print_name(op->name)
             << "[" << print_expr(op->index) << "]"
-            << " = "
-            << print_expr(op->value)
-            << ";\n";
+            << " = ";
+        if (shared_promotion_required) {
+            rhs << promotion_str << "(";
+        }
+        rhs << print_expr(op->value);
+        if (shared_promotion_required) {
+            rhs << ")";
+        }
+        rhs << ";\n";
         stream << get_indent() << rhs.str();
     }
 
@@ -633,7 +758,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Select *op) {
     print_assignment(op->type, rhs.str());
 }
 
-static bool is_shared_allocation(const Allocate *op) {
+bool is_shared_allocation(const Allocate *op) {
     return op->memory_type == MemoryType::GPUShared;
 }
 
@@ -855,11 +980,9 @@ void CodeGen_D3D12Compute_Dev::add_kernel(Stmt s,
 namespace {
 struct BufferSize {
     string name;
-    size_t size;
+    size_t size = 0;
 
-    BufferSize()
-        : size(0) {
-    }
+    BufferSize() = default;
     BufferSize(string name, size_t size)
         : name(std::move(name)), size(size) {
     }
@@ -889,7 +1012,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     auto isConstantBuffer = [&s](const DeviceArgument &arg) {
         return arg.is_buffer && CodeGen_GPU_Dev::is_buffer_constant(s, arg.name) && arg.size > 0;
     };
-    for (auto &arg : args) {
+    for (const auto &arg : args) {
         if (isConstantBuffer(arg)) {
             constants.emplace_back(arg.name, arg.size);
         }
@@ -980,7 +1103,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     s = fsa.mutate(s);
 
     uint32_t total_shared_bytes = 0;
-    for (Stmt sop : fsa.allocs) {
+    for (const Stmt &sop : fsa.allocs) {
         const Allocate *op = sop.as<Allocate>();
         internal_assert(op->extents.size() == 1);
         internal_assert(op->type.lanes() == 1);
@@ -1024,11 +1147,13 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     struct FindThreadGroupSize : public IRVisitor {
         using IRVisitor::visit;
         void visit(const For *loop) override {
-            if (!is_gpu_var(loop->name))
+            if (!is_gpu_var(loop->name)) {
                 return loop->body.accept(this);
-            if (loop->for_type != ForType::GPUThread)
+            }
+            if (loop->for_type != ForType::GPUThread) {
                 return loop->body.accept(this);
-            internal_assert(is_zero(loop->min));
+            }
+            internal_assert(is_const_zero(loop->min));
             int index = thread_loop_workgroup_index(loop->name);
             user_assert(index >= 0) << "Invalid 'numthreads' index for loop variable '" << loop->name << "'.\n";
             // if 'numthreads' for a given dimension can't be determined at code
@@ -1075,7 +1200,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
            << "uint3 tgroup_index  : SV_GroupID,\n"
            << " "
            << "uint3 tid_in_tgroup : SV_GroupThreadID";
-    for (auto &arg : args) {
+    for (const auto &arg : args) {
         stream << ",\n";
         stream << " ";
         if (arg.is_buffer) {
@@ -1222,8 +1347,6 @@ void CodeGen_D3D12Compute_Dev::init_module() {
 
     src_stream << "\n";
 
-    d3d12compute_c.add_common_macros(src_stream);
-
     cur_kernel_name = "";
 }
 
@@ -1246,6 +1369,12 @@ void CodeGen_D3D12Compute_Dev::dump() {
 
 std::string CodeGen_D3D12Compute_Dev::print_gpu_name(const std::string &name) {
     return name;
+}
+
+}  // namespace
+
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_D3D12Compute_Dev(const Target &target) {
+    return std::make_unique<CodeGen_D3D12Compute_Dev>(target);
 }
 
 }  // namespace Internal

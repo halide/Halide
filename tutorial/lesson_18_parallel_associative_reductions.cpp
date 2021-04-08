@@ -4,12 +4,12 @@
 // reduction using the scheduling directive 'rfactor'.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_18*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_18 -std=c++11
-// LD_LIBRARY_PATH=../bin ./lesson_18
+// g++ lesson_18*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_18 -std=c++11
+// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_18
 
 // On os x:
-// g++ lesson_18*.cpp -g -I ../include -L ../bin -lHalide -o lesson_18 -std=c++11
-// DYLD_LIBRARY_PATH=../bin ./lesson_18
+// g++ lesson_18*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_18 -std=c++11
+// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_18
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
         histogram(input(r.x, r.y) / 32) += 1;
 
         histogram.vectorize(i, 8);
-        histogram.realize(8);
+        histogram.realize({8});
 
         // See figures/lesson_18_hist_serial.mp4 for a visualization of
         // what this does.
@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
         intermediate.vectorize(i, 8);
         histogram.vectorize(i, 8);
 
-        histogram.realize(8);
+        histogram.realize({8});
 
         // See figures/lesson_18_hist_manual_par.mp4 for a visualization of
         // what this does.
@@ -156,7 +156,7 @@ int main(int argc, char **argv) {
         // can't prove the associativity of a reduction, it will throw
         // an error.
 
-        Buffer<int> halide_result = histogram.realize(8);
+        Buffer<int> halide_result = histogram.realize({8});
 
         // See figures/lesson_18_hist_rfactor_par.mp4 for a
         // visualization of what this does.
@@ -223,7 +223,7 @@ int main(int argc, char **argv) {
         intermediate.vectorize(x, 8);
         histogram.vectorize(x, 8);
 
-        Buffer<int> halide_result = histogram.realize(8);
+        Buffer<int> halide_result = histogram.realize({8});
 
         // See figures/lesson_18_hist_rfactor_vec.mp4 for a
         // visualization of what this does.
@@ -294,7 +294,7 @@ int main(int argc, char **argv) {
         intermediate.vectorize(x, 8);
         histogram.vectorize(x, 8);
 
-        Buffer<int> halide_result = histogram.realize(8);
+        Buffer<int> halide_result = histogram.realize({8});
 
         // See figures/lesson_18_hist_rfactor_tile.mp4 for a visualization of
         // what this does.

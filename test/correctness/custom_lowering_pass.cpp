@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
     f.add_custom_lowering_pass(new CountMultiplies);
 
     const int size = 10;
-    f.realize(size);
+    f.realize({size});
 
     if (multiply_count != size * 2) {
         printf("The multiplies weren't all counted. Got %d instead of %d\n",

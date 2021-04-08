@@ -4,12 +4,12 @@
 // does not start at (0, 0).
 
 // On linux, you can compile and run it like so:
-// g++ lesson_06*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_06 -std=c++11
-// LD_LIBRARY_PATH=../bin ./lesson_06
+// g++ lesson_06*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_06 -std=c++11
+// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_06
 
 // On os x:
-// g++ lesson_06*.cpp -g -I ../include -L ../bin -lHalide -o lesson_06 -std=c++11
-// DYLD_LIBRARY_PATH=../bin ./lesson_06
+// g++ lesson_06*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_06 -std=c++11
+// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_06
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
 
     // Previously we've realized gradient like so:
     //
-    // gradient.realize(8, 8);
+    // gradient.realize({8, 8});
     //
     // This does three things internally:
     // 1) Generates code than can evaluate gradient over an arbitrary

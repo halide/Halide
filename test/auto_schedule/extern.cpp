@@ -128,9 +128,16 @@ void test_case_3() {
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] Mullapudi2016 autoscheduler does not support WebAssembly.\n");
+        printf("[SKIP] Autoschedulers do not support WebAssembly.\n");
         return 0;
     }
+
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <autoscheduler-lib>\n", argv[0]);
+        return 1;
+    }
+
+    load_plugin(argv[1]);
 
     test_case_1();
     test_case_2();

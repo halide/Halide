@@ -98,7 +98,9 @@ WEAK bool ends_with(const char *filename, const char *suffix) {
         s++;
     }
     while (s != suffix && f != filename) {
-        if (*f != *s) return false;
+        if (*f != *s) {
+            return false;
+        }
         f--;
         s--;
     }
@@ -111,13 +113,15 @@ struct ScopedFile {
         f = fopen(filename, mode);
     }
     ALWAYS_INLINE ~ScopedFile() {
-        fclose(f);
+        if (f) {
+            fclose(f);
+        }
     }
     ALWAYS_INLINE bool write(const void *ptr, size_t bytes) {
-        return fwrite(ptr, bytes, 1, f);
+        return f ? fwrite(ptr, bytes, 1, f) > 0 : false;
     }
     ALWAYS_INLINE bool open() const {
-        return f;
+        return f != nullptr;
     }
 };
 
@@ -141,7 +145,9 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
     halide_copy_to_host(user_context, buf);
 
     ScopedFile f(filename, "wb");
-    if (!f.open()) return -2;
+    if (!f.open()) {
+        return -2;
+    }
 
     size_t elts = 1;
     halide_dimension_t shape[4];

@@ -37,8 +37,8 @@ check_symbol()
 #set -e
 
 # Set up LD_LIBRARY_PATH so that we can find libHalide.so
-export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../bin
-export DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:../bin
+export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../lib
+export DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:../lib
 
 #########################
 # Basic generator usage #

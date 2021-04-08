@@ -19,7 +19,7 @@ target_link_libraries(interpolate.generator PRIVATE Halide::Generator Halide::To
 add_halide_library(interpolate FROM interpolate.generator)
 add_halide_library(interpolate_auto_schedule FROM interpolate.generator
                    GENERATOR interpolate
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Mullapudi2016)
 
 # Main executable
 add_executable(interpolate_filter filter.cpp)
@@ -35,7 +35,7 @@ if (EXISTS ${IMAGE})
     configure_file(${IMAGE} rgba.png COPYONLY)
     add_test(NAME interpolate_filter COMMAND interpolate_filter rgba.png out.png)
     set_tests_properties(interpolate_filter PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS interpolate
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()

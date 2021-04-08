@@ -61,9 +61,9 @@ function mex_halide( generator_filename, varargin )
     halide_distrib_path = getenv('HALIDE_DISTRIB_PATH');
     
     if ismac
-        libhalide = fullfile(halide_distrib_path, 'bin', 'libHalide.dylib');
+        libhalide = fullfile(halide_distrib_path, 'lib', 'libHalide.dylib');
     else
-        libhalide = fullfile(halide_distrib_path, 'bin', 'libHalide.so');
+        libhalide = fullfile(halide_distrib_path, 'lib', 'libHalide.so');
     end
     halide_include = fullfile(halide_distrib_path, 'include');
 
@@ -73,7 +73,7 @@ function mex_halide( generator_filename, varargin )
     end
     halide_cxx = getenv('HALIDE_CXX');
 
-    ld_library_path = fullfile(halide_distrib_path, 'bin');
+    ld_library_path = fullfile(halide_distrib_path, 'lib');
 
     % Build the command to build the generator.
     gen_bin = fullfile(temp, [function_name, '.generator']);

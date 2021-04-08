@@ -19,7 +19,7 @@ target_link_libraries(local_laplacian.generator PRIVATE Halide::Generator Halide
 add_halide_library(local_laplacian FROM local_laplacian.generator)
 add_halide_library(local_laplacian_auto_schedule FROM local_laplacian.generator
                    GENERATOR local_laplacian
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Mullapudi2016)
 
 # Main executable
 add_executable(local_laplacian_process process.cpp)
@@ -35,7 +35,7 @@ if (EXISTS ${IMAGE})
     configure_file(${IMAGE} rgb.png COPYONLY)
     add_test(NAME local_laplacian_process COMMAND local_laplacian_process rgb.png 8 1 1 10 out.png)
     set_tests_properties(local_laplacian_process PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS local_laplacian
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()

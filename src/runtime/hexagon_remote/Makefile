@@ -99,13 +99,9 @@ $(BIN)/%/thread_pool.o: thread_pool.cpp
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c thread_pool.cpp -o $@
 
-$(BIN)/%/halide_remote.o: halide_remote.cpp dlib.h known_symbols.h $(BIN)/src/halide_hexagon_remote.h
+$(BIN)/%/halide_remote.o: halide_remote.cpp known_symbols.h $(BIN)/src/halide_hexagon_remote.h
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -I$(BIN)/src/ -fPIC -c halide_remote.cpp -o $@
-
-$(BIN)/%/dlib.o: dlib.cpp dlib.h
-	mkdir -p $(@D)
-	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c dlib.cpp -o $@
 
 $(BIN)/%/host_malloc.o: host_malloc.cpp
 	mkdir -p $(@D)
@@ -136,7 +132,7 @@ $(BIN)/%/log.o: log.cpp
 	$(CXX-$*) $(CCFLAGS-$*) -fPIC -c log.cpp -o $@
 
 # Build rules for the hexagon implementation.
-$(BIN)/%/libhalide_hexagon_remote_skel.so: $(BIN)/%/halide_remote.o $(BIN)/%/halide_hexagon_remote_skel.o $(BIN)/%/nearbyint.o $(BIN)/%/c11_stubs.o $(BIN)/%/log.o $(BIN)/%/dlib.o $(BIN)/%/known_symbols.o
+$(BIN)/%/libhalide_hexagon_remote_skel.so: $(BIN)/%/halide_remote.o $(BIN)/%/halide_hexagon_remote_skel.o $(BIN)/%/nearbyint.o $(BIN)/%/c11_stubs.o $(BIN)/%/log.o $(BIN)/%/known_symbols.o
 	mkdir -p $(@D)
 	$(CC-$*) -m$* -mG0lib -G0 -fpic -shared -lc $^ -Wl,-soname=libhalide_hexagon_remote_skel.so -Wl,--no-threads -o $@ \
 	-Wl,-Bsymbolic -Wl,--wrap=malloc -Wl,--wrap=calloc -Wl,--wrap=free \
@@ -151,7 +147,7 @@ $(BIN)/%/libhalide_hexagon_host.so: $(BIN)/src/halide_hexagon_remote_stub.c $(BI
 	$(CC-$*) $^ $(CCFLAGS-$*) -Wl,-soname,libhalide_hexagon_host.so -shared -o $@
 
 # Build rules for the simulator implementation.
-$(BIN)/%/sim_remote.o: sim_remote.cpp sim_protocol.h dlib.h known_symbols.h $(BIN)/src/halide_hexagon_remote.h
+$(BIN)/%/sim_remote.o: sim_remote.cpp sim_protocol.h known_symbols.h $(BIN)/src/halide_hexagon_remote.h
 	mkdir -p $(@D)
 	$(CXX-$*) $(CCFLAGS-$*) -I$(BIN)/src/ -c sim_remote.cpp -o $@
 
@@ -184,9 +180,9 @@ LIB_GCC        =$(shell $(CXX-v62) -G0 -print-file-name=libgcc.a)
 FINI           =$(shell $(CXX-v62) -G0 -print-file-name=fini.o)
 LIBDL          =$(HEXAGON_TOOLS_ROOT)/Tools/target/hexagon/lib/v62/G0/libdl.a
 
-$(BIN)/%/hexagon_sim_remote: $(BIN)/%/sim_remote.o $(BIN)/%/dlib.o $(BIN)/%/known_symbols.o $(BIN)/%/libsim_qurt.a $(BIN)/%/libsim_qurt_vtcm.a
+$(BIN)/%/hexagon_sim_remote: $(BIN)/%/sim_remote.o $(BIN)/%/known_symbols.o $(BIN)/%/libsim_qurt.a $(BIN)/%/libsim_qurt_vtcm.a
 	mkdir -p $(@D)
-	$(LD-$*) -o $@ $(CRT0_STANDALONE) $(CRT0) $(INIT) $(BIN)/$*/sim_remote.o $(BIN)/$*/dlib.o $(BIN)/$*/known_symbols.o $(BIN)/$*/libsim_qurt.a $(LIBDL) \
+	$(LD-$*) -o $@ $(CRT0_STANDALONE) $(CRT0) $(INIT) $(BIN)/$*/sim_remote.o $(BIN)/$*/known_symbols.o $(BIN)/$*/libsim_qurt.a $(LIBDL) \
 	--start-group  $(LIB_STANDALONE) --whole-archive $(LIB_C) $(BIN)/$*/libsim_qurt_vtcm.a --no-whole-archive $(LIB_GCC) --end-group $(FINI) \
 	--dynamic-linker= -E --force-dynamic
 

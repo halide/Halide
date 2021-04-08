@@ -8,6 +8,8 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+
 // Find a constant upper bound on the size of each thread-local allocation
 class BoundSmallAllocations : public IRMutator {
     using IRMutator::visit;
@@ -83,16 +85,24 @@ class BoundSmallAllocations : public IRMutator {
         // constant *are* constant.
         if (must_be_constant(op->memory_type)) {
             Region region = op->bounds;
+            bool changed = false;
             for (Range &r : region) {
                 Expr bound = find_constant_bound(r.extent, Direction::Upper, scope);
                 user_assert(bound.defined())
                     << "Was unable to infer constant upper bound on extent of allocation "
                     << op->name << ". Use Func::bound_extent to specify it manually.";
-                r.extent = bound;
+                if (!bound.same_as(r.extent)) {
+                    r.extent = bound;
+                    changed = true;
+                }
             }
 
             Stmt body = mutate(op->body);
-            return Realize::make(op->name, op->types, op->memory_type, region, op->condition, body);
+            if (changed || !body.same_as(op->body)) {
+                return Realize::make(op->name, op->types, op->memory_type, region, op->condition, body);
+            } else {
+                return op;
+            }
         } else {
             return IRMutator::visit(op);
         }
@@ -146,6 +156,8 @@ class BoundSmallAllocations : public IRMutator {
         }
     }
 };
+
+}  // namespace
 
 Stmt bound_small_allocations(const Stmt &s) {
     return BoundSmallAllocations().mutate(s);

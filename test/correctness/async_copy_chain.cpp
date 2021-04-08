@@ -5,7 +5,7 @@ using namespace Halide;
 Var x, y;
 
 void check(Func f) {
-    Buffer<int> out = f.realize(256, 256);
+    Buffer<int> out = f.realize({256, 256});
     out.for_each_element([&](int x, int y) {
         if (out(x, y) != x + y) {
             printf("out(%d, %d) = %d instead of %d\n", x, y, out(x, y), x + y);

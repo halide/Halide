@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
 
     in.trace_loads();
     f.set_custom_trace(my_trace);
-    f.realize(20, 20);
+    f.realize({20, 20});
 
     int c = 0;
     for (int y = 0; y < 20; y++) {

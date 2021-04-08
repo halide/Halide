@@ -10,6 +10,8 @@ namespace Internal {
 
 using std::vector;
 
+namespace {
+
 class RemoveUndef : public IRMutator {
 public:
     Expr predicate;
@@ -30,9 +32,13 @@ private:
     template<typename T>
     Expr mutate_binary_operator(const T *op) {
         Expr a = mutate(op->a);
-        if (!a.defined()) return Expr();
+        if (!a.defined()) {
+            return Expr();
+        }
         Expr b = mutate(op->b);
-        if (!b.defined()) return Expr();
+        if (!b.defined()) {
+            return Expr();
+        }
         if (a.same_as(op->a) &&
             b.same_as(op->b)) {
             return op;
@@ -43,7 +49,9 @@ private:
 
     Expr visit(const Cast *op) override {
         Expr value = mutate(op->value);
-        if (!value.defined()) return Expr();
+        if (!value.defined()) {
+            return Expr();
+        }
         if (value.same_as(op->value)) {
             return op;
         } else {
@@ -99,7 +107,9 @@ private:
 
     Expr visit(const Not *op) override {
         Expr a = mutate(op->a);
-        if (!a.defined()) return Expr();
+        if (!a.defined()) {
+            return Expr();
+        }
         if (a.same_as(op->a)) {
             return op;
         } else {
@@ -147,9 +157,13 @@ private:
 
     Expr visit(const Load *op) override {
         Expr pred = mutate(op->predicate);
-        if (!pred.defined()) return Expr();
+        if (!pred.defined()) {
+            return Expr();
+        }
         Expr index = mutate(op->index);
-        if (!index.defined()) return Expr();
+        if (!index.defined()) {
+            return Expr();
+        }
         if (pred.same_as(op->predicate) && index.same_as(op->index)) {
             return op;
         } else {
@@ -159,9 +173,13 @@ private:
 
     Expr visit(const Ramp *op) override {
         Expr base = mutate(op->base);
-        if (!base.defined()) return Expr();
+        if (!base.defined()) {
+            return Expr();
+        }
         Expr stride = mutate(op->stride);
-        if (!stride.defined()) return Expr();
+        if (!stride.defined()) {
+            return Expr();
+        }
         if (base.same_as(op->base) &&
             stride.same_as(op->stride)) {
             return op;
@@ -172,7 +190,9 @@ private:
 
     Expr visit(const Broadcast *op) override {
         Expr value = mutate(op->value);
-        if (!value.defined()) return Expr();
+        if (!value.defined()) {
+            return Expr();
+        }
         if (value.same_as(op->value)) {
             return op;
         } else {
@@ -192,8 +212,12 @@ private:
         for (size_t i = 0; i < op->args.size(); i++) {
             Expr old_arg = op->args[i];
             Expr new_arg = mutate(old_arg);
-            if (!new_arg.defined()) return Expr();
-            if (!new_arg.same_as(old_arg)) changed = true;
+            if (!new_arg.defined()) {
+                return Expr();
+            }
+            if (!new_arg.same_as(old_arg)) {
+                changed = true;
+            }
             new_args[i] = new_arg;
         }
 
@@ -229,7 +253,9 @@ private:
 
         if (result.defined()) {
             for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-                if (!it->new_value.defined()) continue;
+                if (!it->new_value.defined()) {
+                    continue;
+                }
                 predicate = substitute(it->op->name, it->new_value, predicate);
                 if (it->new_value.same_as(it->op->value) && result.same_as(it->op->body)) {
                     result = it->op;
@@ -270,7 +296,9 @@ private:
 
     Stmt visit(const ProducerConsumer *op) override {
         Stmt body = mutate(op->body);
-        if (!body.defined()) return Stmt();
+        if (!body.defined()) {
+            return Stmt();
+        }
         if (body.same_as(op->body)) {
             return op;
         } else {
@@ -288,7 +316,9 @@ private:
             return Stmt();
         }
         Stmt body = mutate(op->body);
-        if (!body.defined()) return Stmt();
+        if (!body.defined()) {
+            return Stmt();
+        }
         if (min.same_as(op->min) &&
             extent.same_as(op->extent) &&
             body.same_as(op->body)) {
@@ -344,7 +374,9 @@ private:
                 return Stmt();
             }
             args_predicates.push_back(predicate);
-            if (!new_arg.same_as(old_arg)) changed = true;
+            if (!new_arg.same_as(old_arg)) {
+                changed = true;
+            }
             new_args[i] = new_arg;
         }
 
@@ -366,7 +398,9 @@ private:
                 all_values_undefined = false;
                 values_predicates.push_back(predicate);
             }
-            if (!new_value.same_as(old_value)) changed = true;
+            if (!new_value.same_as(old_value)) {
+                changed = true;
+            }
             new_values[i] = new_value;
         }
 
@@ -403,10 +437,14 @@ private:
             all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
         }
         Stmt body = mutate(op->body);
-        if (!body.defined()) return Stmt();
+        if (!body.defined()) {
+            return Stmt();
+        }
 
         Expr condition = mutate(op->condition);
-        if (!condition.defined()) return Stmt();
+        if (!condition.defined()) {
+            return Stmt();
+        }
 
         Expr new_expr;
         if (op->new_expr.defined()) {
@@ -454,10 +492,14 @@ private:
         }
 
         Stmt body = mutate(op->body);
-        if (!body.defined()) return Stmt();
+        if (!body.defined()) {
+            return Stmt();
+        }
 
         Expr condition = mutate(op->condition);
-        if (!condition.defined()) return Stmt();
+        if (!condition.defined()) {
+            return Stmt();
+        }
 
         if (!bounds_changed &&
             body.same_as(op->body) &&
@@ -535,6 +577,8 @@ private:
         }
     }
 };
+
+}  // namespace
 
 Stmt remove_undef(Stmt s) {
     RemoveUndef r;

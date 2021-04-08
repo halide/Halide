@@ -93,8 +93,12 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
         // Code downstream can use min/max in calculated-but-unused arithmetic
         // that can lead to UB (and thus, flaky failures under ASAN/UBSAN)
         // if we leave them set to INT64_MAX/INT64_MIN; normalize to zero to avoid this.
-        if (!bounds->min_defined) bounds->min = 0;
-        if (!bounds->max_defined) bounds->max = 0;
+        if (!bounds->min_defined) {
+            bounds->min = 0;
+        }
+        if (!bounds->max_defined) {
+            bounds->max = 0;
+        }
         bounds->alignment = a_bounds.alignment / b_bounds.alignment;
         bounds->trim_bounds_using_alignment();
     }
@@ -122,9 +126,12 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
             return rewrite.result;
         }
 
+        int a_mod = a_bounds.alignment.modulus;
+        int a_rem = a_bounds.alignment.remainder;
+
         // clang-format off
         if (EVAL_IN_LAMBDA
-            (rewrite(broadcast(x) / broadcast(y), broadcast(x / y, lanes)) ||
+            (rewrite(broadcast(x, c0) / broadcast(y, c0), broadcast(x / y, c0)) ||
              rewrite(select(x, c0, c1) / c2, select(x, fold(c0/c2), fold(c1/c2))) ||
              (!op->type.is_float() &&
               rewrite(x / x, select(x == 0, 0, 1))) ||
@@ -173,9 +180,55 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                rewrite((w + (z + (x * c0 + y))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
                rewrite((w + (z + (y + x * c0))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
-               // Finally, pull out constant additions that are a multiple of the denominator
-               rewrite((x + c0) / c1, x / c1 + fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite((c0 - y)/c1, fold(c0 / c1) - y / c1, (c0 + 1) % c1 == 0 && c1 > 0) ||
+               /** In (x + c0) / c1, when can we pull the constant
+                   addition out of the numerator? An obvious answer is
+                   the constant is a multiple of the denominator, but
+                   there are other cases too. The condition for the
+                   rewrite to be correct is:
+
+                 (x + c0) / c1 == x / c1 + c2
+
+                 Say we know (x + c0) = a_mod * y + a_rem
+
+                 (a_mod * y + a_rem) / c1 == (a_mod * y + a_rem - c0) / c1 + c2
+
+                 If a_mod % c1 == 0, we can subtract the term in y
+                 from both sides and get:
+
+                 a_rem / c1 == (a_rem - c0) / c1 + c2
+
+                 c2 == a_rem / c1 - (a_rem - c0) / c1
+
+                 This is a sufficient and necessary condition for the case when x_mod % c1 == 0.
+               */
+               (no_overflow_int(op->type) &&
+                (rewrite((x + c0) / c1, x / c1 + fold(a_rem / c1 - (a_rem - c0) / c1), a_mod % c1 == 0) ||
+
+                 /**
+                    Now do the same thing for subtraction from a constant.
+
+                    (c0 - x) / c1 == c2 - x / c1
+
+                    where c0 - x == a_mod * y + a_rem
+
+                    So x = c0 - a_mod * y - a_rem
+
+                    (a_mod * y + a_rem) / c1 == c2 - (c0 - a_mod * y - a_rem) / c1
+
+                    If a_mod % c1 == 0, we can pull that term out and cancel it:
+
+                    a_rem / c1 == c2 - (c0 - a_rem) / c1
+
+                    c2 == a_rem / c1 + (c0 - a_rem) / c1
+
+                 */
+                 rewrite((c0 - x)/c1, fold(a_rem / c1 + (c0 - a_rem) / c1) - x / c1, a_mod % c1 == 0) ||
+
+                 // We can also pull it out when the constant is a
+                 // multiple of the denominator.
+                 rewrite((x + c0) / c1, x / c1 + fold(c0 / c1), c0 % c1 == 0) ||
+                 rewrite((c0 - x) / c1, fold(c0 / c1) - x / c1, (c0 + 1) % c1 == 0))) ||
+
                (denominator_non_zero &&
                 (rewrite((x + y)/x, y/x + 1) ||
                  rewrite((y + x)/x, y/x + 1) ||
@@ -199,10 +252,12 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
 
                (op->type.is_float() && rewrite(x/c0, x * fold(1/c0))))) ||
              (no_overflow_int(op->type) &&
-              (rewrite(ramp(x, c0) / broadcast(c1), ramp(x / c1, fold(c0 / c1), lanes), c0 % c1 == 0) ||
-               rewrite(ramp(x, c0) / broadcast(c1), broadcast(x / c1, lanes),
+              (
+               rewrite(ramp(x, c0, lanes) / broadcast(c1, lanes), ramp(x / c1, fold(c0 / c1), lanes), (c0 % c1 == 0)) ||
+               rewrite(ramp(x, c0, lanes) / broadcast(c1, lanes), broadcast(x / c1, lanes),
                        // First and last lanes are the same when...
-                       can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this)))) ||
+                       can_prove((x % c1 + c0 * (lanes - 1)) / c1 == 0, this))
+                       )) ||
              (no_overflow_scalar_int(op->type) &&
               (rewrite(x / -1, -x) ||
                (denominator_non_zero && rewrite(c0 / y, select(y < 0, fold(-c0), c0), c0 == -1)) ||

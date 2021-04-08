@@ -3,7 +3,6 @@
 #include <utility>
 
 #include "Argument.h"
-#include "AutoSchedule.h"
 #include "CodeGen_Internal.h"
 #include "FindCalls.h"
 #include "Func.h"
@@ -47,6 +46,15 @@ std::map<Output, std::string> static_library_outputs(const string &filename_pref
     std::map<Output, std::string> outputs = {
         {Output::c_header, filename_prefix + ext.at(Output::c_header).extension},
         {Output::static_library, filename_prefix + ext.at(Output::static_library).extension},
+    };
+    return outputs;
+}
+
+std::map<Output, std::string> object_file_outputs(const string &filename_prefix, const Target &target) {
+    auto ext = get_output_info(target);
+    std::map<Output, std::string> outputs = {
+        {Output::c_header, filename_prefix + ext.at(Output::c_header).extension},
+        {Output::object, filename_prefix + ext.at(Output::object).extension},
     };
     return outputs;
 }
@@ -105,10 +113,10 @@ struct PipelineContents {
 
     std::vector<Stmt> requirements;
 
-    bool trace_pipeline;
+    bool trace_pipeline = false;
 
     PipelineContents()
-        : module("", Target()), trace_pipeline(false) {
+        : module("", Target()) {
         user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void *>(), 0, ArgumentEstimates{});
         user_context_arg.param = Parameter(Handle(), false, 0, "__user_context");
     }
@@ -156,7 +164,7 @@ Pipeline::Pipeline(const Func &output)
 
 Pipeline::Pipeline(const vector<Func> &outputs)
     : contents(new PipelineContents) {
-    for (Func f : outputs) {
+    for (const Func &f : outputs) {
         f.function().freeze();
         contents->outputs.push_back(f.function());
     }
@@ -171,32 +179,17 @@ vector<Func> Pipeline::outputs() const {
 }
 
 /* static */
-void Pipeline::auto_schedule_Mullapudi2016(const Pipeline &pipeline, const Target &target,
-                                           const MachineParams &arch_params, AutoSchedulerResults *outputs) {
-    AutoSchedulerResults results;
-    results.target = target;
-    results.machine_params_string = arch_params.to_string();
-
-    user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
-                target.arch == Target::POWERPC || target.arch == Target::MIPS)
-        << "The Mullapudi2016 autoscheduler is not supported for the target: " << target;
-    results.scheduler_name = "Mullapudi2016";
-    results.schedule_source = generate_schedules(pipeline.contents->outputs, target, arch_params);
-    // this autoscheduler has no featurization
-
-    *outputs = results;
-}
-
-/* static */
 std::map<std::string, AutoSchedulerFn> &Pipeline::get_autoscheduler_map() {
-    static std::map<std::string, AutoSchedulerFn> autoschedulers = {
-        {"Mullapudi2016", auto_schedule_Mullapudi2016}};
+    static std::map<std::string, AutoSchedulerFn> autoschedulers = {};
     return autoschedulers;
 }
 
 /* static */
 std::string &Pipeline::get_default_autoscheduler_name() {
-    static std::string autoscheduler_name = "Mullapudi2016";
+    static std::string autoscheduler_name = "";
+    if (autoscheduler_name.empty() && !get_autoscheduler_map().empty()) {
+        autoscheduler_name = get_autoscheduler_map().begin()->first;
+    }
     return autoscheduler_name;
 }
 
@@ -217,7 +210,9 @@ AutoSchedulerFn Pipeline::find_autoscheduler(const std::string &autoscheduler_na
 
 AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_name, const Target &target, const MachineParams &arch_params) {
     auto autoscheduler_fn = find_autoscheduler(autoscheduler_name);
-    internal_assert(autoscheduler_fn != nullptr);
+    user_assert(autoscheduler_fn)
+        << "Could not find autoscheduler named '" << autoscheduler_name << "'.\n"
+        << "Did you remember to load the plugin?";
 
     AutoSchedulerResults results;
     results.target = target;
@@ -247,7 +242,7 @@ void Pipeline::set_default_autoscheduler_name(const std::string &autoscheduler_n
 Func Pipeline::get_func(size_t index) {
     // Compute an environment
     std::map<string, Function> env;
-    for (Function f : contents->outputs) {
+    for (const Function &f : contents->outputs) {
         std::map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
@@ -344,7 +339,18 @@ void Pipeline::compile_to_multitarget_static_library(const std::string &filename
         return compile_to_module(args, name, target);
     };
     auto outputs = static_library_outputs(filename_prefix, targets.back());
-    compile_multitarget(generate_function_name(), outputs, targets, module_producer);
+    compile_multitarget(generate_function_name(), outputs, targets, {}, module_producer);
+}
+
+void Pipeline::compile_to_multitarget_object_files(const std::string &filename_prefix,
+                                                   const std::vector<Argument> &args,
+                                                   const std::vector<Target> &targets,
+                                                   const std::vector<std::string> &suffixes) {
+    auto module_producer = [this, &args](const std::string &name, const Target &target) -> Module {
+        return compile_to_module(args, name, target);
+    };
+    auto outputs = object_file_outputs(filename_prefix, targets.back());
+    compile_multitarget(generate_function_name(), outputs, targets, suffixes, module_producer);
 }
 
 void Pipeline::compile_to_file(const string &filename_prefix,
@@ -420,7 +426,7 @@ class FindExterns : public IRGraphVisitor {
                 if (function_takes_user_context(op->name)) {
                     arg_types.push_back(type_of<void *>());
                 }
-                for (Expr e : op->args) {
+                for (const Expr &e : op->args) {
                     arg_types.push_back(e.type().element_of());
                 }
                 bool is_void_return = op->type.bits() == 0 || op->name == "halide_print";
@@ -451,7 +457,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
                                    const LinkageType linkage_type) {
     user_assert(defined()) << "Can't compile undefined Pipeline.\n";
 
-    for (Function f : contents->outputs) {
+    for (const Function &f : contents->outputs) {
         user_assert(f.has_pure_definition() || f.has_extern_definition())
             << "Can't compile Pipeline with undefined output Func: " << f.name() << ".\n";
     }
@@ -470,7 +476,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // explicitly).
     const bool requires_user_context = target.has_feature(Target::UserContext);
     bool has_user_context = false;
-    for (Argument arg : lowering_args) {
+    for (const Argument &arg : lowering_args) {
         if (arg.name == contents->user_context_arg.arg.name) {
             has_user_context = true;
         }
@@ -505,7 +511,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         debug(2) << "Reusing old module\n";
     } else {
         vector<IRMutator *> custom_passes;
-        for (CustomLoweringPass p : contents->custom_lowering_passes) {
+        for (const CustomLoweringPass &p : contents->custom_lowering_passes) {
             custom_passes.push_back(p.pass);
         }
 
@@ -529,31 +535,38 @@ std::string Pipeline::generate_function_name() const {
     return name;
 }
 
+// This essentially is just a getter for contents->jit_target,
+// but also reality-checks that the status of the jit_module and/or wasm_module
+// match what we expect.
+Target Pipeline::get_compiled_jit_target() const {
+    const bool has_wasm = contents->wasm_module.contents.defined();
+    const bool has_native = contents->jit_module.compiled();
+    if (contents->jit_target.arch == Target::WebAssembly) {
+        internal_assert(has_wasm && !has_native);
+    } else if (!contents->jit_target.has_unknowns()) {
+        internal_assert(!has_wasm && has_native);
+    } else {
+        internal_assert(!has_wasm && !has_native);
+    }
+    return contents->jit_target;
+}
+
 void Pipeline::compile_jit(const Target &target_arg) {
     user_assert(defined()) << "Pipeline is undefined\n";
+    user_assert(!target_arg.has_unknowns()) << "Cannot compile_jit() for target '" << target_arg << "'\n";
 
     Target target(target_arg);
     target.set_feature(Target::JIT);
     target.set_feature(Target::UserContext);
 
-    debug(2) << "jit-compiling for: " << target_arg << "\n";
-
-    // If we're re-jitting for the same target, we can just keep the
-    // old jit module.
-    if (contents->jit_target == target) {
-        if (target.arch == Target::WebAssembly) {
-            if (contents->wasm_module.contents.defined()) {
-                debug(2) << "Reusing old wasm module compiled for :\n"
-                         << contents->jit_target << "\n";
-                return;
-            }
-        }
-        if (contents->jit_module.compiled()) {
-            debug(2) << "Reusing old jit module compiled for :\n"
-                     << contents->jit_target << "\n";
-            return;
-        }
+    // If we're re-jitting for the same target, we can just keep the old jit module.
+    if (get_compiled_jit_target() == target) {
+        debug(2) << "Reusing old jit module compiled for :\n"
+                 << target << "\n";
+        return;
     }
+
+    debug(2) << "jit-compiling for: " << target_arg << "\n";
 
     // Clear all cached info in case there is an error.
     contents->invalidate_cache();
@@ -678,7 +691,9 @@ void Pipeline::add_custom_lowering_pass(IRMutator *pass, std::function<void()> d
 }
 
 void Pipeline::clear_custom_lowering_passes() {
-    if (!defined()) return;
+    if (!defined()) {
+        return;
+    }
     contents->clear_custom_lowering_passes();
 }
 
@@ -748,19 +763,6 @@ Realization Pipeline::realize(int x_size, int y_size, int z_size, const Target &
 Realization Pipeline::realize(int x_size, int y_size, const Target &target,
                               const ParamMap &param_map) {
     return realize({x_size, y_size}, target, param_map);
-}
-
-Realization Pipeline::realize(int x_size, const Target &target,
-                              const ParamMap &param_map) {
-    // Use an explicit vector here, since {x_size} can be interpreted
-    // as a scalar initializer
-    vector<int32_t> v = {x_size};
-    return realize(v, target, param_map);
-}
-
-Realization Pipeline::realize(const Target &target,
-                              const ParamMap &param_map) {
-    return realize(vector<int32_t>(), target, param_map);
 }
 
 void Pipeline::add_requirement(const Expr &condition, std::vector<Expr> &error_args) {
@@ -916,9 +918,11 @@ private:
     using ConstVoidPtr = const void *;
     ConstVoidPtr fixed_store[kStoreSize];
 
-    JITCallArgs(const JITCallArgs &) = delete;
-    JITCallArgs(JITCallArgs &&) = delete;
-    void operator=(const JITCallArgs &) = delete;
+public:
+    JITCallArgs(const JITCallArgs &other) = delete;
+    JITCallArgs &operator=(const JITCallArgs &other) = delete;
+    JITCallArgs(JITCallArgs &&other) = delete;
+    JITCallArgs &operator=(JITCallArgs &&other) = delete;
 };
 
 // Make a vector of void *'s to pass to the jit call using the
@@ -1060,12 +1064,10 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
 
     debug(2) << "Realizing Pipeline for " << target << "\n";
 
-    // If target is unspecified...
-    if (target.os == Target::OSUnknown) {
+    if (target.has_unknowns()) {
         // If we've already jit-compiled for a specific target, use that.
-        if (contents->jit_module.compiled()) {
-            target = contents->jit_target;
-        } else {
+        target = get_compiled_jit_target();
+        if (target.has_unknowns()) {
             // Otherwise get the target from the environment
             target = get_jit_target_from_environment();
         }
@@ -1164,13 +1166,9 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
     jit_context.finalize(exit_status);
 }
 
-void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_map) {
-    if (!contents->jit_module.compiled() ||
-        contents->jit_target.has_feature(Target::NoBoundsQuery)) {
-        Target target = get_jit_target_from_environment();
-        target.set_feature(Target::NoBoundsQuery, false);
-        compile_jit(target);
-    }
+void Pipeline::infer_input_bounds(RealizationArg outputs, const Target &target, const ParamMap &param_map) {
+    user_assert(!target.has_feature(Target::NoBoundsQuery)) << "You may not call infer_input_bounds() with Target::NoBoundsQuery set.";
+    compile_jit(target);
 
     // This has to happen after a runtime has been compiled in compile_jit.
     JITFuncCallContext jit_context(jit_handlers());
@@ -1273,22 +1271,16 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const ParamMap &param_
     }
 }
 
-void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
+void Pipeline::infer_input_bounds(const std::vector<int32_t> &sizes,
+                                  const Target &target,
                                   const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Pipeline.\n";
-
-    vector<int> size;
-    if (x_size) size.push_back(x_size);
-    if (y_size) size.push_back(y_size);
-    if (z_size) size.push_back(z_size);
-    if (w_size) size.push_back(w_size);
-
     vector<Buffer<>> bufs;
     for (Type t : contents->outputs[0].output_types()) {
-        bufs.emplace_back(t, size);
+        bufs.emplace_back(t, sizes);
     }
     Realization r(bufs);
-    infer_input_bounds(r, param_map);
+    infer_input_bounds(r, target, param_map);
 }
 
 void Pipeline::invalidate_cache() {

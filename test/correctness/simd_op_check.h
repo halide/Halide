@@ -24,11 +24,13 @@ public:
     std::string filter{"*"};
     std::string output_directory{Internal::get_test_tmp_dir()};
     std::vector<Task> tasks;
+    std::mt19937 rng;
 
     Target target;
 
     ImageParam in_f32{Float(32), 1, "in_f32"};
     ImageParam in_f64{Float(64), 1, "in_f64"};
+    ImageParam in_bf16{BFloat(16), 1, "in_bf16"};
     ImageParam in_i8{Int(8), 1, "in_i8"};
     ImageParam in_u8{UInt(8), 1, "in_u8"};
     ImageParam in_i16{Int(16), 1, "in_i16"};
@@ -38,8 +40,8 @@ public:
     ImageParam in_i64{Int(64), 1, "in_i64"};
     ImageParam in_u64{UInt(64), 1, "in_u64"};
 
-    const std::vector<ImageParam> image_params{in_f32, in_f64, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
-    const std::vector<Argument> arg_types{in_f32, in_f64, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
+    const std::vector<ImageParam> image_params{in_f32, in_f64, in_bf16, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
+    const std::vector<Argument> arg_types{in_f32, in_f64, in_bf16, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
     int W;
     int H;
 
@@ -52,6 +54,11 @@ public:
         num_threads = Internal::ThreadPool<void>::num_processors_online();
     }
     virtual ~SimdOpCheckTest() = default;
+
+    void set_seed(int seed) {
+        rng.seed(seed);
+    }
+
     size_t get_num_threads() const {
         return num_threads;
     }
@@ -59,7 +66,8 @@ public:
     void set_num_threads(size_t n) {
         num_threads = n;
     }
-    bool can_run_code() const {
+
+    virtual bool can_run_code() const {
         // Assume we are configured to run wasm if requested
         // (we'll fail further downstream if not)
         if (target.arch == Target::WebAssembly) {
@@ -84,6 +92,38 @@ public:
             }
         }
         return can_run_the_code;
+    }
+
+    virtual void compile_and_check(Func f, Func error, const std::string &op, const std::string &name, int vector_width, std::ostringstream &error_msg) {
+        // Compile just the vector Func to assembly.
+        std::string asm_filename = output_directory + "check_" + name + ".s";
+        f.compile_to_assembly(asm_filename, arg_types, target);
+
+        std::ifstream asm_file;
+        asm_file.open(asm_filename);
+
+        bool found_it = false;
+
+        std::ostringstream msg;
+        msg << op << " did not generate for target=" << target.to_string() << " vector_width=" << vector_width << ". Instead we got:\n";
+
+        std::string line;
+        while (getline(asm_file, line)) {
+            msg << line << "\n";
+
+            // Check for the op in question
+            found_it |= wildcard_search(op, line) && !wildcard_search("_" + op, line);
+        }
+
+        if (!found_it) {
+            error_msg << "Failed: " << msg.str() << "\n";
+        }
+
+        asm_file.close();
+
+        // Also compile the error checking Func (to be sure it compiles without error)
+        std::string fn_name = "test_" + name;
+        error.compile_to_file(output_directory + fn_name, arg_types, fn_name, target);
     }
 
     // Check if pattern p matches str, allowing for wildcards (*).
@@ -173,9 +213,9 @@ public:
             g.compute_at(f, x)
                 .update()
                 .split(x, xo, xi, vector_width)
-                .fuse(g.rvars()[0], xi, rxi)
-                .atomic()
-                .vectorize(rxi);
+                .atomic(true)
+                .vectorize(g.rvars()[0])
+                .vectorize(xi);
         }
 
         // The output to the pipeline is the maximum absolute difference as a double.
@@ -184,37 +224,7 @@ public:
         error() = Halide::cast<double>(maximum(absd(f(r_check.x, r_check.y), f_scalar(r_check.x, r_check.y))));
 
         setup_images();
-        {
-            // Compile just the vector Func to assembly.
-            std::string asm_filename = output_directory + "check_" + name + ".s";
-            f.compile_to_assembly(asm_filename, arg_types, target);
-
-            std::ifstream asm_file;
-            asm_file.open(asm_filename);
-
-            bool found_it = false;
-
-            std::ostringstream msg;
-            msg << op << " did not generate for target=" << target.to_string() << " vector_width=" << vector_width << ". Instead we got:\n";
-
-            std::string line;
-            while (getline(asm_file, line)) {
-                msg << line << "\n";
-
-                // Check for the op in question
-                found_it |= wildcard_search(op, line) && !wildcard_search("_" + op, line);
-            }
-
-            if (!found_it) {
-                error_msg << "Failed: " << msg.str() << "\n";
-            }
-
-            asm_file.close();
-        }
-
-        // Also compile the error checking Func (to be sure it compiles without error)
-        std::string fn_name = "test_" + name;
-        error.compile_to_file(output_directory + fn_name, arg_types, fn_name, target);
+        compile_and_check(f, error, op, name, vector_width, error_msg);
 
         bool can_run_the_code = can_run_code();
         if (can_run_the_code) {
@@ -223,10 +233,8 @@ public:
                                     .without_feature(Target::NoAsserts)
                                     .without_feature(Target::NoBoundsQuery);
 
-            error.compile_jit(run_target);
-            error.infer_input_bounds();
+            error.infer_input_bounds({}, run_target);
             // Fill the inputs with noise
-            std::mt19937 rng(123);
             for (auto p : image_params) {
                 Halide::Buffer<> buf = p.get();
                 if (!buf.defined()) continue;
@@ -298,6 +306,11 @@ public:
     virtual void setup_images() {
         for (auto p : image_params) {
             p.reset();
+
+            const int alignment_bytes = 16;
+            p.set_host_alignment(alignment_bytes);
+            const int alignment = alignment_bytes / p.type().bytes();
+            p.dim(0).set_min((p.dim(0).min() / alignment) * alignment);
         }
     }
     virtual bool test_all() {

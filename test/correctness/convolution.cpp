@@ -77,8 +77,8 @@ int main(int argc, char **argv) {
 
         // Summation is done as a sequential loop within each gpu thread
         blur2.gpu_tile(x, y, xi, yi, 16, 16);
-    } else if (target.has_feature(Target::HVX_64) || target.has_feature(Target::HVX_128)) {
-        int hvx_vector_width = target.has_feature(Target::HVX_128) ? 64 : 32;
+    } else if (target.has_feature(Target::HVX)) {
+        int hvx_vector_width = 64;
         // Take this opportunity to test scheduling the pure dimensions in a reduction
         Var xi("xi"), yi("yi");
         blur1.hexagon().tile(x, y, xi, yi, 6, 6);
@@ -96,8 +96,8 @@ int main(int argc, char **argv) {
         blur2.vectorize(x, 4).parallel(y);
     }
 
-    Buffer<uint16_t> out1 = blur1.realize(W, H, target);
-    Buffer<uint16_t> out2 = blur2.realize(W, H, target);
+    Buffer<uint16_t> out1 = blur1.realize({W, H}, target);
+    Buffer<uint16_t> out2 = blur2.realize({W, H}, target);
 
     for (int y = 1; y < H - 1; y++) {
         for (int x = 1; x < W - 1; x++) {

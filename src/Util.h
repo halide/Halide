@@ -4,7 +4,7 @@
 #include <assert.h>
 #define NDEBUG
 #else
-#include <assert.h>
+#include <cassert>
 #endif
 
 #ifndef HALIDE_UTIL_H
@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <limits>
 #include <string>
 #include <utility>
@@ -22,8 +23,10 @@
 
 #include "runtime/HalideRuntime.h"
 
-#ifndef HALIDE_EXPORT
-#if defined(_MSC_VER) && !defined(Halide_STATIC_DEFINE)
+#ifdef Halide_STATIC_DEFINE
+#define HALIDE_EXPORT
+#else
+#if defined(_MSC_VER)
 // Halide_EXPORTS is quietly defined by CMake when building a shared library
 #ifdef Halide_EXPORTS
 #define HALIDE_EXPORT __declspec(dllexport)
@@ -31,7 +34,7 @@
 #define HALIDE_EXPORT __declspec(dllimport)
 #endif
 #else
-#define HALIDE_EXPORT
+#define HALIDE_EXPORT __attribute__((visibility("default")))
 #endif
 #endif
 
@@ -40,11 +43,6 @@
 #define HALIDE_NO_USER_CODE_INLINE
 #else
 #define HALIDE_NO_USER_CODE_INLINE HALIDE_NEVER_INLINE
-#endif
-
-// On windows, Halide needs a larger stack than the default MSVC provides
-#ifdef _MSC_VER
-#pragma comment(linker, "/STACK:8388608,1048576")
 #endif
 
 namespace Halide {
@@ -210,6 +208,9 @@ struct all_are_convertible : meta_and<std::is_convertible<Args, To>...> {};
 /** Returns base name and fills in namespaces, outermost one first in vector. */
 std::string extract_namespaces(const std::string &name, std::vector<std::string> &namespaces);
 
+/** Overload that returns base name only */
+std::string extract_namespaces(const std::string &name);
+
 struct FileStat {
     uint64_t file_size;
     uint32_t mod_time;  // Unix epoch time
@@ -285,7 +286,7 @@ inline void write_entire_file(const std::string &pathname, const std::vector<cha
 class TemporaryFile final {
 public:
     TemporaryFile(const std::string &prefix, const std::string &suffix)
-        : temp_path(file_make_temp(prefix, suffix)), do_unlink(true) {
+        : temp_path(file_make_temp(prefix, suffix)) {
     }
     const std::string &pathname() const {
         return temp_path;
@@ -304,9 +305,13 @@ public:
 
 private:
     const std::string temp_path;
-    bool do_unlink;
+    bool do_unlink = true;
+
+public:
     TemporaryFile(const TemporaryFile &) = delete;
-    void operator=(const TemporaryFile &) = delete;
+    TemporaryFile &operator=(const TemporaryFile &) = delete;
+    TemporaryFile(TemporaryFile &&) = delete;
+    TemporaryFile &operator=(TemporaryFile &&) = delete;
 };
 
 /** Routines to test if math would overflow for signed integers with
@@ -459,6 +464,11 @@ std::string c_print_name(const std::string &name);
  * only for internal tests which need to verify behavior; please don't use this outside
  * of Halide tests. */
 int get_llvm_version();
+
+/** Call the given action in a platform-specific context that provides at least
+ * 8MB of stack space. Currently only has any effect on Windows where it uses
+ * a Fiber. */
+void run_with_large_stack(const std::function<void()> &action);
 
 }  // namespace Internal
 }  // namespace Halide
