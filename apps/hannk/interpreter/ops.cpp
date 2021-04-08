@@ -249,7 +249,7 @@ void requantize(const HalideBuffer<const uint8_t> &in, const QuantizationInfo &i
 
 BoundsMap ElementwiseOp::map_bounds(int input_idx, int output_idx) const {
     int rank = output()->rank();
-    assert(rank == input(in)->rank());
+    assert(rank == input(input_idx)->rank());
     return BoundsMap::elementwise(rank);
 }
 
@@ -295,7 +295,7 @@ std::vector<SplitInfo> ConcatenationOp::get_split_info() const {
 
 BoundsMap ConcatenationOp::map_bounds(int input_idx, int output_idx) const {
     int rank = output()->rank();
-    assert(rank == input(in)->rank());
+    assert(rank == input(input_idx)->rank());
 
     int offset = 0;
     for (int i = 0; i < input_idx; i++) {

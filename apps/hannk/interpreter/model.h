@@ -249,40 +249,40 @@ struct SplitInfo {
 };
 
 // A mapping from an output x to required input coordinates [min, max].
-// [min, max] = x * stride / up_stride + bounds
+// [min, max] = x * stride / inv_stride + bounds
 struct DimMap {
     int stride;
-    int up_stride;
+    int inv_stride;
     Interval bounds;
 
-    DimMap(int stride, int up_stride, const Interval &bounds)
-        : stride(stride), up_stride(up_stride), bounds(bounds) {
+    DimMap(int stride, int inv_stride, const Interval &bounds)
+        : stride(stride), inv_stride(inv_stride), bounds(bounds) {
     }
 
     Interval evaluate(Interval result) const {
         result *= stride;
-        result /= up_stride;
+        result /= inv_stride;
         result += bounds;
         return result;
     }
     Interval evaluate(int at) const {
         Interval result(at);
         result *= stride;
-        result /= up_stride;
+        result /= inv_stride;
         result += bounds;
         return result;
     }
 
     bool is_elementwise() const {
-        return stride == 1 && up_stride == 1 && bounds.extent() == 1;
+        return stride == 1 && inv_stride == 1 && bounds.extent() == 1;
     }
 
     bool is_upsample() const {
-        return stride == 1 && up_stride > 1;
+        return stride == 1 && inv_stride > 1;
     }
 
     bool is_downsample() const {
-        return stride > 1 && up_stride == 1;
+        return stride > 1 && inv_stride == 1;
     }
 
     bool is_constant() const {
