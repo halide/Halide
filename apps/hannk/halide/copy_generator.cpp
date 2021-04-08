@@ -29,9 +29,6 @@ public:
         const int vector_size =
             std::max(natural_vector_size(output_.type()), natural_vector_size(input_.type()));
 
-        Expr input_channels = input_.dim(0).extent();
-        Expr output_channels = output_.dim(0).extent();
-
         if (input_.type() == UInt(8) && output_.type() == UInt(8)) {
             // Handle 3 channel -> 4 channel padding as a special case.
             // TODO: vectorize c instead of unroll c.
@@ -40,12 +37,17 @@ public:
                 .unroll(c);
         }
 
+        Expr input_channels = input_.dim(0).extent();
+        Expr output_channels = output_.dim(0).extent();
+        Expr channels_in_bounds =
+            input_.dim(0).min() == output_.dim(0).min() && input_channels == output_channels;
+
         // Handle cases with a small number of channels.
         for (int i = vector_size; i >= 2; i /= 2) {
             output_.specialize(output_channels >= i)
                 .vectorize(c, i, TailStrategy::ShiftInwards)
                 .reorder(x, y, c, b)
-                .specialize(input_channels == output_channels)
+                .specialize(channels_in_bounds)
                 // TODO: This is ridiculous but it helps.
                 .specialize(output_channels < 100)
                 .reorder(c, x, y, b);
@@ -56,7 +58,7 @@ public:
         output_
             .reorder(x, y, c, b)
             .vectorize(c, vector_size, TailStrategy::GuardWithIf)
-            .specialize(input_channels == output_channels);
+            .specialize(channels_in_bounds);
     }
 };
 
