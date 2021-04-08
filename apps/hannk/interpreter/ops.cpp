@@ -403,7 +403,8 @@ void Conv2DOp::execute(const Box &crop) {
         if (filter_width == 1 && filter_height == 1) {
             // For 1x1 filters, we can fuse x and y, which can help avoid overhead for
             // small output sizes.
-            while (can_fuse_xy(input_buf) && can_fuse_xy(output_buf)) {
+            while (can_fuse_xy(input_buf) && can_fuse_xy(output_buf) &&
+                   input_buf.dim(1).extent() == output_buf.dim(1).extent()) {
                 fuse_xy(input_buf);
                 fuse_xy(output_buf);
             }
