@@ -86,6 +86,22 @@
       }
     },
     {
+      "name": "package-windows",
+      "inherits": "package",
+      "displayName": "Package ZIP for Windows",
+      "description": "Build for packaging Windows shared libraries.",
+      "binaryDir": "${sourceDir}/build",
+      "generator": "Visual Studio 16 2019",
+      "toolset": "host=x64",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "BUILD_SHARED_LIBS": "YES",
+        "CMAKE_INSTALL_BINDIR": "bin/$<CONFIG>",
+        "CMAKE_INSTALL_LIBDIR": "lib/$<CONFIG>",
+        "HALIDE_INSTALL_CMAKEDIR": "lib/cmake/Halide"
+      }
+    },
+    {
       "name": "package-unix",
       "hidden": true,
       "inherits": "package",
