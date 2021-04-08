@@ -54,17 +54,17 @@ int aslog::aslog_level() {
 }
 
 std::string conform_name(const std::string &name, const std::string &prefix) {
-    auto invalid_contents = [] (const char& c) { 
+    auto invalid_contents = [](const char &c) {
         return std::ispunct(c) || std::isspace(c);
     };
 
-    auto invalid_prefix = [] (const char& c) { 
+    auto invalid_prefix = [](const char &c) {
         return (c != '_') && !(std::isalpha(c));
     };
 
     std::string result(name);
     std::replace_if(result.begin(), result.end(), invalid_contents, '_');
-    if(invalid_prefix(result.front())) { result = std::string(prefix) + result; }
+    if (invalid_prefix(result.front())) { result = std::string(prefix) + result; }
     return result;
 }
 

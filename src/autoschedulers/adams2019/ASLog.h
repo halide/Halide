@@ -32,7 +32,7 @@ public:
 };
 
 // Conform the given name into a valid C++ identifier (eg for dumping a Func/Var inside a schedule to a header)
-std::string conform_name(const std::string &name, const std::string &prefix="_"); 
+std::string conform_name(const std::string &name, const std::string &prefix = "_");
 
 }  // namespace Internal
 }  // namespace Halide
