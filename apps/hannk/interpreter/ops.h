@@ -315,8 +315,12 @@ public:
             apply(map, input()), apply(map, output()), stride_, filter_size_, padding_, op_, activation_);
     }
 
-    Operator op() const { return op_; }
-    Padding padding() const { return padding_; }
+    Operator op() const {
+        return op_;
+    }
+    Padding padding() const {
+        return padding_;
+    }
 
     BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;

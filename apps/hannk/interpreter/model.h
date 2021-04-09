@@ -365,7 +365,7 @@ public:
 
     // Check if this bounds map is solely an elementwise mapping from dim_in to dim_out.
     bool is_elementwise(int dim_in, int dim_out) const {
-        bool result = true;;
+        bool result = true;
         for (int i = 0; i < dims_out_ + 1; i++) {
             const DimMap &map = at(dim_in, i);
             result = result && (i == dim_out ? map.is_elementwise() : map.is_constant());
@@ -374,7 +374,7 @@ public:
     }
 
     bool is_constant(int dim_in, int dim_out) const {
-        bool result = true;;
+        bool result = true;
         for (int i = 0; i < dims_out_ + 1; i++) {
             const DimMap &map = at(dim_in, i);
             result = result && (i == dim_out ? map.is_elementwise() : map.is_constant());

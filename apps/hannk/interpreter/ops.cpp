@@ -418,19 +418,19 @@ void Conv2DOp::execute(const Box &crop) {
             // and/or specialize.
             CHECK(
                 0 == conv_r16_uint8(input_buf, filter_buf, bias_buf, (uint8_t)params.a_zero,
-                                           (uint8_t)params.b_zero, stride_[0], stride_[1],
-                                           dilation_[0], dilation_[1], params.c.multiplier,
-                                           params.c.shift, (uint8_t)params.c_zero,
-                                           output_range.min, output_range.max, output_buf));
+                                    (uint8_t)params.b_zero, stride_[0], stride_[1],
+                                    dilation_[0], dilation_[1], params.c.multiplier,
+                                    params.c.shift, (uint8_t)params.c_zero,
+                                    output_range.min, output_range.max, output_buf));
         } else
 #endif
         {
             CHECK(
                 0 == conv_uint8(input_buf, filter_buf, bias_buf, (uint8_t)params.a_zero,
-                                       (uint8_t)params.b_zero, stride_[0], stride_[1],
-                                       dilation_[0], dilation_[1], params.c.multiplier,
-                                       params.c.shift, (uint8_t)params.c_zero,
-                                       output_range.min, output_range.max, output_buf));
+                                (uint8_t)params.b_zero, stride_[0], stride_[1],
+                                dilation_[0], dilation_[1], params.c.multiplier,
+                                params.c.shift, (uint8_t)params.c_zero,
+                                output_range.min, output_range.max, output_buf));
         }
     } else {
         CHECK(false) << "Unsupported type " << out->type() << "\n";
@@ -720,14 +720,6 @@ const char *PoolOp::to_string(PoolOp::Operator op) {
 
 BoundsMap PoolOp::map_bounds(int input_idx, int output_idx) const {
     assert(output_idx == 0);
-/*
-    const int in_width = input_buf.dim(1).extent();
-    const int in_height = input_buf.dim(2).extent();
-    const int out_width = output_buf.dim(1).extent();
-    const int out_height = output_buf.dim(2).extent();
-    input_buf.translate(1, compute_padding(stride_[0], in_width, filter_size_[0], out_width));
-    input_buf.translate(2, compute_padding(stride_[1], in_height, filter_size_[1], out_height));
-*/
     return BoundsMap(4, 4)
         .elementwise(0, 0)
         .downsample(1, 1, stride_[0], Interval(0, filter_size_[0] - 1))
