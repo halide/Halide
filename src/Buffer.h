@@ -568,12 +568,12 @@ public:
     Expr operator()(const Expr &first, Args... rest) const {
         std::vector<Expr> args = {first, rest...};
         return (*this)(args);
-    };
+    }
 
     template<typename... Args>
     Expr operator()(const std::vector<Expr> &args) const {
         return buffer_accessor(Buffer<>(*this), args);
-    };
+    }
     // @}
 
     /** Copy to the GPU, using the device API that is the default for the given Target. */

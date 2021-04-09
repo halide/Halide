@@ -87,7 +87,7 @@ struct halide_metal_command_queue;
 extern int halide_metal_acquire_context(void *user_context, struct halide_metal_device **device_ret,
                                         struct halide_metal_command_queue **queue_ret, bool create);
 
-/** This call balances each successfull halide_metal_acquire_context call.
+/** This call balances each successful halide_metal_acquire_context call.
  * If halide_metal_acquire_context is replaced, this routine must be replaced
  * as well.
  */
