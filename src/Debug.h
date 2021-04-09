@@ -63,6 +63,7 @@ public:
     }
 
     static int debug_level();
+    static int set_debug_level(int d);
 };
 
 }  // namespace Internal

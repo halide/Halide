@@ -15,6 +15,12 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (t.has_feature(Target::CUDA)) {
+        t.set_feature(Target::Debug);
+        t.set_feature(Target::DisableLLVMLoopOpt);
+        Halide::Internal::debug::set_debug_level(2);
+    }
+
     // Check dynamic allocations per-block and per-thread into both
     // shared and global
     for (int per_thread = 0; per_thread < 2; per_thread++) {
@@ -35,7 +41,7 @@ int main(int argc, char **argv) {
             f.store_in(memory_type);
 
             // The amount of shared/heap memory required varies with x
-            Buffer<int> out = g.realize({100});
+            Buffer<int> out = g.realize({100}, t);
             for (int x = 0; x < 100; x++) {
                 int correct = 3 * x;
                 if (out(x) != correct) {
