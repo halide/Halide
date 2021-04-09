@@ -1,7 +1,6 @@
 #include "tflite/tflite_parser.h"
 
 #include <algorithm>
-#include <iostream>
 #include <memory>
 
 #include "interpreter/ops.h"
@@ -112,23 +111,6 @@ public:
                                          t->quantization()->zero_point()->cend());
             }
         }
-
-        // TODO: revisit this to see if we can convince ourselves it's always correct.
-        // if (type == TensorType::Int8) {
-        //     // Convert Int8 buffers to UInt8 buffers by adjusting the quantization info.
-        //     // TODO: Is this correct??
-        //     type = halide_type_of<uint8_t>();
-        //     if (quantization.scale.size() == 0) {
-        //         quantization.scale.push_back(1);
-        //     }
-        //     if (quantization.zero.size() == 0) {
-        //         quantization.zero.push_back(128);
-        //     } else {
-        //         for (int &i : quantization.zero) {
-        //             i = 128 + i;
-        //         }
-        //     }
-        // }
 
         if (t->buffer() != 0) {
             const auto *tflite_buffer = model_->buffers()->Get(t->buffer())->data();

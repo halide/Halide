@@ -386,7 +386,6 @@ void Conv2DOp::execute(const Box &crop) {
 
     if (in->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
-        // TODO: reduce code duplication between here and DepthwiseConv2D
         auto input_buf = in->buffer<const uint8_t>();
         auto filter_buf = filt->buffer<const void>();
         auto bias_buf = bias()->buffer<const int32_t>();
@@ -483,7 +482,6 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
     if (in->type() == halide_type_of<uint8_t>() &&
         filt->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
-        // TODO: reduce code duplication between here and Conv2D
         auto input_buf = in->buffer<const uint8_t>();
         auto filter_buf = filt->buffer<const uint8_t>().sliced(3, 0);
         auto bias_buf = bias()->buffer<const int32_t>();
