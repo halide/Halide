@@ -31,7 +31,7 @@ bool use_8bit_multiply(const Target &target) {
     return target.arch != Target::X86 || target.has_feature(Target::AVX512_SapphireRapids);
 }
 
-class Convolution : public Generator<Convolution> {
+class Conv : public Generator<Conv> {
 public:
     // How much to unroll the reduction loop over channels. On some targets,
     // loading a few scalars for one of the reduction inputs is fine, and avoids
@@ -307,7 +307,7 @@ public:
 };
 
 // The above generator expects the filter to already be tiled into
-class TileConvolutionFilter : public Generator<TileConvolutionFilter> {
+class TileConvFilter : public Generator<TileConvFilter> {
 public:
     Input<Buffer<uint8_t>> input_{"input", 4};
     Input<uint8_t> input_zero_{"input_zero"};
@@ -353,5 +353,5 @@ public:
 
 }  // namespace hannk
 
-HALIDE_REGISTER_GENERATOR(hannk::Convolution, Convolution)
-HALIDE_REGISTER_GENERATOR(hannk::TileConvolutionFilter, TileConvolutionFilter)
+HALIDE_REGISTER_GENERATOR(hannk::Conv, Conv)
+HALIDE_REGISTER_GENERATOR(hannk::TileConvFilter, TileConvFilter)

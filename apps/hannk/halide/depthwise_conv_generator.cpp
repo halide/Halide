@@ -7,7 +7,7 @@ using namespace Halide::ConciseCasts;
 
 namespace hannk {
 
-class DepthwiseConvolution : public Generator<DepthwiseConvolution> {
+class DepthwiseConv : public Generator<DepthwiseConv> {
 public:
     // If positive, a constant inverse depth multiplier.
     GeneratorParam<int> inv_depth_multiplier_{"inv_depth_multiplier", -1};
@@ -191,5 +191,4 @@ public:
 
 }  // namespace hannk
 
-HALIDE_REGISTER_GENERATOR(hannk::DepthwiseConvolution,
-                          DepthwiseConvolution)
+HALIDE_REGISTER_GENERATOR(hannk::DepthwiseConv, DepthwiseConv)
