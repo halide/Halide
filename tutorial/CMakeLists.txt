@@ -108,7 +108,7 @@ add_halide_library(my_first_generator_win32 FROM lesson_15_generate
                    GENERATOR my_first_generator
                    TARGETS x86-32-windows)
 
-list(APPEND LESSON_15_EXPECTED_FILES $<TARGET_FILE_NAME:my_first_generator_win32> my_first_generator_win32.h)
+list(APPEND LESSON_15_EXPECTED_FILES $<TARGET_FILE:my_first_generator_win32> my_first_generator_win32.h)
 add_dependencies(lesson_15_targets my_first_generator_win32)
 
 ##
@@ -130,9 +130,9 @@ add_halide_library(my_second_generator_3 FROM lesson_15_generate
                    PARAMS parallel=false output.type=float64)
 
 list(APPEND LESSON_15_EXPECTED_FILES
-     $<TARGET_FILE_NAME:my_second_generator_1> my_second_generator_1.h
-     $<TARGET_FILE_NAME:my_second_generator_2> my_second_generator_2.h
-     $<TARGET_FILE_NAME:my_second_generator_3> my_second_generator_3.h)
+     $<TARGET_FILE:my_second_generator_1> my_second_generator_1.h
+     $<TARGET_FILE:my_second_generator_2> my_second_generator_2.h
+     $<TARGET_FILE:my_second_generator_3> my_second_generator_3.h)
 
 add_dependencies(lesson_15_targets
                  my_second_generator_1
