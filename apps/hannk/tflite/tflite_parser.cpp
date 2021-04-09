@@ -89,6 +89,7 @@ public:
     }
 
     std::unique_ptr<Tensor> parse_tensor(const tflite::Tensor *t) {
+        CHECK(t->shape()) << "Dynamic shapes not supported.";
         const int shape_size = t->shape()->size();
         std::vector<int> shape;
         shape.reserve(shape_size);
