@@ -138,21 +138,6 @@ protected:
      * of functions as. */
     virtual Type upgrade_type_for_argument_passing(const Type &) const;
 
-    /** State needed by llvm for code generation, including the
-     * current module, function, context, builder, and most recently
-     * generated llvm value. */
-    //@{
-    static bool llvm_X86_enabled;
-    static bool llvm_ARM_enabled;
-    static bool llvm_Hexagon_enabled;
-    static bool llvm_AArch64_enabled;
-    static bool llvm_NVPTX_enabled;
-    static bool llvm_Mips_enabled;
-    static bool llvm_PowerPC_enabled;
-    static bool llvm_AMDGPU_enabled;
-    static bool llvm_WebAssembly_enabled;
-    static bool llvm_RISCV_enabled;
-
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;
@@ -461,7 +446,7 @@ protected:
     llvm::Function *get_llvm_intrin(const Type &ret_type, const std::string &name, const std::vector<Type> &arg_types, bool scalars_are_vectors = false);
     llvm::Function *get_llvm_intrin(llvm::Type *ret_type, const std::string &name, const std::vector<llvm::Type *> &arg_types);
     /** Declare an intrinsic function that participates in overload resolution. */
-    void declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types, bool scalars_are_vectors = false);
+    llvm::Function *declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types, bool scalars_are_vectors = false);
     void declare_intrin_overload(const std::string &name, const Type &ret_type, llvm::Function *impl, std::vector<Type> arg_types);
     /** Call an overloaded intrinsic function. Returns nullptr if no suitable overload is found. */
     llvm::Value *call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args);
@@ -567,7 +552,10 @@ private:
 
     llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name, bool result_in_argv = false);
 
-    llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr);
+    llvm::Value *codegen_dense_vector_load(const Type &type, const std::string &name, const Expr &base,
+                                           const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
+                                           llvm::Value *vpred = nullptr, bool slice_to_native = true);
+    llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr, bool slice_to_native = true);
 
     virtual void codegen_predicated_vector_load(const Load *op);
     virtual void codegen_predicated_vector_store(const Store *op);
@@ -579,7 +567,7 @@ private:
 
     /** A helper routine for generating folded vector reductions. */
     template<typename Op>
-    bool try_to_fold_vector_reduce(const Op *op);
+    bool try_to_fold_vector_reduce(const Expr &a, Expr b);
 };
 
 }  // namespace Internal

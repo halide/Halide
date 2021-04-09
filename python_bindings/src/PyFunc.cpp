@@ -325,6 +325,7 @@ void define_func(py::module &m) {
             .def("set_estimates", &Func::set_estimates, py::arg("estimates"))
 
             .def("align_bounds", &Func::align_bounds, py::arg("var"), py::arg("modulus"), py::arg("remainder") = 0)
+            .def("align_extent", &Func::align_extent, py::arg("var"), py::arg("modulus"))
 
             .def("bound_extent", &Func::bound_extent, py::arg("var"), py::arg("extent"))
 

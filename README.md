@@ -32,7 +32,7 @@ If you've acquired a full source distribution and want to build Halide, see the
 
 ## Binary tarballs
 
-The latest version of Halide is **Halide 10.0.0**. We provide binary releases
+The latest version of Halide is **Halide 11.0.1**. We provide binary releases
 for many popular platforms and architectures, including 32/64-bit x86 Windows,
 64-bit macOS, and 32/64-bit x86/ARM Ubuntu Linux. See the releases tab on the
 right (or click [here](https://github.com/halide/Halide/releases/tag/v10.0.0)).
@@ -100,7 +100,7 @@ If you want to build it yourself, first check it out from GitHub:
 ```
 
 (If you want to build LLVM 10.x, use branch `llvmorg-10.0.1`; for current trunk,
-use `master`)
+use `main`)
 
 Then build it like so:
 

@@ -1,9 +1,8 @@
-#include <iostream>
 #include <sstream>
 
 #include "CSE.h"
-#include "CodeGen_ARM.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_Posix.h"
 #include "ConciseCasts.h"
 #include "Debug.h"
 #include "IREquality.h"
@@ -25,6 +24,8 @@ using std::vector;
 using namespace Halide::ConciseCasts;
 using namespace llvm;
 
+#if defined(WITH_ARM) || defined(WITH_AARCH64)
+
 namespace {
 
 // Broadcast to an unknown number of lanes, for making patterns.
@@ -32,21 +33,59 @@ Expr bc(Expr x) {
     return Broadcast::make(std::move(x), 0);
 }
 
-}  // namespace
+/** A code generator that emits ARM code from a given Halide stmt. */
+class CodeGen_ARM : public CodeGen_Posix {
+public:
+    /** Create an ARM code generator for the given arm target. */
+    CodeGen_ARM(const Target &);
+
+protected:
+    using CodeGen_Posix::visit;
+
+    /** Assuming 'inner' is a function that takes two vector arguments, define a wrapper that
+     * takes one vector argument and splits it into two to call inner. */
+    llvm::Function *define_concat_args_wrapper(llvm::Function *inner, const string &name);
+    void init_module() override;
+
+    /** Nodes for which we want to emit specific neon intrinsics */
+    // @{
+    void visit(const Cast *) override;
+    void visit(const Sub *) override;
+    void visit(const Mul *) override;
+    void visit(const Min *) override;
+    void visit(const Max *) override;
+    void visit(const Store *) override;
+    void visit(const Load *) override;
+    void visit(const Call *) override;
+    void visit(const LT *) override;
+    void visit(const LE *) override;
+    void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
+    // @}
+
+    /** Various patterns to peephole match against */
+    struct Pattern {
+        string intrin;  ///< Name of the intrinsic
+        Expr pattern;   ///< The pattern to match against
+        Pattern() = default;
+        Pattern(const string &intrin, Expr p)
+            : intrin(intrin), pattern(std::move(p)) {
+        }
+    };
+    vector<Pattern> casts, averagings, negations;
+
+    string mcpu() const override;
+    string mattrs() const override;
+    bool use_soft_float_abi() const override;
+    int native_vector_bits() const override;
+
+    // NEON can be disabled for older processors.
+    bool neon_intrinsics_disabled() {
+        return target.has_feature(Target::NoNEON);
+    }
+};
 
 CodeGen_ARM::CodeGen_ARM(const Target &target)
     : CodeGen_Posix(target) {
-    if (target.bits == 32) {
-#if !defined(WITH_ARM)
-        user_error << "arm not enabled for this build of Halide.";
-#endif
-        user_assert(llvm_ARM_enabled) << "llvm build not configured with ARM target enabled\n.";
-    } else {
-#if !defined(WITH_AARCH64)
-        user_error << "aarch64 not enabled for this build of Halide.";
-#endif
-        user_assert(llvm_AArch64_enabled) << "llvm build not configured with AArch64 target enabled.\n";
-    }
 
     // RADDHN - Add and narrow with rounding
     // These must come before other narrowing rounding shift patterns
@@ -162,8 +201,6 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
     // clang-format on
 }
 
-namespace {
-
 constexpr int max_intrinsic_args = 4;
 
 struct ArmIntrinsic {
@@ -181,6 +218,7 @@ struct ArmIntrinsic {
         MangleRetArgs = 1 << 4,      // Most intrinsics only mangle the return type. Some mangle the return type and arguments instead.
         ScalarsAreVectors = 1 << 5,  // Some intrinsics have scalar arguments that are vector parameters :(
         SplitArg0 = 1 << 6,          // This intrinsic requires splitting the argument into the low and high halves.
+        NoPrefix = 1 << 7,           // Don't prefix the intrinsic with llvm.*
     };
 };
 
@@ -509,12 +547,22 @@ const ArmIntrinsic intrinsic_defs[] = {
     {nullptr, "sdot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), Int(8, 16), Int(8, 16)}, ArmIntrinsic::NoMangle},
     {nullptr, "udot.v4i32.v16i8", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle},
     {nullptr, "udot.v4i32.v16i8", UInt(32, 4), "dot_product", {UInt(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle},
+
+    // ABDL - Widening absolute difference
+    // Need to be able to handle both signed and unsigned outputs for signed inputs.
+    {"vabdl_i8x8", "vabdl_i8x8", Int(16, 8), "widening_absd", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i8x8", "vabdl_i8x8", UInt(16, 8), "widening_absd", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_u8x8", "vabdl_u8x8", UInt(16, 8), "widening_absd", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i16x4", "vabdl_i16x4", Int(32, 4), "widening_absd", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i16x4", "vabdl_i16x4", UInt(32, 4), "widening_absd", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_u16x4", "vabdl_u16x4", UInt(32, 4), "widening_absd", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i32x2", "vabdl_i32x2", Int(64, 2), "widening_absd", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_i32x2", "vabdl_i32x2", UInt(64, 2), "widening_absd", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_u32x2", "vabdl_u32x2", UInt(64, 2), "widening_absd", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
 };
 // clang-format on
 
-}  // namespace
-
-llvm::Function *CodeGen_ARM::define_concat_args_wrapper(llvm::Function *inner, const std::string &name) {
+llvm::Function *CodeGen_ARM::define_concat_args_wrapper(llvm::Function *inner, const string &name) {
     llvm::FunctionType *inner_ty = inner->getFunctionType();
 
     internal_assert(inner_ty->getNumParams() == 2);
@@ -558,7 +606,7 @@ void CodeGen_ARM::init_module() {
         return;
     }
 
-    std::string prefix = target.bits == 32 ? "llvm.arm.neon." : "llvm.aarch64.neon.";
+    string prefix = target.bits == 32 ? "llvm.arm.neon." : "llvm.aarch64.neon.";
     for (const ArmIntrinsic &intrin : intrinsic_defs) {
         // Get the name of the intrinsic with the appropriate prefix.
         const char *intrin_name = nullptr;
@@ -570,13 +618,13 @@ void CodeGen_ARM::init_module() {
         if (!intrin_name) {
             continue;
         }
-        std::string full_name = intrin_name;
-        if (!starts_with(full_name, "llvm.")) {
+        string full_name = intrin_name;
+        if (!starts_with(full_name, "llvm.") && (intrin.flags & ArmIntrinsic::NoPrefix) == 0) {
             full_name = prefix + full_name;
         }
 
         // We might have to generate versions of this intrinsic with multiple widths.
-        std::vector<int> width_factors = {1};
+        vector<int> width_factors = {1};
         if (intrin.flags & ArmIntrinsic::HalfWidth) {
             width_factors.push_back(2);
         }
@@ -585,7 +633,7 @@ void CodeGen_ARM::init_module() {
             Type ret_type = intrin.ret_type;
             ret_type = ret_type.with_lanes(ret_type.lanes() * width_factor);
             internal_assert(ret_type.bits() * ret_type.lanes() <= 128) << full_name << "\n";
-            std::vector<Type> arg_types;
+            vector<Type> arg_types;
             arg_types.reserve(4);
             for (halide_type_t i : intrin.arg_types) {
                 if (i.bits == 0) {
@@ -603,7 +651,7 @@ void CodeGen_ARM::init_module() {
             mangled_name_builder << full_name;
             if (starts_with(full_name, "llvm.") && (intrin.flags & ArmIntrinsic::NoMangle) == 0) {
                 // Append LLVM name mangling for either the return type or the arguments, or both.
-                std::vector<Type> types;
+                vector<Type> types;
                 if (intrin.flags & ArmIntrinsic::MangleArgs) {
                     types = arg_types;
                 } else if (intrin.flags & ArmIntrinsic::MangleRetArgs) {
@@ -622,12 +670,12 @@ void CodeGen_ARM::init_module() {
                     mangled_name_builder << t.bits();
                 }
             }
-            std::string mangled_name = mangled_name_builder.str();
+            string mangled_name = mangled_name_builder.str();
 
             llvm::Function *intrin_impl = nullptr;
             if (intrin.flags & ArmIntrinsic::SplitArg0) {
                 // This intrinsic needs a wrapper to split the argument.
-                std::string wrapper_name = intrin.name + unique_name("_wrapper");
+                string wrapper_name = intrin.name + unique_name("_wrapper");
                 Type split_arg_type = arg_types[0].with_lanes(arg_types[0].lanes() / 2);
                 llvm::Function *to_wrap = get_llvm_intrin(ret_type, mangled_name, {split_arg_type, split_arg_type});
                 intrin_impl = define_concat_args_wrapper(to_wrap, wrapper_name);
@@ -636,6 +684,8 @@ void CodeGen_ARM::init_module() {
                 intrin_impl = get_llvm_intrin(ret_type, mangled_name, arg_types, scalars_are_vectors);
             }
 
+            intrin_impl->addFnAttr(llvm::Attribute::ReadNone);
+            intrin_impl->addFnAttr(llvm::Attribute::NoUnwind);
             declare_intrin_overload(intrin.name, ret_type, intrin_impl, arg_types);
             if (intrin.flags & ArmIntrinsic::AllowUnsignedOp1) {
                 // Also generate a version of this intrinsic where the second operand is unsigned.
@@ -676,10 +726,7 @@ void CodeGen_ARM::visit(const Cast *op) {
             (op->value.type().is_int() || op->value.type().is_uint()) &&
             t.bits() == op->value.type().bits() * 2) {
             if (const Call *absd = Call::as_intrinsic(op->value, {Call::absd})) {
-                ostringstream ss;
-                int intrin_lanes = 128 / t.bits();
-                ss << "vabdl_" << (absd->args[0].type().is_int() ? "i" : "u") << t.bits() / 2 << "x" << intrin_lanes;
-                value = call_intrin(t, intrin_lanes, ss.str(), absd->args);
+                value = call_overloaded_intrin(t, "widening_absd", absd->args);
                 return;
             }
         }
@@ -992,93 +1039,10 @@ void CodeGen_ARM::visit(const Load *op) {
         return;
     }
 
+    // If the stride is in [-1, 4], we can deal with that using vanilla codegen
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
-
-    // If the stride is one or minus one, we can deal with that using vanilla codegen
-    if (stride && (stride->value == 1 || stride->value == -1)) {
+    if (stride && (-1 <= stride->value && stride->value <= 4)) {
         CodeGen_Posix::visit(op);
-        return;
-    }
-
-    // Strided loads with known stride
-    if (stride && stride->value >= 2 && stride->value <= 4) {
-        // Check alignment on the base. Attempt to shift to an earlier
-        // address if it simplifies the expression. This makes
-        // adjacent strided loads shared a vldN op.
-        Expr base = ramp->base;
-        int offset = 0;
-        ModulusRemainder mod_rem = modulus_remainder(ramp->base);
-
-        const Add *add = base.as<Add>();
-        const IntImm *add_b = add ? add->b.as<IntImm>() : nullptr;
-
-        if ((mod_rem.modulus % stride->value) == 0) {
-            offset = mod_rem.remainder % stride->value;
-        } else if ((mod_rem.modulus == 1) && add_b) {
-            offset = add_b->value % stride->value;
-            if (offset < 0) {
-                offset += stride->value;
-            }
-        }
-
-        if (offset) {
-            base = simplify(base - offset);
-            mod_rem.remainder -= offset;
-            if (mod_rem.modulus) {
-                mod_rem.remainder = mod_imp(mod_rem.remainder, mod_rem.modulus);
-            }
-        }
-
-        int alignment = op->type.bytes();
-        alignment *= gcd(mod_rem.modulus, mod_rem.remainder);
-        // Maximum stack alignment on arm is 16 bytes, so we should
-        // never claim alignment greater than that.
-        alignment = gcd(alignment, 16);
-        internal_assert(alignment > 0);
-
-        // Decide what width to slice things into. If not a multiple
-        // of 64 or 128 bits, then we can't safely slice it up into
-        // some number of vlds, so we hand it over the base class.
-        int bit_width = op->type.bits() * op->type.lanes();
-        int intrin_lanes = 0;
-        if (bit_width % 128 == 0) {
-            intrin_lanes = 128 / op->type.bits();
-        } else if (bit_width % 64 == 0) {
-            intrin_lanes = 64 / op->type.bits();
-        } else {
-            CodeGen_Posix::visit(op);
-            return;
-        }
-
-        llvm::Type *load_return_type = llvm_type_of(op->type.with_lanes(intrin_lanes * stride->value));
-        llvm::Type *load_return_pointer_type = load_return_type->getPointerTo();
-        Value *undef = UndefValue::get(load_return_type);
-        SmallVector<Constant *, 256> constants;
-        for (int j = 0; j < intrin_lanes; j++) {
-            Constant *constant = ConstantInt::get(i32_t, j * stride->value + offset);
-            constants.push_back(constant);
-        }
-        Constant *constantsV = ConstantVector::get(constants);
-
-        vector<Value *> results;
-        for (int i = 0; i < op->type.lanes(); i += intrin_lanes) {
-            Expr slice_base = simplify(base + i * ramp->stride);
-            Expr slice_ramp = Ramp::make(slice_base, ramp->stride, intrin_lanes);
-            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), slice_base);
-            Value *bitcastI = builder->CreateBitOrPointerCast(ptr, load_return_pointer_type);
-            LoadInst *loadI = cast<LoadInst>(builder->CreateLoad(bitcastI));
-#if LLVM_VERSION >= 110
-            loadI->setAlignment(Align(alignment));
-#else
-            loadI->setAlignment(MaybeAlign(alignment));
-#endif
-            add_tbaa_metadata(loadI, op->name, slice_ramp);
-            Value *shuffleInstr = builder->CreateShuffleVector(loadI, undef, constantsV);
-            results.push_back(shuffleInstr);
-        }
-
-        // Concat the results
-        value = concat_vectors(results);
         return;
     }
 
@@ -1178,7 +1142,7 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
     // clang-format on
 
     int factor = op->value.type().lanes() / op->type.lanes();
-    std::vector<Expr> matches;
+    vector<Expr> matches;
     for (const Pattern &p : patterns) {
         if (op->op != p.reduce_op || factor % p.factor != 0) {
             continue;
@@ -1198,6 +1162,13 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             if (!i.defined()) {
                 i = make_zero(op->type);
             }
+            if (const Shuffle *s = matches[0].as<Shuffle>()) {
+                if (s->is_broadcast()) {
+                    // LLVM wants the broadcast as the second operand for the broadcasting
+                    // variant of udot/sdot.
+                    std::swap(matches[0], matches[1]);
+                }
+            }
             value = call_overloaded_intrin(op->type, p.intrin, {i, matches[0], matches[1]});
             if (value) {
                 return;
@@ -1208,7 +1179,7 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
     // TODO: Move this to be patterns? The patterns are pretty trivial, but some
     // of the other logic is tricky.
     const char *intrin = nullptr;
-    std::vector<Expr> intrin_args;
+    vector<Expr> intrin_args;
     Expr accumulator = init;
     if (op->op == VectorReduce::Add && factor == 2) {
         Type narrow_type = op->type.narrow().with_lanes(op->value.type().lanes());
@@ -1339,6 +1310,21 @@ bool CodeGen_ARM::use_soft_float_abi() const {
 int CodeGen_ARM::native_vector_bits() const {
     return 128;
 }
+
+}  // namespace
+
+std::unique_ptr<CodeGen_Posix> new_CodeGen_ARM(const Target &target) {
+    return std::make_unique<CodeGen_ARM>(target);
+}
+
+#else  // WITH_ARM || WITH_AARCH64
+
+std::unique_ptr<CodeGen_Posix> new_CodeGen_ARM(const Target &target) {
+    user_error << "ARM not enabled for this build of Halide.\n";
+    return nullptr;
+}
+
+#endif  // WITH_ARM || WITH_AARCH64
 
 }  // namespace Internal
 }  // namespace Halide

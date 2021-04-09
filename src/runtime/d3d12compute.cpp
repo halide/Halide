@@ -2986,11 +2986,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
                                  int blocksX, int blocksY, int blocksZ,
                                  int threadsX, int threadsY, int threadsZ,
                                  int shared_mem_bytes,
-                                 halide_type_t arg_types[], void *args[], int8_t arg_is_buffer[],
-                                 int num_attributes,
-                                 float *vertex_buffer,
-                                 int num_coords_dim0,
-                                 int num_coords_dim1) {
+                                 halide_type_t arg_types[], void *args[], int8_t arg_is_buffer[]) {
     TRACELOG;
 
     D3D12ContextHolder d3d12_context(user_context, true);

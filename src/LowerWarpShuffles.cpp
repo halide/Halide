@@ -571,7 +571,7 @@ class LowerWarpShuffles : public IRMutator {
 
         Expr wild = Variable::make(Int(32), "*");
         vector<Expr> result;
-        int bits;
+        int bits = 0;
 
         // Move this_lane as far left as possible in the expression to
         // reduce the number of cases to check below.

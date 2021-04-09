@@ -161,7 +161,7 @@ DECLARE_LL_INITMOD(ptx_dev)
 // Various conditional initmods follow (both LL and CPP).
 #ifdef WITH_METAL
 DECLARE_CPP_INITMOD(metal)
-#ifdef WITH_ARM
+#ifdef WITH_AARCH64
 DECLARE_CPP_INITMOD(metal_objc_arm)
 #else
 DECLARE_NO_INITMOD(metal_objc_arm)
@@ -844,6 +844,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_yield(c, bits_64, debug));
                 if (t.has_feature(Target::WasmThreads)) {
+                    // Assume that the wasm libc will be providing pthreads
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                 } else {
                     modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));

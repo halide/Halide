@@ -147,6 +147,9 @@ std::ostream &operator<<(std::ostream &out, const TailStrategy &t) {
     case TailStrategy::GuardWithIf:
         out << "GuardWithIf";
         break;
+    case TailStrategy::Predicate:
+        out << "Predicate";
+        break;
     case TailStrategy::ShiftInwards:
         out << "ShiftInwards";
         break;
@@ -278,6 +281,9 @@ ostream &operator<<(ostream &out, const VectorReduce::Operator &op) {
     switch (op) {
     case VectorReduce::Add:
         out << "Add";
+        break;
+    case VectorReduce::SaturatingAdd:
+        out << "SaturatingAdd";
         break;
     case VectorReduce::Mul:
         out << "Mul";

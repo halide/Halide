@@ -17,7 +17,7 @@ if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
 endif ()
 
 if (WITH_WABT)
-    set(WABT_VER 1.0.20)
+    set(WABT_VER 1.0.22)
 
     message(STATUS "Fetching WABT ${WABT_VER}...")
     FetchContent_Declare(wabt
@@ -71,7 +71,10 @@ if (WITH_WASM_SHELL)
     # We want to deliberately choose a stable version (rather than top-of-tree);
     # this might be a canary version (if needed to get the updates to v8 that we need)
     # but should be carefully tested before landing.
-    set(WASM_SHELL_VERSION 8.8.97)
+    #
+    # Note that V8 8.9.238 is the first version claiming to implement the final simd spec;
+    # see https://github.com/WebAssembly/simd/blob/master/proposals/simd/ImplementationStatus.md
+    set(WASM_SHELL_VERSION 8.9.238)
     set(WASM_SHELL_URL "https://storage.googleapis.com/chromium-v8/official/canary/v8-${WASM_SHELL_PLATFORM}-rel-${WASM_SHELL_VERSION}.zip")
     message(STATUS "Fetching WASM_SHELL ${WASM_SHELL_URL}...")
     FetchContent_Declare(wasm_shell URL "${WASM_SHELL_URL}")
@@ -177,6 +180,12 @@ function(add_wasm_halide_test TARGET)
         list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-simd")
     endif ()
     if (Halide_TARGET MATCHES "wasm_threads")
+        # wasm_threads requires compilation with Emscripten, against a *browser*
+        # environment rather than a shell environment. (This is because the 'pthreads'
+        # support is an elaborate wrapper than Emscripten provides around WebWorkers.)
+        # The version of d8/v8 that we pull does provide enough of a browser-like
+        # environment to support this, but many shell tools (e.g. wabt-interp) don't,
+        # so if you use a different WASM_SHELL, you may have to disable this.
         list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-threads")
     endif ()
 
