@@ -156,6 +156,59 @@ void end_trace_execute(const Model &m, std::vector<int32_t> &parent_ids) {
     halide_trace(nullptr, &trace);
 }
 
+struct OpOrNode {
+    Op *op;
+    std::unique_ptr<ScheduleNode> node;
+
+    OpOrNode(Op *op) : op(op), node(nullptr) {}
+    OpOrNode(std::unique_ptr<ScheduleNode> node) : op(nullptr), node(std::move(node)) {}
+};
+
+}  // namespace
+
+class ScheduleNode {
+public:
+    enum Strategy {
+        // The list of ops should be executed serially.
+        Serial,
+
+        // The list of ops could be executed in parallel.
+        Parallel,
+
+        // The list of ops should be executed as a sequence of producers and consumers.
+        SlidingWindow,
+    };
+
+    std::vector<OpOrNode> ops_;
+    Strategy strategy_;
+
+    ScheduleNode() {}
+    ScheduleNode(Strategy s) : strategy_(s) {}
+
+    void execute() {
+        for (OpOrNode &i : ops_) {
+            i.op->execute(i.op->output()->bounds());
+        }
+    }
+};
+
+namespace {
+
+void optimize_schedule(ScheduleNode &s, const InterpreterOptions &options) {
+    /*
+    // Find producer-consumer pairs sharing a single buffer, and try rewriting them as sliding window schedules.
+    for (int i = 0; i < (int)s.ops_.size(); i++) {
+        for (int j = 0; j < (int)s.ops_.size(); j++) {
+            if (i == j) continue;
+
+            if (can_slide(s.ops_[i], s.ops_[j])) {
+                break;
+            }
+        }
+    }
+    */
+}
+
 }  // namespace
 
 ModelInterpreter::ModelInterpreter(Model m, InterpreterOptions options)
@@ -172,6 +225,13 @@ void ModelInterpreter::init(InterpreterOptions options) {
     fold_constants(&model_);
     remove_dead_ops(&model_);
 
+    schedule_ = ::hannk::make_unique<ScheduleNode>(ScheduleNode::Serial);
+    for (auto &i : model_.ops) {
+        schedule_->ops_.emplace_back(i.get());
+    }
+
+    optimize_schedule(*schedule_, options);
+
     // TODO: Find a better schedule for executing the ops, including
     // better lifetime management for these allocations.
     for (auto &i : model_.tensors) {
@@ -185,6 +245,8 @@ void ModelInterpreter::execute() {
         begin_trace_execute(model_, parent_ids);
     }
 
+    schedule_->execute();
+/*
     for (auto &i : model_.ops) {
         Box crop = i->output()->bounds();
         i->execute(crop);
@@ -193,7 +255,7 @@ void ModelInterpreter::execute() {
             trace_op(i.get(), crop, parent_ids);
         }
     }
-
+*/
     if (trace_) {
         end_trace_execute(model_, parent_ids);
     }

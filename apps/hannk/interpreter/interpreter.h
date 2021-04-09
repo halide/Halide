@@ -17,9 +17,13 @@ struct InterpreterOptions {
     bool trace = false;
 };
 
+class ScheduleNode;
+
 class ModelInterpreter {
     Model model_;
     bool trace_;
+
+    std::unique_ptr<ScheduleNode> schedule_;
 
     void init(InterpreterOptions options);
 

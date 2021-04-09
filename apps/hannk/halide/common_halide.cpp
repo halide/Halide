@@ -76,8 +76,8 @@ Expr approx_log2(const Expr &x, int log2_precision) {
 
     // For x <= 0, return any negative value. If count_leading_zeros returns
     // x.type().bits(), which appears to be the case on every platform we
-    // target, both sides of this select are the same (if log2_precision = 0).
-    return select(x > 0, precision * cast<int>(floor_log2) + frac, cast<int>(-1));
+    // target, both sides of this select are the same.
+    return select(x > 0, precision * cast<int>(floor_log2) + frac, -precision);
 }
 
 Expr approx_exp2(const Expr &x, const Expr &log2_precision_x, int log2_precision_result) {

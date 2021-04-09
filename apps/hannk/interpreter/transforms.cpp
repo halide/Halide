@@ -153,6 +153,10 @@ class InPlace : public OpVisitor {
         maybe_alias_elementwise(op);
     }
 
+    void visit(UnaryOp *op) {
+        maybe_alias_elementwise(op);
+    }
+
     void visit(ConcatenationOp *op) {
         std::vector<int> offset(op->axis() + 1, 0);
         for (int i = 0; i < op->input_count(); i++) {

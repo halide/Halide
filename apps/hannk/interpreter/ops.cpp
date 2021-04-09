@@ -18,6 +18,7 @@
 #include "fill_uint8.h"
 #include "fully_connected_uint8.h"
 #include "l2_normalization_uint8.h"
+#include "logistic_uint8.h"
 #include "max_pool_uint8.h"
 #include "softmax_uint8.h"
 #include "tile_convolution_filter_uint8.h"
@@ -891,6 +892,26 @@ void TileConvFilterOp::execute(const Box &crop) {
     }
 }
 
+const char *UnaryOp::to_string(UnaryOp::Operator op) {
+    switch (op) {
+    case Logistic:
+        return "Logistic";
+    default:
+        CHECK(false) << "Unsupported unary op\n";
+        return nullptr;
+    }
+}
+
+void UnaryOp::execute(const Box &crop) {
+    const Tensor *in = input();
+    Tensor *out = output();
+
+    if (in->type() == halide_type_of<uint8_t>() && out->type() == halide_type_of<uint8_t>()) {
+        auto input_buf = in->buffer<const uint8_t>();
+        auto output_buf = out->buffer<const uint8_t>();
+    }
+}
+
 void BinaryOp::accept(OpVisitor *v) {
     v->visit(this);
 }
@@ -932,6 +953,10 @@ void ReshapeOp::accept(OpVisitor *v) {
 }
 
 void TileConvFilterOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void UnaryOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 

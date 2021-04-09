@@ -400,6 +400,36 @@ public:
     }
 };
 
+class UnaryOp : public ElementwiseOp {
+public:
+    enum Operator {
+        Logistic,
+    };
+
+    static const char *to_string(Operator op);
+
+private:
+    Operator op_;
+
+public:
+    UnaryOp(Tensor *input, Tensor *output, Operator op)
+        : ElementwiseOp({input}, output), op_(op) {
+    }
+
+    std::unique_ptr<Op> clone(const TensorMap &map) const {
+        return ::hannk::make_unique<UnaryOp>(
+            apply(map, input()), apply(map, output()), op_);
+    }
+
+    void accept(OpVisitor *v);
+
+    void execute(const Box &crop);
+
+    void dump(std::ostream &os) const {
+        os << "  " << to_string(op_) << " " << output()->name() << std::endl;
+    }
+};
+
 class OpVisitor {
 public:
     virtual ~OpVisitor() = default;
@@ -425,6 +455,8 @@ public:
     virtual void visit(SoftmaxOp *op) {
     }
     virtual void visit(TileConvFilterOp *op) {
+    }
+    virtual void visit(UnaryOp *op) {
     }
 };
 
