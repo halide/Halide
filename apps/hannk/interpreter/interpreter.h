@@ -1,7 +1,6 @@
 #ifndef HANNK_INTERPRETER_H
 #define HANNK_INTERPRETER_H
 
-#include <map>
 #include <string>
 #include <vector>
 
