@@ -257,7 +257,7 @@ private:
         bool could_overflow = true;
         if (to.can_represent(from) || to.is_float()) {
             could_overflow = false;
-        } else if (to.is_int() && to.bits() > 16 && !(from.is_uint() && from.bits() > 16)) {
+        } else if (to.is_int() && to.bits() >= 32) {
             // If we cast to an int32 or greater, assume that it won't
             // overflow. Signed 32-bit integer overflow is undefined.
             could_overflow = false;

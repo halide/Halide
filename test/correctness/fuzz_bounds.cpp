@@ -385,7 +385,12 @@ bool test_bounds(Expr test, const Interval &interval, Type T, const map<string, 
 
         Expr a_j_v = simplify(substitute(vars, a_j));
 
-        // TODO: not sure what else to do here.
+        if (!is_const(a_j_v)) {
+            // Probably overflow, abort.
+            continue;
+        }
+
+        // This fuzzer only looks for constant bounds, otherwise it's probably overflow.
         if (interval.has_upper_bound()) {
             if (!can_prove(a_j_v <= interval.max)) {
                 std::cerr << "can't prove upper bound: " << (a_j_v <= interval.max) << "\n";
@@ -450,6 +455,11 @@ bool test_expression_bounds(Expr test, int trials, int samples_per_trial) {
         if ((interval.has_upper_bound() && is_integer_overflow(interval.max)) ||
             (interval.has_lower_bound() && is_integer_overflow(interval.min))) {
             // Quit for now, assume other intervals will produce the same results.
+            return true;
+        }
+
+        if (!is_const(interval.min) || !is_const(interval.max)) {
+            // Likely signed_integer_overflow, give up now.
             return true;
         }
 
