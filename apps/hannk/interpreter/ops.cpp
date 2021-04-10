@@ -88,6 +88,17 @@ void optimize_elementwise_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b, Halid
     pad_to_rank(c, rank);
 }
 
+template<typename Ta, typename Tb>
+void optimize_elementwise_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b, int rank) {
+    while (can_fuse_cx(a) && can_fuse_cx(b) &&
+           a.dim(0).extent() == b.dim(0).extent()) {
+        fuse_cx(a);
+        fuse_cx(b);
+    }
+    pad_to_rank(a, rank);
+    pad_to_rank(b, rank);
+}
+
 bool is_alias(const HalideBuffer<const void> &a, const HalideBuffer<const void> &b) {
     return !(a.begin() >= b.end() || a.end() <= b.begin());
 }
@@ -907,8 +918,28 @@ void UnaryOp::execute(const Box &crop) {
     Tensor *out = output();
 
     if (in->type() == halide_type_of<uint8_t>() && out->type() == halide_type_of<uint8_t>()) {
-        auto input_buf = in->buffer<const uint8_t>();
-        auto output_buf = out->buffer<const uint8_t>();
+        if (op_ == Logistic) {
+            auto in_buf = in->buffer<const uint8_t>();
+            auto out_buf = out->buffer<uint8_t>(crop);
+
+            optimize_elementwise_shapes(in_buf, out_buf, 1);
+
+            const int input_zero = in->quantization().zero.at(0);
+            assert(input_zero >= 0 && input_zero <= 255);
+
+            const float in_scale = in->quantization().scale.at(0);
+
+            const int left_shift = 22;
+            // It's a easier to compute 2^(x*(log2(e))) than e^(x).
+            const double real_in_multiplier = in_scale * std::log2(std::exp(1.0f)) / (1 << left_shift);
+
+            auto in_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in_multiplier);
+            assert(in_mul_and_shift.shift <= 0);
+
+            CHECK(0 == logistic_uint8(in_buf, input_zero, in_mul_and_shift.multiplier, -in_mul_and_shift.shift, out_buf));
+        } else {
+            CHECK(false) << "Unsupported unary op\n";
+        }
     }
 }
 
