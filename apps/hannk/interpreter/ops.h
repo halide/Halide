@@ -237,10 +237,10 @@ public:
     }
 };
 
-class L2NormalizationOp : public ElementwiseOp {
+class L2NormalizationOp : public Op {
 public:
     L2NormalizationOp(Tensor *input, Tensor *output)
-        : ElementwiseOp({input}, output) {
+        : Op({input}, {output}) {
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {
@@ -358,12 +358,12 @@ public:
     }
 };
 
-class SoftmaxOp : public ElementwiseOp {
+class SoftmaxOp : public Op {
     float beta_;
 
 public:
     SoftmaxOp(Tensor *input, Tensor *output, float beta)
-        : ElementwiseOp({input}, output), beta_(beta) {
+        : Op({input}, {output}), beta_(beta) {
     }
 
     std::unique_ptr<Op> clone(const TensorMap &map) const {

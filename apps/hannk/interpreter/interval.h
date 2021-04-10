@@ -8,6 +8,14 @@
 
 namespace hannk {
 
+// Divide a by b, rounding up or down.
+int ceil_div(int a, int b);
+int floor_div(int a, int b);
+
+// Align x up or down to a multiple of n.
+int align_up(int x, int n);
+int align_down(int x, int n);
+
 // This type (and Box below) mirrors Halide::Interval, but is not symbolic.
 struct Interval {
     int min, max;
@@ -40,8 +48,8 @@ struct Interval {
 
     Interval &operator/=(int scale) {
         assert(min >= 0 && max >= 0);
-        min /= scale;
-        max /= scale;
+        min = floor_div(min, scale);
+        max = ceil_div(max + 1, scale) - 1;
         return *this;
     }
 
@@ -123,14 +131,6 @@ Interval intersect(const Interval &a, Interval &b);
 Box intersect(Box a, const Box &b);
 
 bool is_empty(const Box &a);
-
-// Divide a by b, rounding up or down.
-int ceil_div(int a, int b);
-int floor_div(int a, int b);
-
-// Align x up or down to a multiple of n.
-int align_up(int x, int n);
-int align_down(int x, int n);
 
 }  // namespace hannk
 
