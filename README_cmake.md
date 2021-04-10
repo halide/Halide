@@ -367,6 +367,7 @@ compiled.
 | `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                                           |
 | `Halide_USE_CODEMODEL_LARGE`             | `OFF`                 | Use the Large LLVM codemodel                                                                                     |
 | `Halide_TARGET`                          | _empty_               | The default target triple to use for `add_halide_library` (and the generator tests, by extension)                |
+| `Halide_CCACHE_BUILD`                    | `OFF`                 | Use ccache to accelerate rebuilds.                                                                               |
 
 The following options are only available when building Halide directly, ie. not
 through the [`add_subdirectory`][add_subdirectory] or
@@ -376,7 +377,6 @@ targets (like tests and documentation) are built.
 | Option                 | Default              | Description                                                                              |
 | ---------------------- | -------------------- | ---------------------------------------------------------------------------------------- |
 | `WITH_TESTS`           | `ON`                 | Enable building unit and integration tests                                               |
-| `WITH_APPS`            | `ON`                 | Enable testing sample applications (run `ctest -L apps` to actually build and test them) |
 | `WITH_PYTHON_BINDINGS` | `ON` if Python found | Enable building Python 3.x bindings                                                      |
 | `WITH_DOCS`            | `OFF`                | Enable building the documentation via Doxygen                                            |
 | `WITH_UTILS`           | `ON`                 | Enable building various utilities including the trace visualizer                         |

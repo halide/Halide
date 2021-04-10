@@ -491,7 +491,8 @@ public:
         }
 
         Dimension(const halide_dimension_t &dim)
-            : d(dim){};
+            : d(dim) {
+        }
     };
 
     /** Access the shape of the buffer */
@@ -835,7 +836,7 @@ public:
     // @{
 
     // The overload with one argument is 'explicit', so that
-    // (say) int is not implicitly convertable to Buffer<int>
+    // (say) int is not implicitly convertible to Buffer<int>
     explicit Buffer(int first) {
         static_assert(!T_is_void,
                       "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");
@@ -928,7 +929,7 @@ public:
      * host_dirty flag. */
     template<typename... Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, int first, Args &&... rest) {
+    explicit Buffer(halide_type_t t, add_const_if_T_is_const<void> *data, int first, Args &&...rest) {
         if (!T_is_void) {
             assert(static_halide_type() == t);
         }
@@ -945,7 +946,7 @@ public:
      * take ownership of the data and does not set the host_dirty flag. */
     template<typename... Args,
              typename = typename std::enable_if<AllInts<Args...>::value>::type>
-    explicit Buffer(T *data, int first, Args &&... rest) {
+    explicit Buffer(T *data, int first, Args &&...rest) {
         int extents[] = {first, (int)rest...};
         buf.type = static_halide_type();
         constexpr int buf_dimensions = 1 + (int)(sizeof...(rest));
@@ -2075,7 +2076,7 @@ private:
     }
 
     template<typename Fn, typename... Args, int N = sizeof...(Args) + 1>
-    void for_each_value_impl(Fn &&f, Args &&... other_buffers) const {
+    void for_each_value_impl(Fn &&f, Args &&...other_buffers) const {
         Buffer<>::for_each_value_task_dim<N> *t =
             (Buffer<>::for_each_value_task_dim<N> *)HALIDE_ALLOCA((dimensions() + 1) * sizeof(for_each_value_task_dim<N>));
         // Move the preparatory code into a non-templated helper to
@@ -2107,7 +2108,7 @@ public:
      * will result in a compilation error. */
     // @{
     template<typename Fn, typename... Args, int N = sizeof...(Args) + 1>
-    HALIDE_ALWAYS_INLINE const Buffer<T, D> &for_each_value(Fn &&f, Args &&... other_buffers) const {
+    HALIDE_ALWAYS_INLINE const Buffer<T, D> &for_each_value(Fn &&f, Args &&...other_buffers) const {
         for_each_value_impl(f, std::forward<Args>(other_buffers)...);
         return *this;
     }
@@ -2115,7 +2116,7 @@ public:
     template<typename Fn, typename... Args, int N = sizeof...(Args) + 1>
     HALIDE_ALWAYS_INLINE
         Buffer<T, D> &
-        for_each_value(Fn &&f, Args &&... other_buffers) {
+        for_each_value(Fn &&f, Args &&...other_buffers) {
         for_each_value_impl(f, std::forward<Args>(other_buffers)...);
         return *this;
     }

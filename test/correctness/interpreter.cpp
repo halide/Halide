@@ -4,6 +4,15 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
 
+    // TODO(#5738): remove after winbots are upgraded
+    Target target = get_jit_target_from_environment();
+    if (target.os == Target::Windows &&
+        (target.has_feature(Target::OpenCL) ||
+         target.has_feature(Target::D3D12Compute))) {
+        printf("[SKIP] workaround for issue #5738\n");
+        return 0;
+    }
+
     // This test demonstrates a trick for writing interpreters in
     // Halide, and as a side-effect tests our ability to correctly
     // emit switch statements.

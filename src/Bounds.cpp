@@ -1227,9 +1227,7 @@ private:
 
             interval.min = Interval::make_max(interval.min, lower.min);
             interval.max = Interval::make_min(interval.max, upper.max);
-        } else if (op->is_intrinsic(Call::likely) ||
-                   op->is_intrinsic(Call::likely_if_innermost)) {
-            internal_assert(op->args.size() == 1);
+        } else if (Call::as_tag(op)) {
             op->args[0].accept(this);
         } else if (op->is_intrinsic(Call::return_second)) {
             internal_assert(op->args.size() == 2);
@@ -1577,6 +1575,7 @@ private:
                 interval.min *= factor;
             }
             break;
+        case VectorReduce::SaturatingAdd:
         case VectorReduce::Mul:
             // Technically there are some things we could say
             // here. E.g. if all the lanes are positive then we're
@@ -2471,10 +2470,8 @@ private:
             for (const auto &pair : cases) {
                 Expr c = pair.first;
                 Stmt body = pair.second;
-                const Call *call = c.as<Call>();
-                if (call && (call->is_intrinsic(Call::likely) ||
-                             call->is_intrinsic(Call::likely_if_innermost) ||
-                             call->is_intrinsic(Call::strict_float))) {
+                const Call *call = Call::as_tag(c);
+                if (call) {
                     c = call->args[0];
                 }
 
@@ -3150,10 +3147,10 @@ void bounds_test() {
     check(scope, clamp(1000 / (x - 2), x - 10, x + 10), -10, 20);
     check(scope, cast<uint16_t>(x / 2), u16(0), u16(5));
     check(scope, cast<uint16_t>((x + 10) / 2), u16(5), u16(10));
-    check(scope, x < 20, make_bool(1), make_bool(1));
-    check(scope, x < 5, make_bool(0), make_bool(1));
-    check(scope, Broadcast::make(x >= 11, 3), make_bool(0), make_bool(0));
-    check(scope, Ramp::make(x + 5, 1, 5) > Broadcast::make(2, 5), make_bool(1), make_bool(1));
+    check(scope, x < 20, make_bool(true), make_bool(true));
+    check(scope, x < 5, make_bool(false), make_bool(true));
+    check(scope, Broadcast::make(x >= 11, 3), make_bool(false), make_bool(false));
+    check(scope, Ramp::make(x + 5, 1, 5) > Broadcast::make(2, 5), make_bool(true), make_bool(true));
 
     check(scope, print(x, y), 0, 10);
     check(scope, print_when(x > y, x, y), 0, 10);

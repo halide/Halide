@@ -49,7 +49,8 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const s
         } else if (is_const_one(split.factor)) {
             // The split factor trivially divides the old extent,
             // but we know nothing new about the outer dimension.
-        } else if (tail == TailStrategy::GuardWithIf) {
+        } else if (tail == TailStrategy::GuardWithIf ||
+                   tail == TailStrategy::Predicate) {
             // It's an exact split but we failed to prove that the
             // extent divides the factor. Use predication to avoid
             // running off the end of the original loop.
@@ -70,6 +71,10 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const s
             // Inject the if condition *after* doing the substitution
             // for the guarded version.
             Expr cond = likely(old_var <= old_max);
+            if (tail == TailStrategy::Predicate) {
+                // Add the hint for predication.
+                cond = predicate(cond);
+            }
             result.emplace_back(cond);
 
         } else if (tail == TailStrategy::ShiftInwards) {

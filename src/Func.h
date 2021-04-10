@@ -376,7 +376,7 @@ public:
 
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
-    reorder(const VarOrRVar &x, const VarOrRVar &y, Args &&... args) {
+    reorder(const VarOrRVar &x, const VarOrRVar &y, Args &&...args) {
         std::vector<VarOrRVar> collected_args{x, y, std::forward<Args>(args)...};
         return reorder(collected_args);
     }
@@ -1293,7 +1293,7 @@ public:
 
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, FuncRef>::type
-    operator()(Args &&... args) const {
+    operator()(Args &&...args) const {
         std::vector<Var> collected_args{std::forward<Args>(args)...};
         return this->operator()(collected_args);
     }
@@ -1310,7 +1310,7 @@ public:
 
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, FuncRef>::type
-    operator()(const Expr &x, Args &&... args) const {
+    operator()(const Expr &x, Args &&...args) const {
         std::vector<Expr> collected_args{x, std::forward<Args>(args)...};
         return (*this)(collected_args);
     }
@@ -1551,8 +1551,18 @@ public:
      * f.align_bounds(x, 2, 1) forces the min to be odd and the extent
      * to be even. The region computed always contains the region that
      * would have been computed without this directive, so no
-     * assertions are injected. */
+     * assertions are injected.
+     */
     Func &align_bounds(const Var &var, Expr modulus, Expr remainder = 0);
+
+    /** Expand the region computed so that the extent is a
+     * multiple of 'modulus'. For example, f.align_extent(x, 2) forces
+     * the extent realized to be even. The region computed always contains the
+     * region that would have been computed without this directive, so no
+     * assertions are injected. (This is essentially equivalent to align_bounds(),
+     * but always leaving the min untouched.)
+     */
+    Func &align_extent(const Var &var, Expr modulus);
 
     /** Bound the extent of a Func's realization, but not its
      * min. This means the dimension can be unrolled or vectorized
@@ -1604,7 +1614,7 @@ public:
 
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>::type
-    reorder(const VarOrRVar &x, const VarOrRVar &y, Args &&... args) {
+    reorder(const VarOrRVar &x, const VarOrRVar &y, Args &&...args) {
         std::vector<VarOrRVar> collected_args{x, y, std::forward<Args>(args)...};
         return reorder(collected_args);
     }
@@ -2030,7 +2040,7 @@ public:
     Func &reorder_storage(const Var &x, const Var &y);
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, Func &>::type
-    reorder_storage(const Var &x, const Var &y, Args &&... args) {
+    reorder_storage(const Var &x, const Var &y, Args &&...args) {
         std::vector<Var> collected_args{x, y, std::forward<Args>(args)...};
         return reorder_storage(collected_args);
     }
@@ -2472,7 +2482,7 @@ inline void assign_results(Realization &r, int idx, Last last) {
 }
 
 template<typename First, typename Second, typename... Rest>
-inline void assign_results(Realization &r, int idx, First first, Second second, Rest &&... rest) {
+inline void assign_results(Realization &r, int idx, First first, Second second, Rest &&...rest) {
     assign_results<First>(r, idx, first);
     assign_results<Second, Rest...>(r, idx + 1, second, rest...);
 }
@@ -2496,7 +2506,7 @@ HALIDE_NO_USER_CODE_INLINE T evaluate(const Expr &e) {
 
 /** JIT-compile and run enough code to evaluate a Halide Tuple. */
 template<typename First, typename... Rest>
-HALIDE_NO_USER_CODE_INLINE void evaluate(Tuple t, First first, Rest &&... rest) {
+HALIDE_NO_USER_CODE_INLINE void evaluate(Tuple t, First first, Rest &&...rest) {
     Internal::check_types<First, Rest...>(t, 0);
 
     Func f;
@@ -2541,7 +2551,7 @@ HALIDE_NO_USER_CODE_INLINE T evaluate_may_gpu(const Expr &e) {
  *  use GPU if jit target from environment specifies one. */
 // @{
 template<typename First, typename... Rest>
-HALIDE_NO_USER_CODE_INLINE void evaluate_may_gpu(Tuple t, First first, Rest &&... rest) {
+HALIDE_NO_USER_CODE_INLINE void evaluate_may_gpu(Tuple t, First first, Rest &&...rest) {
     Internal::check_types<First, Rest...>(t, 0);
 
     Func f;
