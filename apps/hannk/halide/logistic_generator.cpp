@@ -8,7 +8,7 @@ namespace hannk {
 
 // Approximate log2(1 + exp2(x/2^log2_precision-x))*2^log2_precision_result
 Expr approx_log2_1p_exp2(Expr x, Expr log2_precision_x, int log2_precision_result) {
-    const int log2_p = 12;
+    const int log2_p = 8;
     const int p = 1 << log2_p;
     Expr one_plus_exp2_x = p + approx_exp2(x, log2_precision_x, log2_p);
 
@@ -44,7 +44,7 @@ public:
         input = multiply_2x_high(input, input_multiplier_);
 
         // TODO: This is not very accurate. Improve it.
-        const int log2_precision = 12;
+        const int log2_precision = 16;
         Expr log2_inv_logistic = approx_log2_1p_exp2(-input, input_shift_, log2_precision);
         Expr logistic = approx_exp2(-log2_inv_logistic, log2_precision, 8);
 
