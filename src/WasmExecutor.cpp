@@ -1364,7 +1364,7 @@ WasmModuleContents::WasmModuleContents(
 #if WITH_WABT
     user_assert(LLVM_VERSION >= 110) << "Using the WebAssembly JIT is only supported under LLVM 11+.";
 
-    user_assert(!target.has_feature(Target::WasmThreads)) << "The Halide WebAssembly JIT doesn't support wasm threads yet.";
+    user_assert(!target.has_feature(Target::WasmThreads)) << "wasm_threads requires Emscripten (or a similar compiler); it will never be supported under JIT.";
 
     wdebug(1) << "Compiling wasm function " << fn_name << "\n";
 
@@ -1586,11 +1586,11 @@ WasmModule WasmModule::compile(
 #if !defined(WITH_WABT)
     user_error << "Cannot run JITted WebAssembly without configuring a WebAssembly engine.";
     return WasmModule();
-#endif
-
+#else
     WasmModule wasm_module;
     wasm_module.contents = new WasmModuleContents(module, arguments, fn_name, jit_externs, extern_deps);
     return wasm_module;
+#endif
 }
 
 /** Run generated previously compiled wasm code with a set of arguments. */

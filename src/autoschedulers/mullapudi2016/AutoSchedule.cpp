@@ -1957,7 +1957,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     float load_slope = arch_params.balance / arch_params.last_level_cache_size;
     for (const auto &f_load : group_load_costs) {
         internal_assert(g.inlined.find(f_load.first) == g.inlined.end())
-            << "Intermediates of inlined pure fuction \"" << f_load.first
+            << "Intermediates of inlined pure function \"" << f_load.first
             << "\" should not have been in the group_load_costs\n";
 
         const auto &alloc_reg = get_element(alloc_regions, f_load.first);

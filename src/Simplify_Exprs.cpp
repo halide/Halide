@@ -100,7 +100,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
             bounds->alignment = ModulusRemainder{};
             break;
         }
-    };
+    }
 
     // We can pull multiplications by a broadcast out of horizontal
     // additions and do the horizontal addition earlier. This means we
