@@ -530,13 +530,8 @@ private:
                 Expr test2 = (cast(t, a.min) * cast(t, b.max) == cast(t, a.min * b.max));
                 Expr test3 = (cast(t, a.max) * cast(t, b.min) == cast(t, a.max * b.min));
                 Expr test4 = (cast(t, a.max) * cast(t, b.max) == cast(t, a.max * b.max));
-                // std::cerr << "In bounds: " << simplify(test1 && test2 && test3 && test4) << std::endl;
                 if (!can_prove(test1 && test2 && test3 && test4)) {
-                    // std::cerr << "Could not prove\n";
                     bounds_of_type(op->type);
-                    // std::cerr << interval.min << ",\t" << interval.max << std::endl;
-                } else {
-                    // std::cerr << "Proved\n";
                 }
             } else {
                 bounds_of_type(op->type);
