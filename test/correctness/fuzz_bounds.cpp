@@ -15,7 +15,6 @@ using namespace Halide::Internal;
 
 const int fuzz_var_count = 5;
 
-// use std::mt19937 instead of rand() to ensure consistent behavior on all systems
 std::mt19937 rng(0);
 
 Type fuzz_types[] = {UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32)};
