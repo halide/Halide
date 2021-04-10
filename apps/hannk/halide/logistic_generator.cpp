@@ -10,18 +10,17 @@ namespace hannk {
 Expr approx_log2_1p_exp2(Expr x, Expr log2_precision_x, int log2_precision_result) {
     const int log2_p = 12;
     const int p = 1 << log2_p;
-    Expr correction = -(1 << log2_precision_x) / 15;
-    Expr one_plus_exp2_x = p + approx_exp2(x + correction, log2_precision_x, log2_p);
+    Expr one_plus_exp2_x = p + approx_exp2(x, log2_precision_x, log2_p);
 
     // If we compute the log2 of the squared value, we can get a bit more precision.
-    Expr one_plus_exp2_x_sq = pow(one_plus_exp2_x, 2);
-
-    Expr raw = approx_log2(one_plus_exp2_x_sq, log2_precision_result - 1);
+    Expr raw = approx_log2(pow(one_plus_exp2_x, 2), log2_precision_result - 1);
 
     // Since we computed log2(x*p) = log2(x) + log2(p), subtract log2(p) now.
     raw = raw - (log2_p << log2_precision_result);
 
-    // For large x, the intermediate overflows. But log2(1 + 2^x) when x is large is just a line.
+    // TODO: This is numerically unstable when 2^x is small.
+
+    // For large x, the intermediate overflows. But log2(1 + 2^x) when x is large is just x.
     Expr line = rounding_shift_right(x, log2_precision_x - log2_precision_result);
     Expr threshold = 5 << log2_precision_x;
     return select(x < threshold, raw, line);
@@ -47,8 +46,7 @@ public:
         // TODO: This is not very accurate. Improve it.
         const int log2_precision = 12;
         Expr log2_inv_logistic = approx_log2_1p_exp2(-input, input_shift_, log2_precision);
-        const int correction = -(1 << log2_precision) / 15;
-        Expr logistic = approx_exp2(-log2_inv_logistic + correction, log2_precision, 8);
+        Expr logistic = approx_exp2(-log2_inv_logistic, log2_precision, 8);
 
         output_(x) = u8_sat(logistic);
 
