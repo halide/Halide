@@ -11,6 +11,8 @@ using std::string;
 using namespace Halide;
 using namespace Halide::Internal;
 
+#define internal_assert _halide_user_assert
+
 const int fuzz_var_count = 5;
 
 // use std::mt19937 instead of rand() to ensure consistent behavior on all systems
@@ -23,6 +25,7 @@ std::string fuzz_var(int i) {
     return std::string(1, 'a' + i);
 }
 
+// This is modified for each round.
 static Type global_var_type = Int(32);
 
 Expr random_var() {
@@ -59,21 +62,13 @@ Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
         if (!imm_only && var < fuzz_var_count) {
             auto v1 = random_var();
             return cast(T, v1);
+        } else if (overflow_undef) {
+            // For Int(32), we don't care about correctness during
+            // overflow, so just use numbers that are unlikely to
+            // overflow.
+            return cast(T, (int)(rng() % 256 - 128));
         } else {
-            // if (T.is_int()) {
-            //     return cast(T, (int)(rng() % 256 - 128));
-            // } else {
-            //     return cast(T, (int)(rng() % 256));
-            // }
-
-            if (overflow_undef) {
-                // For Int(32), we don't care about correctness during
-                // overflow, so just use numbers that are unlikely to
-                // overflow.
-                return cast(T, (int)(rng() % 256 - 128));
-            } else {
-                return cast(T, (int)(rng() - RAND_MAX / 2));
-            }
+            return cast(T, (int)(rng() - RAND_MAX / 2));
         }
     } else {
         int lanes = get_random_divisor(T);
@@ -112,12 +107,6 @@ Expr random_condition(Type T, int depth, bool maybe_scalar) {
     return make_bin_op[op](a, b);
 }
 
-// Expr make_absd(Expr a, Expr b) {
-//     // random_expr() assumes that the result type is the same as the input type,
-//     // which isn't true for all absd variants, so force the issue.
-//     return cast(a.type(), absd(a, b));
-// }
-
 Expr random_expr(Type T, int depth, bool overflow_undef) {
     typedef Expr (*make_bin_op_fn)(Expr, Expr);
     static make_bin_op_fn make_bin_op[] = {
@@ -128,7 +117,6 @@ Expr random_expr(Type T, int depth, bool overflow_undef) {
         Max::make,
         Div::make,
         Mod::make,
-        // make_absd,
     };
 
     static make_bin_op_fn make_bool_bin_op[] = {
@@ -303,13 +291,6 @@ std::ostream &operator<<(std::ostream &stream, const Interval &interval) {
 }
 
 Interval random_interval(Type T) {
-    // TODO: does 1/4 chance of unbounded seem resonable or unreasonable?
-    static int op_count = 4;
-    // TODO: change these back to > 0
-    // these are arbitrarily true for now.
-    bool needs_min = (rng() % op_count >= 0);
-    bool needs_max = (rng() % op_count >= 0);
-
     Interval interval;
 
     int min_value = -128;
@@ -340,30 +321,26 @@ Interval random_interval(Type T) {
     min_value = std::max(min_value, -128);
     max_value = std::min(max_value, 128);
 
-    if (needs_min) {
-        // change the min_value for the calculation of a max
-        min_value = random_in_range(min_value, max_value);
-        interval.min = cast(T, min_value);
-    }
+    // change the min_value for the calculation of max
+    min_value = random_in_range(min_value, max_value);
+    interval.min = cast(T, min_value);
 
-    if (needs_max) {
-        max_value = random_in_range(min_value, max_value);
-        interval.max = cast(T, max_value);
-    }
+    max_value = random_in_range(min_value, max_value);
+    interval.max = cast(T, max_value);
 
     if (min_value > max_value || (interval.is_bounded() && can_prove(interval.min > interval.max))) {
-        // TODO: this should be some kind of assert.
         std::cerr << "random_interval failed: ";
         std::cerr << min_value << " > " << max_value << "\n";
         std::cerr << interval.min << " > " << interval.max << "\n";
         std::cerr << interval << "\n";
+        internal_assert(false) << "random_interval failed\n";
     }
 
     return interval;
 }
 
 int sample_interval(const Interval &interval) {
-    // TODO: Use other values?
+    // Values chosen so intervals don't repeatedly produce signed_overflow when simplified.
     int min_value = -128;
     int max_value = 128;
 
@@ -373,8 +350,7 @@ int sample_interval(const Interval &interval) {
         } else if (auto ptr = as_const_uint(interval.min)) {
             min_value = *ptr;
         } else {
-            std::cerr << "sample_interval (min) failed: " << interval << "\n";
-            return 0;
+            internal_assert(false) << "sample_interval (min) failed: " << interval.min << "\n";
         }
     }
 
@@ -384,8 +360,7 @@ int sample_interval(const Interval &interval) {
         } else if (auto ptr = as_const_uint(interval.max)) {
             max_value = *ptr;
         } else {
-            std::cerr << "sample_interval (max) failed: " << interval << "\n";
-            return 0;
+            internal_assert(false) << "sample_interval (max) failed: " << interval.max << "\n";
         }
     }
 
@@ -409,8 +384,6 @@ bool test_bounds(Expr test, const Interval &interval, Type T, const map<string, 
         }
 
         Expr a_j_v = simplify(substitute(vars, a_j));
-
-        // TODO: handle a_j_v being integer overflow.
 
         // TODO: not sure what else to do here.
         if (interval.has_upper_bound()) {
@@ -458,7 +431,7 @@ bool test_expression_bounds(Expr test, int trials, int samples_per_trial) {
         Scope<Interval> scope;
 
         for (auto v = vars.begin(); v != vars.end(); v++) {
-            // TODO: why this type? It's what the simplifier fuzzer uses.
+            // This type is used because the variables will be this type for a given round.
             Interval interval = random_interval(global_var_type);
             scope.push(v->first, interval);
         }
@@ -468,7 +441,7 @@ bool test_expression_bounds(Expr test, int trials, int samples_per_trial) {
         interval.max = simplify(interval.max);
 
         if (!(interval.has_upper_bound() || interval.has_lower_bound())) {
-            // TODO: for now, return. Assumes that no other combo
+            // For now, return. Assumes that no other combo
             // will produce a bounded interval (not necessarily true).
             // This is to shorten the amount of output from this test.
             return true;  // any result is allowed
@@ -476,7 +449,7 @@ bool test_expression_bounds(Expr test, int trials, int samples_per_trial) {
 
         if ((interval.has_upper_bound() && is_integer_overflow(interval.max)) ||
             (interval.has_lower_bound() && is_integer_overflow(interval.min))) {
-            // TODO: what do we do here?
+            // Quit for now, assume other intervals will produce the same results.
             return true;
         }
 
@@ -505,13 +478,13 @@ bool test_expression_bounds(Expr test, int trials, int samples_per_trial) {
 
 int main(int argc, char **argv) {
     // Number of random expressions to test.
-    const int count = 10000;
+    const int count = 1000;
     // Depth of the randomly generated expression trees.
     const int depth = 3;
     // Number of trials to test the generated expressions for.
     const int trials = 10;
     // Number of samples of the intervals per trial to test.
-    const int samples = 100;
+    const int samples = 10;
 
     // We want different fuzz tests every time, to increase coverage.
     // We also report the seed to enable reproducing failures.
