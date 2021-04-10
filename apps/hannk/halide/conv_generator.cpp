@@ -31,7 +31,7 @@ bool use_8bit_multiply(const Target &target) {
     return target.arch != Target::X86 || target.has_feature(Target::AVX512_SapphireRapids);
 }
 
-class Convolution : public Generator<Convolution> {
+class Conv : public Generator<Conv> {
 public:
     // How much to unroll the reduction loop over channels. On some targets,
     // loading a few scalars for one of the reduction inputs is fine, and avoids
@@ -42,8 +42,8 @@ public:
     // Unsigned 8-bit input tensor, indexed by c, x, y, b.
     Input<Buffer<uint8_t>> input_{"input", 4};
 
-    // A 5D array of 8-bit filter coefficients indexed by
-    // ci % n, co, ci / n, x, y, where n = vector_reduction (below).
+    // A 6D array of filter coefficients indexed by ci % n, co % k, ci / n, co / k, x, y,
+    // where n = vector_reduction and k = accum_vector_size (below).
     Input<Buffer<>> filter_{"filter", 6};
 
     // A 1D array of 32-bit biases. The bias should be added to the c
@@ -306,12 +306,15 @@ public:
     }
 };
 
-class TileConvolutionFilter : public Generator<TileConvolutionFilter> {
+// The above generator expects the filter to already be tiled into
+class TileConvFilter : public Generator<TileConvFilter> {
 public:
     Input<Buffer<uint8_t>> input_{"input", 4};
     Input<uint8_t> input_zero_{"input_zero"};
     Input<uint8_t> output_zero_{"output_zero"};
 
+    // 6D array of filter coefficients indexed by ci % n, co % k, ci / n, co / k, x, y,
+    // where n = vector_reduction and k = accum_vector_size (below).
     Output<Buffer<>> output_{"output", 6};
 
     void configure() {
@@ -350,5 +353,5 @@ public:
 
 }  // namespace hannk
 
-HALIDE_REGISTER_GENERATOR(hannk::Convolution, Convolution)
-HALIDE_REGISTER_GENERATOR(hannk::TileConvolutionFilter, TileConvolutionFilter)
+HALIDE_REGISTER_GENERATOR(hannk::Conv, Conv)
+HALIDE_REGISTER_GENERATOR(hannk::TileConvFilter, TileConvFilter)
