@@ -283,10 +283,10 @@ public:
         return ::hannk::make_unique<L2NormalizationOp>(input, output);
     }
 
-    std::unique_ptr<Op> parse_logistic(const tflite::Operator *op) {
+    std::unique_ptr<Op> parse_unary(const tflite::Operator *op, UnaryOp::Operator type) {
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
-        return ::hannk::make_unique<UnaryOp>(input, output, UnaryOp::Logistic);
+        return ::hannk::make_unique<UnaryOp>(input, output, type);
     }
 
     std::unique_ptr<Op> parse_op(const tflite::Operator *op) {
@@ -322,7 +322,7 @@ public:
         case tflite::BuiltinOperator_L2_NORMALIZATION:
             return parse_l2_normalization(op);
         case tflite::BuiltinOperator_LOGISTIC:
-            return parse_logistic(op);
+            return parse_unary(op, UnaryOp::Logistic);
 
         default:
             CHECK(0) << "Unsupported op "
