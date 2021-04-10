@@ -518,8 +518,8 @@ public:
     Op() = delete;
     Op(const Op &) = delete;
     Op &operator=(const Op &) = delete;
-    Op(Op &&) = default;
-    Op &operator=(Op &&) = default;
+    Op(Op &&) = delete;
+    Op &operator=(Op &&) = delete;
 };
 
 struct Model {
