@@ -30,16 +30,11 @@ public:
         // Compute 1 / sqrt(x) = 2^log2(x^(-1/2)) = 2^((-1/2)*log2(x))
         // TODO: Are our approx_log2/approx_exp2 precise enough for this op?
         Func inv_sqrt("inv_sqrt");
-        const int log2_precision = 16;
-        const int exp2_precision = 16;
+        const int log2_precision = 14;
+        const int exp2_precision = 14;
         Expr log2_sum_input_sq = approx_log2(sum_input_sq(y), log2_precision);
         inv_sqrt(y) =
             approx_exp2(-log2_sum_input_sq, log2_precision + 1, exp2_precision);
-        // approx_exp2 linearly interpolates the exact powers of 2. Since
-        // 2^x is concave-up, this approximation consistently overestimates
-        // the true function. Roughly correct this error with this correction
-        // factor.
-        inv_sqrt(y) = (inv_sqrt(y) * 15 + 8) / 16;
 
         // The output has a scale of 2^7 = 128 and offset of 128.
         Expr output_scaled = i32(input_zeroed(x, y)) * i32(inv_sqrt(y));

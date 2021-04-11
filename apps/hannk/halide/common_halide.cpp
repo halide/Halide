@@ -69,15 +69,23 @@ Expr approx_log2(const Expr &x, int log2_precision) {
     int log2_max_x = x.type().bits() - 1;
     Expr floor_log2 = log2_max_x - i16(count_leading_zeros(x));
 
-    // Use the bits after the leading bit to linearly interpolate to the next
+    // Use the bits after the leading bit to interpolate to the next
     // power of 2. In other words, we want the slope of the line between
     // floor(log2(x)) and floor(log2(x)) + 1.
-    Expr frac = cast<int>((x >> (floor_log2 - log2_precision)) % precision);
+    Expr correction_1 = (x >> (floor_log2 - log2_precision)) % precision;
+
+    // Also include the second order series term, tweaked to be friendly
+    // to integer arithmetic.
+    assert(log2_precision <= 15);
+    Expr correction_2 =
+        precision / 13 - pow(precision / 2 - correction_1, 2) / (4 * precision);
+
+    Expr correction = correction_1 + correction_2;
 
     // For x <= 0, return any negative value. If count_leading_zeros returns
     // x.type().bits(), which appears to be the case on every platform we
     // target, both sides of this select are the same.
-    return select(x > 0, precision * cast<int>(floor_log2) + frac, -precision);
+    return select(x > 0, precision * i32(floor_log2) + correction, -precision);
 }
 
 Expr approx_exp2(const Expr &x, const Expr &log2_precision_x, int log2_precision_result) {
@@ -86,6 +94,14 @@ Expr approx_exp2(const Expr &x, const Expr &log2_precision_x, int log2_precision
     // Compute floor(x / precision_x) and frac(x / precision_x)
     Expr floor_x = clamp(x >> log2_precision_x, -31, 31);
     Expr frac_x = x - (floor_x << log2_precision_x);
+
+    // Also include the second order series term, tweaked to be friendly
+    // to integer arithmetic.
+    assert(log2_precision_x <= 15);
+    Expr correction_2 =
+        precision_x / 13 - pow(precision_x / 2 - frac_x, 2) / (4 * precision_x);
+
+    frac_x -= correction_2;
 
     // Compute 2^floor(x / precision_x)*precision_result
     Expr exp_floor_x = (1 << log2_precision_result) << floor_x;
