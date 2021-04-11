@@ -487,7 +487,7 @@ bool test_expression_bounds(Expr test, int trials, int samples_per_trial) {
 
 int main(int argc, char **argv) {
     // Number of random expressions to test.
-    const int count = 1000;
+    const int count = 100;
     // Depth of the randomly generated expression trees.
     const int depth = 3;
     // Number of trials to test the generated expressions for.
