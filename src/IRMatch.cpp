@@ -6,6 +6,7 @@
 #include "IRMatch.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
+#include "IRMutator.h"
 
 namespace Halide {
 namespace Internal {
@@ -336,6 +337,53 @@ bool expr_match(const Expr &pattern, const Expr &expr, map<string, Expr> &matche
         matches.clear();
         return false;
     }
+}
+
+namespace {
+
+class WithLanes : public IRMutator {
+    using IRMutator::visit;
+
+    int lanes;
+
+    Type with_lanes(Type t) const {
+        return t.with_lanes(lanes);
+    }
+
+    Expr visit(const Cast *op) override {
+        if (op->type.lanes() != lanes) {
+            return Cast::make(with_lanes(op->type), mutate(op->value));
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+    Expr visit(const Variable *op) override {
+        if (op->type.lanes() != lanes) {
+            return Variable::make(with_lanes(op->type), op->name);
+        } else {
+            return op;
+        }
+    }
+
+    Expr visit(const Broadcast *op) override {
+        if (op->type.lanes() != lanes) {
+            return Broadcast::make(op->value, lanes);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+public:
+    WithLanes(int lanes)
+        : lanes(lanes) {
+    }
+};
+
+}  // namespace
+
+Expr with_lanes(const Expr &x, int lanes) {
+    return WithLanes(lanes).mutate(x);
 }
 
 namespace IRMatcher {

@@ -50,6 +50,10 @@ bool expr_match(const Expr &pattern, const Expr &expr, std::vector<Expr> &result
  */
 bool expr_match(const Expr &pattern, const Expr &expr, std::map<std::string, Expr> &result);
 
+/** Rewrite the expression x to have `lanes` lanes. This is useful
+ * for substituting the results of expr_match into a pattern expression. */
+Expr with_lanes(const Expr &x, int lanes);
+
 void expr_match_test();
 
 /** An alternative template-metaprogramming approach to expression

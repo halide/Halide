@@ -168,51 +168,6 @@ Expr halide_hexagon_add_4mpy(Type result_type, const string &suffix, Expr v01, E
                       {std::move(v01), std::move(c01)}, Call::PureExtern);
 }
 
-// This mutator rewrites patterns with an unknown number of lanes to
-// have the specified number of lanes.
-class WithLanes : public IRMutator {
-    using IRMutator::visit;
-
-    int lanes;
-
-    Type with_lanes(Type t) const {
-        return t.with_lanes(lanes);
-    }
-
-    Expr visit(const Cast *op) override {
-        if (op->type.lanes() != lanes) {
-            return Cast::make(with_lanes(op->type), mutate(op->value));
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
-
-    Expr visit(const Variable *op) override {
-        if (op->type.lanes() != lanes) {
-            return Variable::make(with_lanes(op->type), op->name);
-        } else {
-            return op;
-        }
-    }
-
-    Expr visit(const Broadcast *op) override {
-        if (op->type.lanes() != lanes) {
-            return Broadcast::make(op->value, lanes);
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
-
-public:
-    WithLanes(int lanes)
-        : lanes(lanes) {
-    }
-};
-
-Expr with_lanes(const Expr &x, int lanes) {
-    return WithLanes(lanes).mutate(x);
-}
-
 struct Pattern {
     enum Flags {
         InterleaveResult = 1 << 0,  // After evaluating the pattern, interleave native vectors of the result.
@@ -1026,10 +981,9 @@ private:
             // rewrites above.
             for (const auto &i : cast_rewrites) {
                 if (expr_match(i.first, cast, matches)) {
-                    debug(3) << "rewriting cast to: " << i.first << " from " << cast << "\n";
-                    Expr replacement = with_lanes(i.second, op->type.lanes());
-                    Expr expr = substitute("*", matches[0], replacement);
-                    return mutate(expr);
+                    Expr replacement = substitute("*", matches[0], with_lanes(i.second, op->type.lanes()));
+                    debug(3) << "rewriting cast to: " << replacement << " from " << cast << "\n";
+                    return mutate(replacement);
                 }
             }
         }
