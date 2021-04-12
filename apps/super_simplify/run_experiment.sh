@@ -28,7 +28,7 @@ fi
 make -C ../../ distrib -j32
 
 # Build the autoscheduler
-HL_USE_SYNTHESIZED_RULES=0 make -C ../autoscheduler bin/libauto_schedule.so -j16
+HL_USE_SYNTHESIZED_RULES=0 make -C ../../ distrib
 
 # Build the app generator
 make bin/host/${APP}.generator -j32
@@ -71,7 +71,7 @@ for ((SEED=${FIRST_SEED};SEED<${LAST_SEED};SEED++)); do
     HL_RANDOM_DROPOUT=1 \
     HL_BEAM_SIZE=1 \
     HL_DEBUG_CODEGEN=1 \
-    ./bin/host/${APP}.generator -g ${APP} -e stmt,static_library,h,assembly,registration,compiler_log,llvm_assembly -o results/${SEED} -p ../autoscheduler/bin/libauto_schedule.so target=host-no_runtime-disable_llvm_loop_opt auto_schedule=true -s Adams2019  > results/${SEED}/stdout.txt 2> results/${SEED}/stderr.txt  &
+    ./bin/host/${APP}.generator -g ${APP} -e stmt,static_library,h,assembly,registration,compiler_log,llvm_assembly -o results/${SEED} -p ../../distrib/lib/libautoschedule_adams2019.so target=host-no_runtime-disable_llvm_loop_opt auto_schedule=true -s Adams2019  > results/${SEED}/stdout.txt 2> results/${SEED}/stderr.txt  &
 
     HL_USE_SYNTHESIZED_RULES=0 \
     HL_PERMIT_FAILED_UNROLL=1 \
@@ -79,7 +79,7 @@ for ((SEED=${FIRST_SEED};SEED<${LAST_SEED};SEED++)); do
     HL_RANDOM_DROPOUT=1 \
     HL_BEAM_SIZE=1 \
     HL_DEBUG_CODEGEN=1 \
-    ./bin/host/${APP}.generator -g ${APP} -e stmt,static_library,h,assembly,registration,compiler_log,llvm_assembly -o results_baseline/${SEED} -p ../autoscheduler/bin/libauto_schedule.so target=host-no_runtime-disable_llvm_loop_opt auto_schedule=true -s Adams2019 > results_baseline/${SEED}/stdout.txt 2> results_baseline/${SEED}/stderr.txt    &
+    ./bin/host/${APP}.generator -g ${APP} -e stmt,static_library,h,assembly,registration,compiler_log,llvm_assembly -o results_baseline/${SEED} -p ../../distrib/lib/libautoschedule_adams2019.so target=host-no_runtime-disable_llvm_loop_opt auto_schedule=true -s Adams2019 > results_baseline/${SEED}/stdout.txt 2> results_baseline/${SEED}/stderr.txt    &
 done
 echo "Waiting for generators to finish..."
 wait
