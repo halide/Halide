@@ -379,6 +379,39 @@ std::vector<SplitInfo> Conv2DOp::get_split_info() const {
     };
 }
 
+namespace {
+
+void conv_uint8(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t *bias,
+                const MultiplyParams &params, const std::vector<int> &stride,
+                const std::vector<int> &dilation, const Interval &output_range,
+                halide_buffer_t *output) {
+#ifdef CONV_R16
+    if (input.dim(0).extent() >= 16) {
+        // For large reductions, use the big reduction version.
+        // TODO: We really ought to be able to do this with GuardWithIf
+        // and/or specialize.
+        CHECK(
+            0 == conv_r16_uint8(
+                     input, filter, bias, (uint8_t)params.a_zero,
+                     (uint8_t)params.b_zero, stride[0], stride[1],
+                     dilation[0], dilation[1], params.c.multiplier,
+                     params.c.shift, (uint8_t)params.c_zero,
+                     output_range.min, output_range.max, output));
+    } else
+#endif
+    {
+        CHECK(
+            0 == ::hannk::conv_uint8(
+                     input, filter, bias, (uint8_t)params.a_zero,
+                     (uint8_t)params.b_zero, stride[0], stride[1],
+                     dilation[0], dilation[1], params.c.multiplier,
+                     params.c.shift, (uint8_t)params.c_zero,
+                     output_range.min, output_range.max, output));
+    }
+}
+
+}  // namespace
+
 void Conv2DOp::execute(const Box &crop) {
     const Tensor *in = input();
     const Tensor *filt = filter();
@@ -411,31 +444,45 @@ void Conv2DOp::execute(const Box &crop) {
             pad_to_rank(output_buf, 4);
         }
 
-#ifdef CONV_R16
-        if (input_buf.dim(0).extent() >= 16) {
-            // For large reductions, use the big reduction version.
-            // TODO: We really ought to be able to do this with GuardWithIf
-            // and/or specialize.
-            CHECK(
-                0 == conv_r16_uint8(input_buf, filter_buf, bias_buf, (uint8_t)params.a_zero,
-                                    (uint8_t)params.b_zero, stride_[0], stride_[1],
-                                    dilation_[0], dilation_[1], params.c.multiplier,
-                                    params.c.shift, (uint8_t)params.c_zero,
-                                    output_range.min, output_range.max, output_buf));
-        } else
-#endif
-        {
-            CHECK(
-                0 == conv_uint8(input_buf, filter_buf, bias_buf, (uint8_t)params.a_zero,
-                                (uint8_t)params.b_zero, stride_[0], stride_[1],
-                                dilation_[0], dilation_[1], params.c.multiplier,
-                                params.c.shift, (uint8_t)params.c_zero,
-                                output_range.min, output_range.max, output_buf));
-        }
+        conv_uint8(input_buf, filter_buf, bias_buf, params, stride_, dilation_, output_range, output_buf);
+
     } else {
         CHECK(false) << "Unsupported type " << out->type() << "\n";
     }
 }
+
+namespace {
+
+// Wrapper to dispatch to the appropriate variant of depthwise_conv.
+void depthwise_conv_uint8(
+    halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t *bias,
+    int depth_multiplier, const MultiplyParams &params, const std::vector<int> &stride, const std::vector<int> &dilation,
+    const Interval &output_range, halide_buffer_t *output) {
+    if (depth_multiplier >= output->dim[0].extent) {
+        CHECK(
+            0 == depthwise_conv_broadcast_uint8(
+                     input, filter, bias, depth_multiplier,
+                     (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride[0], stride[1],
+                     dilation[0], dilation[1], params.c.multiplier, params.c.shift,
+                     (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output));
+    } else if (depth_multiplier == 1) {
+        CHECK(
+            0 == depthwise_conv_dm1_uint8(
+                     input, filter, bias, depth_multiplier,
+                     (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride[0], stride[1],
+                     dilation[0], dilation[1], params.c.multiplier, params.c.shift,
+                     (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output));
+    } else {
+        CHECK(
+            0 == ::hannk::depthwise_conv_uint8(
+                     input, filter, bias, depth_multiplier,
+                     (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride[0], stride[1],
+                     dilation[0], dilation[1], params.c.multiplier, params.c.shift,
+                     (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output));
+    }
+}
+
+}  // namespace
 
 std::vector<SplitInfo> DepthwiseConv2DOp::get_split_info() const {
     return {
@@ -453,7 +500,7 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
         if (depth_multiplier_ == 1) {
             // TODO: Handle this padding for SIMD width elsewhere. Either fix depthwise
             // so it doesn't need this, or pass alignment information somewhere else.
-            result.constant(0, align_up(input()->extent(0), 16));
+            result.constant(0, std::max(input()->extent(0), 32));
         } else {
             result.upsample(0, 0, depth_multiplier_);
         }
@@ -494,28 +541,8 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
 
         const auto output_range = get_output_range(activation_, out->quantization());
 
-        if (depth_multiplier_ >= output_buf.dim(0).extent()) {
-            CHECK(
-                0 == depthwise_conv_broadcast_uint8(
-                         input_buf, filter_buf, bias_buf, depth_multiplier_,
-                         (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride_[0], stride_[1],
-                         dilation_[0], dilation_[1], params.c.multiplier, params.c.shift,
-                         (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
-        } else if (depth_multiplier_ == 1) {
-            CHECK(
-                0 == depthwise_conv_dm1_uint8(
-                         input_buf, filter_buf, bias_buf, depth_multiplier_,
-                         (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride_[0], stride_[1],
-                         dilation_[0], dilation_[1], params.c.multiplier, params.c.shift,
-                         (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
-        } else {
-            CHECK(
-                0 == depthwise_conv_uint8(
-                         input_buf, filter_buf, bias_buf, depth_multiplier_,
-                         (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride_[0], stride_[1],
-                         dilation_[0], dilation_[1], params.c.multiplier, params.c.shift,
-                         (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output_buf));
-        }
+        depthwise_conv_uint8(input_buf, filter_buf, bias_buf, depth_multiplier_, params,
+                             stride_, dilation_, output_range, output_buf);
     } else {
         CHECK(false) << "Unsupported type " << out->type() << "\n";
     }
