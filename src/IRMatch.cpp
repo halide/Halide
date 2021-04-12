@@ -4,9 +4,9 @@
 
 #include "IREquality.h"
 #include "IRMatch.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
-#include "IRMutator.h"
 
 namespace Halide {
 namespace Internal {
