@@ -30,7 +30,8 @@
     KNOWN_OP(Pad)             \
     KNOWN_OP(Reshape)         \
     KNOWN_OP(Softmax)         \
-    KNOWN_OP(L2Normalization)
+    KNOWN_OP(L2Normalization) \
+    KNOWN_OP(Logistic)
 
 // TODO(srj): FullyConnected will actually check-fail if you use it,
 // so leave it out of the ops we handle here for now.
@@ -471,7 +472,7 @@ private:
         auto input1 = GetTensorById(context, node->inputs->data[0]);
         auto input2 = GetTensorById(context, node->inputs->data[1]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        const TfLiteAddParams *params = (const TfLiteAddParams *)(node->builtin_data);
+        const TfLiteSubParams *params = (const TfLiteSubParams *)(node->builtin_data);
         auto activation = ConvertTfLiteActivation(params->activation);
         return ::hannk::make_unique<BinaryOp>(input1, input2, output, BinaryOp::Sub, activation);
     }
@@ -599,6 +600,12 @@ private:
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         return ::hannk::make_unique<L2NormalizationOp>(input, output);
+    }
+
+    std::unique_ptr<Op> BuildLogistic(TfLiteContext *context, TfLiteNode *node) {
+        auto input = GetTensorById(context, node->inputs->data[0]);
+        auto output = GetTensorById(context, node->outputs->data[0]);
+        return ::hannk::make_unique<UnaryOp>(input, output, UnaryOp::Logistic);
     }
 
     const HannkDelegateOptions options_;
@@ -784,6 +791,16 @@ bool IsNodeSupported_Softmax(TfLiteContext *context, TfLiteNode *node, TfLiteReg
 }
 
 bool IsNodeSupported_L2Normalization(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    if (!(registration->version <= 2)) {
+        return false;
+    }
+    if (!InputsHaveCorrectTypes(node, context, {k8BitMask})) {
+        return false;
+    }
+    return true;
+}
+
+bool IsNodeSupported_Logistic(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
     if (!(registration->version <= 2)) {
         return false;
     }

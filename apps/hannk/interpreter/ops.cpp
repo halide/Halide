@@ -602,7 +602,7 @@ BoundsMap L2NormalizationOp::map_bounds(int input_idx, int output_idx) const {
     assert(input_idx == 0);
     assert(output_idx == 0);
     return BoundsMap(2, 2)
-        .constant(0, input()->extent(0))
+        .constant(0, input()->bounds(0))
         .elementwise(1, 1);
 }
 
@@ -823,7 +823,7 @@ BoundsMap SoftmaxOp::map_bounds(int input_idx, int output_idx) const {
     assert(input_idx == 0);
     assert(output_idx == 0);
     return BoundsMap(2, 2)
-        .constant(0, input()->extent(0))
+        .constant(0, input()->bounds(0))
         .elementwise(1, 1);
 }
 
@@ -855,8 +855,7 @@ void SoftmaxOp::execute(const Box &crop) {
         assert(in_mul_and_shift.shift <= 0);
         assert(output_mul_and_shift.shift <= 0);
 
-        CHECK(0 == softmax_uint8(left_shift, in_buf,
-                                 in_mul_and_shift.multiplier, -in_mul_and_shift.shift,
+        CHECK(0 == softmax_uint8(left_shift, in_buf, in_mul_and_shift.multiplier, -in_mul_and_shift.shift,
                                  output_zero, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
                                  output_buf));
     } else {

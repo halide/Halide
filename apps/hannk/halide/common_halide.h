@@ -44,8 +44,11 @@ Halide::Expr multiply_quantized(
 // Approximately compute log2(x)*2^log2_precision.
 Halide::Expr approx_log2(const Halide::Expr &x, int log2_precision);
 
-// Approximately compute (2^(x>>log2_precision_x))<<log2_precision_result.
+// Approximately compute 2^(x/2^log2_precision_x)/2^log2_precision_result.
 Halide::Expr approx_exp2(const Halide::Expr &x, const Halide::Expr &log2_precision_x, int log2_precision_result);
+
+// Approximately compute 2^log2_precision/sqrt(x)
+Halide::Expr approx_reciprocal_sqrt(const Halide::Expr &x, int log2_precision);
 
 }  // namespace hannk
 

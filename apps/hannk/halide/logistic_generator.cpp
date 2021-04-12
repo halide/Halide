@@ -6,7 +6,7 @@ using namespace Halide::ConciseCasts;
 
 namespace hannk {
 
-// Approximate log2(1 + exp2(x/2^log2_precision-x))*2^log2_precision_result
+// Approximate log2(1 + 2^(x/2^log2_precision))*2^log2_precision_result
 Expr approx_log2p1_exp2(Expr x, Expr log2_precision_x, int log2_precision_result) {
     const int log2_p = 8;
     const int p = 1 << log2_p;
@@ -43,7 +43,8 @@ public:
         Expr input = i32(i16(input_(x)) - i16(input_zero_)) << 22;
         input = multiply_2x_high(input, input_multiplier_);
 
-        // TODO: This is not very accurate. Improve it.
+        //   256/(1 + 2^input)
+        // = 256*2^(-log2(1 + 2^input))
         const int log2_precision = 15;
         Expr log2_inv_logistic = approx_log2p1_exp2(-input, input_shift_, log2_precision);
         Expr logistic = approx_exp2(-log2_inv_logistic, log2_precision, 8);

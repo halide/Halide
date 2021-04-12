@@ -66,8 +66,7 @@ public:
 
         Expr output = multiply_2x_high(i32(exp2_diff(x, y)), inv_sum_exp_row(y));
         output = multiply_quantized(output, output_multiplier_, output_shift_);
-        output = saturating_add(i16_sat(output), output_zero_);
-        output_(x, y) = u8_sat(output);
+        output_(x, y) = u8_sat(saturating_add(i16_sat(output), output_zero_));
 
         // Schedule.
         // TODO: This schedule has very little ILP, but the extent of y

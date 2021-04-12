@@ -24,7 +24,7 @@ bool test_approx_exp2() {
 
     const double tolerance = 1e-1;
 
-    auto results = test.realize({extent, 31});
+    auto results = test.realize({extent, 15});
     int log2_precision_results_size =
         sizeof(log2_precision_results) / sizeof(log2_precision_results[0]);
     for (int z = 0; z < log2_precision_results_size; z++) {

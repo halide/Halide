@@ -27,25 +27,20 @@ public:
         sum_input_sq(y) = i32(0);
         sum_input_sq(y) += pow(i32(input_zeroed(rx, y)), 2);
 
-        // Compute 1 / sqrt(x) = 2^log2(x^(-1/2)) = 2^((-1/2)*log2(x))
-        // TODO: Are our approx_log2/approx_exp2 precise enough for this op?
         Func inv_sqrt("inv_sqrt");
-        const int log2_precision = 14;
-        const int exp2_precision = 14;
-        Expr log2_sum_input_sq = approx_log2(sum_input_sq(y), log2_precision);
-        inv_sqrt(y) =
-            approx_exp2(-log2_sum_input_sq, log2_precision + 1, exp2_precision);
+        const int log2_precision = 15;
+        inv_sqrt(y) = approx_reciprocal_sqrt(sum_input_sq(y), log2_precision);
 
         // The output has a scale of 2^7 = 128 and offset of 128.
-        Expr output_scaled = i32(input_zeroed(x, y)) * i32(inv_sqrt(y));
-        output_(x, y) =
-            u8_sat(rounding_shift_right(output_scaled, exp2_precision - 7) + 128);
+        Expr output = i32(input_zeroed(x, y)) * i32(inv_sqrt(y));
+        output = i16_sat(rounding_shift_right(output, log2_precision - 7));
+        output_(x, y) = u8_sat(saturating_add(output, i16(128)));
 
         // Schedule.
         const int vector_size = natural_vector_size<uint8_t>();
 
         output_.compute_root()
-            .vectorize(x, vector_size, TailStrategy::GuardWithIf);
+            .vectorize(x, vector_size, TailStrategy::Predicate);
 
         inv_sqrt.compute_at(output_, y);
 

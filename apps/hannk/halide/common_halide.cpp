@@ -60,54 +60,61 @@ Expr multiply_quantized(const Expr &x, const Expr &q, const Expr &shift) {
     return rounding_shift_right(multiply_2x_high(x, q), shift);
 }
 
-Expr approx_log2(const Expr &x, int log2_precision) {
-    int precision = 1 << log2_precision;
-
+Expr floor_log2(const Expr &x) {
     //   floor(log2(x)) = B - clz(x) => log2(x) ~ B - clz(x)
     //   B = sizeof(x)*8 - 1
     //   clz(x) = count_leading_zeros(x)
     int log2_max_x = x.type().bits() - 1;
-    Expr floor_log2 = log2_max_x - i16(count_leading_zeros(x));
+    return log2_max_x - i16(count_leading_zeros(x));
+}
+
+Expr approx_log2(const Expr &x, int log2_precision) {
+    int precision = 1 << log2_precision;
+
+    Expr floor_log2_x = floor_log2(x);
 
     // Use the bits after the leading bit to interpolate to the next
     // power of 2. In other words, we want the slope of the line between
     // floor(log2(x)) and floor(log2(x)) + 1.
-    Expr correction_1 = (x >> (floor_log2 - log2_precision)) % precision;
+    Expr correction = i16((x >> (floor_log2_x - log2_precision)) % precision);
 
     // Also include the second order series term, tweaked to be friendly
     // to integer arithmetic.
     assert(log2_precision <= 15);
-    Expr correction_2 =
-        precision / 13 - pow(precision / 2 - correction_1, 2) / (4 * precision);
-
-    Expr correction = correction_1 + correction_2;
+    int one_over_14 = 4681 >> (16 - log2_precision);
+    correction += one_over_14 - (pow(i32(precision / 2 - correction), 2) >> (log2_precision + 2));
 
     // For x <= 0, return any negative value. If count_leading_zeros returns
     // x.type().bits(), which appears to be the case on every platform we
     // target, both sides of this select are the same.
-    return select(x > 0, precision * i32(floor_log2) + correction, -precision);
+    return select(x > 0, precision * i32(floor_log2_x) + correction, -precision);
 }
 
 Expr approx_exp2(const Expr &x, const Expr &log2_precision_x, int log2_precision_result) {
     Expr precision_x = 1 << log2_precision_x;
 
     // Compute floor(x / precision_x) and frac(x / precision_x)
-    Expr floor_x = clamp(x >> log2_precision_x, -31, 31);
+    Expr floor_x = x >> log2_precision_x;
     Expr frac_x = x - (floor_x << log2_precision_x);
 
     // Also include the second order series term, tweaked to be friendly
     // to integer arithmetic.
-    assert(log2_precision_x <= 15);
-    Expr correction_2 =
-        precision_x / 13 - pow(precision_x / 2 - frac_x, 2) / (4 * precision_x);
-
-    frac_x -= correction_2;
+    Expr one_over_14 = i16(4681) >> (16 - log2_precision_x);
+    frac_x -= one_over_14 - (pow(i32(precision_x / 2 - frac_x), 2) >> (log2_precision_x + 2));
 
     // Compute 2^floor(x / precision_x)*precision_result
-    Expr exp_floor_x = (1 << log2_precision_result) << floor_x;
+    Expr exp_floor_x = 1 << (floor_x + log2_precision_result);
 
     // Linearly interpolate to the next power of 2 using frac_x.
     return exp_floor_x + multiply_2x_high(exp_floor_x, frac_x << (31 - log2_precision_x));
+}
+
+Expr approx_reciprocal_sqrt(const Expr &x, int log2_precision) {
+    //   precision / sqrt(x)
+    // = precision / 2^log2(x^(1/2))
+    // = precision * 2^(-log2(x)/2)
+    Expr log2_x = approx_log2(x, log2_precision - 1);
+    return approx_exp2(-log2_x, log2_precision, log2_precision);
 }
 
 }  // namespace hannk
