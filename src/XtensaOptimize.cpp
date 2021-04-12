@@ -741,14 +741,11 @@ private:
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x >> wild_i32)},
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x / wild_i32), Pattern::ExactLog2Op1},
 
-            // {"halide_xtensa_sat_narrow_i16", i16_sat(wild_i32x)},
+            {"halide_xtensa_sat_narrow_with_shift_i8", i8_sat(rounding_shift_right(wild_i16x, wild_u16))},
+            {"halide_xtensa_sat_narrow_with_shift_u8", u8_sat(rounding_shift_right(wild_i16x, wild_u16))},
+            {"halide_xtensa_sat_narrow_with_shift_i16", i16_sat(rounding_shift_right(wild_i32x, wild_u32))},
+            {"halide_xtensa_sat_narrow_with_shift_u16", u16_sat(rounding_shift_right(wild_i32x, wild_u32))},
 
-            // Implementation of this is incorrect, so needs to be fixed before enabling.
-            // {"halide_xtensa_sat_narrow_with_shift_i16", i16_sat(wild_i32x >> wild_u32)},
-            // {"halide_xtensa_sat_narrow_with_shift_i16", i16_sat(wild_i32x / wild_u32), Pattern::ExactLog2Op1},
-
-            // {"halide_xtensa_sat_narrow_with_shift_u16", u16_sat(wild_i32x >> wild_u32)},
-            // {"halide_xtensa_sat_narrow_with_shift_u16", u16_sat(wild_i32x / wild_u32), Pattern::ExactLog2Op1},
             {"halide_xtensa_narrow_i24_with_shift_i16", i16(wild_i24x >> wild_i24)},
             {"halide_xtensa_narrow_i24_with_shift_i16", i16(wild_i24x / wild_i24), Pattern::ExactLog2Op1},
 
@@ -770,6 +767,9 @@ private:
 
             {"halide_xtensa_sat_narrow_i24x_with_shift_u8", u8_sat(i16(wild_i24x) >> bc(wild_i16))},
             {"halide_xtensa_sat_narrow_i24x_with_shift_u8", u8_sat(i16(wild_i24x) / bc(wild_i16)), Pattern::ExactLog2Op1},
+
+            {"halide_xtensa_sat_narrow_u8", u8_sat(wild_i16x)},
+            {"halide_xtensa_sat_narrow_i16", i16_sat(wild_i32x)},
 
             // Concat and cast.
             {"halide_xtensa_convert_concat_i16_to_i8", i8(halide_xtensa_concat_from_native_i16(wild_i16x, wild_i16x))},
