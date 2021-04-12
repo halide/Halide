@@ -1039,6 +1039,7 @@ public:
         // bounds inference results so that we don't needlessly
         // complicate our bounds expressions.
         vector<pair<string, Expr>> wrappers;
+        vector<ScopedBinding<>> bindings;
         while (true) {
             if (const LetStmt *let = body.as<LetStmt>()) {
                 if (depends_on_bounds_inference(let->value)) {
@@ -1047,6 +1048,7 @@ public:
 
                 body = let->body;
                 wrappers.emplace_back(let->name, let->value);
+                bindings.emplace_back(let_vars_in_scope, let->name);
             } else if (const IfThenElse *if_then_else = body.as<IfThenElse>()) {
                 if (depends_on_bounds_inference(if_then_else->condition) ||
                     if_then_else->else_case.defined()) {
@@ -1227,7 +1229,13 @@ public:
                         // If it's not found, we're already in the
                         // scope of the injected let. The let was
                         // probably lifted to an outer level.
-                        Expr val = Variable::make(Int(32), var);
+                        Expr val;
+                        if (let_vars_in_scope.contains(var + ".guarded")) {
+                            // Use a guarded version if it exists, for tighter bounds inference.
+                            val = Variable::make(Int(32), var + ".guarded");
+                        } else {
+                            val = Variable::make(Int(32), var);
+                        }
                         body = LetStmt::make(var + ".min", val, body);
                         body = LetStmt::make(var + ".max", val, body);
                     }
@@ -1249,6 +1257,12 @@ public:
         }
 
         return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+    }
+
+    Scope<> let_vars_in_scope;
+    Stmt visit(const LetStmt *op) override {
+        ScopedBinding<> bind(let_vars_in_scope, op->name);
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const ProducerConsumer *p) override {

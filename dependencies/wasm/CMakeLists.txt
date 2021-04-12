@@ -180,6 +180,12 @@ function(add_wasm_halide_test TARGET)
         list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-simd")
     endif ()
     if (Halide_TARGET MATCHES "wasm_threads")
+        # wasm_threads requires compilation with Emscripten, against a *browser*
+        # environment rather than a shell environment. (This is because the 'pthreads'
+        # support is an elaborate wrapper than Emscripten provides around WebWorkers.)
+        # The version of d8/v8 that we pull does provide enough of a browser-like
+        # environment to support this, but many shell tools (e.g. wabt-interp) don't,
+        # so if you use a different WASM_SHELL, you may have to disable this.
         list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-threads")
     endif ()
 

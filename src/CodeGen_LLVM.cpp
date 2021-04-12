@@ -91,7 +91,7 @@ using std::vector;
 
 #ifdef WITH_NVPTX
 #define InitializeNVPTXTarget() InitializeTarget(NVPTX)
-#define InitializeNVPTXAsmParser() InitializeAsmParser(NVPTX)
+// #define InitializeNVPTXAsmParser() InitializeAsmParser(NVPTX) // there is no ASM parser for NVPTX
 #define InitializeNVPTXAsmPrinter() InitializeAsmPrinter(NVPTX)
 #endif
 
