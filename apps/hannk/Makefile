@@ -338,7 +338,7 @@ else ifeq (arm-64-android,$(findstring arm-64-android,$(HL_TARGET)))
 $(BIN)/tflite-android/jni/arm64-v8a/libtensorflowlite_jni.so:
 	@echo Fetching tensorflow-lite-android.zip...
 	@mkdir -p $(@D)
-	wget --quiet -O $(BIN)/tflite-android.zip https://google.bintray.com/tensorflow/org/tensorflow/tensorflow-lite/$(TFLITE_VERSION)/tensorflow-lite-$(TFLITE_VERSION).aar || rm -f $@
+	@wget --quiet -O $(BIN)/tflite-android.zip https://google.bintray.com/tensorflow/org/tensorflow/tensorflow-lite/$(TFLITE_VERSION)/tensorflow-lite-$(TFLITE_VERSION).aar || rm -f $@
 	@echo Unzipping tensorflow-lite-android.zip...
 	@unzip -q -o $(BIN)/tflite-android.zip -d $(BIN)/tflite-android
 
