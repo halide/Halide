@@ -31,7 +31,8 @@
     KNOWN_OP(Reshape)         \
     KNOWN_OP(Softmax)         \
     KNOWN_OP(L2Normalization) \
-    KNOWN_OP(Logistic)
+    KNOWN_OP(Logistic)        \
+    KNOWN_OP(Tanh)
 
 // TODO(srj): FullyConnected will actually check-fail if you use it,
 // so leave it out of the ops we handle here for now.
@@ -240,7 +241,6 @@ public:
             const TfLiteTensor &tensor = context->tensors[tensor_id];
             if (tensor.dims == nullptr) {
                 // Can't convert a TfLiteTensor with no dimension info
-                LOG(INFO) << "Skipping tensor_id " << tensor_id << "\n";
                 continue;
             }
             auto t = ConvertTfLiteTensor(tensor);
@@ -608,6 +608,12 @@ private:
         return ::hannk::make_unique<UnaryOp>(input, output, UnaryOp::Logistic);
     }
 
+    std::unique_ptr<Op> BuildTanh(TfLiteContext *context, TfLiteNode *node) {
+        auto input = GetTensorById(context, node->inputs->data[0]);
+        auto output = GetTensorById(context, node->outputs->data[0]);
+        return ::hannk::make_unique<UnaryOp>(input, output, UnaryOp::Tanh);
+    }
+
     const HannkDelegateOptions options_;
     std::unique_ptr<Model> model_;
     std::unique_ptr<ModelInterpreter> interpreter_;
@@ -801,6 +807,16 @@ bool IsNodeSupported_L2Normalization(TfLiteContext *context, TfLiteNode *node, T
 }
 
 bool IsNodeSupported_Logistic(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    if (!(registration->version <= 2)) {
+        return false;
+    }
+    if (!InputsHaveCorrectTypes(node, context, {k8BitMask})) {
+        return false;
+    }
+    return true;
+}
+
+bool IsNodeSupported_Tanh(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
     if (!(registration->version <= 2)) {
         return false;
     }

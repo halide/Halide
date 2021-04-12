@@ -125,11 +125,11 @@ $(BIN)/%/fully_connected_uint8.a: $(GENERATOR_BIN)/fully_connected.generator
 	@mkdir -p $(@D)
 	$< -g FullyConnected -f hannk::fully_connected_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/l2_normalization_uint8.a: $(GENERATOR_BIN)/l2_normalization.generator
+$(BIN)/%/l2_normalization_uint8.a: $(GENERATOR_BIN)/normalization.generator
 	@mkdir -p $(@D)
 	$< -g L2Normalization -f hannk::l2_normalization_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/logistic_uint8.a: $(GENERATOR_BIN)/logistic.generator
+$(BIN)/%/logistic_uint8.a: $(GENERATOR_BIN)/transcendentals.generator
 	@mkdir -p $(@D)
 	$< -g Logistic -f hannk::logistic_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
@@ -137,9 +137,13 @@ $(BIN)/%/max_pool_uint8.a: $(GENERATOR_BIN)/max_pool.generator
 	@mkdir -p $(@D)
 	$< -g MaxPool -f hannk::max_pool_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/softmax_uint8.a: $(GENERATOR_BIN)/softmax.generator
+$(BIN)/%/softmax_uint8.a: $(GENERATOR_BIN)/normalization.generator
 	@mkdir -p $(@D)
 	$< -g Softmax -f hannk::softmax_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
+$(BIN)/%/tanh_uint8.a: $(GENERATOR_BIN)/transcendentals.generator
+	@mkdir -p $(@D)
+	$< -g Tanh -f hannk::tanh_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
 $(BIN)/%/tile_conv_filter_uint8.a: $(GENERATOR_BIN)/conv.generator
 	@mkdir -p $(@D)
@@ -163,6 +167,7 @@ OPS_HALIDE = \
 	$(BIN)/%/logistic_uint8.a \
 	$(BIN)/%/max_pool_uint8.a \
 	$(BIN)/%/softmax_uint8.a \
+	$(BIN)/%/tanh_uint8.a \
 	$(BIN)/%/tile_conv_filter_uint8.a \
 	$(BIN)/%/runtime.a
 

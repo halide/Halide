@@ -99,6 +99,8 @@ Expr approx_exp2(const Expr &x, const Expr &log2_precision_x, int log2_precision
 
     // Also include the second order series term, tweaked to be friendly
     // to integer arithmetic.
+    // TODO: We can do quite a bit better than this if we fit a proper
+    // quadratic.
     Expr one_over_14 = i16(4681) >> (16 - log2_precision_x);
     frac_x -= one_over_14 - (pow(i32(precision_x / 2 - frac_x), 2) >> (log2_precision_x + 2));
 

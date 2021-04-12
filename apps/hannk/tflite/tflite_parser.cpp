@@ -323,6 +323,8 @@ public:
             return parse_l2_normalization(op);
         case tflite::BuiltinOperator_LOGISTIC:
             return parse_unary(op, UnaryOp::Logistic);
+        case tflite::BuiltinOperator_TANH:
+            return parse_unary(op, UnaryOp::Tanh);
 
         default:
             CHECK(0) << "Unsupported op "

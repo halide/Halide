@@ -408,6 +408,7 @@ class UnaryOp : public ElementwiseOp {
 public:
     enum Operator {
         Logistic,
+        Tanh,
     };
 
     static const char *to_string(Operator op);
