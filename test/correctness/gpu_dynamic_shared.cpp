@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     // shared and global
     for (int per_thread = 0; per_thread < 2; per_thread++) {
         for (auto memory_type : {MemoryType::GPUShared, MemoryType::Heap}) {
-            printf("Testing: per_thread=%d, memory_type=%d\n", per_thread, (int) memory_type);
+            printf("Testing: per_thread=%d, memory_type=%d\n", per_thread, (int)memory_type);
 
             Func f("f"), g("g");
             Var x("x"), xi("xi");
