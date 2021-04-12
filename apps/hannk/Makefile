@@ -67,9 +67,11 @@ TFLITE_VERSION = $(TFLITE_VERSION_MAJOR).$(TFLITE_VERSION_MINOR).$(TFLITE_VERSIO
 TFLITE_TAG = v$(TFLITE_VERSION)
 
 # Define `TFLITE_VERSION` here to allow for code that compiles against multiple versions of
-# TFLite (both the C API and the Schema). This deliberately ignores the 'patch' version so
-# 2.3.x is 23, 2.4.x is 24, etc. (Yes, this is inadequate if a minor version ever goes above 9.)
-APP_CXXFLAGS = -I$(MAKEFILE_DIR) -DTFLITE_VERSION=$(TFLITE_VERSION_MAJOR)$(TFLITE_VERSION_MINOR)
+# TFLite (both the C API and the Schema).
+APP_CXXFLAGS = -I$(MAKEFILE_DIR) \
+	-DTFLITE_VERSION_MAJOR=$(TFLITE_VERSION_MAJOR) \
+	-DTFLITE_VERSION_MINOR=$(TFLITE_VERSION_MINOR) \
+	-DTFLITE_VERSION_PATCH=$(TFLITE_VERSION_PATCH)
 
 # ---------------------- halide
 
@@ -336,7 +338,7 @@ else ifeq (arm-64-android,$(findstring arm-64-android,$(HL_TARGET)))
 $(BIN)/tflite-android/jni/arm64-v8a/libtensorflowlite_jni.so:
 	@echo Fetching tensorflow-lite-android.zip...
 	@mkdir -p $(@D)
-	@wget --quiet -O $(BIN)/tflite-android.zip https://google.bintray.com/tensorflow/org/tensorflow/tensorflow-lite/$(TFLITE_VERSION)/tensorflow-lite-$(TFLITE_VERSION).aar || rm -f $@
+	wget --quiet -O $(BIN)/tflite-android.zip https://google.bintray.com/tensorflow/org/tensorflow/tensorflow-lite/$(TFLITE_VERSION)/tensorflow-lite-$(TFLITE_VERSION).aar || rm -f $@
 	@echo Unzipping tensorflow-lite-android.zip...
 	@unzip -q -o $(BIN)/tflite-android.zip -d $(BIN)/tflite-android
 

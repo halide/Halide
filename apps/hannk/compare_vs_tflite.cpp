@@ -358,6 +358,16 @@ int main(int argc, char **argv) {
     std::cout << "Using random seed: " << seed << "\n";
     std::cout << "Using threads: " << threads << "\n";
 
+    {
+        std::string tf_ver = TfLiteVersion();
+        std::cout << "Using TFLite version: " << tf_ver << "\n";
+        std::string expected = std::to_string(TFLITE_VERSION_MAJOR) + "." + std::to_string(TFLITE_VERSION_MINOR) + ".";
+        if (tf_ver.find(expected) != 0) {
+            std::cerr << "*** WARNING: compare_vs_tflite has been tested against TFLite v" << expected << "x, "
+                      << "but is using " << tf_ver << "; results may be inaccurate or wrong.\n";
+        }
+    }
+
     void *delegate_lib = nullptr;
     hannk::DelegateFactory delegate_factory;
     if (use_delegate) {
