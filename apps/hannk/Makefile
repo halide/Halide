@@ -67,9 +67,11 @@ TFLITE_VERSION = $(TFLITE_VERSION_MAJOR).$(TFLITE_VERSION_MINOR).$(TFLITE_VERSIO
 TFLITE_TAG = v$(TFLITE_VERSION)
 
 # Define `TFLITE_VERSION` here to allow for code that compiles against multiple versions of
-# TFLite (both the C API and the Schema). This deliberately ignores the 'patch' version so
-# 2.3.x is 23, 2.4.x is 24, etc. (Yes, this is inadequate if a minor version ever goes above 9.)
-APP_CXXFLAGS = -I$(MAKEFILE_DIR) -DTFLITE_VERSION=$(TFLITE_VERSION_MAJOR)$(TFLITE_VERSION_MINOR)
+# TFLite (both the C API and the Schema).
+APP_CXXFLAGS = -I$(MAKEFILE_DIR) \
+	-DTFLITE_VERSION_MAJOR=$(TFLITE_VERSION_MAJOR) \
+	-DTFLITE_VERSION_MINOR=$(TFLITE_VERSION_MINOR) \
+	-DTFLITE_VERSION_PATCH=$(TFLITE_VERSION_PATCH)
 
 # ---------------------- halide
 
