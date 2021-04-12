@@ -84,6 +84,8 @@ public:
 
         // tanh(x) = (e^2x - 1)/(e^2x + 1). We baked a factor of 2*log2(e) into
         // the input multiplier and shift, so we just need to compute 2^x here.
+        // TODO: It's probably better to just directly approximate tanh, but this
+        // is simple and does not impact performance in any known cases.
         const int log2_precision = 15;
         Expr log2_n = approx_log2m1_exp2(i32(abs(input)), input_shift_, log2_precision);
         Expr log2_d = approx_log2p1_exp2(i32(abs(input)), input_shift_, log2_precision);
