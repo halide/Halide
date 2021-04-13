@@ -882,7 +882,7 @@ struct JITFuncCallContext {
                           std::to_string(exit_status) +
                           " but halide_error was never called.\n");
             }
-            halide_runtime_error << output;
+            halide_runtime_error << "ZZZ(" << output << ")ZZZ";
             error_buffer.end = 0;
         }
     }
