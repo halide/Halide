@@ -96,22 +96,40 @@ class InjectGpuOffload : public IRMutator {
     /** Child code generator for device kernels. */
     map<DeviceAPI, unique_ptr<CodeGen_GPU_Dev>> cgdev;
 
-    map<string, bool> state_needed;
+    map<string, Expr> state_bufs;
 
     const Target &target;
 
-    Expr get_state_var(const string &name) {
-        // Expr v = Variable::make(type_of<void *>(), name);
-        state_needed[name] = true;
-        return Load::make(type_of<void *>(), name, 0,
-                          Buffer<>(), Parameter(), const_true(), ModulusRemainder());
+    Expr state_var(const string &name, Type type, bool create) {
+        Expr ptr = state_var_ptr(name, type, create);
+        if (!ptr.defined()) {
+            return Expr();
+        }
+        return Let::make(name, ptr,
+                         Load::make(type_of<void *>(), name, 0,
+                                    Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
     }
 
-    Expr make_state_var(const string &name) {
-        auto storage = Buffer<void *>::make_scalar(name + "_buf");
-        storage() = nullptr;
-        Expr buf = Variable::make(type_of<halide_buffer_t *>(), storage.name() + ".buffer", storage);
-        return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
+    Expr state_var_ptr(const string &name, Type type, bool create) {
+        Expr &buf = state_bufs[name];
+        if (!buf.defined() && create) {
+            auto storage = Buffer<void *>::make_scalar(name + "_buf");
+            storage() = nullptr;
+            buf = Variable::make(type_of<halide_buffer_t *>(), storage.name() + ".buffer", storage);
+        }
+        if (buf.defined()) {
+            return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
+        } else {
+            return Expr();
+        }
+    }
+
+    Expr module_state(const string &api_name, bool create = true) {
+        return state_var(api_name, type_of<void *>(), create);
+    }
+
+    Expr module_state_ptr(const string &api_name, bool create = true) {
+        return state_var_ptr(api_name, type_of<void *>(), create);
     }
 
     // Create a Buffer containing the given vector, and return an
@@ -233,7 +251,7 @@ class InjectGpuOffload : public IRMutator {
 
         string api_unique_name = gpu_codegen->api_unique_name();
         vector<Expr> run_args = {
-            get_state_var(api_unique_name),
+            module_state(api_unique_name),
             kernel_name,
             Expr(bounds.num_blocks[0]),
             Expr(bounds.num_blocks[1]),
@@ -284,26 +302,25 @@ public:
 
             // If the module state for this API/function did not get created, there were
             // no kernels using this API.
-            if (!state_needed[api_unique_name]) {
+            Expr state_ptr = module_state_ptr(api_unique_name, false);
+            if (!state_ptr.defined()) {
                 continue;
             }
-            Expr state_ptr = make_state_var(api_unique_name);
-            Expr state_ptr_var = Variable::make(type_of<void *>(), api_unique_name);
 
             debug(2) << "Generating init_kernels for " << api_unique_name << "\n";
             vector<char> kernel_src = i.second->compile_to_src();
-            Expr kernel_src_buf = make_buffer_ptr(kernel_src, api_unique_name + "_gpu_source_kernels");
+            Expr kernel_src_buf = make_buffer_ptr(kernel_src, api_unique_name + "_kernels");
 
             string init_kernels_name = "halide_" + api_unique_name + "_initialize_kernels";
-            vector<Expr> init_args = {state_ptr_var, kernel_src_buf, Expr((int)kernel_src.size())};
+            vector<Expr> init_args = {state_ptr, kernel_src_buf, Expr((int)kernel_src.size())};
             Stmt init_kernels = call_extern_and_assert(init_kernels_name, init_args);
 
             string destructor_name = "halide_" + api_unique_name + "_finalize_kernels";
-            vector<Expr> finalize_args = {Expr(destructor_name), get_state_var(api_unique_name)};
+            vector<Expr> finalize_args = {Expr(destructor_name), module_state(api_unique_name)};
             Stmt register_destructor = Evaluate::make(
                 Call::make(Handle(), Call::register_destructor, finalize_args, Call::Intrinsic));
 
-            result = LetStmt::make(api_unique_name, state_ptr, Block::make({init_kernels, register_destructor, result}));
+            result = Block::make({init_kernels, register_destructor, result});
         }
         return result;
     }
