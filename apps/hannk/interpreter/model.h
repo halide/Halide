@@ -205,6 +205,9 @@ public:
     void remove_consumer(Op *op);
     void remove_producer(Op *op);
 
+    const std::list<Op *> &producers() const { return producers_; }
+    const std::list<Op *> &consumers() const { return consumers_; }
+
     void replace_all_consumers_with(TensorPtr other);
 
     void dump(std::ostream &os) const;

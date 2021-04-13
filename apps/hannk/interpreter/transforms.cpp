@@ -26,6 +26,26 @@ bool is_used(const Op *op, TensorPtr t) {
     return is_input(op, t) || is_output(op, t);
 }
 
+template <typename T>
+T *cast_op(Op *x) {
+    class Caster : public OpVisitor {
+    public:
+        T *result = nullptr;
+
+        void visit(T *op) {
+            result = op;
+        }
+    };
+
+    Caster caster;
+    x->accept(&caster);
+    if (caster.result == x) {
+        return caster.result;
+    } else {
+        return nullptr;
+    }
+}
+
 }  // namespace
 
 void remove_dead_ops(Model *m) {
@@ -36,7 +56,7 @@ void remove_dead_ops(Model *m) {
         Op *op = m->ops[i].get();
         bool dead = true;
         for (int j = 0; dead && j < op->input_count(); j++) {
-            if (op->input(j)->is_input() || op->input(j)->is_output()) {
+            if (op->input(j)->is_output()) {
                 dead = false;
                 break;
             }
@@ -44,7 +64,7 @@ void remove_dead_ops(Model *m) {
         for (int j = 0; dead && j < op->output_count(); j++) {
             // An op isn't dead if its output is an output
             // of the graph.
-            if (op->output(j)->is_input() || op->output(j)->is_output()) {
+            if (op->output(j)->is_output()) {
                 dead = false;
                 break;
             }
@@ -166,27 +186,29 @@ class PadForOps : public OpVisitor {
         BoundsMap deps = op->map_bounds(input_idx, output_idx);
         Box required = deps.evaluate(output->bounds());
 
-        if (!is_subset_of(required, input->bounds())) {
-            // Make a PadOp and a new tensor for the padded result.
-            TensorPtr padded =
-                std::make_shared<Tensor>(input->name() + "_padded", input->type(), required, input->quantization());
-            op->set_input(padded);
-
-            HalideBuffer<int32_t> padding_data(2, input->rank());
-            // Center the crop, except for the channel dimension.
-            // TODO: Is this always correct?
-            padding_data(0, 0) = 0;
-            padding_data(1, 0) = 0;
-            for (int i = 1; i < input->rank(); i++) {
-                padding_data(0, i) = (required[i].extent() - input->extent(i)) / 2;
-                padding_data(1, i) = (required[i].extent() - input->extent(i) + 1) / 2;
-            }
-            TensorPtr padding = std::make_shared<Tensor>(input->name() + "_padding", padding_data);
-
-            // Add the new tensor, op, and update the input.
-            std::unique_ptr<Op> pad = ::hannk::make_unique<PadOp>(input, padding, padded);
-            new_ops.emplace_back(std::move(pad));
+        if (is_subset_of(required, input->bounds())) {
+            return;
         }
+
+        // Make a PadOp and a new tensor for the padded result.
+        TensorPtr padded =
+            std::make_shared<Tensor>(input->name() + "_padded", input->type(), required, input->quantization());
+        op->set_input(padded);
+
+        HalideBuffer<int32_t> padding_data(2, input->rank());
+        // Center the crop, except for the channel dimension.
+        // TODO: Is this always correct?
+        padding_data(0, 0) = 0;
+        padding_data(1, 0) = 0;
+        for (int i = 1; i < input->rank(); i++) {
+            padding_data(0, i) = (required[i].extent() - input->extent(i)) / 2;
+            padding_data(1, i) = (required[i].extent() - input->extent(i) + 1) / 2;
+        }
+        TensorPtr padding = std::make_shared<Tensor>(input->name() + "_padding", padding_data);
+
+        // Add the new tensor, op, and update the input.
+        std::unique_ptr<Op> pad = ::hannk::make_unique<PadOp>(input, padding, padded);
+        new_ops.emplace_back(std::move(pad));
     }
 
     void visit(Conv2DOp *op) {
@@ -231,14 +253,42 @@ public:
     std::vector<std::unique_ptr<Op>> new_ops;
 };
 
+class FusePadOps : public OpVisitor {
+    void visit(PadOp *op) {
+        if (op->input()->producers().size() != 1 || op->input()->consumers().size() != 1) {
+            return;
+        }
+        PadOp *prev_pad = cast_op<PadOp>(op->input()->producers().front());
+        if (!prev_pad) {
+            return;
+        }
+
+        op->set_input(prev_pad->input());
+
+        auto prev_padding = prev_pad->input(1)->buffer<const int32_t>();
+        auto padding = op->input(1)->buffer<int32_t>();
+
+        for (int d = 0; d < std::min(prev_padding.dimensions(), padding.dimensions()); d++) {
+            padding(0, d) += prev_padding(0, d);
+            padding(1, d) += prev_padding(1, d);
+        }
+    }
+};
+
 }  // namespace
 
 void pad_for_ops(Model *m) {
-    PadForOps v;
-    m->accept(&v);
-    for (auto &i : v.new_ops) {
+    PadForOps padder;
+    m->accept(&padder);
+    for (auto &i : padder.new_ops) {
         m->insert(std::move(i));
     }
+
+    // Some networks use padding already for other reasons, so
+    // we might have introduced two paddings in a row, which is
+    // a waste.
+    FusePadOps fuser;
+    m->accept(&fuser);
 }
 
 namespace {
