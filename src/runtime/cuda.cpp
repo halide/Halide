@@ -686,7 +686,7 @@ WEAK int halide_cuda_device_release(void *user_context) {
             err = cuCtxSynchronize();
             if (err != CUDA_SUCCESS) {
                 debug(user_context) << "CUDA: cuCtxSynchronize failed (halide_cuda_device_release): "
-                                    << get_error_name(err);
+                                    << get_error_name((CUresult)err);
                 // do not return!
             }
         }
@@ -1068,7 +1068,7 @@ WEAK int halide_cuda_run(void *user_context,
     Context ctx(user_context);
     if (ctx.error != CUDA_SUCCESS) {
         error(user_context) << "CUDA: Context failed: "
-                            << get_error_name(ctx.error);
+                            << get_error_name((CUresult)ctx.error);
         return ctx.error;
     }
 
