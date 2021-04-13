@@ -684,6 +684,11 @@ WEAK int halide_cuda_device_release(void *user_context) {
         err = cuCtxPushCurrent(ctx);
         if (err != CUDA_SUCCESS) {
             err = cuCtxSynchronize();
+            if (err != CUDA_SUCCESS) {
+                debug(user_context) << "CUDA: cuCtxSynchronize failed (halide_cuda_device_release): "
+                                    << get_error_name(err);
+                // do not return!
+            }
         }
         halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
 
@@ -1020,13 +1025,18 @@ WEAK int halide_cuda_device_sync(void *user_context, struct halide_buffer_t *) {
             error(user_context) << "CUDA: In halide_cuda_device_sync, halide_cuda_get_stream returned " << result << "\n";
         }
         err = cuStreamSynchronize(stream);
+        if (err != CUDA_SUCCESS) {
+            error(user_context) << "CUDA: cuStreamSynchronize failed (halide_cuda_device_sync): "
+                                << get_error_name(err);
+            return err;
+        }
     } else {
         err = cuCtxSynchronize();
-    }
-    if (err != CUDA_SUCCESS) {
-        error(user_context) << "CUDA: cuCtxSynchronize failed (halide_cuda_device_sync): "
-                            << get_error_name(err);
-        return err;
+        if (err != CUDA_SUCCESS) {
+            error(user_context) << "CUDA: cuCtxSynchronize failed (halide_cuda_device_sync): "
+                                << get_error_name(err);
+            return err;
+        }
     }
 
 #ifdef DEBUG_RUNTIME
