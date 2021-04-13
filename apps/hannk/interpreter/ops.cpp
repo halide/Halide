@@ -20,6 +20,7 @@
 #include "l2_normalization_uint8.h"
 #include "logistic_uint8.h"
 #include "max_pool_uint8.h"
+#include "mean_uint8.h"
 #include "softmax_uint8.h"
 #include "tanh_uint8.h"
 #include "tile_conv_filter_uint8.h"
@@ -804,6 +805,77 @@ void PoolOp::execute(const Box &crop) {
     }
 }
 
+const char *ReductionOp::to_string(Operator op) {
+    switch (op) {
+    case Mean:
+        return "Mean";
+    default:
+        CHECK(false) << "Unsupported reduction operator.\n";
+        return nullptr;
+    }
+}
+
+bool ReductionOp::reducing(int d) const {
+    auto indices = input(1)->buffer<const int32_t>();
+    for (int i = 0; i < indices.dim(0).extent(); i++) {
+        if (indices(i) == d) {
+            return true;
+        }
+    }
+    return false;
+}
+
+BoundsMap ReductionOp::map_bounds(int input_idx, int output_idx) const {
+    assert(output_idx == 0);
+
+    if (input_idx == 0) {
+        int output_d = 0;
+        BoundsMap result(input()->rank(), output()->rank());
+        for (int d = 0; d < input()->rank(); d++) {
+            if (reducing(d)) {
+                result.constant(d, input()->bounds(d));
+            } else {
+                result.elementwise(d, output_d++);
+            }
+        }
+        assert(output_d == output()->rank());
+        return result;
+    } else {
+        return BoundsMap(1, output()->rank()).all(input(1)->bounds(), output()->rank());
+    }
+}
+
+std::vector<SplitInfo> ReductionOp::get_split_info() const {
+    return {(size_t)output()->rank(), SplitInfo::any_split()};
+}
+
+void ReductionOp::execute(const Box &crop) {
+    auto indices = input(1)->buffer<const int32_t>();
+
+    const Tensor *in = input();
+    Tensor *out = output();
+
+    if (in->type() == halide_type_of<uint8_t>() &&
+        out->type() == halide_type_of<uint8_t>()) {
+        auto input_buf = in->buffer<const uint8_t>();
+        auto output_buf = out->buffer<uint8_t>(crop);
+
+        if (op_ == Mean) {
+            int mins[4] = { 0, 0, 0, 0 };
+            int extents[4] = { 1, 1, 1, 1 };
+            for (int d = 0; d < 4; d++) {
+                if (reducing(d)) {
+                    mins[d] = input_buf.dim(d).min();
+                    extents[d] = input_buf.dim(d).extent();
+                }
+            }
+            CHECK(0 == mean_uint8(input_buf, mins[0], extents[0], mins[1], extents[1],
+                                  mins[2], extents[2], mins[3], extents[3], output_buf));
+        }
+    }
+
+}
+
 std::vector<SplitInfo> ReshapeOp::get_split_info() const {
     return {};
 }
@@ -1008,6 +1080,10 @@ void PoolOp::accept(OpVisitor *v) {
 }
 
 void SoftmaxOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void ReductionOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 

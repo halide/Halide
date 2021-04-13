@@ -88,13 +88,15 @@ public:
     }
 
     std::unique_ptr<Tensor> parse_tensor(const tflite::Tensor *t) {
-        CHECK(t->shape()) << "Dynamic shapes not supported.";
-        const int shape_size = t->shape()->size();
         std::vector<int> shape;
-        shape.reserve(shape_size);
-        for (int i = 0; i < shape_size; i++) {
-            shape.push_back(t->shape()->Get(shape_size - 1 - i));
+        if (t->shape()) {
+            const int shape_size = t->shape()->size();
+            shape.reserve(shape_size);
+            for (int i = 0; i < shape_size; i++) {
+                shape.push_back(t->shape()->Get(shape_size - 1 - i));
+            }
         }
+        //CHECK(t->shape()) << "Dynamic shapes not supported.";
 
         halide_type_t type = parse_type(t->type());
 
@@ -259,9 +261,16 @@ public:
         std::vector<int> new_shape;
         // If there are two inputs, and the second is an int32 vector, it should
         // be used to specify the new shape (instead of ReshapeOptions).
-        CHECK(options) << "Dynamic reshape not supported\n";
         if (options) {
             new_shape.assign(options->new_shape()->cbegin(), options->new_shape()->cend());
+        } else if (op->inputs()->size() == 2) {
+            Tensor *indices = result_.tensors[op->inputs()->Get(1)].get();
+            if (indices->is_allocated() && indices->is_constant()) {
+                auto indices_buf = indices->buffer<const int32_t>();
+                new_shape.assign(indices_buf.begin(), indices_buf.end());
+            } else {
+                CHECK(false) << "Dynamic reshapes not supported.\n";
+            }
         }
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
@@ -281,6 +290,13 @@ public:
         Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
         Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
         return ::hannk::make_unique<L2NormalizationOp>(input, output);
+    }
+
+    std::unique_ptr<Op> parse_reduction(const tflite::Operator *op, ReductionOp::Operator reduction_op) {
+        Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
+        Tensor *indices = result_.tensors[op->inputs()->Get(1)].get();
+        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        return ::hannk::make_unique<ReductionOp>(input, indices, output, reduction_op);
     }
 
     std::unique_ptr<Op> parse_unary(const tflite::Operator *op, UnaryOp::Operator type) {
@@ -321,6 +337,8 @@ public:
             return parse_softmax(op);
         case tflite::BuiltinOperator_L2_NORMALIZATION:
             return parse_l2_normalization(op);
+        case tflite::BuiltinOperator_MEAN:
+            return parse_reduction(op, ReductionOp::Mean);
         case tflite::BuiltinOperator_LOGISTIC:
             return parse_unary(op, UnaryOp::Logistic);
         case tflite::BuiltinOperator_TANH:

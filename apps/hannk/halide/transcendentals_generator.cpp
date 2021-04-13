@@ -9,8 +9,7 @@ namespace hannk {
 // Approximate log2(2^(x/2^log2_precision) +/- 1)*2^log2_precision_result
 Expr approx_log2_exp2_plus_or_minus_one(Expr x, int sign, Expr log2_precision_x, int log2_precision_result) {
     const int log2_p = 8;
-    const int p = 1 << log2_p;
-    Expr one_plus_exp2_x = (p * sign) + i16(approx_exp2(x, log2_precision_x, log2_p));
+    Expr one_plus_exp2_x = (sign << log2_p) + i16(approx_exp2(x, log2_precision_x, log2_p));
 
     // If we compute the log2 of the squared value, we can get a bit more precision.
     // This will overflow if one_plus_exp2_x is greater than 256, but this case

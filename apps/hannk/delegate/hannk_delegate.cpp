@@ -32,11 +32,8 @@
     KNOWN_OP(Softmax)         \
     KNOWN_OP(L2Normalization) \
     KNOWN_OP(Logistic)        \
-    KNOWN_OP(Tanh)
-
-// TODO(srj): FullyConnected will actually check-fail if you use it,
-// so leave it out of the ops we handle here for now.
-//    KNOWN_OP(FullyConnected)
+    KNOWN_OP(Tanh)            \
+    KNOWN_OP(Mean)
 
 namespace hannk {
 namespace {
@@ -614,6 +611,13 @@ private:
         return ::hannk::make_unique<UnaryOp>(input, output, UnaryOp::Tanh);
     }
 
+    std::unique_ptr<Op> BuildMean(TfLiteContext *context, TfLiteNode *node) {
+        auto input = GetTensorById(context, node->inputs->data[0]);
+        auto indices = GetTensorById(context, node->inputs->data[1]);
+        auto output = GetTensorById(context, node->outputs->data[0]);
+        return ::hannk::make_unique<ReductionOp>(input, indices, output, ReductionOp::Mean);
+    }
+
     const HannkDelegateOptions options_;
     std::unique_ptr<Model> model_;
     std::unique_ptr<ModelInterpreter> interpreter_;
@@ -821,6 +825,16 @@ bool IsNodeSupported_Tanh(TfLiteContext *context, TfLiteNode *node, TfLiteRegist
         return false;
     }
     if (!InputsHaveCorrectTypes(node, context, {k8BitMask})) {
+        return false;
+    }
+    return true;
+}
+
+bool IsNodeSupported_Mean(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    if (!(registration->version <= 2)) {
+        return false;
+    }
+    if (!InputsHaveCorrectTypes(node, context, {k8BitMask, 1 << kTfLiteInt32})) {
         return false;
     }
     return true;

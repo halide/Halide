@@ -334,6 +334,41 @@ public:
     }
 };
 
+class ReductionOp : public Op {
+public:
+    enum Operator {
+        Mean,
+    };
+
+    static const char *to_string(Operator op);
+
+protected:
+    Operator op_;
+
+    bool reducing(int d) const;
+
+public:
+    ReductionOp(Tensor *input, Tensor *indices, Tensor *output, Operator op)
+        : Op({input, indices}, {output}), op_(op) {
+    }
+
+    std::unique_ptr<Op> clone(const TensorMap &map) const {
+        return ::hannk::make_unique<ReductionOp>(
+            apply(map, input()), apply(map, input(1)), apply(map, output()), op_);
+    }
+
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    std::vector<SplitInfo> get_split_info() const;
+
+    void accept(OpVisitor *v);
+
+    void execute(const Box &crop);
+
+    void dump(std::ostream &os) const {
+        os << "  " << to_string(op_) << " " << output()->name() << std::endl;
+    }
+};
+
 class ReshapeOp : public Op {
     std::vector<int> new_shape_;
 
@@ -454,6 +489,8 @@ public:
     virtual void visit(PadOp *op) {
     }
     virtual void visit(PoolOp *op) {
+    }
+    virtual void visit(ReductionOp *op) {
     }
     virtual void visit(ReshapeOp *op) {
     }
