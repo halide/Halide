@@ -32,10 +32,6 @@
     KNOWN_OP(Softmax)         \
     KNOWN_OP(L2Normalization)
 
-// TODO(srj): FullyConnected will actually check-fail if you use it,
-// so leave it out of the ops we handle here for now.
-//    KNOWN_OP(FullyConnected)
-
 namespace hannk {
 namespace {
 
