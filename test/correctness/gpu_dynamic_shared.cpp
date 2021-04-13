@@ -23,6 +23,29 @@ int main(int argc, char **argv) {
 
     // Check dynamic allocations per-block and per-thread into both
     // shared and global
+#if 1
+    Func f("f"), g("g");
+    Var x("x"), xi("xi");
+
+    f(x) = x;
+    g(x) = f(x) + f(2 * x);
+
+    g.gpu_tile(x, xi, 16);
+    f.compute_at(g, xi);
+
+    f.store_in(MemoryType::GPUShared);
+
+    // The amount of shared/heap memory required varies with x
+    Buffer<int> out = g.realize({100}, t);
+    for (int x = 0; x < 100; x++) {
+        int correct = 3 * x;
+        if (out(x) != correct) {
+            printf("out(%d) = %d instead of %d\n",
+                   x, out(x), correct);
+            return -1;
+        }
+    }
+#else
     for (int per_thread = 0; per_thread < 2; per_thread++) {
         for (auto memory_type : {MemoryType::GPUShared, MemoryType::Heap}) {
             printf("Testing: per_thread=%d, memory_type=%d\n", per_thread, (int)memory_type);
@@ -54,6 +77,7 @@ int main(int argc, char **argv) {
             }
         }
     }
+#endif
 
     printf("Success!\n");
     return 0;
