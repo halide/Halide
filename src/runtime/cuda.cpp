@@ -1057,6 +1057,8 @@ WEAK int halide_cuda_run(void *user_context,
     CUresult err;
     Context ctx(user_context);
     if (ctx.error != CUDA_SUCCESS) {
+        error(user_context) << "CUDA: Context failed: "
+                            << get_error_name(ctx.error);
         return ctx.error;
     }
 
@@ -1143,6 +1145,8 @@ WEAK int halide_cuda_run(void *user_context,
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
 #endif
+
+    debug(user_context) << "CUDA: halide_cuda_run succeeds!\n";
     return 0;
 }
 
