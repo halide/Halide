@@ -4,11 +4,12 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    Target t = get_jit_target_from_environment();
-    if (!t.has_gpu_feature()) {
-        printf("[SKIP] No GPU target enabled.\n");
-        return 0;
-    }
+    Target t = Target("host-cuda");
+    // get_jit_target_from_environment();
+    // if (!t.has_gpu_feature()) {
+    //     printf("[SKIP] No GPU target enabled.\n");
+    //     return 0;
+    // }
 
     if (t.has_feature(Target::OpenGLCompute)) {
         printf("[SKIP] Skipping test for OpenGLCompute, as it does not support dynamically-sized shared memory\n");
@@ -18,7 +19,7 @@ int main(int argc, char **argv) {
     if (t.has_feature(Target::CUDA)) {
         t.set_feature(Target::Debug);
         t.set_feature(Target::DisableLLVMLoopOpt);
-        Halide::Internal::debug::set_debug_level(1);
+        Halide::Internal::debug::set_debug_level(2);
     }
 
     // Check dynamic allocations per-block and per-thread into both
