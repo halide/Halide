@@ -19,6 +19,7 @@ tflite::BuiltinOperator get_builtin_code(const tflite::OperatorCode *op_code) {
 
 class Parser {
     const tflite::Model *model_;
+    std::vector<TensorPtr> tensors_;
     Model result_;
 
 public:
@@ -134,18 +135,18 @@ public:
     }
 
     std::unique_ptr<Op> parse_binary(const tflite::Operator *op, BinaryOp::Operator type) {
-        Tensor *a = result_.tensors[op->inputs()->Get(0)].get();
-        Tensor *b = result_.tensors[op->inputs()->Get(1)].get();
-        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        TensorPtr a = tensors_[op->inputs()->Get(0)];
+        TensorPtr b = tensors_[op->inputs()->Get(1)];
+        TensorPtr output = tensors_[op->outputs()->Get(0)];
         return ::hannk::make_unique<BinaryOp>(a, b, output, type, ActivationFunction::None);
     }
 
 // We can't do this with templates...
 #define PARSE_BINARY_WITH_ACTIVATION(op, Op)          \
     ::hannk::make_unique<BinaryOp>(                   \
-        result_.tensors[op->inputs()->Get(0)].get(),  \
-        result_.tensors[op->inputs()->Get(1)].get(),  \
-        result_.tensors[op->outputs()->Get(0)].get(), \
+        tensors_[op->inputs()->Get(0)],  \
+        tensors_[op->inputs()->Get(1)],  \
+        tensors_[op->outputs()->Get(0)], \
         BinaryOp::Op,                                 \
         parse_activation_function(op->builtin_options_as_##Op##Options()->fused_activation_function()));
 
@@ -162,8 +163,8 @@ public:
         };
         ActivationFunction activation =
             parse_activation_function(options->fused_activation_function());
-        Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
-        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        TensorPtr input = tensors_[op->inputs()->Get(0)];
+        TensorPtr output = tensors_[op->outputs()->Get(0)];
         return ::hannk::make_unique<PoolOp>(
             input, output, stride, filter_size, padding, reduce_op, activation);
     }
@@ -174,11 +175,11 @@ public:
         ActivationFunction activation =
             parse_activation_function(options->fused_activation_function());
         CHECK(activation == ActivationFunction::None);
-        std::vector<Tensor *> inputs;
+        std::vector<TensorPtr > inputs;
         for (auto i = op->inputs()->cbegin(); i != op->inputs()->cend(); ++i) {
-            inputs.push_back(result_.tensors[*i].get());
+            inputs.push_back(tensors_[*i]);
         }
-        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        TensorPtr output = tensors_[op->outputs()->Get(0)];
         int axis = options->axis();
         // Handle negative values, which are legal
         if (axis < 0) {
@@ -204,10 +205,10 @@ public:
             options->stride_w(),
             options->stride_h(),
         };
-        Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
-        Tensor *filter = result_.tensors[op->inputs()->Get(1)].get();
-        Tensor *bias = result_.tensors[op->inputs()->Get(2)].get();
-        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        TensorPtr input = tensors_[op->inputs()->Get(0)];
+        TensorPtr filter = tensors_[op->inputs()->Get(1)];
+        TensorPtr bias = tensors_[op->inputs()->Get(2)];
+        TensorPtr output = tensors_[op->outputs()->Get(0)];
         return ::hannk::make_unique<Conv2DOp>(input, filter, bias, output, stride,
                                               dilation_factor, padding, activation);
     }
@@ -226,10 +227,10 @@ public:
             options->stride_w(),
             options->stride_h(),
         };
-        Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
-        Tensor *filter = result_.tensors[op->inputs()->Get(1)].get();
-        Tensor *bias = result_.tensors[op->inputs()->Get(2)].get();
-        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        TensorPtr input = tensors_[op->inputs()->Get(0)];
+        TensorPtr filter = tensors_[op->inputs()->Get(1)];
+        TensorPtr bias = tensors_[op->inputs()->Get(2)];
+        TensorPtr output = tensors_[op->outputs()->Get(0)];
         int depth_multiplier = output->extent(0) / input->extent(0);
         return ::hannk::make_unique<DepthwiseConv2DOp>(
             input, filter, bias, output, depth_multiplier,
@@ -241,17 +242,17 @@ public:
             op->builtin_options_as_FullyConnectedOptions();
         ActivationFunction activation =
             parse_activation_function(options->fused_activation_function());
-        Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
-        Tensor *filter = result_.tensors[op->inputs()->Get(1)].get();
-        Tensor *bias = result_.tensors[op->inputs()->Get(2)].get();
-        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        TensorPtr input = tensors_[op->inputs()->Get(0)];
+        TensorPtr filter = tensors_[op->inputs()->Get(1)];
+        TensorPtr bias = tensors_[op->inputs()->Get(2)];
+        TensorPtr output = tensors_[op->outputs()->Get(0)];
         return ::hannk::make_unique<FullyConnectedOp>(input, filter, bias, output, activation);
     }
 
     std::unique_ptr<Op> parse_pad(const tflite::Operator *op) {
-        Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
-        Tensor *padding = result_.tensors[op->inputs()->Get(1)].get();
-        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        TensorPtr input = tensors_[op->inputs()->Get(0)];
+        TensorPtr padding = tensors_[op->inputs()->Get(1)];
+        TensorPtr output = tensors_[op->outputs()->Get(0)];
         return ::hannk::make_unique<PadOp>(input, padding, output);
     }
 
@@ -264,7 +265,7 @@ public:
         if (options) {
             new_shape.assign(options->new_shape()->cbegin(), options->new_shape()->cend());
         } else if (op->inputs()->size() == 2) {
-            Tensor *indices = result_.tensors[op->inputs()->Get(1)].get();
+            TensorPtr indices = tensors_[op->inputs()->Get(1)];
             if (indices->is_allocated() && indices->is_constant()) {
                 auto indices_buf = indices->buffer<const int32_t>();
                 new_shape.assign(indices_buf.begin(), indices_buf.end());
@@ -272,8 +273,8 @@ public:
                 CHECK(false) << "Dynamic reshapes not supported.\n";
             }
         }
-        Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
-        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        TensorPtr input = tensors_[op->inputs()->Get(0)];
+        TensorPtr output = tensors_[op->outputs()->Get(0)];
         return ::hannk::make_unique<ReshapeOp>(input, output, new_shape);
     }
 
@@ -281,27 +282,27 @@ public:
         const tflite::SoftmaxOptions *options =
             op->builtin_options_as_SoftmaxOptions();
         float beta = options->beta();
-        Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
-        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        TensorPtr input = tensors_[op->inputs()->Get(0)];
+        TensorPtr output = tensors_[op->outputs()->Get(0)];
         return ::hannk::make_unique<SoftmaxOp>(input, output, beta);
     }
 
     std::unique_ptr<Op> parse_l2_normalization(const tflite::Operator *op) {
-        Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
-        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        TensorPtr input = tensors_[op->inputs()->Get(0)];
+        TensorPtr output = tensors_[op->outputs()->Get(0)];
         return ::hannk::make_unique<L2NormalizationOp>(input, output);
     }
 
     std::unique_ptr<Op> parse_reduction(const tflite::Operator *op, ReductionOp::Operator reduction_op) {
-        Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
-        Tensor *indices = result_.tensors[op->inputs()->Get(1)].get();
-        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        TensorPtr input = tensors_[op->inputs()->Get(0)];
+        TensorPtr indices = tensors_[op->inputs()->Get(1)];
+        TensorPtr output = tensors_[op->outputs()->Get(0)];
         return ::hannk::make_unique<ReductionOp>(input, indices, output, reduction_op);
     }
 
     std::unique_ptr<Op> parse_unary(const tflite::Operator *op, UnaryOp::Operator type) {
-        Tensor *input = result_.tensors[op->inputs()->Get(0)].get();
-        Tensor *output = result_.tensors[op->outputs()->Get(0)].get();
+        TensorPtr input = tensors_[op->inputs()->Get(0)];
+        TensorPtr output = tensors_[op->outputs()->Get(0)];
         return ::hannk::make_unique<UnaryOp>(input, output, type);
     }
 
@@ -356,7 +357,7 @@ public:
         const tflite::SubGraph &subgraph = *subgraphs[0];
 
         for (const tflite::Tensor *t : *subgraph.tensors()) {
-            result_.tensors.emplace_back(parse_tensor(t));
+            tensors_.emplace_back(parse_tensor(t));
         }
 
         for (const tflite::Operator *i : *subgraph.operators()) {
@@ -364,10 +365,10 @@ public:
         }
 
         for (int i : *subgraph.inputs()) {
-            result_.tensors[i]->set_input(true);
+            tensors_[i]->set_input(true);
         }
         for (int i : *subgraph.outputs()) {
-            result_.tensors[i]->set_output(true);
+            tensors_[i]->set_output(true);
         }
 
         return std::move(result_);

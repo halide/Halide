@@ -110,7 +110,7 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
         ModelInterpreter interpreter(std::move(model));
 
         // Fill in the inputs with pseudorandom data (save the seeds for later).
-        for (Tensor *t : interpreter.inputs()) {
+        for (TensorPtr t : interpreter.inputs()) {
             if (t->is_constant()) {
                 // Skip constant buffers, just like TFlite does later on.
                 continue;
@@ -137,7 +137,7 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
         });
 
         // Save the outputs
-        for (Tensor *t : interpreter.outputs()) {
+        for (TensorPtr t : interpreter.outputs()) {
             if (verbosity) {
                 std::cout << "HALIDE output is " << t->name() << " type " << t->type() << "\n";
             }

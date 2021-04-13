@@ -77,7 +77,7 @@ void begin_trace_execute(const Model &m, std::vector<int32_t> &parent_ids) {
     parent_ids.push_back(halide_trace(nullptr, &trace));
 
     // Get a list of the tensors we should trace, in the order they should be traced.
-    std::vector<const Tensor *> tensors;
+    std::vector<TensorPtr> tensors;
     for (const auto &i : m.ops) {
         for (int j = 0; j < i->output_count(); j++) {
             if (std::find(tensors.begin(), tensors.end(), i->output(j)) == tensors.end()) {
@@ -89,7 +89,7 @@ void begin_trace_execute(const Model &m, std::vector<int32_t> &parent_ids) {
     // Add trace tags for each tensor we should trace.
     trace.event = halide_trace_tag;
     for (int i = 0; i < (int)tensors.size(); i++) {
-        const Tensor *t = tensors[i];
+        TensorPtr t = tensors[i];
         std::stringstream tag;
         tag << "func_type_and_dim: ";
         halide_type_t type = t->type();
@@ -114,7 +114,7 @@ void trace_op(const Op *op, const Box &crop, std::vector<int32_t> &parent_ids) {
         0,
     };
     trace.event = halide_trace_begin_realization;
-    const Tensor *out = op->output();
+    const Tensor *out = op->output().get();
     trace.func = out->name().c_str();
     trace.parent_id = parent_ids.back();
     std::vector<int32_t> coords(out->rank() * 2);
@@ -127,7 +127,7 @@ void trace_op(const Op *op, const Box &crop, std::vector<int32_t> &parent_ids) {
     parent_ids.push_back(halide_trace(nullptr, &trace));
 
     for (int i = 0; i < op->input_count(); i++) {
-        const Tensor *in = op->input(i);
+        const Tensor *in = op->input(i).get();
         if (in->is_constant()) {
             continue;
         }
@@ -234,8 +234,13 @@ void ModelInterpreter::init(InterpreterOptions options) {
 
     // TODO: Find a better schedule for executing the ops, including
     // better lifetime management for these allocations.
-    for (auto &i : model_.tensors) {
-        i->allocate();
+    for (auto &i : model_.ops) {
+        for (int j = 0; j < i->input_count(); j++) {
+            i->input(j)->allocate();
+        }
+        for (int j = 0; j < i->output_count(); j++) {
+            i->output(j)->allocate();
+        }
     }
 }
 
@@ -261,31 +266,42 @@ void ModelInterpreter::execute() {
     }
 }
 
-Tensor *ModelInterpreter::get_tensor(const std::string &name) {
-    for (const auto &t : model_.tensors) {
-        if (t->name() == name) {
-            return t.get();
+TensorPtr ModelInterpreter::get_tensor(const std::string &name) {
+    for (auto &i : model_.ops) {
+        for (int j = 0; j < i->input_count(); j++) {
+            if (i->input(j)->name() == name) {
+                return i->input(j);
+            }
+        }
+        for (int j = 0; j < i->output_count(); j++) {
+            if (i->output(j)->name() == name) {
+                return i->output(j);
+            }
         }
     }
     return nullptr;
 }
 
-std::vector<Tensor *> ModelInterpreter::inputs() {
-    std::vector<Tensor *> result;
-    for (auto &i : model_.tensors) {
-        if (i->is_input()) {
-            result.push_back(i.get());
+std::vector<TensorPtr> ModelInterpreter::inputs() {
+    std::vector<TensorPtr> result;
+    for (auto &i : model_.ops) {
+        for (int j = 0; j < i->input_count(); j++) {
+            if (i->input(j)->is_input()) {
+                result.push_back(i->input(j));
+            }
         }
     }
 
     return result;
 }
 
-std::vector<Tensor *> ModelInterpreter::outputs() {
-    std::vector<Tensor *> result;
-    for (auto &i : model_.tensors) {
-        if (i->is_output()) {
-            result.push_back(i.get());
+std::vector<TensorPtr> ModelInterpreter::outputs() {
+    std::vector<TensorPtr> result;
+    for (auto &i : model_.ops) {
+        for (int j = 0; j < i->output_count(); j++) {
+            if (i->output(j)->is_output()) {
+                result.push_back(i->output(j));
+            }
         }
     }
 

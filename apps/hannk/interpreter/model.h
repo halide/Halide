@@ -75,6 +75,8 @@ public:
 };
 
 class Op;
+class Tensor;
+using TensorPtr = std::shared_ptr<Tensor>;
 
 class Tensor {
     std::string name_;
@@ -196,24 +198,24 @@ public:
 
     std::shared_ptr<TensorStorage> storage();
 
-    void set_alias_of(Tensor *t, std::vector<int> offset = {});
+    void set_alias_of(TensorPtr t, std::vector<int> offset = {});
 
     void add_consumer(Op *op);
     void add_producer(Op *op);
     void remove_consumer(Op *op);
     void remove_producer(Op *op);
 
-    void replace_all_consumers_with(Tensor *other);
+    void replace_all_consumers_with(TensorPtr other);
 
     void dump(std::ostream &os) const;
 };
 
 // A mapping from old tensors to new tensors, when cloning an op.
-using TensorMap = std::map<const Tensor *, Tensor *>;
+using TensorMap = std::map<const TensorPtr , TensorPtr >;
 
 // Apply a tensor map to a list of tensors. This is used to support
 // cloning ops referring to different tensors.
-Tensor *apply(const TensorMap &map, const Tensor *t);
+TensorPtr apply(TensorMap &map, const TensorPtr t);
 
 // Required properties of a crop in a particular dimension.
 struct SplitInfo {
@@ -443,11 +445,11 @@ class OpVisitor;
 
 class Op {
 private:
-    std::vector<Tensor *> inputs_;
-    std::vector<Tensor *> outputs_;
+    std::vector<TensorPtr > inputs_;
+    std::vector<TensorPtr > outputs_;
 
 protected:
-    Op(std::vector<Tensor *> inputs, std::vector<Tensor *> outputs);
+    Op(std::vector<TensorPtr > inputs, std::vector<TensorPtr > outputs);
 
 public:
     virtual ~Op();
@@ -472,7 +474,7 @@ public:
     }
 
     // Clone this op, replacing tensors using the mapping in tensor_map.
-    virtual std::unique_ptr<Op> clone(const TensorMap &tensor_map) const = 0;
+    virtual std::unique_ptr<Op> clone(TensorMap &tensor_map) const = 0;
 
     virtual void accept(OpVisitor *v) = 0;
 
@@ -484,35 +486,35 @@ public:
     int output_count() const {
         return outputs_.size();
     }
-    const Tensor *input(int idx) const {
+    const TensorPtr input(int idx) const {
         return inputs_[idx];
     }
-    const Tensor *output(int idx) const {
+    const TensorPtr output(int idx) const {
         return outputs_[idx];
     }
-    const Tensor *input() const {
+    const TensorPtr input() const {
         return input(0);
     }
-    const Tensor *output() const {
+    const TensorPtr output() const {
         return output(0);
     }
-    Tensor *input(int idx) {
+    TensorPtr input(int idx) {
         return inputs_[idx];
     }
-    Tensor *output(int idx) {
+    TensorPtr output(int idx) {
         return outputs_[idx];
     }
-    Tensor *input() {
+    TensorPtr input() {
         return input(0);
     }
-    Tensor *output() {
+    TensorPtr output() {
         return output(0);
     }
 
-    void set_input(int idx, Tensor *t);
-    void set_output(int idx, Tensor *t);
-    void set_input(Tensor *t);
-    void set_output(Tensor *t);
+    void set_input(int idx, TensorPtr t);
+    void set_output(int idx, TensorPtr t);
+    void set_input(TensorPtr t);
+    void set_output(TensorPtr t);
 
     // Movable but not copyable.
     Op() = delete;
@@ -523,11 +525,9 @@ public:
 };
 
 struct Model {
-    std::vector<std::unique_ptr<Tensor>> tensors;
     std::vector<std::unique_ptr<Op>> ops;
 
     // Add a tensor after an existing tensor.
-    void insert(std::unique_ptr<Tensor> to_insert, const Tensor *after = nullptr);
     void insert(std::unique_ptr<Op> to_insert, const Op *before = nullptr);
     void remove(const Op *op);
 

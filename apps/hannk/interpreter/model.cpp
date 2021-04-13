@@ -6,13 +6,21 @@
 
 namespace hannk {
 
-Tensor *apply(const TensorMap &map, const Tensor *t) {
+TensorPtr apply(TensorMap &map, const TensorPtr t) {
     auto i = map.find(t);
     if (i != map.end()) {
         return i->second;
     }
-    // TODO: Try to do this without const_cast?
-    return const_cast<Tensor *>(t);
+
+    if (t->is_constant()) {
+        // Share constant tensors across users.
+        return t;
+    } else {
+        // Remember this cloned tensor for later applications of the mapping.
+        TensorPtr clone = std::make_shared<Tensor>(*t);
+        map[t] = clone;
+        return clone;
+    }
 }
 
 namespace {
@@ -137,7 +145,7 @@ void Tensor::allocate() {
     buffer_ = buffer;
 }
 
-void Tensor::set_alias_of(Tensor *t, std::vector<int> storage_offset) {
+void Tensor::set_alias_of(TensorPtr t, std::vector<int> storage_offset) {
     storage_ = t->storage();
     storage_offset_ = std::move(storage_offset);
 
@@ -148,13 +156,13 @@ void Tensor::set_alias_of(Tensor *t, std::vector<int> storage_offset) {
     storage_->add_use(type(), offset_bounds);
 }
 
-void Tensor::replace_all_consumers_with(Tensor *other) {
+void Tensor::replace_all_consumers_with(TensorPtr other) {
     // We need to make a copy of the list of consumers so it doesn't get invalidated
     // by set_input below.
     auto consumers = consumers_;
     for (Op *i : consumers) {
         for (int j = 0; j < i->input_count(); j++) {
-            if (i->input(j) == this) {
+            if (i->input(j).get() == this) {
                 i->set_input(j, other);
             }
         }
@@ -184,7 +192,7 @@ void Tensor::dump(std::ostream &os) const {
     os << " " << name() << std::endl;
 }
 
-Op::Op(std::vector<Tensor *> inputs, std::vector<Tensor *> outputs)
+Op::Op(std::vector<TensorPtr > inputs, std::vector<TensorPtr > outputs)
     : inputs_(std::move(inputs)), outputs_(std::move(outputs)) {
     for (auto &i : inputs_) {
         if (!i) continue;
@@ -207,7 +215,7 @@ Op::~Op() {
     }
 }
 
-void Op::set_input(int idx, Tensor *t) {
+void Op::set_input(int idx, TensorPtr t) {
     if (inputs_[idx]) {
         inputs_[idx]->remove_consumer(this);
     }
@@ -217,7 +225,7 @@ void Op::set_input(int idx, Tensor *t) {
     }
 }
 
-void Op::set_output(int idx, Tensor *t) {
+void Op::set_output(int idx, TensorPtr t) {
     if (outputs_[idx]) {
         outputs_[idx]->remove_producer(this);
     }
@@ -227,37 +235,19 @@ void Op::set_output(int idx, Tensor *t) {
     }
 }
 
-void Op::set_input(Tensor *t) {
+void Op::set_input(TensorPtr t) {
     set_input(0, t);
 }
 
-void Op::set_output(Tensor *t) {
+void Op::set_output(TensorPtr t) {
     set_output(0, t);
 }
 
 Model::Model(const Model &copy) {
-    // Clone the tensors, making a mapping from old tensor to new tensor.
     TensorMap map;
-    for (const auto &i : copy.tensors) {
-        auto cloned = ::hannk::make_unique<Tensor>(*i);
-        map[i.get()] = cloned.get();
-        tensors.push_back(std::move(cloned));
-    }
-
-    // Now copy the ops, using the tensor map we made above.
     for (const auto &i : copy.ops) {
         ops.push_back(i->clone(map));
     }
-}
-
-void Model::insert(std::unique_ptr<Tensor> to_insert, const Tensor *after) {
-    for (auto i = tensors.begin(); i != tensors.end(); ++i) {
-        if (i->get() == after) {
-            tensors.insert(++i, std::move(to_insert));
-            return;
-        }
-    }
-    tensors.push_back(std::move(to_insert));
 }
 
 void Model::insert(std::unique_ptr<Op> to_insert, const Op *before) {
@@ -297,11 +287,6 @@ void Model::accept(OpVisitor *v) {
 }
 
 void Model::dump(std::ostream &os) {
-    os << "Tensors: " << std::endl;
-    for (const auto &i : tensors) {
-        i->dump(os);
-    }
-
     os << "Ops: " << std::endl;
     for (const auto &i : ops) {
         i->dump(os);

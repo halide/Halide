@@ -37,15 +37,6 @@ void run_benchmark(const std::string &filename, const InterpreterOptions &option
         std::cout << std::endl;
         interpreter.execute();
     }
-
-    if (options.verbose) {
-        std::cout << std::endl;
-        std::cout << "Outputs:\n";
-        std::vector<Tensor *> outputs = interpreter.outputs();
-        for (Tensor *t : outputs) {
-            t->dump(std::cout);
-        }
-    }
 }
 
 }  // namespace hannk

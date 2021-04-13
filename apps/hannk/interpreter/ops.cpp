@@ -280,9 +280,9 @@ const char *BinaryOp::to_string(BinaryOp::Operator op) {
 }
 
 void BinaryOp::execute(const Box &crop) {
-    const Tensor *in1 = input(0);
-    const Tensor *in2 = input(1);
-    Tensor *out = output();
+    const TensorPtr in1 = input(0);
+    const TensorPtr in2 = input(1);
+    TensorPtr out = output();
 
     if (in1->type() == halide_type_of<uint8_t>() &&
         in2->type() == halide_type_of<uint8_t>() &&
@@ -427,9 +427,9 @@ void conv_uint8(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t
 }  // namespace
 
 void Conv2DOp::execute(const Box &crop) {
-    const Tensor *in = input();
-    const Tensor *filt = filter();
-    Tensor *out = output();
+    const TensorPtr in = input();
+    const TensorPtr filt = filter();
+    TensorPtr out = output();
 
     if (in->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
@@ -536,9 +536,9 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
 }
 
 void DepthwiseConv2DOp::execute(const Box &crop) {
-    const Tensor *in = input();
-    const Tensor *filt = filter();
-    Tensor *out = output();
+    const TensorPtr in = input();
+    const TensorPtr filt = filter();
+    TensorPtr out = output();
 
     if (in->type() == halide_type_of<uint8_t>() &&
         filt->type() == halide_type_of<uint8_t>() &&
@@ -583,9 +583,9 @@ BoundsMap FullyConnectedOp::map_bounds(int input_idx, int output_idx) const {
 }
 
 void FullyConnectedOp::execute(const Box &crop) {
-    const Tensor *in = input();
-    const Tensor *filt = filter();
-    Tensor *out = output();
+    const TensorPtr in = input();
+    const TensorPtr filt = filter();
+    TensorPtr out = output();
 
     if (in->type() == halide_type_of<uint8_t>() &&
         filt->type() == halide_type_of<uint8_t>() &&
@@ -636,8 +636,8 @@ BoundsMap L2NormalizationOp::map_bounds(int input_idx, int output_idx) const {
 }
 
 void L2NormalizationOp::execute(const Box &crop) {
-    const Tensor *in = input();
-    Tensor *out = output();
+    const TensorPtr in = input();
+    TensorPtr out = output();
 
     if (in->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
@@ -681,8 +681,8 @@ BoundsMap PadOp::map_bounds(int input_idx, int output_idx) const {
 }
 
 void PadOp::execute(const Box &crop) {
-    const Tensor *in = input(0);
-    Tensor *out = output();
+    const TensorPtr in = input(0);
+    TensorPtr out = output();
 
     if (out->type().bytes() == 1) {
         auto input_buf = in->buffer<const uint8_t>();
@@ -769,8 +769,8 @@ BoundsMap PoolOp::map_bounds(int input_idx, int output_idx) const {
 }
 
 void PoolOp::execute(const Box &crop) {
-    const Tensor *in = input();
-    Tensor *out = output();
+    const TensorPtr in = input();
+    TensorPtr out = output();
 
     if (in->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
@@ -852,8 +852,8 @@ std::vector<SplitInfo> ReductionOp::get_split_info() const {
 void ReductionOp::execute(const Box &crop) {
     auto indices = input(1)->buffer<const int32_t>();
 
-    const Tensor *in = input();
-    Tensor *out = output();
+    const TensorPtr in = input();
+    TensorPtr out = output();
 
     if (in->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
@@ -888,8 +888,8 @@ BoundsMap ReshapeOp::map_bounds(int input_idx, int output_idx) const {
 }
 
 void ReshapeOp::execute(const Box &crop) {
-    const Tensor *in = input();
-    Tensor *out = output();
+    const TensorPtr in = input();
+    TensorPtr out = output();
 
     auto input_buf = in->buffer<const void>();
     auto output_buf = out->buffer(crop);
@@ -928,8 +928,8 @@ BoundsMap SoftmaxOp::map_bounds(int input_idx, int output_idx) const {
 }
 
 void SoftmaxOp::execute(const Box &crop) {
-    const Tensor *in = input();
-    Tensor *out = output();
+    const TensorPtr in = input();
+    TensorPtr out = output();
 
     if (in->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
@@ -976,8 +976,8 @@ BoundsMap TileConvFilterOp::map_bounds(int input_idx, int output_idx) const {
 }
 
 void TileConvFilterOp::execute(const Box &crop) {
-    const Tensor *in = input();
-    Tensor *out = output();
+    const TensorPtr in = input();
+    TensorPtr out = output();
 
     if (in->type() == halide_type_of<uint8_t>()) {
         auto input_buf = in->buffer<const uint8_t>();
@@ -1005,8 +1005,8 @@ const char *UnaryOp::to_string(UnaryOp::Operator op) {
 }
 
 void UnaryOp::execute(const Box &crop) {
-    const Tensor *in = input();
-    Tensor *out = output();
+    const TensorPtr in = input();
+    TensorPtr out = output();
 
     if (in->type() == halide_type_of<uint8_t>() && out->type() == halide_type_of<uint8_t>()) {
         auto in_buf = in->buffer<const uint8_t>();

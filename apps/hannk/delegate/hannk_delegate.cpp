@@ -166,7 +166,7 @@ std::vector<int> ConvertTfLiteShape(const TfLiteTensor &tensor) {
     return shape;
 }
 
-std::unique_ptr<Tensor> ConvertTfLiteTensor(const TfLiteTensor &tensor) {
+TensorPtr ConvertTfLiteTensor(const TfLiteTensor &tensor) {
     auto shape = ConvertTfLiteShape(tensor);
 
     halide_type_t type = ConvertTfLiteType(tensor.type);
@@ -199,12 +199,12 @@ std::unique_ptr<Tensor> ConvertTfLiteTensor(const TfLiteTensor &tensor) {
         HalideBuffer<void> buffer(type, const_cast<void *>(read_only_data), shape);
         assert(tensor.bytes == buffer.size_in_bytes());
 
-        return ::hannk::make_unique<Tensor>(name, std::move(buffer), std::move(quantization));
+        return std::make_shared<Tensor>(name, std::move(buffer), std::move(quantization));
     }
 
     // Create an "unallocated" Buffer, which points to null.
     HalideBuffer<void> buffer(type, nullptr, shape);
-    return ::hannk::make_unique<Tensor>(name, std::move(buffer), std::move(quantization));
+    return std::make_shared<Tensor>(name, std::move(buffer), std::move(quantization));
 }
 
 class HannkDelegateKernel final {
@@ -241,12 +241,11 @@ public:
                 continue;
             }
             auto t = ConvertTfLiteTensor(tensor);
-            assert(!tensor_id_to_tensor_ptr_.count(tensor_id));
-            tensor_id_to_tensor_ptr_[tensor_id] = t.get();
+            assert(!tensors_.count(tensor_id));
+            tensors_[tensor_id] = t;
             if (options_.verbosity >= 1) {
                 LOG(INFO) << "tensor_id " << tensor_id << " -> " << (void *)t.get() << "\n";
             }
-            model_->tensors.push_back(std::move(t));
         }
 
         // Be careful with params->input_tensors and params->output_tensors here;
@@ -447,9 +446,9 @@ private:
         return self->Eval(context, node);
     };
 
-    Tensor *GetTensorById(TfLiteContext *context, int tensor_id) {
-        auto it = tensor_id_to_tensor_ptr_.find(tensor_id);
-        if (it == tensor_id_to_tensor_ptr_.end()) {
+    TensorPtr GetTensorById(TfLiteContext *context, int tensor_id) {
+        auto it = tensors_.find(tensor_id);
+        if (it == tensors_.end()) {
             LOG(ERROR) << "tensor_id not found: " << tensor_id;
             return nullptr;
         }
@@ -500,7 +499,7 @@ private:
     }
 
     std::unique_ptr<Op> BuildConcatenation(TfLiteContext *context, TfLiteNode *node) {
-        std::vector<Tensor *> inputs(node->inputs->size);
+        std::vector<TensorPtr> inputs(node->inputs->size);
         for (int i = 0; i < node->inputs->size; i++) {
             inputs[i] = GetTensorById(context, node->inputs->data[i]);
         }
@@ -622,7 +621,7 @@ private:
     std::unique_ptr<Model> model_;
     std::unique_ptr<ModelInterpreter> interpreter_;
     // TODO: unordered_map might be a better choice.
-    std::map<int, Tensor *> tensor_id_to_tensor_ptr_;
+    std::map<int, TensorPtr> tensors_;
 };
 
 bool InputsHaveCorrectTypes(const TfLiteNode *node,

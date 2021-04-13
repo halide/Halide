@@ -32,17 +32,15 @@ public:
 
     // Return the Tensor in the current Model with the given name.
     // If none with that name, return null. Tensor is still owned by the Model.
-    Tensor *get_tensor(const std::string &name);
+    TensorPtr get_tensor(const std::string &name);
 
     void execute();
 
     // Return the Tensor(s) that are the initial input(s) of the Model.
-    // Tensor(s) are still owned by the Model.
-    std::vector<Tensor *> inputs();
+    std::vector<TensorPtr> inputs();
 
     // Return the Tensor(s) that are the final output(s) of the Model.
-    // Tensor(s) are still owned by the Model.
-    std::vector<Tensor *> outputs();
+    std::vector<TensorPtr> outputs();
 
     // Movable but not copyable.
     ModelInterpreter() = delete;
