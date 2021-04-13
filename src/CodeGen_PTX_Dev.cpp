@@ -718,7 +718,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     if (debug::debug_level() >= 2) {
         dump();
     }
-    debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
+    debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src\n";
 
     debug(1) << "PTX kernel:\n"
              << outstr.c_str() << "\n";
@@ -739,6 +739,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         string cmd = "ptxas --gpu-name " + mcpu() + " " + ptx.pathname() + " -o " + sass.pathname();
         if (system(cmd.c_str()) == 0) {
             cmd = "nvdisasm " + sass.pathname();
+            debug(2) << "ptxas cmdline: (" << cmd << ")\n";
             int ret = system(cmd.c_str());
             (void)ret;  // Don't care if it fails
         }

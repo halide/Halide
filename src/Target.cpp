@@ -241,6 +241,7 @@ Target::Feature calculate_host_cuda_capability(Target t) {
     int err = interface->compute_capability(nullptr, &major, &minor);
     internal_assert(err == 0) << "Failed to query cuda compute capability\n";
     int ver = major * 10 + minor;
+    Internal::debug(0) <<"CUDA capability is " << major << "." << minor << " -> " << ver << "\n";
     if (ver < 30) {
         return Target::FeatureEnd;
     } else if (ver < 32) {
