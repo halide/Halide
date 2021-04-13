@@ -687,7 +687,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
     b.LoopVectorize = do_loop_opt;
     b.SLPVectorize = true;
-    b.DisableUnrollLoops = !do_loop_opt;
+    // Setting DisableUnrollLoops = true can occasionally generate PTX code that
+    // will fail at runtime under some conditions (e.g. correctness_gpu_dynamic_shared
+    // using NVidia driver 460.x). Note that the (current) default value for this flag
+    // is `false`, so this setting is somewhat redundant.
+    b.DisableUnrollLoops = false;  // !do_loop_opt;
 
     target_machine->adjustPassManager(b);
 
