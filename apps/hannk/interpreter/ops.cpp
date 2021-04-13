@@ -400,7 +400,7 @@ void conv_uint8(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t
                 const std::vector<int> &dilation, const Interval &output_range,
                 halide_buffer_t *output) {
 #ifdef CONV_R16
-    if (input.dim(0).extent() >= 16) {
+    if (input->dim[0].extent >= 16) {
         // For large reductions, use the big reduction version.
         // TODO: We really ought to be able to do this with GuardWithIf
         // and/or specialize.
