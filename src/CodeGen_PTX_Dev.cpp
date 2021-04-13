@@ -737,12 +737,15 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         f.close();
 
         string cmd = "ptxas --gpu-name " + mcpu() + " " + ptx.pathname() + " -o " + sass.pathname();
+        debug(2) << "ptxas cmdline: (" << cmd << ")\n";
         if (system(cmd.c_str()) == 0) {
             cmd = "nvdisasm " + sass.pathname();
-            debug(2) << "ptxas cmdline: (" << cmd << ")\n";
+            debug(2) << "nvdisasm cmdline: (" << cmd << ")\n";
             int ret = system(cmd.c_str());
             (void)ret;  // Don't care if it fails
         }
+ptx.detach();
+sass.detach();
 
         // Note: It works to embed the contents of the .sass file in
         // the buffer instead of the ptx source, and this could help
