@@ -127,7 +127,7 @@ $(BIN)/%/fully_connected_uint8.a: $(GENERATOR_BIN)/fully_connected.generator
 	@mkdir -p $(@D)
 	$< -g FullyConnected -f hannk::fully_connected_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/l2_normalization_uint8.a: $(GENERATOR_BIN)/normalization.generator
+$(BIN)/%/l2_normalization_uint8.a: $(GENERATOR_BIN)/normalizations.generator
 	@mkdir -p $(@D)
 	$< -g L2Normalization -f hannk::l2_normalization_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
@@ -139,11 +139,11 @@ $(BIN)/%/max_pool_uint8.a: $(GENERATOR_BIN)/max_pool.generator
 	@mkdir -p $(@D)
 	$< -g MaxPool -f hannk::max_pool_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/mean_uint8.a: $(GENERATOR_BIN)/reduction.generator
+$(BIN)/%/mean_uint8.a: $(GENERATOR_BIN)/reductions.generator
 	@mkdir -p $(@D)
 	$< -g Mean -f hannk::mean_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/softmax_uint8.a: $(GENERATOR_BIN)/normalization.generator
+$(BIN)/%/softmax_uint8.a: $(GENERATOR_BIN)/normalizations.generator
 	@mkdir -p $(@D)
 	$< -g Softmax -f hannk::softmax_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
