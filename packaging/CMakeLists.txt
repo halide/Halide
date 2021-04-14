@@ -8,14 +8,22 @@ include(CMakePackageConfigHelpers)
 set(Halide_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/Halide"
     CACHE STRING "Path to Halide cmake files")
 
+set(Halide_INSTALL_HELPERSDIR "${CMAKE_INSTALL_LIBDIR}/cmake/HalideHelpers"
+    CACHE STRING "Path to Halide cmake files")
+
 set(Halide_INSTALL_PLUGINDIR "${CMAKE_INSTALL_LIBDIR}"
     CACHE STRING "Path to Halide plugins folder")
+
+set(Halide_INSTALL_TOOLSDIR "${CMAKE_INSTALL_DATADIR}/tools"
+    CACHE STRING "Path to Halide build-time tools and sources")
 
 ##
 # Main library exports
 ##
 
-install(TARGETS Halide Halide_Generator Halide_RunGenMain
+target_sources(Halide_Generator INTERFACE $<INSTALL_INTERFACE:${Halide_INSTALL_TOOLSDIR}/GenGen.cpp>)
+
+install(TARGETS Halide Halide_Generator Halide_LanguageOptions
         EXPORT Halide_Targets
         RUNTIME COMPONENT Halide_Runtime
         LIBRARY COMPONENT Halide_Runtime
@@ -41,9 +49,11 @@ endforeach ()
 # Library-type-agnostic interface targets
 ##
 
-install(TARGETS Halide_Tools Halide_ImageIO Halide_LanguageOptions
+target_sources(Halide_RunGenMain INTERFACE $<INSTALL_INTERFACE:${Halide_INSTALL_TOOLSDIR}/RunGenMain.cpp>)
+
+install(TARGETS Halide_Tools Halide_ImageIO Halide_RunGenMain
         EXPORT Halide_Interfaces
-        INCLUDES DESTINATION ${CMAKE_INSTALL_DATADIR}/tools)
+        INCLUDES DESTINATION ${Halide_INSTALL_TOOLSDIR})
 
 install(TARGETS Halide_Runtime
         EXPORT Halide_Interfaces
@@ -107,7 +117,7 @@ install(DIRECTORY ${Halide_SOURCE_DIR}/tools/
         PATTERN "find_inverse.cpp" EXCLUDE)
 
 install(FILES ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/autotune_loop.sh
-        DESTINATION ${CMAKE_INSTALL_DATADIR}/tools
+        DESTINATION ${Halide_INSTALL_TOOLSDIR}
         PERMISSIONS
         OWNER_READ OWNER_WRITE OWNER_EXECUTE
         GROUP_READ GROUP_EXECUTE
@@ -165,24 +175,33 @@ install(EXPORT Halide_Targets
         COMPONENT Halide_Development)
 
 install(EXPORT Halide_Interfaces
-        DESTINATION ${Halide_INSTALL_CMAKEDIR}
+        DESTINATION ${Halide_INSTALL_HELPERSDIR}
         NAMESPACE Halide::
         FILE Halide-Interfaces.cmake
         COMPONENT Halide_Development)
 
-write_basic_package_version_file(
-    HalideConfigVersion.cmake
-    COMPATIBILITY SameMajorVersion
-)
+write_basic_package_version_file(HalideConfigVersion.cmake
+                                 COMPATIBILITY SameMajorVersion)
+
+write_basic_package_version_file(HalideHelpersConfigVersion.cmake
+                                 COMPATIBILITY SameMajorVersion
+                                 ARCH_INDEPENDENT)
 
 configure_file(HalideConfig.cmake HalideConfig.cmake @ONLY)
+configure_file(HalideHelpersConfig.cmake HalideHelpersConfig.cmake @ONLY)
 
 install(FILES
         ${CMAKE_CURRENT_BINARY_DIR}/HalideConfig.cmake
         ${CMAKE_CURRENT_BINARY_DIR}/HalideConfigVersion.cmake
+        DESTINATION ${Halide_INSTALL_CMAKEDIR}
+        COMPONENT Halide_Development)
+
+install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/HalideHelpersConfig.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/HalideHelpersConfigVersion.cmake
         ${Halide_SOURCE_DIR}/cmake/HalideGeneratorHelpers.cmake
         ${Halide_SOURCE_DIR}/cmake/HalideTargetHelpers.cmake
-        DESTINATION ${Halide_INSTALL_CMAKEDIR}
+        DESTINATION ${Halide_INSTALL_HELPERSDIR}
         COMPONENT Halide_Development)
 
 ##
