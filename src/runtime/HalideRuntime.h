@@ -1490,33 +1490,52 @@ typedef struct halide_buffer_t {
         return s;
     }
 
-    /** A pointer to the element with the lowest address. If all
-     * strides are positive, equal to the host pointer. */
-    HALIDE_ALWAYS_INLINE uint8_t *begin() const {
+    /** Offset to the element with the lowest address.
+     * If all strides are positive, equal to zero.
+     * Offset is in elements, not bytes.
+     * Unlike begin(), this is ok to call on an unallocated buffer. */
+    HALIDE_ALWAYS_INLINE ptrdiff_t begin_offset() const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions; i++) {
-            if (dim[i].stride < 0) {
-                index += (ptrdiff_t)dim[i].stride * (dim[i].extent - 1);
+            const int stride = dim[i].stride;
+            if (stride < 0) {
+                index += stride * (ptrdiff_t)(dim[i].extent - 1);
             }
         }
-        return host + index * type.bytes();
+        return index;
     }
 
-    /** A pointer to one beyond the element with the highest address. */
-    HALIDE_ALWAYS_INLINE uint8_t *end() const {
+    /** An offset to one beyond the element with the highest address.
+     * Offset is in elements, not bytes.
+     * Unlike end(), this is ok to call on an unallocated buffer. */
+    HALIDE_ALWAYS_INLINE ptrdiff_t end_offset() const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions; i++) {
-            if (dim[i].stride > 0) {
-                index += (ptrdiff_t)dim[i].stride * (dim[i].extent - 1);
+            const int stride = dim[i].stride;
+            if (stride > 0) {
+                index += stride * (ptrdiff_t)(dim[i].extent - 1);
             }
         }
         index += 1;
-        return host + index * type.bytes();
+        return index;
+    }
+
+    /** A pointer to the element with the lowest address.
+     * If all strides are positive, equal to the host pointer.
+     * Illegal to call on an unallocated buffer. */
+    HALIDE_ALWAYS_INLINE uint8_t *begin() const {
+        return host + begin_offset() * type.bytes();
+    }
+
+    /** A pointer to one beyond the element with the highest address.
+     * Illegal to call on an unallocated buffer. */
+    HALIDE_ALWAYS_INLINE uint8_t *end() const {
+        return host + end_offset() * type.bytes();
     }
 
     /** The total number of bytes spanned by the data in memory. */
     HALIDE_ALWAYS_INLINE size_t size_in_bytes() const {
-        return (size_t)(end() - begin());
+        return (size_t)(end_offset() - begin_offset()) * type.bytes();
     }
 
     /** A pointer to the element at the given location. */
