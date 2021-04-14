@@ -55,7 +55,7 @@ public:
 
     void accept(OpVisitor *v);
 
-    void execute(const Box &crop);
+    void execute();
 
     void dump(std::ostream &os) const {
         os << "  " << to_string(op_) << " " << output()->name() << std::endl;
@@ -88,7 +88,7 @@ public:
     BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;
 
-    void execute(const Box &crop);
+    void execute();
 
     void dump(std::ostream &os) const {
         os << "  Concatenation " << output()->name() << std::endl;
@@ -140,7 +140,7 @@ public:
     BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;
 
-    void execute(const Box &crop);
+    void execute();
 
     void dump(std::ostream &os) const {
         os << "  Conv2D " << output()->name() << std::endl;
@@ -191,7 +191,7 @@ public:
     BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;
 
-    void execute(const Box &crop);
+    void execute();
 
     void dump(std::ostream &os) const {
         os << "  DepthwiseConv2D " << output()->name() << std::endl;
@@ -230,7 +230,7 @@ public:
     BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;
 
-    void execute(const Box &crop);
+    void execute();
 
     void dump(std::ostream &os) const {
         os << "  FullyConnected " << output()->name() << std::endl;
@@ -252,7 +252,7 @@ public:
     BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;
 
-    void execute(const Box &crop);
+    void execute();
 
     void dump(std::ostream &os) const {
         os << "  L2Normalization " << output()->name() << std::endl;
@@ -275,7 +275,7 @@ public:
     BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;
 
-    void execute(const Box &crop);
+    void execute();
 
     void dump(std::ostream &os) const {
         os << "  Pad " << output()->name() << std::endl;
@@ -327,7 +327,7 @@ public:
 
     void accept(OpVisitor *v);
 
-    void execute(const Box &crop);
+    void execute();
 
     void dump(std::ostream &os) const {
         os << "  " << to_string(op_) << "Pool " << output()->name() << std::endl;
@@ -362,7 +362,7 @@ public:
 
     void accept(OpVisitor *v);
 
-    void execute(const Box &crop);
+    void execute();
 
     void dump(std::ostream &os) const {
         os << "  " << to_string(op_) << " " << output()->name() << std::endl;
@@ -386,7 +386,7 @@ public:
     BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;
 
-    void execute(const Box &crop);
+    void execute();
 
     void dump(std::ostream &os) const {
         os << "  Reshape " << output()->name() << std::endl;
@@ -410,7 +410,7 @@ public:
     BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;
 
-    void execute(const Box &crop);
+    void execute();
 
     void dump(std::ostream &os) const {
         os << "  Softmax " << output()->name() << std::endl;
@@ -432,7 +432,7 @@ public:
     BoundsMap map_bounds(int input_idx, int output_idx) const;
     std::vector<SplitInfo> get_split_info() const;
 
-    void execute(const Box &crop);
+    void execute();
 
     void dump(std::ostream &os) const {
         os << "  TileConvFilterOp " << output()->name() << std::endl;
@@ -463,7 +463,7 @@ public:
 
     void accept(OpVisitor *v);
 
-    void execute(const Box &crop);
+    void execute();
 
     void dump(std::ostream &os) const {
         os << "  " << to_string(op_) << " " << output()->name() << std::endl;

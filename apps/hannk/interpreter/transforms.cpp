@@ -315,7 +315,7 @@ void fold_constants(Model *m) {
             }
 
             // Run the whole op.
-            i->execute(i->output()->bounds());
+            i->execute();
 
             // Mark the outputs constant.
             for (int j = 0; j < i->output_count(); j++) {

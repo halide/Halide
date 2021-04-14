@@ -279,7 +279,7 @@ const char *BinaryOp::to_string(BinaryOp::Operator op) {
     }
 }
 
-void BinaryOp::execute(const Box &crop) {
+void BinaryOp::execute() {
     const TensorPtr in1 = input(0);
     const TensorPtr in2 = input(1);
     TensorPtr out = output();
@@ -320,8 +320,8 @@ BoundsMap ConcatenationOp::map_bounds(int input_idx, int output_idx) const {
     return result;
 }
 
-void ConcatenationOp::execute(const Box &crop) {
-    HalideBuffer<void> output_buf = output()->buffer(crop);
+void ConcatenationOp::execute() {
+    HalideBuffer<void> output_buf = output()->buffer();
 
     int concatenated_i = 0;
     for (int i = 0; i < input_count(); i++) {
@@ -426,7 +426,7 @@ void conv_uint8(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t
 
 }  // namespace
 
-void Conv2DOp::execute(const Box &crop) {
+void Conv2DOp::execute() {
     const TensorPtr in = input();
     const TensorPtr filt = filter();
     TensorPtr out = output();
@@ -436,7 +436,7 @@ void Conv2DOp::execute(const Box &crop) {
         auto input_buf = in->buffer<const uint8_t>();
         auto filter_buf = filt->buffer<const void>();
         auto bias_buf = bias()->buffer<const int32_t>();
-        auto output_buf = out->buffer<uint8_t>(crop);
+        auto output_buf = out->buffer<uint8_t>();
 
         MultiplyParams params =
             get_quantized_multiply_params(in->quantization(), filt->quantization(), out->quantization());
@@ -539,7 +539,7 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
     }
 }
 
-void DepthwiseConv2DOp::execute(const Box &crop) {
+void DepthwiseConv2DOp::execute() {
     const TensorPtr in = input();
     const TensorPtr filt = filter();
     TensorPtr out = output();
@@ -550,7 +550,7 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
         auto input_buf = in->buffer<const uint8_t>();
         auto filter_buf = filt->buffer<const uint8_t>().sliced(3, 0);
         auto bias_buf = bias()->buffer<const int32_t>();
-        auto output_buf = out->buffer<uint8_t>(crop);
+        auto output_buf = out->buffer<uint8_t>();
 
         assert(depth_multiplier_ * input_buf.dim(0).extent() == output_buf.dim(0).extent());
 
@@ -586,7 +586,7 @@ BoundsMap FullyConnectedOp::map_bounds(int input_idx, int output_idx) const {
     }
 }
 
-void FullyConnectedOp::execute(const Box &crop) {
+void FullyConnectedOp::execute() {
     const TensorPtr in = input();
     const TensorPtr filt = filter();
     TensorPtr out = output();
@@ -597,7 +597,7 @@ void FullyConnectedOp::execute(const Box &crop) {
         auto input_buf = in->buffer<const uint8_t>();
         auto filter_buf = filt->buffer<const uint8_t>();
         auto bias_buf = bias()->buffer<const int32_t>();
-        auto output_buf = out->buffer<uint8_t>(crop);
+        auto output_buf = out->buffer<uint8_t>();
 
         // TODO: This should be handled explicitly with a reshape.
         // It's annoying tflite doesn't require this. This means
@@ -639,14 +639,14 @@ BoundsMap L2NormalizationOp::map_bounds(int input_idx, int output_idx) const {
         .elementwise(1, 1);
 }
 
-void L2NormalizationOp::execute(const Box &crop) {
+void L2NormalizationOp::execute() {
     const TensorPtr in = input();
     TensorPtr out = output();
 
     if (in->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
         auto in_buf = in->buffer<const uint8_t>();
-        auto output_buf = out->buffer<uint8_t>(crop);
+        auto output_buf = out->buffer<uint8_t>();
 
         const int input_zero = in->quantization().zero.at(0);
         assert(input_zero >= 0 && input_zero <= 255);
@@ -684,13 +684,13 @@ BoundsMap PadOp::map_bounds(int input_idx, int output_idx) const {
     }
 }
 
-void PadOp::execute(const Box &crop) {
+void PadOp::execute() {
     const TensorPtr in = input(0);
     TensorPtr out = output();
 
     if (out->type().bytes() == 1) {
         auto input_buf = in->buffer<const uint8_t>();
-        auto output_buf = out->buffer<uint8_t>(crop);
+        auto output_buf = out->buffer<uint8_t>();
 
         if (input(1)) {
             auto padding = input(1)->buffer<const int32_t>();
@@ -772,14 +772,14 @@ BoundsMap PoolOp::map_bounds(int input_idx, int output_idx) const {
         .elementwise(3, 3);
 }
 
-void PoolOp::execute(const Box &crop) {
+void PoolOp::execute() {
     const TensorPtr in = input();
     TensorPtr out = output();
 
     if (in->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
         auto input_buf = in->buffer<const uint8_t>();
-        auto output_buf = out->buffer<uint8_t>(crop);
+        auto output_buf = out->buffer<uint8_t>();
 
         const auto output_range = get_output_range(activation_, out->quantization());
 
@@ -853,7 +853,7 @@ std::vector<SplitInfo> ReductionOp::get_split_info() const {
     return {(size_t)output()->rank(), SplitInfo::any_split()};
 }
 
-void ReductionOp::execute(const Box &crop) {
+void ReductionOp::execute() {
     auto indices = input(1)->buffer<const int32_t>();
 
     const TensorPtr in = input();
@@ -862,7 +862,7 @@ void ReductionOp::execute(const Box &crop) {
     if (in->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
         auto input_buf = in->buffer<const uint8_t>();
-        auto output_buf = out->buffer<uint8_t>(crop);
+        auto output_buf = out->buffer<uint8_t>();
 
         if (op_ == Mean) {
             int mins[4] = { 0, 0, 0, 0 };
@@ -891,12 +891,12 @@ BoundsMap ReshapeOp::map_bounds(int input_idx, int output_idx) const {
     return BoundsMap::all(input()->bounds(), output()->rank());
 }
 
-void ReshapeOp::execute(const Box &crop) {
+void ReshapeOp::execute() {
     const TensorPtr in = input();
     TensorPtr out = output();
 
     auto input_buf = in->buffer<const void>();
-    auto output_buf = out->buffer(crop);
+    auto output_buf = out->buffer();
 
     // TODO: should reality-check that the output buf matches the shape we expect
     // assert((int) new_shape_.size() == output_buf.dimensions());
@@ -931,14 +931,14 @@ BoundsMap SoftmaxOp::map_bounds(int input_idx, int output_idx) const {
         .elementwise(1, 1);
 }
 
-void SoftmaxOp::execute(const Box &crop) {
+void SoftmaxOp::execute() {
     const TensorPtr in = input();
     TensorPtr out = output();
 
     if (in->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
         auto in_buf = in->buffer<const uint8_t>();
-        auto output_buf = out->buffer<uint8_t>(crop);
+        auto output_buf = out->buffer<uint8_t>();
 
         // It's a easier to compute 2^(x*(B*log2(e))) than e^(x*B).
         const float beta2 = beta_ * std::log2(std::exp(1.0f));
@@ -979,13 +979,13 @@ BoundsMap TileConvFilterOp::map_bounds(int input_idx, int output_idx) const {
     return BoundsMap::all(input()->bounds(), output()->rank());
 }
 
-void TileConvFilterOp::execute(const Box &crop) {
+void TileConvFilterOp::execute() {
     const TensorPtr in = input();
     TensorPtr out = output();
 
     if (in->type() == halide_type_of<uint8_t>()) {
         auto input_buf = in->buffer<const uint8_t>();
-        auto output_buf = out->buffer<void>(crop);
+        auto output_buf = out->buffer<void>();
 
         int input_zero = in->quantization().zero.at(0);
         int output_zero = out->quantization().zero.at(0);
@@ -1008,13 +1008,13 @@ const char *UnaryOp::to_string(UnaryOp::Operator op) {
     }
 }
 
-void UnaryOp::execute(const Box &crop) {
+void UnaryOp::execute() {
     const TensorPtr in = input();
     TensorPtr out = output();
 
     if (in->type() == halide_type_of<uint8_t>() && out->type() == halide_type_of<uint8_t>()) {
         auto in_buf = in->buffer<const uint8_t>();
-        auto out_buf = out->buffer<uint8_t>(crop);
+        auto out_buf = out->buffer<uint8_t>();
         optimize_elementwise_shapes(in_buf, out_buf, 1);
 
         const int input_zero = in->quantization().zero.at(0);

@@ -175,24 +175,6 @@ public:
         return buffer_.as_const().as<const T>();
     }
 
-    template<class T = void>
-    HalideBuffer<T> buffer(const Box &crop) {
-        HalideBuffer<T> buf = buffer_.as<T>();
-        for (int i = 0; i < (int)crop.size(); i++) {
-            buf.crop(i, crop[i].min, crop[i].extent());
-        }
-        return buf;
-    }
-
-    template<class T = void>
-    HalideBuffer<const T> buffer(const Box &crop) const {
-        HalideBuffer<const T> buf = buffer_.as<const T>();
-        for (int i = 0; i < (int)crop.size(); i++) {
-            buf.crop(i, crop[i].min, crop[i].extent());
-        }
-        return buf;
-    }
-
     bool is_allocated() const;
     void allocate();
 
@@ -469,7 +451,7 @@ public:
     }
 
     // Execute the op on a given crop.
-    virtual void execute(const Box &crop) = 0;
+    virtual void execute() = 0;
 
     // Get information about how crops of this op can be split.
     virtual std::vector<SplitInfo> get_split_info() const {

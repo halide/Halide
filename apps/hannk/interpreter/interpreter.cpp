@@ -39,7 +39,10 @@ void trace_loads_stores(int32_t parent_id, const Tensor *t, Box bounds, bool loa
     event.event = load ? halide_trace_load : halide_trace_store;
 
     bounds = intersect(bounds, t->bounds());
-    HalideBuffer<const void> buf = t->buffer(bounds);
+    HalideBuffer<const void> buf = t->buffer();
+    for (int i = 0; i < buf.dimensions(); i++) {
+        buf.crop(i, bounds[i].min, bounds[i].extent());
+    }
 
     event.type = buf.type();
 
@@ -187,7 +190,7 @@ public:
 
     void execute() {
         for (OpOrNode &i : ops_) {
-            i.op->execute(i.op->output()->bounds());
+            i.op->execute();
         }
     }
 };
