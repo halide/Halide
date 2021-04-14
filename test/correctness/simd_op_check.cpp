@@ -2125,25 +2125,23 @@ public:
                 check("f32x4.sqrt", 4 * w, sqrt(f32_1));
                 check("f64x2.sqrt", 2 * w, sqrt(f64_1));
 
-                // Round to integer above (ceiling)
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("f32x4.ceil", 4 * w, ceil(f32_1));
-                // check("f64x2.ceil", 2 * w, ceil(f64_1));
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    // Round to integer above (ceiling)
+                    check("f32x4.ceil", 4 * w, ceil(f32_1));
+                    check("f64x2.ceil", 2 * w, ceil(f64_1));
 
-                // Round to integer below (floor)
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("f32x4.floor", 4 * w, floor(f32_1));
-                // check("f64x2.floor", 2 * w, floor(f64_1));
+                    // Round to integer below (floor)
+                    check("f32x4.floor", 4 * w, floor(f32_1));
+                    check("f64x2.floor", 2 * w, floor(f64_1));
 
-                // Round to integer toward zero (truncate to integer)
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("f32x4.trunc", 4 * w, trunc(f32_1));
-                // check("f64x2.trunc", 2 * w, trunc(f64_1));
+                    // Round to integer toward zero (truncate to integer)
+                    check("f32x4.trunc", 4 * w, trunc(f32_1));
+                    check("f64x2.trunc", 2 * w, trunc(f64_1));
 
-                // Round to nearest integer, ties to even)
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("f32x4.nearest", 4 * w, round(f32_1));
-                // check("f64x2.nearest", 2 * w, round(f64_1));
+                    // Round to nearest integer, ties to even)
+                    check("f32x4.nearest", 4 * w, round(f32_1));
+                    check("f64x2.nearest", 2 * w, round(f64_1));
+                }
 
                 // Integer to single-precision floating point
                 check("f32x4.convert_i32x4_s", 8 * w, cast<float>(i32_1));
