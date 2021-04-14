@@ -167,6 +167,12 @@ class InPlace : public OpVisitor {
     void visit(ReshapeOp *op) {
         maybe_alias_tensors(op->input(), op->output());
     }
+
+    void visit(OpGroup *op) {
+        for (int i = 0; i < op->op_count(); i++) {
+            op->op(i)->accept(this);
+        }
+    }
 };
 
 }  // namespace
@@ -275,6 +281,12 @@ class FusePadOps : public OpVisitor {
         for (int d = 0; d < std::min(prev_padding.dimensions(), padding.dimensions()); d++) {
             padding(0, d) += prev_padding(0, d);
             padding(1, d) += prev_padding(1, d);
+        }
+    }
+
+    void visit(OpGroup *op) {
+        for (int i = 0; i < op->op_count(); i++) {
+            op->op(i)->accept(this);
         }
     }
 };
