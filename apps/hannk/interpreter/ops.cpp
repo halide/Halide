@@ -486,21 +486,20 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
     assert(output_idx == 0);
     if (input_idx == 0) {
         BoundsMap result(4, 4);
+        result
+            .upsample(0, 0, depth_multiplier_)
+            .downsample(1, 1, stride_[0], Interval(0, dilation_[0] * (filter()->extent(1) - 1)))
+            .downsample(2, 2, stride_[1], Interval(0, dilation_[1] * (filter()->extent(2) - 1)))
+            .elementwise(3, 3);
         if (depth_multiplier_ == 1) {
             // TODO: Handle this padding for SIMD width elsewhere. Either fix depthwise
             // so it doesn't need this, or pass alignment information somewhere else.
 #if defined(__arm__) || defined(__aarch64__)
-            result.constant(0, std::max(input()->extent(0), 16));
+            result.align(0, 16);
 #else
-            result.constant(0, std::max(input()->extent(0), 32));
+            result.align(0, 32);
 #endif
-        } else {
-            result.upsample(0, 0, depth_multiplier_);
         }
-        result
-            .downsample(1, 1, stride_[0], Interval(0, dilation_[0] * (filter()->extent(1) - 1)))
-            .downsample(2, 2, stride_[1], Interval(0, dilation_[1] * (filter()->extent(2) - 1)))
-            .elementwise(3, 3);
         return result;
     } else if (input_idx == 1) {
         return BoundsMap(3, 4)

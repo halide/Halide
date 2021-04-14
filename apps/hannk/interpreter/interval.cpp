@@ -84,13 +84,16 @@ bool is_empty(const Box &a) {
 
 // TODO: These don't handle negative numbers correctly.
 int ceil_div(int a, int b) {
-    assert(a >= 0 && b >= 0);
-    return (a + b - 1) / b;
+    return floor_div(a + b - 1, b);
 }
 
 int floor_div(int a, int b) {
     assert(a >= 0 && b >= 0);
-    return a / b;
+    int q = a / b;
+    if (q * b != a && (a < 0 != b < 0)) {
+        q -= 1;
+    }
+    return q;
 }
 
 int align_up(int x, int n) {

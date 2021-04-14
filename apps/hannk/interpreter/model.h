@@ -205,29 +205,28 @@ TensorPtr apply(TensorMap &map, const TensorPtr t);
 // A mapping from an output x to required input coordinates [min, max].
 // [min, max] = (x / inv_stride) * stride + bounds
 struct DimMap {
+    Interval pre_bounds;
     int stride;
     int inv_stride;
     Interval bounds;
 
     DimMap()
-        : stride(0), inv_stride(1), bounds(0, 0) {
+        : pre_bounds(0, 0), stride(0), inv_stride(1), bounds(0, 0) {
     }
     DimMap(int stride, int inv_stride, const Interval &bounds)
-        : stride(stride), inv_stride(inv_stride), bounds(bounds) {
+        : pre_bounds(0, 0), stride(stride), inv_stride(inv_stride), bounds(bounds) {
     }
 
-    Interval evaluate(Interval result) const {
+    Interval evaluate(Interval x) const {
+        Interval result = x;
+        result += pre_bounds;
         result /= inv_stride;
         result *= stride;
         result += bounds;
         return result;
     }
     Interval evaluate(int at) const {
-        Interval result(at);
-        result /= inv_stride;
-        result *= stride;
-        result += bounds;
-        return result;
+        return evaluate(Interval(at));
     }
 
     bool is_elementwise() const {
@@ -285,10 +284,12 @@ struct DimMap {
     }
 
     DimMap &align(int alignment) {
+        pre_bounds.max += alignment - 1;
         stride *= alignment;
         inv_stride *= alignment;
         bounds /= alignment;
-        bounds *= alignment;
+        bounds.min = align_down(bounds.min, alignment);
+        bounds.max = align_up(bounds.max, alignment);
         return *this;
     }
 };

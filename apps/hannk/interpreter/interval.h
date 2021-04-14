@@ -49,7 +49,7 @@ struct Interval {
     Interval &operator/=(int scale) {
         assert(min >= 0 && max >= 0);
         min = floor_div(min, scale);
-        max = ceil_div(max + 1, scale) - 1;
+        max = floor_div(max, scale);
         return *this;
     }
 
