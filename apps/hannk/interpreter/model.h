@@ -203,12 +203,15 @@ using TensorMap = std::map<const TensorPtr, TensorPtr>;
 TensorPtr apply(TensorMap &map, const TensorPtr t);
 
 // A mapping from an output x to required input coordinates [min, max].
-// [min, max] = x * stride / inv_stride + bounds
+// [min, max] = (x / inv_stride) * stride + bounds
 struct DimMap {
     int stride;
     int inv_stride;
     Interval bounds;
 
+    DimMap()
+        : stride(0), inv_stride(1), bounds(0, 0) {
+    }
     DimMap(int stride, int inv_stride, const Interval &bounds)
         : stride(stride), inv_stride(inv_stride), bounds(bounds) {
     }
@@ -244,32 +247,49 @@ struct DimMap {
     }
 
     // A dependency where the input `bounds` do not depend on the output.
-    static DimMap constant(int extent) {
-        return DimMap(0, 1, Interval(0, extent - 1));
+    DimMap &constant(const Interval &bounds) {
+        stride = 0;
+        inv_stride = 1;
+        this->bounds = bounds;
+        return *this;
     }
 
-    static DimMap constant(const Interval &bounds) {
-        return DimMap(0, 1, bounds);
+    DimMap &constant(int extent) {
+        return constant(Interval(0, extent - 1));
     }
 
-    static DimMap elementwise(int offset = 0) {
-        return DimMap(1, 1, Interval(offset));
+    DimMap &downsample(int factor, const Interval &filter) {
+        stride = factor;
+        inv_stride = 1;
+        bounds = filter;
+        return *this;
     }
 
-    static DimMap stencil(const Interval &filter) {
-        return DimMap(1, 1, filter);
+    DimMap &upsample(int factor, const Interval &filter) {
+        stride = 1;
+        inv_stride = factor;
+        bounds = filter;
+        return *this;
     }
 
-    static DimMap downsample(int factor, const Interval &filter) {
-        return DimMap(factor, 1, filter);
+    DimMap &upsample(int factor) {
+        return upsample(factor, Interval(0, 0));
     }
 
-    static DimMap upsample(int factor) {
-        return DimMap(1, factor, Interval(0, 0));
+    DimMap &elementwise(int offset = 0) {
+        return upsample(1);
     }
 
-    static DimMap upsample(int factor, const Interval &filter) {
-        return DimMap(1, factor, filter);
+    DimMap &stencil(const Interval &filter) {
+        return upsample(1, filter);
+    }
+
+    DimMap &align(int alignment) {
+        stride *= alignment;
+        inv_stride *= alignment;
+        bounds /= alignment;
+        bounds *= alignment;
+        return *this;
     }
 };
 
@@ -280,7 +300,7 @@ class BoundsMap {
 
 public:
     BoundsMap(int dims_in, int dims_out)
-        : dims_in_(dims_in), dims_out_(dims_out), data_(dims_in * (dims_out + 1), {0, 1, {0, 0}}) {
+        : dims_in_(dims_in), dims_out_(dims_out), data_(dims_in * (dims_out + 1)) {
     }
 
     DimMap &at(int dim_in, int dim_out) {
@@ -339,37 +359,44 @@ public:
     // Add bounds for an elementwise mapping of x of dim_in to y of dim_out,
     // where x maps to y + offset.
     BoundsMap &elementwise(int dim_in, int dim_out, int offset = 0) {
-        at(dim_in, dim_out) = DimMap::elementwise(offset);
+        at(dim_in, dim_out).elementwise(offset);
         return *this;
     }
 
     BoundsMap &stencil(int dim_in, int dim_out, const Interval &filter) {
-        at(dim_in, dim_out) = DimMap::stencil(filter);
+        at(dim_in, dim_out).stencil(filter);
         return *this;
     }
 
     BoundsMap &upsample(int dim_in, int dim_out, int factor) {
-        at(dim_in, dim_out) = DimMap::upsample(factor);
+        at(dim_in, dim_out).upsample(factor);
         return *this;
     }
 
     BoundsMap &upsample(int dim_in, int dim_out, int factor, const Interval &filter) {
-        at(dim_in, dim_out) = DimMap::upsample(factor, filter);
+        at(dim_in, dim_out).upsample(factor, filter);
         return *this;
     }
 
     BoundsMap &downsample(int dim_in, int dim_out, int factor, const Interval &filter) {
-        at(dim_in, dim_out) = DimMap::downsample(factor, filter);
+        at(dim_in, dim_out).downsample(factor, filter);
         return *this;
     }
 
     BoundsMap &constant(int dim_in, int extent) {
-        at(dim_in) = DimMap::constant(extent);
+        at(dim_in).constant(extent);
         return *this;
     }
 
     BoundsMap &constant(int dim_in, const Interval &bounds) {
-        at(dim_in) = DimMap::constant(bounds);
+        at(dim_in).constant(bounds);
+        return *this;
+    }
+
+    BoundsMap &align(int dim_out, int alignment) {
+        for (int i = 0; i < dims_in_; i++) {
+            at(i, dim_out).align(alignment);
+        }
         return *this;
     }
 
