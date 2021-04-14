@@ -250,6 +250,8 @@ public:
                     buf.as<float>().for_each_value([&](float &f) { f = (rng() & 0xfff) / 8.0f - 0xff; });
                 } else if (t == Float(64)) {
                     buf.as<double>().for_each_value([&](double &f) { f = (rng() & 0xfff) / 8.0 - 0xff; });
+                } else if (t == Float(16)) {
+                    buf.as<float16_t>().for_each_value([&](float16_t &f) { f = float16_t((rng() & 0xff) / 8.0f - 0xf); });
                 } else {
                     // Random bits is fine
                     for (uint32_t *ptr = (uint32_t *)buf.data();
