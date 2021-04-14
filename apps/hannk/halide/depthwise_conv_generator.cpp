@@ -201,7 +201,12 @@ public:
 
         // Vectorize c with RoundUp so we pad as required for depthwise convolution above.
         output_.compute_root()
-            .vectorize(c, vector_size, TailStrategy::RoundUp);
+            .vectorize(c, vector_size, TailStrategy::RoundUp)
+            .specialize(rate_ == 8);
+
+        // TODO: We could do a lot better than this. This both generates a lot of code,
+        // and we should be a lot more careful about vectorization. A common case is
+        // 3 channels -> 24 channels, we should handle this case very differently.
     }
 
 };
