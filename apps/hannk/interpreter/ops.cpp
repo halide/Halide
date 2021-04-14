@@ -13,7 +13,6 @@
 #endif
 #include "copy_uint8_uint8.h"
 #include "depthwise_conv_broadcast_uint8.h"
-#include "depthwise_conv_dm1_uint8.h"
 #include "depthwise_conv_uint8.h"
 #include "fill_uint8.h"
 #include "fully_connected_uint8.h"
@@ -24,6 +23,7 @@
 #include "softmax_uint8.h"
 #include "tanh_uint8.h"
 #include "tile_conv_filter_uint8.h"
+#include "upsample_channels_uint8.h"
 
 namespace hannk {
 
@@ -475,22 +475,14 @@ void depthwise_conv_uint8(
     if (depth_multiplier >= output->dim[0].extent) {
         CHECK(
             0 == depthwise_conv_broadcast_uint8(
-                     input, filter, bias, depth_multiplier,
-                     (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride[0], stride[1],
-                     dilation[0], dilation[1], params.c.multiplier, params.c.shift,
-                     (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output));
-    } else if (depth_multiplier == 1) {
-        CHECK(
-            0 == depthwise_conv_dm1_uint8(
-                     input, filter, bias, depth_multiplier,
-                     (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride[0], stride[1],
+                     input, filter, bias, (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride[0], stride[1],
                      dilation[0], dilation[1], params.c.multiplier, params.c.shift,
                      (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output));
     } else {
+        assert(depth_multiplier == 1);
         CHECK(
             0 == ::hannk::depthwise_conv_uint8(
-                     input, filter, bias, depth_multiplier,
-                     (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride[0], stride[1],
+                     input, filter, bias, (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride[0], stride[1],
                      dilation[0], dilation[1], params.c.multiplier, params.c.shift,
                      (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output));
     }
@@ -510,17 +502,17 @@ std::vector<SplitInfo> DepthwiseConv2DOp::get_split_info() const {
 BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
     assert(output_idx == 0);
     if (input_idx == 0) {
+        // Pass minimal sized buffers to learn about the alignment requirements.
+        HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
+        HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
+        CHECK(0 == upsample_channels_uint8(input_buf, depth_multiplier_, output_buf));
+        const int channel_alignment = output_buf.dim(0).extent();
+
         BoundsMap result(4, 4);
-        if (depth_multiplier_ == 1) {
-            // TODO: Handle this padding for SIMD width elsewhere. Either fix depthwise
-            // so it doesn't need this, or pass alignment information somewhere else.
-#if defined(__arm__) || defined(__aarch64__)
-            result.constant(0, std::max(input()->extent(0), 16));
-#else
-            result.constant(0, std::max(input()->extent(0), 32));
-#endif
+        if (depth_multiplier_ >= output()->extent(0)) {
+            result.constant(0, 1);
         } else {
-            result.upsample(0, 0, depth_multiplier_);
+            result.constant(0, align_up(output()->extent(0), channel_alignment));
         }
         result
             .downsample(1, 1, stride_[0], Interval(0, dilation_[0] * (filter()->extent(1) - 1)))
@@ -551,8 +543,6 @@ void DepthwiseConv2DOp::execute(const Box &crop) {
         auto filter_buf = filt->buffer<const uint8_t>().sliced(3, 0);
         auto bias_buf = bias()->buffer<const int32_t>();
         auto output_buf = out->buffer<uint8_t>(crop);
-
-        assert(depth_multiplier_ * input_buf.dim(0).extent() == output_buf.dim(0).extent());
 
         MultiplyParams params =
             get_quantized_multiply_params(in->quantization(), filt->quantization(), out->quantization());
@@ -1051,6 +1041,41 @@ void UnaryOp::execute(const Box &crop) {
     }
 }
 
+BoundsMap UpsampleChannelsOp::map_bounds(int input_idx, int output_idx) const {
+    return BoundsMap(4, 4)
+        .upsample(0, 0, rate_)
+        .elementwise(1, 1)
+        .elementwise(2, 2)
+        .elementwise(3, 3);
+}
+
+std::vector<SplitInfo> UpsampleChannelsOp::get_split_info() const {
+    return {
+        SplitInfo::no_split(),
+        SplitInfo::any_split(),
+        SplitInfo::any_split(),
+        SplitInfo::any_split(),
+    };
+}
+
+void UpsampleChannelsOp::execute(const Box &crop) {
+    const TensorPtr in = input();
+    TensorPtr out = output();
+
+    if (in->type() == halide_type_of<uint8_t>()) {
+        auto input_buf = in->buffer<const uint8_t>();
+        auto output_buf = out->buffer<void>(crop);
+
+        for (int d = 1; d + 1 < input_buf.dimensions(); d++) {
+            input_buf.translate(d, (out->extent(d) - in->extent(d)) / 2);
+        }
+
+        CHECK(0 == upsample_channels_uint8(input_buf, rate_, output_buf));
+    } else {
+        CHECK(false) << "Unsupported type " << in->type() << "\n";
+    }
+}
+
 void BinaryOp::accept(OpVisitor *v) {
     v->visit(this);
 }
@@ -1100,6 +1125,10 @@ void TileConvFilterOp::accept(OpVisitor *v) {
 }
 
 void UnaryOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void UpsampleChannelsOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 

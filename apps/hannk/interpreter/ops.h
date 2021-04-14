@@ -173,6 +173,13 @@ public:
             padding_, activation_);
     }
 
+    int depth_multiplier() const {
+        return depth_multiplier_;
+    }
+    void set_depth_multiplier(int depth_multiplier) {
+        depth_multiplier_ = depth_multiplier;
+    }
+
     void accept(OpVisitor *v);
 
     const TensorPtr filter() const {
@@ -470,6 +477,30 @@ public:
     }
 };
 
+class UpsampleChannelsOp : public Op {
+    int rate_;
+
+public:
+    UpsampleChannelsOp(TensorPtr input, TensorPtr output, int rate)
+        : Op({input}, {output}), rate_(rate) {
+    }
+
+    std::unique_ptr<Op> clone(TensorMap &map) const {
+        return ::hannk::make_unique<UpsampleChannelsOp>(apply(map, input()), apply(map, output()), rate_);
+    }
+
+    void accept(OpVisitor *v);
+
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    std::vector<SplitInfo> get_split_info() const;
+
+    void execute(const Box &crop);
+
+    void dump(std::ostream &os) const {
+        os << "  UpsampleChannels " << output()->name() << std::endl;
+    }
+};
+
 class OpVisitor {
 public:
     virtual ~OpVisitor() = default;
@@ -499,6 +530,8 @@ public:
     virtual void visit(TileConvFilterOp *op) {
     }
     virtual void visit(UnaryOp *op) {
+    }
+    virtual void visit(UpsampleChannelsOp *op) {
     }
 };
 

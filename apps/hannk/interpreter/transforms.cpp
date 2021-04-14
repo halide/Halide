@@ -228,8 +228,7 @@ class PadForOps : public OpVisitor {
             }
             TensorPtr tiled =
                 std::make_shared<Tensor>(filter->name() + "_tiled", type, tiled_shape, quantization);
-            // Maybe more than one op uses this same filter...?
-            filter->replace_all_consumers_with(tiled);
+            op->set_input(1, tiled);
 
             std::unique_ptr<Op> tile = ::hannk::make_unique<TileConvFilterOp>(filter, tiled);
             new_ops.emplace_back(std::move(tile));
@@ -237,7 +236,21 @@ class PadForOps : public OpVisitor {
     }
 
     void visit(DepthwiseConv2DOp *op) {
-        pad_for_op(op, 0, 0);
+        if (op->depth_multiplier() != 1 && op->depth_multiplier() < op->output()->extent(0)) {
+            TensorPtr input = op->input();
+            BoundsMap bounds = op->map_bounds(0, 0);
+            Box upsampled_shape = bounds.evaluate(op->output()->bounds());
+
+            TensorPtr upsampled =
+                std::make_shared<Tensor>(input->name() + "_upsampled", input->type(), upsampled_shape, input->quantization());
+            op->set_input(0, upsampled);
+
+            std::unique_ptr<Op> upsample = ::hannk::make_unique<UpsampleChannelsOp>(input, upsampled, op->depth_multiplier());
+            op->set_depth_multiplier(1);
+            new_ops.emplace_back(std::move(upsample));
+        } else {
+            pad_for_op(op, 0, 0);
+        }
     }
 
     void visit(PoolOp *op) {

@@ -7,9 +7,19 @@ using namespace Halide::ConciseCasts;
 
 namespace hannk {
 
+int get_vector_size(const Target &target) {
+    int vector_size = target.natural_vector_size<uint8_t>();
+    if (get_register_count(target) < 32) {
+        // If we are compiling without simd, vector_size can be 1.
+        // Don't let it go to zero.
+        vector_size = std::max(vector_size / 2, 1);
+    }
+    return vector_size;
+}
+
 class DepthwiseConv : public Generator<DepthwiseConv> {
 public:
-    // If positive, a constant inverse depth multiplier.
+    // co = ci * inv_depth_multiplier
     GeneratorParam<int> inv_depth_multiplier_{"inv_depth_multiplier", -1};
 
     // Unsigned 8-bit input tensor, indexed by ci, x, y, b.
@@ -20,9 +30,6 @@ public:
 
     // A 1D array of 32-bit biases indexed by co.
     Input<Buffer<int32_t>> bias_{"bias", 1};
-
-    // The depth multiplier specifies the ratio between co and ci.
-    Input<int> depth_multiplier_{"depth_multiplier"};
 
     // Zero points for the input and filter.
     Input<uint8_t> input_zero_{"input_zero"};
@@ -55,8 +62,7 @@ public:
 
         // Apply the c multiplier.
         Func resampled_input("resampled_input");
-        Expr c_resampled = inv_depth_multiplier_ >= 0 ? c * inv_depth_multiplier_ : c / depth_multiplier_;
-        resampled_input(c, x, y, b) = input_(c_resampled, x, y, b);
+        resampled_input(c, x, y, b) = input_(c * inv_depth_multiplier_, x, y, b);
 
         Func filter_zeroed("filter_zeroed");
         Func input_zeroed("input_zeroed");
@@ -98,12 +104,7 @@ public:
             input_.dim(1).set_stride(1);
         }
 
-        int vector_size = natural_vector_size<uint8_t>();
-        if (get_register_count(target) < 32) {
-            // If we are compiling without simd, vector_size can be 1.
-            // Don't let it go to zero.
-            vector_size = std::max(vector_size / 2, 1);
-        }
+        int vector_size = get_vector_size(target);
 
         // Tile the output, so we can try to re-use loads spatially when performing
         // convolution. This also helps because we can schedule the input and not
@@ -169,17 +170,6 @@ public:
         // pad it and constant fold it outside.
         bias_.in().compute_at(output_, co).store_in(MemoryType::Stack);
 
-        if (inv_depth_multiplier_ < 0) {
-            // The reason inv_depth_multiplier_ is a GeneratorParam and not a
-            // specialization is that we can't specialize the (lack of) compute_at here.
-            resampled_input
-                .compute_at(output_, b)
-                .store_in(MemoryType::Stack)
-                .vectorize(c, vector_size, TailStrategy::GuardWithIf);
-
-            resampled_input.specialize(depth_multiplier_ == 1);
-        }
-
         filter_zeroed
             .compute_at(output_, co)
             .store_in(MemoryType::Stack)
@@ -189,6 +179,34 @@ public:
     }
 };
 
+class UpsampleChannels : public Generator<UpsampleChannels> {
+public:
+    // Unsigned 8-bit input tensor, indexed by ci, x, y, b.
+    Input<Buffer<uint8_t>> input_{"input", 4};
+
+    // The depth multiplier specifies the ratio between co and ci.
+    Input<int> rate_{"rate"};
+
+    Output<Buffer<uint8_t>> output_{"output", 4};
+
+    void generate() {
+        // The algorithm.
+        Var x("x"), y("y"), c("c"), b("b");
+
+        Func input_bounded = repeat_edge(input_);
+        output_(c, x, y, b) = input_bounded(c / rate_, x, y, b);
+
+        // Schedule.
+        int vector_size = get_vector_size(target);
+
+        // Vectorize c with RoundUp so we pad as required for depthwise convolution above.
+        output_.compute_root()
+            .vectorize(c, vector_size, TailStrategy::RoundUp);
+    }
+
+};
+
 }  // namespace hannk
 
 HALIDE_REGISTER_GENERATOR(hannk::DepthwiseConv, DepthwiseConv)
+HALIDE_REGISTER_GENERATOR(hannk::UpsampleChannels, UpsampleChannels)
