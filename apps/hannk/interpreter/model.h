@@ -214,7 +214,7 @@ public:
 };
 
 // A mapping from old tensors to new tensors, when cloning an op.
-using TensorMap = std::map<const TensorPtr , TensorPtr >;
+using TensorMap = std::map<const TensorPtr, TensorPtr>;
 
 // Apply a tensor map to a list of tensors. This is used to support
 // cloning ops referring to different tensors.
@@ -265,15 +265,15 @@ struct DimMap {
     }
 
     Interval evaluate(Interval result) const {
-        result *= stride;
         result /= inv_stride;
+        result *= stride;
         result += bounds;
         return result;
     }
     Interval evaluate(int at) const {
         Interval result(at);
-        result *= stride;
         result /= inv_stride;
+        result *= stride;
         result += bounds;
         return result;
     }
@@ -448,11 +448,11 @@ class OpVisitor;
 
 class Op {
 private:
-    std::vector<TensorPtr > inputs_;
-    std::vector<TensorPtr > outputs_;
+    std::vector<TensorPtr> inputs_;
+    std::vector<TensorPtr> outputs_;
 
 protected:
-    Op(std::vector<TensorPtr > inputs, std::vector<TensorPtr > outputs);
+    Op(std::vector<TensorPtr> inputs, std::vector<TensorPtr> outputs);
 
 public:
     virtual ~Op();
