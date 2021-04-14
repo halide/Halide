@@ -19,13 +19,13 @@ void run_benchmark(const std::string &filename, const InterpreterOptions &option
     }
 
     std::vector<char> buffer = read_entire_file(filename);
-    Model model = parse_tflite_model_from_buffer(buffer.data());
+    std::unique_ptr<OpGroup> model = parse_tflite_model_from_buffer(buffer.data());
 
     if (options.verbose) {
-        model.dump(std::cout);
+        model->dump(std::cout);
     }
 
-    ModelInterpreter interpreter(std::move(model), options);
+    Interpreter interpreter(std::move(model), options);
 
     if (!options.trace) {
         auto result = Halide::Tools::benchmark([&]() { interpreter.execute(); });

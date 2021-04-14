@@ -86,7 +86,6 @@ public:
     void accept(OpVisitor *v);
 
     BoundsMap map_bounds(int input_idx, int output_idx) const;
-    std::vector<SplitInfo> get_split_info() const;
 
     void execute();
 
@@ -138,7 +137,6 @@ public:
 
     halide_type_t filter_type() const;
     BoundsMap map_bounds(int input_idx, int output_idx) const;
-    std::vector<SplitInfo> get_split_info() const;
 
     void execute();
 
@@ -189,7 +187,6 @@ public:
     }
 
     BoundsMap map_bounds(int input_idx, int output_idx) const;
-    std::vector<SplitInfo> get_split_info() const;
 
     void execute();
 
@@ -228,7 +225,6 @@ public:
     }
 
     BoundsMap map_bounds(int input_idx, int output_idx) const;
-    std::vector<SplitInfo> get_split_info() const;
 
     void execute();
 
@@ -250,7 +246,6 @@ public:
     void accept(OpVisitor *v);
 
     BoundsMap map_bounds(int input_idx, int output_idx) const;
-    std::vector<SplitInfo> get_split_info() const;
 
     void execute();
 
@@ -273,7 +268,6 @@ public:
     void accept(OpVisitor *v);
 
     BoundsMap map_bounds(int input_idx, int output_idx) const;
-    std::vector<SplitInfo> get_split_info() const;
 
     void execute();
 
@@ -323,7 +317,6 @@ public:
     }
 
     BoundsMap map_bounds(int input_idx, int output_idx) const;
-    std::vector<SplitInfo> get_split_info() const;
 
     void accept(OpVisitor *v);
 
@@ -358,7 +351,6 @@ public:
     }
 
     BoundsMap map_bounds(int input_idx, int output_idx) const;
-    std::vector<SplitInfo> get_split_info() const;
 
     void accept(OpVisitor *v);
 
@@ -384,7 +376,6 @@ public:
     void accept(OpVisitor *v);
 
     BoundsMap map_bounds(int input_idx, int output_idx) const;
-    std::vector<SplitInfo> get_split_info() const;
 
     void execute();
 
@@ -408,7 +399,6 @@ public:
     void accept(OpVisitor *v);
 
     BoundsMap map_bounds(int input_idx, int output_idx) const;
-    std::vector<SplitInfo> get_split_info() const;
 
     void execute();
 
@@ -430,7 +420,6 @@ public:
     void accept(OpVisitor *v);
 
     BoundsMap map_bounds(int input_idx, int output_idx) const;
-    std::vector<SplitInfo> get_split_info() const;
 
     void execute();
 
@@ -499,6 +488,8 @@ public:
     virtual void visit(TileConvFilterOp *op) {
     }
     virtual void visit(UnaryOp *op) {
+    }
+    virtual void visit(OpGroup *op) {
     }
 };
 

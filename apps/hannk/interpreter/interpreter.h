@@ -16,19 +16,15 @@ struct InterpreterOptions {
     bool trace = false;
 };
 
-class ScheduleNode;
-
-class ModelInterpreter {
-    Model model_;
+class Interpreter {
+    std::unique_ptr<OpGroup> model_;
     bool trace_;
-
-    std::unique_ptr<ScheduleNode> schedule_;
 
     void init(InterpreterOptions options);
 
 public:
-    explicit ModelInterpreter(Model m, InterpreterOptions options = InterpreterOptions());
-    ~ModelInterpreter();
+    explicit Interpreter(std::unique_ptr<OpGroup> m, InterpreterOptions options = InterpreterOptions());
+    ~Interpreter();
 
     // Return the Tensor in the current Model with the given name.
     // If none with that name, return null. Tensor is still owned by the Model.
@@ -43,11 +39,11 @@ public:
     std::vector<TensorPtr> outputs();
 
     // Movable but not copyable.
-    ModelInterpreter() = delete;
-    ModelInterpreter(const ModelInterpreter &) = delete;
-    ModelInterpreter &operator=(const ModelInterpreter &) = delete;
-    ModelInterpreter(ModelInterpreter &&) = default;
-    ModelInterpreter &operator=(ModelInterpreter &&) = default;
+    Interpreter() = delete;
+    Interpreter(const Interpreter &) = delete;
+    Interpreter &operator=(const Interpreter &) = delete;
+    Interpreter(Interpreter &&) = default;
+    Interpreter &operator=(Interpreter &&) = default;
 };
 
 }  // namespace hannk

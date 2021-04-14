@@ -300,13 +300,6 @@ void BinaryOp::execute() {
     }
 }
 
-std::vector<SplitInfo> ConcatenationOp::get_split_info() const {
-    // Allow any split on any dimension other than the concatenated dimension.
-    std::vector<SplitInfo> splits(output()->rank(), SplitInfo::any_split());
-    splits[axis_] = SplitInfo::no_split();
-    return splits;
-}
-
 BoundsMap ConcatenationOp::map_bounds(int input_idx, int output_idx) const {
     int rank = output()->rank();
     assert(rank == input(input_idx)->rank());
@@ -382,15 +375,6 @@ BoundsMap Conv2DOp::map_bounds(int input_idx, int output_idx) const {
         assert(input_idx == 2);
         return BoundsMap(1, 4).elementwise(0, 0);
     }
-}
-
-std::vector<SplitInfo> Conv2DOp::get_split_info() const {
-    return {
-        SplitInfo::no_split(),
-        SplitInfo::any_split(),
-        SplitInfo::any_split(),
-        SplitInfo::any_split(),
-    };
 }
 
 namespace {
@@ -498,15 +482,6 @@ void depthwise_conv_uint8(
 
 }  // namespace
 
-std::vector<SplitInfo> DepthwiseConv2DOp::get_split_info() const {
-    return {
-        SplitInfo::no_split(),
-        SplitInfo::guard_with_if(2),
-        SplitInfo::guard_with_if(2),
-        SplitInfo::any_split(),
-    };
-}
-
 BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
     assert(output_idx == 0);
     if (input_idx == 0) {
@@ -566,13 +541,6 @@ void DepthwiseConv2DOp::execute() {
     }
 }
 
-std::vector<SplitInfo> FullyConnectedOp::get_split_info() const {
-    return {
-        SplitInfo::no_split(),
-        SplitInfo::any_split(),
-    };
-}
-
 BoundsMap FullyConnectedOp::map_bounds(int input_idx, int output_idx) const {
     assert(output_idx == 0);
     if (input_idx == 0) {
@@ -623,14 +591,6 @@ void FullyConnectedOp::execute() {
     }
 }
 
-std::vector<SplitInfo> L2NormalizationOp::get_split_info() const {
-    // Allow any split on any dimension other than the first dimension, where we
-    // compute a reduction.
-    std::vector<SplitInfo> splits(output()->rank(), SplitInfo::any_split());
-    splits.front() = SplitInfo::no_split();
-    return splits;
-}
-
 BoundsMap L2NormalizationOp::map_bounds(int input_idx, int output_idx) const {
     assert(input_idx == 0);
     assert(output_idx == 0);
@@ -658,10 +618,6 @@ void L2NormalizationOp::execute() {
     } else {
         CHECK(false) << "Unsupported type " << out->type() << "\n";
     }
-}
-
-std::vector<SplitInfo> PadOp::get_split_info() const {
-    return {(size_t)output()->rank(), SplitInfo::any_split()};
 }
 
 BoundsMap PadOp::map_bounds(int input_idx, int output_idx) const {
@@ -745,11 +701,6 @@ int compute_padding(int stride, int in_size, int filter_size, int out_size) {
 }
 
 }  // namespace
-
-std::vector<SplitInfo> PoolOp::get_split_info() const {
-    std::vector<SplitInfo> splits(output()->rank(), SplitInfo::any_split());
-    return splits;
-}
 
 const char *PoolOp::to_string(PoolOp::Operator op) {
     switch (op) {
@@ -849,10 +800,6 @@ BoundsMap ReductionOp::map_bounds(int input_idx, int output_idx) const {
     }
 }
 
-std::vector<SplitInfo> ReductionOp::get_split_info() const {
-    return {(size_t)output()->rank(), SplitInfo::any_split()};
-}
-
 void ReductionOp::execute() {
     auto indices = input(1)->buffer<const int32_t>();
 
@@ -878,10 +825,6 @@ void ReductionOp::execute() {
         }
     }
 
-}
-
-std::vector<SplitInfo> ReshapeOp::get_split_info() const {
-    return {};
 }
 
 // TODO: Maybe this is only a reshape in some dimensions, in which case we might be able to split it.
@@ -913,14 +856,6 @@ void ReshapeOp::execute() {
         // TODO: This should also check the strides are dense.
         memcpy(output_buf.data(), input_buf.data(), output_size);
     }
-}
-
-std::vector<SplitInfo> SoftmaxOp::get_split_info() const {
-    // Allow any split on any dimension other than the first dimension, where we
-    // compute a reduction.
-    std::vector<SplitInfo> splits(output()->rank(), SplitInfo::any_split());
-    splits.front() = SplitInfo::no_split();
-    return splits;
 }
 
 BoundsMap SoftmaxOp::map_bounds(int input_idx, int output_idx) const {
@@ -965,10 +900,6 @@ void SoftmaxOp::execute() {
     } else {
         CHECK(false) << "Unsupported type " << out->type() << "\n";
     }
-}
-
-std::vector<SplitInfo> TileConvFilterOp::get_split_info() const {
-    return {};
 }
 
 BoundsMap TileConvFilterOp::map_bounds(int input_idx, int output_idx) const {

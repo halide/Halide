@@ -218,11 +218,10 @@ public:
     // Init() will be called exactly once per instance.
     TfLiteStatus Init(TfLiteContext *context,
                       const TfLiteDelegateParams *params) {
-        if (model_ != nullptr || interpreter_ != nullptr) {
+        if (interpreter_ != nullptr) {
             TF_LITE_KERNEL_LOG(context, "Init must not be called twice.");
             return kTfLiteError;
         }
-        model_ = ::hannk::make_unique<Model>();
 
         std::vector<int> node_indices(params->nodes_to_replace->size);
         for (int i = 0; i < params->nodes_to_replace->size; i++) {
@@ -257,6 +256,7 @@ public:
 
         // Mark the input and output tensors correctly, as code in our interpreter
         // relies upon it.
+        std::vector<TensorPtr> inputs;
         for (int i = 0; i < params->input_tensors->size; i++) {
             const int tensor_id = params->input_tensors->data[i];
             if (tensor_id == kTfLiteOptionalTensor) {
@@ -264,12 +264,14 @@ public:
             }
             auto t = GetTensorById(context, tensor_id);
             t->set_input(true);
+            inputs.push_back(t);
             if (options_.verbosity >= 2) {
                 LOG(INFO) << "Delegate " << (void *)this << (t->is_constant() ? " Const" : "") << " Input tensor: " << tensor_id << "\n";
             }
         }
 
         // Add the output tensors.
+        std::vector<TensorPtr> outputs;
         for (int i = 0; i < params->output_tensors->size; i++) {
             const int tensor_id = params->output_tensors->data[i];
             if (tensor_id == kTfLiteOptionalTensor) {
@@ -280,11 +282,13 @@ public:
             }
             auto t = GetTensorById(context, tensor_id);
             t->set_output(true);
+            outputs.push_back(t);
         }
 
         // Add all ops.
         TfLiteNode *node;
         TfLiteRegistration *reg;
+        std::vector<std::unique_ptr<Op>> ops;
         for (int node_index : node_indices) {
             TF_LITE_ENSURE_STATUS(context->GetNodeAndRegistration(context, node_index, &node, &reg));
             const int op_type = reg->builtin_code;
@@ -306,8 +310,9 @@ public:
                 TF_LITE_KERNEL_LOG(context, "Op factory returned null: %s", op_type);
                 return kTfLiteError;
             }
-            model_->ops.emplace_back(std::move(op));
+            ops.push_back(std::move(op));
         }
+        model_ = ::hannk::make_unique<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
 
         return kTfLiteOk;
     }
@@ -339,8 +344,7 @@ public:
         }
 #endif
 
-        interpreter_ = ::hannk::make_unique<ModelInterpreter>(std::move(*model_));
-        model_.reset();
+        interpreter_ = ::hannk::make_unique<Interpreter>(std::move(model_));
         return kTfLiteOk;
     }
 
@@ -618,8 +622,8 @@ private:
     }
 
     const HannkDelegateOptions options_;
-    std::unique_ptr<Model> model_;
-    std::unique_ptr<ModelInterpreter> interpreter_;
+    std::unique_ptr<OpGroup> model_;
+    std::unique_ptr<Interpreter> interpreter_;
     // TODO: unordered_map might be a better choice.
     std::map<int, TensorPtr> tensors_;
 };

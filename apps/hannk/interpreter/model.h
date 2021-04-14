@@ -202,39 +202,6 @@ using TensorMap = std::map<const TensorPtr, TensorPtr>;
 // cloning ops referring to different tensors.
 TensorPtr apply(TensorMap &map, const TensorPtr t);
 
-// Required properties of a crop in a particular dimension.
-struct SplitInfo {
-    // Required alignment of crops in this dimension.
-    int alignment;
-
-    // Minimum extent of crops in this dimension.
-    int min;
-
-    // The default is not allowing any splits.
-    SplitInfo()
-        : SplitInfo(0, 1) {
-    }
-    SplitInfo(int alignment, int min)
-        : alignment(alignment), min(min) {
-    }
-
-    static SplitInfo no_split() {
-        return SplitInfo(0, 1);
-    }
-    static SplitInfo any_split() {
-        return SplitInfo(1, 1);
-    }
-    static SplitInfo guard_with_if(int factor) {
-        return SplitInfo(factor, 1);
-    }
-    static SplitInfo shift_inwards(int factor) {
-        return SplitInfo(1, factor);
-    }
-    static SplitInfo round_up(int factor) {
-        return SplitInfo(factor, factor);
-    }
-};
-
 // A mapping from an output x to required input coordinates [min, max].
 // [min, max] = x * stride / inv_stride + bounds
 struct DimMap {
@@ -453,11 +420,6 @@ public:
     // Execute the op on a given crop.
     virtual void execute() = 0;
 
-    // Get information about how crops of this op can be split.
-    virtual std::vector<SplitInfo> get_split_info() const {
-        return {};
-    }
-
     // Clone this op, replacing tensors using the mapping in tensor_map.
     virtual std::unique_ptr<Op> clone(TensorMap &tensor_map) const = 0;
 
@@ -509,25 +471,34 @@ public:
     Op &operator=(Op &&) = delete;
 };
 
-struct Model {
-    std::vector<std::unique_ptr<Op>> ops;
+class OpGroup : public Op {
+    std::vector<std::unique_ptr<Op>> ops_;
 
-    // Add a tensor after an existing tensor.
-    void insert(std::unique_ptr<Op> to_insert, const Op *before = nullptr);
+public:
+    OpGroup(std::vector<TensorPtr> inputs, std::vector<TensorPtr> outputs, std::vector<std::unique_ptr<Op>> ops = {})
+        : Op(std::move(inputs), std::move(outputs)), ops_(std::move(ops)) {
+    }
+
+    void add(std::unique_ptr<Op> to_insert, const Op *before = nullptr);
     void remove(const Op *op);
 
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
+
+    void execute();
+
+    int op_count() const {
+        return ops_.size();
+    }
+    Op *op(int i) {
+        return ops_[i].get();
+    }
+    const Op *op(int i) const {
+        return ops_[i].get();
+    }
+
+    std::unique_ptr<Op> clone(TensorMap &tensor_map) const;
     void accept(OpVisitor *v);
-
-    void dump(std::ostream &os);
-
-    // Models can be copied. Tensors that are allocated will be
-    // shared, tensors that are not allocated will be cloned.
-    Model(const Model &);
-    Model() = default;
-    Model(Model &&) = default;
-    Model &operator=(Model &&) = default;
-
-    Model &operator=(const Model &) = delete;
+    void dump(std::ostream &os) const;
 };
 
 }  // namespace hannk

@@ -48,12 +48,15 @@ T *cast_op(Op *x) {
 
 }  // namespace
 
-void remove_dead_ops(Model *m) {
+void remove_dead_ops(OpGroup *root) {
     // Find ops with outputs that are unused.
     // Go in reverse order so removing a dead op
     // enables earlier ops to be seen as dead.
-    for (int i = (int)m->ops.size() - 1; i >= 0; --i) {
-        Op *op = m->ops[i].get();
+    for (int i = root->op_count() - 1; i >= 0; --i) {
+        Op *op = root->op(i);
+        if (OpGroup *group = cast_op<OpGroup>(op)) {
+            remove_dead_ops(group);
+        }
         bool dead = true;
         for (int j = 0; dead && j < op->input_count(); j++) {
             if (op->input(j)->is_output()) {
@@ -69,17 +72,14 @@ void remove_dead_ops(Model *m) {
                 break;
             }
 
-            for (int k = i + 1; k < (int)m->ops.size(); ++k) {
-                Op *other_op = m->ops[k].get();
-                if (is_input(other_op, op->output(j))) {
-                    dead = false;
-                    break;
-                }
+            if (!op->output(j)->consumers().empty()) {
+                dead = false;
+                break;
             }
         }
 
         if (dead) {
-            m->ops.erase(m->ops.begin() + i);
+            root->remove(op);
         }
     }
 }
@@ -171,9 +171,9 @@ class InPlace : public OpVisitor {
 
 }  // namespace
 
-void in_place(Model *m) {
+void in_place(Op *op) {
     InPlace v;
-    m->accept(&v);
+    op->accept(&v);
 }
 
 namespace {
@@ -249,6 +249,10 @@ class PadForOps : public OpVisitor {
         pad_for_op(op, 0, 0);
     }
 
+    void visit(OpGroup *op) {
+        pad_for_ops(op);
+    }
+
 public:
     std::vector<std::unique_ptr<Op>> new_ops;
 };
@@ -277,18 +281,18 @@ class FusePadOps : public OpVisitor {
 
 }  // namespace
 
-void pad_for_ops(Model *m) {
+void pad_for_ops(OpGroup *op) {
     PadForOps padder;
-    m->accept(&padder);
+    op->accept(&padder);
     for (auto &i : padder.new_ops) {
-        m->insert(std::move(i));
+        op->add(std::move(i));
     }
 
     // Some networks use padding already for other reasons, so
     // we might have introduced two paddings in a row, which is
     // a waste.
     FusePadOps fuser;
-    m->accept(&fuser);
+    op->accept(&fuser);
 }
 
 namespace {
@@ -305,29 +309,33 @@ bool can_execute(const Op *op) {
 
 }  // namespace
 
-void fold_constants(Model *m) {
+void fold_constants(OpGroup *root) {
     std::vector<const Op *> to_remove;
-    for (auto &i : m->ops) {
-        if (can_execute(&*i)) {
+    for (int i = 0; i < root->op_count(); i++) {
+        Op *op = root->op(i);
+        if (OpGroup *group = cast_op<OpGroup>(op)) {
+            fold_constants(group);
+        }
+        if (can_execute(op)) {
             // Allocate all the outputs.
-            for (int j = 0; j < i->output_count(); j++) {
-                i->output(j)->allocate();
+            for (int j = 0; j < op->output_count(); j++) {
+                op->output(j)->allocate();
             }
 
             // Run the whole op.
-            i->execute();
+            op->execute();
 
             // Mark the outputs constant.
-            for (int j = 0; j < i->output_count(); j++) {
-                i->output(j)->set_constant();
+            for (int j = 0; j < op->output_count(); j++) {
+                op->output(j)->set_constant();
             }
 
-            to_remove.push_back(&*i);
+            to_remove.push_back(op);
         }
     }
 
     for (const Op *i : to_remove) {
-        m->remove(i);
+        root->remove(i);
     }
 }
 

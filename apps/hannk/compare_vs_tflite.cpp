@@ -102,12 +102,12 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
 
     // ----- Run in Halide
     {
-        Model model = parse_tflite_model_from_buffer(buffer.data());
+        std::unique_ptr<OpGroup> model = parse_tflite_model_from_buffer(buffer.data());
         if (verbosity) {
-            model.dump(std::cout);
+            model->dump(std::cout);
         }
 
-        ModelInterpreter interpreter(std::move(model));
+        Interpreter interpreter(std::move(model));
 
         // Fill in the inputs with pseudorandom data (save the seeds for later).
         for (TensorPtr t : interpreter.inputs()) {

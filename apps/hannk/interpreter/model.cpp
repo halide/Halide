@@ -243,52 +243,75 @@ void Op::set_output(TensorPtr t) {
     set_output(0, t);
 }
 
-Model::Model(const Model &copy) {
-    TensorMap map;
-    for (const auto &i : copy.ops) {
-        ops.push_back(i->clone(map));
+
+void OpGroup::execute() {
+    for (int i = 0; i < op_count(); i++) {
+        op(i)->execute();
     }
 }
 
-void Model::insert(std::unique_ptr<Op> to_insert, const Op *before) {
-    for (auto i = ops.begin(); i != ops.end(); ++i) {
+BoundsMap OpGroup::map_bounds(int input_idx, int output_idx) const {
+    BoundsMap result(input(input_idx)->rank(), output(output_idx)->rank());
+    // TODO
+    return result;
+}
+
+void OpGroup::add(std::unique_ptr<Op> to_add, const Op *before) {
+    for (auto i = ops_.begin(); i != ops_.end(); ++i) {
         if (i->get() == before) {
-            ops.insert(i, std::move(to_insert));
+            ops_.insert(i, std::move(to_add));
             return;
         } else {
-            for (int j = 0; j < to_insert->output_count(); ++j) {
+            for (int j = 0; j < to_add->output_count(); ++j) {
                 for (int k = 0; k < (*i)->input_count(); ++k) {
-                    if ((*i)->input(k) == to_insert->output(j)) {
-                        // i consumes an output of to_insert.
-                        ops.insert(i, std::move(to_insert));
+                    if ((*i)->input(k) == to_add->output(j)) {
+                        // i consumes an output of to_add.
+                        ops_.insert(i, std::move(to_add));
                         return;
                     }
                 }
             }
         }
     }
-    ops.push_back(std::move(to_insert));
+    ops_.push_back(std::move(to_add));
 }
 
-void Model::remove(const Op *op) {
-    for (auto i = ops.begin(); i != ops.end(); ++i) {
+void OpGroup::remove(const Op *op) {
+    for (auto i = ops_.begin(); i != ops_.end(); ++i) {
         if (i->get() == op) {
-            ops.erase(i);
+            ops_.erase(i);
             return;
         }
     }
 }
 
-void Model::accept(OpVisitor *v) {
-    // TODO: Major hack, don't use iterators because visitors might invalidate them.
-    for (int i = 0; i < (int)ops.size(); i++) {
-        ops[i]->accept(v);
+std::unique_ptr<Op> OpGroup::clone(TensorMap &tensor_map) const {
+    std::vector<TensorPtr> inputs;
+    for (int i = 0; i < input_count(); i++) {
+        inputs.push_back(apply(tensor_map, input(i)));
+    }
+    std::vector<TensorPtr> outputs;
+    for (int i = 0; i < output_count(); i++) {
+        outputs.push_back(apply(tensor_map, output(i)));
+    }
+
+    std::vector<std::unique_ptr<Op>> ops;
+    for (int i = 0; i < op_count(); i++) {
+        ops.push_back(op(i)->clone(tensor_map));
+    }
+
+    return ::hannk::make_unique<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
+}
+
+void OpGroup::accept(OpVisitor *v) {
+    for (int i = 0; i < op_count(); i++) {
+        op(i)->accept(v);
     }
 }
 
-void Model::dump(std::ostream &os) {
+void OpGroup::dump(std::ostream &os) const {
     os << "Ops: " << std::endl;
-    for (const auto &i : ops) {
+    for (const auto &i : ops_) {
         i->dump(os);
     }
     os << std::endl;

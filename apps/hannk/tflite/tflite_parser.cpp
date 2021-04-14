@@ -20,7 +20,6 @@ tflite::BuiltinOperator get_builtin_code(const tflite::OperatorCode *op_code) {
 class Parser {
     const tflite::Model *model_;
     std::vector<TensorPtr> tensors_;
-    Model result_;
 
 public:
     explicit Parser(const tflite::Model *model)
@@ -351,27 +350,36 @@ public:
         }
     }
 
-    Model parse() {
-        const auto &subgraphs = *model_->subgraphs();
-        CHECK(subgraphs.size() == 1) << "Only 1 subgraph is currently supported.";
-        const tflite::SubGraph &subgraph = *subgraphs[0];
-
+    std::unique_ptr<OpGroup> parse_subgraph(const tflite::SubGraph &subgraph) {
         for (const tflite::Tensor *t : *subgraph.tensors()) {
             tensors_.emplace_back(parse_tensor(t));
         }
 
+        std::vector<std::unique_ptr<Op>> ops;
         for (const tflite::Operator *i : *subgraph.operators()) {
-            result_.ops.emplace_back(parse_op(i));
+            ops.emplace_back(parse_op(i));
         }
 
+        std::vector<TensorPtr> inputs;
         for (int i : *subgraph.inputs()) {
             tensors_[i]->set_input(true);
+            inputs.push_back(tensors_[i]);
         }
+        std::vector<TensorPtr> outputs;
         for (int i : *subgraph.outputs()) {
             tensors_[i]->set_output(true);
+            outputs.push_back(tensors_[i]);
         }
 
-        return std::move(result_);
+        return ::hannk::make_unique<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
+    }
+
+    std::unique_ptr<OpGroup> parse() {
+        const auto &subgraphs = *model_->subgraphs();
+        CHECK(subgraphs.size() == 1) << "Only 1 subgraph is currently supported.";
+        const tflite::SubGraph &subgraph = *subgraphs[0];
+
+        return parse_subgraph(subgraph);
     }
 
     // Movable but not copyable.
@@ -384,11 +392,11 @@ public:
 
 }  // namespace
 
-Model parse_tflite_model(const tflite::Model *model) {
+std::unique_ptr<OpGroup> parse_tflite_model(const tflite::Model *model) {
     return Parser(model).parse();
 }
 
-Model parse_tflite_model_from_buffer(const void *buffer) {
+std::unique_ptr<OpGroup> parse_tflite_model_from_buffer(const void *buffer) {
     return parse_tflite_model(tflite::GetModel(buffer));
 }
 
