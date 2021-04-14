@@ -933,6 +933,10 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
                                           bool is_bounds_inference, JITCallArgs &args_result) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
+    user_assert(outputs.size() == this->outputs().size()) << "Realization requests " <<
+        outputs.size() << " output(s) for pipeline producing " <<
+        this->outputs().size() << " result(s).\n";
+
     JITModule &compiled_module = contents->jit_module;
     internal_assert(compiled_module.argv_function() ||
                     contents->wasm_module.contents.defined());
