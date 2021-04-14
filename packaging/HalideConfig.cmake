@@ -66,6 +66,7 @@ set(Halide_ENABLE_RTTI @Halide_ENABLE_RTTI@)
 
 include(CMakeFindDependencyMacro)
 
+find_dependency(HalideHelpers "${Halide_VERSION}" EXACT)
 find_dependency(Threads)
 
 if (Halide_comp_PNG)
@@ -91,15 +92,8 @@ macro(Halide_load_targets type)
         Halide_fail("Halide `${type}` libraries were requested but not found.")
     endif ()
 
-    include("${CMAKE_CURRENT_LIST_DIR}/Halide-Interfaces.cmake")
-
     include("${Halide_${type}_targets}")
-    if (EXISTS "${Halide_${type}_deps}")
-        include("${Halide_${type}_deps}")
-    endif ()
-
-    include("${CMAKE_CURRENT_LIST_DIR}/HalideGeneratorHelpers.cmake")
-    include("${CMAKE_CURRENT_LIST_DIR}/HalideTargetHelpers.cmake")
+    include("${Halide_${type}_deps}" OPTIONAL)
 endmacro()
 
 if (Halide_comp_static)
