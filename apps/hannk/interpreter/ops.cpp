@@ -335,6 +335,8 @@ void BinaryOp::execute() {
         auto in1_buf = in1->buffer<const uint8_t>();
         auto in2_buf = in2->buffer<const uint8_t>();
         auto out_buf = out->buffer<uint8_t>();
+        // TODO: We should require the buffers are already broadcasted appropriately before
+        // getting here.
         broadcast_shapes(in1_buf, in2_buf, 4);
         optimize_elementwise_shapes(in1_buf, in2_buf, out_buf, 4);
         switch (op_) {

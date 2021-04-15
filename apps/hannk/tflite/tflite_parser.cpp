@@ -356,7 +356,6 @@ public:
     std::unique_ptr<OpGroup> parse_subgraph(const tflite::SubGraph *subgraph) {
         for (const tflite::Tensor *t : *subgraph->tensors()) {
             tensors_.emplace_back(parse_tensor(t));
-            tensors_.back()->dump(std::cout);
         }
 
         std::vector<std::unique_ptr<Op>> ops;
