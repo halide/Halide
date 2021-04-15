@@ -86,7 +86,7 @@ struct DelegateFactory {
 
 }  // namespace
 
-void run_all(const std::string &filename, int seed, int threads, int verbosity, DelegateFactory *delegate_factory, bool do_compare_results) {
+void run_all(const std::string &filename, int seed, int threads, int verbosity, bool use_hannk, DelegateFactory *delegate_factory, bool do_compare_results) {
     std::cout << "Comparing " << filename << "\n";
 
     std::vector<char> buffer = read_entire_file(filename);
@@ -101,7 +101,7 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
     RunResult halide_result;
 
     // ----- Run in Halide
-    {
+    if (use_hannk) {
         std::unique_ptr<OpGroup> model = parse_tflite_model_from_buffer(buffer.data());
         if (verbosity) {
             model->dump(std::cout);
@@ -248,15 +248,17 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
                   << "\n";
     }
 
-    double ratio = (halide_result.time / tflite_result.time);
-    std::cout << "HALIDE = " << ratio * 100.0 << "% of TFLITE";
-    if (ratio > 1.0) {
-        std::cout << "  *** HALIDE IS SLOWER";
+    if (use_hannk) {
+        double ratio = (halide_result.time / tflite_result.time);
+        std::cout << "HALIDE = " << ratio * 100.0 << "% of TFLITE";
+        if (ratio > 1.0) {
+            std::cout << "  *** HALIDE IS SLOWER";
+        }
+        std::cout << "\n";
     }
-    std::cout << "\n";
 
     if (delegate_factory) {
-        ratio = (delegate_result.time / tflite_result.time);
+        double ratio = (delegate_result.time / tflite_result.time);
         std::cout << "DELEGATE = " << ratio * 100.0 << "% of TFLITE";
         if (ratio > 1.0) {
             std::cout << "  *** DELEGATE IS SLOWER";
@@ -303,7 +305,9 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
             }
         }
     };
-    compare_results(tflite_result, halide_result, verbosity);
+    if (use_hannk) {
+        compare_results(tflite_result, halide_result, verbosity);
+    }
     if (delegate_factory) {
         compare_results(tflite_result, delegate_result, verbosity);
     }
@@ -314,6 +318,7 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
 int main(int argc, char **argv) {
     int seed = time(nullptr);
     int threads = 1;
+    bool use_hannk = true;
     bool use_delegate = true;
     int verbosity = 0;
     std::vector<const char *> files;
@@ -322,6 +327,10 @@ int main(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--seed")) {
             seed = atoi(argv[++i]);
+            continue;
+        }
+        if (!strcmp(argv[i], "--use_hannk")) {
+            use_hannk = atoi(argv[++i]) != 0;
             continue;
         }
         if (!strcmp(argv[i], "--use_delegate")) {
@@ -384,7 +393,7 @@ int main(int argc, char **argv) {
     }
 
     for (auto f : files) {
-        hannk::run_all(f, seed, threads, verbosity, use_delegate ? &delegate_factory : nullptr, do_compare_results);
+        hannk::run_all(f, seed, threads, verbosity, use_hannk, use_delegate ? &delegate_factory : nullptr, do_compare_results);
         std::cout << "\n";
     }
 
