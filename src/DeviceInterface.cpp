@@ -96,8 +96,6 @@ const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d
         name = "cuda";
     } else if (d == DeviceAPI::OpenGLCompute) {
         name = "openglcompute";
-    } else if (d == DeviceAPI::GLSL) {
-        name = "opengl";
     } else if (d == DeviceAPI::HexagonDma) {
         name = "hexagon_dma";
     } else if (d == DeviceAPI::D3D12Compute) {
@@ -152,8 +150,6 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
         return DeviceAPI::CUDA;
     } else if (target.has_feature(Target::OpenGLCompute)) {
         return DeviceAPI::OpenGLCompute;
-    } else if (target.has_feature(Target::OpenGL)) {
-        return DeviceAPI::GLSL;
     } else if (target.has_feature(Target::HexagonDma)) {
         return DeviceAPI::HexagonDma;
     } else if (target.has_feature(Target::D3D12Compute)) {
@@ -183,9 +179,6 @@ Expr make_device_interface_call(DeviceAPI device_api, MemoryType memory_type) {
         break;
     case DeviceAPI::Metal:
         interface_name = "halide_metal_device_interface";
-        break;
-    case DeviceAPI::GLSL:
-        interface_name = "halide_opengl_device_interface";
         break;
     case DeviceAPI::OpenGLCompute:
         interface_name = "halide_openglcompute_device_interface";

@@ -47,7 +47,6 @@ set(RUNTIME_CPP
     msan
     msan_stubs
     opencl
-    opengl
     opengl_egl_context
     opengl_glx_context
     openglcompute
@@ -112,6 +111,7 @@ set(RUNTIME_LL
     x86
     x86_avx
     x86_avx2
+    x86_avx512
     x86_sse41
     )
 
@@ -132,7 +132,6 @@ set(RUNTIME_HEADER_FILES
     HalideRuntimeHexagonHost.h
     HalideRuntimeMetal.h
     HalideRuntimeOpenCL.h
-    HalideRuntimeOpenGL.h
     HalideRuntimeOpenGLCompute.h
     HalideRuntimeQurt.h
     )
@@ -186,10 +185,12 @@ foreach (i IN LISTS RUNTIME_CPP)
                 endif ()
             # Windows on ARM
             elseif (i MATCHES "windows_.*_arm$")
-                if (j EQUAL 32)
+                if (j EQUAL 32 AND TARGET_ARM)
                     set(TARGET "arm-unknown-windows-unknown")
-                else ()
+                elseif (j EQUAL 64 AND TARGET_AARCH64)
                     set(TARGET "aarch64-unknown-windows-unknown")
+                else ()
+                    continue()
                 endif ()
             # Windows Generic
             else()
@@ -230,17 +231,25 @@ foreach (i IN LISTS RUNTIME_CPP)
 
             set(clang_flags ${RUNTIME_CXX_FLAGS} ${fpic} ${fshort-wchar} ${RUNTIME_DEFINES${SUFFIX}} -m${j} -target ${TARGET} -emit-llvm -S)
 
-            # Dep-files are subtle and require clang to run using *just* the right
-            # relative paths to the build root, NOT the Halide build root. This is
-            # a perfect storm of bad behavior from CMake, Ninja, and Clang.
-            file(RELATIVE_PATH ll_path "${CMAKE_BINARY_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/${LL}")
-            file(TO_NATIVE_PATH "${ll_path}" ll_path)
-
+            set(ll_path "${LL}")
             if (CMAKE_GENERATOR MATCHES "Ninja")
-                list(APPEND clang_flags -MD -MF "$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}/${basename}.d>")
-                set(dep_args DEPFILE "${CMAKE_CURRENT_BINARY_DIR}/${basename}.d")
-            elseif (NOT CMAKE_GENERATOR MATCHES "Make")
-                set(dep_args "")
+                if (POLICY CMP0116)
+                    # CMake 3.20+ does the right thing here and transforms the depfiles for us
+                    list(APPEND clang_flags -MD -MF "${basename}.d")
+                    set(dep_args DEPFILE "${basename}.d")
+                else()
+                    # Dep-files are subtle and require clang to run using *just* the right
+                    # relative paths to the build root, NOT the Halide build root. This is
+                    # a perfect storm of bad behavior from CMake <3.20, Ninja, and Clang.
+                    file(RELATIVE_PATH ll_path "${CMAKE_BINARY_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/${LL}")
+                    file(TO_NATIVE_PATH "${ll_path}" ll_path)
+                    list(APPEND clang_flags -MD -MF "$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}/${basename}.d>")
+                    set(dep_args
+                        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+                        DEPFILE "${CMAKE_CURRENT_BINARY_DIR}/${basename}.d")
+                endif()
+            elseif (CMAKE_GENERATOR MATCHES "Make")
+                set(dep_args IMPLICIT_DEPENDS CXX "${SOURCE}")
             endif ()
 
             if (Halide_CLANG_TIDY_BUILD)
@@ -254,9 +263,6 @@ foreach (i IN LISTS RUNTIME_CPP)
                 add_custom_command(OUTPUT "${LL}"
                                    COMMAND clang ${clang_flags} -o "${ll_path}" "$<SHELL_PATH:${SOURCE}>"
                                    DEPENDS "${SOURCE}"
-                                   # Note: IMPLICIT_DEPENDS only works for Makefile generators, ${dep_args} handles Ninja.
-                                   IMPLICIT_DEPENDS CXX "${SOURCE}"
-                                   WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
                                    ${dep_args}
                                    VERBATIM)
             endif()

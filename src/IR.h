@@ -509,10 +509,9 @@ struct Call : public ExprNode<Call> {
         div_round_to_zero,
         dynamic_shuffle,
         extract_mask_element,
-        glsl_texture_load,
-        glsl_texture_store,
-        glsl_varying,
         gpu_thread_barrier,
+        halving_add,
+        halving_sub,
         hvx_gather,
         hvx_scatter,
         hvx_scatter_acc,
@@ -528,7 +527,9 @@ struct Call : public ExprNode<Call> {
         memoize_expr,
         mod_round_to_zero,
         mulhi_shr,  // Compute high_half(arg[0] * arg[1]) >> arg[3]. Note that this is a shift in addition to taking the upper half of multiply result. arg[3] must be an unsigned integer immediate.
+        mux,
         popcount,
+        predicate,
         prefetch,
         promise_clamped,
         random,
@@ -538,6 +539,13 @@ struct Call : public ExprNode<Call> {
         require_mask,
         return_second,
         rewrite_buffer,
+        rounding_halving_add,
+        rounding_halving_sub,
+        rounding_shift_left,
+        rounding_shift_right,
+        saturating_add,
+        saturating_sub,
+        scatter_gather,
         select_mask,
         shift_left,
         shift_right,
@@ -548,6 +556,11 @@ struct Call : public ExprNode<Call> {
         stringify,
         undef,
         unsafe_promise_clamped,
+        widening_add,
+        widening_mul,
+        widening_shift_left,
+        widening_shift_right,
+        widening_sub,
         IntrinsicOpCount  // Sentinel: keep last.
     };
 
@@ -647,6 +660,10 @@ struct Call : public ExprNode<Call> {
             }
         }
         return nullptr;
+    }
+
+    static const Call *as_tag(const Expr &e) {
+        return as_intrinsic(e, {Call::likely, Call::likely_if_innermost, Call::predicate, Call::strict_float});
     }
 
     bool is_extern() const {
@@ -855,6 +872,7 @@ struct VectorReduce : public ExprNode<VectorReduce> {
     // operators.
     typedef enum {
         Add,
+        SaturatingAdd,
         Mul,
         Min,
         Max,

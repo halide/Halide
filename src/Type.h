@@ -425,6 +425,18 @@ public:
         return code() == Handle;
     }
 
+    // Returns true iff type is a signed integral type where overflow is defined.
+    HALIDE_ALWAYS_INLINE
+    bool can_overflow_int() const {
+        return is_int() && bits() <= 16;
+    }
+
+    // Returns true iff type does have a well-defined overflow behavior.
+    HALIDE_ALWAYS_INLINE
+    bool can_overflow() const {
+        return is_uint() || can_overflow_int();
+    }
+
     /** Check that the type name of two handles matches. */
     bool same_handle_type(const Type &other) const;
 

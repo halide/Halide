@@ -376,7 +376,7 @@ public:
 
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
-    reorder(const VarOrRVar &x, const VarOrRVar &y, Args &&... args) {
+    reorder(const VarOrRVar &x, const VarOrRVar &y, Args &&...args) {
         std::vector<VarOrRVar> collected_args{x, y, std::forward<Args>(args)...};
         return reorder(collected_args);
     }
@@ -661,6 +661,19 @@ namespace Internal {
 class IRMutator;
 }  // namespace Internal
 
+/** Helper class for identifying purpose of an Expr passed to memoize.
+ */
+class EvictionKey {
+protected:
+    Expr key;
+    friend class Func;
+
+public:
+    explicit EvictionKey(const Expr &expr = Expr())
+        : key(expr) {
+    }
+};
+
 /** A halide function. This class represents one stage in a Halide
  * pipeline, and is the unit by which we schedule things. By default
  * they are aggressively inlined, so you are encouraged to make lots
@@ -767,7 +780,7 @@ public:
      params.set(img, arg_img);
 
      Target t = get_jit_target_from_environment();
-     Buffer<int32_t> result = f.realize(10, 10, t, params);
+     Buffer<int32_t> result = f.realize({10, 10}, t, params);
      \endcode
      *
      * Alternatively, an initializer list can be used
@@ -782,7 +795,7 @@ public:
      <fill in arg_img...>
 
      Target t = get_jit_target_from_environment();
-     Buffer<int32_t> result = f.realize(10, 10, t, { { p, 17 }, { img, arg_img } });
+     Buffer<int32_t> result = f.realize({10, 10}, t, { { p, 17 }, { img, arg_img } });
      \endcode
      *
      * If the Func cannot be realized into a buffer of the given size
@@ -797,18 +810,26 @@ public:
      *
      */
     // @{
-    Realization realize(std::vector<int32_t> sizes, const Target &target = Target(),
+    Realization realize(std::vector<int32_t> sizes = {}, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
     Realization realize(int x_size, int y_size, int z_size, int w_size, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
     Realization realize(int x_size, int y_size, int z_size, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
     Realization realize(int x_size, int y_size, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
-    Realization realize(int x_size, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
-    Realization realize(const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
+
+    // Making this a template function is a trick: `{intliteral}` is a valid scalar initializer
+    // in C++, but we want it to match the vector call, not the (deprecated) scalar one.
+    template<typename T, typename = typename std::enable_if<std::is_same<T, int>::value>::type>
+    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
+    HALIDE_ALWAYS_INLINE Realization realize(T x_size, const Target &target = Target(),
+                                             const ParamMap &param_map = ParamMap::empty_map()) {
+        return realize(std::vector<int32_t>{x_size}, target, param_map);
+    }
     // @}
 
     /** Evaluate this function into an existing allocated buffer or
@@ -847,19 +868,6 @@ public:
     void infer_input_bounds(const std::vector<int32_t> &sizes,
                             const Target &target = get_jit_target_from_environment(),
                             const ParamMap &param_map = ParamMap::empty_map());
-    HALIDE_ATTRIBUTE_DEPRECATED("Call infer_input_bounds() with an explicit vector<int> instead")
-    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map());
-    // TODO: this is a temporary wrapper used to disambiguate the cases where
-    // a single-entry braced list would match the deprecated overload
-    // (rather than the vector overload); when the deprecated method is removed,
-    // this should be removed, too
-    void infer_input_bounds(const std::initializer_list<int> &sizes,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map()) {
-        infer_input_bounds(std::vector<int>{sizes}, target, param_map);
-    }
     void infer_input_bounds(Pipeline::RealizationArg outputs,
                             const Target &target = get_jit_target_from_environment(),
                             const ParamMap &param_map = ParamMap::empty_map());
@@ -1285,7 +1293,7 @@ public:
 
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, FuncRef>::type
-    operator()(Args &&... args) const {
+    operator()(Args &&...args) const {
         std::vector<Var> collected_args{std::forward<Args>(args)...};
         return this->operator()(collected_args);
     }
@@ -1302,7 +1310,7 @@ public:
 
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, FuncRef>::type
-    operator()(const Expr &x, Args &&... args) const {
+    operator()(const Expr &x, Args &&...args) const {
         std::vector<Expr> collected_args{x, std::forward<Args>(args)...};
         return (*this)(collected_args);
     }
@@ -1530,11 +1538,6 @@ public:
      * only by the auto scheduler if the function is a pipeline output. */
     Func &set_estimate(const Var &var, const Expr &min, const Expr &extent);
 
-    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    Func &estimate(const Var &var, const Expr &min, const Expr &extent) {
-        return set_estimate(var, min, extent);
-    }
-
     /** Set (min, extent) estimates for all dimensions in the Func
      * at once; this is equivalent to calling `set_estimate(args()[n], min, extent)`
      * repeatedly, but slightly terser. The size of the estimates vector
@@ -1548,8 +1551,18 @@ public:
      * f.align_bounds(x, 2, 1) forces the min to be odd and the extent
      * to be even. The region computed always contains the region that
      * would have been computed without this directive, so no
-     * assertions are injected. */
+     * assertions are injected.
+     */
     Func &align_bounds(const Var &var, Expr modulus, Expr remainder = 0);
+
+    /** Expand the region computed so that the extent is a
+     * multiple of 'modulus'. For example, f.align_extent(x, 2) forces
+     * the extent realized to be even. The region computed always contains the
+     * region that would have been computed without this directive, so no
+     * assertions are injected. (This is essentially equivalent to align_bounds(),
+     * but always leaving the min untouched.)
+     */
+    Func &align_extent(const Var &var, Expr modulus);
 
     /** Bound the extent of a Func's realization, but not its
      * min. This means the dimension can be unrolled or vectorized
@@ -1601,7 +1614,7 @@ public:
 
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>::type
-    reorder(const VarOrRVar &x, const VarOrRVar &y, Args &&... args) {
+    reorder(const VarOrRVar &x, const VarOrRVar &y, Args &&...args) {
         std::vector<VarOrRVar> collected_args{x, y, std::forward<Args>(args)...};
         return reorder(collected_args);
     }
@@ -1961,16 +1974,6 @@ public:
                    DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
 
-    /** Schedule for execution using coordinate-based hardware api.
-     * GLSL is an example of this. Conceptually, this is
-     * similar to parallelization over 'x' and 'y' (since GLSL shaders compute
-     * individual output pixels in parallel) and vectorization over 'c'
-     * (since GLSL/RS implicitly vectorizes the color channel). */
-    Func &shader(const Var &x, const Var &y, const Var &c, DeviceAPI device_api);
-
-    /** Schedule for execution as GLSL kernel. */
-    Func &glsl(const Var &x, const Var &y, const Var &c);
-
     /** Schedule for execution on Hexagon. When a loop is marked with
      * Hexagon, that loop is executed on a Hexagon DSP. */
     Func &hexagon(const VarOrRVar &x = Var::outermost());
@@ -2037,7 +2040,7 @@ public:
     Func &reorder_storage(const Var &x, const Var &y);
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, Func &>::type
-    reorder_storage(const Var &x, const Var &y, Args &&... args) {
+    reorder_storage(const Var &x, const Var &y, Args &&...args) {
         std::vector<Var> collected_args{x, y, std::forward<Args>(args)...};
         return reorder_storage(collected_args);
     }
@@ -2216,8 +2219,15 @@ public:
     /** Use the halide_memoization_cache_... interface to store a
      *  computed version of this function across invocations of the
      *  Func.
+     *
+     * If an eviction_key is provided, it must be constructed with
+     * Expr of integer or handle type. The key Expr will be promoted
+     * to a uint64_t and can be used with halide_memoization_cache_evict
+     * to remove memoized entries using this eviction key from the
+     * cache. Memoized computations that do not provide an eviction
+     * key will never be evicted by this mechanism.
      */
-    Func &memoize();
+    Func &memoize(const EvictionKey &eviction_key = EvictionKey());
 
     /** Produce this Func asynchronously in a separate
      * thread. Consumers will be run by the task system when the
@@ -2472,7 +2482,7 @@ inline void assign_results(Realization &r, int idx, Last last) {
 }
 
 template<typename First, typename Second, typename... Rest>
-inline void assign_results(Realization &r, int idx, First first, Second second, Rest &&... rest) {
+inline void assign_results(Realization &r, int idx, First first, Second second, Rest &&...rest) {
     assign_results<First>(r, idx, first);
     assign_results<Second, Rest...>(r, idx + 1, second, rest...);
 }
@@ -2496,7 +2506,7 @@ HALIDE_NO_USER_CODE_INLINE T evaluate(const Expr &e) {
 
 /** JIT-compile and run enough code to evaluate a Halide Tuple. */
 template<typename First, typename... Rest>
-HALIDE_NO_USER_CODE_INLINE void evaluate(Tuple t, First first, Rest &&... rest) {
+HALIDE_NO_USER_CODE_INLINE void evaluate(Tuple t, First first, Rest &&...rest) {
     Internal::check_types<First, Rest...>(t, 0);
 
     Func f;
@@ -2541,7 +2551,7 @@ HALIDE_NO_USER_CODE_INLINE T evaluate_may_gpu(const Expr &e) {
  *  use GPU if jit target from environment specifies one. */
 // @{
 template<typename First, typename... Rest>
-HALIDE_NO_USER_CODE_INLINE void evaluate_may_gpu(Tuple t, First first, Rest &&... rest) {
+HALIDE_NO_USER_CODE_INLINE void evaluate_may_gpu(Tuple t, First first, Rest &&...rest) {
     Internal::check_types<First, Rest...>(t, 0);
 
     Func f;

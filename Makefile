@@ -17,7 +17,7 @@ MAKEFLAGS += --no-builtin-rules
 UNAME = $(shell uname)
 
 ifeq ($(OS), Windows_NT)
-	$(error Halide no longer supports the MinGW environment.)
+    $(error Halide no longer supports the MinGW environment. Please use MSVC through CMake instead.)
 else
     # let's assume "normal" UNIX such as linux
     COMMON_LD_FLAGS=$(LDFLAGS) -ldl -lpthread -lz
@@ -60,7 +60,7 @@ LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir | sed -e 's/\\/\//g' -e 's/\([a-zA
 # Apparently there is no llvm_config flag to get canonical paths to tools,
 # so we'll just construct one relative to --src-root and hope that is stable everywhere.
 LLVM_GIT_LLD_INCLUDE_DIR = $(shell $(LLVM_CONFIG) --src-root | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')/../lld/include
-LLVM_SYSTEM_LIBS=$(shell ${LLVM_CONFIG} --system-libs --link-static | sed -e 's/[\/&]/\\&/g')
+LLVM_SYSTEM_LIBS=$(shell ${LLVM_CONFIG} --system-libs --link-static | sed -e 's/[\/&]/\\&/g' | sed 's/-llibxml2.tbd/-lxml2/')
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
 LLVM_CXX_FLAGS = -std=c++11  $(filter-out -O% -g -fomit-frame-pointer -pedantic -W% -W, $(shell $(LLVM_CONFIG) --cxxflags | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g;s/-D/ -D/g;s/-O/ -O/g')) -I$(LLVM_GIT_LLD_INCLUDE_DIR)
@@ -120,7 +120,7 @@ WITH_WEBASSEMBLY ?= $(findstring webassembly, $(LLVM_COMPONENTS))
 WITH_AMDGPU ?= $(findstring amdgpu, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
-WITH_OPENGL ?= not-empty
+WITH_OPENGLCOMPUTE ?= not-empty
 WITH_D3D12 ?= not-empty
 WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
@@ -157,7 +157,7 @@ OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENCL), , )
 METAL_CXX_FLAGS=$(if $(WITH_METAL), -DWITH_METAL, )
 METAL_LLVM_CONFIG_LIB=$(if $(WITH_METAL), , )
 
-OPENGL_CXX_FLAGS=$(if $(WITH_OPENGL), -DWITH_OPENGL, )
+OPENGLCOMPUTE_CXX_FLAGS=$(if $(WITH_OPENGLCOMPUTE), -DWITH_OPENGLCOMPUTE, )
 
 D3D12_CXX_FLAGS=$(if $(WITH_D3D12), -DWITH_D3D12, )
 D3D12_LLVM_CONFIG_LIB=$(if $(WITH_D3D12), , )
@@ -205,7 +205,7 @@ CXX_FLAGS += $(AARCH64_CXX_FLAGS)
 CXX_FLAGS += $(X86_CXX_FLAGS)
 CXX_FLAGS += $(OPENCL_CXX_FLAGS)
 CXX_FLAGS += $(METAL_CXX_FLAGS)
-CXX_FLAGS += $(OPENGL_CXX_FLAGS)
+CXX_FLAGS += $(OPENGLCOMPUTE_CXX_FLAGS)
 CXX_FLAGS += $(D3D12_CXX_FLAGS)
 CXX_FLAGS += $(MIPS_CXX_FLAGS)
 CXX_FLAGS += $(POWERPC_CXX_FLAGS)
@@ -259,8 +259,7 @@ TUTORIAL_CXX_FLAGS ?= -std=c++11 -g -fno-omit-frame-pointer $(RTTI_CXX_FLAGS) -I
 # Also allow tests, via conditional compilation, to use the entire
 # capability of the CPU being compiled on via -march=native. This
 # presumes tests are run on the same machine they are compiled on.
-ARCH_FOR_TESTS ?= native
-TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS) -march=${ARCH_FOR_TESTS}
+TEST_CXX_FLAGS ?= $(TUTORIAL_CXX_FLAGS) $(CXX_WARNING_FLAGS)
 TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide $(COMMON_LD_FLAGS)
 
 # In the tests, some of our expectations change depending on the llvm version
@@ -333,7 +332,12 @@ TEST_CXX_FLAGS += -DTEST_OPENCL
 endif
 
 ifneq ($(TEST_METAL), )
-TEST_CXX_FLAGS += -DTEST_METAL
+# Using Metal APIs requires writing Objective-C++ (or Swift). Add ObjC++
+# to allow tests to create and destroy Metal contexts, etc. This requires
+# tests to be valid Objective-C++, e.g. avoiding using the identifier "id"
+# in certain ways. In practice this is not enough of a problem to justify
+# the work to limit which files are compiled this way.
+TEST_CXX_FLAGS += -DTEST_METAL -ObjC++
 endif
 
 ifneq ($(TEST_CUDA), )
@@ -417,14 +421,12 @@ SOURCE_FILES = \
   CodeGen_C.cpp \
   CodeGen_D3D12Compute_Dev.cpp \
   CodeGen_GPU_Dev.cpp \
-  CodeGen_GPU_Host.cpp \
   CodeGen_Hexagon.cpp \
   CodeGen_Internal.cpp \
   CodeGen_LLVM.cpp \
   CodeGen_Metal_Dev.cpp \
   CodeGen_MIPS.cpp \
   CodeGen_OpenCL_Dev.cpp \
-  CodeGen_OpenGL_Dev.cpp \
   CodeGen_OpenGLCompute_Dev.cpp \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
@@ -454,6 +456,7 @@ SOURCE_FILES = \
   Expr.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
+  FindIntrinsics.cpp \
   FlattenNestedRamps.cpp \
   Float16.cpp \
   Func.cpp \
@@ -466,7 +469,6 @@ SOURCE_FILES = \
   ImageParam.cpp \
   InferArguments.cpp \
   InjectHostDevBufferCopies.cpp \
-  InjectOpenGLIntrinsics.cpp \
   Inline.cpp \
   InlineReductions.cpp \
   IntegerDivisionTable.cpp \
@@ -480,6 +482,7 @@ SOURCE_FILES = \
   IRPrinter.cpp \
   IRVisitor.cpp \
   JITModule.cpp \
+  Lambda.cpp \
   Lerp.cpp \
   LICM.cpp \
   LLVM_Output.cpp \
@@ -493,6 +496,7 @@ SOURCE_FILES = \
   ModulusRemainder.cpp \
   Monotonic.cpp \
   ObjectInstanceRegistry.cpp \
+  OffloadGPULoops.cpp \
   OutputImageParam.cpp \
   ParallelRVar.cpp \
   Parameter.cpp \
@@ -509,6 +513,7 @@ SOURCE_FILES = \
   RDom.cpp \
   Realization.cpp \
   RealizationOrder.cpp \
+  RebaseLoopsToZero.cpp \
   Reduction.cpp \
   RegionCosts.cpp \
   RemoveDeadAllocations.cpp \
@@ -560,7 +565,6 @@ SOURCE_FILES = \
   UnsafePromises.cpp \
   Util.cpp \
   Var.cpp \
-  VaryingAttributes.cpp \
   VectorizeLoops.cpp \
   WasmExecutor.cpp \
   WrapCalls.cpp
@@ -587,25 +591,18 @@ HEADER_FILES = \
   Buffer.h \
   CanonicalizeGPUVars.h \
   Closure.h \
-  CodeGen_ARM.h \
   CodeGen_C.h \
   CodeGen_D3D12Compute_Dev.h \
   CodeGen_GPU_Dev.h \
-  CodeGen_GPU_Host.h \
   CodeGen_Internal.h \
   CodeGen_LLVM.h \
   CodeGen_Metal_Dev.h \
-  CodeGen_MIPS.h \
   CodeGen_OpenCL_Dev.h \
-  CodeGen_OpenGL_Dev.h \
   CodeGen_OpenGLCompute_Dev.h \
   CodeGen_Posix.h \
-  CodeGen_PowerPC.h \
   CodeGen_PTX_Dev.h \
   CodeGen_PyTorch.h \
-  CodeGen_RISCV.h \
-  CodeGen_WebAssembly.h \
-  CodeGen_X86.h \
+  CodeGen_Targets.h \
   CompilerLogger.h \
   ConciseCasts.h \
   CPlusPlusMangle.h \
@@ -632,6 +629,7 @@ HEADER_FILES = \
   ExternFuncArgument.h \
   FastIntegerDivide.h \
   FindCalls.h \
+  FindIntrinsics.h \
   FlattenNestedRamps.h \
   Float16.h \
   Func.h \
@@ -645,7 +643,6 @@ HEADER_FILES = \
   ImageParam.h \
   InferArguments.h \
   InjectHostDevBufferCopies.h \
-  InjectOpenGLIntrinsics.h \
   Inline.h \
   InlineReductions.h \
   IntegerDivisionTable.h \
@@ -676,6 +673,7 @@ HEADER_FILES = \
   ModulusRemainder.h \
   Monotonic.h \
   ObjectInstanceRegistry.h \
+  OffloadGPULoops.h \
   OutputImageParam.h \
   ParallelRVar.h \
   Param.h \
@@ -692,6 +690,7 @@ HEADER_FILES = \
   Realization.h \
   RDom.h \
   RealizationOrder.h \
+  RebaseLoopsToZero.h \
   Reduction.h \
   RegionCosts.h \
   RemoveDeadAllocations.h \
@@ -728,7 +727,6 @@ HEADER_FILES = \
   UnsafePromises.h \
   Util.h \
   Var.h \
-  VaryingAttributes.h \
   VectorizeLoops.h \
   WrapCalls.h
 
@@ -779,7 +777,6 @@ RUNTIME_CPP_COMPONENTS = \
   msan \
   msan_stubs \
   opencl \
-  opengl \
   openglcompute \
   opengl_egl_context \
   opengl_glx_context \
@@ -843,6 +840,7 @@ RUNTIME_LL_COMPONENTS = \
   x86 \
   x86_avx \
   x86_avx2 \
+  x86_avx512 \
   x86_sse41
 
 RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
@@ -851,7 +849,6 @@ RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeHexagonDma.h \
                             $(INCLUDE_DIR)/HalideRuntimeHexagonHost.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenCL.h \
-                            $(INCLUDE_DIR)/HalideRuntimeOpenGL.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGLCompute.h \
                             $(INCLUDE_DIR)/HalideRuntimeMetal.h	\
                             $(INCLUDE_DIR)/HalideRuntimeQurt.h \
@@ -926,9 +923,15 @@ else
 LIBHALIDE_SONAME_FLAGS=
 endif
 
+ifeq ($(UNAME), Linux)
+LIBHALIDE_EXPORTS=-Wl,--version-script=$(ROOT_DIR)/src/exported_symbols.ldscript
+else
+LIBHALIDE_EXPORTS=-Wl,-exported_symbols_list $(ROOT_DIR)/src/exported_symbols.osx
+endif
+
 $(BIN_DIR)/libHalide.$(SHARED_EXT): $(OBJECTS) $(INITIAL_MODULES)
 	@mkdir -p $(@D)
-	$(CXX) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) $(INSTALL_NAME_TOOL_LD_FLAGS) $(LIBHALIDE_SONAME_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
+	$(CXX) -shared $(LIBHALIDE_EXPORTS) $(OBJECTS) $(INITIAL_MODULES) $(LLVM_LIBS_FOR_SHARED_LIBHALIDE) $(LLVM_SYSTEM_LIBS) $(COMMON_LD_FLAGS) $(INSTALL_NAME_TOOL_LD_FLAGS) $(LIBHALIDE_SONAME_FLAGS) -o $(BIN_DIR)/libHalide.$(SHARED_EXT)
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id $(CURDIR)/$(BIN_DIR)/libHalide.$(SHARED_EXT) $(BIN_DIR)/libHalide.$(SHARED_EXT)
 endif
@@ -1084,7 +1087,7 @@ $(BUILD_DIR)/initmod_ptx.%_ll.o: $(BUILD_DIR)/initmod_ptx.%_ll.cpp
 $(BUILD_DIR)/initmod.%.o: $(BUILD_DIR)/initmod.%.cpp
 	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(SRC_DIR)/%.h $(BUILD_DIR)/llvm_ok
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(BUILD_DIR)/llvm_ok
 	@mkdir -p $(@D)
 	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
@@ -1110,13 +1113,10 @@ CORRECTNESS_TESTS = $(shell ls $(ROOT_DIR)/test/correctness/*.cpp) $(shell ls $(
 PERFORMANCE_TESTS = $(shell ls $(ROOT_DIR)/test/performance/*.cpp)
 ERROR_TESTS = $(shell ls $(ROOT_DIR)/test/error/*.cpp)
 WARNING_TESTS = $(shell ls $(ROOT_DIR)/test/warning/*.cpp)
-OPENGL_TESTS := $(shell ls $(ROOT_DIR)/test/opengl/*.cpp)
 GENERATOR_EXTERNAL_TESTS := $(shell ls $(ROOT_DIR)/test/generator/*test.cpp)
 GENERATOR_EXTERNAL_TEST_GENERATOR := $(shell ls $(ROOT_DIR)/test/generator/*_generator.cpp)
 TUTORIALS = $(filter-out %_generate.cpp, $(shell ls $(ROOT_DIR)/tutorial/*.cpp))
 AUTO_SCHEDULE_TESTS = $(shell ls $(ROOT_DIR)/test/auto_schedule/*.cpp)
-
--include $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=$(BUILD_DIR)/test_opengl_%.d)
 
 test_correctness: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=quiet_correctness_%) $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.c=quiet_correctness_%)
 test_performance: $(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=performance_%)
@@ -1125,7 +1125,6 @@ test_warning: $(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=warning_%)
 test_tutorial: $(TUTORIALS:$(ROOT_DIR)/tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=valgrind_%)
 test_avx512: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=avx512_%)
-test_opengl: $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=opengl_%)
 test_auto_schedule: test_mullapudi2016 test_li2018 test_adams2019
 
 .PHONY: test_correctness_multi_gpu
@@ -1195,6 +1194,8 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_async_parallel,$(GENERAT
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubtest,$(GENERATOR_AOTCPP_TESTS))
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_stubuser,$(GENERATOR_AOTCPP_TESTS))
 
+GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_gpu_multi_context_threaded,$(GENERATOR_AOTCPP_TESTS))
+
 test_aotcpp_generator: $(GENERATOR_AOTCPP_TESTS)
 
 # This is just a test to ensure than RunGen builds and links for a critical mass of Generators;
@@ -1210,6 +1211,7 @@ GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/multitarget.rungen,$
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/nested_externs.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/tiled_blur.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/extern_output.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
+GENERATOR_BUILD_RUNGEN_TESTS := $(filter-out $(FILTERS_DIR)/gpu_multi_context_threaded.rungen,$(GENERATOR_BUILD_RUNGEN_TESTS))
 GENERATOR_BUILD_RUNGEN_TESTS := $(GENERATOR_BUILD_RUNGEN_TESTS) \
 	$(FILTERS_DIR)/multi_rungen \
 	$(FILTERS_DIR)/multi_rungen2 \
@@ -1230,7 +1232,6 @@ ALL_TESTS = test_internal test_correctness test_error test_tutorial test_warning
 # For generator tests they time the compile time only. The times are recorded in CSV files.
 time_compilation_correctness: init_time_compilation_correctness $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=time_compilation_test_%)
 time_compilation_performance: init_time_compilation_performance $(PERFORMANCE_TESTS:$(ROOT_DIR)/test/performance/%.cpp=time_compilation_performance_%)
-time_compilation_opengl: init_time_compilation_opengl $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=time_compilation_opengl_%)
 time_compilation_generator: init_time_compilation_generator $(GENERATOR_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=time_compilation_generator_%)
 
 init_time_compilation_%:
@@ -1249,14 +1250,6 @@ build_tests: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=$(BIN_DIR)/c
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_aottest.cpp=$(BIN_DIR)/$(TARGET)/generator_aot_%) \
 	$(GENERATOR_EXTERNAL_TESTS:$(ROOT_DIR)/test/generator/%_jittest.cpp=$(BIN_DIR)/generator_jit_%) \
 	$(AUTO_SCHEDULE_TESTS:$(ROOT_DIR)/test/auto_schedule/%.cpp=$(BIN_DIR)/auto_schedule_%)
-
-# OpenGL doesn't build on every host platform we support (eg. ARM).
-.PHONY: build_opengl_tests
-build_opengl_tests: $(OPENGL_TESTS:$(ROOT_DIR)/test/opengl/%.cpp=$(BIN_DIR)/opengl_%)
-
-ifneq ($(WITH_OPENGL),)
-build_tests: build_opengl_tests
-endif
 
 clean_generator:
 	rm -rf $(BIN_DIR)/*.generator
@@ -1320,9 +1313,6 @@ $(BIN_DIR)/error_%: $(ROOT_DIR)/test/error/%.cpp $(BIN_DIR)/libHalide.$(SHARED_E
 
 $(BIN_DIR)/warning_%: $(ROOT_DIR)/test/warning/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) $(TEST_LD_FLAGS) -o $@
-
-$(BIN_DIR)/opengl_%: $(ROOT_DIR)/test/opengl/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h $(INCLUDE_DIR)/HalideRuntimeOpenGL.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< -I$(INCLUDE_DIR) -I$(SRC_DIR) $(TEST_LD_FLAGS) $(OPENGL_LD_FLAGS) -o $@ -MMD -MF $(BUILD_DIR)/test_opengl_$*.d
 
 # Auto schedule tests that link against libHalide
 $(BIN_DIR)/auto_schedule_%: $(ROOT_DIR)/test/auto_schedule/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h
@@ -1568,7 +1558,13 @@ $(FILTERS_DIR)/nested_externs_%.a: $(BIN_DIR)/nested_externs.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g nested_externs_$* $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime
 
-GEN_AOT_CXX_FLAGS=$(TEST_CXX_FLAGS) -Wno-unknown-pragmas
+# Similarly, gpu_multi needs two different kernels to test compilation caching.
+# Also requies user-context.
+$(FILTERS_DIR)/gpu_multi_context_threaded_%.a: $(BIN_DIR)/gpu_multi_context_threaded.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g gpu_multi_context_threaded_$* $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
+
+GEN_AOT_CXX_FLAGS=$(TEST_CXX_FLAGS) -Wno-unknown-pragmas -Wno-unused-variable
 GEN_AOT_INCLUDES=-I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I$(ROOT_DIR)/src/runtime -I$(ROOT_DIR)/test/common -I $(ROOT_DIR)/apps/support -I $(SRC_DIR)/runtime -I$(ROOT_DIR)/tools
 GEN_AOT_LD_FLAGS=$(COMMON_LD_FLAGS)
 
@@ -1663,9 +1659,34 @@ generator_aot_multitarget: $(BIN_DIR)/$(TARGET)/generator_aot_multitarget
 	HL_MULTITARGET_TEST_USE_NOBOUNDSQUERY_FEATURE=1 $(CURDIR)/$<
 	@-echo
 
+# gpu_multi_context_threaded has additional deps to link in
+$(BIN_DIR)/$(TARGET)/generator_aot_gpu_multi_context_threaded: $(ROOT_DIR)/test/generator/gpu_multi_context_threaded_aottest.cpp \
+	                                                       $(FILTERS_DIR)/gpu_multi_context_threaded_add.a \
+	                                                       $(FILTERS_DIR)/gpu_multi_context_threaded_mul.a \
+	                                                       $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) $(CUDA_LD_FLAGS) -o $@
+
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_gpu_multi_context_threaded: $(ROOT_DIR)/test/generator/gpu_multi_context_threaded_aottest.cpp \
+	                                                          $(FILTERS_DIR)/gpu_multi_context_threaded_add.halide_generated.cpp \
+	                                                          $(FILTERS_DIR)/gpu_multi_context_threaded_mul.halide_generated.cpp \
+	                                                          $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) $(OPENCL_LD_FLAGS) $(CUDA_LD_FLAGS) -o $@
+
 # nested externs doesn't actually contain a generator named
 # "nested_externs", and has no internal tests in any case.
 test_generator_nested_externs:
+	@echo "Skipping"
+
+# gpu_multi actually contain a generator named
+# "gpu_multi", and has no internal tests in any case.
+test_generator_gpu_multi:
+	@echo "Skipping"
+
+# gpu_multi_context_threaded actually contain a generator named
+# "gpu_multi", and has no internal tests in any case.
+test_generator_gpu_multi_context_threaded:
 	@echo "Skipping"
 
 $(BUILD_DIR)/RunGenMain.o: $(ROOT_DIR)/tools/RunGenMain.cpp $(RUNTIME_EXPORTED_INCLUDES) $(ROOT_DIR)/tools/RunGen.h
@@ -1874,11 +1895,6 @@ warning_%: $(BIN_DIR)/warning_%
 	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1 | egrep --q "^Warning"
 	@-echo
 
-opengl_%: $(BIN_DIR)/opengl_%
-	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$< 2>&1
-	@-echo
-
 generator_jit_%: $(BIN_DIR)/generator_jit_%
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; $(CURDIR)/$<
@@ -1927,9 +1943,6 @@ time_compilation_test_%: $(BIN_DIR)/test_%
 
 time_compilation_performance_%: $(BIN_DIR)/performance_%
 	$(TIME_COMPILATION) compile_times_performance.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_performance_%=performance_%)
-
-time_compilation_opengl_%: $(BIN_DIR)/opengl_%
-	$(TIME_COMPILATION) compile_times_opengl.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_opengl_%=opengl_%)
 
 time_compilation_generator_%: $(BIN_DIR)/%.generator
 	$(TIME_COMPILATION) compile_times_generator.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_generator_%=$(FILTERS_DIR)/%.a)
@@ -2084,7 +2097,15 @@ ifneq (,$(findstring clang version 11.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 11.1,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring clang version 12.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
+ifneq (,$(findstring clang version 13.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
@@ -2108,7 +2129,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 100 110 120))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 110 111 120 130))
 LLVM_OK=yes
 endif
 
@@ -2290,7 +2311,7 @@ $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/uti
 
 # Note: you must have CLANG_FORMAT_LLVM_INSTALL_DIR set for this rule to work.
 # Let's default to the Ubuntu install location.
-CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-10
+CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-11
 
 .PHONY: format
 format:
@@ -2298,7 +2319,7 @@ format:
 
 # Note: you must have CLANG_TIDY_LLVM_INSTALL_DIR set for these rules to work.
 # Let's default to the Ubuntu install location.
-CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-10
+CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-11
 
 .PHONY: clang-tidy
 clang-tidy:

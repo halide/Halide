@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
 
     j.set(3);
     im1.set(im3);
-    Buffer<int> result = f.realize(100);
+    Buffer<int> result = f.realize({100});
 
     for (int i = 0; i < 100; i++) {
         int correct = i < im2(3) ? 37 : (i + 20);

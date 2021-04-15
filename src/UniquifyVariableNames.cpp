@@ -2,6 +2,7 @@
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Scope.h"
 #include "Var.h"
 #include <sstream>
@@ -242,7 +243,7 @@ void uniquify_variable_names_test() {
           {{x, Let::make(y.name(), 3, y)},
            {x_1, Let::make(y.name(), 4, y)}});
 
-    std::cout << "is_monotonic test passed" << std::endl;
+    std::cout << "uniquify_variable_names test passed" << std::endl;
 }
 
 }  // namespace Internal

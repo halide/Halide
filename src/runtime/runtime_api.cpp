@@ -7,7 +7,6 @@
 #include "HalideRuntimeHexagonHost.h"
 #include "HalideRuntimeMetal.h"
 #include "HalideRuntimeOpenCL.h"
-#include "HalideRuntimeOpenGL.h"
 #include "HalideRuntimeOpenGLCompute.h"
 #include "HalideRuntimeQurt.h"
 #include "cpu_features.h"
@@ -32,6 +31,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_cuda_device_interface,
     (void *)&halide_cuda_get_device_ptr,
     (void *)&halide_cuda_initialize_kernels,
+    (void *)&halide_cuda_finalize_kernels,
     (void *)&halide_cuda_run,
     (void *)&halide_cuda_wrap_device_ptr,
     (void *)&halide_current_time_ns,
@@ -94,6 +94,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_hexagon_get_device_handle,
     (void *)&halide_hexagon_get_device_size,
     (void *)&halide_hexagon_initialize_kernels,
+    (void *)&halide_hexagon_finalize_kernels,
     (void *)&halide_hexagon_power_hvx_off,
     (void *)&halide_hexagon_power_hvx_off_as_destructor,
     (void *)&halide_hexagon_power_hvx_on,
@@ -108,6 +109,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_malloc,
     (void *)&halide_matlab_call_pipeline,
     (void *)&halide_memoization_cache_cleanup,
+    (void *)&halide_memoization_cache_evict,
     (void *)&halide_memoization_cache_lookup,
     (void *)&halide_memoization_cache_release,
     (void *)&halide_memoization_cache_set_size,
@@ -118,6 +120,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_metal_get_buffer,
     (void *)&halide_metal_get_crop_offset,
     (void *)&halide_metal_initialize_kernels,
+    (void *)&halide_metal_finalize_kernels,
     (void *)&halide_metal_release_context,
     (void *)&halide_metal_run,
     (void *)&halide_metal_wrap_buffer,
@@ -142,23 +145,17 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_opencl_image_device_interface,
     (void *)&halide_opencl_image_wrap_cl_mem,
     (void *)&halide_opencl_initialize_kernels,
+    (void *)&halide_opencl_finalize_kernels,
     (void *)&halide_opencl_run,
     (void *)&halide_opencl_set_build_options,
     (void *)&halide_opencl_set_device_type,
     (void *)&halide_opencl_set_platform_name,
     (void *)&halide_opencl_wrap_cl_mem,
-    (void *)&halide_opengl_context_lost,
     (void *)&halide_opengl_create_context,
-    (void *)&halide_opengl_detach_texture,
-    (void *)&halide_opengl_device_interface,
     (void *)&halide_opengl_get_proc_address,
-    (void *)&halide_opengl_get_texture,
-    (void *)&halide_opengl_initialize_kernels,
-    (void *)&halide_opengl_run,
-    (void *)&halide_opengl_wrap_render_target,
-    (void *)&halide_opengl_wrap_texture,
     (void *)&halide_openglcompute_device_interface,
     (void *)&halide_openglcompute_initialize_kernels,
+    (void *)&halide_openglcompute_finalize_kernels,
     (void *)&halide_openglcompute_run,
     (void *)&halide_pointer_to_string,
     (void *)&halide_print,
@@ -205,6 +202,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_d3d12compute_acquire_context,
     (void *)&halide_d3d12compute_device_interface,
     (void *)&halide_d3d12compute_initialize_kernels,
+    (void *)&halide_d3d12compute_finalize_kernels,
     (void *)&halide_d3d12compute_release_context,
     (void *)&halide_d3d12compute_run,
 };

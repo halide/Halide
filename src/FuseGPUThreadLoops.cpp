@@ -349,8 +349,12 @@ private:
                 // repeated dependence on the block var
                 s.size = solve_expression(s.size, op->name).result;
                 s.size = simplify(common_subexpression_elimination(s.size));
-                auto result = is_monotonic(s.size, op->name);
-                if (result == Monotonic::Unknown) {
+                switch (is_monotonic(s.size, op->name)) {
+                case Monotonic::Unknown:
+                    // TODO: if bounds_of_expr_in_scope becomes more
+                    // powerful than is_monotonic, it might be better
+                    // to call it here. That would be risky though, as
+                    // it's not exact.
                     debug(1)
                         << "Shared allocation for " << s.name
                         << " has a size that is non-monontonic in the gpu block variable " << op->name
@@ -359,19 +363,19 @@ private:
                         get_compiler_logger()->record_non_monotonic_loop_var(op->name, s.size);
                     }
                     precompute_allocation_size(s);
-                } else {
-                    auto interval_bounds = bounds_of_expr_in_scope(s.size, scope);
-                    user_assert(interval_bounds.has_upper_bound())
-                        << "Couldn't infer bounds for " << s.name << " shared memory allocation\n";
-                    // In theory we could precompute the allocation
-                    // size if there's no upper bound too, but for the
-                    // assert above to fail we'd have to encounter an
-                    // expression that is_monotonic detects as
-                    // increasing, decreasing, or constant, but is
-                    // somehow unbounded. It's probable that no such
-                    // expression exists. is_monotonic is generally
-                    // less capable than bounds_of_expr_in_scope.
-                    s.size = interval_bounds.max;
+                    break;
+                case Monotonic::Increasing:
+                    s.size = substitute(op->name, simplify(op->min + op->extent - 1), s.size);
+                    break;
+                case Monotonic::Constant:
+                    // The size expression used the variable, but we
+                    // may have successfully eliminated it above, or
+                    // is_monotonic might have detected that the
+                    // dependence is false somehow. Just treat it as
+                    // decreasing...
+                case Monotonic::Decreasing:
+                    s.size = substitute(op->name, op->min, s.size);
+                    break;
                 }
             }
             if (in_threads && op->is_parallel()) {
@@ -1442,10 +1446,6 @@ class FuseGPUThreadLoops : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const For *op) override {
-        if (op->device_api == DeviceAPI::GLSL) {
-            return op;
-        }
-
         user_assert(!(CodeGen_GPU_Dev::is_gpu_thread_var(op->name)))
             << "Loops over GPU thread variable: \"" << op->name
             << "\" is outside of any loop over a GPU block variable. "

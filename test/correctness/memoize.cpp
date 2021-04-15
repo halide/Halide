@@ -60,6 +60,11 @@ extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, halide_b
     return 0;
 }
 
+extern "C" DLLEXPORT int computed_eviction_key(int a) {
+    return 2020 + a;
+}
+HalideExtern_1(int, computed_eviction_key, int);
+
 void simple_free(void *user_context, void *ptr) {
     free(ptr);
 }
@@ -86,7 +91,6 @@ int main(int argc, char **argv) {
 
         Func f, f_memoized;
         f_memoized() = count_calls(0, 0);
-        f_memoized.compute_root().memoize();
         f() = f_memoized();
         f_memoized.compute_root().memoize();
 
@@ -113,8 +117,8 @@ int main(int argc, char **argv) {
         g(x, y) = f();
 
         coord.set(0);
-        Buffer<uint8_t> out1 = g.realize(256, 256);
-        Buffer<uint8_t> out2 = g.realize(256, 256);
+        Buffer<uint8_t> out1 = g.realize({256, 256});
+        Buffer<uint8_t> out2 = g.realize({256, 256});
 
         for (int32_t i = 0; i < 256; i++) {
             for (int32_t j = 0; j < 256; j++) {
@@ -125,8 +129,8 @@ int main(int argc, char **argv) {
         assert(call_count == 1);
 
         coord.set(1);
-        Buffer<uint8_t> out3 = g.realize(256, 256);
-        Buffer<uint8_t> out4 = g.realize(256, 256);
+        Buffer<uint8_t> out3 = g.realize({256, 256});
+        Buffer<uint8_t> out4 = g.realize({256, 256});
 
         for (int32_t i = 0; i < 256; i++) {
             for (int32_t j = 0; j < 256; j++) {
@@ -147,8 +151,8 @@ int main(int argc, char **argv) {
         f(x, y) = count_calls(x, y) + count_calls(x, y);
         count_calls.compute_root().memoize();
 
-        Buffer<uint8_t> out1 = f.realize(256, 256);
-        Buffer<uint8_t> out2 = f.realize(256, 256);
+        Buffer<uint8_t> out1 = f.realize({256, 256});
+        Buffer<uint8_t> out2 = f.realize({256, 256});
 
         for (int32_t i = 0; i < 256; i++) {
             for (int32_t j = 0; j < 256; j++) {
@@ -174,8 +178,8 @@ int main(int argc, char **argv) {
         count_calls_23.compute_root().memoize();
         count_calls_42.compute_root().memoize();
 
-        Buffer<uint8_t> out1 = f.realize(256, 256);
-        Buffer<uint8_t> out2 = f.realize(256, 256);
+        Buffer<uint8_t> out1 = f.realize({256, 256});
+        Buffer<uint8_t> out2 = f.realize({256, 256});
 
         for (int32_t i = 0; i < 256; i++) {
             for (int32_t j = 0; j < 256; j++) {
@@ -206,20 +210,20 @@ int main(int argc, char **argv) {
         val1.set(23);
         val2.set(42);
 
-        Buffer<uint8_t> out1 = f.realize(256, 256);
-        Buffer<uint8_t> out2 = f.realize(256, 256);
+        Buffer<uint8_t> out1 = f.realize({256, 256});
+        Buffer<uint8_t> out2 = f.realize({256, 256});
 
         val1.set(42);
-        Buffer<uint8_t> out3 = f.realize(256, 256);
+        Buffer<uint8_t> out3 = f.realize({256, 256});
 
         val1.set(23);
-        Buffer<uint8_t> out4 = f.realize(256, 256);
+        Buffer<uint8_t> out4 = f.realize({256, 256});
 
         val1.set(42);
-        Buffer<uint8_t> out5 = f.realize(256, 256);
+        Buffer<uint8_t> out5 = f.realize({256, 256});
 
         val2.set(57);
-        Buffer<uint8_t> out6 = f.realize(256, 256);
+        Buffer<uint8_t> out6 = f.realize({256, 256});
 
         for (int32_t i = 0; i < 256; i++) {
             for (int32_t j = 0; j < 256; j++) {
@@ -247,9 +251,9 @@ int main(int argc, char **argv) {
         count_calls.compute_root().memoize();
 
         val.set(23.0f);
-        Buffer<uint8_t> out1 = f.realize(256, 256);
+        Buffer<uint8_t> out1 = f.realize({256, 256});
         val.set(23.4f);
-        Buffer<uint8_t> out2 = f.realize(256, 256);
+        Buffer<uint8_t> out2 = f.realize({256, 256});
 
         for (int32_t i = 0; i < 256; i++) {
             for (int32_t j = 0; j < 256; j++) {
@@ -273,9 +277,9 @@ int main(int argc, char **argv) {
         count_calls.compute_root().memoize();
 
         val.set(23.0f);
-        Buffer<uint8_t> out1 = f.realize(256, 256);
+        Buffer<uint8_t> out1 = f.realize({256, 256});
         val.set(23.4f);
-        Buffer<uint8_t> out2 = f.realize(256, 256);
+        Buffer<uint8_t> out2 = f.realize({256, 256});
 
         for (int32_t i = 0; i < 256; i++) {
             for (int32_t j = 0; j < 256; j++) {
@@ -306,13 +310,13 @@ int main(int argc, char **argv) {
 
         val.set(23.0f);
         index.set(2);
-        Buffer<uint8_t> out1 = h.realize(1);
+        Buffer<uint8_t> out1 = h.realize({1});
 
         assert(out1(0) == (uint8_t)(2 * 23 + 4 + 2));
         assert(call_count_with_arg == 3);
 
         index.set(4);
-        out1 = h.realize(1);
+        out1 = h.realize({1});
 
         assert(out1(0) == (uint8_t)(2 * 23 + 4 + 4));
         assert(call_count_with_arg == 4);
@@ -336,7 +340,7 @@ int main(int argc, char **argv) {
         g(x, y) = Tuple(f(x, y)[0] + f(x - 1, y)[0] + f(x + 1, y)[0], f(x, y)[1]);
 
         val.set(23.0f);
-        Realization out = g.realize(128, 128);
+        Realization out = g.realize({128, 128});
         Buffer<uint8_t> out0 = out[0];
         Buffer<int32_t> out1 = out[1];
 
@@ -346,7 +350,7 @@ int main(int argc, char **argv) {
                 assert(out1(i, j) == i);
             }
         }
-        out = g.realize(128, 128);
+        out = g.realize({128, 128});
         out0 = out[0];
         out1 = out[1];
 
@@ -379,7 +383,7 @@ int main(int argc, char **argv) {
         for (int v = 0; v < 1000; v++) {
             int r = rand() % 256;
             val.set((float)r);
-            Buffer<uint8_t> out1 = g.realize(128, 128);
+            Buffer<uint8_t> out1 = g.realize({128, 128});
 
             for (int32_t i = 0; i < 100; i++) {
                 for (int32_t j = 0; j < 100; j++) {
@@ -414,7 +418,7 @@ int main(int argc, char **argv) {
         for (int v = 0; v < 1000; v++) {
             int r = rand() % 256;
             val.set((float)r);
-            Buffer<uint8_t> out1 = g.realize(128, 128);
+            Buffer<uint8_t> out1 = g.realize({128, 128});
 
             for (int32_t i = 0; i < 100; i++) {
                 for (int32_t j = 0; j < 100; j++) {
@@ -427,8 +431,8 @@ int main(int argc, char **argv) {
         printf("Call count before oversize realize is %d.\n", call_count_with_arg);
         call_count_with_arg = 0;
 
-        Buffer<uint8_t> big = g.realize(1024, 1024);
-        Buffer<uint8_t> big2 = g.realize(1024, 1024);
+        Buffer<uint8_t> big = g.realize({1024, 1024});
+        Buffer<uint8_t> big2 = g.realize({1024, 1024});
 
         // TODO work out an assertion on call count here.
         printf("Call count after oversize realize is %d.\n", call_count_with_arg);
@@ -437,7 +441,7 @@ int main(int argc, char **argv) {
         for (int v = 0; v < 1000; v++) {
             int r = rand() % 256;
             val.set((float)r);
-            Buffer<uint8_t> out1 = g.realize(128, 128);
+            Buffer<uint8_t> out1 = g.realize({128, 128});
 
             for (int32_t i = 0; i < 100; i++) {
                 for (int32_t j = 0; j < 100; j++) {
@@ -473,7 +477,7 @@ int main(int argc, char **argv) {
 
         val.set(23.0f);
         Internal::JITSharedRuntime::memoization_cache_set_size(1000000);
-        Buffer<uint8_t> out = g.realize(128, 128);
+        Buffer<uint8_t> out = g.realize({128, 128});
 
         for (int32_t i = 0; i < 128; i++) {
             for (int32_t j = 0; j < 128; j++) {
@@ -557,7 +561,7 @@ int main(int argc, char **argv) {
         Func output;
         output(_) = stage[3](_);
         val.set(23.0f);
-        Buffer<uint8_t> result = output.realize(128, 128);
+        Buffer<uint8_t> result = output.realize({128, 128});
 
         for (int32_t i = 0; i < 128; i++) {
             for (int32_t j = 0; j < 128; j++) {
@@ -569,7 +573,7 @@ int main(int argc, char **argv) {
             printf("Call count for stage %d is %d.\n", i, call_count_staged[i]);
         }
 
-        result = output.realize(128, 128);
+        result = output.realize({128, 128});
         for (int32_t i = 0; i < 128; i++) {
             for (int32_t j = 0; j < 128; j++) {
                 assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));
@@ -611,7 +615,7 @@ int main(int argc, char **argv) {
             error_occured = false;
 
             val.set(23.0f + trial);
-            Realization out = pipe.realize(16, 16);
+            Realization out = pipe.realize({16, 16});
             if (error_occured) {
                 total_errors++;
             } else {
@@ -626,7 +630,7 @@ int main(int argc, char **argv) {
                 }
 
                 error_occured = false;
-                out = pipe.realize(16, 16);
+                out = pipe.realize({16, 16});
                 if (error_occured) {
                     total_errors++;
                 } else {
@@ -680,6 +684,59 @@ int main(int argc, char **argv) {
         assert(result2(0) == 52);
 
         assert(call_count == 2);
+    }
+
+    // Test cache eviction.
+    {
+        call_count = 0;
+        Func count_calls;
+        count_calls.define_extern("count_calls", {}, UInt(8), 2);
+
+        Param<void *> p;
+        Func f, memoized_one, memoized_two, memoized_three;
+        memoized_one() = count_calls(0, 0);
+        memoized_two() = count_calls(1, 1);
+        memoized_three() = count_calls(3, 3);
+        memoized_one.compute_root().memoize(EvictionKey(1));
+        memoized_two.compute_root().memoize(EvictionKey(p));
+        // The called extern here would usually take user_context and extact a value
+        // from within, but JIT mostly subsumes user_context, so this is just an example.
+        memoized_three.compute_root().memoize(EvictionKey(computed_eviction_key(5)));
+        f() = memoized_one() + memoized_two() + memoized_three();
+
+        p.set((void *)&call_count);
+        Buffer<uint8_t> result1 = f.realize();
+        Buffer<uint8_t> result2 = f.realize();
+
+        assert(result1(0) == 126);
+        assert(result2(0) == 126);
+
+        assert(call_count == 3);
+
+        Internal::JITSharedRuntime::memoization_cache_evict(1);
+        result1 = f.realize();
+        assert(result1(0) == 126);
+
+        assert(call_count == 4);
+
+        Internal::JITSharedRuntime::memoization_cache_evict(1);
+        result1 = f.realize();
+        assert(result1(0) == 126);
+
+        assert(call_count == 5);
+
+        Internal::JITSharedRuntime::memoization_cache_evict(1);
+        Internal::JITSharedRuntime::memoization_cache_evict((uint64_t)(uintptr_t)&call_count);
+        result1 = f.realize();
+        assert(result1(0) == 126);
+
+        assert(call_count == 7);
+
+        Internal::JITSharedRuntime::memoization_cache_evict(2025);
+        result1 = f.realize();
+        assert(result1(0) == 126);
+
+        assert(call_count == 8);
     }
 
     printf("Success!\n");

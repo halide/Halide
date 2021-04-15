@@ -242,7 +242,13 @@ bool is_positive_const(const Expr &e) {
         return f->value > 0.0f;
     }
     if (const Cast *c = e.as<Cast>()) {
-        return is_positive_const(c->value);
+        Type to = c->type;
+        Type from = c->value.type();
+        if (!to.is_int_or_uint() || to.can_represent(from)) {
+            // Either the cast does not lose information, or it's a
+            // non-integral cast, so no overflow behavior to worry about.
+            return is_positive_const(c->value);
+        }
     }
     if (const Ramp *r = e.as<Ramp>()) {
         // slightly conservative
@@ -262,7 +268,17 @@ bool is_negative_const(const Expr &e) {
         return f->value < 0.0f;
     }
     if (const Cast *c = e.as<Cast>()) {
-        return is_negative_const(c->value);
+        Type to = c->type;
+        Type from = c->value.type();
+        if (to.is_uint()) {
+            // Early out.
+            return false;
+        }
+        if (!to.is_int_or_uint() || to.can_represent(from)) {
+            // Either the cast does not lose information, or it's a
+            // non-integral cast, so no overflow behavior to worry about.
+            return is_negative_const(c->value);
+        }
     }
     if (const Ramp *r = e.as<Ramp>()) {
         // slightly conservative
@@ -525,8 +541,7 @@ Expr lossless_cast(Type t, Expr e) {
 }
 
 Expr lossless_negate(const Expr &x) {
-    const Mul *m = x.as<Mul>();
-    if (m) {
+    if (const Mul *m = x.as<Mul>()) {
         Expr b = lossless_negate(m->b);
         if (b.defined()) {
             return Mul::make(m->a, b);
@@ -534,6 +549,15 @@ Expr lossless_negate(const Expr &x) {
         Expr a = lossless_negate(m->a);
         if (a.defined()) {
             return Mul::make(a, m->b);
+        }
+    } else if (const Call *m = Call::as_intrinsic(x, {Call::widening_mul})) {
+        Expr b = lossless_negate(m->args[1]);
+        if (b.defined()) {
+            return widening_mul(m->args[0], b);
+        }
+        Expr a = lossless_negate(m->args[0]);
+        if (a.defined()) {
+            return widening_mul(a, m->args[1]);
         }
     } else if (const IntImm *i = x.as<IntImm>()) {
         if (!i->type.is_min(i->value)) {
@@ -1011,6 +1035,19 @@ Stmt remove_likelies(const Stmt &s) {
     return RemoveLikelies().mutate(s);
 }
 
+Expr unwrap_tags(const Expr &e) {
+    if (const Call *tag = Call::as_tag(e)) {
+        return unwrap_tags(tag->args[0]);
+    }
+    return e;
+}
+
+Expr predicate(Expr e) {
+    Type t = e.type();
+    return Internal::Call::make(t, Internal::Call::predicate,
+                                {std::move(e)}, Internal::Call::PureIntrinsic);
+}
+
 Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args) {
     return Internal::Call::make(Int(32),
                                 "halide_error_requirement_failed",
@@ -1025,6 +1062,97 @@ Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values) 
     args.insert(args.end(), cache_key_values.begin(), cache_key_values.end());
     return Internal::Call::make(t, Internal::Call::memoize_expr,
                                 args, Internal::Call::PureIntrinsic);
+}
+
+Expr widening_add(Expr a, Expr b) {
+    match_types(a, b);
+    Type wide_type = a.type().widen();
+    return Call::make(wide_type, Call::widening_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr widening_mul(Expr a, Expr b) {
+    // Widening multiplies can have different signs.
+    match_bits(a, b);
+    match_lanes(a, b);
+    Type wide_type = a.type().widen();
+    if (wide_type.is_uint() && b.type().is_int()) {
+        wide_type = wide_type.with_code(halide_type_int);
+    }
+    return Call::make(wide_type, Call::widening_mul, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr widening_sub(Expr a, Expr b) {
+    match_types(a, b);
+    Type wide_type = a.type().widen();
+    if (wide_type.is_uint()) {
+        // always produce a signed result.
+        wide_type = wide_type.with_code(halide_type_int);
+    }
+    return Call::make(wide_type, Call::widening_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr widening_shift_left(Expr a, Expr b) {
+    match_lanes(a, b);
+    match_bits(a, b);
+    Type wide_type = a.type().widen();
+    return Call::make(wide_type, Call::widening_shift_left, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr widening_shift_right(Expr a, Expr b) {
+    match_lanes(a, b);
+    match_bits(a, b);
+    Type wide_type = a.type().widen();
+    return Call::make(wide_type, Call::widening_shift_right, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr rounding_shift_right(Expr a, Expr b) {
+    match_lanes(a, b);
+    match_bits(a, b);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::rounding_shift_right, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr rounding_shift_left(Expr a, Expr b) {
+    match_lanes(a, b);
+    match_bits(a, b);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::rounding_shift_left, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr saturating_add(Expr a, Expr b) {
+    match_types(a, b);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::saturating_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr saturating_sub(Expr a, Expr b) {
+    match_types(a, b);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::saturating_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr halving_add(Expr a, Expr b) {
+    match_types(a, b);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::halving_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr rounding_halving_add(Expr a, Expr b) {
+    match_types(a, b);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::rounding_halving_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr halving_sub(Expr a, Expr b) {
+    match_types(a, b);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::halving_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr rounding_halving_sub(Expr a, Expr b) {
+    match_types(a, b);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::rounding_halving_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
 }  // namespace Internal
@@ -1253,17 +1381,21 @@ Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &
 }
 
 Expr mux(const Expr &id, const std::vector<Expr> &values) {
-    user_assert(values.size() >= 2) << "mux() only accepts values with size >= 2.\n";
+    user_assert(!values.empty()) << "mux() requires a non-empty vector of values";
+    if (values.size() == 1) {
+        // Useful in generic code where the size of the values vector
+        // might be degenerate.
+        return values[0];
+    }
+
     // Check if all the values have the same type.
     Type t = values[0].type();
     for (int i = 1; i < (int)values.size(); i++) {
         user_assert(values[i].type() == t) << "mux() requires all the values to have the same type.";
     }
-    Expr result = values.back();
-    for (int i = (int)values.size() - 2; i >= 0; i--) {
-        result = select(id == i, values[i], result);
-    }
-    return result;
+    std::vector<Expr> result{id};
+    result.insert(result.end(), values.begin(), values.end());
+    return Internal::Call::make(t, Internal::Call::mux, result, Internal::Call::Intrinsic);
 }
 
 Expr mux(const Expr &id, const Tuple &tup) {
@@ -2157,9 +2289,7 @@ Expr operator~(Expr x) {
 }
 
 Expr operator<<(Expr x, Expr y) {
-    if (y.type().is_vector() && !x.type().is_vector()) {
-        x = Internal::Broadcast::make(x, y.type().lanes());
-    }
+    match_lanes(x, y);
     match_bits(x, y);
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::shift_left, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
@@ -2177,9 +2307,7 @@ Expr operator<<(Expr x, int y) {
 }
 
 Expr operator>>(Expr x, Expr y) {
-    if (y.type().is_vector() && !x.type().is_vector()) {
-        x = Internal::Broadcast::make(x, y.type().lanes());
-    }
+    match_lanes(x, y);
     match_bits(x, y);
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::shift_right, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
@@ -2220,7 +2348,7 @@ Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
     user_assert((weight.type().is_uint() || weight.type().is_float()))
         << "A lerp weight must be an unsigned integer or a float, but "
         << "lerp weight " << weight << " has type " << weight.type() << ".\n";
-    user_assert((zero_val.type().is_float() || zero_val.type().lanes() <= 32))
+    user_assert((zero_val.type().is_float() || zero_val.type().bits() <= 32))
         << "Lerping between 64-bit integers is not supported\n";
     // Compilation error for constant weight that is out of range for integer use
     // as this seems like an easy to catch gotcha.
@@ -2359,6 +2487,25 @@ Expr undef(Type t) {
     return Internal::Call::make(t, Internal::Call::undef,
                                 std::vector<Expr>(),
                                 Internal::Call::PureIntrinsic);
+}
+
+namespace {
+Expr make_scatter_gather(const std::vector<Expr> &args) {
+    // There's currently no difference in the IR between a gather and
+    // a scatter. They're distinct just to make code more readable.
+    return Halide::Internal::Call::make(args[0].type(),
+                                        Halide::Internal::Call::scatter_gather,
+                                        args,
+                                        Halide::Internal::Call::PureIntrinsic);
+}
+}  // namespace
+
+Expr scatter(const std::vector<Expr> &args) {
+    return make_scatter_gather(args);
+}
+
+Expr gather(const std::vector<Expr> &args) {
+    return make_scatter_gather(args);
 }
 
 }  // namespace Halide

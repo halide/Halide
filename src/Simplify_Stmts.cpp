@@ -1,5 +1,6 @@
 #include "Simplify_Internal.h"
 
+#include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "Substitute.h"
 
@@ -13,14 +14,8 @@ using std::vector;
 Stmt Simplify::visit(const IfThenElse *op) {
     Expr condition = mutate(op->condition, nullptr);
 
-    // If (likely(true)) ...
-    const Call *call = condition.as<Call>();
-    Expr unwrapped_condition = condition;
-    if (call &&
-        (call->is_intrinsic(Call::likely) ||
-         call->is_intrinsic(Call::likely_if_innermost))) {
-        unwrapped_condition = call->args[0];
-    }
+    // Remove tags
+    Expr unwrapped_condition = unwrap_tags(condition);
 
     // If (true) ...
     if (is_const_one(unwrapped_condition)) {
@@ -39,14 +34,19 @@ Stmt Simplify::visit(const IfThenElse *op) {
     Stmt then_case, else_case;
     {
         auto f = scoped_truth(unwrapped_condition);
-        // Also substitute the entire condition
-        then_case = substitute(op->condition, const_true(condition.type().lanes()), op->then_case);
-        then_case = mutate(then_case);
+        then_case = mutate(op->then_case);
+        Stmt learned_then_case = f.substitute_facts(then_case);
+        if (!learned_then_case.same_as(then_case)) {
+            then_case = mutate(learned_then_case);
+        }
     }
     {
         auto f = scoped_falsehood(unwrapped_condition);
-        else_case = substitute(op->condition, const_false(condition.type().lanes()), op->else_case);
-        else_case = mutate(else_case);
+        else_case = mutate(op->else_case);
+        Stmt learned_else_case = f.substitute_facts(else_case);
+        if (!learned_else_case.same_as(else_case)) {
+            else_case = mutate(learned_else_case);
+        }
     }
 
     // If both sides are no-ops, bail out.
@@ -69,6 +69,18 @@ Stmt Simplify::visit(const IfThenElse *op) {
         else_acquire &&
         equal(then_acquire->semaphore, else_acquire->semaphore) &&
         equal(then_acquire->count, else_acquire->count)) {
+        // TODO: This simplification sometimes prevents useful loop partioning/no-op
+        // trimming from happening, e.g. it rewrites:
+        //
+        //   for (x, min + -2, extent + 2) {
+        //    if (x < min) {
+        //     acquire (f24.semaphore_0, 1) {}
+        //    } else {
+        //     acquire (f24.semaphore_0, 1) { ... }
+        //    }
+        //   }
+        //
+        // This could be partitioned and simplified, but not after this simplification.
         return Acquire::make(then_acquire->semaphore, then_acquire->count,
                              mutate(IfThenElse::make(condition, then_acquire->body, else_acquire->body)));
     } else if (then_pc &&
@@ -77,6 +89,10 @@ Stmt Simplify::visit(const IfThenElse *op) {
                then_pc->is_producer == else_pc->is_producer) {
         return ProducerConsumer::make(then_pc->name, then_pc->is_producer,
                                       mutate(IfThenElse::make(condition, then_pc->body, else_pc->body)));
+    } else if (then_pc &&
+               is_no_op(else_case)) {
+        return ProducerConsumer::make(then_pc->name, then_pc->is_producer,
+                                      mutate(IfThenElse::make(condition, then_pc->body)));
     } else if (then_block &&
                else_block &&
                equal(then_block->first, else_block->first)) {
@@ -164,10 +180,22 @@ Stmt Simplify::visit(const For *op) {
         bounds_and_alignment_info.push(op->name, min_bounds);
     }
 
-    Stmt new_body = mutate(op->body);
+    Stmt new_body;
+    {
+        // If we're in the loop, the extent must be greater than 0.
+        ScopedFact fact = scoped_truth(0 < new_extent);
+        new_body = mutate(op->body);
+    }
 
     if (bounds_tracked) {
         bounds_and_alignment_info.pop(op->name);
+    }
+
+    if (const Acquire *acquire = new_body.as<Acquire>()) {
+        if (is_no_op(acquire->body)) {
+            // Rewrite iterated no-op acquires as a single acquire.
+            return Acquire::make(acquire->semaphore, mutate(acquire->count * new_extent, nullptr), acquire->body);
+        }
     }
 
     if (is_no_op(new_body)) {
@@ -179,18 +207,8 @@ Stmt Simplify::visit(const For *op) {
                op->device_api == DeviceAPI::None) {
         Stmt s = LetStmt::make(op->name, new_min, new_body);
         return mutate(s);
-    } else if (extent_bounds.max_defined &&
-               extent_bounds.max == 1 &&
-               !in_vector_loop &&
-               op->device_api == DeviceAPI::None) {
-        // If we're inside a vector loop we don't want to rewrite a
-        // for loop of extent at most one into an if, because the
-        // vectorization pass deals with those differently to an
-        // if. If the extent depends on the vectorized variable, the
-        // for loop gets an all-true vectorized case, but an if
-        // statement just gets scalarized.
-        Stmt s = LetStmt::make(op->name, new_min, new_body);
-        return mutate(IfThenElse::make(0 < new_extent, s));
+    } else if (!stmt_uses_var(new_body, op->name) && !is_const_zero(op->min)) {
+        return For::make(op->name, make_zero(Int(32)), new_extent, op->for_type, op->device_api, new_body);
     } else if (op->min.same_as(new_min) &&
                op->extent.same_as(new_extent) &&
                op->body.same_as(new_body)) {
@@ -344,6 +362,8 @@ Stmt Simplify::visit(const Block *op) {
     Stmt rest = op->rest;
 
     if (const AssertStmt *first_assert = first.as<AssertStmt>()) {
+        bool unchanged = first.same_as(op->first);
+
         // Handle an entire sequence of asserts here to avoid a deeply
         // nested stack.  We won't be popping any knowledge until
         // after the end of this chain of asserts, so we can use a
@@ -362,6 +382,7 @@ Stmt Simplify::visit(const Block *op) {
         while ((rest_block = rest.as<Block>()) &&
                (first_assert = rest_block->first.as<AssertStmt>())) {
             first = mutate(first_assert);
+            unchanged &= first.same_as(first_assert);
             rest = rest_block->rest;
             result.push_back(first);
             if ((first_assert = first.as<AssertStmt>())) {
@@ -371,9 +392,19 @@ Stmt Simplify::visit(const Block *op) {
             }
         }
 
-        result.push_back(mutate(rest));
+        Stmt new_rest = mutate(rest);
+        Stmt learned_new_rest = knowledge.substitute_facts(new_rest);
+        if (!learned_new_rest.same_as(new_rest)) {
+            new_rest = mutate(learned_new_rest);
+        }
+        unchanged &= new_rest.same_as(rest);
 
-        return Block::make(result);
+        if (unchanged) {
+            return op;
+        } else {
+            result.push_back(new_rest);
+            return Block::make(result);
+        }
 
     } else {
         rest = mutate(op->rest);
@@ -384,9 +415,11 @@ Stmt Simplify::visit(const Block *op) {
     const LetStmt *let_rest = rest.as<LetStmt>();
     const Block *block_rest = rest.as<Block>();
     const IfThenElse *if_first = first.as<IfThenElse>();
-    const IfThenElse *if_next =
-        rest.as<IfThenElse>() ? rest.as<IfThenElse>() : (block_rest ? block_rest->first.as<IfThenElse>() : nullptr);
+    const IfThenElse *if_next = block_rest ? block_rest->first.as<IfThenElse>() : rest.as<IfThenElse>();
     Stmt if_rest = block_rest ? block_rest->rest : Stmt();
+
+    const Store *store_first = first.as<Store>();
+    const Store *store_next = block_rest ? block_rest->first.as<Store>() : rest.as<Store>();
 
     if (is_no_op(first) &&
         is_no_op(rest)) {
@@ -411,11 +444,28 @@ Stmt Simplify::visit(const Block *op) {
         new_block = substitute(let_rest->name, new_var, new_block);
 
         return LetStmt::make(var_name, let_first->value, new_block);
+    } else if (store_first &&
+               store_next &&
+               store_first->name == store_next->name &&
+               equal(store_first->index, store_next->index) &&
+               equal(store_first->predicate, store_next->predicate) &&
+               is_pure(store_first->index) &&
+               is_pure(store_first->value) &&
+               is_pure(store_first->predicate) &&
+               !expr_uses_var(store_next->index, store_next->name) &&
+               !expr_uses_var(store_next->value, store_next->name) &&
+               !expr_uses_var(store_next->predicate, store_next->name)) {
+        // Second store clobbers first
+        if (block_rest) {
+            return Block::make(store_next, block_rest->rest);
+        } else {
+            return store_next;
+        }
     } else if (if_first &&
                if_next &&
                equal(if_first->condition, if_next->condition) &&
                is_pure(if_first->condition)) {
-        // Two ifs with matching conditions
+        // Two ifs with matching conditions.
         Stmt then_case = mutate(Block::make(if_first->then_case, if_next->then_case));
         Stmt else_case;
         if (if_first->else_case.defined() && if_next->else_case.defined()) {
@@ -442,7 +492,26 @@ Stmt Simplify::visit(const Block *op) {
         // inside the first one, because if it's true the
         // first one must also be true.
         Stmt then_case = mutate(Block::make(if_first->then_case, if_next));
-        Stmt else_case = mutate(if_first->else_case);
+        Stmt else_case = if_first->else_case;
+        Stmt result = IfThenElse::make(if_first->condition, then_case, else_case);
+        if (if_rest.defined()) {
+            result = Block::make(result, if_rest);
+        }
+        return result;
+    } else if (if_first &&
+               if_next &&
+               is_pure(if_first->condition) &&
+               is_pure(if_next->condition) &&
+               is_const_one(mutate(!(if_first->condition && if_next->condition), nullptr))) {
+        // Two ifs where the first condition being true implies the
+        // second is false.  The second if can be nested inside the
+        // else case of the first one, turning a block of if
+        // statements into an if-else chain.
+        Stmt then_case = if_first->then_case;
+        Stmt else_case = if_next;
+        if (if_first->else_case.defined()) {
+            else_case = Block::make(if_first->else_case, else_case);
+        }
         Stmt result = IfThenElse::make(if_first->condition, then_case, else_case);
         if (if_rest.defined()) {
             result = Block::make(result, if_rest);

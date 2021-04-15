@@ -87,7 +87,6 @@ struct Target {
         CLDoubles = halide_target_feature_cl_doubles,
         CLHalf = halide_target_feature_cl_half,
         CLAtomics64 = halide_target_feature_cl_atomic64,
-        OpenGL = halide_target_feature_opengl,  // NOTE: this feature is deprecated and will be removed in Halide 12.
         OpenGLCompute = halide_target_feature_openglcompute,
         EGL = halide_target_feature_egl,
         UserContext = halide_target_feature_user_context,
@@ -111,6 +110,7 @@ struct Target {
         AVX512_KNL = halide_target_feature_avx512_knl,
         AVX512_Skylake = halide_target_feature_avx512_skylake,
         AVX512_Cannonlake = halide_target_feature_avx512_cannonlake,
+        AVX512_SapphireRapids = halide_target_feature_avx512_sapphirerapids,
         TraceLoads = halide_target_feature_trace_loads,
         TraceStores = halide_target_feature_trace_stores,
         TraceRealizations = halide_target_feature_trace_realizations,
@@ -127,10 +127,12 @@ struct Target {
         WasmSignExt = halide_target_feature_wasm_signext,
         WasmSatFloatToInt = halide_target_feature_wasm_sat_float_to_int,
         WasmThreads = halide_target_feature_wasm_threads,
+        WasmBulkMemory = halide_target_feature_wasm_bulk_memory,
         SVE = halide_target_feature_sve,
         SVE2 = halide_target_feature_sve2,
         ARMDotProd = halide_target_feature_arm_dot_prod,
         LLVMLargeCodeModel = halide_llvm_large_code_model,
+        RVV = halide_target_feature_rvv,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;

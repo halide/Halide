@@ -4,6 +4,7 @@
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "Deinterleave.h"
+#include "FindIntrinsics.h"
 #include "IROperator.h"
 #include "Lerp.h"
 #include "Param.h"
@@ -29,7 +30,6 @@ extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeHexagonHost
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeMetal_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenCL_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h[];
-extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeOpenGL_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeQurt_h[];
 extern "C" unsigned char halide_internal_runtime_header_HalideRuntimeD3D12Compute_h[];
 
@@ -299,6 +299,12 @@ protected:
             for (const auto &a : op->args) {
                 include_lerp_types(a.type());
             }
+        } else if (op->is_intrinsic()) {
+            Expr lowered = lower_intrinsic(op);
+            if (lowered.defined()) {
+                lowered.accept(this);
+                return;
+            }
         }
 
         IRGraphVisitor::visit(op);
@@ -311,14 +317,14 @@ public:
 
 }  // namespace
 
-CodeGen_C::CodeGen_C(ostream &s, Target t, OutputKind output_kind, const std::string &guard)
+CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const std::string &guard)
     : IRPrinter(s), id("$$ BAD ID $$"), target(t), output_kind(output_kind),
       extern_c_open(false), inside_atomic_mutex_node(false), emit_atomic_stores(false), using_vector_typedefs(false) {
 
     if (is_header()) {
         // If it's a header, emit an include guard.
-        stream << "#ifndef HALIDE_" << print_name(guard) << "\n"
-               << "#define HALIDE_" << print_name(guard) << "\n"
+        stream << "#ifndef HALIDE_" << c_print_name(guard) << "\n"
+               << "#define HALIDE_" << c_print_name(guard) << "\n"
                << "#include <stdint.h>\n"
                << "\n"
                << "// Forward declarations of the types used in the interface\n"
@@ -417,9 +423,6 @@ CodeGen_C::~CodeGen_C() {
             }
             if (target.has_feature(Target::OpenGLCompute)) {
                 stream << halide_internal_runtime_header_HalideRuntimeOpenGLCompute_h << "\n";
-            }
-            if (target.has_feature(Target::OpenGL)) {
-                stream << halide_internal_runtime_header_HalideRuntimeOpenGL_h << "\n";
             }
             if (target.has_feature(Target::D3D12Compute)) {
                 stream << halide_internal_runtime_header_HalideRuntimeD3D12Compute_h << "\n";
@@ -1213,8 +1216,8 @@ public:
         stream << std::flush;
 
         for (const auto &t : vector_types) {
-            string name = type_to_c_type(t, false, false);
-            string scalar_name = type_to_c_type(t.element_of(), false, false);
+            string name = print_type(t, DoNotAppendSpace);
+            string scalar_name = print_type(t.element_of(), DoNotAppendSpace);
             stream << "#if halide_cpp_use_native_vector(" << scalar_name << ", " << t.lanes() << ")\n";
             stream << "using " << name << " = NativeVector<" << scalar_name << ", " << t.lanes() << ">;\n";
             stream << "using " << name << "_ops = NativeVectorOps<" << scalar_name << ", " << t.lanes() << ">;\n";
@@ -1583,7 +1586,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
 
         if (uses_gpu_for_loops) {
             stream << get_indent() << "halide_error("
-                   << (have_user_context ? "__user_context_" : "nullptr")
+                   << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
                    << ", \"C++ Backend does not support gpu_blocks() or gpu_threads() yet, "
                    << "this function will always fail at runtime\");\n";
             stream << get_indent() << "return halide_error_code_device_malloc_failed;\n";
@@ -1641,7 +1644,7 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     // Figure out the offset of the last pixel.
     size_t num_elems = 1;
     for (int d = 0; d < b.dimensions; d++) {
-        num_elems += b.dim[d].stride * (b.dim[d].extent - 1);
+        num_elems += b.dim[d].stride * (size_t)(b.dim[d].extent - 1);
     }
 
     // For now, we assume buffers that aren't scalar are constant,
@@ -1650,22 +1653,33 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     // used to store stateful module information in offloading runtimes.
     bool is_constant = buffer.dimensions() != 0;
 
-    // Emit the data
-    stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] HALIDE_ATTRIBUTE_ALIGN(32) = {\n";
-    stream << get_indent();
-    for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
-        if (i > 0) {
-            stream << ",";
-            if (i % 16 == 0) {
-                stream << "\n";
-                stream << get_indent();
-            } else {
-                stream << " ";
+    // If it is an GPU source kernel, we would like to see the actual output, not the
+    // uint8 representation. We use a string literal for this.
+    if (ends_with(name, "gpu_source_kernels")) {
+        stream << "static const char *" << name << "_string = R\"BUFCHARSOURCE(";
+        stream.write((char *)b.host, num_elems);
+        stream << ")BUFCHARSOURCE\";\n";
+
+        stream << "static const uint8_t *" << name << "_data HALIDE_ATTRIBUTE_ALIGN(32) = (const uint8_t *) "
+               << name << "_string;\n";
+    } else {
+        // Emit the data
+        stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] HALIDE_ATTRIBUTE_ALIGN(32) = {\n";
+        stream << get_indent();
+        for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
+            if (i > 0) {
+                stream << ",";
+                if (i % 16 == 0) {
+                    stream << "\n";
+                    stream << get_indent();
+                } else {
+                    stream << " ";
+                }
             }
+            stream << (int)(b.host[i]);
         }
-        stream << (int)(b.host[i]);
+        stream << "\n};\n";
     }
-    stream << "\n};\n";
 
     // Emit the shape (constant even for scalar buffers)
     stream << "static const halide_dimension_t " << name << "_buffer_shape[] = {";
@@ -1725,7 +1739,8 @@ string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
     auto cached = cache.find(rhs);
     if (cached == cache.end()) {
         id = unique_name('_');
-        stream << get_indent() << print_type(t, AppendSpace) << (output_kind == CPlusPlusImplementation ? "const " : "") << id << " = " << rhs << ";\n";
+        const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
+        stream << get_indent() << print_type(t, AppendSpace) << const_flag << id << " = " << rhs << ";\n";
         cache[rhs] = id;
     } else {
         id = cached->second;
@@ -2204,6 +2219,8 @@ void CodeGen_C::visit(const Call *op) {
         rhs << print_expr(op->args[0]) << " / " << print_expr(op->args[1]);
     } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
         rhs << print_expr(op->args[0]) << " % " << print_expr(op->args[1]);
+    } else if (op->is_intrinsic(Call::mux)) {
+        rhs << print_expr(lower_mux(op));
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
                       " integer overflow for int32 and int64 is undefined behavior in"
@@ -2223,8 +2240,13 @@ void CodeGen_C::visit(const Call *op) {
         string arg0 = print_expr(op->args[0]);
         rhs << "(" << arg0 << ")";
     } else if (op->is_intrinsic()) {
-        // TODO: other intrinsics
-        internal_error << "Unhandled intrinsic in C backend: " << op->name << "\n";
+        Expr lowered = lower_intrinsic(op);
+        if (lowered.defined()) {
+            rhs << print_expr(lowered);
+        } else {
+            // TODO: other intrinsics
+            internal_error << "Unhandled intrinsic in C backend: " << op->name << "\n";
+        }
     } else {
         // Generic extern calls
         rhs << print_extern_call(op);
@@ -2306,7 +2328,8 @@ void CodeGen_C::visit(const Load *op) {
         bool type_cast_needed = !(allocations.contains(op->name) &&
                                   allocations.get(op->name).type.element_of() == t.element_of());
         if (type_cast_needed) {
-            rhs << "((const " << print_type(t.element_of()) << " *)" << name << ")";
+            const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
+            rhs << "((" << const_flag << print_type(t.element_of()) << " *)" << name << ")";
         } else {
             rhs << name;
         }
@@ -2574,11 +2597,12 @@ void CodeGen_C::visit(const Allocate *op) {
         alloc.type = op->type;
         allocations.push(op->name, alloc);
         heap_allocations.push(op->name);
-        stream << op_type << "*" << op_name << " = (" << print_expr(op->new_expr) << ");\n";
+        string new_e = print_expr(op->new_expr);
+        stream << get_indent() << op_type << " *" << op_name << " = (" << op_type << "*)" << new_e << ";\n";
     } else {
         constant_size = op->constant_allocation_size();
         if (constant_size > 0) {
-            int64_t stack_bytes = constant_size * op->type.bytes();
+            int64_t stack_bytes = (int64_t)constant_size * op->type.bytes();
 
             if (stack_bytes > ((int64_t(1) << 31) - 1)) {
                 user_error << "Total size for allocation "
@@ -2588,6 +2612,7 @@ void CodeGen_C::visit(const Allocate *op) {
                 size_id = print_expr(make_const(size_id_type, constant_size));
 
                 if (op->memory_type == MemoryType::Stack ||
+                    op->memory_type == MemoryType::Register ||
                     (op->memory_type == MemoryType::Auto &&
                      can_allocation_fit_on_stack(stack_bytes))) {
                     on_stack = true;

@@ -93,9 +93,6 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
     case DeviceAPI::OpenGLCompute:
         out << "<OpenGLCompute>";
         break;
-    case DeviceAPI::GLSL:
-        out << "<GLSL>";
-        break;
     case DeviceAPI::Metal:
         out << "<Metal>";
         break;
@@ -149,6 +146,9 @@ std::ostream &operator<<(std::ostream &out, const TailStrategy &t) {
         break;
     case TailStrategy::GuardWithIf:
         out << "GuardWithIf";
+        break;
+    case TailStrategy::Predicate:
+        out << "Predicate";
         break;
     case TailStrategy::ShiftInwards:
         out << "ShiftInwards";
@@ -281,6 +281,9 @@ ostream &operator<<(ostream &out, const VectorReduce::Operator &op) {
     switch (op) {
     case VectorReduce::Add:
         out << "Add";
+        break;
+    case VectorReduce::SaturatingAdd:
+        out << "SaturatingAdd";
         break;
     case VectorReduce::Mul:
         out << "Mul";
@@ -937,7 +940,7 @@ void IRPrinter::visit(const Fork *op) {
 
 void IRPrinter::visit(const IfThenElse *op) {
     stream << get_indent();
-    while (1) {
+    while (true) {
         stream << "if (";
         print_no_parens(op->condition);
         stream << ") {\n";
@@ -1015,7 +1018,7 @@ void IRPrinter::visit(const VectorReduce *op) {
            << op->op
            << ", "
            << op->value
-           << ")\n";
+           << ")";
 }
 
 void IRPrinter::visit(const Atomic *op) {

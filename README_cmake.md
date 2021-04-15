@@ -367,6 +367,7 @@ compiled.
 | `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                                           |
 | `Halide_USE_CODEMODEL_LARGE`             | `OFF`                 | Use the Large LLVM codemodel                                                                                     |
 | `Halide_TARGET`                          | _empty_               | The default target triple to use for `add_halide_library` (and the generator tests, by extension)                |
+| `Halide_CCACHE_BUILD`                    | `OFF`                 | Use ccache to accelerate rebuilds.                                                                               |
 
 The following options are only available when building Halide directly, ie. not
 through the [`add_subdirectory`][add_subdirectory] or
@@ -376,7 +377,6 @@ targets (like tests and documentation) are built.
 | Option                 | Default              | Description                                                                              |
 | ---------------------- | -------------------- | ---------------------------------------------------------------------------------------- |
 | `WITH_TESTS`           | `ON`                 | Enable building unit and integration tests                                               |
-| `WITH_APPS`            | `ON`                 | Enable testing sample applications (run `ctest -L apps` to actually build and test them) |
 | `WITH_PYTHON_BINDINGS` | `ON` if Python found | Enable building Python 3.x bindings                                                      |
 | `WITH_DOCS`            | `OFF`                | Enable building the documentation via Doxygen                                            |
 | `WITH_UTILS`           | `ON`                 | Enable building various utilities including the trace visualizer                         |
@@ -392,7 +392,6 @@ apply when `WITH_TESTS=ON`:
 | `WITH_TEST_ERROR`         | `ON`    | enable the expected-error tests   |
 | `WITH_TEST_WARNING`       | `ON`    | enable the expected-warning tests |
 | `WITH_TEST_PERFORMANCE`   | `ON`    | enable performance testing        |
-| `WITH_TEST_OPENGL`        | `OFF`   | enable the OpenGL tests           |
 | `WITH_TEST_GENERATOR`     | `ON`    | enable the AOT generator tests    |
 
 The following options enable/disable various LLVM backends (they correspond to
@@ -416,7 +415,6 @@ The following options enable/disable various Halide-specific backends:
 | Option                | Default | Description                            |
 | --------------------- | ------- | -------------------------------------- |
 | `TARGET_OPENCL`       | `ON`    | Enable the OpenCL-C backend            |
-| `TARGET_OPENGL`       | `ON`    | Enable the OpenGL/GLSL backend         |
 | `TARGET_METAL`        | `ON`    | Enable the Metal backend               |
 | `TARGET_D3D12COMPUTE` | `ON`    | Enable the Direct3D 12 Compute backend |
 
@@ -465,6 +463,8 @@ CUDA installation automatically, you can point it to it by setting:
 If the CMake version is lower than 3.18, the deprecated [`FindCUDA`][findcuda]
 module will be used instead. It reads the variable `CUDA_TOOLKIT_ROOT_DIR`
 instead of `CUDAToolkit_ROOT` above.
+
+TODO(https://github.com/halide/Halide/issues/5633): update this section for OpenGLCompute, which needs some (but maybe not all) of this.
 
 When targeting OpenGL, the [`FindOpenGL`][findopengl] and [`FindX11`][findx11]
 modules will be used to link AOT generated binaries. These modules can be

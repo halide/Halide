@@ -45,7 +45,7 @@ public:
     /** Construct a Tuple from some Exprs. */
     //@{
     template<typename... Args>
-    Tuple(const Expr &a, const Expr &b, Args &&... args) {
+    Tuple(const Expr &a, const Expr &b, Args &&...args) {
         exprs = std::vector<Expr>{a, b, std::forward<Args>(args)...};
     }
     //@}

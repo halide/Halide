@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
                 Func f;
                 Var x;
                 f(x) = x;
-                f.realize(100);
+                f.realize({100});
             }
         });
     }

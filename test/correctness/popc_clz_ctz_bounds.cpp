@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
         }
         in.set(data);
 
-        Realization result = f.realize(16);
+        Realization result = f.realize({16});
         Buffer<uint8_t> popc_result = result[0];
         Buffer<uint8_t> clz_result = result[1];
         Buffer<uint8_t> ctz_result = result[2];

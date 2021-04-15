@@ -303,7 +303,7 @@ bool mul(int vector_width, ScheduleVariant scheduling, const Target &target) {
         break;
     };
 
-    Buffer<RT> r = f.realize(WIDTH, HEIGHT, target);
+    Buffer<RT> r = f.realize({WIDTH, HEIGHT}, target);
 
     int ecount = 0;
     for (i = 0; i < WIDTH; i++) {
@@ -388,7 +388,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
         break;
     };
 
-    Realization R = f.realize(WIDTH, HEIGHT, target);
+    Realization R = f.realize({WIDTH, HEIGHT}, target);
     Buffer<T> q(R[0]);
     Buffer<T> r(R[1]);
 
@@ -401,6 +401,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
             T ri = r(i, j);
 
             if (BIG(qi) * BIG(bi) + ri != ai && (ecount++) < 10) {
+                std::cerr << "\ndiv_mod failure for t=" << target << " w=" << vector_width << " scheduling=" << (int)scheduling << ":\n";
                 std::cerr << "(a/b)*b + a%b != a; a, b = " << (int64_t)ai
                           << ", " << (int64_t)bi
                           << "; q, r = " << (int64_t)qi
@@ -409,6 +410,7 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
             } else if (!(0 <= ri &&
                          (t.is_min((int64_t)bi) || ri < (T)std::abs((int64_t)bi))) &&
                        (ecount++) < 10) {
+                std::cerr << "\ndiv_mod failure for t=" << target << " w=" << vector_width << " scheduling=" << (int)scheduling << ":\n";
                 std::cerr << "ri is not in the range [0, |b|); a, b = " << (int64_t)ai
                           << ", " << (int64_t)bi
                           << "; q, r = " << (int64_t)qi
@@ -423,12 +425,14 @@ bool div_mod(int vector_width, ScheduleVariant scheduling, const Target &target)
                 Expr re = simplify(ae % be);
 
                 if (!Internal::equal(qe, Expr(qi)) && (ecount++) < 10) {
+                    std::cerr << "\ndiv_mod failure for t=" << target << " w=" << vector_width << " scheduling=" << (int)scheduling << ":\n";
                     std::cerr << "Compiled a/b != simplified a/b: " << (int64_t)ai
                               << "/" << (int64_t)bi
                               << " = " << (int64_t)qi
                               << " != " << qe << "\n";
                     success = false;
                 } else if (!Internal::equal(re, Expr(ri)) && (ecount++) < 10) {
+                    std::cerr << "\ndiv_mod failure for t=" << target << " w=" << vector_width << " scheduling=" << (int)scheduling << ":\n";
                     std::cerr << "Compiled a%b != simplified a%b: " << (int64_t)ai
                               << "%" << (int64_t)bi
                               << " = " << (int64_t)ri
@@ -498,6 +502,8 @@ bool f_mod() {
 }
 
 bool test_mul(int vector_width, ScheduleVariant scheduling, Target target) {
+    std::cout << "Testing mul vector_width: " + std::to_string(vector_width) + "\n";
+
     bool success = true;
 
     // Non-widening multiplication.
@@ -525,6 +531,8 @@ bool test_mul(int vector_width, ScheduleVariant scheduling, Target target) {
 }
 
 bool test_div_mod(int vector_width, ScheduleVariant scheduling, Target target) {
+    std::cout << "Testing div_mod vector_width: " + std::to_string(vector_width) + "\n";
+
     bool success = true;
 
     success &= div_mod<uint8_t, uint64_t>(vector_width, scheduling, target);
@@ -565,11 +573,24 @@ int main(int argc, char **argv) {
         }
     }
 
-    Halide::Internal::ThreadPool<bool> pool;
+    size_t num_threads = Halide::Internal::ThreadPool<bool>::num_processors_online();
+    if (target.has_feature(Target::OpenCL)) {
+        // TODO(https://github.com/halide/Halide/issues/5634):
+        // Try to track down sporadic failures of this function for OpenCL
+        // -- avoid running simultaneous tests
+        // -- set HL_DEBUG_CODEGEN so we can see what the IR looks like
+        num_threads = 1;
+#ifdef _WIN32
+        _putenv_s("HL_DEBUG_CODEGEN", "1");
+#else
+        setenv("HL_DEBUG_CODEGEN", "1", 1);
+#endif
+    }
+
+    Halide::Internal::ThreadPool<bool> pool(num_threads);
     std::vector<std::future<bool>> futures;
 
     for (int vector_width : vector_widths) {
-        std::cout << "Testing mul vector_width: " << vector_width << "\n";
         if (can_parallelize) {
             auto f = pool.async(test_mul, vector_width, scheduling, target);
             futures.push_back(std::move(f));
@@ -579,7 +600,6 @@ int main(int argc, char **argv) {
     }
 
     for (int vector_width : vector_widths) {
-        std::cout << "Testing div_mod vector_width: " << vector_width << "\n";
         if (can_parallelize) {
             auto f = pool.async(test_div_mod, vector_width, scheduling, target);
             futures.push_back(std::move(f));

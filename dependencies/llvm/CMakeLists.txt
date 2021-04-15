@@ -16,12 +16,12 @@ find_package(Clang REQUIRED CONFIG HINTS "${LLVM_DIR}/../clang")
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
-if (LLVM_PACKAGE_VERSION VERSION_LESS 10.0)
-    message(FATAL_ERROR "LLVM version must be 10.0 or newer")
+if (LLVM_PACKAGE_VERSION VERSION_LESS 11.0)
+    message(FATAL_ERROR "LLVM version must be 11.0 or newer")
 endif ()
 
-if (LLVM_PACKAGE_VERSION VERSION_GREATER 12.0)
-    message(WARNING "Halide is not tested on LLVM versions beyond 12.0")
+if (LLVM_PACKAGE_VERSION VERSION_GREATER 13.0)
+    message(WARNING "Halide is not tested on LLVM versions beyond 13.0")
 endif ()
 
 set(Halide_LLVM_DEFS ${LLVM_DEFINITIONS} $<BUILD_INTERFACE:LLVM_VERSION=${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}>)
@@ -53,6 +53,8 @@ set(active_components mcjit bitwriter linker passes)
 set(known_components AArch64 AMDGPU ARM Hexagon Mips NVPTX PowerPC RISCV WebAssembly X86)
 
 # We don't support LLVM10 or below for wasm codegen.
+# TODO: we should probably move this to LLVM 12 or 13, since LLVM11 won't
+# support SIMD usefully enough for Halide
 if (LLVM_PACKAGE_VERSION VERSION_LESS 11.0)
     list(REMOVE_ITEM known_components WebAssembly)
 endif ()

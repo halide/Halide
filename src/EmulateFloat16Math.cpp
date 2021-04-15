@@ -82,7 +82,7 @@ Expr float32_to_float16(Expr value) {
 
     // Test the endpoints
     Expr is_denorm = (bits < make_const(u32_t, 0x38800000));
-    Expr is_inf = (bits == make_const(u32_t, 0x7f800000));
+    Expr is_inf = (bits >= make_const(u32_t, 0x47800000));
     Expr is_nan = (bits > make_const(u32_t, 0x7f800000));
 
     // Denorms are linearly spaced, so we can handle them

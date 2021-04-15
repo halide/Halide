@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
                 sink.gpu_tile(x, y, xi, yi, 16, 16);
             }
 
-            Buffer<int32_t> output = sink.realize(100, 100);
+            Buffer<int32_t> output = sink.realize({100, 100});
 
             // Should be all zeroes.
             RDom r(output);

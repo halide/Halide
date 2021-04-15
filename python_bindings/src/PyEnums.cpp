@@ -15,7 +15,6 @@ void define_enums(py::module &m) {
         .value("Default_GPU", DeviceAPI::Default_GPU)
         .value("CUDA", DeviceAPI::CUDA)
         .value("OpenCL", DeviceAPI::OpenCL)
-        .value("GLSL", DeviceAPI::GLSL)
         .value("OpenGLCompute", DeviceAPI::OpenGLCompute)
         .value("Metal", DeviceAPI::Metal)
         .value("Hexagon", DeviceAPI::Hexagon);
@@ -79,6 +78,7 @@ void define_enums(py::module &m) {
         .value("MIPS", Target::Arch::MIPS)
         .value("Hexagon", Target::Arch::Hexagon)
         .value("POWERPC", Target::Arch::POWERPC)
+        .value("RISCV", Target::Arch::RISCV)
         .value("WebAssembly", Target::Arch::WebAssembly);
 
     py::enum_<Target::Feature>(m, "TargetFeature")
@@ -106,7 +106,6 @@ void define_enums(py::module &m) {
         .value("CLDoubles", Target::Feature::CLDoubles)
         .value("CLHalf", Target::Feature::CLHalf)
         .value("CLAtomics64", Target::Feature::CLAtomics64)
-        .value("OpenGL", Target::Feature::OpenGL)
         .value("OpenGLCompute", Target::Feature::OpenGLCompute)
         .value("EGL", Target::Feature::EGL)
         .value("UserContext", Target::Feature::UserContext)
@@ -129,6 +128,7 @@ void define_enums(py::module &m) {
         .value("AVX512_KNL", Target::Feature::AVX512_KNL)
         .value("AVX512_Skylake", Target::Feature::AVX512_Skylake)
         .value("AVX512_Cannonlake", Target::Feature::AVX512_Cannonlake)
+        .value("AVX512_SapphireRapids", Target::Feature::AVX512_SapphireRapids)
         .value("TraceLoads", Target::Feature::TraceLoads)
         .value("TraceStores", Target::Feature::TraceStores)
         .value("TraceRealizations", Target::Feature::TraceRealizations)
@@ -145,10 +145,12 @@ void define_enums(py::module &m) {
         .value("WasmSignExt", Target::Feature::WasmSignExt)
         .value("WasmSatFloatToInt", Target::Feature::WasmSatFloatToInt)
         .value("WasmThreads", Target::Feature::WasmThreads)
+        .value("WasmBulkMemory", Target::Feature::WasmBulkMemory)
         .value("SVE", Target::Feature::SVE)
         .value("SVE2", Target::Feature::SVE2)
         .value("ARMDotProd", Target::Feature::ARMDotProd)
         .value("LLVMLargeCodeModel", Target::Feature::LLVMLargeCodeModel)
+        .value("RVV", Target::Feature::RVV)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

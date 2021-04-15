@@ -14,11 +14,6 @@ tests(GROUPS correctness
       atomic_tuples.cpp
       atomics.cpp
       autodiff.cpp
-      autotune_bug.cpp
-      autotune_bug_2.cpp
-      autotune_bug_3.cpp
-      autotune_bug_4.cpp
-      autotune_bug_5.cpp
       bad_likely.cpp
       bit_counting.cpp
       bitwise_ops.cpp
@@ -78,6 +73,7 @@ tests(GROUPS correctness
       deferred_loop_level.cpp
       deinterleave4.cpp
       device_buffer_copy.cpp
+      device_copy_at_inner_loop.cpp
       device_crop.cpp
       device_slice.cpp
       dilate3x3.cpp
@@ -117,6 +113,7 @@ tests(GROUPS correctness
       fuse.cpp
       fuse_gpu_threads.cpp
       fused_where_inner_extent_is_zero.cpp
+      fuzz_bounds.cpp
       fuzz_cse.cpp
       fuzz_float_stores.cpp
       fuzz_simplify.cpp
@@ -135,6 +132,7 @@ tests(GROUPS correctness
       gpu_give_input_buffers_device_allocations.cpp
       gpu_jit_explicit_copy_to_device.cpp
       gpu_large_alloc.cpp
+      gpu_many_kernels.cpp
       gpu_mixed_dimensionality.cpp
       gpu_mixed_shared_mem_types.cpp
       gpu_multi_kernel.cpp
@@ -177,7 +175,9 @@ tests(GROUPS correctness
       interleave.cpp
       interleave_rgb.cpp
       interleave_x.cpp
+      interpreter.cpp
       interval.cpp
+      intrinsics.cpp
       introspection.cpp
       inverse.cpp
       isnan.cpp
@@ -216,6 +216,7 @@ tests(GROUPS correctness
       multipass_constraints.cpp
       multiple_outputs.cpp
       multiple_outputs_extern.cpp
+      multiple_scatter.cpp
       mux.cpp
       named_updates.cpp
       nested_shiftinwards.cpp

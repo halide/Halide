@@ -1,6 +1,7 @@
 #include "StmtToHtml.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
+#include "Module.h"
 #include "Scope.h"
 
 #include <cstdio>
@@ -374,7 +375,7 @@ private:
         stream << var(op->name);
         stream << close_expand_button() << " {";
         stream << close_span();
-        ;
+
         stream << open_div(op->is_producer ? "ProduceBody Indent" : "ConsumeBody Indent", produce_id);
         print(op->body);
         stream << close_div();
@@ -627,7 +628,7 @@ private:
         stream << open_span("Matched");
         stream << keyword("if") << " (";
         stream << close_span();
-        while (1) {
+        while (true) {
             print(op->condition);
             stream << matched(")");
             stream << close_expand_button() << " ";

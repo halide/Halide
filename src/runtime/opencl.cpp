@@ -1,6 +1,7 @@
 #include "HalideRuntimeOpenCL.h"
 #include "device_buffer_utils.h"
 #include "device_interface.h"
+#include "gpu_context_common.h"
 #include "printer.h"
 #include "scoped_spin_lock.h"
 
@@ -13,8 +14,12 @@ namespace OpenCL {
 
 // Define the function pointers for the OpenCL API.
 #define HAVE_OPENCL_12
-#define CL_FN(ret, fn, args) WEAK ret(CL_API_CALL *fn) args;
+
+// clang-format off
+#define CL_FN(ret, fn, args) WEAK ret(CL_API_CALL *fn) args;  // NOLINT(bugprone-macro-parentheses)
 #include "cl_functions.h"
+#undef CL_FN
+// clang-format on
 
 // The default implementation of halide_opencl_get_symbol attempts to load
 // the OpenCL runtime shared library/DLL, and then get the symbol from it.
@@ -61,9 +66,13 @@ WEAK void load_libopencl(void *user_context) {
     debug(user_context) << "    load_libopencl (user_context: " << user_context << ")\n";
     halide_assert(user_context, clCreateContext == nullptr);
 
-#define CL_FN(ret, fn, args) fn = get_cl_symbol<ret(CL_API_CALL *) args>(user_context, #fn, true);
-#define CL_12_FN(ret, fn, args) fn = get_cl_symbol<ret(CL_API_CALL *) args>(user_context, #fn, false);
+// clang-format off
+#define CL_FN(ret, fn, args)    fn = get_cl_symbol<ret(CL_API_CALL *) args>(user_context, #fn, true);   // NOLINT(bugprone-macro-parentheses)
+#define CL_12_FN(ret, fn, args) fn = get_cl_symbol<ret(CL_API_CALL *) args>(user_context, #fn, false);  // NOLINT(bugprone-macro-parentheses)
 #include "cl_functions.h"
+#undef CL_12_FN
+#undef CL_FN
+    // clang-format on
 }
 
 extern WEAK halide_device_interface_t opencl_device_interface;
@@ -286,15 +295,7 @@ struct device_handle {
     cl_mem mem;
 };
 
-// Structure to hold the state of a module attached to the context.
-// Also used as a linked-list to keep track of all the different
-// modules that are attached to a context in order to release them all
-// when then context is released.
-struct module_state {
-    cl_program program;
-    module_state *next;
-};
-WEAK module_state *state_list = nullptr;
+WEAK Halide::Internal::GPUCompilationCache<cl_context, cl_program> compilation_cache;
 
 WEAK bool validate_device_pointer(void *user_context, halide_buffer_t *buf, size_t size = 0) {
     if (buf->device == 0) {
@@ -556,6 +557,83 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     return err;
 }
 
+WEAK cl_program compile_kernel(void *user_context, cl_context ctx, const char *src, int size) {
+    cl_int err = 0;
+    cl_device_id dev;
+
+    err = clGetContextInfo(ctx, CL_CONTEXT_DEVICES, sizeof(dev), &dev, nullptr);
+    if (err != CL_SUCCESS) {
+        error(user_context) << "CL: clGetContextInfo(CL_CONTEXT_DEVICES) failed: "
+                            << get_opencl_error_name(err);
+        return nullptr;
+    }
+
+    cl_device_id devices[] = {dev};
+
+    // Get the max constant buffer size supported by this OpenCL implementation.
+    cl_ulong max_constant_buffer_size = 0;
+    err = clGetDeviceInfo(dev, CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE, sizeof(max_constant_buffer_size), &max_constant_buffer_size, nullptr);
+    if (err != CL_SUCCESS) {
+        error(user_context) << "CL: clGetDeviceInfo (CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE) failed: "
+                            << get_opencl_error_name(err);
+        return nullptr;
+    }
+    // Get the max number of constant arguments supported by this OpenCL implementation.
+    cl_uint max_constant_args = 0;
+    err = clGetDeviceInfo(dev, CL_DEVICE_MAX_CONSTANT_ARGS, sizeof(max_constant_args), &max_constant_args, nullptr);
+    if (err != CL_SUCCESS) {
+        error(user_context) << "CL: clGetDeviceInfo (CL_DEVICE_MAX_CONSTANT_ARGS) failed: "
+                            << get_opencl_error_name(err);
+        return nullptr;
+    }
+
+    // Build the compile argument options.
+    stringstream options(user_context);
+    options << "-D MAX_CONSTANT_BUFFER_SIZE=" << max_constant_buffer_size
+            << " -D MAX_CONSTANT_ARGS=" << max_constant_args;
+
+    const char *extra_options = halide_opencl_get_build_options(user_context);
+    options << " " << extra_options;
+
+    const char *sources[] = {src};
+    debug(user_context) << "    clCreateProgramWithSource -> ";
+    cl_program program = clCreateProgramWithSource(ctx, 1, &sources[0], nullptr, &err);
+    if (err != CL_SUCCESS) {
+        debug(user_context) << get_opencl_error_name(err) << "\n";
+        error(user_context) << "CL: clCreateProgramWithSource failed: "
+                            << get_opencl_error_name(err);
+        return nullptr;
+    } else {
+        debug(user_context) << (void *)program << "\n";
+    }
+
+    debug(user_context) << "    clBuildProgram " << (void *)program
+                        << " " << options.str() << "\n";
+    err = clBuildProgram(program, 1, devices, options.str(), nullptr, nullptr);
+    if (err != CL_SUCCESS) {
+
+        {
+            // Allocate an appropriately sized buffer for the build log.
+            Printer<ErrorPrinter, 16384> p(user_context);
+
+            p << "CL: clBuildProgram failed: "
+              << get_opencl_error_name(err)
+              << "\nBuild Log:\n";
+
+            // Get build log
+            if (clGetProgramBuildInfo(program, dev,
+                                      CL_PROGRAM_BUILD_LOG,
+                                      p.capacity() - p.size() - 1, p.dst,
+                                      nullptr) != CL_SUCCESS) {
+                p << "clGetProgramBuildInfo failed (Printer buffer too small?)";
+            }
+        }
+
+        return nullptr;
+    }
+    return program;
+}
+
 }  // namespace OpenCL
 }  // namespace Internal
 }  // namespace Runtime
@@ -661,7 +739,7 @@ WEAK int halide_opencl_compute_capability(void *user_context, int *major, int *m
 
 WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, const char *src, int size) {
     debug(user_context)
-        << "CL: halide_opencl_init_kernels (user_context: " << user_context
+        << "CL: halide_opencl_initialize_kernels (user_context: " << user_context
         << ", state_ptr: " << state_ptr
         << ", program: " << (void *)src
         << ", size: " << size << "\n";
@@ -675,103 +753,29 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    // Create the state object if necessary. This only happens once, regardless
-    // of how many times halide_init_kernels/halide_release is called.
-    // halide_release traverses this list and releases the program objects, but
-    // it does not modify the list nodes created/inserted here.
-    module_state **state = (module_state **)state_ptr;
-    if (!(*state)) {
-        *state = (module_state *)malloc(sizeof(module_state));
-        (*state)->program = nullptr;
-        (*state)->next = state_list;
-        state_list = *state;
+    debug(user_context) << "halide_cuda_initialize_kernels got compilation_cache mutex.\n";
+    cl_program program;
+    if (!compilation_cache.kernel_state_setup(user_context, state_ptr, ctx.context, program,
+                                              compile_kernel, user_context, ctx.context, src, size)) {
+        return halide_error_code_generic_error;
     }
-
-    // Create the program if necessary. TODO: The program object needs to not
-    // only already exist, but be created for the same context/device as the
-    // calling context/device.
-    if (!(*state && (*state)->program) && size > 1) {
-        cl_int err = 0;
-        cl_device_id dev;
-
-        err = clGetContextInfo(ctx.context, CL_CONTEXT_DEVICES, sizeof(dev), &dev, nullptr);
-        if (err != CL_SUCCESS) {
-            error(user_context) << "CL: clGetContextInfo(CL_CONTEXT_DEVICES) failed: "
-                                << get_opencl_error_name(err);
-            return err;
-        }
-
-        cl_device_id devices[] = {dev};
-
-        // Get the max constant buffer size supported by this OpenCL implementation.
-        cl_ulong max_constant_buffer_size = 0;
-        err = clGetDeviceInfo(dev, CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE, sizeof(max_constant_buffer_size), &max_constant_buffer_size, nullptr);
-        if (err != CL_SUCCESS) {
-            error(user_context) << "CL: clGetDeviceInfo (CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE) failed: "
-                                << get_opencl_error_name(err);
-            return err;
-        }
-        // Get the max number of constant arguments supported by this OpenCL implementation.
-        cl_uint max_constant_args = 0;
-        err = clGetDeviceInfo(dev, CL_DEVICE_MAX_CONSTANT_ARGS, sizeof(max_constant_args), &max_constant_args, nullptr);
-        if (err != CL_SUCCESS) {
-            error(user_context) << "CL: clGetDeviceInfo (CL_DEVICE_MAX_CONSTANT_ARGS) failed: "
-                                << get_opencl_error_name(err);
-            return err;
-        }
-
-        // Build the compile argument options.
-        stringstream options(user_context);
-        options << "-D MAX_CONSTANT_BUFFER_SIZE=" << max_constant_buffer_size
-                << " -D MAX_CONSTANT_ARGS=" << max_constant_args;
-
-        const char *extra_options = halide_opencl_get_build_options(user_context);
-        options << " " << extra_options;
-
-        const char *sources[] = {src};
-        debug(user_context) << "    clCreateProgramWithSource -> ";
-        cl_program program = clCreateProgramWithSource(ctx.context, 1, &sources[0], nullptr, &err);
-        if (err != CL_SUCCESS) {
-            debug(user_context) << get_opencl_error_name(err) << "\n";
-            error(user_context) << "CL: clCreateProgramWithSource failed: "
-                                << get_opencl_error_name(err);
-            return err;
-        } else {
-            debug(user_context) << (void *)program << "\n";
-        }
-
-        (*state)->program = program;
-        debug(user_context) << "    clBuildProgram " << (void *)program
-                            << " " << options.str() << "\n";
-        err = clBuildProgram(program, 1, devices, options.str(), nullptr, nullptr);
-        if (err != CL_SUCCESS) {
-
-            {
-                // Allocate an appropriately sized buffer for the build log.
-                Printer<ErrorPrinter, 16384> p(user_context);
-
-                p << "CL: clBuildProgram failed: "
-                  << get_opencl_error_name(err)
-                  << "\nBuild Log:\n";
-
-                // Get build log
-                if (clGetProgramBuildInfo(program, dev,
-                                          CL_PROGRAM_BUILD_LOG,
-                                          p.capacity() - p.size() - 1, p.dst,
-                                          nullptr) != CL_SUCCESS) {
-                    p << "clGetProgramBuildInfo failed (Printer buffer too small?)";
-                }
-            }
-
-            return err;
-        }
-    }
+    halide_assert(user_context, program != nullptr);
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
 #endif
     return 0;
+}
+
+WEAK void halide_opencl_finalize_kernels(void *user_context, void *state_ptr) {
+    debug(user_context)
+        << "CL: halide_opencl_finalize_kernels (user_context: " << user_context
+        << ", state_ptr: " << state_ptr << "\n";
+    ClContext ctx(user_context);
+    if (ctx.error_code == CL_SUCCESS) {
+        compilation_cache.release_hold(user_context, ctx.context, state_ptr);
+    }
 }
 
 // Used to generate correct timings when tracing
@@ -820,21 +824,7 @@ WEAK int halide_opencl_device_release(void *user_context) {
         err = clFinish(q);
         halide_assert(user_context, err == CL_SUCCESS);
 
-        // Unload the modules attached to this context. Note that the list
-        // nodes themselves are not freed, only the program objects are
-        // released. Subsequent calls to halide_init_kernels might re-create
-        // the program object using the same list node to store the program
-        // object.
-        module_state *state = state_list;
-        while (state) {
-            if (state->program) {
-                debug(user_context) << "    clReleaseProgram " << state->program << "\n";
-                err = clReleaseProgram(state->program);
-                halide_assert(user_context, err == CL_SUCCESS);
-                state->program = nullptr;
-            }
-            state = state->next;
-        }
+        compilation_cache.delete_context(user_context, ctx, clReleaseProgram);
 
         // Release the context itself, if we created it.
         if (ctx == context) {
@@ -1053,11 +1043,7 @@ WEAK int halide_opencl_run(void *user_context,
                            int shared_mem_bytes,
                            size_t arg_sizes[],
                            void *args[],
-                           int8_t arg_is_buffer[],
-                           int num_attributes,
-                           float *vertex_buffer,
-                           int num_coords_dim0,
-                           int num_coords_dim1) {
+                           int8_t arg_is_buffer[]) {
     debug(user_context)
         << "CL: halide_opencl_run (user_context: " << user_context << ", "
         << "entry: " << entry_name << ", "
@@ -1077,9 +1063,11 @@ WEAK int halide_opencl_run(void *user_context,
 
     // Create kernel object for entry_name from the program for this module.
     halide_assert(user_context, state_ptr);
-    cl_program program = ((module_state *)state_ptr)->program;
 
-    halide_assert(user_context, program);
+    cl_program program{};
+    bool found = compilation_cache.lookup(ctx.context, state_ptr, program);
+    halide_assert(user_context, found && program != nullptr);
+
     debug(user_context) << "    clCreateKernel " << entry_name << " -> ";
     cl_kernel f = clCreateKernel(program, entry_name, &err);
     if (err != CL_SUCCESS) {
@@ -1366,6 +1354,7 @@ WEAK const struct halide_device_interface_t *halide_opencl_device_interface() {
 
 namespace {
 WEAK __attribute__((destructor)) void halide_opencl_cleanup() {
+    compilation_cache.release_all(nullptr, clReleaseProgram);
     halide_opencl_device_release(nullptr);
 }
 }  // namespace

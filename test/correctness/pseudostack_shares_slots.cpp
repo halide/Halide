@@ -2,10 +2,11 @@
 
 using namespace Halide;
 
-std::vector<size_t> mallocs;
+const int tolerance = 3 * sizeof(int);
+std::vector<int> mallocs;
 
 void *my_malloc(void *user_context, size_t x) {
-    mallocs.push_back(x);
+    mallocs.push_back((int)x);
     void *orig = malloc(x + 32);
     void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
     ((void **)ptr)[-1] = orig;
@@ -51,10 +52,12 @@ int main(int argc, char **argv) {
         for (int sz = 8; sz <= 16; sz += 8) {
             mallocs.clear();
             p.set(sz);
-            chain.back().realize(1024);
-            size_t sz1 = sz + 2 * 20 - 1;
-            size_t sz2 = sz1 - 2;
-            if (mallocs.size() != 2 || mallocs[0] != sz1 || mallocs[1] != sz2) {
+            chain.back().realize({1024});
+            int sz1 = sz + 2 * 20 - 1;
+            int sz2 = sz1 - 2;
+            if (mallocs.size() != 2 ||
+                std::abs(mallocs[0] - sz1) > tolerance ||
+                std::abs(mallocs[1] - sz2) > tolerance) {
                 printf("Incorrect allocations: %d %d %d\n", (int)mallocs.size(), (int)mallocs[0], (int)mallocs[1]);
                 printf("Expected: 2 %d %d\n", (int)sz1, (int)sz2);
                 return -1;
@@ -92,15 +95,19 @@ int main(int argc, char **argv) {
         for (int sz = 64; sz <= 128; sz += 64) {
             mallocs.clear();
             p.set(sz);
-            chain.back().realize(1024);
-            size_t sz1 = sz / 8 + 23;
-            size_t sz2 = sz1 - 2;
-            size_t sz3 = sz + 19;
-            size_t sz4 = sz3 - 2;
-            if (mallocs.size() != 4 || mallocs[0] != sz1 || mallocs[1] != sz2 || mallocs[2] != sz3 || mallocs[3] != sz4) {
+            chain.back().realize({1024});
+            int sz1 = sz / 8 + 23;
+            int sz2 = sz1 - 2;
+            int sz3 = sz + 19;
+            int sz4 = sz3 - 2;
+            if (mallocs.size() != 4 ||
+                std::abs(mallocs[0] - sz1) > tolerance ||
+                std::abs(mallocs[1] - sz2) > tolerance ||
+                std::abs(mallocs[2] - sz3) > tolerance ||
+                std::abs(mallocs[3] - sz4) > tolerance) {
                 printf("Incorrect allocations: %d %d %d %d %d\n", (int)mallocs.size(),
-                       (int)mallocs[0], (int)mallocs[1], (int)mallocs[2], (int)mallocs[3]);
-                printf("Expected: 4 %d %d %d %d\n", (int)sz1, (int)sz2, (int)sz3, (int)sz4);
+                       mallocs[0], mallocs[1], mallocs[2], mallocs[3]);
+                printf("Expected: 4 %d %d %d %d\n", sz1, sz2, sz3, sz4);
                 return -1;
             }
         }

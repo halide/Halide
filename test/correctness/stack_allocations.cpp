@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
     // f and g should both do stack allocations
     h.set_custom_allocator(&my_malloc, &my_free);
 
-    h.realize(10, 10);
+    h.realize({10, 10});
 
     printf("Success!\n");
     return 0;
