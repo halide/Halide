@@ -340,20 +340,10 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     // Note that we must restore it before using internal_error (and also on the non-error path).
     auto old_abort_handler = std::signal(SIGABRT, SIG_DFL);
 
-#if LLVM_VERSION >= 110
     if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, llvm::outs(), llvm::errs())) {
         std::signal(SIGABRT, old_abort_handler);
         internal_error << "lld::wasm::link failed\n";
     }
-#else
-    std::string lld_errs_string;
-    llvm::raw_string_ostream lld_errs(lld_errs_string);
-
-    if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, llvm::outs(), llvm::errs())) {
-        std::signal(SIGABRT, old_abort_handler);
-        internal_error << "lld::wasm::link failed: (" << lld_errs.str() << ")\n";
-    }
-#endif
 
     std::signal(SIGABRT, old_abort_handler);
 
@@ -1362,6 +1352,7 @@ WasmModuleContents::WasmModuleContents(
       trampolines(JITModule::make_trampolines_module(get_host_target(), jit_externs, kTrampolineSuffix, extern_deps)) {
 
 #if WITH_WABT
+    // TODO: we should probably move this to LLVM 12 or 13, since LLVM11 won't support SIMD usefully enough for Halide
     user_assert(LLVM_VERSION >= 110) << "Using the WebAssembly JIT is only supported under LLVM 11+.";
 
     user_assert(!target.has_feature(Target::WasmThreads)) << "wasm_threads requires Emscripten (or a similar compiler); it will never be supported under JIT.";
