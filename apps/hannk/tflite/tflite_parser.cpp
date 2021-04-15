@@ -88,7 +88,7 @@ public:
         }
     }
 
-    std::unique_ptr<Tensor> parse_tensor(const tflite::Tensor *t) {
+    TensorPtr parse_tensor(const tflite::Tensor *t) {
         std::vector<int> shape;
         if (t->shape()) {
             const int shape_size = t->shape()->size();
