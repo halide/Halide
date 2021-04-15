@@ -8,14 +8,35 @@
 
 namespace hannk {
 
-// Divide a by b, rounding up or down.
-int floor_div(int a, int b);
-int round_div(int a, int b);
-int ceil_div(int a, int b);
+// Compute a / b, rounding down.
+inline int floor_div(int a, int b) {
+    assert(a >= 0 && b >= 0);
+    int q = a / b;
+    if (q * b != a && ((a < 0) != (b < 0))) {
+        q -= 1;
+    }
+    return q;
+}
 
-// Align x up or down to a multiple of n.
-int align_up(int x, int n);
-int align_down(int x, int n);
+// Compute a / b, rounding to nearest.
+inline int round_div(int a, int b) {
+    return floor_div(a + b / 2, b);
+}
+
+// Compute a / b, rounding upwards.
+inline int ceil_div(int a, int b) {
+    return floor_div(a + b - 1, b);
+}
+
+// Align x up to the next multiplie of n.
+inline int align_up(int x, int n) {
+    return ceil_div(x, n) * n;
+}
+
+// Align x down to the next multiplie of n.
+inline int align_down(int x, int n) {
+    return floor_div(x, n) * n;
+}
 
 // This type (and Box below) mirrors Halide::Interval, but is not symbolic.
 struct Interval {
@@ -119,16 +140,24 @@ inline std::ostream &operator<<(std::ostream &s, const Interval &i) {
 using Box = std::vector<Interval>;
 
 // Check if b fully contains a.
-bool is_subset_of(const Interval &a, const Interval &b);
+inline bool is_subset_of(const Interval &a, const Interval &b) {
+    return a.min >= b.min && a.max <= b.max;
+}
 bool is_subset_of(const Box &a, const Box &b);
 
 // Check if the union of a and b can be computed exactly.
-bool is_union_exact(const Interval &a, const Interval &b);
+inline bool is_union_exact(const Interval &a, const Interval &b) {
+    return !(a.min > b.max + 1 || b.min > a.max + 1);
+}
 bool is_union_exact(const Box &a, const Box &b);
 
-Interval Union(const Interval &a, const Interval &b);
+inline Interval Union(const Interval &a, const Interval &b) {
+    return {std::min(a.min, b.min), std::max(a.max, b.max)};
+}
 Box Union(const Box &a, const Box &b);
-Interval intersect(const Interval &a, Interval &b);
+inline Interval intersect(const Interval &a, const Interval &b) {
+    return {std::max(a.min, b.min), std::min(a.max, b.max)};
+}
 Box intersect(Box a, const Box &b);
 
 bool is_empty(const Box &a);
