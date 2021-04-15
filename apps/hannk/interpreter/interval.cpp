@@ -85,7 +85,7 @@ bool is_empty(const Box &a) {
 int floor_div(int a, int b) {
     assert(a >= 0 && b >= 0);
     int q = a / b;
-    if (q * b != a && (a < 0 != b < 0)) {
+    if (q * b != a && ((a < 0) != (b < 0))) {
         q -= 1;
     }
     return q;
