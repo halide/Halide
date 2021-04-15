@@ -20,6 +20,7 @@ tflite::BuiltinOperator get_builtin_code(const tflite::OperatorCode *op_code) {
 class Parser {
     const tflite::Model *model_;
     std::vector<TensorPtr> tensors_;
+    std::vector<std::unique_ptr<OpGroup>> subgraphs_;
 
 public:
     explicit Parser(const tflite::Model *model)
@@ -317,6 +318,8 @@ public:
             return PARSE_BINARY_WITH_ACTIVATION(op, Add);
         case tflite::BuiltinOperator_SUB:
             return PARSE_BINARY_WITH_ACTIVATION(op, Sub);
+        case tflite::BuiltinOperator_MUL:
+            return PARSE_BINARY_WITH_ACTIVATION(op, Mul);
         case tflite::BuiltinOperator_AVERAGE_POOL_2D:
             return parse_pool2D(op, PoolOp::Average);
         case tflite::BuiltinOperator_MAX_POOL_2D:
@@ -350,23 +353,24 @@ public:
         }
     }
 
-    std::unique_ptr<OpGroup> parse_subgraph(const tflite::SubGraph &subgraph) {
-        for (const tflite::Tensor *t : *subgraph.tensors()) {
+    std::unique_ptr<OpGroup> parse_subgraph(const tflite::SubGraph *subgraph) {
+        for (const tflite::Tensor *t : *subgraph->tensors()) {
             tensors_.emplace_back(parse_tensor(t));
+            tensors_.back()->dump(std::cout);
         }
 
         std::vector<std::unique_ptr<Op>> ops;
-        for (const tflite::Operator *i : *subgraph.operators()) {
+        for (const tflite::Operator *i : *subgraph->operators()) {
             ops.emplace_back(parse_op(i));
         }
 
         std::vector<TensorPtr> inputs;
-        for (int i : *subgraph.inputs()) {
+        for (int i : *subgraph->inputs()) {
             tensors_[i]->set_input(true);
             inputs.push_back(tensors_[i]);
         }
         std::vector<TensorPtr> outputs;
-        for (int i : *subgraph.outputs()) {
+        for (int i : *subgraph->outputs()) {
             tensors_[i]->set_output(true);
             outputs.push_back(tensors_[i]);
         }
@@ -375,11 +379,12 @@ public:
     }
 
     std::unique_ptr<OpGroup> parse() {
-        const auto &subgraphs = *model_->subgraphs();
-        CHECK(subgraphs.size() == 1) << "Only 1 subgraph is currently supported.";
-        const tflite::SubGraph &subgraph = *subgraphs[0];
+        for (const tflite::SubGraph *s : *model_->subgraphs()) {
+            subgraphs_.push_back(parse_subgraph(s));
+        }
 
-        return parse_subgraph(subgraph);
+        CHECK(subgraphs_.size() == 1) << "Zero or multiple entry points found.";
+        return std::move(subgraphs_.front());
     }
 
     // Movable but not copyable.

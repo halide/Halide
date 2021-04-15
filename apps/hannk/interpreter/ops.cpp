@@ -21,6 +21,7 @@
 #include "logistic_uint8.h"
 #include "max_pool_uint8.h"
 #include "mean_uint8.h"
+#include "mul_uint8_uint8_uint8.h"
 #include "softmax_uint8.h"
 #include "tanh_uint8.h"
 #include "tile_conv_filter_uint8.h"
@@ -99,6 +100,26 @@ void optimize_elementwise_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b, int r
     }
     pad_to_rank(a, rank);
     pad_to_rank(b, rank);
+}
+
+template<typename Ta, typename Tb>
+void broadcast_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b, int rank) {
+    pad_to_rank(a, rank);
+    pad_to_rank(b, rank);
+
+    halide_buffer_t *raw_a = a.raw_buffer();
+    halide_buffer_t *raw_b = b.raw_buffer();
+    for (int d = 0; d < rank; d++) {
+        if (raw_a->dim[d].extent == 1) {
+            raw_a->dim[d].extent = raw_b->dim[d].extent;
+            raw_a->dim[d].stride = 0;
+        } else if (b.dim(d).extent() == 1) {
+            raw_b->dim[d].extent = raw_a->dim[d].extent;
+            raw_b->dim[d].stride = 0;
+        } else {
+            LOG(FATAL) << "Can't broadcast shapes";
+        }
+    }
 }
 
 bool is_alias(const HalideBuffer<const void> &a, const HalideBuffer<const void> &b) {
@@ -235,13 +256,34 @@ void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
 
     const auto out_range = get_output_range(activation, outq);
 
-    optimize_elementwise_shapes(in1, in2, out, 4);
-
     CHECK(0 == add_uint8_uint8(left_shift, in1, in2,
                                in1_zero, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
                                in2_zero, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
                                out_zero, out_mul_and_shift.multiplier, -out_mul_and_shift.shift,
                                out_range.min, out_range.max, out));
+}
+
+void mul(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
+         HalideBuffer<const uint8_t> in2, const QuantizationInfo &in2q,
+         HalideBuffer<uint8_t> out, const QuantizationInfo &outq, ActivationFunction activation) {
+    const int in1_zero = in1q.zero.at(0);
+    const int in2_zero = in2q.zero.at(0);
+    const int out_zero = outq.zero.at(0);
+
+    const float in1_scale = in1q.scale.at(0);
+    const float in2_scale = in2q.scale.at(0);
+    const float out_scale = outq.scale.at(0);
+
+    const double multiplier = in1_scale * in2_scale / out_scale;
+
+    auto mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(multiplier);
+    assert(mul_and_shift.shift <= 0);
+
+    const auto out_range = get_output_range(activation, outq);
+
+    CHECK(0 == mul_uint8_uint8_uint8(in1, in2, in1_zero, in2_zero,
+                                     out_zero, mul_and_shift.multiplier, -mul_and_shift.shift,
+                                     out_range.min, out_range.max, out));
 }
 
 void requantize(const HalideBuffer<const uint8_t> &in, const QuantizationInfo &inq,
@@ -274,6 +316,8 @@ const char *BinaryOp::to_string(BinaryOp::Operator op) {
         return "Add";
     case Sub:
         return "Sub";
+    case Mul:
+        return "Mul";
     default:
         CHECK(false) << "Unsupported binary op\n";
         return nullptr;
@@ -288,12 +332,18 @@ void BinaryOp::execute() {
     if (in1->type() == halide_type_of<uint8_t>() &&
         in2->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
+        auto in1_buf = in1->buffer<const uint8_t>();
+        auto in2_buf = in2->buffer<const uint8_t>();
+        auto out_buf = out->buffer<uint8_t>();
+        broadcast_shapes(in1_buf, in2_buf, 4);
+        optimize_elementwise_shapes(in1_buf, in2_buf, out_buf, 4);
         switch (op_) {
         case Add:
         case Sub:
-            add(in1->buffer<const uint8_t>(), in1->quantization(),
-                in2->buffer<const uint8_t>(), in2->quantization(), op_ == Add ? 1 : -1,
-                out->buffer<uint8_t>(), out->quantization(), activation_);
+            add(in1_buf, in1->quantization(), in2_buf, in2->quantization(), op_ == Add ? 1 : -1, out_buf, out->quantization(), activation_);
+            break;
+        case Mul:
+            mul(in1_buf, in1->quantization(), in2_buf, in2->quantization(), out_buf, out->quantization(), activation_);
             break;
         }
     } else {

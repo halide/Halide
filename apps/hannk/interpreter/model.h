@@ -271,6 +271,10 @@ struct DimMap {
         return *this;
     }
 
+    DimMap &downsample(int factor) {
+        return downsample(factor, Interval(0, 0));
+    }
+
     DimMap &upsample(int factor) {
         return upsample(factor, Interval(0, 0));
     }
@@ -376,6 +380,11 @@ public:
 
     BoundsMap &upsample(int dim_in, int dim_out, int factor, const Interval &filter) {
         at(dim_in, dim_out).upsample(factor, filter);
+        return *this;
+    }
+
+    BoundsMap &downsample(int dim_in, int dim_out, int factor) {
+        at(dim_in, dim_out).downsample(factor);
         return *this;
     }
 

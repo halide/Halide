@@ -143,6 +143,10 @@ $(BIN)/%/mean_uint8.a: $(GENERATOR_BIN)/reductions.generator
 	@mkdir -p $(@D)
 	$< -g Mean -f hannk::mean_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
+$(BIN)/%/mul_uint8_uint8_uint8.a: $(GENERATOR_BIN)/mul.generator
+	@mkdir -p $(@D)
+	$< -g Mul -f hannk::mul_uint8_uint8_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
 $(BIN)/%/softmax_uint8.a: $(GENERATOR_BIN)/normalizations.generator
 	@mkdir -p $(@D)
 	$< -g Softmax -f hannk::softmax_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
@@ -173,6 +177,7 @@ OPS_HALIDE = \
 	$(BIN)/%/logistic_uint8.a \
 	$(BIN)/%/max_pool_uint8.a \
 	$(BIN)/%/mean_uint8.a \
+	$(BIN)/%/mul_uint8_uint8_uint8.a \
 	$(BIN)/%/softmax_uint8.a \
 	$(BIN)/%/tanh_uint8.a \
 	$(BIN)/%/tile_conv_filter_uint8.a \

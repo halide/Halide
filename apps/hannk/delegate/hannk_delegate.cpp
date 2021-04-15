@@ -33,7 +33,8 @@
     KNOWN_OP(L2Normalization) \
     KNOWN_OP(Logistic)        \
     KNOWN_OP(Tanh)            \
-    KNOWN_OP(Mean)
+    KNOWN_OP(Mean)            \
+    KNOWN_OP(Mul)
 
 namespace hannk {
 namespace {
@@ -477,6 +478,15 @@ private:
         return ::hannk::make_unique<BinaryOp>(input1, input2, output, BinaryOp::Sub, activation);
     }
 
+    std::unique_ptr<Op> BuildMul(TfLiteContext *context, TfLiteNode *node) {
+        auto input1 = GetTensorById(context, node->inputs->data[0]);
+        auto input2 = GetTensorById(context, node->inputs->data[1]);
+        auto output = GetTensorById(context, node->outputs->data[0]);
+        const TfLiteMulParams *params = (const TfLiteMulParams *)(node->builtin_data);
+        auto activation = ConvertTfLiteActivation(params->activation);
+        return ::hannk::make_unique<BinaryOp>(input1, input2, output, BinaryOp::Mul, activation);
+    }
+
     std::unique_ptr<Op> BuildPool2d(TfLiteContext *context, TfLiteNode *node, PoolOp::Operator reduce_op) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
@@ -692,6 +702,10 @@ bool IsNodeSupported_Add(TfLiteContext *context, TfLiteNode *node, TfLiteRegistr
 }
 
 bool IsNodeSupported_Sub(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    return IsNodeSupported_Add(context, node, registration);
+}
+
+bool IsNodeSupported_Mul(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
     return IsNodeSupported_Add(context, node, registration);
 }
 

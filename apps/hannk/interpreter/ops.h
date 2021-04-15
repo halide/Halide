@@ -34,6 +34,7 @@ public:
     enum Operator {
         Add,
         Sub,
+        Mul,
     };
 
     static const char *to_string(Operator op);
