@@ -9,8 +9,9 @@
 namespace hannk {
 
 // Divide a by b, rounding up or down.
-int ceil_div(int a, int b);
 int floor_div(int a, int b);
+int round_div(int a, int b);
+int ceil_div(int a, int b);
 
 // Align x up or down to a multiple of n.
 int align_up(int x, int n);

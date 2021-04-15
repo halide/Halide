@@ -42,10 +42,14 @@ Halide::Expr multiply_quantized(
     const Halide::Expr &x, const Halide::Expr &quantized_multiplier, const Halide::Expr &shift);
 
 // Approximate log2(x)*2^log2_precision.
+// log2_precision must be less than 16.
 Halide::Expr approx_log2(const Halide::Expr &x, int log2_precision);
+Halide::Expr approx_log2(const Halide::Type &type, const Halide::Expr &x, int log2_precision);
 
 // Approximate 2^(x/2^log2_precision_x)/2^log2_precision_result.
+// log2_precision_x must be less than 16.
 Halide::Expr approx_exp2(const Halide::Expr &x, const Halide::Expr &log2_precision_x, int log2_precision_result);
+Halide::Expr approx_exp2(const Halide::Type &type, const Halide::Expr &x, const Halide::Expr &log2_precision_x, int log2_precision_result);
 
 // Approximate 2^log2_precision/sqrt(x)
 Halide::Expr approx_reciprocal_sqrt(const Halide::Expr &x, int log2_precision);

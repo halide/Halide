@@ -120,32 +120,33 @@ struct QuantizedMulAndShift {
     int multiplier, shift;
 };
 
-QuantizedMulAndShift get_quantized_mul_and_shift(double double_multiplier) {
+QuantizedMulAndShift get_quantized_mul_and_shift(double double_multiplier, int bits = 32) {
     if (double_multiplier == 0.) {
         return {0, 0};
     }
 
     int shift = 0;
     const double q = std::frexp(double_multiplier, &shift);
-    int64_t q_fixed = (int64_t)std::round(q * (1LL << 31));
-    assert(q_fixed <= (1LL << 31));
+    int64_t q_fixed = (int64_t)std::round(q * (1LL << (bits - 1)));
+    assert(q_fixed <= (1LL << (bits - 1)));
 
-    if (q_fixed == (1LL << 31)) {
+    if (q_fixed == (1LL << (bits - 1))) {
         q_fixed /= 2;
         ++shift;
     }
     assert(q_fixed <= std::numeric_limits<int32_t>::max());
 
-    if (shift < -31) {
+    if (shift < -(bits - 1)) {
         shift = 0;
         q_fixed = 0;
     }
+
     return {(int)q_fixed, shift};
 }
 
-QuantizedMulAndShift get_quantized_mul_and_shift_smaller_than_one(double double_multiplier) {
+QuantizedMulAndShift get_quantized_mul_and_shift_smaller_than_one(double double_multiplier, int bits = 32) {
     assert(double_multiplier >= 0.0 && double_multiplier < 1.0);
-    auto result = get_quantized_mul_and_shift(double_multiplier);
+    auto result = get_quantized_mul_and_shift(double_multiplier, bits);
     assert(result.shift <= 0);
     return result;
 }
@@ -882,18 +883,18 @@ void SoftmaxOp::execute() {
         const int output_zero = out->quantization().zero.at(0);
         assert(output_zero >= 0 && output_zero <= 255);
 
-        const float in_scale = in->quantization().scale.at(0) * beta2;
+        const float in_scale = in->quantization().scale.at(0);
         const float output_scale = out->quantization().scale.at(0);
 
-        const int left_shift = 22;
-        const double real_in_multiplier = in_scale / (1 << left_shift);
+        const int left_shift = 6;
+        const double real_in_multiplier = in_scale * beta2 / (1 << left_shift);
 
-        auto in_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in_multiplier);
+        auto in_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in_multiplier, 16);
         auto output_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(output_scale);
         assert(in_mul_and_shift.shift <= 0);
         assert(output_mul_and_shift.shift <= 0);
 
-        CHECK(0 == softmax_uint8(left_shift, in_buf, in_mul_and_shift.multiplier, -in_mul_and_shift.shift,
+        CHECK(0 == softmax_uint8(in_buf, in_mul_and_shift.multiplier, -in_mul_and_shift.shift,
                                  output_zero, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
                                  output_buf));
     } else {
@@ -951,13 +952,13 @@ void UnaryOp::execute() {
         assert(input_zero >= 0 && input_zero <= 255);
         const float in_scale = in->quantization().scale.at(0);
 
-        const int left_shift = 22;
+        const int left_shift = 6;
 
         if (op_ == Logistic) {
             // It's a easier to compute 2^(x*(log2(e))) than e^(x).
-            const double real_in_multiplier = in_scale * std::log2(std::exp(1.0f)) / (1 << left_shift);
+            const double real_in_multiplier = in_scale * -std::log2(std::exp(1.0f)) / (1 << left_shift);
 
-            auto in_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in_multiplier);
+            auto in_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in_multiplier, 16);
             assert(in_mul_and_shift.shift <= 0);
 
             assert(out->quantization().scale.at(0) == 1.0f / 256.0f);
@@ -968,7 +969,7 @@ void UnaryOp::execute() {
             // It's a easier to compute 2^(2*x*(log2(e))) than e^(2*x).
             const double real_in_multiplier = 2.0f * in_scale * std::log2(std::exp(1.0f)) / (1 << left_shift);
 
-            auto in_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in_multiplier);
+            auto in_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in_multiplier, 16);
             assert(in_mul_and_shift.shift <= 0);
 
             assert(out->quantization().scale.at(0) == 1.0f / 128.0f);

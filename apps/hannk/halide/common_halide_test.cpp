@@ -9,11 +9,47 @@ double relative_error(double x, double y) {
     return std::abs(x - y) / std::max({x, y, 1e-6});
 }
 
+bool test_approx_log2() {
+    const int extent = 50000;
+    const int scale = std::numeric_limits<int>::max() / extent;
+    const int log2_precisions[] = {0, 1, 2, 3, 8, 15};
+
+    Func test("test");
+    std::vector<Expr> tests;
+    for (int i : log2_precisions) {
+        tests.push_back(approx_log2((x + 1) * scale, i));
+    }
+    test(x) = Tuple(tests);
+
+    const double relative_tolerance = 1e-3;
+    const double absolute_tolerance = 2;
+
+    auto results = test.realize({extent});
+    const int log2_precisions_size = sizeof(log2_precisions) / sizeof(log2_precisions[0]);
+    for (int z = 0; z < log2_precisions_size; z++) {
+        Buffer<int> result = results[z];
+        const int log2_precision = log2_precisions[z];
+        const double precision = 1 << log2_precision;
+        for (int x = 0; x < result.width(); x++) {
+            const double exact_x = (x + 1) * scale;
+            const double exact = std::round(std::log2(exact_x) * precision);
+            const double result_x = result(x);
+            if (relative_error(exact, result_x) > relative_tolerance &&
+                std::abs(exact - result_x) > absolute_tolerance) {
+                std::cout << "approx_log2(" << exact_x << ", " << log2_precision << "): "
+                          << exact << " !~= " << result_x << "\n";
+                //return false;
+            }
+        }
+    }
+    return true;
+}
+
 bool test_approx_exp2() {
     const int extent = 50000;
     const int offset = extent / 2;
     const int scale = std::numeric_limits<int>::max() / offset;
-    const int log2_precision_results[] = {0, 1, 2, 3, 8, 16};
+    const int log2_precision_results[] = {0, 1, 2, 3, 8, 15};
 
     Func test("test");
     std::vector<Expr> tests;
@@ -22,25 +58,28 @@ bool test_approx_exp2() {
     }
     test(x, y) = Tuple(tests);
 
-    const double tolerance = 1e-1;
+    const double relative_tolerance = 1e-3;
+    const double absolute_tolerance = 1.0;
 
     auto results = test.realize({extent, 15});
-    int log2_precision_results_size =
+    const int log2_precision_results_size =
         sizeof(log2_precision_results) / sizeof(log2_precision_results[0]);
     for (int z = 0; z < log2_precision_results_size; z++) {
         Buffer<int> result = results[z];
-        int log2_precision_result = log2_precision_results[z];
-        double precision_result = 1 << log2_precision_result;
+        const int log2_precision_result = log2_precision_results[z];
+        const double precision_result = 1 << log2_precision_result;
         for (int y = 0; y < result.height(); y++) {
-            double precision_x = 1 << y;
+            const double precision_x = 1 << y;
             for (int x = 0; x < result.width(); x++) {
-                double exact_x = (x - offset) * scale / precision_x;
-                double exact = std::round(std::exp2(exact_x) * precision_result);
+                const double exact_x = (x - offset) * scale / precision_x;
+                const double exact = std::round(std::exp2(exact_x) * precision_result);
                 if (std::numeric_limits<int>::min() <= exact && exact <= std::numeric_limits<int>::max()) {
-                    double result_xy = result(x, y);
-                    if (relative_error(exact, result_xy) > tolerance && std::abs(exact - result_xy) > 1) {
-                        std::cout << "Failure(" << exact_x << " " << y << " " << log2_precision_result << "): "
+                    const double result_xy = result(x, y);
+                    if (relative_error(exact, result_xy) > relative_tolerance &&
+                        std::abs(exact - result_xy) > absolute_tolerance) {
+                        std::cout << "approx_exp2(" << exact_x << ", " << y << ", " << log2_precision_result << "): "
                                   << exact << " !~= " << result_xy << "\n";
+                       //return false;
                     }
                 } else {
                     // The result would have overflowed.
@@ -52,6 +91,10 @@ bool test_approx_exp2() {
 }
 
 int main(int argc, char **argv) {
+    if (!test_approx_log2()) {
+        return -1;
+    }
+
     if (!test_approx_exp2()) {
         return -1;
     }
