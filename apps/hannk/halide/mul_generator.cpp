@@ -2,7 +2,6 @@
 #include "common_halide.h"
 
 using namespace Halide;
-using namespace Halide::BoundaryConditions;
 using namespace Halide::ConciseCasts;
 
 namespace hannk {
