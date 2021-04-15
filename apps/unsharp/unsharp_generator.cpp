@@ -62,6 +62,11 @@ public:
 
         // Schedule
         if (!auto_schedule) {
+            // Some Intel Mac Minis have GPUs that require tile sizes smaller than 32x32
+            // for this pipeline because they have too few registers. Drop to 16x16 to
+            // avoid unexpected crashes in CI.
+            const int tile_size = get_target().has_feature(Target::Metal) ? 16 : 32;
+
             if (get_target().has_gpu_feature()) {
                 // The timing of this schedule is oddly noisy. Runs
                 // from 0.4ms to 0.5ms on a 2060 RTX.  Oddly, the
@@ -69,7 +74,7 @@ public:
                 Var xi, yi;
                 output.compute_root()
                     .reorder(c, x, y)
-                    .gpu_tile(x, y, xi, yi, 32, 32)
+                    .gpu_tile(x, y, xi, yi, tile_size, tile_size)
                     .bound(c, 0, 3)
                     .unroll(c);
                 ratio.compute_at(output, xi);

@@ -6,7 +6,6 @@ tests(GROUPS error
       atomics_gpu_8_bit.cpp
       atomics_gpu_mutex.cpp
       atomics_self_reference.cpp
-      atomics_vectorized_mutex.cpp
       auto_schedule_no_parallel.cpp
       auto_schedule_no_reorder.cpp
       autodiff_unbounded.cpp
@@ -21,6 +20,8 @@ tests(GROUPS error
       bad_extern_split.cpp
       bad_fold.cpp
       bad_host_alignment.cpp
+      bad_reorder.cpp
+      bad_reorder_storage.cpp
       bad_rvar_order.cpp
       bad_schedule.cpp
       bad_store_at.cpp
@@ -35,6 +36,7 @@ tests(GROUPS error
       define_after_use.cpp
       device_dirty_with_no_device_support.cpp
       device_target_mismatch.cpp
+      dupe_param_name.cpp
       expanding_reduction.cpp
       extern_func_self_argument.cpp
       five_d_gpu_buffer.cpp
@@ -43,12 +45,15 @@ tests(GROUPS error
       implicit_args.cpp
       impossible_constraints.cpp
       init_def_should_be_all_vars.cpp
+      incomplete_target.cpp
       inspect_loop_level.cpp
       lerp_float_weight_out_of_range.cpp
       lerp_mismatch.cpp
       lerp_signed_weight.cpp
       memoize_different_compute_store.cpp
+      memoize_redefine_eviction_key.cpp
       metal_vector_too_large.cpp
+      metal_threads_too_large.cpp
       missing_args.cpp
       no_default_device.cpp
       nonexistent_update_stage.cpp
@@ -57,6 +62,7 @@ tests(GROUPS error
       pointer_arithmetic.cpp
       race_condition.cpp
       rdom_undefined.cpp
+      realization_with_too_many_outputs.cpp
       realize_constantly_larger_than_two_gigs.cpp
       reduction_bounds.cpp
       reduction_type_mismatch.cpp
@@ -64,6 +70,7 @@ tests(GROUPS error
       reuse_var_in_schedule.cpp
       reused_args.cpp
       rfactor_inner_dim_non_commutative.cpp
+      run_with_large_stack_throws.cpp
       specialize_fail.cpp
       split_inner_wrong_tail_strategy.cpp
       thread_id_outside_block_id.cpp
@@ -83,6 +90,7 @@ tests(GROUPS error
       vectorize_too_little.cpp
       vectorize_too_much.cpp
       vectorized_extern.cpp
+      vector_tile.cpp
       wrap_custom_after_shared.cpp
       wrap_frozen.cpp
       wrapper_never_used.cpp

@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
 
         f(x) = print(x * x, "the answer is", 42.0f, "unsigned", cast<uint32_t>(145));
         f.set_custom_print(halide_print);
-        Buffer<int32_t> result = f.realize(10);
+        Buffer<int32_t> result = f.realize({10});
 
         for (int32_t i = 0; i < 10; i++) {
             if (result(i) != i * i) {
@@ -73,7 +73,7 @@ int main(int argc, char **argv) {
         // Test a string containing a printf format specifier (It should print it as-is).
         f(x) = print_when(x == 3, x * x, "g", 42.0f, "%s", param);
         f.set_custom_print(halide_print);
-        Buffer<int32_t> result = f.realize(10);
+        Buffer<int32_t> result = f.realize({10});
 
         for (int32_t i = 0; i < 10; i++) {
             if (result(i) != i * i) {
@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
         }
         f(x) = print(args);
         f.set_custom_print(halide_print);
-        Buffer<uint64_t> result = f.realize(1);
+        Buffer<uint64_t> result = f.realize({1});
 
         if (result(0) != 100) {
             return -1;
@@ -135,7 +135,7 @@ int main(int argc, char **argv) {
     {
         Func f, g;
 
-        const int N = 1000000;
+        const int N = 100000;
 
         Expr e = reinterpret(Float(32), random_uint());
         // Make sure we cover some special values.
@@ -158,7 +158,7 @@ int main(int argc, char **argv) {
         f(x) = print(e);
 
         f.set_custom_print(halide_print);
-        Buffer<float> imf = f.realize(N);
+        Buffer<float> imf = f.realize({N});
 
         assert(messages.size() == (size_t)N);
 
@@ -181,7 +181,7 @@ int main(int argc, char **argv) {
 
         g(x) = print(reinterpret(Float(64), (cast<uint64_t>(random_uint()) << 32) | random_uint()));
         g.set_custom_print(halide_print);
-        Buffer<double> img = g.realize(N);
+        Buffer<double> img = g.realize({N});
 
         assert(messages.size() == (size_t)N);
 
@@ -210,12 +210,12 @@ int main(int argc, char **argv) {
         f(x) = print(x * 3);
         f.set_custom_print(halide_print);
         f.vectorize(x, 32);
-        if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        if (target.has_feature(Target::HVX)) {
             f.hexagon();
         }
-        Buffer<int> result = f.realize(128);
+        Buffer<int> result = f.realize({128});
 
-        if (!target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        if (!target.has_feature(Target::HVX)) {
             assert((int)messages.size() == result.width());
             for (size_t i = 0; i < messages.size(); i++) {
                 assert(messages[i] == std::to_string(i * 3) + "\n");
@@ -235,12 +235,12 @@ int main(int argc, char **argv) {
         f(x) = print_when(x % 2 == 0, x * 3);
         f.set_custom_print(halide_print);
         f.vectorize(x, 32);
-        if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        if (target.has_feature(Target::HVX)) {
             f.hexagon();
         }
-        Buffer<int> result = f.realize(128);
+        Buffer<int> result = f.realize({128});
 
-        if (!target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        if (!target.has_feature(Target::HVX)) {
             assert((int)messages.size() == result.width() / 2);
             for (size_t i = 0; i < messages.size(); i++) {
                 assert(messages[i] == std::to_string(i * 2 * 3) + "\n");

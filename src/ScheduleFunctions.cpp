@@ -31,6 +31,7 @@ using std::string;
 using std::vector;
 
 namespace {
+
 // A structure representing a containing LetStmt, IfThenElse, or For
 // loop. Used in build_provide_loop_nest below. Both If and IfInner represent
 // IfThenElse stmts, however, IfInner should not be reordered to outside of
@@ -56,8 +57,6 @@ bool var_name_match(const string &v1, const string &v2) {
             Internal::ends_with(v1, "." + v2) ||
             Internal::ends_with(v2, "." + v1));
 }
-
-}  // anonymous namespace
 
 class ContainsImpureCall : public IRVisitor {
     using IRVisitor::visit;
@@ -191,7 +190,11 @@ Stmt build_loop_nest(
     // Put all the reduction domain predicates into the containers vector.
     for (Expr pred : predicates) {
         pred = qualify(prefix, pred);
-        pred_container.emplace_back(Container::If, 0, "", likely(pred));
+        // Add a likely qualifier if there isn't already one
+        if (Call::as_intrinsic(pred, {Call::likely, Call::likely_if_innermost})) {
+            pred = likely(pred);
+        }
+        pred_container.emplace_back(Container::If, 0, "", pred);
     }
     int n_predicates = (int)(pred_container.size());
 
@@ -217,7 +220,9 @@ Stmt build_loop_nest(
 
     // Sort the predicate guards for the fused loops so they are as far outwards
     // as possible. IfInnner should not be reordered to outside of a for loop.
-    for (int i = (int)nest.size() - n_predicates_inner - n_predicates; i < (int)nest.size() - n_predicates; i++) {
+    for (int i = (int)nest.size() - n_predicates_inner - n_predicates;
+         i < (int)nest.size() - n_predicates;
+         i++) {
         // Only push up IfThenElse.
         internal_assert(nest[i].value.defined());
         internal_assert(nest[i].type == Container::IfInner);
@@ -363,9 +368,22 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     // Make the (multi-dimensional multi-valued) store node.
     Stmt body = Provide::make(func.name(), values, site);
     if (def.schedule().atomic()) {  // Add atomic node.
-        // If required, we will allocate a mutex buffer called func.name() + ".mutex"
-        // The buffer is added in the AddAtomicMutex pass.
-        body = Atomic::make(func.name(), func.name() + ".mutex", body);
+        bool any_unordered_parallel = false;
+        for (const auto &d : def.schedule().dims()) {
+            any_unordered_parallel |= is_unordered_parallel(d.for_type);
+        }
+        if (any_unordered_parallel) {
+            // If required, we will allocate a mutex buffer called func.name() + ".mutex"
+            // The buffer is added in the AddAtomicMutex pass.
+            body = Atomic::make(func.name(), func.name() + ".mutex", body);
+        } else {
+            // No mutex is required if there is no parallelism, and it
+            // wouldn't work if all parallelism is synchronous
+            // (e.g. vectorization). Vectorization and the like will
+            // need to handle atomic nodes specially, by either
+            // emitting VectorReduce ops or scalarizing.
+            body = Atomic::make(func.name(), std::string{}, body);
+        }
     }
 
     // Default schedule/values if there is no specialization
@@ -743,7 +761,9 @@ class IsUsedInStmt : public IRVisitor {
 
     void visit(const Call *op) override {
         IRVisitor::visit(op);
-        if (op->name == func) result = true;
+        if (op->name == func) {
+            result = true;
+        }
     }
 
     // A reference to the function's buffers counts as a use
@@ -909,7 +929,7 @@ private:
 
             ForType for_type = op->for_type;
             DeviceAPI device_api = op->device_api;
-            if (is_one(extent_val)) {
+            if (is_const_one(extent_val)) {
                 // This is the child loop of a fused group. The real loop of the
                 // fused group is the loop of the parent function of the fused
                 // group. This child loop is just a scheduling point, and should
@@ -1004,20 +1024,19 @@ public:
           is_output_list(is_output_list),
           target(target),
           env(env),
-          compute_level(funcs[0].schedule().compute_level()),
-          store_level(funcs[0].schedule().store_level()) {
+          compute_level(funcs[0].schedule().compute_level()) {
     }
 
     bool found_compute_level() const {
         return _found_compute_level;
     }
     bool found_store_level() const {
-        return _found_store_level;
+        return _found_store_levels_for_funcs.size() == funcs.size();
     }
 
 protected:
     bool _found_compute_level{};
-    bool _found_store_level{};
+    std::set<string> _found_store_levels_for_funcs;
 
     using IRMutator::visit;
 
@@ -1034,11 +1053,10 @@ protected:
 
         // Dig through any let/if statements
         vector<pair<string, Expr>> containers;
-        while (1) {
+        while (true) {
             if (const LetStmt *l = body.as<LetStmt>()) {
-                const Call *call = l->value.as<Call>();
-                if (!(call && call->is_intrinsic(Call::promise_clamped)) &&
-                    !is_pure(l->value)) {
+                const Call *promise_clamped = Call::as_intrinsic(l->value, {Call::promise_clamped});
+                if (!promise_clamped && !is_pure(l->value)) {
                     // The consumer of the Func we're injecting may be an
                     // extern stage, which shows up in the IR as a let
                     // stmt with a side-effecty RHS. We need to take care
@@ -1077,7 +1095,8 @@ protected:
             debug(2) << "Injecting realization of " << funcs[0].name() << " around node " << Stmt(for_loop) << "\n";
 
             Stmt stmt = build_realize(build_pipeline_group(for_loop), funcs[0], is_output_list[0]);
-            _found_store_level = _found_compute_level = true;
+            _found_compute_level = true;
+            _found_store_levels_for_funcs.insert(funcs[0].name());
             return stmt;
         }
 
@@ -1089,10 +1108,14 @@ protected:
             _found_compute_level = true;
         }
 
-        if (_found_compute_level && store_level.match(for_loop->name)) {
-            debug(3) << "Found store level at " << for_loop->name << "\n";
-            body = build_realize_group(body);
-            _found_store_level = true;
+        if (_found_compute_level) {
+            for (size_t i = 0; i < funcs.size(); i++) {
+                if (funcs[i].schedule().store_level().match(for_loop->name)) {
+                    debug(3) << "Found store level for " << funcs[i].name() << " at " << for_loop->name << "\n";
+                    body = build_realize_function_from_group(body, i);
+                    _found_store_levels_for_funcs.insert(funcs[i].name());
+                }
+            }
         }
 
         // Reinstate the let/if statements
@@ -1140,7 +1163,8 @@ protected:
 
             // Prefix all calls to func in op
             Stmt stmt = build_realize(build_pipeline_group(provide_op), funcs[0], is_output_list[0]);
-            _found_store_level = _found_compute_level = true;
+            _found_compute_level = true;
+            _found_store_levels_for_funcs.insert(funcs[0].name());
             return stmt;
         }
 
@@ -1161,7 +1185,6 @@ private:
     const Target &target;
     const map<string, Function> &env;
     const LoopLevel &compute_level;
-    const LoopLevel &store_level;
 
     Stmt build_realize(Stmt s, const Function &func, bool is_output) {
         if (func.has_extern_definition()) {
@@ -1204,15 +1227,14 @@ private:
         }
     }
 
-    Stmt build_realize_group(Stmt s) {
-        for (size_t i = 0; i < funcs.size(); ++i) {
-            if (function_is_already_realized_in_stmt(funcs[i], s)) {
-                continue;
-            }
-            if (function_is_used_in_stmt(funcs[i], s) || is_output_list[i]) {
-                s = build_realize(s, funcs[i], is_output_list[i]);
-            }
+    Stmt build_realize_function_from_group(Stmt s, int func_index) {
+        if (function_is_already_realized_in_stmt(funcs[func_index], s)) {
+            return s;
         }
+        if (function_is_used_in_stmt(funcs[func_index], s) || is_output_list[func_index]) {
+            s = build_realize(s, funcs[func_index], is_output_list[func_index]);
+        }
+
         return s;
     }
 
@@ -2236,7 +2258,7 @@ class RemoveLoopsOverOutermost : public IRMutator {
 
     Stmt visit(const For *op) override {
         if (ends_with(op->name, ".__outermost") &&
-            is_one(simplify(op->extent)) &&
+            is_const_one(simplify(op->extent)) &&
             op->device_api == DeviceAPI::None) {
             return mutate(substitute(op->name, op->min, op->body));
         } else {
@@ -2261,6 +2283,8 @@ bool group_should_be_inlined(const vector<Function> &funcs) {
             funcs[0].can_be_inlined() &&
             funcs[0].schedule().compute_level().is_inlined());
 }
+
+}  // namespace
 
 std::ostream &operator<<(std::ostream &out, const std::vector<Function> &v) {
     out << "{ ";

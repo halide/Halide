@@ -1,12 +1,12 @@
 // Halide tutorial lesson 8: Scheduling multi-stage pipelines
 
 // On linux, you can compile and run it like so:
-// g++ lesson_08*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_08
-// LD_LIBRARY_PATH=../bin ./lesson_08
+// g++ lesson_08*.cpp -g -std=c++11 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_08
+// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_08
 
 // On os x:
-// g++ lesson_08*.cpp -g -std=c++11 -I ../include -L ../bin -lHalide -o lesson_08
-// DYLD_LIBRARY_PATH=../bin ./lesson_08
+// g++ lesson_08*.cpp -g -std=c++11 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_08
+// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_08
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
 
         // And evaluate it over a 4x4 box.
         printf("\nEvaluating producer-consumer pipeline with default schedule\n");
-        consumer.realize(4, 4);
+        consumer.realize({4, 4});
 
         // There were no messages about computing values of the
         // producer. This is because the default schedule fully
@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
 
         // Compile and run.
         printf("\nEvaluating producer.compute_root()\n");
-        consumer.realize(4, 4);
+        consumer.realize({4, 4});
 
         // Reading the output we can see that:
         // A) There were stores to producer.
@@ -209,7 +209,7 @@ int main(int argc, char **argv) {
 
         // Compile and run.
         printf("\nEvaluating producer.compute_at(consumer, y)\n");
-        consumer.realize(4, 4);
+        consumer.realize({4, 4});
 
         // See figures/lesson_08_compute_y.gif for a visualization.
 
@@ -285,7 +285,7 @@ int main(int argc, char **argv) {
         consumer.trace_stores();
 
         printf("\nEvaluating producer.store_root().compute_at(consumer, y)\n");
-        consumer.realize(4, 4);
+        consumer.realize({4, 4});
 
         // See figures/lesson_08_store_root_compute_y.gif for a
         // visualization.
@@ -345,7 +345,7 @@ int main(int argc, char **argv) {
         // producer.store_root().compute_at(consumer, y):
         // - Temporary memory allocated: 10 floats
         // - Loads: 64
-        // - Stores: 39
+        // - Stores: 41
         // - Calls to sin: 25
 
         // Note that my claimed amount of memory allocated doesn't
@@ -395,7 +395,7 @@ int main(int argc, char **argv) {
         consumer.trace_stores();
 
         printf("\nEvaluating producer.store_root().compute_at(consumer, x)\n");
-        consumer.realize(4, 4);
+        consumer.realize({4, 4});
 
         // See figures/lesson_08_store_root_compute_x.gif for a
         // visualization.
@@ -446,7 +446,7 @@ int main(int argc, char **argv) {
         // producer.store_root().compute_at(consumer, x):
         // - Temporary memory allocated: 10 floats
         // - Loads: 48
-        // - Stores: 56
+        // - Stores: 41
         // - Calls to sin: 25
     }
 
@@ -498,7 +498,7 @@ int main(int argc, char **argv) {
         printf("\nEvaluating:\n"
                "consumer.tile(x, y, x_outer, y_outer, x_inner, y_inner, 4, 4);\n"
                "producer.compute_at(consumer, x_outer);\n");
-        consumer.realize(8, 8);
+        consumer.realize({8, 8});
 
         // See figures/lesson_08_tile.gif for a visualization.
 
@@ -586,7 +586,7 @@ int main(int argc, char **argv) {
         // consumer.trace_stores();
         // producer.trace_stores();
 
-        Buffer<float> halide_result = consumer.realize(160, 160);
+        Buffer<float> halide_result = consumer.realize({160, 160});
 
         // See figures/lesson_08_mixed.mp4 for a visualization.
 

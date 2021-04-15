@@ -17,6 +17,7 @@ tests(GROUPS performance
       matrix_multiplication.cpp
       memcpy.cpp
       memory_profiler.cpp
+      nested_vectorization_gemm.cpp
       packed_planar_fusion.cpp
       parallel_performance.cpp
       profiler.cpp
@@ -29,8 +30,9 @@ tests(GROUPS performance
       wrap.cpp
       )
 
+# Make sure that performance tests do not run in parallel with other tests,
+# since doing so might make them flaky.
 set_tests_properties(${TEST_NAMES} PROPERTIES RUN_SERIAL TRUE)
 
-target_link_libraries(performance_thread_safe_jit PRIVATE Threads::Threads)
-
+# This test needs rdynamic or equivalent
 set_target_properties(performance_fast_pow PROPERTIES ENABLE_EXPORTS TRUE)

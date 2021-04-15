@@ -38,7 +38,7 @@ public:
         const Expr num_cols = B_.height();
         const Expr sum_size = A_.height();
 
-        const int vec = natural_vector_size(a_.type());
+        const int vec = std::max(4, natural_vector_size(a_.type()));
         const int s = vec * 2;
 
         Input<Buffer<T>> *A_in = &A_;

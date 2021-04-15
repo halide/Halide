@@ -47,7 +47,7 @@ void separate_func_per_thread_executor(int index) {
     test.p.set(index);
     test.in.set(bufs[index]);
     for (int i = 0; i < 10; i++) {
-        Buffer<int32_t> result = test.f.realize(10);
+        Buffer<int32_t> result = test.f.realize({10});
         for (int j = 0; j < 10; j++) {
             int64_t left = ((j - 1) * (int64_t)bufs[index](std::min(std::max(0, j - 1), 9)) + index * 75);
             int64_t middle = (j * (int64_t)bufs[index](std::min(std::max(0, j), 9)) + index * 75);
@@ -72,7 +72,7 @@ void separate_func_per_thread() {
 
 void same_func_per_thread_executor(int index, test_func &test) {
     for (int i = 0; i < 10; i++) {
-        Buffer<int32_t> result = test.f.realize(10, get_jit_target_from_environment(),
+        Buffer<int32_t> result = test.f.realize({10}, get_jit_target_from_environment(),
                                                 {{test.p, index},
                                                  {test.in, bufs[index]}});
         for (int j = 0; j < 10; j++) {
@@ -110,6 +110,12 @@ void same_func_per_thread() {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
     for (auto &buf : bufs) {
         buf = Buffer<int32_t>(10);
         for (int i = 0; i < 10; i++) {

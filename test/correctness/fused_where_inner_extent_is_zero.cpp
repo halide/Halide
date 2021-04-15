@@ -22,11 +22,11 @@ int main(int argc, char **argv) {
         for (int o = 0; o < 2; o++) {
             inner_extent.set(i);
             outer_extent.set(o);
-            g.realize(10, 10);
+            g.realize({10, 10});
         }
     }
 
-    g.realize(10, 10);
+    g.realize({10, 10});
 
     printf("Success!\n");
     return 0;

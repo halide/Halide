@@ -36,7 +36,10 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
              py::arg("x"), py::arg("y"), py::arg("xo"), py::arg("yo"), py::arg("xi"), py::arg("yi"), py::arg("xfactor"), py::arg("yfactor"), py::arg("tail") = TailStrategy::Auto)
         .def("tile", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const Expr &, const Expr &, TailStrategy)) & T::tile,
              py::arg("x"), py::arg("y"), py::arg("xi"), py::arg("yi"), py::arg("xfactor"), py::arg("yfactor"), py::arg("tail") = TailStrategy::Auto)
-
+        .def("tile", (T & (T::*)(const std::vector<VarOrRVar> &, const std::vector<VarOrRVar> &, const std::vector<VarOrRVar> &, const std::vector<Expr> &, TailStrategy)) & T::tile,
+             py::arg("previous"), py::arg("outers"), py::arg("inners"), py::arg("factors"), py::arg("tail") = TailStrategy::Auto)
+        .def("tile", (T & (T::*)(const std::vector<VarOrRVar> &, const std::vector<VarOrRVar> &, const std::vector<Expr> &, TailStrategy)) & T::tile,
+             py::arg("previous"), py::arg("inners"), py::arg("factors"), py::arg("tail") = TailStrategy::Auto)
         .def("reorder", (T & (T::*)(const std::vector<VarOrRVar> &)) & T::reorder, py::arg("vars"))
         .def("reorder", [](T &t, const py::args &args) -> T & {
             return t.reorder(args_to_vector<VarOrRVar>(args));
@@ -60,6 +63,8 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
         .def("gpu_threads", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, DeviceAPI)) & T::gpu_threads, py::arg("thread_x"), py::arg("thread_y"), py::arg("device_api") = DeviceAPI::Default_GPU)
         .def("gpu_threads", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, DeviceAPI)) & T::gpu_threads, py::arg("thread_x"), py::arg("thread_y"), py::arg("thread_z"), py::arg("device_api") = DeviceAPI::Default_GPU)
         .def("gpu_single_thread", (T & (T::*)(DeviceAPI)) & T::gpu_single_thread, py::arg("device_api") = DeviceAPI::Default_GPU)
+
+        .def("gpu_lanes", (T & (T::*)(const VarOrRVar &, DeviceAPI)) & T::gpu_lanes, py::arg("thread_x"), py::arg("device_api") = DeviceAPI::Default_GPU)
 
         .def("gpu_tile", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const Expr &, TailStrategy, DeviceAPI)) & T::gpu_tile, py::arg("x"), py::arg("bx"), py::arg("tx"), py::arg("x_size"), py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
 

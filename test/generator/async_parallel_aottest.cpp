@@ -4,6 +4,7 @@
 #include <mutex>
 #include <random>
 #include <stdio.h>
+#include <string>
 #include <thread>
 
 #include "HalideBuffer.h"

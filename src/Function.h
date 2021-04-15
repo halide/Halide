@@ -52,7 +52,7 @@ public:
      * constructor only exists so that you can make vectors of
      * functions, etc.
      */
-    Function();
+    Function() = default;
 
     /** Construct a new function with the given name */
     explicit Function(const std::string &n);

@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
     halide_do_par_for(nullptr, launcher_task, 0, num_launcher_tasks, nullptr);
 
     halide_profiler_state *state = halide_profiler_get_state();
-    assert(state != NULL);
+    assert(state != nullptr);
 
     validate(state);
 

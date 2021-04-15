@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     f.compute_at(g, xi);
 
     slices.set(32);
-    g.realize(1024, 1024);
+    g.realize({1024, 1024});
 
     printf("Success!\n");
     return 0;

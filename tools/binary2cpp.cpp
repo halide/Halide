@@ -1,8 +1,8 @@
 
-#include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cassert>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 #ifdef _WIN32
 #include <fcntl.h>  // O_BINARY
@@ -43,9 +43,11 @@ int main(int argc, const char **argv) {
     printf("unsigned char %s[] = {\n", target);
     int count = 0;
     int line_break = 0;
-    while (1) {
+    while (true) {
         int c = getchar();
-        if (c == EOF) break;
+        if (c == EOF) {
+            break;
+        }
         printf("0x%02x, ", c);
         // Not necessary, but makes a bit easier to read
         if (++line_break > 12) {

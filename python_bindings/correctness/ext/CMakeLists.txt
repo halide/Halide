@@ -1,6 +1,4 @@
-set(TARGET_addconstant host)
-set(TARGET_bit host)
-set(TARGET_user_context host-user_context)
+set(FEATURES_user_context user_context)
 
 foreach (GEN IN ITEMS addconstant bit user_context)
     # Create the Halide generator executable
@@ -13,7 +11,8 @@ foreach (GEN IN ITEMS addconstant bit user_context)
                        GENERATOR ${GEN}
                        FUNCTION_NAME ${GEN}
                        PYTHON_EXTENSION ${GEN}_py_cpp
-                       TARGETS ${TARGET_${GEN}})
+                       FEATURES ${FEATURES_${GEN}}
+                       TARGETS cmake)
 
     # Create the module from the generated library and .py.cpp
     Python3_add_library(py_${GEN} MODULE ${${GEN}_py_cpp})

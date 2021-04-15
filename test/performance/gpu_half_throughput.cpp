@@ -5,6 +5,11 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
+    if (t.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
     if (!(t.has_feature(Target::CUDA) ||
           t.has_feature(Target::Metal))) {
         printf("[SKIP] No GPU target enabled supporting half-precision.\n");

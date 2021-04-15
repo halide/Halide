@@ -7,16 +7,18 @@
  * Bindings for parameters, extern calls, etc. are established and the
  * Wasm code is executed. Allows calls to realize to work
  * exactly as if native code had been run, but via a JavaScript/Wasm VM.
- * Currently, V8 is supported, with SpiderMonkey intended to be included soon as well.
+ * Currently, only the WABT interpreter is supported.
  */
 
 #include "Argument.h"
 #include "JITModule.h"
 #include "Parameter.h"
-#include "Target.h"
 #include "Type.h"
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
 
 struct WasmModuleContents;

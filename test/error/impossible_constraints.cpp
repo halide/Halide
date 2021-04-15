@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
     // The requires that the input be larger than the input
     out() = input(input.width(), input.height()) + input(0, 0);
 
-    out.infer_input_bounds();
+    out.infer_input_bounds({});
 
     printf("Success!\n");
     return 0;

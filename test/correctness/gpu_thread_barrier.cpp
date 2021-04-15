@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
             f.update(i * 4 + 3).gpu_threads(x);
         }
 
-        Buffer<int> out = g.realize(100, 100);
+        Buffer<int> out = g.realize({100, 100});
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
                 int correct = 7 * 100 + 9;
@@ -106,7 +106,8 @@ int main(int argc, char **argv) {
 
         Func f;
         Var x, y;
-        f(x, y) = undef<int>();
+        f(x, y) = 0;
+        f(x, y) += undef<int>();
         f(x, y) += x + 100 * y;
         // This next line is dubious, because it entirely masks the
         // effect of the previous definition. If you add an undefined
@@ -128,11 +129,12 @@ int main(int argc, char **argv) {
         f.update(1).gpu_threads(x, y);
         f.update(2).gpu_threads(x, y);
 
-        // There should be two thread barriers: one in between the
+        // There should be three thread barriers: one after the intial
+        // pure definition, one in between the
         // non-undef definitions, and one between f and g.
-        g.add_custom_lowering_pass(new CheckBarrierCount(2));
+        g.add_custom_lowering_pass(new CheckBarrierCount(3));
 
-        Buffer<int> out = g.realize(100, 100);
+        Buffer<int> out = g.realize({100, 100});
     }
 
     printf("Success!\n");

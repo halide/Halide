@@ -74,7 +74,7 @@ public:
         const float kOffset = 2.f;
         calculated_output(x, y, c) = cast<uint8_t>(out.tuple_output(x, y, c)[1] + kOffset);
 
-        Buffer<int> input = make_image<int>();
+        Buffer<int> configure_input = make_image<int>();
         const int bias = 1;
         Buffer<uint8_t> extra_u8(32, 32);
         extra_u8.fill(0);
@@ -83,7 +83,7 @@ public:
         Func extra_func;
         extra_func(x, y, c) = cast<uint16_t>(3);
         const int extra_scalar = 0;
-        int_output = configure::generate(this, {input,
+        int_output = configure::generate(this, {configure_input,
                                                 bias,
                                                 extra_u8,
                                                 extra_u8,

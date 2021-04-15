@@ -165,13 +165,13 @@ WEAK int halide_error_param_too_large_f64(void *user_context, const char *param_
 
 WEAK int halide_error_out_of_memory(void *user_context) {
     // The error message builder uses malloc, so we can't use it here.
-    halide_error(user_context, "Out of memory (halide_malloc returned NULL)");
+    halide_error(user_context, "Out of memory (halide_malloc returned nullptr)");
     return halide_error_code_out_of_memory;
 }
 
 WEAK int halide_error_buffer_argument_is_null(void *user_context, const char *buffer_name) {
     error(user_context)
-        << "Buffer argument " << buffer_name << " is NULL";
+        << "Buffer argument " << buffer_name << " is nullptr";
     return halide_error_code_buffer_argument_is_null;
 }
 

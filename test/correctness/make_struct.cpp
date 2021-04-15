@@ -32,7 +32,7 @@ HalideExtern_1(int, check_struct, struct_t *);
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping test for WebAssembly as the wasm JIT cannot support passing arbitrary pointers to/from HalideExtern code.\n");
+        printf("[SKIP] Skipping test for WebAssembly as the wasm JIT cannot support passing arbitrary pointers to/from HalideExtern code.\n");
         return 0;
     }
 

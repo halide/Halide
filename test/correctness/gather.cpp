@@ -39,8 +39,8 @@ bool test() {
     output_vtcm(x, y) = lut_vtcm(xCoord, yCoord);
     output(x, y) = output_vtcm(x, y);
 
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        const int vector_size = target.has_feature(Target::HVX_128) ? 128 : 64;
+    if (target.has_feature(Target::HVX)) {
+        const int vector_size = target.has_feature(Target::HVX) ? 128 : 64;
         Var yi;
 
         output
@@ -62,7 +62,7 @@ bool test() {
         }
     }
 
-    Buffer<ITYPE> output_buf = output.realize(W_img, H_img);
+    Buffer<ITYPE> output_buf = output.realize({W_img, H_img});
 
     for (int y = 0; y < H_img; y++) {
         for (int x = 0; x < W_img; x++) {
@@ -87,10 +87,9 @@ int main() {
     if (!test<uint8_t>() ||
         !test<int8_t>() ||
         !test<uint16_t>() ||
-        !test<int16_t>()
-        //!test<uint32_t>() ||
-        //!test<int32_t>()
-        ) return 1;
+        !test<int16_t>() ||
+        !test<uint32_t>() ||
+        !test<int32_t>()) return 1;
     printf("Success!\n");
     return 0;
 }

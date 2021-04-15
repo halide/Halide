@@ -112,7 +112,9 @@ struct LogEmitter {
 
     ~LogEmitter() {
         std::string s = msg.str();
-        if (s.back() != '\n') s += '\n';
+        if (s.back() != '\n') {
+            s += '\n';
+        }
         f(s);
     }
 
@@ -201,7 +203,7 @@ inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
 // variants *will* be instantiated (increasing code size), so this approach
 // should only be used when strictly necessary.
 template<template<typename> class Functor, typename... Args>
-auto dynamic_type_dispatch(const halide_type_t &type, Args &&... args) -> decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
+auto dynamic_type_dispatch(const halide_type_t &type, Args &&...args) -> decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
 
 #define HANDLE_CASE(CODE, BITS, TYPE)  \
     case halide_type_code(CODE, BITS): \
@@ -387,6 +389,7 @@ inline Buffer<> allocate_buffer(const halide_type_t &type, const Shape &shape) {
     if (b.number_of_elements() > 0) {
         b.check_overflow();
         b.allocate();
+        b.set_host_dirty();
     }
     return b;
 }
@@ -733,13 +736,17 @@ struct ArgData {
 
         std::vector<std::string> v = split_string(raw_string, ":");
         if (v[0] == "zero") {
-            if (v.size() != 2) fail() << "Invalid syntax: " << raw_string;
+            if (v.size() != 2) {
+                fail() << "Invalid syntax: " << raw_string;
+            }
             auto shape = parse_optional_extents(v[1]);
             Buffer<> b = allocate_buffer(metadata->type, shape);
             memset(b.data(), 0, b.size_in_bytes());
             return b;
         } else if (v[0] == "constant") {
-            if (v.size() != 3) fail() << "Invalid syntax: " << raw_string;
+            if (v.size() != 3) {
+                fail() << "Invalid syntax: " << raw_string;
+            }
             halide_scalar_value_t value;
             if (!parse_scalar(metadata->type, v[1], &value)) {
                 fail() << "Invalid value for constant value";
@@ -749,7 +756,9 @@ struct ArgData {
             dynamic_type_dispatch<FillWithScalar>(metadata->type, b, value);
             return b;
         } else if (v[0] == "identity") {
-            if (v.size() != 2) fail() << "Invalid syntax: " << raw_string;
+            if (v.size() != 2) {
+                fail() << "Invalid syntax: " << raw_string;
+            }
             auto shape = parse_optional_extents(v[1]);
             // Make a binary buffer with diagonal elements set to true. Diagonal
             // elements are those whose first two dimensions are equal.
@@ -760,7 +769,9 @@ struct ArgData {
             // Convert the binary buffer to the required type, so true becomes 1.
             return Halide::Tools::ImageTypeConversion::convert_image(b, metadata->type);
         } else if (v[0] == "random") {
-            if (v.size() != 3) fail() << "Invalid syntax: " << raw_string;
+            if (v.size() != 3) {
+                fail() << "Invalid syntax: " << raw_string;
+            }
             int seed;
             if (!parse_scalar(v[1], &seed)) {
                 fail() << "Invalid value for seed";
@@ -793,13 +804,15 @@ struct ArgData {
             fail() << "Dimension mismatch; expected " << constrained_shape.size() << "dimensions";
         }
         for (size_t i = 0; i < constrained_shape.size(); ++i) {
-            // min of nonzero means "largest value for min"
-            if (constrained_shape[i].min != 0 && new_shape[i].min > constrained_shape[i].min) {
+            // If the constrained shape is not in bounds of the
+            // buffer's current shape we need to use the constrained
+            // shape.
+            int current_min = new_shape[i].min;
+            int current_max = new_shape[i].min + new_shape[i].extent - 1;
+            int constrained_min = constrained_shape[i].min;
+            int constrained_max = constrained_shape[i].min + constrained_shape[i].extent - 1;
+            if (constrained_min < current_min || constrained_max > current_max) {
                 new_shape[i].min = constrained_shape[i].min;
-                updated = true;
-            }
-            // extent of nonzero means "largest value for extent"
-            if (constrained_shape[i].extent != 0 && new_shape[i].extent > constrained_shape[i].extent) {
                 new_shape[i].extent = constrained_shape[i].extent;
                 updated = true;
             }
@@ -872,6 +885,10 @@ struct ArgData {
         }
 
         buffer_value = allocate_buffer(metadata->type, new_shape);
+
+        // allocate_buffer conservatively sets host dirty. Don't waste
+        // time copying output buffers to device.
+        buffer_value.set_host_dirty(false);
 
         info() << "Output " << name << ": BoundsQuery result is " << constrained_shape;
         info() << "Output " << name << ": Shape is " << get_shape(buffer_value);
@@ -1007,7 +1024,9 @@ public:
                 if (!values.empty()) {
                     bool set = false;
                     for (auto &v : values) {
-                        if (!v.first) continue;
+                        if (!v.first) {
+                            continue;
+                        }
                         info() << "Argument value for: " << arg.metadata->name << " is parsed from metadata (" << v.second << ") as: "
                                << scalar_to_string(arg.metadata->type, *v.first);
                         arg.scalar_value = *v.first;

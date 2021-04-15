@@ -15,7 +15,7 @@
 #endif
 #include <windows.h>
 #else
-#include <stdio.h>
+#include <cstdio>
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
@@ -24,6 +24,8 @@ namespace Halide {
 
 namespace Internal {
 namespace Archive {
+
+namespace {
 
 // This is a bare-bones Windows .lib file writer, based on inspection
 // of the LLVM ArchiveWriter class and the documentation at
@@ -157,15 +159,11 @@ void write_symbol_table(std::ostream &out,
         }
         llvm::object::SymbolicFile &obj = *obj_or_err.get();
         for (const auto &sym : obj.symbols()) {
-#if LLVM_VERSION >= 110
             auto flags = sym.getFlags();
             if (!flags) {
                 internal_error << llvm::toString(flags.takeError()) << "\n";
             }
             const uint32_t sym_flags = flags.get();
-#else
-            const uint32_t sym_flags = sym.getFlags();
-#endif
             if (sym_flags & llvm::object::SymbolRef::SF_FormatSpecific) {
                 continue;
             }
@@ -300,6 +298,8 @@ void write_coff_archive(std::ostream &out,
     }
 }
 
+}  // namespace
+
 }  // namespace Archive
 }  // namespace Internal
 
@@ -307,7 +307,9 @@ std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &fil
     std::string error_string;
     std::error_code err;
     std::unique_ptr<llvm::raw_fd_ostream> raw_out(new llvm::raw_fd_ostream(filename, err, llvm::sys::fs::F_None));
-    if (err) error_string = err.message();
+    if (err) {
+        error_string = err.message();
+    }
     internal_assert(error_string.empty())
         << "Error opening output " << filename << ": " << error_string << "\n";
 
@@ -337,12 +339,7 @@ std::unique_ptr<llvm::Module> clone_module(const llvm::Module &module_in) {
 }  // namespace
 
 void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
-#if LLVM_VERSION >= 100
-               llvm::CodeGenFileType file_type
-#else
-               llvm::TargetMachine::CodeGenFileType file_type
-#endif
-) {
+               llvm::CodeGenFileType file_type) {
     Internal::debug(1) << "emit_file.Compiling to native code...\n";
     Internal::debug(2) << "Target triple: " << module_in.getTargetTriple() << "\n";
 
@@ -403,19 +400,11 @@ std::unique_ptr<llvm::Module> compile_module_to_llvm_module(const Module &module
 }
 
 void compile_llvm_module_to_object(llvm::Module &module, Internal::LLVMOStream &out) {
-#if LLVM_VERSION >= 100
     emit_file(module, out, llvm::CGFT_ObjectFile);
-#else
-    emit_file(module, out, llvm::TargetMachine::CGFT_ObjectFile);
-#endif
 }
 
 void compile_llvm_module_to_assembly(llvm::Module &module, Internal::LLVMOStream &out) {
-#if LLVM_VERSION >= 100
     emit_file(module, out, llvm::CGFT_AssemblyFile);
-#else
-    emit_file(module, out, llvm::TargetMachine::CGFT_AssemblyFile);
-#endif
 }
 
 void compile_llvm_module_to_llvm_bitcode(llvm::Module &module, Internal::LLVMOStream &out) {
@@ -434,18 +423,31 @@ namespace {
 
 std::string get_current_directory() {
 #ifdef _WIN32
-    std::string dir;
-    char p[MAX_PATH];
-    DWORD ret = GetCurrentDirectoryA(MAX_PATH, p);
-    internal_assert(ret != 0) << "GetCurrentDirectoryA() failed";
-    dir = p;
+    DWORD dir_buf_size = GetCurrentDirectoryW(0, nullptr);
+    internal_assert(dir_buf_size) << "GetCurrentDirectoryW() failed; error " << GetLastError() << "\n";
+
+    // GetCurrentDirectoryW returns a _buffer size_, not a character count.
+    // std::wstring null-terminates on its own, so don't count that here.
+    std::wstring wdir(dir_buf_size - 1, 0);
+
+    DWORD ret = GetCurrentDirectoryW(dir_buf_size, &wdir[0]);
+    internal_assert(ret) << "GetCurrentDirectoryW() failed; error " << GetLastError() << "\n";
+
+    int dir_len = WideCharToMultiByte(CP_UTF8, 0, &wdir[0], (int)wdir.size(), nullptr, 0, nullptr, nullptr);
+    internal_assert(dir_len) << "WideCharToMultiByte() failed; error " << GetLastError() << "\n";
+
+    std::string dir(dir_len, 0);
+
+    ret = WideCharToMultiByte(CP_UTF8, 0, &wdir[0], (int)wdir.size(), &dir[0], (int)dir.size(), nullptr, nullptr);
+    internal_assert(ret) << "WideCharToMultiByte() failed; error " << GetLastError() << "\n";
+
     return dir;
 #else
     std::string dir;
     // Note that passing null for the first arg isn't strictly POSIX, but is
     // supported everywhere we currently build.
     char *p = getcwd(nullptr, 0);
-    internal_assert(p != NULL) << "getcwd() failed";
+    internal_assert(p != nullptr) << "getcwd() failed";
     dir = p;
     free(p);
     return dir;
@@ -454,7 +456,14 @@ std::string get_current_directory() {
 
 void set_current_directory(const std::string &d) {
 #ifdef _WIN32
-    internal_assert(SetCurrentDirectoryA(d.c_str())) << "SetCurrentDirectoryA() failed";
+    int n_chars = MultiByteToWideChar(CP_UTF8, 0, &d[0], (int)d.size(), nullptr, 0);
+    internal_assert(n_chars) << "MultiByteToWideChar() failed; error " << GetLastError() << "\n";
+
+    std::wstring wd(n_chars, 0);
+    int ret = MultiByteToWideChar(CP_UTF8, 0, &d[0], (int)d.size(), &wd[0], wd.size());
+    internal_assert(ret) << "MultiByteToWideChar() failed; error " << GetLastError() << "\n";
+
+    internal_assert(SetCurrentDirectoryW(wd.c_str())) << "SetCurrentDirectoryW() failed; error " << GetLastError() << "\n";
 #else
     internal_assert(chdir(d.c_str()) == 0) << "chdir() failed";
 #endif
@@ -529,7 +538,7 @@ void create_static_library(const std::vector<std::string> &src_files_in, const T
     // our existing usage.)
     std::string src_dir = dir_and_file(src_files_in.front()).first;
     std::vector<std::string> src_files;
-    for (auto &s_in : src_files_in) {
+    for (const auto &s_in : src_files_in) {
         auto df = dir_and_file(s_in);
         internal_assert(df.first == src_dir) << "All inputs to create_static_library() must be in the same directory";
         for (auto &s_existing : src_files) {

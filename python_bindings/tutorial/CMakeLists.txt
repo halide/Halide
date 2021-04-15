@@ -25,7 +25,7 @@ foreach (TEST IN LISTS TESTS)
 
     set_tests_properties(python_tutorial_${TEST_NAME} PROPERTIES
                          LABELS python
-                         ENVIRONMENT "PYTHONPATH=${PYTHONPATH};HL_TARGET=host")
+                         ENVIRONMENT "PYTHONPATH=${PYTHONPATH};HL_TARGET=${Halide_TARGET}")
 endforeach ()
 
 ## Add some hacks for getting CMake to delay compiling lesson_10_halide until after the test has run. The "better" way
@@ -35,7 +35,8 @@ endforeach ()
 # This dummy command "generates" the files that the TEST python_tutorial_lesson_10_aot_compilation_generate will
 # actually generate as part of the fixture below.
 add_custom_command(OUTPUT lesson_10_halide.py.cpp lesson_10_halide.o
-                   COMMAND "${CMAKE_COMMAND}" -E echo Dummy command for lesson 10 sources.)
+                   COMMAND "${CMAKE_COMMAND}" -E echo Dummy command for lesson 10 sources.
+                   VERBATIM)
 
 # This target allows CMake to build lesson_10_halide.so (or whatever the correct extension is) as part of the tests
 # later. It is excluded from ALL since it isn't valid to build outside of this context.

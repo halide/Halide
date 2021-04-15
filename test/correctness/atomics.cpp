@@ -22,7 +22,9 @@ template<typename T,
          typename std::enable_if<std::is_floating_point<T>::value>::type * = nullptr>
 inline void check(int line_number, T x, T target, T threshold = T(1e-6)) {
     _halide_user_assert(std::fabs((x) - (target)) < threshold)
-        << "Line " << line_number << ": Expected " << (target) << " instead of " << (x) << "\n";
+        << "Line " << line_number
+        << ": Expected " << (target)
+        << " instead of " << (x) << "\n";
 }
 
 inline void check(int line_number, float16_t x, float16_t target) {
@@ -37,7 +39,9 @@ template<typename T,
          typename std::enable_if<std::is_integral<T>::value, int>::type * = nullptr>
 inline void check(int line_number, T x, T target) {
     _halide_user_assert(x == target)
-        << "Line " << line_number << ": Expected " << (target) << " instead of " << (x) << "\n";
+        << "Line " << line_number
+        << ": Expected " << (int64_t)(target)
+        << " instead of " << (int64_t)(x) << "\n";
 }
 
 template<typename T>
@@ -152,7 +156,7 @@ void test_parallel_hist(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Buffer<T> out = hist.realize(hist_size);
+        Buffer<T> out = hist.realize({hist_size});
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
         }
@@ -239,7 +243,7 @@ void test_parallel_cas_update(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Buffer<T> out = hist.realize(hist_size);
+        Buffer<T> out = hist.realize({hist_size});
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
         }
@@ -288,7 +292,7 @@ void test_parallel_hist_tuple(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Realization out = hist.realize(hist_size);
+        Realization out = hist.realize({hist_size});
         Buffer<T> out0 = out[0];
         Buffer<T> out1 = out[1];
         for (int i = 0; i < hist_size; i++) {
@@ -357,7 +361,7 @@ void test_predicated_hist(const Backend &backend) {
         case Backend::CUDAVectorize: {
             RVar ro, ri;
             RVar rio, rii;
-            hist.update()
+            hist.update(update_id)
                 .atomic(true /*override_assciativity_test*/)
                 .split(r, ro, ri, 32)
                 .split(ri, rio, rii, 4)
@@ -401,7 +405,7 @@ void test_predicated_hist(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Buffer<T> out = hist.realize(hist_size);
+        Buffer<T> out = hist.realize({hist_size});
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
         }
@@ -454,7 +458,7 @@ void test_parallel_hist_tuple2(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Realization out = hist.realize(hist_size);
+        Realization out = hist.realize({hist_size});
         Buffer<T> out0 = out[0];
         Buffer<T> out1 = out[1];
         for (int i = 0; i < hist_size; i++) {
@@ -646,7 +650,7 @@ void test_hist_compute_at(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Buffer<T> out = final.realize(10, 10);
+        Buffer<T> out = final.realize({10, 10});
         for (int i = 0; i < 10; i++) {
             for (int j = 0; j < 10; j++) {
                 check(__LINE__, out(i, j), correct_final(i, j));
@@ -711,7 +715,7 @@ void test_hist_tuple_compute_at(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Realization out = final.realize(10, 10);
+        Realization out = final.realize({10, 10});
         Buffer<T> out0 = out[0];
         Buffer<T> out1 = out[1];
         for (int i = 0; i < 10; i++) {
@@ -794,7 +798,7 @@ void test_hist_store_at(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Buffer<T> out = final.realize(10, 10);
+        Buffer<T> out = final.realize({10, 10});
         for (int i = 0; i < 10; i++) {
             for (int j = 0; j < 10; j++) {
                 check(__LINE__, out(i, j), correct_final(i, j));
@@ -824,7 +828,7 @@ void test_hist_rfactor(const Backend &backend) {
 
     Func intermediate =
         hist.update()
-            .rfactor({{r.y, y}});
+            .rfactor(r.y, y);
     intermediate.compute_root();
     hist.compute_root();
     switch (backend) {
@@ -858,7 +862,13 @@ void test_hist_rfactor(const Backend &backend) {
     case Backend::CUDAVectorize: {
         RVar ro, ri;
         RVar rio, rii;
-        hist.update().atomic(true).split(r, ro, ri, 32).split(ri, rio, rii, 4).gpu_blocks(ro, DeviceAPI::CUDA).gpu_threads(rio, DeviceAPI::CUDA).vectorize(rii);
+        intermediate.update()
+            .atomic(true)
+            .split(r.x, ro, ri, 32)
+            .split(ri, rio, rii, 4)
+            .gpu_blocks(ro, DeviceAPI::CUDA)
+            .gpu_threads(rio, DeviceAPI::CUDA)
+            .vectorize(rii);
     } break;
     default: {
         _halide_user_assert(false) << "Unsupported backend.\n";
@@ -876,7 +886,7 @@ void test_hist_rfactor(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Buffer<T> out = hist.realize(hist_size);
+        Buffer<T> out = hist.realize({hist_size});
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
         }
@@ -959,7 +969,7 @@ void test_hist_tuple_rfactor(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Realization out = hist.realize(hist_size);
+        Realization out = hist.realize({hist_size});
         Buffer<T> out0 = out[0];
         Buffer<T> out1 = out[1];
         for (int i = 0; i < hist_size; i++) {
@@ -1038,7 +1048,7 @@ void test_extern_func(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Buffer<int> out = hist.realize(hist_size);
+        Buffer<int> out = hist.realize({hist_size});
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
         }
@@ -1097,7 +1107,7 @@ void test_async(const Backend &backend) {
 
     // Run 10 times to make sure race condition do happen
     for (int iter = 0; iter < 10; iter++) {
-        Buffer<int> out = consumer.realize(hist_size);
+        Buffer<int> out = consumer.realize({hist_size});
         for (int i = 0; i < hist_size; i++) {
             check(__LINE__, out(i), correct(i));
         }
@@ -1164,7 +1174,7 @@ void test_async_tuple(const Backend &backend) {
 
     // Run 10 times to make sure race condition do not happen
     for (int iter = 0; iter < 10; iter++) {
-        Realization out = consumer1.realize(2 * img_size);
+        Realization out = consumer1.realize({2 * img_size});
         Buffer<int> out0 = out[0];
         Buffer<int> out1 = out[1];
         for (int i = 0; i < 2 * img_size; i++) {
@@ -1176,7 +1186,7 @@ void test_async_tuple(const Backend &backend) {
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping test for WebAssembly as it does not support atomics yet.\n");
+        printf("[SKIP] Skipping test for WebAssembly as it does not support atomics yet.\n");
         return 0;
     }
 
@@ -1236,13 +1246,13 @@ int main(int argc, char **argv) {
         test_all<uint64_t>(Backend::CUDA);
         test_all<int64_t>(Backend::CUDA);
         test_all<double>(Backend::CUDA);
-        // TODO: Broken currently; commented out until https://github.com/halide/Halide/pull/4628 lands
-        // test_all<uint32_t>(Backend::CUDAVectorize);
-        // test_all<int32_t>(Backend::CUDAVectorize);
-        // test_all<float>(Backend::CUDAVectorize);
-        // test_all<uint64_t>(Backend::CUDAVectorize);
-        // test_all<int64_t>(Backend::CUDAVectorize);
-        // test_all<double>(Backend::CUDAVectorize);
+
+        test_all<uint32_t>(Backend::CUDAVectorize);
+        test_all<int32_t>(Backend::CUDAVectorize);
+        test_all<float>(Backend::CUDAVectorize);
+        test_all<uint64_t>(Backend::CUDAVectorize);
+        test_all<int64_t>(Backend::CUDAVectorize);
+        test_all<double>(Backend::CUDAVectorize);
     }
     test_extern_func(Backend::CPU);
     test_extern_func(Backend::CPUVectorize);

@@ -112,6 +112,12 @@ Buffer<uint16_t> test_transpose_wrap(int mode) {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
     test_transpose(scalar_trans);
     test_transpose_wrap(scalar_trans);
     test_transpose(vec_y_trans);

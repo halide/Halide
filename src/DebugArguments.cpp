@@ -14,7 +14,7 @@ void debug_arguments(LoweredFunc *func, const Target &t) {
     vector<Stmt> stmts;
     stmts.push_back(Evaluate::make(print("Entering Pipeline " + func->name)));
     stmts.push_back(Evaluate::make(print("Target: " + t.to_string())));
-    for (LoweredArgument arg : func->args) {
+    for (const LoweredArgument &arg : func->args) {
         std::ostringstream name;
         Expr scalar_var = Variable::make(arg.type, arg.name);
         Expr buffer_var = Variable::make(type_of<halide_buffer_t *>(), arg.name + ".buffer");

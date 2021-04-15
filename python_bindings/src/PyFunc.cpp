@@ -64,7 +64,7 @@ void define_set_func_ref<double>(py::class_<Func> &func_class) {
                      std::ostringstream os;
                      os << "Loss of precision detected when casting " << rhs << " to a single precision float. The difference is " << diff << ".";
                      std::string msg = os.str();
-                     PyErr_WarnEx(NULL, msg.c_str(), 1);
+                     PyErr_WarnEx(nullptr, msg.c_str(), 1);
                  }
                  return func(lhs) = Expr(f);
              });
@@ -136,35 +136,43 @@ void define_func(py::module &m) {
                 },
                 py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target())
 
-            // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
                 "realize",
                 [](Func &f, int x_size, const Target &target) -> py::object {
-                    return realization_to_object(f.realize(x_size, target));
+                    PyErr_WarnEx(PyExc_DeprecationWarning,
+                                 "Call realize() with an explicit list of ints instead.",
+                                 1);
+                    return realization_to_object(f.realize(std::vector<int32_t>{x_size}, target));
                 },
                 py::arg("x_size"), py::arg("target") = Target())
 
-            // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
                 "realize",
                 [](Func &f, int x_size, int y_size, const Target &target) -> py::object {
-                    return realization_to_object(f.realize(x_size, y_size, target));
+                    PyErr_WarnEx(PyExc_DeprecationWarning,
+                                 "Call realize() with an explicit list of ints instead.",
+                                 1);
+                    return realization_to_object(f.realize({x_size, y_size}, target));
                 },
                 py::arg("x_size"), py::arg("y_size"), py::arg("target") = Target())
 
-            // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
                 "realize",
                 [](Func &f, int x_size, int y_size, int z_size, const Target &target) -> py::object {
-                    return realization_to_object(f.realize(x_size, y_size, z_size, target));
+                    PyErr_WarnEx(PyExc_DeprecationWarning,
+                                 "Call realize() with an explicit list of ints instead.",
+                                 1);
+                    return realization_to_object(f.realize({x_size, y_size, z_size}, target));
                 },
                 py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("target") = Target())
 
-            // TODO: deprecate in favor of std::vector<int32_t> size version?
             .def(
                 "realize",
                 [](Func &f, int x_size, int y_size, int z_size, int w_size, const Target &target) -> py::object {
-                    return realization_to_object(f.realize(x_size, y_size, z_size, w_size, target));
+                    PyErr_WarnEx(PyExc_DeprecationWarning,
+                                 "Call realize() with an explicit list of ints instead.",
+                                 1);
+                    return realization_to_object(f.realize({x_size, y_size, z_size, w_size}, target));
                 },
                 py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("w_size"), py::arg("target") = Target())
 
@@ -195,6 +203,7 @@ void define_func(py::module &m) {
             .def("store_at", (Func & (Func::*)(const Func &, const RVar &)) & Func::store_at, py::arg("f"), py::arg("var"))
             .def("store_at", (Func & (Func::*)(LoopLevel)) & Func::store_at, py::arg("loop_level"))
 
+            .def("async_", &Func::async)
             .def("memoize", &Func::memoize)
             .def("compute_inline", &Func::compute_inline)
             .def("compute_root", &Func::compute_root)
@@ -227,6 +236,7 @@ void define_func(py::module &m) {
             .def("compile_to_static_library", &Func::compile_to_static_library, py::arg("filename_prefix"), py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = get_target_from_environment())
 
             .def("compile_to_multitarget_static_library", &Func::compile_to_multitarget_static_library, py::arg("filename_prefix"), py::arg("arguments"), py::arg("targets"))
+            .def("compile_to_multitarget_object_files", &Func::compile_to_multitarget_object_files, py::arg("filename_prefix"), py::arg("arguments"), py::arg("targets"), py::arg("suffixes"))
 
             // TODO: useless until Module is defined.
             .def("compile_to_module", &Func::compile_to_module, py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = get_target_from_environment())
@@ -271,22 +281,35 @@ void define_func(py::module &m) {
             .def("output_buffers", &Func::output_buffers)
 
             .def(
-                "infer_input_bounds", [](Func &f, int x_size, int y_size, int z_size, int w_size) -> void {
-                    f.infer_input_bounds(x_size, y_size, z_size, w_size);
-                },
-                py::arg("x_size") = 0, py::arg("y_size") = 0, py::arg("z_size") = 0, py::arg("w_size") = 0)
+                "infer_input_bounds", [](Func &f, const py::object &dst, const Target &target) -> void {
+                    // dst could be Buffer<>, vector<Buffer>, or vector<int>
+                    try {
+                        Buffer<> b = dst.cast<Buffer<>>();
+                        f.infer_input_bounds(b, target);
+                        return;
+                    } catch (...) {
+                        // fall thru
+                    }
 
-            .def(
-                "infer_input_bounds", [](Func &f, Buffer<> buffer) -> void {
-                    f.infer_input_bounds(buffer);
-                },
-                py::arg("dst"))
+                    try {
+                        std::vector<Buffer<>> v = dst.cast<std::vector<Buffer<>>>();
+                        f.infer_input_bounds(Realization(v), target);
+                        return;
+                    } catch (...) {
+                        // fall thru
+                    }
 
-            .def(
-                "infer_input_bounds", [](Func &f, std::vector<Buffer<>> buffer) -> void {
-                    f.infer_input_bounds(Realization(buffer));
+                    try {
+                        std::vector<int32_t> v = dst.cast<std::vector<int32_t>>();
+                        f.infer_input_bounds(v, target);
+                        return;
+                    } catch (...) {
+                        // fall thru
+                    }
+
+                    throw py::value_error("Invalid arguments to infer_input_bounds");
                 },
-                py::arg("dst"))
+                py::arg("dst"), py::arg("target") = get_jit_target_from_environment())
 
             .def("in_", (Func(Func::*)(const Func &)) & Func::in, py::arg("f"))
             .def("in_", (Func(Func::*)(const std::vector<Func> &fs)) & Func::in, py::arg("fs"))
@@ -302,14 +325,9 @@ void define_func(py::module &m) {
             .def("set_estimates", &Func::set_estimates, py::arg("estimates"))
 
             .def("align_bounds", &Func::align_bounds, py::arg("var"), py::arg("modulus"), py::arg("remainder") = 0)
+            .def("align_extent", &Func::align_extent, py::arg("var"), py::arg("modulus"))
 
             .def("bound_extent", &Func::bound_extent, py::arg("var"), py::arg("extent"))
-
-            .def("gpu_lanes", &Func::gpu_lanes, py::arg("thread_x"), py::arg("device_api") = DeviceAPI::Default_GPU)
-
-            .def("shader", &Func::shader, py::arg("x"), py::arg("y"), py::arg("c"), py::arg("device_api"))
-
-            .def("glsl", &Func::glsl, py::arg("x"), py::arg("y"), py::arg("c"))
 
             .def("align_storage", &Func::align_storage, py::arg("dim"), py::arg("alignment"))
 

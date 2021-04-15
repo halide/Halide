@@ -37,12 +37,12 @@ int main(int argc, char *argv[]) {
 
         if (target.has_gpu_feature()) {
             g.gpu_tile(x, xi, 32);
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        } else if (target.has_feature(Target::HVX)) {
             g.hexagon();
         }
         h.set_custom_print(halide_print);
 
-        h.realize(256, target);
+        h.realize({256}, target);
     }
 
     Internal::JITSharedRuntime::release_all();

@@ -17,7 +17,7 @@ Halide::Runtime::Buffer<int32_t> make_gpu_buffer(bool hexagon_rpc, int offset = 
         f.gpu_tile(x, y, xi, yi, 8, 8, TailStrategy::Auto, api);
     }
 
-    Buffer<int32_t> result = f.realize(128, 128);
+    Buffer<int32_t> result = f.realize({128, 128});
     return *result.get();
 }
 
@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
     bool hexagon_rpc = (target.arch != Target::Hexagon) &&
-                       target.features_any_of({Target::HVX_64, Target::HVX_128});
+                       target.has_feature(Target::HVX);
 
     if (!hexagon_rpc && !target.has_gpu_feature()) {
         printf("[SKIP] No GPU target enabled.\n");
@@ -214,8 +214,7 @@ int main(int argc, char **argv) {
     // Test copying between different device APIs. Probably will not
     // run on test infrastructure as we do not configure more than one
     // GPU API at a time. For now, special case CUDA and OpenCL as these are
-    // the most likely to be supported together. (OpenGL would be a candidate
-    // but buffer_copy support needs to be added.)
+    // the most likely to be supported together.
     if (target.has_feature(Target::CUDA) && target.has_feature(Target::OpenCL)) {
         printf("Test cross device copy device to device.\n");
         {

@@ -13,7 +13,6 @@
 #include <iostream>
 #include <map>
 #include <memory>
-#include <set>
 #include <string>
 #include <utility>
 
@@ -98,7 +97,7 @@ protected:
     const std::string generator_name;
     const std::string function_name;
     const std::string autoscheduler_name;
-    const Target target;
+    const Target target = Target();
     const std::string generator_args;
     const bool obfuscate_exprs{false};
 

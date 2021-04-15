@@ -9,6 +9,12 @@ using namespace Halide;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
     Func sin_f, cos_f, sin_ref, cos_ref;
     Var x;
     Expr t = x / 1000.f;
@@ -22,24 +28,24 @@ int main(int argc, char **argv) {
     sin_ref.vectorize(x, 8);
     cos_ref.vectorize(x, 8);
 
-    double t1 = 1e6 * benchmark([&]() { sin_f.realize(1000); });
-    double t2 = 1e6 * benchmark([&]() { cos_f.realize(1000); });
-    double t3 = 1e6 * benchmark([&]() { sin_ref.realize(1000); });
-    double t4 = 1e6 * benchmark([&]() { cos_ref.realize(1000); });
+    double t_fast_sin = 1e6 * benchmark([&]() { sin_f.realize({1000}); });
+    double t_fast_cos = 1e6 * benchmark([&]() { cos_f.realize({1000}); });
+    double t_sin = 1e6 * benchmark([&]() { sin_ref.realize({1000}); });
+    double t_cos = 1e6 * benchmark([&]() { cos_ref.realize({1000}); });
 
     printf("sin: %f ns per pixel\n"
            "fast_sine: %f ns per pixel\n"
            "cosine: %f ns per pixel\n"
            "fast_cosine: %f ns per pixel\n",
-           t1, t3, t2, t4);
+           t_sin, t_fast_sin, t_cos, t_fast_cos);
 
-    if (t3 < 1.5f * t1) {
-        printf("fast_sin is not 1.5x faster than sin\n");
+    if (t_sin < t_fast_sin) {
+        printf("fast_sin is not faster than sin\n");
         return -1;
     }
 
-    if (t4 < 1.5f * t2) {
-        printf("fast_cos is not 1.5x faster than cos\n");
+    if (t_cos < t_fast_cos) {
+        printf("fast_cos is not faster than cos\n");
         return -1;
     }
 

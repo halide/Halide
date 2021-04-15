@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
             hist.update().atomic().parallel(ri).parallel(x).vectorize(ro);
         }
 
-        Buffer<int> result = hist.realize(10, 100);
+        Buffer<int> result = hist.realize({10, 100});
         for (int i = 0; i < result.width(); i++) {
             for (int j = 0; j < result.height(); j++) {
                 // If i has a square root in the integers modulo ten

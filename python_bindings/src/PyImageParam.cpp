@@ -31,6 +31,7 @@ void define_image_param(py::module &m) {
             .def("host_alignment", &OutputImageParam::host_alignment)
             .def("set_estimates", &OutputImageParam::set_estimates, py::arg("estimates"))
             .def("set_host_alignment", &OutputImageParam::set_host_alignment)
+            .def("store_in", &OutputImageParam::store_in, py::arg("memory_type"))
             .def("dimensions", &OutputImageParam::dimensions)
             .def("left", &OutputImageParam::left)
             .def("right", &OutputImageParam::right)

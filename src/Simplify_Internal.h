@@ -28,6 +28,18 @@
 namespace Halide {
 namespace Internal {
 
+inline int64_t saturating_mul(int64_t a, int64_t b) {
+    if (mul_would_overflow(64, a, b)) {
+        if ((a > 0) == (b > 0)) {
+            return INT64_MAX;
+        } else {
+            return INT64_MIN;
+        }
+    } else {
+        return a * b;
+    }
+}
+
 class Simplify : public VariadicVisitor<Simplify, Expr, Stmt> {
     using Super = VariadicVisitor<Simplify, Expr, Stmt>;
 
@@ -36,6 +48,7 @@ public:
 
     struct ExprInfo {
         // We track constant integer bounds when they exist
+        // TODO: Use ConstantInterval?
         int64_t min = 0, max = 0;
         bool min_defined = false, max_defined = false;
         // And the alignment of integer variables
@@ -113,9 +126,8 @@ public:
 #else
     HALIDE_ALWAYS_INLINE
     Expr mutate(const Expr &e, ExprInfo *b) {
-        Expr new_e = Super::dispatch(e, b);
-        internal_assert(new_e.type() == e.type()) << e << " -> " << new_e << "\n";
-        return new_e;
+        // This gets inlined into every call to mutate, so do not add any code here.
+        return Super::dispatch(e, b);
     }
 #endif
 
@@ -186,6 +198,8 @@ public:
     IRMatcher::WildConst<1> c1;
     IRMatcher::WildConst<2> c2;
     IRMatcher::WildConst<3> c3;
+    IRMatcher::WildConst<4> c4;
+    IRMatcher::WildConst<5> c5;
 
     // Tracks whether or not we're inside a vector loop. Certain
     // transformations are not a good idea if the code is to be
@@ -198,9 +212,7 @@ public:
     void found_buffer_reference(const std::string &name, size_t dimensions = 0);
 
     // Wrappers for as_const_foo that are more convenient to use in
-    // the large chains of conditions in the visit methods
-    // below. Unlike the versions in IROperator, these only match
-    // scalars.
+    // the large chains of conditions in the visit methods below.
     bool const_float(const Expr &e, double *f);
     bool const_int(const Expr &e, int64_t *i);
     bool const_uint(const Expr &e, uint64_t *u);
@@ -208,8 +220,12 @@ public:
     // Put the args to a commutative op in a canonical order
     HALIDE_ALWAYS_INLINE
     bool should_commute(const Expr &a, const Expr &b) {
-        if (a.node_type() < b.node_type()) return true;
-        if (a.node_type() > b.node_type()) return false;
+        if (a.node_type() < b.node_type()) {
+            return true;
+        }
+        if (a.node_type() > b.node_type()) {
+            return false;
+        }
 
         if (a.node_type() == IRNodeType::Variable) {
             const Variable *va = a.as<Variable>();
@@ -233,6 +249,10 @@ public:
         void learn_true(const Expr &fact);
         void learn_upper_bound(const Variable *v, int64_t val);
         void learn_lower_bound(const Variable *v, int64_t val);
+
+        // Replace exprs known to be truths or falsehoods with const_true or const_false.
+        Expr substitute_facts(const Expr &e);
+        Stmt substitute_facts(const Stmt &s);
 
         ScopedFact(Simplify *s)
             : simplify(s) {
@@ -302,6 +322,7 @@ public:
     Expr visit(const Load *op, ExprInfo *bounds);
     Expr visit(const Call *op, ExprInfo *bounds);
     Expr visit(const Shuffle *op, ExprInfo *bounds);
+    Expr visit(const VectorReduce *op, ExprInfo *bounds);
     Expr visit(const Let *op, ExprInfo *bounds);
     Stmt visit(const LetStmt *op);
     Stmt visit(const AssertStmt *op);

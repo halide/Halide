@@ -1,8 +1,6 @@
 #include "HalideRuntime.h"
 #include "printer.h"
 
-#define INLINE inline __attribute__((always_inline))
-
 #ifndef MX_API_VER
 #define MX_API_VER 0x07040000
 #endif
@@ -69,11 +67,12 @@ typedef size_t mwIndex;
 typedef ptrdiff_t mwSignedIndex;
 #endif
 
-typedef void (*mex_exit_fn)(void);
+typedef void (*mex_exit_fn)();
 
 // Declare function pointers for the mex APIs.
-#define MEX_FN(ret, func, args) ret(*func) args;
+#define MEX_FN(ret, func, args) ret(*func) args;  // NOLINT(bugprone-macro-parentheses)
 #include "mex_functions.h"
+#undef MEX_FN
 
 // Given a halide type code and bit width, find the equivalent matlab class ID.
 WEAK mxClassID get_class_id(int32_t type_code, int32_t type_bits) {
@@ -164,27 +163,27 @@ WEAK const char *get_class_name(mxClassID id) {
 
 // Get the real data pointer from an mxArray.
 template<typename T>
-INLINE T *get_data(mxArray *a) {
+ALWAYS_INLINE T *get_data(mxArray *a) {
     return (T *)mxGetData(a);
 }
 template<typename T>
-INLINE const T *get_data(const mxArray *a) {
+ALWAYS_INLINE const T *get_data(const mxArray *a) {
     return (const T *)mxGetData(a);
 }
 
 // Search for a symbol in the calling process (i.e. matlab).
 template<typename T>
-INLINE T get_mex_symbol(void *user_context, const char *name, bool required) {
+ALWAYS_INLINE T get_mex_symbol(void *user_context, const char *name, bool required) {
     T s = (T)halide_get_symbol(name);
-    if (required && s == NULL) {
+    if (required && s == nullptr) {
         error(user_context) << "mex API not found: " << name << "\n";
-        return NULL;
+        return nullptr;
     }
     return s;
 }
 
 // Provide Matlab API version agnostic wrappers for version specific APIs.
-INLINE size_t get_number_of_dimensions(const mxArray *a) {
+ALWAYS_INLINE size_t get_number_of_dimensions(const mxArray *a) {
     if (mxGetNumberOfDimensions_730) {
         return mxGetNumberOfDimensions_730(a);
     } else {
@@ -192,7 +191,7 @@ INLINE size_t get_number_of_dimensions(const mxArray *a) {
     }
 }
 
-INLINE size_t get_dimension(const mxArray *a, size_t n) {
+ALWAYS_INLINE size_t get_dimension(const mxArray *a, size_t n) {
     if (mxGetDimensions_730) {
         return mxGetDimensions_730(a)[n];
     } else {
@@ -200,7 +199,7 @@ INLINE size_t get_dimension(const mxArray *a, size_t n) {
     }
 }
 
-INLINE mxArray *create_numeric_matrix(size_t M, size_t N, mxClassID type, mxComplexity complexity) {
+ALWAYS_INLINE mxArray *create_numeric_matrix(size_t M, size_t N, mxClassID type, mxComplexity complexity) {
     if (mxCreateNumericMatrix_730) {
         return mxCreateNumericMatrix_730(M, N, type, complexity);
     } else {
@@ -259,14 +258,19 @@ WEAK void halide_matlab_print(void *, const char *msg) {
 
 WEAK int halide_matlab_init(void *user_context) {
     // Assume that if mexWarnMsgTxt exists, we've already attempted initialization.
-    if (mexWarnMsgTxt != NULL) {
+    if (mexWarnMsgTxt != nullptr) {
         return halide_error_code_success;
     }
 
-#define MEX_FN(ret, func, args) func = get_mex_symbol<ret(*) args>(user_context, #func, true);
-#define MEX_FN_700(ret, func, func_700, args) func_700 = get_mex_symbol<ret(*) args>(user_context, #func, false);
-#define MEX_FN_730(ret, func, func_730, args) func_730 = get_mex_symbol<ret(*) args>(user_context, #func_730, false);
+// clang-format off
+#define MEX_FN(ret, func, args)                 func = get_mex_symbol<ret(*) args>(user_context, #func, true);          // NOLINT(bugprone-macro-parentheses)
+#define MEX_FN_700(ret, func, func_700, args)   func_700 = get_mex_symbol<ret(*) args>(user_context, #func, false);     // NOLINT(bugprone-macro-parentheses)
+#define MEX_FN_730(ret, func, func_730, args)   func_730 = get_mex_symbol<ret(*) args>(user_context, #func_730, false); // NOLINT(bugprone-macro-parentheses)
 #include "mex_functions.h"
+#undef MEX_FN_730
+#undef MEX_FN_700
+#undef MEX_FN
+    // clang-format on
 
     if (!mexWarnMsgTxt) {
         return halide_error_code_matlab_init_failed;

@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     if (t.has_gpu_feature() && !t.has_feature(Target::OpenGLCompute)) {
         Var xi, yi;
         f.gpu_tile(x, y, xi, yi, 16, 16);
-    } else if (t.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    } else if (t.has_feature(Target::HVX)) {
         f.hexagon(y);
     } else {
         printf("[SKIP] No GPU target enabled.\n");
@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     }
     f.parallel(z);
 
-    Buffer<int> im = f.realize(64, 64, 64);
+    Buffer<int> im = f.realize({64, 64, 64});
 
     for (int x = 0; x < 64; x++) {
         for (int y = 0; y < 64; y++) {

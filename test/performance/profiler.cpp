@@ -16,6 +16,12 @@ void my_print(void *, const char *msg) {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
     // Make a long chain of finely-interleaved Funcs, of which one is very expensive.
     Func f[30];
     Var c, x;
@@ -48,7 +54,7 @@ int main(int argc, char **argv) {
     }
 
     Target t = get_jit_target_from_environment().with_feature(Target::Profile);
-    Buffer<float> im = out.realize(10, 1000, t);
+    Buffer<float> im = out.realize({10, 1000}, t);
 
     //out.compile_to_assembly("/dev/stdout", {}, t.with_feature(Target::JIT));
 

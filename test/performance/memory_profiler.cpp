@@ -103,8 +103,9 @@ int check_error_parallel(int min_heap_peak, int max_heap_peak, int exp_num_mallo
 }
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not yet support the profiler.\n");
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
         return 0;
     }
 
@@ -125,7 +126,7 @@ int main(int argc, char **argv) {
         f1.set_custom_print(&my_print);
 
         reset_stats();
-        f1.realize(size_x, size_y, t);
+        f1.realize({size_x, size_y}, t);
         int stack_size = size_x * size_y * sizeof(int);
         if (check_error(0, 0, 0, stack_size) != 0) {
             return -1;
@@ -146,7 +147,7 @@ int main(int argc, char **argv) {
         f2.set_custom_print(&my_print);
 
         reset_stats();
-        f2.realize(size_x, size_y, t);
+        f2.realize({size_x, size_y}, t);
         int total = (size_x + 1) * (size_y + 1) * sizeof(int);
         if (check_error(total, 1, total, 0) != 0) {
             return -1;
@@ -164,7 +165,7 @@ int main(int argc, char **argv) {
         f3.set_custom_print(&my_print);
 
         reset_stats();
-        f3.realize(1000, 1000, t);
+        f3.realize({1000, 1000}, t);
         if (check_error(0, 0, 0, 0) != 0) {
             return -1;
         }
@@ -181,7 +182,7 @@ int main(int argc, char **argv) {
         f3.set_custom_print(&my_print);
 
         reset_stats();
-        f3.realize(1000, 1000, t);
+        f3.realize({1000, 1000}, t);
         if (check_error(0, 0, 0, 0) != 0) {
             return -1;
         }
@@ -212,7 +213,7 @@ int main(int argc, char **argv) {
         reset_stats();
         toggle1.set(true);
         toggle2.set(true);
-        f6.realize(size_x, t);
+        f6.realize({size_x}, t);
         total = size_x * sizeof(float);
         if (check_error(total, 1, total, 0) != 0) {
             return -1;
@@ -221,7 +222,7 @@ int main(int argc, char **argv) {
         reset_stats();
         toggle1.set(true);
         toggle2.set(false);
-        f6.realize(size_x, t);
+        f6.realize({size_x}, t);
         total = size_x * sizeof(float);
         if (check_error(total, 1, total, 0) != 0) {
             return -1;
@@ -230,7 +231,7 @@ int main(int argc, char **argv) {
         reset_stats();
         toggle1.set(false);
         toggle2.set(true);
-        f6.realize(size_x, t);
+        f6.realize({size_x}, t);
         total = size_x * sizeof(float);
         if (check_error(total, 1, total, 0) != 0) {
             return -1;
@@ -239,7 +240,7 @@ int main(int argc, char **argv) {
         reset_stats();
         toggle1.set(false);
         toggle2.set(false);
-        f6.realize(size_x, t);
+        f6.realize({size_x}, t);
         if (check_error(0, 0, 0, 0) != 0) {
             return -1;
         }
@@ -261,7 +262,7 @@ int main(int argc, char **argv) {
         f8.set_custom_print(&my_print);
 
         reset_stats();
-        f8.realize(size_x, size_y, t);
+        f8.realize({size_x, size_y}, t);
         int peak = size_x * sizeof(int);
         int total = size_x * size_y * sizeof(int);
         if (check_error(peak, size_y, total / size_y, 0) != 0) {
@@ -287,7 +288,7 @@ int main(int argc, char **argv) {
         f10.set_custom_print(&my_print);
 
         reset_stats();
-        f10.realize(size_x, size_y, t);
+        f10.realize({size_x, size_y}, t);
         int min_heap_peak = size_x * sizeof(int);
         int total = size_x * size_y * sizeof(int);
         if (check_error_parallel(min_heap_peak, total, size_y, total / size_y, 0) != 0) {
@@ -308,7 +309,7 @@ int main(int argc, char **argv) {
         f11.set_custom_print(&my_print);
 
         reset_stats();
-        f11.realize(size_x, size_y, t);
+        f11.realize({size_x, size_y}, t);
         int total = size_x * size_y * sizeof(int);
         if (check_error(total, 1, total, 0) != 0) {
             return -1;
@@ -329,7 +330,7 @@ int main(int argc, char **argv) {
         f12.set_custom_print(&my_print);
 
         reset_stats();
-        f12.realize(size_x, size_y, t);
+        f12.realize({size_x, size_y}, t);
         int stack_size = size_x * size_y * sizeof(int);
         if (check_error(0, 0, 0, stack_size) != 0) {
             return -1;

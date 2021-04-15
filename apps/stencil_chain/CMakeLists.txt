@@ -19,7 +19,7 @@ target_link_libraries(stencil_chain.generator PRIVATE Halide::Generator Halide::
 add_halide_library(stencil_chain FROM stencil_chain.generator)
 add_halide_library(stencil_chain_auto_schedule FROM stencil_chain.generator
                    GENERATOR stencil_chain
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Mullapudi2016)
 
 # Main executable
 add_executable(stencil_chain_process process.cpp)
@@ -35,7 +35,7 @@ if (EXISTS ${IMAGE})
     configure_file(${IMAGE} rgb.png COPYONLY)
     add_test(NAME stencil_chain_process COMMAND stencil_chain_process rgb.png 10 out.png)
     set_tests_properties(stencil_chain_process PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS stencil_chain
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()

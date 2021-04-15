@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
         f.store_root().compute_at(g, y);
 
         counter = 0;
-        check(g.realize(2, 10));
+        check(g.realize({2, 10}));
 
         int correct = 24;
         if (counter != correct) {
@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
         f.store_root().compute_at(g, y);
 
         counter = 0;
-        check(g.realize(2, 10));
+        check(g.realize({2, 10}));
 
         int correct = 60;
         if (counter != correct) {
@@ -87,10 +87,8 @@ int main(int argc, char **argv) {
         // clobber earlier values of the final stage of f, so we have
         // to compute the final stage of f two rows at a time as well.
 
-        // The result is that we evaluate the first three rows of f
-        // for the first scanline of g, and then another two rows for
-        // every row of g thereafter. This adds up to 2*(3 + 9*2) = 42
-        // evaluations of f.
+        // The result is that we extend the loop to warm up f by 2
+        // iterations. This adds up to 2*(12*2) = 48 evaluations of f.
         Func f("f");
         f(x, y) = x;
         f(0, y) += f(1, y) + f(2, y);
@@ -106,9 +104,9 @@ int main(int argc, char **argv) {
         f.store_root().compute_at(g, y);
 
         counter = 0;
-        check(g.realize(2, 10));
+        check(g.realize({2, 10}));
 
-        int correct = 42;
+        int correct = 48;
         if (counter != correct) {
             printf("Failed sliding a reduction: %d evaluations instead of %d\n", counter, correct);
             return -1;

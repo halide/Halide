@@ -9,6 +9,12 @@ using namespace Halide::Tools;
 #define H 160
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
     Var x, y;
     Func f, g;
 
@@ -21,12 +27,12 @@ int main(int argc, char **argv) {
 
     f.parallel(y);
 
-    Buffer<float> imf = f.realize(W, H);
+    Buffer<float> imf = f.realize({W, H});
 
     double parallelTime = benchmark([&]() { f.realize(imf); });
 
     printf("Realizing g\n");
-    Buffer<float> img = g.realize(W, H);
+    Buffer<float> img = g.realize({W, H});
     printf("Done realizing g\n");
 
     double serialTime = benchmark([&]() { g.realize(img); });

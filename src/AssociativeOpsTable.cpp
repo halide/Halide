@@ -1,6 +1,8 @@
 #include "AssociativeOpsTable.h"
 #include "IRPrinter.h"
 
+#include <mutex>
+
 namespace Halide {
 namespace Internal {
 
@@ -33,9 +35,10 @@ enum class ValType {
     Int16 = 6,
     Int32 = 7,
     Int64 = 8,
-    Float32 = 9,
-    Float64 = 10,
-    All = 11,  // General type (including all previous types)
+    Float16 = 9,
+    Float32 = 10,
+    Float64 = 11,
+    All = 12,  // General type (including all previous types)
 };
 
 ValType convert_halide_type_to_val_type(const Type &halide_t) {
@@ -68,7 +71,9 @@ ValType convert_halide_type_to_val_type(const Type &halide_t) {
         }
     } else {
         internal_assert(halide_t.is_float());
-        if (halide_t.bits() == 32) {
+        if (halide_t.bits() == 16) {
+            val_t = ValType::Float16;
+        } else if (halide_t.bits() == 32) {
             val_t = ValType::Float32;
         } else {
             internal_assert(halide_t.bits() == 64);
@@ -115,26 +120,26 @@ struct TableKey {
     }
 };
 
-static map<TableKey, vector<AssociativePattern>> pattern_tables;
+map<TableKey, vector<AssociativePattern>> pattern_tables;
 
-#define declare_vars(t, index)                                      \
-    Expr x##index = Variable::make(t, "x" + std::to_string(index)); \
-    Expr y##index = Variable::make(t, "y" + std::to_string(index)); \
-    Expr k##index = Variable::make(t, "k" + std::to_string(index)); \
-    Expr zero_##index = make_const(t, 0);                           \
-    Expr one_##index = make_const(t, 1);                            \
-    Expr neg_one_##index = make_const(t, -1);                       \
-    Expr tmax_##index = t.max();                                    \
-    Expr tmin_##index = t.min();
+#define declare_vars(t, index)                                        \
+    Expr x##index = Variable::make((t), "x" + std::to_string(index)); \
+    Expr y##index = Variable::make((t), "y" + std::to_string(index)); \
+    Expr k##index = Variable::make((t), "k" + std::to_string(index)); \
+    Expr zero_##index = make_const((t), 0);                           \
+    Expr one_##index = make_const((t), 1);                            \
+    Expr neg_one_##index = make_const((t), -1);                       \
+    Expr tmax_##index = (t).max();                                    \
+    Expr tmin_##index = (t).min()
 
-#define declare_vars_single(types)      \
-    internal_assert(types.size() == 1); \
-    declare_vars(types[0], 0)
+#define declare_vars_single(types)        \
+    internal_assert((types).size() == 1); \
+    declare_vars((types)[0], 0)
 
-#define declare_vars_double(types)      \
-    internal_assert(types.size() == 2); \
-    declare_vars(types[0], 0)           \
-        declare_vars(types[1], 1)
+#define declare_vars_double(types)        \
+    internal_assert((types).size() == 2); \
+    declare_vars((types)[0], 0);          \
+    declare_vars((types)[1], 1)
 
 void populate_ops_table_single_general_add(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);
@@ -249,7 +254,7 @@ void populate_ops_table_single_uint32_select(const vector<Type> &types, vector<A
     table.emplace_back(select(x0 < -y0, y0, tmax_0), zero_0, true);          // Saturating add
 }
 
-static const map<TableKey, void (*)(const vector<Type> &types, vector<AssociativePattern> &)> val_type_to_populate_luts_fn = {
+const map<TableKey, void (*)(const vector<Type> &types, vector<AssociativePattern> &)> val_type_to_populate_luts_fn = {
     {TableKey(ValType::All, RootExpr::Add, 1), &populate_ops_table_single_general_add},
     {TableKey(ValType::All, RootExpr::Mul, 1), &populate_ops_table_single_general_mul},
     {TableKey(ValType::All, RootExpr::Max, 1), &populate_ops_table_single_general_max},
@@ -319,7 +324,7 @@ std::string print_types(const vector<Type> &types) {
 const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
     internal_assert(!exprs.empty());
 
-    static vector<AssociativePattern> empty;
+    static const vector<AssociativePattern> empty;
 
     if (exprs.size() > 2) {
         debug(5) << "Returning empty table since tuple size is larger than 2\n";
@@ -362,6 +367,11 @@ const vector<AssociativePattern> &get_ops_table(const vector<Expr> &exprs) {
     }
 
     if (root != RootExpr::Unknown) {
+        // get_ops_table_helper() lazily initializes the table, so ensure
+        // that multiple threads can't try to do so at the same time.
+        static std::mutex ops_table_lock;
+        std::lock_guard<std::mutex> lock_guard(ops_table_lock);
+
         const vector<AssociativePattern> &table = get_ops_table_helper(types, root, exprs.size());
         debug(7) << "Table size: " << table.size() << "\n";
         for (const auto &p : table) {

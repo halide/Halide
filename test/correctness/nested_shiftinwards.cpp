@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     // size below.
 
     // Just check it doesn't fail a bounds assertion.
-    Buffer<uint16_t> out = g.realize(input.width() - 2, input.height() - 2, 3);
+    Buffer<uint16_t> out = g.realize({input.width() - 2, input.height() - 2, 3});
 
     printf("Success!\n");
     return 0;

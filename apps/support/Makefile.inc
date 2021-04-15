@@ -4,11 +4,14 @@ MAKEFLAGS += --no-builtin-rules
 .SUFFIXES:
 
 HALIDE_DISTRIB_PATH ?= $(realpath ../../distrib)
+ifeq (,$(HALIDE_DISTRIB_PATH))
+$(error Could not find a Halide distribution. Before building an app, run "make distrib" at the root level, or set HALIDE_DISTRIB_PATH to the root of an existing Halide distribution)
+endif
+
 LDFLAGS ?=
 IMAGES ?= ../images
 UNAME ?= $(shell uname)
 SHELL = bash
-
 PYTHON ?= python3
 
 # TODO(srj): the python bindings need to be put into the distrib folders;
@@ -82,53 +85,76 @@ else
 SHARED_EXT=so
 endif
 
-# To run apps on android that support this, build a separate toolchain from the Android NDK
-# using the make-standalone-toolchain.sh script:
-#$ build/tools/make-standalone-toolchain.sh --arch=arm64 --platform=android-21 --install-dir=$ANDROID_ARM64_TOOLCHAIN
-#$ build/tools/make-standalone-toolchain.sh --arch=arm --platform=android-21 --install-dir=$ANDROID_ARM_TOOLCHAIN
+# We expect $ANDROID_NDK_ROOT to be defined by an env var.
+# We require at least NDK r19b or later.
+ANDROID_NDK_ROOT ?= /path/to/android_ndk_root
+
+# e.g. 'darwin' or 'linux'
+ANDROID_NDK_HOST_PLATFORM ?= $(shell echo `uname` | tr '[:upper:]' '[:lower:]')
+
+# The minimum Android API version to compile against. (This is *not* the same as the NDK version.)
+# 26 - Android 8 (aka Oreo)
+ANDROID_API_VERSION ?= 26
+
 CXX-host ?= $(CXX)
 CXX-host-opencl ?= $(CXX)
-CXX-host-opengl ?= $(CXX)
 CXX-host-cuda ?= $(CXX)
 CXX-host-metal ?= $(CXX)
 CXX-host-hvx_128 ?= $(CXX)
 CXX-host-hvx_64 ?= $(CXX)
-CXX-$(HL_TARGET) ?= $(CXX)
-CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
-CXX-arm-32-android ?= $(ANDROID_ARM_TOOLCHAIN)/bin/arm-linux-androideabi-c++
+CXX-host-hvx ?= $(CXX)
+CXX-arm-64-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/aarch64-linux-android${ANDROID_API_VERSION}-clang++
+CXX-arm-32-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/armv7a-linux-androideabi${ANDROID_API_VERSION}-clang++
+CXX-arm-64-profile-android ?= $(CXX-arm-64-android)
+CXX-arm-32-profile-android ?= $(CXX-arm-32-android)
 
 CXXFLAGS-host ?= $(CXXFLAGS)
 CXXFLAGS-host-opencl ?= $(CXXFLAGS)
-CXXFLAGS-host-opengl ?= $(CXXFLAGS)
 CXXFLAGS-host-cuda ?= $(CXXFLAGS)
 CXXFLAGS-host-metal ?= $(CXXFLAGS)
 CXXFLAGS-host-hvx_128 ?= $(CXXFLAGS)
 CXXFLAGS-host-hvx_64 ?= $(CXXFLAGS)
-CXXFLAGS-$(HL_TARGET) ?= $(CXXFLAGS)
 CXXFLAGS-arm-64-android ?= $(CXXFLAGS)
 CXXFLAGS-arm-32-android ?= $(CXXFLAGS)
 
 LDFLAGS-host ?= $(LDFLAGS)
 LDFLAGS-host-opencl ?= $(LDFLAGS)
-LDFLAGS-host-opengl ?= $(LDFLAGS)
 LDFLAGS-host-cuda ?= $(LDFLAGS)
 LDFLAGS-host-metal ?= $(LDFLAGS)
 LDFLAGS-host-hvx_128 ?= $(LDFLAGS)
 LDFLAGS-host-hvx_64 ?= $(LDFLAGS)
+# Use the statically-linked version of libc++ on Android by default, for simplicity
+# of deployment. (Despite the name, this applies to libc++, not libstdc++)
+LDFLAGS-arm-64-android ?= -llog -fPIE -pie -static-libstdc++
+LDFLAGS-arm-32-android ?= -llog -fPIE -pie -static-libstdc++
+
+# Put HL_TARGET variants of all of these last, to avoid conflict with the android variants
+# if building with `HL_TARGET=arm-64-android make foo`
+CXX-$(HL_TARGET) ?= $(CXX)
+CXXFLAGS-$(HL_TARGET) ?= $(CXXFLAGS)
 LDFLAGS-$(HL_TARGET) ?= $(LDFLAGS)
-LDFLAGS-arm-64-android ?= -llog -fPIE -pie
-LDFLAGS-arm-32-android ?= -llog -fPIE -pie
 
 LIB_HALIDE_STATIC = $(HALIDE_DISTRIB_PATH)/lib/libHalide.a
 
-LIB_HALIDE = $(HALIDE_DISTRIB_PATH)/bin/libHalide.$(SHARED_EXT)
+LIB_HALIDE = $(HALIDE_DISTRIB_PATH)/lib/libHalide.$(SHARED_EXT)
 
-GENERATOR_DEPS ?= $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
+GENERATOR_DEPS ?= $(LIB_AUTOSCHEDULER) $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
 GENERATOR_DEPS_STATIC ?= $(LIB_HALIDE_STATIC) $(HALIDE_DISTRIB_PATH)/include/Halide.h $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp
 
 # Generators which use autoscheduler plugin need to specify the linker where to find libHalide.so required by the plugin.
 LIBHALIDE_LDFLAGS ?= -Wl,-rpath,$(dir $(LIB_HALIDE)) -L $(dir $(LIB_HALIDE)) -lHalide $(LDFLAGS)
-LIBHALIDE_LDFLAGS_STATIC ?=  -L $(dir $(LIB_HALIDE_STATIC)) -lHalide $(LDFLAGS)
+LIBHALIDE_LDFLAGS_STATIC ?= $(LIB_HALIDE_STATIC) $(LDFLAGS)
+
+# Autoschedulers. Mullapudi2016 is currently the default, because it's fast.
+AUTOSCHEDULER ?= mullapudi2016
+ifneq ($(AUTOSCHEDULER),)
+LIB_AUTOSCHEDULER ?= $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(SHARED_EXT)
+ifeq ($(UNAME), Darwin)
+LIBHALIDE_LDFLAGS +=  -Wl,-force_load $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(SHARED_EXT)
+else
+LIBHALIDE_LDFLAGS +=  -Wl,--no-as-needed -lautoschedule_$(AUTOSCHEDULER) -Wl,--as-needed
+endif
+endif
 
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
@@ -156,15 +182,6 @@ IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
 
 IMAGE_IO_FLAGS = $(IMAGE_IO_LIBS) $(IMAGE_IO_CXX_FLAGS)
 
-PLATFORM_OPENGL_LDFLAGS=-lGL -lX11
-ifeq ($(UNAME), Darwin)
-PLATFORM_OPENGL_LDFLAGS=-framework OpenGL
-endif
-
-ifneq (, $(findstring opengl,$(HL_TARGET)))
-  OPENGL_LDFLAGS=$(PLATFORM_OPENGL_LDFLAGS)
-endif
-
 ifneq (, $(findstring metal,$(HL_TARGET)))
   LDFLAGS += -framework Metal -framework Foundation
 endif
@@ -185,13 +202,11 @@ $(BIN)/%.registration.cpp: $(BIN)/%.a
 
 .PRECIOUS: $(BIN)/%/RunGenMain.o
 $(BIN)/%/RunGenMain.o: $(HALIDE_DISTRIB_PATH)/tools/RunGenMain.cpp $(HALIDE_DISTRIB_PATH)/tools/RunGen.h
-	@[[ "$(HL_TARGET)" != "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must NOT begin with wasm-32-wasmrt for target $@" && exit 1)
 	@mkdir -p $(@D)
 	$(CXX) -c $< $(CXXFLAGS) -fno-exceptions $(IMAGE_IO_CXX_FLAGS) -I$(BIN)/$* -o $@
 
 .PRECIOUS: $(BIN)/%.rungen
 $(BIN)/%.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%.a $(BIN)/%.registration.cpp
-	@[[ "$(HL_TARGET)" != "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must NOT begin with wasm-32-wasmrt for target $@" && exit 1)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 RUNARGS ?=
@@ -211,72 +226,5 @@ $(BIN)/%.run: $(BIN)/%.rungen
 
 .PHONY: %.benchmark
 %.benchmark: $(BIN)/$(HL_TARGET)/%.rungen
-	@[[ "$(HL_TARGET)" != "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must NOT begin with wasm-32-wasmrt for target $@" && exit 1)
 	@$^ --benchmarks=all --estimate_all --parsable_output
 
-# ------- wasm support
-
-# EMCC is the tool that invokes Emscripten
-EMCC ?= emcc
-
-# WASM_SHELL is the shell tool used to run AOT-compiled WebAssembly.
-# (Node could be used instead.)
-WASM_SHELL ?= d8
-
-ifneq (,$(findstring wasm_simd128,$(HL_TARGET)))
-	EMCC_SIMD_OPT=1
-	WASM_SHELL += --experimental-wasm-simd
-else
-	EMCC_SIMD_OPT=0
-endif
-
-ifneq (,$(findstring node,$(WASM_SHELL)))
-	EMCC_ENVIRONMENT=node
-	WASM_SHELL_ARG_SEP=
-else
-	EMCC_ENVIRONMENT=shell
-	WASM_SHELL_ARG_SEP="--"
-endif
-
-# We slurp in the default ~/.emscripten config file and make an altered version
-# with LLVM_ROOT pointing to the LLVM we are using, so that we can build with
-# the 'correct' version (ie the one that the rest of Halide is using) whether
-# or not ~/.emscripten has been edited correctly.
-LLVM_CONFIG ?= llvm-config
-LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g')
-EMCC_CONFIG = $(shell cat $(HOME)/.emscripten | grep -v LLVM_ROOT | tr '\n' ';')LLVM_ROOT='$(LLVM_BINDIR)'
-
-# Note that USE_LIBJPEG requires Emscripten 1.38.31 or later
-EMCC_OPTS = \
-	--source-map-base . \
-	-s ALLOW_MEMORY_GROWTH=1 \
-	-s ASSERTIONS=1 \
-	-s ENVIRONMENT=$(EMCC_ENVIRONMENT) \
-	-s EXIT_RUNTIME=1 \
-	-s FORCE_FILESYSTEM=1 \
-	-s SIMD=$(EMCC_SIMD_OPT) \
-	-s USE_LIBPNG=1 \
-	-s USE_LIBJPEG=1 \
-	-s WASM=1
-
-CXX-WASM = EMCC_WASM_BACKEND=1 EM_CONFIG="$(EMCC_CONFIG)" $(EMCC) $(EMCC_OPTS)
-
-.PRECIOUS: $(BIN)/%/RunGenMainWasm.o
-$(BIN)/%/RunGenMainWasm.o: $(HALIDE_DISTRIB_PATH)/tools/RunGenMain.cpp $(HALIDE_DISTRIB_PATH)/tools/RunGen.h
-	@[[ "$(HL_TARGET)" == "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must begin with wasm-32-wasmrt" && exit 1)
-	@mkdir -p $(@D)
-	$(CXX-WASM) -c $< $(CXXFLAGS) -fno-exceptions -I$(BIN)/$* -o $@
-
-.PRECIOUS: $(BIN)/%.rungen.js
-$(BIN)/%.rungen.js: $(BIN)/%/RunGenMainWasm.o $(BIN)/%.a $(BIN)/%.registration.cpp
-	@[[ "$(HL_TARGET)" == "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must begin with wasm-32-wasmrt for target $@" && exit 1)
-	$(CXX-WASM) $(CXXFLAGS) -g $^ -o $@
-
-.PHONY: $(BIN)/%.rungen_wasm
-$(BIN)/%.rungen_wasm: $(BIN)/%.rungen.js
-	# nothing
-
-.PHONY: %.benchmark_wasm
-%.benchmark_wasm: $(BIN)/$(HL_TARGET)/%.rungen.js
-	@[[ "$(HL_TARGET)" == "wasm-32-wasmrt"* ]] || (echo "HL_TARGET must begin with wasm-32-wasmrt for target $@" && exit 1)
-	@cd $(<D); $(WASM_SHELL) $(<F) $(WASM_SHELL_ARG_SEP) --benchmarks=all --estimate_all --parsable_output

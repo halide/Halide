@@ -8,6 +8,8 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+
 // Find a constant upper bound on the size of each thread-local allocation
 class BoundSmallAllocations : public IRMutator {
     using IRMutator::visit;
@@ -71,6 +73,41 @@ class BoundSmallAllocations : public IRMutator {
         return IRMutator::visit(op);
     }
 
+    bool must_be_constant(MemoryType memory_type) const {
+        return (memory_type == MemoryType::Register ||
+                (device_api == DeviceAPI::OpenGLCompute &&
+                 memory_type == MemoryType::GPUShared));
+    }
+
+    Stmt visit(const Realize *op) override {
+        // Called pre-storage-flattening. At this point we just want
+        // to ensure any extents on allocations which *must* be
+        // constant *are* constant.
+        if (must_be_constant(op->memory_type)) {
+            Region region = op->bounds;
+            bool changed = false;
+            for (Range &r : region) {
+                Expr bound = find_constant_bound(r.extent, Direction::Upper, scope);
+                user_assert(bound.defined())
+                    << "Was unable to infer constant upper bound on extent of allocation "
+                    << op->name << ". Use Func::bound_extent to specify it manually.";
+                if (!bound.same_as(r.extent)) {
+                    r.extent = bound;
+                    changed = true;
+                }
+            }
+
+            Stmt body = mutate(op->body);
+            if (changed || !body.same_as(op->body)) {
+                return Realize::make(op->name, op->types, op->memory_type, region, op->condition, body);
+            } else {
+                return op;
+            }
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
     Stmt visit(const Allocate *op) override {
         Expr total_extent = make_const(Int(64), 1);
         for (const Expr &e : op->extents) {
@@ -78,11 +115,7 @@ class BoundSmallAllocations : public IRMutator {
         }
         Expr bound = find_constant_bound(total_extent, Direction::Upper, scope);
 
-        bool must_be_constant = (op->memory_type == MemoryType::Register ||
-                                 (device_api == DeviceAPI::OpenGLCompute &&
-                                  op->memory_type == MemoryType::GPUShared));
-
-        if (!bound.defined() && must_be_constant) {
+        if (!bound.defined() && must_be_constant(op->memory_type)) {
             user_assert(op->memory_type != MemoryType::Register)
                 << "Allocation " << op->name << " has a dynamic size. "
                 << "Only fixed-size allocations can be stored in registers. "
@@ -112,7 +145,7 @@ class BoundSmallAllocations : public IRMutator {
         if (size_ptr &&
             (in_thread_loop ||
              (op->memory_type == MemoryType::Stack && can_allocation_fit_on_stack(size)) ||
-             must_be_constant ||
+             must_be_constant(op->memory_type) ||
              (op->memory_type == MemoryType::Auto && size <= malloc_overhead))) {
             user_assert(size >= 0 && size < (int64_t)1 << 31)
                 << "Allocation " << op->name << " has a size greater than 2^31: " << bound << "\n";
@@ -123,6 +156,8 @@ class BoundSmallAllocations : public IRMutator {
         }
     }
 };
+
+}  // namespace
 
 Stmt bound_small_allocations(const Stmt &s) {
     return BoundSmallAllocations().mutate(s);

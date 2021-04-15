@@ -59,8 +59,8 @@ bool test() {
     // is small enough to fit in cache.
     g.reorder(y, x);
 
-    Buffer<A> outputg = g.realize(W, H);
-    Buffer<A> outputf = f.realize(W, H);
+    Buffer<A> outputg = g.realize({W, H});
+    Buffer<A> outputf = f.realize({W, H});
 
     double t_g = benchmark([&]() {
         g.realize(outputg);
@@ -93,6 +93,11 @@ bool test() {
 }
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
 
     bool ok = true;
 

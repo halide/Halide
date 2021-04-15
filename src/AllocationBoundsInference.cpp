@@ -6,6 +6,8 @@
 #include "IROperator.h"
 #include "Simplify.h"
 
+#include <set>
+
 namespace Halide {
 namespace Internal {
 
@@ -13,6 +15,8 @@ using std::map;
 using std::set;
 using std::string;
 using std::vector;
+
+namespace {
 
 // Figure out the region touched of each buffer, and deposit them as
 // let statements outside of each realize node, or at the top level if
@@ -79,16 +83,20 @@ class AllocationInference : public IRMutator {
                 extent = simplify((max - min) + 1);
             }
             if (bound.modulus.defined()) {
-                internal_assert(bound.remainder.defined());
-                min -= bound.remainder;
-                min = (min / bound.modulus) * bound.modulus;
-                min += bound.remainder;
-                Expr max_plus_one = max + 1;
-                max_plus_one -= bound.remainder;
-                max_plus_one = ((max_plus_one + bound.modulus - 1) / bound.modulus) * bound.modulus;
-                max_plus_one += bound.remainder;
-                extent = simplify(max_plus_one - min);
-                max = max_plus_one - 1;
+                if (bound.remainder.defined()) {
+                    min -= bound.remainder;
+                    min = (min / bound.modulus) * bound.modulus;
+                    min += bound.remainder;
+                    Expr max_plus_one = max + 1;
+                    max_plus_one -= bound.remainder;
+                    max_plus_one = ((max_plus_one + bound.modulus - 1) / bound.modulus) * bound.modulus;
+                    max_plus_one += bound.remainder;
+                    extent = simplify(max_plus_one - min);
+                    max = max_plus_one - 1;
+                } else {
+                    extent = simplify(((extent + bound.modulus - 1) / bound.modulus) * bound.modulus);
+                    max = simplify(min + extent - 1);
+                }
             }
 
             Expr min_var = Variable::make(Int(32), min_name);
@@ -126,7 +134,9 @@ public:
                 touched_by_extern.insert(f.name());
                 for (size_t i = 0; i < f.extern_arguments().size(); i++) {
                     ExternFuncArgument arg = f.extern_arguments()[i];
-                    if (!arg.is_func()) continue;
+                    if (!arg.is_func()) {
+                        continue;
+                    }
                     Function input(arg.func);
                     touched_by_extern.insert(input.name());
                 }
@@ -151,6 +161,8 @@ class StripDeclareBoxTouched : public IRMutator {
         }
     }
 };
+
+}  // namespace
 
 Stmt allocation_bounds_inference(Stmt s,
                                  const map<string, Function> &env,
