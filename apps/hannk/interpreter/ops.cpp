@@ -113,10 +113,10 @@ void broadcast_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b, int rank) {
         if (raw_a->dim[d].extent == 1) {
             raw_a->dim[d].extent = raw_b->dim[d].extent;
             raw_a->dim[d].stride = 0;
-        } else if (b.dim(d).extent() == 1) {
+        } else if (raw_b->dim[d].extent == 1) {
             raw_b->dim[d].extent = raw_a->dim[d].extent;
             raw_b->dim[d].stride = 0;
-        } else {
+        } else if (raw_a->dim[d].extent != raw_b->dim[d].extent) {
             LOG(FATAL) << "Can't broadcast shapes";
         }
     }
