@@ -4014,14 +4014,6 @@ void CodeGen_LLVM::visit(const Store *op) {
             int native_bits = native_vector_bits();
             int native_bytes = native_bits / 8;
 
-            // If it is an external buffer, then we cannot assume that the host pointer
-            // is aligned to at least the native vector width. However, we may be able to do
-            // better than just assuming that it is unaligned.
-            if (is_external && op->param.defined()) {
-                int host_alignment = op->param.host_alignment();
-                alignment = gcd(alignment, host_alignment);
-            }
-
             // Boost the alignment if possible, up to the native vector width.
             ModulusRemainder mod_rem = op->alignment;
             while ((mod_rem.remainder & 1) == 0 &&
@@ -4030,6 +4022,14 @@ void CodeGen_LLVM::visit(const Store *op) {
                 mod_rem.modulus /= 2;
                 mod_rem.remainder /= 2;
                 alignment *= 2;
+            }
+
+            // If it is an external buffer, then we cannot assume that the host pointer
+            // is aligned to at least the native vector width. However, we may be able to do
+            // better than just assuming that it is unaligned.
+            if (is_external && op->param.defined()) {
+                int host_alignment = op->param.host_alignment();
+                alignment = gcd(alignment, host_alignment);
             }
 
             // For dense vector stores wider than the native vector
