@@ -935,7 +935,7 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
 
     size_t total_outputs = 0;
     for (const Func &out : this->outputs()) {
-      total_outputs += out.outputs();
+        total_outputs += out.outputs();
     }
     user_assert(outputs.size() == total_outputs)
         << "Realization requires " << outputs.size() << " output(s) but pipeline produces "
