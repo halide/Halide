@@ -5,6 +5,7 @@
 //                  should this be in the Halide namespace??
 #include "Halide.h"
 #include "MCTreeNode.h"
+#include <_types/_uint32_t.h>
 #include <cmath>        // std::sqrt
 #include <cstdint>      // uint32_t
 #include <iostream>     // std::cerr
@@ -26,6 +27,10 @@ namespace MCTS {
     // Defined in AutoSchedule.cpp
     double get_exploration_percent();
     uint32_t get_min_iterations();
+    double get_exploitation_percent();
+    uint32_t get_min_explore();
+    uint32_t get_min_exploit();
+    uint32_t get_rollout_length();
 
     // State must comply with interface in MCStateInterface.h
     // TODO(rootjalex): Should we do the Action template? needs default (empty) action.
@@ -93,7 +98,11 @@ namespace MCTS {
             State current_state = starter_state; // track the current best state.
 
             const double percent_to_explore = get_exploration_percent();
-            const uint32_t min_iterations = get_min_iterations();
+            const double percent_to_exploit = get_exploitation_percent();
+            // const uint32_t min_random_iterations = get_min_iterations();
+            const uint32_t min_explore_iters = get_min_explore();
+            const uint32_t min_exploit_iters = get_min_exploit();
+            const uint32_t rollout_length = get_rollout_length();
 
             // TODO: be smarter about decision allocation?
             internal_assert(max_iterations >= n_decisions) << "Must have enough iterations for the number of decisions made\n";
@@ -102,10 +111,16 @@ namespace MCTS {
             // uint32_t n_iterations_per_decision = max_iterations / 2;
 
             for (uint32_t d = 0; d < n_decisions; d++) {
-                uint32_t n_iterations_per_decision = ceil(percent_to_explore * root_node->get_n_branches()) + min_iterations;
-                internal_assert (n_iterations_per_decision != 0) << "accidentally gave 0 iterations: " << root_node->get_n_branches() << "\n";
+                const uint32_t n_exploitation = ceil(percent_to_exploit * root_node->get_n_branches()) + min_exploit_iters;
+                const uint32_t n_exploration = ceil(percent_to_explore * root_node->get_n_branches()) + min_explore_iters;
+                const uint32_t n_iterations_total = n_exploitation + n_exploration;
+
+                // std::cerr << "Decision: " << d << " exploit: " << n_exploitation << " explore: " << n_exploration << " total: " << n_iterations_total << " out of " << root_node->get_n_branches() << "\n";
+
+                // uint32_t n_iterations_per_decision = ceil(percent_to_explore * root_node->get_n_branches()) + min_iterations;
+                internal_assert(n_iterations_total != 0) << "accidentally gave 0 iterations: " << root_node->get_n_branches() << "\n";
                 // std::cerr << "Decision: " << d << " has " << n_iterations_per_decision << " iterations available, for " << root_node->get_n_branches() << " branches\n";
-                std::tie(current_state, root_node) = make_decision(root_node, current_state, n_iterations_per_decision, num_simulations);
+                std::tie(current_state, root_node) = make_decision(root_node, current_state, n_iterations_total, num_simulations, n_exploitation, rollout_length, n_decisions);
                 // Clear the parent of the new root_node
                 // TODO: figure out what to do here? Need some sort of back-tracking probably.
                 internal_assert(root_node) << "make_decision could not find a decision to make\n";
@@ -125,14 +140,20 @@ namespace MCTS {
         // size_t n_explores = 0;
         // size_t n_exploitations = 0;
 
-        std::pair<State, NodePtr> make_decision(const NodePtr root_node, const State &root_state, uint32_t n_iterations, uint32_t n_simulations) {
+        std::pair<State, NodePtr> make_decision(const NodePtr root_node, const State &root_state,
+                                                const uint32_t n_iterations, const uint32_t n_simulations,
+                                                const uint32_t k_best, const uint32_t rollout_length,
+                                                const uint32_t n_decisions) {
             internal_assert(!root_state.is_terminal()) << "make_decision was given an end state\n";
             // Only one decision to make, don't waste any time:
-            if (root_node->get_n_branches() == 1) {
+            const uint32_t n_branches = root_node->get_n_branches();
+            if (n_branches == 1) {
                 // This should be the only child.
                 NodePtr rollout_node = root_node->choose_only_random_child();
                 return {root_state.take_action(rollout_node->get_action()), rollout_node};
             }
+
+            uint32_t search_depth = 0;
 
             for (uint32_t i = 0; i < n_iterations; i++) {
                 // TODO: decide expansion method??
@@ -149,10 +170,10 @@ namespace MCTS {
                 // }
 
                 NodePtr rollout_node = nullptr;
-                if (i < root_node->get_n_branches()) {
-                    rollout_node = root_node->choose_specific_child(i);
+                if (i < k_best) {
+                    rollout_node = root_node->choose_specific_child(i % n_branches);
                 } else {
-                    rollout_node = get_best_value_child(root_node);
+                    rollout_node = root_node->choose_any_random_child();
                 }
 
                 if (!rollout_node) {
@@ -160,7 +181,7 @@ namespace MCTS {
                     return {root_state, nullptr};
                 }
                 // TODO(rootjalex): make this decision a configurable choice.
-                for (uint32_t j = 0; (j < n_simulations) && (!rollout_node->is_leaf()); j++) {
+                for (uint32_t j = 0; (j < rollout_length) && (!rollout_node->is_leaf()); j++) {
                     // Make weighted random rollouts
                     rollout_node = rollout_node->choose_weighted_random_child();
                     internal_assert(rollout_node) << "simulation returned nullptr\n";
@@ -169,34 +190,31 @@ namespace MCTS {
                 // Propagate visit count up the parent chain.
                 rollout_node->increment_visits();
 
-                if (!(rollout_node->is_leaf() && !rollout_node->is_terminal())) {
-                    // Otherwise state is invalid.
-                    // double node_cost = rollout_node->get_state().calculate_cost();
-                    // TODO(rootjalex): make sure that this is actually faster than the above.
-                    double node_cost = rollout_node->get_action().get_cost();
-                    // Back propagation. node_cost is passed by value,
-                    // because the policy for backprop is handled via the State class.
-                    // e.g. it might make node_cost the minimum of values, or the average, etc.
-                    bool continue_updating = rollout_node->update(node_cost);
+                const double node_cost = rollout_node->get_action().get_cost();
+                const uint32_t node_depth = rollout_node->get_depth();
 
-                    if (continue_updating) {
-                        // This messy backprop is due to the fact that
-                        // node is shared but we don't have shared ptrs
-                        // to parent nodes, as that would cause loops.
-                        Node *parent_ptr = rollout_node->get_parent();
-                        // This order of operations makes sure that the root_node is updated, but nothing past that.
-                        while (parent_ptr && parent_ptr->update(node_cost) && parent_ptr != root_node.get()) {
-                            parent_ptr = parent_ptr->get_parent();
-                        }
+                search_depth = std::max(search_depth, node_depth);
+
+                // Back propagation. node_cost is passed by value,
+                // because the policy for backprop is handled via the State class.
+                // e.g. it might make node_cost the minimum of values, or the average, etc.
+                bool continue_updating = rollout_node->update(node_cost, node_depth);
+
+                if (continue_updating) {
+                    // This messy backprop is due to the fact that
+                    // node is shared but we don't have shared ptrs
+                    // to parent nodes, as that would cause loops.
+                    Node *parent_ptr = rollout_node->get_parent();
+                    // This order of operations makes sure that the root_node is updated, but nothing past that.
+                    while (parent_ptr && parent_ptr->update(node_cost, node_depth) && parent_ptr != root_node.get()) {
+                        parent_ptr = parent_ptr->get_parent();
                     }
-
-                    n_valid_nodes++;
-                } else {
-                    n_invalid_nodes++;
                 }
             }
             // TODO: other methods for choosing the best child?
-            NodePtr best_node = get_min_value_child(root_node);
+            // const uint32_t search_depth = std::min(root_node->get_depth() + rollout_length, n_decisions);
+
+            NodePtr best_node = get_min_value_child(root_node, /* search_depth */ search_depth, /* use_search_depth */ true);
             internal_assert(root_node) << "make_decision found nullptr\n";
             // TODO: clear parent of best_node?
             return {root_state.take_action(best_node->get_action()), best_node};
@@ -320,7 +338,7 @@ namespace MCTS {
         */
 
         // Find the child with the minimum value.
-        NodePtr get_min_value_child(NodePtr parent_node) const {
+        NodePtr get_min_value_child(NodePtr parent_node, uint32_t search_depth = 0, bool use_search_depth = false) const {
             double best_value = std::numeric_limits<double>::max();
             NodePtr best_node = nullptr;
 
@@ -329,16 +347,32 @@ namespace MCTS {
             for (int i = 0; i < num_children; i++) {
                 NodePtr child_ptr = parent_node->get_child(i);
                 const double child_value = child_ptr->get_value();
+                const uint32_t child_max_depth = child_ptr->get_state_depth();
 
-                if (!best_node || child_value < best_value) {
+                // bool lower_depth = (child_max_depth >= search_depth) && (child_max_depth >= best_depth);
+                // Depth is correct
+                bool correct_depth = !use_search_depth || (child_max_depth == search_depth);
+                bool lower_cost = !best_node || (child_value < best_value);
+
+                if (correct_depth && lower_cost) {
                     best_value = child_value;
                     best_node = child_ptr;
                 }
+
                 // std::cerr << "\t\tChild with cost:" << child_value << std::endl;
             }
 
             if (!best_node) {
                 std::cerr << "Failed to find best child node, with " << num_children << std::endl;
+                std::cerr << "Params: " << search_depth << " " << use_search_depth << std::endl;
+
+                for (int i = 0; i < num_children; i++) {
+                    NodePtr child_ptr = parent_node->get_child(i);
+                    const double child_value = child_ptr->get_value();
+                    const uint32_t child_max_depth = child_ptr->get_state_depth();
+
+                    std::cerr << "Child(" << i << ") = [value = " << child_value << ", depth = " << child_max_depth << "]\n";
+                }
             }
 
             internal_assert(best_node) << "get_min_value_child ended with a nullptr node\n";

@@ -397,6 +397,10 @@ double CPU_State::get_value() const {
     return minimum_cost;
 }
 
+uint32_t CPU_State::get_stored_depth() const {
+    return maximum_depth;
+}
+
 bool CPU_State::is_terminal() const {
     // TODO(rootjalex): Save this as a value, node size can't change afaik.
     // TODO(rootjalex): Are there other teminal conditions?
@@ -433,7 +437,7 @@ double CPU_State::calculate_cost() const {
     }
 }
 
-bool CPU_State::update(double &cost_value) {
+bool CPU_State::update(double cost_value) {
     // We want the minimum cost of any child node.
     if (minimum_cost > cost_value) {
         minimum_cost = cost_value;
@@ -441,6 +445,22 @@ bool CPU_State::update(double &cost_value) {
     }
     // No update, so no need to continue back prop.
     return false;
+}
+
+bool CPU_State::update(double cost_value, uint32_t _depth) {
+    if (_depth > maximum_depth) {
+        // This update is a further depth than we've seen before
+        minimum_cost = cost_value;
+        maximum_depth = _depth;
+        return true;
+    } else if (_depth == maximum_depth && minimum_cost > cost_value) {
+        // We want the minimum cost of any child node at the deepest depth.
+        minimum_cost = cost_value;
+        return true;
+    } else {
+        // No update, so no need to continue back prop.
+        return false;
+    }
 }
 
 double CPU_State::get_exploitation_value(uint32_t num_visits) {

@@ -136,12 +136,48 @@ namespace MCTS {
         }
     }
 
+    double get_exploitation_percent() {
+        std::string exploitation_str = Halide::Internal::get_env_variable("HL_MCTS_EXPLOITATION");
+        if (!exploitation_str.empty()) {
+            return std::stod(exploitation_str.c_str());
+        } else {
+            return .05;
+        }
+    }
+
+    uint32_t get_min_explore() {
+        std::string min_iters_str = Halide::Internal::get_env_variable("HL_MCTS_EXPLORE_MIN");
+        if (!min_iters_str.empty()) {
+            return atoi(min_iters_str.c_str());
+        } else {
+            return 4;
+        }
+    }
+
+    uint32_t get_min_exploit() {
+        std::string min_iters_str = Halide::Internal::get_env_variable("HL_MCTS_EXPLOIT_MIN");
+        if (!min_iters_str.empty()) {
+            return atoi(min_iters_str.c_str());
+        } else {
+            return 4;
+        }
+    }
+
     uint32_t get_min_iterations() {
         std::string min_iters_str = Halide::Internal::get_env_variable("HL_MCTS_MIN_ITERS");
         if (!min_iters_str.empty()) {
             return atoi(min_iters_str.c_str());
         } else {
-            return 8;
+            return 4;
+        }
+    }
+
+    uint32_t get_rollout_length() {
+        std::string rollout_str = Halide::Internal::get_env_variable("HL_MCTS_ROLLOUT_LENGTH");
+        if (!rollout_str.empty()) {
+            return atoi(rollout_str.c_str());
+        } else {
+            return 4;
         }
     }
 }

@@ -3,11 +3,13 @@
 
 // TODO(rootjalex): figure out includes.
 //                  should this be in the Halide namespace??
+#include <_types/_uint32_t.h>
 #include <algorithm>    // std::sort
 #include <cstdint>      // uint32_t
 #include <iostream>     // std::cerr
 #include <memory>       // std::shared_ptr
 #include <random>       // std::mt19937
+#include <utility>
 #include <vector>
 
 /*
@@ -224,17 +226,21 @@ namespace MCTS {
         // This child should not have been explored before.
         SharedPtr choose_specific_child(uint32_t index) {
             assert(index < possible_actions.size());
-            return add_child_with_action(possible_actions[index]);
+            return evaluate_action(possible_actions[index]);
         }
 
         SharedPtr choose_only_random_child() {
             assert(possible_actions.size() == 1);
-            return add_child_with_action(possible_actions[0]);
+            return evaluate_action(possible_actions[0]);
         }
 
         // (potentially) update the state's value.
-        bool update(double &cost_value) {
+        bool update(const double cost_value) {
             return state.update(cost_value);
+        }
+
+        bool update(const double cost_value, const uint32_t _depth) {
+            return state.update(cost_value, _depth);
         }
 
         // Refer to the state for an exploration value.
@@ -260,6 +266,10 @@ namespace MCTS {
 
         double get_value() const {
             return state.get_value();
+        }
+
+        uint32_t get_state_depth() const {
+            return state.get_stored_depth();
         }
 
         uint32_t get_depth() const {
@@ -308,6 +318,29 @@ namespace MCTS {
 
         size_t get_n_branches() const {
             return possible_actions.size();
+        }
+
+        std::pair<uint32_t, double> get_min_available() {
+            if (is_terminal()) {
+                return {depth, action.get_cost()};
+            } else {
+                const uint32_t stored_depth = state.get_stored_depth();
+                const double stored_cost = state.get_value();
+
+                internal_assert(!possible_actions.empty()) << "get_min_available had no children but is not terminal.\n";
+
+                const uint32_t next_depth = depth + 1;
+                const uint32_t next_cost = possible_actions[0].get_cost();
+
+                if (stored_depth == 0 || next_depth > stored_depth) {
+                    // No stored depth yet or next_depth is deeper.
+                    return {next_depth, next_cost};
+                } else if (next_depth == stored_depth) {
+                    return {next_depth, std::min(stored_depth, next_depth)};
+                } else {
+                    return {stored_depth, stored_cost};
+                }
+            }
         }
     };
 

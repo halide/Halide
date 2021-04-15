@@ -116,6 +116,7 @@ class CPU_State {
 
     // Minimum cost found by exploring this state.
     double minimum_cost = std::numeric_limits<double>::max();
+    uint32_t maximum_depth = 0;
 
     // Required information to be able to generate possible actions.
     // All State for a run of MCTS should have the same pointers.
@@ -169,6 +170,7 @@ public:
     // Get the value stored by this state.
     // Could be minimum or acerage of children traversed.
     double get_value() const;
+    uint32_t get_stored_depth() const;
 
     // TODO(rootjalex): understand what this should do.
     bool is_terminal() const;
@@ -183,7 +185,8 @@ public:
 
     // Update the value of this state. Passed by
     // reference in case it needs to be updated.
-    bool update(double &cost_value);
+    bool update(double cost_value);
+    bool update(double cost_value, uint32_t _depth);
 
     // Return a stored or calculated exploration value.
     // This might be the minimum cost found so far, or
