@@ -389,15 +389,9 @@ TOTAL_NUM_SAMPLES=$((NUM_BATCHES*BATCH_SIZE*${#GENERATOR_ARGS_SETS_ARRAY[@]}))
 echo "Num batches: ${NUM_BATCHES}"
 echo "Total number of samples to be generated: ${TOTAL_NUM_SAMPLES}"
 
-RETRAIN_AFTER_EACH_BATCH=${RETRAIN_AFTER_EACH_BATCH:-1}
-
-if [[ ${RETRAIN_AFTER_EACH_BATCH} == 1 ]]; then
-    MAX_BENCHMARK_TIME=$((${#GENERATOR_ARGS_SETS_ARRAY[@]}*660))
-    NUM_SAMPLES_PER_QUEUE=$((BATCH_SIZE*${#GENERATOR_ARGS_SETS_ARRAY[@]}))
-else
-    MAX_BENCHMARK_TIME=$((NUM_BATCHES*${#GENERATOR_ARGS_SETS_ARRAY[@]}*660))
-    NUM_SAMPLES_PER_QUEUE=$((NUM_BATCHES*BATCH_SIZE*${#GENERATOR_ARGS_SETS_ARRAY[@]}))
-fi
+RETRAIN_AFTER_EACH_BATCH=1
+MAX_BENCHMARK_TIME=$((NUM_BATCHES*${#GENERATOR_ARGS_SETS_ARRAY[@]}*660))
+NUM_SAMPLES_PER_QUEUE=$((NUM_BATCHES*BATCH_SIZE*${#GENERATOR_ARGS_SETS_ARRAY[@]}))
 
 echo "Retrain after each batch: ${RETRAIN_AFTER_EACH_BATCH}"
 
@@ -610,10 +604,10 @@ if [[ $TRAIN_ONLY != 1 ]]; then
                 wait "${benchmark_loop_pid}"
             fi
 
-            #CUR_SECONDS="$SECONDS"
-            #retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE} ${LEARNING_RATE}
-            #TRAIN_TIME=$((SECONDS-CUR_SECONDS))
-            #echo "Train time for batch with ID = ${BATCH_ID}: ${TRAIN_TIME}"
+            CUR_SECONDS="$SECONDS"
+            retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE} ${LEARNING_RATE}
+            TRAIN_TIME=$((SECONDS-CUR_SECONDS))
+            echo "Train time for batch with ID = ${BATCH_ID}: ${TRAIN_TIME}"
         fi
         BATCH_ID=$((BATCH_ID+1))
     done
@@ -631,13 +625,13 @@ if [[ ${RETRAIN_AFTER_EACH_BATCH} == 1 ]]; then
 fi
 
 # retrain model weights on all samples seen so far
-#echo Retraining model...
+echo Retraining model...
 
-#CUR_SECONDS="$SECONDS"
+CUR_SECONDS="$SECONDS"
 #SAMPLES="/tmp/tmp.fFK27Z4goh/autotuned_samples"
-#retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE} ${LEARNING_RATE}
-#TRAIN_TIME=$((SECONDS-CUR_SECONDS))
-#echo "Num batches = ${NUM_BATCHES}. Train time: ${TRAIN_TIME}"
+retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE} ${LEARNING_RATE}
+TRAIN_TIME=$((SECONDS-CUR_SECONDS))
+echo "Num batches = ${NUM_BATCHES}. Train time: ${TRAIN_TIME}"
 
 if [[ $TRAIN_ONLY == 1 ]]; then
     echo Num batches = ${NUM_BATCHES}. Took ${SECONDS} seconds to retrain
