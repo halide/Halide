@@ -273,7 +273,7 @@ public:
                 auto indices_buf = indices->buffer<const int32_t>();
                 new_shape.assign(indices_buf.begin(), indices_buf.end());
             } else {
-                CHECK(false) << "Dynamic reshapes not supported.\n";
+                LOG(FATAL) << "Dynamic reshapes not supported.\n";
             }
         }
         TensorPtr input = tensors_[op->inputs()->Get(0)];
