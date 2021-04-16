@@ -10,6 +10,10 @@ class Mean : public Generator<Mean> {
 public:
     Input<Buffer<uint8_t>> input_{"input", 4};
 
+    // The bounds of the region to reduce. This pipeline is
+    // implemented as a stencil over this reach at each output.
+    // However, the expected usage is to have either the output
+    // extent be 1, or the reduction extent be 1.
     Input<int> c_min_{"c_min"};
     Input<int> c_extent_{"c_extent"};
     Input<int> x_min_{"x_min"};
