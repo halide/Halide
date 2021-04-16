@@ -52,9 +52,9 @@ public:
         //   256/(1 + 2^input)
         // = 256*2^(-log2(1 + 2^input))
         const int log2_precision = 8;
-        Expr log2_inv_logistic = approx_log2p1_exp2(Int(16), input, input_shift_, log2_precision);
-        Expr logistic = approx_exp2(Int(16), -log2_inv_logistic, log2_precision, 8);
-        output_(x) = u8_sat(logistic);
+        Expr log2_d = approx_log2p1_exp2(Int(16), input, input_shift_, log2_precision);
+        Expr output = approx_exp2(Int(16), -log2_d, log2_precision, 8);
+        output_(x) = u8_sat(output);
 
         // Schedule.
         const int vector_size = natural_vector_size<uint8_t>();
