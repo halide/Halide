@@ -59,8 +59,8 @@ public:
     Input<uint16_t> beta_shift_{"beta_shift"};
 
     Input<uint8_t> output_zero_{"output_zero"};
-    Input<int32_t> output_multiplier_{"output_multiplier"};
-    Input<uint32_t> output_shift_{"output_shift"};
+    Input<int16_t> output_multiplier_{"output_multiplier"};
+    Input<uint16_t> output_shift_{"output_shift"};
     Output<Buffer<uint8_t>> output_{"output", 2};
 
     void generate() {
@@ -95,21 +95,17 @@ public:
         Func sum_exp_row("sum_exp_row");
         sum_exp_row(y) += i32(exp2_diff(rx, y));
 
-        // Below, we compute exp2_diff * inv_sum_exp_row / 31, so we need to
-        // multiply by 2^(exp_precision + 31) to get a result of the correct
-        // quantization. This doesn't overflow because we know the sum
+        // Below, we compute exp2_diff * inv_sum_exp_row / 15, so we need to
+        // multiply by 2^(exp_precision + 15) to get a result of the correct
+        // quantization. This doesn't saturate because we know the sum
         // is greater than or equal to 2^0*2^exp_precision, because we
         // subtracted the max from the input.
-        // TODO: Maybe it's worth avoiding this (scalar) division on some
-        // targets, maybe Newton's method?
         Func inv_sum_exp_row("inv_sum_exp_row");
-        Expr numerator = cast<int64_t>(1) << 47;
-        inv_sum_exp_row(y) =
-            i32_sat((numerator + sum_exp_row(y) / 2) / sum_exp_row(y));
+        inv_sum_exp_row(y) = i16_sat(approx_reciprocal(sum_exp_row(y), 31));
 
-        Expr output = multiply_2x_high(i32(exp2_diff(x, y)), inv_sum_exp_row(y));
+        Expr output = multiply_2x_high(exp2_diff(x, y), inv_sum_exp_row(y));
         output = multiply_quantized(output, output_multiplier_, output_shift_);
-        output_(x, y) = u8_sat(saturating_add(i16_sat(output), output_zero_));
+        output_(x, y) = u8_sat(saturating_add(output, output_zero_));
 
         // Schedule.
         const int vector_size = natural_vector_size<uint8_t>();

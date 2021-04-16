@@ -1026,7 +1026,7 @@ void SoftmaxOp::execute() {
         const double real_in_multiplier = in_scale * beta2 / (1 << left_shift);
 
         auto in_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in_multiplier, 16);
-        auto output_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(output_scale);
+        auto output_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(output_scale, 16);
         assert(in_mul_and_shift.shift <= 0);
         assert(output_mul_and_shift.shift <= 0);
 

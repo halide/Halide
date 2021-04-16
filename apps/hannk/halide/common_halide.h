@@ -51,6 +51,9 @@ Halide::Expr approx_log2(const Halide::Type &type, const Halide::Expr &x, int lo
 Halide::Expr approx_exp2(const Halide::Expr &x, const Halide::Expr &log2_precision_x, int log2_precision_result);
 Halide::Expr approx_exp2(const Halide::Type &type, const Halide::Expr &x, const Halide::Expr &log2_precision_x, int log2_precision_result);
 
+// Approximate 2^log2_precision/x
+Halide::Expr approx_reciprocal(const Halide::Expr &x, int log2_precision);
+
 // Approximate 2^log2_precision/sqrt(x)
 Halide::Expr approx_reciprocal_sqrt(const Halide::Expr &x, int log2_precision);
 

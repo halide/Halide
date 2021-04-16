@@ -146,6 +146,14 @@ Expr approx_exp2(const Expr &x, const Expr &log2_precision_x, int log2_precision
     return approx_exp2(Int(32), x, log2_precision_x, log2_precision_result);
 }
 
+Expr approx_reciprocal(const Expr &x, int log2_precision) {
+    //   precision / x
+    // = precision / 2^log2(x)
+    // = precision * 2^(-log2(x))
+    Expr log2_x = approx_log2(x, 15);
+    return approx_exp2(-log2_x, 15, log2_precision);
+}
+
 Expr approx_reciprocal_sqrt(const Expr &x, int log2_precision) {
     //   precision / sqrt(x)
     // = precision / 2^log2(x^(1/2))
