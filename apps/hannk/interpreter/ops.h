@@ -408,6 +408,30 @@ public:
     }
 };
 
+class SpaceDepthOp : public Op {
+    int block_size_;
+
+public:
+    SpaceDepthOp(TensorPtr input, TensorPtr output, float block_size)
+        : Op({input}, {output}), block_size_(block_size) {
+    }
+
+    std::unique_ptr<Op> clone(TensorMap &map) const {
+        return ::hannk::make_unique<SpaceDepthOp>(apply(map, input()), apply(map, output()), block_size_);
+    }
+
+    void accept(OpVisitor *v);
+
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
+
+    void execute();
+
+    void dump(std::ostream &os) const {
+        const char *name = block_size_ > 0 ? "SpaceToDepth" : "DepthToSpace";
+        os << "  " << name << " " << output()->name() << std::endl;
+    }
+};
+
 class TileConvFilterOp : public Op {
 public:
     TileConvFilterOp(TensorPtr input, TensorPtr output)
@@ -485,6 +509,8 @@ public:
     virtual void visit(ReshapeOp *op) {
     }
     virtual void visit(SoftmaxOp *op) {
+    }
+    virtual void visit(SpaceDepthOp *op) {
     }
     virtual void visit(TileConvFilterOp *op) {
     }

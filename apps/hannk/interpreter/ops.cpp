@@ -957,6 +957,72 @@ void SoftmaxOp::execute() {
     }
 }
 
+namespace {
+
+template <typename T>
+inline void DepthToSpace(const HalideBuffer<const T> &input, int block_size, HalideBuffer<T> output) {
+    // This is really slow, if profiling has brought you here, optimize it.
+    output.for_each_element([&](int c, int x, int y, int b) {
+        int xi = floor_div(x, block_size);
+        int yi = floor_div(y, block_size);
+        int ci = (y - yi * block_size) * block_size + (x - xi * block_size);
+        output(c, x, y, b) = input(c * block_size * block_size + ci, xi, yi, b);
+    });
+}
+
+template <typename T>
+inline void SpaceToDepth(const HalideBuffer<const T> &input, int block_size, HalideBuffer<T> output) {
+    // This is really slow, if profiling has brought you here, optimize it.
+    output.for_each_element([&](int c, int x, int y, int b) {
+        int ci = floor_div(c, block_size * block_size);
+        int xyi = c - ci * block_size * block_size;
+        int yi = xyi / block_size;
+        int xi = xyi % block_size;
+        output(c, x, y, b) = input(ci, x * block_size + xi, y * block_size + yi, b);
+    });
+}
+
+}  // namespace
+
+BoundsMap SpaceDepthOp::map_bounds(int input_idx, int output_idx) const {
+    assert(input_idx == 0);
+    assert(output_idx == 0);
+
+    const int rank = output()->rank();
+    assert(input->rank() == rank);
+    BoundsMap result(rank, rank);
+    if (block_size_ > 0) {
+        result.upsample(0, 0, block_size_ * block_size_);
+        result.downsample(1, 1, block_size_);
+        result.downsample(2, 2, block_size_);
+    } else {
+        result.downsample(0, 0, block_size_ * block_size_);
+        result.upsample(1, 1, -block_size_);
+        result.upsample(2, 2, -block_size_);
+    }
+    for (int d = 3; d < rank; d++) {
+        result.elementwise(d, d);
+    }
+    return result;
+}
+
+void SpaceDepthOp::execute() {
+    const TensorPtr in = input();
+    TensorPtr out = output();
+
+    if (in->type() == halide_type_of<uint8_t>() &&
+        out->type() == halide_type_of<uint8_t>()) {
+        auto in_buf = in->buffer<const uint8_t>();
+        auto out_buf = out->buffer<uint8_t>();
+
+        if (block_size_ > 0) {
+            SpaceToDepth(in_buf, block_size_, out_buf);
+        } else {
+            DepthToSpace(in_buf, -block_size_, out_buf);
+        }
+    }
+}
+
 BoundsMap TileConvFilterOp::map_bounds(int input_idx, int output_idx) const {
     assert(input_idx == 0);
     assert(output_idx == 0);
@@ -1070,6 +1136,10 @@ void PoolOp::accept(OpVisitor *v) {
 }
 
 void SoftmaxOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void SpaceDepthOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 

@@ -278,6 +278,24 @@ public:
         return ::hannk::make_unique<ReshapeOp>(input, output, new_shape);
     }
 
+    std::unique_ptr<Op> parse_space_to_depth(const tflite::Operator *op) {
+        const tflite::SpaceToDepthOptions *options =
+            op->builtin_options_as_SpaceToDepthOptions();
+        int block_size = options->block_size();
+        TensorPtr input = tensors_[op->inputs()->Get(0)];
+        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        return ::hannk::make_unique<SpaceDepthOp>(input, output, block_size);
+    }
+
+    std::unique_ptr<Op> parse_depth_to_space(const tflite::Operator *op) {
+        const tflite::DepthToSpaceOptions *options =
+            op->builtin_options_as_DepthToSpaceOptions();
+        int block_size = options->block_size();
+        TensorPtr input = tensors_[op->inputs()->Get(0)];
+        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        return ::hannk::make_unique<SpaceDepthOp>(input, output, -block_size);
+    }
+
     std::unique_ptr<Op> parse_softmax(const tflite::Operator *op) {
         const tflite::SoftmaxOptions *options =
             op->builtin_options_as_SoftmaxOptions();
@@ -334,6 +352,10 @@ public:
             return parse_pad(op);
         case tflite::BuiltinOperator_RESHAPE:
             return parse_reshape(op);
+        case tflite::BuiltinOperator_SPACE_TO_DEPTH:
+            return parse_space_to_depth(op);
+        case tflite::BuiltinOperator_DEPTH_TO_SPACE:
+            return parse_depth_to_space(op);
         case tflite::BuiltinOperator_FULLY_CONNECTED:
             return parse_fully_connected(op);
         case tflite::BuiltinOperator_SOFTMAX:

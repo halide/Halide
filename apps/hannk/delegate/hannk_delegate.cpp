@@ -20,21 +20,23 @@
 // Use a List-Of-X approach here to ensure that places we handle ops are kept in sync
 #define ALL_KNOWN_OPS         \
     KNOWN_OP(Add)             \
-    KNOWN_OP(Sub)             \
     KNOWN_OP(AveragePool2d)   \
     KNOWN_OP(Concatenation)   \
     KNOWN_OP(Conv2d)          \
     KNOWN_OP(DepthwiseConv2d) \
-    KNOWN_OP(MaxPool2d)       \
+    KNOWN_OP(DepthToSpace)    \
     KNOWN_OP(FullyConnected)  \
+    KNOWN_OP(L2Normalization) \
+    KNOWN_OP(Logistic)        \
+    KNOWN_OP(MaxPool2d)       \
+    KNOWN_OP(Mean)            \
+    KNOWN_OP(Mul)             \
     KNOWN_OP(Pad)             \
     KNOWN_OP(Reshape)         \
     KNOWN_OP(Softmax)         \
-    KNOWN_OP(L2Normalization) \
-    KNOWN_OP(Logistic)        \
-    KNOWN_OP(Tanh)            \
-    KNOWN_OP(Mean)            \
-    KNOWN_OP(Mul)
+    KNOWN_OP(SpaceToDepth)    \
+    KNOWN_OP(Sub)             \
+    KNOWN_OP(Tanh)
 
 namespace hannk {
 namespace {
@@ -631,6 +633,20 @@ private:
         return ::hannk::make_unique<ReductionOp>(input, indices, output, ReductionOp::Mean);
     }
 
+    std::unique_ptr<Op> BuildSpaceToDepth(TfLiteContext *context, TfLiteNode *node) {
+        auto input = GetTensorById(context, node->inputs->data[0]);
+        auto output = GetTensorById(context, node->outputs->data[0]);
+        const TfLiteSpaceToDepthParams *params = (const TfLiteSpaceToDepthParams *)(node->builtin_data);
+        return ::hannk::make_unique<SpaceDepthOp>(input, output, params->block_size);
+    }
+
+    std::unique_ptr<Op> BuildDepthToSpace(TfLiteContext *context, TfLiteNode *node) {
+        auto input = GetTensorById(context, node->inputs->data[0]);
+        auto output = GetTensorById(context, node->outputs->data[0]);
+        const TfLiteDepthToSpaceParams *params = (const TfLiteDepthToSpaceParams *)(node->builtin_data);
+        return ::hannk::make_unique<SpaceDepthOp>(input, output, -params->block_size);
+    }
+
     const HannkDelegateOptions options_;
     std::unique_ptr<OpGroup> model_;
     std::unique_ptr<Interpreter> interpreter_;
@@ -852,6 +868,26 @@ bool IsNodeSupported_Mean(TfLiteContext *context, TfLiteNode *node, TfLiteRegist
         return false;
     }
     if (!InputsHaveCorrectTypes(node, context, {k8BitMask, 1 << kTfLiteInt32})) {
+        return false;
+    }
+    return true;
+}
+
+bool IsNodeSupported_SpaceToDepth(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    if (!(registration->version <= 2)) {
+        return false;
+    }
+    if (!InputsHaveCorrectTypes(node, context, {k8BitMask})) {
+        return false;
+    }
+    return true;
+}
+
+bool IsNodeSupported_DepthToSpace(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    if (!(registration->version <= 2)) {
+        return false;
+    }
+    if (!InputsHaveCorrectTypes(node, context, {k8BitMask})) {
         return false;
     }
     return true;
