@@ -275,6 +275,8 @@ string CodeGen_WebAssembly::mattrs() const {
     }
 
     if (target.has_feature(Target::WasmThreads)) {
+        // "WasmThreads" doesn't directly affect LLVM codegen,
+        // but it does end up requiring atomics, so be sure to enable them.
         s << sep << ",+atomics";
         sep = ",";
     }
