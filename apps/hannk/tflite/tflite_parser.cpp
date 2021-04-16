@@ -373,6 +373,12 @@ public:
             return parse_binary(op, BinaryOp::NotEqual);
         case tflite::BuiltinOperator_PAD:
             return parse_pad(op);
+        case tflite::BuiltinOperator_RELU:
+            return parse_unary(op, UnaryOp::Relu);
+        case tflite::BuiltinOperator_RELU6:
+            return parse_unary(op, UnaryOp::Relu6);
+        case tflite::BuiltinOperator_RELU_N1_TO_1:
+            return parse_unary(op, UnaryOp::ReluN1To1);
         case tflite::BuiltinOperator_RESHAPE:
             return parse_reshape(op);
         case tflite::BuiltinOperator_SOFTMAX:

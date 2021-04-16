@@ -37,6 +37,9 @@
     KNOWN_OP(NotEqual)        \
     KNOWN_OP(Pad)             \
     KNOWN_OP(Reshape)         \
+    KNOWN_OP(Relu)            \
+    KNOWN_OP(Relu6)           \
+    KNOWN_OP(ReluN1To1)       \
     KNOWN_OP(Softmax)         \
     KNOWN_OP(SpaceToDepth)    \
     KNOWN_OP(Sub)             \
@@ -647,16 +650,30 @@ private:
         return ::hannk::make_unique<L2NormalizationOp>(input, output);
     }
 
-    std::unique_ptr<Op> BuildLogistic(TfLiteContext *context, TfLiteNode *node) {
+    std::unique_ptr<Op> BuildUnary(TfLiteContext *context, TfLiteNode *node, UnaryOp::Operator type) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return ::hannk::make_unique<UnaryOp>(input, output, UnaryOp::Logistic);
+        return ::hannk::make_unique<UnaryOp>(input, output, type);
+    }
+
+    std::unique_ptr<Op> BuildLogistic(TfLiteContext *context, TfLiteNode *node) {
+        return BuildUnary(context, node, UnaryOp::Logistic);
     }
 
     std::unique_ptr<Op> BuildTanh(TfLiteContext *context, TfLiteNode *node) {
-        auto input = GetTensorById(context, node->inputs->data[0]);
-        auto output = GetTensorById(context, node->outputs->data[0]);
-        return ::hannk::make_unique<UnaryOp>(input, output, UnaryOp::Tanh);
+        return BuildUnary(context, node, UnaryOp::Tanh);
+    }
+
+    std::unique_ptr<Op> BuildRelu(TfLiteContext *context, TfLiteNode *node) {
+        return BuildUnary(context, node, UnaryOp::Relu);
+    }
+
+    std::unique_ptr<Op> BuildRelu6(TfLiteContext *context, TfLiteNode *node) {
+        return BuildUnary(context, node, UnaryOp::Relu6);
+    }
+
+    std::unique_ptr<Op> BuildReluN1To1(TfLiteContext *context, TfLiteNode *node) {
+        return BuildUnary(context, node, UnaryOp::ReluN1To1);
     }
 
     std::unique_ptr<Op> BuildMean(TfLiteContext *context, TfLiteNode *node) {
@@ -925,7 +942,7 @@ bool IsNodeSupported_L2Normalization(TfLiteContext *context, TfLiteNode *node, T
     return true;
 }
 
-bool IsNodeSupported_Logistic(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+bool IsNodeSupported_Unary(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
     if (!(registration->version <= 2)) {
         return false;
     }
@@ -935,14 +952,24 @@ bool IsNodeSupported_Logistic(TfLiteContext *context, TfLiteNode *node, TfLiteRe
     return true;
 }
 
+bool IsNodeSupported_Logistic(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    return IsNodeSupported_Unary(context, node, registration);
+}
+
 bool IsNodeSupported_Tanh(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    if (!(registration->version <= 2)) {
-        return false;
-    }
-    if (!InputsHaveCorrectTypes(node, context, {k8BitMask})) {
-        return false;
-    }
-    return true;
+    return IsNodeSupported_Unary(context, node, registration);
+}
+
+bool IsNodeSupported_Relu(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    return IsNodeSupported_Unary(context, node, registration);
+}
+
+bool IsNodeSupported_Relu6(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    return IsNodeSupported_Unary(context, node, registration);
+}
+
+bool IsNodeSupported_ReluN1To1(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    return IsNodeSupported_Unary(context, node, registration);
 }
 
 bool IsNodeSupported_Mean(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {

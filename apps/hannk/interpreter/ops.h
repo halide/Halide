@@ -462,6 +462,9 @@ public:
     enum Operator {
         Logistic,
         Tanh,
+        Relu,
+        Relu6,
+        ReluN1To1,
     };
 
     static const char *to_string(Operator op);

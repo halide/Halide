@@ -290,7 +290,8 @@ void mul(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
 }
 
 void requantize(const HalideBuffer<const uint8_t> &in, const QuantizationInfo &inq,
-                HalideBuffer<uint8_t> out, const QuantizationInfo &outq) {
+                HalideBuffer<uint8_t> out, const QuantizationInfo &outq,
+                ActivationFunction activation = ActivationFunction::None) {
     if (inq == outq) {
         // Some of these are just copies, or no-ops.
         if (is_alias(in, out)) {
@@ -301,7 +302,23 @@ void requantize(const HalideBuffer<const uint8_t> &in, const QuantizationInfo &i
     } else {
         // TODO: Maybe a dedicated pipeline for this would be better. It
         // could be a little faster, and avoid some quantization error.
-        add(in, inq, in, inq, 0, out, outq, ActivationFunction::None);
+        add(in, inq, in, inq, 0, out, outq, activation);
+    }
+}
+
+ActivationFunction to_activation(UnaryOp::Operator op) {
+    switch (op) {
+    case UnaryOp::Relu:
+        return ActivationFunction::Relu;
+    case UnaryOp::Relu6:
+        return ActivationFunction::Relu6;
+    case UnaryOp::ReluN1To1:
+        return ActivationFunction::ReluN1To1;
+    case UnaryOp::Tanh:
+        return ActivationFunction::Tanh;
+    default:
+        LOG(FATAL) << UnaryOp::to_string(op) << " is not an activation function";
+        return ActivationFunction::None;
     }
 }
 
@@ -1116,6 +1133,12 @@ const char *UnaryOp::to_string(UnaryOp::Operator op) {
         return "Logistic";
     case Tanh:
         return "Tanh";
+    case Relu:
+        return "Relu";
+    case Relu6:
+        return "Relu6";
+    case ReluN1To1:
+        return "ReluN1To1";
     default:
         CHECK(false) << "Unsupported unary op\n";
         return nullptr;
@@ -1148,6 +1171,7 @@ void UnaryOp::execute() {
             assert(out->quantization().zero.at(0) == 0);
 
             CHECK(0 == logistic_uint8(in_buf, input_zero, in_mul_and_shift.multiplier, -in_mul_and_shift.shift, out_buf));
+            return;
         } else if (op_ == Tanh) {
             // It's a easier to compute 2^(2*x*(log2(e))) than e^(2*x).
             const double real_in_multiplier = 2.0f * in_scale * std::log2(std::exp(1.0f)) / (1 << left_shift);
@@ -1159,10 +1183,15 @@ void UnaryOp::execute() {
             assert(out->quantization().zero.at(0) == 128);
 
             CHECK(0 == tanh_uint8(in_buf, input_zero, in_mul_and_shift.multiplier, -in_mul_and_shift.shift, out_buf));
-        } else {
-            CHECK(false) << "Unsupported unary op\n";
+            return;
+        } else if (op_ == Relu || op_ == Relu6 || op_ == ReluN1To1) {
+            requantize(in_buf, in->quantization(), out_buf, out->quantization(), to_activation(op_));
+            return;
         }
     }
+    LOG(FATAL)
+        << "Unsupported unary op " << to_string(op_)
+        << " for types " << in->type() << ", " << out->type();
 }
 
 void BinaryOp::accept(OpVisitor *v) {
