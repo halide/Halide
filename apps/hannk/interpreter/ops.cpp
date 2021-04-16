@@ -321,9 +321,47 @@ const char *BinaryOp::to_string(BinaryOp::Operator op) {
         return "Sub";
     case Mul:
         return "Mul";
+    case Less:
+        return "Less";
+    case LessEqual:
+        return "LessEqual";
+    case Equal:
+        return "Equal";
+    case NotEqual:
+        return "NotEqual";
     default:
         CHECK(false) << "Unsupported binary op\n";
         return nullptr;
+    }
+}
+
+double dequantize_scalar(const Tensor *t) {
+    assert(t->rank() == 0);
+
+    const QuantizationInfo &q = t->quantization();
+    float scale = q.scale.empty() ? 1.0f : q.scale.front();
+    int zero = q.zero.empty() ? 0 : q.zero.front();
+
+    HalideBuffer<const void> buf = t->buffer<const void>();
+    if (buf.type() == halide_type_of<uint8_t>()) {
+        return (buf.as<const uint8_t>()() - zero) * scale;
+    } else if (buf.type() == halide_type_of<int8_t>()) {
+        return (buf.as<const int8_t>()() - zero) * scale;
+    } else if (buf.type() == halide_type_of<uint16_t>()) {
+        return (buf.as<const uint16_t>()() - zero) * scale;
+    } else if (buf.type() == halide_type_of<int16_t>()) {
+        return (buf.as<const int16_t>()() - zero) * scale;
+    } else if (buf.type() == halide_type_of<uint32_t>()) {
+        return (buf.as<const uint32_t>()() - zero) * scale;
+    } else if (buf.type() == halide_type_of<int32_t>()) {
+        return (buf.as<const int32_t>()() - zero) * scale;
+    } else if (buf.type() == halide_type_of<float>()) {
+        return (buf.as<const float>()() - zero) * scale;
+    } else if (buf.type() == halide_type_of<double>()) {
+        return (buf.as<const double>()() - zero) * scale;
+    } else {
+        LOG(FATAL) << "Unsupported type " << buf.type();
+        return std::numeric_limits<double>::quiet_NaN();
     }
 }
 
@@ -346,14 +384,38 @@ void BinaryOp::execute() {
         case Add:
         case Sub:
             add(in1_buf, in1->quantization(), in2_buf, in2->quantization(), op_ == Add ? 1 : -1, out_buf, out->quantization(), activation_);
-            break;
+            return;
         case Mul:
             mul(in1_buf, in1->quantization(), in2_buf, in2->quantization(), out_buf, out->quantization(), activation_);
+            return;
+        default:
             break;
         }
-    } else {
-        CHECK(false) << "Unsupported type " << out->type() << "\n";
+    } else if (out->type() == halide_type_of<bool>() && out->rank() == 0) {
+        double in1_scalar = dequantize_scalar(in1.get());
+        double in2_scalar = dequantize_scalar(in2.get());
+        auto out_buf = out->buffer<bool>();
+
+        switch (op_) {
+        case Less:
+            out_buf() = in1_scalar < in2_scalar;
+            return;
+        case LessEqual:
+            out_buf() = in1_scalar <= in2_scalar;
+            return;
+        case Equal:
+            out_buf() = in1_scalar == in2_scalar;
+            return;
+        case NotEqual:
+            out_buf() = in1_scalar != in2_scalar;
+            return;
+        default:
+            break;
+        }
     }
+    LOG(FATAL)
+        << "Unsupported binary op " << to_string(op_)
+        << " for types " << in1->type() << ", " << in2->type() << ", " << out->type();
 }
 
 BoundsMap ConcatenationOp::map_bounds(int input_idx, int output_idx) const {

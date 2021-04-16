@@ -25,12 +25,16 @@
     KNOWN_OP(Conv2d)          \
     KNOWN_OP(DepthwiseConv2d) \
     KNOWN_OP(DepthToSpace)    \
+    KNOWN_OP(Equal)           \
     KNOWN_OP(FullyConnected)  \
     KNOWN_OP(L2Normalization) \
+    KNOWN_OP(Less)            \
+    KNOWN_OP(LessEqual)       \
     KNOWN_OP(Logistic)        \
     KNOWN_OP(MaxPool2d)       \
     KNOWN_OP(Mean)            \
     KNOWN_OP(Mul)             \
+    KNOWN_OP(NotEqual)        \
     KNOWN_OP(Pad)             \
     KNOWN_OP(Reshape)         \
     KNOWN_OP(Softmax)         \
@@ -462,31 +466,60 @@ private:
         return it->second;
     }
 
-    std::unique_ptr<Op> BuildAdd(TfLiteContext *context, TfLiteNode *node) {
+    template <typename OptionsT>
+    std::unique_ptr<Op> BuildBinary(TfLiteContext *context, TfLiteNode *node, BinaryOp::Operator type) {
         auto input1 = GetTensorById(context, node->inputs->data[0]);
         auto input2 = GetTensorById(context, node->inputs->data[1]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        const TfLiteAddParams *params = (const TfLiteAddParams *)(node->builtin_data);
+        const OptionsT *params = (const OptionsT *)(node->builtin_data);
         auto activation = ConvertTfLiteActivation(params->activation);
-        return ::hannk::make_unique<BinaryOp>(input1, input2, output, BinaryOp::Add, activation);
+        return ::hannk::make_unique<BinaryOp>(input1, input2, output, type, activation);
+    }
+
+    std::unique_ptr<Op> BuildAdd(TfLiteContext *context, TfLiteNode *node) {
+        return BuildBinary<TfLiteAddParams>(context, node, BinaryOp::Add);
     }
 
     std::unique_ptr<Op> BuildSub(TfLiteContext *context, TfLiteNode *node) {
-        auto input1 = GetTensorById(context, node->inputs->data[0]);
-        auto input2 = GetTensorById(context, node->inputs->data[1]);
-        auto output = GetTensorById(context, node->outputs->data[0]);
-        const TfLiteSubParams *params = (const TfLiteSubParams *)(node->builtin_data);
-        auto activation = ConvertTfLiteActivation(params->activation);
-        return ::hannk::make_unique<BinaryOp>(input1, input2, output, BinaryOp::Sub, activation);
+        return BuildBinary<TfLiteSubParams>(context, node, BinaryOp::Sub);
     }
 
     std::unique_ptr<Op> BuildMul(TfLiteContext *context, TfLiteNode *node) {
+        return BuildBinary<TfLiteMulParams>(context, node, BinaryOp::Mul);
+    }
+
+    std::unique_ptr<Op> BuildBinary(TfLiteContext *context, TfLiteNode *node, BinaryOp::Operator type, bool swap_operands = false) {
         auto input1 = GetTensorById(context, node->inputs->data[0]);
         auto input2 = GetTensorById(context, node->inputs->data[1]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        const TfLiteMulParams *params = (const TfLiteMulParams *)(node->builtin_data);
-        auto activation = ConvertTfLiteActivation(params->activation);
-        return ::hannk::make_unique<BinaryOp>(input1, input2, output, BinaryOp::Mul, activation);
+        if (swap_operands) {
+            std::swap(input1, input2);
+        }
+        return ::hannk::make_unique<BinaryOp>(input1, input2, output, type);
+    }
+
+    std::unique_ptr<Op> BuildLess(TfLiteContext *context, TfLiteNode *node) {
+        return BuildBinary(context, node, BinaryOp::Less);
+    }
+
+    std::unique_ptr<Op> BuildLessEqual(TfLiteContext *context, TfLiteNode *node) {
+        return BuildBinary(context, node, BinaryOp::LessEqual);
+    }
+
+    std::unique_ptr<Op> BuildGreater(TfLiteContext *context, TfLiteNode *node) {
+        return BuildBinary(context, node, BinaryOp::Less, true);
+    }
+
+    std::unique_ptr<Op> BuildGreaterEqual(TfLiteContext *context, TfLiteNode *node) {
+        return BuildBinary(context, node, BinaryOp::LessEqual, true);
+    }
+
+    std::unique_ptr<Op> BuildEqual(TfLiteContext *context, TfLiteNode *node) {
+        return BuildBinary(context, node, BinaryOp::Equal);
+    }
+
+    std::unique_ptr<Op> BuildNotEqual(TfLiteContext *context, TfLiteNode *node) {
+        return BuildBinary(context, node, BinaryOp::NotEqual);
     }
 
     std::unique_ptr<Op> BuildPool2d(TfLiteContext *context, TfLiteNode *node, PoolOp::Operator reduce_op) {
@@ -703,6 +736,14 @@ bool IsActivationReluOrNone(TfLiteFusedActivation activation) {
 // TODO: this should also allow Int8 once we fix biasing for those
 constexpr int k8BitMask = 1 << kTfLiteUInt8;
 
+constexpr int kArithmeticTypesMask =
+    (1 << kTfLiteUInt8) |
+    (1 << kTfLiteInt8) |
+    (1 << kTfLiteInt16) |
+    (1 << kTfLiteInt32) |
+    (1 << kTfLiteFloat32) |
+    (1 << kTfLiteFloat64);
+
 bool IsNodeSupported_Add(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
     if (!(registration->version <= 2)) {
         return false;
@@ -723,6 +764,47 @@ bool IsNodeSupported_Sub(TfLiteContext *context, TfLiteNode *node, TfLiteRegistr
 
 bool IsNodeSupported_Mul(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
     return IsNodeSupported_Add(context, node, registration);
+}
+
+bool IsNodeSupported_Compare(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    if (!(registration->version <= 2)) {
+        return false;
+    }
+    if (!InputsHaveCorrectTypes(node, context, {kArithmeticTypesMask, kArithmeticTypesMask})) {
+        return false;
+    }
+    if (node->outputs->size != 1) {
+        return false;
+    }
+    const TfLiteTensor &output = context->tensors[node->outputs->data[0]];
+    if (output.type != kTfLiteBool || output.dims->size != 0) {
+        return false;
+    }
+    return true;
+}
+
+bool IsNodeSupported_Less(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    return IsNodeSupported_Compare(context, node, registration);
+}
+
+bool IsNodeSupported_LessEqual(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    return IsNodeSupported_Compare(context, node, registration);
+}
+
+bool IsNodeSupported_Greater(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    return IsNodeSupported_Compare(context, node, registration);
+}
+
+bool IsNodeSupported_GreaterEqual(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    return IsNodeSupported_Compare(context, node, registration);
+}
+
+bool IsNodeSupported_Equal(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    return IsNodeSupported_Compare(context, node, registration);
+}
+
+bool IsNodeSupported_NotEqual(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    return IsNodeSupported_Compare(context, node, registration);
 }
 
 bool IsNodeSupported_Concatenation(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
