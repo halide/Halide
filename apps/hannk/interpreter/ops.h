@@ -35,6 +35,10 @@ public:
         Add,
         Sub,
         Mul,
+        Less,
+        LessEqual,
+        Equal,
+        NotEqual,
     };
 
     static const char *to_string(Operator op);
@@ -44,7 +48,7 @@ private:
     ActivationFunction activation_;
 
 public:
-    BinaryOp(TensorPtr a, TensorPtr b, TensorPtr output, Operator op, ActivationFunction activation)
+    BinaryOp(TensorPtr a, TensorPtr b, TensorPtr output, Operator op, ActivationFunction activation = ActivationFunction::None)
         : ElementwiseOp({a, b}, output), op_(op), activation_(activation) {
     }
 
@@ -457,6 +461,11 @@ class UnaryOp : public ElementwiseOp {
 public:
     enum Operator {
         Logistic,
+        Negate,
+        Relu,
+        Relu6,
+        ReluN1To1,
+        Square,
         Tanh,
     };
 

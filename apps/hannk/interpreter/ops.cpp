@@ -152,13 +152,13 @@ QuantizedMulAndShift get_quantized_mul_and_shift(double double_multiplier, int b
     int shift = 0;
     const double q = std::frexp(double_multiplier, &shift);
     int64_t q_fixed = (int64_t)std::round(q * (1LL << (bits - 1)));
-    assert(q_fixed <= (1LL << (bits - 1)));
+    assert(std::abs(q_fixed) <= (1LL << (bits - 1)));
 
-    if (q_fixed == (1LL << (bits - 1))) {
+    if (std::abs(q_fixed) == (1LL << (bits - 1))) {
         q_fixed /= 2;
         ++shift;
     }
-    assert(q_fixed <= std::numeric_limits<int32_t>::max());
+    assert(std::abs(q_fixed) <= std::numeric_limits<int32_t>::max());
 
     if (shift < -(bits - 1)) {
         shift = 0;
@@ -169,7 +169,7 @@ QuantizedMulAndShift get_quantized_mul_and_shift(double double_multiplier, int b
 }
 
 QuantizedMulAndShift get_quantized_mul_and_shift_smaller_than_one(double double_multiplier, int bits = 32) {
-    assert(double_multiplier >= 0.0 && double_multiplier < 1.0);
+    assert(-1.0 < double_multiplier && double_multiplier < 1.0);
     auto result = get_quantized_mul_and_shift(double_multiplier, bits);
     assert(result.shift <= 0);
     return result;
@@ -189,7 +189,7 @@ Interval get_quantized_min_max(ActivationFunction activation, int zero_point, do
         min = zero_point + (int)std::round(-1.0 / scale);
         max = zero_point + (int)std::round(1.0 / scale);
     } else {
-        CHECK(false) << "Unsupported quantized activation function type.";
+        LOG(FATAL) << "Unsupported quantized activation function type.";
     }
     return {std::max(min, 0), std::min(max, 255)};
 }
@@ -231,9 +231,10 @@ MultiplyParams get_quantized_multiply_params(const QuantizationInfo &a, const Qu
     return result;
 }
 
-void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
+void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q, int in1sign,
          HalideBuffer<const uint8_t> in2, const QuantizationInfo &in2q, int in2sign,
-         HalideBuffer<uint8_t> out, const QuantizationInfo &outq, ActivationFunction activation) {
+         HalideBuffer<uint8_t> out, const QuantizationInfo &outq,
+         ActivationFunction activation = ActivationFunction::None) {
     const int in1_zero = in1q.zero.at(0);
     const int in2_zero = in2q.zero.at(0);
     const int out_zero = outq.zero.at(0);
@@ -255,6 +256,7 @@ void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
     assert(in2_mul_and_shift.shift <= 0);
     assert(out_mul_and_shift.shift <= 0);
 
+    in1_mul_and_shift.multiplier *= in1sign;
     in2_mul_and_shift.multiplier *= in2sign;
 
     const auto out_range = get_output_range(activation, outq);
@@ -268,7 +270,8 @@ void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
 
 void mul(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
          HalideBuffer<const uint8_t> in2, const QuantizationInfo &in2q,
-         HalideBuffer<uint8_t> out, const QuantizationInfo &outq, ActivationFunction activation) {
+         HalideBuffer<uint8_t> out, const QuantizationInfo &outq,
+         ActivationFunction activation = ActivationFunction::None) {
     const int in1_zero = in1q.zero.at(0);
     const int in2_zero = in2q.zero.at(0);
     const int out_zero = outq.zero.at(0);
@@ -277,7 +280,8 @@ void mul(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
     const float in2_scale = in2q.scale.at(0);
     const float out_scale = outq.scale.at(0);
 
-    const double multiplier = in1_scale * in2_scale / out_scale;
+    const int left_shift = 6;
+    const double multiplier = in1_scale * in2_scale / (out_scale * (1 << (2 * left_shift)));
 
     auto mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(multiplier);
     assert(mul_and_shift.shift <= 0);
@@ -290,7 +294,8 @@ void mul(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
 }
 
 void requantize(const HalideBuffer<const uint8_t> &in, const QuantizationInfo &inq,
-                HalideBuffer<uint8_t> out, const QuantizationInfo &outq) {
+                HalideBuffer<uint8_t> out, const QuantizationInfo &outq,
+                ActivationFunction activation = ActivationFunction::None) {
     if (inq == outq) {
         // Some of these are just copies, or no-ops.
         if (is_alias(in, out)) {
@@ -301,7 +306,23 @@ void requantize(const HalideBuffer<const uint8_t> &in, const QuantizationInfo &i
     } else {
         // TODO: Maybe a dedicated pipeline for this would be better. It
         // could be a little faster, and avoid some quantization error.
-        add(in, inq, in, inq, 0, out, outq, ActivationFunction::None);
+        add(in, inq, 1, in, inq, 0, out, outq, activation);
+    }
+}
+
+ActivationFunction to_activation(UnaryOp::Operator op) {
+    switch (op) {
+    case UnaryOp::Relu:
+        return ActivationFunction::Relu;
+    case UnaryOp::Relu6:
+        return ActivationFunction::Relu6;
+    case UnaryOp::ReluN1To1:
+        return ActivationFunction::ReluN1To1;
+    case UnaryOp::Tanh:
+        return ActivationFunction::Tanh;
+    default:
+        LOG(FATAL) << UnaryOp::to_string(op) << " is not an activation function";
+        return ActivationFunction::None;
     }
 }
 
@@ -321,9 +342,47 @@ const char *BinaryOp::to_string(BinaryOp::Operator op) {
         return "Sub";
     case Mul:
         return "Mul";
+    case Less:
+        return "Less";
+    case LessEqual:
+        return "LessEqual";
+    case Equal:
+        return "Equal";
+    case NotEqual:
+        return "NotEqual";
     default:
-        CHECK(false) << "Unsupported binary op\n";
+        LOG(FATAL) << "Unsupported binary op\n";
         return nullptr;
+    }
+}
+
+double dequantize_scalar(const Tensor *t) {
+    assert(t->rank() == 0);
+
+    const QuantizationInfo &q = t->quantization();
+    float scale = q.scale.empty() ? 1.0f : q.scale.front();
+    int zero = q.zero.empty() ? 0 : q.zero.front();
+
+    HalideBuffer<const void> buf = t->buffer<const void>();
+    if (buf.type() == halide_type_of<uint8_t>()) {
+        return (buf.as<const uint8_t>()() - zero) * scale;
+    } else if (buf.type() == halide_type_of<int8_t>()) {
+        return (buf.as<const int8_t>()() - zero) * scale;
+    } else if (buf.type() == halide_type_of<uint16_t>()) {
+        return (buf.as<const uint16_t>()() - zero) * scale;
+    } else if (buf.type() == halide_type_of<int16_t>()) {
+        return (buf.as<const int16_t>()() - zero) * scale;
+    } else if (buf.type() == halide_type_of<uint32_t>()) {
+        return (buf.as<const uint32_t>()() - zero) * scale;
+    } else if (buf.type() == halide_type_of<int32_t>()) {
+        return (buf.as<const int32_t>()() - zero) * scale;
+    } else if (buf.type() == halide_type_of<float>()) {
+        return (buf.as<const float>()() - zero) * scale;
+    } else if (buf.type() == halide_type_of<double>()) {
+        return (buf.as<const double>()() - zero) * scale;
+    } else {
+        LOG(FATAL) << "Unsupported type " << buf.type();
+        return std::numeric_limits<double>::quiet_NaN();
     }
 }
 
@@ -345,15 +404,39 @@ void BinaryOp::execute() {
         switch (op_) {
         case Add:
         case Sub:
-            add(in1_buf, in1->quantization(), in2_buf, in2->quantization(), op_ == Add ? 1 : -1, out_buf, out->quantization(), activation_);
-            break;
+            add(in1_buf, in1->quantization(), 1, in2_buf, in2->quantization(), op_ == Add ? 1 : -1, out_buf, out->quantization(), activation_);
+            return;
         case Mul:
             mul(in1_buf, in1->quantization(), in2_buf, in2->quantization(), out_buf, out->quantization(), activation_);
+            return;
+        default:
             break;
         }
-    } else {
-        CHECK(false) << "Unsupported type " << out->type() << "\n";
+    } else if (out->type() == halide_type_of<bool>() && out->rank() == 0) {
+        double in1_scalar = dequantize_scalar(in1.get());
+        double in2_scalar = dequantize_scalar(in2.get());
+        auto out_buf = out->buffer<bool>();
+
+        switch (op_) {
+        case Less:
+            out_buf() = in1_scalar < in2_scalar;
+            return;
+        case LessEqual:
+            out_buf() = in1_scalar <= in2_scalar;
+            return;
+        case Equal:
+            out_buf() = in1_scalar == in2_scalar;
+            return;
+        case NotEqual:
+            out_buf() = in1_scalar != in2_scalar;
+            return;
+        default:
+            break;
+        }
     }
+    LOG(FATAL)
+        << "Unsupported binary op " << to_string(op_)
+        << " for types " << in1->type() << ", " << in2->type() << ", " << out->type();
 }
 
 BoundsMap ConcatenationOp::map_bounds(int input_idx, int output_idx) const {
@@ -391,7 +474,8 @@ halide_type_t Conv2DOp::filter_type() const {
         const halide_filter_metadata_t *metadata = conv_uint8_metadata();
         return metadata->arguments[1].type;
     } else {
-        CHECK(false) << "Unsupported type " << output()->type() << "\n";
+        LOG(FATAL) << "Unsupported type " << output()->type() << "\n";
+        return halide_type_t(halide_type_int, 0, 0);
     }
 }
 
@@ -499,9 +583,8 @@ void Conv2DOp::execute() {
         }
 
         conv_uint8(input_buf, filter_buf, bias_buf, params, stride_, dilation_, output_range, output_buf);
-
     } else {
-        CHECK(false) << "Unsupported type " << out->type() << "\n";
+        LOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -582,8 +665,6 @@ void DepthwiseConv2DOp::execute() {
         auto bias_buf = bias()->buffer<const int32_t>();
         auto output_buf = out->buffer<uint8_t>();
 
-        assert(depth_multiplier_ * input_buf.dim(0).extent() == output_buf.dim(0).extent());
-
         MultiplyParams params =
             get_quantized_multiply_params(in->quantization(), filt->quantization(), out->quantization());
 
@@ -592,7 +673,7 @@ void DepthwiseConv2DOp::execute() {
         depthwise_conv_uint8(input_buf, filter_buf, bias_buf, depth_multiplier_, params,
                              stride_, dilation_, output_range, output_buf);
     } else {
-        CHECK(false) << "Unsupported type " << out->type() << "\n";
+        LOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -642,7 +723,7 @@ void FullyConnectedOp::execute() {
                      (uint8_t)params.c_zero, params.c.multiplier, params.c.shift, (uint8_t)output_range.min,
                      (uint8_t)output_range.max, output_buf));
     } else {
-        CHECK(false) << "Unsupported type " << out->type() << "\n";
+        LOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -671,7 +752,7 @@ void L2NormalizationOp::execute() {
 
         CHECK(0 == l2_normalization_uint8(in_buf, input_zero, output_buf));
     } else {
-        CHECK(false) << "Unsupported type " << out->type() << "\n";
+        LOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -743,7 +824,7 @@ void PadOp::execute() {
             CHECK(0 == copy_uint8_uint8(input_buf, pad_value, output_buf));
         }
     } else {
-        CHECK(false) << "Unsupported type " << out->type() << "\n";
+        LOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -764,7 +845,7 @@ const char *PoolOp::to_string(PoolOp::Operator op) {
     case Max:
         return "Max";
     default:
-        CHECK(false) << "Unsupported pool op\n";
+        LOG(FATAL) << "Unsupported pool op\n";
         return nullptr;
     }
 }
@@ -811,7 +892,7 @@ void PoolOp::execute() {
             break;
         }
     } else {
-        CHECK(false) << "Unsupported type " << out->type() << "\n";
+        LOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -820,7 +901,7 @@ const char *ReductionOp::to_string(Operator op) {
     case Mean:
         return "Mean";
     default:
-        CHECK(false) << "Unsupported reduction operator.\n";
+        LOG(FATAL) << "Unsupported reduction operator.\n";
         return nullptr;
     }
 }
@@ -953,7 +1034,7 @@ void SoftmaxOp::execute() {
                                  output_zero, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
                                  output_buf));
     } else {
-        CHECK(false) << "Unsupported type " << out->type() << "\n";
+        LOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -989,7 +1070,7 @@ BoundsMap SpaceDepthOp::map_bounds(int input_idx, int output_idx) const {
     assert(output_idx == 0);
 
     const int rank = output()->rank();
-    assert(input->rank() == rank);
+    assert(input()->rank() == rank);
     BoundsMap result(rank, rank);
     if (block_size_ > 0) {
         result.upsample(0, 0, block_size_ * block_size_);
@@ -1044,7 +1125,7 @@ void TileConvFilterOp::execute() {
 
         CHECK(0 == tile_conv_filter_uint8(input_buf, input_zero, output_zero, output_buf));
     } else {
-        CHECK(false) << "Unsupported type " << in->type() << "\n";
+        LOG(FATAL) << "Unsupported type " << in->type() << "\n";
     }
 }
 
@@ -1052,10 +1133,20 @@ const char *UnaryOp::to_string(UnaryOp::Operator op) {
     switch (op) {
     case Logistic:
         return "Logistic";
+    case Negate:
+        return "Negate";
+    case Relu:
+        return "Relu";
+    case Relu6:
+        return "Relu6";
+    case ReluN1To1:
+        return "ReluN1To1";
+    case Square:
+        return "Square";
     case Tanh:
         return "Tanh";
     default:
-        CHECK(false) << "Unsupported unary op\n";
+        LOG(FATAL) << "Unsupported unary op\n";
         return nullptr;
     }
 }
@@ -1086,6 +1177,7 @@ void UnaryOp::execute() {
             assert(out->quantization().zero.at(0) == 0);
 
             CHECK(0 == logistic_uint8(in_buf, input_zero, in_mul_and_shift.multiplier, -in_mul_and_shift.shift, out_buf));
+            return;
         } else if (op_ == Tanh) {
             // It's a easier to compute 2^(2*x*(log2(e))) than e^(2*x).
             const double real_in_multiplier = 2.0f * in_scale * std::log2(std::exp(1.0f)) / (1 << left_shift);
@@ -1097,10 +1189,21 @@ void UnaryOp::execute() {
             assert(out->quantization().zero.at(0) == 128);
 
             CHECK(0 == tanh_uint8(in_buf, input_zero, in_mul_and_shift.multiplier, -in_mul_and_shift.shift, out_buf));
-        } else {
-            CHECK(false) << "Unsupported unary op\n";
+            return;
+        } else if (op_ == Negate) {
+            add(in_buf, in->quantization(), -1, in_buf, in->quantization(), 0, out_buf, out->quantization());
+            return;
+        } else if (op_ == Square) {
+            mul(in_buf, in->quantization(), in_buf, in->quantization(), out_buf, out->quantization());
+            return;
+        } else if (op_ == Relu || op_ == Relu6 || op_ == ReluN1To1) {
+            requantize(in_buf, in->quantization(), out_buf, out->quantization(), to_activation(op_));
+            return;
         }
     }
+    LOG(FATAL)
+        << "Unsupported unary op " << to_string(op_)
+        << " for types " << in->type() << ", " << out->type();
 }
 
 void BinaryOp::accept(OpVisitor *v) {

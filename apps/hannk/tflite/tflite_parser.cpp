@@ -134,10 +134,13 @@ public:
         return ::hannk::make_unique<Tensor>(t->name()->str(), std::move(buffer), std::move(quantization));
     }
 
-    std::unique_ptr<Op> parse_binary(const tflite::Operator *op, BinaryOp::Operator type) {
+    std::unique_ptr<Op> parse_binary(const tflite::Operator *op, BinaryOp::Operator type, bool swap_operands = false) {
         TensorPtr a = tensors_[op->inputs()->Get(0)];
         TensorPtr b = tensors_[op->inputs()->Get(1)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
+        if (swap_operands) {
+            std::swap(a, b);
+        }
         return ::hannk::make_unique<BinaryOp>(a, b, output, type, ActivationFunction::None);
     }
 
@@ -270,7 +273,7 @@ public:
                 auto indices_buf = indices->buffer<const int32_t>();
                 new_shape.assign(indices_buf.begin(), indices_buf.end());
             } else {
-                CHECK(false) << "Dynamic reshapes not supported.\n";
+                LOG(FATAL) << "Dynamic reshapes not supported.\n";
             }
         }
         TensorPtr input = tensors_[op->inputs()->Get(0)];
@@ -334,38 +337,60 @@ public:
         switch (builtin_code) {
         case tflite::BuiltinOperator_ADD:
             return PARSE_BINARY_WITH_ACTIVATION(op, Add);
-        case tflite::BuiltinOperator_SUB:
-            return PARSE_BINARY_WITH_ACTIVATION(op, Sub);
-        case tflite::BuiltinOperator_MUL:
-            return PARSE_BINARY_WITH_ACTIVATION(op, Mul);
         case tflite::BuiltinOperator_AVERAGE_POOL_2D:
             return parse_pool2D(op, PoolOp::Average);
-        case tflite::BuiltinOperator_MAX_POOL_2D:
-            return parse_pool2D(op, PoolOp::Max);
         case tflite::BuiltinOperator_CONCATENATION:
             return parse_concatenation(op);
         case tflite::BuiltinOperator_CONV_2D:
             return parse_conv2D(op);
-        case tflite::BuiltinOperator_DEPTHWISE_CONV_2D:
-            return parse_depthwise_conv2D(op);
-        case tflite::BuiltinOperator_PAD:
-            return parse_pad(op);
-        case tflite::BuiltinOperator_RESHAPE:
-            return parse_reshape(op);
-        case tflite::BuiltinOperator_SPACE_TO_DEPTH:
-            return parse_space_to_depth(op);
         case tflite::BuiltinOperator_DEPTH_TO_SPACE:
             return parse_depth_to_space(op);
+        case tflite::BuiltinOperator_DEPTHWISE_CONV_2D:
+            return parse_depthwise_conv2D(op);
+        case tflite::BuiltinOperator_EQUAL:
+            return parse_binary(op, BinaryOp::Equal);
         case tflite::BuiltinOperator_FULLY_CONNECTED:
             return parse_fully_connected(op);
-        case tflite::BuiltinOperator_SOFTMAX:
-            return parse_softmax(op);
+        case tflite::BuiltinOperator_GREATER:
+            return parse_binary(op, BinaryOp::Less, true);
+        case tflite::BuiltinOperator_GREATER_EQUAL:
+            return parse_binary(op, BinaryOp::LessEqual, true);
         case tflite::BuiltinOperator_L2_NORMALIZATION:
             return parse_l2_normalization(op);
-        case tflite::BuiltinOperator_MEAN:
-            return parse_reduction(op, ReductionOp::Mean);
+        case tflite::BuiltinOperator_LESS:
+            return parse_binary(op, BinaryOp::Less);
+        case tflite::BuiltinOperator_LESS_EQUAL:
+            return parse_binary(op, BinaryOp::LessEqual);
         case tflite::BuiltinOperator_LOGISTIC:
             return parse_unary(op, UnaryOp::Logistic);
+        case tflite::BuiltinOperator_MAX_POOL_2D:
+            return parse_pool2D(op, PoolOp::Max);
+        case tflite::BuiltinOperator_MEAN:
+            return parse_reduction(op, ReductionOp::Mean);
+        case tflite::BuiltinOperator_MUL:
+            return PARSE_BINARY_WITH_ACTIVATION(op, Mul);
+        case tflite::BuiltinOperator_NEG:
+            return parse_unary(op, UnaryOp::Negate);
+        case tflite::BuiltinOperator_NOT_EQUAL:
+            return parse_binary(op, BinaryOp::NotEqual);
+        case tflite::BuiltinOperator_PAD:
+            return parse_pad(op);
+        case tflite::BuiltinOperator_RELU:
+            return parse_unary(op, UnaryOp::Relu);
+        case tflite::BuiltinOperator_RELU6:
+            return parse_unary(op, UnaryOp::Relu6);
+        case tflite::BuiltinOperator_RELU_N1_TO_1:
+            return parse_unary(op, UnaryOp::ReluN1To1);
+        case tflite::BuiltinOperator_RESHAPE:
+            return parse_reshape(op);
+        case tflite::BuiltinOperator_SOFTMAX:
+            return parse_softmax(op);
+        case tflite::BuiltinOperator_SPACE_TO_DEPTH:
+            return parse_space_to_depth(op);
+        case tflite::BuiltinOperator_SQUARE:
+            return parse_unary(op, UnaryOp::Square);
+        case tflite::BuiltinOperator_SUB:
+            return PARSE_BINARY_WITH_ACTIVATION(op, Sub);
         case tflite::BuiltinOperator_TANH:
             return parse_unary(op, UnaryOp::Tanh);
 

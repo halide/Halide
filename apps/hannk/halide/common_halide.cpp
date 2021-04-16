@@ -126,7 +126,7 @@ Expr approx_exp2(const Type &type, const Expr &x, const Expr &log2_precision_x, 
     // We ignore the constant term from the polynomial.
     const int p3 = std::lround(7.91076597e-02 * (1 << 15));
     const int p2 = std::lround(2.24701130e-01 * (1 << 15));
-    const int p1 = std::lround(6.96189819e-01 * (1 << 15));
+    const int p1 = std::lround(6.96189819e-01 * (1 << 15)) - 1;  // Hack to avoid overflow below.
 
     Expr frac1 = i16(x - (floor_x << log2_precision_x)) << (15 - i16(log2_precision_x));
     Expr frac2 = multiply_2x_high(frac1, frac1);
