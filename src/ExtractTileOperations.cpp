@@ -95,6 +95,7 @@ NewMatmul
 convert_to_matmul(const Store *op, const string &new_name) {
     // m[ramp(0, 1, S)] = VectorAdd(lhs[{XYR tile}] * xX(rhs[{YR tile}])) + m[ramp(0, 1, S)]
     const auto wild_i8x = Variable::make(Int(8, 0), "*");
+    const auto wild_u8x = Variable::make(UInt(8, 0), "*");
     const auto wild_i16x = Variable::make(Int(16, 0), "*");
     vector<Expr> matches;
     const auto pattern1 = wild_i32x + wild_i32x;
@@ -106,13 +107,31 @@ convert_to_matmul(const Store *op, const string &new_name) {
 
     // FIXME: Add support for uint8 and bf16 for LLVM 13+
     auto pattern2 = cast(Int(32, 0), cast(Int(16, 0), wild_i8x) * wild_i16x);
-    if (!expr_match(pattern2, reduce->value, matches)) { return {}; }
+    auto pattern2_alt = cast(Int(32, 0), cast(Int(16, 0), wild_u8x) * wild_i16x);
+
+    bool lhs_signed = false;
+    if (expr_match(pattern2, reduce->value, matches)) {
+        lhs_signed = true;
+    } else if (expr_match(pattern2_alt, reduce->value, matches)) {
+        lhs_signed = false;
+    } else {
+        return {};
+    }
+
     const auto *lhs_load = matches[0].as<Load>();
     // FIXME: When tile_r is not 4 the broadcast is inside the index, not of the value
     const auto *rhs_broadcast = matches[1].as<Broadcast>();
     if (!lhs_load || !rhs_broadcast) { return {}; }
     const auto *rhs_cast = rhs_broadcast->value.as<Cast>();
-    if (!rhs_cast || rhs_cast->value.type().element_of() != Int(8)) { return {}; }
+    bool rhs_signed = false;
+    if (rhs_cast && rhs_cast->value.type().element_of() == Int(8)) {
+        rhs_signed = true;
+    } else if (rhs_cast && rhs_cast->value.type().element_of() == UInt(8)) {
+        rhs_signed = false;
+    } else {
+        return {};
+    }
+
     const auto *rhs_load = rhs_cast->value.as<Load>();
     if (!rhs_load) { return {}; }
 
@@ -134,9 +153,21 @@ convert_to_matmul(const Store *op, const string &new_name) {
 
     // {rows, colbytes, var, index}
     auto lhs_var = Variable::make(Handle(), lhs_load->name);
-    auto lhs = Call::make(Int(8, 1024), "tile_load", {tile_x, tile_r, lhs_var, lhs_tile.base, lhs_tile.stride[0]}, Call::Intrinsic);
+    auto lhs = [&]() {
+        if (lhs_signed) {
+            return Call::make(Int(8, 1024), "tile_load", {tile_x, tile_r, lhs_var, lhs_tile.base, lhs_tile.stride[0]}, Call::Intrinsic);
+        } else {
+            return Call::make(UInt(8, 1024), "tile_load", {tile_x, tile_r, lhs_var, lhs_tile.base, lhs_tile.stride[0]}, Call::Intrinsic);
+        }
+    }();
     auto rhs_var = Variable::make(Handle(), rhs_load->name);
-    auto rhs = Call::make(Int(8, 1024), "tile_load", {1, tile_y * tile_r, rhs_var, rhs_tile.base, rhs_tile.stride[0]}, Call::Intrinsic);
+    auto rhs = [&]() {
+        if (rhs_signed) {
+            return Call::make(Int(8, 1024), "tile_load", {1, tile_y * tile_r, rhs_var, rhs_tile.base, rhs_tile.stride[0]}, Call::Intrinsic);
+        } else {
+            return Call::make(UInt(8, 1024), "tile_load", {1, tile_y * tile_r, rhs_var, rhs_tile.base, rhs_tile.stride[0]}, Call::Intrinsic);
+        }
+    }();
 
     // {rows, colbytes, acc, out, lhs, rhs}
     auto out = Load::make(Int(32, 256), new_name, Ramp::make(0, 1, 256), {}, {}, const_true(256), {});
