@@ -277,7 +277,8 @@ void mul(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
     const float in2_scale = in2q.scale.at(0);
     const float out_scale = outq.scale.at(0);
 
-    const double multiplier = in1_scale * in2_scale / out_scale;
+    const int left_shift = 6;
+    const double multiplier = in1_scale * in2_scale / (out_scale * (1 << (2 * left_shift)));
 
     auto mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(multiplier);
     assert(mul_and_shift.shift <= 0);

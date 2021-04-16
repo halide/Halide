@@ -26,8 +26,8 @@ public:
     void generate() {
         Var c("c"), x("x"), y("y"), b("b");
 
-        Expr input1 = i16(input1_(c, x, y, b)) - i16(input1_zero_);
-        Expr input2 = i16(input2_(c, x, y, b)) - i16(input2_zero_);
+        Expr input1 = (i16(input1_(c, x, y, b)) - i16(input1_zero_)) << 6;
+        Expr input2 = (i16(input2_(c, x, y, b)) - i16(input2_zero_)) << 6;
 
         Expr output = multiply_quantized(i32(input1) * i32(input2), output_multiplier_, output_shift_);
         output = saturating_add(i16_sat(output), output_zero_);
