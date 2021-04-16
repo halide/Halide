@@ -1043,7 +1043,7 @@ public:
         return r;
     }
 
-    static Vec load_predicated(const void *base, const NativeVector<int32_t, Lanes> offset, const Mask predicate) {
+    static Vec load_predicated(const void *base, const NativeVector<int32_t, Lanes> offset, const NativeVector<uint8_t, Lanes> predicate) {
         Vec r;
         for (size_t i = 0; i < Lanes; i++) {
             if (predicate[i]) {
@@ -1068,7 +1068,7 @@ public:
         }
     }
 
-    static void store_predicated(const Vec v, void *base, const NativeVector<int32_t, Lanes> offset, const Mask predicate) {
+    static void store_predicated(const Vec v, void *base, const NativeVector<int32_t, Lanes> offset, const NativeVector<uint8_t, Lanes> predicate) {
         for (size_t i = 0; i < Lanes; i++) {
             if (predicate[i]) {
                 ((ElementType*)base)[offset[i]] = v[i];
