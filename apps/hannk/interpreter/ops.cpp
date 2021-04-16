@@ -152,13 +152,13 @@ QuantizedMulAndShift get_quantized_mul_and_shift(double double_multiplier, int b
     int shift = 0;
     const double q = std::frexp(double_multiplier, &shift);
     int64_t q_fixed = (int64_t)std::round(q * (1LL << (bits - 1)));
-    assert(q_fixed <= (1LL << (bits - 1)));
+    assert(std::abs(q_fixed) <= (1LL << (bits - 1)));
 
-    if (q_fixed == (1LL << (bits - 1))) {
+    if (std::abs(q_fixed) == (1LL << (bits - 1))) {
         q_fixed /= 2;
         ++shift;
     }
-    assert(q_fixed <= std::numeric_limits<int32_t>::max());
+    assert(std::abs(q_fixed) <= std::numeric_limits<int32_t>::max());
 
     if (shift < -(bits - 1)) {
         shift = 0;
@@ -169,7 +169,7 @@ QuantizedMulAndShift get_quantized_mul_and_shift(double double_multiplier, int b
 }
 
 QuantizedMulAndShift get_quantized_mul_and_shift_smaller_than_one(double double_multiplier, int bits = 32) {
-    assert(double_multiplier >= 0.0 && double_multiplier < 1.0);
+    assert(-1.0 < double_multiplier && double_multiplier < 1.0);
     auto result = get_quantized_mul_and_shift(double_multiplier, bits);
     assert(result.shift <= 0);
     return result;
@@ -665,8 +665,6 @@ void DepthwiseConv2DOp::execute() {
         auto bias_buf = bias()->buffer<const int32_t>();
         auto output_buf = out->buffer<uint8_t>();
 
-        assert(depth_multiplier_ * input_buf.dim(0).extent() == output_buf.dim(0).extent());
-
         MultiplyParams params =
             get_quantized_multiply_params(in->quantization(), filt->quantization(), out->quantization());
 
@@ -1072,7 +1070,7 @@ BoundsMap SpaceDepthOp::map_bounds(int input_idx, int output_idx) const {
     assert(output_idx == 0);
 
     const int rank = output()->rank();
-    assert(input->rank() == rank);
+    assert(input()->rank() == rank);
     BoundsMap result(rank, rank);
     if (block_size_ > 0) {
         result.upsample(0, 0, block_size_ * block_size_);
