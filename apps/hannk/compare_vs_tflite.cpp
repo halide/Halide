@@ -161,6 +161,7 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
         }
 
         TfLiteInterpreter *tf_interpreter = TfLiteInterpreterCreate(tf_model, tf_options);
+        CHECK(tf_interpreter != nullptr);
 
         // The options/model can be deleted immediately after interpreter creation.
         TfLiteInterpreterOptionsDelete(tf_options);
