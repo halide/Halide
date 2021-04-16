@@ -369,6 +369,8 @@ public:
             return parse_reduction(op, ReductionOp::Mean);
         case tflite::BuiltinOperator_MUL:
             return PARSE_BINARY_WITH_ACTIVATION(op, Mul);
+        case tflite::BuiltinOperator_NEG:
+            return parse_unary(op, UnaryOp::Negate);
         case tflite::BuiltinOperator_NOT_EQUAL:
             return parse_binary(op, BinaryOp::NotEqual);
         case tflite::BuiltinOperator_PAD:
@@ -385,6 +387,8 @@ public:
             return parse_softmax(op);
         case tflite::BuiltinOperator_SPACE_TO_DEPTH:
             return parse_space_to_depth(op);
+        case tflite::BuiltinOperator_SQUARE:
+            return parse_unary(op, UnaryOp::Square);
         case tflite::BuiltinOperator_SUB:
             return PARSE_BINARY_WITH_ACTIVATION(op, Sub);
         case tflite::BuiltinOperator_TANH:

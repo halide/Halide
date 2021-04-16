@@ -35,6 +35,7 @@
     KNOWN_OP(Mean)            \
     KNOWN_OP(Mul)             \
     KNOWN_OP(NotEqual)        \
+    KNOWN_OP(Neg)             \
     KNOWN_OP(Pad)             \
     KNOWN_OP(Reshape)         \
     KNOWN_OP(Relu)            \
@@ -42,6 +43,7 @@
     KNOWN_OP(ReluN1To1)       \
     KNOWN_OP(Softmax)         \
     KNOWN_OP(SpaceToDepth)    \
+    KNOWN_OP(Square)          \
     KNOWN_OP(Sub)             \
     KNOWN_OP(Tanh)
 
@@ -660,6 +662,10 @@ private:
         return BuildUnary(context, node, UnaryOp::Logistic);
     }
 
+    std::unique_ptr<Op> BuildNeg(TfLiteContext *context, TfLiteNode *node) {
+        return BuildUnary(context, node, UnaryOp::Negate);
+    }
+
     std::unique_ptr<Op> BuildTanh(TfLiteContext *context, TfLiteNode *node) {
         return BuildUnary(context, node, UnaryOp::Tanh);
     }
@@ -688,6 +694,10 @@ private:
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteSpaceToDepthParams *params = (const TfLiteSpaceToDepthParams *)(node->builtin_data);
         return ::hannk::make_unique<SpaceDepthOp>(input, output, params->block_size);
+    }
+
+    std::unique_ptr<Op> BuildSquare(TfLiteContext *context, TfLiteNode *node) {
+        return BuildUnary(context, node, UnaryOp::Square);
     }
 
     std::unique_ptr<Op> BuildDepthToSpace(TfLiteContext *context, TfLiteNode *node) {
@@ -956,6 +966,10 @@ bool IsNodeSupported_Logistic(TfLiteContext *context, TfLiteNode *node, TfLiteRe
     return IsNodeSupported_Unary(context, node, registration);
 }
 
+bool IsNodeSupported_Neg(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    return IsNodeSupported_Unary(context, node, registration);
+}
+
 bool IsNodeSupported_Tanh(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
     return IsNodeSupported_Unary(context, node, registration);
 }
@@ -969,6 +983,10 @@ bool IsNodeSupported_Relu6(TfLiteContext *context, TfLiteNode *node, TfLiteRegis
 }
 
 bool IsNodeSupported_ReluN1To1(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    return IsNodeSupported_Unary(context, node, registration);
+}
+
+bool IsNodeSupported_Square(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
     return IsNodeSupported_Unary(context, node, registration);
 }
 

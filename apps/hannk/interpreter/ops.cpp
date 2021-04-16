@@ -231,9 +231,10 @@ MultiplyParams get_quantized_multiply_params(const QuantizationInfo &a, const Qu
     return result;
 }
 
-void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
+void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q, int in1sign,
          HalideBuffer<const uint8_t> in2, const QuantizationInfo &in2q, int in2sign,
-         HalideBuffer<uint8_t> out, const QuantizationInfo &outq, ActivationFunction activation) {
+         HalideBuffer<uint8_t> out, const QuantizationInfo &outq,
+         ActivationFunction activation = ActivationFunction::None) {
     const int in1_zero = in1q.zero.at(0);
     const int in2_zero = in2q.zero.at(0);
     const int out_zero = outq.zero.at(0);
@@ -255,6 +256,7 @@ void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
     assert(in2_mul_and_shift.shift <= 0);
     assert(out_mul_and_shift.shift <= 0);
 
+    in1_mul_and_shift.multiplier *= in1sign;
     in2_mul_and_shift.multiplier *= in2sign;
 
     const auto out_range = get_output_range(activation, outq);
@@ -268,7 +270,8 @@ void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
 
 void mul(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
          HalideBuffer<const uint8_t> in2, const QuantizationInfo &in2q,
-         HalideBuffer<uint8_t> out, const QuantizationInfo &outq, ActivationFunction activation) {
+         HalideBuffer<uint8_t> out, const QuantizationInfo &outq,
+         ActivationFunction activation = ActivationFunction::None) {
     const int in1_zero = in1q.zero.at(0);
     const int in2_zero = in2q.zero.at(0);
     const int out_zero = outq.zero.at(0);
@@ -303,7 +306,7 @@ void requantize(const HalideBuffer<const uint8_t> &in, const QuantizationInfo &i
     } else {
         // TODO: Maybe a dedicated pipeline for this would be better. It
         // could be a little faster, and avoid some quantization error.
-        add(in, inq, in, inq, 0, out, outq, activation);
+        add(in, inq, 1, in, inq, 0, out, outq, activation);
     }
 }
 
@@ -401,7 +404,7 @@ void BinaryOp::execute() {
         switch (op_) {
         case Add:
         case Sub:
-            add(in1_buf, in1->quantization(), in2_buf, in2->quantization(), op_ == Add ? 1 : -1, out_buf, out->quantization(), activation_);
+            add(in1_buf, in1->quantization(), 1, in2_buf, in2->quantization(), op_ == Add ? 1 : -1, out_buf, out->quantization(), activation_);
             return;
         case Mul:
             mul(in1_buf, in1->quantization(), in2_buf, in2->quantization(), out_buf, out->quantization(), activation_);
@@ -1132,14 +1135,18 @@ const char *UnaryOp::to_string(UnaryOp::Operator op) {
     switch (op) {
     case Logistic:
         return "Logistic";
-    case Tanh:
-        return "Tanh";
+    case Negate:
+        return "Negate";
     case Relu:
         return "Relu";
     case Relu6:
         return "Relu6";
     case ReluN1To1:
         return "ReluN1To1";
+    case Square:
+        return "Square";
+    case Tanh:
+        return "Tanh";
     default:
         LOG(FATAL) << "Unsupported unary op\n";
         return nullptr;
@@ -1184,6 +1191,12 @@ void UnaryOp::execute() {
             assert(out->quantization().zero.at(0) == 128);
 
             CHECK(0 == tanh_uint8(in_buf, input_zero, in_mul_and_shift.multiplier, -in_mul_and_shift.shift, out_buf));
+            return;
+        } else if (op_ == Negate) {
+            add(in_buf, in->quantization(), -1, in_buf, in->quantization(), 0, out_buf, out->quantization());
+            return;
+        } else if (op_ == Square) {
+            mul(in_buf, in->quantization(), in_buf, in->quantization(), out_buf, out->quantization());
             return;
         } else if (op_ == Relu || op_ == Relu6 || op_ == ReluN1To1) {
             requantize(in_buf, in->quantization(), out_buf, out->quantization(), to_activation(op_));
