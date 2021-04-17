@@ -86,10 +86,10 @@ public:
 
         // Since we know that diff_beta is less than 0, we can use the full
         // range of an integer for the fractional part.
-        const int exp_precision = 14;
+        const int exp_precision = 15;
         Func exp2_diff("exp2_diff");
         exp2_diff(x, y) =
-            approx_exp2(Int(16), diff_beta, beta_shift_, exp_precision);
+            i16_sat(approx_exp2(diff_beta, beta_shift_, exp_precision));
 
         // This could overflow if there are more than 2^16 values of x.
         Func sum_exp_row("sum_exp_row");
@@ -101,8 +101,10 @@ public:
         // is greater than or equal to 2^0*2^exp_precision, because we
         // subtracted the max from the input.
         Func inv_sum_exp_row("inv_sum_exp_row");
-        inv_sum_exp_row(y) = i16_sat(approx_reciprocal(sum_exp_row(y), 31));
+        inv_sum_exp_row(y) =
+            i16_sat(approx_reciprocal(sum_exp_row(y), exp_precision * 2));
 
+        assert(exp_precision == 15);
         Expr output = multiply_2x_high(exp2_diff(x, y), inv_sum_exp_row(y));
         output = multiply_quantized(output, output_multiplier_, output_shift_);
         output_(x, y) = u8_sat(saturating_add(output, output_zero_));

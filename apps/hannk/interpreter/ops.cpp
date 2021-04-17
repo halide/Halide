@@ -1020,7 +1020,9 @@ void SoftmaxOp::execute() {
         assert(output_zero >= 0 && output_zero <= 255);
 
         const float in_scale = in->quantization().scale.at(0);
-        const float output_scale = out->quantization().scale.at(0);
+        // TODO: Debug why this extra factor of 2 is needed. There's something
+        // wrong with the fixed point tricks in the implementation.
+        const float output_scale = out->quantization().scale.at(0) * 2.0f;
 
         const int left_shift = 6;
         const double real_in_multiplier = in_scale * beta2 / (1 << left_shift);
