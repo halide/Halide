@@ -46,9 +46,6 @@ public:
         input1 = multiply_quantized(input1, input1_multiplier_, input1_shift_);
         input2 = multiply_quantized(input2, input2_multiplier_, input2_shift_);
 
-        // Treat input1 + input2 * 0 as a special case.
-        input2 = select(input2_multiplier_ != 0, input2, 0);
-
         Expr output = multiply_quantized(input1 + input2, output_multiplier_, output_shift_);
         output = saturating_add(i16_sat(output), output_zero_);
         output_(c, x, y, b) = clamp(u8_sat(output), output_min_, output_max_);
