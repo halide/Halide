@@ -91,7 +91,7 @@ $(BIN)/%/add_uint8_uint8.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
 	$< -g Add -f hannk::add_uint8_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/average_pool_uint8.a: $(GENERATOR_BIN)/average_pool.generator
+$(BIN)/%/average_pool_uint8.a: $(GENERATOR_BIN)/pool.generator
 	@mkdir -p $(@D)
 	$< -g AveragePool -f hannk::average_pool_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
@@ -135,7 +135,7 @@ $(BIN)/%/logistic_uint8.a: $(GENERATOR_BIN)/transcendentals.generator
 	@mkdir -p $(@D)
 	$< -g Logistic -f hannk::logistic_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/max_pool_uint8.a: $(GENERATOR_BIN)/max_pool.generator
+$(BIN)/%/max_pool_uint8.a: $(GENERATOR_BIN)/pool.generator
 	@mkdir -p $(@D)
 	$< -g MaxPool -f hannk::max_pool_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
