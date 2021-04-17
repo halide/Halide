@@ -97,6 +97,15 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
     };
 
     std::map<std::string, int> seeds;
+    const auto seed_for_name = [&seed, &seeds](const std::string &name) -> int {
+        auto it = seeds.find(name);
+        if (it != seeds.end()) {
+            return it->second;
+        }
+        const int seed_here = seed++;
+        seeds[name] = seed_here;
+        return seed_here;
+    };
 
     RunResult halide_result;
 
@@ -115,8 +124,7 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
                 // Skip constant buffers, just like TFlite does later on.
                 continue;
             }
-            int seed_here = seed++;
-            seeds[t->name()] = seed_here;
+            const int seed_here = seed_for_name(t->name());
             auto input_buf = t->buffer();
             dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
             if (verbosity) {
@@ -147,7 +155,7 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
     }
 
     // ----- Run in TFLite
-    const auto run_in_tflite = [&seeds](const std::vector<char> &buffer, int seed, int threads, int verbosity, TfLiteDelegate *delegate) -> RunResult {
+    const auto run_in_tflite = [&seed_for_name](const std::vector<char> &buffer, int threads, int verbosity, TfLiteDelegate *delegate) -> RunResult {
         RunResult result;
 
         TfLiteModel *tf_model = TfLiteModelCreate(buffer.data(), buffer.size());
@@ -184,9 +192,7 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
                 }
                 continue;
             }
-            auto seed_i = seeds.find(t->name);
-            assert(seed_i != seeds.end());
-            int seed_here = seed_i->second;
+            const int seed_here = seed_for_name(t->name);
             auto input_buf = wrap_tf_lite_tensor_with_halide_buffer(t);
             dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
             if (verbosity) {
@@ -219,7 +225,7 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
         return result;
     };
 
-    RunResult tflite_result = run_in_tflite(buffer, seed, threads, verbosity, nullptr);
+    RunResult tflite_result = run_in_tflite(buffer, threads, verbosity, nullptr);
 
     RunResult delegate_result;
     if (delegate_factory) {
@@ -235,7 +241,7 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
         }
         TfLiteDelegate *delegate = delegate_factory->create_delegate(keys, values, num_options, nullptr);
         assert(delegate);
-        delegate_result = run_in_tflite(buffer, seed, threads, verbosity, delegate);
+        delegate_result = run_in_tflite(buffer, threads, verbosity, delegate);
         delegate_factory->destroy_delegate(delegate);
     }
 
