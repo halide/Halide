@@ -34,7 +34,6 @@ Expr approx_log2m1_exp2(Type type, Expr x, Expr log2_precision_x, int log2_preci
 class Logistic : public Generator<Logistic> {
 public:
     Input<Buffer<uint8_t>> input_{"input", 1};
-
     Input<uint8_t> input_zero_{"input_zero"};
     // The input multiplier and shift should have an extra factor of -log2(e).
     Input<int16_t> input_multiplier_{"input_multiplier"};
@@ -66,7 +65,6 @@ public:
 class Tanh : public Generator<Tanh> {
 public:
     Input<Buffer<uint8_t>> input_{"input", 1};
-
     Input<uint8_t> input_zero_{"input_zero"};
     // The input multiplier and shift should have an extra factor of 2*log2(e).
     Input<int16_t> input_multiplier_{"input_multiplier"};

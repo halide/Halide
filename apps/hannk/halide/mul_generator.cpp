@@ -8,11 +8,10 @@ namespace hannk {
 
 class Mul : public Generator<Mul> {
 public:
-    // Input buffers.
     Input<Buffer<uint8_t>> input1_{"input1", 4};
-    Input<Buffer<uint8_t>> input2_{"input2", 4};
-
     Input<uint8_t> input1_zero_{"input1_zero"};
+
+    Input<Buffer<uint8_t>> input2_{"input2", 4};
     Input<uint8_t> input2_zero_{"input2_zero"};
 
     Input<uint8_t> output_zero_{"output_zero"};

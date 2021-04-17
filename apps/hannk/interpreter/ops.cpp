@@ -243,7 +243,7 @@ void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q, int in1s
     const float in2_scale = in2q.scale.at(0);
     const float out_scale = outq.scale.at(0);
 
-    const int left_shift = 20;  // 20 for 8-bit, 15 for 16-bit
+    const int left_shift = 20;
     const double twice_max_input_scale = 2 * std::max(in1_scale, in2_scale);
     const double real_in1_multiplier = in1_scale / twice_max_input_scale;
     const double real_in2_multiplier = in2_scale / twice_max_input_scale;
@@ -261,9 +261,8 @@ void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q, int in1s
 
     const auto out_range = get_output_range(activation, outq);
 
-    CHECK(0 == add_uint8_uint8(left_shift, in1, in2,
-                               in1_zero, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
-                               in2_zero, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
+    CHECK(0 == add_uint8_uint8(in1, in1_zero, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
+                               in2, in2_zero, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
                                out_zero, out_mul_and_shift.multiplier, -out_mul_and_shift.shift,
                                out_range.min, out_range.max, out));
 }
@@ -288,7 +287,7 @@ void mul(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
 
     const auto out_range = get_output_range(activation, outq);
 
-    CHECK(0 == mul_uint8_uint8_uint8(in1, in2, in1_zero, in2_zero,
+    CHECK(0 == mul_uint8_uint8_uint8(in1, in1_zero, in2, in2_zero,
                                      out_zero, mul_and_shift.multiplier, -mul_and_shift.shift,
                                      out_range.min, out_range.max, out));
 }
@@ -472,7 +471,7 @@ halide_type_t Conv2DOp::filter_type() const {
     if (input()->type() == halide_type_of<uint8_t>() &&
         output()->type() == halide_type_of<uint8_t>()) {
         const halide_filter_metadata_t *metadata = conv_uint8_metadata();
-        return metadata->arguments[1].type;
+        return metadata->arguments[2].type;
     } else {
         LOG(FATAL) << "Unsupported type " << output()->type() << "\n";
         return halide_type_t(halide_type_int, 0, 0);
@@ -499,7 +498,7 @@ BoundsMap Conv2DOp::map_bounds(int input_idx, int output_idx) const {
         // TODO: How to initialize the above buffer without allocating?
         filter_buf.deallocate();
         HalideBuffer<uint8_t> output_buf;
-        CHECK(0 == conv_uint8(input_buf, filter_buf, bias_buf, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf));
+        CHECK(0 == conv_uint8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf));
 
         const int vector_reduction = filter_buf.dim(0).extent();
         const int vector_tile = filter_buf.dim(1).extent();
@@ -530,21 +529,19 @@ void conv_uint8(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t
         // and/or specialize.
         CHECK(
             0 == conv_r16_uint8(
-                     input, filter, bias, (uint8_t)params.a_zero,
-                     (uint8_t)params.b_zero, stride[0], stride[1],
-                     dilation[0], dilation[1], params.c.multiplier,
-                     params.c.shift, (uint8_t)params.c_zero,
-                     output_range.min, output_range.max, output));
+                     input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias,
+                     stride[0], stride[1], dilation[0], dilation[1], params.c.multiplier,
+                     params.c.shift, (uint8_t)params.c_zero, output_range.min, output_range.max,
+                     output));
     } else
 #endif
     {
         CHECK(
             0 == ::hannk::conv_uint8(
-                     input, filter, bias, (uint8_t)params.a_zero,
-                     (uint8_t)params.b_zero, stride[0], stride[1],
-                     dilation[0], dilation[1], params.c.multiplier,
-                     params.c.shift, (uint8_t)params.c_zero,
-                     output_range.min, output_range.max, output));
+                     input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias,
+                     stride[0], stride[1], dilation[0], dilation[1], params.c.multiplier,
+                     params.c.shift, (uint8_t)params.c_zero, output_range.min, output_range.max,
+                     output));
     }
 }
 
@@ -598,23 +595,20 @@ void depthwise_conv_uint8(
     if (depth_multiplier >= output->dim[0].extent) {
         CHECK(
             0 == depthwise_conv_broadcast_uint8(
-                     input, filter, bias, depth_multiplier,
-                     (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride[0], stride[1],
-                     dilation[0], dilation[1], params.c.multiplier, params.c.shift,
+                     input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
+                     stride[0], stride[1], dilation[0], dilation[1], params.c.multiplier, params.c.shift,
                      (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output));
     } else if (depth_multiplier == 1) {
         CHECK(
             0 == depthwise_conv_dm1_uint8(
-                     input, filter, bias, depth_multiplier,
-                     (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride[0], stride[1],
-                     dilation[0], dilation[1], params.c.multiplier, params.c.shift,
+                     input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
+                     stride[0], stride[1], dilation[0], dilation[1], params.c.multiplier, params.c.shift,
                      (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output));
     } else {
         CHECK(
             0 == ::hannk::depthwise_conv_uint8(
-                     input, filter, bias, depth_multiplier,
-                     (uint8_t)params.a_zero, (uint8_t)params.b_zero, stride[0], stride[1],
-                     dilation[0], dilation[1], params.c.multiplier, params.c.shift,
+                     input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
+                     stride[0], stride[1], dilation[0], dilation[1], params.c.multiplier, params.c.shift,
                      (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output));
     }
 }
@@ -719,7 +713,7 @@ void FullyConnectedOp::execute() {
 
         CHECK(
             0 == fully_connected_uint8(
-                     input_buf, filter_buf, bias_buf, (uint8_t)params.a_zero, (uint8_t)params.b_zero,
+                     input_buf, (uint8_t)params.a_zero, filter_buf, (uint8_t)params.b_zero, bias_buf,
                      (uint8_t)params.c_zero, params.c.multiplier, params.c.shift, (uint8_t)output_range.min,
                      (uint8_t)output_range.max, output_buf));
     } else {

@@ -9,7 +9,6 @@ namespace hannk {
 class L2Normalization : public Generator<L2Normalization> {
 public:
     Input<Buffer<uint8_t>> input_{"input", 2};
-
     Input<uint8_t> input_zero_{"input_zero"};
 
     Output<Buffer<uint8_t>> output_{"output", 2};

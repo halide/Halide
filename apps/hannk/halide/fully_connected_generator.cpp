@@ -9,11 +9,12 @@ namespace hannk {
 class FullyConnected : public Generator<FullyConnected> {
 public:
     Input<Buffer<uint8_t>> input_{"input", 2};
-    Input<Buffer<uint8_t>> filter_{"filter", 2};
-    Input<Buffer<int32_t>> bias_{"bias", 1};
-
     Input<uint8_t> input_zero_{"input_zero"};
+
+    Input<Buffer<uint8_t>> filter_{"filter", 2};
     Input<uint8_t> filter_zero_{"filter_zero"};
+
+    Input<Buffer<int32_t>> bias_{"bias", 1};
 
     Input<uint8_t> output_zero_{"output_zero"};
     Input<int32_t> output_multiplier_{"output_multiplier"};

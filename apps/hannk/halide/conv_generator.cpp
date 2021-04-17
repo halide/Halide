@@ -41,18 +41,16 @@ public:
 
     // Unsigned 8-bit input tensor, indexed by c, x, y, b.
     Input<Buffer<uint8_t>> input_{"input", 4};
+    Input<uint8_t> input_zero_{"input_zero"};
 
     // A 6D array of filter coefficients indexed by ci % n, co % k, ci / n, co / k, x, y,
     // where n = vector_reduction and k = accum_vector_size (below).
     Input<Buffer<>> filter_{"filter", 6};
+    Input<uint8_t> filter_zero_{"filter_zero"};
 
     // A 1D array of 32-bit biases. The bias should be added to the c
     // dimension of the output.
     Input<Buffer<int32_t>> bias_{"bias", 1};
-
-    // Zero points for the input and filter.
-    Input<uint8_t> input_zero_{"input_zero"};
-    Input<uint8_t> filter_zero_{"filter_zero"};
 
     // The stride specifies how the input [x, y] is sub-subsampled. For every
     // spatial location [x, y] in the output buffer, the input buffer is sampled

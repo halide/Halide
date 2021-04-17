@@ -8,19 +8,13 @@ namespace hannk {
 
 class Add : public Generator<Add> {
 public:
-    // Left shift for both inputs.
-    Input<uint32_t> left_shift_{"left_shift"};
-
-    // Input buffers.
+    // Input buffers and quantization parameters.
     Input<Buffer<uint8_t>> input1_{"input1", 4};
-    Input<Buffer<uint8_t>> input2_{"input2", 4};
-
-    // Offset, quantization multiplier and shift for the left hand side.
     Input<uint8_t> input1_zero_{"input1_zero"};
     Input<int32_t> input1_multiplier_{"input1_multiplier"};
     Input<uint32_t> input1_shift_{"input1_shift"};
 
-    // Offset, quantization multiplier and shift for the right hand side.
+    Input<Buffer<uint8_t>> input2_{"input2", 4};
     Input<uint8_t> input2_zero_{"input2_zero"};
     Input<int32_t> input2_multiplier_{"input2_multiplier"};
     Input<uint32_t> input2_shift_{"input2_shift"};
@@ -40,8 +34,8 @@ public:
         Expr input1 = input1_(c, x, y, b);
         Expr input2 = input2_(c, x, y, b);
 
-        input1 = i32(i16(input1) - i16(input1_zero_)) << left_shift_;
-        input2 = i32(i16(input2) - i16(input2_zero_)) << left_shift_;
+        input1 = i32(i16(input1) - i16(input1_zero_)) << 20;
+        input2 = i32(i16(input2) - i16(input2_zero_)) << 20;
 
         input1 = multiply_quantized(input1, input1_multiplier_, input1_shift_);
         input2 = multiply_quantized(input2, input2_multiplier_, input2_shift_);

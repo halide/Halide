@@ -13,19 +13,17 @@ public:
 
     // Unsigned 8-bit input tensor, indexed by ci, x, y, b.
     Input<Buffer<uint8_t>> input_{"input", 4};
+    Input<uint8_t> input_zero_{"input_zero"};
 
     // A 3D array of 8-bit filter coefficients indexed by co, x, y.
     Input<Buffer<uint8_t>> filter_{"filter", 3};
+    Input<uint8_t> filter_zero_{"filter_zero"};
 
     // A 1D array of 32-bit biases indexed by co.
     Input<Buffer<int32_t>> bias_{"bias", 1};
 
     // The depth multiplier specifies the ratio between co and ci.
     Input<int> depth_multiplier_{"depth_multiplier"};
-
-    // Zero points for the input and filter.
-    Input<uint8_t> input_zero_{"input_zero"};
-    Input<uint8_t> filter_zero_{"filter_zero"};
 
     // The stride specifies how the input [x, y] are sub-subsampled. For every
     // spatial location [x, y] in the output buffer, the input buffer is sampled
