@@ -100,12 +100,10 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
     const auto seed_for_name = [&seed, &seeds](const std::string &name) -> int {
         auto it = seeds.find(name);
         if (it != seeds.end()) {
-            std::cout << "CACHED: " << name << " -> " << it->second << "\n";
             return it->second;
         }
         const int seed_here = seed++;
         seeds[name] = seed_here;
-        std::cout << "NEW: " << name << " -> " << seed_here << "\n";
         return seed_here;
     };
 
