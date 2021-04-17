@@ -90,6 +90,10 @@ Expr approx_log2(const Type &type, const Expr &x, int log2_precision) {
     Expr frac2 = multiply_2x_high(frac1, frac1);
     Expr frac3 = multiply_2x_high(frac2, frac1);
 
+    // TODO: On ARM, these polynomial coefficients each get broadcasted into their
+    // own register. But, we could be using the "lane" version of the qrdmulh
+    // instruction, and put all of the coefficients into one vector register. This
+    // would reduce register pressure, which is very high in code using this helper.
     Expr poly =
         i32(multiply_2x_high(i16(p3), frac3) + multiply_2x_high(i16(p2), frac2) + p0) +
         i32(multiply_2x_high(i16(p1), frac1)) + i32(frac1);
@@ -132,6 +136,10 @@ Expr approx_exp2(const Type &type, const Expr &x, const Expr &log2_precision_x, 
     Expr frac2 = multiply_2x_high(frac1, frac1);
     Expr frac3 = multiply_2x_high(frac2, frac1);
 
+    // TODO: On ARM, these polynomial coefficients each get broadcasted into their
+    // own register. But, we could be using the "lane" version of the qrdmulh
+    // instruction, and put all of the coefficients into one vector register. This
+    // would reduce register pressure, which is very high in code using this helper.
     assert(p1 + p2 + p3 < (1 << 15));
     Expr poly =
         multiply_2x_high(i16(p3), frac3) +
