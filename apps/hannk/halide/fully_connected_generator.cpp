@@ -38,10 +38,10 @@ public:
         multiplied(c, b) += i32(filter_zeroed(rc, c)) * i32(input_zeroed(rc, b));
 
         // Saturate and narrow the output.
-        Expr output =
-            multiply_quantized(multiplied(c, b), output_multiplier_, output_shift_);
-        output = saturating_add(i16_sat(output), output_zero_);
-        output_(c, b) = clamp(u8_sat(output), output_min_, output_max_);
+        Expr output = multiply_2x_high(multiplied(c, b), output_multiplier_);
+        output = i16_sat(rounding_shift_right(output, output_shift_));
+        output = u8_sat(saturating_add(output, output_zero_));
+        output_(c, b) = clamp(output, output_min_, output_max_);
 
         // Schedule.
 

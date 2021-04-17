@@ -31,15 +31,9 @@ Halide::Expr align_down(const Halide::Expr &x, const Halide::Expr &n);
 Halide::Expr align_up(const Halide::Expr &x, const Halide::Expr &n);
 Halide::Expr align(const Halide::Expr &x, const Halide::Expr &n);
 
-// This function implements the same computation as the ARMv7 NEON VQRDMULH
-// instruction.
+// Compute saturating_narrow(rounding_shift_right(widening_mul(a, b), N))
+// where N is the number of bits of the narrowed result minus one.
 Halide::Expr multiply_2x_high(const Halide::Expr &a, const Halide::Expr &b);
-
-// Performs right shift and multiply by a multiplier. Aims to be very close to
-// tflite's reference implementation. However, tflite is standardizing on left
-// (exponent-like) shifts.
-Halide::Expr multiply_quantized(
-    const Halide::Expr &x, const Halide::Expr &quantized_multiplier, const Halide::Expr &shift);
 
 // Approximate log2(x)*2^log2_precision.
 // log2_precision must be less than 16.

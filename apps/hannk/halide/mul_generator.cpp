@@ -28,9 +28,10 @@ public:
         Expr input1 = (i16(input1_(c, x, y, b)) - i16(input1_zero_)) << 6;
         Expr input2 = (i16(input2_(c, x, y, b)) - i16(input2_zero_)) << 6;
 
-        Expr output = multiply_quantized(i32(input1) * i32(input2), output_multiplier_, output_shift_);
-        output = saturating_add(i16_sat(output), output_zero_);
-        output_(c, x, y, b) = clamp(u8_sat(output), output_min_, output_max_);
+        Expr output = multiply_2x_high(i32(input1) * i32(input2), output_multiplier_);
+        output = i16_sat(rounding_shift_right(output, output_shift_));
+        output = u8_sat(saturating_add(output, output_zero_));
+        output_(c, x, y, b) = clamp(output, output_min_, output_max_);
 
         // Schedule.
         const int vector_size = natural_vector_size<uint8_t>();

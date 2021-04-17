@@ -37,12 +37,13 @@ public:
         input1 = i32(i16(input1) - i16(input1_zero_)) << 20;
         input2 = i32(i16(input2) - i16(input2_zero_)) << 20;
 
-        input1 = multiply_quantized(input1, input1_multiplier_, input1_shift_);
-        input2 = multiply_quantized(input2, input2_multiplier_, input2_shift_);
+        input1 = rounding_shift_right(multiply_2x_high(input1, input1_multiplier_), input1_shift_);
+        input2 = rounding_shift_right(multiply_2x_high(input2, input2_multiplier_), input2_shift_);
 
-        Expr output = multiply_quantized(input1 + input2, output_multiplier_, output_shift_);
-        output = saturating_add(i16_sat(output), output_zero_);
-        output_(c, x, y, b) = clamp(u8_sat(output), output_min_, output_max_);
+        Expr output = multiply_2x_high(input1 + input2, output_multiplier_);
+        output = i16_sat(rounding_shift_right(output, output_shift_));
+        output = u8_sat(saturating_add(output, output_zero_));
+        output_(c, x, y, b) = clamp(output, output_min_, output_max_);
 
         // Schedule.
         const int vector_size = natural_vector_size<uint8_t>();

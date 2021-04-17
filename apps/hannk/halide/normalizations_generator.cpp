@@ -105,7 +105,8 @@ public:
 
         assert(exp_precision == 15);
         Expr output = multiply_2x_high(exp2_diff(x, y), inv_sum_exp_row(y));
-        output = multiply_quantized(output, output_multiplier_, output_shift_);
+        output = multiply_2x_high(output, output_multiplier_);
+        output = i16_sat(rounding_shift_right(output, output_shift_));
         output_(x, y) = u8_sat(saturating_add(output, output_zero_));
 
         // Schedule.

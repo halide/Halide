@@ -56,10 +56,6 @@ Expr multiply_2x_high(const Expr &a, const Expr &b) {
     return saturating_cast(t, result);
 }
 
-Expr multiply_quantized(const Expr &x, const Expr &q, const Expr &shift) {
-    return rounding_shift_right(multiply_2x_high(x, q), shift);
-}
-
 Expr floor_log2(const Expr &x) {
     //   floor(log2(x)) = B - clz(x) => log2(x) ~ B - clz(x)
     //   B = sizeof(x)*8 - 1
