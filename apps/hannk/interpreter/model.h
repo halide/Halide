@@ -43,7 +43,7 @@ class TensorStorage {
 
 public:
     TensorStorage();
-    TensorStorage(HalideBuffer<void> buffer);
+    explicit TensorStorage(HalideBuffer<void> buffer);
     TensorStorage &operator=(const TensorStorage &) = delete;
     TensorStorage(TensorStorage &&) = default;
     TensorStorage &operator=(TensorStorage &&) = default;
