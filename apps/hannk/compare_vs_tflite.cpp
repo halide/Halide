@@ -86,14 +86,15 @@ struct DelegateFactory {
 
 }  // namespace
 
-void run_all(const std::string &filename, int seed, int threads, int verbosity, bool use_hannk, DelegateFactory *delegate_factory, bool do_compare_results) {
+void run_all(const std::string &filename, int seed, int threads, int verbosity, bool use_hannk,
+             DelegateFactory *delegate_factory, bool do_benchmark, bool do_compare_results) {
     std::cout << "Comparing " << filename << "\n";
 
     std::vector<char> buffer = read_entire_file(filename);
 
     struct RunResult {
         std::vector<Buffer<const void>> outputs;
-        std::chrono::duration<double> time;
+        std::chrono::duration<double> time{0};
     };
 
     std::map<std::string, int> seeds;
@@ -140,9 +141,11 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
         interpreter.execute();
 
         // Now benchmark it
-        halide_result.time = bench([&interpreter]() {
-            interpreter.execute();
-        });
+        if (do_benchmark) {
+            halide_result.time = bench([&interpreter]() {
+                interpreter.execute();
+            });
+        }
 
         // Save the outputs
         for (TensorPtr t : interpreter.outputs()) {
@@ -155,7 +158,7 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
     }
 
     // ----- Run in TFLite
-    const auto run_in_tflite = [&seed_for_name](const std::vector<char> &buffer, int threads, int verbosity, TfLiteDelegate *delegate) -> RunResult {
+    const auto run_in_tflite = [&seed_for_name, do_benchmark](const std::vector<char> &buffer, int threads, int verbosity, TfLiteDelegate *delegate) -> RunResult {
         RunResult result;
 
         TfLiteModel *tf_model = TfLiteModelCreate(buffer.data(), buffer.size());
@@ -205,10 +208,12 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
         CHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
 
         // Now benchmark it
-        result.time = bench([&tf_interpreter]() {
-            TfLiteStatus status;
-            CHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
-        });
+        if (do_benchmark) {
+            result.time = bench([&tf_interpreter]() {
+                TfLiteStatus status;
+                CHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
+            });
+        }
 
         // Save the outputs
         for (int i = 0; i < outputs; i++) {
@@ -246,31 +251,33 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
     }
 
     // ----- Log benchmark times
-    std::cout << "TFLITE-DIRECT   Time: " << std::chrono::duration_cast<std::chrono::microseconds>(tflite_result.time).count() << " us"
-              << "\n";
-    std::cout << "HALIDE-DIRECT   Time: " << std::chrono::duration_cast<std::chrono::microseconds>(halide_result.time).count() << " us"
-              << "\n";
-    if (delegate_factory) {
-        std::cout << "HALIDE-DELEGATE Time: " << std::chrono::duration_cast<std::chrono::microseconds>(delegate_result.time).count() << " us"
+    if (do_benchmark) {
+        std::cout << "TFLITE-DIRECT   Time: " << std::chrono::duration_cast<std::chrono::microseconds>(tflite_result.time).count() << " us"
                   << "\n";
-    }
-
-    if (use_hannk) {
-        double ratio = (halide_result.time / tflite_result.time);
-        std::cout << "HALIDE = " << ratio * 100.0 << "% of TFLITE";
-        if (ratio > 1.0) {
-            std::cout << "  *** HALIDE IS SLOWER";
+        std::cout << "HALIDE-DIRECT   Time: " << std::chrono::duration_cast<std::chrono::microseconds>(halide_result.time).count() << " us"
+                  << "\n";
+        if (delegate_factory) {
+            std::cout << "HALIDE-DELEGATE Time: " << std::chrono::duration_cast<std::chrono::microseconds>(delegate_result.time).count() << " us"
+                      << "\n";
         }
-        std::cout << "\n";
-    }
 
-    if (delegate_factory) {
-        double ratio = (delegate_result.time / tflite_result.time);
-        std::cout << "DELEGATE = " << ratio * 100.0 << "% of TFLITE";
-        if (ratio > 1.0) {
-            std::cout << "  *** DELEGATE IS SLOWER";
+        if (use_hannk) {
+            double ratio = (halide_result.time / tflite_result.time);
+            std::cout << "HALIDE = " << ratio * 100.0 << "% of TFLITE";
+            if (ratio > 1.0) {
+                std::cout << "  *** HALIDE IS SLOWER";
+            }
+            std::cout << "\n";
         }
-        std::cout << "\n";
+
+        if (delegate_factory) {
+            double ratio = (delegate_result.time / tflite_result.time);
+            std::cout << "DELEGATE = " << ratio * 100.0 << "% of TFLITE";
+            if (ratio > 1.0) {
+                std::cout << "  *** DELEGATE IS SLOWER";
+            }
+            std::cout << "\n";
+        }
     }
 
     if (!do_compare_results) {
@@ -327,6 +334,7 @@ int main(int argc, char **argv) {
     int threads = 1;
     bool use_hannk = true;
     bool use_delegate = true;
+    bool do_benchmark = true;
     int verbosity = 0;
     std::vector<const char *> files;
     bool do_compare_results = true;
@@ -350,6 +358,10 @@ int main(int argc, char **argv) {
         }
         if (!strcmp(argv[i], "--compare")) {
             do_compare_results = atoi(argv[++i]) != 0;
+            continue;
+        }
+        if (!strcmp(argv[i], "--benchmark")) {
+            do_benchmark = atoi(argv[++i]) != 0;
             continue;
         }
         if (!strcmp(argv[i], "--verbose")) {
@@ -400,7 +412,7 @@ int main(int argc, char **argv) {
     }
 
     for (auto f : files) {
-        hannk::run_all(f, seed, threads, verbosity, use_hannk, use_delegate ? &delegate_factory : nullptr, do_compare_results);
+        hannk::run_all(f, seed, threads, verbosity, use_hannk, use_delegate ? &delegate_factory : nullptr, do_benchmark, do_compare_results);
         std::cout << "\n";
     }
 

@@ -53,7 +53,7 @@ build: \
 	$(BIN)/$(HL_TARGET)/compare_vs_tflite
 
 test: compare_vs_tflite
-	$(BIN)/$(HL_TARGET)/compare_vs_tflite test/*/*
+	$(BIN)/$(HL_TARGET)/compare_vs_tflite test/*/* --benchmark 0
 
 clean:
 	rm -rf $(BIN)
