@@ -9,11 +9,22 @@ function(target_export_script TARGET)
     set(multiValueArgs)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-    set(dummy_source [[ int main() { return 0; } ]])
-    set(is_shared "$<STREQUAL:$<TARGET_PROPERTY:TYPE>,SHARED_LIBRARY>")
+    get_property(target_type TARGET ${TARGET} PROPERTY TYPE)
+    if (NOT target_type STREQUAL "SHARED_LIBRARY")
+        # Linker scripts do nothing on non-shared libraries.
+        return()
+    endif ()
 
-    # CMake doesn't recognize MSVC/link.exe's unknown-option warning.
-    set(extra_errors FAIL_REGEX "LNK4044: unrecognized option")
+    if (MSVC)
+        ## TODO: implement something similar for Windows/link.exe
+        # https://github.com/halide/Halide/issues/4651
+        return()
+    endif ()
+
+    set(dummy_source [[ int main() { return 0; } ]])
+
+    # CMake doesn't recognize MSVC/ldd link.exe's unknown-option warnings
+    set(extra_errors FAIL_REGEX "LNK4044: unrecognized option|warning : ignoring unknown argument")
 
     ## More linkers support the GNU syntax (ld, lld, gold), so try it first.
     set(version_script "LINKER:--version-script=${ARG_GNU_LD}")
@@ -22,8 +33,8 @@ function(target_export_script TARGET)
     check_cxx_source_compiles("${dummy_source}" LINKER_HAS_FLAG_VERSION_SCRIPT ${extra_errors})
 
     if (LINKER_HAS_FLAG_VERSION_SCRIPT)
-        target_link_options(${TARGET} PRIVATE "$<${is_shared}:${version_script}>")
-        set_property(TARGET ${TARGET} APPEND PROPERTY LINK_DEPENDS "$<${is_shared}:${ARG_GNU_LD}>")
+        target_link_options(${TARGET} PRIVATE "${version_script}")
+        set_property(TARGET ${TARGET} APPEND PROPERTY LINK_DEPENDS "${ARG_GNU_LD}")
         return()
     endif ()
 
@@ -34,16 +45,10 @@ function(target_export_script TARGET)
     check_cxx_source_compiles("${dummy_source}" LINKER_HAS_FLAG_EXPORTED_SYMBOLS_LIST ${extra_errors})
 
     if (LINKER_HAS_FLAG_EXPORTED_SYMBOLS_LIST)
-        target_link_options(${TARGET} PRIVATE "$<${is_shared}:${exported_symbols_list}>")
-        set_property(TARGET ${TARGET} APPEND PROPERTY LINK_DEPENDS "$<${is_shared}:${ARG_APPLE_LD}>")
+        target_link_options(${TARGET} PRIVATE "${exported_symbols_list}")
+        set_property(TARGET ${TARGET} APPEND PROPERTY LINK_DEPENDS "${ARG_APPLE_LD}")
         return()
     endif ()
 
-    ## TODO: implement something similar for Windows/link.exe
-    # https://github.com/halide/Halide/issues/4651
-
-    ## Warn the user if we were supposed to have been able to attach a linker script.
-    if (BUILD_SHARED_LIBS AND NOT MSVC)
-        message(WARNING "Unknown linker! Could not attach Halide linker script.")
-    endif ()
+    message(WARNING "Unknown linker! Could not attach Halide linker script.")
 endfunction()

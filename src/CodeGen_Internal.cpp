@@ -168,13 +168,9 @@ llvm::Type *get_vector_element_type(llvm::Type *t) {
 llvm::ElementCount element_count(int e) {
     return llvm::ElementCount::getFixed(e);
 }
-#elif LLVM_VERSION >= 110
+#else
 llvm::ElementCount element_count(int e) {
     return llvm::ElementCount(e, /*scalable*/ false);
-}
-#else
-int element_count(int e) {
-    return e;
 }
 #endif
 
@@ -655,11 +651,7 @@ bool get_md_string(llvm::Metadata *value, std::string &result) {
     }
     llvm::MDString *c = llvm::dyn_cast<llvm::MDString>(value);
     if (c) {
-#if LLVM_VERSION >= 110
         result = c->getString().str();
-#else
-        result = c->getString();
-#endif
         return true;
     }
     return false;

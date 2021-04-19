@@ -515,6 +515,16 @@ public:
         return r;
     }
 
+    static Vec load_predicated(const void *base, const CppVector<int32_t, Lanes> &offset, const Mask &predicate) {
+        Vec r;
+        for (size_t i = 0; i < Lanes; i++) {
+            if (predicate[i]) {
+                r[i] = ((const ElementType*)base)[offset[i]];
+            }
+        }
+        return r;
+    }
+
     static void store(const Vec &v, void *base, int32_t offset) {
         memcpy(((ElementType*)base + offset), v.data(), sizeof(ElementType) * Lanes);
     }
@@ -522,6 +532,14 @@ public:
     static void store_scatter(const Vec &v, void *base, const CppVector<int32_t, Lanes> &offset) {
         for (size_t i = 0; i < Lanes; i++) {
             ((ElementType*)base)[offset[i]] = v[i];
+        }
+    }
+
+    static void store_predicated(const Vec &v, void *base, const CppVector<int32_t, Lanes> &offset, const Mask &predicate) {
+        for (size_t i = 0; i < Lanes; i++) {
+            if (predicate[i]) {
+                ((ElementType*)base)[offset[i]] = v[i];
+            }
         }
     }
 
@@ -1025,6 +1043,15 @@ public:
         return r;
     }
 
+    static Vec load_predicated(const void *base, const NativeVector<int32_t, Lanes> offset, const NativeVector<uint8_t, Lanes> predicate) {
+        Vec r;
+        for (size_t i = 0; i < Lanes; i++) {
+            if (predicate[i]) {
+                r[i] = ((const ElementType*)base)[offset[i]];
+            }
+        }
+        return r;
+    }
     static void store(const Vec v, void *base, int32_t offset) {
         // We only require Vec to be element-aligned, so we can't safely just write
         // directly from memory (might segfault). Use memcpy for safety.
@@ -1038,6 +1065,14 @@ public:
     static void store_scatter(const Vec v, void *base, const NativeVector<int32_t, Lanes> offset) {
         for (size_t i = 0; i < Lanes; i++) {
             ((ElementType*)base)[offset[i]] = v[i];
+        }
+    }
+
+    static void store_predicated(const Vec v, void *base, const NativeVector<int32_t, Lanes> offset, const NativeVector<uint8_t, Lanes> predicate) {
+        for (size_t i = 0; i < Lanes; i++) {
+            if (predicate[i]) {
+                ((ElementType*)base)[offset[i]] = v[i];
+            }
         }
     }
 
@@ -2302,8 +2337,6 @@ string CodeGen_C::print_extern_call(const Call *op) {
 }
 
 void CodeGen_C::visit(const Load *op) {
-    user_assert(is_const_one(op->predicate)) << "Predicated load is not supported by C backend.\n";
-
     // TODO: We could replicate the logic in the llvm codegen which decides whether
     // the vector access can be aligned. Doing so would also require introducing
     // aligned type equivalents for all the vector types.
@@ -2314,7 +2347,7 @@ void CodeGen_C::visit(const Load *op) {
 
     // If we're loading a contiguous ramp into a vector, just load the vector
     Expr dense_ramp_base = strided_ramp_base(op->index, 1);
-    if (dense_ramp_base.defined()) {
+    if (dense_ramp_base.defined() && is_const_one(op->predicate)) {
         internal_assert(t.is_vector());
         string id_ramp_base = print_expr(dense_ramp_base);
         rhs << print_type(t) + "_ops::load(" << name << ", " << id_ramp_base << ")";
@@ -2322,8 +2355,15 @@ void CodeGen_C::visit(const Load *op) {
         // If index is a vector, gather vector elements.
         internal_assert(t.is_vector());
         string id_index = print_expr(op->index);
-        rhs << print_type(t) + "_ops::load_gather(" << name << ", " << id_index << ")";
+        if (is_const_one(op->predicate)) {
+            rhs << print_type(t) + "_ops::load_gather(" << name << ", " << id_index << ")";
+        } else {
+            string id_predicate = print_expr(op->predicate);
+            rhs << print_type(t) + "_ops::load_predicated(" << name << ", " << id_index << ", " << id_predicate << ")";
+        }
     } else {
+        user_assert(is_const_one(op->predicate)) << "Predicated scalar load is not supported by C backend.\n";
+
         string id_index = print_expr(op->index);
         bool type_cast_needed = !(allocations.contains(op->name) &&
                                   allocations.get(op->name).type.element_of() == t.element_of());
@@ -2339,8 +2379,6 @@ void CodeGen_C::visit(const Load *op) {
 }
 
 void CodeGen_C::visit(const Store *op) {
-    user_assert(is_const_one(op->predicate)) << "Predicated store is not supported by C backend.\n";
-
     Type t = op->value.type();
 
     if (inside_atomic_mutex_node) {
@@ -2367,7 +2405,7 @@ void CodeGen_C::visit(const Store *op) {
 
     // If we're writing a contiguous ramp, just store the vector.
     Expr dense_ramp_base = strided_ramp_base(op->index, 1);
-    if (dense_ramp_base.defined()) {
+    if (dense_ramp_base.defined() && is_const_one(op->predicate)) {
         internal_assert(op->value.type().is_vector());
         string id_ramp_base = print_expr(dense_ramp_base);
         stream << get_indent() << print_type(t) + "_ops::store(" << id_value << ", " << name << ", " << id_ramp_base << ");\n";
@@ -2375,8 +2413,15 @@ void CodeGen_C::visit(const Store *op) {
         // If index is a vector, scatter vector elements.
         internal_assert(t.is_vector());
         string id_index = print_expr(op->index);
-        stream << get_indent() << print_type(t) + "_ops::store_scatter(" << id_value << ", " << name << ", " << id_index << ");\n";
+        if (is_const_one(op->predicate)) {
+            stream << get_indent() << print_type(t) + "_ops::store_scatter(" << id_value << ", " << name << ", " << id_index << ");\n";
+        } else {
+            string id_predicate = print_expr(op->predicate);
+            stream << get_indent() << print_type(t) + "_ops::store_predicated(" << id_value << ", " << name << ", " << id_index << ", " << id_predicate << ");\n";
+        }
     } else {
+        user_assert(is_const_one(op->predicate)) << "Predicated scalar store is not supported by C backend.\n";
+
         bool type_cast_needed =
             t.is_handle() ||
             !allocations.contains(op->name) ||
