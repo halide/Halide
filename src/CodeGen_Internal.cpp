@@ -285,7 +285,8 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
                *const_int_divisor > 1 &&
                ((t.bits() > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
 
-        int64_t multiplier, shift;
+        int64_t multiplier;
+        int shift;
         if (t.bits() == 32) {
             multiplier = IntegerDivision::table_s32[*const_int_divisor][2];
             shift = IntegerDivision::table_s32[*const_int_divisor][3];
@@ -310,8 +311,7 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
         // Multiply and keep the high half of the
         // result, and then apply the shift.
         Expr mult = make_const(num.type(), multiplier);
-        num = Call::make(num.type(), Call::mulhi_shr, {num, mult, make_const(UInt(num.type().bits()), shift)},
-                         Call::PureIntrinsic);
+        num = multiply_quantized(num, mult, shift + num.type().bits());
 
         // Maybe flip the bits back again.
         num = cast(a.type(), num ^ sign);
@@ -343,9 +343,7 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
 
         // Widen, multiply, narrow
         Expr mult = make_const(num.type(), multiplier);
-        Expr val = Call::make(num.type(), Call::mulhi_shr,
-                              {num, mult, make_const(UInt(num.type().bits()), method == 1 ? (int)shift : 0)},
-                              Call::PureIntrinsic);
+        Expr val = multiply_quantized(num, mult, (method == 1 ? shift : 0) + num.type().bits());
 
         if (method == 2) {
             // Average with original numerator.

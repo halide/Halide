@@ -345,15 +345,19 @@ Expr widening_mul(Expr a, Expr b);
 Expr widening_sub(Expr a, Expr b);
 /** Compute widen(a) << b. */
 Expr widening_shift_left(Expr a, Expr b);
+Expr widening_shift_left(Expr a, int b);
 /** Compute widen(a) >> b. */
 Expr widening_shift_right(Expr a, Expr b);
+Expr widening_shift_right(Expr a, int b);
 
 /** Compute saturating_add(a, (1 >> min(b, 0)) / 2) << b. When b is positive
  * indicating a left shift, the rounding term is zero. */
 Expr rounding_shift_left(Expr a, Expr b);
+Expr rounding_shift_left(Expr a, int b);
 /** Compute saturating_add(a, (1 << max(b, 0)) / 2) >> b. When b is negative
  * indicating a left shift, the rounding term is zero. */
 Expr rounding_shift_right(Expr a, Expr b);
+Expr rounding_shift_right(Expr a, int b);
 
 /** Compute saturating_narrow(widen(a) + widen(b)) */
 Expr saturating_add(Expr a, Expr b);
@@ -368,6 +372,13 @@ Expr rounding_halving_add(Expr a, Expr b);
 Expr halving_sub(Expr a, Expr b);
 /** Compute narrow((widen(a) - widen(b) + 1) / 2) */
 Expr rounding_halving_sub(Expr a, Expr b);
+
+/** Compute saturating_narrow(shift_right(widening_mul(a, b), q)) */
+Expr multiply_quantized(Expr a, Expr b, Expr q);
+Expr multiply_quantized(Expr a, Expr b, int q);
+/** Compute saturating_narrow(rounding_shift_right(widening_mul(a, b), q)) */
+Expr rounding_multiply_quantized(Expr a, Expr b, Expr q);
+Expr rounding_multiply_quantized(Expr a, Expr b, int q);
 
 }  // namespace Internal
 

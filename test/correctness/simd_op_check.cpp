@@ -232,6 +232,7 @@ public:
         if (use_ssse3) {
             for (int w = 2; w <= 4; w++) {
                 check("pmulhrsw", 4 * w, i16((i32(i16_1) * i32(i16_2) + 16384) >> 15));
+                check("pmulhrsw", 4 * w, i16_sat((i32(i16_1) * i32(i16_2) + 16384) >> 15));
                 check("pabsb", 8 * w, abs(i8_1));
                 check("pabsw", 4 * w, abs(i16_1));
                 check("pabsd", 2 * w, abs(i32_1));
@@ -422,6 +423,7 @@ public:
             check("vpmullw*ymm", 16, i16_1 * i16_2);
 
             check("vpmulhrsw*ymm", 16, i16((((i32(i16_1) * i32(i16_2)) + 16384)) / 32768));
+            check("vpmulhrsw*ymm", 16, i16_sat((((i32(i16_1) * i32(i16_2)) + 16384)) / 32768));
 
             check("vpcmp*b*ymm", 32, select(u8_1 == u8_2, u8(1), u8(2)));
             check("vpcmp*b*ymm", 32, select(u8_1 > u8_2, u8(1), u8(2)));
