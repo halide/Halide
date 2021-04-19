@@ -79,9 +79,10 @@ protected:
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
 
-    // NEON can be disabled for older processors.
+    // NEON can be disabled for older processors and if SVE is used with longer vectors.
     bool neon_intrinsics_disabled() {
-        return target.has_feature(Target::NoNEON);
+        return target.has_feature(Target::NoNEON) ||
+               (target.features_any_of({Target::SVE, Target::SVE2}) && target.vector_bits != 128);
     }
 };
 
