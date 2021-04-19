@@ -30,14 +30,14 @@ template<typename T>
 int64_t multiply_quantized(int64_t a, int64_t b, int q) {
     const int64_t min_t = std::numeric_limits<T>::min();
     const int64_t max_t = std::numeric_limits<T>::max();
-    return std::min(std::max((a * b) >> q, min_t), max_t);
+    return std::min<int64_t>(std::max<int64_t>((a * b) >> q, min_t), max_t);
 }
 
 template<typename T>
 int64_t rounding_multiply_quantized(int64_t a, int64_t b, int q) {
     const int64_t min_t = std::numeric_limits<T>::min();
     const int64_t max_t = std::numeric_limits<T>::max();
-    return std::min(std::max((a * b + (1ll << (q - 1))) >> q, min_t), max_t);
+    return std::min<int64_t>(std::max<int64_t>((a * b + (1ll << (q - 1))) >> q, min_t), max_t);
 }
 
 template<typename T>
