@@ -14,13 +14,27 @@ namespace Internal {
 namespace Autoscheduler {
 
 /*
+  The adams2019 autoscheduler has two caching implementations within its schedule search:
+
+  1) Block (or tile) caching: handled by this file and Cache.cpp. If block caching is enabled
+  the below data structure (Cache) is used to save the tilings that have been generated at prior
+  passes of beam search. This allows for faster children generation when tiling is a scheduling
+  option. As noted below, this cache is a mapping of the form: Node -> vector_dim -> vector<tilings>.
+
+  2) Featurization caching: handled within a LoopNest. The featurization of a LoopNest is used at
+  multiple points in beam search (i.e. whenever the featurization of a child LoopNest is computed),
+  so it is useful to not repeatedly calculate featurizations. As noted in LoopNest.h, this mapping
+  is of the form: (structural hash of producers) -> (StageMap of schedule features). Note that not
+  all features can be safely cached (i.e. inlined features), so some must be recomputed (see
+  LoopNest::recompute_inlined_features).
+
   Important changes that caching impacts, outside of this file and Cache.cpp:
 
   - LoopNest::compute_features
     If cache_features is enabled (i.e. HL_DISABLE_MEMOIZED_FEATURES!=1) then this function caches
-    the feautizations of its children, and if called again, reuses those cached feauturizations.
-    The features are saved in a LoopNest's member, std::map<> feature_cache. Some features do not
-    persist, and the FeaturesIntermediates strucct (see Featurization.h) is used to cache useful
+    the featurizations of its children, and if called again, reuses those cached featurizations.
+    The features are saved in a LoopNest's member, std::map<> features_cache. Some features do not
+    persist, and the FeaturesIntermediates struct (see Featurization.h) is used to cache useful
     values that aid in recomputing such features.
 
   - LoopNest::compute_working_set_from_features
