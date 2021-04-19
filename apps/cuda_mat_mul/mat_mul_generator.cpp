@@ -21,14 +21,10 @@ public:
     Output<Buffer<float>> out{"out", 2};
 
     void generate() {
-        Var x("x"), y("y"), p("p");
+        // 688 us on an RTX 2060
+        // cublas is 512 us on the same card
 
-        const int warp_size = 32;
-        const int vec_size = 2;
-        const int x_tile = 3;
-        const int y_tile = 4;
-        const int y_unroll = 8;
-        const int r_unroll = 1;
+        Var x("x"), y("y"), p("p");
 
         Func prod("prod");
         RDom r(0, size);
@@ -38,69 +34,24 @@ public:
         Var xi, yi, xio, xii, yii, xo, yo, x_pair, xiio, ty;
         RVar rxo, rxi;
 
-        // This schedule requires CUDA, due to use of gpu_lanes()
-        assert(get_target().has_feature(Target::CUDA));
-
         out.bound(x, 0, size)
             .bound(y, 0, size)
-            .tile(x, y, xi, yi, x_tile * vec_size * warp_size, y_tile * y_unroll)
-            .split(yi, ty, yi, y_unroll)
-            .vectorize(xi, vec_size)
-            .split(xi, xio, xii, warp_size)
-            .reorder(xio, yi, xii, ty, x, y)
-            .unroll(xio)
-            .unroll(yi)
+            .tile(x, y, xi, yi, 64, 16)
+            .tile(xi, yi, xii, yii, 4, 8)
             .gpu_blocks(x, y)
-            .gpu_threads(ty)
-            .gpu_lanes(xii);
-        prod.store_in(MemoryType::Register)
-            .compute_at(out, x)
-            .split(x, xo, xi, warp_size * vec_size, TailStrategy::RoundUp)
-            .split(y, ty, y, y_unroll)
-            .gpu_threads(ty)
-            .unroll(xi, vec_size)
-            .gpu_lanes(xi)
-            .unroll(xo)
+            .gpu_threads(xi, yi)
+            .unroll(xii)
+            .unroll(yii);
+        prod.compute_at(out, xi)
+            .vectorize(x)
             .unroll(y)
             .update()
-            .split(x, xo, xi, warp_size * vec_size, TailStrategy::RoundUp)
-            .split(y, ty, y, y_unroll)
-            .gpu_threads(ty)
-            .unroll(xi, vec_size)
-            .gpu_lanes(xi)
-            .split(r.x, rxo, rxi, warp_size)
-            .unroll(rxi, r_unroll)
-            .reorder(xi, xo, y, rxi, ty, rxo)
-            .unroll(xo)
-            .unroll(y);
-
-        Var Bx = B.in().args()[0], By = B.in().args()[1];
-        Var Ax = A.in().args()[0], Ay = A.in().args()[1];
-        B.in()
-            .compute_at(prod, ty)
-            .split(Bx, xo, xi, warp_size)
-            .gpu_lanes(xi)
-            .unroll(xo)
-            .unroll(By);
-
-        A.in()
-            .compute_at(prod, rxo)
-            .vectorize(Ax, vec_size)
-            .split(Ax, xo, xi, warp_size)
-            .gpu_lanes(xi)
-            .unroll(xo)
-            .split(Ay, yo, yi, y_tile)
-            .gpu_threads(yi)
-            .unroll(yo);
-
-        A.in()
-            .in()
-            .compute_at(prod, rxi)
-            .vectorize(Ax, vec_size)
-            .split(Ax, xo, xi, warp_size)
-            .gpu_lanes(xi)
-            .unroll(xo)
-            .unroll(Ay);
+            .reorder(x, y, r)
+            .vectorize(x)
+            .unroll(y)
+            .unroll(r, 8);
+        A.in().compute_at(prod, r).vectorize(_0).unroll(_1);
+        B.in().compute_at(prod, r).vectorize(_0).unroll(_1);
 
         set_alignment_and_bounds(A, size);
         set_alignment_and_bounds(B, size);

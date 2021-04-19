@@ -1155,15 +1155,24 @@ public:
 
             // VQMOVN   I       -       Saturating Move and Narrow
             check(arm32 ? "vqmovn.s16" : "sqxtn", 8 * w, i8_sat(i16_1));
+            check(arm32 ? "vqmovn.s16" : "sqxtn", 8 * w, i8_sat(i32_1));
+            check(arm32 ? "vqmovn.s16" : "sqxtn", 8 * w, i8_sat(i64_1));
             check(arm32 ? "vqmovn.s32" : "sqxtn", 4 * w, i16_sat(i32_1));
+            check(arm32 ? "vqmovn.s32" : "sqxtn", 4 * w, i16_sat(i64_1));
             check(arm32 ? "vqmovn.s64" : "sqxtn", 2 * w, i32_sat(i64_1));
             check(arm32 ? "vqmovn.u16" : "uqxtn", 8 * w, u8(min(u16_1, max_u8)));
+            check(arm32 ? "vqmovn.u16" : "uqxtn", 8 * w, u8(min(u32_1, max_u8)));
+            check(arm32 ? "vqmovn.u16" : "uqxtn", 8 * w, u8(min(u64_1, max_u8)));
             check(arm32 ? "vqmovn.u32" : "uqxtn", 4 * w, u16(min(u32_1, max_u16)));
+            check(arm32 ? "vqmovn.u32" : "uqxtn", 4 * w, u16(min(u64_1, max_u16)));
             check(arm32 ? "vqmovn.u64" : "uqxtn", 2 * w, u32(min(u64_1, max_u32)));
 
             // VQMOVUN  I       -       Saturating Move and Unsigned Narrow
             check(arm32 ? "vqmovun.s16" : "sqxtun", 8 * w, u8_sat(i16_1));
+            check(arm32 ? "vqmovun.s16" : "sqxtun", 8 * w, u8_sat(i32_1));
+            check(arm32 ? "vqmovun.s16" : "sqxtun", 8 * w, u8_sat(i64_1));
             check(arm32 ? "vqmovun.s32" : "sqxtun", 4 * w, u16_sat(i32_1));
+            check(arm32 ? "vqmovun.s32" : "sqxtun", 4 * w, u16_sat(i64_1));
             check(arm32 ? "vqmovun.s64" : "sqxtun", 2 * w, u32_sat(i64_1));
 
             // VQNEG    I       -       Saturating Negate
@@ -2116,25 +2125,23 @@ public:
                 check("f32x4.sqrt", 4 * w, sqrt(f32_1));
                 check("f64x2.sqrt", 2 * w, sqrt(f64_1));
 
-                // Round to integer above (ceiling)
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("f32x4.ceil", 4 * w, ceil(f32_1));
-                // check("f64x2.ceil", 2 * w, ceil(f64_1));
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    // Round to integer above (ceiling)
+                    check("f32x4.ceil", 4 * w, ceil(f32_1));
+                    check("f64x2.ceil", 2 * w, ceil(f64_1));
 
-                // Round to integer below (floor)
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("f32x4.floor", 4 * w, floor(f32_1));
-                // check("f64x2.floor", 2 * w, floor(f64_1));
+                    // Round to integer below (floor)
+                    check("f32x4.floor", 4 * w, floor(f32_1));
+                    check("f64x2.floor", 2 * w, floor(f64_1));
 
-                // Round to integer toward zero (truncate to integer)
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("f32x4.trunc", 4 * w, trunc(f32_1));
-                // check("f64x2.trunc", 2 * w, trunc(f64_1));
+                    // Round to integer toward zero (truncate to integer)
+                    check("f32x4.trunc", 4 * w, trunc(f32_1));
+                    check("f64x2.trunc", 2 * w, trunc(f64_1));
 
-                // Round to nearest integer, ties to even)
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("f32x4.nearest", 4 * w, round(f32_1));
-                // check("f64x2.nearest", 2 * w, round(f64_1));
+                    // Round to nearest integer, ties to even)
+                    check("f32x4.nearest", 4 * w, round(f32_1));
+                    check("f64x2.nearest", 2 * w, round(f64_1));
+                }
 
                 // Integer to single-precision floating point
                 check("f32x4.convert_i32x4_s", 8 * w, cast<float>(i32_1));
@@ -2142,8 +2149,11 @@ public:
 
                 // Integer to double-precision floating point
                 if (Halide::Internal::get_llvm_version() >= 130) {
-                    check("f64x2.convert_low_i32x4_s", 2 * w, cast<double>(i32_1));
-                    check("f64x2.convert_low_i32x4_u", 2 * w, cast<double>(u32_1));
+                    // TODO: we can't directly generate these instructions at LLVM top of tree,
+                    // but LLVM isn't generating the f64x2.convert_low_i32x4_s/u instructions;
+                    // investigation needed.
+                    // check("f64x2.convert_low_i32x4_s", 2 * w, cast<double>(i32_1));
+                    // check("f64x2.convert_low_i32x4_u", 2 * w, cast<double>(u32_1));
                 }
 
                 // Single-precision floating point to integer with saturation
