@@ -232,7 +232,7 @@ public:
                       const TfLiteDelegateParams *params) {
         if (interpreter_ != nullptr) {
             TF_LITE_KERNEL_LOG(context, "Init must not be called twice.");
-            return kTfLiteError;
+            return kTfLiteDelegateError;
         }
 
         std::vector<int> node_indices(params->nodes_to_replace->size);
@@ -314,13 +314,13 @@ public:
 
             default:
                 TF_LITE_KERNEL_LOG(context, "Op not supported: %d", op_type);
-                return kTfLiteError;
+                return kTfLiteDelegateError;
             }
             // clang-format on
 
             if (op == nullptr) {
                 TF_LITE_KERNEL_LOG(context, "Op factory returned null: %s", op_type);
-                return kTfLiteError;
+                return kTfLiteDelegateError;
             }
             ops.push_back(std::move(op));
         }
@@ -352,7 +352,7 @@ public:
 #else
         if (interpreter_ != nullptr) {
             TF_LITE_KERNEL_LOG(context, "Calling Prepare() multiple times");
-            return kTfLiteError;
+            return kTfLiteDelegateError;
         }
 #endif
 
@@ -360,12 +360,12 @@ public:
         return kTfLiteOk;
     }
 
-    // Eval() will be called at least once. It can expect that prepare() will
+    // Eval() will be called at least once. It can expect that Prepare() will
     // have been called for the current set of tensor shape(s).
     TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node) {
         if (interpreter_ == nullptr) {
             TF_LITE_KERNEL_LOG(context, "interpreter_ is not built in Eval");
-            return kTfLiteError;
+            return kTfLiteDelegateError;
         }
 
         // Copy the non-constant Tensor inputs. TODO: avoid this by sharing pointers.
@@ -450,7 +450,7 @@ private:
     static TfLiteStatus PrepareImpl(TfLiteContext *context, TfLiteNode *node) {
         if (node->user_data == nullptr) {
             LOG(ERROR) << "Delegate kernel was not initialized";
-            return kTfLiteError;
+            return kTfLiteDelegateError;
         }
         HannkDelegateKernel *self = (HannkDelegateKernel *)node->user_data;
         return self->Prepare(context, node);
