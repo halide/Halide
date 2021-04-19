@@ -26,14 +26,14 @@ void check(Expr test, Expr expected) {
     return check(test, expected, expected.type());
 }
 
-template <typename T>
+template<typename T>
 int64_t multiply_quantized(int64_t a, int64_t b, int q) {
     const int64_t min_t = std::numeric_limits<T>::min();
     const int64_t max_t = std::numeric_limits<T>::max();
     return std::min(std::max((a * b) >> q, min_t), max_t);
 }
 
-template <typename T>
+template<typename T>
 int64_t rounding_multiply_quantized(int64_t a, int64_t b, int q) {
     const int64_t min_t = std::numeric_limits<T>::min();
     const int64_t max_t = std::numeric_limits<T>::max();
