@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Build the generator to autotune. This script will be autotuning the
 # autoscheduler's cost model training pipeline, which is large enough
 # to be interesting.

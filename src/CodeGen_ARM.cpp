@@ -11,6 +11,7 @@
 #include "IRPrinter.h"
 #include "LLVM_Headers.h"
 #include "Simplify.h"
+#include "Substitute.h"
 #include "Util.h"
 
 namespace Halide {
@@ -727,6 +728,32 @@ void CodeGen_ARM::visit(const Cast *op) {
             t.bits() == op->value.type().bits() * 2) {
             if (const Call *absd = Call::as_intrinsic(op->value, {Call::absd})) {
                 value = call_overloaded_intrin(t, "widening_absd", absd->args);
+                return;
+            }
+        }
+
+        // If we didn't find a pattern, try rewriting the cast.
+        static const vector<pair<Expr, Expr>> cast_rewrites = {
+            // Double or triple narrowing saturating casts are better expressed as
+            // regular narrowing casts.
+            {u8_sat(wild_u32x_), u8_sat(u16_sat(wild_u32x_))},
+            {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
+            {i8_sat(wild_u32x_), i8_sat(u16_sat(wild_u32x_))},
+            {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
+            {u16_sat(wild_u64x_), u16_sat(u32_sat(wild_u64x_))},
+            {u16_sat(wild_i64x_), u16_sat(i32_sat(wild_i64x_))},
+            {i16_sat(wild_u64x_), i16_sat(u32_sat(wild_u64x_))},
+            {i16_sat(wild_i64x_), i16_sat(i32_sat(wild_i64x_))},
+            {u8_sat(wild_u64x_), u8_sat(u16_sat(u32_sat(wild_u64x_)))},
+            {u8_sat(wild_i64x_), u8_sat(i16_sat(i32_sat(wild_i64x_)))},
+            {i8_sat(wild_u64x_), i8_sat(u16_sat(u32_sat(wild_u64x_)))},
+            {i8_sat(wild_i64x_), i8_sat(i16_sat(i32_sat(wild_i64x_)))},
+        };
+        for (const auto &i : cast_rewrites) {
+            if (expr_match(i.first, op, matches)) {
+                Expr replacement = substitute("*", matches[0], with_lanes(i.second, op->type.lanes()));
+                debug(3) << "rewriting cast to: " << replacement << " from " << Expr(op) << "\n";
+                value = codegen(replacement);
                 return;
             }
         }

@@ -30,7 +30,7 @@ extern int halide_d3d12compute_run(void *user_context,
                                    int blocksX, int blocksY, int blocksZ,
                                    int threadsX, int threadsY, int threadsZ,
                                    int shared_mem_bytes,
-                                   halide_type_t arg_types[], void *args[], int8_t arg_is_buffer[]);
+                                   struct halide_type_t arg_types[], void *args[], int8_t arg_is_buffer[]);
 extern void halide_d3d12compute_finalize_kernels(void *user_context, void *state_ptr);
 // @}
 
@@ -78,7 +78,7 @@ struct halide_d3d12compute_command_queue;
 extern int halide_d3d12compute_acquire_context(void *user_context, struct halide_d3d12compute_device **device_ret,
                                                struct halide_d3d12compute_command_queue **queue_ret, bool create);
 
-/** This call balances each successfull halide_d3d12compute_acquire_context call.
+/** This call balances each successful halide_d3d12compute_acquire_context call.
  * If halide_d3d12compute_acquire_context is replaced, this routine must be replaced
  * as well.
  */

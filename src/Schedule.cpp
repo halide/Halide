@@ -225,8 +225,8 @@ struct FuncScheduleContents {
     Expr memoize_eviction_key;
 
     FuncScheduleContents()
-        : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()),
-          memory_type(MemoryType::Auto){};
+        : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()) {
+    }
 
     // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
     void mutate(IRMutator *mutator) {

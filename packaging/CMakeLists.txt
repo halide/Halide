@@ -77,7 +77,9 @@ else ()
     set(rbase $ORIGIN)
 endif ()
 
-set_target_properties(${exes} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
+if (NOT CMAKE_INSTALL_RPATH)
+    set_target_properties(${exes} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
+endif ()
 
 install(TARGETS ${exes}
         EXPORT Halide_Interfaces)

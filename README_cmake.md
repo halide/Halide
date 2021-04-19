@@ -377,7 +377,6 @@ targets (like tests and documentation) are built.
 | Option                 | Default              | Description                                                                              |
 | ---------------------- | -------------------- | ---------------------------------------------------------------------------------------- |
 | `WITH_TESTS`           | `ON`                 | Enable building unit and integration tests                                               |
-| `WITH_APPS`            | `ON`                 | Enable testing sample applications (run `ctest -L apps` to actually build and test them) |
 | `WITH_PYTHON_BINDINGS` | `ON` if Python found | Enable building Python 3.x bindings                                                      |
 | `WITH_DOCS`            | `OFF`                | Enable building the documentation via Doxygen                                            |
 | `WITH_UTILS`           | `ON`                 | Enable building various utilities including the trace visualizer                         |
