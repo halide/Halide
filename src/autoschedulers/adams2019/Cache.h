@@ -19,7 +19,7 @@ namespace Autoscheduler {
   1) Block (or tile) caching: handled by this file and Cache.cpp. If block caching is enabled
   the below data structure (Cache) is used to save the tilings that have been generated at prior
   passes of beam search. This allows for faster children generation when tiling is a scheduling
-  option. As noted below, this cache is a mapping of the form: Node -> vector_dim -> vector<tilings>.
+  option. As noted below, this cache is a mapping of the form: Node -> vector_dim -> vector<tiled LoopNest>.
 
   2) Featurization caching: handled within a LoopNest. The featurization of a LoopNest is used at
   multiple points in beam search (i.e. whenever the featurization of a child LoopNest is computed),
@@ -91,7 +91,7 @@ struct CachingOptions {
     }
 };
 
-// Node -> (vector_dim -> vector<tilings>)
+// Node -> (vector_dim -> vector<tiled LoopNest>)
 using BlockCache = NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>>;
 
 // Cache for memoizing possible tilings.
