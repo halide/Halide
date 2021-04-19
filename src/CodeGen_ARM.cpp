@@ -250,20 +250,20 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vmullu", "umull", UInt(64, 2), "widening_mul", {UInt(32, 2), UInt(32, 2)}},
 
     // SQADD, UQADD - Saturating add
-    {"llvm.sadd.sat", "llvm.sadd.sat", Int(8, 8), "saturating_add", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
-    {"llvm.uadd.sat", "llvm.uadd.sat", UInt(8, 8), "saturating_add", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::HalfWidth},
-    {"llvm.sadd.sat", "llvm.sadd.sat", Int(16, 4), "saturating_add", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth},
-    {"llvm.uadd.sat", "llvm.uadd.sat", UInt(16, 4), "saturating_add", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::HalfWidth},
-    {"llvm.sadd.sat", "llvm.sadd.sat", Int(32, 2), "saturating_add", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"llvm.uadd.sat", "llvm.uadd.sat", UInt(32, 2), "saturating_add", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::HalfWidth},
+    {"vqadds", "sqadd", Int(8, 8), "saturating_add", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
+    {"vqaddu", "uqadd", UInt(8, 8), "saturating_add", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::HalfWidth},
+    {"vqadds", "sqadd", Int(16, 4), "saturating_add", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth},
+    {"vqaddu", "uqadd", UInt(16, 4), "saturating_add", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::HalfWidth},
+    {"vqadds", "sqadd", Int(32, 2), "saturating_add", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
+    {"vqaddu", "uqadd", UInt(32, 2), "saturating_add", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::HalfWidth},
 
     // SQSUB, UQSUB - Saturating subtract
-    {"llvm.ssub.sat", "llvm.ssub.sat", Int(8, 8), "saturating_sub", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
-    {"llvm.usub.sat", "llvm.usub.sat", UInt(8, 8), "saturating_sub", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::HalfWidth},
-    {"llvm.ssub.sat", "llvm.ssub.sat", Int(16, 4), "saturating_sub", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth},
-    {"llvm.usub.sat", "llvm.usub.sat", UInt(16, 4), "saturating_sub", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::HalfWidth},
-    {"llvm.ssub.sat", "llvm.ssub.sat", Int(32, 2), "saturating_sub", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"llvm.usub.sat", "llvm.usub.sat", UInt(32, 2), "saturating_sub", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::HalfWidth},
+    {"vqsubs", "sqsub", Int(8, 8), "saturating_sub", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
+    {"vqsubu", "uqsub", UInt(8, 8), "saturating_sub", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::HalfWidth},
+    {"vqsubs", "sqsub", Int(16, 4), "saturating_sub", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth},
+    {"vqsubu", "uqsub", UInt(16, 4), "saturating_sub", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::HalfWidth},
+    {"vqsubs", "sqsub", Int(32, 2), "saturating_sub", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
+    {"vqsubu", "uqsub", UInt(32, 2), "saturating_sub", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::HalfWidth},
 
     // SHADD, UHADD - Halving add
     {"vhadds", "shadd", Int(8, 8), "halving_add", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
@@ -432,6 +432,16 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vrshiftu", "urshl", UInt(32, 2), "rounding_shift_left", {UInt(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
     {"vrshifts", "srshl", Int(64, 2), "rounding_shift_left", {Int(64, 2), Int(64, 2)}},
     {"vrshiftu", "urshl", UInt(64, 2), "rounding_shift_left", {UInt(64, 2), Int(64, 2)}},
+
+    // SSHL, USHL - Shift left (by signed vector)
+    {"vshifts", "sshl", Int(8, 8), "shift_left", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
+    {"vshiftu", "ushl", UInt(8, 8), "shift_left", {UInt(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
+    {"vshifts", "sshl", Int(16, 4), "shift_left", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth},
+    {"vshiftu", "ushl", UInt(16, 4), "shift_left", {UInt(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth},
+    {"vshifts", "sshl", Int(32, 2), "shift_left", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
+    {"vshiftu", "ushl", UInt(32, 2), "shift_left", {UInt(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
+    {"vshifts", "sshl", Int(64, 2), "shift_left", {Int(64, 2), Int(64, 2)}},
+    {"vshiftu", "ushl", UInt(64, 2), "shift_left", {UInt(64, 2), Int(64, 2)}},
 
     // SRSHR, URSHR - Rounding shift right (by immediate in [1, output bits])
     // LLVM wants these expressed as SRSHL by negative amounts.
@@ -1111,6 +1121,26 @@ void CodeGen_ARM::visit(const Call *op) {
         }
         value = codegen(rounding_shift_left(op->args[0], simplify(-b)));
         return;
+    } else if (op->is_intrinsic(Call::widening_shift_right) && op->args[1].type().is_int()) {
+        // We want these as left shifts with a negative b instead.
+        value = codegen(widening_shift_left(op->args[0], simplify(-op->args[1])));
+        return;
+    } else if (op->is_intrinsic(Call::shift_right) && op->args[1].type().is_int()) {
+        // We want these as left shifts with a negative b instead.
+        value = codegen(op->args[0] << simplify(-op->args[1]));
+        return;
+    }
+
+    if (op->type.is_vector()) {
+        vector<Expr> matches;
+        for (const Pattern &pattern : calls) {
+            if (expr_match(pattern.pattern, op, matches)) {
+                value = call_overloaded_intrin(op->type, pattern.intrin, matches);
+                if (value) {
+                    return;
+                }
+            }
+        }
     }
 
     CodeGen_Posix::visit(op);
@@ -1309,6 +1339,11 @@ string CodeGen_ARM::mattrs() const {
             separator = ",";
         } else if (target.has_feature(Target::SVE)) {
             arch_flags = "+sve";
+            separator = ",";
+        }
+
+        if (target.has_feature(Target::ARMv81a)) {
+            arch_flags += separator + "+v8.1a";
             separator = ",";
         }
 
