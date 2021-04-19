@@ -478,29 +478,6 @@ void CodeGen_X86::visit(const Cast *op) {
 }
 
 void CodeGen_X86::visit(const Call *op) {
-#if LLVM_VERSION < 110
-    if (op->is_intrinsic(Call::widening_mul) && (op->type.is_int() || op->type.is_uint())) {
-        // Widening integer multiply of non-power-of-two vector sizes is
-        // broken in older llvms for older x86:
-        // https://bugs.llvm.org/show_bug.cgi?id=44976
-        const int lanes = op->type.lanes();
-        if (!target.has_feature(Target::SSE41) &&
-            (lanes & (lanes - 1)) &&
-            (op->type.bits() >= 32) &&
-            !op->type.is_float()) {
-            // Any fancy shuffles to pad or slice into smaller vectors
-            // just gets undone by LLVM and retriggers the bug. Just
-            // scalarize.
-            vector<Expr> result;
-            for (int i = 0; i < lanes; i++) {
-                result.emplace_back(Shuffle::make_extract_element(Cast::make(op->type, op->args[0]), i) *
-                                    Shuffle::make_extract_element(Cast::make(op->type, op->args[1]), i));
-            }
-            codegen(Shuffle::make_concat(result));
-            return;
-        }
-    }
-#endif
     if (op->is_intrinsic(Call::mulhi_shr)) {
         internal_assert(op->args.size() == 3);
 

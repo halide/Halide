@@ -38,9 +38,13 @@ endif ()
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 # Require standard C++17
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED YES)
-set(CMAKE_CXX_EXTENSIONS NO)
+if(NOT CMAKE_CXX_STANDARD)
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    set(CMAKE_CXX_EXTENSIONS OFF)
+elseif(CMAKE_CXX_STANDARD LESS 17)
+    message(FATAL_ERROR "Halide requires C++17 or newer")
+endif()
 
 # Build Halide with ccache if the package is present
 option(Halide_CCACHE_BUILD "Set to ON for a ccache enabled build" OFF)

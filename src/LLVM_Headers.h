@@ -1,10 +1,10 @@
 #ifndef HALIDE_LLVM_HEADERS_H
 #define HALIDE_LLVM_HEADERS_H
 
-#if LLVM_VERSION >= 100
+#if LLVM_VERSION >= 110
 // We're good to go
 #else
-#error "Compiling Halide requires LLVM 10.0 or newer"
+#error "Compiling Halide requires LLVM 11.0 or newer"
 #endif
 
 // This seems to be required by some LLVM header, which is likely an LLVM bug.
@@ -107,19 +107,11 @@ auto iterator_to_pointer(T iter) -> decltype(&*std::declval<T>()) {
 }
 
 inline std::string get_llvm_function_name(const llvm::Function *f) {
-#if LLVM_VERSION >= 110
     return f->getName().str();
-#else
-    return f->getName();
-#endif
 }
 
 inline std::string get_llvm_function_name(const llvm::Function &f) {
-#if LLVM_VERSION >= 110
     return f.getName().str();
-#else
-    return f.getName();
-#endif
 }
 
 inline llvm::StructType *get_llvm_struct_type_by_name(llvm::Module *module, const char *name) {
