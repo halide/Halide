@@ -1131,18 +1131,6 @@ void CodeGen_ARM::visit(const Call *op) {
         return;
     }
 
-    if (op->type.is_vector()) {
-        vector<Expr> matches;
-        for (const Pattern &pattern : calls) {
-            if (expr_match(pattern.pattern, op, matches)) {
-                value = call_overloaded_intrin(op->type, pattern.intrin, matches);
-                if (value) {
-                    return;
-                }
-            }
-        }
-    }
-
     CodeGen_Posix::visit(op);
 }
 
