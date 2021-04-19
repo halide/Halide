@@ -65,8 +65,6 @@ Expr floor_log2(const Expr &x) {
 }
 
 Expr approx_log2(const Type &type, const Expr &x, int log2_precision) {
-    int precision = 1 << log2_precision;
-
     Expr floor_log2_x = floor_log2(x);
 
     // Use a cubic polynomial to interpolate the fractional part of the result.
@@ -94,14 +92,9 @@ Expr approx_log2(const Type &type, const Expr &x, int log2_precision) {
         i32(multiply_2x_high(i16(p3), frac3) + multiply_2x_high(i16(p2), frac2) + p0) +
         i32(multiply_2x_high(i16(p1), frac1)) + i32(frac1);
 
-    Expr result = saturating_add(
+    return saturating_add(
         cast(type, floor_log2_x) << log2_precision,
         cast(type, rounding_shift_right(poly, 15 - log2_precision)));
-
-    // For x <= 0, return any negative value. If count_leading_zeros returns
-    // x.type().bits(), which appears to be the case on every platform we
-    // target, both sides of this select are the same.
-    return select(x > 0, result, -precision);
 }
 
 Expr approx_log2(const Expr &x, int log2_precision) {
