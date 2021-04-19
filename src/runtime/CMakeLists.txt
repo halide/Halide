@@ -115,7 +115,7 @@ set(RUNTIME_LL
     x86_sse41
     )
 
-if (LLVM_PACKAGE_VERSION VERSION_GREATER_EQUAL 12.0)
+if (Halide_LLVM_VERSION VERSION_GREATER_EQUAL 12.0)
   # AMX instructions require LLVM 12 or newer
   list(APPEND RUNTIME_LL x86_amx)
 endif ()

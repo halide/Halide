@@ -16,6 +16,9 @@ find_package(Clang REQUIRED CONFIG HINTS "${LLVM_DIR}/../clang")
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
+# LLVM_PACKAGE_VERSION does not propagate to higher scopes
+set(Halide_LLVM_VERSION ${LLVM_PACKAGE_VERSION} CACHE INTERNAL "Provided LLVM version")
+
 if (LLVM_PACKAGE_VERSION VERSION_LESS 10.0)
     message(FATAL_ERROR "LLVM version must be 10.0 or newer")
 endif ()
