@@ -1476,22 +1476,22 @@ struct Intrin {
         // TODO: This is a dumb hack for not being able to cast pattern args in a generic
         // way or decay a pattern arg to an int.
         if (const int64_t *c = as_const_int(arg2)) {
-            if (intrin == Call::multiply_quantized) {
-                return multiply_quantized(arg0, arg1, (int)*c);
-            } else if (intrin == Call::rounding_multiply_quantized) {
-                return rounding_multiply_quantized(arg0, arg1, (int)*c);
+            if (intrin == Call::mul_shift_right) {
+                return mul_shift_right(arg0, arg1, (int)*c);
+            } else if (intrin == Call::rounding_mul_shift_right) {
+                return rounding_mul_shift_right(arg0, arg1, (int)*c);
             }
         } else if (const uint64_t *c = as_const_uint(arg2)) {
-            if (intrin == Call::multiply_quantized) {
-                return multiply_quantized(arg0, arg1, (int)*c);
-            } else if (intrin == Call::rounding_multiply_quantized) {
-                return rounding_multiply_quantized(arg0, arg1, (int)*c);
+            if (intrin == Call::mul_shift_right) {
+                return mul_shift_right(arg0, arg1, (int)*c);
+            } else if (intrin == Call::rounding_mul_shift_right) {
+                return rounding_mul_shift_right(arg0, arg1, (int)*c);
             }
         } else {
-            if (intrin == Call::multiply_quantized) {
-                return multiply_quantized(arg0, arg1, arg2);
-            } else if (intrin == Call::rounding_multiply_quantized) {
-                return rounding_multiply_quantized(arg0, arg1, arg2);
+            if (intrin == Call::mul_shift_right) {
+                return mul_shift_right(arg0, arg1, arg2);
+            } else if (intrin == Call::rounding_mul_shift_right) {
+                return rounding_mul_shift_right(arg0, arg1, arg2);
             }
         }
 
@@ -1573,12 +1573,12 @@ auto rounding_shift_right(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(
     return {Call::rounding_shift_right, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B, typename C>
-auto multiply_quantized(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
-    return {Call::multiply_quantized, pattern_arg(a), pattern_arg(b), pattern_arg(c)};
+auto mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
+    return {Call::mul_shift_right, pattern_arg(a), pattern_arg(b), pattern_arg(c)};
 }
 template<typename A, typename B, typename C>
-auto rounding_multiply_quantized(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
-    return {Call::rounding_multiply_quantized, pattern_arg(a), pattern_arg(b), pattern_arg(c)};
+auto rounding_mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
+    return {Call::rounding_mul_shift_right, pattern_arg(a), pattern_arg(b), pattern_arg(c)};
 }
 
 template<typename A>

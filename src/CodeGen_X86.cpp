@@ -493,9 +493,9 @@ void CodeGen_X86::visit(const Call *op) {
 
     // clang-format off
     static Pattern patterns[] = {
-        {"pmulh", multiply_quantized(wild_i16x_, wild_i16x_, 16)},
-        {"pmulh", multiply_quantized(wild_u16x_, wild_u16x_, 16)},
-        {"saturating_pmulhrs", rounding_multiply_quantized(wild_i16x_, wild_i16x_, 15)},
+        {"pmulh", mul_shift_right(wild_i16x_, wild_i16x_, 16)},
+        {"pmulh", mul_shift_right(wild_u16x_, wild_u16x_, 16)},
+        {"saturating_pmulhrs", rounding_mul_shift_right(wild_i16x_, wild_i16x_, 15)},
     };
     // clang-format on
 

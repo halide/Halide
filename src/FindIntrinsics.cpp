@@ -397,18 +397,18 @@ protected:
                 rewrite(rounding_shift_right(widening_add(x, y), 1), rounding_halving_add(x, y), is_x_same_int_or_uint) ||
                 rewrite(rounding_shift_right(widening_sub(x, y), 1), rounding_halving_sub(x, y), is_x_same_int_or_uint) ||
 
-                rewrite(max(min(shift_right(widening_mul(x, y), z), upper), lower), multiply_quantized(x, y, z), is_x_same_int_or_uint) ||
-                rewrite(max(min(rounding_shift_right(widening_mul(x, y), z), upper), lower), rounding_multiply_quantized(x, y, z), is_x_same_int_or_uint) ||
-                rewrite(min(shift_right(widening_mul(x, y), z), upper), multiply_quantized(x, y, z), is_x_same_uint) ||
-                rewrite(min(rounding_shift_right(widening_mul(x, y), z), upper), rounding_multiply_quantized(x, y, z), is_x_same_uint) ||
+                rewrite(max(min(shift_right(widening_mul(x, y), z), upper), lower), mul_shift_right(x, y, z), is_x_same_int_or_uint) ||
+                rewrite(max(min(rounding_shift_right(widening_mul(x, y), z), upper), lower), rounding_mul_shift_right(x, y, z), is_x_same_int_or_uint) ||
+                rewrite(min(shift_right(widening_mul(x, y), z), upper), mul_shift_right(x, y, z), is_x_same_uint) ||
+                rewrite(min(rounding_shift_right(widening_mul(x, y), z), upper), rounding_mul_shift_right(x, y, z), is_x_same_uint) ||
                 // We don't need saturation for the full upper half of a multiply.
                 // For signed integers, this is almost true, except for when x and y
                 // are both the most negative value. For these, we only need saturation
                 // at the upper bound.
-                rewrite(min(shift_right(widening_mul(x, y), c0), upper), multiply_quantized(x, y, c0), is_x_same_int && c0 >= bits - 1) ||
-                rewrite(min(rounding_shift_right(widening_mul(x, y), c0), upper), rounding_multiply_quantized(x, y, c0), is_x_same_int && c0 >= bits - 1) ||
-                rewrite(shift_right(widening_mul(x, y), c0), multiply_quantized(x, y, c0), is_x_same_int_or_uint && c0 >= bits) ||
-                rewrite(rounding_shift_right(widening_mul(x, y), c0), rounding_multiply_quantized(x, y, c0), is_x_same_int_or_uint && c0 >= bits) ||
+                rewrite(min(shift_right(widening_mul(x, y), c0), upper), mul_shift_right(x, y, c0), is_x_same_int && c0 >= bits - 1) ||
+                rewrite(min(rounding_shift_right(widening_mul(x, y), c0), upper), rounding_mul_shift_right(x, y, c0), is_x_same_int && c0 >= bits - 1) ||
+                rewrite(shift_right(widening_mul(x, y), c0), mul_shift_right(x, y, c0), is_x_same_int_or_uint && c0 >= bits) ||
+                rewrite(rounding_shift_right(widening_mul(x, y), c0), rounding_mul_shift_right(x, y, c0), is_x_same_int_or_uint && c0 >= bits) ||
 
                 // We can ignore the sign of the widening subtract for halving subtracts.
                 rewrite(shift_right(cast(op_type_wide, widening_sub(x, y)), 1), halving_sub(x, y), is_x_same_int_or_uint) ||
@@ -666,7 +666,7 @@ Expr lower_sorted_avg(const Expr &a, const Expr &b) {
     return a + ((b - a) >> 1);
 }
 
-Expr lower_multiply_quantized(const Expr &a, const Expr &b, const Expr &q) {
+Expr lower_mul_shift_right(const Expr &a, const Expr &b, const Expr &q) {
     internal_assert(a.type() == b.type());
     int full_q = a.type().bits();
     if (a.type().is_int()) {
@@ -676,23 +676,23 @@ Expr lower_multiply_quantized(const Expr &a, const Expr &b, const Expr &q) {
         // Try to rewrite this to a "full precision" multiply by multiplying
         // one of the operands and the denominator by a constant. We only do this
         // if it isn't already full precision. This avoids infinite loops despite
-        // "lowering" this to another multiply_quantized operation.
+        // "lowering" this to another mul_shift_right operation.
         Expr missing_q = full_q - q;
         internal_assert(missing_q.type().bits() == b.type().bits());
         Expr new_b = simplify(b << missing_q);
         if (is_const(new_b) && can_prove(new_b >> missing_q == b)) {
-            return multiply_quantized(a, new_b, full_q);
+            return mul_shift_right(a, new_b, full_q);
         }
         Expr new_a = simplify(a << missing_q);
         if (is_const(new_a) && can_prove(new_a >> missing_q == a)) {
-            return multiply_quantized(new_a, b, full_q);
+            return mul_shift_right(new_a, b, full_q);
         }
     }
 
     if (can_prove(q > a.type().bits())) {
         // If q is bigger than the narrow type, write it as an exact upper
         // half multiply, followed by an extra shift.
-        Expr result = multiply_quantized(a, b, a.type().bits());
+        Expr result = mul_shift_right(a, b, a.type().bits());
         result = result >> simplify(q - a.type().bits());
         return result;
     }
@@ -707,7 +707,7 @@ Expr lower_multiply_quantized(const Expr &a, const Expr &b, const Expr &q) {
     return result;
 }
 
-Expr lower_rounding_multiply_quantized(const Expr &a, const Expr &b, const Expr &q) {
+Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q) {
     internal_assert(a.type() == b.type());
     int full_q = a.type().bits();
     if (a.type().is_int()) {
@@ -716,17 +716,17 @@ Expr lower_rounding_multiply_quantized(const Expr &a, const Expr &b, const Expr 
     // Try to rewrite this to a "full precision" multiply by multiplying
     // one of the operands and the denominator by a constant. We only do this
     // if it isn't already full precision. This avoids infinite loops despite
-    // "lowering" this to another multiply_quantized operation.
+    // "lowering" this to another mul_shift_right operation.
     if (can_prove(q < full_q)) {
         Expr missing_q = full_q - q;
         internal_assert(missing_q.type().bits() == b.type().bits());
         Expr new_b = simplify(b << missing_q);
         if (is_const(new_b) && can_prove(new_b >> missing_q == b)) {
-            return rounding_multiply_quantized(a, new_b, full_q);
+            return rounding_mul_shift_right(a, new_b, full_q);
         }
         Expr new_a = simplify(a << missing_q);
         if (is_const(new_a) && can_prove(new_a >> missing_q == a)) {
-            return rounding_multiply_quantized(new_a, b, full_q);
+            return rounding_mul_shift_right(new_a, b, full_q);
         }
     }
 
@@ -780,12 +780,12 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::rounding_halving_sub)) {
         internal_assert(op->args.size() == 2);
         return lower_rounding_halving_sub(op->args[0], op->args[1]);
-    } else if (op->is_intrinsic(Call::rounding_multiply_quantized)) {
+    } else if (op->is_intrinsic(Call::rounding_mul_shift_right)) {
         internal_assert(op->args.size() == 3);
-        return lower_rounding_multiply_quantized(op->args[0], op->args[1], op->args[2]);
-    } else if (op->is_intrinsic(Call::multiply_quantized)) {
+        return lower_rounding_mul_shift_right(op->args[0], op->args[1], op->args[2]);
+    } else if (op->is_intrinsic(Call::mul_shift_right)) {
         internal_assert(op->args.size() == 3);
-        return lower_multiply_quantized(op->args[0], op->args[1], op->args[2]);
+        return lower_mul_shift_right(op->args[0], op->args[1], op->args[2]);
     } else if (op->is_intrinsic(Call::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         return lower_sorted_avg(op->args[0], op->args[1]);

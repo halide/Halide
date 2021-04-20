@@ -27,14 +27,14 @@ void check(Expr test, Expr expected) {
 }
 
 template<typename T>
-int64_t multiply_quantized(int64_t a, int64_t b, int q) {
+int64_t mul_shift_right(int64_t a, int64_t b, int q) {
     const int64_t min_t = std::numeric_limits<T>::min();
     const int64_t max_t = std::numeric_limits<T>::max();
     return std::min<int64_t>(std::max<int64_t>((a * b) >> q, min_t), max_t);
 }
 
 template<typename T>
-int64_t rounding_multiply_quantized(int64_t a, int64_t b, int q) {
+int64_t rounding_mul_shift_right(int64_t a, int64_t b, int q) {
     const int64_t min_t = std::numeric_limits<T>::min();
     const int64_t max_t = std::numeric_limits<T>::max();
     return std::min<int64_t>(std::max<int64_t>((a * b + (1ll << (q - 1))) >> q, min_t), max_t);
@@ -76,10 +76,10 @@ void check_intrinsics_over_range() {
             }
 
             std::pair<Expr, int64_t> multiply_intrinsics_with_reference_answer[] = {
-                {multiply_quantized(a_expr, b_expr, t_bits - 1), multiply_quantized<T>(a, b, t_bits - 1)},
-                {multiply_quantized(a_expr, b_expr, t_bits), multiply_quantized<T>(a, b, t_bits)},
-                {rounding_multiply_quantized(a_expr, b_expr, t_bits - 1), rounding_multiply_quantized<T>(a, b, t_bits - 1)},
-                {rounding_multiply_quantized(a_expr, b_expr, t_bits), rounding_multiply_quantized<T>(a, b, t_bits)},
+                {mul_shift_right(a_expr, b_expr, t_bits - 1), mul_shift_right<T>(a, b, t_bits - 1)},
+                {mul_shift_right(a_expr, b_expr, t_bits), mul_shift_right<T>(a, b, t_bits)},
+                {rounding_mul_shift_right(a_expr, b_expr, t_bits - 1), rounding_mul_shift_right<T>(a, b, t_bits - 1)},
+                {rounding_mul_shift_right(a_expr, b_expr, t_bits), rounding_mul_shift_right<T>(a, b, t_bits)},
             };
             for (const auto &p : multiply_intrinsics_with_reference_answer) {
                 if (a < std::numeric_limits<int>::min() || a > std::numeric_limits<int>::max() ||
@@ -275,19 +275,19 @@ int main(int argc, char **argv) {
     check((u16(u8x) - u16(u8y) * 7) * 5, widening_mul(u8x, u8(5)) - widening_mul(u8y, u8(35)));
 
     // Quantized multiplication.
-    check(i8_sat(i16(i8x) * i16(i8y) >> 7), multiply_quantized(i8x, i8y, 7));
-    check(i8(min(i16(i8x) * i16(i8y) >> 7, 127)), multiply_quantized(i8x, i8y, 7));
-    check(i8_sat(i16(i8x) * i16(i8y) >> 8), multiply_quantized(i8x, i8y, 8));
-    check(u8_sat(u16(u8x) * u16(u8y) >> 8), multiply_quantized(u8x, u8y, 8));
-    check(i8(i16(i8x) * i16(i8y) >> 8), multiply_quantized(i8x, i8y, 8));
-    check(u8(u16(u8x) * u16(u8y) >> 8), multiply_quantized(u8x, u8y, 8));
+    check(i8_sat(i16(i8x) * i16(i8y) >> 7), mul_shift_right(i8x, i8y, 7));
+    check(i8(min(i16(i8x) * i16(i8y) >> 7, 127)), mul_shift_right(i8x, i8y, 7));
+    check(i8_sat(i16(i8x) * i16(i8y) >> 8), mul_shift_right(i8x, i8y, 8));
+    check(u8_sat(u16(u8x) * u16(u8y) >> 8), mul_shift_right(u8x, u8y, 8));
+    check(i8(i16(i8x) * i16(i8y) >> 8), mul_shift_right(i8x, i8y, 8));
+    check(u8(u16(u8x) * u16(u8y) >> 8), mul_shift_right(u8x, u8y, 8));
 
-    check(i8_sat(rounding_shift_right(i16(i8x) * i16(i8y), 7)), rounding_multiply_quantized(i8x, i8y, 7));
-    check(i8(min(rounding_shift_right(i16(i8x) * i16(i8y), 7), 127)), rounding_multiply_quantized(i8x, i8y, 7));
-    check(i8_sat(rounding_shift_right(i16(i8x) * i16(i8y), 8)), rounding_multiply_quantized(i8x, i8y, 8));
-    check(u8_sat(rounding_shift_right(u16(u8x) * u16(u8y), 8)), rounding_multiply_quantized(u8x, u8y, 8));
-    check(i8(rounding_shift_right(i16(i8x) * i16(i8y), 8)), rounding_multiply_quantized(i8x, i8y, 8));
-    check(u8(rounding_shift_right(u16(u8x) * u16(u8y), 8)), rounding_multiply_quantized(u8x, u8y, 8));
+    check(i8_sat(rounding_shift_right(i16(i8x) * i16(i8y), 7)), rounding_mul_shift_right(i8x, i8y, 7));
+    check(i8(min(rounding_shift_right(i16(i8x) * i16(i8y), 7), 127)), rounding_mul_shift_right(i8x, i8y, 7));
+    check(i8_sat(rounding_shift_right(i16(i8x) * i16(i8y), 8)), rounding_mul_shift_right(i8x, i8y, 8));
+    check(u8_sat(rounding_shift_right(u16(u8x) * u16(u8y), 8)), rounding_mul_shift_right(u8x, u8y, 8));
+    check(i8(rounding_shift_right(i16(i8x) * i16(i8y), 8)), rounding_mul_shift_right(i8x, i8y, 8));
+    check(u8(rounding_shift_right(u16(u8x) * u16(u8y), 8)), rounding_mul_shift_right(u8x, u8y, 8));
 
     check_intrinsics_over_range<int8_t>();
     check_intrinsics_over_range<uint8_t>();

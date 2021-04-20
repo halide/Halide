@@ -102,12 +102,12 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
     casts.emplace_back("rounding_sub_narrow", u32(rounding_shift_right(wild_u64x_ - wild_u64x_, 32)));
 
     // QDMULH - Saturating doubling multiply keep high half
-    calls.emplace_back("qdmulh", multiply_quantized(wild_i16x_, wild_i16x_, 15));
-    calls.emplace_back("qdmulh", multiply_quantized(wild_i32x_, wild_i32x_, 31));
+    calls.emplace_back("qdmulh", mul_shift_right(wild_i16x_, wild_i16x_, 15));
+    calls.emplace_back("qdmulh", mul_shift_right(wild_i32x_, wild_i32x_, 31));
 
     // QRDMULH - Saturating doubling multiply keep high half with rounding
-    calls.emplace_back("qrdmulh", rounding_multiply_quantized(wild_i16x_, wild_i16x_, 15));
-    calls.emplace_back("qrdmulh", rounding_multiply_quantized(wild_i32x_, wild_i32x_, 31));
+    calls.emplace_back("qrdmulh", rounding_mul_shift_right(wild_i16x_, wild_i16x_, 15));
+    calls.emplace_back("qrdmulh", rounding_mul_shift_right(wild_i32x_, wild_i32x_, 31));
 
     // RSHRN - Rounding shift right narrow (by immediate in [1, output bits])
     casts.emplace_back("rounding_shift_right_narrow", i8(rounding_shift_right(wild_i16x_, wild_u16_)));

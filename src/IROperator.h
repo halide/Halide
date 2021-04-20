@@ -374,11 +374,11 @@ Expr halving_sub(Expr a, Expr b);
 Expr rounding_halving_sub(Expr a, Expr b);
 
 /** Compute saturating_narrow(shift_right(widening_mul(a, b), q)) */
-Expr multiply_quantized(Expr a, Expr b, Expr q);
-Expr multiply_quantized(Expr a, Expr b, int q);
+Expr mul_shift_right(Expr a, Expr b, Expr q);
+Expr mul_shift_right(Expr a, Expr b, int q);
 /** Compute saturating_narrow(rounding_shift_right(widening_mul(a, b), q)) */
-Expr rounding_multiply_quantized(Expr a, Expr b, Expr q);
-Expr rounding_multiply_quantized(Expr a, Expr b, int q);
+Expr rounding_mul_shift_right(Expr a, Expr b, Expr q);
+Expr rounding_mul_shift_right(Expr a, Expr b, int q);
 
 }  // namespace Internal
 

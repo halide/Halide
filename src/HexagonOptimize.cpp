@@ -935,18 +935,18 @@ private:
 
         static const vector<Pattern> calls = {
             // Multiply keep high half.
-            {"halide.hexagon.trunc_mpy.vw.vw", multiply_quantized(wild_i32x, wild_i32x, 32)},
+            {"halide.hexagon.trunc_mpy.vw.vw", mul_shift_right(wild_i32x, wild_i32x, 32)},
 
             // Scalar multiply keep high half, with multiplication by 2.
-            {"halide.hexagon.trunc_satw_mpy2.vh.h", multiply_quantized(wild_i16x, wild_i16, 15)},
-            {"halide.hexagon.trunc_satw_mpy2.vh.h", multiply_quantized(wild_i16, wild_i16x, 15), Pattern::SwapOps01},
-            {"halide.hexagon.trunc_satdw_mpy2.vw.vw", multiply_quantized(wild_i32x, wild_i32x, 31)},
+            {"halide.hexagon.trunc_satw_mpy2.vh.h", mul_shift_right(wild_i16x, wild_i16, 15)},
+            {"halide.hexagon.trunc_satw_mpy2.vh.h", mul_shift_right(wild_i16, wild_i16x, 15), Pattern::SwapOps01},
+            {"halide.hexagon.trunc_satdw_mpy2.vw.vw", mul_shift_right(wild_i32x, wild_i32x, 31)},
 
             // Scalar and vector multiply keep high half, with multiplication by 2, and rounding.
-            {"halide.hexagon.trunc_satw_mpy2_rnd.vh.h", rounding_multiply_quantized(wild_i16x, wild_i16, 15)},
-            {"halide.hexagon.trunc_satw_mpy2_rnd.vh.h", rounding_multiply_quantized(wild_i16, wild_i16x, 15), Pattern::SwapOps01},
-            {"halide.hexagon.trunc_satw_mpy2_rnd.vh.vh", rounding_multiply_quantized(wild_i16x, wild_i16x, 15)},
-            {"halide.hexagon.trunc_satdw_mpy2_rnd.vw.vw", rounding_multiply_quantized(wild_i32x, wild_i32x, 31)},
+            {"halide.hexagon.trunc_satw_mpy2_rnd.vh.h", rounding_mul_shift_right(wild_i16x, wild_i16, 15)},
+            {"halide.hexagon.trunc_satw_mpy2_rnd.vh.h", rounding_mul_shift_right(wild_i16, wild_i16x, 15), Pattern::SwapOps01},
+            {"halide.hexagon.trunc_satw_mpy2_rnd.vh.vh", rounding_mul_shift_right(wild_i16x, wild_i16x, 15)},
+            {"halide.hexagon.trunc_satdw_mpy2_rnd.vw.vw", rounding_mul_shift_right(wild_i32x, wild_i32x, 31)},
 
             // Vector by scalar widening multiplies. These need to happen before the ones below, to avoid
             // using vector versions when scalar versions would suffice.
@@ -1001,8 +1001,8 @@ private:
                 return div_mod.first;
             }
             return div_mod.second;
-        } else if (op->is_intrinsic(Call::multiply_quantized) ||
-                   op->is_intrinsic(Call::rounding_multiply_quantized)) {
+        } else if (op->is_intrinsic(Call::mul_shift_right) ||
+                   op->is_intrinsic(Call::rounding_mul_shift_right)) {
             // Lower these now, we might be able to use other patterns on the result.
             return mutate(lower_intrinsic(op));
         } else {

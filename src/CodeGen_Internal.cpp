@@ -311,7 +311,7 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
         // Multiply and keep the high half of the
         // result, and then apply the shift.
         Expr mult = make_const(num.type(), multiplier);
-        num = multiply_quantized(num, mult, shift + num.type().bits());
+        num = mul_shift_right(num, mult, shift + num.type().bits());
 
         // Maybe flip the bits back again.
         num = cast(a.type(), num ^ sign);
@@ -343,7 +343,7 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
 
         // Widen, multiply, narrow
         Expr mult = make_const(num.type(), multiplier);
-        Expr val = multiply_quantized(num, mult, (method == 1 ? shift : 0) + num.type().bits());
+        Expr val = mul_shift_right(num, mult, (method == 1 ? shift : 0) + num.type().bits());
 
         if (method == 2) {
             // Average with original numerator.

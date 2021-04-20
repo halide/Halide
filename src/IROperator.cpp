@@ -1216,40 +1216,40 @@ Expr rounding_halving_sub(Expr a, Expr b) {
     return Call::make(result_type, Call::rounding_halving_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
-Expr multiply_quantized(Expr a, Expr b, Expr q) {
-    user_assert(a.defined() && b.defined() && q.defined()) << "multiply_quantized of undefined Expr\n";
+Expr mul_shift_right(Expr a, Expr b, Expr q) {
+    user_assert(a.defined() && b.defined() && q.defined()) << "mul_shift_right of undefined Expr\n";
     match_types(a, b);
     match_lanes(a, q);
     match_bits(a, q);
     // q might have widened the bits or lanes of a.
     match_types(a, b);
     Type result_type = a.type();
-    return Call::make(result_type, Call::multiply_quantized, {std::move(a), std::move(b), std::move(q)}, Call::PureIntrinsic);
+    return Call::make(result_type, Call::mul_shift_right, {std::move(a), std::move(b), std::move(q)}, Call::PureIntrinsic);
 }
 
-Expr multiply_quantized(Expr a, Expr b, int q) {
-    user_assert(a.defined() && b.defined()) << "multiply_quantized of undefined Expr\n";
+Expr mul_shift_right(Expr a, Expr b, int q) {
+    user_assert(a.defined() && b.defined()) << "mul_shift_right of undefined Expr\n";
     Type qt = a.type().with_code(halide_type_uint);
     check_representable(qt, q);
-    return multiply_quantized(std::move(a), std::move(b), make_const(qt, q));
+    return mul_shift_right(std::move(a), std::move(b), make_const(qt, q));
 }
 
-Expr rounding_multiply_quantized(Expr a, Expr b, Expr q) {
-    user_assert(a.defined() && b.defined() && q.defined()) << "rounding_multiply_quantized of undefined Expr\n";
+Expr rounding_mul_shift_right(Expr a, Expr b, Expr q) {
+    user_assert(a.defined() && b.defined() && q.defined()) << "rounding_mul_shift_right of undefined Expr\n";
     match_types(a, b);
     match_lanes(a, q);
     match_bits(a, q);
     // q might have widened the bits or lanes of a.
     match_types(a, b);
     Type result_type = a.type();
-    return Call::make(result_type, Call::rounding_multiply_quantized, {std::move(a), std::move(b), std::move(q)}, Call::PureIntrinsic);
+    return Call::make(result_type, Call::rounding_mul_shift_right, {std::move(a), std::move(b), std::move(q)}, Call::PureIntrinsic);
 }
 
-Expr rounding_multiply_quantized(Expr a, Expr b, int q) {
-    user_assert(a.defined() && b.defined()) << "rounding_multiply_quantized of undefined Expr\n";
+Expr rounding_mul_shift_right(Expr a, Expr b, int q) {
+    user_assert(a.defined() && b.defined()) << "rounding_mul_shift_right of undefined Expr\n";
     Type qt = a.type().with_code(halide_type_uint);
     check_representable(qt, q);
-    return rounding_multiply_quantized(std::move(a), std::move(b), make_const(qt, q));
+    return rounding_mul_shift_right(std::move(a), std::move(b), make_const(qt, q));
 }
 
 }  // namespace Internal
