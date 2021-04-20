@@ -145,7 +145,7 @@ add_library(Halide_initmod OBJECT)
 # Note: ensure that these flags match the flags in the Makefile.
 # Note: this always uses Clang-from-LLVM for compilation, so none of these flags should need conditionalization.
 set(RUNTIME_CXX_FLAGS
-    -O3
+    -Os
     -ffreestanding
     -fno-blocks
     -fno-exceptions
@@ -220,7 +220,7 @@ foreach (i IN LISTS RUNTIME_CPP)
         set(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${i}.cpp")
 
         set(RUNTIME_DEFINES -DCOMPILING_HALIDE_RUNTIME -DBITS_${j})
-        set(RUNTIME_DEFINES_debug -g -DDEBUG_RUNTIME ${RUNTIME_DEFINES})
+        set(RUNTIME_DEFINES_debug -DDEBUG_RUNTIME ${RUNTIME_DEFINES})
 
         foreach (SUFFIX IN ITEMS "" "_debug")
             set(basename "initmod.${i}_${j}${SUFFIX}")
