@@ -3,6 +3,9 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    printf("[SKIP] Avoid test hang due to https://reviews.llvm.org/D100099 [https://github.com/halide/Halide/issues/5926].\n");
+    return 0;
+
     for (int dst_lanes : {1, 3}) {
         for (int reduce_factor : {2, 3, 4}) {
             std::vector<Type> types =
