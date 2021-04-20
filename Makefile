@@ -1027,35 +1027,35 @@ $(BUILD_DIR)/initmod.%_32.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_ok
 
 $(BUILD_DIR)/initmod.windows_%_x86_32_debug.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
-	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_WIN_X86_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*_x86.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_x86_32_debug.d
+	$(CLANG) $(CXX_WARNING_FLAGS) -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_WIN_X86_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*_x86.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_x86_32_debug.d
 
 $(BUILD_DIR)/initmod.windows_%_x86_64_debug.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
-	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WIN_X86_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*_x86.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_x86_64_debug.d
+	$(CLANG) $(CXX_WARNING_FLAGS) -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WIN_X86_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*_x86.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_x86_64_debug.d
 
 $(BUILD_DIR)/initmod.windows_%_arm_32_debug.ll: $(SRC_DIR)/runtime/windows_%_arm.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
-	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_WIN_ARM_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*_arm.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_arm_32_debug.d
+	$(CLANG) $(CXX_WARNING_FLAGS) -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_WIN_ARM_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*_arm.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_arm_32_debug.d
 
 $(BUILD_DIR)/initmod.windows_%_arm_64_debug.ll: $(SRC_DIR)/runtime/windows_%_arm.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
-	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WIN_ARM_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*_arm.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_arm_64_debug.d
+	$(CLANG) $(CXX_WARNING_FLAGS) -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WIN_ARM_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*_arm.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_arm_64_debug.d
 
 $(BUILD_DIR)/initmod.windows_%_64_debug.ll: $(SRC_DIR)/runtime/windows_%.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
-	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WIN_GENERIC_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_64_debug.d
+	$(CLANG) $(CXX_WARNING_FLAGS) -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_WIN_GENERIC_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_64_debug.d
 
 $(BUILD_DIR)/initmod.%_64_debug.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
-	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m64 -target  $(RUNTIME_TRIPLE_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64_debug.d
+	$(CLANG) $(CXX_WARNING_FLAGS) -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m64 -target  $(RUNTIME_TRIPLE_64) -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64_debug.d
 
 $(BUILD_DIR)/initmod.windows_%_32_debug.ll: $(SRC_DIR)/runtime/windows_%.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
-	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_WIN_X86_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_32_debug.d
+	$(CLANG) $(CXX_WARNING_FLAGS) -DDEBUG_RUNTIME $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_WIN_X86_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/windows_$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.windows_$*_32_debug.d
 
 $(BUILD_DIR)/initmod.%_32_debug.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
-	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -O3 $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32_debug.d
+	$(CLANG) $(CXX_WARNING_FLAGS) -DDEBUG_RUNTIME -O3 $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32_debug.d
 
 $(BUILD_DIR)/initmod.%_ll.ll: $(SRC_DIR)/runtime/%.ll
 	@mkdir -p $(@D)
