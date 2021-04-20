@@ -1269,6 +1269,7 @@ public:
             Expr shift_8 = (i8_2 % 8) - 4;
             Expr shift_16 = (i16_2 % 16) - 8;
             Expr shift_32 = (i32_2 % 32) - 16;
+            Expr shift_64 = (i64_2 % 64) - 32;
             Expr round_s8 = (i8(1) >> min(shift_8, 0)) / 2;
             Expr round_s16 = (i16(1) >> min(shift_16, 0)) / 2;
             Expr round_s32 = (i32(1) >> min(shift_32, 0)) / 2;
@@ -1342,6 +1343,22 @@ public:
             check(arm32 ? "vshl.i16" : "shl", 4 * w, u16_1 * 16);
             check(arm32 ? "vshl.i32" : "shl", 2 * w, u32_1 * 16);
             check(arm32 ? "vshl.i64" : "shl", 2 * w, u64_1 * 16);
+            check(arm32 ? "vshl.s8" : "sshl", 8 * w, i8_1 << shift_8);
+            check(arm32 ? "vshl.s8" : "sshl", 8 * w, i8_1 >> shift_8);
+            check(arm32 ? "vshl.s16" : "sshl", 4 * w, i16_1 << shift_16);
+            check(arm32 ? "vshl.s16" : "sshl", 4 * w, i16_1 >> shift_16);
+            check(arm32 ? "vshl.s32" : "sshl", 2 * w, i32_1 << shift_32);
+            check(arm32 ? "vshl.s32" : "sshl", 2 * w, i32_1 >> shift_32);
+            check(arm32 ? "vshl.s64" : "sshl", 2 * w, i64_1 << shift_64);
+            check(arm32 ? "vshl.s64" : "sshl", 2 * w, i64_1 >> shift_64);
+            check(arm32 ? "vshl.u8" : "ushl", 8 * w, u8_1 << shift_8);
+            check(arm32 ? "vshl.u8" : "ushl", 8 * w, u8_1 >> shift_8);
+            check(arm32 ? "vshl.u16" : "ushl", 4 * w, u16_1 << shift_16);
+            check(arm32 ? "vshl.u16" : "ushl", 4 * w, u16_1 >> shift_16);
+            check(arm32 ? "vshl.u32" : "ushl", 2 * w, u32_1 << shift_32);
+            check(arm32 ? "vshl.u32" : "ushl", 2 * w, u32_1 >> shift_32);
+            check(arm32 ? "vshl.u64" : "ushl", 2 * w, u64_1 << shift_64);
+            check(arm32 ? "vshl.u64" : "ushl", 2 * w, u64_1 >> shift_64);
 
             // VSHLL    I       -       Shift Left Long
             check(arm32 ? "vshll.s8" : "sshll", 8 * w, i16(i8_1) * 16);
