@@ -480,5 +480,15 @@ int main(int argc, char **argv) {
         Pipeline(output).auto_schedule(target, params);
     }
 
+    if (true) {
+        ImageParam im(Int(32), 1);
+        ImageParam scalar(Int(32), 0);
+
+        Func f("f");
+        f() = im(clamp(scalar(), 0, 42)) + 42;
+
+        Pipeline(f).auto_schedule(target, params);
+    }
+
     return 0;
 }

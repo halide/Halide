@@ -905,6 +905,45 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             // TODO: peephole the boundary condition call pattern instead of assuming the user used the builtin
             node.is_boundary_condition = node.is_pointwise && starts_with(node.func.name(), "repeat_edge");
 
+            // TODO(abadams|zvookin): This is probably not the way to solve this.
+            // The goal here is to illustrate the bug with a test and show that it
+            // is caused by this particualr behavior of bounds inference.
+            
+            // A mutator to remove zero dimension (scalar) image loads as
+            // Halide's bounds inference leaves these in as values and
+            // the analysis in this file cannot handle them.
+            class RemoveScalarImageLoads : public IRMutator {
+                using IRMutator::visit;
+
+                bool MatchScalarImageFunc(const Function &f) {
+                    auto values = f.definition().values();
+                    if (values.size() != 1) {
+                        return false;
+                    }
+                    const Call *im_call = values[0].as<Call>();
+                    if (im_call == nullptr) {
+                        return false;
+                    }
+                    if (im_call->call_type != Call::Image ||
+                        im_call->args.empty()) {
+                        return false;
+                    }
+                    return true;
+                }
+
+                Expr visit(const Call *op) override {
+                  if ((op->call_type == Call::Image && op->args.empty()) ||
+                      (op->call_type == Call::Halide && op->func.defined() && MatchScalarImageFunc(Function(op->func)))) {
+                    // TODO(abadams|zvookin): Even if this solution is used, it is perhaps not valid to pass the image into a PureExtern call.
+                    return Call::make(op->type, op->name, op->args, Call::PureExtern, op->func, op->value_index, op->image, op->param);
+                  } else {
+                    return IRMutator::visit(op);
+                  }
+                }
+            } remove_scalar_image_loads;
+
+            exprs = remove_scalar_image_loads.mutate(exprs);
+            
             auto boxes = boxes_required(exprs, stage_scope_with_symbolic_rvar_bounds, func_value_bounds);
             for (auto &p : boxes) {
                 auto it = env.find(p.first);
