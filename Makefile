@@ -1850,7 +1850,7 @@ test_internal: $(BIN_DIR)/test_internal
 
 correctness_%: $(BIN_DIR)/correctness_%
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$<
+	cd $(TMP_DIR) ; timeout 15s $(CURDIR)/$<
 	@-echo
 
 correctness_opencl_runtime: $(BIN_DIR)/$(TARGET)/correctness_opencl_runtime
