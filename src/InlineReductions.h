@@ -4,6 +4,7 @@
 #include <string>
 
 #include "Expr.h"
+#include "Func.h"
 #include "RDom.h"
 #include "Tuple.h"
 
@@ -11,6 +12,8 @@
  * Defines some inline reductions: sum, product, minimum, maximum.
  */
 namespace Halide {
+
+class Func;
 
 /** An inline reduction. This is suitable for convolution-type
  * operations - the reduction will be computed in the innermost loop
@@ -69,6 +72,28 @@ Tuple argmin(Expr, const std::string &s = "argmin");
 Tuple argmax(const RDom &, Expr, const std::string &s = "argmax");
 Tuple argmin(const RDom &, Expr, const std::string &s = "argmin");
 // @}
+
+/** Inline reductions create an anonymous helper Func to do the
+ * work. The variants below instead take a named Func object to use,
+ * so that it is no longer anonymous and can be scheduled
+ * (e.g. unrolled across the reduction domain). The Func passed must
+ * not have any existing definition. */
+//@{
+Expr sum(Expr, Func);
+Expr saturating_sum(Expr, Func);
+Expr product(Expr, Func);
+Expr maximum(Expr, Func);
+Expr minimum(Expr, Func);
+Expr sum(const RDom &, Expr, Func);
+Expr saturating_sum(const RDom &r, Expr e, Func);
+Expr product(const RDom &, Expr, Func);
+Expr maximum(const RDom &, Expr, Func);
+Expr minimum(const RDom &, Expr, Func);
+Tuple argmax(Expr, Func);
+Tuple argmin(Expr, Func);
+Tuple argmax(const RDom &, Expr, Func);
+Tuple argmin(const RDom &, Expr, Func);
+//@}
 
 }  // namespace Halide
 
