@@ -382,6 +382,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"arm_dot_prod", Target::ARMDotProd},
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
     {"rvv", Target::RVV},
+    {"armv81a", Target::ARMv81a},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -966,8 +967,9 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 13> intersection_features = {{
+    const std::array<Feature, 14> intersection_features = {{
         ARMv7s,
+        ARMv81a,
         AVX,
         AVX2,
         AVX512,
