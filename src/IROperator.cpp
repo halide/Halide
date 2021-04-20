@@ -1237,7 +1237,7 @@ Expr mul_shift_right(Expr a, Expr b, int q) {
 
 Expr rounding_mul_shift_right(Expr a, Expr b, Expr q) {
     user_assert(a.defined() && b.defined() && q.defined()) << "rounding_mul_shift_right of undefined Expr\n";
-    user_assert(q.type().is_uint()) << "mul_shift_right shift must be unsigned\n";
+    user_assert(q.type().is_uint()) << "rounding_mul_shift_right shift must be unsigned\n";
     match_types(a, b);
     match_lanes(a, q);
     match_bits(a, q);
