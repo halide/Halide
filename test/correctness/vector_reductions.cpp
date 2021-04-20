@@ -3,23 +3,20 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    printf("[SKIP] Avoid test hang due to https://reviews.llvm.org/D100099 [https://github.com/halide/Halide/issues/5926].\n");
-    return 0;
+    // printf("[SKIP] Avoid test hang due to https://reviews.llvm.org/D100099 [https://github.com/halide/Halide/issues/5926].\n");
+    // return 0;
 
-    for (int dst_lanes : {1, 3}) {
-        for (int reduce_factor : {2, 3, 4}) {
-            std::vector<Type> types =
-                {UInt(8), Int(8), UInt(16), Int(16), UInt(32), Int(32),
-                 UInt(64), Int(64), Float(16), Float(32), Float(64)};
+    int dst_lanes = 1; {
+        int reduce_factor = 3 {
             const int src_lanes = dst_lanes * reduce_factor;
-            for (Type src_type : types) {
-                for (int widen_factor : {1, 2, 4}) {
+            Type src_type = UInt(8); {
+                int widen_factor = 1; {
                     Type dst_type = src_type.with_bits(src_type.bits() * widen_factor);
                     if (std::find(types.begin(), types.end(), dst_type) == types.end()) {
                         continue;
                     }
 
-                    for (int op = 0; op < 7; op++) {
+                    int op = 1; {
                         if (dst_type == Float(16) && reduce_factor > 2) {
                             // Reductions of float16s is really not very associative
                             continue;
