@@ -1454,9 +1454,6 @@ public:
             check(arm32 ? "vsubw.u16" : "usubw", 4 * w, u32_1 - u16_1);
             check(arm32 ? "vsubw.s32" : "ssubw", 2 * w, i64_1 - i32_1);
             check(arm32 ? "vsubw.u32" : "usubw", 2 * w, u64_1 - u32_1);
-
-            // VST1     X       -       Store single-element structures
-            check(arm32 ? "vst1.8" : "st", 8 * w, i8_1);
         }
 
         // VST2 X       -       Store two-element structures
