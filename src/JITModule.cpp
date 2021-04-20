@@ -237,12 +237,12 @@ JITModule::JITModule(const Module &m, const LoweredFunc &fn,
     std::vector<JITModule> deps_with_runtime = dependencies;
     std::vector<JITModule> shared_runtime = JITSharedRuntime::get(llvm_module.get(), m.target());
     deps_with_runtime.insert(deps_with_runtime.end(), shared_runtime.begin(), shared_runtime.end());
-    compile_module(std::move(llvm_module), fn.name, m.target(), deps_with_runtime);
+    compile_module(std::move(llvm_module), fn.name, m.target(), CodeGenOpt::Aggressive, deps_with_runtime);
     // If -time-passes is in HL_LLVM_ARGS, this will print llvm passes time statstics otherwise its no-op.
     llvm::reportAndResetTimings();
 }
 
-void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target,
+void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &function_name, const Target &target, int opt_level,
                                const std::vector<JITModule> &dependencies,
                                const std::vector<std::string> &requested_exports) {
 
@@ -269,7 +269,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     HalideJITMemoryManager *memory_manager = new HalideJITMemoryManager(dependencies);
     engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(memory_manager));
 
-    engine_builder.setOptLevel(CodeGenOpt::Aggressive);
+    engine_builder.setOptLevel((CodeGenOpt::Level)opt_level);
     if (!mcpu.empty()) {
         engine_builder.setMCPU(mcpu);
     }
@@ -369,7 +369,7 @@ JITModule JITModule::make_trampolines_module(const Target &target_arg,
     std::unique_ptr<llvm::Module> llvm_module = CodeGen_LLVM::compile_trampolines(
         target, result.jit_module->context, suffix, extern_signatures);
 
-    result.compile_module(std::move(llvm_module), /*function_name*/ "", target, deps, requested_exports);
+    result.compile_module(std::move(llvm_module), /*function_name*/ "", target, CodeGenOpt::Aggressive, deps, requested_exports);
 
     return result;
 }
@@ -759,7 +759,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
 
         std::vector<std::string> halide_exports(halide_exports_unique.begin(), halide_exports_unique.end());
 
-        runtime.compile_module(std::move(module), "", target, deps, halide_exports);
+        runtime.compile_module(std::move(module), "", target, CodeGenOpt::Less, deps, halide_exports);
 
         if (runtime_kind == MainShared) {
             runtime_internal_handlers.custom_print =
