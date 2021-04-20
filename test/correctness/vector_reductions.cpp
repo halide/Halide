@@ -3,124 +3,51 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    // printf("[SKIP] Avoid test hang due to https://reviews.llvm.org/D100099 [https://github.com/halide/Halide/issues/5926].\n");
-    // return 0;
+    int dst_lanes = 1;
+    int reduce_factor = 3 const int src_lanes = dst_lanes * reduce_factor;
+    Type src_type = UInt(8);
+    int widen_factor = 1;
+    Type dst_type = src_type.with_bits(src_type.bits() * widen_factor);
 
-    int dst_lanes = 1; {
-        int reduce_factor = 3 {
-            const int src_lanes = dst_lanes * reduce_factor;
-            Type src_type = UInt(8); {
-                int widen_factor = 1; {
-                    Type dst_type = src_type.with_bits(src_type.bits() * widen_factor);
-                    if (std::find(types.begin(), types.end(), dst_type) == types.end()) {
-                        continue;
-                    }
+    Var x, xo, xi;
+    RDom r(0, reduce_factor);
+    RVar rx;
+    Func in;
+    if (src_type.is_float()) {
+        in(x) = cast(src_type, random_float());
+    } else {
+        in(x) = cast(src_type, random_int());
+    }
+    in.compute_root();
 
-                    int op = 1; {
-                        if (dst_type == Float(16) && reduce_factor > 2) {
-                            // Reductions of float16s is really not very associative
-                            continue;
-                        }
+    Expr rhs = cast(dst_type, in(x * reduce_factor + r));
+    Expr rhs2 = cast(dst_type, in(x * reduce_factor + r + 32));
 
-                        Var x, xo, xi;
-                        RDom r(0, reduce_factor);
-                        RVar rx;
-                        Func in;
-                        if (src_type.is_float()) {
-                            in(x) = cast(src_type, random_float());
-                        } else {
-                            in(x) = cast(src_type, random_int());
-                        }
-                        in.compute_root();
+    Func f, ref("ref");
+    f(x) *= rhs;
+    ref(x) *= rhs;
 
-                        Expr rhs = cast(dst_type, in(x * reduce_factor + r));
-                        Expr rhs2 = cast(dst_type, in(x * reduce_factor + r + 32));
+    f.compute_root()
+        .update()
+        .split(x, xo, xi, dst_lanes)
+        .fuse(r, xi, rx)
+        .atomic()
+        .vectorize(rx);
+    ref.compute_root();
 
-                        if (op == 4 || op == 5) {
-                            // Test cases 4 and 5 in the switch
-                            // statement below require a Bool rhs.
-                            rhs = rhs > cast(rhs.type(), 5);
-                        }
+    RDom c(0, 128);
+    Expr err = cast<double>(maximum(absd(f(c), ref(c))));
 
-                        Func f, ref("ref");
-                        switch (op) {
-                        case 0:
-                            f(x) += rhs;
-                            ref(x) += rhs;
-                            break;
-                        case 1:
-                            f(x) *= rhs;
-                            ref(x) *= rhs;
-                            break;
-                        case 2:
-                            // Widening min/max reductions are not interesting
-                            if (widen_factor != 1) {
-                                continue;
-                            }
-                            f(x) = rhs.type().min();
-                            ref(x) = rhs.type().min();
-                            f(x) = max(f(x), rhs);
-                            ref(x) = max(f(x), rhs);
-                            break;
-                        case 3:
-                            if (widen_factor != 1) {
-                                continue;
-                            }
-                            f(x) = rhs.type().max();
-                            ref(x) = rhs.type().max();
-                            f(x) = min(f(x), rhs);
-                            ref(x) = min(f(x), rhs);
-                            break;
-                        case 4:
-                            if (widen_factor != 1) {
-                                continue;
-                            }
-                            f(x) = cast<bool>(false);
-                            ref(x) = cast<bool>(false);
-                            f(x) = f(x) || rhs;
-                            ref(x) = f(x) || rhs;
-                            break;
-                        case 5:
-                            if (widen_factor != 1) {
-                                continue;
-                            }
-                            f(x) = cast<bool>(true);
-                            ref(x) = cast<bool>(true);
-                            f(x) = f(x) && rhs;
-                            ref(x) = f(x) && rhs;
-                            break;
-                        case 6:
-                            // Dot product
-                            f(x) += rhs * rhs2;
-                            ref(x) += rhs * rhs2;
-                        }
+    double e = evaluate<double>(err);
 
-                        f.compute_root()
-                            .update()
-                            .split(x, xo, xi, dst_lanes)
-                            .fuse(r, xi, rx)
-                            .atomic()
-                            .vectorize(rx);
-                        ref.compute_root();
-
-                        RDom c(0, 128);
-                        Expr err = cast<double>(maximum(absd(f(c), ref(c))));
-
-                        double e = evaluate<double>(err);
-
-                        if (e > 1e-3) {
-                            std::cerr
-                                << "Horizontal reduction produced different output when vectorized!\n"
-                                << "Maximum error = " << e << "\n"
-                                << "Reducing from " << src_type.with_lanes(src_lanes)
-                                << " to " << dst_type.with_lanes(dst_lanes) << "\n"
-                                << "RHS: " << f.update_value() << "\n";
-                            exit(-1);
-                        }
-                    }
-                }
-            }
-        }
+    if (e > 1e-3) {
+        std::cerr
+            << "Horizontal reduction produced different output when vectorized!\n"
+            << "Maximum error = " << e << "\n"
+            << "Reducing from " << src_type.with_lanes(src_lanes)
+            << " to " << dst_type.with_lanes(dst_lanes) << "\n"
+            << "RHS: " << f.update_value() << "\n";
+        exit(-1);
     }
 
     printf("Success!\n");
