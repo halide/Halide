@@ -3,11 +3,12 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    int dst_lanes = 1;
-    int reduce_factor = 3 const int src_lanes = dst_lanes * reduce_factor;
-    Type src_type = UInt(8);
-    int widen_factor = 1;
-    Type dst_type = src_type.with_bits(src_type.bits() * widen_factor);
+    const int dst_lanes = 1;
+    const int reduce_factor = 3;
+    const int src_lanes = dst_lanes * reduce_factor;
+    const Type src_type = UInt(8);
+    const int widen_factor = 1;
+    const Type dst_type = src_type.with_bits(src_type.bits() * widen_factor);
 
     Var x, xo, xi;
     RDom r(0, reduce_factor);
