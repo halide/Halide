@@ -683,7 +683,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // Setting DisableUnrollLoops = true can occasionally generate PTX code that
     // will fail at runtime under some conditions (e.g. correctness_gpu_dynamic_shared
     // using NVidia driver 460.x).
-    b.DisableUnrollLoops = false;  // !do_loop_opt;
+    // b.DisableUnrollLoops = false;  // !do_loop_opt;
+    b.DisableUnrollLoops = !do_loop_opt;
 
     target_machine->adjustPassManager(b);
 
