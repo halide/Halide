@@ -1473,26 +1473,10 @@ struct Intrin {
         }
 
         Expr arg2 = std::get<const_min(2, sizeof...(Args) - 1)>(args).make(state, type_hint);
-        // TODO: This is a dumb hack for not being able to cast pattern args in a generic
-        // way or decay a pattern arg to an int.
-        if (const int64_t *c = as_const_int(arg2)) {
-            if (intrin == Call::mul_shift_right) {
-                return mul_shift_right(arg0, arg1, (int)*c);
-            } else if (intrin == Call::rounding_mul_shift_right) {
-                return rounding_mul_shift_right(arg0, arg1, (int)*c);
-            }
-        } else if (const uint64_t *c = as_const_uint(arg2)) {
-            if (intrin == Call::mul_shift_right) {
-                return mul_shift_right(arg0, arg1, (int)*c);
-            } else if (intrin == Call::rounding_mul_shift_right) {
-                return rounding_mul_shift_right(arg0, arg1, (int)*c);
-            }
-        } else {
-            if (intrin == Call::mul_shift_right) {
-                return mul_shift_right(arg0, arg1, arg2);
-            } else if (intrin == Call::rounding_mul_shift_right) {
-                return rounding_mul_shift_right(arg0, arg1, arg2);
-            }
+        if (intrin == Call::mul_shift_right) {
+            return mul_shift_right(arg0, arg1, arg2);
+        } else if (intrin == Call::rounding_mul_shift_right) {
+            return rounding_mul_shift_right(arg0, arg1, arg2);
         }
 
         internal_error << "Unhandled intrinsic in IRMatcher: " << intrin;
