@@ -502,6 +502,7 @@ void CodeGen_X86::visit(const Call *op) {
         // case.
         Value *cond = builder->CreateICmpEQ(args[0], ConstantInt::get(arg_type[0], 0));
         value = builder->CreateSelect(cond, ConstantInt::get(arg_type[0], op->args[0].type().bits()), call);
+        return;
     }
 
     CodeGen_Posix::visit(op);
