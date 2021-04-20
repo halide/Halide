@@ -14,11 +14,7 @@ int main(int argc, char **argv) {
     RDom r(0, reduce_factor);
     RVar rx;
     Func in;
-    if (src_type.is_float()) {
-        in(x) = cast(src_type, random_float());
-    } else {
-        in(x) = cast(src_type, random_int());
-    }
+    in(x) = cast(src_type, random_int());
     in.compute_root();
 
     Expr rhs = cast(dst_type, in(x * reduce_factor + r));
