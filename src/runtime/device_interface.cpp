@@ -53,14 +53,8 @@ WEAK int copy_to_host_already_locked(void *user_context, struct halide_buffer_t 
     return result;
 }
 
-}  // namespace Internal
-}  // namespace Runtime
-}  // namespace Halide
-
-namespace {
-
-ALWAYS_INLINE int debug_log_and_validate_buf(void *user_context, const halide_buffer_t *buf_arg,
-                                             const char *routine) {
+WEAK int debug_log_and_validate_buf(void *user_context, const halide_buffer_t *buf_arg,
+                                    const char *routine) {
     if (buf_arg == nullptr) {
         return halide_error_buffer_is_null(user_context, routine);
     }
@@ -97,7 +91,9 @@ ALWAYS_INLINE int debug_log_and_validate_buf(void *user_context, const halide_bu
     return 0;
 }
 
-}  // namespace
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 extern "C" {
 
