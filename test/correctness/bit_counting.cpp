@@ -25,7 +25,7 @@ T local_count_trailing_zeros(T v) {
             return b;
         }
     }
-    return 0;
+    return bits;
 }
 
 template<typename T>
@@ -37,7 +37,7 @@ T local_count_leading_zeros(T v) {
             return b;
         }
     }
-    return 0;
+    return bits;
 }
 
 template<typename T>

@@ -486,6 +486,22 @@ void CodeGen_X86::visit(const Call *op) {
         internal_assert(shift != nullptr) << "Third argument to mulhi_shr intrinsic must be an unsigned integer immediate.\n";
         value = codegen(cast(op->type, p_wide >> op->type.bits()) >> shift->value);
         return;
+    } else if (op->is_intrinsic(Call::count_leading_zeros) ||
+               op->is_intrinsic(Call::count_trailing_zeros)) {
+        internal_assert(op->args.size() == 1);
+        std::vector<llvm::Type *> arg_type(1);
+        arg_type[0] = llvm_type_of(op->args[0].type());
+        llvm::Function *fn = llvm::Intrinsic::getDeclaration(module.get(),
+                                                             (op->is_intrinsic(Call::count_leading_zeros)) ? llvm::Intrinsic::ctlz : llvm::Intrinsic::cttz,
+                                                             arg_type);
+        llvm::Value *is_const_zero_undef = llvm::ConstantInt::getFalse(*context);
+        llvm::Value *args[2] = {codegen(op->args[0]), is_const_zero_undef};
+        CallInst *call = builder->CreateCall(fn, args);
+
+        // On x86, count_leading_zeros of 0 is undefined behavior, fix up this
+        // case.
+        Value *cond = builder->CreateICmpEQ(args[0], ConstantInt::get(arg_type[0], 0));
+        value = builder->CreateSelect(cond, ConstantInt::get(arg_type[0], op->args[0].type().bits()), call);
     }
 
     CodeGen_Posix::visit(op);
