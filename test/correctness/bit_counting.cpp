@@ -94,11 +94,6 @@ int test_bit_counting(const Target &target) {
 
     Buffer<T> ctlz_result = ctlz_test.realize({256});
     for (int i = 0; i < 256; ++i) {
-        if (input(i) == 0) {
-            // results are undefined for zero input
-            continue;
-        }
-
         if (ctlz_result(i) != local_count_leading_zeros(input(i))) {
             std::string bits_string = as_bits(input(i));
             printf("Ctlz of %u [0b%s] returned %d (should be %d)\n",
@@ -114,11 +109,6 @@ int test_bit_counting(const Target &target) {
 
     Buffer<T> cttz_result = cttz_test.realize({256});
     for (int i = 0; i < 256; ++i) {
-        if (input(i) == 0) {
-            // results are undefined for zero input
-            continue;
-        }
-
         if (cttz_result(i) != local_count_trailing_zeros(input(i))) {
             std::string bits_string = as_bits(input(i));
             printf("Cttz of %u [0b%s] returned %d (should be %d)\n",
