@@ -1000,7 +1000,7 @@ private:
     }
 
     Expr match_load_store_predicate(Expr pred) {
-        static const std::vector<Expr> patterns = {
+        const std::vector<Expr> patterns = {
             ramp(wild_i32, 1, pred.type().lanes()) <= bc(wild_i32, pred.type().lanes())};
 
         vector<Expr> matches;
