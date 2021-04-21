@@ -4,28 +4,6 @@ namespace hannk {
 
 namespace {
 
-bool is_input(const Op *op, TensorPtr t) {
-    for (int i = 0; i < op->input_count(); ++i) {
-        if (op->input(i) == t) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool is_output(const Op *op, TensorPtr t) {
-    for (int i = 0; i < op->output_count(); ++i) {
-        if (op->output(i) == t) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool is_used(const Op *op, TensorPtr t) {
-    return is_input(op, t) || is_output(op, t);
-}
-
 template <typename T>
 T *cast_op(Op *x) {
     class Caster : public OpVisitor {

@@ -1039,6 +1039,7 @@ void ReshapeOp::execute() {
             new_shape.clear();
         }
     }
+    std::reverse(new_shape.begin(), new_shape.end());
 
     // One of the shape values can be -1, meaning "calculate it for me".
     int output_elements = 1;
@@ -1060,8 +1061,7 @@ void ReshapeOp::execute() {
 
     CHECK((int)new_shape.size() == output_buf.dimensions());
     for (int d = 0; d < output_buf.dimensions(); d++) {
-        CHECK(new_shape.at(new_shape.size() - d - 1) == output_buf.dim(d).extent()) << new_shape
-                                                                                    << "d " << d << " expect " << new_shape.at(d) << " actual " << output_buf.dim(d).extent();
+        CHECK(new_shape.at(d) == output_buf.dim(d).extent());
     }
 
     CHECK(input_buf.number_of_elements() == output_buf.number_of_elements());
