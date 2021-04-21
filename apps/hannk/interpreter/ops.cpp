@@ -307,12 +307,13 @@ void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q, int in1s
 
     const auto out_range = get_output_range(activation, outq);
 
-    elementwise_loop_nest<2>([&](HalideBuffer<const uint8_t> in1_buf, HalideBuffer<const uint8_t> in2_buf, HalideBuffer<uint8_t> out_buf) {
+    auto add_rank2 = [&](HalideBuffer<const uint8_t> in1_buf, HalideBuffer<const uint8_t> in2_buf, HalideBuffer<uint8_t> out_buf) {
         CHECK(0 == add_uint8_uint8(in1_buf, in1_zero, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
                                    in2_buf, in2_zero, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
                                    out_zero, out_mul_and_shift.multiplier, -out_mul_and_shift.shift,
                                    out_range.min, out_range.max, out_buf));
-    }, in1, in2, out);
+    };
+    elementwise_loop_nest<2>(add_rank2, in1, in2, out);
 }
 
 void mul(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
@@ -339,11 +340,12 @@ void mul(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
 
     const auto out_range = get_output_range(activation, outq);
 
-    elementwise_loop_nest<2>([&](HalideBuffer<const uint8_t> in1_buf, HalideBuffer<const uint8_t> in2_buf, HalideBuffer<uint8_t> out_buf) {
+    auto mul_rank2 = [&](HalideBuffer<const uint8_t> in1_buf, HalideBuffer<const uint8_t> in2_buf, HalideBuffer<uint8_t> out_buf) {
         CHECK(0 == mul_uint8_uint8_uint8(in1_buf, in1_zero, in2_buf, in2_zero,
                                          out_zero, mul_and_shift.multiplier, -mul_and_shift.shift,
                                          out_range.min, out_range.max, out_buf));
-    }, in1, in2, out);
+    };
+    elementwise_loop_nest<2>(mul_rank2, in1, in2, out);
 }
 
 void requantize(const HalideBuffer<const uint8_t> &in, const QuantizationInfo &inq,
@@ -795,9 +797,10 @@ void L2NormalizationOp::execute() {
         assert(out->quantization().scale.at(0) == 1.0f / 128.0f);
         assert(out->quantization().zero.at(0) == 128);
 
-        loop_nest<2>([&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
+        auto l2_normalization_rank2 = [&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
             CHECK(0 == l2_normalization_uint8(in_buf, input_zero, out_buf));
-        }, in_buf, out_buf);
+        };
+        loop_nest<2>(l2_normalization_rank2, in_buf, out_buf);
     } else {
         LOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
@@ -1135,11 +1138,12 @@ void SoftmaxOp::execute() {
         assert(in_mul_and_shift.shift <= 0);
         assert(output_mul_and_shift.shift <= 0);
 
-        loop_nest<2>([&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
+        auto softmax_rank2 = [&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
             CHECK(0 == softmax_uint8(in_buf, in_mul_and_shift.multiplier, -in_mul_and_shift.shift,
                                      output_zero, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
                                      out_buf));
-        }, in_buf, out_buf);
+        };
+        loop_nest<2>(softmax_rank2, in_buf, out_buf);
     } else {
         LOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
@@ -1282,9 +1286,10 @@ void UnaryOp::execute() {
             assert(out->quantization().scale.at(0) == 1.0f / 256.0f);
             assert(out->quantization().zero.at(0) == 0);
 
-            elementwise_loop_nest<1>([&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
+            auto logistic_rank1 = [&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
                 CHECK(0 == logistic_uint8(in_buf, input_zero, in_mul_and_shift.multiplier, -in_mul_and_shift.shift, out_buf));
-            }, in_buf, out_buf);
+            };
+            elementwise_loop_nest<1>(logistic_rank1, in_buf, out_buf);
             return;
         } else if (op_ == Tanh) {
             // It's a easier to compute 2^(2*x*(log2(e))) than e^(2*x).
@@ -1296,9 +1301,10 @@ void UnaryOp::execute() {
             assert(out->quantization().scale.at(0) == 1.0f / 128.0f);
             assert(out->quantization().zero.at(0) == 128);
 
-            elementwise_loop_nest<1>([&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
+            auto tanh_rank1 = [&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
                 CHECK(0 == tanh_uint8(in_buf, input_zero, in_mul_and_shift.multiplier, -in_mul_and_shift.shift, out_buf));
-            }, in_buf, out_buf);
+            };
+            elementwise_loop_nest<1>(tanh_rank1, in_buf, out_buf);
             return;
         } else if (op_ == Negate) {
             add(in_buf, in->quantization(), -1, in_buf, in->quantization(), 0, out_buf, out->quantization());
