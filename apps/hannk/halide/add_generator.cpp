@@ -9,12 +9,12 @@ namespace hannk {
 class Add : public Generator<Add> {
 public:
     // Input buffers and quantization parameters.
-    Input<Buffer<uint8_t>> input1_{"input1", 4};
+    Input<Buffer<uint8_t>> input1_{"input1", 2};
     Input<uint8_t> input1_zero_{"input1_zero"};
     Input<int32_t> input1_multiplier_{"input1_multiplier"};
     Input<uint32_t> input1_shift_{"input1_shift"};
 
-    Input<Buffer<uint8_t>> input2_{"input2", 4};
+    Input<Buffer<uint8_t>> input2_{"input2", 2};
     Input<uint8_t> input2_zero_{"input2_zero"};
     Input<int32_t> input2_multiplier_{"input2_multiplier"};
     Input<uint32_t> input2_shift_{"input2_shift"};
@@ -26,13 +26,13 @@ public:
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
-    Output<Buffer<uint8_t>> output_{"output", 4};
+    Output<Buffer<uint8_t>> output_{"output", 2};
 
     void generate() {
-        Var c("c"), x("x"), y("y"), b("b");
+        Var c("c"), x("x");
 
-        Expr input1 = input1_(c, x, y, b);
-        Expr input2 = input2_(c, x, y, b);
+        Expr input1 = input1_(c, x);
+        Expr input2 = input2_(c, x);
 
         input1 = i32(i16(input1) - i16(input1_zero_)) << 20;
         input2 = i32(i16(input2) - i16(input2_zero_)) << 20;
@@ -43,7 +43,7 @@ public:
         Expr output = multiply_2x_high(input1 + input2, output_multiplier_);
         output = i16_sat(rounding_shift_right(output, output_shift_));
         output = u8_sat(saturating_add(output, output_zero_));
-        output_(c, x, y, b) = clamp(output, output_min_, output_max_);
+        output_(c, x) = clamp(output, output_min_, output_max_);
 
         // Schedule.
         const int vector_size = natural_vector_size<uint8_t>();
