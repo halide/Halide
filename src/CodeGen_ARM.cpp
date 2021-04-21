@@ -52,7 +52,6 @@ protected:
     // @{
     void visit(const Cast *) override;
     void visit(const Sub *) override;
-    void visit(const Mul *) override;
     void visit(const Min *) override;
     void visit(const Max *) override;
     void visit(const Store *) override;
@@ -774,48 +773,6 @@ void CodeGen_ARM::visit(const Cast *op) {
     CodeGen_Posix::visit(op);
 }
 
-void CodeGen_ARM::visit(const Mul *op) {
-    if (neon_intrinsics_disabled()) {
-        CodeGen_Posix::visit(op);
-        return;
-    }
-
-    // We only have peephole optimizations for int vectors for now
-    if (op->type.is_scalar() || op->type.is_float()) {
-        CodeGen_Posix::visit(op);
-        return;
-    }
-
-    vector<Expr> matches;
-
-    int shift_amount = 0;
-    if (is_const_power_of_two_integer(op->b, &shift_amount)) {
-        // Let LLVM handle these.
-        CodeGen_Posix::visit(op);
-        return;
-    }
-
-    // Vector multiplies by 3, 5, 7, 9 should do shift-and-add or
-    // shift-and-sub instead to reduce register pressure (the
-    // shift is an immediate)
-    // TODO: Verify this is still good codegen.
-    if (is_const(op->b, 3)) {
-        value = codegen((op->a << 1) + op->a);
-        return;
-    } else if (is_const(op->b, 5)) {
-        value = codegen((op->a << 2) + op->a);
-        return;
-    } else if (is_const(op->b, 7)) {
-        value = codegen((op->a << 3) - op->a);
-        return;
-    } else if (is_const(op->b, 9)) {
-        value = codegen((op->a << 3) + op->a);
-        return;
-    }
-
-    CodeGen_Posix::visit(op);
-}
-
 void CodeGen_ARM::visit(const Sub *op) {
     if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
@@ -824,9 +781,9 @@ void CodeGen_ARM::visit(const Sub *op) {
 
     if (op->type.is_vector()) {
         vector<Expr> matches;
-        for (size_t i = 0; i < negations.size(); i++) {
-            if (expr_match(negations[i].pattern, op, matches)) {
-                value = call_overloaded_intrin(op->type, negations[i].intrin, matches);
+        for (const auto &i : negations) {
+            if (expr_match(i.pattern, op, matches)) {
+                value = call_overloaded_intrin(op->type, i.intrin, matches);
                 return;
             }
         }

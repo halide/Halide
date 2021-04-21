@@ -72,13 +72,6 @@ protected:
     void visit(const Sub *) override;
     void visit(const Cast *) override;
     void visit(const Call *) override;
-    void visit(const GT *) override;
-    void visit(const LT *) override;
-    void visit(const LE *) override;
-    void visit(const GE *) override;
-    void visit(const EQ *) override;
-    void visit(const NE *) override;
-    void visit(const Select *) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &init) override;
     // @}
 };
@@ -222,8 +215,7 @@ void CodeGen_X86::init_module() {
 }
 
 // i32(i16_a)*i32(i16_b) +/- i32(i16_c)*i32(i16_d) can be done by
-// interleaving a, c, and b, d, and then using pmaddwd. We
-// recognize it here, and implement it in the initial module.
+// interleaving a, c, and b, d, and then using pmaddwd.
 bool should_use_pmaddwd(const Expr &a, const Expr &b, vector<Expr> &result) {
     Type t = a.type();
     internal_assert(b.type() == t);
@@ -297,111 +289,6 @@ void CodeGen_X86::visit(const Sub *op) {
     CodeGen_Posix::visit(op);
 }
 
-void CodeGen_X86::visit(const GT *op) {
-    Type t = op->a.type();
-
-    if (t.is_vector() &&
-        upgrade_type_for_arithmetic(t) == t) {
-        // Non-native vector widths get legalized poorly by llvm. We
-        // split it up ourselves.
-
-        int slice_size = vector_lanes_for_slice(t);
-
-        Value *a = codegen(op->a), *b = codegen(op->b);
-        vector<Value *> result;
-        for (int i = 0; i < op->type.lanes(); i += slice_size) {
-            Value *sa = slice_vector(a, i, slice_size);
-            Value *sb = slice_vector(b, i, slice_size);
-            Value *slice_value;
-            if (t.is_float()) {
-                slice_value = builder->CreateFCmpOGT(sa, sb);
-            } else if (t.is_int()) {
-                slice_value = builder->CreateICmpSGT(sa, sb);
-            } else {
-                slice_value = builder->CreateICmpUGT(sa, sb);
-            }
-            result.push_back(slice_value);
-        }
-
-        value = concat_vectors(result);
-        value = slice_vector(value, 0, t.lanes());
-    } else {
-        CodeGen_Posix::visit(op);
-    }
-}
-
-void CodeGen_X86::visit(const EQ *op) {
-    Type t = op->a.type();
-
-    if (t.is_vector() &&
-        upgrade_type_for_arithmetic(t) == t) {
-        // Non-native vector widths get legalized poorly by llvm. We
-        // split it up ourselves.
-
-        int slice_size = vector_lanes_for_slice(t);
-
-        Value *a = codegen(op->a), *b = codegen(op->b);
-        vector<Value *> result;
-        for (int i = 0; i < op->type.lanes(); i += slice_size) {
-            Value *sa = slice_vector(a, i, slice_size);
-            Value *sb = slice_vector(b, i, slice_size);
-            Value *slice_value;
-            if (t.is_float()) {
-                slice_value = builder->CreateFCmpOEQ(sa, sb);
-            } else {
-                slice_value = builder->CreateICmpEQ(sa, sb);
-            }
-            result.push_back(slice_value);
-        }
-
-        value = concat_vectors(result);
-        value = slice_vector(value, 0, t.lanes());
-    } else {
-        CodeGen_Posix::visit(op);
-    }
-}
-
-void CodeGen_X86::visit(const LT *op) {
-    codegen(op->b > op->a);
-}
-
-void CodeGen_X86::visit(const LE *op) {
-    codegen(!(op->a > op->b));
-}
-
-void CodeGen_X86::visit(const GE *op) {
-    codegen(!(op->b > op->a));
-}
-
-void CodeGen_X86::visit(const NE *op) {
-    codegen(!(op->a == op->b));
-}
-
-void CodeGen_X86::visit(const Select *op) {
-    if (op->condition.type().is_vector()) {
-        // LLVM handles selects on vector conditions much better at native width
-        Value *cond = codegen(op->condition);
-        Value *true_val = codegen(op->true_value);
-        Value *false_val = codegen(op->false_value);
-        Type t = op->true_value.type();
-        int slice_size = vector_lanes_for_slice(t);
-
-        vector<Value *> result;
-        for (int i = 0; i < t.lanes(); i += slice_size) {
-            Value *st = slice_vector(true_val, i, slice_size);
-            Value *sf = slice_vector(false_val, i, slice_size);
-            Value *sc = slice_vector(cond, i, slice_size);
-            Value *slice_value = builder->CreateSelect(sc, st, sf);
-            result.push_back(slice_value);
-        }
-
-        value = concat_vectors(result);
-        value = slice_vector(value, 0, t.lanes());
-    } else {
-        CodeGen_Posix::visit(op);
-    }
-}
-
 void CodeGen_X86::visit(const Cast *op) {
 
     if (!op->type.is_vector()) {
@@ -431,10 +318,9 @@ void CodeGen_X86::visit(const Cast *op) {
     // clang-format on
 
     vector<Expr> matches;
-    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
-        const Pattern &pattern = patterns[i];
-        if (expr_match(pattern.pattern, op, matches)) {
-            value = call_overloaded_intrin(op->type, pattern.intrin, matches);
+    for (const Pattern &p : patterns) {
+        if (expr_match(p.pattern, op, matches)) {
+            value = call_overloaded_intrin(op->type, p.intrin, matches);
             if (value) {
                 return;
             }
@@ -450,28 +336,6 @@ void CodeGen_X86::visit(const Cast *op) {
             value = codegen(simplify(Mul::make(Cast::make(op->type, mul->args[0]), Cast::make(op->type, mul->args[1]))));
             return;
         }
-    }
-
-    // Workaround for https://llvm.org/bugs/show_bug.cgi?id=24512
-    // LLVM uses a numerically unstable method for vector
-    // uint32->float conversion before AVX.
-    if (op->value.type().element_of() == UInt(32) &&
-        op->type.is_float() &&
-        op->type.is_vector() &&
-        !target.has_feature(Target::AVX)) {
-        Type signed_type = Int(32, op->type.lanes());
-
-        // Convert the top 31 bits to float using the signed version
-        Expr top_bits = cast(signed_type, op->value >> 1);
-        top_bits = cast(op->type, top_bits);
-
-        // Convert the bottom bit
-        Expr bottom_bit = cast(signed_type, op->value % 2);
-        bottom_bit = cast(op->type, bottom_bit);
-
-        // Recombine as floats
-        codegen(top_bits + top_bits + bottom_bit);
-        return;
     }
 
     CodeGen_Posix::visit(op);
