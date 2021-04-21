@@ -49,17 +49,22 @@ int main(int argc, char **argv) {
     local_min(x, y) = minimum(input_val);
 
     // Try a separable form of minimum too, so we test two reductions
-    // in one pipeline.
+    // in one pipeline. Use a user-provided Func for one of them and
+    // unroll the reduction domain.
     Func min_x, min_y;
     RDom kx(-1, 3), ky(-1, 3);
+    Func min_y_inner;
     min_x(x, y) = minimum(input(x + kx, y));
-    min_y(x, y) = minimum(min_x(x, y + ky));
+    min_y(x, y) = minimum(min_x(x, y + ky), min_y_inner);
 
     // Vectorize them all, to make life more interesting.
     local_product.vectorize(x, 4);
     local_max.vectorize(x, 4);
     local_min.vectorize(x, 4);
     min_y.vectorize(x, 4);
+
+    // This would fail if the provided Func went unused.
+    min_y_inner.update().unroll(ky);
 
     Buffer<float> prod_im = local_product.realize({10, 10});
     Buffer<float> max_im = local_max.realize({10, 10});
@@ -111,9 +116,18 @@ int main(int argc, char **argv) {
     Buffer<float> input_3d = lambda(x, y, z, x * 100.0f + y * 10.0f + ((z + 5 % 10))).realize({10, 10, 10});
     RDom all_z(input_3d.min(2), input_3d.extent(2));
 
-    Func sum_implicit;
-    sum_implicit(_) = sum(input_3d(_, all_z));
+    Func sum_implicit_inner, sum_implicit;
+    sum_implicit(_) = sum(input_3d(_, all_z), sum_implicit_inner);
     Buffer<float> sum_implicit_im = sum_implicit.realize({10, 10});
+
+    // The inner Func ends with with _0, _1, etc as its free vars.
+    auto args = sum_implicit_inner.args();
+    if (args.size() != 2 ||
+        args[0].name() != Var(_0).name() ||
+        args[1].name() != Var(_1).name()) {
+        printf("sum_implicit_inner has the wrong args\n");
+        return -1;
+    }
 
     Func product_implicit;
     product_implicit(_) = product(input_3d(_, all_z));
