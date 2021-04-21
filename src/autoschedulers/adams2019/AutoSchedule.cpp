@@ -100,8 +100,6 @@
 #include "State.h"
 #include "Timer.h"
 
-#include "Timer.h"
-
 
 #ifdef _WIN32
 #include <io.h>
