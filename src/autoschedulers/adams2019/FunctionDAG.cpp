@@ -549,10 +549,51 @@ void FunctionDAG::Edge::expand_footprint(const Span *consumer_loop, Span *produc
     }
 }
 
-FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &params, const Target &target) {
+FunctionDAG::FunctionDAG(const vector<Function> &outputs_arg, const MachineParams &params, const Target &target) {
+    // Bounds inference can include image loads that are to a single
+    // location in returned bounds expressions. The idea is these are
+    // easily computed at runtime entry to the compiled code. However
+    // the values are not available to the autoscheduler and hence
+    // these cannot be used. Thus we rewrite such Image calls to
+    // Extern calls here to hide them from bounds inference.
+    class RemoveImageLoads : public IRMutator {
+        using IRMutator::visit;
+
+        Expr visit(const Call *op) override {
+          debug(0) << "RemoveImageLoads found call " << Expr(op) << "\n";
+          if (op->call_type == Call::Image) {
+            // TODO(abadams|zvookin): Even if this solution is used, it is perhaps not valid to pass the image into an Extern call.
+            debug(0) << "Rewriting call " << Expr(op) << "\n";
+            
+            vector<Expr> new_args(op->args.size());
+            for (size_t i = 0; i < op->args.size(); i++) {
+                const Expr &old_arg = op->args[i];
+                Expr new_arg = mutate(old_arg);
+                new_args[i] = std::move(new_arg);
+            }
+
+            return Call::make(op->type, op->name, new_args, Call::Extern, op->func, op->value_index, op->image, op->param);
+          } else {
+            debug(0) << "Delegating call " << Expr(op) << "\n";
+            return IRMutator::visit(op);
+          }
+       }
+    } remove_image_loads;
+
     map<string, Function> env;
-    for (const Function &o : outputs) {
+    for (const Function &o : outputs_arg) {
         populate_environment(o, env);
+    }
+
+    std::vector<Function> outputs;
+    std::tie(outputs, env) = deep_copy(outputs_arg, env);
+
+    for (size_t i = 0; i < outputs.size(); i++) {
+      outputs[i].mutate(&remove_image_loads);
+    }
+
+    for (auto &entry : env) {
+      entry.second.mutate(&remove_image_loads);
     }
 
     // A mutator to apply parameter estimates to the expressions
@@ -905,45 +946,6 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             // TODO: peephole the boundary condition call pattern instead of assuming the user used the builtin
             node.is_boundary_condition = node.is_pointwise && starts_with(node.func.name(), "repeat_edge");
 
-            // TODO(abadams|zvookin): This is probably not the way to solve this.
-            // The goal here is to illustrate the bug with a test and show that it
-            // is caused by this particualr behavior of bounds inference.
-            
-            // A mutator to remove zero dimension (scalar) image loads as
-            // Halide's bounds inference leaves these in as values and
-            // the analysis in this file cannot handle them.
-            class RemoveScalarImageLoads : public IRMutator {
-                using IRMutator::visit;
-
-                bool MatchScalarImageFunc(const Function &f) {
-                    auto values = f.definition().values();
-                    if (values.size() != 1) {
-                        return false;
-                    }
-                    const Call *im_call = values[0].as<Call>();
-                    if (im_call == nullptr) {
-                        return false;
-                    }
-                    if (im_call->call_type != Call::Image ||
-                        im_call->args.empty()) {
-                        return false;
-                    }
-                    return true;
-                }
-
-                Expr visit(const Call *op) override {
-                  if ((op->call_type == Call::Image && op->args.empty()) ||
-                      (op->call_type == Call::Halide && op->func.defined() && MatchScalarImageFunc(Function(op->func)))) {
-                    // TODO(abadams|zvookin): Even if this solution is used, it is perhaps not valid to pass the image into a PureExtern call.
-                    return Call::make(op->type, op->name, op->args, Call::PureExtern, op->func, op->value_index, op->image, op->param);
-                  } else {
-                    return IRMutator::visit(op);
-                  }
-                }
-            } remove_scalar_image_loads;
-
-            exprs = remove_scalar_image_loads.mutate(exprs);
-            
             auto boxes = boxes_required(exprs, stage_scope_with_symbolic_rvar_bounds, func_value_bounds);
             for (auto &p : boxes) {
                 auto it = env.find(p.first);
