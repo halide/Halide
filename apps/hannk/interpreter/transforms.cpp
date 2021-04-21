@@ -4,7 +4,7 @@ namespace hannk {
 
 namespace {
 
-template <typename T>
+template<typename T>
 T *cast_op(Op *x) {
     class Caster : public OpVisitor {
     public:
