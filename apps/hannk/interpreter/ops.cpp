@@ -71,14 +71,23 @@ void fuse_xy(HalideBuffer<T> &buf) {
 
 // Embed extent 1 dimensions until buf has the given rank.
 template<typename T>
-void pad_to_rank(HalideBuffer<T> &buf, int rank) {
+void pad_to_rank(int rank, HalideBuffer<T> &buf) {
     while (buf.dimensions() < rank) {
         buf.embed(buf.dimensions(), 0);
     }
 }
 
+template<typename T, typename... Ts>
+void pad_to_rank(int rank, HalideBuffer<T> &buf, HalideBuffer<Ts> &...rest) {
+    pad_to_rank(rank, buf);
+    pad_to_rank(rank, rest...);
+}
+
+// Fuse the innermost (stride 1) dimension with other dimensions as much as possible.
+// This may enable the buffers to be processed with fewer instances of the "tail" of
+// a vectorization loop.
 template<typename Ta, typename Tb, typename Tc>
-void optimize_elementwise_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b, HalideBuffer<Tc> &c, int rank) {
+void optimize_elementwise_shapes(int rank, HalideBuffer<Ta> &a, HalideBuffer<Tb> &b, HalideBuffer<Tc> &c) {
     while (can_fuse_cx(a) && can_fuse_cx(b) && can_fuse_cx(c) &&
            a.dim(0).extent() == c.dim(0).extent() &&
            b.dim(0).extent() == c.dim(0).extent()) {
@@ -86,26 +95,57 @@ void optimize_elementwise_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b, Halid
         fuse_cx(b);
         fuse_cx(c);
     }
-    pad_to_rank(a, rank);
-    pad_to_rank(b, rank);
-    pad_to_rank(c, rank);
+    pad_to_rank(rank, a);
+    pad_to_rank(rank, b);
+    pad_to_rank(rank, c);
 }
 
 template<typename Ta, typename Tb>
-void optimize_elementwise_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b, int rank) {
+void optimize_elementwise_shapes(int rank, HalideBuffer<Ta> &a, HalideBuffer<Tb> &b) {
     while (can_fuse_cx(a) && can_fuse_cx(b) &&
            a.dim(0).extent() == b.dim(0).extent()) {
         fuse_cx(a);
         fuse_cx(b);
     }
-    pad_to_rank(a, rank);
-    pad_to_rank(b, rank);
+    pad_to_rank(rank, a);
+    pad_to_rank(rank, b);
 }
 
+template<int FnRank, typename Fn, typename T, typename... Ts>
+void loop_nest_impl(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
+    if (op0.dimensions() == FnRank) {
+        fn(op0, ops...);
+    } else {
+        const int last_dim = op0.dimensions() - 1;
+        for (int i = op0.dim(last_dim).min(); i <= op0.dim(last_dim).max(); i++) {
+            loop_nest_impl<FnRank>(fn, op0.sliced(last_dim, i), ops.sliced(last_dim, i)...);
+        }
+    }
+}
+
+// Call an elementwise operation that accepts operands of a particular rank,
+// and calls it on operands of any rank by slicing off or padding (in a loop)
+// the outer dimensions.
+template<int FnRank, typename Fn, typename T, typename... Ts>
+void elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
+    optimize_elementwise_shapes(FnRank, op0, ops...);
+    loop_nest_impl<FnRank>(fn, op0, ops...);
+}
+
+// Similar to the above, but do not fuse dimensions when possible.
+template<int FnRank, typename Fn, typename T, typename... Ts>
+void loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
+    pad_to_rank(FnRank, op0, ops...);
+    loop_nest_impl<FnRank>(fn, op0, ops...);
+}
+
+// Broadcast the extent 1 dimensions of one shape to match the extent of the
+// other shape.
 template<typename Ta, typename Tb>
-void broadcast_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b, int rank) {
-    pad_to_rank(a, rank);
-    pad_to_rank(b, rank);
+void broadcast_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b) {
+    int rank = std::max(a.dimensions(), b.dimensions());
+    pad_to_rank(rank, a);
+    pad_to_rank(rank, b);
 
     halide_buffer_t *raw_a = a.raw_buffer();
     halide_buffer_t *raw_b = b.raw_buffer();
@@ -125,10 +165,12 @@ void broadcast_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b, int rank) {
     }
 }
 
+// Check if and b are aliases of the same buffer.
 bool is_alias(const HalideBuffer<const void> &a, const HalideBuffer<const void> &b) {
     return !(a.begin() >= b.end() || a.end() <= b.begin());
 }
 
+// Crop both a and b to the union of both buffers.
 template<typename T, typename U>
 void crop_to_union(HalideBuffer<T> &a, HalideBuffer<U> &b) {
     assert(a.dimensions() == b.dimensions());
@@ -235,6 +277,10 @@ void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q, int in1s
          HalideBuffer<const uint8_t> in2, const QuantizationInfo &in2q, int in2sign,
          HalideBuffer<uint8_t> out, const QuantizationInfo &outq,
          ActivationFunction activation = ActivationFunction::None) {
+    // TODO: We should require the buffers are already broadcasted appropriately before
+    // getting here.
+    broadcast_shapes(in1, in2);
+
     const int in1_zero = in1q.zero.at(0);
     const int in2_zero = in2q.zero.at(0);
     const int out_zero = outq.zero.at(0);
@@ -261,16 +307,22 @@ void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q, int in1s
 
     const auto out_range = get_output_range(activation, outq);
 
-    CHECK(0 == add_uint8_uint8(in1, in1_zero, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
-                               in2, in2_zero, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
-                               out_zero, out_mul_and_shift.multiplier, -out_mul_and_shift.shift,
-                               out_range.min, out_range.max, out));
+    elementwise_loop_nest<2>([&](HalideBuffer<const uint8_t> in1_buf, HalideBuffer<const uint8_t> in2_buf, HalideBuffer<uint8_t> out_buf) {
+        CHECK(0 == add_uint8_uint8(in1_buf, in1_zero, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
+                                   in2_buf, in2_zero, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
+                                   out_zero, out_mul_and_shift.multiplier, -out_mul_and_shift.shift,
+                                   out_range.min, out_range.max, out_buf));
+    }, in1, in2, out);
 }
 
 void mul(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
          HalideBuffer<const uint8_t> in2, const QuantizationInfo &in2q,
          HalideBuffer<uint8_t> out, const QuantizationInfo &outq,
          ActivationFunction activation = ActivationFunction::None) {
+    // TODO: We should require the buffers are already broadcasted appropriately before
+    // getting here.
+    broadcast_shapes(in1, in2);
+
     const int in1_zero = in1q.zero.at(0);
     const int in2_zero = in2q.zero.at(0);
     const int out_zero = outq.zero.at(0);
@@ -287,9 +339,11 @@ void mul(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
 
     const auto out_range = get_output_range(activation, outq);
 
-    CHECK(0 == mul_uint8_uint8_uint8(in1, in1_zero, in2, in2_zero,
-                                     out_zero, mul_and_shift.multiplier, -mul_and_shift.shift,
-                                     out_range.min, out_range.max, out));
+    elementwise_loop_nest<2>([&](HalideBuffer<const uint8_t> in1_buf, HalideBuffer<const uint8_t> in2_buf, HalideBuffer<uint8_t> out_buf) {
+        CHECK(0 == mul_uint8_uint8_uint8(in1_buf, in1_zero, in2_buf, in2_zero,
+                                         out_zero, mul_and_shift.multiplier, -mul_and_shift.shift,
+                                         out_range.min, out_range.max, out_buf));
+    }, in1, in2, out);
 }
 
 void requantize(const HalideBuffer<const uint8_t> &in, const QuantizationInfo &inq,
@@ -396,10 +450,7 @@ void BinaryOp::execute() {
         auto in1_buf = in1->buffer<const uint8_t>();
         auto in2_buf = in2->buffer<const uint8_t>();
         auto out_buf = out->buffer<uint8_t>();
-        // TODO: We should require the buffers are already broadcasted appropriately before
-        // getting here.
-        broadcast_shapes(in1_buf, in2_buf, 4);
-        optimize_elementwise_shapes(in1_buf, in2_buf, out_buf, 4);
+
         switch (op_) {
         case Add:
         case Sub:
@@ -575,8 +626,8 @@ void Conv2DOp::execute() {
                 fuse_xy(input_buf);
                 fuse_xy(output_buf);
             }
-            pad_to_rank(input_buf, 4);
-            pad_to_rank(output_buf, 4);
+            pad_to_rank(4, input_buf);
+            pad_to_rank(4, output_buf);
         }
 
         conv_uint8(input_buf, filter_buf, bias_buf, params, stride_, dilation_, output_range, output_buf);
@@ -736,7 +787,7 @@ void L2NormalizationOp::execute() {
     if (in->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
         auto in_buf = in->buffer<const uint8_t>();
-        auto output_buf = out->buffer<uint8_t>();
+        auto out_buf = out->buffer<uint8_t>();
 
         const int input_zero = in->quantization().zero.at(0);
         assert(input_zero >= 0 && input_zero <= 255);
@@ -744,7 +795,9 @@ void L2NormalizationOp::execute() {
         assert(out->quantization().scale.at(0) == 1.0f / 128.0f);
         assert(out->quantization().zero.at(0) == 128);
 
-        CHECK(0 == l2_normalization_uint8(in_buf, input_zero, output_buf));
+        loop_nest<2>([&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
+            CHECK(0 == l2_normalization_uint8(in_buf, input_zero, out_buf));
+        }, in_buf, out_buf);
     } else {
         LOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
@@ -1022,6 +1075,28 @@ void ReshapeOp::execute() {
     }
 }
 
+BoundsMap ShapeOp::map_bounds(int input_idx, int output_idx) const {
+    assert(input_idx == 0);
+    assert(output_idx == 0);
+    // This doesn't actually read anything from the input.
+    return BoundsMap(input()->rank(), 1);
+}
+
+void ShapeOp::execute() {
+    const TensorPtr in = input();
+    TensorPtr out = output();
+
+    if (out->type() == halide_type_of<int32_t>()) {
+        HalideBuffer<int32_t> out_buf = out->buffer<int32_t>();
+        assert(out_buf.dimensions() == 1);
+        for (int i = out_buf.dim(0).min(); i <= out_buf.dim(0).max(); i++) {
+            out_buf(i) = in->extent(i);
+        }
+    } else {
+        LOG(FATAL) << "Unsupported type " << out->type() << "\n";
+    }
+}
+
 BoundsMap SoftmaxOp::map_bounds(int input_idx, int output_idx) const {
     assert(input_idx == 0);
     assert(output_idx == 0);
@@ -1037,7 +1112,7 @@ void SoftmaxOp::execute() {
     if (in->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
         auto in_buf = in->buffer<const uint8_t>();
-        auto output_buf = out->buffer<uint8_t>();
+        auto out_buf = out->buffer<uint8_t>();
 
         // It's a easier to compute 2^(x*(B*log2(e))) than e^(x*B).
         const float beta2 = beta_ * std::log2(std::exp(1.0f));
@@ -1060,9 +1135,11 @@ void SoftmaxOp::execute() {
         assert(in_mul_and_shift.shift <= 0);
         assert(output_mul_and_shift.shift <= 0);
 
-        CHECK(0 == softmax_uint8(in_buf, in_mul_and_shift.multiplier, -in_mul_and_shift.shift,
-                                 output_zero, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
-                                 output_buf));
+        loop_nest<2>([&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
+            CHECK(0 == softmax_uint8(in_buf, in_mul_and_shift.multiplier, -in_mul_and_shift.shift,
+                                     output_zero, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
+                                     out_buf));
+        }, in_buf, out_buf);
     } else {
         LOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
@@ -1188,7 +1265,6 @@ void UnaryOp::execute() {
     if (in->type() == halide_type_of<uint8_t>() && out->type() == halide_type_of<uint8_t>()) {
         auto in_buf = in->buffer<const uint8_t>();
         auto out_buf = out->buffer<uint8_t>();
-        optimize_elementwise_shapes(in_buf, out_buf, 1);
 
         const int input_zero = in->quantization().zero.at(0);
         assert(input_zero >= 0 && input_zero <= 255);
@@ -1206,7 +1282,9 @@ void UnaryOp::execute() {
             assert(out->quantization().scale.at(0) == 1.0f / 256.0f);
             assert(out->quantization().zero.at(0) == 0);
 
-            CHECK(0 == logistic_uint8(in_buf, input_zero, in_mul_and_shift.multiplier, -in_mul_and_shift.shift, out_buf));
+            elementwise_loop_nest<1>([&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
+                CHECK(0 == logistic_uint8(in_buf, input_zero, in_mul_and_shift.multiplier, -in_mul_and_shift.shift, out_buf));
+            }, in_buf, out_buf);
             return;
         } else if (op_ == Tanh) {
             // It's a easier to compute 2^(2*x*(log2(e))) than e^(2*x).
@@ -1218,7 +1296,9 @@ void UnaryOp::execute() {
             assert(out->quantization().scale.at(0) == 1.0f / 128.0f);
             assert(out->quantization().zero.at(0) == 128);
 
-            CHECK(0 == tanh_uint8(in_buf, input_zero, in_mul_and_shift.multiplier, -in_mul_and_shift.shift, out_buf));
+            elementwise_loop_nest<1>([&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
+                CHECK(0 == tanh_uint8(in_buf, input_zero, in_mul_and_shift.multiplier, -in_mul_and_shift.shift, out_buf));
+            }, in_buf, out_buf);
             return;
         } else if (op_ == Negate) {
             add(in_buf, in->quantization(), -1, in_buf, in->quantization(), 0, out_buf, out->quantization());
@@ -1265,6 +1345,10 @@ void PadOp::accept(OpVisitor *v) {
 }
 
 void PoolOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void ShapeOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 
