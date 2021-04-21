@@ -7,6 +7,7 @@
 #include "IRVisitor.h"
 #include "Lerp.h"
 #include "Simplify.h"
+#include "Substitute.h"
 #include "XtensaOptimize.h"
 
 namespace Halide {
@@ -323,6 +324,18 @@ HALIDE_ALWAYS_INLINE void aligned_store(const VectorType& a, void *base, int32_t
 template <typename VectorType, typename BaseType, int Lanes>
 HALIDE_ALWAYS_INLINE void store(const VectorType& a, void *base, int32_t offset) {
     memcpy(((BaseType*)base + offset), &a, sizeof(BaseType) * Lanes);
+}
+
+template <typename VectorType, typename BaseType, int Lanes>
+HALIDE_ALWAYS_INLINE VectorType load_variable(const void *base, int32_t offset, int32_t count) {
+    VectorType r;
+    memcpy(&r, ((const BaseType*)base + offset), sizeof(BaseType) * count);
+    return r;
+}
+
+template <typename VectorType, typename BaseType, int Lanes>
+HALIDE_ALWAYS_INLINE void store_variable(const VectorType& a, void *base, int32_t offset, int32_t count) {
+    memcpy(((BaseType*)base + offset), &a, sizeof(BaseType) * count);
 }
 
 template <typename VectorType, typename OffsetType, typename BaseType, int Lanes>
@@ -742,7 +755,7 @@ HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_mul_add_i24(const int24x64_t
 }
 
 HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_quad_mul_add_i24(
-                                            const int24x64_t& acc, 
+                                            const int24x64_t& acc,
                                             const int8x64_t& a0,
                                             const int8_t& s0,
                                             const int8x64_t& a1,
@@ -2001,8 +2014,6 @@ void CodeGen_Xtensa::visit(const EQ *op) {
 }
 
 void CodeGen_Xtensa::visit(const Load *op) {
-    user_assert(is_const_one(op->predicate)) << "Predicated load is not supported by Xtensa backend." << Expr(op) << "\n";
-
     // TODO: We could replicate the logic in the llvm codegen which decides whether
     // the vector access can be aligned. Doing so would also require introducing
     // aligned type equivalents for all the vector types.
@@ -2013,7 +2024,23 @@ void CodeGen_Xtensa::visit(const Load *op) {
 
     // If we're loading a contiguous ramp into a vector, just load the vector
     Expr dense_ramp_base = strided_ramp_base(op->index, 1);
-    if (dense_ramp_base.defined()) {
+    if (!is_const_one(op->predicate)) {
+        const Call *pred = op->predicate.as<Call>();
+        if (pred && (pred->name == "clamped_dense_ramp") && dense_ramp_base.defined()) {
+            internal_assert(t.is_vector());
+            // The number of elements is difference between upper bound and base of the ramp
+            // plus one (because the predicate is <=).
+            Expr count = simplify(pred->args[1] - pred->args[0] + 1);
+            string id_ramp_base = print_expr(dense_ramp_base);
+            string id_count = print_expr(count);
+            rhs << "load_variable"
+                << "<" << print_type(t) << ", "
+                << print_type(t.element_of()) << ", " << t.lanes()
+                << ">(" << name << ", " << id_ramp_base << ", " << id_count << ")";
+        } else {
+            user_assert(is_const_one(op->predicate)) << "This predicated load is not supported by Xtensa backend." << op->predicate << "\n";
+        }
+    } else if (dense_ramp_base.defined()) {
         internal_assert(t.is_vector());
         std::string op_name;
         // TODO(vksnk): generalize this!
@@ -2060,8 +2087,6 @@ void CodeGen_Xtensa::visit(const Load *op) {
 }
 
 void CodeGen_Xtensa::visit(const Store *op) {
-    user_assert(is_const_one(op->predicate)) << "Predicated store is not supported by C backend.\n";
-
     Type t = op->value.type();
 
     if (inside_atomic_mutex_node) {
@@ -2088,7 +2113,24 @@ void CodeGen_Xtensa::visit(const Store *op) {
 
     // If we're writing a contiguous ramp, just store the vector.
     Expr dense_ramp_base = strided_ramp_base(op->index, 1);
-    if (dense_ramp_base.defined()) {
+
+    if (!is_const_one(op->predicate)) {
+        const Call *pred = op->predicate.as<Call>();
+        if (pred && (pred->name == "clamped_dense_ramp") && dense_ramp_base.defined()) {
+            // The number of elements is difference between upper bound and base of the ramp
+            // plus one (because the predicate is <=).
+            Expr count = simplify(pred->args[1] - pred->args[0] + 1);
+            internal_assert(op->value.type().is_vector());
+            string id_ramp_base = print_expr(dense_ramp_base);
+            string id_count = print_expr(count);
+            stream << get_indent() << "store_variable"
+                   << "<" << print_type(t) << ", "
+                   << print_type(t.element_of()) << ", " << t.lanes()
+                   << ">(" << id_value << ", " << name << ", " << id_ramp_base << ", " << id_count << ");\n";
+        } else {
+            user_assert(is_const_one(op->predicate)) << "This predicated store is not supported by Xtensa backend.\n";
+        }
+    } else if (dense_ramp_base.defined()) {
         internal_assert(op->value.type().is_vector());
         string op_name;
         // TODO(vksnk): generalize this!
@@ -2510,5 +2552,26 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
 
     close_scope("alloc " + print_name(op->name));
 }
+
+void CodeGen_Xtensa::visit(const Let *op) {
+    const auto *call = op->value.as<Call>();
+    if (call && (call->name == "clamped_dense_ramp")) {
+        Expr body = substitute(op->name, call, op->body);
+        body.accept(this);
+        return;
+    }
+    return CodeGen_C::visit(op);
+}
+
+void CodeGen_Xtensa::visit(const LetStmt *op) {
+    const auto *call = op->value.as<Call>();
+    if (call && (call->name == "clamped_dense_ramp")) {
+        Stmt body = substitute(op->name, call, op->body);
+        body.accept(this);
+        return;
+    }
+    return CodeGen_C::visit(op);
+}
+
 }  // namespace Internal
 }  // namespace Halide

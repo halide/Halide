@@ -55,6 +55,8 @@ protected:
     void visit(const Min *op) override;
     void visit(const Max *op) override;
     void visit(const IntImm *op) override;
+    void visit(const Let *op) override;
+    void visit(const LetStmt *op) override;
 
 protected:
     int current_loop_level = 0;

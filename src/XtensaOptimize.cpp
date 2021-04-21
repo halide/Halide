@@ -999,6 +999,53 @@ private:
         return mutate(body);
     }
 
+    Expr match_load_store_predicate(Expr pred) {
+        static const std::vector<Expr> patterns = {
+            ramp(wild_i32, 1, pred.type().lanes()) <= bc(wild_i32, pred.type().lanes())};
+
+        vector<Expr> matches;
+        Expr new_pred;
+        for (const Expr &p : patterns) {
+            if (expr_match(p, pred, matches)) {
+                for (int ix = 0; ix < (int)matches.size(); ix++) {
+                    matches[ix] = mutate(matches[ix]);
+                }
+                new_pred = Call::make(pred.type(), "clamped_dense_ramp", matches, Call::PureExtern);
+                break;
+            }
+        }
+        return new_pred;
+    }
+
+    Expr visit(const Load *op) override {
+        if (!is_const_one(op->predicate)) {
+            Expr new_pred = match_load_store_predicate(op->predicate);
+
+            if (new_pred.defined()) {
+                return Load::make(op->type, op->name,
+                                  mutate(op->index), op->image,
+                                  op->param,
+                                  new_pred,
+                                  op->alignment);
+            }
+        }
+
+        return IRGraphMutator::visit(op);
+    }
+
+    Stmt visit(const Store *op) override {
+        if (!is_const_one(op->predicate)) {
+            Expr new_pred = match_load_store_predicate(op->predicate);
+
+            if (new_pred.defined()) {
+                return Store::make(op->name, mutate(op->value), mutate(op->index),
+                                   op->param, new_pred, op->alignment);
+            }
+        }
+
+        return IRGraphMutator::visit(op);
+    }
+
 public:
     MatchXtensaPatterns() {
     }
