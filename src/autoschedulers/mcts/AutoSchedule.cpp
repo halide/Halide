@@ -180,6 +180,15 @@ namespace MCTS {
             return 4;
         }
     }
+
+    uint32_t get_beam_size() {
+        std::string beam_str = Halide::Internal::get_env_variable("HL_MCTS_BEAM_SIZE");
+        if (!beam_str.empty()) {
+            return atoi(beam_str.c_str());
+        } else {
+            return 4;
+        }
+    }
 }
 
 namespace Halide {
@@ -307,7 +316,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     std::string schedule_source;
 
     try {
-        CPU_State optimal = solver.solve(start_state, /* n_decisions*/ dag.nodes.size() * 2, seed);
+        CPU_State optimal = solver.solve_beam(start_state, /* n_decisions*/ dag.nodes.size() * 2, seed);
         cost = optimal.calculate_cost();
         schedule_source = optimal.apply_schedule();
         std::cerr << "is_terminal? " << optimal.is_terminal() << std::endl;

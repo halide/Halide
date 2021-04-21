@@ -25,9 +25,7 @@ class StripIdentities : public IRMutator {
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::return_second) ||
-            op->is_intrinsic(Call::likely) ||
-            op->is_intrinsic(Call::likely_if_innermost)) {
+        if (Call::as_tag(op) || op->is_intrinsic(Call::return_second)) {
             return mutate(op->args.back());
         } else {
             return IRMutator::visit(op);
@@ -161,6 +159,10 @@ class IsNoOp : public IRVisitor {
             return;
         }
         IRVisitor::visit(op);
+    }
+
+    void visit(const Acquire *op) override {
+        condition = const_false();
     }
 
     template<typename LetOrLetStmt>
@@ -371,10 +373,16 @@ class TrimNoOps : public IRMutator {
 
         if (is_const_one(is_no_op.condition)) {
             // This loop is definitely useless
+            debug(3) << "Removed empty loop.\n"
+                     << "Old: " << Stmt(op) << "\n";
             return Evaluate::make(0);
         } else if (is_const_zero(is_no_op.condition)) {
             // This loop is definitely needed
-            return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            if (body.same_as(op->body)) {
+                return op;
+            } else {
+                return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            }
         }
 
         // The condition is something interesting. Try to see if we
@@ -391,6 +399,8 @@ class TrimNoOps : public IRMutator {
 
         if (i.is_empty()) {
             // Empty loop
+            debug(3) << "Removed empty loop.\n"
+                     << "Old: " << Stmt(op) << "\n";
             return Evaluate::make(0);
         }
 

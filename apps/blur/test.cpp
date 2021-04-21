@@ -159,8 +159,8 @@ int main(int argc, char **argv) {
     const bool is_hexagon = strstr(md->target, "hvx_128") || strstr(md->target, "hvx_64");
 
     // The Hexagon simulator can't allocate as much memory as the above wants.
-    const int width = is_hexagon ? 648 : 6408;
-    const int height = is_hexagon ? 482 : 4802;
+    const int width = is_hexagon ? 648 : 2568;
+    const int height = is_hexagon ? 482 : 1922;
 
     Buffer<uint16_t> input(width, height);
 

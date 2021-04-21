@@ -5,7 +5,6 @@
 #include "CSE.h"
 #include "CodeGen_C.h"
 #include "CodeGen_PyTorch.h"
-#include "CodeGen_X86.h"
 #include "Deinterleave.h"
 #include "Func.h"
 #include "Generator.h"

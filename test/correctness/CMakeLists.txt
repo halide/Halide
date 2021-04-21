@@ -14,11 +14,6 @@ tests(GROUPS correctness
       atomic_tuples.cpp
       atomics.cpp
       autodiff.cpp
-      autotune_bug.cpp
-      autotune_bug_2.cpp
-      autotune_bug_3.cpp
-      autotune_bug_4.cpp
-      autotune_bug_5.cpp
       bad_likely.cpp
       bit_counting.cpp
       bitwise_ops.cpp
@@ -118,6 +113,7 @@ tests(GROUPS correctness
       fuse.cpp
       fuse_gpu_threads.cpp
       fused_where_inner_extent_is_zero.cpp
+      fuzz_bounds.cpp
       fuzz_cse.cpp
       fuzz_float_stores.cpp
       fuzz_simplify.cpp

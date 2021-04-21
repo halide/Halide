@@ -12,8 +12,8 @@
 #include <limits>       // std::numeric_limits
 #include <memory>       // std::shared_ptr
 #include <utility>      // std::pair
-#include <vector>
-
+#include <vector>       // st::vector
+#include <algorithm>    // std::min_element
 
 /*
 
@@ -31,6 +31,7 @@ namespace MCTS {
     uint32_t get_min_explore();
     uint32_t get_min_exploit();
     uint32_t get_rollout_length();
+    uint32_t get_beam_size();
 
     // State must comply with interface in MCStateInterface.h
     // TODO(rootjalex): Should we do the Action template? needs default (empty) action.
@@ -65,6 +66,10 @@ namespace MCTS {
         Solver() = default;
 
         typedef std::shared_ptr<Node> NodePtr;
+
+        typedef std::pair<NodePtr, State> BeamElement;
+
+        typedef std::vector<BeamElement> Beam;
     public:
         // TODO(rootjalex): implement this.
         // static MakeTimerSolver(uint32_t )
@@ -137,8 +142,188 @@ namespace MCTS {
             return current_state;
         }
 
-        // size_t n_explores = 0;
-        // size_t n_exploitations = 0;
+
+
+
+        State solve_beam(const State &starter_state, uint32_t n_decisions, int seed = 1) {
+            std::mt19937 rng((uint32_t)seed);
+
+            // TODO(rootjalex): replace with std::make_shared
+            NodePtr root_node = NodePtr(new Node(starter_state, Action::Default(), /* parent */ nullptr, rng));
+            State current_state = starter_state; // track the current best state.
+
+            const double percent_to_explore = get_exploration_percent();
+            const double percent_to_exploit = get_exploitation_percent();
+            // const uint32_t min_random_iterations = get_min_iterations();
+            const uint32_t min_explore_iters = get_min_explore();
+            const uint32_t min_exploit_iters = get_min_exploit();
+            const uint32_t rollout_length = get_rollout_length();
+
+            // TODO: be smarter about decision allocation?
+            internal_assert(max_iterations >= n_decisions) << "Must have enough iterations for the number of decisions made\n";
+            // const uint32_t n_iterations_per_decision = max_iterations / n_decisions;
+
+            // uint32_t n_iterations_per_decision = max_iterations / 2;
+            const uint32_t beam_size = get_beam_size();
+
+            Beam beam(beam_size, {nullptr, current_state});
+            uint32_t beam_fill = 1;
+            beam[0] = {root_node, current_state};
+
+            auto clear_parent = [](BeamElement &elem) { elem.first->clear_parent(); };
+
+            for (uint32_t d = 0; d < n_decisions; d++) {
+
+              const uint32_t search_depth = do_beam_rollouts(beam, beam_fill, percent_to_explore, percent_to_exploit,
+                                                             min_explore_iters, min_exploit_iters, rollout_length);
+
+              fill_beam(beam, beam_fill, beam_size, search_depth, true);
+
+              std::for_each(beam.begin(), beam.begin() + beam_fill, clear_parent);
+            }
+
+            std::cerr << "Iterations:" << iterations << std::endl;
+            std::cerr << "Valids:" << n_valid_nodes << std::endl;
+            std::cerr << "Invalids:" << n_invalid_nodes << std::endl;
+            // std::cerr << "Explorations:" << n_explores << std::endl;
+            // std::cerr << "Exploitations:" << n_exploitations << std::endl;
+
+            auto beam_element_ordering = [](BeamElement &lhs, BeamElement &rhs) { return lhs.first->get_value() < rhs.first->get_value(); };
+
+            auto max_elem = std::max_element(beam.begin(), beam.begin() + beam_fill, beam_element_ordering);
+            auto min_elem = std::min_element(beam.begin(), beam.begin() + beam_fill, beam_element_ordering);
+
+            std::cerr << "Min element: " << min_elem->first->get_value() << "\n";
+            std::cerr << "Max element: " << max_elem->first->get_value() << "\n";
+
+            return min_elem->second;
+        }
+
+        // Returns maximum depth explored
+        uint32_t do_beam_rollouts(Beam &beam, uint32_t beam_size, double percent_explore, double percent_exploit,
+                                  uint32_t min_explore, uint32_t min_exploit, uint32_t rollout_length) {
+        
+            uint32_t max_depth_explored = 0;
+            // TODO: this is easily parallelizable...
+            for (uint32_t i = 0; i < beam_size; i++) {
+                max_depth_explored = std::max(max_depth_explored,
+                                              do_rollouts(beam[i].first, beam[i].second,
+                                                          percent_explore, percent_exploit,
+                                                          min_explore, min_exploit,
+                                                          rollout_length));
+            }
+            return max_depth_explored;
+        }
+
+        // Returns maximum depth explored
+        uint32_t do_rollouts(const NodePtr root_node, const State &root_state,
+                             double percent_explore, double percent_exploit,
+                             uint32_t min_explore, uint32_t min_exploit,
+                             uint32_t rollout_length) {
+            internal_assert(root_node) << "do_rollouts was given a nullptr\n";
+            internal_assert(!root_state.is_terminal()) << "do_rollouts was given an end state\n";
+            const uint32_t n_branches = root_node->get_n_branches();
+            // if (n_branches == 1) {
+            if (false) {
+                // Fill the action if it hasn't been explored yet.
+                root_node->choose_only_random_child();
+                // TODO: we might need to do a special case here, or remove this optimization...
+                return 0;
+            } else {
+                // Need to perform rollouts.
+                uint32_t search_depth = 0;
+
+                const uint32_t n_exploitation = ceil(percent_exploit * n_branches) + min_exploit;
+                const uint32_t n_exploration = ceil(percent_explore * n_branches) + min_explore;
+                const uint32_t n_iterations_total = std::min(n_exploitation + n_exploration, n_branches);
+
+                for (uint32_t i = 0; i < n_iterations_total; i++) {
+                    NodePtr rollout_node = nullptr;
+                    if (i < n_exploitation) {
+                        rollout_node = root_node->choose_specific_child(i % n_branches);
+                    } else {
+                        rollout_node = root_node->choose_any_random_child();
+                    }
+                    internal_assert(rollout_node) << "do_rollouts selected a nullptr\n";
+
+                    for (uint32_t j = 0; (j < rollout_length) && (!rollout_node->is_leaf()); j++) {
+                        // Make weighted random rollouts
+                        rollout_node = rollout_node->choose_weighted_random_child();
+                        internal_assert(rollout_node) << "simulation returned nullptr\n";
+                    }
+
+                    // Propagate visit count up the parent chain.
+                    rollout_node->increment_visits();
+
+                    const double node_cost = rollout_node->get_action().get_cost();
+                    const uint32_t node_depth = rollout_node->get_depth();
+
+                    search_depth = std::max(search_depth, node_depth);
+
+                    // Back propagation. node_cost is passed by value,
+                    // because the policy for backprop is handled via the State class.
+                    // e.g. it might make node_cost the minimum of values, or the average, etc.
+                    bool continue_updating = rollout_node->update(node_cost, node_depth);
+
+                    if (continue_updating) {
+                        // This messy backprop is due to the fact that
+                        // node is shared but we don't have shared ptrs
+                        // to parent nodes, as that would cause loops.
+                        Node *parent_ptr = rollout_node->get_parent();
+                        // This order of operations makes sure that the root_node is updated, but nothing past that.
+                        while (parent_ptr && parent_ptr->update(node_cost, node_depth) && parent_ptr != root_node.get()) {
+                            parent_ptr = parent_ptr->get_parent();
+                        }
+                    }
+                }
+
+                return search_depth;
+            }
+        }
+
+        void fill_beam(Beam &beam, uint32_t &beam_size, uint32_t max_beam_size, uint32_t search_depth, bool use_search_depth) {
+            internal_assert(beam_size > 0) << "fill_beam given an empty beam\n";
+            Beam new_beam(max_beam_size, beam[0]);
+            uint32_t new_beam_size = 0;
+
+            // TODO: this might not be smart...
+            auto min_iterator = new_beam.begin();
+
+            auto beam_element_ordering = [](BeamElement &lhs, BeamElement &rhs) { return lhs.first->get_value() < rhs.first->get_value(); };
+
+            // Iterate through the current beam.
+            for (uint32_t b = 0; b < beam_size; b++) {
+                NodePtr root_node = beam[b].first;
+                State &root_state = beam[b].second;
+
+                const int num_children = root_node->get_num_children();
+
+                // Now iterate through this root's children, select the good ones.
+                for (int i = 0; i < num_children; i++) {
+                    NodePtr child_ptr = root_node->get_child(i);
+                    const double child_value = child_ptr->get_value();
+                    const uint32_t child_max_depth = child_ptr->get_state_depth();
+
+                    bool correct_depth = !use_search_depth || (child_max_depth == search_depth);
+                    bool obvious_insert = (new_beam_size < max_beam_size);
+                    bool difficult_insert = (child_value < min_iterator->first->get_value());
+
+                    if (correct_depth) {
+                        if (obvious_insert) {
+                            new_beam[new_beam_size] = {child_ptr, root_state.take_action(child_ptr->get_action())};
+                            new_beam_size++;
+                        } else if (difficult_insert) {
+                            // TODO: how expensive does this get...?
+                            min_iterator = min_element(new_beam.begin(), new_beam.begin() + new_beam_size, beam_element_ordering);
+                            *min_iterator = {child_ptr, root_state.take_action(child_ptr->get_action())};
+                        }
+                    }
+                }
+            }
+
+            beam = std::move(new_beam);
+            beam_size = new_beam_size;
+        }
 
         std::pair<State, NodePtr> make_decision(const NodePtr root_node, const State &root_state,
                                                 const uint32_t n_iterations, const uint32_t n_simulations,

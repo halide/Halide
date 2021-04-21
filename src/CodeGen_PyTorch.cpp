@@ -172,7 +172,7 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
                     << c_print_name(buffer_args[i].name) << "_buffer.host_dirty(),"
                     << "\"device not synchronized for buffer "
                     << c_print_name(buffer_args[i].name)
-                    << ", make sure all update stages are excplicitly computed on GPU."
+                    << ", make sure all update stages are explicitly computed on GPU."
                     << "\");\n";
                 stream << get_indent();
                 stream
@@ -386,7 +386,7 @@ inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
 
     AT_ASSERTM(err == 0, "Halide call failed");
     // Make sure data is on device
-    AT_ASSERTM(!_buf_buffer.host_dirty(),"device not synchronized for buffer _buf, make sure all update stages are excplicitly computed on GPU.");
+    AT_ASSERTM(!_buf_buffer.host_dirty(),"device not synchronized for buffer _buf, make sure all update stages are explicitly computed on GPU.");
     _buf_buffer.device_detach_native();
 
     return 0;

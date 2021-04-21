@@ -404,23 +404,19 @@ private:
 
             // Assume no overflow for float, int32, and int64
             if (op->type.can_overflow()) {
-                if (interval.has_upper_bound()) {
-                    // TODO(5682): Can't catch overflow of UInt(64) currently.
-                    Type t = op->type.is_uint() ? UInt(64) : Int(32);
-                    Expr no_overflow = (cast(t, a.max) + cast(t, b.max) == cast(t, interval.max));
-                    if (!can_prove(no_overflow)) {
-                        bounds_of_type(op->type);
-                        return;
-                    }
+                if (!interval.is_bounded()) {
+                    // Possibly infinite things that wrap can be anything.
+                    bounds_of_type(op->type);
+                    return;
                 }
-                if (interval.has_lower_bound()) {
-                    // TODO(5682): Can't catch overflow of UInt(64) currently.
-                    Type t = op->type.is_uint() ? UInt(64) : Int(32);
-                    Expr no_overflow = (cast(t, a.min) + cast(t, b.min) == cast(t, interval.min));
-                    if (!can_prove(no_overflow)) {
-                        bounds_of_type(op->type);
-                        return;
-                    }
+
+                // TODO(5682): Can't catch overflow of UInt(64) currently.
+                Type t = op->type.is_uint() ? UInt(64) : Int(32);
+                Expr no_overflow_max = (cast(t, a.max) + cast(t, b.max) == cast(t, interval.max));
+                Expr no_overflow_min = (cast(t, a.min) + cast(t, b.min) == cast(t, interval.min));
+                if (!can_prove(no_overflow_max && no_overflow_min)) {
+                    bounds_of_type(op->type);
+                    return;
                 }
             }
         }
@@ -448,19 +444,18 @@ private:
 
             // Assume no overflow for float, int32, and int64
             if (op->type.can_overflow()) {
-                if (interval.has_upper_bound()) {
-                    Expr no_overflow = (cast<int>(a.max) - cast<int>(b.min) == cast<int>(interval.max));
-                    if (!can_prove(no_overflow)) {
-                        bounds_of_type(op->type);
-                        return;
-                    }
+                if (!interval.is_bounded()) {
+                    // Possibly infinite things that wrap can be anything.
+                    bounds_of_type(op->type);
+                    return;
                 }
-                if (interval.has_lower_bound()) {
-                    Expr no_overflow = (cast<int>(a.min) - cast<int>(b.max) == cast<int>(interval.min));
-                    if (!can_prove(no_overflow)) {
-                        bounds_of_type(op->type);
-                        return;
-                    }
+
+                Expr no_overflow_max = (cast<int>(a.max) - cast<int>(b.min) == cast<int>(interval.max));
+                Expr no_overflow_min = (cast<int>(a.min) - cast<int>(b.max) == cast<int>(interval.min));
+
+                if (!can_prove(no_overflow_max && no_overflow_min)) {
+                    bounds_of_type(op->type);
+                    return;
                 }
             }
 
@@ -1232,9 +1227,7 @@ private:
 
             interval.min = Interval::make_max(interval.min, lower.min);
             interval.max = Interval::make_min(interval.max, upper.max);
-        } else if (op->is_intrinsic(Call::likely) ||
-                   op->is_intrinsic(Call::likely_if_innermost)) {
-            internal_assert(op->args.size() == 1);
+        } else if (Call::as_tag(op)) {
             op->args[0].accept(this);
         } else if (op->is_intrinsic(Call::return_second)) {
             internal_assert(op->args.size() == 2);
@@ -1582,6 +1575,7 @@ private:
                 interval.min *= factor;
             }
             break;
+        case VectorReduce::SaturatingAdd:
         case VectorReduce::Mul:
             // Technically there are some things we could say
             // here. E.g. if all the lanes are positive then we're
@@ -2476,10 +2470,8 @@ private:
             for (const auto &pair : cases) {
                 Expr c = pair.first;
                 Stmt body = pair.second;
-                const Call *call = c.as<Call>();
-                if (call && (call->is_intrinsic(Call::likely) ||
-                             call->is_intrinsic(Call::likely_if_innermost) ||
-                             call->is_intrinsic(Call::strict_float))) {
+                const Call *call = Call::as_tag(c);
+                if (call) {
                     c = call->args[0];
                 }
 

@@ -91,20 +91,20 @@ void unpack_closure(const Closure &closure,
     int idx = 0;
     for (const auto &v : closure.vars) {
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-        LoadInst *load = builder->CreateLoad(ptr);
+        LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
         dst.push(v.first, load);
         load->setName(v.first);
     }
     for (const auto &b : closure.buffers) {
         {
             Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-            LoadInst *load = builder->CreateLoad(ptr);
+            LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
             dst.push(b.first, load);
             load->setName(b.first);
         }
         {
             Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-            LoadInst *load = builder->CreateLoad(ptr);
+            LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
             dst.push(b.first + ".buffer", load);
             load->setName(b.first + ".buffer");
         }
@@ -168,13 +168,9 @@ llvm::Type *get_vector_element_type(llvm::Type *t) {
 llvm::ElementCount element_count(int e) {
     return llvm::ElementCount::getFixed(e);
 }
-#elif LLVM_VERSION >= 110
+#else
 llvm::ElementCount element_count(int e) {
     return llvm::ElementCount(e, /*scalable*/ false);
-}
-#else
-int element_count(int e) {
-    return e;
 }
 #endif
 
@@ -655,11 +651,7 @@ bool get_md_string(llvm::Metadata *value, std::string &result) {
     }
     llvm::MDString *c = llvm::dyn_cast<llvm::MDString>(value);
     if (c) {
-#if LLVM_VERSION >= 110
         result = c->getString().str();
-#else
-        result = c->getString();
-#endif
         return true;
     }
     return false;
@@ -761,7 +753,11 @@ void set_function_attributes_for_target(llvm::Function *fn, const Target &t) {
 void embed_bitcode(llvm::Module *M, const string &halide_command) {
     // Save llvm.compiler.used and remote it.
     SmallVector<Constant *, 2> used_array;
+#if LLVM_VERSION >= 130
+    SmallVector<GlobalValue *, 4> used_globals;
+#else
     SmallPtrSet<GlobalValue *, 4> used_globals;
+#endif
     llvm::Type *used_element_type = llvm::Type::getInt8Ty(M->getContext())->getPointerTo(0);
     GlobalVariable *used = collectUsedGlobalVariables(*M, used_globals, true);
     for (auto *GV : used_globals) {
