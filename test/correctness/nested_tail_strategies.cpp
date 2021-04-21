@@ -65,6 +65,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (get_jit_target_from_environment() != get_host_target()) {
+        printf("[SKIP] Target is not host and the test is target feature independent.\n");
+        return 0;
+    }
+
     // Test random compositions of tail strategies in simple
     // producer-consumer pipelines. The bounds being tight sometimes
     // depends on the simplifier being able to cancel out things.

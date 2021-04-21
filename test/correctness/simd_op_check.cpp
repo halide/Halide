@@ -2242,6 +2242,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (hl_target.has_gpu_feature()) {
+        printf("[SKIP] Target is not host and the test is target feature independent.\n");
+        return 0;
+    }
+
     SimdOpCheck test(hl_target);
 
     if (argc > 1) {

@@ -332,6 +332,11 @@ Expr e(Variable::make(Int(0), fuzz_var(4)));
 }  // namespace
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment() != get_host_target()) {
+        printf("[SKIP] Target is not host and the test is target feature independent.\n");
+        return 0;
+    }
+
     // Number of random expressions to test.
     const int count = 10000;
     // Depth of the randomly generated expression trees.

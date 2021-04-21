@@ -257,6 +257,11 @@ Buffer<float> block_transposed_by_n(Buffer<float> &buf, int vectorize) {
 }
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment() != get_host_target()) {
+        printf("[SKIP] Target is not host and the test is target feature independent.\n");
+        return 0;
+    }
+
     std::cout << std::setprecision(10);
     Buffer<float> vals = one_million_rando_floats();
     Buffer<float> transposed;

@@ -1029,6 +1029,11 @@ int self_assignment_rfactor_test() {
 }  // namespace
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment() != get_host_target()) {
+        printf("[SKIP] Target is not host and the test is target feature independent.\n");
+        return 0;
+    }
+
     printf("Running self assignment rfactor test\n");
     if (self_assignment_rfactor_test() != 0) {
         return -1;

@@ -290,6 +290,11 @@ void test_one_source() {
 }
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment() != get_host_target()) {
+        printf("[SKIP] Target is not host and the test is target feature independent.\n");
+        return 0;
+    }
+
     test_one_source<int8_t>();
     test_one_source<uint8_t>();
     test_one_source<int16_t>();

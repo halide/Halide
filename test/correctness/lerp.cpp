@@ -128,6 +128,11 @@ void check_range(int32_t zero_min, int32_t zero_extent, value_t zero_offset, val
 }
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment() != get_host_target()) {
+        printf("[SKIP] Target is not host and the test is target feature independent.\n");
+        return 0;
+    }
+
     // Test bool
     check_range<bool, uint8_t>(0, 2, 0, 1,
                                0, 2, 0, 1,

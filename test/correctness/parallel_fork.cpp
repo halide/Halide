@@ -74,6 +74,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (get_jit_target_from_environment() != get_host_target()) {
+        printf("[SKIP] Target is not host and the test is target feature independent.\n");
+        return 0;
+    }
+
     Func both;
     Buffer<int32_t> im;
     int count;

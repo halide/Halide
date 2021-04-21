@@ -6,6 +6,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment() != get_host_target()) {
+        printf("[SKIP] Target is not host and the test is target feature independent.\n");
+        return 0;
+    }
+
     // Make sure it's possible to generate object files for lots of
     // targets. This provides early warning that you may have broken
     // Halide on some other platform.
