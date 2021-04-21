@@ -112,15 +112,15 @@ Expr sum(Expr e, const std::string &name) {
     return sum(RDom(), std::move(e), Func(name));
 }
 
-Expr sum(Expr e, Func f) {
-    return sum(RDom(), std::move(e), std::move(f));
+Expr sum(Expr e, const Func &f) {
+    return sum(RDom(), std::move(e), f);
 }
 
 Expr sum(const RDom &r, Expr e, const std::string &name) {
     return sum(r, std::move(e), Func(name));
 }
 
-Expr sum(const RDom &r, Expr e, Func f) {
+Expr sum(const RDom &r, Expr e, const Func &f) {
     user_assert(!f.defined())
         << "Func " << f.name()
         << " passed to sum already has a definition";
@@ -138,15 +138,15 @@ Expr saturating_sum(Expr e, const std::string &name) {
     return saturating_sum(RDom(), std::move(e), Func(name));
 }
 
-Expr saturating_sum(Expr e, Func f) {
-    return saturating_sum(RDom(), std::move(e), std::move(f));
+Expr saturating_sum(Expr e, const Func &f) {
+    return saturating_sum(RDom(), std::move(e), f);
 }
 
 Expr saturating_sum(const RDom &r, Expr e, const std::string &name) {
     return saturating_sum(r, std::move(e), Func(name));
 }
 
-Expr saturating_sum(const RDom &r, Expr e, Func f) {
+Expr saturating_sum(const RDom &r, Expr e, const Func &f) {
     user_assert(!f.defined())
         << "Func " << f.name()
         << " passed to saturating_sum already has a definition";
@@ -165,15 +165,15 @@ Expr product(Expr e, const std::string &name) {
     return product(RDom(), std::move(e), Func(name));
 }
 
-Expr product(Expr e, Func f) {
-    return product(RDom(), std::move(e), std::move(f));
+Expr product(Expr e, const Func &f) {
+    return product(RDom(), std::move(e), f);
 }
 
 Expr product(const RDom &r, Expr e, const std::string &name) {
     return product(r, std::move(e), Func(name));
 }
 
-Expr product(const RDom &r, Expr e, Func f) {
+Expr product(const RDom &r, Expr e, const Func &f) {
     user_assert(!f.defined())
         << "Func " << f.name()
         << " passed to product already has a definition";
@@ -191,15 +191,15 @@ Expr maximum(Expr e, const std::string &name) {
     return maximum(RDom(), std::move(e), Func(name));
 }
 
-Expr maximum(Expr e, Func f) {
-    return maximum(RDom(), std::move(e), std::move(f));
+Expr maximum(Expr e, const Func &f) {
+    return maximum(RDom(), std::move(e), f);
 }
 
 Expr maximum(const RDom &r, Expr e, const std::string &name) {
     return maximum(r, std::move(e), Func(name));
 }
 
-Expr maximum(const RDom &r, Expr e, Func f) {
+Expr maximum(const RDom &r, Expr e, const Func &f) {
     user_assert(!f.defined())
         << "Func " << f.name()
         << " passed to maximum already has a definition";
@@ -218,15 +218,15 @@ Expr minimum(Expr e, const std::string &name) {
     return minimum(RDom(), std::move(e), Func(name));
 }
 
-Expr minimum(Expr e, Func f) {
-    return minimum(RDom(), std::move(e), std::move(f));
+Expr minimum(Expr e, const Func &f) {
+    return minimum(RDom(), std::move(e), f);
 }
 
 Expr minimum(const RDom &r, Expr e, const std::string &name) {
     return minimum(r, std::move(e), Func(name));
 }
 
-Expr minimum(const RDom &r, Expr e, Func f) {
+Expr minimum(const RDom &r, Expr e, const Func &f) {
     user_assert(!f.defined())
         << "Func " << f.name()
         << " passed to minimum already has a definition";
@@ -245,15 +245,15 @@ Tuple argmax(Expr e, const std::string &name) {
     return argmax(RDom(), std::move(e), Func(name));
 }
 
-Tuple argmax(Expr e, Func f) {
-    return argmax(RDom(), std::move(e), std::move(f));
+Tuple argmax(Expr e, const Func &f) {
+    return argmax(RDom(), std::move(e), f);
 }
 
 Tuple argmax(const RDom &r, Expr e, const std::string &name) {
     return argmax(r, std::move(e), Func(name));
 }
 
-Tuple argmax(const RDom &r, Expr e, Func f) {
+Tuple argmax(const RDom &r, Expr e, const Func &f) {
     user_assert(!f.defined())
         << "Func " << f.name()
         << " passed to argmax already has a definition";
@@ -284,15 +284,15 @@ Tuple argmin(Expr e, const std::string &name) {
     return argmin(RDom(), std::move(e), Func(name));
 }
 
-Tuple argmin(Expr e, Func f) {
-    return argmin(RDom(), std::move(e), std::move(f));
+Tuple argmin(Expr e, const Func &f) {
+    return argmin(RDom(), std::move(e), f);
 }
 
 Tuple argmin(const RDom &r, Expr e, const std::string &name) {
     return argmin(r, std::move(e), Func(name));
 }
 
-Tuple argmin(const RDom &r, Expr e, Func f) {
+Tuple argmin(const RDom &r, Expr e, const Func &f) {
     user_assert(!f.defined())
         << "Func " << f.name()
         << " passed to argmin already has a definition";

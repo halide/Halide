@@ -4,7 +4,6 @@
 #include <string>
 
 #include "Expr.h"
-#include "Func.h"
 #include "RDom.h"
 #include "Tuple.h"
 
@@ -79,20 +78,20 @@ Tuple argmin(const RDom &, Expr, const std::string &s = "argmin");
  * (e.g. unrolled across the reduction domain). The Func passed must
  * not have any existing definition. */
 //@{
-Expr sum(Expr, Func);
-Expr saturating_sum(Expr, Func);
-Expr product(Expr, Func);
-Expr maximum(Expr, Func);
-Expr minimum(Expr, Func);
-Expr sum(const RDom &, Expr, Func);
-Expr saturating_sum(const RDom &r, Expr e, Func);
-Expr product(const RDom &, Expr, Func);
-Expr maximum(const RDom &, Expr, Func);
-Expr minimum(const RDom &, Expr, Func);
-Tuple argmax(Expr, Func);
-Tuple argmin(Expr, Func);
-Tuple argmax(const RDom &, Expr, Func);
-Tuple argmin(const RDom &, Expr, Func);
+Expr sum(Expr, const Func &);
+Expr saturating_sum(Expr, const Func &);
+Expr product(Expr, const Func &);
+Expr maximum(Expr, const Func &);
+Expr minimum(Expr, const Func &);
+Expr sum(const RDom &, Expr, const Func &);
+Expr saturating_sum(const RDom &r, Expr e, const Func &);
+Expr product(const RDom &, Expr, const Func &);
+Expr maximum(const RDom &, Expr, const Func &);
+Expr minimum(const RDom &, Expr, const Func &);
+Tuple argmax(Expr, const Func &);
+Tuple argmin(Expr, const Func &);
+Tuple argmax(const RDom &, Expr, const Func &);
+Tuple argmin(const RDom &, Expr, const Func &);
 //@}
 
 }  // namespace Halide
