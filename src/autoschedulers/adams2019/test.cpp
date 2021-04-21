@@ -16,7 +16,6 @@ int main(int argc, char **argv) {
 
     Var x("x"), y("y");
 
-#if 0
     if (true) {
         // In a point-wise pipeline, everything should be fully fused.
         Func f("f"), g("g"), h("h");
@@ -464,7 +463,6 @@ int main(int argc, char **argv) {
         casted.set_estimate(x, 0, 2000).set_estimate(y, 0, 2000);
         Pipeline(casted).auto_schedule(target, params);
     }
-#endif
 
     if (true) {
         ImageParam im(Int(32), 2);
