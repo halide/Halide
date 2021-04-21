@@ -6,29 +6,24 @@ using namespace Halide::ConciseCasts;
 
 namespace hannk {
 
-// Approximate log2(2^(x/2^log2_precision) +/- 1)*2^log2_precision_result
-Expr approx_log2_exp2_plus_or_minus_one(Type type, Expr x, int sign, Expr log2_precision_x, int log2_precision_result) {
-    const int log2_p = 15;
-    int one = sign << log2_p;
-    Expr one_plus_exp2_x = one + approx_exp2(x, log2_precision_x, log2_p);
-
-    Expr raw = approx_log2(type, one_plus_exp2_x, log2_precision_result);
-
-    // Since we computed log2(x*p) = log2(x) + log2(p), subtract log2(p) now.
-    raw = raw - (log2_p << log2_precision_result);
+// Approximate log2(2^(x/2^q) +/- 1)*2^q
+Expr approx_log2_exp2_plus_or_minus_one(int q, Expr x, int sign, Expr q_x, Type type = Int(32)) {
+    const int q_exp = 15;
+    int one = sign << q_exp;
+    Expr raw = approx_log2(q, one + approx_exp2(q_exp, x, q_x), q_exp, type);
 
     // For large x, the intermediate overflows. But log2(1 + 2^x) when x is large is just x.
-    Expr threshold = 15 << log2_precision_x;
-    Expr line = cast(type, rounding_shift_right(x, log2_precision_x - log2_precision_result));
+    Expr threshold = 16 << q_x;
+    Expr line = cast(type, rounding_shift_right(x, q_x - q));
     return select(x < threshold, raw, line);
 }
 
-Expr approx_log2p1_exp2(Type type, Expr x, Expr log2_precision_x, int log2_precision_result) {
-    return approx_log2_exp2_plus_or_minus_one(type, x, 1, log2_precision_x, log2_precision_result);
+Expr approx_log2p1_exp2(int q, Expr x, Expr q_x, Type type = Int(32)) {
+    return approx_log2_exp2_plus_or_minus_one(q, x, 1, q_x, type);
 }
 
-Expr approx_log2m1_exp2(Type type, Expr x, Expr log2_precision_x, int log2_precision_result) {
-    return approx_log2_exp2_plus_or_minus_one(type, x, -1, log2_precision_x, log2_precision_result);
+Expr approx_log2m1_exp2(int q, Expr x, Expr q_x, Type type = Int(32)) {
+    return approx_log2_exp2_plus_or_minus_one(q, x, -1, q_x, type);
 }
 
 class Logistic : public Generator<Logistic> {
@@ -50,9 +45,9 @@ public:
 
         //   256/(1 + 2^input)
         // = 256*2^(-log2(1 + 2^input))
-        const int log2_precision = 8;
-        Expr log2_d = approx_log2p1_exp2(Int(16), input, input_shift_, log2_precision);
-        Expr output = approx_exp2(Int(16), -log2_d, log2_precision, 8);
+        const int q = 8;
+        Expr log2_d = approx_log2p1_exp2(q, input, input_shift_, Int(16));
+        Expr output = approx_exp2(8, -log2_d, q, Int(16));
         output_(x) = u8_sat(output);
 
         // Schedule.
@@ -83,10 +78,10 @@ public:
         // the input multiplier and shift, so we just need to compute 2^x here.
         // TODO: It's probably better to just directly approximate tanh, but this
         // is simple and does not impact performance in any known cases.
-        const int log2_precision = 8;
-        Expr log2_n = approx_log2m1_exp2(Int(16), i16(abs(input)), input_shift_, log2_precision);
-        Expr log2_d = approx_log2p1_exp2(Int(16), i16(abs(input)), input_shift_, log2_precision);
-        Expr abs_output = approx_exp2(Int(16), log2_n - log2_d, log2_precision, 7);
+        const int q = 8;
+        Expr log2_n = approx_log2m1_exp2(q, i16(abs(input)), input_shift_, Int(16));
+        Expr log2_d = approx_log2p1_exp2(q, i16(abs(input)), input_shift_, Int(16));
+        Expr abs_output = approx_exp2(7, log2_n - log2_d, q, Int(16));
         Expr output = select(input < 0, -abs_output, abs_output);
         output_(x) = u8_sat(output + 128);
 

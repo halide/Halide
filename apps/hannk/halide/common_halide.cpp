@@ -64,7 +64,7 @@ Expr floor_log2(const Expr &x) {
     return log2_max_x - i16(count_leading_zeros(x));
 }
 
-Expr approx_log2(const Type &type, const Expr &x, int log2_precision) {
+Expr approx_log2(int q, const Expr &x, int q_x, const Type &type) {
     Expr floor_log2_x = floor_log2(x);
 
     // Use a cubic polynomial to interpolate the fractional part of the result.
@@ -91,21 +91,20 @@ Expr approx_log2(const Type &type, const Expr &x, int log2_precision) {
     Expr poly =
         i32(multiply_2x_high(i16(p3), frac3) + multiply_2x_high(i16(p2), frac2) + p0) +
         i32(multiply_2x_high(i16(p1), frac1)) + i32(frac1);
+    Expr frac_result = cast(type, rounding_shift_right(poly, 15 - q));
 
-    return saturating_add(
-        cast(type, floor_log2_x) << log2_precision,
-        cast(type, rounding_shift_right(poly, 15 - log2_precision)));
+    // We've computed log2(x*2^q_x) = log2(x) + q_x. Subtract
+    // that offset now, before we scale up the output.
+    Expr floor_result = cast(type, floor_log2_x - q_x) << q;
+
+    return saturating_add(floor_result, frac_result);
 }
 
-Expr approx_log2(const Expr &x, int log2_precision) {
-    return approx_log2(Int(32), x, log2_precision);
-}
-
-Expr approx_exp2(const Type &type, const Expr &x, const Expr &log2_precision_x, int log2_precision_result) {
+Expr approx_exp2(int q, const Expr &x, const Expr &q_x, const Type &type) {
     // Compute floor(x / precision_x) and frac(x / precision_x)
-    Expr floor_x = cast(type, x >> log2_precision_x);
+    Expr floor_x = cast(type, x >> q_x);
 
-    Expr exp2_floor_x = cast(type, 1) << (floor_x + log2_precision_result);
+    Expr exp2_floor_x = cast(type, 1) << (floor_x + q);
 
     // Use a cubic polynomial to interpolate the fractional part of the argument.
     // TODO: A cubic might be overkill for our needs.
@@ -121,7 +120,7 @@ Expr approx_exp2(const Type &type, const Expr &x, const Expr &log2_precision_x, 
     const int p2 = std::lround(2.24701130e-01 * (1 << 15));
     const int p1 = std::lround(6.96189819e-01 * (1 << 15)) - 1;  // Hack to avoid overflow below.
 
-    Expr frac1 = i16(x - (floor_x << log2_precision_x)) << (15 - i16(log2_precision_x));
+    Expr frac1 = i16(x - (floor_x << q_x)) << (15 - i16(q_x));
     Expr frac2 = multiply_2x_high(frac1, frac1);
     Expr frac3 = multiply_2x_high(frac2, frac1);
 
@@ -139,24 +138,20 @@ Expr approx_exp2(const Type &type, const Expr &x, const Expr &log2_precision_x, 
     return saturating_add(exp2_floor_x, multiply_2x_high(exp2_floor_x, poly));
 }
 
-Expr approx_exp2(const Expr &x, const Expr &log2_precision_x, int log2_precision_result) {
-    return approx_exp2(Int(32), x, log2_precision_x, log2_precision_result);
-}
-
-Expr approx_reciprocal(const Expr &x, int log2_precision) {
+Expr approx_reciprocal(int q, const Expr &x, int q_x) {
     //   precision / x
     // = precision / 2^log2(x)
     // = precision * 2^(-log2(x))
-    Expr log2_x = approx_log2(x, 15);
-    return approx_exp2(-log2_x, 15, log2_precision);
+    Expr log2_x = approx_log2(15, x, q_x);
+    return approx_exp2(q, -log2_x, 15);
 }
 
-Expr approx_reciprocal_sqrt(const Expr &x, int log2_precision) {
+Expr approx_reciprocal_sqrt(int q, const Expr &x, int q_x) {
     //   precision / sqrt(x)
     // = precision / 2^log2(x^(1/2))
     // = precision * 2^(-log2(x)/2)
-    Expr log2_x = approx_log2(x, 14);
-    return approx_exp2(-log2_x, 15, log2_precision);
+    Expr log2_x = approx_log2(14, x, q_x);
+    return approx_exp2(q, -log2_x, 15);
 }
 
 }  // namespace hannk

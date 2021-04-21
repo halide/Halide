@@ -29,13 +29,10 @@ public:
     Output<Buffer<uint8_t>> output_{"output", 2};
 
     void generate() {
-        Var c("c"), x("x");
+        Var x("x"), y("y");
 
-        Expr input1 = input1_(c, x);
-        Expr input2 = input2_(c, x);
-
-        input1 = i32(i16(input1) - i16(input1_zero_)) << 20;
-        input2 = i32(i16(input2) - i16(input2_zero_)) << 20;
+        Expr input1 = i32(i16(input1_(x, y)) - i16(input1_zero_)) << 20;
+        Expr input2 = i32(i16(input2_(x, y)) - i16(input2_zero_)) << 20;
 
         input1 = rounding_shift_right(multiply_2x_high(input1, input1_multiplier_), input1_shift_);
         input2 = rounding_shift_right(multiply_2x_high(input2, input2_multiplier_), input2_shift_);
@@ -43,19 +40,19 @@ public:
         Expr output = multiply_2x_high(input1 + input2, output_multiplier_);
         output = i16_sat(rounding_shift_right(output, output_shift_));
         output = u8_sat(saturating_add(output, output_zero_));
-        output_(c, x) = clamp(output, output_min_, output_max_);
+        output_(x, y) = clamp(output, output_min_, output_max_);
 
         // Schedule.
         const int vector_size = natural_vector_size<uint8_t>();
 
         output_.compute_root()
-            .vectorize(c, vector_size, TailStrategy::Predicate);
+            .vectorize(x, vector_size, TailStrategy::Predicate);
 
         // Support broadcasting in the c dimension for input2.
         input2_.dim(0).set_stride(Expr());
         output_.specialize(input2_.dim(0).stride() == 1);
         output_.specialize(input2_.dim(0).stride() == 0);
-        output_.specialize_fail("inpu2 dimension 0 must have a stride of 0 or 1.");
+        output_.specialize_fail("input2 dimension 0 must have a stride of 0 or 1.");
     }
 };
 

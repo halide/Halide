@@ -35,21 +35,19 @@ Halide::Expr align(const Halide::Expr &x, const Halide::Expr &n);
 // where N is the number of bits of the narrowed result minus one.
 Halide::Expr multiply_2x_high(const Halide::Expr &a, const Halide::Expr &b);
 
-// Approximate log2(x)*2^log2_precision.
-// log2_precision must be less than 16.
-Halide::Expr approx_log2(const Halide::Expr &x, int log2_precision);
-Halide::Expr approx_log2(const Halide::Type &type, const Halide::Expr &x, int log2_precision);
+// Approximate log2(x/2^q_x)*2^q.
+// q must be less than 16.
+Halide::Expr approx_log2(int q, const Halide::Expr &x, int q_x, const Halide::Type &type = Halide::Int(32));
 
-// Approximate 2^(x/2^log2_precision_x)/2^log2_precision_result.
-// log2_precision_x must be less than 16.
-Halide::Expr approx_exp2(const Halide::Expr &x, const Halide::Expr &log2_precision_x, int log2_precision_result);
-Halide::Expr approx_exp2(const Halide::Type &type, const Halide::Expr &x, const Halide::Expr &log2_precision_x, int log2_precision_result);
+// Approximate 2^(x/2^q_x)/2^q.
+// q_x must be less than 16.
+Halide::Expr approx_exp2(int q, const Halide::Expr &x, const Halide::Expr &q_x, const Halide::Type &type = Halide::Int(32));
 
-// Approximate 2^log2_precision/x
-Halide::Expr approx_reciprocal(const Halide::Expr &x, int log2_precision);
+// Approximate 2^q/(x/2^q_x)
+Halide::Expr approx_reciprocal(int q, const Halide::Expr &x, int q_x);
 
-// Approximate 2^log2_precision/sqrt(x)
-Halide::Expr approx_reciprocal_sqrt(const Halide::Expr &x, int log2_precision);
+// Approximate 2^q/sqrt(x/2^q_x)
+Halide::Expr approx_reciprocal_sqrt(int q, const Halide::Expr &x, int q_x);
 
 }  // namespace hannk
 

@@ -27,12 +27,12 @@ public:
         sum_input_sq(y) += pow(i32(input_zeroed(rx, y)), 2);
 
         Func inv_sqrt("inv_sqrt");
-        const int log2_precision = 15;
-        inv_sqrt(y) = approx_reciprocal_sqrt(sum_input_sq(y), log2_precision);
+        const int q = 15;
+        inv_sqrt(y) = approx_reciprocal_sqrt(q, sum_input_sq(y), 0);
 
         // The output has a scale of 2^7 = 128 and offset of 128.
         Expr output = i32(input_zeroed(x, y)) * i32(inv_sqrt(y));
-        output = i16_sat(rounding_shift_right(output, log2_precision - 7));
+        output = i16_sat(rounding_shift_right(output, q - 7));
         output_(x, y) = u8_sat(saturating_add(output, i16(128)));
 
         // Schedule.
@@ -85,25 +85,25 @@ public:
 
         // Since we know that diff_beta is less than 0, we can use the full
         // range of an integer for the fractional part.
-        const int exp_precision = 15;
+        const int q = 15;
         Func exp2_diff("exp2_diff");
         exp2_diff(x, y) =
-            i16_sat(approx_exp2(diff_beta, beta_shift_, exp_precision));
+            i16_sat(approx_exp2(q, diff_beta, beta_shift_));
 
         // This could overflow if there are more than 2^16 values of x.
         Func sum_exp_row("sum_exp_row");
         sum_exp_row(y) += i32(exp2_diff(rx, y));
 
         // Below, we compute exp2_diff * inv_sum_exp_row / 15, so we need to
-        // multiply by 2^(exp_precision + 15) to get a result of the correct
+        // multiply by 2^(q + 15) to get a result of the correct
         // quantization. This doesn't saturate because we know the sum
-        // is greater than or equal to 2^0*2^exp_precision, because we
+        // is greater than or equal to 2^0*2^q, because we
         // subtracted the max from the input.
         Func inv_sum_exp_row("inv_sum_exp_row");
         inv_sum_exp_row(y) =
-            i16_sat(approx_reciprocal(sum_exp_row(y), exp_precision * 2));
+            i16_sat(approx_reciprocal(q * 2, sum_exp_row(y), 0));
 
-        assert(exp_precision == 15);
+        assert(q == 15);
         Expr output = multiply_2x_high(exp2_diff(x, y), inv_sum_exp_row(y));
         output = multiply_2x_high(output, output_multiplier_);
         output = i16_sat(rounding_shift_right(output, output_shift_));
