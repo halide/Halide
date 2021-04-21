@@ -23,10 +23,12 @@
     KNOWN_OP(AveragePool2d)   \
     KNOWN_OP(Concatenation)   \
     KNOWN_OP(Conv2d)          \
-    KNOWN_OP(DepthwiseConv2d) \
     KNOWN_OP(DepthToSpace)    \
+    KNOWN_OP(DepthwiseConv2d) \
     KNOWN_OP(Equal)           \
     KNOWN_OP(FullyConnected)  \
+    KNOWN_OP(Greater)         \
+    KNOWN_OP(GreaterEqual)    \
     KNOWN_OP(L2Normalization) \
     KNOWN_OP(Less)            \
     KNOWN_OP(LessEqual)       \
@@ -34,13 +36,13 @@
     KNOWN_OP(MaxPool2d)       \
     KNOWN_OP(Mean)            \
     KNOWN_OP(Mul)             \
-    KNOWN_OP(NotEqual)        \
     KNOWN_OP(Neg)             \
+    KNOWN_OP(NotEqual)        \
     KNOWN_OP(Pad)             \
-    KNOWN_OP(Reshape)         \
     KNOWN_OP(Relu)            \
     KNOWN_OP(Relu6)           \
     KNOWN_OP(ReluN1To1)       \
+    KNOWN_OP(Reshape)         \
     KNOWN_OP(Shape)           \
     KNOWN_OP(Softmax)         \
     KNOWN_OP(SpaceToDepth)    \
@@ -472,7 +474,7 @@ private:
         return it->second;
     }
 
-    template <typename OptionsT>
+    template<typename OptionsT>
     std::unique_ptr<Op> BuildBinary(TfLiteContext *context, TfLiteNode *node, BinaryOp::Operator type) {
         auto input1 = GetTensorById(context, node->inputs->data[0]);
         auto input2 = GetTensorById(context, node->inputs->data[1]);
