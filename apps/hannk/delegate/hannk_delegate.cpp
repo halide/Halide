@@ -633,10 +633,15 @@ private:
     std::unique_ptr<Op> BuildReshape(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        const TfLiteReshapeParams *params = (const TfLiteReshapeParams *)(node->builtin_data);
-        std::vector<int> new_shape;
-        new_shape.assign(params->shape, params->shape + params->num_dimensions);
-        return ::hannk::make_unique<ReshapeOp>(input, output, new_shape);
+        TensorPtr shape_tensor = nullptr;
+        std::vector<int> shape_array;
+        if (node->inputs->size == 2) {
+            shape_tensor = GetTensorById(context, node->inputs->data[1]);
+        } else {
+            const TfLiteReshapeParams *params = (const TfLiteReshapeParams *)(node->builtin_data);
+            shape_array.assign(params->shape, params->shape + params->num_dimensions);
+        }
+        return ::hannk::make_unique<ReshapeOp>(input, shape_tensor, output, shape_array);
     }
 
     std::unique_ptr<Op> BuildSoftmax(TfLiteContext *context, TfLiteNode *node) {

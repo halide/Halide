@@ -367,15 +367,15 @@ public:
 };
 
 class ReshapeOp : public Op {
-    std::vector<int> new_shape_;
+    std::vector<int> shape_array_;
 
 public:
-    ReshapeOp(TensorPtr input, TensorPtr output, std::vector<int> new_shape)
-        : Op({input}, {output}), new_shape_(std::move(new_shape)) {
+    ReshapeOp(TensorPtr input, TensorPtr shape_tensor, TensorPtr output, std::vector<int> shape_array)
+        : Op({input, shape_tensor}, {output}), shape_array_(std::move(shape_array)) {
     }
 
     std::unique_ptr<Op> clone(TensorMap &map) const {
-        return ::hannk::make_unique<ReshapeOp>(apply(map, input()), apply(map, output()), new_shape_);
+        return ::hannk::make_unique<ReshapeOp>(apply(map, input()), apply(map, input(1)), apply(map, output()), shape_array_);
     }
 
     void accept(OpVisitor *v);
