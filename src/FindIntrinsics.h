@@ -28,6 +28,9 @@ Expr lower_halving_sub(const Expr &a, const Expr &b);
 Expr lower_rounding_halving_add(const Expr &a, const Expr &b);
 Expr lower_rounding_halving_sub(const Expr &a, const Expr &b);
 
+Expr lower_mul_shift_right(const Expr &a, const Expr &b, const Expr &q);
+Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q);
+
 /** Replace one of the above ops with equivalent arithmetic. */
 Expr lower_intrinsic(const Call *op);
 
