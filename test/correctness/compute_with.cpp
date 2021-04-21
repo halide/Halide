@@ -143,6 +143,7 @@ int split_test() {
 }
 
 int fuse_test() {
+    const int size = 20;
     Buffer<int> im_ref, im;
     {
         Var x("x"), y("y"), z("z");
@@ -151,7 +152,7 @@ int fuse_test() {
         f(x, y, z) = x + y + z;
         g(x, y, z) = x - y + z;
         h(x, y, z) = f(x + 2, y - 1, z + 3) + g(x - 5, y - 6, z + 2);
-        im_ref = h.realize({100, 100, 100});
+        im_ref = h.realize({size, size, size});
     }
 
     {
@@ -173,18 +174,18 @@ int fuse_test() {
         g.trace_loads().trace_stores();
         h.trace_loads().trace_stores();
         stores = {
-            {f.name(), Bound(2, 101, -1, 98, 3, 102)},
-            {g.name(), Bound(-5, 94, -6, 93, 2, 101)},
-            {h.name(), Bound(0, 99, 0, 99, 0, 99)},
+            {f.name(), Bound(2, size + 1, -1, size - 2, 3, size + 2)},
+            {g.name(), Bound(-5, size - 6, -6, size - 7, 2, size + 1)},
+            {h.name(), Bound(0, size - 1, 0, size - 1, 0, size - 1)},
         };
         loads = {
-            {f.name(), Bound(2, 101, -1, 98, 3, 102)},
-            {g.name(), Bound(-5, 94, -6, 93, 2, 101)},
+            {f.name(), Bound(2, size + 1, -1, size - 2, 3, size + 2)},
+            {g.name(), Bound(-5, size - 6, -6, size - 7, 2, size + 1)},
             {h.name(), Bound()},  // There shouldn't be any load from h
         };
         h.set_custom_trace(&my_trace);
 
-        im = h.realize({100, 100, 100});
+        im = h.realize({size, size, size});
     }
 
     auto func = [im_ref](int x, int y, int z) {
@@ -474,7 +475,7 @@ int double_split_fuse_test() {
 
 int rgb_yuv420_test() {
     // Somewhat approximating the behavior of rgb -> yuv420 (downsample by half in the u and v channels)
-    const int size = 256;
+    const int size = 64;
     Buffer<int> y_im(size, size), u_im(size / 2, size / 2), v_im(size / 2, size / 2);
     Buffer<int> y_im_ref(size, size), u_im_ref(size / 2, size / 2), v_im_ref(size / 2, size / 2);
 
@@ -637,6 +638,8 @@ int rgb_yuv420_test() {
 }
 
 int vectorize_test() {
+    const int width = 111;
+    const int height = 31;
     Buffer<int> im_ref, im;
     {
         Var x("x"), y("y");
@@ -645,7 +648,7 @@ int vectorize_test() {
         f(x, y) = x + y;
         g(x, y) = x - y;
         h(x, y) = f(x - 1, y + 1) + g(x + 2, y - 2);
-        im_ref = h.realize({111, 111});
+        im_ref = h.realize({width, height});
     }
 
     {
@@ -670,18 +673,18 @@ int vectorize_test() {
         g.trace_loads().trace_stores();
         h.trace_loads().trace_stores();
         stores = {
-            {f.name(), Bound(-1, 109, 1, 111)},
-            {g.name(), Bound(2, 112, -2, 108)},
-            {h.name(), Bound(0, 110, 0, 110)},
+            {f.name(), Bound(-1, width - 2, 1, height)},
+            {g.name(), Bound(2, width + 1, -2, height - 3)},
+            {h.name(), Bound(0, width - 1, 0, height - 1)},
         };
         loads = {
-            {f.name(), Bound(-1, 109, 1, 111)},
-            {g.name(), Bound(2, 112, -2, 108)},
+            {f.name(), Bound(-1, width - 2, 1, height)},
+            {g.name(), Bound(2, width + 1, -2, height - 3)},
             {h.name(), Bound()},  // There shouldn't be any load from h
         };
         h.set_custom_trace(&my_trace);
 
-        im = h.realize({111, 111});
+        im = h.realize({width, height});
     }
 
     auto func = [im_ref](int x, int y) {

@@ -262,23 +262,19 @@ public:
     std::unique_ptr<Op> parse_reshape(const tflite::Operator *op) {
         const tflite::ReshapeOptions *options =
             op->builtin_options_as_ReshapeOptions();
-        std::vector<int> new_shape;
+        std::vector<int> shape_array;
         // If there are two inputs, and the second is an int32 vector, it should
         // be used to specify the new shape (instead of ReshapeOptions).
+        TensorPtr shape_tensor = nullptr;
+        if (op->inputs()->size() == 2) {
+            shape_tensor = tensors_[op->inputs()->Get(1)];
+        }
         if (options) {
-            new_shape.assign(options->new_shape()->cbegin(), options->new_shape()->cend());
-        } else if (op->inputs()->size() == 2) {
-            TensorPtr indices = tensors_[op->inputs()->Get(1)];
-            if (indices->is_allocated() && indices->is_constant()) {
-                auto indices_buf = indices->buffer<const int32_t>();
-                new_shape.assign(indices_buf.begin(), indices_buf.end());
-            } else {
-                LOG(FATAL) << "Dynamic reshapes not supported.\n";
-            }
+            shape_array.assign(options->new_shape()->cbegin(), options->new_shape()->cend());
         }
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return ::hannk::make_unique<ReshapeOp>(input, output, new_shape);
+        return ::hannk::make_unique<ReshapeOp>(input, shape_tensor, output, shape_array);
     }
 
     std::unique_ptr<Op> parse_space_to_depth(const tflite::Operator *op) {

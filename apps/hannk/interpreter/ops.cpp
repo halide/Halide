@@ -942,8 +942,8 @@ void ReductionOp::execute() {
         auto output_buf = out->buffer<uint8_t>();
 
         if (op_ == Mean) {
-            int mins[4] = { 0, 0, 0, 0 };
-            int extents[4] = { 1, 1, 1, 1 };
+            int mins[4] = {0, 0, 0, 0};
+            int extents[4] = {1, 1, 1, 1};
             for (int d = 0; d < 4; d++) {
                 if (reducing(d)) {
                     mins[d] = input_buf.dim(d).min();
@@ -954,7 +954,6 @@ void ReductionOp::execute() {
                                   mins[2], extents[2], mins[3], extents[3], output_buf));
         }
     }
-
 }
 
 // TODO: Maybe this is only a reshape in some dimensions, in which case we might be able to split it.
@@ -966,18 +965,53 @@ BoundsMap ReshapeOp::map_bounds(int input_idx, int output_idx) const {
 
 void ReshapeOp::execute() {
     const TensorPtr in = input();
+    const TensorPtr shape = input(1);
     TensorPtr out = output();
 
     auto input_buf = in->buffer<const void>();
     auto output_buf = out->buffer();
 
-    // TODO: should reality-check that the output buf matches the shape we expect
-    // assert((int) new_shape_.size() == output_buf.dimensions());
-    // for (int d = 0; d < output_buf.dimensions(); d++) {
-    //     assert(new_shape_.at(d) == output_buf.dim(d).extent());
-    // }
+    std::vector<int32_t> new_shape;
+    // The shape can be specified by a Tensor or a constant array (but not both).
+    // It's legal for the Tensor to be dynamic, so we have to keep a reference to it
+    // and extract the data at execution time.
+    if (shape && shape->rank() == 1 && shape->type() == halide_type_of<int32_t>()) {
+        auto shape_buf = shape->buffer<const int32_t>();
+        new_shape.assign(shape_buf.begin(), shape_buf.end());
+    } else {
+        new_shape = shape_array_;
+        if (new_shape.size() == 1 && new_shape[0] == 0) {
+            // Legacy tflite models use a shape parameter of [0] to indicate scalars,
+            // so adjust accordingly.
+            new_shape.clear();
+        }
+    }
 
-    assert(input_buf.number_of_elements() == output_buf.number_of_elements());
+    // One of the shape values can be -1, meaning "calculate it for me".
+    int output_elements = 1;
+    int stretch_dim = -1;
+    for (size_t i = 0; i < new_shape.size(); ++i) {
+        int value = new_shape[i];
+        if (value == -1) {
+            CHECK(stretch_dim == -1);
+            stretch_dim = i;
+        } else {
+            output_elements *= value;
+        }
+    }
+    if (stretch_dim != -1) {
+        new_shape[stretch_dim] = input_buf.number_of_elements() / output_elements;
+        output_elements *= new_shape[stretch_dim];
+        CHECK(output_elements == (int)output_buf.number_of_elements());
+    }
+
+    CHECK((int)new_shape.size() == output_buf.dimensions());
+    for (int d = 0; d < output_buf.dimensions(); d++) {
+        CHECK(new_shape.at(new_shape.size() - d - 1) == output_buf.dim(d).extent()) << new_shape
+                                                                                    << "d " << d << " expect " << new_shape.at(d) << " actual " << output_buf.dim(d).extent();
+    }
+
+    CHECK(input_buf.number_of_elements() == output_buf.number_of_elements());
     size_t output_size = output_buf.number_of_elements() * out->type().bytes();
     if (is_alias(input_buf, output_buf)) {
         assert(input_buf.begin() == output_buf.begin());
@@ -1036,7 +1070,7 @@ void SoftmaxOp::execute() {
 
 namespace {
 
-template <typename T>
+template<typename T>
 inline void DepthToSpace(const HalideBuffer<const T> &input, int block_size, HalideBuffer<T> output) {
     // This is really slow, if profiling has brought you here, optimize it.
     output.for_each_element([&](int c, int x, int y, int b) {
@@ -1047,7 +1081,7 @@ inline void DepthToSpace(const HalideBuffer<const T> &input, int block_size, Hal
     });
 }
 
-template <typename T>
+template<typename T>
 inline void SpaceToDepth(const HalideBuffer<const T> &input, int block_size, HalideBuffer<T> output) {
     // This is really slow, if profiling has brought you here, optimize it.
     output.for_each_element([&](int c, int x, int y, int b) {
