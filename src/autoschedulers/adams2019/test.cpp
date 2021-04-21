@@ -932,6 +932,5 @@ int main(int argc, char **argv) {
     set_env_variable("HL_DISABLE_MEMOIZED_BLOCKS", cache_blocks, /* overwrite */ 1);
 
     std::cout << "adams2019 testing passed\n";
-
     return 0;
 }
