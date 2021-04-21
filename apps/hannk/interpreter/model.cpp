@@ -192,7 +192,7 @@ void Tensor::dump(std::ostream &os) const {
     os << " " << name() << std::endl;
 }
 
-Op::Op(std::vector<TensorPtr > inputs, std::vector<TensorPtr > outputs)
+Op::Op(std::vector<TensorPtr> inputs, std::vector<TensorPtr> outputs)
     : inputs_(std::move(inputs)), outputs_(std::move(outputs)) {
     for (auto &i : inputs_) {
         if (!i) continue;

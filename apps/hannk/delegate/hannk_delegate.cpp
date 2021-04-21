@@ -472,7 +472,7 @@ private:
         return it->second;
     }
 
-    template <typename OptionsT>
+    template<typename OptionsT>
     std::unique_ptr<Op> BuildBinary(TfLiteContext *context, TfLiteNode *node, BinaryOp::Operator type) {
         auto input1 = GetTensorById(context, node->inputs->data[0]);
         auto input2 = GetTensorById(context, node->inputs->data[1]);

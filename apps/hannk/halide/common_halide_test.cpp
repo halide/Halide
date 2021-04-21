@@ -38,7 +38,7 @@ bool test_approx_log2() {
                 std::abs(exact - result_x) > absolute_tolerance) {
                 std::cout << "approx_log2(" << exact_x << ", " << log2_precision << "): "
                           << exact << " !~= " << result_x << "\n";
-                //return false;
+                return false;
             }
         }
     }
@@ -79,7 +79,7 @@ bool test_approx_exp2() {
                         std::abs(exact - result_xy) > absolute_tolerance) {
                         std::cout << "approx_exp2(" << exact_x << ", " << y << ", " << log2_precision_result << "): "
                                   << exact << " !~= " << result_xy << "\n";
-                       //return false;
+                        return false;
                     }
                 } else {
                     // The result would have overflowed.

@@ -145,12 +145,12 @@ public:
     }
 
 // We can't do this with templates...
-#define PARSE_BINARY_WITH_ACTIVATION(op, Op)          \
-    ::hannk::make_unique<BinaryOp>(                   \
-        tensors_[op->inputs()->Get(0)],  \
-        tensors_[op->inputs()->Get(1)],  \
-        tensors_[op->outputs()->Get(0)], \
-        BinaryOp::Op,                                 \
+#define PARSE_BINARY_WITH_ACTIVATION(op, Op) \
+    ::hannk::make_unique<BinaryOp>(          \
+        tensors_[op->inputs()->Get(0)],      \
+        tensors_[op->inputs()->Get(1)],      \
+        tensors_[op->outputs()->Get(0)],     \
+        BinaryOp::Op,                        \
         parse_activation_function(op->builtin_options_as_##Op##Options()->fused_activation_function()));
 
     std::unique_ptr<Op> parse_pool2D(const tflite::Operator *op, PoolOp::Operator reduce_op) {
@@ -178,7 +178,7 @@ public:
         ActivationFunction activation =
             parse_activation_function(options->fused_activation_function());
         CHECK(activation == ActivationFunction::None);
-        std::vector<TensorPtr > inputs;
+        std::vector<TensorPtr> inputs;
         for (auto i = op->inputs()->cbegin(); i != op->inputs()->cend(); ++i) {
             inputs.push_back(tensors_[*i]);
         }
