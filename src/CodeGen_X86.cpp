@@ -155,10 +155,12 @@ const x86Intrinsic intrinsic_defs[] = {
     // Multiply keep high half
     {"llvm.x86.avx2.pmulh.w", Int(16, 16), "pmulh", {Int(16, 16), Int(16, 16)}, Target::AVX2},
     {"llvm.x86.avx2.pmulhu.w", UInt(16, 16), "pmulh", {UInt(16, 16), UInt(16, 16)}, Target::AVX2},
-    {"llvm.x86.avx2.pmul.hr.sw", Int(16, 16), "pmulhr", {Int(16, 16), Int(16, 16)}, Target::AVX2},
+    {"llvm.x86.avx2.pmul.hr.sw", Int(16, 16), "pmulhrs", {Int(16, 16), Int(16, 16)}, Target::AVX2},
+    {"saturating_pmulhrswx16", Int(16, 16), "saturating_pmulhrs", {Int(16, 16), Int(16, 16)}, Target::AVX2},
     {"llvm.x86.sse2.pmulh.w", Int(16, 8), "pmulh", {Int(16, 8), Int(16, 8)}},
     {"llvm.x86.sse2.pmulhu.w", UInt(16, 8), "pmulh", {UInt(16, 8), UInt(16, 8)}},
-    {"llvm.x86.ssse3.pmul.hr.sw.128", Int(16, 8), "pmulhr", {Int(16, 8), Int(16, 8)}, Target::SSE41},
+    {"llvm.x86.ssse3.pmul.hr.sw.128", Int(16, 8), "pmulhrs", {Int(16, 8), Int(16, 8)}, Target::SSE41},
+    {"saturating_pmulhrswx8", Int(16, 8), "saturating_pmulhrs", {Int(16, 8), Int(16, 8)}, Target::SSE41},
 
     // Pairwise multiply-add
     {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "pmaddwd", {Int(16, 32), Int(16, 32)}, Target::AVX512_Skylake},
@@ -417,9 +419,9 @@ void CodeGen_X86::visit(const Cast *op) {
 
     // clang-format off
     static Pattern patterns[] = {
-        {"pmulh", i16(widening_mul(wild_i16x_, wild_i16x_) >> u32(16))},
-        {"pmulh", u16(widening_mul(wild_u16x_, wild_u16x_) >> u32(16))},
-        {"pmulhr", i16(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), u32(15)))},
+        // This isn't rounding_multiply_quantzied(i16, i16, 15) because it doesn't
+        // saturate the result.
+        {"pmulhrs", i16(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), 15))},
 
         {"saturating_narrow", i16_sat(wild_i32x_)},
         {"saturating_narrow", u16_sat(wild_i32x_)},
@@ -478,14 +480,34 @@ void CodeGen_X86::visit(const Cast *op) {
 }
 
 void CodeGen_X86::visit(const Call *op) {
-    if (op->is_intrinsic(Call::mulhi_shr)) {
-        internal_assert(op->args.size() == 3);
-
-        Expr p_wide = widening_mul(op->args[0], op->args[1]);
-        const UIntImm *shift = op->args[2].as<UIntImm>();
-        internal_assert(shift != nullptr) << "Third argument to mulhi_shr intrinsic must be an unsigned integer immediate.\n";
-        value = codegen(cast(op->type, p_wide >> op->type.bits()) >> shift->value);
+    if (!op->type.is_vector()) {
+        // We only have peephole optimizations for vectors in here.
+        CodeGen_Posix::visit(op);
         return;
+    }
+
+    struct Pattern {
+        string intrin;
+        Expr pattern;
+    };
+
+    // clang-format off
+    static Pattern patterns[] = {
+        {"pmulh", mul_shift_right(wild_i16x_, wild_i16x_, 16)},
+        {"pmulh", mul_shift_right(wild_u16x_, wild_u16x_, 16)},
+        {"saturating_pmulhrs", rounding_mul_shift_right(wild_i16x_, wild_i16x_, 15)},
+    };
+    // clang-format on
+
+    vector<Expr> matches;
+    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
+        const Pattern &pattern = patterns[i];
+        if (expr_match(pattern.pattern, op, matches)) {
+            value = call_overloaded_intrin(op->type, pattern.intrin, matches);
+            if (value) {
+                return;
+            }
+        }
     }
 
     CodeGen_Posix::visit(op);
