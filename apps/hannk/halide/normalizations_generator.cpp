@@ -85,7 +85,7 @@ public:
 
         // Since we know that diff_beta is less than 0, we can use the full
         // range of an integer for the fractional part.
-        const int q = 15;
+        constexpr int q = 15;
         Func exp2_diff("exp2_diff");
         exp2_diff(x, y) =
             i16_sat(approx_exp2(q, diff_beta, beta_shift_));
@@ -103,7 +103,7 @@ public:
         inv_sum_exp_row(y) =
             i16_sat(approx_reciprocal(q * 2, sum_exp_row(y), 0));
 
-        assert(q == 15);
+        static_assert(q == 15, "");
         Expr output = multiply_2x_high(exp2_diff(x, y), inv_sum_exp_row(y));
         output = multiply_2x_high(output, output_multiplier_);
         output = i16_sat(rounding_shift_right(output, output_shift_));
