@@ -560,11 +560,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs_arg, const MachineParam
         using IRMutator::visit;
 
         Expr visit(const Call *op) override {
-          debug(0) << "RemoveImageLoads found call " << Expr(op) << "\n";
           if (op->call_type == Call::Image) {
-            // TODO(abadams|zvookin): Even if this solution is used, it is perhaps not valid to pass the image into an Extern call.
-            debug(0) << "Rewriting call " << Expr(op) << "\n";
-            
             vector<Expr> new_args(op->args.size());
             for (size_t i = 0; i < op->args.size(); i++) {
                 const Expr &old_arg = op->args[i];
@@ -574,7 +570,6 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs_arg, const MachineParam
 
             return Call::make(op->type, op->name, new_args, Call::Extern, op->func, op->value_index, op->image, op->param);
           } else {
-            debug(0) << "Delegating call " << Expr(op) << "\n";
             return IRMutator::visit(op);
           }
        }
