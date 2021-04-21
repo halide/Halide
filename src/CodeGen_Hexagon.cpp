@@ -2056,33 +2056,6 @@ void CodeGen_Hexagon::visit(const Call *op) {
         llvm::Function *fn = module->getFunction("halide.hexagon.scatter.release");
         value = builder->CreateCall(fn, {ptr});
         return;
-    } else if (op->is_intrinsic(Call::mulhi_shr) && op->type.is_vector() &&
-               (op->type.bits() == 8 || op->type.bits() == 16)) {
-        internal_assert(op->args.size() == 3);
-        Type wide_ty = op->type.widen();
-
-        // Generate a widening multiply.
-        Expr p_wide = Call::make(
-            wide_ty, "halide.hexagon.mpy" + type_suffix(op->args[0], op->args[1]),
-            {op->args[0], op->args[1]}, Call::PureExtern);
-
-        // Keep the high half (truncate the low half). This also
-        // re-interleaves after mpy deinterleaved.
-        Expr p = Call::make(op->type,
-                            "halide.hexagon.trunclo" + type_suffix(p_wide, false),
-                            {p_wide}, Call::PureExtern);
-
-        // Apply the remaining shift.
-        const UIntImm *shift = op->args[2].as<UIntImm>();
-        internal_assert(shift != nullptr)
-            << "Third argument to mulhi_shr intrinsic must be an unsigned integer "
-               "immediate.\n";
-        if (shift->value != 0) {
-            p = p >> make_const(p.type(), shift->value);
-        }
-
-        value = codegen(p);
-        return;
     } else if (op->is_intrinsic(Call::sorted_avg) && op->type.is_vector() &&
                ((op->type.is_uint() &&
                  (op->type.bits() == 8 || op->type.bits() == 16)) ||
