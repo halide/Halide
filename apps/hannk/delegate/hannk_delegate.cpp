@@ -41,6 +41,7 @@
     KNOWN_OP(Relu)            \
     KNOWN_OP(Relu6)           \
     KNOWN_OP(ReluN1To1)       \
+    KNOWN_OP(Shape)           \
     KNOWN_OP(Softmax)         \
     KNOWN_OP(SpaceToDepth)    \
     KNOWN_OP(Square)          \
@@ -644,6 +645,12 @@ private:
         return ::hannk::make_unique<ReshapeOp>(input, shape_tensor, output, shape_array);
     }
 
+    std::unique_ptr<Op> BuildShape(TfLiteContext *context, TfLiteNode *node) {
+        auto input = GetTensorById(context, node->inputs->data[0]);
+        auto output = GetTensorById(context, node->outputs->data[0]);
+        return ::hannk::make_unique<ShapeOp>(input, output);
+    }
+
     std::unique_ptr<Op> BuildSoftmax(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
@@ -932,6 +939,16 @@ bool IsNodeSupported_Reshape(TfLiteContext *context, TfLiteNode *node, TfLiteReg
     }
     // Note that Reshape can have 1 or 2 inputs.
     if (node->inputs->size > 2) {
+        return false;
+    }
+    return true;
+}
+
+bool IsNodeSupported_Shape(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    if (!(registration->version <= 2)) {
+        return false;
+    }
+    if (node->inputs->size != 1) {
         return false;
     }
     return true;

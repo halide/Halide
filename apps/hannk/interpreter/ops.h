@@ -389,6 +389,27 @@ public:
     }
 };
 
+class ShapeOp : public Op {
+public:
+    ShapeOp(TensorPtr input, TensorPtr output)
+        : Op({input}, {output}) {
+    }
+
+    std::unique_ptr<Op> clone(TensorMap &map) const {
+        return ::hannk::make_unique<ShapeOp>(apply(map, input()), apply(map, output()));
+    }
+
+    void accept(OpVisitor *v);
+
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
+
+    void execute();
+
+    void dump(std::ostream &os) const {
+        os << "  Shape " << output()->name() << std::endl;
+    }
+};
+
 class SoftmaxOp : public Op {
     float beta_;
 
@@ -516,6 +537,8 @@ public:
     virtual void visit(ReductionOp *op) {
     }
     virtual void visit(ReshapeOp *op) {
+    }
+    virtual void visit(ShapeOp *op) {
     }
     virtual void visit(SoftmaxOp *op) {
     }

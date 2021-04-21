@@ -1022,6 +1022,28 @@ void ReshapeOp::execute() {
     }
 }
 
+BoundsMap ShapeOp::map_bounds(int input_idx, int output_idx) const {
+    assert(input_idx == 0);
+    assert(output_idx == 0);
+    // This doesn't actually read anything from the input.
+    return BoundsMap(input()->rank(), 1);
+}
+
+void ShapeOp::execute() {
+    const TensorPtr in = input();
+    TensorPtr out = output();
+
+    if (out->type() == halide_type_of<int32_t>()) {
+        HalideBuffer<int32_t> out_buf = out->buffer<int32_t>();
+        assert(out_buf.dimensions() == 1);
+        for (int i = out_buf.dim(0).min(); i <= out_buf.dim(0).max(); i++) {
+            out_buf(i) = in->extent(i);
+        }
+    } else {
+        LOG(FATAL) << "Unsupported type " << out->type() << "\n";
+    }
+}
+
 BoundsMap SoftmaxOp::map_bounds(int input_idx, int output_idx) const {
     assert(input_idx == 0);
     assert(output_idx == 0);
@@ -1265,6 +1287,10 @@ void PadOp::accept(OpVisitor *v) {
 }
 
 void PoolOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void ShapeOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 

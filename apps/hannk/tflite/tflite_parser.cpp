@@ -277,6 +277,12 @@ public:
         return ::hannk::make_unique<ReshapeOp>(input, shape_tensor, output, shape_array);
     }
 
+    std::unique_ptr<Op> parse_shape(const tflite::Operator *op) {
+        TensorPtr input = tensors_[op->inputs()->Get(0)];
+        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        return ::hannk::make_unique<ShapeOp>(input, output);
+    }
+
     std::unique_ptr<Op> parse_space_to_depth(const tflite::Operator *op) {
         const tflite::SpaceToDepthOptions *options =
             op->builtin_options_as_SpaceToDepthOptions();
@@ -379,6 +385,8 @@ public:
             return parse_unary(op, UnaryOp::ReluN1To1);
         case tflite::BuiltinOperator_RESHAPE:
             return parse_reshape(op);
+        case tflite::BuiltinOperator_SHAPE:
+            return parse_shape(op);
         case tflite::BuiltinOperator_SOFTMAX:
             return parse_softmax(op);
         case tflite::BuiltinOperator_SPACE_TO_DEPTH:
