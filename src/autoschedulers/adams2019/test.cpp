@@ -896,7 +896,7 @@ int main(int argc, char **argv) {
                 p1 = Pipeline(f);
             }
         }
-        
+
         if (!test_caching(p1, p2, target, params)) {
             std::cerr << "Caching check failed on scalar image load" << std::endl;
             return 1;
@@ -920,7 +920,7 @@ int main(int argc, char **argv) {
                 p1 = Pipeline(f);
             }
         }
-        
+
         if (!test_caching(p1, p2, target, params)) {
             std::cerr << "Caching check failed on invariant image load" << std::endl;
             return 1;

@@ -584,11 +584,11 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs_arg, const MachineParam
     std::tie(outputs, env) = deep_copy(outputs_arg, env);
 
     for (size_t i = 0; i < outputs.size(); i++) {
-      outputs[i].mutate(&remove_image_loads);
+        outputs[i].mutate(&remove_image_loads);
     }
 
     for (auto &entry : env) {
-      entry.second.mutate(&remove_image_loads);
+        entry.second.mutate(&remove_image_loads);
     }
 
     // A mutator to apply parameter estimates to the expressions
