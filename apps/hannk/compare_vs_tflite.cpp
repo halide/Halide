@@ -140,20 +140,20 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
         // Execute once, to prime the pump
         interpreter.execute();
 
-        // Now benchmark it
-        if (do_benchmark) {
-            halide_result.time = bench([&interpreter]() {
-                interpreter.execute();
-            });
-        }
-
-        // Save the outputs
+        // Save the outputs from that execution (before benchmarking)
         for (TensorPtr t : interpreter.outputs()) {
             if (verbosity) {
                 std::cout << "HALIDE output is " << t->name() << " type " << t->type() << "\n";
             }
             // Make a copy since the Buffer might reference memory owned by the interpreter
             halide_result.outputs.emplace_back(t->buffer().copy());
+        }
+
+        // Now benchmark it
+        if (do_benchmark) {
+            halide_result.time = bench([&interpreter]() {
+                interpreter.execute();
+            });
         }
     }
 
@@ -207,15 +207,7 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
         // Execute once, to prime the pump
         CHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
 
-        // Now benchmark it
-        if (do_benchmark) {
-            result.time = bench([&tf_interpreter]() {
-                TfLiteStatus status;
-                CHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
-            });
-        }
-
-        // Save the outputs
+        // Save the outputs from that execution (before benchmarking)
         for (int i = 0; i < outputs; i++) {
             const TfLiteTensor *t = TfLiteInterpreterGetOutputTensor(tf_interpreter, i);
             if (verbosity) {
@@ -223,6 +215,14 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
             }
             // Make a copy since the Buffer might reference memory owned by the tf_interpreter
             result.outputs.emplace_back(wrap_tf_lite_tensor_with_halide_buffer(t).copy());
+        }
+
+        // Now benchmark it
+        if (do_benchmark) {
+            result.time = bench([&tf_interpreter]() {
+                TfLiteStatus status;
+                CHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
+            });
         }
 
         TfLiteInterpreterDelete(tf_interpreter);
