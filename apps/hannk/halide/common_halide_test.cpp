@@ -9,6 +9,7 @@ double relative_error(double x, double y) {
     return std::abs(x - y) / std::max({x, y, 1e-6});
 }
 
+template<typename T>
 bool test_approx_log2() {
     const int extent = 50000;
     const int scale = std::numeric_limits<int>::max() / extent;
@@ -17,7 +18,7 @@ bool test_approx_log2() {
     Func test("test");
     std::vector<Expr> tests;
     for (int i : log2_precisions) {
-        tests.push_back(approx_log2((x + 1) * scale, i));
+        tests.push_back(approx_log2(i, (x + 1) * scale, 0, halide_type_of<T>()));
     }
     test(x) = Tuple(tests);
 
@@ -27,34 +28,39 @@ bool test_approx_log2() {
     auto results = test.realize({extent});
     const int log2_precisions_size = sizeof(log2_precisions) / sizeof(log2_precisions[0]);
     for (int z = 0; z < log2_precisions_size; z++) {
-        Buffer<int> result = results[z];
+        Buffer<T> result = results[z];
         const int log2_precision = log2_precisions[z];
         const double precision = 1 << log2_precision;
         for (int x = 0; x < result.width(); x++) {
             const double exact_x = (x + 1) * scale;
             const double exact = std::round(std::log2(exact_x) * precision);
-            const double result_x = result(x);
-            if (relative_error(exact, result_x) > relative_tolerance &&
-                std::abs(exact - result_x) > absolute_tolerance) {
-                std::cout << "approx_log2(" << exact_x << ", " << log2_precision << "): "
-                          << exact << " !~= " << result_x << "\n";
-                return false;
+            if (std::numeric_limits<T>::min() <= exact && exact <= std::numeric_limits<T>::max()) {
+                const double result_x = result(x);
+                if (relative_error(exact, result_x) > relative_tolerance &&
+                    std::abs(exact - result_x) > absolute_tolerance) {
+                    std::cout << "approx_log2(" << exact_x << ", " << log2_precision << "): "
+                              << exact << " !~= " << result_x << "\n";
+                    return false;
+                }
+            } else {
+                // The result would have overflowed.
             }
         }
     }
     return true;
 }
 
+template<typename T>
 bool test_approx_exp2() {
     const int extent = 50000;
     const int offset = extent / 2;
-    const int scale = std::numeric_limits<int>::max() / offset;
+    const int scale = std::numeric_limits<T>::max() / offset;
     const int log2_precision_results[] = {0, 1, 2, 3, 8, 15};
 
     Func test("test");
     std::vector<Expr> tests;
     for (int i : log2_precision_results) {
-        tests.push_back(approx_exp2((x - offset) * scale, y, i));
+        tests.push_back(approx_exp2(i, (x - offset) * scale, y, halide_type_of<T>()));
     }
     test(x, y) = Tuple(tests);
 
@@ -65,7 +71,7 @@ bool test_approx_exp2() {
     const int log2_precision_results_size =
         sizeof(log2_precision_results) / sizeof(log2_precision_results[0]);
     for (int z = 0; z < log2_precision_results_size; z++) {
-        Buffer<int> result = results[z];
+        Buffer<T> result = results[z];
         const int log2_precision_result = log2_precision_results[z];
         const double precision_result = 1 << log2_precision_result;
         for (int y = 0; y < result.height(); y++) {
@@ -73,7 +79,7 @@ bool test_approx_exp2() {
             for (int x = 0; x < result.width(); x++) {
                 const double exact_x = (x - offset) * scale / precision_x;
                 const double exact = std::round(std::exp2(exact_x) * precision_result);
-                if (std::numeric_limits<int>::min() <= exact && exact <= std::numeric_limits<int>::max()) {
+                if (std::numeric_limits<T>::min() <= exact && exact <= std::numeric_limits<T>::max()) {
                     const double result_xy = result(x, y);
                     if (relative_error(exact, result_xy) > relative_tolerance &&
                         std::abs(exact - result_xy) > absolute_tolerance) {
@@ -91,11 +97,17 @@ bool test_approx_exp2() {
 }
 
 int main(int argc, char **argv) {
-    if (!test_approx_log2()) {
+    if (!test_approx_log2<int16_t>()) {
+        return -1;
+    }
+    if (!test_approx_log2<int32_t>()) {
         return -1;
     }
 
-    if (!test_approx_exp2()) {
+    if (!test_approx_exp2<int16_t>()) {
+        return -1;
+    }
+    if (!test_approx_exp2<int32_t>()) {
         return -1;
     }
 

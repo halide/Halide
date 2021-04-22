@@ -13,14 +13,14 @@ const char *const severity_names[] = {"INFO", "WARNING", "ERROR", "FATAL"};
 
 Logger::Logger(LogSeverity severity, const char *file, int line)
     : severity(severity) {
-    assert(severity >= 0 && severity <= 3);
+    assert(severity >= 0 && (size_t)severity < size(severity_names));
     msg << severity_names[(int)severity] << ": "
         << "(" << file << ":" << line << ") ";
 }
 
 Logger::Logger(LogSeverity severity)
     : severity(severity) {
-    assert(severity >= 0 && severity <= 2);
+    assert(severity >= 0 && (size_t)severity < size(severity_names));
     msg << severity_names[(int)severity] << ": ";
 }
 
