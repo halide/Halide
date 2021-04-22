@@ -12,7 +12,7 @@ namespace hannk {
 
 // There should be std::size, like std::begin and std::end.
 template<typename T, size_t N>
-constexpr size_t size(T(&)[N]) {
+constexpr size_t size(T (&)[N]) {
     return N;
 }
 
