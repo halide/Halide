@@ -1120,6 +1120,8 @@ bool IsNodeSupported(TfLiteContext *context, TfLiteNode *node, TfLiteRegistratio
 }
 
 /*static*/ TfLiteStatus HannkDelegate::DelegatePrepare(TfLiteContext *context, TfLiteDelegate *delegate) {
+    HannkDelegate *self = (HannkDelegate *)delegate;
+
     TfLiteStatus status;
 
     TfLiteIntArray *plan = nullptr;
@@ -1140,21 +1142,23 @@ bool IsNodeSupported(TfLiteContext *context, TfLiteNode *node, TfLiteRegistratio
         }
 
         if (IsNodeSupported(context, node, registration)) {
+            if (self->options_.verbosity >= 1) {
+                LOG(INFO) << "Handling node, index=" << node_index << " code=" << registration->builtin_code;
+            }
             supported_nodes.push_back(node_index);
         } else {
-            // TODO: consider using a lambda to pass in the options_ struct
-            // so we can gate this via verbosity.
-            //
-            // NOTE: The TFLite C API doesn't provide a way to map builtin_code
-            // to a readable name; see lite/builtin_ops.h to find what sort
-            // of node(s) we are skipping here. (The names are available if
-            // we add a dependency on the generated schema file, but that's a
-            // dep we don't otherwise need or want here.)
-            LOG(INFO) << "Skipping unsupported node, index=" << node_index
-                      << " code=" << registration->builtin_code
-                      << " version=" << registration->version
-                      << " custom_name=(" << (registration->custom_name ? registration->custom_name : "nullptr") << ")"
-                      << "\n";
+            if (self->options_.verbosity >= 1) {
+                // NOTE: The TFLite C API doesn't provide a way to map builtin_code
+                // to a readable name; see lite/builtin_ops.h to find what sort
+                // of node(s) we are skipping here. (The names are available if
+                // we add a dependency on the generated schema file, but that's a
+                // dep we don't otherwise need or want here.)
+                LOG(INFO) << "Skipping unsupported node, index=" << node_index
+                          << " code=" << registration->builtin_code
+                          << " version=" << registration->version
+                          << " custom_name=(" << (registration->custom_name ? registration->custom_name : "nullptr") << ")"
+                          << "\n";
+            }
         }
     }
 
