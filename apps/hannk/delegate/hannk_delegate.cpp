@@ -11,12 +11,6 @@
 #include "tensorflow/lite/c/c_api.h"
 #include "util/error_util.h"
 
-// TODO: this is likely a worthwhile optimization that we can support without
-// too much effort, but requires some testing harnesses we don't have yet
-// and isn't likely to be our lowest-hanging fruit. Revisit once other optimizations
-// start to become diminishing returns.
-#define ALLOW_DYNAMIC_TENSORS 0
-
 // Use a List-Of-X approach here to ensure that places we handle ops are kept in sync
 #define ALL_KNOWN_OPS         \
     KNOWN_OP(Add)             \
@@ -84,6 +78,24 @@ std::unique_ptr<TfLiteIntArray, TfLiteIntArrayDeleter> BuildTfLiteIntArray(const
     return result;
 }
 
+// -------------------- Some glue code adapted from tfite/kernels/kernel_util.h
+
+bool IsConstantTensor(const TfLiteTensor &tensor) {
+    return tensor.allocation_type == kTfLiteMmapRo;
+}
+
+bool IsDynamicTensor(const TfLiteTensor &tensor) {
+    return tensor.allocation_type == kTfLiteDynamic;
+}
+
+void SetTensorToDynamic(TfLiteContext *context, int tensor_id) {
+    TfLiteTensor &tensor = context->tensors[tensor_id];
+    if (tensor.allocation_type != kTfLiteDynamic) {
+        tensor.allocation_type = kTfLiteDynamic;
+        tensor.data.raw = nullptr;
+    }
+}
+
 // -------------------- HannkDelegate
 
 struct HannkDelegate final : public TfLiteDelegate {
@@ -95,11 +107,7 @@ struct HannkDelegate final : public TfLiteDelegate {
         assert(this->CopyToBufferHandle == nullptr);
         assert(this->FreeBufferHandle == nullptr);
         this->Prepare = DelegatePrepare;
-#if ALLOW_DYNAMIC_TENSORS
         this->flags = kTfLiteDelegateFlagsAllowDynamicTensors;
-#else
-        this->flags = 0;
-#endif
     }
 
     static TfLiteStatus DelegatePrepare(TfLiteContext *context, TfLiteDelegate *delegate);
@@ -205,12 +213,12 @@ TensorPtr ConvertTfLiteTensor(const TfLiteTensor &tensor) {
     // an empty string.
     const char *name = tensor.name ? tensor.name : "";
 
-    if (tensor.allocation_type == kTfLiteMmapRo) {
+    if (IsConstantTensor(tensor)) {
         const void *read_only_data = (const uint8_t *)tensor.data.data;
         assert(read_only_data != nullptr);
         // Construct a HalideBuffer that points to read_only_data (but does not copy or own it).
         // Since TFLite will ensure that the TfLiteTensor remains valid while we're using it,
-        // this should be completely safe
+        // this should be completely safe.
         HalideBuffer<void> buffer(type, const_cast<void *>(read_only_data), shape);
         assert(tensor.bytes == buffer.size_in_bytes());
 
@@ -233,6 +241,10 @@ public:
     // Init() will be called exactly once per instance.
     TfLiteStatus Init(TfLiteContext *context,
                       const TfLiteDelegateParams *params) {
+        if (options_.verbosity >= 1) {
+            LOG(INFO) << "Delegate " << (void *)this << " Init\n";
+        }
+
         if (interpreter_ != nullptr) {
             TF_LITE_KERNEL_LOG(context, "Init must not be called twice.");
             return kTfLiteDelegateError;
@@ -257,17 +269,11 @@ public:
             auto t = ConvertTfLiteTensor(tensor);
             assert(!tensors_.count(tensor_id));
             tensors_[tensor_id] = t;
-            if (options_.verbosity >= 1) {
-                LOG(INFO) << "tensor_id " << tensor_id << " -> " << (void *)t.get() << "\n";
-            }
         }
 
         // Be careful with params->input_tensors and params->output_tensors here;
         // in particular, params->input_tensors will contain all of the 'constant'
         // input tensors (which are generally inputs only to a specific node).
-#if ALLOW_DYNAMIC_TENSORS
-        // TODO: verify the above comment is still correct.
-#endif
 
         // Mark the input and output tensors correctly, as code in our interpreter
         // relies upon it.
@@ -342,30 +348,37 @@ public:
 
         assert(model_ != nullptr);
 
-#if ALLOW_DYNAMIC_TENSORS
-        // Because we set kTfLiteDelegateFlagsAllowDynamicTensors, TFLite
-        // may call Prepare() after Eval() if only tensor shapes have changed
-        // (but nothing else in the model), which is a nice potential optimization.
-        // (Apparently, if you don't set kTfLiteDelegateFlagsAllowDynamicTensors,
-        // TFLite will create a fresh Delegate for every call instead.)
-        //
-        // TODO: will be called with interp (but no model) if inputs resized.
-        // update the tensors in the model/interp.
-        abort();  // TODO
-#else
         if (interpreter_ != nullptr) {
             TF_LITE_KERNEL_LOG(context, "Calling Prepare() multiple times");
             return kTfLiteDelegateError;
         }
-#endif
 
         interpreter_ = ::hannk::make_unique<Interpreter>(std::move(model_));
+
+        for (int i = 0; i < node->outputs->size; i++) {
+            const int tensor_id = node->outputs->data[i];
+            if (tensor_id == kTfLiteOptionalTensor) {
+                continue;
+            }
+            auto t = GetTensorById(context, tensor_id);
+            if (t && t->is_dynamic()) {
+                if (options_.verbosity >= 2) {
+                    LOG(INFO) << "SetTensorToDynamic " << tensor_id;
+                }
+                SetTensorToDynamic(context, tensor_id);
+            }
+        }
+
         return kTfLiteOk;
     }
 
     // Eval() will be called at least once. It can expect that Prepare() will
     // have been called for the current set of tensor shape(s).
     TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node) {
+        if (options_.verbosity >= 1) {
+            LOG(INFO) << "Delegate " << (void *)this << " Eval\n";
+        }
+
         if (interpreter_ == nullptr) {
             TF_LITE_KERNEL_LOG(context, "interpreter_ is not built in Eval");
             return kTfLiteDelegateError;
@@ -380,14 +393,13 @@ public:
             assert(tensor_id >= 0 && tensor_id < (int)context->tensors_size);
             const TfLiteTensor &tensor = context->tensors[tensor_id];
             auto t = GetTensorById(context, tensor_id);
-            assert(t->is_constant() == (tensor.allocation_type == kTfLiteMmapRo));
+            assert(t->is_constant() == IsConstantTensor(tensor));
             if (t->is_constant()) {
                 continue;
             }
             assert(t->is_input() && !t->is_constant() && t->is_allocated());
             auto buf = t->buffer();
             assert(buf.size_in_bytes() == tensor.bytes);
-
             memcpy(buf.data(), tensor.data.data, tensor.bytes);
         }
 
@@ -401,11 +413,27 @@ public:
                 continue;
             }
             assert(tensor_id >= 0 && tensor_id < (int)context->tensors_size);
-            const TfLiteTensor &tensor = context->tensors[tensor_id];
-            assert(tensor.allocation_type != kTfLiteMmapRo);
+            TfLiteTensor &tensor = context->tensors[tensor_id];
+            assert(!IsConstantTensor(tensor));
             auto t = GetTensorById(context, tensor_id);
             assert(t->is_output() && !t->is_constant() && t->is_allocated());
+            if (t->is_dynamic()) {
+                CHECK(IsDynamicTensor(tensor));
+                const Box b = t->bounds();
+                TfLiteIntArray *new_size = TfLiteIntArrayCreate((int)b.size());
+                for (size_t i = 0; i < b.size(); i++) {
+                    new_size->data[b.size() - i - 1] = b[i].extent();
+                }
+                // (Note that ResizeTensor takes ownership of new_size, even if an error is returned.)
+                auto status = context->ResizeTensor(context, &tensor, new_size);
+                if (status != kTfLiteOk) {
+                    TF_LITE_KERNEL_LOG(context, "ResizeTensor() failed:", status);
+                    return status;
+                }
+            }
             auto buf = t->buffer();
+            assert(tensor.data.data != nullptr);
+            assert(buf.data() != nullptr);
             assert(buf.size_in_bytes() == tensor.bytes);
 
             memcpy(tensor.data.data, buf.data(), tensor.bytes);
@@ -1124,6 +1152,7 @@ bool IsNodeSupported(TfLiteContext *context, TfLiteNode *node, TfLiteRegistratio
             // dep we don't otherwise need or want here.)
             LOG(INFO) << "Skipping unsupported node, index=" << node_index
                       << " code=" << registration->builtin_code
+                      << " version=" << registration->version
                       << " custom_name=(" << (registration->custom_name ? registration->custom_name : "nullptr") << ")"
                       << "\n";
         }

@@ -86,7 +86,8 @@ Tensor::Tensor(std::string name, halide_type_t type, const Box &bounds, Quantiza
 Tensor::Tensor(const Tensor &copy)
     : name_(copy.name()), buffer_(make_buffer(copy.type(), copy.bounds())),
       quantization_(copy.quantization_), is_constant_(copy.is_constant_),
-      is_input_(copy.is_input_), is_output_(copy.is_output_), storage_(copy.storage_) {
+      is_input_(copy.is_input_), is_output_(copy.is_output_), is_dynamic_(copy.is_dynamic_),
+      storage_(copy.storage_) {
     if (copy.is_allocated()) {
         allocate();
         // This should have used the same buffer as the copy's storage.
@@ -128,6 +129,10 @@ void Tensor::allocate() {
         return;
     }
 
+    if (is_dynamic()) {
+        return;
+    }
+
     storage()->allocate();
     HalideBuffer<void> buffer = storage()->buffer();
     for (int i = 0; i < buffer.dimensions(); i++) {
@@ -145,7 +150,25 @@ void Tensor::allocate() {
     buffer_ = buffer;
 }
 
+void Tensor::resize(const Box &new_shape) {
+    CHECK(is_dynamic());
+
+    const halide_type_t type = buffer_.type();
+    std::vector<halide_dimension_t> new_dims;
+    new_dims.reserve(new_shape.size());
+    int stride = 1;
+    for (const auto &d : new_shape) {
+        new_dims.emplace_back(d.min, d.extent(), stride);
+        stride *= d.extent();
+    }
+    buffer_ = HalideBuffer<void>(type, nullptr, new_dims);
+    buffer_.allocate();
+    storage_ = nullptr;
+}
+
 void Tensor::set_alias_of(TensorPtr t, std::vector<int> storage_offset) {
+    CHECK(!is_dynamic());
+
     storage_ = t->storage();
     storage_offset_ = std::move(storage_offset);
 
@@ -187,6 +210,9 @@ void Tensor::dump(std::ostream &os) const {
     }
     if (is_constant()) {
         os << " constant";
+    }
+    if (is_dynamic()) {
+        os << " dynamic";
     }
 
     os << " " << name() << std::endl;
