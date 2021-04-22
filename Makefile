@@ -971,11 +971,11 @@ $(BIN_DIR)/build_halide_h: $(ROOT_DIR)/tools/build_halide_h.cpp
 -include $(OBJECTS:.o=.d)
 -include $(INITIAL_MODULES:.o=.d)
 
-# Compile generic 32- or 64-bit code (The 'spir/spir64' is a red
+# Compile generic 32- or 64-bit code (The 'wasm/wasm64' is a red
 # herring. These targets produce generic-enough bitcode to still work
 # once the triple is rewritten)
-RUNTIME_TRIPLE_32 = "spir-unknown-unknown-unknown"
-RUNTIME_TRIPLE_64 = "spir64-unknown-unknown-unknown"
+RUNTIME_TRIPLE_32 = "wasm32-unknown-unknown-unknown"
+RUNTIME_TRIPLE_64 = "wasm64-unknown-unknown-unknown"
 
 # Windows requires special handling.  The generic windows_* modules must have -fpic elided
 # and (for 64 bit) must set wchar to be 2 bytes.  The windows_*_x86 and windows_*_arm
@@ -988,7 +988,7 @@ RUNTIME_TRIPLE_WIN_X86_32 = "i386-unknown-windows-unknown"
 RUNTIME_TRIPLE_WIN_X86_64 = "x86_64-unknown-windows-unknown"
 RUNTIME_TRIPLE_WIN_ARM_32 = "arm-unknown-windows-unknown"
 RUNTIME_TRIPLE_WIN_ARM_64 = "aarch64-unknown-windows-unknown"
-RUNTIME_TRIPLE_WIN_GENERIC_64 = "spir64-unknown-unknown-unknown"
+RUNTIME_TRIPLE_WIN_GENERIC_64 = "wasm64-unknown-unknown-unknown"
 
 # `-fno-threadsafe-statics` is very important here (note that it allows us to use a 'modern' C++
 # standard but still skip threadsafe guards for static initialization in our runtime code)

@@ -203,17 +203,17 @@ foreach (i IN LISTS RUNTIME_CPP)
                     # unfortunately, clang doesn't automatically set this flag even though the
                     # ABI is msvc on windows
                     set(fshort-wchar -fshort-wchar)
-                    set(TARGET "spir64-unknown-unknown-unknown")
+                    set(TARGET "wasm64-unknown-unknown-unknown")
                 endif ()
             endif()
         # Everything else
         else()
             if (j EQUAL 32)
-                # (The 'spir' is a red herring. This is just a generic 32-bit little-endian target.)
-                set(TARGET "spir-unknown-unknown-unknown")
+                # (The 'wasm' is a red herring. This is just a generic 32-bit little-endian target.)
+                set(TARGET "wasm32-unknown-unknown-unknown")
             else ()
                 # generic 64-bit code
-                set(TARGET "spir64-unknown-unknown-unknown")
+                set(TARGET "wasm64-unknown-unknown-unknown")
             endif ()
         endif ()
 
