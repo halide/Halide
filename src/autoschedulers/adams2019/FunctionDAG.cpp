@@ -560,19 +560,19 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs_arg, const MachineParam
         using IRMutator::visit;
 
         Expr visit(const Call *op) override {
-          if (op->call_type == Call::Image) {
-            vector<Expr> new_args(op->args.size());
-            for (size_t i = 0; i < op->args.size(); i++) {
-                const Expr &old_arg = op->args[i];
-                Expr new_arg = mutate(old_arg);
-                new_args[i] = std::move(new_arg);
-            }
+            if (op->call_type == Call::Image) {
+                vector<Expr> new_args(op->args.size());
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    const Expr &old_arg = op->args[i];
+                    Expr new_arg = mutate(old_arg);
+                    new_args[i] = std::move(new_arg);
+                }
 
-            return Call::make(op->type, op->name, new_args, Call::Extern, op->func, op->value_index, op->image, op->param);
-          } else {
-            return IRMutator::visit(op);
-          }
-       }
+                return Call::make(op->type, op->name, new_args, Call::Extern, op->func, op->value_index, op->image, op->param);
+            } else {
+                return IRMutator::visit(op);
+            }
+        }
     } remove_image_loads;
 
     map<string, Function> env;
