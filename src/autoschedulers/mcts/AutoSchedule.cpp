@@ -132,7 +132,7 @@ namespace MCTS {
         if (!exploration_str.empty()) {
             return std::stod(exploration_str.c_str());
         } else {
-            return .05;
+            return .025;
         }
     }
 
@@ -141,7 +141,7 @@ namespace MCTS {
         if (!exploitation_str.empty()) {
             return std::stod(exploitation_str.c_str());
         } else {
-            return .05;
+            return .025;
         }
     }
 
@@ -156,15 +156,6 @@ namespace MCTS {
 
     uint32_t get_min_exploit() {
         std::string min_iters_str = Halide::Internal::get_env_variable("HL_MCTS_EXPLOIT_MIN");
-        if (!min_iters_str.empty()) {
-            return atoi(min_iters_str.c_str());
-        } else {
-            return 4;
-        }
-    }
-
-    uint32_t get_min_iterations() {
-        std::string min_iters_str = Halide::Internal::get_env_variable("HL_MCTS_MIN_ITERS");
         if (!min_iters_str.empty()) {
             return atoi(min_iters_str.c_str());
         } else {
@@ -188,6 +179,11 @@ namespace MCTS {
         } else {
             return 4;
         }
+    }
+
+    bool use_beam() {
+        std::string beam_str = Halide::Internal::get_env_variable("HL_MCTS_DISABLE_BEAM");
+        return beam_str != "1";
     }
 }
 
@@ -316,7 +312,9 @@ void generate_schedule(const std::vector<Function> &outputs,
     std::string schedule_source;
 
     try {
-        CPU_State optimal = solver.solve_beam(start_state, /* n_decisions*/ dag.nodes.size() * 2, seed);
+        CPU_State optimal = (MCTS::use_beam()) ? 
+                                                solver.solve_beam(start_state, /* n_decisions*/ dag.nodes.size() * 2, seed)
+                                                : solver.solve(start_state, /* n_decisions*/ dag.nodes.size() * 2, seed);
         cost = optimal.calculate_cost();
         schedule_source = optimal.apply_schedule();
         std::cerr << "is_terminal? " << optimal.is_terminal() << std::endl;
