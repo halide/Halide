@@ -26,7 +26,6 @@ TODO(rootjalex): add more details
 namespace MCTS {
     // Defined in AutoSchedule.cpp
     double get_exploration_percent();
-    uint32_t get_min_iterations();
     double get_exploitation_percent();
     uint32_t get_min_explore();
     uint32_t get_min_exploit();
@@ -104,7 +103,6 @@ namespace MCTS {
 
             const double percent_to_explore = get_exploration_percent();
             const double percent_to_exploit = get_exploitation_percent();
-            // const uint32_t min_random_iterations = get_min_iterations();
             const uint32_t min_explore_iters = get_min_explore();
             const uint32_t min_exploit_iters = get_min_exploit();
             const uint32_t rollout_length = get_rollout_length();
@@ -154,7 +152,6 @@ namespace MCTS {
 
             const double percent_to_explore = get_exploration_percent();
             const double percent_to_exploit = get_exploitation_percent();
-            // const uint32_t min_random_iterations = get_min_iterations();
             const uint32_t min_explore_iters = get_min_explore();
             const uint32_t min_exploit_iters = get_min_exploit();
             const uint32_t rollout_length = get_rollout_length();
@@ -287,7 +284,7 @@ namespace MCTS {
             uint32_t new_beam_size = 0;
 
             // TODO: this might not be smart...
-            auto min_iterator = new_beam.begin();
+            auto max_iterator = new_beam.begin();
 
             auto beam_element_ordering = [](BeamElement &lhs, BeamElement &rhs) { return lhs.first->get_value() < rhs.first->get_value(); };
 
@@ -306,16 +303,16 @@ namespace MCTS {
 
                     bool correct_depth = !use_search_depth || (child_max_depth == search_depth);
                     bool obvious_insert = (new_beam_size < max_beam_size);
-                    bool difficult_insert = (child_value < min_iterator->first->get_value());
+                    // TODO: how expensive does this get...?
+                    max_iterator = max_element(new_beam.begin(), new_beam.begin() + new_beam_size, beam_element_ordering);
+                    bool difficult_insert = (child_value < max_iterator->first->get_value());
 
                     if (correct_depth) {
                         if (obvious_insert) {
                             new_beam[new_beam_size] = {child_ptr, root_state.take_action(child_ptr->get_action())};
                             new_beam_size++;
                         } else if (difficult_insert) {
-                            // TODO: how expensive does this get...?
-                            min_iterator = min_element(new_beam.begin(), new_beam.begin() + new_beam_size, beam_element_ordering);
-                            *min_iterator = {child_ptr, root_state.take_action(child_ptr->get_action())};
+                            *max_iterator = {child_ptr, root_state.take_action(child_ptr->get_action())};
                         }
                     }
                 }
