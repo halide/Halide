@@ -8,12 +8,12 @@ namespace hannk {
 
 // Approximate log2(2^(x/2^q) +/- 1)*2^q
 Expr approx_log2_exp2_plus_or_minus_one(int q, Expr x, int sign, Expr q_x, Type type = Int(32)) {
-    const int q_exp = 8;
+    const int q_exp = type.bits() / 2;
     int one = sign << q_exp;
-    Expr raw = approx_log2(q, one + approx_exp2(q_exp, x, q_x, Int(16)), q_exp, type);
+    Expr raw = approx_log2(q, one + approx_exp2(q_exp, x, q_x, type), q_exp, type);
 
     // For large x, the intermediate overflows. But log2(1 + 2^x) when x is large is just x.
-    Expr threshold = 16 << q_x;
+    Expr threshold = cast(x.type(), 16) << q_x;
     Expr line = cast(type, rounding_shift_right(x, q_x - q));
     return select(x < threshold, raw, line);
 }
