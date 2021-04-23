@@ -44,10 +44,10 @@ Halide::Expr approx_log2(int q, const Halide::Expr &x, int q_x, const Halide::Ty
 Halide::Expr approx_exp2(int q, const Halide::Expr &x, const Halide::Expr &q_x, const Halide::Type &type = Halide::Int(32));
 
 // Approximate 2^q/(x/2^q_x)
-Halide::Expr approx_reciprocal(int q, const Halide::Expr &x, int q_x);
+Halide::Expr approx_reciprocal(int q, const Halide::Expr &x, int q_x, const Halide::Type &type = Halide::Int(32));
 
 // Approximate 2^q/sqrt(x/2^q_x)
-Halide::Expr approx_reciprocal_sqrt(int q, const Halide::Expr &x, int q_x);
+Halide::Expr approx_reciprocal_sqrt(int q, const Halide::Expr &x, int q_x, const Halide::Type &type = Halide::Int(32));
 
 }  // namespace hannk
 

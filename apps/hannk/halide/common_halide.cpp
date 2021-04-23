@@ -104,7 +104,7 @@ Expr approx_exp2(int q, const Expr &x, const Expr &q_x, const Type &type) {
     // Compute floor(x / precision_x) and frac(x / precision_x)
     Expr floor_x = cast(type, x >> q_x);
 
-    Expr exp2_floor_x = cast(type, 1) << (floor_x + q);
+    Expr exp2_floor_x = saturating_cast(type, 1 << (floor_x + q));
 
     // Use a cubic polynomial to interpolate the fractional part of the argument.
     // TODO: A cubic might be overkill for our needs.
@@ -138,20 +138,20 @@ Expr approx_exp2(int q, const Expr &x, const Expr &q_x, const Type &type) {
     return saturating_add(exp2_floor_x, multiply_2x_high(exp2_floor_x, poly));
 }
 
-Expr approx_reciprocal(int q, const Expr &x, int q_x) {
+Expr approx_reciprocal(int q, const Expr &x, int q_x, const Type &type) {
     //   precision / x
     // = precision / 2^log2(x)
     // = precision * 2^(-log2(x))
     Expr log2_x = approx_log2(15, x, q_x);
-    return approx_exp2(q, -log2_x, 15);
+    return approx_exp2(q, -log2_x, 15, type);
 }
 
-Expr approx_reciprocal_sqrt(int q, const Expr &x, int q_x) {
+Expr approx_reciprocal_sqrt(int q, const Expr &x, int q_x, const Type &type) {
     //   precision / sqrt(x)
     // = precision / 2^log2(x^(1/2))
     // = precision * 2^(-log2(x)/2)
     Expr log2_x = approx_log2(14, x, q_x);
-    return approx_exp2(q, -log2_x, 15);
+    return approx_exp2(q, -log2_x, 15, type);
 }
 
 }  // namespace hannk

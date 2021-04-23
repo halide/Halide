@@ -87,8 +87,7 @@ public:
         // range of an integer for the fractional part.
         constexpr int q = 15;
         Func exp2_diff("exp2_diff");
-        exp2_diff(x, y) =
-            i16_sat(approx_exp2(q, diff_beta, beta_shift_));
+        exp2_diff(x, y) = approx_exp2(q, diff_beta, beta_shift_, Int(16));
 
         // This could overflow if there are more than 2^16 values of x.
         Func sum_exp_row("sum_exp_row");
@@ -100,8 +99,7 @@ public:
         // is greater than or equal to 2^0*2^q, because we
         // subtracted the max from the input.
         Func inv_sum_exp_row("inv_sum_exp_row");
-        inv_sum_exp_row(y) =
-            i16_sat(approx_reciprocal(q * 2, sum_exp_row(y), 0));
+        inv_sum_exp_row(y) = approx_reciprocal(q * 2, sum_exp_row(y), 0, Int(16));
 
         static_assert(q == 15, "");
         Expr output = multiply_2x_high(exp2_diff(x, y), inv_sum_exp_row(y));
