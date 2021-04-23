@@ -1,4 +1,4 @@
-// Halide tutorial lesson 21: Auto-Scheduler
+// Halide tutorial lesson 21: Auto-Scheduler part 2
 
 // Before reading this file, see lesson_21_auto_scheduler_generate.cpp
 
