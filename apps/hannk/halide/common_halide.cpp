@@ -138,19 +138,19 @@ Expr approx_exp2(int q, const Expr &x, const Expr &q_x, const Type &type) {
     return saturating_add(exp2_floor_x, multiply_2x_high(exp2_floor_x, poly));
 }
 
-Expr approx_reciprocal(int q, const Expr &x, int q_x, const Type &type) {
+Expr approx_reciprocal(int q, const Expr &x, const Type &type) {
     //   precision / x
     // = precision / 2^log2(x)
     // = precision * 2^(-log2(x))
-    Expr log2_x = approx_log2(15, x, q_x);
+    Expr log2_x = approx_log2(15, x, 0);
     return approx_exp2(q, -log2_x, 15, type);
 }
 
-Expr approx_reciprocal_sqrt(int q, const Expr &x, int q_x, const Type &type) {
+Expr approx_reciprocal_sqrt(int q, const Expr &x, const Type &type) {
     //   precision / sqrt(x)
     // = precision / 2^log2(x^(1/2))
     // = precision * 2^(-log2(x)/2)
-    Expr log2_x = approx_log2(14, x, q_x);
+    Expr log2_x = approx_log2(14, x, 0);
     return approx_exp2(q, -log2_x, 15, type);
 }
 

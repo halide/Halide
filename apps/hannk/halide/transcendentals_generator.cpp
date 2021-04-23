@@ -8,9 +8,9 @@ namespace hannk {
 
 // Approximate log2(2^(x/2^q) +/- 1)*2^q
 Expr approx_log2_exp2_plus_or_minus_one(int q, Expr x, int sign, Expr q_x, Type type = Int(32)) {
-    const int q_exp = 15;
+    const int q_exp = 8;
     int one = sign << q_exp;
-    Expr raw = approx_log2(q, one + approx_exp2(q_exp, x, q_x), q_exp, type);
+    Expr raw = approx_log2(q, one + approx_exp2(q_exp, x, q_x, Int(16)), q_exp, type);
 
     // For large x, the intermediate overflows. But log2(1 + 2^x) when x is large is just x.
     Expr threshold = 16 << q_x;
@@ -25,6 +25,12 @@ Expr approx_log2p1_exp2(int q, Expr x, Expr q_x, Type type = Int(32)) {
 Expr approx_log2m1_exp2(int q, Expr x, Expr q_x, Type type = Int(32)) {
     return approx_log2_exp2_plus_or_minus_one(q, x, -1, q_x, type);
 }
+
+// TODO: These implementations are pretty slow, at least on x86. However:
+// - They are readily implementable on every target
+// - Produce identical results on every target
+// - Avoid the use of lookup tables, which can be annoying on some targets
+// - Negligibly impact overall performance in most realistic workloads
 
 class Logistic : public Generator<Logistic> {
 public:
@@ -76,8 +82,6 @@ public:
 
         // tanh(x) = (e^2x - 1)/(e^2x + 1). We baked a factor of 2*log2(e) into
         // the input multiplier and shift, so we just need to compute 2^x here.
-        // TODO: It's probably better to just directly approximate tanh, but this
-        // is simple and does not impact performance in any known cases.
         const int q = 8;
         Expr log2_n = approx_log2m1_exp2(q, i16(abs(input)), input_shift_, Int(16));
         Expr log2_d = approx_log2p1_exp2(q, i16(abs(input)), input_shift_, Int(16));
