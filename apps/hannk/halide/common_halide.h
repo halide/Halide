@@ -17,6 +17,10 @@ using Halide::Internal::widening_sub;
 // Get the number of vector registers available on the target.
 int get_register_count(const Halide::Target &target);
 
+// Get the vector reduction factor that is convenient for this target
+// for the given type.
+int get_vector_reduction_factor(const Halide::Target &target, Halide::Type t);
+
 // A tensor has the same requirements as a buffer in Halide by default, except
 // the min of the innermost dimension must also be 0.
 void interpret_as_tensor(Halide::OutputImageParam p);

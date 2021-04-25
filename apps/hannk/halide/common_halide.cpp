@@ -8,7 +8,7 @@ namespace hannk {
 int get_register_count(const Target &target) {
     switch (target.arch) {
     case Target::X86:
-        return target.has_feature(Target::AVX512_Skylake) ? 32 : 16;
+        return target.features_any_of({Target::AVX512_Skylake, Target::AVX512_Cannonlake, Target::AVX512_SapphireRapids}) ? 32 : 16;
     case Target::ARM:
         return target.bits == 64 ? 32 : 16;
     case Target::Hexagon:
@@ -16,6 +16,17 @@ int get_register_count(const Target &target) {
     default:
         return 16;
     }
+}
+
+int get_vector_reduction_factor(const Target &target, Type t) {
+    if (target.arch == Target::Hexagon ||
+        target.has_feature(Target::ARMDotProd) ||
+        target.has_feature(Target::AVX512_SapphireRapids)) {
+        return 32 / t.bits();
+    }
+
+    // Most targets can do 2-way horizontal reductions well.
+    return 2;
 }
 
 void interpret_as_tensor(OutputImageParam p) {
