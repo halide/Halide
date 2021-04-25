@@ -1,5 +1,6 @@
 #include "Halide.h"
 #include "common_halide.h"
+#include "elementwise_program.h"
 
 using namespace Halide;
 using namespace Halide::ConciseCasts;
@@ -123,67 +124,88 @@ Expr approx_log2m1_exp2(int q, Expr x, Expr q_x, Type type = Int(32)) {
     return approx_log2_exp2_plus_or_minus_one(q, x, -1, q_x, type);
 }
 
-class Logistic : public Generator<Logistic> {
-public:
-    Input<Buffer<uint8_t>> input_{"input", 1};
-    Input<uint8_t> input_zero_{"input_zero"};
-    // The input multiplier and shift should have an extra factor of -log2(e).
-    Input<int16_t> input_multiplier_{"input_multiplier"};
-    Input<uint16_t> input_shift_{"input_shift"};
+Expr logistic(Expr x, Expr q_x, Type type) {
+    const int q = 8;
+    Expr log2_d = approx_log2p1_exp2(q, x, q_x, Int(16));
+    return approx_exp2(type.bits() - 1, -log2_d, q, type);
+}
 
-    Output<Buffer<uint8_t>> output_{"output", 1};
+Expr tanh(Expr x, Expr q_x, Type type) {
+    const int q = 8;
+    Expr log2_n = approx_log2m1_exp2(q, i16(abs(x)), q_x, Int(16));
+    Expr log2_d = approx_log2p1_exp2(q, i16(abs(x)), q_x, Int(16));
+    Expr abs_output = approx_exp2(type.bits() - 1, log2_n - log2_d, q, type);
+    return select(x < 0, -abs_output, abs_output);
+}
+
+// This is a generator that interprets programs to implement sequences of
+// elementwise operations dynamically.
+class Elementwise : public Generator<Elementwise> {
+public:
+    GeneratorParam<Type> intermediate_type_{"intermediate_type", Int(16)};
+
+    Input<Buffer<>[]> inputs_{"inputs", 1};
+    Input<Buffer<int32_t>> program_{"program", 2};
+
+    Output<Buffer<>> output_{"output", 1};
 
     void generate() {
-        // The algorithm.
-        Var x("x");
+        Var x("x"), u("u");
 
-        Expr input = (i16(input_(x)) - i16(input_zero_)) << 6;
-        input = multiply_2x_high(input, input_multiplier_);
+        Type unsigned_intermediate = ((Type)intermediate_type_).with_code(halide_type_uint);
 
-        //   256/(1 + 2^input)
-        // = 256*2^(-log2(1 + 2^input))
-        const int q = 8;
-        Expr log2_d = approx_log2p1_exp2(q, input, input_shift_, Int(16));
-        Expr output = approx_exp2(8, -log2_d, q, Int(16));
-        output_(x) = u8_sat(output);
+        Func scratch("scratch");
+        scratch(x, u) = undef(intermediate_type_);
 
-        // Schedule.
-        const int vector_size = natural_vector_size<uint8_t>();
+        // Load the inputs into the scratch memory.
+        const int input_count = inputs_.size();
+        for (int i = 0; i < input_count; i++) {
+            scratch(x, -i - 1) = cast(intermediate_type_, inputs_[i](x));
+        }
+        // scratch slot 0 is a constant 0.
+        scratch(x, 0) = cast(intermediate_type_, 0);
 
-        output_.vectorize(x, vector_size, TailStrategy::Predicate);
-    }
-};
+        RDom r(0, ElementwiseInstruction::OpCodeCount, 0, program_.dim(1).extent());
+        Expr op = program_(0, r.y);
+        Expr arg1 = program_(1, r.y);
+        Expr arg2 = program_(2, r.y);
+        Expr arg3 = cast(intermediate_type_, program_(3, r.y));
 
-class Tanh : public Generator<Tanh> {
-public:
-    Input<Buffer<uint8_t>> input_{"input", 1};
-    Input<uint8_t> input_zero_{"input_zero"};
-    // The input multiplier and shift should have an extra factor of 2*log2(e).
-    Input<int16_t> input_multiplier_{"input_multiplier"};
-    Input<uint16_t> input_shift_{"input_shift"};
+        const int max_input = input_count - 1;
+        Expr input1 = scratch(x, unsafe_promise_clamped(arg1, -max_input, r.y + 1));
+        Expr input2 = scratch(x, unsafe_promise_clamped(arg2, -max_input, r.y + 1));
 
-    Output<Buffer<uint8_t>> output_{"output", 1};
+        r.where(r.x == op);
+        scratch(x, r.y + 1) = mux(r.x, {
+            arg3,
+            saturating_add(input1, input2 + arg3),
+            saturating_sub(input1, input2 + arg3),
+            rounding_mul_shift_right(input1, input2, cast(unsigned_intermediate, arg3)),
+            rounding_shift_right(input1, input2 + arg3),
+            min(input1, input2 + arg3),
+            max(input1, input2 + arg3),
+            rounding_shift_right(logistic(input1, input2, intermediate_type_), arg3),
+            rounding_shift_right(tanh(input1, input2, intermediate_type_), arg3),
+        });
 
-    void generate() {
-        // The algorithm.
-        Var x("x");
-
-        Expr input = (i16(input_(x)) - i16(input_zero_)) << 6;
-        input = multiply_2x_high(input, input_multiplier_);
-
-        // tanh(x) = (e^2x - 1)/(e^2x + 1). We baked a factor of 2*log2(e) into
-        // the input multiplier and shift, so we just need to compute 2^x here.
-        const int q = 8;
-        Expr log2_n = approx_log2m1_exp2(q, i16(abs(input)), input_shift_, Int(16));
-        Expr log2_d = approx_log2p1_exp2(q, i16(abs(input)), input_shift_, Int(16));
-        Expr abs_output = approx_exp2(7, log2_n - log2_d, q, Int(16));
-        Expr output = select(input < 0, -abs_output, abs_output);
-        output_(x) = u8_sat(output + 128);
+        output_(x) = saturating_cast(output_.type(), scratch(x, program_.dim(1).extent()));
 
         // Schedule.
-        const int vector_size = natural_vector_size<uint8_t>();
+        output_.compute_root()
+            .vectorize(x, natural_vector_size<uint8_t>(), TailStrategy::Predicate);
 
-        output_.vectorize(x, vector_size, TailStrategy::Predicate);
+        // Only allow this many instructions per input, so we can store scratch
+        // on the real stack.
+        const int max_instructions_per_input = 4;
+
+        scratch
+            .bound_extent(u, input_count * (max_instructions_per_input + 1))
+            .store_in(MemoryType::Register)
+            .update(input_count + 1)
+            .unroll(r.x);
+
+        program_.dim(0).set_min(0).set_extent(4).set_stride(1);
+        program_.dim(1).set_min(0).set_stride(4);
     }
 };
 
@@ -191,5 +213,4 @@ public:
 
 HALIDE_REGISTER_GENERATOR(hannk::Add, Add)
 HALIDE_REGISTER_GENERATOR(hannk::Mul, Mul)
-HALIDE_REGISTER_GENERATOR(hannk::Logistic, Logistic)
-HALIDE_REGISTER_GENERATOR(hannk::Tanh, Tanh)
+HALIDE_REGISTER_GENERATOR(hannk::Elementwise, Elementwise)

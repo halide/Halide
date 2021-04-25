@@ -119,6 +119,10 @@ $(BIN)/%/depthwise_conv_dm1_uint8.a: $(GENERATOR_BIN)/depthwise_conv.generator
 	@mkdir -p $(@D)
 	$< -g DepthwiseConv inv_depth_multiplier=1 -f hannk::depthwise_conv_dm1_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
+$(BIN)/%/elementwise_5xuint8_1xuint8.a: $(GENERATOR_BIN)/elementwise.generator
+	@mkdir -p $(@D)
+	$< -g Elementwise inputs.size=5 inputs.type=uint8 output.type=uint8 -f hannk::elementwise_5xuint8_1xuint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
 $(BIN)/%/fill_uint8.a: $(GENERATOR_BIN)/fill.generator
 	@mkdir -p $(@D)
 	$< -g Fill -f hannk::fill_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_bounds_query-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
@@ -130,10 +134,6 @@ $(BIN)/%/fully_connected_uint8.a: $(GENERATOR_BIN)/fully_connected.generator
 $(BIN)/%/l2_normalization_uint8.a: $(GENERATOR_BIN)/normalizations.generator
 	@mkdir -p $(@D)
 	$< -g L2Normalization -f hannk::l2_normalization_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
-
-$(BIN)/%/logistic_uint8.a: $(GENERATOR_BIN)/elementwise.generator
-	@mkdir -p $(@D)
-	$< -g Logistic -f hannk::logistic_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
 $(BIN)/%/max_pool_uint8.a: $(GENERATOR_BIN)/pool.generator
 	@mkdir -p $(@D)
@@ -151,10 +151,6 @@ $(BIN)/%/softmax_uint8.a: $(GENERATOR_BIN)/normalizations.generator
 	@mkdir -p $(@D)
 	$< -g Softmax -f hannk::softmax_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/tanh_uint8.a: $(GENERATOR_BIN)/elementwise.generator
-	@mkdir -p $(@D)
-	$< -g Tanh -f hannk::tanh_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
-
 $(BIN)/%/tile_conv_filter_uint8.a: $(GENERATOR_BIN)/conv.generator
 	@mkdir -p $(@D)
 	$< -g TileConvFilter -f hannk::tile_conv_filter_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
@@ -171,15 +167,14 @@ OPS_HALIDE = \
 	$(BIN)/%/depthwise_conv_uint8.a \
 	$(BIN)/%/depthwise_conv_broadcast_uint8.a \
 	$(BIN)/%/depthwise_conv_dm1_uint8.a \
+	$(BIN)/%/elementwise_5xuint8_1xuint8.a \
 	$(BIN)/%/fill_uint8.a \
 	$(BIN)/%/fully_connected_uint8.a \
 	$(BIN)/%/l2_normalization_uint8.a \
-	$(BIN)/%/logistic_uint8.a \
 	$(BIN)/%/max_pool_uint8.a \
 	$(BIN)/%/mean_uint8.a \
 	$(BIN)/%/mul_uint8_uint8_uint8.a \
 	$(BIN)/%/softmax_uint8.a \
-	$(BIN)/%/tanh_uint8.a \
 	$(BIN)/%/tile_conv_filter_uint8.a \
 	$(BIN)/%/runtime.a
 

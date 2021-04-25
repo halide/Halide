@@ -22,8 +22,8 @@ enum class Padding {
 // This is an abstract helper op for elementwise operations.
 class ElementwiseOp : public Op {
 public:
-    ElementwiseOp(std::vector<TensorPtr> inputs, TensorPtr output)
-        : Op(std::move(inputs), {output}) {
+    ElementwiseOp(std::vector<TensorPtr> inputs, std::vector<TensorPtr> outputs)
+        : Op(std::move(inputs), std::move(outputs)) {
     }
 
     BoundsMap map_bounds(int input_idx, int output_idx) const;
@@ -49,7 +49,7 @@ private:
 
 public:
     BinaryOp(TensorPtr a, TensorPtr b, TensorPtr output, Operator op, ActivationFunction activation = ActivationFunction::None)
-        : ElementwiseOp({a, b}, output), op_(op), activation_(activation) {
+        : ElementwiseOp({a, b}, {output}), op_(op), activation_(activation) {
     }
 
     std::unique_ptr<Op> clone(TensorMap &map) const {
@@ -197,6 +197,39 @@ public:
 
     void dump(std::ostream &os) const {
         os << "  DepthwiseConv2D " << output()->name() << std::endl;
+    }
+};
+
+class ElementwiseProgramOp : public ElementwiseOp {
+private:
+    Halide::Runtime::Buffer<int> program_;
+
+public:
+    ElementwiseProgramOp(std::vector<TensorPtr> inputs, TensorPtr output, HalideBuffer<int> program)
+        : ElementwiseOp(std::move(inputs), {output}), program_(program) {
+    }
+    ElementwiseProgramOp(std::vector<TensorPtr> inputs, std::vector<TensorPtr> outputs, HalideBuffer<int> program)
+        : ElementwiseOp(std::move(inputs), std::move(outputs)), program_(program) {
+    }
+
+    std::unique_ptr<Op> clone(TensorMap &map) const {
+        std::vector<TensorPtr> inputs, outputs;
+        for (int i = 0; i < input_count(); i++) {
+            inputs.push_back(apply(map, input(i)));
+        }
+        for (int i = 0; i < output_count(); i++) {
+            inputs.push_back(apply(map, output(i)));
+        }
+        return ::hannk::make_unique<ElementwiseProgramOp>(
+            std::move(inputs), std::move(outputs), program_);
+    }
+
+    void accept(OpVisitor *v);
+
+    void execute();
+
+    void dump(std::ostream &os) const {
+        os << "  ElementwiseProgram" << std::endl;
     }
 };
 
@@ -497,7 +530,7 @@ private:
 
 public:
     UnaryOp(TensorPtr input, TensorPtr output, Operator op)
-        : ElementwiseOp({input}, output), op_(op) {
+        : ElementwiseOp({input}, {output}), op_(op) {
     }
 
     std::unique_ptr<Op> clone(TensorMap &map) const {
@@ -525,6 +558,8 @@ public:
     virtual void visit(Conv2DOp *op) {
     }
     virtual void visit(DepthwiseConv2DOp *op) {
+    }
+    virtual void visit(ElementwiseProgramOp *op) {
     }
     virtual void visit(FullyConnectedOp *op) {
     }
