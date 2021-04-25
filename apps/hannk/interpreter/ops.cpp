@@ -1,4 +1,5 @@
 #include "interpreter/ops.h"
+#include "halide/elementwise_program.h"
 #include "util/error_util.h"
 
 #include <atomic>
@@ -15,15 +16,14 @@
 #include "depthwise_conv_broadcast_uint8.h"
 #include "depthwise_conv_dm1_uint8.h"
 #include "depthwise_conv_uint8.h"
+#include "elementwise_5xuint8_1xuint8.h"
 #include "fill_uint8.h"
 #include "fully_connected_uint8.h"
 #include "l2_normalization_uint8.h"
-#include "logistic_uint8.h"
 #include "max_pool_uint8.h"
 #include "mean_uint8.h"
 #include "mul_uint8_uint8_uint8.h"
 #include "softmax_uint8.h"
-#include "tanh_uint8.h"
 #include "tile_conv_filter_uint8.h"
 
 namespace hannk {
@@ -384,7 +384,7 @@ ActivationFunction to_activation(UnaryOp::Operator op) {
 }  // namespace
 
 BoundsMap ElementwiseOp::map_bounds(int input_idx, int output_idx) const {
-    int rank = output()->rank();
+    int rank = output(output_idx)->rank();
     assert(rank == input(input_idx)->rank());
     return BoundsMap::elementwise(rank);
 }
@@ -735,6 +735,10 @@ BoundsMap FullyConnectedOp::map_bounds(int input_idx, int output_idx) const {
     } else {
         return BoundsMap(0, 2);
     }
+}
+
+void ElementwiseProgramOp::execute() {
+    LOG(FATAL) << "Unsupported elementwise program\n";
 }
 
 void FullyConnectedOp::execute() {
@@ -1286,8 +1290,17 @@ void UnaryOp::execute() {
             assert(out->quantization().scale.at(0) == 1.0f / 256.0f);
             assert(out->quantization().zero.at(0) == 0);
 
+            int instructions[][4] = {
+                {ElementwiseInstruction::Sub, -1, 0, input_zero},
+                {ElementwiseInstruction::Const, 0, 0, in_mul_and_shift.multiplier},
+                {ElementwiseInstruction::RoundingMulShift, 1, 2, 15 - left_shift},
+                {ElementwiseInstruction::Const, 0, 0, -in_mul_and_shift.shift},
+                {ElementwiseInstruction::Logistic, 3, 4, 7},
+            };
+            Halide::Runtime::Buffer<int> program(&instructions[0][0], 4, 5);
+
             auto logistic_rank1 = [&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
-                CHECK(0 == logistic_uint8(in_buf, input_zero, in_mul_and_shift.multiplier, -in_mul_and_shift.shift, out_buf));
+                CHECK(0 == elementwise_5xuint8_1xuint8(in_buf, in_buf, in_buf, in_buf, in_buf, program, out_buf));
             };
             elementwise_loop_nest<1>(logistic_rank1, in_buf, out_buf);
             return;
@@ -1301,8 +1314,18 @@ void UnaryOp::execute() {
             assert(out->quantization().scale.at(0) == 1.0f / 128.0f);
             assert(out->quantization().zero.at(0) == 128);
 
+            int instructions[][4] = {
+                {ElementwiseInstruction::Sub, -1, 0, input_zero},
+                {ElementwiseInstruction::Const, 0, 0, in_mul_and_shift.multiplier},
+                {ElementwiseInstruction::RoundingMulShift, 1, 2, 15 - left_shift},
+                {ElementwiseInstruction::Const, 0, 0, -in_mul_and_shift.shift},
+                {ElementwiseInstruction::Tanh, 3, 4, 8},
+                {ElementwiseInstruction::Add, 6, 0, 128},
+            };
+            Halide::Runtime::Buffer<int> program(&instructions[0][0], 4, 6);
+
             auto tanh_rank1 = [&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
-                CHECK(0 == tanh_uint8(in_buf, input_zero, in_mul_and_shift.multiplier, -in_mul_and_shift.shift, out_buf));
+                CHECK(0 == elementwise_5xuint8_1xuint8(in_buf, in_buf, in_buf, in_buf, in_buf, program, out_buf));
             };
             elementwise_loop_nest<1>(tanh_rank1, in_buf, out_buf);
             return;
@@ -1335,6 +1358,10 @@ void Conv2DOp::accept(OpVisitor *v) {
 }
 
 void DepthwiseConv2DOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void ElementwiseProgramOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 
