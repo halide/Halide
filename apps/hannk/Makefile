@@ -87,7 +87,7 @@ $(GENERATOR_BIN)/%.generator: halide/%_generator.cpp $(GENERATOR_BIN)/common_hal
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -g $(filter %.cpp %.o,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
-$(BIN)/%/add_uint8_uint8.a: $(GENERATOR_BIN)/add.generator
+$(BIN)/%/add_uint8_uint8.a: $(GENERATOR_BIN)/elementwise.generator
 	@mkdir -p $(@D)
 	$< -g Add -f hannk::add_uint8_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
@@ -131,7 +131,7 @@ $(BIN)/%/l2_normalization_uint8.a: $(GENERATOR_BIN)/normalizations.generator
 	@mkdir -p $(@D)
 	$< -g L2Normalization -f hannk::l2_normalization_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/logistic_uint8.a: $(GENERATOR_BIN)/transcendentals.generator
+$(BIN)/%/logistic_uint8.a: $(GENERATOR_BIN)/elementwise.generator
 	@mkdir -p $(@D)
 	$< -g Logistic -f hannk::logistic_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
@@ -143,7 +143,7 @@ $(BIN)/%/mean_uint8.a: $(GENERATOR_BIN)/reductions.generator
 	@mkdir -p $(@D)
 	$< -g Mean -f hannk::mean_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/mul_uint8_uint8_uint8.a: $(GENERATOR_BIN)/mul.generator
+$(BIN)/%/mul_uint8_uint8_uint8.a: $(GENERATOR_BIN)/elementwise.generator
 	@mkdir -p $(@D)
 	$< -g Mul -f hannk::mul_uint8_uint8_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
@@ -151,7 +151,7 @@ $(BIN)/%/softmax_uint8.a: $(GENERATOR_BIN)/normalizations.generator
 	@mkdir -p $(@D)
 	$< -g Softmax -f hannk::softmax_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/tanh_uint8.a: $(GENERATOR_BIN)/transcendentals.generator
+$(BIN)/%/tanh_uint8.a: $(GENERATOR_BIN)/elementwise.generator
 	@mkdir -p $(@D)
 	$< -g Tanh -f hannk::tanh_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
@@ -159,7 +159,7 @@ $(BIN)/%/tile_conv_filter_uint8.a: $(GENERATOR_BIN)/conv.generator
 	@mkdir -p $(@D)
 	$< -g TileConvFilter -f hannk::tile_conv_filter_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/runtime.a: $(GENERATOR_BIN)/add.generator
+$(BIN)/%/runtime.a: $(GENERATOR_BIN)/fill.generator
 	@mkdir -p $(@D)
 	$< -r runtime -o $(BIN)/$* target=$(HL_TARGET)
 
