@@ -3,8 +3,8 @@
 #include <algorithm>
 #include <memory>
 
-#include "interpreter/ops.h"
 #include "interpreter/lower.h"
+#include "interpreter/ops.h"
 #include "tflite_schema_generated.h"
 #include "util/error_util.h"
 
