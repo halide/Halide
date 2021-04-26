@@ -3,9 +3,12 @@
 
 namespace hannk {
 
-// Implement an LSTM from its constituent parts.
-std::unique_ptr<OpGroup> lower_lstm(TensorPtr data_input, TensorPtr prev_activ_input, TensorPtr weights_input, TensorPtr biases_input, TensorPtr prev_state_input,
-                                    TensorPtr activ_output, TensorPtr state_output, TensorPtr concat_temp, TensorPtr activ_temp) {
+// Implement an LSTM from its constituent parts. This is extremely specific
+// to TFlite's LSTM op, which according to Benoit Jacob, is deprecated.
+// TODO: We could potentially lower this to individual elementwise ops instead,
+// and remove the 'LstmElementwiseOp' op.
+std::unique_ptr<OpGroup> lower_tflite_lstm(TensorPtr data_input, TensorPtr prev_activ_input, TensorPtr weights_input, TensorPtr biases_input, TensorPtr prev_state_input,
+                                           TensorPtr activ_output, TensorPtr state_output, TensorPtr concat_temp, TensorPtr activ_temp) {
     std::vector<TensorPtr> inputs = {data_input, prev_activ_input, weights_input, biases_input, prev_state_input};
     std::vector<TensorPtr> outputs = {activ_output, state_output};
 

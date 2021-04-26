@@ -155,6 +155,11 @@ public:
     }
 };
 
+// Implements the elementwise compute part of the 'LSTM' TFlite operation.
+// This is extremely specific to TFlite's implementation choices, which are
+// documented here: https://github.com/tensorflow/tensorflow/blob/cbeddb59c4c836637f64b3eb5c639d7db8ca4005/tensorflow/lite/kernels/internal/reference/reference_ops.h#L758-L830
+// According to Benoit Jacob, this approach of specific LSTM ops is deprecated,
+// and most future LSTMs should just arrive as individual elementwise ops.
 class LstmElementwise : public Generator<LstmElementwise> {
 public:
     Input<Buffer<int16_t>> input_gate_{"input_gate", 2};
@@ -162,6 +167,8 @@ public:
     Input<Buffer<int16_t>> forget_gate_{"forget_gate", 2};
     Input<Buffer<int16_t>> output_gate_{"output_gate", 2};
     Input<Buffer<int16_t>> prev_state_{"prev_state", 2};
+
+    // TODO: Use Output<> and generator, but how to output tuples with the generate interface?
 
     Func build() {
         Var c("c"), b("b");
@@ -175,20 +182,18 @@ public:
         Expr input_times_input_modulation = multiply_2x_high(input_gate_output, input_modulation_gate_output);
         Expr prev_state_times_forget_state = multiply_2x_high(forget_gate_output, prev_state_(c, b));
 
-        Expr new_state = rounding_shift_right(input_times_input_modulation, 4);
-        new_state = saturating_add(new_state, prev_state_times_forget_state);
-
-        Func output_int16("output_int16");
-        output_int16(c, b) = multiply_2x_high(output_gate_output, approx_tanh(15, new_state, 11, Int(16)));
+        Func new_state("new_state");
+        new_state(c, b) = saturating_add(rounding_shift_right(input_times_input_modulation, 4), prev_state_times_forget_state);
 
         Func output("output");
-        Expr output_uint8 = u8_sat(rounding_shift_right(output_int16(c, b), 8) + 128);
-        output(c, b) = {output_int16(c, b), output_uint8};
+        Expr output_int16 = multiply_2x_high(output_gate_output, approx_tanh(15, new_state(c, b), 11, Int(16)));
+        Expr output_uint8 = u8_sat(rounding_shift_right(output_int16, 8) + 128);
+        output(c, b) = {new_state(c, b), output_uint8};
 
         output.compute_root()
             .vectorize(c, natural_vector_size<uint8_t>());
 
-        output_int16.compute_at(output, c)
+        new_state.compute_at(output, c)
             .vectorize(c);
 
         return output;
