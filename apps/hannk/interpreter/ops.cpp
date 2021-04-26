@@ -1315,6 +1315,7 @@ void UnaryOp::execute() {
 
         const int left_shift = 6;
 
+        std::array<int, 32> program_buffer;
         if (op_ == Logistic) {
             const double real_in_multiplier = in_scale / (1 << left_shift);
 
@@ -1324,17 +1325,15 @@ void UnaryOp::execute() {
             assert(out->quantization().scale.at(0) == 1.0f / 256.0f);
             assert(out->quantization().zero.at(0) == 0);
 
-            int instructions[][4] = {
-                {ElementwiseInstruction::Sub, -1, 0, input_zero},
-                {ElementwiseInstruction::Const, 0, 0, in_mul_and_shift.multiplier},
-                {ElementwiseInstruction::RoundingMulShift, 1, 2, 15 - left_shift},
-                {ElementwiseInstruction::Const, 0, 0, -in_mul_and_shift.shift},
-                {ElementwiseInstruction::Logistic, 3, 4, 7},
-            };
-            HalideBuffer<int> program(&instructions[0][0], 4, 5);
+            // Build a program to implement the logistic op.
+            ElementwiseProgram p(program_buffer);
+            auto input_zeroed = p.sub(p.input(0), input_zero);
+            auto input_scaled = p.rounding_mul_shift(input_zeroed, in_mul_and_shift.multiplier, 15 - left_shift);
+            auto result = p.logistic(8, input_scaled, -in_mul_and_shift.shift);
+            auto program_buf = p.assemble(result);
 
             auto logistic_rank1 = [&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
-                CHECK(0 == elementwise_5xuint8_1xuint8(in_buf, in_buf, in_buf, in_buf, in_buf, program, out_buf));
+                CHECK(0 == elementwise_5xuint8_1xuint8(in_buf, in_buf, in_buf, in_buf, in_buf, program_buf, out_buf));
             };
             elementwise_loop_nest<1>(logistic_rank1, in_buf, out_buf);
             return;
@@ -1347,18 +1346,15 @@ void UnaryOp::execute() {
             assert(out->quantization().scale.at(0) == 1.0f / 128.0f);
             assert(out->quantization().zero.at(0) == 128);
 
-            int instructions[][4] = {
-                {ElementwiseInstruction::Sub, -1, 0, input_zero},
-                {ElementwiseInstruction::Const, 0, 0, in_mul_and_shift.multiplier},
-                {ElementwiseInstruction::RoundingMulShift, 1, 2, 15 - left_shift},
-                {ElementwiseInstruction::Const, 0, 0, -in_mul_and_shift.shift},
-                {ElementwiseInstruction::Tanh, 3, 4, 8},
-                {ElementwiseInstruction::Add, 6, 0, 128},
-            };
-            HalideBuffer<int> program(&instructions[0][0], 4, 6);
+            // Build a program to implement the tanh op.
+            ElementwiseProgram p(program_buffer);
+            auto input_zeroed = p.sub(p.input(0), input_zero);
+            auto input_scaled = p.rounding_mul_shift(input_zeroed, in_mul_and_shift.multiplier, 15 - left_shift);
+            auto result = p.add(p.tanh(7, input_scaled, -in_mul_and_shift.shift), 128);
+            auto program_buf = p.assemble(result);
 
             auto tanh_rank1 = [&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
-                CHECK(0 == elementwise_5xuint8_1xuint8(in_buf, in_buf, in_buf, in_buf, in_buf, program, out_buf));
+                CHECK(0 == elementwise_5xuint8_1xuint8(in_buf, in_buf, in_buf, in_buf, in_buf, program_buf, out_buf));
             };
             elementwise_loop_nest<1>(tanh_rank1, in_buf, out_buf);
             return;

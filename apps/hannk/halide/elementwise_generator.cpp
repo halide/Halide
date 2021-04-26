@@ -127,7 +127,7 @@ public:
         // scratch slot 0 is a constant 0.
         scratch(x, 0) = cast(intermediate_type, 0);
 
-        RDom r(0, ElementwiseInstruction::OpCodeCount, 0, program_.dim(1).extent());
+        RDom r(0, ElementwiseProgram::OpCodeCount, 0, program_.dim(1).extent());
         Expr op = program_(0, r.y);
         Expr arg1 = program_(1, r.y);
         Expr arg2 = program_(2, r.y);
@@ -146,8 +146,8 @@ public:
             rounding_shift_right(input1, input2 + arg3),
             min(input1, input2 + arg3),
             max(input1, input2 + arg3),
-            rounding_shift_right(approx_logistic(q, input1, input2, intermediate_type), arg3),
-            rounding_shift_right(approx_tanh(q, input1, input2, intermediate_type), arg3),
+            rounding_shift_right(approx_logistic(q, input1, input2, intermediate_type), q - arg3),
+            rounding_shift_right(approx_tanh(q, input1, input2, intermediate_type), q - arg3),
         });
 
         output_(x) = saturating_cast(output_.type(), scratch(x, program_.dim(1).extent()));
