@@ -27,15 +27,43 @@ public:
     void generate() {
         Var c("c"), b("b");
 
-        Func input_zeroed("input_zeroed");
-        Func filter_zeroed("filter_zeroed");
-        input_zeroed(c, b) = i16(input_(c, b)) - i16(input_zero_);
-        filter_zeroed(c, b) = i16(filter_(c, b)) - i16(filter_zero_);
+        // We require the reduction dimension to be aligned to a uint8 vector.
+        Expr filter_extent = align(filter_.dim(0).extent(), natural_vector_size<uint8_t>());
+        filter_.dim(0).set_min(0);
+        RDom rc(0, filter_extent);
 
-        RDom rc(filter_.dim(0).min(), filter_.dim(0).extent());
+        // We want to compute the reduction:
+        // multiplied(c, b) = bias_(c)
+        // multiplied(c, b) +=
+        //    (i32(input) - i32(input_zero_)) *
+        //    (i32(filter) - i32(filter_zero_))
+        //
+        // However, this precludes using efficient dot product instructions. To
+        // fix this, expand the expression:
+        //
+        // multiplied(c, b) = bias_(c)
+        // multiplied(c, b) +=
+        //    i32(filter(rc, c)) * i32(input(rc, b)) -
+        //    i32(filter(rc, c)) * i32(input_zero_) -
+        //    i32(filter_zero_) * i32(input(rc, b)) +
+        //    i32(filter_zero_) * i32(input_zero_)
+        //
+        // We can then separate this into several reductions. The last reduction
+        // is a constant, and the middle two reductions can be computed once for
+        // each c or b, instead of each (c, b).
+        Func sum_filter("sum_filter");
+        sum_filter(c) += u32(filter_(rc, c));
+
+        Func sum_input("sum_input");
+        sum_input(b) += u32(input_(rc, b));
+
         Func multiplied("multiplied");
-        multiplied(c, b) = bias_(c);
-        multiplied(c, b) += i32(filter_zeroed(rc, c)) * i32(input_zeroed(rc, b));
+        multiplied(c, b) =
+            bias_(c) + filter_extent * filter_zero_ * input_zero_ -
+            i32(sum_filter(c)) * input_zero_ -
+            i32(sum_input(b)) * filter_zero_;
+
+        multiplied(c, b) += i32(u16(input_(rc, b)) * u16(filter_(rc, c)));
 
         // Saturate and narrow the output.
         Expr output = multiply_2x_high(multiplied(c, b), output_multiplier_);
@@ -44,24 +72,83 @@ public:
         output_(c, b) = clamp(output, output_min_, output_max_);
 
         // Schedule.
-
-        // This schedule is pretty weird. It assumes we can vectorize 8-bit data
-        // by 4, which means 32-bit loads and stores to/from vectors.
+        // Reorder batches inside the outer loop over channels to improve locality
+        // of accesses to the filter. This also allows us to compute the sum of the
+        // filter for only a subset of channels at a time.
+        Var co("co");
         Expr output_channels = output_.dim(0).extent();
+        // Use half of the registers as accumulators.
+        const int accum_registers = get_register_count(target) / 2;
         output_.compute_root()
-            .specialize(output_channels >= 4)
-            .vectorize(c, 4, TailStrategy::ShiftInwards);
+            .specialize(output_channels >= accum_registers)
+            .split(c, co, c, accum_registers, TailStrategy::ShiftInwards)
+            .reorder(c, b, co)
+            .vectorize(c);
 
-        // And then we do full vector reductions.
-        // TODO: We could rfactor this to do reductions on vectors first, followed
-        // by only one total vector reduction.
-        const int vector_size = natural_vector_size<uint8_t>() * 2;
-        multiplied.compute_at(output_, c)
+        // Make a dummy outer loop if there aren't enough channels.
+        output_
+            .split(c, co, c, 1)
+            .reorder(c, b, co);
+
+        multiplied.compute_at(output_, b)
+            .vectorize(c);
+        // Enable sum_filter to be skipped if it isn't needed.
+        multiplied.specialize(input_zero_ == 0);
+
+        // The schedule here splits the reduction into 3 parts:
+        // 1. The inner vector reduction factor (rci)
+        // 2. The outer vector reduction factor (rc)
+        // 3. The reduction of whole vectors (rco).
+        // Step 2 is saved for the end, which is a total reduction of an int32 vector.
+        // The other two steps map nicely to vector reductions like udot or pmaddwd.
+        const int accum_vector_size = natural_vector_size<int32_t>();
+        const int vector_reduction_factor = get_vector_reduction_factor(target, UInt(8));
+        RVar rci, rco;
+        multiplied.update()
+            .split(rc, rc, rci, vector_reduction_factor)
+            .split(rc, rco, rc, accum_vector_size);
+        Func multiplied_intm = multiplied.update().rfactor(rc, co);
+
+        multiplied_intm.compute_at(multiplied, b)
+            .reorder_storage(co, c)
+            .vectorize(co)
+            .unroll(c)
+            .update()
+            .reorder(rci, co, c, rco)
+            .unroll(c)
+            .vectorize(co)
+            .atomic()
+            .vectorize(rci);
+
+        // We could transpose here by adding a wrapper to multiplied_intm and reordering
+        // the storage, which would enable the reduction below to be a pure vectorize
+        // instead of a vector reduction, but this didn't seem to be better on either x86
+        // or ARM.
+
+        multiplied.update()
+            .reorder(c, rc, b)
+            .unroll(c)
+            .atomic()
+            .vectorize(rc);
+
+        const int reduce_vector_size = natural_vector_size<uint8_t>();
+        // This gets reused across batches.
+        // I don't think it actually makes sense to unroll this, but if
+        // we don't, LLVM does it for us but as an outer loop, which
+        // is the worst of all possibilities.
+        sum_filter.compute_at(output_, co)
+            .vectorize(c)
             .update()
             .atomic()
             .reorder(c, rc)
             .unroll(c)
-            .vectorize(rc, vector_size);
+            .vectorize(rc, reduce_vector_size);
+
+        sum_input.compute_root()
+            .update()
+            .atomic()
+            .reorder(rc, b)
+            .vectorize(rc, reduce_vector_size);
     }
 };
 

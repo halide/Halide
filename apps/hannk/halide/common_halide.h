@@ -17,6 +17,10 @@ using Halide::Internal::widening_sub;
 // Get the number of vector registers available on the target.
 int get_register_count(const Halide::Target &target);
 
+// Get the vector reduction factor that is convenient for this target
+// for the given type.
+int get_vector_reduction_factor(const Halide::Target &target, Halide::Type t);
+
 // A tensor has the same requirements as a buffer in Halide by default, except
 // the min of the innermost dimension must also be 0.
 void interpret_as_tensor(Halide::OutputImageParam p);
@@ -43,11 +47,11 @@ Halide::Expr approx_log2(int q, const Halide::Expr &x, int q_x, const Halide::Ty
 // q_x must be less than 16.
 Halide::Expr approx_exp2(int q, const Halide::Expr &x, const Halide::Expr &q_x, const Halide::Type &type = Halide::Int(32));
 
-// Approximate 2^q/(x/2^q_x)
-Halide::Expr approx_reciprocal(int q, const Halide::Expr &x, int q_x);
+// Approximate 2^q/x
+Halide::Expr approx_reciprocal(int q, const Halide::Expr &x, const Halide::Type &type = Halide::Int(32));
 
-// Approximate 2^q/sqrt(x/2^q_x)
-Halide::Expr approx_reciprocal_sqrt(int q, const Halide::Expr &x, int q_x);
+// Approximate 2^q/sqrt(x)
+Halide::Expr approx_reciprocal_sqrt(int q, const Halide::Expr &x, const Halide::Type &type = Halide::Int(32));
 
 }  // namespace hannk
 

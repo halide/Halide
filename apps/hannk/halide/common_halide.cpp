@@ -8,7 +8,7 @@ namespace hannk {
 int get_register_count(const Target &target) {
     switch (target.arch) {
     case Target::X86:
-        return target.has_feature(Target::AVX512_Skylake) ? 32 : 16;
+        return target.features_any_of({Target::AVX512_Skylake, Target::AVX512_Cannonlake, Target::AVX512_SapphireRapids}) ? 32 : 16;
     case Target::ARM:
         return target.bits == 64 ? 32 : 16;
     case Target::Hexagon:
@@ -16,6 +16,17 @@ int get_register_count(const Target &target) {
     default:
         return 16;
     }
+}
+
+int get_vector_reduction_factor(const Target &target, Type t) {
+    if (target.arch == Target::Hexagon ||
+        target.has_feature(Target::ARMDotProd) ||
+        target.has_feature(Target::AVX512_SapphireRapids)) {
+        return 32 / t.bits();
+    }
+
+    // Most targets can do 2-way horizontal reductions well.
+    return 2;
 }
 
 void interpret_as_tensor(OutputImageParam p) {
@@ -104,7 +115,7 @@ Expr approx_exp2(int q, const Expr &x, const Expr &q_x, const Type &type) {
     // Compute floor(x / precision_x) and frac(x / precision_x)
     Expr floor_x = cast(type, x >> q_x);
 
-    Expr exp2_floor_x = cast(type, 1) << (floor_x + q);
+    Expr exp2_floor_x = saturating_cast(type, 1 << (floor_x + q));
 
     // Use a cubic polynomial to interpolate the fractional part of the argument.
     // TODO: A cubic might be overkill for our needs.
@@ -138,20 +149,20 @@ Expr approx_exp2(int q, const Expr &x, const Expr &q_x, const Type &type) {
     return saturating_add(exp2_floor_x, multiply_2x_high(exp2_floor_x, poly));
 }
 
-Expr approx_reciprocal(int q, const Expr &x, int q_x) {
+Expr approx_reciprocal(int q, const Expr &x, const Type &type) {
     //   precision / x
     // = precision / 2^log2(x)
     // = precision * 2^(-log2(x))
-    Expr log2_x = approx_log2(15, x, q_x);
-    return approx_exp2(q, -log2_x, 15);
+    Expr log2_x = approx_log2(15, x, 0);
+    return approx_exp2(q, -log2_x, 15, type);
 }
 
-Expr approx_reciprocal_sqrt(int q, const Expr &x, int q_x) {
+Expr approx_reciprocal_sqrt(int q, const Expr &x, const Type &type) {
     //   precision / sqrt(x)
     // = precision / 2^log2(x^(1/2))
     // = precision * 2^(-log2(x)/2)
-    Expr log2_x = approx_log2(14, x, q_x);
-    return approx_exp2(q, -log2_x, 15);
+    Expr log2_x = approx_log2(14, x, 0);
+    return approx_exp2(q, -log2_x, 15, type);
 }
 
 }  // namespace hannk

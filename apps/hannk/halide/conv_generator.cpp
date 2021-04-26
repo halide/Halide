@@ -10,18 +10,6 @@ namespace hannk {
 Var x("x"), y("y"), c("c"), b("b");
 Var ci("ci"), co("co");
 
-int get_vector_reduction_factor(const Target &target, Type t) {
-    if (target.arch == Target::Hexagon ||
-        target.has_feature(Target::ARMDotProd)) {
-        // Hexagon and ARM with dot products can reduce 32-bits
-        // of output at once.
-        return 32 / t.bits();
-    }
-
-    // Most targets can do 2-way horizontal reductions well.
-    return 2;
-}
-
 // There are two codepaths in this generator. On targets with widening
 // 8-bit multiplies, we implement the reduction by expanding the subtraction
 // of the offsets into 4 reductions involving 8-bit multiplies. On targets

@@ -413,6 +413,8 @@ int main(int argc, char **argv) {
 
     for (auto f : files) {
         hannk::run_all(f, seed, threads, verbosity, use_hannk, use_delegate ? &delegate_factory : nullptr, do_benchmark, do_compare_results);
+        halide_profiler_report(nullptr);
+        halide_profiler_reset();
         std::cout << "\n";
     }
 
