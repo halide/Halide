@@ -282,10 +282,36 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
         }
     }
 
+    int curr_min = 0; int curr_max = 0;
+    vector<int> new_indices = op->indices;
+    for (size_t i = 0; i < new_vectors.size(); i++) {
+        Expr e = new_vectors[i];
+        curr_max = curr_max + e.type().lanes();
+        if (const Load *load = e.as<Load>()) {
+            if (const Ramp *ramp = load->index.as<Ramp>()) {
+                const int64_t *stride = as_const_int(ramp->stride);
+                if (stride && (*stride != 1) && is_const_one(load->predicate)) {
+                    changed = true;
+                    for (size_t j = 0; j < new_indices.size(); j++) {
+                        int index = new_indices[j];
+                        if ((index >= curr_min) && (index < curr_max)) {
+                            new_indices[j] = index * (*stride);
+                        }
+                    }
+                    Expr new_load_index = Ramp::make(ramp->base, 1, ramp->lanes * (*stride));
+                    Type t = load->type.with_lanes(load->type.lanes() * (*stride));
+                    new_vectors[i] = Load::make(t, load->name, new_load_index, load->image,
+                                                load->param, const_true(t.lanes()), load->alignment);
+                }
+            }
+        }
+        curr_min = curr_max;
+    }
+
     if (!changed) {
         return op;
     } else {
-        return Shuffle::make(new_vectors, op->indices);
+        return Shuffle::make(new_vectors, new_indices);
     }
 }
 
