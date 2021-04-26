@@ -282,7 +282,8 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
         }
     }
 
-    int curr_min = 0; int curr_max = 0;
+    int curr_min = 0;
+    int curr_max = 0;
     vector<int> new_indices = op->indices;
     for (size_t i = 0; i < new_vectors.size(); i++) {
         Expr e = new_vectors[i];
