@@ -166,24 +166,30 @@ public:
     Func build() {
         Var c("c"), b("b");
 
-        Expr input_gate_output = approx_logistic(15, input_gate_(c, b), 3, Int(16));
-        Expr input_modulation_gate_output = approx_tanh(15, input_modulation_gate_(c, b), 3, Int(16));
+        Expr input_gate_output = approx_logistic(15, input_gate_(c, b), 12, Int(16));
+        Expr input_modulation_gate_output = approx_tanh(15, input_modulation_gate_(c, b), 12, Int(16));
 
-        Expr forget_gate_output = approx_logistic(15, forget_gate_(c, b), 3, Int(16));
-        Expr output_gate_output = approx_logistic(15, output_gate_(c, b), 3, Int(16));
+        Expr forget_gate_output = approx_logistic(15, forget_gate_(c, b), 12, Int(16));
+        Expr output_gate_output = approx_logistic(15, output_gate_(c, b), 12, Int(16));
 
         Expr input_times_input_modulation = multiply_2x_high(input_gate_output, input_modulation_gate_output);
-        Expr prev_state_times_forget_state = rounding_mul_shift_right(forget_gate_output, prev_state_(c, b), 18);
+        Expr prev_state_times_forget_state = multiply_2x_high(forget_gate_output, prev_state_(c, b));
 
-        Expr new_state = saturating_add(input_times_input_modulation << 4, prev_state_times_forget_state);
+        Expr new_state = rounding_shift_right(input_times_input_modulation, 4);
+        new_state = saturating_add(new_state, prev_state_times_forget_state);
+
+        Func output_int16("output_int16");
+        output_int16(c, b) = multiply_2x_high(output_gate_output, approx_tanh(15, new_state, 11, Int(16)));
 
         Func output("output");
-        Expr output_int16 = multiply_2x_high(output_gate_output, approx_tanh(15, new_state, 4, Int(16)));
-        Expr output_uint8 = u8_sat(rounding_shift_right(output_int16, 8) + 128);
-        output(c, b) = {output_int16, output_uint8};
+        Expr output_uint8 = u8_sat(rounding_shift_right(output_int16(c, b), 8) + 128);
+        output(c, b) = {output_int16(c, b), output_uint8};
 
         output.compute_root()
             .vectorize(c, natural_vector_size<uint8_t>());
+
+        output_int16.compute_at(output, c)
+            .vectorize(c);
 
         return output;
     }
