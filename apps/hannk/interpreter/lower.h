@@ -6,8 +6,8 @@
 namespace hannk {
 
 // Implement an LSTM from its constituent parts.
-std::unique_ptr<OpGroup> lower_lstm(TensorPtr data_input, TensorPtr prev_activ_input, TensorPtr weights_input, TensorPtr biases_input, TensorPtr prev_state_input,
-                                    TensorPtr activ_output, TensorPtr state_output, TensorPtr concat_temp, TensorPtr activ_temp);
+std::unique_ptr<OpGroup> lower_tflite_lstm(TensorPtr data_input, TensorPtr prev_activ_input, TensorPtr weights_input, TensorPtr biases_input, TensorPtr prev_state_input,
+                                           TensorPtr activ_output, TensorPtr state_output, TensorPtr concat_temp, TensorPtr activ_temp);
 
 }  // namespace hannk
 

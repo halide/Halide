@@ -342,8 +342,8 @@ public:
         TensorPtr concat_temp = tensors_[op->outputs()->Get(2)];
         TensorPtr activ_temp = tensors_[op->outputs()->Get(3)];
 
-        return lower_lstm(data_input, prev_activ_input, weights_input, biases_input, prev_state_input,
-                          activ_output, state_output, concat_temp, activ_temp);
+        return lower_tflite_lstm(data_input, prev_activ_input, weights_input, biases_input, prev_state_input,
+                                 activ_output, state_output, concat_temp, activ_temp);
     }
 
     std::unique_ptr<Op> parse_op(const tflite::Operator *op) {
