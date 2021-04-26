@@ -22,7 +22,7 @@ public:
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
-    Output<Buffer<uint8_t>> output_{"output", 2};
+    Output<Buffer<>> output_{"output", 2};
 
     void generate() {
         Var c("c"), b("b");
@@ -68,8 +68,11 @@ public:
         // Saturate and narrow the output.
         Expr output = multiply_2x_high(multiplied(c, b), output_multiplier_);
         output = i16_sat(rounding_shift_right(output, output_shift_));
-        output = u8_sat(saturating_add(output, output_zero_));
-        output_(c, b) = clamp(output, output_min_, output_max_);
+        if (output_.type() == halide_type_of<uint8_t>()) {
+            output = u8_sat(saturating_add(output, output_zero_));
+            output = clamp(output, output_min_, output_max_);
+        }
+        output_(c, b) = output;
 
         // Schedule.
         // Reorder batches inside the outer loop over channels to improve locality
@@ -152,6 +155,41 @@ public:
     }
 };
 
+class LstmElementwise : public Generator<LstmElementwise> {
+public:
+    Input<Buffer<int16_t>> input_gate_{"input_gate", 2};
+    Input<Buffer<int16_t>> input_modulation_gate_{"input_modulation_gate", 2};
+    Input<Buffer<int16_t>> forget_gate_{"forget_gate", 2};
+    Input<Buffer<int16_t>> output_gate_{"output_gate", 2};
+    Input<Buffer<int16_t>> prev_state_{"prev_state", 2};
+
+    Func build() {
+        Var c("c"), b("b");
+
+        Expr input_gate_output = approx_logistic(15, input_gate_(c, b), 3, Int(16));
+        Expr input_modulation_gate_output = approx_tanh(15, input_modulation_gate_(c, b), 3, Int(16));
+
+        Expr forget_gate_output = approx_logistic(15, forget_gate_(c, b), 3, Int(16));
+        Expr output_gate_output = approx_logistic(15, output_gate_(c, b), 3, Int(16));
+
+        Expr input_times_input_modulation = multiply_2x_high(input_gate_output, input_modulation_gate_output);
+        Expr prev_state_times_forget_state = rounding_mul_shift_right(forget_gate_output, prev_state_(c, b), 18);
+
+        Expr new_state = saturating_add(input_times_input_modulation << 4, prev_state_times_forget_state);
+
+        Func output("output");
+        Expr output_int16 = multiply_2x_high(output_gate_output, approx_tanh(15, new_state, 4, Int(16)));
+        Expr output_uint8 = u8_sat(rounding_shift_right(output_int16, 8) + 128);
+        output(c, b) = {output_int16, output_uint8};
+
+        output.compute_root()
+            .vectorize(c, natural_vector_size<uint8_t>());
+
+        return output;
+    }
+};
+
 }  // namespace hannk
 
 HALIDE_REGISTER_GENERATOR(hannk::FullyConnected, FullyConnected)
+HALIDE_REGISTER_GENERATOR(hannk::LstmElementwise, LstmElementwise)
