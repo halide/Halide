@@ -127,13 +127,21 @@ $(BIN)/%/fill_uint8.a: $(GENERATOR_BIN)/fill.generator
 	@mkdir -p $(@D)
 	$< -g Fill -f hannk::fill_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_bounds_query-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/fully_connected_uint8.a: $(GENERATOR_BIN)/fully_connected.generator
+$(BIN)/%/fully_connected_uint8_uint8.a: $(GENERATOR_BIN)/fully_connected.generator
 	@mkdir -p $(@D)
-	$< -g FullyConnected -f hannk::fully_connected_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+	$< -g FullyConnected output.type=uint8 -f hannk::fully_connected_uint8_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
+$(BIN)/%/fully_connected_uint8_int16.a: $(GENERATOR_BIN)/fully_connected.generator
+	@mkdir -p $(@D)
+	$< -g FullyConnected output.type=int16 -f hannk::fully_connected_uint8_int16 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
 $(BIN)/%/l2_normalization_uint8.a: $(GENERATOR_BIN)/normalizations.generator
 	@mkdir -p $(@D)
 	$< -g L2Normalization -f hannk::l2_normalization_uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
+$(BIN)/%/lstm_elementwise.a: $(GENERATOR_BIN)/fully_connected.generator
+	@mkdir -p $(@D)
+	$< -g LstmElementwise -f hannk::lstm_elementwise -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
 $(BIN)/%/max_pool_uint8.a: $(GENERATOR_BIN)/pool.generator
 	@mkdir -p $(@D)
@@ -169,8 +177,10 @@ OPS_HALIDE = \
 	$(BIN)/%/depthwise_conv_dm1_uint8.a \
 	$(BIN)/%/elementwise_5xuint8_1xuint8.a \
 	$(BIN)/%/fill_uint8.a \
-	$(BIN)/%/fully_connected_uint8.a \
+	$(BIN)/%/fully_connected_uint8_uint8.a \
+	$(BIN)/%/fully_connected_uint8_int16.a \
 	$(BIN)/%/l2_normalization_uint8.a \
+	$(BIN)/%/lstm_elementwise.a \
 	$(BIN)/%/max_pool_uint8.a \
 	$(BIN)/%/mean_uint8.a \
 	$(BIN)/%/mul_uint8_uint8_uint8.a \
@@ -213,6 +223,10 @@ $(BIN)/%/ops.o: interpreter/ops.cpp $(OPS_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(OPS_CXXFLAGS) -c $< -o $@
 
+$(BIN)/%/lower.o: interpreter/lower.cpp $(OPS_HALIDE)
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(OPS_CXXFLAGS) -c $< -o $@
+
 $(BIN)/%/transforms.o: interpreter/transforms.cpp
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -c $< -o $@
@@ -224,6 +238,7 @@ $(BIN)/%/interval.o: interpreter/interval.cpp $(OPS_HALIDE)
 INTERPRETER_DEPS = \
 	$(BIN)/%/interpreter.o \
 	$(BIN)/%/interval.o \
+	$(BIN)/%/lower.o \
 	$(BIN)/%/model.o \
 	$(BIN)/%/transforms.o \
 	$(BIN)/%/ops.o \

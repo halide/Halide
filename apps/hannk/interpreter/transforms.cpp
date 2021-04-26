@@ -102,10 +102,12 @@ class InPlace : public OpVisitor {
     using OpVisitor::visit;
 
     void maybe_alias_elementwise(ElementwiseOp *op) {
-        for (int i = 0; i < op->input_count(); i++) {
-            if (maybe_alias_tensors(op->input(i), op->output())) {
-                // We can only alias one of the inputs to the output.
-                return;
+        for (int j = 0; j < op->output_count(); j++) {
+            for (int i = 0; i < op->input_count(); i++) {
+                if (maybe_alias_tensors(op->input(i), op->output(j))) {
+                    // We can only alias one of the input to each output.
+                    break;
+                }
             }
         }
     }
@@ -115,6 +117,10 @@ class InPlace : public OpVisitor {
     }
 
     void visit(UnaryOp *op) {
+        maybe_alias_elementwise(op);
+    }
+
+    void visit(LstmElementwiseOp *op) {
         maybe_alias_elementwise(op);
     }
 

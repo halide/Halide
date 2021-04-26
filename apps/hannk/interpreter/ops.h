@@ -237,7 +237,8 @@ class FullyConnectedOp : public Op {
     ActivationFunction activation_;
 
 public:
-    FullyConnectedOp(TensorPtr input, TensorPtr filter, TensorPtr bias, TensorPtr output, ActivationFunction activation)
+    FullyConnectedOp(TensorPtr input, TensorPtr filter, TensorPtr bias, TensorPtr output,
+                     ActivationFunction activation = ActivationFunction::None)
         : Op({input, filter, bias}, {output}), activation_(activation) {
     }
 
@@ -289,6 +290,27 @@ public:
 
     void dump(std::ostream &os) const {
         os << "  L2Normalization " << output()->name() << std::endl;
+    }
+};
+
+class LstmElementwiseOp : public ElementwiseOp {
+public:
+    LstmElementwiseOp(TensorPtr activ_temp, TensorPtr prev_state_input, TensorPtr state_output, TensorPtr activ_output)
+        : ElementwiseOp({activ_temp, prev_state_input}, {state_output, activ_output}) {
+    }
+
+    std::unique_ptr<Op> clone(TensorMap &map) const {
+        return ::hannk::make_unique<LstmElementwiseOp>(
+            apply(map, input(0)), apply(map, input(1)),
+            apply(map, output(0)), apply(map, output(1)));
+    }
+
+    void accept(OpVisitor *v);
+
+    void execute();
+
+    void dump(std::ostream &os) const {
+        os << "  LstmElementwiseOp " << std::endl;
     }
 };
 
@@ -564,6 +586,8 @@ public:
     virtual void visit(FullyConnectedOp *op) {
     }
     virtual void visit(L2NormalizationOp *op) {
+    }
+    virtual void visit(LstmElementwiseOp *op) {
     }
     virtual void visit(PadOp *op) {
     }

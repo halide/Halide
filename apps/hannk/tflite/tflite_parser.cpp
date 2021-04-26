@@ -4,6 +4,7 @@
 #include <memory>
 
 #include "interpreter/ops.h"
+#include "interpreter/lower.h"
 #include "tflite_schema_generated.h"
 #include "util/error_util.h"
 
@@ -329,6 +330,22 @@ public:
         return ::hannk::make_unique<UnaryOp>(input, output, type);
     }
 
+    std::unique_ptr<Op> parse_lstm(const tflite::Operator *op) {
+        TensorPtr data_input = tensors_[op->inputs()->Get(0)];
+        TensorPtr prev_activ_input = tensors_[op->inputs()->Get(1)];
+        TensorPtr weights_input = tensors_[op->inputs()->Get(2)];
+        TensorPtr biases_input = tensors_[op->inputs()->Get(3)];
+        TensorPtr prev_state_input = tensors_[op->inputs()->Get(4)];
+
+        TensorPtr activ_output = tensors_[op->outputs()->Get(0)];
+        TensorPtr state_output = tensors_[op->outputs()->Get(1)];
+        TensorPtr concat_temp = tensors_[op->outputs()->Get(2)];
+        TensorPtr activ_temp = tensors_[op->outputs()->Get(3)];
+
+        return lower_tflite_lstm(data_input, prev_activ_input, weights_input, biases_input, prev_state_input,
+                                 activ_output, state_output, concat_temp, activ_temp);
+    }
+
     std::unique_ptr<Op> parse_op(const tflite::Operator *op) {
         const auto *opcodes = model_->operator_codes();
 
@@ -365,6 +382,8 @@ public:
             return parse_binary(op, BinaryOp::LessEqual);
         case tflite::BuiltinOperator_LOGISTIC:
             return parse_unary(op, UnaryOp::Logistic);
+        case tflite::BuiltinOperator_LSTM:
+            return parse_lstm(op);
         case tflite::BuiltinOperator_MAX_POOL_2D:
             return parse_pool2D(op, PoolOp::Max);
         case tflite::BuiltinOperator_MEAN:
