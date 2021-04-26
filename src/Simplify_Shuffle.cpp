@@ -298,8 +298,8 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                             new_indices[j] = index * (*stride);
                         }
                     }
-                    Expr new_load_index = Ramp::make(ramp->base, 1, ramp->lanes * (*stride));
-                    Type t = load->type.with_lanes(load->type.lanes() * (*stride));
+                    Expr new_load_index = Ramp::make(ramp->base, 1, (ramp->lanes - 1) * (*stride) + 1);
+                    Type t = load->type.with_lanes((load->type.lanes() - 1) * (*stride) + 1);
                     new_vectors[i] = Load::make(t, load->name, new_load_index, load->image,
                                                 load->param, const_true(t.lanes()), load->alignment);
                 }
