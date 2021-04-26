@@ -350,7 +350,7 @@ void DefaultCostModel::load_weights() {
     }
 
     if (need_randomize) {
-        // Get the seed for random dropout
+        // Get the seed for random weights
         std::string seed_str = Internal::get_env_variable("HL_RANDOM_WEIGHT_SEED");
         // Or use the time, if not set.
         int seed = (int)time(nullptr);
