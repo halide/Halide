@@ -104,10 +104,10 @@ public:
         const int accum_vector_size = natural_vector_size<int32_t>();
         const int vector_reduction_factor = get_vector_reduction_factor(target, UInt(8));
         RVar rci, rco;
-        Func multiplied_intm = multiplied.update()
+        multiplied.update()
             .split(rc, rc, rci, vector_reduction_factor)
-            .split(rc, rco, rc, accum_vector_size)
-            .rfactor(rc, co);
+            .split(rc, rco, rc, accum_vector_size);
+        Func multiplied_intm = multiplied.update().rfactor(rc, co);
 
         multiplied_intm.compute_at(multiplied, b)
             .reorder_storage(co, c)

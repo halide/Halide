@@ -57,13 +57,8 @@ TensorPtr Interpreter::get_tensor(const std::string &name) {
 
 std::vector<TensorPtr> Interpreter::inputs() {
     std::vector<TensorPtr> result;
-    for (int i = 0; i < model_->op_count(); i++) {
-        Op *op = model_->op(i);
-        for (int j = 0; j < op->input_count(); j++) {
-            if (op->input(j)->is_input()) {
-                result.push_back(op->input(j));
-            }
-        }
+    for (int i = 0; i < model_->input_count(); i++) {
+        result.push_back(model_->input(i));
     }
 
     return result;
@@ -71,13 +66,8 @@ std::vector<TensorPtr> Interpreter::inputs() {
 
 std::vector<TensorPtr> Interpreter::outputs() {
     std::vector<TensorPtr> result;
-    for (int i = 0; i < model_->op_count(); i++) {
-        Op *op = model_->op(i);
-        for (int j = 0; j < op->output_count(); j++) {
-            if (op->output(j)->is_output()) {
-                result.push_back(op->output(j));
-            }
-        }
+    for (int i = 0; i < model_->output_count(); i++) {
+        result.push_back(model_->output(i));
     }
 
     return result;
