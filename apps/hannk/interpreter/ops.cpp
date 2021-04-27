@@ -33,41 +33,37 @@ namespace hannk {
 namespace {
 
 // Check if dimension 0 and dimension 1 of buf can be fused.
-template<typename T>
-bool can_fuse(const HalideBuffer<T> &buf, int d0, int d1) {
+// We avoid the use of Halide::Runtime::Buffer where possible in these helpers
+// to reduce template instantiation and runtime overhead.
+bool can_fuse(const halide_buffer_t *buf, int d0, int d1) {
     assert(d0 != d1);
-    return d0 < buf.dimensions() &&
-           d1 < buf.dimensions() &&
-           buf.dim(d0).min() == 0 &&
-           buf.dim(d1).stride() > 0 &&
-           buf.dim(d1).stride() == buf.dim(d0).extent() * buf.dim(d0).stride();
+    return d0 < buf->dimensions &&
+           d1 < buf->dimensions &&
+           buf->dim[d0].min == 0 &&
+           buf->dim[d1].stride > 0 &&
+           buf->dim[d1].stride == buf->dim[d0].extent * buf->dim[d0].stride;
 }
-template<typename T>
-bool can_fuse_cx(const HalideBuffer<T> &buf) {
+bool can_fuse_cx(const halide_buffer_t *buf) {
     return can_fuse(buf, 0, 1);
 }
-template<typename T>
-bool can_fuse_xy(const HalideBuffer<T> &buf) {
+bool can_fuse_xy(const halide_buffer_t *buf) {
     return can_fuse(buf, 1, 2);
 }
 
 // Fuse the first two dimensions of buf. d1 is deleted from the buffer.
-template<typename T>
-void fuse(HalideBuffer<T> &buf, int d0, int d1) {
-    halide_dimension_t &dim0 = buf.raw_buffer()->dim[d0];
-    halide_dimension_t &dim1 = buf.raw_buffer()->dim[d1];
+void fuse(halide_buffer_t *buf, int d0, int d1) {
+    halide_dimension_t &dim0 = buf->dim[d0];
+    halide_dimension_t &dim1 = buf->dim[d1];
     dim0.extent *= dim1.extent;
-    for (int d = d1; d + 1 < buf.dimensions(); d++) {
-        buf.raw_buffer()->dim[d] = buf.raw_buffer()->dim[d + 1];
+    for (int d = d1; d + 1 < buf->dimensions; d++) {
+        buf->dim[d] = buf->dim[d + 1];
     }
-    buf.slice(buf.dimensions() - 1);
+    buf->dimensions--;
 }
-template<typename T>
-void fuse_cx(HalideBuffer<T> &buf) {
+void fuse_cx(halide_buffer_t *buf) {
     fuse(buf, 0, 1);
 }
-template<typename T>
-void fuse_xy(HalideBuffer<T> &buf) {
+void fuse_xy(halide_buffer_t *buf) {
     fuse(buf, 1, 2);
 }
 
@@ -79,8 +75,8 @@ void pad_to_rank(int rank, HalideBuffer<T> &buf) {
     }
 }
 
-template <typename Ta, typename... Ts>
-void fuse_cx(HalideBuffer<Ta> &a, HalideBuffer<Ts> &... rest) {
+template <typename... Ts>
+void fuse_cx(halide_buffer_t *a, HalideBuffer<Ts> &... rest) {
     fuse_cx(a);
     fuse_cx(rest...);
 }
@@ -308,7 +304,7 @@ void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q, int in1s
 
     const auto out_range = get_output_range(activation, outq);
 
-    auto add_rank2 = [&](HalideBuffer<const uint8_t> in1_buf, HalideBuffer<const uint8_t> in2_buf, HalideBuffer<uint8_t> out_buf) {
+    auto add_rank2 = [&](halide_buffer_t *in1_buf, halide_buffer_t *in2_buf, halide_buffer_t *out_buf) {
         CHECK(0 == add_uint8_uint8(in1_buf, in1_zero, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
                                    in2_buf, in2_zero, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
                                    out_zero, out_mul_and_shift.multiplier, -out_mul_and_shift.shift,
@@ -341,7 +337,7 @@ void mul(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
 
     const auto out_range = get_output_range(activation, outq);
 
-    auto mul_rank2 = [&](HalideBuffer<const uint8_t> in1_buf, HalideBuffer<const uint8_t> in2_buf, HalideBuffer<uint8_t> out_buf) {
+    auto mul_rank2 = [&](halide_buffer_t *in1_buf, halide_buffer_t *in2_buf, halide_buffer_t *out_buf) {
         CHECK(0 == mul_uint8_uint8_uint8(in1_buf, in1_zero, in2_buf, in2_zero,
                                          out_zero, mul_and_shift.multiplier, -mul_and_shift.shift,
                                          out_range.min, out_range.max, out_buf));
@@ -856,7 +852,7 @@ void L2NormalizationOp::execute() {
         assert(out->quantization().scale.at(0) == 1.0f / 128.0f);
         assert(out->quantization().zero.at(0) == 128);
 
-        auto l2_normalization_rank2 = [&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
+        auto l2_normalization_rank2 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
             CHECK(0 == l2_normalization_uint8(in_buf, input_zero, out_buf));
         };
         loop_nest<2>(l2_normalization_rank2, in_buf, out_buf);
@@ -1197,7 +1193,7 @@ void SoftmaxOp::execute() {
         assert(in_mul_and_shift.shift <= 0);
         assert(output_mul_and_shift.shift <= 0);
 
-        auto softmax_rank2 = [&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
+        auto softmax_rank2 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
             CHECK(0 == softmax_uint8(in_buf, in_mul_and_shift.multiplier, -in_mul_and_shift.shift,
                                      output_zero, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
                                      out_buf));
@@ -1384,7 +1380,7 @@ void UnaryOp::execute() {
             auto result = p.logistic(8, input_scaled, -in_mul_and_shift.shift);
             auto program_buf = p.assemble({result});
 
-            auto logistic_rank1 = [&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
+            auto logistic_rank1 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
                 CHECK(0 == elementwise_5xuint8_1xuint8(in_buf, in_buf, in_buf, in_buf, in_buf, program_buf, out_buf));
             };
             elementwise_loop_nest<1>(logistic_rank1, in_buf, out_buf);
@@ -1405,7 +1401,7 @@ void UnaryOp::execute() {
             auto result = p.add(p.tanh(7, input_scaled, -in_mul_and_shift.shift), 128);
             auto program_buf = p.assemble({result});
 
-            auto tanh_rank1 = [&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
+            auto tanh_rank1 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
                 CHECK(0 == elementwise_5xuint8_1xuint8(in_buf, in_buf, in_buf, in_buf, in_buf, program_buf, out_buf));
             };
             elementwise_loop_nest<1>(tanh_rank1, in_buf, out_buf);
