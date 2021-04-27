@@ -302,6 +302,25 @@ public:
         return ::hannk::make_unique<SpaceDepthOp>(input, output, -block_size);
     }
 
+    std::unique_ptr<Op> parse_split(const tflite::Operator *op) {
+        //const tflite::SplitOptions *options =
+        //    op->builtin_options_as_SplitOptions();
+        TensorPtr input = tensors_[op->inputs()->Get(0)];
+        std::vector<TensorPtr> outputs;
+        for (auto i = op->outputs()->cbegin(); i != op->outputs()->cend(); ++i) {
+            outputs.push_back(tensors_[*i]);
+        }
+        int axis = input->rank() - 1; //options->axis();
+        // Handle negative values, which are legal
+        if (axis < 0) {
+            axis = (int)input->rank() + axis;
+        }
+        // Now 'flip' the axis so that it refers to the right dimension in
+        // the Tensor (since we reverse the dimension order)
+        axis = (int)input->rank() - axis - 1;
+        return ::hannk::make_unique<SplitOp>(input, outputs, axis);
+    }
+
     std::unique_ptr<Op> parse_softmax(const tflite::Operator *op) {
         const tflite::SoftmaxOptions *options =
             op->builtin_options_as_SoftmaxOptions();
@@ -410,6 +429,8 @@ public:
             return parse_softmax(op);
         case tflite::BuiltinOperator_SPACE_TO_DEPTH:
             return parse_space_to_depth(op);
+        case tflite::BuiltinOperator_SPLIT:
+            return parse_split(op);
         case tflite::BuiltinOperator_SQUARE:
             return parse_unary(op, UnaryOp::Square);
         case tflite::BuiltinOperator_SUB:

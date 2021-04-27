@@ -15,6 +15,21 @@ Interpreter::Interpreter(std::unique_ptr<OpGroup> m, InterpreterOptions options)
 Interpreter::~Interpreter() {
 }
 
+class AllocateAll : public OpVisitor {
+    void visit(OpGroup *g) {
+        for (int i = 0; i < g->op_count(); i++) {
+            Op *op = g->op(i);
+            for (int j = 0; j < op->input_count(); j++) {
+                op->input(j)->allocate();
+            }
+            for (int j = 0; j < op->output_count(); j++) {
+                op->output(j)->allocate();
+            }
+            op->accept(this);
+        }
+    }
+};
+
 void Interpreter::init(InterpreterOptions options) {
     pad_for_ops(model_.get());
     in_place(model_.get());
@@ -23,15 +38,8 @@ void Interpreter::init(InterpreterOptions options) {
 
     // TODO: Find a better schedule for executing the ops, including
     // better lifetime management for these allocations.
-    for (int i = 0; i < model_->op_count(); i++) {
-        Op *op = model_->op(i);
-        for (int j = 0; j < op->input_count(); j++) {
-            op->input(j)->allocate();
-        }
-        for (int j = 0; j < op->output_count(); j++) {
-            op->output(j)->allocate();
-        }
-    }
+    AllocateAll allocate_all;
+    model_->accept(&allocate_all);
 }
 
 void Interpreter::execute() {

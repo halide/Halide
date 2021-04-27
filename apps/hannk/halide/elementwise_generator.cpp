@@ -1,6 +1,6 @@
 #include "Halide.h"
 #include "common_halide.h"
-#include "elementwise_program.h"
+#include "interpreter/elementwise_program.h"
 
 using namespace Halide;
 using namespace Halide::ConciseCasts;
@@ -103,13 +103,13 @@ public:
 class Elementwise : public Generator<Elementwise> {
 public:
     GeneratorParam<Type> intermediate_type_{"intermediate_type", Int(16)};
+    GeneratorParam<Type> output1_type_{"output1_type", Int(0)};
+    GeneratorParam<Type> output2_type_{"output2_type", Int(0)};
 
     Input<Buffer<>[]> inputs_{"inputs", 1};
     Input<Buffer<int32_t>> program_{"program", 2};
 
-    Output<Buffer<>> output_{"output", 1};
-
-    void generate() {
+    Func build() {
         Var x("x"), u("u");
 
         Type intermediate_type = intermediate_type_;
@@ -150,10 +150,24 @@ public:
             rounding_shift_right(approx_tanh(q, input1, input2, intermediate_type), q - arg3),
         });
 
-        output_(x) = saturating_cast(output_.type(), scratch(x, program_.dim(1).extent()));
+        Func output("output");
+        std::vector<Type> output_types;
+        if (((Type)output1_type_).bits() > 0) {
+            output_types.push_back(output1_type_);
+        }
+        if (((Type)output2_type_).bits() > 0) {
+            output_types.push_back(output2_type_);
+        }
+        int output_count = output_types.size();
+
+        std::vector<Expr> outputs;
+        for (int i = 0; i < output_count; i++) {
+            outputs.push_back(saturating_cast(output_types[i], scratch(x, program_.dim(1).extent() - output_count + i + 1)));
+        }
+        output(x) = Tuple(outputs);
 
         // Schedule.
-        output_.compute_root()
+        output.compute_root()
             .vectorize(x, natural_vector_size<uint8_t>(), TailStrategy::Predicate);
 
         // Only allow this many instructions per input, so we can store scratch
@@ -168,6 +182,8 @@ public:
 
         program_.dim(0).set_min(0).set_extent(4).set_stride(1);
         program_.dim(1).set_min(0).set_stride(4);
+
+        return output;
     }
 };
 

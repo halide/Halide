@@ -120,7 +120,7 @@ class InPlace : public OpVisitor {
         maybe_alias_elementwise(op);
     }
 
-    void visit(LstmElementwiseOp *op) {
+    void visit(ElementwiseProgramOp *op) {
         maybe_alias_elementwise(op);
     }
 
@@ -129,6 +129,14 @@ class InPlace : public OpVisitor {
         for (int i = 0; i < op->input_count(); i++) {
             maybe_alias_tensors(op->input(i), op->output(), offset);
             offset[op->axis()] += op->input(i)->extent(op->axis());
+        }
+    }
+
+    void visit(SplitOp *op) {
+        std::vector<int> offset(op->axis() + 1, 0);
+        for (int i = 0; i < op->output_count(); i++) {
+            maybe_alias_tensors(op->output(i), op->input(), offset);
+            offset[op->axis()] += op->output(i)->extent(op->axis());
         }
     }
 
@@ -240,7 +248,9 @@ class PadForOps : public OpVisitor {
     }
 
     void visit(OpGroup *op) {
-        pad_for_ops(op);
+        for (int i = 0; i < op->op_count(); i++) {
+            op->op(i)->accept(this);
+        }
     }
 
 public:
