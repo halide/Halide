@@ -350,8 +350,17 @@ void DefaultCostModel::load_weights() {
     }
 
     if (need_randomize) {
-        auto seed = time(nullptr);
-        std::cout << "Randomizing weights using seed = " << seed << "\n";
+        // Get the seed for random weights
+        std::string seed_str = Internal::get_env_variable("HL_RANDOM_WEIGHT_SEED");
+        // Or use the time, if not set.
+        int seed = (int)time(nullptr);
+        if (!seed_str.empty()) {
+            std::cout << "Randomizing with HL_RANDOM_WEIGHT_SEED, seed = " << seed_str << "\n";
+            seed = atoi(seed_str.c_str());
+        }
+        else{
+            std::cout << "Randomizing weights using time-based seed = " << seed << "\n";
+        }
         weights.randomize((uint32_t)seed);
     }
 
