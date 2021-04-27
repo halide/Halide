@@ -1366,7 +1366,7 @@ void UnaryOp::execute() {
 
         const int left_shift = 6;
 
-        std::array<int, 32> program_buffer;
+        std::array<int16_t, 64> program_buffer;
         if (op_ == Logistic) {
             const double real_in_multiplier = in_scale / (1 << left_shift);
 

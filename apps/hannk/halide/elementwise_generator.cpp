@@ -107,7 +107,7 @@ public:
     GeneratorParam<Type> output2_type_{"output2_type", Int(0)};
 
     Input<Buffer<>[]> inputs_{"inputs", 1};
-    Input<Buffer<int32_t>> program_{"program", 2};
+    Input<Buffer<int16_t>> program_{"program", 2};
 
     Func build() {
         Var x("x"), u("u");
@@ -132,22 +132,23 @@ public:
         Expr arg1 = program_(1, r.y);
         Expr arg2 = program_(2, r.y);
         Expr arg3 = cast(intermediate_type, program_(3, r.y));
+        Expr arg4 = cast(intermediate_type, program_(4, r.y));
 
         const int max_input = input_count - 1;
-        Expr input1 = scratch(x, unsafe_promise_clamped(arg1, -max_input, r.y + 1));
-        Expr input2 = scratch(x, unsafe_promise_clamped(arg2, -max_input, r.y + 1));
+        Expr input1 = scratch(x, unsafe_promise_clamped(i32(arg1), -max_input, r.y + 1));
+        Expr input2 = scratch(x, unsafe_promise_clamped(i32(arg2), -max_input, r.y + 1));
 
         r.where(r.x == op);
         scratch(x, r.y + 1) = mux(r.x, {
             arg3,
             saturating_add(input1, input2 + arg3),
             saturating_sub(input1, input2 + arg3),
-            rounding_mul_shift_right(input1, input2, cast(unsigned_intermediate, arg3)),
+            rounding_mul_shift_right(input1, input2 + arg3, cast(unsigned_intermediate, arg4)),
             rounding_shift_right(input1, input2 + arg3),
             min(input1, input2 + arg3),
             max(input1, input2 + arg3),
-            rounding_shift_right(approx_logistic(q, input1, input2, intermediate_type), q - arg3),
-            rounding_shift_right(approx_tanh(q, input1, input2, intermediate_type), q - arg3),
+            rounding_shift_right(approx_logistic(q, input1, input2 + arg3, intermediate_type), q - arg4),
+            rounding_shift_right(approx_tanh(q, input1, input2 + arg3, intermediate_type), q - arg4),
         });
 
         Func output("output");
@@ -168,7 +169,7 @@ public:
 
         // Schedule.
         output.compute_root()
-            .vectorize(x, natural_vector_size<uint8_t>(), TailStrategy::Predicate);
+            .vectorize(x, natural_vector_size<uint8_t>());
 
         // Only allow this many instructions per input, so we can store scratch
         // on the real stack.
@@ -180,8 +181,8 @@ public:
             .update(input_count + 1)
             .unroll(r.x);
 
-        program_.dim(0).set_min(0).set_extent(4).set_stride(1);
-        program_.dim(1).set_min(0).set_stride(4);
+        program_.dim(0).set_min(0).set_extent(5).set_stride(1);
+        program_.dim(1).set_min(0).set_stride(5);
 
         return output;
     }

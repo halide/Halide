@@ -38,7 +38,7 @@ std::unique_ptr<OpGroup> lower_tflite_lstm(TensorPtr data_input, TensorPtr prev_
     // documented here: https://github.com/tensorflow/tensorflow/blob/cbeddb59c4c836637f64b3eb5c639d7db8ca4005/tensorflow/lite/kernels/internal/reference/reference_ops.h#L758-L830
     // According to Benoit Jacob, this approach of specific LSTM ops is deprecated,
     // and most future LSTMs should just arrive as individual elementwise ops.
-    std::array<int, 256> program_buffer;
+    std::array<int16_t, 256> program_buffer;
     ElementwiseProgram p(program_buffer);
 
     std::vector<TensorPtr> elementwise_inputs = {input_gate_buf, input_modulation_gate_buf, forget_gate_buf, output_gate_buf, prev_state_input};
@@ -48,7 +48,7 @@ std::unique_ptr<OpGroup> lower_tflite_lstm(TensorPtr data_input, TensorPtr prev_
     auto output_gate = p.input(3);
     auto prev_state = p.input(4);
 
-    const int q = 15;
+    const int16_t q = 15;
     auto input_gate_output = p.logistic(q, input_gate, q - 3);
     auto input_modulation_gate_output = p.tanh(q, input_modulation_gate, q - 3);
 
@@ -61,10 +61,15 @@ std::unique_ptr<OpGroup> lower_tflite_lstm(TensorPtr data_input, TensorPtr prev_
     auto new_state = p.add(p.rounding_shift(input_times_input_modulation, 4), prev_state_times_forget_state);
 
     auto output = p.rounding_mul_shift(output_gate_output, p.tanh(q, new_state, q - 4), q);
-    output = p.add(p.rounding_shift(output, 8), 128);
+    // This tricky ordering enables the assembler to not add two dummy adds to get
+    // the outputs in the right place.
+    output = p.rounding_shift(output, 8);
+    new_state = p.add(new_state, 0);
+    output = p.add(output, 128);
     std::vector<TensorPtr> elementwise_outputs = {state_output, activ_output};
 
     auto program_buf = p.assemble({new_state, output});
+    p.disassemble(std::cout);
     program_buf = program_buf.copy();
 
     ops.push_back(::hannk::make_unique<ElementwiseProgramOp>(elementwise_inputs, elementwise_outputs, program_buf));
