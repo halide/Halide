@@ -15,6 +15,8 @@ Interpreter::Interpreter(std::unique_ptr<OpGroup> m, InterpreterOptions options)
 Interpreter::~Interpreter() {
 }
 
+namespace {
+
 class AllocateAll : public OpVisitor {
     void visit(OpGroup *g) {
         for (int i = 0; i < g->op_count(); i++) {
@@ -29,6 +31,8 @@ class AllocateAll : public OpVisitor {
         }
     }
 };
+
+}  // namespace
 
 void Interpreter::init(InterpreterOptions options) {
     pad_for_ops(model_.get());
