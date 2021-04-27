@@ -75,14 +75,14 @@ void pad_to_rank(int rank, HalideBuffer<T> &buf) {
     }
 }
 
-template <typename... Ts>
-void fuse_cx(halide_buffer_t *a, HalideBuffer<Ts> &... rest) {
+template<typename... Ts>
+void fuse_cx(halide_buffer_t *a, HalideBuffer<Ts> &...rest) {
     fuse_cx(a);
     fuse_cx(rest...);
 }
 
-template <typename Ta, typename... Ts>
-void pad_to_rank(int rank, HalideBuffer<Ta> &a, HalideBuffer<Ts> &... rest) {
+template<typename Ta, typename... Ts>
+void pad_to_rank(int rank, HalideBuffer<Ta> &a, HalideBuffer<Ts> &...rest) {
     pad_to_rank(rank, a);
     pad_to_rank(rank, rest...);
 }
@@ -91,7 +91,7 @@ bool all(bool first) {
     return first;
 }
 
-template <typename... T>
+template<typename... T>
 bool all(bool first, T... rest) {
     return first && all(rest...);
 }
@@ -100,7 +100,7 @@ bool all(bool first, T... rest) {
 // This may enable the buffers to be processed with fewer instances of the "tail" of
 // a vectorization loop.
 template<typename Ta, typename... Ts>
-void optimize_elementwise_shapes(int rank, HalideBuffer<Ta> &a, HalideBuffer<Ts> &... rest) {
+void optimize_elementwise_shapes(int rank, HalideBuffer<Ta> &a, HalideBuffer<Ts> &...rest) {
     while (can_fuse_cx(a) && all(can_fuse_cx(rest)...) &&
            all(a.dim(0).extent() == rest.dim(0).extent()...)) {
         fuse_cx(a, rest...);

@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "interpreter/interpreter.h"
+#include "interpreter/lower.h"
 #include "interpreter/ops.h"
 #include "tensorflow/lite/builtin_ops.h"
 #include "tensorflow/lite/c/builtin_op_data.h"
@@ -33,6 +34,7 @@
     KNOWN_OP(Less)            \
     KNOWN_OP(LessEqual)       \
     KNOWN_OP(Logistic)        \
+    KNOWN_OP(Lstm)            \
     KNOWN_OP(MaxPool2d)       \
     KNOWN_OP(Mean)            \
     KNOWN_OP(Mul)             \
@@ -721,6 +723,23 @@ private:
         return ::hannk::make_unique<SpaceDepthOp>(input, output, -params->block_size);
     }
 
+    std::unique_ptr<Op> BuildLstm(TfLiteContext *context, TfLiteNode *node) {
+        // Note that the TFLite 'Lstm' op is lowered into several Hannk ops
+        auto data_input = GetTensorById(context, node->inputs->data[0]);
+        auto prev_activ_input = GetTensorById(context, node->inputs->data[1]);
+        auto weights_input = GetTensorById(context, node->inputs->data[2]);
+        auto biases_input = GetTensorById(context, node->inputs->data[3]);
+        auto prev_state_input = GetTensorById(context, node->inputs->data[4]);
+
+        auto activ_output = GetTensorById(context, node->outputs->data[0]);
+        auto state_output = GetTensorById(context, node->outputs->data[1]);
+        auto concat_temp = GetTensorById(context, node->outputs->data[2]);
+        auto activ_temp = GetTensorById(context, node->outputs->data[3]);
+
+        return lower_tflite_lstm(data_input, prev_activ_input, weights_input, biases_input, prev_state_input,
+                                 activ_output, state_output, concat_temp, activ_temp);
+    }
+
     const HannkDelegateOptions options_;
     std::unique_ptr<OpGroup> model_;
     std::unique_ptr<Interpreter> interpreter_;
@@ -755,6 +774,23 @@ bool InputsHaveCorrectTypes(const TfLiteNode *node,
 bool AllInputsHaveType(const TfLiteNode *node, TfLiteContext *context, int possible_types_mask) {
     for (int i = 0; i < node->inputs->size; ++i) {
         const int tensor_id = node->inputs->data[i];
+        if (tensor_id == kTfLiteOptionalTensor) {
+            continue;
+        }
+        const TfLiteTensor &tensor = context->tensors[tensor_id];
+        const int tensor_type_mask = 1 << tensor.type;
+        if (!(tensor_type_mask & possible_types_mask)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TensorsHaveCorrectTypes(TfLiteContext *context,
+                             std::initializer_list<std::pair<int, int>> tensor_ids_and_masks) {
+    for (const auto &it : tensor_ids_and_masks) {
+        const int tensor_id = it.first;
+        const int possible_types_mask = it.second;
         if (tensor_id == kTfLiteOptionalTensor) {
             continue;
         }
@@ -1041,6 +1077,63 @@ bool IsNodeSupported_DepthToSpace(TfLiteContext *context, TfLiteNode *node, TfLi
     if (!InputsHaveCorrectTypes(node, context, {k8BitMask})) {
         return false;
     }
+    return true;
+}
+
+bool IsNodeSupported_Lstm(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
+    // TODO: we might work with v3 or v4, but haven't tested any instances.
+    if (!(registration->version <= 2)) {
+        return false;
+    }
+
+    if (node->inputs->size != 5 || node->outputs->size != 4) {
+        return false;
+    }
+
+    // Our 'Lstm' op is actually a group of several Hannk ops;
+    // we must check these carefully (see lower_tflite_lstm() for reference):
+
+    const int data_input = node->inputs->data[0];
+    const int prev_activ_input = node->inputs->data[1];
+    const int weights_input = node->inputs->data[2];
+    const int biases_input = node->inputs->data[3];
+    const int prev_state_input = node->inputs->data[4];
+
+    const int activ_output = node->outputs->data[0];
+    const int state_output = node->outputs->data[1];
+    const int concat_temp = node->outputs->data[2];
+    const int activ_temp = node->outputs->data[3];
+
+    if (!TensorsHaveCorrectTypes(context,
+                                 {
+                                     {data_input, k8BitMask},
+                                     {prev_activ_input, k8BitMask},
+                                     {weights_input, k8BitMask},
+                                     {biases_input, 1 << kTfLiteInt32},
+                                     {prev_state_input, (1 << kTfLiteInt16)},
+                                     {activ_output, k8BitMask},
+                                     {state_output, (1 << kTfLiteInt16)},
+                                     {concat_temp, k8BitMask},
+                                     {activ_temp, (1 << kTfLiteInt16)},
+                                 })) {
+        return false;
+    }
+
+    const TfLiteLSTMParams *params = (const TfLiteLSTMParams *)(node->builtin_data);
+    // TODO: there is an activation function specified here but it's not clear
+    // whether it's used in the LSTM reference implementation. Ignoring for now.
+    // if (params->activation == ...) {
+    //     return false;
+    // }
+
+    // TODO: for v2+, you can specify 'basic' vs 'full' kernels.
+    // The 'basic' kernel is all we've tested with.
+    if (registration->version >= 2) {
+        if (params->kernel_type != kTfLiteLSTMBasicKernel) {
+            return false;
+        }
+    }
+
     return true;
 }
 
