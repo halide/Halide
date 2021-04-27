@@ -240,7 +240,9 @@ class PadForOps : public OpVisitor {
     }
 
     void visit(OpGroup *op) {
-        pad_for_ops(op);
+        for (int i = 0; i < op->op_count(); i++) {
+            op->op(i)->accept(this);
+        }
     }
 
 public:

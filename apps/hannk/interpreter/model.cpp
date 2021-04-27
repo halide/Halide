@@ -1,4 +1,5 @@
 #include "interpreter/model.h"
+#include "interpreter/ops.h"
 #include "util/error_util.h"
 
 #include <cmath>
@@ -303,9 +304,7 @@ std::unique_ptr<Op> OpGroup::clone(TensorMap &tensor_map) const {
 }
 
 void OpGroup::accept(OpVisitor *v) {
-    for (int i = 0; i < op_count(); i++) {
-        op(i)->accept(v);
-    }
+    v->visit(this);
 }
 
 void OpGroup::dump(std::ostream &os) const {

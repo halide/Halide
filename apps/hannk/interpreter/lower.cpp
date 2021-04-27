@@ -14,9 +14,6 @@ std::unique_ptr<OpGroup> lower_tflite_lstm(TensorPtr data_input, TensorPtr prev_
 
     std::vector<std::unique_ptr<Op>> ops;
 
-    concat_temp->allocate();
-    activ_temp->allocate();
-
     std::vector<TensorPtr> concat_inputs = {data_input, prev_activ_input};
     ops.push_back(::hannk::make_unique<ConcatenationOp>(concat_inputs, concat_temp, 0));
     ops.push_back(::hannk::make_unique<FullyConnectedOp>(concat_temp, weights_input, biases_input, activ_temp));

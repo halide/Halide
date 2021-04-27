@@ -354,8 +354,8 @@ void mul(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
     elementwise_loop_nest<2>(mul_rank2, in1, in2, out);
 }
 
-void requantize(const HalideBuffer<const uint8_t> &in, const QuantizationInfo &inq,
-                HalideBuffer<uint8_t> out, const QuantizationInfo &outq,
+void requantize(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
+                HalideBuffer<void> out, const QuantizationInfo &outq,
                 ActivationFunction activation = ActivationFunction::None) {
     if (inq == outq) {
         // Some of these are just copies, or no-ops.
