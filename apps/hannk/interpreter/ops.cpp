@@ -193,6 +193,7 @@ bool is_alias(const halide_buffer_t *a, const halide_buffer_t *b) {
     return std::max(begin(a), begin(b)) < std::min(end(a), end(b));
 }
 
+
 // Crop both a and b to the union of both buffers.
 template<typename T, typename U>
 void crop_to_union(HalideBuffer<T> &a, HalideBuffer<U> &b) {

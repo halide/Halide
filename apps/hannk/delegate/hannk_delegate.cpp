@@ -777,443 +777,473 @@ private:
     std::map<int, TensorPtr> tensors_;
 };
 
-bool InputsHaveCorrectTypes(const TfLiteNode *node,
-                            TfLiteContext *context,
-                            std::initializer_list<int> per_input_possible_types_mask) {
-    if (node->inputs->size != (int)per_input_possible_types_mask.size()) {
-        LOG(ERROR) << "inputs size mismatch in InputsHaveCorrectTypes";
-        return false;
-    }
-    int i = -1;
-    for (int possible_types_mask : per_input_possible_types_mask) {
-        ++i;
-        // Skip optional tensor.
-        const int tensor_id = node->inputs->data[i];
-        if (tensor_id == kTfLiteOptionalTensor) {
-            continue;
-        }
-        const TfLiteTensor &tensor = context->tensors[tensor_id];
-        const int tensor_type_mask = 1 << tensor.type;
-        if (!(tensor_type_mask & possible_types_mask)) {
+class NodeSupport {
+    TfLiteContext *context_;
+    TfLiteNode *node_;
+    TfLiteRegistration *registration_;
+
+    // static const[expr] is a better choice but requires C++17 to avoid pain.
+    enum PossibleTypesMask {
+        NONE = 1 << kTfLiteNoType,
+        U8 = 1 << kTfLiteUInt8,
+        I8 = 1 << kTfLiteInt8,
+        I16 = 1 << kTfLiteInt16,
+        I32 = 1 << kTfLiteInt32,
+        F32 = 1 << kTfLiteFloat32,
+        F64 = 1 << kTfLiteFloat64,
+        I32_OR_NONE = I32 | NONE,
+        ANY_ARITHMETIC = U8 | I8 | I16 | I32 | F32 | F64
+    };
+
+    bool InputsHaveCorrectTypes(std::initializer_list<PossibleTypesMask> per_input_possible_types_mask) const {
+        if (node_->inputs->size != (int)per_input_possible_types_mask.size()) {
+            LOG(ERROR) << "inputs size mismatch in InputsHaveCorrectTypes";
             return false;
         }
-    }
-    return true;
-}
-
-bool AllInputsHaveType(const TfLiteNode *node, TfLiteContext *context, int possible_types_mask) {
-    for (int i = 0; i < node->inputs->size; ++i) {
-        const int tensor_id = node->inputs->data[i];
-        if (tensor_id == kTfLiteOptionalTensor) {
-            continue;
+        int i = -1;
+        for (PossibleTypesMask possible_types_mask : per_input_possible_types_mask) {
+            ++i;
+            // Skip optional tensor.
+            const int tensor_id = node_->inputs->data[i];
+            if (tensor_id == kTfLiteOptionalTensor) {
+                continue;
+            }
+            const TfLiteTensor &tensor = context_->tensors[tensor_id];
+            const int tensor_type_mask = 1 << tensor.type;
+            if (!(tensor_type_mask & possible_types_mask)) {
+                return false;
+            }
         }
-        const TfLiteTensor &tensor = context->tensors[tensor_id];
-        const int tensor_type_mask = 1 << tensor.type;
-        if (!(tensor_type_mask & possible_types_mask)) {
+        return true;
+    }
+
+    bool AllInputsHaveType(PossibleTypesMask possible_types_mask) const {
+        for (int i = 0; i < node_->inputs->size; ++i) {
+            const int tensor_id = node_->inputs->data[i];
+            if (tensor_id == kTfLiteOptionalTensor) {
+                continue;
+            }
+            const TfLiteTensor &tensor = context_->tensors[tensor_id];
+            const int tensor_type_mask = 1 << tensor.type;
+            if (!(tensor_type_mask & possible_types_mask)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool TensorsHaveCorrectTypes(std::initializer_list<std::pair<int, PossibleTypesMask>> tensor_ids_and_masks) const {
+        for (const auto &it : tensor_ids_and_masks) {
+            const int tensor_id = it.first;
+            const PossibleTypesMask possible_types_mask = it.second;
+            if (tensor_id == kTfLiteOptionalTensor) {
+                continue;
+            }
+            const TfLiteTensor &tensor = context_->tensors[tensor_id];
+            const int tensor_type_mask = 1 << tensor.type;
+            if (!(tensor_type_mask & possible_types_mask)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool IsActivationReluOrNone(TfLiteFusedActivation activation) const {
+        return (activation == kTfLiteActRelu ||
+                activation == kTfLiteActRelu6 ||
+                activation == kTfLiteActReluN1To1 ||
+                activation == kTfLiteActNone);
+    }
+
+    bool IsNodeSupported_Add() const {
+        if (!(registration_->version <= 2)) {
             return false;
         }
-    }
-    return true;
-}
-
-bool TensorsHaveCorrectTypes(TfLiteContext *context,
-                             std::initializer_list<std::pair<int, int>> tensor_ids_and_masks) {
-    for (const auto &it : tensor_ids_and_masks) {
-        const int tensor_id = it.first;
-        const int possible_types_mask = it.second;
-        if (tensor_id == kTfLiteOptionalTensor) {
-            continue;
-        }
-        const TfLiteTensor &tensor = context->tensors[tensor_id];
-        const int tensor_type_mask = 1 << tensor.type;
-        if (!(tensor_type_mask & possible_types_mask)) {
+        if (!InputsHaveCorrectTypes({U8, U8})) {
             return false;
         }
-    }
-    return true;
-}
-
-bool IsActivationReluOrNone(TfLiteFusedActivation activation) {
-    return (activation == kTfLiteActRelu ||
-            activation == kTfLiteActRelu6 ||
-            activation == kTfLiteActReluN1To1 ||
-            activation == kTfLiteActNone);
-}
-
-// TODO: this should also allow Int8 once we fix biasing for those
-constexpr int k8BitMask = 1 << kTfLiteUInt8;
-
-constexpr int kArithmeticTypesMask =
-    (1 << kTfLiteUInt8) |
-    (1 << kTfLiteInt8) |
-    (1 << kTfLiteInt16) |
-    (1 << kTfLiteInt32) |
-    (1 << kTfLiteFloat32) |
-    (1 << kTfLiteFloat64);
-
-bool IsNodeSupported_Add(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    if (!(registration->version <= 2)) {
-        return false;
-    }
-    if (!InputsHaveCorrectTypes(node, context, {k8BitMask, k8BitMask})) {
-        return false;
-    }
-    const TfLiteAddParams *params = (const TfLiteAddParams *)(node->builtin_data);
-    if (!IsActivationReluOrNone(params->activation)) {
-        return false;
-    }
-    return true;
-}
-
-bool IsNodeSupported_Sub(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    return IsNodeSupported_Add(context, node, registration);
-}
-
-bool IsNodeSupported_Mul(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    return IsNodeSupported_Add(context, node, registration);
-}
-
-bool IsNodeSupported_Compare(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    if (!(registration->version <= 2)) {
-        return false;
-    }
-    if (!InputsHaveCorrectTypes(node, context, {kArithmeticTypesMask, kArithmeticTypesMask})) {
-        return false;
-    }
-    if (node->outputs->size != 1) {
-        return false;
-    }
-    const TfLiteTensor &output = context->tensors[node->outputs->data[0]];
-    if (output.type != kTfLiteBool || output.dims->size != 0) {
-        return false;
-    }
-    return true;
-}
-
-bool IsNodeSupported_Less(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    return IsNodeSupported_Compare(context, node, registration);
-}
-
-bool IsNodeSupported_LessEqual(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    return IsNodeSupported_Compare(context, node, registration);
-}
-
-bool IsNodeSupported_Greater(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    return IsNodeSupported_Compare(context, node, registration);
-}
-
-bool IsNodeSupported_GreaterEqual(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    return IsNodeSupported_Compare(context, node, registration);
-}
-
-bool IsNodeSupported_Equal(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    return IsNodeSupported_Compare(context, node, registration);
-}
-
-bool IsNodeSupported_NotEqual(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    return IsNodeSupported_Compare(context, node, registration);
-}
-
-bool IsNodeSupported_Concatenation(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    if (!(registration->version <= 2)) {
-        return false;
-    }
-    if (!AllInputsHaveType(node, context, k8BitMask)) {
-        return false;
-    }
-    // TODO: This op has an activation but we don't appear to use it.
-    // const TfLiteConcatenationParams *params = (const TfLiteConcatenationParams *)(node->builtin_data);
-    return true;
-}
-
-bool IsNodeSupported_Conv2d(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    if (!(registration->version <= 2)) {
-        return false;
-    }
-    if (!InputsHaveCorrectTypes(node, context, {k8BitMask, k8BitMask, 1 << kTfLiteInt32})) {
-        return false;
-    }
-    const TfLiteConvParams *params = (const TfLiteConvParams *)(node->builtin_data);
-    if (!IsActivationReluOrNone(params->activation)) {
-        return false;
-    }
-    return true;
-}
-
-bool IsNodeSupported_DepthwiseConv2d(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    if (!(registration->version <= 2)) {
-        return false;
-    }
-    if (!InputsHaveCorrectTypes(node, context, {k8BitMask, k8BitMask, 1 << kTfLiteInt32})) {
-        return false;
-    }
-    const TfLiteDepthwiseConvParams *params = (const TfLiteDepthwiseConvParams *)(node->builtin_data);
-    if (!IsActivationReluOrNone(params->activation)) {
-        return false;
-    }
-    return true;
-}
-
-bool IsNodeSupported_FullyConnected(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    // This is correct, we don't handle the params for v2 or later yet
-    if (!(registration->version <= 1)) {
-        return false;
-    }
-    if (!InputsHaveCorrectTypes(node, context, {k8BitMask, k8BitMask, (1 << kTfLiteInt32) | (1 << kTfLiteNoType)})) {
-        return false;
-    }
-    const TfLiteFullyConnectedParams *params = (const TfLiteFullyConnectedParams *)(node->builtin_data);
-    if (!IsActivationReluOrNone(params->activation)) {
-        return false;
-    }
-    return true;
-}
-
-bool IsNodeSupported_Pool2d(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    if (!(registration->version <= 2)) {
-        return false;
-    }
-    if (!InputsHaveCorrectTypes(node, context, {k8BitMask})) {
-        return false;
-    }
-    const TfLitePoolParams *params = (const TfLitePoolParams *)(node->builtin_data);
-    if (!IsActivationReluOrNone(params->activation)) {
-        return false;
-    }
-    return true;
-}
-
-bool IsNodeSupported_AveragePool2d(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    return IsNodeSupported_Pool2d(context, node, registration);
-}
-
-bool IsNodeSupported_MaxPool2d(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    return IsNodeSupported_Pool2d(context, node, registration);
-}
-
-bool IsNodeSupported_Pad(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    if (!(registration->version <= 2)) {
-        return false;
-    }
-    if (!InputsHaveCorrectTypes(node, context, {k8BitMask, 1 << kTfLiteInt32})) {
-        return false;
-    }
-    return true;
-}
-
-bool IsNodeSupported_Reshape(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    if (!(registration->version <= 2)) {
-        return false;
-    }
-    // Note that Reshape can have 1 or 2 inputs.
-    if (node->inputs->size > 2) {
-        return false;
-    }
-    return true;
-}
-
-bool IsNodeSupported_Shape(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    if (!(registration->version <= 2)) {
-        return false;
-    }
-    if (node->inputs->size != 1) {
-        return false;
-    }
-    return true;
-}
-
-bool IsNodeSupported_Softmax(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    if (!(registration->version <= 2)) {
-        return false;
-    }
-    if (!InputsHaveCorrectTypes(node, context, {k8BitMask})) {
-        return false;
-    }
-    return true;
-}
-
-bool IsNodeSupported_L2Normalization(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    if (!(registration->version <= 2)) {
-        return false;
-    }
-    if (!InputsHaveCorrectTypes(node, context, {k8BitMask})) {
-        return false;
-    }
-    return true;
-}
-
-bool IsNodeSupported_Unary(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    if (!(registration->version <= 2)) {
-        return false;
-    }
-    if (!InputsHaveCorrectTypes(node, context, {k8BitMask})) {
-        return false;
-    }
-    return true;
-}
-
-bool IsNodeSupported_Logistic(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    return IsNodeSupported_Unary(context, node, registration);
-}
-
-bool IsNodeSupported_Neg(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    return IsNodeSupported_Unary(context, node, registration);
-}
-
-bool IsNodeSupported_Tanh(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    return IsNodeSupported_Unary(context, node, registration);
-}
-
-bool IsNodeSupported_Relu(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    return IsNodeSupported_Unary(context, node, registration);
-}
-
-bool IsNodeSupported_Relu6(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    return IsNodeSupported_Unary(context, node, registration);
-}
-
-bool IsNodeSupported_ReluN1To1(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    return IsNodeSupported_Unary(context, node, registration);
-}
-
-bool IsNodeSupported_Square(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    return IsNodeSupported_Unary(context, node, registration);
-}
-
-bool IsNodeSupported_Mean(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    if (!(registration->version <= 2)) {
-        return false;
-    }
-    if (!InputsHaveCorrectTypes(node, context, {k8BitMask, 1 << kTfLiteInt32})) {
-        return false;
-    }
-    return true;
-}
-
-bool IsNodeSupported_SpaceToDepth(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    if (!(registration->version <= 2)) {
-        return false;
-    }
-    if (!InputsHaveCorrectTypes(node, context, {k8BitMask})) {
-        return false;
-    }
-    return true;
-}
-
-bool IsNodeSupported_DepthToSpace(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    if (!(registration->version <= 2)) {
-        return false;
-    }
-    if (!InputsHaveCorrectTypes(node, context, {k8BitMask})) {
-        return false;
-    }
-    return true;
-}
-
-bool IsNodeSupported_Lstm(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    // TODO: we might work with v3 or v4, but haven't tested any instances.
-    if (!(registration->version <= 2)) {
-        return false;
-    }
-
-    if (node->inputs->size != 5 || node->outputs->size != 4) {
-        return false;
-    }
-
-    // Our 'Lstm' op is actually a group of several Hannk ops;
-    // we must check these carefully (see lower_tflite_lstm() for reference):
-
-    const int data_input = node->inputs->data[0];
-    const int prev_activ_input = node->inputs->data[1];
-    const int weights_input = node->inputs->data[2];
-    const int biases_input = node->inputs->data[3];
-    const int prev_state_input = node->inputs->data[4];
-
-    const int activ_output = node->outputs->data[0];
-    const int state_output = node->outputs->data[1];
-    const int concat_temp = node->outputs->data[2];
-    const int activ_temp = node->outputs->data[3];
-
-    if (!TensorsHaveCorrectTypes(context,
-                                 {
-                                     {data_input, k8BitMask},
-                                     {prev_activ_input, k8BitMask},
-                                     {weights_input, k8BitMask},
-                                     {biases_input, 1 << kTfLiteInt32},
-                                     {prev_state_input, (1 << kTfLiteInt16)},
-                                     {activ_output, k8BitMask},
-                                     {state_output, (1 << kTfLiteInt16)},
-                                     {concat_temp, k8BitMask},
-                                     {activ_temp, (1 << kTfLiteInt16)},
-                                 })) {
-        return false;
-    }
-
-    const TfLiteLSTMParams *params = (const TfLiteLSTMParams *)(node->builtin_data);
-    // TODO: there is an activation function specified here but it's not clear
-    // whether it's used in the LSTM reference implementation. Ignoring for now.
-    // if (params->activation == ...) {
-    //     return false;
-    // }
-
-    // TODO: for v2+, you can specify 'basic' vs 'full' kernels.
-    // The 'basic' kernel is all we've tested with.
-    if (registration->version >= 2) {
-        if (params->kernel_type != kTfLiteLSTMBasicKernel) {
+        const TfLiteAddParams *params = (const TfLiteAddParams *)(node_->builtin_data);
+        if (!IsActivationReluOrNone(params->activation)) {
             return false;
         }
+        return true;
     }
 
-    return true;
-}
-
-bool IsNodeSupported(TfLiteContext *context, TfLiteNode *node, TfLiteRegistration *registration) {
-    // Ensure all inputs & outputs have dim <= 4.
-    for (int i = 0; i < node->inputs->size; ++i) {
-        const int tensor_id = node->inputs->data[i];
-        if (tensor_id == kTfLiteOptionalTensor) {
-            continue;
-        }
-        const TfLiteTensor &tensor = context->tensors[tensor_id];
-        assert(tensor.dims);
-        if (tensor.dims->size > 4) {
+    bool IsNodeSupported_Sub() const {
+        if (!(registration_->version <= 2)) {
             return false;
         }
-    }
-    for (int i = 0; i < node->outputs->size; ++i) {
-        const int tensor_id = node->outputs->data[i];
-        const TfLiteTensor &tensor = context->tensors[tensor_id];
-        assert(tensor.dims);
-        if (tensor.dims->size > 4) {
+        if (!InputsHaveCorrectTypes({U8, U8})) {
             return false;
         }
+        const TfLiteSubParams *params = (const TfLiteSubParams *)(node_->builtin_data);
+        if (!IsActivationReluOrNone(params->activation)) {
+            return false;
+        }
+        return true;
     }
 
-    // Now check for each specific node.
-    //
-    // TODO: Our existing code for TFLiteParser, etc doesn't pay
-    // attention to version (AFAICT); need to find & examine the specs of
-    // version changes to ensure this is correct. Existing version checking
-    // here is mostly bogus. See tensorflow/lite/tools/versioning/op_version.cc
-    //
-    // TODO: style here is imitation of approach used in Hexagon delegate,
-    // but a purely data-table-driven-approach might be better in the long run?
+    bool IsNodeSupported_Mul() const {
+        if (!(registration_->version <= 2)) {
+            return false;
+        }
+        if (!InputsHaveCorrectTypes({U8, U8})) {
+            return false;
+        }
+        const TfLiteMulParams *params = (const TfLiteMulParams *)(node_->builtin_data);
+        if (!IsActivationReluOrNone(params->activation)) {
+            return false;
+        }
+        return true;
+    }
 
-    // clang-format off
-    switch (registration->builtin_code) {
+    bool IsNodeSupported_Compare() const {
+        if (!(registration_->version <= 2)) {
+            return false;
+        }
+        if (!InputsHaveCorrectTypes({ANY_ARITHMETIC, ANY_ARITHMETIC})) {
+            return false;
+        }
+        if (node_->outputs->size != 1) {
+            return false;
+        }
+        const TfLiteTensor &output = context_->tensors[node_->outputs->data[0]];
+        if (output.type != kTfLiteBool || output.dims->size != 0) {
+            return false;
+        }
+        return true;
+    }
 
-        #define KNOWN_OP(OP) case kTfLiteBuiltin##OP: return IsNodeSupported_##OP(context, node, registration);
-        ALL_KNOWN_OPS
-        #undef KNOWN_OP
+    bool IsNodeSupported_Less() const {
+        return IsNodeSupported_Compare();
+    }
 
-    default:
+    bool IsNodeSupported_LessEqual() const {
+        return IsNodeSupported_Compare();
+    }
+
+    bool IsNodeSupported_Greater() const {
+        return IsNodeSupported_Compare();
+    }
+
+    bool IsNodeSupported_GreaterEqual() const {
+        return IsNodeSupported_Compare();
+    }
+
+    bool IsNodeSupported_Equal() const {
+        return IsNodeSupported_Compare();
+    }
+
+    bool IsNodeSupported_NotEqual() const {
+        return IsNodeSupported_Compare();
+    }
+
+    bool IsNodeSupported_Concatenation() const {
+        if (!(registration_->version <= 2)) {
+            return false;
+        }
+        if (!AllInputsHaveType(U8)) {
+            return false;
+        }
+        // TODO: This op has an activation but we don't appear to use it.
+        // const TfLiteConcatenationParams *params = (const TfLiteConcatenationParams *)(node_->builtin_data);
+        return true;
+    }
+
+    bool IsNodeSupported_Conv2d() const {
+        if (!(registration_->version <= 2)) {
+            return false;
+        }
+        if (!InputsHaveCorrectTypes({U8, U8, I32})) {
+            return false;
+        }
+        const TfLiteConvParams *params = (const TfLiteConvParams *)(node_->builtin_data);
+        if (!IsActivationReluOrNone(params->activation)) {
+            return false;
+        }
+        return true;
+    }
+
+    bool IsNodeSupported_DepthwiseConv2d() const {
+        if (!(registration_->version <= 2)) {
+            return false;
+        }
+        if (!InputsHaveCorrectTypes({U8, U8, I32})) {
+            return false;
+        }
+        const TfLiteDepthwiseConvParams *params = (const TfLiteDepthwiseConvParams *)(node_->builtin_data);
+        if (!IsActivationReluOrNone(params->activation)) {
+            return false;
+        }
+        return true;
+    }
+
+    bool IsNodeSupported_FullyConnected() const {
+        // This is correct, we don't handle the params for v2 or later yet
+        if (!(registration_->version <= 1)) {
+            return false;
+        }
+        if (!InputsHaveCorrectTypes({U8, U8, I32_OR_NONE})) {
+            return false;
+        }
+        const TfLiteFullyConnectedParams *params = (const TfLiteFullyConnectedParams *)(node_->builtin_data);
+        if (!IsActivationReluOrNone(params->activation)) {
+            return false;
+        }
+        return true;
+    }
+
+    bool IsNodeSupported_Pool2d() const {
+        if (!(registration_->version <= 2)) {
+            return false;
+        }
+        if (!InputsHaveCorrectTypes({U8})) {
+            return false;
+        }
+        const TfLitePoolParams *params = (const TfLitePoolParams *)(node_->builtin_data);
+        if (!IsActivationReluOrNone(params->activation)) {
+            return false;
+        }
+        return true;
+    }
+
+    bool IsNodeSupported_AveragePool2d() const {
+        return IsNodeSupported_Pool2d();
+    }
+
+    bool IsNodeSupported_MaxPool2d() const {
+        return IsNodeSupported_Pool2d();
+    }
+
+    bool IsNodeSupported_Pad() const {
+        if (!(registration_->version <= 2)) {
+            return false;
+        }
+        if (!InputsHaveCorrectTypes({U8, I32})) {
+            return false;
+        }
+        return true;
+    }
+
+    bool IsNodeSupported_Reshape() const {
+        if (!(registration_->version <= 2)) {
+            return false;
+        }
+        // Note that Reshape can have 1 or 2 inputs.
+        if (node_->inputs->size > 2) {
+            return false;
+        }
+        return true;
+    }
+
+    bool IsNodeSupported_Shape() const {
+        if (!(registration_->version <= 2)) {
+            return false;
+        }
+        if (node_->inputs->size != 1) {
+            return false;
+        }
+        return true;
+    }
+
+    bool IsNodeSupported_Softmax() const {
+        if (!(registration_->version <= 2)) {
+            return false;
+        }
+        if (!InputsHaveCorrectTypes({U8})) {
+            return false;
+        }
+        return true;
+    }
+
+    bool IsNodeSupported_L2Normalization() const {
+        if (!(registration_->version <= 2)) {
+            return false;
+        }
+        if (!InputsHaveCorrectTypes({U8})) {
+            return false;
+        }
+        return true;
+    }
+
+    bool IsNodeSupported_Unary() const {
+        if (!(registration_->version <= 2)) {
+            return false;
+        }
+        if (!InputsHaveCorrectTypes({U8})) {
+            return false;
+        }
+        return true;
+    }
+
+    bool IsNodeSupported_Logistic() const {
+        return IsNodeSupported_Unary();
+    }
+
+    bool IsNodeSupported_Neg() const {
+        return IsNodeSupported_Unary();
+    }
+
+    bool IsNodeSupported_Tanh() const {
+        return IsNodeSupported_Unary();
+    }
+
+    bool IsNodeSupported_Relu() const {
+        return IsNodeSupported_Unary();
+    }
+
+    bool IsNodeSupported_Relu6() const {
+        return IsNodeSupported_Unary();
+    }
+
+    bool IsNodeSupported_ReluN1To1() const {
+        return IsNodeSupported_Unary();
+    }
+
+    bool IsNodeSupported_Square() const {
+        return IsNodeSupported_Unary();
+    }
+
+    bool IsNodeSupported_Mean() const {
+        if (!(registration_->version <= 2)) {
+            return false;
+        }
+        if (!InputsHaveCorrectTypes({U8, I32})) {
+            return false;
+        }
+        return true;
+    }
+
+    bool IsNodeSupported_SpaceToDepth() const {
+        if (!(registration_->version <= 2)) {
+            return false;
+        }
+        if (!InputsHaveCorrectTypes({U8})) {
+            return false;
+        }
+        return true;
+    }
+
+    bool IsNodeSupported_DepthToSpace() const {
+        if (!(registration_->version <= 2)) {
+            return false;
+        }
+        if (!InputsHaveCorrectTypes({U8})) {
+            return false;
+        }
+        return true;
+    }
+
+    bool IsNodeSupported_Lstm() const {
+        // TODO: we might work with v3 or v4, but haven't tested any instances.
+        if (!(registration_->version <= 2)) {
+            return false;
+        }
+
+        if (node_->inputs->size != 5 || node_->outputs->size != 4) {
+            return false;
+        }
+
+        // Our 'Lstm' op is actually a group of several Hannk ops;
+        // we must check these carefully (see lower_tflite_lstm() for reference):
+
+        const int data_input = node_->inputs->data[0];
+        const int prev_activ_input = node_->inputs->data[1];
+        const int weights_input = node_->inputs->data[2];
+        const int biases_input = node_->inputs->data[3];
+        const int prev_state_input = node_->inputs->data[4];
+
+        const int activ_output = node_->outputs->data[0];
+        const int state_output = node_->outputs->data[1];
+        const int concat_temp = node_->outputs->data[2];
+        const int activ_temp = node_->outputs->data[3];
+
+        if (!TensorsHaveCorrectTypes({
+                {data_input, U8},
+                {prev_activ_input, U8},
+                {weights_input, U8},
+                {biases_input, I32},
+                {prev_state_input, I16},
+                {activ_output, U8},
+                {state_output, I16},
+                {concat_temp, U8},
+                {activ_temp, I16},
+            })) {
+            return false;
+        }
+
+        const TfLiteLSTMParams *params = (const TfLiteLSTMParams *)(node_->builtin_data);
+        // TODO: there is an activation function specified here but it's not clear
+        // whether it's used in the LSTM reference implementation. Ignoring for now.
+        // if (params->activation == ...) {
+        //     return false;
+        // }
+
+        // TODO: for v2+, you can specify 'basic' vs 'full' kernels.
+        // The 'basic' kernel is all we've tested with.
+        if (registration_->version >= 2) {
+            if (params->kernel_type != kTfLiteLSTMBasicKernel) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+public:
+    NodeSupport(TfLiteContext *c,
+                TfLiteNode *n,
+                TfLiteRegistration *r)
+        : context_(c), node_(n), registration_(r) {
+    }
+
+    bool IsNodeSupported() const {
+        // Ensure all inputs & outputs have dim <= 4.
+        for (int i = 0; i < node_->inputs->size; ++i) {
+            const int tensor_id = node_->inputs->data[i];
+            if (tensor_id == kTfLiteOptionalTensor) {
+                continue;
+            }
+            const TfLiteTensor &tensor = context_->tensors[tensor_id];
+            assert(tensor.dims);
+            if (tensor.dims->size > 4) {
+                return false;
+            }
+        }
+        for (int i = 0; i < node_->outputs->size; ++i) {
+            const int tensor_id = node_->outputs->data[i];
+            const TfLiteTensor &tensor = context_->tensors[tensor_id];
+            assert(tensor.dims);
+            if (tensor.dims->size > 4) {
+                return false;
+            }
+        }
+
+        // Now check for each specific node.
+        //
+        // TODO: Our existing code for TFLiteParser, etc doesn't pay
+        // attention to version (AFAICT); need to find & examine the specs of
+        // version changes to ensure this is correct. Existing version checking
+        // here is mostly bogus. See tensorflow/lite/tools/versioning/op_version.cc
+        //
+        // TODO: style here is imitation of approach used in Hexagon delegate,
+        // but a purely data-table-driven-approach might be better in the long run?
+
+        // clang-format off
+        switch (registration_->builtin_code) {
+
+            #define KNOWN_OP(OP) case kTfLiteBuiltin##OP: return IsNodeSupported_##OP();
+            ALL_KNOWN_OPS
+            #undef KNOWN_OP
+
+        default:
+            return false;
+        }
+        // clang-format on
+
         return false;
     }
-    // clang-format on
-
-    return false;
-}
-
+};
 /*static*/ TfLiteStatus HannkDelegate::DelegatePrepare(TfLiteContext *context, TfLiteDelegate *delegate) {
     HannkDelegate *self = (HannkDelegate *)delegate;
 
@@ -1236,7 +1266,8 @@ bool IsNodeSupported(TfLiteContext *context, TfLiteNode *node, TfLiteRegistratio
             return status;
         }
 
-        if (IsNodeSupported(context, node, registration)) {
+        NodeSupport support(context, node, registration);
+        if (support.IsNodeSupported()) {
             if (self->options_.verbosity >= 1) {
                 LOG(INFO) << "Handling node, index=" << node_index << " code=" << registration->builtin_code;
             }

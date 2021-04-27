@@ -133,7 +133,7 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
             }
         }
 
-        // No: we won't be parallelizing withing Halide code, that will be done within
+        // No: we won't be parallelizing within Halide code, that will be done within
         // our interpreter. Leaving this here as an example of what *not* to do.
         // halide_set_num_threads(threads);
 
