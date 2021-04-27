@@ -85,6 +85,7 @@ class Tensor {
     bool is_constant_ = false;
     bool is_input_ = false;
     bool is_output_ = false;
+    bool is_dynamic_ = false;
 
     // Possibly shared storage for this tensor.
     std::shared_ptr<TensorStorage> storage_;
@@ -149,6 +150,14 @@ public:
         is_constant_ = constant;
     }
 
+    bool is_dynamic() const {
+        return is_dynamic_;
+    }
+
+    void set_dynamic(bool dynamic = true) {
+        is_dynamic_ = dynamic;
+    }
+
     bool is_input() const {
         return is_input_;
     }
@@ -177,6 +186,8 @@ public:
 
     bool is_allocated() const;
     void allocate();
+
+    void resize(const Box &new_shape);
 
     std::shared_ptr<TensorStorage> storage();
 

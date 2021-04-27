@@ -67,6 +67,11 @@ namespace {
 // We can alias two tensors if the input is not used after the output is written,
 // and we meet a number of other requirements.
 bool maybe_alias_tensors(TensorPtr input, TensorPtr output, std::vector<int> offset = {}) {
+    // If either tensor is dynamic, can't alias them.
+    if (input->is_dynamic() || output->is_dynamic()) {
+        return false;
+    }
+
     if (input->rank() != output->rank()) {
         // TODO: We should be able to alias reshapes.
         return false;

@@ -87,8 +87,10 @@ Tensor::Tensor(std::string name, halide_type_t type, const Box &bounds, Quantiza
 Tensor::Tensor(const Tensor &copy)
     : name_(copy.name()), buffer_(make_buffer(copy.type(), copy.bounds())),
       quantization_(copy.quantization_), is_constant_(copy.is_constant_),
-      is_input_(copy.is_input_), is_output_(copy.is_output_), storage_(copy.storage_) {
+      is_input_(copy.is_input_), is_output_(copy.is_output_), is_dynamic_(copy.is_dynamic_),
+      storage_(copy.storage_) {
     if (copy.is_allocated()) {
+        assert(!is_dynamic_);
         allocate();
         // This should have used the same buffer as the copy's storage.
         assert(buffer_.data() == copy.buffer_.data());
@@ -129,6 +131,10 @@ void Tensor::allocate() {
         return;
     }
 
+    if (is_dynamic()) {
+        return;
+    }
+
     storage()->allocate();
     HalideBuffer<void> buffer = storage()->buffer();
     for (int i = 0; i < buffer.dimensions(); i++) {
@@ -146,7 +152,46 @@ void Tensor::allocate() {
     buffer_ = buffer;
 }
 
+void Tensor::resize(const Box &new_shape) {
+    CHECK(is_dynamic());
+
+    std::vector<halide_dimension_t> new_dims;
+    new_dims.reserve(new_shape.size());
+
+    const halide_dimension_t *old_dims = buffer_.raw_buffer()->dim;
+
+    bool all_same = (buffer_.dimensions() == (int)new_shape.size());
+    // Resizing a dynamic tensor shouldn't (AFAICT) ever change the
+    // number of dimensions -- just the extents -- but let's guard
+    // against that just in case, because it's easy to do.
+    assert(all_same);
+
+    int stride = 1;
+    for (const auto &d : new_shape) {
+        const int d_min = d.min;
+        const int d_extent = d.extent();
+        if (all_same && (d_min != old_dims->min || d_extent != old_dims->extent)) {
+            all_same = false;
+        }
+        new_dims.emplace_back(d_min, d_extent, stride);
+        stride *= d_extent;
+    }
+    if (all_same) {
+        return;
+    }
+
+    HalideBuffer<void> new_buffer(buffer_.type(), nullptr, new_dims);
+    new_buffer.allocate();
+    if (buffer_.data()) {
+        new_buffer.copy_from(buffer_);
+    }
+    buffer_ = std::move(new_buffer);
+    storage_ = nullptr;
+}
+
 void Tensor::set_alias_of(TensorPtr t, std::vector<int> storage_offset) {
+    CHECK(!is_dynamic());
+
     storage_ = t->storage();
     storage_offset_ = std::move(storage_offset);
 
@@ -188,6 +233,9 @@ void Tensor::dump(std::ostream &os) const {
     }
     if (is_constant()) {
         os << " constant";
+    }
+    if (is_dynamic()) {
+        os << " dynamic";
     }
 
     os << " " << name() << std::endl;

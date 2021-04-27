@@ -867,20 +867,42 @@ BoundsMap PadOp::map_bounds(int input_idx, int output_idx) const {
 
 void PadOp::execute() {
     const TensorPtr in = input(0);
+    const TensorPtr padding = input(1);
     TensorPtr out = output();
+
+    assert(padding->buffer().dim(0).extent() == 2);
+    assert(padding->buffer().dim(1).extent() == in->rank());
+
+    if (out->is_dynamic()) {
+        const int dims = in->rank();
+        Box new_shape = in->bounds();
+        auto padding_buf = padding->buffer<const int32_t>();
+        for (int d = 0; d < dims; ++d) {
+            const int idx = dims - d - 1;
+            const int before_padding = padding_buf(0, idx);
+            const int after_padding = padding_buf(1, idx);
+            assert(before_padding >= 0 && after_padding >= 0);
+            new_shape[d].max += before_padding + after_padding;
+        }
+        out->resize(new_shape);
+    }
 
     if (out->type().bytes() == 1) {
         auto input_buf = in->buffer<const uint8_t>();
         auto output_buf = out->buffer<uint8_t>();
 
-        if (input(1)) {
-            auto padding = input(1)->buffer<const int32_t>();
-            for (int d = 0; d < output_buf.dimensions(); d++) {
-                input_buf.translate(d, padding(0, d));
+        if (padding) {
+            const int dims = input_buf.dimensions();
+            auto padding_buf = padding->buffer<const int32_t>();
+            for (int d = 0; d < input_buf.dimensions(); d++) {
+                const int idx = dims - d - 1;
+                input_buf.translate(d, padding_buf(0, idx));
             }
         }
 
         uint8_t pad_value = in->quantization().zero.at(0);
+
+        // TODO: should we pad_to_rank(4) the input and output bufs before the loop?
 
         int fill_min_dim = 0;
         if (input_buf.dim(0).extent() == 3 && output_buf.dim(0).extent() == 4) {
@@ -895,12 +917,14 @@ void PadOp::execute() {
             int output_max = output_buf.dim(d).max();
             if (output_min < input_min) {
                 auto before = output_buf.cropped(d, output_min, input_min - output_min);
+                pad_to_rank(4, before);
                 CHECK(0 == fill_uint8(pad_value, before));
             } else {
                 input_min = output_min;
             }
             if (output_max > input_max) {
                 auto after = output_buf.cropped(d, input_max + 1, output_max - input_max);
+                pad_to_rank(4, after);
                 CHECK(0 == fill_uint8(pad_value, after));
             } else {
                 input_max = output_max;
@@ -910,6 +934,8 @@ void PadOp::execute() {
         if (!is_alias(input_buf, output_buf) ||
             input_buf.dim(0).min() > output_buf.dim(0).min() ||
             input_buf.dim(0).max() < output_buf.dim(0).max()) {
+            pad_to_rank(4, input_buf);
+            pad_to_rank(4, output_buf);
             CHECK(0 == copy_uint8_uint8(input_buf, pad_value, output_buf));
         }
     } else {
@@ -1058,15 +1084,12 @@ BoundsMap ReshapeOp::map_bounds(int input_idx, int output_idx) const {
     return BoundsMap::all(input()->bounds(), output()->rank());
 }
 
-void ReshapeOp::execute() {
+std::vector<int> ReshapeOp::calc_new_shape() const {
     const TensorPtr in = input();
     const TensorPtr shape = input(1);
     TensorPtr out = output();
 
-    auto input_buf = in->buffer<const void>();
-    auto output_buf = out->buffer();
-
-    std::vector<int32_t> new_shape;
+    std::vector<int> new_shape;
     // The shape can be specified by a Tensor or a constant array (but not both).
     // It's legal for the Tensor to be dynamic, so we have to keep a reference to it
     // and extract the data at execution time.
@@ -1087,7 +1110,7 @@ void ReshapeOp::execute() {
     int output_elements = 1;
     int stretch_dim = -1;
     for (size_t i = 0; i < new_shape.size(); ++i) {
-        int value = new_shape[i];
+        const int value = new_shape[i];
         if (value == -1) {
             CHECK(stretch_dim == -1);
             stretch_dim = i;
@@ -1096,10 +1119,34 @@ void ReshapeOp::execute() {
         }
     }
     if (stretch_dim != -1) {
+        auto input_buf = in->buffer<const void>();
+        auto output_buf = out->buffer<const void>();
         new_shape[stretch_dim] = input_buf.number_of_elements() / output_elements;
         output_elements *= new_shape[stretch_dim];
         CHECK(output_elements == (int)output_buf.number_of_elements());
     }
+
+    return new_shape;
+}
+
+void ReshapeOp::execute() {
+    const TensorPtr in = input();
+    const TensorPtr shape = input(1);
+    TensorPtr out = output();
+
+    std::vector<int> new_shape = calc_new_shape();
+
+    if (out->is_dynamic()) {
+        Box b;
+        b.reserve(new_shape.size());
+        for (int i : new_shape) {
+            b.emplace_back(0, i);
+        }
+        out->resize(b);
+    }
+
+    auto input_buf = in->buffer();
+    auto output_buf = out->buffer();
 
     CHECK((int)new_shape.size() == output_buf.dimensions());
     for (int d = 0; d < output_buf.dimensions(); d++) {
