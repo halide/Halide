@@ -355,7 +355,7 @@ void DefaultCostModel::load_weights() {
         // Or use the time, if not set.
         int seed = (int)time(nullptr);
         if (!seed_str.empty()) {
-            std::cout << "Randomizing with HL_RANDOM_WEIGHT_SEED = " << seed_str << "\n";
+            std::cout << "Randomizing with HL_RANDOM_WEIGHT_SEED, seed = " << seed_str << "\n";
             seed = atoi(seed_str.c_str());
         }
         else{
