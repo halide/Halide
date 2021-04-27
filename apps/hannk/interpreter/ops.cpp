@@ -17,7 +17,7 @@
 #include "depthwise_conv_dm1_uint8.h"
 #include "depthwise_conv_uint8.h"
 #include "elementwise_5xuint8_1xuint8.h"
-#include "elementwise_5xint16_1xint16uint8.h"
+#include "elementwise_5xint16_1xuint8int16.h"
 #include "fill_uint8.h"
 #include "fully_connected_uint8_int16.h"
 #include "fully_connected_uint8_uint8.h"
@@ -777,9 +777,9 @@ void ElementwiseProgramOp::execute() {
         };
         loop_nest<1>(elementwise_rank1, in0, in1, in2, in3, in4, out0);
         return;
-    } else if (can_use_elementwise_program(this, {5, halide_type_of<int16_t>()}, {halide_type_of<int16_t>(), halide_type_of<uint8_t>()})) {
+    } else if (can_use_elementwise_program(this, {5, halide_type_of<int16_t>()}, {halide_type_of<uint8_t>(), halide_type_of<int16_t>()})) {
         auto elementwise_rank1 = [&](arg_ptr in0, arg_ptr in1, arg_ptr in2, arg_ptr in3, arg_ptr in4, arg_ptr out0, arg_ptr out1) {
-            CHECK(0 == elementwise_5xint16_1xint16uint8(in0, in1, in2, in3, in4, program_, out0, out1));
+            CHECK(0 == elementwise_5xint16_1xuint8int16(in0, in1, in2, in3, in4, program_, out0, out1));
         };
         loop_nest<1>(elementwise_rank1, in0, in1, in2, in3, in4, out0, out1);
         return;
@@ -1378,9 +1378,9 @@ void UnaryOp::execute() {
             assert(out->quantization().zero.at(0) == 0);
 
             // Build a program to implement the logistic op.
-            ElementwiseProgram p(program_buffer);
+            ElementwiseAssembler p(program_buffer);
             auto input_zeroed = p.sub(p.input(0), input_zero);
-            auto input_scaled = p.rounding_mul_shift(input_zeroed, in_mul_and_shift.multiplier, 15 - left_shift);
+            auto input_scaled = p.mul_shift(input_zeroed, in_mul_and_shift.multiplier, 15 - left_shift);
             auto result = p.logistic(8, input_scaled, -in_mul_and_shift.shift);
             auto program_buf = p.assemble({result});
 
@@ -1399,9 +1399,9 @@ void UnaryOp::execute() {
             assert(out->quantization().zero.at(0) == 128);
 
             // Build a program to implement the tanh op.
-            ElementwiseProgram p(program_buffer);
+            ElementwiseAssembler p(program_buffer);
             auto input_zeroed = p.sub(p.input(0), input_zero);
-            auto input_scaled = p.rounding_mul_shift(input_zeroed, in_mul_and_shift.multiplier, 15 - left_shift);
+            auto input_scaled = p.mul_shift(input_zeroed, in_mul_and_shift.multiplier, 15 - left_shift);
             auto result = p.add(p.tanh(7, input_scaled, -in_mul_and_shift.shift), 128);
             auto program_buf = p.assemble({result});
 

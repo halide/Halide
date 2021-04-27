@@ -123,9 +123,9 @@ $(BIN)/%/elementwise_5xuint8_1xuint8.a: $(GENERATOR_BIN)/elementwise.generator
 	@mkdir -p $(@D)
 	$< -g Elementwise inputs.size=5 inputs.type=uint8 output1_type=uint8 -f hannk::elementwise_5xuint8_1xuint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/elementwise_5xint16_1xint16uint8.a: $(GENERATOR_BIN)/elementwise.generator
+$(BIN)/%/elementwise_5xint16_1xuint8int16.a: $(GENERATOR_BIN)/elementwise.generator
 	@mkdir -p $(@D)
-	$< -g Elementwise inputs.size=5 inputs.type=int16 output1_type=int16 output2_type=uint8 -f hannk::elementwise_5xint16_1xint16uint8 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+	$< -g Elementwise inputs.size=5 inputs.type=int16 output1_type=uint8 output2_type=int16 -f hannk::elementwise_5xint16_1xuint8int16 -o $(BIN)/$* target=$(HL_TARGET)-no_runtime-large_buffers-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
 $(BIN)/%/fill_uint8.a: $(GENERATOR_BIN)/fill.generator
 	@mkdir -p $(@D)
@@ -176,7 +176,7 @@ OPS_HALIDE = \
 	$(BIN)/%/depthwise_conv_broadcast_uint8.a \
 	$(BIN)/%/depthwise_conv_dm1_uint8.a \
 	$(BIN)/%/elementwise_5xuint8_1xuint8.a \
-	$(BIN)/%/elementwise_5xint16_1xint16uint8.a \
+	$(BIN)/%/elementwise_5xint16_1xuint8int16.a \
 	$(BIN)/%/fill_uint8.a \
 	$(BIN)/%/fully_connected_uint8_uint8.a \
 	$(BIN)/%/fully_connected_uint8_int16.a \
