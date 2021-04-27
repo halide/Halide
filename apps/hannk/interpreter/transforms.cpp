@@ -130,18 +130,31 @@ class InPlace : public OpVisitor {
     }
 
     void visit(ConcatenationOp *op) {
+        bool is_no_op = true;
         std::vector<int> offset(op->axis() + 1, 0);
         for (int i = 0; i < op->input_count(); i++) {
-            maybe_alias_tensors(op->input(i), op->output(), offset);
+            is_no_op = is_no_op && maybe_alias_tensors(op->input(i), op->output(), offset);
+            is_no_op = is_no_op && op->input(i)->quantization() == op->output()->quantization();
             offset[op->axis()] += op->input(i)->extent(op->axis());
+        }
+        if (is_no_op) {
+            // TODO: Try actually deleting the op?
+            op->set_no_op();
         }
     }
 
     void visit(SplitOp *op) {
+        bool is_no_op = true;
         std::vector<int> offset(op->axis() + 1, 0);
         for (int i = 0; i < op->output_count(); i++) {
-            maybe_alias_tensors(op->output(i), op->input(), offset);
+            is_no_op = is_no_op && maybe_alias_tensors(op->output(i), op->input(), offset);
+            is_no_op = is_no_op && op->output(i)->quantization() == op->input()->quantization();
             offset[op->axis()] += op->output(i)->extent(op->axis());
+        }
+        if (is_no_op) {
+            // TODO: Try actually deleting the op?
+            // TODO: This is actually wrong!
+            //op->set_no_op();
         }
     }
 

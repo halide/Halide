@@ -69,6 +69,7 @@ public:
 
 class ConcatenationOp : public Op {
     int axis_;
+    bool is_no_op_ = false;
 
 public:
     ConcatenationOp(std::vector<TensorPtr> inputs, TensorPtr output, int axis)
@@ -77,6 +78,9 @@ public:
 
     int axis() const {
         return axis_;
+    }
+    void set_no_op() {
+        is_no_op_ = true;
     }
 
     std::unique_ptr<Op> clone(TensorMap &map) const {
@@ -502,6 +506,7 @@ public:
 
 class SplitOp : public Op {
     int axis_;
+    bool is_no_op_;
 
 public:
     SplitOp(TensorPtr input, std::vector<TensorPtr> outputs, int axis)
@@ -517,7 +522,12 @@ public:
             apply(map, input()), std::move(outputs), axis_);
     }
 
-    int axis() const { return axis_; }
+    int axis() const {
+        return axis_;
+    }
+    void set_no_op() {
+        is_no_op_ = true;
+    }
 
     void accept(OpVisitor *v);
 

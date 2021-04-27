@@ -171,22 +171,26 @@ void broadcast_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b) {
     }
 }
 
-const uint8_t *begin(const halide_buffer_t *buf) {
-    return buf->host;
+const void *begin(const halide_buffer_t *buf) {
+    std::ptrdiff_t offset = 0;
+    for (int i = 0; i < buf->dimensions; i++) {
+        offset += (buf->dim[i].extent - 1) * std::min(0, buf->dim[i].stride);
+    }
+    return buf->host + offset * buf->type.bytes();
 }
 
-const uint8_t *end(const halide_buffer_t *buf) {
-    const uint8_t *result = buf->host;
+const void *end(const halide_buffer_t *buf) {
+    std::ptrdiff_t offset = 0;
     for (int i = 0; i < buf->dimensions; i++) {
-        result += (buf->dim[i].extent - 1) * buf->dim[i].stride;
+        offset += (buf->dim[i].extent - 1) * std::max(0, buf->dim[i].stride);
     }
-    result += 1;
-    return result;
+    offset += 1;
+    return buf->host + offset * buf->type.bytes();
 }
 
 // Check if and b are aliases of the same buffer.
 bool is_alias(const halide_buffer_t *a, const halide_buffer_t *b) {
-    return !(begin(a) >= end(b) || end(a) <= begin(b));
+    return std::max(begin(a), begin(b)) < std::min(end(a), end(b));
 }
 
 // Crop both a and b to the union of both buffers.
@@ -526,6 +530,9 @@ BoundsMap ConcatenationOp::map_bounds(int input_idx, int output_idx) const {
 }
 
 void ConcatenationOp::execute() {
+    if (is_no_op_) {
+        return;
+    }
     HalideBuffer<void> output_buf = output()->buffer();
 
     int concatenated_i = 0;
@@ -1355,6 +1362,9 @@ BoundsMap SplitOp::map_bounds(int input_idx, int output_idx) const {
 }
 
 void SplitOp::execute() {
+    if (is_no_op_) {
+        return;
+    }
     HalideBuffer<const void> input_buf = input()->buffer();
 
     int concatenated_i = 0;
@@ -1362,10 +1372,8 @@ void SplitOp::execute() {
         HalideBuffer<void> output_buf = output(i)->buffer();
         assert(output_buf.dim(axis_).min() == 0);
 
-        HalideBuffer<const void> input_crop = input_buf;
-        input_crop.translate(axis_, -concatenated_i);
-        crop_to_union(input_crop, output_buf);
-        requantize(input_crop, input()->quantization(), output_buf, output(i)->quantization());
+        output_buf.translate(axis_, concatenated_i);
+        requantize(input_buf, input()->quantization(), output_buf, output(i)->quantization());
 
         concatenated_i += output_buf.dim(axis_).extent();
     }
