@@ -377,7 +377,7 @@ public:
     // Eval() will be called at least once. It can expect that Prepare() will
     // have been called for the current set of tensor shape(s).
     TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node) {
-        if (options_.verbosity >= 1) {
+        if (options_.verbosity >= 3) {
             LOG(INFO) << "Delegate " << (void *)this << " Eval\n";
         }
 
@@ -777,10 +777,149 @@ private:
     std::map<int, TensorPtr> tensors_;
 };
 
+const char *GetOpName(int op) {
+    // As of TFLite 2.4
+    constexpr int count = 129;
+    static const char *const names[count] = {
+        "ADD",
+        "AVERAGEPOOL2D",
+        "CONCATENATION",
+        "CONV2D",
+        "DEPTHWISECONV2D",
+        "DEPTHTOSPACE",
+        "DEQUANTIZE",
+        "EMBEDDINGLOOKUP",
+        "FLOOR",
+        "FULLYCONNECTED",
+        "HASHTABLELOOKUP",
+        "L2NORMALIZATION",
+        "L2POOL2D",
+        "LOCALRESPONSENORMALIZATION",
+        "LOGISTIC",
+        "LSHPROJECTION",
+        "LSTM",
+        "MAXPOOL2D",
+        "MUL",
+        "RELU",
+        "RELUN1TO1",
+        "RELU6",
+        "RESHAPE",
+        "RESIZEBILINEAR",
+        "RNN",
+        "SOFTMAX",
+        "SPACETODEPTH",
+        "SVDF",
+        "TANH",
+        "CONCATEMBEDDINGS",
+        "SKIPGRAM",
+        "CALL",
+        "CUSTOM",
+        "EMBEDDINGLOOKUPSPARSE",
+        "PAD",
+        "UNIDIRECTIONALSEQUENCERNN",
+        "GATHER",
+        "BATCHTOSPACEND",
+        "SPACETOBATCHND",
+        "TRANSPOSE",
+        "MEAN",
+        "SUB",
+        "DIV",
+        "SQUEEZE",
+        "UNIDIRECTIONALSEQUENCELSTM",
+        "STRIDEDSLICE",
+        "BIDIRECTIONALSEQUENCERNN",
+        "EXP",
+        "TOPKV2",
+        "SPLIT",
+        "LOGSOFTMAX",
+        "DELEGATE",
+        "BIDIRECTIONALSEQUENCELSTM",
+        "CAST",
+        "PRELU",
+        "MAXIMUM",
+        "ARGMAX",
+        "MINIMUM",
+        "LESS",
+        "NEG",
+        "PADV2",
+        "GREATER",
+        "GREATEREQUAL",
+        "LESSEQUAL",
+        "SELECT",
+        "SLICE",
+        "SIN",
+        "TRANSPOSECONV",
+        "SPARSETODENSE",
+        "TILE",
+        "EXPANDDIMS",
+        "EQUAL",
+        "NOTEQUAL",
+        "LOG",
+        "SUM",
+        "SQRT",
+        "RSQRT",
+        "SHAPE",
+        "POW",
+        "ARGMIN",
+        "FAKEQUANT",
+        "REDUCEPROD",
+        "REDUCEMAX",
+        "PACK",
+        "LOGICALOR",
+        "ONEHOT",
+        "LOGICALAND",
+        "LOGICALNOT",
+        "UNPACK",
+        "REDUCEMIN",
+        "FLOORDIV",
+        "REDUCEANY",
+        "SQUARE",
+        "ZEROSLIKE",
+        "FILL",
+        "FLOORMOD",
+        "RANGE",
+        "RESIZENEARESTNEIGHBOR",
+        "LEAKYRELU",
+        "SQUAREDDIFFERENCE",
+        "MIRRORPAD",
+        "ABS",
+        "SPLITV",
+        "UNIQUE",
+        "CEIL",
+        "REVERSEV2",
+        "ADDN",
+        "GATHERND",
+        "COS",
+        "WHERE",
+        "RANK",
+        "ELU",
+        "REVERSESEQUENCE",
+        "MATRIXDIAG",
+        "QUANTIZE",
+        "MATRIXSETDIAG",
+        "ROUND",
+        "HARDSWISH",
+        "IF",
+        "WHILE",
+        "NONMAXSUPPRESSIONV4",
+        "NONMAXSUPPRESSIONV5",
+        "SCATTERND",
+        "SELECTV2",
+        "DENSIFY",
+        "SEGMENTSUM",
+        "BATCHMATMUL",
+        "PLACEHOLDERFORGREATEROPCODES",
+        "CUMSUM",
+    };
+    return op >= 0 && op < count ? names[op] : "UNKNOWN";
+}
+
 class NodeSupport {
     TfLiteContext *context_;
     TfLiteNode *node_;
     TfLiteRegistration *registration_;
+    bool const verbose_;
+    mutable std::ostringstream failures_;
 
     // static const[expr] is a better choice but requires C++17 to avoid pain.
     enum PossibleTypesMask {
@@ -791,72 +930,156 @@ class NodeSupport {
         I32 = 1 << kTfLiteInt32,
         F32 = 1 << kTfLiteFloat32,
         F64 = 1 << kTfLiteFloat64,
+        BOOLTYPE = 1 << kTfLiteBool,
         I32_OR_NONE = I32 | NONE,
-        ANY_ARITHMETIC = U8 | I8 | I16 | I32 | F32 | F64
+        ANY_ARITHMETIC = U8 | I8 | I16 | I32 | F32 | F64,
+        ANY = (int)0xffffffff
     };
 
-    bool InputsHaveCorrectTypes(std::initializer_list<PossibleTypesMask> per_input_possible_types_mask) const {
-        if (node_->inputs->size != (int)per_input_possible_types_mask.size()) {
-            LOG(ERROR) << "inputs size mismatch in InputsHaveCorrectTypes";
+    static std::string mask_to_string(int m) {
+        // Correspond to the types in TfLiteType
+        static const char *const names[32] = {
+            "NoType",
+            "Float32",
+            "Int32",
+            "UInt8",
+            "Int64",
+            "String",
+            "Bool",
+            "Int16",
+            "Complex64",
+            "Int8",
+            "Float16",
+            "Float64",
+            "Complex128",
+            "Unknown13",
+            "Unknown14",
+            "Unknown15",
+            "Unknown16",
+            "Unknown17",
+            "Unknown18",
+            "Unknown19",
+            "Unknown20",
+            "Unknown21",
+            "Unknown22",
+            "Unknown23",
+            "Unknown24",
+            "Unknown25",
+            "Unknown26",
+            "Unknown27",
+            "Unknown28",
+            "Unknown29",
+            "Unknown30",
+            "Unknown31",
+        };
+        std::ostringstream o;
+        const char *sep = "";
+        for (int i = 0; i < 32; i++) {
+            if (m & (1 << i)) {
+                o << sep << names[i];
+                sep = "|";
+            }
+        }
+        return o.str();
+    };
+
+    bool DimsAllOk(TfLiteIntArray *list, const char *label) const {
+        for (int i = 0; i < list->size; ++i) {
+            const int tensor_id = list->data[i];
+            if (tensor_id == kTfLiteOptionalTensor) {
+                continue;
+            }
+            const TfLiteTensor &tensor = context_->tensors[tensor_id];
+            assert(tensor.dims);
+            if (tensor.dims->size > 4) {
+                if (verbose_) {
+                    failures_ << "The " << label << "[" << i << "] has too many dimensions (" << tensor.dims->size << ")\n";
+                }
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool HasTypeImpl(int i, int possible_types_mask, TfLiteIntArray *list, const char *label) const {
+        const int tensor_id = list->data[i];
+        if (tensor_id == kTfLiteOptionalTensor) {
+            return true;
+        }
+        const TfLiteTensor &tensor = context_->tensors[tensor_id];
+        const int tensor_type_mask = 1 << tensor.type;
+        if (!(tensor_type_mask & possible_types_mask)) {
+            if (verbose_) {
+                failures_ << "For " << label << "[" << i << "]"
+                          << ", expected type(s) " << mask_to_string(possible_types_mask)
+                          << " but saw " << mask_to_string(tensor_type_mask)
+                          << "\n";
+            }
+            return false;
+        }
+        return true;
+    }
+
+    bool InputHasType(int i, PossibleTypesMask possible_types_mask) const {
+        return HasTypeImpl(i, possible_types_mask, node_->inputs, "input");
+    }
+
+    bool OutputHasType(int i, PossibleTypesMask possible_types_mask) const {
+        return HasTypeImpl(i, possible_types_mask, node_->outputs, "output");
+    }
+
+    bool ListHasCorrectTypesImpl(std::initializer_list<PossibleTypesMask> per_tensor_possible_types_mask, TfLiteIntArray *list, const char *label) const {
+        if (list->size != (int)per_tensor_possible_types_mask.size()) {
+            if (verbose_) {
+                failures_ << "Expected " << per_tensor_possible_types_mask.size()
+                          << " " << label << "(s) but saw " << list->size << "\n";
+            }
             return false;
         }
         int i = -1;
-        for (PossibleTypesMask possible_types_mask : per_input_possible_types_mask) {
+        for (PossibleTypesMask possible_types_mask : per_tensor_possible_types_mask) {
             ++i;
-            // Skip optional tensor.
-            const int tensor_id = node_->inputs->data[i];
-            if (tensor_id == kTfLiteOptionalTensor) {
-                continue;
-            }
-            const TfLiteTensor &tensor = context_->tensors[tensor_id];
-            const int tensor_type_mask = 1 << tensor.type;
-            if (!(tensor_type_mask & possible_types_mask)) {
+            if (!HasTypeImpl(i, possible_types_mask, list, label)) {
                 return false;
             }
         }
         return true;
     }
 
-    bool AllInputsHaveType(PossibleTypesMask possible_types_mask) const {
-        for (int i = 0; i < node_->inputs->size; ++i) {
-            const int tensor_id = node_->inputs->data[i];
-            if (tensor_id == kTfLiteOptionalTensor) {
-                continue;
-            }
-            const TfLiteTensor &tensor = context_->tensors[tensor_id];
-            const int tensor_type_mask = 1 << tensor.type;
-            if (!(tensor_type_mask & possible_types_mask)) {
-                return false;
-            }
-        }
-        return true;
+    bool InputsHaveCorrectTypes(std::initializer_list<PossibleTypesMask> per_tensor_possible_types_mask) const {
+        return ListHasCorrectTypesImpl(per_tensor_possible_types_mask, node_->inputs, "input");
     }
 
-    bool TensorsHaveCorrectTypes(std::initializer_list<std::pair<int, PossibleTypesMask>> tensor_ids_and_masks) const {
-        for (const auto &it : tensor_ids_and_masks) {
-            const int tensor_id = it.first;
-            const PossibleTypesMask possible_types_mask = it.second;
-            if (tensor_id == kTfLiteOptionalTensor) {
-                continue;
-            }
-            const TfLiteTensor &tensor = context_->tensors[tensor_id];
-            const int tensor_type_mask = 1 << tensor.type;
-            if (!(tensor_type_mask & possible_types_mask)) {
-                return false;
-            }
-        }
-        return true;
+    bool OutputsHaveCorrectTypes(std::initializer_list<PossibleTypesMask> per_tensor_possible_types_mask) const {
+        return ListHasCorrectTypesImpl(per_tensor_possible_types_mask, node_->outputs, "output");
     }
 
     bool IsActivationReluOrNone(TfLiteFusedActivation activation) const {
-        return (activation == kTfLiteActRelu ||
-                activation == kTfLiteActRelu6 ||
-                activation == kTfLiteActReluN1To1 ||
-                activation == kTfLiteActNone);
+        if (activation == kTfLiteActRelu ||
+            activation == kTfLiteActRelu6 ||
+            activation == kTfLiteActReluN1To1 ||
+            activation == kTfLiteActNone) {
+            return true;
+        }
+        if (verbose_) {
+            failures_ << "Activation was expected to be ReluOrNone but was " << activation << "\n";
+        }
+        return false;
+    }
+
+    bool IsVersionOK(int min_version, int max_version) const {
+        if (registration_->version < min_version || registration_->version > max_version) {
+            if (verbose_) {
+                failures_ << "Version " << registration_->version
+                          << " is not within range " << min_version << ".." << max_version << "\n";
+            }
+            return false;
+        }
+        return true;
     }
 
     bool IsNodeSupported_Add() const {
-        if (!(registration_->version <= 2)) {
+        if (!IsVersionOK(1, 2)) {
             return false;
         }
         if (!InputsHaveCorrectTypes({U8, U8})) {
@@ -870,7 +1093,7 @@ class NodeSupport {
     }
 
     bool IsNodeSupported_Sub() const {
-        if (!(registration_->version <= 2)) {
+        if (!IsVersionOK(1, 2)) {
             return false;
         }
         if (!InputsHaveCorrectTypes({U8, U8})) {
@@ -884,7 +1107,7 @@ class NodeSupport {
     }
 
     bool IsNodeSupported_Mul() const {
-        if (!(registration_->version <= 2)) {
+        if (!IsVersionOK(1, 2)) {
             return false;
         }
         if (!InputsHaveCorrectTypes({U8, U8})) {
@@ -898,17 +1121,20 @@ class NodeSupport {
     }
 
     bool IsNodeSupported_Compare() const {
-        if (!(registration_->version <= 2)) {
+        if (!IsVersionOK(1, 2)) {
             return false;
         }
         if (!InputsHaveCorrectTypes({ANY_ARITHMETIC, ANY_ARITHMETIC})) {
             return false;
         }
-        if (node_->outputs->size != 1) {
+        if (!OutputsHaveCorrectTypes({BOOLTYPE})) {
             return false;
         }
         const TfLiteTensor &output = context_->tensors[node_->outputs->data[0]];
-        if (output.type != kTfLiteBool || output.dims->size != 0) {
+        if (output.dims->size != 0) {
+            if (verbose_) {
+                failures_ << "Output must be a scalar\n";
+            }
             return false;
         }
         return true;
@@ -939,19 +1165,39 @@ class NodeSupport {
     }
 
     bool IsNodeSupported_Concatenation() const {
-        if (!(registration_->version <= 2)) {
+        if (!IsVersionOK(1, 2)) {
             return false;
         }
-        if (!AllInputsHaveType(U8)) {
+
+        if (node_->inputs->size < 1) {
+            if (verbose_) {
+                failures_ << "Expected at least one input\n";
+            }
             return false;
         }
+
+        // All the inputs (and the single output) must match types.
+        const int tensor_id = node_->inputs->data[0];
+        const TfLiteType type = context_->tensors[tensor_id].type;
+        const PossibleTypesMask required_type_mask = PossibleTypesMask(1 << type);
+        for (int i = 0; i < node_->inputs->size; ++i) {
+            if (!InputHasType(i, required_type_mask)) {
+                return false;
+            }
+        }
+
+        // Exactly one output.
+        if (!OutputsHaveCorrectTypes({PossibleTypesMask(1 << type)})) {
+            return false;
+        }
+
         // TODO: This op has an activation but we don't appear to use it.
         // const TfLiteConcatenationParams *params = (const TfLiteConcatenationParams *)(node_->builtin_data);
         return true;
     }
 
     bool IsNodeSupported_Conv2d() const {
-        if (!(registration_->version <= 2)) {
+        if (!IsVersionOK(1, 2)) {
             return false;
         }
         if (!InputsHaveCorrectTypes({U8, U8, I32})) {
@@ -965,7 +1211,7 @@ class NodeSupport {
     }
 
     bool IsNodeSupported_DepthwiseConv2d() const {
-        if (!(registration_->version <= 2)) {
+        if (!IsVersionOK(1, 2)) {
             return false;
         }
         if (!InputsHaveCorrectTypes({U8, U8, I32})) {
@@ -980,7 +1226,7 @@ class NodeSupport {
 
     bool IsNodeSupported_FullyConnected() const {
         // This is correct, we don't handle the params for v2 or later yet
-        if (!(registration_->version <= 1)) {
+        if (!IsVersionOK(1, 1)) {
             return false;
         }
         if (!InputsHaveCorrectTypes({U8, U8, I32_OR_NONE})) {
@@ -994,7 +1240,7 @@ class NodeSupport {
     }
 
     bool IsNodeSupported_Pool2d() const {
-        if (!(registration_->version <= 2)) {
+        if (!IsVersionOK(1, 2)) {
             return false;
         }
         if (!InputsHaveCorrectTypes({U8})) {
@@ -1016,7 +1262,7 @@ class NodeSupport {
     }
 
     bool IsNodeSupported_Pad() const {
-        if (!(registration_->version <= 2)) {
+        if (!IsVersionOK(1, 2)) {
             return false;
         }
         if (!InputsHaveCorrectTypes({U8, I32})) {
@@ -1026,28 +1272,31 @@ class NodeSupport {
     }
 
     bool IsNodeSupported_Reshape() const {
-        if (!(registration_->version <= 2)) {
+        if (!IsVersionOK(1, 2)) {
             return false;
         }
         // Note that Reshape can have 1 or 2 inputs.
         if (node_->inputs->size > 2) {
+            if (verbose_) {
+                failures_ << "Reshape must have 1 or 2 inputs\n";
+            }
             return false;
         }
         return true;
     }
 
     bool IsNodeSupported_Shape() const {
-        if (!(registration_->version <= 2)) {
+        if (!IsVersionOK(1, 2)) {
             return false;
         }
-        if (node_->inputs->size != 1) {
+        if (!InputsHaveCorrectTypes({ANY})) {
             return false;
         }
         return true;
     }
 
     bool IsNodeSupported_Softmax() const {
-        if (!(registration_->version <= 2)) {
+        if (!IsVersionOK(1, 2)) {
             return false;
         }
         if (!InputsHaveCorrectTypes({U8})) {
@@ -1057,7 +1306,7 @@ class NodeSupport {
     }
 
     bool IsNodeSupported_L2Normalization() const {
-        if (!(registration_->version <= 2)) {
+        if (!IsVersionOK(1, 2)) {
             return false;
         }
         if (!InputsHaveCorrectTypes({U8})) {
@@ -1067,7 +1316,7 @@ class NodeSupport {
     }
 
     bool IsNodeSupported_Unary() const {
-        if (!(registration_->version <= 2)) {
+        if (!IsVersionOK(1, 2)) {
             return false;
         }
         if (!InputsHaveCorrectTypes({U8})) {
@@ -1105,7 +1354,7 @@ class NodeSupport {
     }
 
     bool IsNodeSupported_Mean() const {
-        if (!(registration_->version <= 2)) {
+        if (!IsVersionOK(1, 2)) {
             return false;
         }
         if (!InputsHaveCorrectTypes({U8, I32})) {
@@ -1115,7 +1364,7 @@ class NodeSupport {
     }
 
     bool IsNodeSupported_SpaceToDepth() const {
-        if (!(registration_->version <= 2)) {
+        if (!IsVersionOK(1, 2)) {
             return false;
         }
         if (!InputsHaveCorrectTypes({U8})) {
@@ -1125,7 +1374,7 @@ class NodeSupport {
     }
 
     bool IsNodeSupported_DepthToSpace() const {
-        if (!(registration_->version <= 2)) {
+        if (!IsVersionOK(1, 2)) {
             return false;
         }
         if (!InputsHaveCorrectTypes({U8})) {
@@ -1136,38 +1385,27 @@ class NodeSupport {
 
     bool IsNodeSupported_Lstm() const {
         // TODO: we might work with v3 or v4, but haven't tested any instances.
-        if (!(registration_->version <= 2)) {
-            return false;
-        }
-
-        if (node_->inputs->size != 5 || node_->outputs->size != 4) {
+        if (!IsVersionOK(1, 2)) {
             return false;
         }
 
         // Our 'Lstm' op is actually a group of several Hannk ops;
         // we must check these carefully (see lower_tflite_lstm() for reference):
 
-        const int data_input = node_->inputs->data[0];
-        const int prev_activ_input = node_->inputs->data[1];
-        const int weights_input = node_->inputs->data[2];
-        const int biases_input = node_->inputs->data[3];
-        const int prev_state_input = node_->inputs->data[4];
-
-        const int activ_output = node_->outputs->data[0];
-        const int state_output = node_->outputs->data[1];
-        const int concat_temp = node_->outputs->data[2];
-        const int activ_temp = node_->outputs->data[3];
-
-        if (!TensorsHaveCorrectTypes({
-                {data_input, U8},
-                {prev_activ_input, U8},
-                {weights_input, U8},
-                {biases_input, I32},
-                {prev_state_input, I16},
-                {activ_output, U8},
-                {state_output, I16},
-                {concat_temp, U8},
-                {activ_temp, I16},
+        if (!InputsHaveCorrectTypes({
+                /*data_input*/ U8,
+                /*prev_activ_input*/ U8,
+                /*weights_input*/ U8,
+                /*biases_input*/ I32,
+                /*prev_state_input*/ I16,
+            })) {
+            return false;
+        }
+        if (!OutputsHaveCorrectTypes({
+                /*activ_output*/ U8,
+                /*state_output*/ I16,
+                /*concat_temp*/ U8,
+                /*activ_temp*/ I16,
             })) {
             return false;
         }
@@ -1183,6 +1421,9 @@ class NodeSupport {
         // The 'basic' kernel is all we've tested with.
         if (registration_->version >= 2) {
             if (params->kernel_type != kTfLiteLSTMBasicKernel) {
+                if (verbose_) {
+                    failures_ << "LSTM only supports kTfLiteLSTMBasicKernel\n";
+                }
                 return false;
             }
         }
@@ -1191,32 +1432,17 @@ class NodeSupport {
     }
 
 public:
-    NodeSupport(TfLiteContext *c,
-                TfLiteNode *n,
-                TfLiteRegistration *r)
-        : context_(c), node_(n), registration_(r) {
+    NodeSupport(TfLiteContext *c, TfLiteNode *n, TfLiteRegistration *r, bool v)
+        : context_(c), node_(n), registration_(r), verbose_(v) {
     }
 
     bool IsNodeSupported() const {
         // Ensure all inputs & outputs have dim <= 4.
-        for (int i = 0; i < node_->inputs->size; ++i) {
-            const int tensor_id = node_->inputs->data[i];
-            if (tensor_id == kTfLiteOptionalTensor) {
-                continue;
-            }
-            const TfLiteTensor &tensor = context_->tensors[tensor_id];
-            assert(tensor.dims);
-            if (tensor.dims->size > 4) {
-                return false;
-            }
+        if (!DimsAllOk(node_->inputs, "input")) {
+            return false;
         }
-        for (int i = 0; i < node_->outputs->size; ++i) {
-            const int tensor_id = node_->outputs->data[i];
-            const TfLiteTensor &tensor = context_->tensors[tensor_id];
-            assert(tensor.dims);
-            if (tensor.dims->size > 4) {
-                return false;
-            }
+        if (!DimsAllOk(node_->outputs, "output")) {
+            return false;
         }
 
         // Now check for each specific node.
@@ -1237,15 +1463,24 @@ public:
             #undef KNOWN_OP
 
         default:
+            if (verbose_) {
+                failures_ << "Op with builtin_code " << registration_->builtin_code << " (" << GetOpName(registration_->builtin_code) << ") is not supported by hannk.\n";
+            }
             return false;
         }
         // clang-format on
 
         return false;
     }
+
+    std::string Failures() const {
+        return failures_.str();
+    }
 };
+
 /*static*/ TfLiteStatus HannkDelegate::DelegatePrepare(TfLiteContext *context, TfLiteDelegate *delegate) {
     HannkDelegate *self = (HannkDelegate *)delegate;
+    const int verbosity = self->options_.verbosity;
 
     TfLiteStatus status;
 
@@ -1266,24 +1501,22 @@ public:
             return status;
         }
 
-        NodeSupport support(context, node, registration);
+        NodeSupport support(context, node, registration, verbosity >= 1);
         if (support.IsNodeSupported()) {
-            if (self->options_.verbosity >= 1) {
-                LOG(INFO) << "Handling node, index=" << node_index << " code=" << registration->builtin_code;
+            if (verbosity >= 2) {
+                LOG(INFO) << "Handling node, index=" << node_index
+                          << " code=" << registration->builtin_code
+                          << " (" << GetOpName(registration->builtin_code) << ")";
             }
             supported_nodes.push_back(node_index);
         } else {
-            if (self->options_.verbosity >= 1) {
-                // NOTE: The TFLite C API doesn't provide a way to map builtin_code
-                // to a readable name; see lite/builtin_ops.h to find what sort
-                // of node(s) we are skipping here. (The names are available if
-                // we add a dependency on the generated schema file, but that's a
-                // dep we don't otherwise need or want here.)
+            if (verbosity >= 1) {
                 LOG(INFO) << "Skipping unsupported node, index=" << node_index
                           << " code=" << registration->builtin_code
+                          << " (" << GetOpName(registration->builtin_code) << ")"
                           << " version=" << registration->version
-                          << " custom_name=(" << (registration->custom_name ? registration->custom_name : "nullptr") << ")"
-                          << "\n";
+                          << " custom_name=(" << (registration->custom_name ? registration->custom_name : "null") << "); "
+                          << "Reason(s): " << support.Failures();
             }
         }
     }
