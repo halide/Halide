@@ -8,7 +8,6 @@ using Slot = ElementwiseProgram::Slot;
 
 const char *ElementwiseProgram::to_string(OpCode op) {
     switch (op) {
-    case Const: return "Const";
     case Add: return "Add";
     case Sub: return "Sub";
     case RoundingMulShift: return "RoundingMulShift";
@@ -26,7 +25,6 @@ namespace {
 // Returns a mask with bit (1 << i) set to 1 if operand i is relevant for the op.
 int get_opcode_operand_mask(ElementwiseProgram::OpCode op) {
     switch (op) {
-    case ElementwiseProgram::Const: return 0x8;
     case ElementwiseProgram::Add: return 0x7;
     case ElementwiseProgram::Sub: return 0x7;
     case ElementwiseProgram::RoundingMulShift: return 0xf;
@@ -100,15 +98,11 @@ void ElementwiseProgram::disassemble(std::ostream &output) {
     }
 }
 
-Slot ElementwiseProgram::zero() {
-    return {0};
-}
-
 Slot ElementwiseProgram::constant(int16_t value) {
     if (value == 0) {
         return {0};
     } else {
-        return add_instruction(Const, zero(), zero(), value);
+        return add_instruction(Add, {0}, {0}, value);
     }
 }
 
@@ -121,7 +115,7 @@ Slot ElementwiseProgram::add(Slot a, Slot b, int16_t add_b) {
 }
 
 Slot ElementwiseProgram::add(Slot a, int16_t b) {
-    return add(a, zero(), b);
+    return add(a, constant(0), b);
 }
 
 Slot ElementwiseProgram::sub(Slot a, Slot b, int16_t add_b) {
@@ -129,7 +123,7 @@ Slot ElementwiseProgram::sub(Slot a, Slot b, int16_t add_b) {
 }
 
 Slot ElementwiseProgram::sub(Slot a, int16_t b) {
-    return sub(a, zero(), b);
+    return sub(a, constant(0), b);
 }
 
 Slot ElementwiseProgram::min(Slot a, Slot b, int16_t add_b) {
@@ -137,7 +131,7 @@ Slot ElementwiseProgram::min(Slot a, Slot b, int16_t add_b) {
 }
 
 Slot ElementwiseProgram::min(Slot a, int16_t b) {
-    return min(a, zero(), b);
+    return min(a, constant(0), b);
 }
 
 Slot ElementwiseProgram::max(Slot a, Slot b, int16_t add_b) {
@@ -145,7 +139,7 @@ Slot ElementwiseProgram::max(Slot a, Slot b, int16_t add_b) {
 }
 
 Slot ElementwiseProgram::max(Slot a, int16_t b) {
-    return max(a, zero(), b);
+    return max(a, constant(0), b);
 }
 
 Slot ElementwiseProgram::rounding_mul_shift(Slot a, Slot b, int16_t shift) {
@@ -153,7 +147,7 @@ Slot ElementwiseProgram::rounding_mul_shift(Slot a, Slot b, int16_t shift) {
 }
 
 Slot ElementwiseProgram::rounding_mul_shift(Slot a, int16_t b, int16_t shift) {
-    return add_instruction(RoundingMulShift, a, zero(), b, shift);
+    return add_instruction(RoundingMulShift, a, constant(0), b, shift);
 }
 
 Slot ElementwiseProgram::rounding_shift(Slot a, Slot shift, int16_t extra_shift) {
@@ -161,7 +155,7 @@ Slot ElementwiseProgram::rounding_shift(Slot a, Slot shift, int16_t extra_shift)
 }
 
 Slot ElementwiseProgram::rounding_shift(Slot a, int16_t shift) {
-    return rounding_shift(a, zero(), shift);
+    return rounding_shift(a, constant(0), shift);
 }
 
 Slot ElementwiseProgram::logistic(int16_t q, Slot a, Slot q_a) {
@@ -169,7 +163,7 @@ Slot ElementwiseProgram::logistic(int16_t q, Slot a, Slot q_a) {
 }
 
 Slot ElementwiseProgram::logistic(int16_t q, Slot a, int16_t q_a) {
-    return add_instruction(Logistic, a, zero(), q_a, q);
+    return add_instruction(Logistic, a, constant(0), q_a, q);
 }
 
 Slot ElementwiseProgram::tanh(int16_t q, Slot a, Slot q_a) {
@@ -177,7 +171,7 @@ Slot ElementwiseProgram::tanh(int16_t q, Slot a, Slot q_a) {
 }
 
 Slot ElementwiseProgram::tanh(int16_t q, Slot a, int16_t q_a) {
-    return add_instruction(Tanh, a, zero(), q_a, q);
+    return add_instruction(Tanh, a, constant(0), q_a, q);
 }
 
 }  // namespace hannk

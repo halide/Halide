@@ -140,7 +140,6 @@ public:
 
         r.where(r.x == op);
         scratch(x, r.y + 1) = mux(r.x, {
-            arg3,
             saturating_add(input1, input2 + arg3),
             saturating_sub(input1, input2 + arg3),
             rounding_mul_shift_right(input1, input2 + arg3, cast(unsigned_intermediate, arg4)),

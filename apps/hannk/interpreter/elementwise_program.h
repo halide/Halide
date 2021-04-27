@@ -14,8 +14,6 @@ public:
     // Every instruction can use two memory locations op1 and op2, and immediates op3 and op4.
     // Memory location 0 is the constant 0.
     enum OpCode {
-        // op3
-        Const = 0,
         // saturating_add(load(op1), load(op2) + op3)
         Add,
         // saturating_sub(load(op1), load(op2) + op3)
@@ -63,7 +61,6 @@ public:
 
     void disassemble(std::ostream &output);
 
-    Slot zero();
     Slot constant(int16_t value);
     Slot input(int index);
     Slot add(Slot a, Slot b, int16_t add_b = 0);
