@@ -831,19 +831,19 @@ void PadOp::execute() {
     const TensorPtr padding = input(1);
     TensorPtr out = output();
 
+    assert(padding->buffer().dim(0).extent() == 2);
+    assert(padding->buffer().dim(1).extent() == in->rank());
+
     if (out->is_dynamic()) {
         const int dims = in->rank();
-        CHECK(padding->buffer().dim(0).extent() == 2);
-        CHECK(padding->buffer().dim(1).extent() == dims);
         Box new_shape = in->bounds();
         auto padding_buf = padding->buffer<const int32_t>();
         for (int d = 0; d < dims; ++d) {
             const int idx = dims - d - 1;
             const int before_padding = padding_buf(0, idx);
             const int after_padding = padding_buf(1, idx);
-            CHECK(before_padding >= 0 && after_padding >= 0);
-            new_shape[d].min -= before_padding;
-            new_shape[d].max += after_padding;
+            assert(before_padding >= 0 && after_padding >= 0);
+            new_shape[d].max += before_padding + after_padding;
         }
         out->resize(new_shape);
     }
@@ -853,13 +853,17 @@ void PadOp::execute() {
         auto output_buf = out->buffer<uint8_t>();
 
         if (padding) {
+            const int dims = input_buf.dimensions();
             auto padding_buf = padding->buffer<const int32_t>();
             for (int d = 0; d < input_buf.dimensions(); d++) {
-                input_buf.translate(d, padding_buf(0, d));
+                const int idx = dims - d - 1;
+                input_buf.translate(d, padding_buf(0, idx));
             }
         }
 
         uint8_t pad_value = in->quantization().zero.at(0);
+
+        // TODO: should we pad_to_rank(4) the input and output bufs before the loop?
 
         int fill_min_dim = 0;
         if (input_buf.dim(0).extent() == 3 && output_buf.dim(0).extent() == 4) {

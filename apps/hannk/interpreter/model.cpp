@@ -89,6 +89,7 @@ Tensor::Tensor(const Tensor &copy)
       is_input_(copy.is_input_), is_output_(copy.is_output_), is_dynamic_(copy.is_dynamic_),
       storage_(copy.storage_) {
     if (copy.is_allocated()) {
+        assert(!is_dynamic_);
         allocate();
         // This should have used the same buffer as the copy's storage.
         assert(buffer_.data() == copy.buffer_.data());
@@ -161,8 +162,12 @@ void Tensor::resize(const Box &new_shape) {
         new_dims.emplace_back(d.min, d.extent(), stride);
         stride *= d.extent();
     }
-    buffer_ = HalideBuffer<void>(type, nullptr, new_dims);
-    buffer_.allocate();
+    HalideBuffer<void> new_buffer(type, nullptr, new_dims);
+    new_buffer.allocate();
+    if (buffer_.data()) {
+        new_buffer.copy_from(buffer_);
+    }
+    buffer_ = std::move(new_buffer);
     storage_ = nullptr;
 }
 

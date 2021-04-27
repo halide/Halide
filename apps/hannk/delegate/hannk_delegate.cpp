@@ -655,6 +655,8 @@ private:
     }
 
     std::unique_ptr<Op> BuildPad(TfLiteContext *context, TfLiteNode *node) {
+        // TODO: handle the PadOp that has 3 inputs
+        CHECK(node->inputs->size == 2);
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto padding = GetTensorById(context, node->inputs->data[1]);
         auto output = GetTensorById(context, node->outputs->data[0]);
