@@ -16,9 +16,11 @@
 #include "depthwise_conv_dm1_uint8.h"
 #include "depthwise_conv_uint8.h"
 #include "fill_uint8.h"
-#include "fully_connected_uint8.h"
+#include "fully_connected_uint8_int16.h"
+#include "fully_connected_uint8_uint8.h"
 #include "l2_normalization_uint8.h"
 #include "logistic_uint8.h"
+#include "lstm_elementwise.h"
 #include "max_pool_uint8.h"
 #include "mean_uint8.h"
 #include "mul_uint8_uint8_uint8.h"
@@ -384,7 +386,7 @@ ActivationFunction to_activation(UnaryOp::Operator op) {
 }  // namespace
 
 BoundsMap ElementwiseOp::map_bounds(int input_idx, int output_idx) const {
-    int rank = output()->rank();
+    int rank = output(output_idx)->rank();
     assert(rank == input(input_idx)->rank());
     return BoundsMap::elementwise(rank);
 }
@@ -743,13 +745,10 @@ void FullyConnectedOp::execute() {
     TensorPtr out = output();
 
     if (in->type() == halide_type_of<uint8_t>() &&
-        filt->type() == halide_type_of<uint8_t>() &&
-        out->type() == halide_type_of<uint8_t>()) {
+        filt->type() == halide_type_of<uint8_t>()) {
         auto input_buf = in->buffer<const uint8_t>();
         auto filter_buf = filt->buffer<const uint8_t>();
         auto bias_buf = bias()->buffer<const int32_t>();
-        auto output_buf = out->buffer<uint8_t>();
-
         // TODO: This should be handled explicitly with a reshape.
         // It's annoying tflite doesn't require this. This means
         // that we can't arbitrarily insert padding of the strides
@@ -762,16 +761,28 @@ void FullyConnectedOp::execute() {
         MultiplyParams params =
             get_quantized_multiply_params(in->quantization(), filt->quantization(), out->quantization());
 
-        const auto output_range = get_output_range(activation_, out->quantization());
+        if (out->type() == halide_type_of<uint8_t>()) {
+            auto output_buf = out->buffer<uint8_t>();
 
-        CHECK(
-            0 == fully_connected_uint8(
-                     input_buf, (uint8_t)params.a_zero, filter_buf, (uint8_t)params.b_zero, bias_buf,
-                     (uint8_t)params.c_zero, params.c.multiplier, params.c.shift, (uint8_t)output_range.min,
-                     (uint8_t)output_range.max, output_buf));
-    } else {
-        LOG(FATAL) << "Unsupported type " << out->type() << "\n";
+            const auto output_range = get_output_range(activation_, out->quantization());
+
+            CHECK(
+                0 == fully_connected_uint8_uint8(
+                         input_buf, (uint8_t)params.a_zero, filter_buf, (uint8_t)params.b_zero, bias_buf,
+                         (uint8_t)params.c_zero, params.c.multiplier, params.c.shift, (uint8_t)output_range.min,
+                         (uint8_t)output_range.max, output_buf));
+            return;
+        } else if (out->type() == halide_type_of<int16_t>()) {
+            auto output_buf = out->buffer<int16_t>();
+
+            CHECK(
+                0 == fully_connected_uint8_int16(
+                         input_buf, (uint8_t)params.a_zero, filter_buf, (uint8_t)params.b_zero, bias_buf,
+                         0, params.c.multiplier, params.c.shift, 0, 0, output_buf));
+            return;
+        }
     }
+    LOG(FATAL) << "Unsupported type " << out->type() << "\n";
 }
 
 BoundsMap L2NormalizationOp::map_bounds(int input_idx, int output_idx) const {
@@ -804,6 +815,30 @@ void L2NormalizationOp::execute() {
     } else {
         LOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
+}
+
+void LstmElementwiseOp::execute() {
+    const TensorPtr activ_temp = input(0);
+    const TensorPtr prev_state_input = input(1);
+    TensorPtr state_output = output(0);
+    TensorPtr activ_output = output(1);
+
+    HalideBuffer<const int16_t> activ_temp_buf = activ_temp->buffer<const int16_t>();
+    HalideBuffer<const int16_t> prev_state_input_buf = prev_state_input->buffer<const int16_t>();
+    HalideBuffer<int16_t> state_output_buf = state_output->buffer<int16_t>();
+    HalideBuffer<uint8_t> activ_output_buf = activ_output->buffer<uint8_t>();
+
+    const int output_depth = state_output_buf.dim(0).extent();
+    HalideBuffer<const int16_t> input_gate =
+        activ_temp_buf.cropped(0, output_depth * 0, output_depth).translated(0, -output_depth * 0);
+    HalideBuffer<const int16_t> input_modulation_gate =
+        activ_temp_buf.cropped(0, output_depth * 1, output_depth).translated(0, -output_depth * 1);
+    HalideBuffer<const int16_t> forget_gate =
+        activ_temp_buf.cropped(0, output_depth * 2, output_depth).translated(0, -output_depth * 2);
+    HalideBuffer<const int16_t> output_gate =
+        activ_temp_buf.cropped(0, output_depth * 3, output_depth).translated(0, -output_depth * 3);
+
+    CHECK(0 == lstm_elementwise(input_gate, input_modulation_gate, forget_gate, output_gate, prev_state_input_buf, state_output_buf, activ_output_buf));
 }
 
 BoundsMap PadOp::map_bounds(int input_idx, int output_idx) const {
@@ -1324,8 +1359,7 @@ void UnaryOp::execute() {
         const int left_shift = 6;
 
         if (op_ == Logistic) {
-            // It's a easier to compute 2^(x*(log2(e))) than e^(x).
-            const double real_in_multiplier = in_scale * -std::log2(std::exp(1.0f)) / (1 << left_shift);
+            const double real_in_multiplier = in_scale / (1 << left_shift);
 
             auto in_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in_multiplier, 16);
             assert(in_mul_and_shift.shift <= 0);
@@ -1339,8 +1373,7 @@ void UnaryOp::execute() {
             elementwise_loop_nest<1>(logistic_rank1, in_buf, out_buf);
             return;
         } else if (op_ == Tanh) {
-            // It's a easier to compute 2^(2*x*(log2(e))) than e^(2*x).
-            const double real_in_multiplier = 2.0f * in_scale * std::log2(std::exp(1.0f)) / (1 << left_shift);
+            const double real_in_multiplier = in_scale / (1 << left_shift);
 
             auto in_mul_and_shift = get_quantized_mul_and_shift_smaller_than_one(real_in_multiplier, 16);
             assert(in_mul_and_shift.shift <= 0);
@@ -1390,6 +1423,10 @@ void FullyConnectedOp::accept(OpVisitor *v) {
 }
 
 void L2NormalizationOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void LstmElementwiseOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 

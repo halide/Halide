@@ -86,10 +86,13 @@ Expr approx_log2(int q, const Expr &x, int q_x, const Type &type) {
     //   poly_x = np.arange(points, 2 * points + 1) / points
     //   poly_y = np.log2(poly_x)
     //   p = np.polyfit(poly_x - 1, poly_y, 3)
-    const int p3 = std::lround(1.55971251e-01 * (1 << 15));
-    const int p2 = std::lround(-5.75039427e-01 * (1 << 15));
-    const int p1 = std::lround(0.41903642e+00 * (1 << 15));
-    const int p0 = std::lround(3.32891346e-04 * (1 << 15));
+    //
+    // Quantize to 14 bits so the polynomial evaluation fits in 15 bits.
+    const int poly_bits = 14;
+    const int p3 = std::lround(1.55971251e-01 * (1 << poly_bits));
+    const int p2 = std::lround(-5.75039427e-01 * (1 << poly_bits));
+    const int p1 = std::lround(1.41903642e+00 * (1 << poly_bits));
+    const int p0 = std::lround(3.32891346e-04 * (1 << poly_bits));
 
     Expr frac1 = i16(x << (15 - floor_log2_x)) & 0x7fff;
     Expr frac2 = multiply_2x_high(frac1, frac1);
@@ -100,9 +103,16 @@ Expr approx_log2(int q, const Expr &x, int q_x, const Type &type) {
     // instruction, and put all of the coefficients into one vector register. This
     // would reduce register pressure, which is very high in code using this helper.
     Expr poly =
-        i32(multiply_2x_high(i16(p3), frac3) + multiply_2x_high(i16(p2), frac2) + p0) +
-        i32(multiply_2x_high(i16(p1), frac1)) + i32(frac1);
-    Expr frac_result = cast(type, rounding_shift_right(poly, 15 - q));
+        multiply_2x_high(i16(p3), frac3) +
+        multiply_2x_high(i16(p2), frac2) +
+        multiply_2x_high(i16(p1), frac1) +
+        p0;
+    Expr frac_result;
+    if (q < poly_bits) {
+        frac_result = cast(type, rounding_shift_right(poly, poly_bits - q));
+    } else {
+        frac_result = cast(type, poly) << (q - poly_bits);
+    }
 
     // We've computed log2(x*2^q_x) = log2(x) + q_x. Subtract
     // that offset now, before we scale up the output.
@@ -163,6 +173,63 @@ Expr approx_reciprocal_sqrt(int q, const Expr &x, const Type &type) {
     // = precision * 2^(-log2(x)/2)
     Expr log2_x = approx_log2(14, x, 0);
     return approx_exp2(q, -log2_x, 15, type);
+}
+
+// TODO: These implementations are pretty slow, at least on x86. However:
+// - They are readily implementable on every target
+// - Produce identical results on every target
+// - Avoid the use of lookup tables, which can be annoying on some targets
+// - Negligibly impact overall performance in most realistic workloads
+
+// Approximate log2(2^(x/2^q) +/- 1)*2^q
+Expr approx_log2_exp2_plus_or_minus_one(int q, Expr x, int sign, Expr q_x, Type type) {
+    // TODO: Try to make this intermediate fit in 16 bits.
+    const int q_exp = 16;
+    int one = sign << q_exp;
+    Expr one_plus_exp2_x = one + approx_exp2(q_exp, x, q_x, Int(32));
+    Expr raw = approx_log2(q, one_plus_exp2_x, q_exp, type);
+
+    // For large x, the intermediate overflows. But log2(1 + 2^x) when x is large is just x.
+    const int threshold = 30 - q_exp;
+    Expr line = saturating_cast(type, rounding_shift_right(cast(type.widen(), x), i16(q_x) - q));
+    return select((x >> q_x) < threshold, raw, line);
+}
+
+Expr approx_log2p1_exp2(int q, const Expr &x, const Expr &q_x, const Type &type) {
+    return approx_log2_exp2_plus_or_minus_one(q, x, 1, q_x, type);
+}
+
+Expr approx_log2m1_exp2(int q, const Expr &x, const Expr &q_x, const Type &type) {
+    return approx_log2_exp2_plus_or_minus_one(q, x, -1, q_x, type);
+}
+
+const float log2_e = 1.442695f;
+
+Expr approx_logistic(int q, const Expr &x, const Expr &q_x, const Type &type) {
+    // log2(e) is ~1.5, so to implement this, we quantize log2(e)/2, and adjust
+    // q_x to compensate.
+    const int log2_e_q = std::lround(log2_e * (1 << (x.type().bits() - 2)));
+    Expr x2 = multiply_2x_high(x, cast(x.type(), -log2_e_q));
+
+    const int log_q = 11;
+    Expr log2_d = approx_log2p1_exp2(log_q, x2, q_x - 1, Int(16));
+    return approx_exp2(q, -log2_d, log_q, type);
+}
+
+Expr approx_tanh(int q, const Expr &x, const Expr &q_x, const Type &type) {
+    // log2(e) is ~1.5, so to implement this, we quantize log2(e)/2, and adjust
+    // q_x to compensate.
+    const int log2_e_q = std::lround(log2_e * (1 << (x.type().bits() - 2)));
+    Expr x2 = multiply_2x_high(x, cast(x.type(), log2_e_q));
+
+    const int log_q = 11;
+    Expr log2_n = approx_log2m1_exp2(log_q, i16(abs(x2)), q_x - 2, Int(16));
+    Expr log2_d = approx_log2p1_exp2(log_q, i16(abs(x2)), q_x - 2, Int(16));
+    Expr abs_output = approx_exp2(q, log2_n - log2_d, log_q, type);
+    return select(x2 < 0, -abs_output, x2 == 0, 0, abs_output);
+
+    // TODO: Try approx_logistic(q + 1, x, q_x - 1, type) - (1 << q) instead, it
+    // might be faster.
 }
 
 }  // namespace hannk

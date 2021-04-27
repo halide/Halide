@@ -22,8 +22,8 @@ enum class Padding {
 // This is an abstract helper op for elementwise operations.
 class ElementwiseOp : public Op {
 public:
-    ElementwiseOp(std::vector<TensorPtr> inputs, TensorPtr output)
-        : Op(std::move(inputs), {output}) {
+    ElementwiseOp(std::vector<TensorPtr> inputs, std::vector<TensorPtr> outputs)
+        : Op(std::move(inputs), std::move(outputs)) {
     }
 
     BoundsMap map_bounds(int input_idx, int output_idx) const;
@@ -49,7 +49,7 @@ private:
 
 public:
     BinaryOp(TensorPtr a, TensorPtr b, TensorPtr output, Operator op, ActivationFunction activation = ActivationFunction::None)
-        : ElementwiseOp({a, b}, output), op_(op), activation_(activation) {
+        : ElementwiseOp({a, b}, {output}), op_(op), activation_(activation) {
     }
 
     std::unique_ptr<Op> clone(TensorMap &map) const {
@@ -204,7 +204,8 @@ class FullyConnectedOp : public Op {
     ActivationFunction activation_;
 
 public:
-    FullyConnectedOp(TensorPtr input, TensorPtr filter, TensorPtr bias, TensorPtr output, ActivationFunction activation)
+    FullyConnectedOp(TensorPtr input, TensorPtr filter, TensorPtr bias, TensorPtr output,
+                     ActivationFunction activation = ActivationFunction::None)
         : Op({input, filter, bias}, {output}), activation_(activation) {
     }
 
@@ -256,6 +257,27 @@ public:
 
     void dump(std::ostream &os) const {
         os << "  L2Normalization " << output()->name() << std::endl;
+    }
+};
+
+class LstmElementwiseOp : public ElementwiseOp {
+public:
+    LstmElementwiseOp(TensorPtr activ_temp, TensorPtr prev_state_input, TensorPtr state_output, TensorPtr activ_output)
+        : ElementwiseOp({activ_temp, prev_state_input}, {state_output, activ_output}) {
+    }
+
+    std::unique_ptr<Op> clone(TensorMap &map) const {
+        return ::hannk::make_unique<LstmElementwiseOp>(
+            apply(map, input(0)), apply(map, input(1)),
+            apply(map, output(0)), apply(map, output(1)));
+    }
+
+    void accept(OpVisitor *v);
+
+    void execute();
+
+    void dump(std::ostream &os) const {
+        os << "  LstmElementwiseOp " << std::endl;
     }
 };
 
@@ -506,7 +528,7 @@ private:
 
 public:
     UnaryOp(TensorPtr input, TensorPtr output, Operator op)
-        : ElementwiseOp({input}, output), op_(op) {
+        : ElementwiseOp({input}, {output}), op_(op) {
     }
 
     std::unique_ptr<Op> clone(TensorMap &map) const {
@@ -538,6 +560,8 @@ public:
     virtual void visit(FullyConnectedOp *op) {
     }
     virtual void visit(L2NormalizationOp *op) {
+    }
+    virtual void visit(LstmElementwiseOp *op) {
     }
     virtual void visit(PadOp *op) {
     }
