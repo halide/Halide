@@ -870,11 +870,31 @@ class NodeSupport {
     }
 
     bool IsNodeSupported_Sub() const {
-        return IsNodeSupported_Add();
+        if (!(registration->version <= 2)) {
+            return false;
+        }
+        if (!InputsHaveCorrectTypes({U8, U8})) {
+            return false;
+        }
+        const TfLiteSubParams *params = (const TfLiteSubParams *)(node->builtin_data);
+        if (!IsActivationReluOrNone(params->activation)) {
+            return false;
+        }
+        return true;
     }
 
     bool IsNodeSupported_Mul() const {
-        return IsNodeSupported_Add();
+        if (!(registration->version <= 2)) {
+            return false;
+        }
+        if (!InputsHaveCorrectTypes({U8, U8})) {
+            return false;
+        }
+        const TfLiteMulParams *params = (const TfLiteMulParams *)(node->builtin_data);
+        if (!IsActivationReluOrNone(params->activation)) {
+            return false;
+        }
+        return true;
     }
 
     bool IsNodeSupported_Compare() const {
