@@ -1,6 +1,7 @@
 #include "interpreter/elementwise_program.h"
 
 #include <iomanip>
+#include <iostream>
 
 namespace hannk {
 
