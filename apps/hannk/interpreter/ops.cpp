@@ -108,15 +108,23 @@ void optimize_elementwise_shapes(int rank, HalideBuffer<Ta> &a, HalideBuffer<Ts>
     pad_to_rank(rank, a, rest...);
 }
 
+halide_buffer_t slice_last_dim(halide_buffer_t buf, int at) {
+    buf.dimensions--;
+    buf.host += buf.type.bytes() * buf.dim[buf.dimensions].stride * at;
+    return buf;
+}
 
-template<int FnRank, typename Fn, typename T, typename... Ts>
-void loop_nest_impl(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
-    if (op0.dimensions() == FnRank) {
-        fn(op0, ops...);
+template<int FnRank, typename Fn, typename... Ts>
+void loop_nest_impl(Fn &&fn, halide_buffer_t op0, Ts... ops) {
+    if (op0.dimensions == FnRank) {
+        fn(&op0, &ops...);
     } else {
-        const int last_dim = op0.dimensions() - 1;
-        for (int i = op0.dim(last_dim).min(); i <= op0.dim(last_dim).max(); i++) {
-            loop_nest_impl<FnRank>(fn, op0.sliced(last_dim, i), ops.sliced(last_dim, i)...);
+        const int last_dim = op0.dimensions - 1;
+        const int min = op0.dim[last_dim].min;
+        const int extent = op0.dim[last_dim].extent;
+        const int max = min + extent - 1;
+        for (int i = min; i <= max; i++) {
+            loop_nest_impl<FnRank>(fn, slice_last_dim(op0, i), slice_last_dim(ops, i)...);
         }
     }
 }
@@ -127,14 +135,14 @@ void loop_nest_impl(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
 template<int FnRank, typename Fn, typename T, typename... Ts>
 void elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
     optimize_elementwise_shapes(FnRank, op0, ops...);
-    loop_nest_impl<FnRank>(fn, op0, ops...);
+    loop_nest_impl<FnRank>(fn, *op0.raw_buffer(), *ops.raw_buffer()...);
 }
 
 // Similar to the above, but do not fuse dimensions when possible.
 template<int FnRank, typename Fn, typename T, typename... Ts>
 void loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
     pad_to_rank(FnRank, op0, ops...);
-    loop_nest_impl<FnRank>(fn, op0, ops...);
+    loop_nest_impl<FnRank>(fn, *op0.raw_buffer(), *ops.raw_buffer()...);
 }
 
 // Broadcast the extent 1 dimensions of one shape to match the extent of the
