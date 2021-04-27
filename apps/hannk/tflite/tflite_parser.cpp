@@ -305,12 +305,15 @@ public:
     std::unique_ptr<Op> parse_split(const tflite::Operator *op) {
         //const tflite::SplitOptions *options =
         //    op->builtin_options_as_SplitOptions();
-        TensorPtr input = tensors_[op->inputs()->Get(0)];
+        TensorPtr axis_tensor = tensors_[op->inputs()->Get(0)];
+        CHECK(axis_tensor->is_allocated()) << "Can't handle dynamic axis for Split.\n";
+        int axis = axis_tensor->buffer<int32_t>()();
+
+        TensorPtr input = tensors_[op->inputs()->Get(1)];
         std::vector<TensorPtr> outputs;
         for (auto i = op->outputs()->cbegin(); i != op->outputs()->cend(); ++i) {
             outputs.push_back(tensors_[*i]);
         }
-        int axis = input->rank() - 1; //options->axis();
         // Handle negative values, which are legal
         if (axis < 0) {
             axis = (int)input->rank() + axis;
