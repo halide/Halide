@@ -154,15 +154,32 @@ void Tensor::allocate() {
 void Tensor::resize(const Box &new_shape) {
     CHECK(is_dynamic());
 
-    const halide_type_t type = buffer_.type();
     std::vector<halide_dimension_t> new_dims;
     new_dims.reserve(new_shape.size());
+
+    const halide_dimension_t *old_dims = buffer_.raw_buffer()->dim;
+
+    bool all_same = (buffer_.dimensions() == (int)new_shape.size());
+    // Resizing a dynamic tensor shouldn't (AFAICT) ever change the
+    // number of dimensions -- just the extents -- but let's guard
+    // against that just in case, because it's easy to do.
+    assert(all_same);
+
     int stride = 1;
     for (const auto &d : new_shape) {
-        new_dims.emplace_back(d.min, d.extent(), stride);
-        stride *= d.extent();
+        const int d_min = d.min;
+        const int d_extent = d.extent();
+        if (all_same && (d_min != old_dims->min || d_extent != old_dims->extent)) {
+            all_same = false;
+        }
+        new_dims.emplace_back(d_min, d_extent, stride);
+        stride *= d_extent;
     }
-    HalideBuffer<void> new_buffer(type, nullptr, new_dims);
+    if (all_same) {
+        return;
+    }
+
+    HalideBuffer<void> new_buffer(buffer_.type(), nullptr, new_dims);
     new_buffer.allocate();
     if (buffer_.data()) {
         new_buffer.copy_from(buffer_);
