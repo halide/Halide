@@ -96,7 +96,6 @@ convert_to_matmul(const Store *op, const string &new_name) {
     // m[ramp(0, 1, S)] = VectorAdd(lhs[{XYR tile}] * xX(rhs[{YR tile}])) + m[ramp(0, 1, S)]
     const auto wild_i8x = Variable::make(Int(8, 0), "*");
     const auto wild_u8x = Variable::make(UInt(8, 0), "*");
-    const auto wild_i16x = Variable::make(Int(16, 0), "*");
     vector<Expr> matches;
     const auto pattern1 = wild_i32x + wild_i32x;
     if (!expr_match(pattern1, op->value, matches)) { return {}; }
@@ -105,14 +104,14 @@ convert_to_matmul(const Store *op, const string &new_name) {
     if (!reduce || reduce->op != VectorReduce::Add) { return {}; }
     if (!load || load->name != op->name || !equal(load->index, op->index)) { return {}; }
 
-    // FIXME: Add support for uint8 and bf16 for LLVM 13+
-    auto pattern2 = cast(Int(32, 0), cast(Int(16, 0), wild_i8x) * wild_i16x);
-    auto pattern2_alt = cast(Int(32, 0), cast(Int(16, 0), wild_u8x) * wild_i16x);
+    // FIXME: Add support for bf16 for LLVM 13+
+    auto pattern2 = cast(Int(32, 0), cast(Int(32, 0), wild_i8x) * wild_i32x);
+    auto pattern2_unsigned = cast(Int(32, 0), cast(Int(32, 0), wild_u8x) * wild_i32x);
 
     bool lhs_signed = false;
     if (expr_match(pattern2, reduce->value, matches)) {
         lhs_signed = true;
-    } else if (expr_match(pattern2_alt, reduce->value, matches)) {
+    } else if (expr_match(pattern2_unsigned, reduce->value, matches)) {
         lhs_signed = false;
     } else {
         return {};
@@ -150,6 +149,10 @@ convert_to_matmul(const Store *op, const string &new_name) {
         tile_r != rhs_tile.extent[1]) {
         return {};
     }
+
+#if LLVM_VERSION < 130
+    user_assert(lhs_signed && rhs_signed) << "LLVM 13 or above is required for unsigned AMX instructions";
+#endif
 
     // {rows, colbytes, var, index}
     auto lhs_var = Variable::make(Handle(), lhs_load->name);
