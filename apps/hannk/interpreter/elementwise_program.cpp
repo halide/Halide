@@ -103,57 +103,79 @@ void ElementwiseProgram::disassemble(std::ostream &output) {
 Slot ElementwiseProgram::zero() {
     return {0};
 }
-Slot ElementwiseProgram::immediate(int16_t value) {
-    return add_instruction(Const, zero(), zero(), value);
+
+Slot ElementwiseProgram::constant(int16_t value) {
+    if (value == 0) {
+        return {0};
+    } else {
+        return add_instruction(Const, zero(), zero(), value);
+    }
 }
+
 Slot ElementwiseProgram::input(int index) {
     return {(int16_t)(-index - 1)};
 }
+
 Slot ElementwiseProgram::add(Slot a, Slot b, int16_t add_b) {
     return add_instruction(Add, a, b, add_b);
 }
+
 Slot ElementwiseProgram::add(Slot a, int16_t b) {
     return add(a, zero(), b);
 }
+
 Slot ElementwiseProgram::sub(Slot a, Slot b, int16_t add_b) {
     return add_instruction(Sub, a, b, add_b);
 }
+
 Slot ElementwiseProgram::sub(Slot a, int16_t b) {
     return sub(a, zero(), b);
 }
+
 Slot ElementwiseProgram::min(Slot a, Slot b, int16_t add_b) {
     return add_instruction(Min, a, b, add_b);
 }
+
 Slot ElementwiseProgram::min(Slot a, int16_t b) {
     return min(a, zero(), b);
 }
+
 Slot ElementwiseProgram::max(Slot a, Slot b, int16_t add_b) {
     return add_instruction(Max, a, b, add_b);
 }
+
 Slot ElementwiseProgram::max(Slot a, int16_t b) {
     return max(a, zero(), b);
 }
+
 Slot ElementwiseProgram::rounding_mul_shift(Slot a, Slot b, int16_t shift) {
     return add_instruction(RoundingMulShift, a, b, 0, shift);
 }
+
 Slot ElementwiseProgram::rounding_mul_shift(Slot a, int16_t b, int16_t shift) {
     return add_instruction(RoundingMulShift, a, zero(), b, shift);
 }
+
 Slot ElementwiseProgram::rounding_shift(Slot a, Slot shift, int16_t extra_shift) {
     return add_instruction(RoundingShift, a, shift, extra_shift);
 }
+
 Slot ElementwiseProgram::rounding_shift(Slot a, int16_t shift) {
     return rounding_shift(a, zero(), shift);
 }
+
 Slot ElementwiseProgram::logistic(int16_t q, Slot a, Slot q_a) {
     return add_instruction(Logistic, a, q_a, 0, q);
 }
+
 Slot ElementwiseProgram::logistic(int16_t q, Slot a, int16_t q_a) {
     return add_instruction(Logistic, a, zero(), q_a, q);
 }
+
 Slot ElementwiseProgram::tanh(int16_t q, Slot a, Slot q_a) {
     return add_instruction(Tanh, a, q_a, 0, q);
 }
+
 Slot ElementwiseProgram::tanh(int16_t q, Slot a, int16_t q_a) {
     return add_instruction(Tanh, a, zero(), q_a, q);
 }

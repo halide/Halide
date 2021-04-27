@@ -59,7 +59,7 @@ public:
     void disassemble(std::ostream &output);
 
     Slot zero();
-    Slot immediate(int16_t value);
+    Slot constant(int16_t value);
     Slot input(int index);
     Slot add(Slot a, Slot b, int16_t add_b = 0);
     Slot add(Slot a, int16_t b);
