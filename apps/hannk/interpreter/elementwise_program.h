@@ -35,6 +35,11 @@ public:
         OpCodeCount,
     };
 
+    enum {
+        // The "width" of each instruction.
+        InstructionSize = 5,
+    };
+
     static const char *to_string(OpCode op);
 
     struct Slot {

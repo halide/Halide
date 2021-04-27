@@ -54,7 +54,7 @@ Slot ElementwiseProgram::add_instruction(OpCode op, Slot op1, Slot op2, int16_t 
 }
 
 ElementwiseProgram::ElementwiseProgram(int16_t *buffer, int buffer_size)
-    : instructions(buffer, 5, buffer_size / 5) {
+    : instructions(buffer, InstructionSize, buffer_size / InstructionSize) {
 }
 
 Halide::Runtime::Buffer<int16_t> ElementwiseProgram::assemble(std::initializer_list<Slot> outputs) {

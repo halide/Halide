@@ -181,8 +181,8 @@ public:
             .update(input_count + 1)
             .unroll(r.x);
 
-        program_.dim(0).set_min(0).set_extent(5).set_stride(1);
-        program_.dim(1).set_min(0).set_stride(5);
+        program_.dim(0).set_min(0).set_extent(ElementwiseProgram::InstructionSize).set_stride(1);
+        program_.dim(1).set_min(0).set_stride(ElementwiseProgram::InstructionSize);
 
         return output;
     }
