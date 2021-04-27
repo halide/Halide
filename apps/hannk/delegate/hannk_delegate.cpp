@@ -993,7 +993,7 @@ class NodeSupport {
             assert(tensor.dims);
             if (tensor.dims->size > 4) {
                 if (verbose_) {
-                    failures_ << "The " << label << " " << i << " has too many dimensions (" << tensor.dims->size << ")\n";
+                    failures_ << "The " << label << "[" << i << "] has too many dimensions (" << tensor.dims->size << ")\n";
                 }
                 return false;
             }
@@ -1001,7 +1001,7 @@ class NodeSupport {
         return true;
     }
 
-    bool HasTypeImpl(int i, PossibleTypesMask possible_types_mask, TfLiteIntArray *list, const char *label) const {
+    bool HasTypeImpl(int i, int possible_types_mask, TfLiteIntArray *list, const char *label) const {
         const int tensor_id = list->data[i];
         if (tensor_id == kTfLiteOptionalTensor) {
             return true;
@@ -1010,7 +1010,7 @@ class NodeSupport {
         const int tensor_type_mask = 1 << tensor.type;
         if (!(tensor_type_mask & possible_types_mask)) {
             if (verbose_) {
-                failures_ << "For " << label << " " << i << " of " << list->size
+                failures_ << "For " << label << "[" << i << "]"
                           << ", expected type(s) " << mask_to_string(possible_types_mask)
                           << " but saw " << mask_to_string(tensor_type_mask)
                           << "\n";
@@ -1052,15 +1052,6 @@ class NodeSupport {
 
     bool OutputsHaveCorrectTypes(std::initializer_list<PossibleTypesMask> per_tensor_possible_types_mask) const {
         return ListHasCorrectTypesImpl(per_tensor_possible_types_mask, node_->outputs, "output");
-    }
-
-    bool AllInputsHaveType(PossibleTypesMask possible_types_mask) const {
-        for (int i = 0; i < node_->inputs->size; ++i) {
-            if (!InputHasType(i, possible_types_mask)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     bool IsActivationReluOrNone(TfLiteFusedActivation activation) const {
@@ -1177,9 +1168,29 @@ class NodeSupport {
         if (!IsVersionOK(1, 2)) {
             return false;
         }
-        if (!AllInputsHaveType(U8)) {
+
+        if (node_->inputs->size < 1) {
+            if (verbose_) {
+                failures_ << "Expected at least one input\n";
+            }
             return false;
         }
+
+        // All the inputs (and the single output) must match types.
+        const int tensor_id = node_->inputs->data[0];
+        const TfLiteType type = context_->tensors[tensor_id].type;
+        const PossibleTypesMask required_type_mask = PossibleTypesMask(1 << type);
+        for (int i = 0; i < node_->inputs->size; ++i) {
+            if (!InputHasType(i, required_type_mask)) {
+                return false;
+            }
+        }
+
+        // Exactly one output.
+        if (!OutputsHaveCorrectTypes({PossibleTypesMask(1 << type)})) {
+            return false;
+        }
+
         // TODO: This op has an activation but we don't appear to use it.
         // const TfLiteConcatenationParams *params = (const TfLiteConcatenationParams *)(node_->builtin_data);
         return true;
