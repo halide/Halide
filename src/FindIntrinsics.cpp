@@ -45,18 +45,6 @@ Expr saturating_narrow(const Expr &a) {
     return saturating_cast(narrow, a);
 }
 
-Expr make_shift_right(const Expr &a, int const_b) {
-    internal_assert(const_b > 0);
-    Expr b = make_const(a.type().with_code(halide_type_uint), const_b);
-    return Call::make(a.type(), Call::shift_right, {a, b}, Call::PureIntrinsic);
-}
-
-Expr make_rounding_shift_right(const Expr &a, int const_b) {
-    internal_assert(const_b > 0);
-    Expr b = make_const(a.type().with_code(halide_type_uint), const_b);
-    return Call::make(a.type(), Call::rounding_shift_right, {a, b}, Call::PureIntrinsic);
-}
-
 // Returns true iff t is an integral type where overflow is undefined
 bool no_overflow_int(Type t) {
     return t.is_int() && t.bits() >= 32;
@@ -183,6 +171,7 @@ protected:
 
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;
+    IRMatcher::Wild<2> z;
     IRMatcher::WildConst<0> c0;
 
     Expr visit(const Add *op) override {
@@ -387,6 +376,7 @@ protected:
 
             Type op_type_wide = op->type.widen();
             Type signed_type_wide = op_type_wide.with_code(halide_type_int);
+            Type unsigned_type = op->type.with_code(halide_type_uint);
 
             int bits = op->type.bits();
             auto is_x_same_int = op->type.is_int() && is_int(x, bits);
@@ -407,6 +397,19 @@ protected:
                 rewrite(halving_add(widening_sub(x, y), 1), rounding_halving_sub(x, y), is_x_same_int_or_uint) ||
                 rewrite(rounding_shift_right(widening_add(x, y), 1), rounding_halving_add(x, y), is_x_same_int_or_uint) ||
                 rewrite(rounding_shift_right(widening_sub(x, y), 1), rounding_halving_sub(x, y), is_x_same_int_or_uint) ||
+
+                rewrite(max(min(shift_right(widening_mul(x, y), z), upper), lower), mul_shift_right(x, y, cast(unsigned_type, z)), is_x_same_int_or_uint && is_uint(z)) ||
+                rewrite(max(min(rounding_shift_right(widening_mul(x, y), z), upper), lower), rounding_mul_shift_right(x, y, cast(unsigned_type, z)), is_x_same_int_or_uint && is_uint(z)) ||
+                rewrite(min(shift_right(widening_mul(x, y), z), upper), mul_shift_right(x, y, cast(unsigned_type, z)), is_x_same_uint && is_uint(z)) ||
+                rewrite(min(rounding_shift_right(widening_mul(x, y), z), upper), rounding_mul_shift_right(x, y, cast(unsigned_type, z)), is_x_same_uint && is_uint(z)) ||
+                // We don't need saturation for the full upper half of a multiply.
+                // For signed integers, this is almost true, except for when x and y
+                // are both the most negative value. For these, we only need saturation
+                // at the upper bound.
+                rewrite(min(shift_right(widening_mul(x, y), c0), upper), mul_shift_right(x, y, cast(unsigned_type, c0)), is_x_same_int && c0 >= bits - 1) ||
+                rewrite(min(rounding_shift_right(widening_mul(x, y), c0), upper), rounding_mul_shift_right(x, y, cast(unsigned_type, c0)), is_x_same_int && c0 >= bits - 1) ||
+                rewrite(shift_right(widening_mul(x, y), c0), mul_shift_right(x, y, cast(unsigned_type, c0)), is_x_same_int_or_uint && c0 >= bits) ||
+                rewrite(rounding_shift_right(widening_mul(x, y), c0), rounding_mul_shift_right(x, y, cast(unsigned_type, c0)), is_x_same_int_or_uint && c0 >= bits) ||
 
                 // We can ignore the sign of the widening subtract for halving subtracts.
                 rewrite(shift_right(cast(op_type_wide, widening_sub(x, y)), 1), halving_sub(x, y), is_x_same_int_or_uint) ||
@@ -601,7 +604,7 @@ Expr lower_widening_shift_right(const Expr &a, const Expr &b) {
 }
 
 Expr lower_rounding_shift_left(const Expr &a, const Expr &b) {
-    Expr round = simplify(make_shift_right(make_one(a.type()) >> min(b, 0), 1));
+    Expr round = simplify((make_one(a.type()) >> min(b, 0)) >> 1);
     if ((a.type().is_uint() && a.type().bits() <= 32) || a.type().bits() < 32) {
         return narrow(widening_add(a, round) << b);
     } else {
@@ -612,7 +615,7 @@ Expr lower_rounding_shift_left(const Expr &a, const Expr &b) {
 }
 
 Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
-    Expr round = simplify(make_shift_right(make_one(a.type()) << max(b, 0), 1));
+    Expr round = simplify((make_one(a.type()) << max(b, 0)) >> 1);
     if ((a.type().is_uint() && a.type().bits() <= 32) || a.type().bits() < 32) {
         return narrow(widening_add(a, round) >> b);
     } else {
@@ -639,33 +642,103 @@ Expr lower_saturating_sub(const Expr &a, const Expr &b) {
 Expr lower_halving_add(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
     // Borrowed from http://aggregate.org/MAGIC/#Average%20of%20Integers
-    return (a & b) + make_shift_right((a ^ b), 1);
+    return (a & b) + ((a ^ b) >> 1);
 }
 
 Expr lower_halving_sub(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    return make_shift_right(a, 1) - make_shift_right(b, 1) - make_shift_right((b & 1) - (a & 1) + 1, 1);
+    return (a >> 1) - (b >> 1) - (((b & 1) - (a & 1) + 1) >> 1);
 }
 
 // TODO: These should using rounding_shift_right, but lowering that
 // results in double widening and the simplifier doesn't fix it.
 Expr lower_rounding_halving_add(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    return make_shift_right(a, 1) + make_shift_right(b, 1) + make_shift_right((a & 1) + (b & 1) + 1, 1);
+    return (a >> 1) + (b >> 1) + (((a & 1) + (b & 1) + 1) >> 1);
 }
 
 Expr lower_rounding_halving_sub(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    return make_shift_right(a, 1) - make_shift_right(b, 1) + make_shift_right((a & 1) - (b & 1) + 1, 1);
-}
-
-Expr lower_mulhi_shr(const Type &result_type, const Expr &a, const Expr &b, const Expr &shift) {
-    return cast(result_type, widening_mul(a, b) >> simplify(shift + result_type.bits()));
+    return (a >> 1) - (b >> 1) + (((a & 1) - (b & 1) + 1) >> 1);
 }
 
 Expr lower_sorted_avg(const Expr &a, const Expr &b) {
     // b > a, so the following works without widening.
-    return a + (b - a) / 2;
+    return a + ((b - a) >> 1);
+}
+
+Expr lower_mul_shift_right(const Expr &a, const Expr &b, const Expr &q) {
+    internal_assert(a.type() == b.type());
+    int full_q = a.type().bits();
+    if (a.type().is_int()) {
+        full_q -= 1;
+    }
+    if (can_prove(q < full_q)) {
+        // Try to rewrite this to a "full precision" multiply by multiplying
+        // one of the operands and the denominator by a constant. We only do this
+        // if it isn't already full precision. This avoids infinite loops despite
+        // "lowering" this to another mul_shift_right operation.
+        Expr missing_q = full_q - q;
+        internal_assert(missing_q.type().bits() == b.type().bits());
+        Expr new_b = simplify(b << missing_q);
+        if (is_const(new_b) && can_prove(new_b >> missing_q == b)) {
+            return mul_shift_right(a, new_b, full_q);
+        }
+        Expr new_a = simplify(a << missing_q);
+        if (is_const(new_a) && can_prove(new_a >> missing_q == a)) {
+            return mul_shift_right(new_a, b, full_q);
+        }
+    }
+
+    if (can_prove(q > a.type().bits())) {
+        // If q is bigger than the narrow type, write it as an exact upper
+        // half multiply, followed by an extra shift.
+        Expr result = mul_shift_right(a, b, a.type().bits());
+        result = result >> simplify(q - a.type().bits());
+        return result;
+    }
+
+    // If all else fails, just widen, shift, and narrow.
+    Expr result = widening_mul(a, b) >> q;
+    if (!can_prove(q >= a.type().bits())) {
+        result = saturating_narrow(result);
+    } else {
+        result = narrow(result);
+    }
+    return result;
+}
+
+Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q) {
+    internal_assert(a.type() == b.type());
+    int full_q = a.type().bits();
+    if (a.type().is_int()) {
+        full_q -= 1;
+    }
+    // Try to rewrite this to a "full precision" multiply by multiplying
+    // one of the operands and the denominator by a constant. We only do this
+    // if it isn't already full precision. This avoids infinite loops despite
+    // "lowering" this to another mul_shift_right operation.
+    if (can_prove(q < full_q)) {
+        Expr missing_q = full_q - q;
+        internal_assert(missing_q.type().bits() == b.type().bits());
+        Expr new_b = simplify(b << missing_q);
+        if (is_const(new_b) && can_prove(new_b >> missing_q == b)) {
+            return rounding_mul_shift_right(a, new_b, full_q);
+        }
+        Expr new_a = simplify(a << missing_q);
+        if (is_const(new_a) && can_prove(new_a >> missing_q == a)) {
+            return rounding_mul_shift_right(new_a, b, full_q);
+        }
+    }
+
+    // If all else fails, just widen, shift, and narrow.
+    Expr result = rounding_shift_right(widening_mul(a, b), q);
+    if (!can_prove(q >= a.type().bits())) {
+        result = saturating_narrow(result);
+    } else {
+        result = narrow(result);
+    }
+    return result;
 }
 
 Expr lower_intrinsic(const Call *op) {
@@ -708,9 +781,12 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::rounding_halving_sub)) {
         internal_assert(op->args.size() == 2);
         return lower_rounding_halving_sub(op->args[0], op->args[1]);
-    } else if (op->is_intrinsic(Call::mulhi_shr)) {
+    } else if (op->is_intrinsic(Call::rounding_mul_shift_right)) {
         internal_assert(op->args.size() == 3);
-        return lower_mulhi_shr(op->type, op->args[0], op->args[1], op->args[2]);
+        return lower_rounding_mul_shift_right(op->args[0], op->args[1], op->args[2]);
+    } else if (op->is_intrinsic(Call::mul_shift_right)) {
+        internal_assert(op->args.size() == 3);
+        return lower_mul_shift_right(op->args[0], op->args[1], op->args[2]);
     } else if (op->is_intrinsic(Call::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         return lower_sorted_avg(op->args[0], op->args[1]);
