@@ -69,7 +69,6 @@ std::unique_ptr<OpGroup> lower_tflite_lstm(TensorPtr data_input, TensorPtr prev_
     std::vector<TensorPtr> elementwise_outputs = {state_output, activ_output};
 
     auto program_buf = p.assemble({new_state, output});
-    p.disassemble(std::cout);
     program_buf = program_buf.copy();
 
     ops.push_back(::hannk::make_unique<ElementwiseProgramOp>(elementwise_inputs, elementwise_outputs, program_buf));

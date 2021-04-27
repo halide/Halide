@@ -763,24 +763,25 @@ bool can_use_elementwise_program(const Op *op,
 }
 
 void ElementwiseProgramOp::execute() {
-    HalideBuffer<const void> input0 = input(0)->buffer();
-    HalideBuffer<const void> input1 = input(std::min(input_count() - 1, 1))->buffer();
-    HalideBuffer<const void> input2 = input(std::min(input_count() - 1, 2))->buffer();
-    HalideBuffer<const void> input3 = input(std::min(input_count() - 1, 3))->buffer();
-    HalideBuffer<const void> input4 = input(std::min(input_count() - 1, 4))->buffer();
-    HalideBuffer<void> output0 = output(0)->buffer();
-    HalideBuffer<void> output1 = output(std::min(output_count() - 1, 1))->buffer();
+    HalideBuffer<const void> in0 = input(0)->buffer();
+    HalideBuffer<const void> in1 = input(std::min(input_count() - 1, 1))->buffer();
+    HalideBuffer<const void> in2 = input(std::min(input_count() - 1, 2))->buffer();
+    HalideBuffer<const void> in3 = input(std::min(input_count() - 1, 3))->buffer();
+    HalideBuffer<const void> in4 = input(std::min(input_count() - 1, 4))->buffer();
+    HalideBuffer<void> out0 = output(0)->buffer();
+    HalideBuffer<void> out1 = output(std::min(output_count() - 1, 1))->buffer();
+    using arg_ptr = halide_buffer_t *;
     if (can_use_elementwise_program(this, {5, halide_type_of<uint8_t>()}, {halide_type_of<uint8_t>()})) {
-        auto elementwise_rank1 = [&](HalideBuffer<const uint8_t> input0, HalideBuffer<const uint8_t> input1, HalideBuffer<const uint8_t> input2, HalideBuffer<const uint8_t> input3, HalideBuffer<const uint8_t> input4, HalideBuffer<uint8_t> output0) {
-            CHECK(0 == elementwise_5xuint8_1xuint8(input0, input1, input2, input3, input4, program_, output0));
+        auto elementwise_rank1 = [&](arg_ptr in0, arg_ptr in1, arg_ptr in2, arg_ptr in3, arg_ptr in4, arg_ptr out0) {
+            CHECK(0 == elementwise_5xuint8_1xuint8(in0, in1, in2, in3, in4, program_, out0));
         };
-        loop_nest<1>(elementwise_rank1, input0, input1, input2, input3, input4, output0);
+        loop_nest<1>(elementwise_rank1, in0, in1, in2, in3, in4, out0);
         return;
     } else if (can_use_elementwise_program(this, {5, halide_type_of<int16_t>()}, {halide_type_of<int16_t>(), halide_type_of<uint8_t>()})) {
-        auto elementwise_rank1 = [&](HalideBuffer<const int16_t> input0, HalideBuffer<const int16_t> input1, HalideBuffer<const int16_t> input2, HalideBuffer<const int16_t> input3, HalideBuffer<const int16_t> input4, HalideBuffer<int16_t> output0, HalideBuffer<uint8_t> output1) {
-            CHECK(0 == elementwise_5xint16_1xint16uint8(input0, input1, input2, input3, input4, program_, output0, output1));
+        auto elementwise_rank1 = [&](arg_ptr in0, arg_ptr in1, arg_ptr in2, arg_ptr in3, arg_ptr in4, arg_ptr out0, arg_ptr out1) {
+            CHECK(0 == elementwise_5xint16_1xint16uint8(in0, in1, in2, in3, in4, program_, out0, out1));
         };
-        loop_nest<1>(elementwise_rank1, input0, input1, input2, input3, input4, output0, output1);
+        loop_nest<1>(elementwise_rank1, in0, in1, in2, in3, in4, out0, out1);
         return;
     }
     LOG(FATAL) << "Unsupported elementwise program\n";
