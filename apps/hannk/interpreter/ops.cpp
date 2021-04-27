@@ -171,9 +171,22 @@ void broadcast_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b) {
     }
 }
 
+const uint8_t *begin(const halide_buffer_t *buf) {
+    return buf->host;
+}
+
+const uint8_t *end(const halide_buffer_t *buf) {
+    const uint8_t *result = buf->host;
+    for (int i = 0; i < buf->dimensions; i++) {
+        result += (buf->dim[i].extent - 1) * buf->dim[i].stride;
+    }
+    result += 1;
+    return result;
+}
+
 // Check if and b are aliases of the same buffer.
-bool is_alias(const HalideBuffer<const void> &a, const HalideBuffer<const void> &b) {
-    return !(a.begin() >= b.end() || a.end() <= b.begin());
+bool is_alias(const halide_buffer_t *a, const halide_buffer_t *b) {
+    return !(begin(a) >= end(b) || end(a) <= begin(b));
 }
 
 // Crop both a and b to the union of both buffers.
@@ -359,7 +372,7 @@ void requantize(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
                 ActivationFunction activation = ActivationFunction::None) {
     if (inq == outq) {
         // Some of these are just copies, or no-ops.
-        if (is_alias(in, out)) {
+        if (is_alias(in.raw_buffer(), out)) {
             return;
         } else {
             out.copy_from(in);
