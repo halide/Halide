@@ -43,6 +43,7 @@
     KNOWN_OP(Softmax)         \
     KNOWN_OP(SpaceToDepth)    \
     KNOWN_OP(Split)           \
+    KNOWN_OP(SplitV)          \
     KNOWN_OP(Square)          \
     KNOWN_OP(Sub)             \
     KNOWN_OP(Tanh)
@@ -743,12 +744,12 @@ private:
         return ::hannk::make_unique<SpaceDepthOp>(input, output, params->block_size);
     }
 
-    std::unique_ptr<Op> BuildSplit(TfLiteContext *context, TfLiteNode *node) {
-        auto axis_tensor = GetTensorById(context, node->inputs->data[0]);
+    std::unique_ptr<Op> BuildSplit(TfLiteContext *context, TfLiteNode *node, int axis_tensor_index, int input_tensor_index) {
+        auto axis_tensor = GetTensorById(context, node->inputs->data[axis_tensor_index]);
         CHECK(axis_tensor->is_allocated()) << "Can't handle dynamic axis for Split.\n";
         int axis = axis_tensor->buffer<int32_t>()();
 
-        auto input = GetTensorById(context, node->inputs->data[1]);
+        auto input = GetTensorById(context, node->inputs->data[input_tensor_index]);
         std::vector<TensorPtr> outputs(node->outputs->size);
         for (int i = 0; i < node->outputs->size; i++) {
             outputs[i] = GetTensorById(context, node->outputs->data[i]);
@@ -762,6 +763,14 @@ private:
         // the Tensor (since we reverse the dimension order)
         axis = (int)input->rank() - axis - 1;
         return ::hannk::make_unique<SplitOp>(input, outputs, axis);
+    }
+
+    std::unique_ptr<Op> BuildSplit(TfLiteContext *context, TfLiteNode *node) {
+        return BuildSplit(context, node, 0, 1);
+    }
+
+    std::unique_ptr<Op> BuildSplitV(TfLiteContext *context, TfLiteNode *node) {
+        return BuildSplit(context, node, 2, 0);
     }
 
     std::unique_ptr<Op> BuildSquare(TfLiteContext *context, TfLiteNode *node) {
@@ -1223,10 +1232,7 @@ class NodeSupport {
             return false;
         }
 
-        if (node_->inputs->size < 2) {
-            if (verbose_) {
-                failures_ << "Expected at least 2 inputs\n";
-            }
+        if (!InputsHaveCorrectTypes({I32, ANY})) {
             return false;
         }
 
@@ -1241,8 +1247,27 @@ class NodeSupport {
         }
 
         // Exactly one input.
-        if (!InputsHaveCorrectTypes({I32, PossibleTypesMask(1 << type)})) {
+
+        return true;
+    }
+
+    bool IsNodeSupported_SplitV() const {
+        if (!IsVersionOK(1, 2)) {
             return false;
+        }
+
+        if (!InputsHaveCorrectTypes({ANY, I32, I32})) {
+            return false;
+        }
+
+        // All the outputs (and the single input) must match types.
+        const int tensor_id = node_->inputs->data[0];
+        const TfLiteType type = context_->tensors[tensor_id].type;
+        const PossibleTypesMask required_type_mask = PossibleTypesMask(1 << type);
+        for (int i = 0; i < node_->outputs->size; ++i) {
+            if (!OutputHasType(i, required_type_mask)) {
+                return false;
+            }
         }
 
         return true;
