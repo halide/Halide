@@ -33,41 +33,37 @@ namespace hannk {
 namespace {
 
 // Check if dimension 0 and dimension 1 of buf can be fused.
-template<typename T>
-bool can_fuse(const HalideBuffer<T> &buf, int d0, int d1) {
+// We avoid the use of Halide::Runtime::Buffer where possible in these helpers
+// to reduce template instantiation and runtime overhead.
+bool can_fuse(const halide_buffer_t *buf, int d0, int d1) {
     assert(d0 != d1);
-    return d0 < buf.dimensions() &&
-           d1 < buf.dimensions() &&
-           buf.dim(d0).min() == 0 &&
-           buf.dim(d1).stride() > 0 &&
-           buf.dim(d1).stride() == buf.dim(d0).extent() * buf.dim(d0).stride();
+    return d0 < buf->dimensions &&
+           d1 < buf->dimensions &&
+           buf->dim[d0].min == 0 &&
+           buf->dim[d1].stride > 0 &&
+           buf->dim[d1].stride == buf->dim[d0].extent * buf->dim[d0].stride;
 }
-template<typename T>
-bool can_fuse_cx(const HalideBuffer<T> &buf) {
+bool can_fuse_cx(const halide_buffer_t *buf) {
     return can_fuse(buf, 0, 1);
 }
-template<typename T>
-bool can_fuse_xy(const HalideBuffer<T> &buf) {
+bool can_fuse_xy(const halide_buffer_t *buf) {
     return can_fuse(buf, 1, 2);
 }
 
 // Fuse the first two dimensions of buf. d1 is deleted from the buffer.
-template<typename T>
-void fuse(HalideBuffer<T> &buf, int d0, int d1) {
-    halide_dimension_t &dim0 = buf.raw_buffer()->dim[d0];
-    halide_dimension_t &dim1 = buf.raw_buffer()->dim[d1];
+void fuse(halide_buffer_t *buf, int d0, int d1) {
+    halide_dimension_t &dim0 = buf->dim[d0];
+    halide_dimension_t &dim1 = buf->dim[d1];
     dim0.extent *= dim1.extent;
-    for (int d = d1; d + 1 < buf.dimensions(); d++) {
-        buf.raw_buffer()->dim[d] = buf.raw_buffer()->dim[d + 1];
+    for (int d = d1; d + 1 < buf->dimensions; d++) {
+        buf->dim[d] = buf->dim[d + 1];
     }
-    buf.slice(buf.dimensions() - 1);
+    buf->dimensions--;
 }
-template<typename T>
-void fuse_cx(HalideBuffer<T> &buf) {
+void fuse_cx(halide_buffer_t *buf) {
     fuse(buf, 0, 1);
 }
-template<typename T>
-void fuse_xy(HalideBuffer<T> &buf) {
+void fuse_xy(halide_buffer_t *buf) {
     fuse(buf, 1, 2);
 }
 
@@ -79,48 +75,56 @@ void pad_to_rank(int rank, HalideBuffer<T> &buf) {
     }
 }
 
-template<typename T, typename... Ts>
-void pad_to_rank(int rank, HalideBuffer<T> &buf, HalideBuffer<Ts> &...rest) {
-    pad_to_rank(rank, buf);
+template<typename... Ts>
+void fuse_cx(halide_buffer_t *a, HalideBuffer<Ts> &...rest) {
+    fuse_cx(a);
+    fuse_cx(rest...);
+}
+
+template<typename Ta, typename... Ts>
+void pad_to_rank(int rank, HalideBuffer<Ta> &a, HalideBuffer<Ts> &...rest) {
+    pad_to_rank(rank, a);
     pad_to_rank(rank, rest...);
+}
+
+bool all(bool first) {
+    return first;
+}
+
+template<typename... T>
+bool all(bool first, T... rest) {
+    return first && all(rest...);
 }
 
 // Fuse the innermost (stride 1) dimension with other dimensions as much as possible.
 // This may enable the buffers to be processed with fewer instances of the "tail" of
 // a vectorization loop.
-template<typename Ta, typename Tb, typename Tc>
-void optimize_elementwise_shapes(int rank, HalideBuffer<Ta> &a, HalideBuffer<Tb> &b, HalideBuffer<Tc> &c) {
-    while (can_fuse_cx(a) && can_fuse_cx(b) && can_fuse_cx(c) &&
-           a.dim(0).extent() == c.dim(0).extent() &&
-           b.dim(0).extent() == c.dim(0).extent()) {
-        fuse_cx(a);
-        fuse_cx(b);
-        fuse_cx(c);
+template<typename Ta, typename... Ts>
+void optimize_elementwise_shapes(int rank, HalideBuffer<Ta> &a, HalideBuffer<Ts> &...rest) {
+    while (can_fuse_cx(a) && all(can_fuse_cx(rest)...) &&
+           all(a.dim(0).extent() == rest.dim(0).extent()...)) {
+        fuse_cx(a, rest...);
     }
-    pad_to_rank(rank, a);
-    pad_to_rank(rank, b);
-    pad_to_rank(rank, c);
+    pad_to_rank(rank, a, rest...);
 }
 
-template<typename Ta, typename Tb>
-void optimize_elementwise_shapes(int rank, HalideBuffer<Ta> &a, HalideBuffer<Tb> &b) {
-    while (can_fuse_cx(a) && can_fuse_cx(b) &&
-           a.dim(0).extent() == b.dim(0).extent()) {
-        fuse_cx(a);
-        fuse_cx(b);
-    }
-    pad_to_rank(rank, a);
-    pad_to_rank(rank, b);
+halide_buffer_t slice_last_dim(halide_buffer_t buf, int at) {
+    buf.dimensions--;
+    buf.host += buf.type.bytes() * buf.dim[buf.dimensions].stride * at;
+    return buf;
 }
 
-template<int FnRank, typename Fn, typename T, typename... Ts>
-void loop_nest_impl(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
-    if (op0.dimensions() == FnRank) {
-        fn(op0, ops...);
+template<int FnRank, typename Fn, typename... Ts>
+void loop_nest_impl(Fn &&fn, halide_buffer_t op0, Ts... ops) {
+    if (op0.dimensions == FnRank) {
+        fn(&op0, &ops...);
     } else {
-        const int last_dim = op0.dimensions() - 1;
-        for (int i = op0.dim(last_dim).min(); i <= op0.dim(last_dim).max(); i++) {
-            loop_nest_impl<FnRank>(fn, op0.sliced(last_dim, i), ops.sliced(last_dim, i)...);
+        const int last_dim = op0.dimensions - 1;
+        const int min = op0.dim[last_dim].min;
+        const int extent = op0.dim[last_dim].extent;
+        const int max = min + extent - 1;
+        for (int i = min; i <= max; i++) {
+            loop_nest_impl<FnRank>(fn, slice_last_dim(op0, i), slice_last_dim(ops, i)...);
         }
     }
 }
@@ -131,14 +135,14 @@ void loop_nest_impl(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
 template<int FnRank, typename Fn, typename T, typename... Ts>
 void elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
     optimize_elementwise_shapes(FnRank, op0, ops...);
-    loop_nest_impl<FnRank>(fn, op0, ops...);
+    loop_nest_impl<FnRank>(fn, *op0.raw_buffer(), *ops.raw_buffer()...);
 }
 
 // Similar to the above, but do not fuse dimensions when possible.
 template<int FnRank, typename Fn, typename T, typename... Ts>
 void loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
     pad_to_rank(FnRank, op0, ops...);
-    loop_nest_impl<FnRank>(fn, op0, ops...);
+    loop_nest_impl<FnRank>(fn, *op0.raw_buffer(), *ops.raw_buffer()...);
 }
 
 // Broadcast the extent 1 dimensions of one shape to match the extent of the
@@ -309,7 +313,7 @@ void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q, int in1s
 
     const auto out_range = get_output_range(activation, outq);
 
-    auto add_rank2 = [&](HalideBuffer<const uint8_t> in1_buf, HalideBuffer<const uint8_t> in2_buf, HalideBuffer<uint8_t> out_buf) {
+    auto add_rank2 = [&](halide_buffer_t *in1_buf, halide_buffer_t *in2_buf, halide_buffer_t *out_buf) {
         CHECK(0 == add_uint8_uint8(in1_buf, in1_zero, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
                                    in2_buf, in2_zero, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
                                    out_zero, out_mul_and_shift.multiplier, -out_mul_and_shift.shift,
@@ -342,7 +346,7 @@ void mul(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
 
     const auto out_range = get_output_range(activation, outq);
 
-    auto mul_rank2 = [&](HalideBuffer<const uint8_t> in1_buf, HalideBuffer<const uint8_t> in2_buf, HalideBuffer<uint8_t> out_buf) {
+    auto mul_rank2 = [&](halide_buffer_t *in1_buf, halide_buffer_t *in2_buf, halide_buffer_t *out_buf) {
         CHECK(0 == mul_uint8_uint8_uint8(in1_buf, in1_zero, in2_buf, in2_zero,
                                          out_zero, mul_and_shift.multiplier, -mul_and_shift.shift,
                                          out_range.min, out_range.max, out_buf));
@@ -350,8 +354,8 @@ void mul(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
     elementwise_loop_nest<2>(mul_rank2, in1, in2, out);
 }
 
-void requantize(const HalideBuffer<const uint8_t> &in, const QuantizationInfo &inq,
-                HalideBuffer<uint8_t> out, const QuantizationInfo &outq,
+void requantize(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
+                HalideBuffer<void> out, const QuantizationInfo &outq,
                 ActivationFunction activation = ActivationFunction::None) {
     if (inq == outq) {
         // Some of these are just copies, or no-ops.
@@ -808,7 +812,7 @@ void L2NormalizationOp::execute() {
         assert(out->quantization().scale.at(0) == 1.0f / 128.0f);
         assert(out->quantization().zero.at(0) == 128);
 
-        auto l2_normalization_rank2 = [&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
+        auto l2_normalization_rank2 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
             CHECK(0 == l2_normalization_uint8(in_buf, input_zero, out_buf));
         };
         loop_nest<2>(l2_normalization_rank2, in_buf, out_buf);
@@ -1220,7 +1224,7 @@ void SoftmaxOp::execute() {
         assert(in_mul_and_shift.shift <= 0);
         assert(output_mul_and_shift.shift <= 0);
 
-        auto softmax_rank2 = [&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
+        auto softmax_rank2 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
             CHECK(0 == softmax_uint8(in_buf, in_mul_and_shift.multiplier, -in_mul_and_shift.shift,
                                      output_zero, output_mul_and_shift.multiplier, -output_mul_and_shift.shift,
                                      out_buf));
@@ -1367,7 +1371,7 @@ void UnaryOp::execute() {
             assert(out->quantization().scale.at(0) == 1.0f / 256.0f);
             assert(out->quantization().zero.at(0) == 0);
 
-            auto logistic_rank1 = [&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
+            auto logistic_rank1 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
                 CHECK(0 == logistic_uint8(in_buf, input_zero, in_mul_and_shift.multiplier, -in_mul_and_shift.shift, out_buf));
             };
             elementwise_loop_nest<1>(logistic_rank1, in_buf, out_buf);
@@ -1381,7 +1385,7 @@ void UnaryOp::execute() {
             assert(out->quantization().scale.at(0) == 1.0f / 128.0f);
             assert(out->quantization().zero.at(0) == 128);
 
-            auto tanh_rank1 = [&](HalideBuffer<const uint8_t> in_buf, HalideBuffer<uint8_t> out_buf) {
+            auto tanh_rank1 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
                 CHECK(0 == tanh_uint8(in_buf, input_zero, in_mul_and_shift.multiplier, -in_mul_and_shift.shift, out_buf));
             };
             elementwise_loop_nest<1>(tanh_rank1, in_buf, out_buf);
