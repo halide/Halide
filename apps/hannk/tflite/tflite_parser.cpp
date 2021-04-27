@@ -361,8 +361,16 @@ public:
         TensorPtr concat_temp = tensors_[op->outputs()->Get(2)];
         TensorPtr activ_temp = tensors_[op->outputs()->Get(3)];
 
+        // TODO: there is an activation function specified here but it's not clear
+        // whether it's used in the LSTM reference implementation. Ignoring for now.
+        //
+        // const auto options = op->builtin_options_as_LSTMOptions();
+        // ActivationFunction activation = parse_activation_function(options->fused_activation_function());
+
+        const ActivationFunction activation = ActivationFunction::None;
+
         return lower_tflite_lstm(data_input, prev_activ_input, weights_input, biases_input, prev_state_input,
-                                 activ_output, state_output, concat_temp, activ_temp);
+                                 activ_output, state_output, concat_temp, activ_temp, activation);
     }
 
     std::unique_ptr<Op> parse_op(const tflite::Operator *op) {
