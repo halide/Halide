@@ -19,10 +19,10 @@ public:
         return false;
     }
 
-    void compile_and_check(Func f, Func error, const std::string &op, const std::string &name, int vector_width, std::ostringstream &error_msg) override {
+    void compile_and_check(Func error, const std::string &op, const std::string &name, int vector_width, std::ostringstream &error_msg) override {
         // Compile just the vector Func to assembly.
         std::string cpp_filename = output_directory + "check_" + name + ".cpp";
-        f.compile_to_c(cpp_filename, arg_types, "", target);
+        error.compile_to_c(cpp_filename, arg_types, "", target);
         std::ifstream cpp_file;
         cpp_file.open(cpp_filename);
 
