@@ -263,19 +263,22 @@ public:
     std::unique_ptr<Op> parse_reshape(const tflite::Operator *op) {
         const tflite::ReshapeOptions *options =
             op->builtin_options_as_ReshapeOptions();
-        std::vector<int> shape_array;
+        TensorPtr input = tensors_[op->inputs()->Get(0)];
+        TensorPtr output = tensors_[op->outputs()->Get(0)];
         // If there are two inputs, and the second is an int32 vector, it should
         // be used to specify the new shape (instead of ReshapeOptions).
         TensorPtr shape_tensor = nullptr;
         if (op->inputs()->size() == 2) {
             shape_tensor = tensors_[op->inputs()->Get(1)];
+        } else if (options) {
+            size_t size = options->new_shape()->size();
+            HalideBuffer<int32_t> shape_data(size);
+            for (size_t i = 0; i < size; i++) {
+                shape_data(i) = options->new_shape()->Get(i);
+            }
+            shape_tensor = std::make_shared<Tensor>(input->name() + "_shape", shape_data);
         }
-        if (options) {
-            shape_array.assign(options->new_shape()->cbegin(), options->new_shape()->cend());
-        }
-        TensorPtr input = tensors_[op->inputs()->Get(0)];
-        TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return ::hannk::make_unique<ReshapeOp>(input, shape_tensor, output, shape_array);
+        return ::hannk::make_unique<ReshapeOp>(input, shape_tensor, output);
     }
 
     std::unique_ptr<Op> parse_shape(const tflite::Operator *op) {

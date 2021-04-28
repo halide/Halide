@@ -1113,13 +1113,11 @@ std::vector<int> ReshapeOp::calc_new_shape() const {
     if (shape && shape->rank() == 1 && shape->type() == halide_type_of<int32_t>()) {
         auto shape_buf = shape->buffer<const int32_t>();
         new_shape.assign(shape_buf.begin(), shape_buf.end());
-    } else {
-        new_shape = shape_array_;
-        if (new_shape.size() == 1 && new_shape[0] == 0) {
-            // Legacy tflite models use a shape parameter of [0] to indicate scalars,
-            // so adjust accordingly.
-            new_shape.clear();
-        }
+    }
+    if (new_shape.size() == 1 && new_shape[0] == 0) {
+        // Legacy tflite models use a shape parameter of [0] to indicate scalars,
+        // so adjust accordingly.
+        new_shape.clear();
     }
     std::reverse(new_shape.begin(), new_shape.end());
 

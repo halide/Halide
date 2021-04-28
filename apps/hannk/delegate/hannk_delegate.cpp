@@ -669,14 +669,16 @@ private:
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         TensorPtr shape_tensor = nullptr;
-        std::vector<int> shape_array;
         if (node->inputs->size == 2) {
             shape_tensor = GetTensorById(context, node->inputs->data[1]);
         } else {
             const TfLiteReshapeParams *params = (const TfLiteReshapeParams *)(node->builtin_data);
-            shape_array.assign(params->shape, params->shape + params->num_dimensions);
+            if (params) {
+                HalideBuffer<int32_t> shape_data(const_cast<int32_t*>(params->shape), params->num_dimensions);
+                shape_tensor = std::make_shared<Tensor>(input->name() + "_shape", shape_data);
+            }
         }
-        return ::hannk::make_unique<ReshapeOp>(input, shape_tensor, output, shape_array);
+        return ::hannk::make_unique<ReshapeOp>(input, shape_tensor, output);
     }
 
     std::unique_ptr<Op> BuildShape(TfLiteContext *context, TfLiteNode *node) {
