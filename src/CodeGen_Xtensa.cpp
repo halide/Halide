@@ -1159,6 +1159,10 @@ HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_concat_from_native(const int32x16_
     return int32x32_t(int32x32_t::from_native_vector, a, b);
 }
 
+HALIDE_ALWAYS_INLINE uint1x16_t halide_xtensa_slice_to_native(const uint1x32_t& src, int index, int native_lanes, int total_lanes) {
+  return (index == 0)?IVP_EXTRACTBLN(src):IVP_EXTRACTBHN(src);
+}
+
 HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_slice_to_native_i32x32_t(const int32x64_t& src, int index) {
   return int32x32_t(int32x32_t::from_native_vector, src.native_vector[2 * index], src.native_vector[2 * index + 1]);
 }
@@ -1216,6 +1220,11 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_sat_narrow_i16(const int32x32_t& a
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_sat_narrow_with_shift_i16(const int32x32_t& a, uint32_t shift) {
   xb_vecNx48 wide = IVP_CVT48SNX32(a.native_vector[1], a.native_vector[0]);
   return IVP_PACKVRNX48(wide, shift);
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_sat_narrow_with_shift_u16(const int32x32_t& a, uint32_t shift) {
+  xb_vecNx48 wide = IVP_CVT48SNX32(a.native_vector[1], a.native_vector[0]);
+  return IVP_PACKVRNRNX48(wide, shift);
 }
 
 HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_convert_concat_i16_to_u8(const int16x32_t& a, const int16x32_t& b) {
@@ -1606,7 +1615,7 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         return rhs.str();
     }
 
-    if (op->name == "halide_xtensa_slice_to_native") {
+    if (op->name == "halide_xtensa_slice_to_native" && !op->type.is_bool()) {
         rhs << args[0] << ".native_vector[" << args[1] << "]";
         return rhs.str();
     }
