@@ -1,4 +1,5 @@
 #include "interpreter/ops.h"
+#include "interpreter/elementwise_program.h"
 #include "util/error_util.h"
 
 #include <atomic>
@@ -15,17 +16,16 @@
 #include "depthwise_conv_broadcast_uint8.h"
 #include "depthwise_conv_dm1_uint8.h"
 #include "depthwise_conv_uint8.h"
+#include "elementwise_5xuint8_1xuint8.h"
+#include "elementwise_5xint16_1xuint8int16.h"
 #include "fill_uint8.h"
 #include "fully_connected_uint8_int16.h"
 #include "fully_connected_uint8_uint8.h"
 #include "l2_normalization_uint8.h"
-#include "logistic_uint8.h"
-#include "lstm_elementwise.h"
 #include "max_pool_uint8.h"
 #include "mean_uint8.h"
 #include "mul_uint8_uint8_uint8.h"
 #include "softmax_uint8.h"
-#include "tanh_uint8.h"
 #include "tile_conv_filter_uint8.h"
 
 namespace hannk {
@@ -381,10 +381,12 @@ void requantize(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
         } else {
             out.copy_from(in);
         }
-    } else {
+    } else if (in.type() == halide_type_of<uint8_t>() && out.type() == halide_type_of<uint8_t>()) {
         // TODO: Maybe a dedicated pipeline for this would be better. It
         // could be a little faster, and avoid some quantization error.
         add(in, inq, 1, in, inq, 0, out, outq, activation);
+    } else {
+        LOG(FATAL) << "Unable to requantize " << in.type() << " -> " << out.type() << "\n";
     }
 }
 
@@ -528,6 +530,9 @@ BoundsMap ConcatenationOp::map_bounds(int input_idx, int output_idx) const {
 }
 
 void ConcatenationOp::execute() {
+    if (is_no_op_) {
+        return;
+    }
     HalideBuffer<void> output_buf = output()->buffer();
 
     int concatenated_i = 0;
@@ -760,6 +765,53 @@ BoundsMap FullyConnectedOp::map_bounds(int input_idx, int output_idx) const {
     }
 }
 
+bool can_use_elementwise_program(const Op *op,
+                                 const std::vector<halide_type_t> &input_types,
+                                 const std::vector<halide_type_t> &output_types) {
+    if (op->input_count() > (int)input_types.size()) {
+        return false;
+    }
+    if (op->output_count() > (int)output_types.size()) {
+        return false;
+    }
+    for (int i = 0; i < op->input_count(); i++) {
+        if (op->input(i)->type() != input_types[i]) {
+            return false;
+        }
+    }
+    for (int i = 0; i < op->output_count(); i++) {
+        if (op->output(i)->type() != output_types[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void ElementwiseProgramOp::execute() {
+    HalideBuffer<const void> in0 = input(0)->buffer();
+    HalideBuffer<const void> in1 = input(std::min(input_count() - 1, 1))->buffer();
+    HalideBuffer<const void> in2 = input(std::min(input_count() - 1, 2))->buffer();
+    HalideBuffer<const void> in3 = input(std::min(input_count() - 1, 3))->buffer();
+    HalideBuffer<const void> in4 = input(std::min(input_count() - 1, 4))->buffer();
+    HalideBuffer<void> out0 = output(0)->buffer();
+    HalideBuffer<void> out1 = output(std::min(output_count() - 1, 1))->buffer();
+    using arg_ptr = halide_buffer_t *;
+    if (can_use_elementwise_program(this, {5, halide_type_of<uint8_t>()}, {halide_type_of<uint8_t>()})) {
+        auto elementwise_rank1 = [&](arg_ptr in0, arg_ptr in1, arg_ptr in2, arg_ptr in3, arg_ptr in4, arg_ptr out0) {
+            CHECK(0 == elementwise_5xuint8_1xuint8(in0, in1, in2, in3, in4, program_, out0));
+        };
+        loop_nest<1>(elementwise_rank1, in0, in1, in2, in3, in4, out0);
+        return;
+    } else if (can_use_elementwise_program(this, {5, halide_type_of<int16_t>()}, {halide_type_of<uint8_t>(), halide_type_of<int16_t>()})) {
+        auto elementwise_rank1 = [&](arg_ptr in0, arg_ptr in1, arg_ptr in2, arg_ptr in3, arg_ptr in4, arg_ptr out0, arg_ptr out1) {
+            CHECK(0 == elementwise_5xint16_1xuint8int16(in0, in1, in2, in3, in4, program_, out0, out1));
+        };
+        loop_nest<1>(elementwise_rank1, in0, in1, in2, in3, in4, out0, out1);
+        return;
+    }
+    LOG(FATAL) << "Unsupported elementwise program\n";
+}
+
 void FullyConnectedOp::execute() {
     const TensorPtr in = input();
     const TensorPtr filt = filter();
@@ -836,30 +888,6 @@ void L2NormalizationOp::execute() {
     } else {
         LOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
-}
-
-void LstmElementwiseOp::execute() {
-    const TensorPtr activ_temp = input(0);
-    const TensorPtr prev_state_input = input(1);
-    TensorPtr state_output = output(0);
-    TensorPtr activ_output = output(1);
-
-    HalideBuffer<const int16_t> activ_temp_buf = activ_temp->buffer<const int16_t>();
-    HalideBuffer<const int16_t> prev_state_input_buf = prev_state_input->buffer<const int16_t>();
-    HalideBuffer<int16_t> state_output_buf = state_output->buffer<int16_t>();
-    HalideBuffer<uint8_t> activ_output_buf = activ_output->buffer<uint8_t>();
-
-    const int output_depth = state_output_buf.dim(0).extent();
-    HalideBuffer<const int16_t> input_gate =
-        activ_temp_buf.cropped(0, output_depth * 0, output_depth).translated(0, -output_depth * 0);
-    HalideBuffer<const int16_t> input_modulation_gate =
-        activ_temp_buf.cropped(0, output_depth * 1, output_depth).translated(0, -output_depth * 1);
-    HalideBuffer<const int16_t> forget_gate =
-        activ_temp_buf.cropped(0, output_depth * 2, output_depth).translated(0, -output_depth * 2);
-    HalideBuffer<const int16_t> output_gate =
-        activ_temp_buf.cropped(0, output_depth * 3, output_depth).translated(0, -output_depth * 3);
-
-    CHECK(0 == lstm_elementwise(input_gate, input_modulation_gate, forget_gate, output_gate, prev_state_input_buf, state_output_buf, activ_output_buf));
 }
 
 BoundsMap PadOp::map_bounds(int input_idx, int output_idx) const {
@@ -1318,6 +1346,39 @@ void SpaceDepthOp::execute() {
     }
 }
 
+BoundsMap SplitOp::map_bounds(int input_idx, int output_idx) const {
+    assert(input_idx == 0);
+    const int rank = input()->rank();
+    assert(output(output_idx)->rank() == rank);
+
+    int offset = 0;
+    for (int i = 0; i < output_idx; i++) {
+        offset += output(i)->extent(axis_);
+    }
+
+    BoundsMap result = BoundsMap::elementwise(rank);
+    result.at(axis_, axis_).bounds -= offset;
+    return result;
+}
+
+void SplitOp::execute() {
+    if (is_no_op_) {
+        return;
+    }
+    HalideBuffer<const void> input_buf = input()->buffer();
+
+    int concatenated_i = 0;
+    for (int i = 0; i < output_count(); i++) {
+        HalideBuffer<void> output_buf = output(i)->buffer();
+        assert(output_buf.dim(axis_).min() == 0);
+
+        output_buf.translate(axis_, concatenated_i);
+        requantize(input_buf, input()->quantization(), output_buf, output(i)->quantization());
+
+        concatenated_i += output_buf.dim(axis_).extent();
+    }
+}
+
 BoundsMap TileConvFilterOp::map_bounds(int input_idx, int output_idx) const {
     assert(input_idx == 0);
     assert(output_idx == 0);
@@ -1379,6 +1440,7 @@ void UnaryOp::execute() {
 
         const int left_shift = 6;
 
+        std::array<int16_t, 64> program_buffer;
         if (op_ == Logistic) {
             const double real_in_multiplier = in_scale / (1 << left_shift);
 
@@ -1388,8 +1450,15 @@ void UnaryOp::execute() {
             assert(out->quantization().scale.at(0) == 1.0f / 256.0f);
             assert(out->quantization().zero.at(0) == 0);
 
+            // Build a program to implement the logistic op.
+            ElementwiseAssembler p(program_buffer);
+            auto input_zeroed = p.sub(p.input(0), input_zero);
+            auto input_scaled = p.mul_shift(input_zeroed, in_mul_and_shift.multiplier, 15 - left_shift);
+            auto result = p.logistic(8, input_scaled, -in_mul_and_shift.shift);
+            auto program_buf = p.assemble({result});
+
             auto logistic_rank1 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
-                CHECK(0 == logistic_uint8(in_buf, input_zero, in_mul_and_shift.multiplier, -in_mul_and_shift.shift, out_buf));
+                CHECK(0 == elementwise_5xuint8_1xuint8(in_buf, in_buf, in_buf, in_buf, in_buf, program_buf, out_buf));
             };
             elementwise_loop_nest<1>(logistic_rank1, in_buf, out_buf);
             return;
@@ -1402,8 +1471,15 @@ void UnaryOp::execute() {
             assert(out->quantization().scale.at(0) == 1.0f / 128.0f);
             assert(out->quantization().zero.at(0) == 128);
 
+            // Build a program to implement the tanh op.
+            ElementwiseAssembler p(program_buffer);
+            auto input_zeroed = p.sub(p.input(0), input_zero);
+            auto input_scaled = p.mul_shift(input_zeroed, in_mul_and_shift.multiplier, 15 - left_shift);
+            auto result = p.add(p.tanh(7, input_scaled, -in_mul_and_shift.shift), 128);
+            auto program_buf = p.assemble({result});
+
             auto tanh_rank1 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
-                CHECK(0 == tanh_uint8(in_buf, input_zero, in_mul_and_shift.multiplier, -in_mul_and_shift.shift, out_buf));
+                CHECK(0 == elementwise_5xuint8_1xuint8(in_buf, in_buf, in_buf, in_buf, in_buf, program_buf, out_buf));
             };
             elementwise_loop_nest<1>(tanh_rank1, in_buf, out_buf);
             return;
@@ -1439,15 +1515,15 @@ void DepthwiseConv2DOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 
+void ElementwiseProgramOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
 void FullyConnectedOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 
 void L2NormalizationOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void LstmElementwiseOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 
@@ -1468,6 +1544,10 @@ void SoftmaxOp::accept(OpVisitor *v) {
 }
 
 void SpaceDepthOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void SplitOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 
