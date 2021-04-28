@@ -9,17 +9,28 @@ using Slot = ElementwiseAssembler::Slot;
 
 const char *ElementwiseAssembler::to_string(OpCode op) {
     switch (op) {
-    case Add: return "Add";
-    case Sub: return "Sub";
-    case MulAdd: return "MulAdd";
-    case MulShift: return "MulShift";
-    case Shift: return "Shift";
-    case Min: return "Min";
-    case Max: return "Max";
-    case Clamp: return "Clamp";
-    case Logistic: return "Logistic";
-    case Tanh: return "Tanh";
-    default: return "Unknown";
+    case Add:
+        return "Add";
+    case Sub:
+        return "Sub";
+    case MulAdd:
+        return "MulAdd";
+    case MulShift:
+        return "MulShift";
+    case Shift:
+        return "Shift";
+    case Min:
+        return "Min";
+    case Max:
+        return "Max";
+    case Clamp:
+        return "Clamp";
+    case Logistic:
+        return "Logistic";
+    case Tanh:
+        return "Tanh";
+    default:
+        return "Unknown";
     }
 }
 
@@ -28,17 +39,28 @@ namespace {
 // Returns a mask with bit (1 << i) set to 1 if operand i is relevant for the op.
 int get_opcode_operand_mask(ElementwiseAssembler::OpCode op) {
     switch (op) {
-    case ElementwiseAssembler::Add: return 0x7;
-    case ElementwiseAssembler::Sub: return 0x7;
-    case ElementwiseAssembler::MulAdd: return 0xf;
-    case ElementwiseAssembler::MulShift: return 0xf;
-    case ElementwiseAssembler::Shift: return 0x7;
-    case ElementwiseAssembler::Min: return 0x7;
-    case ElementwiseAssembler::Max: return 0x7;
-    case ElementwiseAssembler::Clamp: return 0xd;
-    case ElementwiseAssembler::Logistic: return 0xf;
-    case ElementwiseAssembler::Tanh: return 0xf;
-    default: return 0;
+    case ElementwiseAssembler::Add:
+        return 0x7;
+    case ElementwiseAssembler::Sub:
+        return 0x7;
+    case ElementwiseAssembler::MulAdd:
+        return 0xf;
+    case ElementwiseAssembler::MulShift:
+        return 0xf;
+    case ElementwiseAssembler::Shift:
+        return 0x7;
+    case ElementwiseAssembler::Min:
+        return 0x7;
+    case ElementwiseAssembler::Max:
+        return 0x7;
+    case ElementwiseAssembler::Clamp:
+        return 0xd;
+    case ElementwiseAssembler::Logistic:
+        return 0xf;
+    case ElementwiseAssembler::Tanh:
+        return 0xf;
+    default:
+        return 0;
     }
 }
 

@@ -1,6 +1,6 @@
 #include "interpreter/lower.h"
-#include "interpreter/ops.h"
 #include "interpreter/elementwise_program.h"
+#include "interpreter/ops.h"
 
 namespace hannk {
 

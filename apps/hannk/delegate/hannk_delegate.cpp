@@ -676,7 +676,7 @@ private:
         } else {
             const TfLiteReshapeParams *params = (const TfLiteReshapeParams *)(node->builtin_data);
             if (params) {
-                HalideBuffer<int32_t> shape_data(const_cast<int32_t*>(params->shape), params->num_dimensions);
+                HalideBuffer<int32_t> shape_data(const_cast<int32_t *>(params->shape), params->num_dimensions);
                 shape_tensor = std::make_shared<Tensor>(input->name() + "_shape", shape_data);
             }
         }
