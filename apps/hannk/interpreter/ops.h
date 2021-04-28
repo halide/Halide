@@ -69,6 +69,7 @@ public:
 
 class ConcatenationOp : public Op {
     int axis_;
+    bool is_no_op_ = false;
 
 public:
     ConcatenationOp(std::vector<TensorPtr> inputs, TensorPtr output, int axis)
@@ -77,6 +78,9 @@ public:
 
     int axis() const {
         return axis_;
+    }
+    void set_no_op() {
+        is_no_op_ = true;
     }
 
     std::unique_ptr<Op> clone(TensorMap &map) const {
@@ -200,6 +204,39 @@ public:
     }
 };
 
+class ElementwiseProgramOp : public ElementwiseOp {
+private:
+    Halide::Runtime::Buffer<int16_t> program_;
+
+public:
+    ElementwiseProgramOp(std::vector<TensorPtr> inputs, TensorPtr output, HalideBuffer<int16_t> program)
+        : ElementwiseOp(std::move(inputs), {output}), program_(program) {
+    }
+    ElementwiseProgramOp(std::vector<TensorPtr> inputs, std::vector<TensorPtr> outputs, HalideBuffer<int16_t> program)
+        : ElementwiseOp(std::move(inputs), std::move(outputs)), program_(program) {
+    }
+
+    std::unique_ptr<Op> clone(TensorMap &map) const {
+        std::vector<TensorPtr> inputs, outputs;
+        for (int i = 0; i < input_count(); i++) {
+            inputs.push_back(apply(map, input(i)));
+        }
+        for (int i = 0; i < output_count(); i++) {
+            inputs.push_back(apply(map, output(i)));
+        }
+        return ::hannk::make_unique<ElementwiseProgramOp>(
+            std::move(inputs), std::move(outputs), program_);
+    }
+
+    void accept(OpVisitor *v);
+
+    void execute();
+
+    void dump(std::ostream &os) const {
+        os << "  ElementwiseProgram" << std::endl;
+    }
+};
+
 class FullyConnectedOp : public Op {
     ActivationFunction activation_;
 
@@ -257,27 +294,6 @@ public:
 
     void dump(std::ostream &os) const {
         os << "  L2Normalization " << output()->name() << std::endl;
-    }
-};
-
-class LstmElementwiseOp : public ElementwiseOp {
-public:
-    LstmElementwiseOp(TensorPtr activ_temp, TensorPtr prev_state_input, TensorPtr state_output, TensorPtr activ_output)
-        : ElementwiseOp({activ_temp, prev_state_input}, {state_output, activ_output}) {
-    }
-
-    std::unique_ptr<Op> clone(TensorMap &map) const {
-        return ::hannk::make_unique<LstmElementwiseOp>(
-            apply(map, input(0)), apply(map, input(1)),
-            apply(map, output(0)), apply(map, output(1)));
-    }
-
-    void accept(OpVisitor *v);
-
-    void execute();
-
-    void dump(std::ostream &os) const {
-        os << "  LstmElementwiseOp " << std::endl;
     }
 };
 
@@ -465,7 +481,7 @@ class SpaceDepthOp : public Op {
     int block_size_;
 
 public:
-    SpaceDepthOp(TensorPtr input, TensorPtr output, float block_size)
+    SpaceDepthOp(TensorPtr input, TensorPtr output, int block_size)
         : Op({input}, {output}), block_size_(block_size) {
     }
 
@@ -482,6 +498,42 @@ public:
     void dump(std::ostream &os) const {
         const char *name = block_size_ > 0 ? "SpaceToDepth" : "DepthToSpace";
         os << "  " << name << " " << output()->name() << std::endl;
+    }
+};
+
+class SplitOp : public Op {
+    int axis_;
+    bool is_no_op_;
+
+public:
+    SplitOp(TensorPtr input, std::vector<TensorPtr> outputs, int axis)
+        : Op({input}, std::move(outputs)), axis_(axis) {
+    }
+
+    std::unique_ptr<Op> clone(TensorMap &map) const {
+        std::vector<TensorPtr> outputs;
+        for (int i = 0; i < output_count(); i++) {
+            outputs.push_back(apply(map, output(i)));
+        }
+        return ::hannk::make_unique<SplitOp>(
+            apply(map, input()), std::move(outputs), axis_);
+    }
+
+    int axis() const {
+        return axis_;
+    }
+    void set_no_op() {
+        is_no_op_ = true;
+    }
+
+    void accept(OpVisitor *v);
+
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
+
+    void execute();
+
+    void dump(std::ostream &os) const {
+        os << "  Split" << std::endl;
     }
 };
 
@@ -554,11 +606,11 @@ public:
     }
     virtual void visit(DepthwiseConv2DOp *op) {
     }
+    virtual void visit(ElementwiseProgramOp *op) {
+    }
     virtual void visit(FullyConnectedOp *op) {
     }
     virtual void visit(L2NormalizationOp *op) {
-    }
-    virtual void visit(LstmElementwiseOp *op) {
     }
     virtual void visit(PadOp *op) {
     }
@@ -573,6 +625,8 @@ public:
     virtual void visit(SoftmaxOp *op) {
     }
     virtual void visit(SpaceDepthOp *op) {
+    }
+    virtual void visit(SplitOp *op) {
     }
     virtual void visit(TileConvFilterOp *op) {
     }

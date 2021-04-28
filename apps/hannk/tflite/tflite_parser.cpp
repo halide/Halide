@@ -305,6 +305,36 @@ public:
         return ::hannk::make_unique<SpaceDepthOp>(input, output, -block_size);
     }
 
+    std::unique_ptr<Op> parse_split(const tflite::Operator *op, int axis_tensor_index, int input_tensor_index) {
+        assert(axis_tensor_index < op->inputs()->size());
+        TensorPtr axis_tensor = tensors_[op->inputs()->Get(axis_tensor_index)];
+        CHECK(axis_tensor->is_allocated()) << "Can't handle dynamic axis for Split.\n";
+        int axis = axis_tensor->buffer<int32_t>()();
+
+        assert(input_tensor_index < op->inputs()->size());
+        TensorPtr input = tensors_[op->inputs()->Get(input_tensor_index)];
+        std::vector<TensorPtr> outputs;
+        for (auto i = op->outputs()->cbegin(); i != op->outputs()->cend(); ++i) {
+            outputs.push_back(tensors_[*i]);
+        }
+        // Handle negative values, which are legal
+        if (axis < 0) {
+            axis = (int)input->rank() + axis;
+        }
+        // Now 'flip' the axis so that it refers to the right dimension in
+        // the Tensor (since we reverse the dimension order)
+        axis = (int)input->rank() - axis - 1;
+        return ::hannk::make_unique<SplitOp>(input, outputs, axis);
+    }
+
+    std::unique_ptr<Op> parse_split(const tflite::Operator *op) {
+        return parse_split(op, 0, 1);
+    }
+
+    std::unique_ptr<Op> parse_split_v(const tflite::Operator *op) {
+        return parse_split(op, 2, 0);
+    }
+
     std::unique_ptr<Op> parse_softmax(const tflite::Operator *op) {
         const tflite::SoftmaxOptions *options =
             op->builtin_options_as_SoftmaxOptions();
@@ -421,6 +451,10 @@ public:
             return parse_softmax(op);
         case tflite::BuiltinOperator_SPACE_TO_DEPTH:
             return parse_space_to_depth(op);
+        case tflite::BuiltinOperator_SPLIT:
+            return parse_split(op);
+        case tflite::BuiltinOperator_SPLIT_V:
+            return parse_split_v(op);
         case tflite::BuiltinOperator_SQUARE:
             return parse_unary(op, UnaryOp::Square);
         case tflite::BuiltinOperator_SUB:
