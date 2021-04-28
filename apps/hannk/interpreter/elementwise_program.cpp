@@ -105,7 +105,7 @@ void ElementwiseAssembler::disassemble(std::ostream &output) {
         OpCode op = (OpCode)instructions(0, i);
         output
             << std::setw(3) << std::right << i + 1 << " "
-            << std::setw(20) << std::left << to_string(op);
+            << std::setw(12) << std::left << to_string(op);
 
         int mask = get_opcode_operand_mask(op);
         for (int j = 0; j < 4; j++) {
