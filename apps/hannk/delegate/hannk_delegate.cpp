@@ -745,10 +745,12 @@ private:
     }
 
     std::unique_ptr<Op> BuildSplit(TfLiteContext *context, TfLiteNode *node, int axis_tensor_index, int input_tensor_index) {
+        assert(axis_tensor_index < node->inputs->size);
         auto axis_tensor = GetTensorById(context, node->inputs->data[axis_tensor_index]);
         CHECK(axis_tensor->is_allocated()) << "Can't handle dynamic axis for Split.\n";
         int axis = axis_tensor->buffer<int32_t>()();
 
+        assert(input_tensor_index < node->inputs->size);
         auto input = GetTensorById(context, node->inputs->data[input_tensor_index]);
         std::vector<TensorPtr> outputs(node->outputs->size);
         for (int i = 0; i < node->outputs->size; i++) {

@@ -303,10 +303,12 @@ public:
     }
 
     std::unique_ptr<Op> parse_split(const tflite::Operator *op, int axis_tensor_index, int input_tensor_index) {
+        assert(axis_tensor_index < op->inputs()->size());
         TensorPtr axis_tensor = tensors_[op->inputs()->Get(axis_tensor_index)];
         CHECK(axis_tensor->is_allocated()) << "Can't handle dynamic axis for Split.\n";
         int axis = axis_tensor->buffer<int32_t>()();
 
+        assert(input_tensor_index < op->inputs()->size());
         TensorPtr input = tensors_[op->inputs()->Get(input_tensor_index)];
         std::vector<TensorPtr> outputs;
         for (auto i = op->outputs()->cbegin(); i != op->outputs()->cend(); ++i) {
