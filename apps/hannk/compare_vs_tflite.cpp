@@ -303,13 +303,15 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
             // which should match our results exactly (since we mimic the same result,
             // whether or not we actually generate those specific instructions).
             // So leave the options at their default.
+            const float tolerance = 1.0f / 256.0f;
 #else
             // TFLite on x86 (on desktop platforms, at least) appears to mostly
             // use the reference implementations, which don't have the same
             // rounding-shift behavior. We'll bump up the 'close' value for these.
             // This is a lttle hand-wavy but is a decent proxy for now.
-            options.close_thresh = 3.0;
+            const float tolerance = 1.0f / 100.0f;
 #endif
+            options.close_thresh = std::ceil((1ull << tflite_buf.type().bits) * tolerance);
             CompareBuffersResult r = dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf, options);
             if (r.ok) {
                 if (verbosity >= 2) {
