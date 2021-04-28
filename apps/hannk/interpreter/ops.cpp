@@ -1116,6 +1116,8 @@ void ReductionOp::execute() {
                     extents[d] = input_buf.dim(d).extent();
                 }
             }
+            pad_to_rank(4, input_buf);
+            pad_to_rank(4, output_buf);
             CHECK(0 == mean_uint8(input_buf, mins[0], extents[0], mins[1], extents[1],
                                   mins[2], extents[2], mins[3], extents[3], output_buf));
         }
