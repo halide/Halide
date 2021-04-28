@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
         f(x, y) = random_float();
         f.vectorize(x, 4);
         f.parallel(y);
-        Buffer<float> rand_image = f.realize(1024, 1024);
+        Buffer<float> rand_image = f.realize({1024, 1024});
 
         // Do some tests for randomness.
 
@@ -80,14 +80,14 @@ int main(int argc, char **argv) {
 
         seed.set(0);
 
-        Buffer<double> im1 = f.realize(1024, 1024);
-        Buffer<double> im2 = f.realize(1024, 1024);
+        Buffer<double> im1 = f.realize({1024, 1024});
+        Buffer<double> im2 = f.realize({1024, 1024});
 
         Func g;
         g(x, y) = f(x, y);
         seed.set(1);
 
-        Buffer<double> im3 = g.realize(1024, 1024);
+        Buffer<double> im3 = g.realize({1024, 1024});
 
         RDom r(im1);
         Expr v1 = im1(r.x, r.y);
@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
     {
         Func f;
         f(x, y) = random_int();
-        Buffer<int> im = f.realize(1024, 1024);
+        Buffer<int> im = f.realize({1024, 1024});
 
         // Count the number of set bits;
         RDom r(im);

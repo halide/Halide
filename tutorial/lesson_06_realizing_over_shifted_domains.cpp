@@ -39,10 +39,10 @@ int main(int argc, char **argv) {
 
     // Previously we've realized gradient like so:
     //
-    // gradient.realize(8, 8);
+    // gradient.realize({8, 8});
     //
     // This does three things internally:
-    // 1) Generates code than can evaluate gradient over an arbitrary
+    // 1) Generates code that can evaluate gradient over an arbitrary
     // rectangle.
     // 2) Allocates a new 8 x 8 image.
     // 3) Runs the generated code to evaluate gradient for all x, y

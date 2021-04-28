@@ -36,7 +36,7 @@ def test_misused_and():
     f = hl.Func('f')
     try:
         f[x, y] = hl.print_when(x == 0 and y == 0, 0, "x=",x, "y=", y)
-        f.realize(10, 10)
+        f.realize([10, 10])
     except ValueError as e:
         assert 'cannot be converted to a bool' in str(e)
     else:
@@ -48,7 +48,7 @@ def test_misused_or():
     f = hl.Func('f')
     try:
         f[x, y] = hl.print_when(x == 0 or y == 0, 0, "x=",x, "y=", y)
-        f.realize(10, 10)
+        f.realize([10, 10])
     except ValueError as e:
         assert 'cannot be converted to a bool' in str(e)
     else:

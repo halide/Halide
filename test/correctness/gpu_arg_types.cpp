@@ -19,8 +19,8 @@ int main(int argc, char *argv[]) {
     foo.set(-1);
     f.gpu_tile(x, tx, 8);
 
-    Buffer<int16_t> out = f.realize(256);
-    Buffer<int16_t> out2 = g.realize(256);
+    Buffer<int16_t> out = f.realize({256});
+    Buffer<int16_t> out2 = g.realize({256});
     out.copy_to_host();
 
     for (int i = 0; i < 256; i++) {

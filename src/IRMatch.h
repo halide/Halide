@@ -50,6 +50,10 @@ bool expr_match(const Expr &pattern, const Expr &expr, std::vector<Expr> &result
  */
 bool expr_match(const Expr &pattern, const Expr &expr, std::map<std::string, Expr> &result);
 
+/** Rewrite the expression x to have `lanes` lanes. This is useful
+ * for substituting the results of expr_match into a pattern expression. */
+Expr with_lanes(const Expr &x, int lanes);
+
 void expr_match_test();
 
 /** An alternative template-metaprogramming approach to expression
@@ -252,7 +256,7 @@ struct WildConstInt {
             halide_scalar_value_t val;
             halide_type_t type;
             state.get_bound_const(i, val, type);
-            return e.type == type && value == val.u.i64;
+            return (halide_type_t)e.type == type && value == val.u.i64;
         }
         state.set_bound_const(i, value, e.type);
         return true;
@@ -318,7 +322,7 @@ struct WildConstUInt {
             halide_scalar_value_t val;
             halide_type_t type;
             state.get_bound_const(i, val, type);
-            return e.type == type && value == val.u.u64;
+            return (halide_type_t)e.type == type && value == val.u.u64;
         }
         state.set_bound_const(i, value, e.type);
         return true;
@@ -371,7 +375,7 @@ struct WildConstFloat {
             halide_scalar_value_t val;
             halide_type_t type;
             state.get_bound_const(i, val, type);
-            return e.type == type && value == val.u.f64;
+            return (halide_type_t)e.type == type && value == val.u.f64;
         }
         state.set_bound_const(i, value, e.type);
         return true;
@@ -1468,6 +1472,13 @@ struct Intrin {
             return rounding_shift_right(arg0, arg1);
         }
 
+        Expr arg2 = std::get<const_min(2, sizeof...(Args) - 1)>(args).make(state, type_hint);
+        if (intrin == Call::mul_shift_right) {
+            return mul_shift_right(arg0, arg1, arg2);
+        } else if (intrin == Call::rounding_mul_shift_right) {
+            return rounding_mul_shift_right(arg0, arg1, arg2);
+        }
+
         internal_error << "Unhandled intrinsic in IRMatcher: " << intrin;
         return Expr();
     }
@@ -1544,6 +1555,14 @@ auto rounding_shift_left(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a
 template<typename A, typename B>
 auto rounding_shift_right(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
     return {Call::rounding_shift_right, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B, typename C>
+auto mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
+    return {Call::mul_shift_right, pattern_arg(a), pattern_arg(b), pattern_arg(c)};
+}
+template<typename A, typename B, typename C>
+auto rounding_mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
+    return {Call::rounding_mul_shift_right, pattern_arg(a), pattern_arg(b), pattern_arg(c)};
 }
 
 template<typename A>
@@ -2206,7 +2225,7 @@ struct CanProve {
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = condition.type().lanes();
-    };
+    }
 };
 
 template<typename A, typename Prover>
@@ -2243,7 +2262,7 @@ struct IsFloat {
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = t.lanes();
-    };
+    }
 };
 
 template<typename A>
@@ -2281,7 +2300,7 @@ struct IsInt {
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = t.lanes();
-    };
+    }
 };
 
 template<typename A>
@@ -2323,7 +2342,7 @@ struct IsUInt {
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = t.lanes();
-    };
+    }
 };
 
 template<typename A>
@@ -2364,7 +2383,7 @@ struct IsScalar {
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = t.lanes();
-    };
+    }
 };
 
 template<typename A>
@@ -2399,7 +2418,7 @@ struct IsMaxValue {
         }
         ty.code = halide_type_uint;
         ty.bits = 1;
-    };
+    }
 };
 
 template<typename A>
@@ -2436,7 +2455,7 @@ struct IsMinValue {
         }
         ty.code = halide_type_uint;
         ty.bits = 1;
-    };
+    }
 };
 
 template<typename A>

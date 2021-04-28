@@ -1,7 +1,3 @@
-#include "CodeGen_Hexagon.h"
-
-#include <iostream>
-#include <mutex>
 #include <sstream>
 #include <utility>
 
@@ -12,14 +8,11 @@
 #include "Debug.h"
 #include "HexagonOptimize.h"
 #include "IREquality.h"
-#include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "LICM.h"
 #include "LLVM_Headers.h"
 #include "LoopCarry.h"
-#include "Monotonic.h"
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Target.h"
@@ -96,7 +89,6 @@ protected:
      * return null if the maybe option is true and the intrinsic is
      * not found. */
     ///@{
-    using CodeGen_LLVM::call_intrin;
     llvm::Value *call_intrin(Type t, const std::string &name,
                              std::vector<Expr>, bool maybe = false);
     llvm::Value *call_intrin(llvm::Type *t, const std::string &name,
@@ -138,8 +130,6 @@ private:
 
 CodeGen_Hexagon::CodeGen_Hexagon(const Target &t)
     : CodeGen_Posix(t) {
-    user_assert(llvm_Hexagon_enabled)
-        << "llvm build not configured with Hexagon target enabled.\n";
     if (target.has_feature(Halide::Target::HVX_v66)) {
         isa_version = 66;
     } else if (target.has_feature(Halide::Target::HVX_v65)) {
@@ -293,8 +283,6 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
 
             return Call::make(op->type, Call::if_then_else,
                               {condition, load, make_zero(op->type)}, Call::Intrinsic);
-
-            return load;
         } else {
             // It's a predicated vector gather. Just scalarize. We'd
             // prefer to keep it in a loop, but that would require
@@ -1252,7 +1240,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             // Let LLVM handle concat or slices.
             return CodeGen_Posix::shuffle_vectors(a, b, indices);
         }
-        return vlut(concat_vectors({a, b}), indices);
+        return vdelta(concat_vectors({a, b}), indices);
     }
 
     if (stride == 1) {
@@ -1541,6 +1529,7 @@ bool generate_vdelta(const std::vector<int> &indices, bool reverse,
     return true;
 }
 
+// Try generating vdelta/vrdelta before falling back to vlut.
 Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
     llvm::Type *lut_ty = lut->getType();
     int lut_elements = get_vector_num_elements(lut_ty);
@@ -1564,8 +1553,8 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
             }
         }
         Value *result = vdelta(i8_lut, i8_indices);
-        result = builder->CreateBitCast(result, lut_ty);
-        return result;
+        llvm::Type *result_ty = get_vector_type(get_vector_element_type(lut_ty), indices.size());
+        return builder->CreateBitCast(result, result_ty);
     }
 
     // We can only use vdelta to produce a single native vector at a
@@ -1647,8 +1636,6 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
 
     // TODO: If the above fails, we might be able to use a vdelta and
     // vrdelta instruction together to implement the shuffle.
-    internal_error << "Unsupported vdelta operation.\n";
-
     // TODO: If the vdelta results are sparsely used, it might be
     // better to use vlut.
     return vlut(lut, indices);
@@ -1800,8 +1787,10 @@ Value *CodeGen_Hexagon::call_intrin(Type result_type, const string &name,
             fn = fn2;
         }
     }
-    return call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
-                       get_llvm_function_name(fn), std::move(args));
+    fn->addFnAttr(llvm::Attribute::ReadNone);
+    fn->addFnAttr(llvm::Attribute::NoUnwind);
+    return CodeGen_Posix::call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
+                                      fn, std::move(args));
 }
 
 Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
@@ -1821,8 +1810,10 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
             fn = fn2;
         }
     }
-    return call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
-                       get_llvm_function_name(fn), std::move(args));
+    fn->addFnAttr(llvm::Attribute::ReadNone);
+    fn->addFnAttr(llvm::Attribute::NoUnwind);
+    return CodeGen_Posix::call_intrin(result_type, get_vector_num_elements(fn->getReturnType()),
+                                      fn, std::move(args));
 }
 
 string CodeGen_Hexagon::mcpu() const {
@@ -2064,33 +2055,6 @@ void CodeGen_Hexagon::visit(const Call *op) {
         llvm::Function *fn = module->getFunction("halide.hexagon.scatter.release");
         value = builder->CreateCall(fn, {ptr});
         return;
-    } else if (op->is_intrinsic(Call::mulhi_shr) && op->type.is_vector() &&
-               (op->type.bits() == 8 || op->type.bits() == 16)) {
-        internal_assert(op->args.size() == 3);
-        Type wide_ty = op->type.widen();
-
-        // Generate a widening multiply.
-        Expr p_wide = Call::make(
-            wide_ty, "halide.hexagon.mpy" + type_suffix(op->args[0], op->args[1]),
-            {op->args[0], op->args[1]}, Call::PureExtern);
-
-        // Keep the high half (truncate the low half). This also
-        // re-interleaves after mpy deinterleaved.
-        Expr p = Call::make(op->type,
-                            "halide.hexagon.trunclo" + type_suffix(p_wide, false),
-                            {p_wide}, Call::PureExtern);
-
-        // Apply the remaining shift.
-        const UIntImm *shift = op->args[2].as<UIntImm>();
-        internal_assert(shift != nullptr)
-            << "Third argument to mulhi_shr intrinsic must be an unsigned integer "
-               "immediate.\n";
-        if (shift->value != 0) {
-            p = p >> make_const(p.type(), shift->value);
-        }
-
-        value = codegen(p);
-        return;
     } else if (op->is_intrinsic(Call::sorted_avg) && op->type.is_vector() &&
                ((op->type.is_uint() &&
                  (op->type.bits() == 8 || op->type.bits() == 16)) ||
@@ -2326,16 +2290,15 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
 
 }  // namespace
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
-    std::unique_ptr<CodeGen_Posix> ret(std::make_unique<CodeGen_Hexagon>(target));
-    ret->set_context(context);
-    return ret;
+std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target) {
+    return std::make_unique<CodeGen_Hexagon>(target);
 }
 
 #else  // WITH_HEXAGON
 
-std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target, llvm::LLVMContext &context) {
+std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target) {
     user_error << "hexagon not enabled for this build of Halide.\n";
+    return nullptr;
 }
 
 #endif  // WITH_HEXAGON

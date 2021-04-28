@@ -12,7 +12,7 @@ bool test(Expr e, const char *funcname, int vector_width, int N, Buffer<T> &inpu
     if (vector_width > 1) {
         f.vectorize(x, vector_width);
     }
-    Buffer<T> im = f.realize(N);
+    Buffer<T> im = f.realize({N});
 
     printf("Testing %s (%s x %d)\n", funcname, type_of<T>() == Float(32) ? "float" : "double", vector_width);
     bool ok = true;

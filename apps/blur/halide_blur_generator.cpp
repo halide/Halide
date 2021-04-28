@@ -82,6 +82,7 @@ public:
             }
         } else if (get_target().has_feature(Target::HVX)) {
             // Hexagon schedule.
+            // TODO: Try using a schedule like the CPU one below.
             const int vector_size = 128;
 
             blur_y.compute_root()
@@ -96,8 +97,17 @@ public:
                 .vectorize(x, vector_size);
         } else {
             // CPU schedule.
-            blur_y.split(y, y, yi, 8).parallel(y).vectorize(x, 8);
-            blur_x.store_at(blur_y, y).compute_at(blur_y, yi).vectorize(x, 8);
+            // Compute blur_x as needed at each vector of the output.
+            // Halide will store blur_x in a circular buffer so its
+            // results can be re-used.
+            blur_y
+                .split(y, y, yi, 32)
+                .parallel(y)
+                .vectorize(x, 16);
+            blur_x
+                .store_at(blur_y, y)
+                .compute_at(blur_y, x)
+                .vectorize(x, 16);
         }
     }
 };

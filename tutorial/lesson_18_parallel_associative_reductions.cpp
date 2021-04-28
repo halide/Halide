@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
         histogram(input(r.x, r.y) / 32) += 1;
 
         histogram.vectorize(i, 8);
-        histogram.realize(8);
+        histogram.realize({8});
 
         // See figures/lesson_18_hist_serial.mp4 for a visualization of
         // what this does.
@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
         intermediate.vectorize(i, 8);
         histogram.vectorize(i, 8);
 
-        histogram.realize(8);
+        histogram.realize({8});
 
         // See figures/lesson_18_hist_manual_par.mp4 for a visualization of
         // what this does.
@@ -156,7 +156,7 @@ int main(int argc, char **argv) {
         // can't prove the associativity of a reduction, it will throw
         // an error.
 
-        Buffer<int> halide_result = histogram.realize(8);
+        Buffer<int> halide_result = histogram.realize({8});
 
         // See figures/lesson_18_hist_rfactor_par.mp4 for a
         // visualization of what this does.
@@ -223,7 +223,7 @@ int main(int argc, char **argv) {
         intermediate.vectorize(x, 8);
         histogram.vectorize(x, 8);
 
-        Buffer<int> halide_result = histogram.realize(8);
+        Buffer<int> halide_result = histogram.realize({8});
 
         // See figures/lesson_18_hist_rfactor_vec.mp4 for a
         // visualization of what this does.
@@ -294,7 +294,7 @@ int main(int argc, char **argv) {
         intermediate.vectorize(x, 8);
         histogram.vectorize(x, 8);
 
-        Buffer<int> halide_result = histogram.realize(8);
+        Buffer<int> halide_result = histogram.realize({8});
 
         // See figures/lesson_18_hist_rfactor_tile.mp4 for a visualization of
         // what this does.

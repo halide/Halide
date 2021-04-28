@@ -17,7 +17,7 @@ void define_tuple(py::module &m) {
             .def(py::init([](const py::tuple &t) -> Tuple {
                 std::vector<Expr> v;
                 v.reserve(t.size());
-                for (const auto &o : t) {
+                for (const auto o : t) {
                     v.push_back(o.cast<Expr>());
                 }
                 return Tuple(v);

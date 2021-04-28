@@ -56,7 +56,7 @@ else ()
     set(Halide_TARGET "${Halide_CMAKE_TARGET}" CACHE STRING "The target to use when compiling AOT tests")
 endif ()
 
-if (NOT Halide_TARGET_MESSAGE_PRINTED)
+if (NOT Halide_TARGET_MESSAGE_PRINTED AND NOT Halide_FIND_QUIETLY)
     message(STATUS "Halide detected current CMake target:  ${Halide_CMAKE_TARGET}")
     message(STATUS "Halide using default generator target: ${Halide_TARGET}")
     set(Halide_TARGET_MESSAGE_PRINTED TRUE CACHE INTERNAL "Limit printing the detected targets multiple times")

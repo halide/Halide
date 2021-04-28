@@ -49,10 +49,21 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
             // int -> float
             return make_const(op->type, safe_numeric_cast<double>(i));
         } else if (op->type.is_int() &&
-                   const_uint(value, &u)) {
+                   const_uint(value, &u) &&
+                   op->type.bits() < value.type().bits()) {
             // uint -> int
             // Recursively call mutate just to set the bounds
             return mutate(make_const(op->type, safe_numeric_cast<int64_t>(u)), bounds);
+        } else if (op->type.is_int() &&
+                   const_uint(value, &u) &&
+                   op->type.bits() >= value.type().bits()) {
+            // uint -> int with less than or equal to the number of bits
+            if (op->type.can_represent(u)) {
+                // Recursively call mutate just to set the bounds
+                return mutate(make_const(op->type, safe_numeric_cast<int64_t>(u)), bounds);
+            } else {
+                return make_signed_integer_overflow(op->type);
+            }
         } else if (op->type.is_uint() &&
                    const_uint(value, &u)) {
             // uint -> uint

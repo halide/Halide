@@ -35,11 +35,7 @@ extern int halide_metal_run(void *user_context,
                             int shared_mem_bytes,
                             size_t arg_sizes[],
                             void *args[],
-                            int8_t arg_is_buffer[],
-                            int num_attributes,
-                            float *vertex_buffer,
-                            int num_coords_dim0,
-                            int num_coords_dim1);
+                            int8_t arg_is_buffer[]);
 // @}
 
 /** Set the underlying MTLBuffer for a halide_buffer_t. This memory should be
@@ -91,7 +87,7 @@ struct halide_metal_command_queue;
 extern int halide_metal_acquire_context(void *user_context, struct halide_metal_device **device_ret,
                                         struct halide_metal_command_queue **queue_ret, bool create);
 
-/** This call balances each successfull halide_metal_acquire_context call.
+/** This call balances each successful halide_metal_acquire_context call.
  * If halide_metal_acquire_context is replaced, this routine must be replaced
  * as well.
  */

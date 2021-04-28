@@ -59,8 +59,8 @@ bool test() {
     // is small enough to fit in cache.
     g.reorder(y, x);
 
-    Buffer<A> outputg = g.realize(W, H);
-    Buffer<A> outputf = f.realize(W, H);
+    Buffer<A> outputg = g.realize({W, H});
+    Buffer<A> outputf = f.realize({W, H});
 
     double t_g = benchmark([&]() {
         g.realize(outputg);

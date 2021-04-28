@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
     im.set_device_dirty(true);
 
     // Explicitly don't use device support
-    f.realize(128, 128, Target{"host"});
+    f.realize({128, 128}, Target{"host"});
 
     printf("Success!\n");
     return 0;

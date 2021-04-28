@@ -36,40 +36,57 @@ def test_simplestub():
     f = simplestub.generate(target, buffer_input=b_in, func_input=f_in, float_arg=3.5)
     _realize_and_check(f)
 
-    # ----------- Inputs w/ mixed by-position and by-name
-    f = simplestub.generate(target, b_in, f_in, float_arg=3.5)
-    _realize_and_check(f)
-
-    f = simplestub.generate(target, b_in, float_arg=3.5, func_input=f_in)
+    f = simplestub.generate(target, float_arg=3.5, buffer_input=b_in, func_input=f_in)
     _realize_and_check(f)
 
     # ----------- Above set again, w/ GeneratorParam mixed in
     k = 42
 
+    # (positional)
     f = simplestub.generate(target, b_in, f_in, 3.5, offset=k)
     _realize_and_check(f, k)
 
+    # (keyword)
     f = simplestub.generate(target, offset=k, buffer_input=b_in, func_input=f_in, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = simplestub.generate(target, b_in, f_in, offset=k, float_arg=3.5)
+    f = simplestub.generate(target, buffer_input=b_in, offset=k, func_input=f_in, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = simplestub.generate(target, b_in, float_arg=3.5, offset=k, func_input=f_in)
+    f = simplestub.generate(target, buffer_input=b_in, func_input=f_in, offset=k, float_arg=3.5)
+    _realize_and_check(f, k)
+
+    f = simplestub.generate(target, buffer_input=b_in, float_arg=3.5, func_input=f_in, offset=k)
     _realize_and_check(f, k)
 
     # ----------- Test various failure modes
     try:
+        # Inputs w/ mixed by-position and by-name
+        f = simplestub.generate(target, b_in, f_in, float_arg=3.5)
+    except RuntimeError as e:
+        assert 'Cannot use both positional and keyword arguments for inputs.' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+    try:
         # too many positional args
         f = simplestub.generate(target, b_in, f_in, 3.5, 4)
     except RuntimeError as e:
-        assert 'Expected at most 3 positional args, but saw 4.' in str(e)
+        assert 'Expected exactly 3 positional args for inputs, but saw 4.' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+    try:
+        # too few positional args
+        f = simplestub.generate(target, b_in, f_in)
+    except RuntimeError as e:
+        assert 'Expected exactly 3 positional args for inputs, but saw 2.' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # Inputs that can't be converted to what the receiver needs (positional)
-        f = simplestub.generate(target, 3.141592, "happy")
+        f = simplestub.generate(target, hl.f32(3.141592), "happy", k)
     except RuntimeError as e:
         assert 'Unable to cast Python instance' in str(e)
     else:
@@ -84,32 +101,24 @@ def test_simplestub():
         assert False, 'Did not see expected exception!'
 
     try:
-        # Missing required inputs
-        f = simplestub.generate(target, b_in, f_in)
-    except RuntimeError as e:
-        assert "Generator Input named 'float_arg' was not specified." in str(e)
-    else:
-        assert False, 'Did not see expected exception!'
-
-    try:
         # Input specified by both pos and kwarg
         f = simplestub.generate(target, b_in, f_in, 3.5, float_arg=4.5)
     except RuntimeError as e:
-        assert "Generator Input named 'float_arg' was specified by both position and keyword." in str(e)
+        assert "Cannot use both positional and keyword arguments for inputs." in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # Bad input name
-        f = simplestub.generate(target, b_in, float_arg=3.5, offset=k, funk_input=f_in)
+        f = simplestub.generate(target, buffer_input=b_in, float_arg=3.5, offset=k, funk_input=f_in)
     except RuntimeError as e:
-        assert "Generator Input named 'func_input' was not specified." in str(e)
+        assert "Expected exactly 3 keyword args for inputs, but saw 2." in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # Bad gp name
-        f = simplestub.generate(target, b_in, float_arg=3.5, offset=k, func_input=f_in, nonexistent_generator_param="wat")
+        f = simplestub.generate(target, buffer_input=b_in, float_arg=3.5, offset=k, func_input=f_in, nonexistent_generator_param="wat")
     except RuntimeError as e:
         assert "Generator simplestub has no GeneratorParam named: nonexistent_generator_param" in str(e)
     else:
@@ -156,6 +165,9 @@ def test_complexstub():
     float_arg = 1.25
     int_arg = 33
 
+    func_input = hl.Func("func_input")
+    func_input[x, y, c] = hl.u16(x + y + c)
+
     r = complexstub(target,
                     typed_buffer_input=constant_image,
                     untyped_buffer_input=constant_image,
@@ -164,6 +176,7 @@ def test_complexstub():
                     float_arg=float_arg,
                     int_arg=[ int_arg, int_arg ],
                     untyped_buffer_output_type="uint8",
+                    extra_func_input=func_input,
                     vectorize=True)
 
     # return value is a tuple; unpack separately to avoid
@@ -173,9 +186,10 @@ def test_complexstub():
         array_output,
         typed_buffer_output,
         untyped_buffer_output,
-        static_compiled_buffer_output) = r
+        static_compiled_buffer_output,
+        extra_func_output) = r
 
-    b = simple_output.realize(32, 32, 3, target)
+    b = simple_output.realize([32, 32, 3], target)
     assert b.type() == hl.Float(32)
     for x in range(32):
         for y in range(32):
@@ -184,7 +198,7 @@ def test_complexstub():
                 actual = b[x, y, c]
                 assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
-    b = tuple_output.realize(32, 32, 3, target)
+    b = tuple_output.realize([32, 32, 3], target)
     assert b[0].type() == hl.Float(32)
     assert b[1].type() == hl.Float(32)
     assert len(b) == 2
@@ -199,7 +213,7 @@ def test_complexstub():
 
     assert len(array_output) == 2
     for a in array_output:
-        b = a.realize(32, 32, target)
+        b = a.realize([32, 32], target)
         assert b.type() == hl.Int(16)
         for x in range(32):
             for y in range(32):
@@ -211,7 +225,7 @@ def test_complexstub():
     # is used within another Generator; this isn't yet implemented since there
     # isn't yet Python bindings for Generator authoring. This section
     # of the test may need revision at that point.
-    b = typed_buffer_output.realize(32, 32, 3, target)
+    b = typed_buffer_output.realize([32, 32, 3], target)
     assert b.type() == hl.Float(32)
     for x in range(32):
         for y in range(32):
@@ -220,7 +234,7 @@ def test_complexstub():
                 actual = b[x, y, c]
                 assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
-    b = untyped_buffer_output.realize(32, 32, 3, target)
+    b = untyped_buffer_output.realize([32, 32, 3], target)
     assert b.type() == hl.UInt(8)
     for x in range(32):
         for y in range(32):
@@ -229,7 +243,7 @@ def test_complexstub():
                 actual = b[x, y, c]
                 assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
-    b = static_compiled_buffer_output.realize(4, 4, 1, target)
+    b = static_compiled_buffer_output.realize([4, 4, 1], target)
     assert b.type() == hl.UInt(8)
     for x in range(4):
         for y in range(4):
@@ -238,6 +252,13 @@ def test_complexstub():
                 actual = b[x, y, c]
                 assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
+    b = extra_func_output.realize([32, 32], target)
+    assert b.type() == hl.Float(64)
+    for x in range(32):
+        for y in range(32):
+            expected = x + y + 1
+            actual = b[x, y]
+            assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
 def test_partialbuildmethod():
     x, y, c = hl.Var(), hl.Var(), hl.Var()

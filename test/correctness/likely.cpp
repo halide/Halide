@@ -232,10 +232,10 @@ int main(int argc, char **argv) {
         // If either of these realize calls iterates from 0 to limit,
         // and then from limit to 10, we'll have a nice segfault.
         limit.set(10000000);
-        Buffer<int> result = g.realize(10);
+        Buffer<int> result = g.realize({10});
 
         limit.set(-10000000);
-        result = g.realize(10);
+        result = g.realize({10});
     }
 
     // The performance of this behavior is tested in

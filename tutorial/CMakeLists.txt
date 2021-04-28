@@ -141,7 +141,7 @@ add_dependencies(lesson_15_targets
 
 ##
 add_test(NAME tutorial_lesson_15_build_gens
-         COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target lesson_15_targets)
+         COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target lesson_15_targets --config $<CONFIG>)
 set_tests_properties(tutorial_lesson_15_build_gens PROPERTIES
                      LABELS tutorial
                      FIXTURES_SETUP tutorial_lesson_15)

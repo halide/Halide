@@ -84,7 +84,7 @@ def main():
     # Buffers. We call this a Realization. It's equivalent to a
     # std::vector of hl.Buffer/Image objects:
     if True:
-        im1, im2 = multi_valued.realize(80, 60)
+        im1, im2 = multi_valued.realize([80, 60])
         assert im1.type() == hl.Int(32)
         assert im2.type() == hl.Float(32)
         assert im1[30, 40] == 30 + 40
@@ -148,7 +148,7 @@ def main():
         # First we create an Image to take the argmax over.
         input_func = hl.Func()
         input_func[x] = hl.sin(x)
-        input = input_func.realize(100)
+        input = input_func.realize([100])
         assert input.type() == hl.Float(32)
 
         # Then we defined a 2-valued Tuple which tracks the maximum value
@@ -281,7 +281,7 @@ def main():
         escape[x, y] = first_escape[0]
 
         # Realize the pipeline and print the result as ascii art.
-        result = escape.realize(61, 25)
+        result = escape.realize([61, 25])
         assert result.type() == hl.Int(32)
         code = " .:-~*={&%#@"
         for yy in range(result.height()):

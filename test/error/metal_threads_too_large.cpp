@@ -17,12 +17,12 @@ int main(int argc, char **argv) {
     f.gpu_blocks(y).gpu_threads(x, DeviceAPI::Metal);
 
     // 65536 is larger enough than `maxTotalThreadsPerThreadgroup`
-    Buffer<uint16_t> input = lambda(x, y, cast<uint16_t>(x + y)).realize(65536, 1);
+    Buffer<uint16_t> input = lambda(x, y, cast<uint16_t>(x + y)).realize({65536, 1});
     input.set_host_dirty();
     im.set(input);
 
     Buffer<uint16_t> output(input.width(), input.height());
-    Target mac_target("x86-64-osx-metal-debug");
+    Target mac_target{"host-metal-debug"};
     f.realize(output, mac_target);
     output.copy_to_host();
 

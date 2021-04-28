@@ -221,16 +221,16 @@ class ExprCost : public IRVisitor {
                 call->is_intrinsic(Call::bitwise_not) || call->is_intrinsic(Call::bitwise_xor) ||
                 call->is_intrinsic(Call::bitwise_or) || call->is_intrinsic(Call::shift_left) ||
                 call->is_intrinsic(Call::shift_right) || call->is_intrinsic(Call::div_round_to_zero) ||
-                call->is_intrinsic(Call::mod_round_to_zero) || call->is_intrinsic(Call::undef)) {
+                call->is_intrinsic(Call::mod_round_to_zero) || call->is_intrinsic(Call::undef) ||
+                call->is_intrinsic(Call::mux)) {
                 arith += 1;
             } else if (call->is_intrinsic(Call::abs) || call->is_intrinsic(Call::absd) ||
                        call->is_intrinsic(Call::lerp) || call->is_intrinsic(Call::random) ||
                        call->is_intrinsic(Call::count_leading_zeros) ||
                        call->is_intrinsic(Call::count_trailing_zeros)) {
                 arith += 5;
-            } else if (call->is_intrinsic(Call::likely) ||
-                       call->is_intrinsic(Call::likely_if_innermost)) {
-                // Likely does not result in actual operations.
+            } else if (Call::as_tag(call)) {
+                // Tags do not result in actual operations.
             } else {
                 // For other intrinsics, use 1 for the arithmetic cost.
                 arith += 1;

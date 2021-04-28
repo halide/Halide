@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     g.compute_with(f.specialize(tile), y, LoopAlignStrategy::AlignEnd);
 
     tile.set(true);
-    h.realize(200, 200);
+    h.realize({200, 200});
 
     printf("Success!\n");
     return 0;

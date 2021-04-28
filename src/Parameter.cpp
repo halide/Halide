@@ -22,7 +22,7 @@ struct ParameterContents {
     uint64_t data;
     int host_alignment;
     std::vector<BufferConstraint> buffer_constraints;
-    Expr scalar_min, scalar_max, scalar_estimate;
+    Expr scalar_default, scalar_min, scalar_max, scalar_estimate;
     const bool is_buffer;
     MemoryType memory_type = MemoryType::Auto;
 
@@ -263,6 +263,28 @@ int Parameter::host_alignment() const {
     check_is_buffer();
     return contents->host_alignment;
 }
+
+void Parameter::set_default_value(const Expr &e) {
+    check_is_scalar();
+    if (e.defined()) {
+        user_assert(e.type() == contents->type)
+            << "Can't set parameter " << name()
+            << " of type " << contents->type
+            << " to have default value " << e
+            << " of type " << e.type() << "\n";
+
+        user_assert(is_const(e))
+            << "Default value for parameter " << name()
+            << " must be constant: " << e << "\n";
+    }
+    contents->scalar_default = e;
+}
+
+Expr Parameter::default_value() const {
+    check_is_scalar();
+    return contents->scalar_default;
+}
+
 void Parameter::set_min_value(const Expr &e) {
     check_is_scalar();
     if (e.defined()) {
@@ -318,7 +340,7 @@ Expr Parameter::estimate() const {
 ArgumentEstimates Parameter::get_argument_estimates() const {
     ArgumentEstimates argument_estimates;
     if (!is_buffer()) {
-        argument_estimates.scalar_def = scalar_expr();
+        argument_estimates.scalar_def = default_value();
         argument_estimates.scalar_min = min_value();
         argument_estimates.scalar_max = max_value();
         argument_estimates.scalar_estimate = estimate();

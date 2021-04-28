@@ -37,6 +37,7 @@ add_autoscheduler(NAME Adams2019
                   SOURCES
                   ASLog.cpp
                   AutoSchedule.cpp
+                  Cache.cpp
                   DefaultCostModel.cpp
                   FunctionDAG.cpp
                   LoopNest.cpp

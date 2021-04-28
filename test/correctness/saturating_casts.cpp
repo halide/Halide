@@ -56,7 +56,7 @@ void test_saturating() {
 
     f(x) = saturating_cast<target_t>(in(x));
 
-    Buffer<target_t> result = f.realize(7);
+    Buffer<target_t> result = f.realize({7});
 
     for (int32_t i = 0; i < 7; i++) {
         bool source_signed = std::numeric_limits<source_t>::is_signed;
@@ -155,7 +155,7 @@ void test_concise(cast_maker_t cast_maker, bool saturating) {
 
     f(x) = cast_maker(in(x));
 
-    Buffer<target_t> result = f.realize(7);
+    Buffer<target_t> result = f.realize({7});
 
     for (int32_t i = 0; i < 7; i++) {
         bool source_signed = std::numeric_limits<source_t>::is_signed;

@@ -1057,9 +1057,9 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
     }
 
     if (exact) {
-        user_assert(tail == TailStrategy::GuardWithIf)
+        user_assert(tail == TailStrategy::GuardWithIf || tail == TailStrategy::Predicate)
             << "When splitting Var " << old_name
-            << " the tail strategy must be GuardWithIf or Auto. "
+            << " the tail strategy must be GuardWithIf, Predicate or Auto. "
             << "Anything else may change the meaning of the algorithm\n";
     }
 
@@ -2264,7 +2264,6 @@ Func &Func::align_bounds(const Var &var, Expr modulus, Expr remainder) {
 
     // Reduce the remainder
     remainder = remainder % modulus;
-
     invalidate_cache();
 
     bool found = func.is_pure_arg(var.name());
@@ -2275,6 +2274,26 @@ Func &Func::align_bounds(const Var &var, Expr modulus, Expr remainder) {
         << " is not one of the pure variables of " << name() << ".\n";
 
     Bound b = {var.name(), Expr(), Expr(), modulus, remainder};
+    func.schedule().bounds().push_back(b);
+    return *this;
+}
+
+Func &Func::align_extent(const Var &var, Expr modulus) {
+    user_assert(modulus.defined()) << "modulus is undefined\n";
+    user_assert(Int(32).can_represent(modulus.type())) << "Can't represent modulus as int32\n";
+
+    modulus = cast<int32_t>(modulus);
+
+    invalidate_cache();
+
+    bool found = func.is_pure_arg(var.name());
+    user_assert(found)
+        << "Can't align extent of variable " << var.name()
+        << " of function " << name()
+        << " because " << var.name()
+        << " is not one of the pure variables of " << name() << ".\n";
+
+    Bound b = {var.name(), Expr(), Expr(), modulus, Expr()};
     func.schedule().bounds().push_back(b);
     return *this;
 }
@@ -3036,16 +3055,6 @@ Realization Func::realize(int x_size, int y_size, int z_size, const Target &targ
 Realization Func::realize(int x_size, int y_size, const Target &target,
                           const ParamMap &param_map) {
     return realize({x_size, y_size}, target, param_map);
-}
-
-Realization Func::realize(int x_size, const Target &target,
-                          const ParamMap &param_map) {
-    return realize(std::vector<int>{x_size}, target, param_map);
-}
-
-Realization Func::realize(const Target &target,
-                          const ParamMap &param_map) {
-    return realize(std::vector<int>{}, target, param_map);
 }
 
 void Func::infer_input_bounds(const std::vector<int32_t> &sizes,

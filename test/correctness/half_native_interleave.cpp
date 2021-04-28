@@ -38,9 +38,9 @@ int main(int argc, char **argv) {
     }
 
     // Run the pipeline and verify the results are correct.
-    Buffer<int16_t> out_p = product.realize(W, target);
-    Buffer<int16_t> out_s = sum.realize(W, target);
-    Buffer<int16_t> out_d = diff.realize(W, target);
+    Buffer<int16_t> out_p = product.realize({W}, target);
+    Buffer<int16_t> out_s = sum.realize({W}, target);
+    Buffer<int16_t> out_d = diff.realize({W}, target);
 
     for (int x = 1; x < W - 1; x++) {
         int16_t correct_p = input(x) * 2;
