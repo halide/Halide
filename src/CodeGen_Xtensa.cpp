@@ -1207,7 +1207,7 @@ HALIDE_ALWAYS_INLINE int8x64_t halide_xtensa_convert_concat_i16_to_i8(const int1
   return IVP_PACKL2NX24(wide);
 }
 
-HALIDE_ALWAYS_INLINE int8x64_t halide_xtensa_sat_narrow_u8(const int16x64_t& a) {
+HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_sat_narrow_u8(const int16x64_t& a) {
   xb_vec2Nx24 wide = IVP_CVT24S2NX16(a.native_vector[1], a.native_vector[0]);
   return IVP_PACKVRU2NX24(wide, 0);
 }
@@ -1222,11 +1222,12 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_sat_narrow_with_shift_i16(const in
   return IVP_PACKVRNX48(wide, shift);
 }
 
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_sat_narrow_with_shift_u16(const int32x32_t& a, uint32_t shift) {
+/* Looks like there is no such instruction.
+HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_sat_narrow_with_shift_u16(const int32x32_t& a, uint32_t shift) {
   xb_vecNx48 wide = IVP_CVT48SNX32(a.native_vector[1], a.native_vector[0]);
-  return IVP_PACKVRNRNX48(wide, shift);
+  return IVP_PACKVRUNX48(wide, shift);
 }
-
+*/
 HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_convert_concat_i16_to_u8(const int16x32_t& a, const int16x32_t& b) {
   xb_vec2Nx24 wide = IVP_CVT24S2NX16(b, a);
   return xb_vec2Nx8_rtor_xb_vec2Nx8U(IVP_PACKL2NX24(wide));

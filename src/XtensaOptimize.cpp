@@ -744,7 +744,8 @@ private:
             {"halide_xtensa_sat_narrow_with_shift_i8", i8_sat(rounding_shift_right(wild_i16x, wild_u16))},
             {"halide_xtensa_sat_narrow_with_shift_u8", u8_sat(rounding_shift_right(wild_i16x, wild_u16))},
             {"halide_xtensa_sat_narrow_with_shift_i16", i16_sat(rounding_shift_right(wild_i32x, wild_u32))},
-            {"halide_xtensa_sat_narrow_with_shift_u16", u16_sat(rounding_shift_right(wild_i32x, wild_u32))},
+            // Looks like there is no such instruction.
+            // {"halide_xtensa_sat_narrow_with_shift_u16", u16_sat(rounding_shift_right(wild_i32x, wild_u32))},
 
             {"halide_xtensa_narrow_i24_with_shift_i16", i16(wild_i24x >> wild_i24)},
             {"halide_xtensa_narrow_i24_with_shift_i16", i16(wild_i24x / wild_i24), Pattern::ExactLog2Op1},
