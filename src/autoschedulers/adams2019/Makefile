@@ -59,6 +59,8 @@ $(BIN)/cost_model/%.a: $(BIN)/cost_model.generator
 # undefined rather than dependent on libHalide.so.
 $(BIN)/libautoschedule_adams2019.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp \
 				$(SRC)/ASLog.cpp \
+				$(SRC)/Cache.h \
+				$(SRC)/Cache.cpp \
 				$(SRC)/DefaultCostModel.h \
 				$(SRC)/DefaultCostModel.cpp \
 				$(SRC)/Weights.h \
@@ -230,4 +232,3 @@ $(BIN)/%/included_schedule_file.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/included_
 
 test_included_schedule_file: $(BIN)/$(HL_TARGET)/included_schedule_file.rungen
 	$^ --benchmarks=all --benchmark_min_time=1 --estimate_all
-
