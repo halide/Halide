@@ -67,6 +67,16 @@ namespace {
 // We can alias two tensors if the input is not used after the output is written,
 // and we meet a number of other requirements.
 bool maybe_alias_tensors(TensorPtr input, TensorPtr output, std::vector<int> offset = {}) {
+    // We shouldn't change a tensor that is already aliased.
+    if (input->is_alias() && std::all_of(offset.begin(), offset.end(), [](int i) { return i == 0; })) {
+        // If the input is aliased, but there is no offset, try aliasing the other
+        // way around.
+        std::swap(input, output);
+    }
+    if (input->is_alias()) {
+        return false;
+    }
+
     // If either tensor is dynamic, can't alias them.
     if (input->is_dynamic() || output->is_dynamic()) {
         return false;
@@ -153,8 +163,7 @@ class InPlace : public OpVisitor {
         }
         if (is_no_op) {
             // TODO: Try actually deleting the op?
-            // TODO: This is actually wrong!
-            //op->set_no_op();
+            op->set_no_op();
         }
     }
 

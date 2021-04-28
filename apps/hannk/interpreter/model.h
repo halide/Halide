@@ -191,6 +191,7 @@ public:
 
     std::shared_ptr<TensorStorage> storage();
 
+    bool is_alias() const;
     void set_alias_of(TensorPtr t, std::vector<int> offset = {});
 
     void add_consumer(Op *op);

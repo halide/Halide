@@ -189,6 +189,12 @@ void Tensor::resize(const Box &new_shape) {
     storage_ = nullptr;
 }
 
+bool Tensor::is_alias() const {
+    // TODO: This check could incorrectly return true, if the tensor has been
+    // allocated already via storage(), but isn't an alias.
+    return storage_ != nullptr;
+}
+
 void Tensor::set_alias_of(TensorPtr t, std::vector<int> storage_offset) {
     CHECK(!is_dynamic());
 
