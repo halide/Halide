@@ -47,14 +47,14 @@ TFLITE_TAG = v$(TFLITE_VERSION)
 #   $ git clone https://github.com/tensorflow/tensorflow
 #   $ cd tensorflow
 #   $ git checkout $(TFLITE_TAG)
-#	$ mkdir tflite_build && cd tflite_build
+#   $ mkdir tflite_build && cd tflite_build
 #   $ cmake ../tensorflow/lite/c
 #   $ cmake --build . -j`nproc`
 #
 # For Android, you must have the Android NDK installed locally, with ANDROID_NDK_ROOT
 # defined to point to it. Sample steps for Android:
 #
-#	$ mkdir tflite_build_android && cd tflite_build_android
+#   $ mkdir tflite_build_android && cd tflite_build_android
 #   $ cmake ../tensorflow/lite/c \
 #         -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
 #         -DANDROID_ABI=arm64-v8a
