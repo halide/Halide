@@ -97,7 +97,7 @@ bool all(bool first, T... rest) {
 
 // Fuse the innermost (stride 1) dimension with other dimensions as much as possible.
 // This may enable the buffers to be processed with fewer instances of the "tail" of
-// a vectorization loop.
+// a vectorization loop, and fewer levels of recursion in the loop nest helpers below.
 template<typename Ta, typename... Ts>
 void optimize_elementwise_shapes(int rank, HalideBuffer<Ta> &a, HalideBuffer<Ts> &...rest) {
     while (can_fuse_cx(a) && all(can_fuse_cx(rest)...) &&
@@ -128,46 +128,49 @@ void loop_nest_impl(Fn &&fn, halide_buffer_t op0, Ts... ops) {
     }
 }
 
-// Call an elementwise operation that accepts operands of a particular rank,
-// and calls it on operands of any rank by slicing off or padding (in a loop)
-// the outer dimensions.
-template<int FnRank, typename Fn, typename T, typename... Ts>
-void elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
-    optimize_elementwise_shapes(FnRank, op0, ops...);
-    loop_nest_impl<FnRank>(fn, *op0.raw_buffer(), *ops.raw_buffer()...);
+void broadcast_dims(int extent) {
 }
 
-// Similar to the above, but do not fuse dimensions when possible.
-template<int FnRank, typename Fn, typename T, typename... Ts>
-void loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
-    pad_to_rank(FnRank, op0, ops...);
-    loop_nest_impl<FnRank>(fn, *op0.raw_buffer(), *ops.raw_buffer()...);
+template<typename... Ts>
+void broadcast_dims(int extent, halide_dimension_t *dim, Ts *... rest) {
+    if (dim->extent == 1 && extent > 1) {
+        dim->extent = extent;
+        dim->stride = 0;
+    }
+    broadcast_dims(extent, rest...);
 }
 
 // Broadcast the extent 1 dimensions of one shape to match the extent of the
 // other shape.
-template<typename Ta, typename Tb>
-void broadcast_shapes(HalideBuffer<Ta> &a, HalideBuffer<Tb> &b) {
-    int rank = std::max(a.dimensions(), b.dimensions());
-    pad_to_rank(rank, a);
-    pad_to_rank(rank, b);
+template<typename Ta, typename... Ts>
+void broadcast_shapes(HalideBuffer<Ta> &a, HalideBuffer<Ts> &... rest) {
+    const int rank = a.dimensions();
+    assert(all(rank == rest.dimensions()...));
+    pad_to_rank(rank, a, rest...);
 
-    halide_buffer_t *raw_a = a.raw_buffer();
-    halide_buffer_t *raw_b = b.raw_buffer();
     for (int d = 0; d < rank; d++) {
-        if (raw_a->dim[d].extent == raw_b->dim[d].extent) {
-            continue;
-        }
-        if (raw_a->dim[d].extent == 1) {
-            raw_a->dim[d].extent = raw_b->dim[d].extent;
-            raw_a->dim[d].stride = 0;
-        } else if (raw_b->dim[d].extent == 1) {
-            raw_b->dim[d].extent = raw_a->dim[d].extent;
-            raw_b->dim[d].stride = 0;
-        } else {
-            LOG(FATAL) << "Can't broadcast shapes";
-        }
+        int extent = std::max({a.dim(d).extent(), rest.dim(d).extent()...});
+        broadcast_dims(extent, &a.raw_buffer()->dim[d], &rest.raw_buffer()->dim[d]...);
     }
+}
+
+// This helper implements all of the logic necessary for elementwise operations:
+// 1. Broadcasting any extents of 1 to match the rest of the dimensions.
+// 2. Optimizing the shapes by fusing dimensions where possible.
+// 3. Padding shapes to the required rank of `fn`.
+// 4. Iterating and slicing the extra dimensions of the shapes before calling `fn`.
+template<int FnRank, typename Fn, typename T, typename... Ts>
+void elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
+    broadcast_shapes(op0, ops...);
+    optimize_elementwise_shapes(FnRank, op0, ops...);
+    loop_nest_impl<FnRank>(fn, *op0.raw_buffer(), *ops.raw_buffer()...);
+}
+
+// This helper is similar to the above, but it only implements steps 3 and 4.
+template<int FnRank, typename Fn, typename T, typename... Ts>
+void loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
+    pad_to_rank(FnRank, op0, ops...);
+    loop_nest_impl<FnRank>(fn, *op0.raw_buffer(), *ops.raw_buffer()...);
 }
 
 const void *begin(const halide_buffer_t *buf) {
@@ -299,10 +302,6 @@ void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q, int in1s
          HalideBuffer<const uint8_t> in2, const QuantizationInfo &in2q, int in2sign,
          const HalideBuffer<uint8_t> &out, const QuantizationInfo &outq,
          ActivationFunction activation = ActivationFunction::None) {
-    // TODO: We should require the buffers are already broadcasted appropriately before
-    // getting here.
-    broadcast_shapes(in1, in2);
-
     const int in1_zero = in1q.zero.at(0);
     const int in2_zero = in2q.zero.at(0);
     const int out_zero = outq.zero.at(0);
@@ -342,10 +341,6 @@ void mul(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
          HalideBuffer<const uint8_t> in2, const QuantizationInfo &in2q,
          const HalideBuffer<uint8_t> &out, const QuantizationInfo &outq,
          ActivationFunction activation = ActivationFunction::None) {
-    // TODO: We should require the buffers are already broadcasted appropriately before
-    // getting here.
-    broadcast_shapes(in1, in2);
-
     const int in1_zero = in1q.zero.at(0);
     const int in2_zero = in2q.zero.at(0);
     const int out_zero = outq.zero.at(0);
@@ -821,16 +816,16 @@ void ElementwiseProgramOp::execute() {
     const auto &out1 = output(std::min(output_count() - 1, 1))->buffer();
     using arg_ptr = halide_buffer_t *;
     if (can_use_elementwise_program<TypeList<uint8_t, uint8_t, uint8_t, uint8_t, uint8_t>, TypeList<uint8_t>>(this)) {
-        auto elementwise_rank1 = [&](arg_ptr in0, arg_ptr in1, arg_ptr in2, arg_ptr in3, arg_ptr in4, arg_ptr out0) {
+        auto rank1 = [&](arg_ptr in0, arg_ptr in1, arg_ptr in2, arg_ptr in3, arg_ptr in4, arg_ptr out0) {
             CHECK(0 == elementwise_5xuint8_1xuint8(in0, in1, in2, in3, in4, program_, out0));
         };
-        loop_nest<1>(elementwise_rank1, in0, in1, in2, in3, in4, out0);
+        elementwise_loop_nest<1>(rank1, in0, in1, in2, in3, in4, out0);
         return;
     } else if (can_use_elementwise_program<TypeList<int16_t, int16_t, int16_t, int16_t, int16_t>, TypeList<uint8_t, int16_t>>(this)) {
-        auto elementwise_rank1 = [&](arg_ptr in0, arg_ptr in1, arg_ptr in2, arg_ptr in3, arg_ptr in4, arg_ptr out0, arg_ptr out1) {
+        auto rank1 = [&](arg_ptr in0, arg_ptr in1, arg_ptr in2, arg_ptr in3, arg_ptr in4, arg_ptr out0, arg_ptr out1) {
             CHECK(0 == elementwise_5xint16_1xuint8int16(in0, in1, in2, in3, in4, program_, out0, out1));
         };
-        loop_nest<1>(elementwise_rank1, in0, in1, in2, in3, in4, out0, out1);
+        elementwise_loop_nest<1>(rank1, in0, in1, in2, in3, in4, out0, out1);
         return;
     }
     LOG(FATAL) << "Unsupported elementwise program\n";

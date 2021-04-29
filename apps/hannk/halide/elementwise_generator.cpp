@@ -128,18 +128,12 @@ public:
         Func scratch("scratch");
         scratch(x, u) = undef(intermediate_type_);
 
-        // Wrap the inputs as a dimension of a Func.
-        const int input_count = inputs_.size();
-        Func inputs("inputs");
-        std::vector<Expr> input_values;
-        for (int i = 0; i < input_count; i++) {
-            input_values.push_back(cast(intermediate_type, inputs_[i](x)));
-        }
-        inputs(x, u) = mux(u, input_values);
-
         // Load the inputs into the scratch memory.
-        RDom ri(0, input_count);
-        scratch(x, -ri - 1) = inputs(x, ri);
+        const int input_count = inputs_.size();
+        for (int i = 0; i < input_count; i++) {
+            scratch(x, -i - 1) = cast(intermediate_type, inputs_[i](x));
+        }
+
         // scratch slot 0 is a constant 0.
         scratch(x, 0) = cast(intermediate_type, 0);
 
@@ -199,10 +193,18 @@ public:
         // on the real stack. This is a lame heuristic.
         const int max_instructions_per_input = 4;
 
+        // Support broadcasting of dimension 0 of any input.
+        for (int i = 0; i < input_count; i++) {
+            inputs_[i].dim(0).set_stride(Expr());
+            scratch.update(i).specialize(inputs_[i].dim(0).stride() == 1);
+            scratch.update(i).specialize(inputs_[i].dim(0).stride() == 0);
+            scratch.update(i).specialize_fail("Input dimension 0 must have stride 0 or 1.");
+        }
+
         scratch
             .bound_extent(u, input_count * (max_instructions_per_input + 1))
             .store_in(MemoryType::Register)
-            .update(2)
+            .update(input_count + 1)
             .unroll(r.x);
 
         program_.dim(0).set_min(0).set_extent(ElementwiseAssembler::InstructionSize).set_stride(1);
