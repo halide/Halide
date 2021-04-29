@@ -41,13 +41,13 @@ void fill_buffer_b(Buffer<IntT> &buf, int col, int acc) {
     }
 }
 
-template<bool LhsSigned, bool RhsSigned>
+template<typename LhsInt8, typename RhsInt8>
 bool matmul() {
-    auto lhs = std::conditional_t<LhsSigned, make_int_t, make_uint_t>{};
-    auto rhs = std::conditional_t<RhsSigned, make_int_t, make_uint_t>{};
+    constexpr bool lhs_signed = std::is_signed<LhsInt8>::value;
+    constexpr bool rhs_signed = std::is_signed<RhsInt8>::value;
 
-    using LhsInt8 = std::conditional_t<LhsSigned, int8_t, uint8_t>;
-    using RhsInt8 = std::conditional_t<RhsSigned, int8_t, uint8_t>;
+    auto lhs = std::conditional_t<lhs_signed, make_int_t, make_uint_t>{};
+    auto rhs = std::conditional_t<rhs_signed, make_int_t, make_uint_t>{};
 
     Target target = get_jit_target_from_environment();
     if (!target.has_feature(Target::AVX512_SapphireRapids)) {
@@ -146,10 +146,10 @@ bool matmul() {
     return true;
 }
 
-auto matmul_ss = &matmul<true, false>;
-auto matmul_us = &matmul<false, true>;
-auto matmul_su = &matmul<true, false>;
-auto matmul_uu = &matmul<false, false>;
+auto matmul_ss = &matmul<int8_t, int8_t>;
+auto matmul_us = &matmul<uint8_t, int8_t>;
+auto matmul_su = &matmul<int8_t, uint8_t>;
+auto matmul_uu = &matmul<uint8_t, uint8_t>;
 
 int main(int argc, char **argv) {
     matmul_ss();
