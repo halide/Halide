@@ -113,7 +113,7 @@ public:
     GeneratorParam<Type> output3_type_{"output3_type", Int(0)};
 
     // An array of inputs.
-    Input<Buffer<>[]> inputs_ { "inputs", 1 };
+    Input<Buffer<>[]> inputs_{"inputs", 1};
     // The program to run. See elementwise_program.h for a description of
     // this buffer.
     Input<Buffer<int16_t>> program_{"program", 2};
@@ -154,19 +154,20 @@ public:
         Expr input1 = scratch(x, unsafe_promise_clamped(i32(arg1), -max_input, r.y + 1));
         Expr input2 = scratch(x, unsafe_promise_clamped(i32(arg2), -max_input, r.y + 1));
 
+        std::vector<Expr> instructions = {
+            saturating_add(input1, input2 + arg3),
+            saturating_sub(input1, input2 + arg3),
+            saturating_add(multiply_2x_high(input1, input2 + arg3), arg4),
+            rounding_mul_shift_right(input1, input2 + arg3, cast(unsigned_intermediate, arg4)),
+            rounding_shift_right(input1, input2 + arg3),
+            min(input1, input2 + arg3),
+            max(input1, input2 + arg3),
+            clamp(input1, arg3, arg4),
+            rounding_shift_right(approx_logistic(q, input1, input2 + arg3, intermediate_type), q - arg4),
+            rounding_shift_right(approx_tanh(q, input1, input2 + arg3, intermediate_type), q - arg4),
+        };
         r.where(r.x == op);
-        scratch(x, r.y + 1) = mux(r.x, {
-                                           saturating_add(input1, input2 + arg3),
-                                           saturating_sub(input1, input2 + arg3),
-                                           saturating_add(multiply_2x_high(input1, input2 + arg3), arg4),
-                                           rounding_mul_shift_right(input1, input2 + arg3, cast(unsigned_intermediate, arg4)),
-                                           rounding_shift_right(input1, input2 + arg3),
-                                           min(input1, input2 + arg3),
-                                           max(input1, input2 + arg3),
-                                           clamp(input1, arg3, arg4),
-                                           rounding_shift_right(approx_logistic(q, input1, input2 + arg3, intermediate_type), q - arg4),
-                                           rounding_shift_right(approx_tanh(q, input1, input2 + arg3, intermediate_type), q - arg4),
-                                       });
+        scratch(x, r.y + 1) = mux(r.x, instructions);
 
         Func output("output");
         std::vector<Type> output_types;

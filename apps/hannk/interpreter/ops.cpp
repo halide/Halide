@@ -380,7 +380,9 @@ void requantize(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
         } else {
             out.copy_from(in);
         }
-    } else if (in.type() == halide_type_of<uint8_t>() && out.type() == halide_type_of<uint8_t>()) {
+    } else if (in.type() == halide_type_of<uint8_t>() &&
+               out.type() == halide_type_of<uint8_t>() &&
+               activation == ActivationFunction::None) {
         // TODO: Maybe a dedicated pipeline for this would be better. It
         // could be a little faster, and avoid some quantization error.
         add(in, inq, 1, in, inq, 0, out, outq, activation);
