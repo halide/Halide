@@ -1,4 +1,4 @@
-#include "common_halide.h"
+#include "halide/common_halide.h"
 
 using namespace Halide;
 using namespace Halide::ConciseCasts;

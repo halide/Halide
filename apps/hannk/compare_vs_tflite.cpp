@@ -87,7 +87,7 @@ struct DelegateFactory {
 }  // namespace
 
 void run_all(const std::string &filename, int seed, int threads, int verbosity, bool use_hannk,
-             DelegateFactory *delegate_factory, bool do_benchmark, bool do_compare_results) {
+             DelegateFactory *delegate_factory, bool use_tflite, bool do_benchmark, bool do_compare_results) {
     std::cout << "Comparing " << filename << "\n";
 
     std::vector<char> buffer = read_entire_file(filename);
@@ -230,7 +230,10 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
         return result;
     };
 
-    RunResult tflite_result = run_in_tflite(buffer, threads, verbosity, nullptr);
+    RunResult tflite_result;
+    if (use_tflite) {
+        tflite_result = run_in_tflite(buffer, threads, verbosity, nullptr);
+    }
 
     RunResult delegate_result;
     if (delegate_factory) {
@@ -321,10 +324,10 @@ void run_all(const std::string &filename, int seed, int threads, int verbosity, 
             }
         }
     };
-    if (use_hannk) {
+    if (use_tflite && use_hannk) {
         compare_results(tflite_result, halide_result, verbosity);
     }
-    if (delegate_factory) {
+    if (use_tflite && delegate_factory) {
         compare_results(tflite_result, delegate_result, verbosity);
     }
 }
@@ -336,6 +339,7 @@ int main(int argc, char **argv) {
     int threads = 1;
     bool use_hannk = true;
     bool use_delegate = true;
+    bool use_tflite = true;
     bool do_benchmark = true;
     int verbosity = 0;
     std::vector<const char *> files;
@@ -352,6 +356,10 @@ int main(int argc, char **argv) {
         }
         if (!strcmp(argv[i], "--use_delegate")) {
             use_delegate = atoi(argv[++i]) != 0;
+            continue;
+        }
+        if (!strcmp(argv[i], "--use_tflite")) {
+            use_tflite = atoi(argv[++i]) != 0;
             continue;
         }
         if (!strcmp(argv[i], "--threads")) {
@@ -414,7 +422,7 @@ int main(int argc, char **argv) {
     }
 
     for (auto f : files) {
-        hannk::run_all(f, seed, threads, verbosity, use_hannk, use_delegate ? &delegate_factory : nullptr, do_benchmark, do_compare_results);
+        hannk::run_all(f, seed, threads, verbosity, use_hannk, use_delegate ? &delegate_factory : nullptr, use_tflite, do_benchmark, do_compare_results);
         halide_profiler_report(nullptr);
         halide_profiler_reset();
         std::cout << "\n";

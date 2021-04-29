@@ -1,32 +1,31 @@
-#include "interpreter/ops.h"
-#include "interpreter/elementwise_program.h"
-#include "util/error_util.h"
-
 #include <atomic>
 #include <cmath>
 #include <iostream>
 
-#include "add_uint8_uint8.h"
-#include "average_pool_uint8.h"
-#include "conv_uint8.h"
+#include "halide/add_uint8_uint8.h"
+#include "halide/average_pool_uint8.h"
+#include "halide/conv_uint8.h"
 #ifdef CONV_R16
-#include "conv_r16_uint8.h"
+#include "halide/conv_r16_uint8.h"
 #endif
-#include "copy_uint8_uint8.h"
-#include "depthwise_conv_broadcast_uint8.h"
-#include "depthwise_conv_dm1_uint8.h"
-#include "depthwise_conv_uint8.h"
-#include "elementwise_5xint16_1xuint8int16.h"
-#include "elementwise_5xuint8_1xuint8.h"
-#include "fill_uint8.h"
-#include "fully_connected_uint8_int16.h"
-#include "fully_connected_uint8_uint8.h"
-#include "l2_normalization_uint8.h"
-#include "max_pool_uint8.h"
-#include "mean_uint8.h"
-#include "mul_uint8_uint8_uint8.h"
-#include "softmax_uint8.h"
-#include "tile_conv_filter_uint8.h"
+#include "halide/copy_uint8_uint8.h"
+#include "halide/depthwise_conv_broadcast_uint8.h"
+#include "halide/depthwise_conv_dm1_uint8.h"
+#include "halide/depthwise_conv_uint8.h"
+#include "halide/elementwise_5xint16_1xuint8int16.h"
+#include "halide/elementwise_5xuint8_1xuint8.h"
+#include "halide/fill_uint8.h"
+#include "halide/fully_connected_uint8_int16.h"
+#include "halide/fully_connected_uint8_uint8.h"
+#include "halide/l2_normalization_uint8.h"
+#include "halide/max_pool_uint8.h"
+#include "halide/mean_uint8.h"
+#include "halide/mul_uint8_uint8_uint8.h"
+#include "halide/softmax_uint8.h"
+#include "halide/tile_conv_filter_uint8.h"
+#include "interpreter/elementwise_program.h"
+#include "interpreter/ops.h"
+#include "util/error_util.h"
 
 namespace hannk {
 

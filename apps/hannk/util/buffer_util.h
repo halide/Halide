@@ -179,8 +179,7 @@ struct CompareBuffers {
 // with pseudorandom data.
 template<typename T>
 struct FillWithRandom {
-    template <int D>
-    void operator()(Halide::Runtime::Buffer<void, D> &b_dynamic, int seed) {
+    void operator()(Halide::Runtime::Buffer<> &b_dynamic, int seed) {
         Halide::Runtime::Buffer<T> b = b_dynamic;
         std::mt19937 rng(seed);
         fill_with_random_impl(b, rng);

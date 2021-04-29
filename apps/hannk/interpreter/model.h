@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "HalideBuffer.h"
-#include "interval.h"
+#include "interpreter/interval.h"
 #include "util/error_util.h"
 
 namespace hannk {
@@ -22,7 +22,7 @@ std::unique_ptr<T> make_unique(Args &&...args) {
 const int max_rank = 6;
 
 template<typename T>
-using HalideBuffer = Halide::Runtime::Buffer<T, max_rank>;
+using HalideBuffer = Halide::Runtime::Buffer<T>;
 
 struct QuantizationInfo {
     std::vector<float> scale;
