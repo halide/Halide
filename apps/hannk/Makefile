@@ -241,20 +241,20 @@ INTERPRETER_DEPS = \
 
 # ---------------------- tflite
 
-$(BIN)/schema/tflite_schema.fbs:
+$(BIN)/tflite/tflite_schema.fbs:
 	@echo Fetching tflite_schema.fbs...
 	@mkdir -p $(@D)
 	@wget --quiet -O $@ https://github.com/tensorflow/tensorflow/raw/$(TFLITE_TAG)/tensorflow/lite/schema/schema.fbs || rm -f $@
 
 # This is a very minimal .h file that allows only for reading a flatbuffer...
 # which is all tflite_parser needs.
-$(BIN)/schema/tflite_schema_generated.h: $(BIN)/schema/tflite_schema.fbs
+$(BIN)/tflite/tflite_schema_generated.h: $(BIN)/tflite/tflite_schema.fbs
 	@mkdir -p $(@D)
 	$(FLATC) --cpp --no-includes -o $(@D) $<
 
-TFLITE_SCHEMA_CXXFLAGS = -I$(BIN)/schema
+TFLITE_SCHEMA_CXXFLAGS = -I$(BIN)/
 
-$(BIN)/%/tflite_parser.o: tflite/tflite_parser.cpp $(BIN)/schema/tflite_schema_generated.h
+$(BIN)/%/tflite_parser.o: tflite/tflite_parser.cpp $(BIN)/tflite/tflite_schema_generated.h
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(TFLITE_SCHEMA_CXXFLAGS) -c $< -o $@
 
