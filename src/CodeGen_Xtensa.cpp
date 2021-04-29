@@ -226,16 +226,10 @@ using float32x32_t = MultipleOfNativeVector<float32x16_t, 2>;
 using float32x64_t = MultipleOfNativeVector<float32x16_t, 4>;
 
 template <typename ResultType>
-HALIDE_ALWAYS_INLINE ResultType ramp(int32_t base, int32_t stride) {
-  printf("General ramp is not implemented");
-  return ResultType();
-}
+HALIDE_ALWAYS_INLINE ResultType ramp(int32_t base, int32_t stride) = delete;
 
 template <typename ResultType>
-HALIDE_ALWAYS_INLINE ResultType dense_ramp(int32_t base) {
-  printf("General dense_ramp is not implemented");
-  return ResultType();
-}
+HALIDE_ALWAYS_INLINE ResultType dense_ramp(int32_t base) = delete;
 
 template<>
 HALIDE_ALWAYS_INLINE int32x32_t ramp<int32x32_t>(int32_t base, int32_t stride) {
@@ -463,6 +457,22 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint8x64_t load<uint8x64_t, uint8_t, 64
 }
 
 template<>
+HALIDE_ALWAYS_INLINE void store<int8x64_t, int8_t, 64>(const int8x64_t& a, void *base, int32_t offset) {
+	valign align;
+	xb_vec2Nx8* __restrict ptr  = (xb_vec2Nx8*)((int8_t*)base + offset);
+	IVP_SA2NX8_IP(a, align, ptr);
+	IVP_SAPOS2NX8_FP(align, ptr);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE void store<uint8x64_t, uint8_t, 64>(const uint8x64_t& a, void *base, int32_t offset) {
+	valign align;
+	xb_vec2Nx8U* __restrict ptr  = (xb_vec2Nx8U*)((uint8_t*)base + offset);
+	IVP_SA2NX8U_IP(a, align, ptr);
+	IVP_SAPOS2NX8U_FP(align, ptr);
+}
+
+template<>
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x32_t load<int16x32_t, int16_t, 32>(const void *base, int32_t offset) {
     xb_vecNx16 r;
     // xb_vec2Nx8* ptr8 = (xb_vec2Nx8*)((const int16_t*)base + offset);
@@ -520,6 +530,30 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x32_t load<int32x32_t, int32_t, 32
     return int32x32_t(int32x32_t::from_native_vector,
                 IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(nv8_0)),
                 IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(nv8_1)));
+}
+
+template <typename ResultType, typename LoadType>
+HALIDE_ALWAYS_INLINE ResultType widening_load(const void *base, int32_t offset) = delete;
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x32_t widening_load<int16x32_t, uint8x64_t>(const void *base, int32_t offset) {
+    xb_vecNx16 r;
+    const xb_vec2Nx8* __restrict ptr8 = (const xb_vec2Nx8*)((const uint8_t*)base + offset);
+    valign align = IVP_LA_PP(ptr8);
+    IVP_LANX8U_IP(r, align, (const xb_vecNx8U*)ptr8);
+    return r;
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x64_t widening_load<int16x64_t, uint8x64_t>(const void *base, int32_t offset) {
+    xb_vecNx16 r1, r2;
+    const xb_vec2Nx8* __restrict ptr8 = (const xb_vec2Nx8*)((const uint8_t*)base + offset);
+    valign align = IVP_LA_PP(ptr8);
+    IVP_LANX8U_IP(r1, align, (const xb_vecNx8U*)ptr8);
+    // Pointer is automatically incremented by previous call.
+    IVP_LANX8U_IP(r2, align, (const xb_vecNx8U*)ptr8);
+
+    return int16x64_t(int16x64_t::from_native_vector, r1, r2);
 }
 
 HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_interleave_i16(const int16x32_t& a, const int16x32_t& b) {
@@ -1598,6 +1632,30 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
     ostringstream rhs;
 
     vector<string> args(op->args.size());
+
+    if (op->name == "halide_xtensa_copy_1d") {
+        args[0] = print_name(op->args[0].as<StringImm>()->value);
+        args[1] = print_expr(op->args[1]);
+        args[2] = print_name(op->args[2].as<StringImm>()->value);
+
+        for (size_t i = 3; i < op->args.size(); i++) {
+            args[i] = print_expr(op->args[i]);
+        }
+        rhs << op->name << "(" << with_commas(args) << ")";
+        return rhs.str();
+    }
+
+    if (op->name == "halide_xtensa_widening_load") {
+        internal_assert(op->args.size() == 3);
+        // We are only using this argument to get the type of the load.
+        internal_assert(is_const_one(op->args[2]));
+        args[0] = print_name(op->args[0].as<StringImm>()->value);
+        args[1] = print_expr(op->args[1]);
+
+        rhs << "widening_load<" << print_type(op->type) << ", " << print_type(op->args[2].type()) << ">(" << args[0] << ", " << args[1] << ")";
+        return rhs.str();
+    }
+
     for (size_t i = 0; i < op->args.size(); i++) {
         args[i] = print_expr(op->args[i]);
     }
@@ -1683,18 +1741,6 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
             << "IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(" + args[0] + ")), "
             << "IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(" + args[1] + ")), "
             << args[2] + ", " + args[3] + ");";
-        return rhs.str();
-    }
-
-    if (op->name == "halide_xtensa_copy_1d") {
-        args[0] = print_name(op->args[0].as<StringImm>()->value);
-        args[1] = print_expr(op->args[1]);
-        args[2] = print_name(op->args[2].as<StringImm>()->value);
-
-        for (size_t i = 3; i < op->args.size(); i++) {
-            args[i] = print_expr(op->args[i]);
-        }
-        rhs << op->name << "(" << with_commas(args) << ")";
         return rhs.str();
     }
 

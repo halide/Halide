@@ -726,6 +726,15 @@ private:
     }
 
     Expr visit(const Cast *op) override {
+        // Try for to look for widening loads.
+        if (const Load *load = op->value.as<Load>()) {
+            Expr dense_ramp_base = strided_ramp_base(load->index, 1);
+            if (dense_ramp_base.defined() && is_const_one(load->predicate) && (op->type.is_int_or_uint()) && ((op->type.bits() == 16) || (op->type.bits() == 32)) && (load->type.is_int_or_uint()) && (2 * load->type.bits() == op->type.bits())) {
+                // The third argument is just to pass the type of load.
+                return Call::make(op->type, "halide_xtensa_widening_load", {load->name, dense_ramp_base, make_one(load->type)}, Call::PureExtern);
+            }
+        }
+
         static const std::vector<Pattern> casts = {
             // Narrowing multiply with shift.
             // {"halide_xtensa_sat_mul_with_shift_i32", i32(wild_i64x * wild_i64x / wild_i64), Pattern::NarrowOp0 | Pattern::NarrowUnsignedOp1 | Pattern::ExactLog2Op2},
@@ -834,6 +843,22 @@ private:
     }
 
     Expr visit(const Call *op) override {
+        if (op->name == "halide_xtensa_slice_to_native") {
+            if (const Cast *cast = op->args[0].as<Cast>()) {
+                internal_assert(op->args.size() == 4);
+                if (const Load *load = cast->value.as<Load>()) {
+                    Expr dense_ramp_base = strided_ramp_base(load->index, 1);
+
+                    if (dense_ramp_base.defined() && is_const_one(load->predicate)) {
+                        // arg1 is an index and arg2 is a native vector size.
+                        dense_ramp_base = dense_ramp_base + op->args[1] * op->args[2];
+                        // The third argument is just to pass the type of load.
+                        return Call::make(op->type, "halide_xtensa_widening_load", {load->name, dense_ramp_base, make_one(load->type)}, Call::PureExtern);
+                    }
+                }
+            }
+        }
+
         // NOTE(vksnk): there seems to be a single instructions which could do lerp-like compute,
         // but documentation is confusing and I couldn't get it right, so need to revisit at some point.
         // if (op->is_intrinsic(Call::lerp) && op->type.is_int() && (op->type.bits() == 16) && (op->type.lanes() == 32)) {
@@ -918,6 +943,13 @@ private:
             {"halide_xtensa_convert_i48_high_i32", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_i48(wild_i48x, wild_i48x)), 3, 16, 64), Pattern::PassOnlyOp1},
             {"halide_xtensa_convert_i48_low_u32", halide_xtensa_slice_to_native_u32(u32(wild_i48x), 0, 16, 32)},
             {"halide_xtensa_convert_i48_high_u32", halide_xtensa_slice_to_native_u32(u32(wild_i48x), 1, 16, 32)},
+
+            {"halide_xtensa_convert_u16_low_u32", halide_xtensa_slice_to_native_u32(u32(wild_u16x), 0, 16, 32)},
+            {"halide_xtensa_convert_u16_high_u32", halide_xtensa_slice_to_native_u32(u32(wild_u16x), 1, 16, 32)},
+            {"halide_xtensa_convert_u16_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_u16x), 0, 16, 32)},
+            {"halide_xtensa_convert_u16_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_u16x), 1, 16, 32)},
+            {"halide_xtensa_convert_i16_low_u32", halide_xtensa_slice_to_native_u32(u32(wild_i16x), 0, 16, 32)},
+            {"halide_xtensa_convert_i16_high_u32", halide_xtensa_slice_to_native_u32(u32(wild_i16x), 1, 16, 32)},
             {"halide_xtensa_convert_i16_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 0, 16, 32)},
             {"halide_xtensa_convert_i16_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 1, 16, 32)},
 
@@ -951,6 +983,7 @@ private:
         if (op->is_intrinsic()) {
             Expr lowered = lower_intrinsic(op);
             if (lowered.defined()) {
+                lowered = simplify(lowered);
                 return mutate(lowered);
             }
         }
@@ -1502,7 +1535,8 @@ private:
 
     Expr visit(const Call *op) override {
         int native_lanes = get_native_vector_lanes_num(op->type);
-        if (native_lanes > 0) {
+        std::set<std::string> skip_slicing = {"halide_xtensa_widening_load"};
+        if (native_lanes > 0 && (skip_slicing.count(op->name) == 0)) {
             if (!(op->name == "halide_xtensa_interleave_i16") && !(op->name == "halide_xtensa_narrow_i24_with_shift_i16")) {
                 const int total_lanes = op->type.lanes();
                 int split_to = op->type.lanes() / native_lanes;
@@ -1548,7 +1582,9 @@ private:
             is_safe_to_pad = is_safe_to_pad && (arg.type().is_scalar() || (op->type.lanes() == arg.type().lanes()));
         }
         std::set<std::string> safe_to_pad = {"halide_xtensa_dynamic_shuffle"};
-        is_safe_to_pad = is_safe_to_pad || safe_to_pad.count(op->name) > 0;
+        is_safe_to_pad = is_safe_to_pad || (safe_to_pad.count(op->name) > 0);
+        std::set<std::string> skip_padding = {"halide_xtensa_widening_load"};
+        is_safe_to_pad = is_safe_to_pad && (skip_padding.count(op->name) == 0);
         if (width_to_extend > 0 && is_safe_to_pad) {
             vector<Expr> args;
             const int lanes = op->type.lanes();
