@@ -25,20 +25,6 @@ inline std::vector<char> read_entire_file(const std::string &filename) {
     return result;
 }
 
-inline void write_entire_file(const std::string &filename, const void *source, size_t source_len) {
-    std::ofstream f(filename, std::ios::out | std::ios::binary);
-    CHECK(f.is_open()) << "Unable to open file: " << filename;
-
-    f.write(reinterpret_cast<const char *>(source), source_len);
-    f.flush();
-    CHECK(f.good()) << "Unable to write file: " << filename;
-    f.close();
-}
-
-inline void write_entire_file(const std::string &filename, const std::vector<char> &source) {
-    write_entire_file(filename, source.data(), source.size());
-}
-
 }  // namespace hannk
 
 #endif  // HANNK_FILE_UTIL_H
