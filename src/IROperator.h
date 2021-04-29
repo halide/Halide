@@ -64,6 +64,10 @@ bool is_const_one(const Expr &e);
  * undefined Stmt, or as an Evaluate node of a constant) */
 bool is_no_op(const Stmt &s);
 
+/** Returns false if the statement unconditionally asserts or otherwise
+ * terminates the program. */
+bool is_terminator(const Stmt &s);
+
 /** Does the expression
  * 1) Take on the same value no matter where it appears in a Stmt, and
  * 2) Evaluating it has no side-effects

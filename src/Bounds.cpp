@@ -2584,15 +2584,28 @@ private:
             // ever go one way in a given run, so we should conditionalize
             // the boxes touched on the condition.
 
+            // Only conditionalize the resulting boxes if neither of the
+            // branches does not return (it is an unconditional assert).
+            // This avoids complicating bounds for no reason.
+            bool use_condition = true;
+
             // Fork the boxes touched and go down each path
             map<string, Box> then_boxes, else_boxes;
             then_boxes.swap(boxes);
-            op->then_case.accept(this);
+            if (!is_terminator(op->then_case)) {
+                op->then_case.accept(this);
+            } else {
+                use_condition = false;
+            }
             then_boxes.swap(boxes);
 
             if (op->else_case.defined()) {
                 else_boxes.swap(boxes);
-                op->else_case.accept(this);
+                if (!is_terminator(op->else_case)) {
+                    op->else_case.accept(this);
+                } else {
+                    use_condition = false;
+                }
                 else_boxes.swap(boxes);
             }
 
@@ -2608,16 +2621,18 @@ private:
                 Box &then_box = then_boxes[i.first];
                 Box &orig_box = boxes[i.first];
 
-                if (then_box.maybe_unused()) {
-                    then_box.used = then_box.used && op->condition;
-                } else {
-                    then_box.used = op->condition;
-                }
+                if (use_condition) {
+                    if (then_box.maybe_unused()) {
+                        then_box.used = then_box.used && op->condition;
+                    } else {
+                        then_box.used = op->condition;
+                    }
 
-                if (else_box.maybe_unused()) {
-                    else_box.used = else_box.used && !op->condition;
-                } else {
-                    else_box.used = !op->condition;
+                    if (else_box.maybe_unused()) {
+                        else_box.used = else_box.used && !op->condition;
+                    } else {
+                        else_box.used = !op->condition;
+                    }
                 }
 
                 merge_boxes(then_box, else_box);
@@ -2729,7 +2744,7 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
         public:
             Stmt mutate(const Stmt &s) override {
                 bool old = relevant;
-                relevant = false;
+                relevant = is_terminator(s);
                 Stmt s_new = IRMutator::mutate(s);
                 if (!relevant) {
                     relevant = old;

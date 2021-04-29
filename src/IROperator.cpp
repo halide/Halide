@@ -121,6 +121,21 @@ bool is_no_op(const Stmt &s) {
     return e && is_const(e->value);
 }
 
+bool is_terminator(const Stmt &s) {
+    if (const AssertStmt *a = s.as<AssertStmt>()) {
+        return is_const_zero(a->condition);
+    } else if (const Block *b = s.as<Block>()) {
+        if (is_terminator(b->first)) {
+            return true;
+        } else if (b->rest.defined() && is_terminator(b->rest)) {
+            return true;
+        }
+    } else if (const LetStmt *l = s.as<LetStmt>()) {
+        return is_terminator(l->body);
+    }
+    return false;
+}
+
 namespace {
 
 class ExprIsPure : public IRGraphVisitor {
