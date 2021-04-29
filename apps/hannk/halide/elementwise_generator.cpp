@@ -113,7 +113,7 @@ public:
     GeneratorParam<Type> output3_type_{"output3_type", Int(0)};
 
     // An array of inputs.
-    Input<Buffer<>[]> inputs_{"inputs", 1};
+    Input<Buffer<>[]> inputs_ { "inputs", 1 };
     // The program to run. See elementwise_program.h for a description of
     // this buffer.
     Input<Buffer<int16_t>> program_{"program", 2};

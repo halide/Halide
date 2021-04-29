@@ -71,7 +71,7 @@ public:
         assert(size <= MaxSize);
         // Default construct the new elements.
         for (size_t i = size_; i < size; ++i) {
-            new(&data()[i]) T();
+            new (&data()[i]) T();
         }
         // Destroy the removed elements.
         for (size_t i = size; i < size_; ++i) {
@@ -86,13 +86,13 @@ public:
 
     void push_back(T x) {
         assert(size_ < MaxSize);
-        new(&data()[size_++]) T(std::move(x));
+        new (&data()[size_++]) T(std::move(x));
     }
 
     template<typename... Args>
-    void emplace_back(Args &&... args) {
+    void emplace_back(Args &&...args) {
         assert(size_ < MaxSize);
-        new(&data()[size_++]) T(std::forward<Args>(args)...);
+        new (&data()[size_++]) T(std::forward<Args>(args)...);
     }
 
     void pop_back() {
@@ -100,8 +100,8 @@ public:
         resize(size_ - 1);
     }
 
-    using iterator = T*;
-    using const_iterator = const T*;
+    using iterator = T *;
+    using const_iterator = const T *;
 
     size_t size() const {
         return size_;

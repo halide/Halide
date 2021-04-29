@@ -132,7 +132,7 @@ void broadcast_dims(int extent) {
 }
 
 template<typename... Ts>
-void broadcast_dims(int extent, halide_dimension_t *dim, Ts *... rest) {
+void broadcast_dims(int extent, halide_dimension_t *dim, Ts *...rest) {
     if (dim->extent == 1 && extent > 1) {
         dim->extent = extent;
         dim->stride = 0;
@@ -143,7 +143,7 @@ void broadcast_dims(int extent, halide_dimension_t *dim, Ts *... rest) {
 // Broadcast the extent 1 dimensions of one shape to match the extent of the
 // other shape.
 template<typename Ta, typename... Ts>
-void broadcast_shapes(HalideBuffer<Ta> &a, HalideBuffer<Ts> &... rest) {
+void broadcast_shapes(HalideBuffer<Ta> &a, HalideBuffer<Ts> &...rest) {
     const int rank = a.dimensions();
     assert(all(rank == rest.dimensions()...));
     pad_to_rank(rank, a, rest...);
@@ -436,7 +436,7 @@ namespace {
 
 template<typename T>
 T as_scalar(const HalideBuffer<const void> &buf) {
-    return *(const T*)buf.data();
+    return *(const T *)buf.data();
 }
 
 double dequantize_scalar(const Tensor *t) {
