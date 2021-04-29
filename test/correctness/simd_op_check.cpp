@@ -232,6 +232,7 @@ public:
         if (use_ssse3) {
             for (int w = 2; w <= 4; w++) {
                 check("pmulhrsw", 4 * w, i16((i32(i16_1) * i32(i16_2) + 16384) >> 15));
+                check("pmulhrsw", 4 * w, i16_sat((i32(i16_1) * i32(i16_2) + 16384) >> 15));
                 check("pabsb", 8 * w, abs(i8_1));
                 check("pabsw", 4 * w, abs(i16_1));
                 check("pabsd", 2 * w, abs(i32_1));
@@ -422,6 +423,7 @@ public:
             check("vpmullw*ymm", 16, i16_1 * i16_2);
 
             check("vpmulhrsw*ymm", 16, i16((((i32(i16_1) * i32(i16_2)) + 16384)) / 32768));
+            check("vpmulhrsw*ymm", 16, i16_sat((((i32(i16_1) * i32(i16_2)) + 16384)) / 32768));
 
             check("vpcmp*b*ymm", 32, select(u8_1 == u8_2, u8(1), u8(2)));
             check("vpcmp*b*ymm", 32, select(u8_1 > u8_2, u8(1), u8(2)));
@@ -1267,6 +1269,7 @@ public:
             Expr shift_8 = (i8_2 % 8) - 4;
             Expr shift_16 = (i16_2 % 16) - 8;
             Expr shift_32 = (i32_2 % 32) - 16;
+            Expr shift_64 = (i64_2 % 64) - 32;
             Expr round_s8 = (i8(1) >> min(shift_8, 0)) / 2;
             Expr round_s16 = (i16(1) >> min(shift_16, 0)) / 2;
             Expr round_s32 = (i32(1) >> min(shift_32, 0)) / 2;
@@ -1340,6 +1343,22 @@ public:
             check(arm32 ? "vshl.i16" : "shl", 4 * w, u16_1 * 16);
             check(arm32 ? "vshl.i32" : "shl", 2 * w, u32_1 * 16);
             check(arm32 ? "vshl.i64" : "shl", 2 * w, u64_1 * 16);
+            check(arm32 ? "vshl.s8" : "sshl", 8 * w, i8_1 << shift_8);
+            check(arm32 ? "vshl.s8" : "sshl", 8 * w, i8_1 >> shift_8);
+            check(arm32 ? "vshl.s16" : "sshl", 4 * w, i16_1 << shift_16);
+            check(arm32 ? "vshl.s16" : "sshl", 4 * w, i16_1 >> shift_16);
+            check(arm32 ? "vshl.s32" : "sshl", 2 * w, i32_1 << shift_32);
+            check(arm32 ? "vshl.s32" : "sshl", 2 * w, i32_1 >> shift_32);
+            check(arm32 ? "vshl.s64" : "sshl", 2 * w, i64_1 << shift_64);
+            check(arm32 ? "vshl.s64" : "sshl", 2 * w, i64_1 >> shift_64);
+            check(arm32 ? "vshl.u8" : "ushl", 8 * w, u8_1 << shift_8);
+            check(arm32 ? "vshl.u8" : "ushl", 8 * w, u8_1 >> shift_8);
+            check(arm32 ? "vshl.u16" : "ushl", 4 * w, u16_1 << shift_16);
+            check(arm32 ? "vshl.u16" : "ushl", 4 * w, u16_1 >> shift_16);
+            check(arm32 ? "vshl.u32" : "ushl", 2 * w, u32_1 << shift_32);
+            check(arm32 ? "vshl.u32" : "ushl", 2 * w, u32_1 >> shift_32);
+            check(arm32 ? "vshl.u64" : "ushl", 2 * w, u64_1 << shift_64);
+            check(arm32 ? "vshl.u64" : "ushl", 2 * w, u64_1 >> shift_64);
 
             // VSHLL    I       -       Shift Left Long
             check(arm32 ? "vshll.s8" : "sshll", 8 * w, i16(i8_1) * 16);
@@ -1435,9 +1454,6 @@ public:
             check(arm32 ? "vsubw.u16" : "usubw", 4 * w, u32_1 - u16_1);
             check(arm32 ? "vsubw.s32" : "ssubw", 2 * w, i64_1 - i32_1);
             check(arm32 ? "vsubw.u32" : "usubw", 2 * w, u64_1 - u32_1);
-
-            // VST1     X       -       Store single-element structures
-            check(arm32 ? "vst1.8" : "st", 8 * w, i8_1);
         }
 
         // VST2 X       -       Store two-element structures
