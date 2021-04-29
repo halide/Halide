@@ -5,7 +5,7 @@
 
 #include "interpreter/lower.h"
 #include "interpreter/ops.h"
-#include "tflite/tflite_schema_generated.h"
+#include "tensorflow/lite/schema/schema_generated.h"
 #include "util/error_util.h"
 
 namespace hannk {

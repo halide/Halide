@@ -7,7 +7,7 @@
 #
 # export HL_TARGET to specify the target architecture to build. (Defaults to arm-64-android.)
 #
-# usage: HL_TARGET=arm-64-android run_device_on_target local_testdata/*.tflite
+# usage: HL_TARGET=arm-64-android ./run_compare_on_device.sh local_testdata/*.tflite
 
 set -e
 
@@ -15,11 +15,11 @@ APP_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 export HL_TARGET=${HL_TARGET:-arm-64-android}
 
-export TFLITE_SHARED_LIBRARY=${TFLITE_SHARED_LIBRARY:-${APP_DIR}/bin/tflite-android/jni/arm64-v8a/libtensorflowlite_jni.so}
+TENSORFLOW_BASE=${TENSORFLOW_BASE:-${HOME}/GitHub/tensorflow}
+TFLITE_SHARED_LIBRARY=${TFLITE_SHARED_LIBRARY:-${TENSORFLOW_BASE}/tflite_build_android/libtensorflowlite_c.so}
 
 BUILD_TARGETS="bin/${HL_TARGET}/compare_vs_tflite bin/${HL_TARGET}/libHannkDelegate.so"
 DEVICE_DIR=/data/local/tmp/halide/compare_vs_tflite
-BINARIES_TO_PUSH="${APP_DIR}/${BUILD_TARGET} ${APP_DIR}/${BUILD_TARGETS}"
 
 if [[ -n "${ANDROID_SERIAL}" ]]; then
   echo Using ANDROID_SERIAL=${ANDROID_SERIAL}

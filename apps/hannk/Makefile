@@ -1,13 +1,5 @@
 include ../support/Makefile.inc
 
-# Note: this requires that you have the flatbuffers `flatc` tool available on
-# the host system; this is usually easy to install via e.g.
-#
-#     apt-get install libflatbuffers-dev
-#     brew install flatbuffers
-#
-FLATC ?= flatc
-
 # Removing exceptions just because we don't need 'em and it saves space.
 #
 # -fPIC is necessary for .so builds (at least on Linux); not necessary for the non-delegate
@@ -16,17 +8,6 @@ CXXFLAGS += -Wno-unused-private-field -fno-exceptions -fPIC -fvisibility=hidden 
 
 ifneq (,$(findstring -O,$(OPTIMIZE)))
 	CXXFLAGS += -DNDEBUG
-endif
-
-PROBABLY_DESKTOP =
-ifneq (,$(findstring host,$(HL_TARGET)))
-	PROBABLY_DESKTOP = yes
-endif
-ifneq (,$(findstring linux,$(HL_TARGET)))
-	PROBABLY_DESKTOP = yes
-endif
-ifneq (,$(findstring osx,$(HL_TARGET)))
-	PROBABLY_DESKTOP = yes
 endif
 
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
@@ -48,13 +29,58 @@ test: compare_vs_tflite
 clean:
 	rm -rf $(BIN)
 
-# Choosing TFLite 2.4.0 because it's the most recent stable release with an Android AAR file available.
+# ---------------------- TFLite glue
+
 TFLITE_VERSION_MAJOR ?= 2
-TFLITE_VERSION_MINOR ?= 4
-TFLITE_VERSION_PATCH ?= 0
+TFLITE_VERSION_MINOR ?= 5
+TFLITE_VERSION_PATCH ?= 0-rc2
 
 TFLITE_VERSION = $(TFLITE_VERSION_MAJOR).$(TFLITE_VERSION_MINOR).$(TFLITE_VERSION_PATCH)
 TFLITE_TAG = v$(TFLITE_VERSION)
+
+# Note that we require the C API for TFLite (not the C++ API).
+# Normally, TENSORFLOW_BASE is the only symbol you need to define.
+# (This seems like a plausible default.)
+#
+# Sample steps to build for desktop (see also https://www.tensorflow.org/lite/guide/build_cmake):
+#
+#   $ git clone https://github.com/tensorflow/tensorflow
+#   $ cd tensorflow
+#   $ git checkout $(TFLITE_TAG)
+#   $ mkdir tflite_build && cd tflite_build
+#   $ cmake ../tensorflow/lite/c
+#   $ cmake --build . -j`nproc`
+#
+# For Android, you must have the Android NDK installed locally, with ANDROID_NDK_ROOT
+# defined to point to it. Sample steps for Android:
+#
+#   $ mkdir tflite_build_android && cd tflite_build_android
+#   $ cmake ../tensorflow/lite/c \
+#         -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
+#         -DANDROID_ABI=arm64-v8a
+#   $ cmake --build . -j`nproc`
+
+# Assume a desktop system for now (linux, osx, etc)
+TENSORFLOW_BASE ?= $(HOME)/GitHub/tensorflow
+TFLITE_INCLUDES ?= $(TENSORFLOW_BASE)
+
+ifeq (arm-64-android,$(findstring arm-64-android,$(HL_TARGET)))
+
+TFLITE_SHARED_LIBRARY ?= $(TENSORFLOW_BASE)/tflite_build_android/libtensorflowlite_c.so
+# Set the rpath to . on Android since run_compare_on_device.sh will push the .so to the same dir as the app
+TFLITE_LDFLAGS=-Wl,-rpath,.
+
+else
+
+TFLITE_SHARED_LIBRARY ?= $(TENSORFLOW_BASE)/tflite_build/libtensorflowlite_c.$(SHARED_EXT)
+# Point at the TFLite path, but also the exe directory (for libHannkDelegate.so)
+TFLITE_LDFLAGS = -Wl,-rpath,$(dir $(TFLITE_SHARED_LIBRARY)),-rpath,$(dir $@)
+
+endif
+
+FLATBUFFER_INCLUDES ?= $(dir $(TFLITE_SHARED_LIBRARY))/flatbuffers/include
+
+# ---------------------- misc
 
 # Define `TFLITE_VERSION` here to allow for code that compiles against multiple versions of
 # TFLite (both the C API and the Schema).
@@ -62,6 +88,7 @@ APP_CXXFLAGS = -I$(MAKEFILE_DIR) \
 	-DTFLITE_VERSION_MAJOR=$(TFLITE_VERSION_MAJOR) \
 	-DTFLITE_VERSION_MINOR=$(TFLITE_VERSION_MINOR) \
 	-DTFLITE_VERSION_PATCH=$(TFLITE_VERSION_PATCH)
+
 
 # ---------------------- halide
 
@@ -239,22 +266,11 @@ INTERPRETER_DEPS = \
 	$(BIN)/%/ops.o \
 	$(OPS_HALIDE)
 
-# ---------------------- tflite
+# ---------------------- tflite-parser
 
-$(BIN)/tflite/tflite_schema.fbs:
-	@echo Fetching tflite_schema.fbs...
-	@mkdir -p $(@D)
-	@wget --quiet -O $@ https://github.com/tensorflow/tensorflow/raw/$(TFLITE_TAG)/tensorflow/lite/schema/schema.fbs || rm -f $@
+TFLITE_SCHEMA_CXXFLAGS = -I$(TFLITE_INCLUDES) -I$(FLATBUFFER_INCLUDES)
 
-# This is a very minimal .h file that allows only for reading a flatbuffer...
-# which is all tflite_parser needs.
-$(BIN)/tflite/tflite_schema_generated.h: $(BIN)/tflite/tflite_schema.fbs
-	@mkdir -p $(@D)
-	$(FLATC) --cpp --no-includes -o $(@D) $<
-
-TFLITE_SCHEMA_CXXFLAGS = -I$(BIN)/
-
-$(BIN)/%/tflite_parser.o: tflite/tflite_parser.cpp $(BIN)/tflite/tflite_schema_generated.h
+$(BIN)/%/tflite_parser.o: tflite/tflite_parser.cpp
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(TFLITE_SCHEMA_CXXFLAGS) -c $< -o $@
 
@@ -273,7 +289,14 @@ $(BIN)/%/hannk_delegate_adaptor.o: delegate/hannk_delegate_adaptor.cpp
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(TFLITE_INCLUDES_FLAGS) $(UTIL_CXXFLAGS) -c $< -o $@
 
-ifdef PROBABLY_DESKTOP
+ifeq (arm-64-android,$(findstring arm-64-android,$(HL_TARGET)))
+
+# Don't include $(LDFLAGS) here, it includes pthreads, which we don't want
+DELEGATE_LD_FLAGS=-static-libstdc++
+DELEGATE_LD_FLAGS += -Wl,--version-script=delegate/exported_symbols.ldscript
+DELEGATE_LD_FLAGS += -Wl,-soname,libHannkDelegate.so
+
+else
 
 DELEGATE_LD_FLAGS=$(LDFLAGS)
 
@@ -284,19 +307,6 @@ else
 DELEGATE_LD_FLAGS += -Wl,--version-script=delegate/exported_symbols.ldscript
 DELEGATE_LD_FLAGS += -Wl,-soname,libHannkDelegate.so
 endif
-
-else ifeq (arm-64-android,$(findstring arm-64-android,$(HL_TARGET)))
-
-# Don't include $(LDFLAGS) here, it includes pthreads, which we don't want
-DELEGATE_LD_FLAGS=-static-libstdc++
-DELEGATE_LD_FLAGS += -Wl,--version-script=delegate/exported_symbols.ldscript
-DELEGATE_LD_FLAGS += -Wl,-soname,libHannkDelegate.so
-
-else
-
-# Other values for HL_TARGET will be special-cased here in the future.
-# Unhandled cases will fail to compile/link.
-DELEGATE_LD_FLAGS ?= ERROR_TODO
 
 endif
 
@@ -317,65 +327,6 @@ $(BIN)/%/benchmark: benchmark.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UT
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
-# compare_vs_tflite requires the tflite headers and library.
-#
-# For host, you need to clone and build locally (if there is a prebuilt
-# library for TFLite for linux, etc # that's generally available, I haven't
-# found it, except for the Python plugins, which won't work for our purposes).
-# Note that we require the C API for TFLite (not the C++ API); building
-# `//tensorflow/lite:libtensorflowlite.so` will only provide the C++ API. To
-# get the C API version, use `bazel build -c opt //tensorflow/lite/c:tensorflowlite_c`
-# instead.
-#
-# It's inexplicably painful to build TFLite in library form for Android (either in
-# static or shared form), so we pull a prebuilt version (which is what they recommend
-# anyway). For Android we pull the libtensorflowlite_jni.so build.
-
-ifdef PROBABLY_DESKTOP
-
-# Normally, TENSORFLOW_BASE is the only symbol you need to define.
-# (This seems like a plausible default.)
-#
-# Sample steps to build:
-#
-# 	$ git clone https://github.com/tensorflow/tensorflow
-# 	$ cd tensorflow
-#   $ git checkout $(TFLITE_TAG)
-# 	$ bazelisk build -c opt //tensorflow/lite/c:tensorflowlite_c
-#
-# (Note that TFLite is very picky about the version of Bazel installed, thus this suggests
-# using bazelisk rather than bazel; see https://github.com/bazelbuild/bazelisk)
-
-TENSORFLOW_BASE ?= $(HOME)/GitHub/tensorflow
-TFLITE_INCLUDES ?= $(TENSORFLOW_BASE)
-TFLITE_SHARED_LIBRARY ?= $(TENSORFLOW_BASE)/bazel-bin/tensorflow/lite/c/libtensorflowlite_c.$(SHARED_EXT)
-# Point at the TFLite path, but also the exe directory (for libHannkDelegate.so)
-TFLITE_LDFLAGS=-Wl,-rpath,$(dir $(TFLITE_SHARED_LIBRARY)),-rpath,$(dir $@)
-
-else ifeq (arm-64-android,$(findstring arm-64-android,$(HL_TARGET)))
-
-# See https://www.tensorflow.org/lite/guide/android for details of what we're doing here
-# to get an Android prebuilt tflite library.
-$(BIN)/tflite-android/jni/arm64-v8a/libtensorflowlite_jni.so:
-	@echo Fetching tensorflow-lite-android.zip...
-	@mkdir -p $(@D)
-	@wget --quiet -O $(BIN)/tflite-android.zip https://google.bintray.com/tensorflow/org/tensorflow/tensorflow-lite/$(TFLITE_VERSION)/tensorflow-lite-$(TFLITE_VERSION).aar || rm -f $@
-	@echo Unzipping tensorflow-lite-android.zip...
-	@unzip -q -o $(BIN)/tflite-android.zip -d $(BIN)/tflite-android
-
-TFLITE_INCLUDES=$(BIN)/tflite-android/headers
-TFLITE_SHARED_LIBRARY=$(BIN)/tflite-android/jni/arm64-v8a/libtensorflowlite_jni.so
-# Set the rpath to . on Android since run_compare_on_device.sh will push the .so to the same dir as the app
-TFLITE_LDFLAGS=-Wl,-rpath,.
-
-else
-
-# Other values for HL_TARGET will be special-cased here in the future.
-# Unhandled cases will fail to compile/link.
-TFLITE_INCLUDES ?= ERROR_TODO
-TFLITE_SHARED_LIBRARY ?= ERROR_TODO
-
-endif
 
 
 # To build for Android, use `HL_TARGET=arm-64-android make compare_vs_tflite`
