@@ -8,16 +8,6 @@ include ../support/Makefile.inc
 #
 FLATC ?= flatc
 
-# It also requires the flatbuffers include files be in the C++ include path,
-# but -- notably -- does NOT require libflatbuffers.a to be compiled for the
-# target, so you don't need to crosscompile for (e.g.) Android. The includes
-# will generally be installed by the same thing that installs flatc, but may
-# not be in the default include path for the crosscompiler, so we need to
-# explicitly point it correctly below:
-#
-# This is the location that brew installs on my Mac.
-FLATBUFFERS_INCLUDE_PATH ?= /usr/local/Cellar/flatbuffers/1.12.0/include
-
 # Removing exceptions just because we don't need 'em and it saves space.
 #
 # -fPIC is necessary for .so builds (at least on Linux); not necessary for the non-delegate
@@ -266,11 +256,7 @@ TFLITE_SCHEMA_CXXFLAGS = -I$(BIN)/schema
 
 $(BIN)/%/tflite_parser.o: tflite/tflite_parser.cpp $(BIN)/schema/tflite_schema_generated.h
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -I$(FLATBUFFERS_INCLUDE_PATH) $(TFLITE_SCHEMA_CXXFLAGS) -c $< -o $@
-
-$(BIN)/%/tflite_parser.o: tflite/tflite_parser.cpp $(BIN)/schema/tflite_schema_generated.h
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -I$(FLATBUFFERS_INCLUDE_PATH) $(TFLITE_SCHEMA_CXXFLAGS) -c $< -o $@
+	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(TFLITE_SCHEMA_CXXFLAGS) -c $< -o $@
 
 TFLITE_PARSER_DEPS = \
 	$(BIN)/%/tflite_parser.o
