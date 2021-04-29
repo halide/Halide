@@ -27,6 +27,7 @@ TensorPtr apply(TensorMap &map, const TensorPtr t) {
 namespace {
 
 HalideBuffer<void> make_buffer(halide_type_t type, const Box &bounds) {
+    // TODO: Avoid this dynamic allocation. Halide's API requires std::vector here.
     std::vector<int> extents(bounds.size());
     for (int i = 0; i < (int)bounds.size(); i++) {
         extents[i] = bounds[i].extent();
@@ -153,6 +154,7 @@ void Tensor::allocate() {
 void Tensor::resize(const Box &new_shape) {
     CHECK(is_dynamic());
 
+    // TODO: Avoid this dynamic allocation. Halide's API requires std::vector here.
     std::vector<halide_dimension_t> new_dims;
     new_dims.reserve(new_shape.size());
 

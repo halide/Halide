@@ -1130,15 +1130,12 @@ BoundsMap ReshapeOp::map_bounds(int input_idx, int output_idx) const {
     return BoundsMap::all(input()->bounds(), output()->rank());
 }
 
-std::vector<int> ReshapeOp::calc_new_shape() const {
+SmallVector<int, max_rank> ReshapeOp::calc_new_shape() const {
     const TensorPtr in = input();
     const TensorPtr shape = input(1);
     TensorPtr out = output();
 
-    std::vector<int> new_shape;
-    // The shape can be specified by a Tensor or a constant array (but not both).
-    // It's legal for the Tensor to be dynamic, so we have to keep a reference to it
-    // and extract the data at execution time.
+    SmallVector<int, max_rank> new_shape;
     if (shape && shape->rank() == 1 && shape->type() == halide_type_of<int32_t>()) {
         auto shape_buf = shape->buffer<const int32_t>();
         new_shape.assign(shape_buf.begin(), shape_buf.end());
@@ -1178,11 +1175,10 @@ void ReshapeOp::execute() {
     const TensorPtr shape = input(1);
     TensorPtr out = output();
 
-    std::vector<int> new_shape = calc_new_shape();
+    SmallVector<int, max_rank> new_shape = calc_new_shape();
 
     if (out->is_dynamic()) {
         Box b;
-        b.reserve(new_shape.size());
         for (int i : new_shape) {
             b.emplace_back(0, i);
         }

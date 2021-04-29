@@ -19,8 +19,6 @@ std::unique_ptr<T> make_unique(Args &&...args) {
     return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
 }
 
-const int max_rank = 6;
-
 template<typename T>
 using HalideBuffer = Halide::Runtime::Buffer<T>;
 
@@ -120,7 +118,6 @@ public:
         const int dimensions = buffer_.dimensions();
 
         Box result;
-        result.reserve(dimensions);
         for (int d = 0; d < dimensions; d++) {
             const auto &dim = buffer_.dim(d);
             result.emplace_back(dim.min(), dim.max());

@@ -410,7 +410,7 @@ public:
 };
 
 class ReshapeOp : public Op {
-    std::vector<int> calc_new_shape() const;
+    SmallVector<int, max_rank> calc_new_shape() const;
 
 public:
     ReshapeOp(TensorPtr input, TensorPtr shape_tensor, TensorPtr output)

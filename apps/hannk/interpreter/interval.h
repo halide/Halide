@@ -2,11 +2,148 @@
 #define HANNK_INTERVAL_H
 
 #include <iostream>
-#include <vector>
+#include <utility>
 
 #include "HalideBuffer.h"
 
 namespace hannk {
+
+// The maximum rank of any shape or array of dimension information.
+const int max_rank = 6;
+
+// This class mimics std::vector, but never dynamically allocates memory.
+// It can only grow to MaxSize elements.
+template <typename T, size_t MaxSize>
+class SmallVector {
+    alignas(alignof(T)) char buf_[MaxSize * sizeof(T)];
+    size_t size_ = 0;
+
+public:
+    SmallVector() = default;
+    SmallVector(size_t size) {
+        resize(size);
+    }
+    SmallVector(const SmallVector &copy) {
+        for (const T &i : copy) {
+            push_back(i);
+        }
+    }
+    SmallVector(SmallVector &&move) {
+        for (T &i : move) {
+            push_back(std::move(i));
+        }
+    }
+    ~SmallVector() {
+      resize(0);
+    }
+
+    SmallVector &operator=(const SmallVector &assign) {
+        resize(0);
+        for (const T &i : assign) {
+            push_back(i);
+        }
+    }
+    SmallVector &operator=(SmallVector &&move) {
+        resize(0);
+        for (T &i : move) {
+            push_back(std::move(i));
+        }
+    }
+
+    template<typename Iterator>
+    void assign(Iterator begin, Iterator end) {
+        clear();
+        for (Iterator i = begin; i != end; ++i) {
+            push_back(*i);
+        }
+    }
+
+    void resize(size_t size) {
+        assert(size <= MaxSize);
+        // Default construct the new elements.
+        for (size_t i = size_; i < size; ++i) {
+            new(&data()[i]) T();
+        }
+        // Destroy the removed elements.
+        for (size_t i = size; i < size_; ++i) {
+            data()[i].~T();
+        }
+        size_ = size;
+    }
+
+    void clear() {
+        resize(0);
+    }
+
+    void push_back(T x) {
+        assert(size_ < MaxSize);
+        new(&data()[size_++]) T(std::move(x));
+    }
+
+    template<typename... Args>
+    void emplace_back(Args &&... args) {
+        assert(size_ < MaxSize);
+        new(&data()[size_++]) T(std::forward<Args>(args)...);
+    }
+
+    void pop_back() {
+        assert(size_ > 0);
+        resize(size_ - 1);
+    }
+
+    using iterator = T*;
+    using const_iterator = const T*;
+
+    size_t size() const {
+        return size_;
+    }
+
+    bool empty() const {
+        return size_ == 0;
+    }
+
+    T *data() {
+        return (T *)&buf_[0];
+    }
+
+    const T *data() const {
+        return (const T *)&buf_[0];
+    }
+
+    iterator begin() {
+        return data();
+    }
+
+    iterator end() {
+        return begin() + size_;
+    }
+
+    const_iterator begin() const {
+        return data();
+    }
+
+    const_iterator end() const {
+        return begin() + size_;
+    }
+
+    T &at(size_t i) {
+        assert(i < size_);
+        return data()[i];
+    }
+
+    const T &at(size_t i) const {
+        assert(i < size_);
+        return data()[i];
+    }
+
+    T &operator[](size_t i) {
+        return data()[i];
+    }
+
+    const T &operator[](size_t i) const {
+        return data()[i];
+    }
+};
 
 // Compute a / b, rounding down.
 inline int floor_div(int a, int b) {
@@ -137,7 +274,7 @@ inline std::ostream &operator<<(std::ostream &s, const Interval &i) {
 
 // TODO: We really need an llvm::SmallVector-like thing here.
 // These are rarely more than size 4.
-using Box = std::vector<Interval>;
+using Box = SmallVector<Interval, max_rank>;
 
 // Check if b fully contains a.
 inline bool is_subset_of(const Interval &a, const Interval &b) {
