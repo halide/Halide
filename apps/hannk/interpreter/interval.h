@@ -40,7 +40,7 @@ public:
         }
     }
     ~SmallVector() {
-      resize(0);
+        resize(0);
     }
 
     SmallVector &operator=(const SmallVector &assign) {

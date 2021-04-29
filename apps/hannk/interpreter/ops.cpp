@@ -764,9 +764,23 @@ BoundsMap FullyConnectedOp::map_bounds(int input_idx, int output_idx) const {
     }
 }
 
-bool can_use_elementwise_program(const Op *op,
-                                 const std::vector<halide_type_t> &input_types,
-                                 const std::vector<halide_type_t> &output_types) {
+// This is a silly wrapper for a list of types that we can compare to
+// a list of runtime types, without dynamically allocating any memory.
+template<typename... Types>
+struct TypeList {
+    halide_type_t types[sizeof...(Types)] = {halide_type_of<Types>()...};
+    constexpr size_t size() const {
+        return sizeof...(Types);
+    }
+    halide_type_t operator[](int i) {
+        return types[i];
+    }
+};
+
+template<typename InputTypes, typename OutputTypes>
+bool can_use_elementwise_program(const Op *op) {
+    InputTypes input_types;
+    OutputTypes output_types;
     if (op->input_count() > (int)input_types.size()) {
         return false;
     }
@@ -795,13 +809,13 @@ void ElementwiseProgramOp::execute() {
     HalideBuffer<void> out0 = output(0)->buffer();
     HalideBuffer<void> out1 = output(std::min(output_count() - 1, 1))->buffer();
     using arg_ptr = halide_buffer_t *;
-    if (can_use_elementwise_program(this, {5, halide_type_of<uint8_t>()}, {halide_type_of<uint8_t>()})) {
+    if (can_use_elementwise_program<TypeList<uint8_t, uint8_t, uint8_t, uint8_t, uint8_t>, TypeList<uint8_t>>(this)) {
         auto elementwise_rank1 = [&](arg_ptr in0, arg_ptr in1, arg_ptr in2, arg_ptr in3, arg_ptr in4, arg_ptr out0) {
             CHECK(0 == elementwise_5xuint8_1xuint8(in0, in1, in2, in3, in4, program_, out0));
         };
         loop_nest<1>(elementwise_rank1, in0, in1, in2, in3, in4, out0);
         return;
-    } else if (can_use_elementwise_program(this, {5, halide_type_of<int16_t>()}, {halide_type_of<uint8_t>(), halide_type_of<int16_t>()})) {
+    } else if (can_use_elementwise_program<TypeList<int16_t, int16_t, int16_t, int16_t, int16_t>, TypeList<uint8_t, int16_t>>(this)) {
         auto elementwise_rank1 = [&](arg_ptr in0, arg_ptr in1, arg_ptr in2, arg_ptr in3, arg_ptr in4, arg_ptr out0, arg_ptr out1) {
             CHECK(0 == elementwise_5xint16_1xuint8int16(in0, in1, in2, in3, in4, program_, out0, out1));
         };
