@@ -1,6 +1,7 @@
 #ifndef HANNK_INTERVAL_H
 #define HANNK_INTERVAL_H
 
+#include <initializer_list>
 #include <iostream>
 #include <utility>
 
@@ -33,6 +34,11 @@ public:
             push_back(std::move(i));
         }
     }
+    SmallVector(std::initializer_list<T> values) {
+        for (T &i : values) {
+            push_back(i);
+        }
+    }
     ~SmallVector() {
       resize(0);
     }
@@ -42,12 +48,15 @@ public:
         for (const T &i : assign) {
             push_back(i);
         }
+        return *this;
     }
+
     SmallVector &operator=(SmallVector &&move) {
         resize(0);
         for (T &i : move) {
             push_back(std::move(i));
         }
+        return *this;
     }
 
     template<typename Iterator>

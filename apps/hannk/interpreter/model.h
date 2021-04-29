@@ -91,7 +91,7 @@ class Tensor {
     // Possibly shared storage for this tensor.
     std::shared_ptr<TensorStorage> storage_;
     // The offset of this tensor into the storage buffer.
-    std::array<int, max_rank> storage_offset_{};
+    SmallVector<int, max_rank> storage_offset_;
 
     // A list of ops that use this tensor as an output or an input, respectively.
     std::list<Op *> producers_;
@@ -192,7 +192,7 @@ public:
     std::shared_ptr<TensorStorage> storage();
 
     bool is_alias() const;
-    void set_alias_of(TensorPtr t, const std::array<int, max_rank> &offset = {});
+    void set_alias_of(TensorPtr t, const SmallVector<int, max_rank> &offset = {});
 
     void add_consumer(Op *op);
     void add_producer(Op *op);

@@ -66,7 +66,7 @@ namespace {
 
 // We can alias two tensors if the input is not used after the output is written,
 // and we meet a number of other requirements.
-bool maybe_alias_tensors(TensorPtr input, TensorPtr output, const std::array<int, max_rank> &offset = {}) {
+bool maybe_alias_tensors(TensorPtr input, TensorPtr output, const SmallVector<int, max_rank> &offset = {}) {
     // We shouldn't change a tensor that is already aliased.
     if (input->is_alias() && std::all_of(offset.begin(), offset.end(), [](int i) { return i == 0; })) {
         // If the input is aliased, but there is no offset, try aliasing the other
@@ -101,7 +101,7 @@ bool maybe_alias_tensors(TensorPtr input, TensorPtr output, const std::array<int
     // We can't grow the bounds of the output tensor.
     // TODO: We could, if we allowed non-zero mins.
     Box input_bounds_with_offset = input->bounds();
-    for (int i = 0; i < (int)input_bounds_with_offset.size(); ++i) {
+    for (int i = 0; i < (int)offset.size(); ++i) {
         input_bounds_with_offset[i] += offset[i];
     }
     if (!is_subset_of(input_bounds_with_offset, output->bounds())) {
@@ -141,7 +141,7 @@ class InPlace : public OpVisitor {
 
     void visit(ConcatenationOp *op) {
         bool is_no_op = true;
-        std::array<int, max_rank> offset{};
+        SmallVector<int, max_rank> offset(op->axis() + 1);
         for (int i = 0; i < op->input_count(); i++) {
             is_no_op = is_no_op && maybe_alias_tensors(op->input(i), op->output(), offset);
             is_no_op = is_no_op && op->input(i)->quantization() == op->output()->quantization();
@@ -155,7 +155,7 @@ class InPlace : public OpVisitor {
 
     void visit(SplitOp *op) {
         bool is_no_op = true;
-        std::array<int, max_rank> offset{};
+        SmallVector<int, max_rank> offset(op->axis() + 1);
         for (int i = 0; i < op->output_count(); i++) {
             is_no_op = is_no_op && maybe_alias_tensors(op->output(i), op->input(), offset);
             is_no_op = is_no_op && op->output(i)->quantization() == op->input()->quantization();
@@ -175,7 +175,7 @@ class InPlace : public OpVisitor {
 
         auto padding = op->input(1)->buffer<const int32_t>();
 
-        std::array<int, max_rank> offset{};
+        SmallVector<int, max_rank> offset(padding.extent(1));
         for (int d = 0; d < padding.extent(1); d++) {
             offset[d] = padding(0, d);
         }
