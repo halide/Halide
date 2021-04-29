@@ -297,7 +297,7 @@ MultiplyParams get_quantized_multiply_params(const QuantizationInfo &a, const Qu
 
 void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q, int in1sign,
          HalideBuffer<const uint8_t> in2, const QuantizationInfo &in2q, int in2sign,
-         HalideBuffer<uint8_t> out, const QuantizationInfo &outq,
+         const HalideBuffer<uint8_t> &out, const QuantizationInfo &outq,
          ActivationFunction activation = ActivationFunction::None) {
     // TODO: We should require the buffers are already broadcasted appropriately before
     // getting here.
@@ -340,7 +340,7 @@ void add(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q, int in1s
 
 void mul(HalideBuffer<const uint8_t> in1, const QuantizationInfo &in1q,
          HalideBuffer<const uint8_t> in2, const QuantizationInfo &in2q,
-         HalideBuffer<uint8_t> out, const QuantizationInfo &outq,
+         const HalideBuffer<uint8_t> &out, const QuantizationInfo &outq,
          ActivationFunction activation = ActivationFunction::None) {
     // TODO: We should require the buffers are already broadcasted appropriately before
     // getting here.
@@ -375,7 +375,7 @@ void requantize(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
                 ActivationFunction activation = ActivationFunction::None) {
     if (inq == outq) {
         // Some of these are just copies, or no-ops.
-        if (is_alias(in.raw_buffer(), out)) {
+        if (is_alias(in.raw_buffer(), out.raw_buffer())) {
             return;
         } else {
             out.copy_from(in);
@@ -437,6 +437,13 @@ const char *BinaryOp::to_string(BinaryOp::Operator op) {
     }
 }
 
+namespace {
+
+template<typename T>
+T as_scalar(const HalideBuffer<const void> &buf) {
+    return *(const T*)buf.data();
+}
+
 double dequantize_scalar(const Tensor *t) {
     assert(t->rank() == 0);
 
@@ -444,28 +451,30 @@ double dequantize_scalar(const Tensor *t) {
     float scale = q.scale.empty() ? 1.0f : q.scale.front();
     int zero = q.zero.empty() ? 0 : q.zero.front();
 
-    HalideBuffer<const void> buf = t->buffer<const void>();
+    const auto &buf = t->buffer<const void>();
     if (buf.type() == halide_type_of<uint8_t>()) {
-        return (buf.as<const uint8_t>()() - zero) * scale;
+        return (as_scalar<uint8_t>(buf) - zero) * scale;
     } else if (buf.type() == halide_type_of<int8_t>()) {
-        return (buf.as<const int8_t>()() - zero) * scale;
+        return (as_scalar<int8_t>(buf) - zero) * scale;
     } else if (buf.type() == halide_type_of<uint16_t>()) {
-        return (buf.as<const uint16_t>()() - zero) * scale;
+        return (as_scalar<uint16_t>(buf) - zero) * scale;
     } else if (buf.type() == halide_type_of<int16_t>()) {
-        return (buf.as<const int16_t>()() - zero) * scale;
+        return (as_scalar<int16_t>(buf) - zero) * scale;
     } else if (buf.type() == halide_type_of<uint32_t>()) {
-        return (buf.as<const uint32_t>()() - zero) * scale;
+        return (as_scalar<uint32_t>(buf) - zero) * scale;
     } else if (buf.type() == halide_type_of<int32_t>()) {
-        return (buf.as<const int32_t>()() - zero) * scale;
+        return (as_scalar<int32_t>(buf) - zero) * scale;
     } else if (buf.type() == halide_type_of<float>()) {
-        return (buf.as<const float>()() - zero) * scale;
+        return (as_scalar<float>(buf) - zero) * scale;
     } else if (buf.type() == halide_type_of<double>()) {
-        return (buf.as<const double>()() - zero) * scale;
+        return (as_scalar<double>(buf) - zero) * scale;
     } else {
         LOG(FATAL) << "Unsupported type " << buf.type();
         return std::numeric_limits<double>::quiet_NaN();
     }
 }
+
+}  // namespace
 
 void BinaryOp::execute() {
     const TensorPtr in1 = input(0);
@@ -475,9 +484,9 @@ void BinaryOp::execute() {
     if (in1->type() == halide_type_of<uint8_t>() &&
         in2->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
-        auto in1_buf = in1->buffer<const uint8_t>();
-        auto in2_buf = in2->buffer<const uint8_t>();
-        auto out_buf = out->buffer<uint8_t>();
+        const auto &in1_buf = in1->buffer<const uint8_t>();
+        const auto &in2_buf = in2->buffer<const uint8_t>();
+        const auto &out_buf = out->buffer<uint8_t>();
 
         switch (op_) {
         case Add:
@@ -534,16 +543,16 @@ void ConcatenationOp::execute() {
     if (is_no_op_) {
         return;
     }
-    HalideBuffer<void> output_buf = output()->buffer();
+    const auto &output_buf = output()->buffer();
 
     int concatenated_i = 0;
     for (int i = 0; i < input_count(); i++) {
-        HalideBuffer<const void> input_buf = input(i)->buffer();
+        auto input_buf = input(i)->buffer();
         assert(input_buf.dim(axis_).min() == 0);
         input_buf.translate(axis_, concatenated_i);
         concatenated_i += input_buf.dim(axis_).extent();
 
-        HalideBuffer<void> output_crop = output_buf;
+        auto output_crop = output_buf;
         crop_to_union(output_crop, input_buf);
         requantize(input_buf, input(i)->quantization(), output_crop, output()->quantization());
     }
@@ -803,13 +812,13 @@ bool can_use_elementwise_program(const Op *op) {
 }
 
 void ElementwiseProgramOp::execute() {
-    HalideBuffer<const void> in0 = input(0)->buffer();
-    HalideBuffer<const void> in1 = input(std::min(input_count() - 1, 1))->buffer();
-    HalideBuffer<const void> in2 = input(std::min(input_count() - 1, 2))->buffer();
-    HalideBuffer<const void> in3 = input(std::min(input_count() - 1, 3))->buffer();
-    HalideBuffer<const void> in4 = input(std::min(input_count() - 1, 4))->buffer();
-    HalideBuffer<void> out0 = output(0)->buffer();
-    HalideBuffer<void> out1 = output(std::min(output_count() - 1, 1))->buffer();
+    const auto &in0 = input(0)->buffer();
+    const auto &in1 = input(std::min(input_count() - 1, 1))->buffer();
+    const auto &in2 = input(std::min(input_count() - 1, 2))->buffer();
+    const auto &in3 = input(std::min(input_count() - 1, 3))->buffer();
+    const auto &in4 = input(std::min(input_count() - 1, 4))->buffer();
+    const auto &out0 = output(0)->buffer();
+    const auto &out1 = output(std::min(output_count() - 1, 1))->buffer();
     using arg_ptr = halide_buffer_t *;
     if (can_use_elementwise_program<TypeList<uint8_t, uint8_t, uint8_t, uint8_t, uint8_t>, TypeList<uint8_t>>(this)) {
         auto elementwise_rank1 = [&](arg_ptr in0, arg_ptr in1, arg_ptr in2, arg_ptr in3, arg_ptr in4, arg_ptr out0) {
@@ -1376,7 +1385,7 @@ void SplitOp::execute() {
     if (is_no_op_) {
         return;
     }
-    HalideBuffer<const void> input_buf = input()->buffer();
+    const auto &input_buf = input()->buffer();
 
     int concatenated_i = 0;
     for (int i = 0; i < output_count(); i++) {
