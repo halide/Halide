@@ -7,7 +7,7 @@
 #
 # export HL_TARGET to specify the target architecture to build. (Defaults to arm-64-android.)
 #
-# usage: HL_TARGET=arm-64-android run_device_on_target local_testdata/*.tflite
+# usage: HL_TARGET=arm-64-android ./run_benchmark_on_device.sh local_testdata/*.tflite
 
 set -e
 
