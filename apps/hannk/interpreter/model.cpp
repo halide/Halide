@@ -139,9 +139,7 @@ void Tensor::allocate() {
     HalideBuffer<void> buffer = storage()->buffer();
     for (int i = 0; i < buffer.dimensions(); i++) {
         Interval dim_i(buffer_.dim(i).min(), buffer_.dim(i).max());
-        if (i < (int)storage_offset_.size()) {
-            dim_i += storage_offset_[i];
-        }
+        dim_i += storage_offset_[i];
         assert(buffer.dim(i).min() <= dim_i.min);
         assert(buffer.dim(i).max() >= dim_i.max);
         buffer.crop(i, dim_i.min, dim_i.extent());
@@ -195,14 +193,14 @@ bool Tensor::is_alias() const {
     return storage_ != nullptr;
 }
 
-void Tensor::set_alias_of(TensorPtr t, std::vector<int> storage_offset) {
+void Tensor::set_alias_of(TensorPtr t, const std::array<int, max_rank> &storage_offset) {
     CHECK(!is_dynamic());
 
     storage_ = t->storage();
-    storage_offset_ = std::move(storage_offset);
+    storage_offset_ = storage_offset;
 
     Box offset_bounds = bounds();
-    for (int i = 0; i < (int)storage_offset_.size(); i++) {
+    for (int i = 0; i < (int)offset_bounds.size(); i++) {
         offset_bounds[i] += storage_offset_[i];
     }
     storage_->add_use(type(), offset_bounds);

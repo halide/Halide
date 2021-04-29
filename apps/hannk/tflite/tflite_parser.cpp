@@ -154,22 +154,22 @@ public:
         BinaryOp::Op,                        \
         parse_activation_function(op->builtin_options_as_##Op##Options()->fused_activation_function()));
 
-    std::unique_ptr<Op> parse_pool2D(const tflite::Operator *op, PoolOp::Operator reduce_op) {
+    std::unique_ptr<Op> parse_pool2D(const tflite::Operator *op, Pool2DOp::Operator reduce_op) {
         const auto options = op->builtin_options_as_Pool2DOptions();
         Padding padding = parse_padding(options->padding());
-        std::vector<int> stride = {
+        std::array<int, 2> stride = {{
             options->stride_w(),
             options->stride_h(),
-        };
-        std::vector<int> filter_size = {
+        }};
+        std::array<int, 2> filter_size = {{
             options->filter_width(),
             options->filter_height(),
-        };
+        }};
         ActivationFunction activation =
             parse_activation_function(options->fused_activation_function());
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return ::hannk::make_unique<PoolOp>(
+        return ::hannk::make_unique<Pool2DOp>(
             input, output, stride, filter_size, padding, reduce_op, activation);
     }
 
@@ -198,17 +198,17 @@ public:
     std::unique_ptr<Op> parse_conv2D(const tflite::Operator *op) {
         const tflite::Conv2DOptions *options =
             op->builtin_options_as_Conv2DOptions();
-        std::vector<int> dilation_factor = {
+        std::array<int, 2> dilation_factor = {{
             options->dilation_w_factor(),
             options->dilation_h_factor(),
-        };
+        }};
         ActivationFunction activation =
             parse_activation_function(options->fused_activation_function());
         Padding padding = parse_padding(options->padding());
-        std::vector<int> stride = {
+        std::array<int, 2> stride = {{
             options->stride_w(),
             options->stride_h(),
-        };
+        }};
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr filter = tensors_[op->inputs()->Get(1)];
         TensorPtr bias = tensors_[op->inputs()->Get(2)];
@@ -220,17 +220,17 @@ public:
     std::unique_ptr<Op> parse_depthwise_conv2D(const tflite::Operator *op) {
         const tflite::DepthwiseConv2DOptions *options =
             op->builtin_options_as_DepthwiseConv2DOptions();
-        std::vector<int> dilation_factor = {
+        std::array<int, 2> dilation_factor = {{
             options->dilation_w_factor(),
             options->dilation_h_factor(),
-        };
+        }};
         ActivationFunction activation =
             parse_activation_function(options->fused_activation_function());
         Padding padding = parse_padding(options->padding());
-        std::vector<int> stride = {
+        std::array<int, 2> stride = {{
             options->stride_w(),
             options->stride_h(),
-        };
+        }};
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr filter = tensors_[op->inputs()->Get(1)];
         TensorPtr bias = tensors_[op->inputs()->Get(2)];
@@ -306,12 +306,12 @@ public:
     }
 
     std::unique_ptr<Op> parse_split(const tflite::Operator *op, int axis_tensor_index, int input_tensor_index) {
-        assert(axis_tensor_index < op->inputs()->size());
+        assert(axis_tensor_index < (int)op->inputs()->size());
         TensorPtr axis_tensor = tensors_[op->inputs()->Get(axis_tensor_index)];
         CHECK(axis_tensor->is_allocated()) << "Can't handle dynamic axis for Split.\n";
         int axis = axis_tensor->buffer<int32_t>()();
 
-        assert(input_tensor_index < op->inputs()->size());
+        assert(input_tensor_index < (int)op->inputs()->size());
         TensorPtr input = tensors_[op->inputs()->Get(input_tensor_index)];
         std::vector<TensorPtr> outputs;
         for (auto i = op->outputs()->cbegin(); i != op->outputs()->cend(); ++i) {
@@ -398,7 +398,7 @@ public:
         case tflite::BuiltinOperator_ADD:
             return PARSE_BINARY_WITH_ACTIVATION(op, Add);
         case tflite::BuiltinOperator_AVERAGE_POOL_2D:
-            return parse_pool2D(op, PoolOp::Average);
+            return parse_pool2D(op, Pool2DOp::Average);
         case tflite::BuiltinOperator_CONCATENATION:
             return parse_concatenation(op);
         case tflite::BuiltinOperator_CONV_2D:
@@ -426,7 +426,7 @@ public:
         case tflite::BuiltinOperator_LSTM:
             return parse_lstm(op);
         case tflite::BuiltinOperator_MAX_POOL_2D:
-            return parse_pool2D(op, PoolOp::Max);
+            return parse_pool2D(op, Pool2DOp::Max);
         case tflite::BuiltinOperator_MEAN:
             return parse_reduction(op, ReductionOp::Mean);
         case tflite::BuiltinOperator_MUL:

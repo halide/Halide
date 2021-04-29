@@ -600,8 +600,8 @@ BoundsMap Conv2DOp::map_bounds(int input_idx, int output_idx) const {
 namespace {
 
 void conv_uint8(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t *bias,
-                const MultiplyParams &params, const std::vector<int> &stride,
-                const std::vector<int> &dilation, const Interval &output_range,
+                const MultiplyParams &params, const std::array<int, 2> &stride,
+                const std::array<int, 2> &dilation, const Interval &output_range,
                 halide_buffer_t *output) {
 #ifdef CONV_R16
     if (input->dim[0].extent >= 16) {
@@ -671,7 +671,7 @@ namespace {
 // Wrapper to dispatch to the appropriate variant of depthwise_conv.
 void depthwise_conv_uint8(
     halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t *bias,
-    int depth_multiplier, const MultiplyParams &params, const std::vector<int> &stride, const std::vector<int> &dilation,
+    int depth_multiplier, const MultiplyParams &params, const std::array<int, 2> &stride, const std::array<int, 2> &dilation,
     const Interval &output_range, halide_buffer_t *output) {
     if (depth_multiplier >= output->dim[0].extent) {
         CHECK(
@@ -998,7 +998,7 @@ int compute_padding(int stride, int in_size, int filter_size, int out_size) {
 
 }  // namespace
 
-const char *PoolOp::to_string(PoolOp::Operator op) {
+const char *Pool2DOp::to_string(Pool2DOp::Operator op) {
     switch (op) {
     case Average:
         return "Average";
@@ -1010,7 +1010,7 @@ const char *PoolOp::to_string(PoolOp::Operator op) {
     }
 }
 
-BoundsMap PoolOp::map_bounds(int input_idx, int output_idx) const {
+BoundsMap Pool2DOp::map_bounds(int input_idx, int output_idx) const {
     assert(output_idx == 0);
     return BoundsMap(4, 4)
         .elementwise(0, 0)
@@ -1019,7 +1019,7 @@ BoundsMap PoolOp::map_bounds(int input_idx, int output_idx) const {
         .elementwise(3, 3);
 }
 
-void PoolOp::execute() {
+void Pool2DOp::execute() {
     const TensorPtr in = input();
     TensorPtr out = output();
 
@@ -1531,7 +1531,7 @@ void PadOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 
-void PoolOp::accept(OpVisitor *v) {
+void Pool2DOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 

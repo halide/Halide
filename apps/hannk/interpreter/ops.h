@@ -1,6 +1,8 @@
 #ifndef HANNK_OPS_H_
 #define HANNK_OPS_H_
 
+#include <array>
+
 #include "interpreter/model.h"
 
 namespace hannk {
@@ -104,18 +106,18 @@ public:
 };
 
 class Conv2DOp : public Op {
-    std::vector<int> stride_;
-    std::vector<int> dilation_;
+    std::array<int, 2> stride_;
+    std::array<int, 2> dilation_;
     Padding padding_;
     ActivationFunction activation_;
 
 public:
     Conv2DOp(TensorPtr input, TensorPtr filter, TensorPtr bias, TensorPtr output,
-             std::vector<int> stride, std::vector<int> dilation, Padding padding,
+             std::array<int, 2> stride, std::array<int, 2> dilation, Padding padding,
              ActivationFunction activation)
         : Op({input, filter, bias}, {output}),
-          stride_(std::move(stride)),
-          dilation_(std::move(dilation)),
+          stride_(stride),
+          dilation_(dilation),
           padding_(padding),
           activation_(activation) {
     }
@@ -156,19 +158,19 @@ public:
 
 class DepthwiseConv2DOp : public Op {
     int depth_multiplier_;
-    std::vector<int> stride_;
-    std::vector<int> dilation_;
+    std::array<int, 2> stride_;
+    std::array<int, 2> dilation_;
     Padding padding_;
     ActivationFunction activation_;
 
 public:
     DepthwiseConv2DOp(TensorPtr input, TensorPtr filter, TensorPtr bias, TensorPtr output,
-                      int depth_multiplier, std::vector<int> stride, std::vector<int> dilation,
+                      int depth_multiplier, std::array<int, 2> stride, std::array<int, 2> dilation,
                       Padding padding, ActivationFunction activation)
         : Op({input, filter, bias}, {output}),
           depth_multiplier_(depth_multiplier),
-          stride_(std::move(stride)),
-          dilation_(std::move(dilation)),
+          stride_(stride),
+          dilation_(dilation),
           padding_(padding),
           activation_(activation) {
     }
@@ -322,7 +324,7 @@ public:
     }
 };
 
-class PoolOp : public Op {
+class Pool2DOp : public Op {
 public:
     enum Operator {
         Average,
@@ -332,26 +334,26 @@ public:
     static const char *to_string(Operator op);
 
 protected:
-    std::vector<int> stride_;
-    std::vector<int> filter_size_;
+    std::array<int, 2> stride_;
+    std::array<int, 2> filter_size_;
     Padding padding_;
     Operator op_;
     ActivationFunction activation_;
 
 public:
-    PoolOp(TensorPtr input, TensorPtr output, std::vector<int> stride,
-           std::vector<int> filter_size, Padding padding, Operator op,
-           ActivationFunction activation)
+    Pool2DOp(TensorPtr input, TensorPtr output, std::array<int, 2> stride,
+             std::array<int, 2> filter_size, Padding padding, Operator op,
+             ActivationFunction activation)
         : Op({input}, {output}),
-          stride_(std::move(stride)),
-          filter_size_(std::move(filter_size)),
+          stride_(stride),
+          filter_size_(filter_size),
           padding_(padding),
           op_(op),
           activation_(activation) {
     }
 
     std::unique_ptr<Op> clone(TensorMap &map) const {
-        return ::hannk::make_unique<PoolOp>(
+        return ::hannk::make_unique<Pool2DOp>(
             apply(map, input()), apply(map, output()), stride_, filter_size_, padding_, op_, activation_);
     }
 
@@ -614,7 +616,7 @@ public:
     }
     virtual void visit(PadOp *op) {
     }
-    virtual void visit(PoolOp *op) {
+    virtual void visit(Pool2DOp *op) {
     }
     virtual void visit(ReductionOp *op) {
     }

@@ -562,29 +562,29 @@ private:
         return BuildBinary(context, node, BinaryOp::NotEqual);
     }
 
-    std::unique_ptr<Op> BuildPool2d(TfLiteContext *context, TfLiteNode *node, PoolOp::Operator reduce_op) {
+    std::unique_ptr<Op> BuildPool2d(TfLiteContext *context, TfLiteNode *node, Pool2DOp::Operator reduce_op) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLitePoolParams *params = (const TfLitePoolParams *)(node->builtin_data);
         auto padding = ConvertTfLitePadding(params->padding);
-        const std::vector<int> stride = {
+        const std::array<int, 2> stride = {{
             params->stride_width,
             params->stride_height,
-        };
-        const std::vector<int> filter_size = {
+        }};
+        const std::array<int, 2> filter_size = {{
             params->filter_width,
             params->filter_height,
-        };
+        }};
         auto activation = ConvertTfLiteActivation(params->activation);
-        return ::hannk::make_unique<PoolOp>(input, output, stride, filter_size, padding, reduce_op, activation);
+        return ::hannk::make_unique<Pool2DOp>(input, output, stride, filter_size, padding, reduce_op, activation);
     }
 
     std::unique_ptr<Op> BuildAveragePool2d(TfLiteContext *context, TfLiteNode *node) {
-        return BuildPool2d(context, node, PoolOp::Average);
+        return BuildPool2d(context, node, Pool2DOp::Average);
     }
 
     std::unique_ptr<Op> BuildMaxPool2d(TfLiteContext *context, TfLiteNode *node) {
-        return BuildPool2d(context, node, PoolOp::Max);
+        return BuildPool2d(context, node, Pool2DOp::Max);
     }
 
     std::unique_ptr<Op> BuildConcatenation(TfLiteContext *context, TfLiteNode *node) {
@@ -614,14 +614,14 @@ private:
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteConvParams *params = (const TfLiteConvParams *)(node->builtin_data);
         auto padding = ConvertTfLitePadding(params->padding);
-        const std::vector<int> stride = {
+        const std::array<int, 2> stride = {{
             params->stride_width,
             params->stride_height,
-        };
-        const std::vector<int> dilation_factor = {
+        }};
+        const std::array<int, 2> dilation_factor = {{
             params->dilation_width_factor,
             params->dilation_height_factor,
-        };
+        }};
         auto activation = ConvertTfLiteActivation(params->activation);
         return ::hannk::make_unique<Conv2DOp>(input, filter, bias, output, stride,
                                               dilation_factor, padding, activation);
@@ -634,14 +634,14 @@ private:
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteDepthwiseConvParams *params = (const TfLiteDepthwiseConvParams *)(node->builtin_data);
         int depth_multiplier = output->extent(0) / input->extent(0);
-        const std::vector<int> stride = {
+        const std::array<int, 2> stride = {{
             params->stride_width,
             params->stride_height,
-        };
-        const std::vector<int> dilation_factor = {
+        }};
+        const std::array<int, 2> dilation_factor = {{
             params->dilation_width_factor,
             params->dilation_height_factor,
-        };
+        }};
         auto padding = ConvertTfLitePadding(params->padding);
         auto activation = ConvertTfLiteActivation(params->activation);
         return ::hannk::make_unique<DepthwiseConv2DOp>(input, filter, bias, output, depth_multiplier,

@@ -1,6 +1,7 @@
 #ifndef HANNK_MODEL_H
 #define HANNK_MODEL_H
 
+#include <array>
 #include <iostream>
 #include <list>
 #include <map>
@@ -18,8 +19,10 @@ std::unique_ptr<T> make_unique(Args &&...args) {
     return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
 }
 
+const int max_rank = 6;
+
 template<typename T>
-using HalideBuffer = Halide::Runtime::Buffer<T>;
+using HalideBuffer = Halide::Runtime::Buffer<T, max_rank>;
 
 struct QuantizationInfo {
     std::vector<float> scale;
@@ -90,7 +93,7 @@ class Tensor {
     // Possibly shared storage for this tensor.
     std::shared_ptr<TensorStorage> storage_;
     // The offset of this tensor into the storage buffer.
-    std::vector<int> storage_offset_;
+    std::array<int, max_rank> storage_offset_{};
 
     // A list of ops that use this tensor as an output or an input, respectively.
     std::list<Op *> producers_;
@@ -192,7 +195,7 @@ public:
     std::shared_ptr<TensorStorage> storage();
 
     bool is_alias() const;
-    void set_alias_of(TensorPtr t, std::vector<int> offset = {});
+    void set_alias_of(TensorPtr t, const std::array<int, max_rank> &offset = {});
 
     void add_consumer(Op *op);
     void add_producer(Op *op);
@@ -317,18 +320,20 @@ struct DimMap {
 class BoundsMap {
     int dims_in_;
     int dims_out_;
-    std::vector<DimMap> data_;
+    DimMap data_[max_rank * (max_rank + 1)];
 
 public:
     BoundsMap(int dims_in, int dims_out)
-        : dims_in_(dims_in), dims_out_(dims_out), data_(dims_in * (dims_out + 1)) {
+        : dims_in_(dims_in), dims_out_(dims_out) {
+        assert(dims_in <= max_rank);
+        assert(dims_out <= max_rank);
     }
 
     DimMap &at(int dim_in, int dim_out) {
-        return data_[dim_in * (dims_out_ + 1) + dim_out];
+        return data_[dim_in * (max_rank + 1) + dim_out];
     }
     const DimMap &at(int dim_in, int dim_out) const {
-        return data_[dim_in * (dims_out_ + 1) + dim_out];
+        return data_[dim_in * (max_rank + 1) + dim_out];
     }
 
     DimMap &at(int dim_in) {
