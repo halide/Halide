@@ -1,5 +1,5 @@
 #include "Halide.h"
-#include "common_halide.h"
+#include "halide/common_halide.h"
 #include "interpreter/elementwise_program.h"
 
 using namespace Halide;

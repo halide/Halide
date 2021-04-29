@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "HalideBuffer.h"
-#include "interval.h"
+#include "interpreter/interval.h"
 #include "util/error_util.h"
 
 namespace hannk {

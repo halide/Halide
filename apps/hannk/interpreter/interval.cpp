@@ -1,4 +1,4 @@
-#include "interval.h"
+#include "interpreter/interval.h"
 
 namespace hannk {
 

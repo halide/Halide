@@ -1,4 +1,4 @@
-#include "hannk_delegate.h"
+#include "delegate/hannk_delegate.h"
 #include "tensorflow/lite/tools/delegates/delegate_provider.h"
 #include "util/error_util.h"
 
