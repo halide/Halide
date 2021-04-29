@@ -7,29 +7,70 @@
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+struct make_uint_t {
+    template<typename... Args>
+    auto operator()(Args &&... args) const {
+        return UInt(static_cast<Args &&>(args)...);
+    }
+};
+
+struct make_int_t {
+    template<typename... Args>
+    auto operator()(Args &&... args) const {
+        return Int(static_cast<Args &&>(args)...);
+    }
+};
+
+template<typename IntT>
+void fill_buffer_a(Buffer<IntT> &buf, int row, int acc) {
+    for (int iy = 0; iy < row; iy++) {
+        for (int ix = 0; ix < acc; ix++) {
+            buf(ix, iy) = rand() % 256 + std::numeric_limits<IntT>::min();
+        }
+    }
+}
+
+template<typename IntT>
+void fill_buffer_b(Buffer<IntT> &buf, int col, int acc) {
+    for (int iy = 0; iy < acc / 4; iy++) {
+        for (int ix = 0; ix < col; ix++) {
+            for (int ik = 0; ik < 4; ++ik) {
+                buf(ik, ix, iy) = rand() % 256 + std::numeric_limits<IntT>::min();
+            }
+        }
+    }
+}
+
+template<bool LhsSigned, bool RhsSigned>
+bool matmul() {
+    auto lhs = std::conditional_t<LhsSigned, make_int_t, make_uint_t>{};
+    auto rhs = std::conditional_t<RhsSigned, make_int_t, make_uint_t>{};
+
+    using LhsInt8 = std::conditional_t<LhsSigned, int8_t, uint8_t>;
+    using RhsInt8 = std::conditional_t<RhsSigned, int8_t, uint8_t>;
+
     Target target = get_jit_target_from_environment();
     if (!target.has_feature(Target::AVX512_SapphireRapids)) {
         std::cout << "[SKIP] The tiled matmul test is only designed to test AMX support.\n";
-        return 0;
+        return true;
     }
     const int row = 16;
     const int col = 16;
     const int acc = 16;
 
     Var x("x"), y("y");
-    ImageParam A(Int(8), 2, "lhs");
+    ImageParam A(lhs(8), 2, "lhs");
     // NB the RHS matrix in AMX instructions should be tiled in "VNNI format",
     // where instead of being (cols, rows) where rows are adjacent in memory it
     // should be (4, cols, rows / 4) for int8, or (2, cols, rows / 2) for bf16.
     // This means that the rows must always be divisible by 4 (or 2 for bf16).
-    ImageParam B(Int(8), 3, "rhs");
+    ImageParam B(rhs(8), 3, "rhs");
 
     RDom r(0, acc);
 
     Func mm("matmul");
     mm(y, x) = cast<int32_t>(0);
-    mm(y, x) += cast<int16_t>(A(r.x, x)) * B(r.x % 4, y, r.x / 4);
+    mm(y, x) += cast<int32_t>(A(r.x, x)) * B(r.x % 4, y, r.x / 4);
 
     // Ensure all (x, y) tile sizes are the same so that loops are fused.
     int tile_y = 8;
@@ -67,22 +108,12 @@ int main(int argc, char **argv) {
         .vectorize(mmyi)
         .vectorize(mmxi);
 
-    Buffer<int8_t> a_buf(acc, row);
-    for (int iy = 0; iy < row; iy++) {
-        for (int ix = 0; ix < acc; ix++) {
-            a_buf(ix, iy) = rand() % 256 - 128;
-        }
-    }
+    Buffer<LhsInt8> a_buf(acc, row);
+    fill_buffer_a(a_buf, row, acc);
     A.set(a_buf);
 
-    Buffer<int8_t> b_buf(4, col, acc / 4);
-    for (int iy = 0; iy < acc / 4; iy++) {
-        for (int ix = 0; ix < col; ix++) {
-            for (int ik = 0; ik < 4; ++ik) {
-                b_buf(ik, ix, iy) = rand() % 256 - 128;
-            }
-        }
-    }
+    Buffer<RhsInt8> b_buf(4, col, acc / 4);
+    fill_buffer_b(b_buf, col, acc);
     B.set(b_buf);
 
     Buffer<int32_t> out(col, row);
@@ -107,10 +138,23 @@ int main(int argc, char **argv) {
             if (val != out(i, j)) {
                 std::cerr << "Invalid result at " << i << ", " << j << "\n"
                           << out(i, j) << " != " << val << "\n";
-                return 1;
+                return false;
             }
         }
     }
     std::cout << "Success!\n";
+    return true;
+}
+
+auto matmul_ss = &matmul<true, false>;
+auto matmul_us = &matmul<false, true>;
+auto matmul_su = &matmul<true, false>;
+auto matmul_uu = &matmul<false, false>;
+
+int main(int argc, char **argv) {
+    matmul_ss();
+    matmul_us();
+    matmul_su();
+    matmul_uu();
     return 0;
 }
