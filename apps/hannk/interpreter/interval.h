@@ -14,7 +14,7 @@ const int max_rank = 6;
 
 // This class mimics std::vector, but never dynamically allocates memory.
 // It can only grow to MaxSize elements.
-template <typename T, size_t MaxSize>
+template<typename T, size_t MaxSize>
 class SmallVector {
     alignas(alignof(T)) char buf_[MaxSize * sizeof(T)];
     size_t size_ = 0;
