@@ -9,14 +9,14 @@ using namespace Halide;
 
 struct make_uint_t {
     template<typename... Args>
-    auto operator()(Args &&...args) const {
+    Type operator()(Args &&...args) const {
         return UInt(static_cast<Args &&>(args)...);
     }
 };
 
 struct make_int_t {
     template<typename... Args>
-    auto operator()(Args &&...args) const {
+    Type operator()(Args &&...args) const {
         return Int(static_cast<Args &&>(args)...);
     }
 };
@@ -46,8 +46,8 @@ bool matmul() {
     constexpr bool lhs_signed = std::is_signed<LhsInt8>::value;
     constexpr bool rhs_signed = std::is_signed<RhsInt8>::value;
 
-    auto lhs = std::conditional_t<lhs_signed, make_int_t, make_uint_t>{};
-    auto rhs = std::conditional_t<rhs_signed, make_int_t, make_uint_t>{};
+    auto lhs = typename std::conditional<lhs_signed, make_int_t, make_uint_t>::type{};
+    auto rhs = typename std::conditional<rhs_signed, make_int_t, make_uint_t>::type{};
 
     Target target = get_jit_target_from_environment();
     if (!target.has_feature(Target::AVX512_SapphireRapids)) {
