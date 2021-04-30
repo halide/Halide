@@ -1199,7 +1199,7 @@ void ReshapeOp::execute() {
     if (out->is_dynamic()) {
         Box b;
         for (int i : new_shape) {
-            b.emplace_back(0, i);
+            b.emplace_back(0, i - 1);
         }
         out->resize(b);
     }
