@@ -9,14 +9,14 @@ using namespace Halide;
 
 struct make_uint_t {
     template<typename... Args>
-    auto operator()(Args &&... args) const {
+    auto operator()(Args &&...args) const {
         return UInt(static_cast<Args &&>(args)...);
     }
 };
 
 struct make_int_t {
     template<typename... Args>
-    auto operator()(Args &&... args) const {
+    auto operator()(Args &&...args) const {
         return Int(static_cast<Args &&>(args)...);
     }
 };
