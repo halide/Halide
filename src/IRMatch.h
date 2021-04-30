@@ -50,6 +50,10 @@ bool expr_match(const Expr &pattern, const Expr &expr, std::vector<Expr> &result
  */
 bool expr_match(const Expr &pattern, const Expr &expr, std::map<std::string, Expr> &result);
 
+/** Rewrite the expression x to have `lanes` lanes. This is useful
+ * for substituting the results of expr_match into a pattern expression. */
+Expr with_lanes(const Expr &x, int lanes);
+
 void expr_match_test();
 
 /** An alternative template-metaprogramming approach to expression
@@ -1468,6 +1472,13 @@ struct Intrin {
             return rounding_shift_right(arg0, arg1);
         }
 
+        Expr arg2 = std::get<const_min(2, sizeof...(Args) - 1)>(args).make(state, type_hint);
+        if (intrin == Call::mul_shift_right) {
+            return mul_shift_right(arg0, arg1, arg2);
+        } else if (intrin == Call::rounding_mul_shift_right) {
+            return rounding_mul_shift_right(arg0, arg1, arg2);
+        }
+
         internal_error << "Unhandled intrinsic in IRMatcher: " << intrin;
         return Expr();
     }
@@ -1544,6 +1555,14 @@ auto rounding_shift_left(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a
 template<typename A, typename B>
 auto rounding_shift_right(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
     return {Call::rounding_shift_right, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B, typename C>
+auto mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
+    return {Call::mul_shift_right, pattern_arg(a), pattern_arg(b), pattern_arg(c)};
+}
+template<typename A, typename B, typename C>
+auto rounding_mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
+    return {Call::rounding_mul_shift_right, pattern_arg(a), pattern_arg(b), pattern_arg(c)};
 }
 
 template<typename A>

@@ -836,7 +836,7 @@ public:
     // @{
 
     // The overload with one argument is 'explicit', so that
-    // (say) int is not implicitly convertable to Buffer<int>
+    // (say) int is not implicitly convertible to Buffer<int>
     explicit Buffer(int first) {
         static_assert(!T_is_void,
                       "To construct an Buffer<void>, pass a halide_type_t as the first argument to the constructor");

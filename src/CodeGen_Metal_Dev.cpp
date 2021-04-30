@@ -737,7 +737,8 @@ void CodeGen_Metal_Dev::init_module() {
     src_stream.clear();
 
     // Write out the Halide math functions.
-    src_stream << "#include <metal_stdlib>\n"
+    src_stream << "#pragma clang diagnostic ignored \"-Wunused-function\"\n"
+               << "#include <metal_stdlib>\n"
                << "using namespace metal;\n"  // Seems like the right way to go.
                << "namespace {\n"
                << "constexpr float float_from_bits(unsigned int x) {return as_type<float>(x);}\n"
