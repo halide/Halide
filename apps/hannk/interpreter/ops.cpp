@@ -144,8 +144,7 @@ void broadcast_dims(int extent, halide_dimension_t *dim, Ts *...rest) {
 // other shape.
 template<typename Ta, typename... Ts>
 void broadcast_shapes(HalideBuffer<Ta> &a, HalideBuffer<Ts> &...rest) {
-    const int rank = a.dimensions();
-    assert(all(rank == rest.dimensions()...));
+    const int rank = std::max({a.dimensions(), rest.dimensions()...});
     pad_to_rank(rank, a, rest...);
 
     for (int d = 0; d < rank; d++) {
