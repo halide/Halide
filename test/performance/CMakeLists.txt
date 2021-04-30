@@ -3,6 +3,7 @@ tests(GROUPS performance
       async_gpu.cpp
       block_transpose.cpp
       boundary_conditions.cpp
+      broadcasting.cpp
       clamped_vector_load.cpp
       const_division.cpp
       fan_in.cpp
