@@ -145,8 +145,8 @@ public:
         Expr arg4 = cast(intermediate_type, program_(4, r.y));
 
         const int max_input = input_count - 1;
-        Expr input1 = scratch(x, unsafe_promise_clamped(i32(arg1), -max_input, r.y + 1));
-        Expr input2 = scratch(x, unsafe_promise_clamped(i32(arg2), -max_input, r.y + 1));
+        Expr input1 = scratch(x, unsafe_promise_clamped(i32(arg1), -max_input - 1, r.y + 1));
+        Expr input2 = scratch(x, unsafe_promise_clamped(i32(arg2), -max_input - 1, r.y + 1));
 
         std::vector<Expr> instructions = {
             saturating_add(input1, input2 + arg3),
@@ -201,8 +201,9 @@ public:
             scratch.update(i).specialize_fail("Input dimension 0 must have stride 0 or 1.");
         }
 
+        const int slots = input_count * max_instructions_per_input;
         scratch
-            .bound_extent(u, input_count * (max_instructions_per_input + 1))
+            .bound_extent(u, input_count + slots + 1)
             .store_in(MemoryType::Register)
             .update(input_count + 1)
             .unroll(r.x);
