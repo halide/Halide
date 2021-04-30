@@ -1052,7 +1052,7 @@ public:
      * Buffer<const uint8_t>, or converting a Buffer<T>& to Buffer<const T>&.
      * Does a runtime assert if the source buffer type is void. */
     template<typename T2>
-    HALIDE_ALWAYS_INLINE Buffer<T2, D> & as() & {
+    HALIDE_ALWAYS_INLINE Buffer<T2, D> &as() & {
         Buffer<T2, D>::assert_can_convert_from(*this);
         return *((Buffer<T2, D> *)this);
     }
