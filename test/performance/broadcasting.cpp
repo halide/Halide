@@ -29,9 +29,6 @@ int main(int argc, char **argv) {
     b_broadcastable.dim(0).set_stride(Expr());
     result_broadcastable.specialize(b_broadcastable.dim(0).stride() == 1);
     result_broadcastable.specialize(b_broadcastable.dim(0).stride() == 0);
-    // Without this, the specializations simplify away before they can do anything.
-    // (https://github.com/halide/Halide/issues/5907).
-    //result_broadcastable.specialize_fail("Stride must be 0 or 1");
 
     result.compile_jit();
     result_broadcastable.compile_jit();
