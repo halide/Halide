@@ -73,30 +73,6 @@ bool maybe_alias_tensors(TensorPtr input, TensorPtr output, SmallVector<int, max
         return false;
     }
 
-    // If any of the offsets are negative, we need to swap the aliasing.
-    // TODO: This is a hack, maybe?
-    if (std::any_of(offset.begin(), offset.end(), [](int i) { return i < 0; })) {
-        std::swap(input, output);
-        for (int &i : offset) {
-            i = -i;
-        }
-    }
-
-    // If there are still negative offsets, we can't alias.
-    if (std::any_of(offset.begin(), offset.end(), [](int i) { return i < 0; })) {
-        return false;
-    }
-
-    // We shouldn't change a tensor that is already aliased.
-    if (input->is_alias() && std::all_of(offset.begin(), offset.end(), [](int i) { return i == 0; })) {
-        // If the input is aliased, but there is no offset, try aliasing the other
-        // way around.
-        std::swap(input, output);
-    }
-    if (input->is_alias()) {
-        return false;
-    }
-
     // If either tensor is dynamic, can't alias them.
     if (input->is_dynamic() || output->is_dynamic()) {
         return false;
@@ -118,17 +94,28 @@ bool maybe_alias_tensors(TensorPtr input, TensorPtr output, SmallVector<int, max
         return false;
     }
 
-    // We can't grow the bounds of the output tensor.
-    // TODO: We could, if we allowed non-zero mins.
+    // We can't grow the bounds of the tensor we alias with.
+    // TODO: We could, if we allowed non-zero mins. We also
+    // could allow the max to grow, just not the min.
     Box input_bounds_with_offset = input->bounds();
+    Box output_bounds_with_negative_offset = output->bounds();
     for (int i = 0; i < (int)offset.size(); ++i) {
         input_bounds_with_offset[i] += offset[i];
+        output_bounds_with_negative_offset[i] -= offset[i];
     }
-    if (!is_subset_of(input_bounds_with_offset, output->bounds())) {
-        return false;
+    bool input_subset_of_output = is_subset_of(input_bounds_with_offset, output->bounds());
+    bool output_subset_of_input = is_subset_of(output_bounds_with_negative_offset, input->bounds());
+    if (input_subset_of_output && !input->is_alias()) {
+        input->set_alias_of(output, offset);
+        return true;
+    } else if (output_subset_of_input && !output->is_alias()) {
+        for (int &i : offset) {
+            i = -i;
+        }
+        output->set_alias_of(input, offset);
+        return true;
     }
 
-    input->set_alias_of(output, offset);
     return true;
 }
 
