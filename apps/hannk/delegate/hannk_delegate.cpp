@@ -313,11 +313,11 @@ public:
         // Add all ops.
         TfLiteNode *node;
         TfLiteRegistration *reg;
-        std::vector<std::unique_ptr<Op>> ops;
+        std::vector<OpPtr> ops;
         for (int node_index : node_indices) {
             TF_LITE_ENSURE_STATUS(context->GetNodeAndRegistration(context, node_index, &node, &reg));
             const int op_type = reg->builtin_code;
-            std::unique_ptr<Op> op;
+            OpPtr op;
 
             // clang-format off
             switch (op_type) {
@@ -337,7 +337,7 @@ public:
             }
             ops.push_back(std::move(op));
         }
-        model_ = ::hannk::make_unique<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
+        model_ = make_op<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
 
         return kTfLiteOk;
     }
@@ -357,7 +357,7 @@ public:
             return kTfLiteDelegateError;
         }
 
-        interpreter_ = ::hannk::make_unique<Interpreter>(std::move(model_));
+        interpreter_ = std::unique_ptr<Interpreter>(new Interpreter(std::move(model_)));
 
         for (int i = 0; i < node->outputs->size; i++) {
             const int tensor_id = node->outputs->data[i];
@@ -469,7 +469,7 @@ private:
             return nullptr;
         }
         HannkDelegate *hannk_delegate = (HannkDelegate *)params->delegate;
-        auto self = ::hannk::make_unique<HannkDelegateKernel>(hannk_delegate->options_);
+        std::unique_ptr<HannkDelegateKernel> self(new HannkDelegateKernel(hannk_delegate->options_));
         if (self->Init(context, params) != kTfLiteOk) {
             LOG(ERROR) << "HannkDelegate.init: NULL params";
             return nullptr;
@@ -507,62 +507,62 @@ private:
     }
 
     template<typename OptionsT>
-    std::unique_ptr<Op> BuildBinary(TfLiteContext *context, TfLiteNode *node, BinaryOp::Operator type) {
+    OpPtr BuildBinary(TfLiteContext *context, TfLiteNode *node, BinaryOp::Operator type) {
         auto input1 = GetTensorById(context, node->inputs->data[0]);
         auto input2 = GetTensorById(context, node->inputs->data[1]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         const OptionsT *params = (const OptionsT *)(node->builtin_data);
         auto activation = ConvertTfLiteActivation(params->activation);
-        return ::hannk::make_unique<BinaryOp>(input1, input2, output, type, activation);
+        return make_op<BinaryOp>(input1, input2, output, type, activation);
     }
 
-    std::unique_ptr<Op> BuildAdd(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildAdd(TfLiteContext *context, TfLiteNode *node) {
         return BuildBinary<TfLiteAddParams>(context, node, BinaryOp::Add);
     }
 
-    std::unique_ptr<Op> BuildSub(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildSub(TfLiteContext *context, TfLiteNode *node) {
         return BuildBinary<TfLiteSubParams>(context, node, BinaryOp::Sub);
     }
 
-    std::unique_ptr<Op> BuildMul(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildMul(TfLiteContext *context, TfLiteNode *node) {
         return BuildBinary<TfLiteMulParams>(context, node, BinaryOp::Mul);
     }
 
-    std::unique_ptr<Op> BuildBinary(TfLiteContext *context, TfLiteNode *node, BinaryOp::Operator type, bool swap_operands = false) {
+    OpPtr BuildBinary(TfLiteContext *context, TfLiteNode *node, BinaryOp::Operator type, bool swap_operands = false) {
         auto input1 = GetTensorById(context, node->inputs->data[0]);
         auto input2 = GetTensorById(context, node->inputs->data[1]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         if (swap_operands) {
             std::swap(input1, input2);
         }
-        return ::hannk::make_unique<BinaryOp>(input1, input2, output, type);
+        return make_op<BinaryOp>(input1, input2, output, type);
     }
 
-    std::unique_ptr<Op> BuildLess(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildLess(TfLiteContext *context, TfLiteNode *node) {
         return BuildBinary(context, node, BinaryOp::Less);
     }
 
-    std::unique_ptr<Op> BuildLessEqual(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildLessEqual(TfLiteContext *context, TfLiteNode *node) {
         return BuildBinary(context, node, BinaryOp::LessEqual);
     }
 
-    std::unique_ptr<Op> BuildGreater(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildGreater(TfLiteContext *context, TfLiteNode *node) {
         return BuildBinary(context, node, BinaryOp::Less, true);
     }
 
-    std::unique_ptr<Op> BuildGreaterEqual(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildGreaterEqual(TfLiteContext *context, TfLiteNode *node) {
         return BuildBinary(context, node, BinaryOp::LessEqual, true);
     }
 
-    std::unique_ptr<Op> BuildEqual(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildEqual(TfLiteContext *context, TfLiteNode *node) {
         return BuildBinary(context, node, BinaryOp::Equal);
     }
 
-    std::unique_ptr<Op> BuildNotEqual(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildNotEqual(TfLiteContext *context, TfLiteNode *node) {
         return BuildBinary(context, node, BinaryOp::NotEqual);
     }
 
-    std::unique_ptr<Op> BuildPool2d(TfLiteContext *context, TfLiteNode *node, Pool2DOp::Operator reduce_op) {
+    OpPtr BuildPool2d(TfLiteContext *context, TfLiteNode *node, Pool2DOp::Operator reduce_op) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLitePoolParams *params = (const TfLitePoolParams *)(node->builtin_data);
@@ -576,18 +576,18 @@ private:
             params->filter_height,
         }};
         auto activation = ConvertTfLiteActivation(params->activation);
-        return ::hannk::make_unique<Pool2DOp>(input, output, stride, filter_size, padding, reduce_op, activation);
+        return make_op<Pool2DOp>(input, output, stride, filter_size, padding, reduce_op, activation);
     }
 
-    std::unique_ptr<Op> BuildAveragePool2d(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildAveragePool2d(TfLiteContext *context, TfLiteNode *node) {
         return BuildPool2d(context, node, Pool2DOp::Average);
     }
 
-    std::unique_ptr<Op> BuildMaxPool2d(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildMaxPool2d(TfLiteContext *context, TfLiteNode *node) {
         return BuildPool2d(context, node, Pool2DOp::Max);
     }
 
-    std::unique_ptr<Op> BuildConcatenation(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildConcatenation(TfLiteContext *context, TfLiteNode *node) {
         std::vector<TensorPtr> inputs(node->inputs->size);
         for (int i = 0; i < node->inputs->size; i++) {
             inputs[i] = GetTensorById(context, node->inputs->data[i]);
@@ -604,10 +604,10 @@ private:
         // Now 'flip' the axis so that it refers to the right dimension in
         // the Tensor (since we reverse the dimension order)
         axis = (int)output->rank() - axis - 1;
-        return ::hannk::make_unique<ConcatenationOp>(inputs, output, axis);
+        return make_op<ConcatenationOp>(inputs, output, axis);
     }
 
-    std::unique_ptr<Op> BuildConv2d(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildConv2d(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto filter = GetTensorById(context, node->inputs->data[1]);
         auto bias = GetTensorById(context, node->inputs->data[2]);
@@ -623,11 +623,11 @@ private:
             params->dilation_height_factor,
         }};
         auto activation = ConvertTfLiteActivation(params->activation);
-        return ::hannk::make_unique<Conv2DOp>(input, filter, bias, output, stride,
+        return make_op<Conv2DOp>(input, filter, bias, output, stride,
                                               dilation_factor, padding, activation);
     }
 
-    std::unique_ptr<Op> BuildDepthwiseConv2d(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildDepthwiseConv2d(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto filter = GetTensorById(context, node->inputs->data[1]);
         auto bias = GetTensorById(context, node->inputs->data[2]);
@@ -644,30 +644,30 @@ private:
         }};
         auto padding = ConvertTfLitePadding(params->padding);
         auto activation = ConvertTfLiteActivation(params->activation);
-        return ::hannk::make_unique<DepthwiseConv2DOp>(input, filter, bias, output, depth_multiplier,
+        return make_op<DepthwiseConv2DOp>(input, filter, bias, output, depth_multiplier,
                                                        stride, dilation_factor, padding, activation);
     }
 
-    std::unique_ptr<Op> BuildFullyConnected(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildFullyConnected(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto filter = GetTensorById(context, node->inputs->data[1]);
         auto bias = GetTensorById(context, node->inputs->data[2]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteFullyConnectedParams *params = (const TfLiteFullyConnectedParams *)(node->builtin_data);
         auto activation = ConvertTfLiteActivation(params->activation);
-        return ::hannk::make_unique<FullyConnectedOp>(input, filter, bias, output, activation);
+        return make_op<FullyConnectedOp>(input, filter, bias, output, activation);
     }
 
-    std::unique_ptr<Op> BuildPad(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildPad(TfLiteContext *context, TfLiteNode *node) {
         // TODO: handle the PadOp that has 3 inputs
         CHECK(node->inputs->size == 2);
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto padding = GetTensorById(context, node->inputs->data[1]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return ::hannk::make_unique<PadOp>(input, padding, output);
+        return make_op<PadOp>(input, padding, output);
     }
 
-    std::unique_ptr<Op> BuildReshape(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildReshape(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         TensorPtr shape_tensor = nullptr;
@@ -680,73 +680,73 @@ private:
                 shape_tensor = std::make_shared<Tensor>(input->name() + "_shape", shape_data);
             }
         }
-        return ::hannk::make_unique<ReshapeOp>(input, shape_tensor, output);
+        return make_op<ReshapeOp>(input, shape_tensor, output);
     }
 
-    std::unique_ptr<Op> BuildShape(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildShape(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return ::hannk::make_unique<ShapeOp>(input, output);
+        return make_op<ShapeOp>(input, output);
     }
 
-    std::unique_ptr<Op> BuildSoftmax(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildSoftmax(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteSoftmaxParams *params = (const TfLiteSoftmaxParams *)(node->builtin_data);
-        return ::hannk::make_unique<SoftmaxOp>(input, output, params->beta);
+        return make_op<SoftmaxOp>(input, output, params->beta);
     }
 
-    std::unique_ptr<Op> BuildL2Normalization(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildL2Normalization(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return ::hannk::make_unique<L2NormalizationOp>(input, output);
+        return make_op<L2NormalizationOp>(input, output);
     }
 
-    std::unique_ptr<Op> BuildUnary(TfLiteContext *context, TfLiteNode *node, UnaryOp::Operator type) {
+    OpPtr BuildUnary(TfLiteContext *context, TfLiteNode *node, UnaryOp::Operator type) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return ::hannk::make_unique<UnaryOp>(input, output, type);
+        return make_op<UnaryOp>(input, output, type);
     }
 
-    std::unique_ptr<Op> BuildLogistic(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildLogistic(TfLiteContext *context, TfLiteNode *node) {
         return BuildUnary(context, node, UnaryOp::Logistic);
     }
 
-    std::unique_ptr<Op> BuildNeg(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildNeg(TfLiteContext *context, TfLiteNode *node) {
         return BuildUnary(context, node, UnaryOp::Negate);
     }
 
-    std::unique_ptr<Op> BuildTanh(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildTanh(TfLiteContext *context, TfLiteNode *node) {
         return BuildUnary(context, node, UnaryOp::Tanh);
     }
 
-    std::unique_ptr<Op> BuildRelu(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildRelu(TfLiteContext *context, TfLiteNode *node) {
         return BuildUnary(context, node, UnaryOp::Relu);
     }
 
-    std::unique_ptr<Op> BuildRelu6(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildRelu6(TfLiteContext *context, TfLiteNode *node) {
         return BuildUnary(context, node, UnaryOp::Relu6);
     }
 
-    std::unique_ptr<Op> BuildReluN1To1(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildReluN1To1(TfLiteContext *context, TfLiteNode *node) {
         return BuildUnary(context, node, UnaryOp::ReluN1To1);
     }
 
-    std::unique_ptr<Op> BuildMean(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildMean(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto indices = GetTensorById(context, node->inputs->data[1]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return ::hannk::make_unique<ReductionOp>(input, indices, output, ReductionOp::Mean);
+        return make_op<ReductionOp>(input, indices, output, ReductionOp::Mean);
     }
 
-    std::unique_ptr<Op> BuildSpaceToDepth(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildSpaceToDepth(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteSpaceToDepthParams *params = (const TfLiteSpaceToDepthParams *)(node->builtin_data);
-        return ::hannk::make_unique<SpaceDepthOp>(input, output, params->block_size);
+        return make_op<SpaceDepthOp>(input, output, params->block_size);
     }
 
-    std::unique_ptr<Op> BuildSplit(TfLiteContext *context, TfLiteNode *node, int axis_tensor_index, int input_tensor_index) {
+    OpPtr BuildSplit(TfLiteContext *context, TfLiteNode *node, int axis_tensor_index, int input_tensor_index) {
         assert(axis_tensor_index < node->inputs->size);
         auto axis_tensor = GetTensorById(context, node->inputs->data[axis_tensor_index]);
         CHECK(axis_tensor->is_allocated()) << "Can't handle dynamic axis for Split.\n";
@@ -766,29 +766,29 @@ private:
         // Now 'flip' the axis so that it refers to the right dimension in
         // the Tensor (since we reverse the dimension order)
         axis = (int)input->rank() - axis - 1;
-        return ::hannk::make_unique<SplitOp>(input, outputs, axis);
+        return make_op<SplitOp>(input, outputs, axis);
     }
 
-    std::unique_ptr<Op> BuildSplit(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildSplit(TfLiteContext *context, TfLiteNode *node) {
         return BuildSplit(context, node, 0, 1);
     }
 
-    std::unique_ptr<Op> BuildSplitV(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildSplitV(TfLiteContext *context, TfLiteNode *node) {
         return BuildSplit(context, node, 2, 0);
     }
 
-    std::unique_ptr<Op> BuildSquare(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildSquare(TfLiteContext *context, TfLiteNode *node) {
         return BuildUnary(context, node, UnaryOp::Square);
     }
 
-    std::unique_ptr<Op> BuildDepthToSpace(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildDepthToSpace(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteDepthToSpaceParams *params = (const TfLiteDepthToSpaceParams *)(node->builtin_data);
-        return ::hannk::make_unique<SpaceDepthOp>(input, output, -params->block_size);
+        return make_op<SpaceDepthOp>(input, output, -params->block_size);
     }
 
-    std::unique_ptr<Op> BuildLstm(TfLiteContext *context, TfLiteNode *node) {
+    OpPtr BuildLstm(TfLiteContext *context, TfLiteNode *node) {
         // Note that the TFLite 'Lstm' op is lowered into several Hannk ops
         auto data_input = GetTensorById(context, node->inputs->data[0]);
         auto prev_activ_input = GetTensorById(context, node->inputs->data[1]);

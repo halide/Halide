@@ -312,7 +312,7 @@ BoundsMap OpGroup::map_bounds(int input_idx, int output_idx) const {
     return result;
 }
 
-void OpGroup::add(std::unique_ptr<Op> to_add, const Op *before) {
+void OpGroup::add(OpPtr to_add, const Op *before) {
     for (auto i = ops_.begin(); i != ops_.end(); ++i) {
         if (i->get() == before) {
             ops_.insert(i, std::move(to_add));
@@ -341,7 +341,7 @@ void OpGroup::remove(const Op *op) {
     }
 }
 
-std::unique_ptr<Op> OpGroup::clone(TensorMap &tensor_map) const {
+OpPtr OpGroup::clone(TensorMap &tensor_map) const {
     std::vector<TensorPtr> inputs;
     for (int i = 0; i < input_count(); i++) {
         inputs.push_back(apply(tensor_map, input(i)));
@@ -351,12 +351,12 @@ std::unique_ptr<Op> OpGroup::clone(TensorMap &tensor_map) const {
         outputs.push_back(apply(tensor_map, output(i)));
     }
 
-    std::vector<std::unique_ptr<Op>> ops;
+    std::vector<OpPtr> ops;
     for (int i = 0; i < op_count(); i++) {
         ops.push_back(op(i)->clone(tensor_map));
     }
 
-    return ::hannk::make_unique<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
+    return make_op<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
 }
 
 void OpGroup::accept(OpVisitor *v) {

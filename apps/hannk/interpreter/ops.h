@@ -54,8 +54,8 @@ public:
         : ElementwiseOp({a, b}, {output}), op_(op), activation_(activation) {
     }
 
-    std::unique_ptr<Op> clone(TensorMap &map) const {
-        return ::hannk::make_unique<BinaryOp>(
+    OpPtr clone(TensorMap &map) const {
+        return make_op<BinaryOp>(
             apply(map, input(0)), apply(map, input(1)),
             apply(map, output()), op_, activation_);
     }
@@ -85,12 +85,12 @@ public:
         is_no_op_ = true;
     }
 
-    std::unique_ptr<Op> clone(TensorMap &map) const {
+    OpPtr clone(TensorMap &map) const {
         std::vector<TensorPtr> inputs;
         for (int i = 0; i < input_count(); i++) {
             inputs.push_back(apply(map, input(i)));
         }
-        return ::hannk::make_unique<ConcatenationOp>(
+        return make_op<ConcatenationOp>(
             std::move(inputs), apply(map, output()), axis_);
     }
 
@@ -122,8 +122,8 @@ public:
           activation_(activation) {
     }
 
-    std::unique_ptr<Op> clone(TensorMap &map) const {
-        return ::hannk::make_unique<Conv2DOp>(
+    OpPtr clone(TensorMap &map) const {
+        return make_op<Conv2DOp>(
             apply(map, input()), apply(map, filter()), apply(map, bias()),
             apply(map, output()), stride_, dilation_, padding_, activation_);
     }
@@ -175,8 +175,8 @@ public:
           activation_(activation) {
     }
 
-    std::unique_ptr<Op> clone(TensorMap &map) const {
-        return ::hannk::make_unique<DepthwiseConv2DOp>(
+    OpPtr clone(TensorMap &map) const {
+        return make_op<DepthwiseConv2DOp>(
             apply(map, input()), apply(map, filter()), apply(map, bias()),
             apply(map, output()), depth_multiplier_, stride_, dilation_,
             padding_, activation_);
@@ -218,7 +218,7 @@ public:
         : ElementwiseOp(std::move(inputs), std::move(outputs)), program_(program) {
     }
 
-    std::unique_ptr<Op> clone(TensorMap &map) const {
+    OpPtr clone(TensorMap &map) const {
         std::vector<TensorPtr> inputs, outputs;
         for (int i = 0; i < input_count(); i++) {
             inputs.push_back(apply(map, input(i)));
@@ -226,7 +226,7 @@ public:
         for (int i = 0; i < output_count(); i++) {
             inputs.push_back(apply(map, output(i)));
         }
-        return ::hannk::make_unique<ElementwiseProgramOp>(
+        return make_op<ElementwiseProgramOp>(
             std::move(inputs), std::move(outputs), program_);
     }
 
@@ -248,8 +248,8 @@ public:
         : Op({input, filter, bias}, {output}), activation_(activation) {
     }
 
-    std::unique_ptr<Op> clone(TensorMap &map) const {
-        return ::hannk::make_unique<FullyConnectedOp>(
+    OpPtr clone(TensorMap &map) const {
+        return make_op<FullyConnectedOp>(
             apply(map, input()), apply(map, filter()), apply(map, bias()),
             apply(map, output()), activation_);
     }
@@ -284,8 +284,8 @@ public:
         : Op({input}, {output}) {
     }
 
-    std::unique_ptr<Op> clone(TensorMap &map) const {
-        return ::hannk::make_unique<L2NormalizationOp>(apply(map, input()), apply(map, output()));
+    OpPtr clone(TensorMap &map) const {
+        return make_op<L2NormalizationOp>(apply(map, input()), apply(map, output()));
     }
 
     void accept(OpVisitor *v);
@@ -308,8 +308,8 @@ public:
         }
     }
 
-    std::unique_ptr<Op> clone(TensorMap &map) const {
-        return ::hannk::make_unique<PadOp>(
+    OpPtr clone(TensorMap &map) const {
+        return make_op<PadOp>(
             apply(map, input(0)), apply(map, input(1)), apply(map, output()));
     }
 
@@ -352,8 +352,8 @@ public:
           activation_(activation) {
     }
 
-    std::unique_ptr<Op> clone(TensorMap &map) const {
-        return ::hannk::make_unique<Pool2DOp>(
+    OpPtr clone(TensorMap &map) const {
+        return make_op<Pool2DOp>(
             apply(map, input()), apply(map, output()), stride_, filter_size_, padding_, op_, activation_);
     }
 
@@ -393,8 +393,8 @@ public:
         : Op({input, indices}, {output}), op_(op) {
     }
 
-    std::unique_ptr<Op> clone(TensorMap &map) const {
-        return ::hannk::make_unique<ReductionOp>(
+    OpPtr clone(TensorMap &map) const {
+        return make_op<ReductionOp>(
             apply(map, input()), apply(map, input(1)), apply(map, output()), op_);
     }
 
@@ -420,8 +420,8 @@ public:
         }
     }
 
-    std::unique_ptr<Op> clone(TensorMap &map) const {
-        return ::hannk::make_unique<ReshapeOp>(apply(map, input()), apply(map, input(1)), apply(map, output()));
+    OpPtr clone(TensorMap &map) const {
+        return make_op<ReshapeOp>(apply(map, input()), apply(map, input(1)), apply(map, output()));
     }
 
     void accept(OpVisitor *v);
@@ -441,8 +441,8 @@ public:
         : Op({input}, {output}) {
     }
 
-    std::unique_ptr<Op> clone(TensorMap &map) const {
-        return ::hannk::make_unique<ShapeOp>(apply(map, input()), apply(map, output()));
+    OpPtr clone(TensorMap &map) const {
+        return make_op<ShapeOp>(apply(map, input()), apply(map, output()));
     }
 
     void accept(OpVisitor *v);
@@ -464,8 +464,8 @@ public:
         : Op({input}, {output}), beta_(beta) {
     }
 
-    std::unique_ptr<Op> clone(TensorMap &map) const {
-        return ::hannk::make_unique<SoftmaxOp>(apply(map, input()), apply(map, output()), beta_);
+    OpPtr clone(TensorMap &map) const {
+        return make_op<SoftmaxOp>(apply(map, input()), apply(map, output()), beta_);
     }
 
     void accept(OpVisitor *v);
@@ -487,8 +487,8 @@ public:
         : Op({input}, {output}), block_size_(block_size) {
     }
 
-    std::unique_ptr<Op> clone(TensorMap &map) const {
-        return ::hannk::make_unique<SpaceDepthOp>(apply(map, input()), apply(map, output()), block_size_);
+    OpPtr clone(TensorMap &map) const {
+        return make_op<SpaceDepthOp>(apply(map, input()), apply(map, output()), block_size_);
     }
 
     void accept(OpVisitor *v);
@@ -512,12 +512,12 @@ public:
         : Op({input}, std::move(outputs)), axis_(axis) {
     }
 
-    std::unique_ptr<Op> clone(TensorMap &map) const {
+    OpPtr clone(TensorMap &map) const {
         std::vector<TensorPtr> outputs;
         for (int i = 0; i < output_count(); i++) {
             outputs.push_back(apply(map, output(i)));
         }
-        return ::hannk::make_unique<SplitOp>(
+        return make_op<SplitOp>(
             apply(map, input()), std::move(outputs), axis_);
     }
 
@@ -545,8 +545,8 @@ public:
         : Op({input}, {output}) {
     }
 
-    std::unique_ptr<Op> clone(TensorMap &map) const {
-        return ::hannk::make_unique<TileConvFilterOp>(apply(map, input()), apply(map, output()));
+    OpPtr clone(TensorMap &map) const {
+        return make_op<TileConvFilterOp>(apply(map, input()), apply(map, output()));
     }
 
     void accept(OpVisitor *v);
@@ -582,8 +582,8 @@ public:
         : ElementwiseOp({input}, {output}), op_(op) {
     }
 
-    std::unique_ptr<Op> clone(TensorMap &map) const {
-        return ::hannk::make_unique<UnaryOp>(
+    OpPtr clone(TensorMap &map) const {
+        return make_op<UnaryOp>(
             apply(map, input()), apply(map, output()), op_);
     }
 

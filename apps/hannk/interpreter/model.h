@@ -14,11 +14,6 @@
 
 namespace hannk {
 
-template<class T, class... Args>
-std::unique_ptr<T> make_unique(Args &&...args) {
-    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
-}
-
 template<typename T>
 using HalideBuffer = Halide::Runtime::Buffer<T>;
 
@@ -77,7 +72,13 @@ public:
 
 class Op;
 class Tensor;
+using OpPtr = std::unique_ptr<Op>;
 using TensorPtr = std::shared_ptr<Tensor>;
+
+template<class T, class... Args>
+std::unique_ptr<T> make_op(Args &&...args) {
+    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
 
 class Tensor {
     std::string name_;
@@ -476,7 +477,7 @@ public:
     virtual void execute() = 0;
 
     // Clone this op, replacing tensors using the mapping in tensor_map.
-    virtual std::unique_ptr<Op> clone(TensorMap &tensor_map) const = 0;
+    virtual OpPtr clone(TensorMap &tensor_map) const = 0;
 
     virtual void accept(OpVisitor *v) = 0;
 
@@ -527,14 +528,14 @@ public:
 };
 
 class OpGroup : public Op {
-    std::vector<std::unique_ptr<Op>> ops_;
+    std::vector<OpPtr> ops_;
 
 public:
-    OpGroup(std::vector<TensorPtr> inputs, std::vector<TensorPtr> outputs, std::vector<std::unique_ptr<Op>> ops = {})
+    OpGroup(std::vector<TensorPtr> inputs, std::vector<TensorPtr> outputs, std::vector<OpPtr> ops = {})
         : Op(std::move(inputs), std::move(outputs)), ops_(std::move(ops)) {
     }
 
-    void add(std::unique_ptr<Op> to_insert, const Op *before = nullptr);
+    void add(OpPtr to_insert, const Op *before = nullptr);
     void remove(const Op *op);
 
     BoundsMap map_bounds(int input_idx, int output_idx) const;
@@ -551,7 +552,7 @@ public:
         return ops_[i].get();
     }
 
-    std::unique_ptr<Op> clone(TensorMap &tensor_map) const;
+    OpPtr clone(TensorMap &tensor_map) const;
     void accept(OpVisitor *v);
     void dump(std::ostream &os) const;
 };

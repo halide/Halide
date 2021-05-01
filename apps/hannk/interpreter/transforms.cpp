@@ -233,7 +233,7 @@ class PadForOps : public OpVisitor {
         TensorPtr padding = std::make_shared<Tensor>(input->name() + "_padding", padding_data);
 
         // Add the new tensor, op, and update the input.
-        std::unique_ptr<Op> pad = ::hannk::make_unique<PadOp>(input, padding, padded);
+        OpPtr pad = make_op<PadOp>(input, padding, padded);
         new_ops.emplace_back(std::move(pad));
     }
 
@@ -257,7 +257,7 @@ class PadForOps : public OpVisitor {
             // Maybe more than one op uses this same filter...?
             filter->replace_all_consumers_with(tiled);
 
-            std::unique_ptr<Op> tile = ::hannk::make_unique<TileConvFilterOp>(filter, tiled);
+            OpPtr tile = make_op<TileConvFilterOp>(filter, tiled);
             new_ops.emplace_back(std::move(tile));
         }
     }
@@ -282,7 +282,7 @@ class PadForOps : public OpVisitor {
     }
 
 public:
-    std::vector<std::unique_ptr<Op>> new_ops;
+    std::vector<OpPtr> new_ops;
 };
 
 class FusePadOps : public OpVisitor {
