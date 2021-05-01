@@ -66,7 +66,27 @@ namespace {
 
 // We can alias two tensors if the input is not used after the output is written,
 // and we meet a number of other requirements.
-bool maybe_alias_tensors(TensorPtr input, TensorPtr output, const SmallVector<int, max_rank> &offset = {}) {
+bool maybe_alias_tensors(TensorPtr input, TensorPtr output, SmallVector<int, max_rank> offset = {}) {
+    // If the input is used anywhere else, we should not alias it.
+    // TODO: This is conservative, we could alias it if it is the *last* use.
+    if (input->consumers().size() != 1) {
+        return false;
+    }
+
+    // If any of the offsets are negative, we need to swap the aliasing.
+    // TODO: This is a hack, maybe?
+    if (std::any_of(offset.begin(), offset.end(), [](int i) { return i < 0; })) {
+        std::swap(input, output);
+        for (int &i : offset) {
+            i = -i;
+        }
+    }
+
+    // If there are still negative offsets, we can't alias.
+    if (std::any_of(offset.begin(), offset.end(), [](int i) { return i < 0; })) {
+        return false;
+    }
+
     // We shouldn't change a tensor that is already aliased.
     if (input->is_alias() && std::all_of(offset.begin(), offset.end(), [](int i) { return i == 0; })) {
         // If the input is aliased, but there is no offset, try aliasing the other
@@ -157,9 +177,9 @@ class InPlace : public OpVisitor {
         bool is_no_op = true;
         SmallVector<int, max_rank> offset(op->axis() + 1);
         for (int i = 0; i < op->output_count(); i++) {
-            is_no_op = is_no_op && maybe_alias_tensors(op->output(i), op->input(), offset);
+            is_no_op = is_no_op && maybe_alias_tensors(op->input(), op->output(i), offset);
             is_no_op = is_no_op && op->output(i)->quantization() == op->input()->quantization();
-            offset[op->axis()] += op->output(i)->extent(op->axis());
+            offset[op->axis()] -= op->output(i)->extent(op->axis());
         }
         if (is_no_op) {
             // TODO: Try actually deleting the op?
