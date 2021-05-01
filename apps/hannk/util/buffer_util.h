@@ -87,6 +87,8 @@ struct CompareBuffersOptions {
     // If true, log info about failures to stderr.
     // If false, log nothing, stay silent.
     bool verbose = true;
+    // Max number of diffs to log
+    uint64_t max_diffs_to_log = 32;  // somewhat arbitrary
 
     void require_exact() {
         exact_thresh = 0.0;
@@ -120,7 +122,6 @@ struct CompareBuffers {
         const T close_thresh = (T)opts.close_thresh;
 
         const uint64_t max_close = std::ceil(expected_buf.number_of_elements() * opts.max_close_percent);
-        constexpr uint64_t kMaxToLog = 32;  // somewhat arbitrary
 
         const auto do_compare = [&](bool verbose) -> CompareBuffersResult {
             CompareBuffersResult r;
@@ -133,11 +134,11 @@ struct CompareBuffers {
                     const char *msg;
                     if (diff > exact_thresh) {
                         r.num_wrong++;
-                        do_log &= (r.num_wrong < kMaxToLog);
+                        do_log &= (r.num_wrong < opts.max_diffs_to_log);
                         msg = "WRONG";
                     } else {
                         r.num_close++;
-                        do_log &= (r.num_close < kMaxToLog);
+                        do_log &= (r.num_close < opts.max_diffs_to_log);
                         msg = "Inexact";
                     }
                     if (do_log) {
@@ -164,11 +165,11 @@ struct CompareBuffers {
                           << ", close " << r.num_close << " vs " << max_close << "):\n";
                 (void)do_compare(true);
             }
-            if (r.num_wrong > kMaxToLog) {
-                std::cerr << "(" << (r.num_wrong - kMaxToLog) << " wrong values omitted)\n";
+            if (r.num_wrong > opts.max_diffs_to_log) {
+                std::cerr << "(" << (r.num_wrong - opts.max_diffs_to_log) << " wrong values omitted)\n";
             }
-            if (r.num_close > kMaxToLog) {
-                std::cerr << "(" << (r.num_close - kMaxToLog) << " inexact values omitted)\n";
+            if (r.num_close > opts.max_diffs_to_log) {
+                std::cerr << "(" << (r.num_close - opts.max_diffs_to_log) << " inexact values omitted)\n";
             }
         }
         return r;
