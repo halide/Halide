@@ -469,6 +469,9 @@ public:
     }
 
     std::unique_ptr<OpGroup> parse_subgraph(const tflite::SubGraph *subgraph) {
+        std::vector<TensorPtr> old_tensors;
+        std::swap(old_tensors, tensors_);
+
         for (const tflite::Tensor *t : *subgraph->tensors()) {
             tensors_.emplace_back(parse_tensor(t));
         }
@@ -488,6 +491,8 @@ public:
             tensors_[i]->set_output(true);
             outputs.push_back(tensors_[i]);
         }
+
+        std::swap(tensors_, old_tensors);
 
         return make_op<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
     }
