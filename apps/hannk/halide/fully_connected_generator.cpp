@@ -6,6 +6,15 @@ using namespace Halide::ConciseCasts;
 
 namespace hannk {
 
+// There are two codepaths in this generator. On targets with widening
+// 8-bit multiplies, we implement the reduction by expanding the subtraction
+// of the offsets into 4 reductions involving 8-bit multiplies. On targets
+// without widening 8-bit multiplication, it's faster to just subtract the
+// offsets and use 16-bit multiplications.
+bool use_8bit_multiply(const Target &target) {
+    return target.arch != Target::X86 || target.has_feature(Target::AVX512_SapphireRapids);
+}
+
 class FullyConnected : public Generator<FullyConnected> {
 public:
     Input<Buffer<uint8_t>> input_{"input", 2};
@@ -32,38 +41,60 @@ public:
         filter_.dim(0).set_min(0);
         RDom rc(0, filter_extent);
 
-        // We want to compute the reduction:
-        // multiplied(c, b) = bias_(c)
-        // multiplied(c, b) +=
-        //    (i32(input) - i32(input_zero_)) *
-        //    (i32(filter) - i32(filter_zero_))
-        //
-        // However, this precludes using efficient dot product instructions. To
-        // fix this, expand the expression:
-        //
-        // multiplied(c, b) = bias_(c)
-        // multiplied(c, b) +=
-        //    i32(filter(rc, c)) * i32(input(rc, b)) -
-        //    i32(filter(rc, c)) * i32(input_zero_) -
-        //    i32(filter_zero_) * i32(input(rc, b)) +
-        //    i32(filter_zero_) * i32(input_zero_)
-        //
-        // We can then separate this into several reductions. The last reduction
-        // is a constant, and the middle two reductions can be computed once for
-        // each c or b, instead of each (c, b).
-        Func sum_filter("sum_filter");
-        sum_filter(c) += u32(filter_(rc, c));
-
         Func sum_input("sum_input");
-        sum_input(b) += u32(input_(rc, b));
-
         Func multiplied("multiplied");
-        multiplied(c, b) =
-            bias_(c) + filter_extent * filter_zero_ * input_zero_ -
-            i32(sum_filter(c)) * input_zero_ -
-            i32(sum_input(b)) * filter_zero_;
+        Func multiplied_sums("multiplied_sums");
+        if (use_8bit_multiply(target)) {
+            // We want to compute the reduction:
+            // multiplied(c, b) = bias_(c)
+            // multiplied(c, b) +=
+            //    (i32(input) - i32(input_zero_)) *
+            //    (i32(filter) - i32(filter_zero_))
+            //
+            // However, this precludes using efficient dot product instructions. To
+            // fix this, expand the expression:
+            //
+            // multiplied(c, b) = bias_(c)
+            // multiplied(c, b) +=
+            //    i32(filter(rc, c)) * i32(input(rc, b)) -
+            //    i32(filter(rc, c)) * i32(input_zero_) -
+            //    i32(filter_zero_) * i32(input(rc, b)) +
+            //    i32(filter_zero_) * i32(input_zero_)
+            //
+            // We can then separate this into several reductions. The last reduction
+            // is a constant, and the middle two reductions can be computed once for
+            // each c or b, instead of each (c, b).
+            sum_input(b) += u32(input_(rc, b));
 
-        multiplied(c, b) += i32(u16(input_(rc, b)) * u16(filter_(rc, c)));
+            // We actually do these two reductions together as a tuple. The first tuple
+            // element is the positive terms, the second tuple element is the negative
+            // terms. We separate them because doing a multiply subtract is hard on most
+            // targets. It is marginally faster to move the filter * input_zero reduction
+            // out of this loop, but it's a pain to implement well. This ends up not
+            // being too bad on most targets, because we can only do 1 multiply-add per
+            // load anyways. Doing an extra multiply-add for each load is ~free.
+            // TODO: Often the filter is constant, and we could precompute the sum of
+            // it elsewhere.
+            multiplied_sums(c, b) = {
+                bias_(c) + filter_extent * filter_zero_ * input_zero_,
+                i32(sum_input(b)) * filter_zero_,
+            };
+
+            multiplied_sums(c, b) = {
+                multiplied_sums(c, b)[0] + i32(u16(input_(rc, b)) * u16(filter_(rc, c))),
+                multiplied_sums(c, b)[1] + i32(u16(filter_(rc, c)) * u16(input_zero_)),
+            };
+
+            // TODO: This subtract happens after the total vector reductions from the
+            // above reduction. It would be a lot better if we could do this subtract
+            // first somehow.
+            multiplied(c, b) = multiplied_sums(c, b)[0] - multiplied_sums(c, b)[1];
+        } else {
+            multiplied(c, b) = bias_(c);
+            multiplied(c, b) +=
+                i32(i16(input_(rc, b)) - i16(input_zero_)) *
+                i32(i16(filter_(rc, c)) - i16(filter_zero_));
+        }
 
         // Saturate and narrow the output.
         Expr output = multiply_2x_high(multiplied(c, b), output_multiplier_);
@@ -81,7 +112,7 @@ public:
         Var co("co");
         Expr output_channels = output_.dim(0).extent();
         // Use half of the registers as accumulators.
-        const int accum_registers = get_register_count(target) / 2;
+        const int accum_registers = 8;
         output_.compute_root()
             .specialize(output_channels >= accum_registers)
             .split(c, co, c, accum_registers, TailStrategy::ShiftInwards)
@@ -93,10 +124,14 @@ public:
             .split(c, co, c, 1)
             .reorder(c, b, co);
 
+        if (use_8bit_multiply(target)) {
+            multiplied = multiplied_sums;
+        }
+
         multiplied.compute_at(output_, b)
             .vectorize(c);
         // Enable sum_filter to be skipped if it isn't needed.
-        multiplied.specialize(input_zero_ == 0);
+        multiplied.specialize(filter_zero_ == 0);
 
         // The schedule here splits the reduction into 3 parts:
         // 1. The inner vector reduction factor (rci)
@@ -121,7 +156,8 @@ public:
             .unroll(c)
             .vectorize(co)
             .atomic()
-            .vectorize(rci);
+            .vectorize(rci)
+            .specialize(input_zero_ == 0);
 
         // We could transpose here by adding a wrapper to multiplied_intm and reordering
         // the storage, which would enable the reduction below to be a pure vectorize
@@ -134,24 +170,15 @@ public:
             .atomic()
             .vectorize(rc);
 
-        const int reduce_vector_size = natural_vector_size<uint8_t>();
-        // This gets reused across batches.
-        // I don't think it actually makes sense to unroll this, but if
-        // we don't, LLVM does it for us but as an outer loop, which
-        // is the worst of all possibilities.
-        sum_filter.compute_at(output_, co)
-            .vectorize(c)
-            .update()
-            .atomic()
-            .reorder(c, rc)
-            .unroll(c)
-            .vectorize(rc, reduce_vector_size);
-
-        sum_input.compute_root()
-            .update()
-            .atomic()
-            .reorder(rc, b)
-            .vectorize(rc, reduce_vector_size);
+        if (use_8bit_multiply(target)) {
+            // This reduction could be optimized better, but it rarely matters much.
+            const int reduce_vector_size = natural_vector_size<uint8_t>();
+            sum_input.compute_root()
+                .update()
+                .atomic()
+                .reorder(rc, b)
+                .vectorize(rc, reduce_vector_size);
+        }
     }
 };
 
