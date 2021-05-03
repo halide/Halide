@@ -57,14 +57,7 @@ Expr align(const Expr &x, const Expr &n) {
 }
 
 Expr multiply_2x_high(const Expr &a, const Expr &b) {
-    Type t = a.type().bits() > b.type().bits() ? a.type() : b.type();
-    Expr ab_wide = widening_mul(a, b);
-    // In Halide, integer division rounds to negative infinity, so division by a
-    // power of two is the same as a shift (unlike C).
-    // TODO: Using rounding_shift_right here doesn't generate qrdmulh :(
-    int nudge = 1 << (t.bits() - 2);
-    Expr result = (ab_wide + nudge) >> (t.bits() - 1);
-    return saturating_cast(t, result);
+    return rounding_mul_shift_right(a, b, std::max(a.type().bits(), b.type().bits()) - 1);
 }
 
 Expr floor_log2(const Expr &x) {

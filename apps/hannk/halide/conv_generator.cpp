@@ -116,9 +116,9 @@ public:
             Expr r_size = filter_width * filter_height * filter_depth;
             // We need the negative of this reduction, so compute the sum first, and then
             // subtract it after.
-            offset_c(c) += i32(filter_rdxyc) * i32(input_zero_);
+            offset_c(c) += i32(u16(filter_rdxyc) * u16(input_zero_));
             offset_c(c) =
-                bias_(c) + i32(filter_zero_) * i32(input_zero_) * r_size - offset_c(c);
+                bias_(c) + i32(u16(filter_zero_) * u16(input_zero_)) * r_size - offset_c(c);
 
             // The sum of the input is used to compute the filter_zero * input term.
             // TODO: This is separable, but a bit messy to optimize this way.
@@ -131,7 +131,7 @@ public:
             // and just have a single reduction of 16-bit multiplies to compute.
             convolved(c, x, y, b) = bias_(c);
         }
-        convolved(c, x, y, b) += i32(input_rdxyc) * i32(filter_rdxyc);
+        convolved(c, x, y, b) += i32(u16(input_rdxyc) * u16(filter_rdxyc));
 
         // Saturate and narrow the output.
         Expr output = multiply_2x_high(convolved(c, x, y, b), output_multiplier_);
@@ -145,6 +145,7 @@ public:
         interpret_as_tensor(output_);
         require_same_min_extent(3, input_, output_);
         require_same_min_extent(0, bias_, output_);
+        input_.dim(0).set_min(0).set_extent(filter_depth);
 
         output_.compute_root();
 
@@ -225,9 +226,10 @@ public:
                 .vectorize(c, 4, TailStrategy::RoundUp)
                 .vectorize(x, natural_vector_size<int32_t>(), TailStrategy::GuardWithIf);
 
+            Expr input_channels = input_.dim(0).extent();
             for (int i = natural_vector_size<int16_t>(); i >= unroll_reduction; i /= 2) {
                 // Use GuardWithIf here to avoid growing the bounds.
-                input.specialize(input_.dim(0).extent() >= i)
+                input.specialize(input_channels >= i)
                     .vectorize(c, i, TailStrategy::GuardWithIf);
             }
         } else if (unroll_reduction >= natural_vector_size<uint8_t>()) {
@@ -244,15 +246,17 @@ public:
             // Precompute the channel offset at root.
             // TODO: This gets recomputed often when the op is split up into small
             // pieces.
-            offset_c.compute_root();
+            offset_c.compute_root()
+                .vectorize(c, accum_vector_size, TailStrategy::RoundUp);
             offset_c.update(0)
                 .specialize(input_zero_ != 0)
                 .split(r.z, rco, rci, unroll_reduction)
-                .reorder(rci, c, rco, r.x, r.y)
+                .split(c, co, c, accum_vector_size, TailStrategy::RoundUp)
+                .reorder(rci, c, rco, r.x, r.y, co)
                 .atomic()
                 .vectorize(rci, vector_reduction)
                 .unroll(rci)
-                .vectorize(c, accum_vector_size, TailStrategy::RoundUp);
+                .vectorize(c);
             offset_c.update(1)
                 .vectorize(c, accum_vector_size, TailStrategy::RoundUp);
 
@@ -260,10 +264,12 @@ public:
             sum_input.compute_at(output_, xo)
                 .vectorize(x)
                 .update()
-                .reorder(r.z, r.x, r.y, x)
+                .split(r.z, rco, rci, unroll_reduction)
+                .reorder(rci, x, rco, r.x, r.y)
                 .atomic()
-                .vectorize(r.z, unroll_reduction)
-                .vectorize(x);
+                .vectorize(rci)
+                .vectorize(x)
+                .specialize(stride_x_ == 1 && is_interleaved(input_, unroll_reduction));
         }
 
         // TODO: Pad this outside and let it constant fold.
