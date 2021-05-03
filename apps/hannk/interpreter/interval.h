@@ -13,10 +13,10 @@ namespace hannk {
 const int max_rank = 6;
 
 // This class mimics std::vector, but never dynamically allocates memory.
-// It can only grow to MaxSize elements.
-template<typename T, size_t MaxSize>
+// It can only grow to Capacity elements.
+template<typename T, size_t Capacity>
 class SmallVector {
-    alignas(alignof(T)) char buf_[MaxSize * sizeof(T)];
+    alignas(alignof(T)) char buf_[Capacity * sizeof(T)];
     size_t size_ = 0;
 
 public:
@@ -68,7 +68,7 @@ public:
     }
 
     void resize(size_t size) {
-        assert(size <= MaxSize);
+        assert(size <= Capacity);
         // Default construct the new elements.
         for (size_t i = size_; i < size; ++i) {
             new (&data()[i]) T();
@@ -85,13 +85,13 @@ public:
     }
 
     void push_back(T x) {
-        assert(size_ < MaxSize);
+        assert(size_ < Capacity);
         new (&data()[size_++]) T(std::move(x));
     }
 
     template<typename... Args>
     void emplace_back(Args &&...args) {
-        assert(size_ < MaxSize);
+        assert(size_ < Capacity);
         new (&data()[size_++]) T(std::forward<Args>(args)...);
     }
 

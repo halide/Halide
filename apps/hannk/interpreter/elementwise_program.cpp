@@ -9,6 +9,8 @@ using Slot = ElementwiseAssembler::Slot;
 
 const char *ElementwiseAssembler::to_string(OpCode op) {
     switch (op) {
+    case Noop:
+        return "Noop";
     case Add:
         return "Add";
     case Sub:
@@ -39,6 +41,8 @@ namespace {
 // Returns a mask with bit (1 << i) set to 1 if operand i is relevant for the op.
 int get_opcode_operand_mask(ElementwiseAssembler::OpCode op) {
     switch (op) {
+    case ElementwiseAssembler::Noop:
+        return 0x0;
     case ElementwiseAssembler::Add:
         return 0x7;
     case ElementwiseAssembler::Sub:

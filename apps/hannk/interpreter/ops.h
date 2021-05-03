@@ -50,7 +50,7 @@ private:
     ActivationFunction activation_;
 
 public:
-    BinaryOp(TensorPtr a, TensorPtr b, TensorPtr output, Operator op, ActivationFunction activation = ActivationFunction::None)
+    BinaryOp(const TensorPtr &a, const TensorPtr &b, const TensorPtr &output, Operator op, ActivationFunction activation = ActivationFunction::None)
         : ElementwiseOp({a, b}, {output}), op_(op), activation_(activation) {
     }
 
@@ -74,7 +74,7 @@ class ConcatenationOp : public Op {
     bool is_no_op_ = false;
 
 public:
-    ConcatenationOp(std::vector<TensorPtr> inputs, TensorPtr output, int axis)
+    ConcatenationOp(std::vector<TensorPtr> inputs, const TensorPtr &output, int axis)
         : Op(std::move(inputs), {output}), axis_(axis) {
     }
 
@@ -112,7 +112,7 @@ class Conv2DOp : public Op {
     ActivationFunction activation_;
 
 public:
-    Conv2DOp(TensorPtr input, TensorPtr filter, TensorPtr bias, TensorPtr output,
+    Conv2DOp(const TensorPtr &input, const TensorPtr &filter, const TensorPtr &bias, const TensorPtr &output,
              std::array<int, 2> stride, std::array<int, 2> dilation, Padding padding,
              ActivationFunction activation)
         : Op({input, filter, bias}, {output}),
@@ -130,19 +130,19 @@ public:
 
     void accept(OpVisitor *v);
 
-    const TensorPtr filter() const {
+    const TensorPtr &filter() const {
         return Op::input(1);
     }
-    const TensorPtr bias() const {
+    const TensorPtr &bias() const {
         return Op::input(2);
     }
-    TensorPtr filter() {
+    const TensorPtr &filter() {
         return Op::input(1);
     }
     void set_filter(TensorPtr filter) {
-        Op::set_input(1, filter);
+        Op::set_input(1, std::move(filter));
     }
-    TensorPtr bias() {
+    const TensorPtr &bias() {
         return Op::input(2);
     }
 
@@ -164,7 +164,7 @@ class DepthwiseConv2DOp : public Op {
     ActivationFunction activation_;
 
 public:
-    DepthwiseConv2DOp(TensorPtr input, TensorPtr filter, TensorPtr bias, TensorPtr output,
+    DepthwiseConv2DOp(const TensorPtr &input, const TensorPtr &filter, const TensorPtr &bias, const TensorPtr &output,
                       int depth_multiplier, std::array<int, 2> stride, std::array<int, 2> dilation,
                       Padding padding, ActivationFunction activation)
         : Op({input, filter, bias}, {output}),
@@ -184,16 +184,16 @@ public:
 
     void accept(OpVisitor *v);
 
-    const TensorPtr filter() const {
+    const TensorPtr &filter() const {
         return Op::input(1);
     }
-    const TensorPtr bias() const {
+    const TensorPtr &bias() const {
         return Op::input(2);
     }
-    TensorPtr filter() {
+    const TensorPtr &filter() {
         return Op::input(1);
     }
-    TensorPtr bias() {
+    const TensorPtr &bias() {
         return Op::input(2);
     }
 
@@ -211,7 +211,7 @@ private:
     Halide::Runtime::Buffer<int16_t> program_;
 
 public:
-    ElementwiseProgramOp(std::vector<TensorPtr> inputs, TensorPtr output, HalideBuffer<int16_t> program)
+    ElementwiseProgramOp(std::vector<TensorPtr> inputs, const TensorPtr &output, HalideBuffer<int16_t> program)
         : ElementwiseOp(std::move(inputs), {output}), program_(program) {
     }
     ElementwiseProgramOp(std::vector<TensorPtr> inputs, std::vector<TensorPtr> outputs, HalideBuffer<int16_t> program)
@@ -243,7 +243,7 @@ class FullyConnectedOp : public Op {
     ActivationFunction activation_;
 
 public:
-    FullyConnectedOp(TensorPtr input, TensorPtr filter, TensorPtr bias, TensorPtr output,
+    FullyConnectedOp(const TensorPtr &input, const TensorPtr &filter, const TensorPtr &bias, const TensorPtr &output,
                      ActivationFunction activation = ActivationFunction::None)
         : Op({input, filter, bias}, {output}), activation_(activation) {
     }
@@ -256,16 +256,16 @@ public:
 
     void accept(OpVisitor *v);
 
-    const TensorPtr filter() const {
+    const TensorPtr &filter() const {
         return Op::input(1);
     }
-    const TensorPtr bias() const {
+    const TensorPtr &bias() const {
         return Op::input(2);
     }
-    TensorPtr filter() {
+    const TensorPtr &filter() {
         return Op::input(1);
     }
-    TensorPtr bias() {
+    const TensorPtr &bias() {
         return Op::input(2);
     }
 
@@ -280,7 +280,7 @@ public:
 
 class L2NormalizationOp : public Op {
 public:
-    L2NormalizationOp(TensorPtr input, TensorPtr output)
+    L2NormalizationOp(const TensorPtr &input, const TensorPtr &output)
         : Op({input}, {output}) {
     }
 
@@ -301,7 +301,7 @@ public:
 
 class PadOp : public Op {
 public:
-    PadOp(TensorPtr input, TensorPtr padding, TensorPtr output)
+    PadOp(const TensorPtr &input, const TensorPtr &padding, const TensorPtr &output)
         : Op({input, padding}, {output}) {
         if (input->rank() == 0 || !padding->is_constant()) {
             output->set_dynamic();
@@ -341,7 +341,7 @@ protected:
     ActivationFunction activation_;
 
 public:
-    Pool2DOp(TensorPtr input, TensorPtr output, std::array<int, 2> stride,
+    Pool2DOp(const TensorPtr &input, const TensorPtr &output, std::array<int, 2> stride,
              std::array<int, 2> filter_size, Padding padding, Operator op,
              ActivationFunction activation)
         : Op({input}, {output}),
@@ -389,7 +389,7 @@ protected:
     bool reducing(int d) const;
 
 public:
-    ReductionOp(TensorPtr input, TensorPtr indices, TensorPtr output, Operator op)
+    ReductionOp(const TensorPtr &input, const TensorPtr &indices, const TensorPtr &output, Operator op)
         : Op({input, indices}, {output}), op_(op) {
     }
 
@@ -413,7 +413,7 @@ class ReshapeOp : public Op {
     SmallVector<int, max_rank> calc_new_shape() const;
 
 public:
-    ReshapeOp(TensorPtr input, TensorPtr shape_tensor, TensorPtr output)
+    ReshapeOp(const TensorPtr &input, const TensorPtr &shape_tensor, const TensorPtr &output)
         : Op({input, shape_tensor}, {output}) {
         if (shape_tensor && !shape_tensor->is_constant()) {
             output->set_dynamic();
@@ -437,7 +437,7 @@ public:
 
 class ShapeOp : public Op {
 public:
-    ShapeOp(TensorPtr input, TensorPtr output)
+    ShapeOp(const TensorPtr &input, const TensorPtr &output)
         : Op({input}, {output}) {
     }
 
@@ -460,7 +460,7 @@ class SoftmaxOp : public Op {
     float beta_;
 
 public:
-    SoftmaxOp(TensorPtr input, TensorPtr output, float beta)
+    SoftmaxOp(const TensorPtr &input, const TensorPtr &output, float beta)
         : Op({input}, {output}), beta_(beta) {
     }
 
@@ -483,7 +483,7 @@ class SpaceDepthOp : public Op {
     int block_size_;
 
 public:
-    SpaceDepthOp(TensorPtr input, TensorPtr output, int block_size)
+    SpaceDepthOp(const TensorPtr &input, const TensorPtr &output, int block_size)
         : Op({input}, {output}), block_size_(block_size) {
     }
 
@@ -505,10 +505,10 @@ public:
 
 class SplitOp : public Op {
     int axis_;
-    bool is_no_op_;
+    bool is_no_op_ = false;
 
 public:
-    SplitOp(TensorPtr input, std::vector<TensorPtr> outputs, int axis)
+    SplitOp(const TensorPtr &input, std::vector<TensorPtr> outputs, int axis)
         : Op({input}, std::move(outputs)), axis_(axis) {
     }
 
@@ -541,7 +541,7 @@ public:
 
 class TileConvFilterOp : public Op {
 public:
-    TileConvFilterOp(TensorPtr input, TensorPtr output)
+    TileConvFilterOp(const TensorPtr &input, const TensorPtr &output)
         : Op({input}, {output}) {
     }
 
@@ -578,7 +578,7 @@ private:
     Operator op_;
 
 public:
-    UnaryOp(TensorPtr input, TensorPtr output, Operator op)
+    UnaryOp(const TensorPtr &input, const TensorPtr &output, Operator op)
         : ElementwiseOp({input}, {output}), op_(op) {
     }
 

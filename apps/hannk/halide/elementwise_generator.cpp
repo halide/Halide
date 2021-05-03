@@ -113,29 +113,29 @@ public:
     GeneratorParam<Type> output3_type_{"output3_type", Int(0)};
 
     // An array of inputs.
-    Input<Buffer<>[]> inputs_ { "inputs", 1 };
+    Input<Buffer<>[]> inputs_ { "inputs", 2 };
     // The program to run. See elementwise_program.h for a description of
     // this buffer.
     Input<Buffer<int16_t>> program_{"program", 2};
 
     Func build() {
-        Var x("x"), u("u");
+        Var x("x"), y("y"), u("u");
 
         Type intermediate_type = intermediate_type_;
         Type unsigned_intermediate = intermediate_type.with_code(halide_type_uint);
         const int q = intermediate_type.bits() - (intermediate_type.is_int() ? 1 : 0);
 
         Func scratch("scratch");
-        scratch(x, u) = undef(intermediate_type_);
+        scratch(x, y, u) = undef(intermediate_type_);
 
         // Load the inputs into the scratch memory.
         const int input_count = inputs_.size();
         for (int i = 0; i < input_count; i++) {
-            scratch(x, -i - 1) = cast(intermediate_type, inputs_[i](x));
+            scratch(x, y, -i - 1) = cast(intermediate_type, inputs_[i](x, y));
         }
 
         // scratch slot 0 is a constant 0.
-        scratch(x, 0) = cast(intermediate_type, 0);
+        scratch(x, y, 0) = cast(intermediate_type, 0);
 
         RDom r(0, ElementwiseAssembler::OpCodeCount, 0, program_.dim(1).extent());
         Expr op = program_(0, r.y);
@@ -144,11 +144,14 @@ public:
         Expr arg3 = cast(intermediate_type, program_(3, r.y));
         Expr arg4 = cast(intermediate_type, program_(4, r.y));
 
+        Expr slot = r.y + 1;
+
         const int max_input = input_count - 1;
-        Expr input1 = scratch(x, unsafe_promise_clamped(i32(arg1), -max_input - 1, r.y + 1));
-        Expr input2 = scratch(x, unsafe_promise_clamped(i32(arg2), -max_input - 1, r.y + 1));
+        Expr input1 = scratch(x, y, unsafe_promise_clamped(i32(arg1), -max_input - 1, slot));
+        Expr input2 = scratch(x, y, unsafe_promise_clamped(i32(arg2), -max_input - 1, slot));
 
         std::vector<Expr> instructions = {
+            scratch(x, y, slot),
             saturating_add(input1, input2 + arg3),
             saturating_sub(input1, input2 + arg3),
             saturating_add(multiply_2x_high(input1, input2 + arg3), arg4),
@@ -161,7 +164,7 @@ public:
             rounding_shift_right(approx_tanh(q, input1, input2 + arg3, intermediate_type), q - arg4),
         };
         r.where(r.x == op);
-        scratch(x, r.y + 1) = mux(r.x, instructions);
+        scratch(x, y, slot) = mux(r.x, instructions);
 
         Func output("output");
         std::vector<Type> output_types;
@@ -179,11 +182,11 @@ public:
         // Grab the last output_count values from scratch and write them to each output.
         std::vector<Expr> outputs;
         for (int i = 0; i < output_count; i++) {
-            Expr output_i = scratch(x, program_.dim(1).extent() - output_count + i + 1);
+            Expr output_i = scratch(x, y, program_.dim(1).extent() - output_count + i + 1);
             output_i = saturating_cast(output_types[i], output_i);
             outputs.push_back(output_i);
         }
-        output(x) = Tuple(outputs);
+        output(x, y) = Tuple(outputs);
 
         // Schedule.
         output.compute_root()

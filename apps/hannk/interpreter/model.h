@@ -25,6 +25,16 @@ struct QuantizationInfo {
     bool operator==(const QuantizationInfo &r) const {
         return dimension == r.dimension && scale == r.scale && zero == r.zero;
     }
+
+    float uniform_scale() const {
+        assert(scale.size() == 1);
+        return scale[0];
+    }
+
+    int32_t uniform_zero() const {
+        assert(zero.size() == 1);
+        return zero[0];
+    }
 };
 
 inline std::ostream &operator<<(std::ostream &s, const QuantizationInfo &q) {
@@ -135,6 +145,10 @@ public:
         return buffer_.dim(i).extent();
     }
 
+    int number_of_elements() const {
+        return buffer_.number_of_elements();
+    }
+
     int rank() const {
         return buffer_.dimensions();
     }
@@ -185,6 +199,10 @@ public:
         return buffer_.as_const().as<const T>();
     }
 
+    halide_buffer_t *raw_buffer() {
+        return buffer_.raw_buffer();
+    }
+
     bool is_allocated() const;
     void allocate();
 
@@ -193,7 +211,7 @@ public:
     std::shared_ptr<TensorStorage> storage();
 
     bool is_alias() const;
-    void set_alias_of(TensorPtr t, const SmallVector<int, max_rank> &offset = {});
+    void set_alias_of(const TensorPtr &t, const SmallVector<int, max_rank> &offset = {});
 
     void add_consumer(Op *op);
     void add_producer(Op *op);
@@ -207,7 +225,7 @@ public:
         return consumers_;
     }
 
-    void replace_all_consumers_with(TensorPtr other);
+    void replace_all_consumers_with(const TensorPtr &other);
 
     void dump(std::ostream &os) const;
 };
@@ -217,7 +235,7 @@ using TensorMap = std::map<const TensorPtr, TensorPtr>;
 
 // Apply a tensor map to a list of tensors. This is used to support
 // cloning ops referring to different tensors.
-TensorPtr apply(TensorMap &map, const TensorPtr t);
+const TensorPtr &apply(TensorMap &map, const TensorPtr &t);
 
 // A mapping from an output x to required input coordinates [min, max].
 // [min, max] = (x / inv_stride) * stride + bounds
@@ -489,28 +507,28 @@ public:
     int output_count() const {
         return outputs_.size();
     }
-    const TensorPtr input(int idx) const {
+    const TensorPtr &input(int idx) const {
         return inputs_[idx];
     }
-    const TensorPtr output(int idx) const {
+    const TensorPtr &output(int idx) const {
         return outputs_[idx];
     }
-    const TensorPtr input() const {
+    const TensorPtr &input() const {
         return input(0);
     }
-    const TensorPtr output() const {
+    const TensorPtr &output() const {
         return output(0);
     }
-    TensorPtr input(int idx) {
+    const TensorPtr &input(int idx) {
         return inputs_[idx];
     }
-    TensorPtr output(int idx) {
+    const TensorPtr &output(int idx) {
         return outputs_[idx];
     }
-    TensorPtr input() {
+    const TensorPtr &input() {
         return input(0);
     }
-    TensorPtr output() {
+    const TensorPtr &output() {
         return output(0);
     }
 

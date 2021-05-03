@@ -7,7 +7,7 @@
 
 namespace hannk {
 
-TensorPtr apply(TensorMap &map, const TensorPtr t) {
+const TensorPtr &apply(TensorMap &map, const TensorPtr &t) {
     auto i = map.find(t);
     if (i != map.end()) {
         return i->second;
@@ -18,9 +18,7 @@ TensorPtr apply(TensorMap &map, const TensorPtr t) {
         return t;
     } else {
         // Remember this cloned tensor for later applications of the mapping.
-        TensorPtr clone = std::make_shared<Tensor>(*t);
-        map[t] = clone;
-        return clone;
+        return map[t] = std::make_shared<Tensor>(*t);
     }
 }
 
@@ -28,15 +26,15 @@ namespace {
 
 HalideBuffer<void> make_buffer(halide_type_t type, const Box &bounds) {
     // TODO: Avoid this dynamic allocation. Halide's API requires std::vector here.
-    std::vector<int> extents(bounds.size());
+    SmallVector<halide_dimension_t, max_rank> dims(bounds.size());
+    int stride = 1;
     for (int i = 0; i < (int)bounds.size(); i++) {
-        extents[i] = bounds[i].extent();
+        dims[i].min = bounds[i].min;
+        dims[i].extent = bounds[i].extent();
+        dims[i].stride = stride;
+        stride *= dims[i].extent;
     }
-    HalideBuffer<void> buffer(type, nullptr, extents);
-    for (int i = 0; i < (int)bounds.size(); i++) {
-        buffer.translate(i, bounds[i].min);
-    }
-    return buffer;
+    return HalideBuffer<void>(type, nullptr, (int)dims.size(), dims.data());
 }
 
 }  // namespace
@@ -154,11 +152,9 @@ void Tensor::allocate() {
 }
 
 void Tensor::resize(const Box &new_shape) {
-    CHECK(is_dynamic());
+    assert(is_dynamic());
 
-    // TODO: Avoid this dynamic allocation. Halide's API requires std::vector here.
-    std::vector<halide_dimension_t> new_dims;
-    new_dims.reserve(new_shape.size());
+    SmallVector<halide_dimension_t, max_rank> new_dims;
 
     const halide_dimension_t *old_dims = buffer_.raw_buffer()->dim;
 
@@ -182,7 +178,7 @@ void Tensor::resize(const Box &new_shape) {
         return;
     }
 
-    HalideBuffer<void> new_buffer(buffer_.type(), nullptr, new_dims);
+    HalideBuffer<void> new_buffer(buffer_.type(), nullptr, (int)new_dims.size(), new_dims.data());
     new_buffer.allocate();
     if (buffer_.data()) {
         new_buffer.copy_from(buffer_);
@@ -197,8 +193,8 @@ bool Tensor::is_alias() const {
     return storage_ != nullptr;
 }
 
-void Tensor::set_alias_of(TensorPtr t, const SmallVector<int, max_rank> &storage_offset) {
-    CHECK(!is_dynamic());
+void Tensor::set_alias_of(const TensorPtr &t, const SmallVector<int, max_rank> &storage_offset) {
+    assert(!is_dynamic());
 
     storage_ = t->storage();
     storage_offset_ = storage_offset;
@@ -210,7 +206,7 @@ void Tensor::set_alias_of(TensorPtr t, const SmallVector<int, max_rank> &storage
     storage_->add_use(type(), offset_bounds);
 }
 
-void Tensor::replace_all_consumers_with(TensorPtr other) {
+void Tensor::replace_all_consumers_with(const TensorPtr &other) {
     // We need to make a copy of the list of consumers so it doesn't get invalidated
     // by set_input below.
     auto consumers = consumers_;
@@ -276,7 +272,7 @@ void Op::set_input(int idx, TensorPtr t) {
     if (inputs_[idx]) {
         inputs_[idx]->remove_consumer(this);
     }
-    inputs_[idx] = t;
+    inputs_[idx] = std::move(t);
     if (inputs_[idx]) {
         inputs_[idx]->add_consumer(this);
     }
@@ -286,18 +282,18 @@ void Op::set_output(int idx, TensorPtr t) {
     if (outputs_[idx]) {
         outputs_[idx]->remove_producer(this);
     }
-    outputs_[idx] = t;
+    outputs_[idx] = std::move(t);
     if (outputs_[idx]) {
         outputs_[idx]->add_producer(this);
     }
 }
 
 void Op::set_input(TensorPtr t) {
-    set_input(0, t);
+    set_input(0, std::move(t));
 }
 
 void Op::set_output(TensorPtr t) {
-    set_output(0, t);
+    set_output(0, std::move(t));
 }
 
 void OpGroup::execute() {
