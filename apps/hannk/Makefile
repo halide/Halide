@@ -323,10 +323,8 @@ $(BIN)/%/libHannkDelegate.so: \
 	@mkdir -p $(@D)
 	$(CXX-$*) -shared $^ $(DELEGATE_LD_FLAGS) -o $@
 
-$(BIN)/%/hannk_delegate_provider.a: $(BIN)/%/hannk_delegate.o $(BIN)/%/hannk_delegate_provider.o
-	@mkdir -p $(@D)
-	ar q $@ $(OBJECTS) $^
-	ranlib $@
+HANNK_INTERNAL_DELEGATE_DEPS = \
+	$(BIN)/%/hannk_delegate.o
 
 # ---------------------- toplevel executables
 
@@ -338,7 +336,12 @@ $(BIN)/%/benchmark: benchmark.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UT
 
 # To build for Android, use `HL_TARGET=arm-64-android make compare_vs_tflite`
 $(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp \
-		$(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UTIL_DEPS) $(TFLITE_SHARED_LIBRARY) $(BIN)/%/hannk_delegate_provider.a $(BIN)/$(HL_TARGET)/libHannkDelegate.so
+		$(INTERPRETER_DEPS) \
+		$(TFLITE_PARSER_DEPS) \
+		$(UTIL_DEPS) \
+		$(TFLITE_SHARED_LIBRARY) \
+		$(HANNK_INTERNAL_DELEGATE_DEPS) \
+		$(BIN)/$(HL_TARGET)/libHannkDelegate.so
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -I$(TFLITE_INCLUDES) $(TFLITE_LDFLAGS) $(filter %.cpp %.o %.a %.so %.$(SHARED_EXT),$^) -o $@ $(LDFLAGS-$*)
 

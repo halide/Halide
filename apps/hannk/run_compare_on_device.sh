@@ -7,7 +7,7 @@
 #
 # export HL_TARGET to specify the target architecture to build. (Defaults to arm-64-android.)
 #
-# usage: HL_TARGET=arm-64-android ./run_compare_on_device.sh local_testdata/*.tflite
+# usage: HL_TARGET=arm-64-android ./run_compare_on_device.sh local_testdata/*.tflite --flag1 --flag2 ...
 
 set -e
 
@@ -40,16 +40,32 @@ if [ "$#" -eq 0 ]; then
     exit 1
 fi
 
-adb push "$@" "${DEVICE_DIR}" > /dev/null
-
-FILES=
-for FILE in "$@"
+LOCAL_FILES=
+DEVICE_FILES=
+FLAGS=
+NEXT_IS_FLAG=0
+for ARG in "$@"
 do
-  BASENAME=$(basename "${FILE}")
-  FILES="${FILES} ${DEVICE_DIR}/${BASENAME}"
+  if [[ ${NEXT_IS_FLAG} -eq 1 ]]; then
+    # assume it's a flag
+    FLAGS="${FLAGS} ${ARG}"
+    NEXT_IS_FLAG=0
+  else
+    if [[ "${ARG}" =~ ^-.* ]]; then
+      # assume it's a flag
+      FLAGS="${FLAGS} ${ARG}"
+      NEXT_IS_FLAG=1
+    else
+      # assume it's a file
+      BASENAME=$(basename "${ARG}")
+      LOCAL_FILES="${LOCAL_FILES} ${ARG}"
+      DEVICE_FILES="${DEVICE_FILES} ${DEVICE_DIR}/${BASENAME}"
+    fi
+  fi
 done
 
-adb shell "LD_LIBRARY_PATH=${DEVICE_DIR}:${LD_LIBRARY_PATH} ${DEVICE_DIR}/compare_vs_tflite ${FILES}"
+adb push ${LOCAL_FILES} "${DEVICE_DIR}"
+adb shell LD_LIBRARY_PATH=${DEVICE_DIR}:${LD_LIBRARY_PATH} ${DEVICE_DIR}/compare_vs_tflite ${FLAGS} ${DEVICE_FILES}
 
 echo
 echo All comparisons complete.
