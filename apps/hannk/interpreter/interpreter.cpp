@@ -8,7 +8,7 @@
 namespace hannk {
 
 Interpreter::Interpreter(std::unique_ptr<OpGroup> m, InterpreterOptions options)
-    : model_(std::move(m)), trace_(options.trace) {
+    : model_(std::move(m)) {
     init(options);
 }
 
