@@ -1347,8 +1347,9 @@ void SpaceToDepth(const HalideBuffer<const T> &input, int block_size, HalideBuff
 
         // This only works if the first 3 dimensions of the input and the
         // first 2 dimensions of the output are densely stored in memory.
-        assert(can_fuse_cx(FuseType::Delete, input) && can_fuse_cx(FuseType::Delete, output));
-        assert(can_fuse_xy(FuseType::Delete, input));
+        assert(can_fuse_cx(FuseType::Delete, input.raw_buffer()));
+        assert(can_fuse_xy(FuseType::Delete, input.raw_buffer()));
+        assert(can_fuse_cx(FuseType::Delete, output.raw_buffer()));
 
         for (int out_h = output.dim(2).min(); out_h <= output.dim(2).max(); ++out_h) {
             const T *input_ptr = &input(0, 0, out_h * block_size);
