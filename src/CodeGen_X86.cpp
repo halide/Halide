@@ -703,7 +703,7 @@ string CodeGen_X86::mattrs() const {
         }
         if (target.has_feature(Target::AVX512_SapphireRapids)) {
 #if LLVM_VERSION >= 120
-            features += ",+avx512bf16,+avx512vnni";
+            features += ",+avx512bf16,+avx512vnni,+amx-int8,+amx-bf16";
 #else
             user_error << "AVX512 SapphireRapids requires LLVM 12 or later.";
 #endif
