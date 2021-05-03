@@ -5,6 +5,7 @@
 #include <random>
 #include <unistd.h>
 
+#include "delegate/hannk_delegate.h"
 #include "halide_benchmark.h"
 #include "interpreter/interpreter.h"
 #include "tflite/tflite_parser.h"
@@ -146,6 +147,7 @@ enum WhichRun {
     kTfLite,
     kHannk,
     kExternalDelegate,
+    kInternalDelegate,
 
     kNumRuns  // keep last
 };
@@ -154,6 +156,7 @@ static const char *const RunNames[kNumRuns] = {
     "TfLite",
     "Hannk",
     "HannkExternalDelegate",
+    "HannkInternalDelegate",
 };
 
 struct Runner {
@@ -367,7 +370,7 @@ void Runner::run(const std::string &filename) {
 
     std::map<WhichRun, RunResult> results;
 
-    const std::array<WhichRun, kNumRuns> all_runs = {kTfLite, kHannk, kExternalDelegate};
+    const std::array<WhichRun, kNumRuns> all_runs = {kTfLite, kHannk, kExternalDelegate, kInternalDelegate};
 
     std::vector<WhichRun> active_runs;
     for (WhichRun i : all_runs) {
@@ -387,10 +390,19 @@ void Runner::run(const std::string &filename) {
         CHECK(delegate_ptr.init(external_delegate_path, verbosity));
         return run_in_tflite(buffer, delegate_ptr.get());
     };
+    const auto exec_hannk_internal_delegate = [this, &buffer]() {
+        HannkDelegateOptions options;
+        options.verbosity = verbosity;
+        TfLiteDelegate *delegate = HannkDelegateCreate(&options);
+        auto result = run_in_tflite(buffer, delegate);
+        HannkDelegateDelete(delegate);
+        return result;
+    };
     const std::map<WhichRun, std::function<RunResult()>> execs = {
         {kTfLite, exec_tflite},
         {kHannk, exec_hannk},
         {kExternalDelegate, exec_hannk_external_delegate},
+        {kInternalDelegate, exec_hannk_internal_delegate},
     };
 
     for (WhichRun i : active_runs) {
@@ -438,10 +450,6 @@ int main(int argc, char **argv) {
     runner.seed = time(nullptr);
     std::vector<const char *> files;
 
-    for (int i = 0; i < hannk::kNumRuns; i++) {
-        runner.do_run[i] = true;
-    }
-
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--seed")) {
             runner.seed = atoi(argv[++i]);
@@ -462,6 +470,9 @@ int main(int argc, char **argv) {
                     break;
                 case 'x':
                     runner.do_run[hannk::kExternalDelegate] = true;
+                    break;
+                case 'i':
+                    runner.do_run[hannk::kInternalDelegate] = true;
                     break;
                 default: {
                     std::cerr << "Unknown option to --enable: " << c << "\n";

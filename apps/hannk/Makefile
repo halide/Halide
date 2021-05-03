@@ -289,6 +289,10 @@ $(BIN)/%/hannk_delegate_adaptor.o: delegate/hannk_delegate_adaptor.cpp
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(TFLITE_INCLUDES_FLAGS) $(UTIL_CXXFLAGS) -c $< -o $@
 
+$(BIN)/%/hannk_delegate_provider.o: delegate/hannk_delegate_provider.cpp
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(TFLITE_INCLUDES_FLAGS) $(UTIL_CXXFLAGS) -c $< -o $@
+
 ifeq (arm-64-android,$(findstring arm-64-android,$(HL_TARGET)))
 
 # Don't include $(LDFLAGS) here, it includes pthreads, which we don't want
@@ -319,7 +323,10 @@ $(BIN)/%/libHannkDelegate.so: \
 	@mkdir -p $(@D)
 	$(CXX-$*) -shared $^ $(DELEGATE_LD_FLAGS) -o $@
 
-delegate: $(BIN)/$(HL_TARGET)/libHannkDelegate.so
+$(BIN)/%/hannk_delegate_provider.a: $(BIN)/%/hannk_delegate.o $(BIN)/%/hannk_delegate_provider.o
+	@mkdir -p $(@D)
+	ar q $@ $(OBJECTS) $^
+	ranlib $@
 
 # ---------------------- toplevel executables
 
@@ -331,7 +338,7 @@ $(BIN)/%/benchmark: benchmark.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UT
 
 # To build for Android, use `HL_TARGET=arm-64-android make compare_vs_tflite`
 $(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp \
-		$(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UTIL_DEPS) $(TFLITE_SHARED_LIBRARY) $(BIN)/$(HL_TARGET)/libHannkDelegate.so
+		$(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UTIL_DEPS) $(TFLITE_SHARED_LIBRARY) $(BIN)/%/hannk_delegate_provider.a $(BIN)/$(HL_TARGET)/libHannkDelegate.so
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -I$(TFLITE_INCLUDES) $(TFLITE_LDFLAGS) $(filter %.cpp %.o %.a %.so %.$(SHARED_EXT),$^) -o $@ $(LDFLAGS-$*)
 
