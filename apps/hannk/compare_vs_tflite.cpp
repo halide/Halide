@@ -405,6 +405,7 @@ void Runner::run(const std::string &filename) {
         {kInternalDelegate, exec_hannk_internal_delegate},
     };
 
+    std::cout << '\n';
     for (WhichRun i : active_runs) {
         std::cout << "Executing in " << RunNames[i] << " ...\n";
         results[i] = execs.at(i)();
@@ -412,11 +413,14 @@ void Runner::run(const std::string &filename) {
 
     // ----- Log benchmark times
     if (do_benchmark) {
+
+        std::cout << '\n';
         for (WhichRun i : active_runs) {
             std::cout << RunNames[i] << " Time: " << std::chrono::duration_cast<std::chrono::microseconds>(results[i].time).count() << " us"
                       << "\n";
         }
 
+        std::cout << '\n';
         for (WhichRun i : active_runs) {
             if (i == kTfLite) {
                 continue;
@@ -432,6 +436,8 @@ void Runner::run(const std::string &filename) {
 
     // ----- Now compare the outputs
     if (do_compare_results && do_run[kTfLite]) {
+        std::cout << '\n';
+
         for (WhichRun i : active_runs) {
             if (i == kTfLite) {
                 continue;
