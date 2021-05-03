@@ -22,6 +22,7 @@
     KNOWN_OP(DepthwiseConv2d) \
     KNOWN_OP(Equal)           \
     KNOWN_OP(FullyConnected)  \
+    KNOWN_OP(Gather)          \
     KNOWN_OP(Greater)         \
     KNOWN_OP(GreaterEqual)    \
     KNOWN_OP(L2Normalization) \
@@ -667,6 +668,19 @@ private:
         return make_op<PadOp>(input, padding, output);
     }
 
+    OpPtr BuildGather(TfLiteContext *context, TfLiteNode *node) {
+        auto input = GetTensorById(context, node->inputs->data[0]);
+        auto indices = GetTensorById(context, node->inputs->data[1]);
+        auto output = GetTensorById(context, node->outputs->data[0]);
+        const TfLiteGatherParams *params = (const TfLiteGatherParams *)(node->builtin_data);
+        int axis = params->axis;
+        if (axis < 0) {
+            axis += input->rank();
+        }
+        axis = input->rank() - 1 - axis;
+        return make_op<GatherOp>(input, indices, output, axis);
+    }
+
     OpPtr BuildReshape(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
@@ -1055,15 +1069,15 @@ class NodeSupport {
         return true;
     }
 
-    bool InputHasType(int i, PossibleTypesMask possible_types_mask) const {
+    bool InputHasType(int i, int possible_types_mask) const {
         return HasTypeImpl(i, possible_types_mask, node_->inputs, "input");
     }
 
-    bool OutputHasType(int i, PossibleTypesMask possible_types_mask) const {
+    bool OutputHasType(int i, int possible_types_mask) const {
         return HasTypeImpl(i, possible_types_mask, node_->outputs, "output");
     }
 
-    bool ListHasCorrectTypesImpl(std::initializer_list<PossibleTypesMask> per_tensor_possible_types_mask, TfLiteIntArray *list, const char *label) const {
+    bool ListHasCorrectTypesImpl(std::initializer_list<int> per_tensor_possible_types_mask, TfLiteIntArray *list, const char *label) const {
         if (list->size != (int)per_tensor_possible_types_mask.size()) {
             if (verbose_) {
                 failures_ << "Expected " << per_tensor_possible_types_mask.size()
@@ -1072,7 +1086,7 @@ class NodeSupport {
             return false;
         }
         int i = -1;
-        for (PossibleTypesMask possible_types_mask : per_tensor_possible_types_mask) {
+        for (int possible_types_mask : per_tensor_possible_types_mask) {
             ++i;
             if (!HasTypeImpl(i, possible_types_mask, list, label)) {
                 return false;
@@ -1081,11 +1095,11 @@ class NodeSupport {
         return true;
     }
 
-    bool InputsHaveCorrectTypes(std::initializer_list<PossibleTypesMask> per_tensor_possible_types_mask) const {
+    bool InputsHaveCorrectTypes(std::initializer_list<int> per_tensor_possible_types_mask) const {
         return ListHasCorrectTypesImpl(per_tensor_possible_types_mask, node_->inputs, "input");
     }
 
-    bool OutputsHaveCorrectTypes(std::initializer_list<PossibleTypesMask> per_tensor_possible_types_mask) const {
+    bool OutputsHaveCorrectTypes(std::initializer_list<int> per_tensor_possible_types_mask) const {
         return ListHasCorrectTypesImpl(per_tensor_possible_types_mask, node_->outputs, "output");
     }
 
@@ -1117,7 +1131,7 @@ class NodeSupport {
         if (!IsVersionOK(1, 2)) {
             return false;
         }
-        if (!InputsHaveCorrectTypes({U8, U8})) {
+        if (!InputsHaveCorrectTypes({U8 | I32, U8 | I32})) {
             return false;
         }
         const TfLiteAddParams *params = (const TfLiteAddParams *)(node_->builtin_data);
@@ -1131,7 +1145,7 @@ class NodeSupport {
         if (!IsVersionOK(1, 2)) {
             return false;
         }
-        if (!InputsHaveCorrectTypes({U8, U8})) {
+        if (!InputsHaveCorrectTypes({U8 | I32, U8 | I32})) {
             return false;
         }
         const TfLiteSubParams *params = (const TfLiteSubParams *)(node_->builtin_data);
@@ -1145,7 +1159,7 @@ class NodeSupport {
         if (!IsVersionOK(1, 2)) {
             return false;
         }
-        if (!InputsHaveCorrectTypes({U8, U8})) {
+        if (!InputsHaveCorrectTypes({U8 | I32, U8 | I32})) {
             return false;
         }
         const TfLiteMulParams *params = (const TfLiteMulParams *)(node_->builtin_data);
@@ -1272,6 +1286,18 @@ class NodeSupport {
             if (!OutputHasType(i, required_type_mask)) {
                 return false;
             }
+        }
+
+        return true;
+    }
+
+    bool IsNodeSupported_Gather() const {
+        if (!IsVersionOK(1, 2)) {
+            return false;
+        }
+
+        if (!InputHasType(1, I32)) {
+            return false;
         }
 
         return true;

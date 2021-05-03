@@ -180,6 +180,21 @@ void loop_nest_impl(Fn &&fn, halide_buffer_t op0, Bufs... ops) {
     }
 }
 
+template<typename Fn, typename T, typename... Ts>
+void scalar_loop_nest_impl(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
+    if (op0.dimensions() == 0) {
+        fn(op0(), ops()...);
+    } else {
+        const int last_dim = op0.dimensions() - 1;
+        const int min = op0.dim(last_dim).min();
+        const int extent = op0.dim(last_dim).extent();
+        const int max = min + extent - 1;
+        for (int i = min; i <= max; i++) {
+            scalar_loop_nest_impl(fn, op0.sliced(last_dim, i), ops.sliced(last_dim, i)...);
+        }
+    }
+}
+
 void broadcast_dims(int min, int extent) {
 }
 
@@ -222,6 +237,15 @@ void elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops
     broadcast_shapes(rank, op0.raw_buffer(), ops.raw_buffer()...);
     optimize_elementwise_shapes(op0.raw_buffer(), ops.raw_buffer()...);
     loop_nest_impl<FnRank>(fn, *op0.raw_buffer(), *ops.raw_buffer()...);
+}
+
+template<typename Fn, typename T, typename... Ts>
+void scalar_elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
+    const int rank = std::max({op0.dimensions(), ops.dimensions()...});
+    pad_to_rank(rank, op0, ops...);
+    broadcast_shapes(rank, op0.raw_buffer(), ops.raw_buffer()...);
+    optimize_elementwise_shapes(op0.raw_buffer(), ops.raw_buffer()...);
+    scalar_loop_nest_impl(fn, op0, ops...);
 }
 
 // This helper is similar to the above, but it only implements steps 3 and 4.
@@ -502,6 +526,29 @@ double dequantize_scalar(const Tensor *t) {
     }
 }
 
+template <typename TResult, typename TOperand>
+TResult implement_binary(BinaryOp::Operator op, TOperand a, TOperand b) {
+    switch (op) {
+    case BinaryOp::Add:
+        return a + b;
+    case BinaryOp::Sub:
+        return a - b;
+    case BinaryOp::Mul:
+        return a * b;
+    case BinaryOp::Less:
+        return a < b;
+    case BinaryOp::LessEqual:
+        return a <= b;
+    case BinaryOp::Equal:
+        return a == b;
+    case BinaryOp::NotEqual:
+        return a != b;
+    default:
+        LOG(FATAL) << "Unknown binary operator " << BinaryOp::to_string(op);
+        return TResult();
+    }
+}
+
 }  // namespace
 
 void BinaryOp::execute() {
@@ -527,6 +574,19 @@ void BinaryOp::execute() {
         default:
             break;
         }
+    } else if (in1->type() == halide_type_of<int32_t>() &&
+               in2->type() == halide_type_of<int32_t>() &&
+               out->type() == halide_type_of<int32_t>()) {
+        const auto &in1_buf = in1->buffer<const int32_t>();
+        const auto &in2_buf = in2->buffer<const int32_t>();
+        const auto &out_buf = out->buffer<int32_t>();
+
+        // This is really slow, only intended to support scalar operations.
+        auto scalar_op = [&](int32_t a, int32_t b, int32_t &result) {
+            result = implement_binary<int32_t>(op_, a, b);
+        };
+        scalar_elementwise_loop_nest(scalar_op, in1_buf, in2_buf, out_buf);
+        return;
     } else if (out->type() == halide_type_of<bool>() && out->rank() == 0) {
         double in1_scalar = dequantize_scalar(in1.get());
         double in2_scalar = dequantize_scalar(in2.get());
@@ -912,6 +972,36 @@ void FullyConnectedOp::execute() {
         }
     }
     LOG(FATAL) << "Unsupported type " << out->type() << "\n";
+}
+
+BoundsMap GatherOp::map_bounds(int input_idx, int output_idx) const {
+    if (input_idx == 0) {
+        BoundsMap result = BoundsMap::elementwise(output()->rank());
+        // We need potentially anything from the dimension we are gathering.
+        result.constant(axis_, input()->extent(axis_));
+        return result;
+    } else {
+        assert(input_idx == 1);
+        BoundsMap result(1, output()->rank());
+        result.elementwise(0, axis_);
+        return result;
+    }
+}
+
+void GatherOp::execute() {
+    const HalideBuffer<const void> &in = input(0)->buffer();
+    HalideBuffer<const int32_t> indices = input(1)->buffer();
+    const HalideBuffer<void> &out = output()->buffer();
+
+    if (indices.dimensions() == 0) {
+        indices.embed(0, 0);
+    }
+
+    for (int i = out.dim(axis_).min(); i <= out.dim(axis_).max(); i++) {
+        HalideBuffer<const void> in_i = in.sliced(axis_, indices(i));
+        HalideBuffer<void> out_i = out.sliced(axis_, i);
+        out_i.copy_from(in_i);
+    }
 }
 
 BoundsMap L2NormalizationOp::map_bounds(int input_idx, int output_idx) const {
@@ -1559,6 +1649,10 @@ void ElementwiseProgramOp::accept(OpVisitor *v) {
 }
 
 void FullyConnectedOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void GatherOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 

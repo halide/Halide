@@ -278,6 +278,29 @@ public:
     }
 };
 
+class GatherOp : public Op {
+    int axis_;
+
+public:
+    GatherOp(TensorPtr input, TensorPtr indices, TensorPtr output, int axis)
+        : Op({input, indices}, {output}), axis_(axis) {
+    }
+
+    OpPtr clone(TensorMap &map) const {
+        return make_op<GatherOp>(apply(map, input(0)), apply(map, input(1)), apply(map, output()), axis_);
+    }
+
+    void accept(OpVisitor *v);
+
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
+
+    void execute();
+
+    void dump(std::ostream &os) const {
+        os << "  Gather " << output()->name() << std::endl;
+    }
+};
+
 class L2NormalizationOp : public Op {
 public:
     L2NormalizationOp(const TensorPtr &input, const TensorPtr &output)
@@ -611,6 +634,8 @@ public:
     virtual void visit(ElementwiseProgramOp *op) {
     }
     virtual void visit(FullyConnectedOp *op) {
+    }
+    virtual void visit(GatherOp *op) {
     }
     virtual void visit(L2NormalizationOp *op) {
     }

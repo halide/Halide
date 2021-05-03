@@ -287,6 +287,20 @@ public:
         return make_op<ShapeOp>(input, output);
     }
 
+    OpPtr parse_gather(const tflite::Operator *op) {
+        const tflite::GatherOptions *options =
+            op->builtin_options_as_GatherOptions();
+        int axis = options->axis();
+        TensorPtr input = tensors_[op->inputs()->Get(0)];
+        TensorPtr indices = tensors_[op->inputs()->Get(1)];
+        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        if (axis < 0) {
+            axis += input->rank();
+        }
+        axis = input->rank() - 1 - axis;
+        return make_op<GatherOp>(input, indices, output, axis);
+    }
+
     OpPtr parse_space_to_depth(const tflite::Operator *op) {
         const tflite::SpaceToDepthOptions *options =
             op->builtin_options_as_SpaceToDepthOptions();
@@ -411,6 +425,8 @@ public:
             return parse_binary(op, BinaryOp::Equal);
         case tflite::BuiltinOperator_FULLY_CONNECTED:
             return parse_fully_connected(op);
+        case tflite::BuiltinOperator_GATHER:
+            return parse_gather(op);
         case tflite::BuiltinOperator_GREATER:
             return parse_binary(op, BinaryOp::Less, true);
         case tflite::BuiltinOperator_GREATER_EQUAL:
