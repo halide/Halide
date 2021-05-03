@@ -160,10 +160,16 @@ struct Runner {
     int seed = 0;
     int threads = 1;
     int verbosity = 0;
-    bool do_run[kNumRuns] = {true};
+    bool do_run[kNumRuns];  // no way to default-init everything to anything but zero, alas
     bool do_benchmark = true;
     bool do_compare_results = true;
     std::string external_delegate_path;
+
+    Runner() {
+        for (int i = 0; i < kNumRuns; i++) {
+            do_run[i] = true;
+        }
+    }
 
     void run(const std::string &filename);
 
@@ -388,6 +394,7 @@ void Runner::run(const std::string &filename) {
     };
 
     for (WhichRun i : active_runs) {
+        std::cout << "Executing in " << RunNames[i] << " ...\n";
         results[i] = execs.at(i)();
     }
 
@@ -430,6 +437,10 @@ int main(int argc, char **argv) {
     hannk::Runner runner;
     runner.seed = time(nullptr);
     std::vector<const char *> files;
+
+    for (int i = 0; i < hannk::kNumRuns; i++) {
+        runner.do_run[i] = true;
+    }
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--seed")) {
