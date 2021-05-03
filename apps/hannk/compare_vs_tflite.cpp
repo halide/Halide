@@ -142,14 +142,25 @@ public:
 
 }  // namespace
 
+enum WhichRun {
+    kTfLite,
+    kHannk,
+    kExternalDelegate,
+
+    kNumRuns  // keep last
+};
+
+static const char *const RunNames[kNumRuns] = {
+    "TfLite",
+    "Hannk",
+    "HannkExternalDelegate",
+};
+
 struct Runner {
     int seed = 0;
     int threads = 1;
     int verbosity = 0;
-    bool run_tflite = true;
-    bool run_hannk = true;
-    // bool run_internal_delegate = true; TODO
-    bool run_external_delegate = true;
+    bool do_run[kNumRuns] = {true};
     bool do_benchmark = true;
     bool do_compare_results = true;
     std::string external_delegate_path;
@@ -167,7 +178,7 @@ private:
     };
     RunResult run_in_hannk(const std::vector<char> &buffer);
     RunResult run_in_tflite(const std::vector<char> &buffer, TfLiteDelegate *delegate = nullptr);
-    void compare_results(const RunResult &a, const RunResult &b);
+    void compare_results(const std::string &msg, const RunResult &a, const RunResult &b);
 };
 
 int Runner::seed_for_name(const std::string &name) {
@@ -302,7 +313,7 @@ Runner::RunResult Runner::run_in_tflite(const std::vector<char> &buffer, TfLiteD
     return result;
 }
 
-void Runner::compare_results(const RunResult &a, const RunResult &b) {
+void Runner::compare_results(const std::string &msg, const RunResult &a, const RunResult &b) {
     CHECK(a.outputs.size() == b.outputs.size());
     for (size_t i = 0; i < a.outputs.size(); ++i) {
         const Buffer<const void> &tflite_buf = a.outputs[i];
@@ -330,11 +341,14 @@ void Runner::compare_results(const RunResult &a, const RunResult &b) {
 #endif
         options.close_thresh = std::ceil((1ull << tflite_buf.type().bits) * tolerance);
         options.max_diffs_to_log = 8;
+        std::cout << msg;
         CompareBuffersResult r = dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf, options);
         if (r.ok) {
             if (verbosity >= 2) {
                 std::cout << "MATCHING output " << i << " is:\n";
                 dynamic_type_dispatch<DumpBuffer>(halide_buf.type(), halide_buf);
+            } else {
+                std::cout << "OK!\n";
             }
         }
     }
@@ -343,71 +357,70 @@ void Runner::compare_results(const RunResult &a, const RunResult &b) {
 void Runner::run(const std::string &filename) {
     std::cout << "Processing " << filename << " ...\n";
 
-    std::vector<char> buffer = read_entire_file(filename);
+    const std::vector<char> buffer = read_entire_file(filename);
 
-    RunResult halide_result;
+    std::map<WhichRun, RunResult> results;
 
-    // ----- Run in Hannk (no delegate)
-    if (run_hannk) {
-        halide_result = run_in_hannk(buffer);
+    const std::array<WhichRun, kNumRuns> all_runs = {kTfLite, kHannk, kExternalDelegate};
+
+    std::vector<WhichRun> active_runs;
+    for (WhichRun i : all_runs) {
+        if (do_run[i]) {
+            active_runs.push_back(i);
+        }
     }
 
-    // ----- Run in TFLite
-    RunResult tflite_result;
-    if (run_tflite) {
-        tflite_result = run_in_tflite(buffer);
-    }
-
-    // ----- Run in TFLite (with external delegate)
-    RunResult delegate_result;
-    if (run_external_delegate) {
+    const auto exec_tflite = [this, &buffer]() {
+        return run_in_tflite(buffer);
+    };
+    const auto exec_hannk = [this, &buffer]() {
+        return run_in_hannk(buffer);
+    };
+    const auto exec_hannk_external_delegate = [this, &buffer]() {
         DelegatePtr delegate_ptr;
         CHECK(delegate_ptr.init(external_delegate_path, verbosity));
-        delegate_result = run_in_tflite(buffer, delegate_ptr.get());
+        return run_in_tflite(buffer, delegate_ptr.get());
+    };
+    const std::map<WhichRun, std::function<RunResult()>> execs = {
+        {kTfLite, exec_tflite},
+        {kHannk, exec_hannk},
+        {kExternalDelegate, exec_hannk_external_delegate},
+    };
+
+    for (WhichRun i : active_runs) {
+        results[i] = execs.at(i)();
     }
 
     // ----- Log benchmark times
     if (do_benchmark) {
-        if (run_tflite) {
-            std::cout << "TFLITE-DIRECT   Time: " << std::chrono::duration_cast<std::chrono::microseconds>(tflite_result.time).count() << " us"
-                      << "\n";
-        }
-        if (run_hannk) {
-            std::cout << "HALIDE-DIRECT   Time: " << std::chrono::duration_cast<std::chrono::microseconds>(halide_result.time).count() << " us"
-                      << "\n";
-        }
-        if (run_external_delegate) {
-            std::cout << "HALIDE-DELEGATE Time: " << std::chrono::duration_cast<std::chrono::microseconds>(delegate_result.time).count() << " us"
+        for (WhichRun i : active_runs) {
+            std::cout << RunNames[i] << " Time: " << std::chrono::duration_cast<std::chrono::microseconds>(results[i].time).count() << " us"
                       << "\n";
         }
 
-        if (run_hannk) {
-            double ratio = (halide_result.time / tflite_result.time);
-            std::cout << "HALIDE = " << ratio * 100.0 << "% of TFLITE";
-            if (ratio > 1.0) {
-                std::cout << "  *** HALIDE IS SLOWER";
+        for (WhichRun i : active_runs) {
+            if (i == kTfLite) {
+                continue;
             }
-            std::cout << "\n";
-        }
-
-        if (run_external_delegate) {
-            double ratio = (delegate_result.time / tflite_result.time);
-            std::cout << "DELEGATE = " << ratio * 100.0 << "% of TFLITE";
+            double ratio = (results[i].time / results[kTfLite].time);
+            std::cout << RunNames[i] << " = " << ratio * 100.0 << "% of " << RunNames[kTfLite];
             if (ratio > 1.0) {
-                std::cout << "  *** DELEGATE IS SLOWER";
+                std::cout << "  *** " << RunNames[i] << " IS SLOWER";
             }
             std::cout << "\n";
         }
     }
 
     // ----- Now compare the outputs
-    if (do_compare_results && run_tflite && run_hannk) {
-        std::cout << "Comparing TFLite-reference vs hannk:\n";
-        compare_results(tflite_result, halide_result);
-    }
-    if (do_compare_results && run_tflite && run_external_delegate) {
-        std::cout << "Comparing TFLite-reference vs TFLite-hannk-external-delegate:\n";
-        compare_results(tflite_result, delegate_result);
+    if (do_compare_results && do_run[kTfLite]) {
+        for (WhichRun i : active_runs) {
+            if (i == kTfLite) {
+                continue;
+            }
+            std::ostringstream msg;
+            msg << "Comparing " << RunNames[kTfLite] << " vs " << RunNames[i] << ":";
+            compare_results(msg.str(), results[kTfLite], results[i]);
+        }
     }
 }
 
@@ -424,22 +437,20 @@ int main(int argc, char **argv) {
             continue;
         }
         if (!strcmp(argv[i], "--enable")) {
-            runner.run_tflite = false;
-            runner.run_hannk = false;
-            // runner.run_internal_delegate = false;  TODO
-            runner.run_external_delegate = false;
+            for (int i = 0; i < hannk::kNumRuns; i++) {
+                runner.do_run[i] = false;
+            }
             std::string opts = argv[++i];
             for (char c : opts) {
                 switch (c) {
                 case 't':
-                    runner.run_tflite = true;
+                    runner.do_run[hannk::kTfLite] = true;
                     break;
                 case 'h':
-                    runner.run_hannk = true;
+                    runner.do_run[hannk::kHannk] = true;
                     break;
-                // case 'i' : runner.run_internal_delegate = true; break;  TODO
                 case 'x':
-                    runner.run_external_delegate = true;
+                    runner.do_run[hannk::kExternalDelegate] = true;
                     break;
                 default: {
                     std::cerr << "Unknown option to --enable: " << c << "\n";

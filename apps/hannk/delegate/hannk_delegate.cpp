@@ -624,7 +624,7 @@ private:
         }};
         auto activation = ConvertTfLiteActivation(params->activation);
         return make_op<Conv2DOp>(input, filter, bias, output, stride,
-                                              dilation_factor, padding, activation);
+                                 dilation_factor, padding, activation);
     }
 
     OpPtr BuildDepthwiseConv2d(TfLiteContext *context, TfLiteNode *node) {
@@ -645,7 +645,7 @@ private:
         auto padding = ConvertTfLitePadding(params->padding);
         auto activation = ConvertTfLiteActivation(params->activation);
         return make_op<DepthwiseConv2DOp>(input, filter, bias, output, depth_multiplier,
-                                                       stride, dilation_factor, padding, activation);
+                                          stride, dilation_factor, padding, activation);
     }
 
     OpPtr BuildFullyConnected(TfLiteContext *context, TfLiteNode *node) {

@@ -147,7 +147,7 @@ public:
 
 // We can't do this with templates...
 #define PARSE_BINARY_WITH_ACTIVATION(op, Op) \
-    make_op<BinaryOp>(          \
+    make_op<BinaryOp>(                       \
         tensors_[op->inputs()->Get(0)],      \
         tensors_[op->inputs()->Get(1)],      \
         tensors_[op->outputs()->Get(0)],     \
@@ -214,7 +214,7 @@ public:
         TensorPtr bias = tensors_[op->inputs()->Get(2)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
         return make_op<Conv2DOp>(input, filter, bias, output, stride,
-                                              dilation_factor, padding, activation);
+                                 dilation_factor, padding, activation);
     }
 
     OpPtr parse_depthwise_conv2D(const tflite::Operator *op) {
