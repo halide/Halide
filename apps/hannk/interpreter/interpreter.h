@@ -18,7 +18,6 @@ struct InterpreterOptions {
 
 class Interpreter {
     std::unique_ptr<OpGroup> model_;
-    bool trace_;
 
     void init(InterpreterOptions options);
 
