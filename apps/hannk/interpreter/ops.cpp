@@ -147,7 +147,7 @@ bool all(bool first, T... rest) {
 // This may enable the buffers to be processed with fewer instances of the "tail" of
 // a vectorization loop, and fewer levels of recursion in the loop nest helpers below.
 template<typename... Bufs>
-void optimize_elementwise_shapes(int rank, halide_buffer_t *a, Bufs *... rest) {
+void optimize_elementwise_shapes(halide_buffer_t *a, Bufs *... rest) {
     assert(all(a->dimensions == rest->dimensions...));
     for (int d = 0; d + 1 < a->dimensions; d++) {
         while (can_fuse(d, d + 1, FuseType::Pad, a) &&
@@ -220,7 +220,7 @@ void elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops
     const int rank = std::max({op0.dimensions(), ops.dimensions()...});
     pad_to_rank(rank, op0, ops...);
     broadcast_shapes(rank, op0.raw_buffer(), ops.raw_buffer()...);
-    optimize_elementwise_shapes(FnRank, op0.raw_buffer(), ops.raw_buffer()...);
+    optimize_elementwise_shapes(op0.raw_buffer(), ops.raw_buffer()...);
     loop_nest_impl<FnRank>(fn, *op0.raw_buffer(), *ops.raw_buffer()...);
 }
 
