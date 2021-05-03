@@ -7,17 +7,14 @@
 #
 # export HL_TARGET to specify the target architecture to build. (Defaults to arm-64-android.)
 #
-# usage: HL_TARGET=arm-64-android ./run_benchmark_on_device.sh local_testdata/*.tflite
+# usage: HL_TARGET=arm-64-android ./run_benchmark_on_device.sh local_testdata/*.tflite [--cmake]
 
 set -e
 
-APP_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+HANNK_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 export HL_TARGET=${HL_TARGET:-arm-64-android}
 
-BENCHMARK_BINARY_NAME=benchmark
-BENCHMARK_TARGET="bin/${HL_TARGET}/${BENCHMARK_BINARY_NAME}"
-BENCHMARK_BINARY="${APP_DIR}/${BENCHMARK_TARGET}"
 DEVICE_DIR="/data/local/tmp/halide/benchmarking"
 
 if [[ -n "${ANDROID_SERIAL}" ]]; then
@@ -25,26 +22,57 @@ if [[ -n "${ANDROID_SERIAL}" ]]; then
 fi
 echo Using HL_TARGET=${HL_TARGET}
 
+if [ "$#" -eq 0 ]; then
+    echo "Specify at least one .tflite file to use."
+    exit 1
+fi
+
+LOCAL_FILES=
+DEVICE_FILES=
+FLAGS=
+NEXT_IS_FLAG=0
+BUILD_IS_CMAKE=0
+for ARG in "$@"
+do
+    if [[ ${NEXT_IS_FLAG} -eq 1 ]]; then
+        # second part of previous flag
+        FLAGS="${FLAGS} ${ARG}"
+        NEXT_IS_FLAG=0
+    elif [[ "${ARG}" == "--cmake" ]]; then
+        BUILD_IS_CMAKE=1
+    elif [[ "${ARG}" =~ ^-.* ]]; then
+        # assume it's a flag
+        FLAGS="${FLAGS} ${ARG}"
+        NEXT_IS_FLAG=1
+    else
+        # assume it's a file
+        BASENAME=$(basename "${ARG}")
+        LOCAL_FILES="${LOCAL_FILES} ${ARG}"
+        DEVICE_FILES="${DEVICE_FILES} ${DEVICE_DIR}/${BASENAME}"
+    fi
+done
+
+if [[ ${BUILD_IS_CMAKE} -eq 1 ]]; then
+    # TODO: this isn't working yet; crosscompilation in CMake is painful
+    echo Building [CMake]...
+    ${HANNK_DIR}/configure_cmake.sh > /dev/null
+    BUILD_TARGETS="${HANNK_DIR}/build/benchmark"
+    cmake --build ${HANNK_DIR}/build -j`nproc` benchmark
+else
+    echo Building [Make]...
+    cd ${HANNK_DIR}
+    BUILD_TARGETS="bin/${HL_TARGET}/benchmark"
+    make -j `nproc` ${BUILD_TARGETS} > /dev/null
+fi
+
+
 # Remove and re-create $DEVICE_DIR, to avoid accidentally re-using stale blobs.
 adb shell rm -rf "${DEVICE_DIR}"
 adb shell mkdir -p "${DEVICE_DIR}"
 
-# Build and push the microbenchmark.
-echo Building...
-make -j `nproc` ${BENCHMARK_TARGET} > /dev/null
+adb push ${BUILD_TARGETS} ${LOCAL_FILES} ${DEVICE_DIR}/
 
-adb push "${BENCHMARK_BINARY}" "${DEVICE_DIR}/${BENCHMARK_BINARY_NAME}" > /dev/null
-
-adb push "$@" "${DEVICE_DIR}" > /dev/null
-
-FILES=
-for FILE in "$@"
-do
-  BASENAME=$(basename "${FILE}")
-  FILES="${FILES} ${DEVICE_DIR}/${BASENAME}"
-done
-
-adb shell "${DEVICE_DIR}/${BENCHMARK_BINARY_NAME} ${FILES}"
+adb shell "${DEVICE_DIR}/benchmark ${DEVICE_FILES}"
 
 echo
 echo All benchmarks complete.
