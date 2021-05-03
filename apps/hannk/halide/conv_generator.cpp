@@ -131,7 +131,7 @@ public:
             // and just have a single reduction of 16-bit multiplies to compute.
             convolved(c, x, y, b) = bias_(c);
         }
-        convolved(c, x, y, b) += i32(u16(input_rdxyc) * u16(filter_rdxyc));
+        convolved(c, x, y, b) += i32(input_rdxyc) * i32(filter_rdxyc);
 
         // Saturate and narrow the output.
         Expr output = multiply_2x_high(convolved(c, x, y, b), output_multiplier_);
