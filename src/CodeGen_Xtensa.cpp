@@ -1251,6 +1251,10 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_sat_narrow_i16(const int32x32_t& a
   return IVP_PACKVRNX48(wide, 0);
 }
 
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_sat_narrow_with_shift_i16(const int48x32_t& a, uint32_t shift) {
+  return IVP_PACKVRNX48(a, shift);
+}
+
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_sat_narrow_with_shift_i16(const int32x32_t& a, uint32_t shift) {
   xb_vecNx48 wide = IVP_CVT48SNX32(a.native_vector[1], a.native_vector[0]);
   return IVP_PACKVRNX48(wide, shift);
@@ -1457,53 +1461,6 @@ class ScopedDmaInitializer {
         CodeGen_C::add_vector_typedefs(filtered_vector_types);
     }
 }
-
-namespace {
-template<typename T>
-bool is_native_xtensa_vector(Type t) {
-    return false;
-}
-
-template<>
-bool is_native_xtensa_vector<int8_t>(Type t) {
-    return t.is_int() && (t.bits() == 8) && (t.lanes() == 64);
-}
-
-template<>
-bool is_native_xtensa_vector<uint8_t>(Type t) {
-    return t.is_uint() && (t.bits() == 8) && (t.lanes() == 64);
-}
-
-template<>
-bool is_native_xtensa_vector<int16_t>(Type t) {
-    return t.is_int() && (t.bits() == 16) && (t.lanes() == 32);
-}
-
-template<>
-bool is_native_xtensa_vector<uint16_t>(Type t) {
-    return t.is_uint() && (t.bits() == 16) && (t.lanes() == 32);
-}
-
-template<>
-bool is_native_xtensa_vector<int32_t>(Type t) {
-    return t.is_int() && (t.bits() == 32) && (t.lanes() == 16);
-}
-
-template<>
-bool is_native_xtensa_vector<uint32_t>(Type t) {
-    return t.is_uint() && (t.bits() == 32) && (t.lanes() == 16);
-}
-
-template<>
-bool is_native_xtensa_vector<float>(Type t) {
-    return t.is_float() && (t.bits() == 32) && (t.lanes() == 16);
-}
-
-bool is_double_native_vector_type(Type t) {
-    return (t.is_int_or_uint() && ((t.bits() == 8 && t.lanes() == 128) || (t.bits() == 16 && t.lanes() == 64) || (t.bits() == 32 && t.lanes() == 32))) || (t.is_float() && t.bits() == 32 && t.lanes() == 32);
-}
-
-}  // namespace
 
 // TODO(vksnk): condense this code.
 bool CodeGen_Xtensa::is_native_vector_type(Type t) {
@@ -1745,37 +1702,42 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
     }
 
     string op_name = op->name;
-    // TODO(vksnk): replace with map.
-    if (op->name == "halide_xtensa_sat_add_i16") {
-        op_name = "IVP_ADDSNX16";
-    } else if (op->name == "halide_xtensa_sat_sub_i16") {
-        op_name = "IVP_SUBSNX16";
-    } else if (op->name == "halide_xtensa_avg_i16") {
-        op_name = "IVP_AVGNX16";
-    } else if (op->name == "halide_xtensa_avg_u16") {
-        op_name = "IVP_AVGUNX16";
-    } else if (op->name == "halide_xtensa_avg_round_i16") {
-        op_name = "IVP_AVGRNX16";
-    } else if (op->name == "halide_xtensa_avg_round_u16") {
-        op_name = "IVP_AVGRUNX16U";
-    } else if (op->name == "halide_xtensa_widen_mul_i48") {
-        op_name = "IVP_MULNX16";
-    } else if (op->name == "halide_xtensa_widen_pair_mul_u48") {
-        op_name = "IVP_MULUUPNX16";
-    } else if (op->name == "halide_xtensa_convert_i48_low_i32") {
-        op_name = "IVP_CVT32SNX48L";
-    } else if (op->name == "halide_xtensa_convert_i48_high_i32") {
-        op_name = "IVP_CVT32SNX48H";
-    } else if (op->name == "halide_xtensa_convert_i48_low_u32") {
-        op_name = "IVP_CVT32UNX48L";
-    } else if (op->name == "halide_xtensa_convert_i48_high_u32") {
-        op_name = "IVP_CVT32UNX48H";
-    } else if (op->name == "halide_xtensa_full_reduce_i16") {
-        op_name = "IVP_RADDNX16";
-    } else if (op->name == "halide_xtensa_convert_to_int32x16_t_from_uint1x16_t") {
-        op_name = "convert_to_int32x16_t_from_uint1x16_t";
-    } else if (op->name == "halide_xtensa_narrow_i48_with_shift_i16") {
-        op_name = "IVP_PACKVRNRNX48";
+    std::map<string, string> op_name_to_intrinsic = {
+        {"halide_xtensa_sat_add_i16", "IVP_ADDSNX16"},
+        {"halide_xtensa_sat_sub_i16", "IVP_SUBSNX16"},
+        {"halide_xtensa_avg_i16", "IVP_AVGNX16"},
+        {"halide_xtensa_avg_u16", "IVP_AVGUNX16"},
+        {"halide_xtensa_avg_round_i16", "IVP_AVGRNX16"},
+        {"halide_xtensa_avg_round_u16", "IVP_AVGRUNX16U"},
+        {"halide_xtensa_widen_mul_i48", "IVP_MULNX16"},
+        {"halide_xtensa_widen_pair_mul_u48", "IVP_MULUUPNX16"},
+        {"halide_xtensa_convert_i48_low_i32", "IVP_CVT32SNX48L"},
+        {"halide_xtensa_convert_i48_high_i32", "IVP_CVT32SNX48H"},
+        {"halide_xtensa_convert_i48_low_u32", "IVP_CVT32UNX48L"},
+        {"halide_xtensa_convert_i48_high_u32", "IVP_CVT32UNX48H"},
+        {"halide_xtensa_convert_to_int32x16_t_from_uint1x16_t", "convert_to_int32x16_t_from_uint1x16_t"},
+        {"halide_xtensa_narrow_i48_with_shift_i16", "IVP_PACKVRNRNX48"},
+
+        {"halide_xtensa_full_reduce_add_i8", "IVP_RADD2NX8"},
+        {"halide_xtensa_full_reduce_add_i16", "IVP_RADDNX16"},
+
+        {"halide_xtensa_full_reduce_min_u8", "IVP_RMINU2NX8U"},
+        {"halide_xtensa_full_reduce_min_u16", "IVP_RMINUNX16U"},
+        {"halide_xtensa_full_reduce_min_u32", "IVP_RMINUN_2X32U"},
+        {"halide_xtensa_full_reduce_min_i8", "IVP_RMIN2NX8"},
+        {"halide_xtensa_full_reduce_min_i16", "IVP_RMINNX16"},
+        {"halide_xtensa_full_reduce_min_i32", "IVP_RMINN_2X32"},
+
+        {"halide_xtensa_full_reduce_max_u8", "IVP_RMAXU2NX8U"},
+        {"halide_xtensa_full_reduce_max_u16", "IVP_RMAXUNX16U"},
+        {"halide_xtensa_full_reduce_max_u32", "IVP_RMAXUN_2X32U"},
+        {"halide_xtensa_full_reduce_max_i8", "IVP_RMAX2NX8"},
+        {"halide_xtensa_full_reduce_max_i16", "IVP_RMAXNX16"},
+        {"halide_xtensa_full_reduce_max_i32", "IVP_RMAXN_2X32"},
+    };
+
+    if (op_name_to_intrinsic.count(op_name) > 0) {
+        op_name = op_name_to_intrinsic[op_name];
     }
 
     rhs << op_name << "(" << with_commas(args) << ")";

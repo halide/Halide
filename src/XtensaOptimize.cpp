@@ -23,6 +23,46 @@ using std::vector;
 
 using namespace Halide::ConciseCasts;
 
+template<>
+bool is_native_xtensa_vector<int8_t>(Type t) {
+    return t.is_int() && (t.bits() == 8) && (t.lanes() == 64);
+}
+
+template<>
+bool is_native_xtensa_vector<uint8_t>(Type t) {
+    return t.is_uint() && (t.bits() == 8) && (t.lanes() == 64);
+}
+
+template<>
+bool is_native_xtensa_vector<int16_t>(Type t) {
+    return t.is_int() && (t.bits() == 16) && (t.lanes() == 32);
+}
+
+template<>
+bool is_native_xtensa_vector<uint16_t>(Type t) {
+    return t.is_uint() && (t.bits() == 16) && (t.lanes() == 32);
+}
+
+template<>
+bool is_native_xtensa_vector<int32_t>(Type t) {
+    return t.is_int() && (t.bits() == 32) && (t.lanes() == 16);
+}
+
+template<>
+bool is_native_xtensa_vector<uint32_t>(Type t) {
+    return t.is_uint() && (t.bits() == 32) && (t.lanes() == 16);
+}
+
+template<>
+bool is_native_xtensa_vector<float>(Type t) {
+    return t.is_float() && (t.bits() == 32) && (t.lanes() == 16);
+}
+
+bool is_double_native_vector_type(Type t) {
+    constexpr int double_vector_bitwidth = 512 * 2;
+    return (t.bits() % 8 == 0) && (double_vector_bitwidth % t.bits() == 0) && (double_vector_bitwidth / t.bits() == t.lanes());
+}
+
 struct Pattern {
     enum Flags {
         InterleaveResult = 1 << 0,  // After evaluating the pattern, interleave native vectors of the result.
@@ -558,17 +598,6 @@ private:
                 // {"halide_xtensa_pred_add_i16", wild_i16x + select(wild_u1x, wild_i16x, wild_i16x)},
                 // {"halide_xtensa_pred_add_i32", wild_i32x + select(wild_u1x, wild_i32x, wild_i32x)},
 
-                // NOTE(vksnk): looked like a good idea, but seems to be slower. Need to double-check.
-                // {"halide_xtensa_widen_pair_mul_vu8_si16_i24",
-                //                    i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})) +
-                //                    i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})),
-                //                    Pattern::AccumulatorOutput24},
-
-                // {"halide_xtensa_widen_mul_add_vu8_si16_i24",
-                //                    i16(wild_i24x) +
-                //                    i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})),
-                //                    Pattern::AccumulatorOutput24},
-
                 {"halide_xtensa_qqqq", slice(wild_i24x256, 0, 1, 128) + slice(wild_i24x256, 128, 1, 128), Pattern::SameOp01},
                 {"halide_xtensa_yyyy", (call("halide_xtensa_xxxx", wild_i24x64, {wild_i24x64, wild_i24x128}) + slice(wild_i24x128, 64, 1, 64)), Pattern::SameOp12},
                 {"halide_xtensa_xxxx", (wild_i24x64 + slice(wild_i24x128, 0, 1, 64))},
@@ -584,8 +613,6 @@ private:
                 {"halide_xtensa_widen_pair_mul_add_i48", halide_xtensa_widen_mul_add_i48(wild_i48x, wild_i16x, wild_i16x) + halide_xtensa_widen_mul_i48(wild_i16x, wild_i16x)},
                 {"halide_xtensa_widen_mul_add_i48", i32(wild_i48x) + i32(halide_xtensa_widen_mul_i48(wild_i16x, wild_i16x)), Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_mul_add_i48", wild_i48x + halide_xtensa_widen_mul_i48(wild_i16x, wild_i16x)},
-
-                {"halide_xtensa_widen_mul_add_vu8_si16_i24", i16(wild_i24x) + i16(call("halide_xtensa_widen_mul_vu8_si16_i24", wild_i24x, {wild_u8x, wild_i16})), Pattern::AccumulatorOutput24},
 
                 {"halide_xtensa_widen_mul_add_i24",
                  wild_i24x + call("halide_xtensa_widen_mul_i24", wild_i24x, {wild_i8x, wild_i8x})},
@@ -648,7 +675,6 @@ private:
 
             static const std::vector<Pattern> muls = {
                 {"halide_xtensa_widen_mul_i48", i48(wild_i16x) * i48(wild_i16x)},
-                {"halide_xtensa_widen_mul_vu8_si16_i24", wild_i16x * bc(wild_i16x), Pattern::NarrowUnsignedOp0 | Pattern::AccumulatorOutput24},
 
                 {"halide_xtensa_widen_zzzzz", i24(concat({wild_i8x64, wild_i8x64, wild_i8x64, wild_i8x64})) * i24(repeat_each_element(wild_i8x4, 64))},
                 {"halide_xtensa_widen_zzzzz", i24(wild_i8x256) * i24(repeat_each_element(wild_i8x4, 64))},
@@ -882,10 +908,11 @@ private:
             return Call::make(op->type, "halide_xtensa_absd_i16",
                               {mutate(op->args[0]), mutate(op->args[1])},
                               Call::PureExtern);
-        } else if (op->is_intrinsic(Call::widening_shift_left)) {
-            // Replace widening left shift with multiplication.
-            return mutate(widening_mul(op->args[0], make_one(op->args[0].type()) << op->args[1]));
         }
+        // else if (op->is_intrinsic(Call::widening_shift_left)) {
+        //     // Replace widening left shift with multiplication.
+        //     return mutate(widening_mul(op->args[0], make_one(op->args[0].type()) << op->args[1]));
+        // }
 
         static const std::vector<Pattern> calls = {
             {"halide_xtensa_avg_u16", halving_add(wild_u16x, wild_u16x)},
@@ -920,6 +947,7 @@ private:
              call("halide_xtensa_widen_mul_add_i48", wild_i48x,
                   {call("halide_xtensa_widen_mul_add_i48", wild_i48x, {wild_i48x, wild_i16x, wild_i16x}), wild_i16x, wild_i16x})},
 
+            {"halide_xtensa_sat_narrow_with_shift_i16", call("halide_xtensa_sat_narrow_with_shift_i16", wild_i16x, {i32(wild_i48x), wild_u32})},
             // NOTE(vksnk): looked like a good idea, but seems to be slower. Need to double-check.
             // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(i32(wild_i48x))},
             // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(u32(wild_i48x))},
@@ -995,7 +1023,24 @@ private:
         // Full reduction.
         if (op->type.is_scalar()) {
             static const std::vector<Pattern> reduces = {
-                {"halide_xtensa_full_reduce_i16", vector_reduce(VectorReduce::Add, wild_i32x), Pattern::NarrowOps},
+                {"halide_xtensa_full_reduce_add_i8", vector_reduce(VectorReduce::Add, wild_i16x), Pattern::NarrowOps},
+                {"halide_xtensa_full_reduce_add_i16", vector_reduce(VectorReduce::Add, wild_i32x), Pattern::NarrowOps},
+
+                // Min reduction.
+                {"halide_xtensa_full_reduce_min_u8", vector_reduce(VectorReduce::Min, wild_u8x)},
+                {"halide_xtensa_full_reduce_min_u16", vector_reduce(VectorReduce::Min, wild_u16x)},
+                {"halide_xtensa_full_reduce_min_u32", vector_reduce(VectorReduce::Min, wild_u32x)},
+                {"halide_xtensa_full_reduce_min_i8", vector_reduce(VectorReduce::Min, wild_i8x)},
+                {"halide_xtensa_full_reduce_min_i16", vector_reduce(VectorReduce::Min, wild_i16x)},
+                {"halide_xtensa_full_reduce_min_i32", vector_reduce(VectorReduce::Min, wild_i32x)},
+
+                // Max reduction.
+                {"halide_xtensa_full_reduce_max_u8", vector_reduce(VectorReduce::Max, wild_u8x)},
+                {"halide_xtensa_full_reduce_max_u16", vector_reduce(VectorReduce::Max, wild_u16x)},
+                {"halide_xtensa_full_reduce_max_u32", vector_reduce(VectorReduce::Max, wild_u32x)},
+                {"halide_xtensa_full_reduce_max_i8", vector_reduce(VectorReduce::Max, wild_i8x)},
+                {"halide_xtensa_full_reduce_max_i16", vector_reduce(VectorReduce::Max, wild_i16x)},
+                {"halide_xtensa_full_reduce_max_i32", vector_reduce(VectorReduce::Max, wild_i32x)},
             };
 
             Expr new_expr = apply_patterns(op, reduces, this);
@@ -1534,44 +1579,66 @@ private:
     }
 
     Expr visit(const Call *op) override {
-        int native_lanes = get_native_vector_lanes_num(op->type);
-        std::set<std::string> skip_slicing = {"halide_xtensa_widening_load"};
-        if (native_lanes > 0 && (skip_slicing.count(op->name) == 0)) {
-            if (!(op->name == "halide_xtensa_interleave_i16") && !(op->name == "halide_xtensa_narrow_i24_with_shift_i16")) {
-                const int total_lanes = op->type.lanes();
-                int split_to = op->type.lanes() / native_lanes;
-                vector<Expr> args;
-                for (size_t arg_index = 0; arg_index < op->args.size(); arg_index++) {
-                    args.push_back(mutate(op->args[arg_index]));
-                }
-
-                std::vector<Expr> concat_args;
+        if (op->name.find("halide_xtensa_full_reduce_add") == 0) {
+            int native_lanes = get_native_vector_lanes_num(op->args[0].type());
+            if (native_lanes > 0) {
+                const int total_lanes = op->args[0].type().lanes();
+                int split_to = total_lanes / native_lanes;
+                Expr arg = mutate(op->args[0]);
+                Expr partial_sum;
                 for (int ix = 0; ix < split_to; ix++) {
-                    std::vector<Expr> sliced_args;
-                    for (size_t arg_index = 0; arg_index < op->args.size(); arg_index++) {
-                        Expr sliced_arg;
-                        if (args[arg_index].type().is_scalar()) {
-                            sliced_arg = args[arg_index];
-                            // dynamic_shuffle is tricky, we can actually slice an index,
-                            // but not the actual data vector.
-                        } else if ((op->name == "halide_xtensa_dynamic_shuffle") && arg_index == 0) {
-                            sliced_arg = args[arg_index];
-                        } else {
-                            sliced_arg = Call::make(args[arg_index].type().with_lanes(native_lanes),
-                                                    "halide_xtensa_slice_to_native",
-                                                    {args[arg_index], ix, native_lanes, total_lanes},
-                                                    Call::PureExtern);
-                        }
-                        sliced_args.push_back(sliced_arg);
+                    Expr sliced_arg = Call::make(arg.type().with_lanes(native_lanes),
+                                                 "halide_xtensa_slice_to_native",
+                                                 {arg, ix, native_lanes, total_lanes},
+                                                 Call::PureExtern);
+                    if (!partial_sum.defined()) {
+                        partial_sum = sliced_arg;
+                    } else {
+                        partial_sum = Add::make(partial_sum, sliced_arg);
                     }
-
-                    Expr r = Call::make(op->type.with_lanes(native_lanes), op->name, sliced_args, op->call_type);
-                    concat_args.push_back(std::move(r));
                 }
-                return Call::make(op->type,
-                                  "halide_xtensa_concat_from_native",
-                                  concat_args, Call::PureExtern);
+
+                return Call::make(op->type, op->name, {partial_sum}, op->call_type);
             }
+        }
+
+        int native_lanes = get_native_vector_lanes_num(op->type);
+        std::set<std::string> skip_slicing = {"halide_xtensa_widening_load", "halide_xtensa_interleave_i16", "halide_xtensa_narrow_i24_with_shift_i16"};
+        if (native_lanes > 0 && (skip_slicing.count(op->name) == 0)) {
+            const int total_lanes = op->type.lanes();
+            int split_to = op->type.lanes() / native_lanes;
+            vector<Expr> args;
+            for (size_t arg_index = 0; arg_index < op->args.size(); arg_index++) {
+                args.push_back(mutate(op->args[arg_index]));
+            }
+
+            std::vector<Expr> concat_args;
+            for (int ix = 0; ix < split_to; ix++) {
+                std::vector<Expr> sliced_args;
+                for (size_t arg_index = 0; arg_index < op->args.size(); arg_index++) {
+                    Expr sliced_arg;
+                    if (args[arg_index].type().is_scalar()) {
+                        sliced_arg = args[arg_index];
+                        // dynamic_shuffle is tricky, we can actually slice an index,
+                        // but not the actual data vector.
+                    } else if ((op->name == "halide_xtensa_dynamic_shuffle") && arg_index == 0) {
+                        sliced_arg = args[arg_index];
+                    } else {
+                        sliced_arg = Call::make(args[arg_index].type().with_lanes(native_lanes),
+                                                "halide_xtensa_slice_to_native",
+                                                {args[arg_index], ix, native_lanes, total_lanes},
+                                                Call::PureExtern);
+                    }
+                    sliced_args.push_back(sliced_arg);
+                }
+
+                Expr r = Call::make(op->type.with_lanes(native_lanes), op->name, sliced_args, op->call_type);
+                concat_args.push_back(std::move(r));
+            }
+
+            return Call::make(op->type,
+                              "halide_xtensa_concat_from_native",
+                              concat_args, Call::PureExtern);
         }
 
         // TODO(vksnk): need to be careful here, because not everything can be
@@ -1604,6 +1671,59 @@ private:
             Expr r = Call::make(op->type.with_lanes(width_to_extend), op->name, args, op->call_type);
 
             return slice(r, op->type, lanes);
+        }
+
+        return IRMutator::visit(op);
+    }
+
+    Expr visit(const VectorReduce *op) override {
+        // TODO(vksnk): Factor it out.
+        Expr (*binop)(Expr, Expr) = nullptr;
+        switch (op->op) {
+        case VectorReduce::Add:
+            binop = Add::make;
+            break;
+        case VectorReduce::Mul:
+            binop = Mul::make;
+            break;
+        case VectorReduce::Min:
+            binop = Min::make;
+            break;
+        case VectorReduce::Max:
+            binop = Max::make;
+            break;
+        case VectorReduce::And:
+            binop = And::make;
+            break;
+        case VectorReduce::Or:
+            binop = Or::make;
+            break;
+        case VectorReduce::SaturatingAdd:
+            binop = saturating_add;
+            break;
+        }
+
+        int native_lanes = get_native_vector_lanes_num(op->value.type());
+        // Only support full reductions for now.
+        if (native_lanes > 0 && op->type.is_scalar()) {
+            const int total_lanes = op->type.lanes();
+            int split_to = op->value.type().lanes() / native_lanes;
+            Expr v = mutate(op->value);
+
+            Expr partial_reduction;
+            for (int ix = 0; ix < split_to; ix++) {
+                Expr sliced_v = Call::make(v.type().with_lanes(native_lanes),
+                                           "halide_xtensa_slice_to_native",
+                                           {v, ix, native_lanes, total_lanes},
+                                           Call::PureExtern);
+                if (!partial_reduction.defined()) {
+                    partial_reduction = sliced_v;
+                } else {
+                    partial_reduction = binop(partial_reduction, sliced_v);
+                }
+            }
+
+            return VectorReduce::make(op->op, partial_reduction, 1);
         }
 
         return IRMutator::visit(op);
