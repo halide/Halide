@@ -1334,42 +1334,14 @@ void DepthToSpace(const HalideBuffer<const T> &input, int block_size, HalideBuff
 
 template<typename T>
 void SpaceToDepth(const HalideBuffer<const T> &input, int block_size, HalideBuffer<T> output) {
-    assert(input.dimensions() == output.dimensions());
-    assert(output.dimensions() >= 3);
-    if (output.dimensions() == 3) {
-        // This is taken almost verbatim from TFlite's implementation.
-        const int output_depth = output.dim(0).extent();
-        const int output_width = output.dim(1).extent();
-
-        const int input_depth = input.dim(0).extent();
-
-        const int stride = block_size * input_depth;
-
-        // This only works if the first 3 dimensions of the input and the
-        // first 2 dimensions of the output are densely stored in memory.
-        assert(can_fuse_cx(FuseType::Delete, input.raw_buffer()));
-        assert(can_fuse_xy(FuseType::Delete, input.raw_buffer()));
-        assert(can_fuse_cx(FuseType::Delete, output.raw_buffer()));
-
-        for (int out_h = output.dim(2).min(); out_h <= output.dim(2).max(); ++out_h) {
-            const T *input_ptr = &input(0, 0, out_h * block_size);
-            T* output_ptr = &output(0, 0, out_h);
-            for (int offset_h = 0; offset_h < block_size; ++offset_h) {
-                T* dst = output_ptr;
-                for (int out_w = 0; out_w < output_width; ++out_w) {
-                    memcpy(dst, input_ptr, stride * sizeof(T));
-                    input_ptr += stride;
-                    dst += output_depth;
-                }
-                output_ptr += stride;
-            }
-        }
-    } else {
-        int last_dim = output.dimensions() - 1;
-        for (int i = output.dim(last_dim).min(); i <= output.dim(last_dim).max(); i++) {
-            SpaceToDepth(input.sliced(last_dim, i), block_size, output.sliced(last_dim, i));
-        }
-    }
+    // This is really slow, if profiling has brought you here, optimize it.
+    output.for_each_element([&](int c, int x, int y, int b) {
+        int ci = floor_div(c, block_size * block_size);
+        int xyi = c - ci * block_size * block_size;
+        int yi = xyi / block_size;
+        int xi = xyi % block_size;
+        output(c, x, y, b) = input(ci, x * block_size + xi, y * block_size + yi, b);
+    });
 }
 
 }  // namespace
