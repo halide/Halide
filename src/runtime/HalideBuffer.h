@@ -217,8 +217,8 @@ private:
 
     /** Decrement the reference count of any owned allocation and free host
      * and device memory if it hits zero. Sets alloc to nullptr. */
-    void decref() {
-        if (owns_host_memory()) {
+    void decref(bool device_only = false) {
+        if (owns_host_memory() && !device_only) {
             int new_count = --(alloc->ref_count);
             if (new_count == 0) {
                 void (*fn)(void *) = alloc->deallocate_fn;
@@ -229,42 +229,35 @@ private:
             alloc = nullptr;
             set_host_dirty(false);
         }
-        decref_dev();
-    }
-
-    void decref_dev() {
-        int new_count = 0;
         if (dev_ref_count) {
-            new_count = --(dev_ref_count->count);
-        }
-        if (new_count == 0) {
-            if (buf.device) {
-                assert(!(alloc && device_dirty()) &&
-                       "Implicitly freeing a dirty device allocation while a host allocation still lives. "
-                       "Call device_free explicitly if you want to drop dirty device-side data. "
-                       "Call copy_to_host explicitly if you want the data copied to the host allocation "
-                       "before the device allocation is freed.");
-                if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::WrappedNative) {
-                    buf.device_interface->detach_native(nullptr, &buf);
-                } else if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::AllocatedDeviceAndHost) {
-                    buf.device_interface->device_and_host_free(nullptr, &buf);
-                } else if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
-                    buf.device_interface->device_release_crop(nullptr, &buf);
-                } else if (dev_ref_count == nullptr || dev_ref_count->ownership == BufferDeviceOwnership::Allocated) {
-                    buf.device_interface->device_free(nullptr, &buf);
+            int new_count = --(dev_ref_count->count);
+            if (new_count == 0) {
+                if (buf.device) {
+                    assert(!(alloc && device_dirty()) &&
+                           "Implicitly freeing a dirty device allocation while a host allocation still lives. "
+                           "Call device_free explicitly if you want to drop dirty device-side data. "
+                           "Call copy_to_host explicitly if you want the data copied to the host allocation "
+                           "before the device allocation is freed.");
+                    if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::WrappedNative) {
+                        buf.device_interface->detach_native(nullptr, &buf);
+                    } else if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::AllocatedDeviceAndHost) {
+                        buf.device_interface->device_and_host_free(nullptr, &buf);
+                    } else if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
+                        buf.device_interface->device_release_crop(nullptr, &buf);
+                    } else if (dev_ref_count == nullptr || dev_ref_count->ownership == BufferDeviceOwnership::Allocated) {
+                        buf.device_interface->device_free(nullptr, &buf);
+                    }
                 }
-            }
-            if (dev_ref_count) {
                 if (dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
                     delete (DevRefCountCropped *)dev_ref_count;
                 } else {
                     delete dev_ref_count;
                 }
             }
+            dev_ref_count = nullptr;
         }
         buf.device = 0;
         buf.device_interface = nullptr;
-        dev_ref_count = nullptr;
     }
 
     void free_shape_storage() {
@@ -777,7 +770,7 @@ public:
      * if this buffer held the last reference to it. Asserts that
      * device_dirty is false. */
     void device_deallocate() {
-        decref_dev();
+        decref(true);
     }
 
     /** Allocate a new image of the given size with a runtime
