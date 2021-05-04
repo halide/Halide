@@ -83,7 +83,7 @@ public:
             };
 
             multiplied_sums(c, b) = {
-                multiplied_sums(c, b)[0] + i32(u16(input_(rc, b)) * u16(filter_(rc, c))),
+                multiplied_sums(c, b)[0] + i32(u16(filter_(rc, c)) * u16(input_(rc, b))),
                 multiplied_sums(c, b)[1] + i32(u16(filter_(rc, c)) * u16(input_zero_)),
             };
 
@@ -94,8 +94,8 @@ public:
         } else {
             multiplied(c, b) = bias_(c);
             multiplied(c, b) +=
-                i32(i16(input_(rc, b)) - i16(input_zero_)) *
-                i32(i16(filter_(rc, c)) - i16(filter_zero_));
+                i32(i16(filter_(rc, c)) - i16(filter_zero_)) *
+                i32(i16(input_(rc, b)) - i16(input_zero_));
         }
 
         // Saturate and narrow the output.

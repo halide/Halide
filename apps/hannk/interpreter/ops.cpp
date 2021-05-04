@@ -31,6 +31,23 @@ namespace hannk {
 
 namespace {
 
+// Split a dimension d into two new dimensions. Dim d will have min 0
+// and extent factor, while the new dim d + 1 will have the outer split dimension.
+template<typename T>
+void split(int d, int factor, HalideBuffer<T> &buf) {
+    buf.embed(d, 0);
+    halide_dimension_t &dim0 = buf.raw_buffer()->dim[d];
+    halide_dimension_t &dim1 = buf.raw_buffer()->dim[d + 1];
+    dim0.min = 0;
+    dim0.extent = factor;
+    dim0.stride = dim1.stride;
+    assert(dim1.min % factor == 0);
+    assert(dim1.extent % factor == 0);
+    dim1.min /= factor;
+    dim1.extent /= factor;
+    dim1.stride *= factor;
+}
+
 enum class FuseType {
     // Delete the second of the fused dimension, reducing the rank by 1.
     Delete,
@@ -82,9 +99,7 @@ bool can_fuse_xy(FuseType type, const halide_buffer_t *buf) {
 // If pad is true, add a new dimension of extent 1 and min 0 at the end.
 // If pad is false, d1 is deleted from the buffer.
 void fuse(int d0, int d1, FuseType type, halide_buffer_t *buf) {
-    assert(d0 != d1);
-    assert(d0 < buf->dimensions);
-    assert(d1 < buf->dimensions);
+    assert(can_fuse(d0, d1, type, buf));
     halide_dimension_t &dim0 = buf->dim[d0];
     halide_dimension_t &dim1 = buf->dim[d1];
     dim0.extent *= dim1.extent;
@@ -158,7 +173,20 @@ void optimize_elementwise_shapes(halide_buffer_t *a, Bufs *...rest) {
     }
 }
 
+// A hack to allow us to pass a type for each halide_buffer_t object.
+template<typename T>
+class TypedBufferT : public halide_buffer_t {};
+
+// We can safely slice the last dim of a halide_buffer_t, because we don't need
+// to modify any of the dim objects.
 halide_buffer_t slice_last_dim(halide_buffer_t buf, int at) {
+    buf.dimensions--;
+    buf.host += buf.type.bytes() * buf.dim[buf.dimensions].stride * at;
+    return buf;
+}
+
+template<typename T>
+TypedBufferT<T> slice_last_dim(TypedBufferT<T> buf, int at) {
     buf.dimensions--;
     buf.host += buf.type.bytes() * buf.dim[buf.dimensions].stride * at;
     return buf;
@@ -181,16 +209,16 @@ void loop_nest_impl(Fn &&fn, halide_buffer_t op0, Bufs... ops) {
 }
 
 template<typename Fn, typename T, typename... Ts>
-void scalar_loop_nest_impl(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
-    if (op0.dimensions() == 0) {
-        fn(op0(), ops()...);
+void scalar_loop_nest_impl(Fn &&fn, TypedBufferT<T> op0, TypedBufferT<Ts>... ops) {
+    if (op0.dimensions == 0) {
+        fn(*(T *)op0.host, *(Ts *)ops.host...);
     } else {
-        const int last_dim = op0.dimensions() - 1;
-        const int min = op0.dim(last_dim).min();
-        const int extent = op0.dim(last_dim).extent();
+        const int last_dim = op0.dimensions - 1;
+        const int min = op0.dim[last_dim].min;
+        const int extent = op0.dim[last_dim].extent;
         const int max = min + extent - 1;
         for (int i = min; i <= max; i++) {
-            scalar_loop_nest_impl(fn, op0.sliced(last_dim, i), ops.sliced(last_dim, i)...);
+            scalar_loop_nest_impl(fn, slice_last_dim(op0, i), slice_last_dim(ops, i)...);
         }
     }
 }
@@ -232,20 +260,22 @@ void broadcast_shapes(int rank, halide_buffer_t *a, Bufs *...rest) {
 // 4. Iterating and slicing the extra dimensions of the shapes before calling `fn`.
 template<int FnRank, typename Fn, typename T, typename... Ts>
 void elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
-    const int rank = std::max({op0.dimensions(), ops.dimensions()...});
+    const int rank = std::max({FnRank, op0.dimensions(), ops.dimensions()...});
     pad_to_rank(rank, op0, ops...);
     broadcast_shapes(rank, op0.raw_buffer(), ops.raw_buffer()...);
     optimize_elementwise_shapes(op0.raw_buffer(), ops.raw_buffer()...);
     loop_nest_impl<FnRank>(fn, *op0.raw_buffer(), *ops.raw_buffer()...);
 }
 
+// This is the same as the above, except it calls fn with scalar values at each
+// element of the buffer.
 template<typename Fn, typename T, typename... Ts>
 void scalar_elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
     const int rank = std::max({op0.dimensions(), ops.dimensions()...});
     pad_to_rank(rank, op0, ops...);
     broadcast_shapes(rank, op0.raw_buffer(), ops.raw_buffer()...);
     optimize_elementwise_shapes(op0.raw_buffer(), ops.raw_buffer()...);
-    scalar_loop_nest_impl(fn, op0, ops...);
+    scalar_loop_nest_impl(fn, *(TypedBufferT<T> *)op0.raw_buffer(), *(TypedBufferT<Ts> *)ops.raw_buffer()...);
 }
 
 // This helper is similar to the above, but it only implements steps 3 and 4.
@@ -356,9 +386,9 @@ MultiplyParams get_quantized_multiply_params(const QuantizationInfo &a, const Qu
     return result;
 }
 
-void add_uint8(const HalideBuffer<const uint8_t> &in1, const QuantizationInfo &in1q, int in1sign,
-               const HalideBuffer<const uint8_t> &in2, const QuantizationInfo &in2q, int in2sign,
-               const HalideBuffer<uint8_t> &out, const QuantizationInfo &outq,
+void add_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q, int in1sign,
+               const HalideBuffer<const void> &in2, const QuantizationInfo &in2q, int in2sign,
+               const HalideBuffer<void> &out, const QuantizationInfo &outq,
                ActivationFunction activation = ActivationFunction::None) {
     const int in1_zero = in1q.uniform_zero();
     const int in2_zero = in2q.uniform_zero();
@@ -395,9 +425,9 @@ void add_uint8(const HalideBuffer<const uint8_t> &in1, const QuantizationInfo &i
     elementwise_loop_nest<2>(add_rank2, in1, in2, out);
 }
 
-void mul_uint8(const HalideBuffer<const uint8_t> &in1, const QuantizationInfo &in1q,
-               const HalideBuffer<const uint8_t> &in2, const QuantizationInfo &in2q,
-               const HalideBuffer<uint8_t> &out, const QuantizationInfo &outq,
+void mul_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q,
+               const HalideBuffer<const void> &in2, const QuantizationInfo &in2q,
+               const HalideBuffer<void> &out, const QuantizationInfo &outq,
                ActivationFunction activation = ActivationFunction::None) {
     const int in1_zero = in1q.uniform_zero();
     const int in2_zero = in2q.uniform_zero();
@@ -503,7 +533,7 @@ double dequantize_scalar(const Tensor *t) {
     float scale = q.scale.empty() ? 1.0f : q.scale.front();
     int zero = q.zero.empty() ? 0 : q.zero.front();
 
-    const auto &buf = t->buffer<const void>();
+    const auto &buf = t->buffer();
     if (buf.type() == halide_type_of<uint8_t>()) {
         return (as_scalar<uint8_t>(buf) - zero) * scale;
     } else if (buf.type() == halide_type_of<int8_t>()) {
@@ -559,9 +589,9 @@ void BinaryOp::execute() {
     if (in1->type() == halide_type_of<uint8_t>() &&
         in2->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
-        const auto &in1_buf = in1->buffer<const uint8_t>();
-        const auto &in2_buf = in2->buffer<const uint8_t>();
-        const auto &out_buf = out->buffer<uint8_t>();
+        const auto &in1_buf = in1->buffer();
+        const auto &in2_buf = in2->buffer();
+        const auto &out_buf = out->buffer();
 
         switch (op_) {
         case Add:
@@ -949,7 +979,6 @@ void FullyConnectedOp::execute() {
         // that we can't arbitrarily insert padding of the strides
         // for tensors consumed by this op.
         while (input_buf.dimensions() > 2) {
-            assert(can_fuse_cx(FuseType::Delete, input_buf));
             fuse_cx(FuseType::Delete, input_buf);
         }
 
@@ -1411,27 +1440,24 @@ void SoftmaxOp::execute() {
 
 namespace {
 
-template<typename T>
-void DepthToSpace(const HalideBuffer<const T> &input, int block_size, HalideBuffer<T> output) {
-    // This is really slow, if profiling has brought you here, optimize it.
-    output.for_each_element([&](int c, int x, int y, int b) {
-        int xi = floor_div(x, block_size);
-        int yi = floor_div(y, block_size);
-        int ci = (y - yi * block_size) * block_size + (x - xi * block_size);
-        output(c, x, y, b) = input(c * block_size * block_size + ci, xi, yi, b);
-    });
+void DepthToSpace(HalideBuffer<const void> input, int block_size, HalideBuffer<void> output) {
+    const int output_depth = output.dim(0).extent();
+    split(1, block_size, output);
+    split(3, block_size, output);
+    split(0, output_depth * block_size, input);
+    split(0, output_depth, input);
+    output.transpose(2, 3);
+    output.copy_from(input);
 }
 
-template<typename T>
-void SpaceToDepth(const HalideBuffer<const T> &input, int block_size, HalideBuffer<T> output) {
-    // This is really slow, if profiling has brought you here, optimize it.
-    output.for_each_element([&](int c, int x, int y, int b) {
-        int ci = floor_div(c, block_size * block_size);
-        int xyi = c - ci * block_size * block_size;
-        int yi = xyi / block_size;
-        int xi = xyi % block_size;
-        output(c, x, y, b) = input(ci, x * block_size + xi, y * block_size + yi, b);
-    });
+void SpaceToDepth(HalideBuffer<const void> input, int block_size, HalideBuffer<void> output) {
+    const int input_depth = input.dim(0).extent();
+    split(1, block_size, input);
+    split(3, block_size, input);
+    split(0, input_depth * block_size, output);
+    split(0, input_depth, output);
+    input.transpose(2, 3);
+    output.copy_from(input);
 }
 
 }  // namespace
@@ -1464,8 +1490,8 @@ void SpaceDepthOp::execute() {
 
     if (in->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
-        const auto &in_buf = in->buffer<const uint8_t>();
-        auto out_buf = out->buffer<uint8_t>();
+        const auto &in_buf = in->buffer();
+        const auto &out_buf = out->buffer();
 
         if (block_size_ > 0) {
             SpaceToDepth(in_buf, block_size_, out_buf);

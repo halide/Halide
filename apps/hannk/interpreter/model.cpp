@@ -125,6 +125,18 @@ bool Tensor::is_allocated() const {
     return buffer_.data() != nullptr;
 }
 
+namespace {
+
+// Copy a Halide buffer without the internal reference counting.
+// This reduces overhead of buffer copies, and is unnecessary because
+// we do our own reference counting.
+template<typename T>
+HalideBuffer<T> drop_reference(const HalideBuffer<T> &buf) {
+    return HalideBuffer<T>(buf.type(), buf.data(), buf.dimensions(), buf.raw_buffer()->dim);
+}
+
+}  // namespace
+
 void Tensor::allocate() {
     if (buffer_.data()) {
         return;
@@ -135,7 +147,7 @@ void Tensor::allocate() {
     }
 
     storage()->allocate();
-    HalideBuffer<void> buffer = storage()->buffer();
+    HalideBuffer<void> buffer = drop_reference(storage()->buffer());
     for (int i = 0; i < buffer.dimensions(); i++) {
         Interval dim_i(buffer_.dim(i).min(), buffer_.dim(i).max());
         if (i < (int)storage_offset_.size()) {
