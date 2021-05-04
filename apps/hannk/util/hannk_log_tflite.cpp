@@ -1,3 +1,5 @@
+#include <cstring>
+
 #include "tensorflow/lite/tools/logging.h"
 #include "util/hannk_log.h"
 
