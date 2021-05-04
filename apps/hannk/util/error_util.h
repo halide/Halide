@@ -16,23 +16,8 @@ constexpr size_t size(T (&)[N]) {
     return N;
 }
 
-inline std::ostream &operator<<(std::ostream &stream, const halide_type_t &type) {
-    if (type.code == halide_type_uint && type.bits == 1) {
-        stream << "bool";
-    } else {
-        static const char *const names[5] = {"int", "uint", "float", "handle", "bfloat"};
-        assert(type.code >= 0 && type.code < size(names));
-        stream << names[type.code] << (int)type.bits;
-    }
-    if (type.lanes > 1) {
-        stream << "x" << (int)type.lanes;
-    }
-    return stream;
-}
-
-inline std::ostream &operator<<(std::ostream &s, const halide_dimension_t &dim) {
-    return s << "{" << dim.min << ", " << dim.extent << ", " << dim.stride << "}";
-}
+std::ostream &operator<<(std::ostream &stream, const halide_type_t &type);
+std::ostream &operator<<(std::ostream &s, const halide_dimension_t &dim);
 
 template<typename T>
 inline std::ostream &operator<<(std::ostream &s, const std::vector<T> &v) {
