@@ -386,9 +386,9 @@ MultiplyParams get_quantized_multiply_params(const QuantizationInfo &a, const Qu
     return result;
 }
 
-void add_uint8(const HalideBuffer<const uint8_t> &in1, const QuantizationInfo &in1q, int in1sign,
-               const HalideBuffer<const uint8_t> &in2, const QuantizationInfo &in2q, int in2sign,
-               const HalideBuffer<uint8_t> &out, const QuantizationInfo &outq,
+void add_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q, int in1sign,
+               const HalideBuffer<const void> &in2, const QuantizationInfo &in2q, int in2sign,
+               const HalideBuffer<void> &out, const QuantizationInfo &outq,
                ActivationFunction activation = ActivationFunction::None) {
     const int in1_zero = in1q.uniform_zero();
     const int in2_zero = in2q.uniform_zero();
@@ -425,9 +425,9 @@ void add_uint8(const HalideBuffer<const uint8_t> &in1, const QuantizationInfo &i
     elementwise_loop_nest<2>(add_rank2, in1, in2, out);
 }
 
-void mul_uint8(const HalideBuffer<const uint8_t> &in1, const QuantizationInfo &in1q,
-               const HalideBuffer<const uint8_t> &in2, const QuantizationInfo &in2q,
-               const HalideBuffer<uint8_t> &out, const QuantizationInfo &outq,
+void mul_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q,
+               const HalideBuffer<const void> &in2, const QuantizationInfo &in2q,
+               const HalideBuffer<void> &out, const QuantizationInfo &outq,
                ActivationFunction activation = ActivationFunction::None) {
     const int in1_zero = in1q.uniform_zero();
     const int in2_zero = in2q.uniform_zero();
@@ -533,7 +533,7 @@ double dequantize_scalar(const Tensor *t) {
     float scale = q.scale.empty() ? 1.0f : q.scale.front();
     int zero = q.zero.empty() ? 0 : q.zero.front();
 
-    const auto &buf = t->buffer<const void>();
+    const auto &buf = t->buffer();
     if (buf.type() == halide_type_of<uint8_t>()) {
         return (as_scalar<uint8_t>(buf) - zero) * scale;
     } else if (buf.type() == halide_type_of<int8_t>()) {
@@ -589,9 +589,9 @@ void BinaryOp::execute() {
     if (in1->type() == halide_type_of<uint8_t>() &&
         in2->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
-        const auto &in1_buf = in1->buffer<const uint8_t>();
-        const auto &in2_buf = in2->buffer<const uint8_t>();
-        const auto &out_buf = out->buffer<uint8_t>();
+        const auto &in1_buf = in1->buffer();
+        const auto &in2_buf = in2->buffer();
+        const auto &out_buf = out->buffer();
 
         switch (op_) {
         case Add:
@@ -1490,8 +1490,8 @@ void SpaceDepthOp::execute() {
 
     if (in->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
-        const auto &in_buf = in->buffer<const uint8_t>();
-        auto out_buf = out->buffer<uint8_t>();
+        const auto &in_buf = in->buffer();
+        const auto &out_buf = out->buffer();
 
         if (block_size_ > 0) {
             SpaceToDepth(in_buf, block_size_, out_buf);
