@@ -9,7 +9,7 @@ mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
 
 if [ -z ${HALIDE_INSTALL_PATH} ]; then
-HALIDE_INSTALL_PATH=${HOME}/halide-13-install
+HALIDE_INSTALL_PATH=${HOME}/halide-13-install/lib/cmake/Halide
 fi
 echo Using HalideInstall=${HALIDE_INSTALL_PATH}
 
@@ -28,7 +28,7 @@ EXTRAS=
 if [[ "${HL_TARGET}" =~ ^arm-64-android.* ]]; then
 echo Configuring for Android arm64-v8a build...
 echo Using ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}
-EXTRAS="-DCMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake"
+EXTRAS="-DCMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a"
 else
 echo Assuming host build...
 fi
