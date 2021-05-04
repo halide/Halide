@@ -456,6 +456,10 @@ int main(int argc, char **argv) {
     runner.seed = time(nullptr);
     std::vector<const char *> files;
 
+    // Default the exernal delegate to disabled, since it may
+    // need extra setup to work (eg LD_LIBRARY_PATH or --external_delegate_path)
+    runner.do_run[hannk::kExternalDelegate] = false;
+
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--seed")) {
             runner.seed = atoi(argv[++i]);
