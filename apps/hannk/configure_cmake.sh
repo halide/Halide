@@ -18,10 +18,10 @@ HL_TARGET=host
 fi
 echo Using HL_TARGET=${HL_TARGET}
 
-if [ -z ${HALIDE_BUILDER} ]; then
-HALIDE_BUILDER=Ninja
+if [ -z "${CMAKE_GENERATOR}" ]; then
+CMAKE_GENERATOR=Ninja
 fi
-echo Using build tool=${HALIDE_BUILDER}
+echo Using build tool=${CMAKE_GENERATOR}
 
 EXTRAS=
 # TODO: this doesn't work (yet); crosscompiling in CMake is painful.
@@ -35,7 +35,7 @@ fi
 
 cmake \
   ${EXTRAS} \
-  -G ${HALIDE_BUILDER} \
+  -G "${CMAKE_GENERATOR}" \
   -DCMAKE_BUILD_TYPE=Release \
   -DHalide_DIR="${HALIDE_INSTALL_PATH}" \
   -DCMAKE_PREFIX_PATH="${HALIDE_INSTALL_PATH}" \
