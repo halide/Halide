@@ -260,7 +260,7 @@ void broadcast_shapes(int rank, halide_buffer_t *a, Bufs *...rest) {
 // 4. Iterating and slicing the extra dimensions of the shapes before calling `fn`.
 template<int FnRank, typename Fn, typename T, typename... Ts>
 void elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
-    const int rank = std::max({op0.dimensions(), ops.dimensions()...});
+    const int rank = std::max({FnRank, op0.dimensions(), ops.dimensions()...});
     pad_to_rank(rank, op0, ops...);
     broadcast_shapes(rank, op0.raw_buffer(), ops.raw_buffer()...);
     optimize_elementwise_shapes(op0.raw_buffer(), ops.raw_buffer()...);
