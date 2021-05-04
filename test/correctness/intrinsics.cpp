@@ -17,7 +17,7 @@ void check(Expr test, Expr expected, Type required_type) {
         std::cerr << "failure!\n";
         std::cerr << "test: " << test << "\n";
         std::cerr << "result: " << result << "\n";
-        std::cerr << "exepcted: " << expected << "\n";
+        std::cerr << "expected: " << expected << "\n";
         abort();
     }
 }

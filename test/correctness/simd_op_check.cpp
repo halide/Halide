@@ -1110,6 +1110,14 @@ public:
                         for (int v : {2, 4}) {
                             check("udot", v, sum(u32(in_u8(f * x + r)) * in_u8(f * x + r + 32)));
                             check("sdot", v, sum(i32(in_i8(f * x + r)) * in_i8(f * x + r + 32)));
+                            if (f == 4) {
+                                // This doesn't generate for higher reduction factors because the
+                                // intermediate is 16-bit instead of 32-bit. It seems like it would
+                                // be slower to fix this (because the intermediate sum would be
+                                // 32-bit instead of 16-bit).
+                                check("udot", v, sum(u32(in_u8(f * x + r))));
+                                check("sdot", v, sum(i32(in_i8(f * x + r))));
+                            }
                         }
                     }
                 }
