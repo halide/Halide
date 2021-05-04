@@ -31,6 +31,23 @@ namespace hannk {
 
 namespace {
 
+// Split a dimension d into two new dimensions. Dim d will have min 0
+// and extent factor, while the new dim d + 1 will have the outer split dimension.
+template <typename T>
+void split(int d, int factor, HalideBuffer<T> &buf) {
+    buf.embed(d, 0);
+    halide_dimension_t &dim0 = buf.raw_buffer()->dim[d];
+    halide_dimension_t &dim1 = buf.raw_buffer()->dim[d + 1];
+    dim0.min = 0;
+    dim0.extent = factor;
+    dim0.stride = dim1.stride;
+    assert(dim1.min % factor == 0);
+    assert(dim1.extent % factor == 0);
+    dim1.min /= factor;
+    dim1.extent /= factor;
+    dim1.stride *= factor;
+}
+
 enum class FuseType {
     // Delete the second of the fused dimension, reducing the rank by 1.
     Delete,
@@ -85,6 +102,7 @@ void fuse(int d0, int d1, FuseType type, halide_buffer_t *buf) {
     assert(d0 != d1);
     assert(d0 < buf->dimensions);
     assert(d1 < buf->dimensions);
+    assert(can_fuse(d0, d1, type, buf));
     halide_dimension_t &dim0 = buf->dim[d0];
     halide_dimension_t &dim1 = buf->dim[d1];
     dim0.extent *= dim1.extent;
@@ -949,7 +967,6 @@ void FullyConnectedOp::execute() {
         // that we can't arbitrarily insert padding of the strides
         // for tensors consumed by this op.
         while (input_buf.dimensions() > 2) {
-            assert(can_fuse_cx(FuseType::Delete, input_buf));
             fuse_cx(FuseType::Delete, input_buf);
         }
 
@@ -1411,27 +1428,24 @@ void SoftmaxOp::execute() {
 
 namespace {
 
-template<typename T>
-void DepthToSpace(const HalideBuffer<const T> &input, int block_size, HalideBuffer<T> output) {
-    // This is really slow, if profiling has brought you here, optimize it.
-    output.for_each_element([&](int c, int x, int y, int b) {
-        int xi = floor_div(x, block_size);
-        int yi = floor_div(y, block_size);
-        int ci = (y - yi * block_size) * block_size + (x - xi * block_size);
-        output(c, x, y, b) = input(c * block_size * block_size + ci, xi, yi, b);
-    });
+void DepthToSpace(HalideBuffer<const void> input, int block_size, HalideBuffer<void> output) {
+    const int output_depth = output.dim(0).extent();
+    split(1, block_size, output);
+    split(3, block_size, output);
+    split(0, output_depth * block_size, input);
+    split(0, output_depth, input);
+    output.transpose(2, 3);
+    output.copy_from(input);
 }
 
-template<typename T>
-void SpaceToDepth(const HalideBuffer<const T> &input, int block_size, HalideBuffer<T> output) {
-    // This is really slow, if profiling has brought you here, optimize it.
-    output.for_each_element([&](int c, int x, int y, int b) {
-        int ci = floor_div(c, block_size * block_size);
-        int xyi = c - ci * block_size * block_size;
-        int yi = xyi / block_size;
-        int xi = xyi % block_size;
-        output(c, x, y, b) = input(ci, x * block_size + xi, y * block_size + yi, b);
-    });
+void SpaceToDepth(HalideBuffer<const void> input, int block_size, HalideBuffer<void> output) {
+    const int input_depth = input.dim(0).extent();
+    split(1, block_size, input);
+    split(3, block_size, input);
+    split(0, input_depth * block_size, output);
+    split(0, input_depth, output);
+    input.transpose(2, 3);
+    output.copy_from(input);
 }
 
 }  // namespace
