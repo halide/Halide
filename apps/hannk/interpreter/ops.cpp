@@ -33,7 +33,7 @@ namespace {
 
 // Split a dimension d into two new dimensions. Dim d will have min 0
 // and extent factor, while the new dim d + 1 will have the outer split dimension.
-template <typename T>
+template<typename T>
 void split(int d, int factor, HalideBuffer<T> &buf) {
     buf.embed(d, 0);
     halide_dimension_t &dim0 = buf.raw_buffer()->dim[d];
