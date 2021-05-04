@@ -58,3 +58,11 @@ target_link_libraries(compare_vs_tflite PRIVATE
 target_include_directories(compare_vs_tflite
                            PUBLIC $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>)
 
+# Tests
+file(GLOB TEST_FILES "test/*/*")
+foreach (t IN LISTS TEST_FILES)
+    add_test(NAME hannk_test_${t} COMMAND compare_vs_tflite ${t} --benchmark 0)
+    set_tests_properties(hannk_test_${t} PROPERTIES
+                         LABELS hannk_tests)
+endforeach()
+
