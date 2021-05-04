@@ -166,12 +166,26 @@ struct Runner {
     bool do_run[kNumRuns];  // no way to default-init everything to anything but zero, alas
     bool do_benchmark = true;
     bool do_compare_results = true;
+    double tolerance;
     std::string external_delegate_path;
 
     Runner() {
         for (int i = 0; i < kNumRuns; i++) {
             do_run[i] = true;
         }
+#if defined(__arm__) || defined(__aarch64__)
+        // TFLite on Arm devices generally uses the rounding-shift instructions,
+        // which should match our results exactly (since we mimic the same result,
+        // whether or not we actually generate those specific instructions).
+        // So leave the options at their default.
+        tolerance = 1.0 / 256.0;
+#else
+        // TFLite on x86 (on desktop platforms, at least) appears to mostly
+        // use the reference implementations, which don't have the same
+        // rounding-shift behavior. We'll bump up the 'close' value for these.
+        // This is a lttle hand-wavy but is a decent proxy for now.
+        tolerance = 1.0 / 100.0;
+#endif
     }
 
     void run(const std::string &filename);
@@ -187,7 +201,7 @@ private:
     };
     RunResult run_in_hannk(const std::vector<char> &buffer);
     RunResult run_in_tflite(const std::vector<char> &buffer, TfLiteDelegate *delegate = nullptr);
-    void compare_results(const std::string &msg, const RunResult &a, const RunResult &b);
+    bool compare_results(const std::string &msg, const RunResult &a, const RunResult &b);
 };
 
 int Runner::seed_for_name(const std::string &name) {
@@ -322,7 +336,8 @@ Runner::RunResult Runner::run_in_tflite(const std::vector<char> &buffer, TfLiteD
     return result;
 }
 
-void Runner::compare_results(const std::string &msg, const RunResult &a, const RunResult &b) {
+bool Runner::compare_results(const std::string &msg, const RunResult &a, const RunResult &b) {
+    bool all_matched = true;
     CHECK(a.outputs.size() == b.outputs.size());
     for (size_t i = 0; i < a.outputs.size(); ++i) {
         const Buffer<const void> &tflite_buf = a.outputs[i];
@@ -335,19 +350,6 @@ void Runner::compare_results(const std::string &msg, const RunResult &a, const R
             CHECK(tflite_buf.dim(d).stride() == halide_buf.dim(d).stride());  // TODO: must the strides match?
         }
         CompareBuffersOptions options;
-#if defined(__arm__) || defined(__aarch64__)
-        // TFLite on Arm devices generally uses the rounding-shift instructions,
-        // which should match our results exactly (since we mimic the same result,
-        // whether or not we actually generate those specific instructions).
-        // So leave the options at their default.
-        const float tolerance = 1.0f / 256.0f;
-#else
-        // TFLite on x86 (on desktop platforms, at least) appears to mostly
-        // use the reference implementations, which don't have the same
-        // rounding-shift behavior. We'll bump up the 'close' value for these.
-        // This is a lttle hand-wavy but is a decent proxy for now.
-        const float tolerance = 1.0f / 100.0f;
-#endif
         options.close_thresh = std::ceil((1ull << tflite_buf.type().bits) * tolerance);
         options.max_diffs_to_log = 8;
         std::cout << msg;
@@ -359,8 +361,11 @@ void Runner::compare_results(const std::string &msg, const RunResult &a, const R
             } else {
                 std::cout << "OK!\n";
             }
+        } else {
+            all_matched = false;
         }
     }
+    return all_matched;
 };
 
 void Runner::run(const std::string &filename) {
@@ -438,13 +443,21 @@ void Runner::run(const std::string &filename) {
     if (do_compare_results && do_run[kTfLite]) {
         std::cout << '\n';
 
+        bool all_matched = true;
         for (WhichRun i : active_runs) {
             if (i == kTfLite) {
                 continue;
             }
             std::ostringstream msg;
             msg << "Comparing " << RunNames[kTfLite] << " vs " << RunNames[i] << ":";
-            compare_results(msg.str(), results[kTfLite], results[i]);
+            if (!compare_results(msg.str(), results[kTfLite], results[i])) {
+                all_matched = false;
+            }
+        }
+
+        if (!all_matched) {
+            std::cerr << "Some runs exceeded the error threshold!\n";
+            exit(1);
         }
     }
 }
@@ -502,6 +515,10 @@ int main(int argc, char **argv) {
         }
         if (!strcmp(argv[i], "--compare")) {
             runner.do_compare_results = atoi(argv[++i]) != 0;
+            continue;
+        }
+        if (!strcmp(argv[i], "--tolerance")) {
+            runner.tolerance = atof(argv[++i]);
             continue;
         }
         if (!strcmp(argv[i], "--benchmark")) {
