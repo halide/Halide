@@ -147,7 +147,7 @@ bool all(bool first, T... rest) {
 // This may enable the buffers to be processed with fewer instances of the "tail" of
 // a vectorization loop, and fewer levels of recursion in the loop nest helpers below.
 template<typename... Bufs>
-void optimize_elementwise_shapes(halide_buffer_t *a, Bufs *... rest) {
+void optimize_elementwise_shapes(halide_buffer_t *a, Bufs *...rest) {
     assert(all(a->dimensions == rest->dimensions...));
     for (int d = 0; d + 1 < a->dimensions; d++) {
         while (can_fuse(d, d + 1, FuseType::Pad, a) &&
@@ -526,7 +526,7 @@ double dequantize_scalar(const Tensor *t) {
     }
 }
 
-template <typename TResult, typename TOperand>
+template<typename TResult, typename TOperand>
 TResult implement_binary(BinaryOp::Operator op, TOperand a, TOperand b) {
     switch (op) {
     case BinaryOp::Add:
@@ -860,7 +860,7 @@ struct TypeList {
     }
 };
 
-template <size_t N, typename T>
+template<size_t N, typename T>
 struct TypeArray {
     constexpr size_t size() const {
         return N;
