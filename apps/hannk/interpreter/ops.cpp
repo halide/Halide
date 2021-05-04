@@ -99,9 +99,6 @@ bool can_fuse_xy(FuseType type, const halide_buffer_t *buf) {
 // If pad is true, add a new dimension of extent 1 and min 0 at the end.
 // If pad is false, d1 is deleted from the buffer.
 void fuse(int d0, int d1, FuseType type, halide_buffer_t *buf) {
-    assert(d0 != d1);
-    assert(d0 < buf->dimensions);
-    assert(d1 < buf->dimensions);
     assert(can_fuse(d0, d1, type, buf));
     halide_dimension_t &dim0 = buf->dim[d0];
     halide_dimension_t &dim1 = buf->dim[d1];
@@ -176,7 +173,20 @@ void optimize_elementwise_shapes(halide_buffer_t *a, Bufs *...rest) {
     }
 }
 
+// A hack to allow us to pass a type for each halide_buffer_t object.
+template<typename T>
+class TypedBufferT : public halide_buffer_t {};
+
+// We can safely slice the last dim of a halide_buffer_t, because we don't need
+// to modify any of the dim objects.
 halide_buffer_t slice_last_dim(halide_buffer_t buf, int at) {
+    buf.dimensions--;
+    buf.host += buf.type.bytes() * buf.dim[buf.dimensions].stride * at;
+    return buf;
+}
+
+template <typename T>
+TypedBufferT<T> slice_last_dim(TypedBufferT<T> buf, int at) {
     buf.dimensions--;
     buf.host += buf.type.bytes() * buf.dim[buf.dimensions].stride * at;
     return buf;
@@ -199,16 +209,16 @@ void loop_nest_impl(Fn &&fn, halide_buffer_t op0, Bufs... ops) {
 }
 
 template<typename Fn, typename T, typename... Ts>
-void scalar_loop_nest_impl(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
-    if (op0.dimensions() == 0) {
-        fn(op0(), ops()...);
+void scalar_loop_nest_impl(Fn &&fn, TypedBufferT<T> op0, TypedBufferT<Ts>... ops) {
+    if (op0.dimensions == 0) {
+        fn(*(T *)op0.host, *(Ts *)ops.host...);
     } else {
-        const int last_dim = op0.dimensions() - 1;
-        const int min = op0.dim(last_dim).min();
-        const int extent = op0.dim(last_dim).extent();
+        const int last_dim = op0.dimensions - 1;
+        const int min = op0.dim[last_dim].min;
+        const int extent = op0.dim[last_dim].extent;
         const int max = min + extent - 1;
         for (int i = min; i <= max; i++) {
-            scalar_loop_nest_impl(fn, op0.sliced(last_dim, i), ops.sliced(last_dim, i)...);
+            scalar_loop_nest_impl(fn, slice_last_dim(op0, i), slice_last_dim(ops, i)...);
         }
     }
 }
@@ -257,13 +267,15 @@ void elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops
     loop_nest_impl<FnRank>(fn, *op0.raw_buffer(), *ops.raw_buffer()...);
 }
 
+// This is the same as the above, except it calls fn with scalar values at each
+// element of the buffer.
 template<typename Fn, typename T, typename... Ts>
 void scalar_elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
     const int rank = std::max({op0.dimensions(), ops.dimensions()...});
     pad_to_rank(rank, op0, ops...);
     broadcast_shapes(rank, op0.raw_buffer(), ops.raw_buffer()...);
     optimize_elementwise_shapes(op0.raw_buffer(), ops.raw_buffer()...);
-    scalar_loop_nest_impl(fn, op0, ops...);
+    scalar_loop_nest_impl(fn, *(TypedBufferT<T> *)op0.raw_buffer(), *(TypedBufferT<Ts> *)ops.raw_buffer()...);
 }
 
 // This helper is similar to the above, but it only implements steps 3 and 4.
