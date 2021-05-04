@@ -31,27 +31,23 @@ if [ "$#" -eq 0 ]; then
 fi
 
 LOCAL_FILES=
-DEVICE_FILES=
-FLAGS=
-NEXT_IS_FLAG=0
+DEVICE_ARGS=
 BUILD_IS_CMAKE=0
 for ARG in "$@"
 do
-    if [[ ${NEXT_IS_FLAG} -eq 1 ]]; then
-        # second part of previous flag
-        FLAGS="${FLAGS} ${ARG}"
-        NEXT_IS_FLAG=0
-    elif [[ "${ARG}" == "--cmake" ]]; then
+    if [[ "${ARG}" == "--cmake" ]]; then
+        # Don't propagate
         BUILD_IS_CMAKE=1
-    elif [[ "${ARG}" =~ ^-.* ]]; then
-        # assume it's a flag
-        FLAGS="${FLAGS} ${ARG}"
-        NEXT_IS_FLAG=1
     else
-        # assume it's a file
-        BASENAME=$(basename "${ARG}")
-        LOCAL_FILES="${LOCAL_FILES} ${ARG}"
-        DEVICE_FILES="${DEVICE_FILES} ${DEVICE_DIR}/${BASENAME}"
+        if [ -f "${ARG}" ]; then
+            # assume it's a file.
+            BASENAME=$(basename "${ARG}")
+            LOCAL_FILES="${LOCAL_FILES} ${ARG}"
+            DEVICE_ARGS="${DEVICE_ARGS} ${DEVICE_DIR}/${BASENAME}"
+        else
+            # assume it's a flag (or flag argument) and just pass thru
+            DEVICE_ARGS="${DEVICE_ARGS} ${ARG}"
+        fi
     fi
 done
 
@@ -75,7 +71,7 @@ adb shell mkdir -p "${DEVICE_DIR}"
 
 adb push ${BUILD_TARGETS} ${TFLITE_SHARED_LIBRARY} ${LOCAL_FILES} ${DEVICE_DIR}/
 
-adb shell LD_LIBRARY_PATH=${DEVICE_DIR}:${LD_LIBRARY_PATH} ${DEVICE_DIR}/compare_vs_tflite ${FLAGS} ${DEVICE_FILES}
+adb shell LD_LIBRARY_PATH=${DEVICE_DIR}:${LD_LIBRARY_PATH} ${DEVICE_DIR}/compare_vs_tflite ${DEVICE_ARGS}
 
 echo
 echo All comparisons complete.

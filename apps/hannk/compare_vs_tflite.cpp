@@ -17,10 +17,9 @@
 #include "tensorflow/lite/c/c_api.h"
 #include "tensorflow/lite/c/common.h"
 
-namespace hannk {
-
 using Halide::Runtime::Buffer;
 
+namespace hannk {
 namespace {
 
 std::chrono::duration<double> bench(std::function<void()> f) {
@@ -140,8 +139,6 @@ public:
         }
     }
 };
-
-}  // namespace
 
 enum WhichRun {
     kTfLite,
@@ -462,79 +459,128 @@ void Runner::run(const std::string &filename) {
     }
 }
 
+}  // namespace
 }  // namespace hannk
+
+namespace {
+
+using FlagFn = std::function<int(const std::string &value)>;
+using FlagFnMap = std::map<std::string, FlagFn>;
+
+int process_args(int argc, char **argv, const FlagFnMap &m, FlagFn nonflags) {
+    for (int i = 1; i < argc; i++) {
+        std::string flag = argv[i];
+        if (flag[0] != '-') {
+            nonflags(flag);
+            continue;
+        }
+        flag = flag.substr(1);
+        if (flag[0] == '-') {
+            flag = flag.substr(1);
+        }
+
+        std::string value;
+        auto eq = flag.find('=');
+        if (eq != std::string::npos) {
+            value = flag.substr(eq + 1);
+            flag = flag.substr(0, eq);
+        } else if (i + 1 < argc) {
+            value = argv[++i];
+        } else {
+            std::cerr << "Missing value for flag '" << flag << "'\n";
+            return -1;
+        }
+        auto it = m.find(flag);
+        if (it == m.end()) {
+            std::cerr << "Unknown flag '" << flag << "'\n";
+            return -1;
+        }
+        int r = it->second(value);
+        if (r != 0) {
+            return r;
+        }
+    }
+    return 0;
+}
+
+}  // namespace
 
 int main(int argc, char **argv) {
     hannk::Runner runner;
     runner.seed = time(nullptr);
-    std::vector<const char *> files;
+    std::vector<std::string> files;
 
     // Default the exernal delegate to disabled, since it may
     // need extra setup to work (eg LD_LIBRARY_PATH or --external_delegate_path)
     runner.do_run[hannk::kExternalDelegate] = false;
 
-    for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "--seed")) {
-            runner.seed = atoi(argv[++i]);
-            continue;
-        }
-        if (!strcmp(argv[i], "--enable")) {
-            for (int i = 0; i < hannk::kNumRuns; i++) {
-                runner.do_run[i] = false;
-            }
-            std::string opts = argv[++i];
-            for (char c : opts) {
-                switch (c) {
-                case 't':
-                    runner.do_run[hannk::kTfLite] = true;
-                    break;
-                case 'h':
-                    runner.do_run[hannk::kHannk] = true;
-                    break;
-                case 'x':
-                    runner.do_run[hannk::kExternalDelegate] = true;
-                    break;
-                case 'i':
-                    runner.do_run[hannk::kInternalDelegate] = true;
-                    break;
-                default: {
-                    std::cerr << "Unknown option to --enable: " << c << "\n";
-                    return -1;
-                }
-                }
-            }
-            continue;
-        }
-        if (!strcmp(argv[i], "--external_delegate_path")) {
-            runner.external_delegate_path = argv[++i];
-            continue;
-        }
-        if (!strcmp(argv[i], "--threads")) {
-            runner.threads = atoi(argv[++i]);
-            continue;
-        }
-        if (!strcmp(argv[i], "--compare")) {
-            runner.do_compare_results = atoi(argv[++i]) != 0;
-            continue;
-        }
-        if (!strcmp(argv[i], "--tolerance")) {
-            runner.tolerance = atof(argv[++i]);
-            continue;
-        }
-        if (!strcmp(argv[i], "--benchmark")) {
-            runner.do_benchmark = atoi(argv[++i]) != 0;
-            continue;
-        }
-        if (!strcmp(argv[i], "--verbose")) {
-            if (i + 1 < argc && argv[i + 1][0] != '-') {
-                runner.verbosity = atoi(argv[++i]);
-            } else {
-                runner.verbosity = 1;
-            }
-            continue;
-        }
-        files.push_back(argv[i]);
+    const FlagFn nonflags = [&files](const std::string &value) {
+        // Assume it's a file.
+        files.push_back(value);
+        return 0;
+    };
+
+    const FlagFnMap m = {
+        {"benchmark", [&runner](const std::string &value) {
+             runner.do_benchmark = std::stoi(value) != 0;
+             return 0;
+         }},
+        {"compare", [&runner](const std::string &value) {
+             runner.do_compare_results = std::stoi(value) != 0;
+             return 0;
+         }},
+        {"enable", [&runner](const std::string &value) {
+             for (int i = 0; i < hannk::kNumRuns; i++) {
+                 runner.do_run[i] = false;
+             }
+             for (char c : value) {
+                 switch (c) {
+                 case 't':
+                     runner.do_run[hannk::kTfLite] = true;
+                     break;
+                 case 'h':
+                     runner.do_run[hannk::kHannk] = true;
+                     break;
+                 case 'x':
+                     runner.do_run[hannk::kExternalDelegate] = true;
+                     break;
+                 case 'i':
+                     runner.do_run[hannk::kInternalDelegate] = true;
+                     break;
+                 default:
+                     std::cerr << "Unknown option to --enable: " << c << "\n";
+                     return -1;
+                 }
+             }
+             return 0;
+         }},
+        {"external_delegate_path", [&runner](const std::string &value) {
+             runner.external_delegate_path = value;
+             return 0;
+         }},
+        {"seed", [&runner](const std::string &value) {
+             runner.seed = std::stoi(value);
+             return 0;
+         }},
+        {"threads", [&runner](const std::string &value) {
+             runner.threads = std::stoi(value);
+             return 0;
+         }},
+        {"tolerance", [&runner](const std::string &value) {
+             runner.tolerance = std::stof(value);
+             return 0;
+         }},
+        {"verbose", [&runner](const std::string &value) {
+             runner.verbosity = std::stoi(value);
+             return 0;
+         }},
+    };
+
+    int r = process_args(argc, argv, m, nonflags);
+    if (r != 0) {
+        return r;
     }
+
     if (runner.threads <= 0) {
 #ifdef _WIN32
         char *num_cores = getenv("NUMBER_OF_PROCESSORS");

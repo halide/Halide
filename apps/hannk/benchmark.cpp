@@ -53,6 +53,10 @@ int main(int argc, char **argv) {
             options.trace = true;
             continue;
         }
+        if (argv[i][0] == '-') {
+            LOG(ERROR) << "Unknown flag: " << argv[i] << ".\n";
+            exit(-1);
+        }
     }
 
     if (options.verbose && options.trace) {
