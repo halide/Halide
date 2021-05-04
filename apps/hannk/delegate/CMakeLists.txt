@@ -16,14 +16,9 @@ target_include_directories(hannk_delegate_registrar PRIVATE
 # --------------- external (shared-library) delegate
 
 # External delegates in TFLite are always .so (never .dylib);
-# on Mac we must declare the library to be MODULE rather than SHARED to get this
-if (APPLE)
-set(SOTYPE MODULE)
-else ()
-set(SOTYPE SHARED)
-endif ()
-
-add_library(hannk_delegate_external ${SOTYPE}
+# on Mac we must declare the library to be MODULE rather than SHARED to get this.
+# Apparently on Linux they are basically the same, so, use it everywhere for now.
+add_library(hannk_delegate_external MODULE
             hannk_delegate_adaptor.cpp
             hannk_delegate.cpp)
 target_link_libraries(hannk_delegate_external PRIVATE
@@ -37,8 +32,7 @@ target_include_directories(hannk_delegate_external PRIVATE
 if (APPLE)
     target_link_options(hannk_delegate_external PRIVATE "-Wl,-exported_symbols_list,${hannk_SOURCE_DIR}/delegate/exported_symbols.osx")
 else ()
-    target_link_options(hannk_delegate_external PRIVATE "-Wl,--version-script,${hannk_SOURCE_DIR}/delegate/exported_symbols.ldscript"
-                                                      "-Wl,-soname,libHannkDelegate.so")
+    target_link_options(hannk_delegate_external PRIVATE "-Wl,--version-script,${hannk_SOURCE_DIR}/delegate/exported_symbols.ldscript")
 endif()
 
 # Give it the name that we already use elsewhere ("lib" and ".so" will be added)
