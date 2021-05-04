@@ -9,7 +9,7 @@ set(_HANNK_HALIDE_TARGETS "")
 function(_add_hannk_halide_library)
     set(options)
     set(oneValueArgs TARGET GENERATOR_NAME)
-    set(multiValueArgs SRCS FEATURES GENERATOR_ARGS GENERATOR_DEPS FEATURES)
+    set(multiValueArgs SRCS GENERATOR_ARGS GENERATOR_DEPS FEATURES)
     cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     add_executable(${args_TARGET}.generator ${args_SRCS})
