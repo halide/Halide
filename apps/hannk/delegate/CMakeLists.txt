@@ -7,10 +7,10 @@ target_link_libraries(hannk_delegate_registrar PRIVATE
                       interpreter
                       error_util
                       hannk_log_tflite
-                      tensorflowlite_headers)
+                      tensorflowlite_headers
+                      Halide::Runtime)
 target_include_directories(hannk_delegate_registrar PRIVATE
-                           $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
-                           $<BUILD_INTERFACE:${CMAKE_PREFIX_PATH}/include>)
+                           $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 
 
 # --------------- external (shared-library) delegate
@@ -30,14 +30,14 @@ target_link_libraries(hannk_delegate_external PRIVATE
                       interpreter
                       error_util
                       hannk_log_tflite
-                      tensorflowlite_headers)
+                      tensorflowlite_headers
+                      Halide::Runtime)
 target_include_directories(hannk_delegate_external PRIVATE
-                           $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
-                           $<BUILD_INTERFACE:${CMAKE_PREFIX_PATH}/include>)
+                           $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 if (APPLE)
-    target_link_options(hannk_delegate_external PRIVATE "-Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/exported_symbols.osx")
+    target_link_options(hannk_delegate_external PRIVATE "-Wl,-exported_symbols_list,${hannk_SOURCE_DIR}/delegate/exported_symbols.osx")
 else ()
-    target_link_options(hannk_delegate_external PRIVATE "-Wl,--version-script,${CMAKE_CURRENT_SOURCE_DIR}/exported_symbols.ldscript"
+    target_link_options(hannk_delegate_external PRIVATE "-Wl,--version-script,${hannk_SOURCE_DIR}/delegate/exported_symbols.ldscript"
                                                       "-Wl,-soname,libHannkDelegate.so")
 endif()
 

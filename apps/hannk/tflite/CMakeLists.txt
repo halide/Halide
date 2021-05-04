@@ -12,6 +12,11 @@ set(TFLITE_C_BUILD_SHARED_LIBS OFF)
 set(TFLITE_ENABLE_RUY OFF)
 set(TFLITE_ENABLE_XNNPACK OFF)
 
+# Also have to disable some stuff dragged in by TFLite
+set(FLATBUFFERS_BUILD_TESTS OFF)
+set(FLATBUFFERS_INSTALL OFF)
+set(FLATBUFFERS_BUILD_FLATC OFF)
+
 FetchContent_Declare(tflite
                      GIT_REPOSITORY https://github.com/tensorflow/tensorflow
                      GIT_TAG ${TFLITE_TAG}
@@ -51,11 +56,10 @@ target_include_directories(tensorflowlite_headers INTERFACE
                            $<BUILD_INTERFACE:${tflite_SOURCE_DIR}>)
 
 # ----------------
-
 add_library(tflite_parser STATIC tflite_parser.cpp)
 target_include_directories(tflite_parser
-                           PUBLIC $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
-                           PRIVATE $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}>
+                           PUBLIC $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>
+                           PRIVATE $<BUILD_INTERFACE:${hannk_BINARY_DIR}>
                            $<BUILD_INTERFACE:${tflite_SOURCE_DIR}>
-                           $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/flatbuffers/include>)
+                           $<BUILD_INTERFACE:${hannk_BINARY_DIR}/flatbuffers/include>)
 target_link_libraries(tflite_parser PRIVATE Halide::Runtime)

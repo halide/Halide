@@ -1,7 +1,7 @@
 
 add_library(common_halide STATIC common_halide.cpp)
 target_link_libraries(common_halide PRIVATE Halide::Halide)
-target_include_directories(common_halide PUBLIC $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>)
+target_include_directories(common_halide PUBLIC $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 
 set(_HANNK_HALIDE_TARGETS "")
 
@@ -14,7 +14,7 @@ function(_add_hannk_halide_library)
 
     add_executable(${args_TARGET}.generator ${args_SRCS})
     target_link_libraries(${args_TARGET}.generator PRIVATE ${args_GENERATOR_DEPS} common_halide Halide::Generator)
-    target_include_directories(${args_TARGET}.generator PUBLIC $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>)
+    target_include_directories(${args_TARGET}.generator PUBLIC $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 
     add_halide_library(${args_TARGET} FROM ${args_TARGET}.generator
                        NAMESPACE hannk
@@ -161,4 +161,4 @@ _add_hannk_halide_library(
 
 add_library(op_impls INTERFACE)
 target_link_libraries(op_impls INTERFACE ${_HANNK_HALIDE_TARGETS})
-target_include_directories(op_impls INTERFACE $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}>)
+target_include_directories(op_impls INTERFACE $<BUILD_INTERFACE:${hannk_BINARY_DIR}>)

@@ -5,7 +5,7 @@ enable_testing()
 
 # -fPIC is necessary for .so builds (at least on Linux); not necessary for the non-delegate
 # builds but easier to enable it for everything.
-add_compile_options(-fPIC)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Set up language settings
 set(CMAKE_CXX_STANDARD 11)
@@ -56,10 +56,10 @@ target_link_libraries(compare_vs_tflite PRIVATE
                       Halide::Tools  # for halide_benchmark.h
                       Halide::Runtime)
 target_include_directories(compare_vs_tflite
-                           PUBLIC $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>)
+                           PUBLIC $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 
 # Tests
-file(GLOB TEST_FILES "test/*/*")
+file(GLOB TEST_FILES CONFIGURE_DEPENDS "test/*/*")
 foreach (t IN LISTS TEST_FILES)
     add_test(NAME hannk_test_${t} COMMAND compare_vs_tflite ${t} --benchmark 0)
     set_tests_properties(hannk_test_${t} PROPERTIES
