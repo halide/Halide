@@ -132,7 +132,7 @@ namespace {
 // we do our own reference counting.
 template<typename T>
 HalideBuffer<T> drop_reference(const HalideBuffer<T> &buf) {
-  return HalideBuffer<T>(buf.type(), buf.data(), buf.dimensions(), buf.raw_buffer()->dim);
+    return HalideBuffer<T>(buf.type(), buf.data(), buf.dimensions(), buf.raw_buffer()->dim);
 }
 
 }  // namespace

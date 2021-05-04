@@ -185,7 +185,7 @@ halide_buffer_t slice_last_dim(halide_buffer_t buf, int at) {
     return buf;
 }
 
-template <typename T>
+template<typename T>
 TypedBufferT<T> slice_last_dim(TypedBufferT<T> buf, int at) {
     buf.dimensions--;
     buf.host += buf.type.bytes() * buf.dim[buf.dimensions].stride * at;
