@@ -1233,22 +1233,22 @@ public:
             using MemType = uint8_t;
             auto &typed_dst = (Buffer<MemType, D> &)dst;
             auto &typed_src = (Buffer<const MemType, D> &)src;
-            typed_dst.for_each_value([&](MemType &dst, MemType src) { dst = src; }, typed_src);
+            typed_dst.template for_each_value_impl<true>([&](MemType &dst, MemType src) { dst = src; }, typed_src);
         } else if (T_is_void ? (type().bytes() == 2) : (sizeof(not_void_T) == 2)) {
             using MemType = uint16_t;
             auto &typed_dst = (Buffer<MemType, D> &)dst;
             auto &typed_src = (Buffer<const MemType, D> &)src;
-            typed_dst.for_each_value([&](MemType &dst, MemType src) { dst = src; }, typed_src);
+            typed_dst.template for_each_value_impl<true>([&](MemType &dst, MemType src) { dst = src; }, typed_src);
         } else if (T_is_void ? (type().bytes() == 4) : (sizeof(not_void_T) == 4)) {
             using MemType = uint32_t;
             auto &typed_dst = (Buffer<MemType, D> &)dst;
             auto &typed_src = (Buffer<const MemType, D> &)src;
-            typed_dst.for_each_value([&](MemType &dst, MemType src) { dst = src; }, typed_src);
+            typed_dst.template for_each_value_impl<true>([&](MemType &dst, MemType src) { dst = src; }, typed_src);
         } else if (T_is_void ? (type().bytes() == 8) : (sizeof(not_void_T) == 8)) {
             using MemType = uint64_t;
             auto &typed_dst = (Buffer<MemType, D> &)dst;
             auto &typed_src = (Buffer<const MemType, D> &)src;
-            typed_dst.for_each_value([&](MemType &dst, MemType src) { dst = src; }, typed_src);
+            typed_dst.template for_each_value_impl<true>([&](MemType &dst, MemType src) { dst = src; }, typed_src);
         } else {
             assert(false && "type().bytes() must be 1, 2, 4, or 8");
         }
@@ -1979,16 +1979,32 @@ private:
     static void increment_ptrs() {
     }
 
-    template<typename Fn, typename... Ptrs>
+    HALIDE_ALWAYS_INLINE
+    static void copy_dense(size_t, const void *) {
+        // This is a dummy to make the code below compile when sizeof...(Ptrs) == 1.
+        // It should never be called.
+    }
+
+    template <typename T2>
+    HALIDE_ALWAYS_INLINE
+    static void copy_dense(size_t extent, T2 *dst, const T2 *src) {
+        memcpy(dst, src, extent * sizeof(T2));
+    }
+
+    template<bool is_copy, typename Fn, typename... Ptrs>
     HALIDE_NEVER_INLINE static void for_each_value_helper(Fn &&f, int d, bool innermost_strides_are_one,
                                                           const for_each_value_task_dim<sizeof...(Ptrs)> *t, Ptrs... ptrs) {
         if (d == -1) {
             f((*ptrs)...);
         } else if (d == 0) {
             if (innermost_strides_are_one) {
-                for (int i = t[0].extent; i != 0; i--) {
-                    f((*ptrs)...);
-                    increment_ptrs((&ptrs)...);
+                if (is_copy) {
+                    copy_dense(t[0].extent, ptrs...);
+                } else {
+                    for (int i = t[0].extent; i != 0; i--) {
+                        f((*ptrs)...);
+                        increment_ptrs((&ptrs)...);
+                    }
                 }
             } else {
                 for (int i = t[0].extent; i != 0; i--) {
@@ -1998,7 +2014,7 @@ private:
             }
         } else {
             for (int i = t[d].extent; i != 0; i--) {
-                for_each_value_helper(f, d - 1, innermost_strides_are_one, t, ptrs...);
+                for_each_value_helper<is_copy>(f, d - 1, innermost_strides_are_one, t, ptrs...);
                 advance_ptrs(t[d].stride, (&ptrs)...);
             }
         }
@@ -2068,7 +2084,7 @@ private:
         return innermost_strides_are_one;
     }
 
-    template<typename Fn, typename... Args, int N = sizeof...(Args) + 1>
+    template<bool is_copy, typename Fn, typename... Args, int N = sizeof...(Args) + 1>
     void for_each_value_impl(Fn &&f, Args &&...other_buffers) const {
         Buffer<>::for_each_value_task_dim<N> *t =
             (Buffer<>::for_each_value_task_dim<N> *)HALIDE_ALLOCA((dimensions() + 1) * sizeof(for_each_value_task_dim<N>));
@@ -2077,10 +2093,10 @@ private:
         const halide_buffer_t *buffers[] = {&buf, (&other_buffers.buf)...};
         bool innermost_strides_are_one = Buffer<>::for_each_value_prep(t, buffers);
 
-        Buffer<>::for_each_value_helper(f, dimensions() - 1,
-                                        innermost_strides_are_one,
-                                        t,
-                                        data(), (other_buffers.data())...);
+        Buffer<>::for_each_value_helper<is_copy>(f, dimensions() - 1,
+                                                 innermost_strides_are_one,
+                                                 t,
+                                                 data(), (other_buffers.data())...);
     }
     // @}
 
@@ -2102,7 +2118,7 @@ public:
     // @{
     template<typename Fn, typename... Args, int N = sizeof...(Args) + 1>
     HALIDE_ALWAYS_INLINE const Buffer<T, D> &for_each_value(Fn &&f, Args &&...other_buffers) const {
-        for_each_value_impl(f, std::forward<Args>(other_buffers)...);
+        for_each_value_impl<false>(f, std::forward<Args>(other_buffers)...);
         return *this;
     }
 
@@ -2110,7 +2126,7 @@ public:
     HALIDE_ALWAYS_INLINE
         Buffer<T, D> &
         for_each_value(Fn &&f, Args &&...other_buffers) {
-        for_each_value_impl(f, std::forward<Args>(other_buffers)...);
+        for_each_value_impl<false>(f, std::forward<Args>(other_buffers)...);
         return *this;
     }
     // @}
