@@ -71,7 +71,7 @@ public:
 
             multiplied(c, b) =
                 bias_(c) + filter_extent * filter_zero_ * input_zero_ -
-                i32(sum_input(b)) * filter_zero_,
+                i32(sum_input(b)) * filter_zero_;
 
             multiplied(c, b) += i32(u16(filter_(rc, c)) * u16(input_(rc, b)));
 
