@@ -26,7 +26,7 @@ add_subdirectory(cuda_mat_mul)
 add_subdirectory(depthwise_separable_conv)
 add_subdirectory(fft)
 if (ENABLE_APPS_HANNK)
-add_subdirectory(hannk)
+# add_subdirectory(hannk)
 endif ()
 add_subdirectory(harris)
 # add_subdirectory(hexagon_benchmarks)  # TODO(#5374): missing CMake build
