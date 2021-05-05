@@ -1303,11 +1303,9 @@ class NodeSupport {
         if (!IsVersionOK(1, 2)) {
             return false;
         }
-
-        if (!InputHasType(1, I32)) {
+        if (!InputsHaveCorrectTypes({ANY, I32})) {
             return false;
         }
-
         return true;
     }
 
@@ -1404,6 +1402,9 @@ class NodeSupport {
         if (!IsVersionOK(1, 2)) {
             return false;
         }
+        if (!InputsHaveCorrectTypes({ANY})) {
+            return false;
+        }
         return true;
     }
 
@@ -1479,11 +1480,17 @@ class NodeSupport {
         if (!IsVersionOK(1, 2)) {
             return false;
         }
+        if (!InputsHaveCorrectTypes({ANY})) {
+            return false;
+        }
         return true;
     }
 
     bool IsNodeSupported_DepthToSpace() const {
         if (!IsVersionOK(1, 2)) {
+            return false;
+        }
+        if (!InputsHaveCorrectTypes({ANY})) {
             return false;
         }
         return true;
@@ -1493,7 +1500,7 @@ class NodeSupport {
         if (!IsVersionOK(1, 2)) {
             return false;
         }
-        if (!InputHasType(1, I32)) {
+        if (!InputsHaveCorrectTypes({ANY, I32})) {
             return false;
         }
         return true;
