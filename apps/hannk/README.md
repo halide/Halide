@@ -7,14 +7,14 @@ There are several front ends for the interpreter:
 
 This app is a work in progress. Currently, only quantized uint8 networks are supported.
 All of the [TensorFlow hosted models](https://www.tensorflow.org/lite/guide/hosted_models)
-are working and producing good performance. 
+are working and producing good performance.
 
 ### Benchmarks
 The comparison data below was produced with TensorFlow v.2.4.0 (the latest release as of this writing):
 
 x86 OSX laptop w/ AVX2:
 
-| Network | TFlite (ms)|Halide (ms)| Speedup       
+| Network | TFlite (ms)|Halide (ms)| Speedup
 | ---- | ---- | ---- | ---- |
 | inception_v1_224_quant | 72.5 | 28.4 | 2.55 |
 | inception_v2_224_quant | 100 | 38.1 | 2.62 |
@@ -26,12 +26,12 @@ x86 OSX laptop w/ AVX2:
 
 Qualcomm Snapdragon 855 A76 core (Pixel 4):
 
-| Network | TFlite (ms)|Halide (ms)| Speedup       
+| Network | TFlite (ms)|Halide (ms)| Speedup
 | ---- | ---- | ---- | ---- |
-| inception_v1_224_quant | 24.7 | 26.5 | 0.93 |
-| inception_v2_224_quant | 49.8 | 37.3 | 1.34 |
-| inception_v3_quant | 97 | 96.3 | 1.01 |
-| inception_v4_299_quant | 198 | 200.6 | 0.99 | 
+| inception_v1_224_quant | 24.7 | 26.3 | 0.94 |
+| inception_v2_224_quant | 49.8 | 34.8 | 1.43 |
+| inception_v3_quant | 97 | 90.9 | 1.07 |
+| inception_v4_299_quant | 198 | 190.8 | 1.04 |
 | mobilenet_v1_0.25_128_quant	| 0.97 | 0.72 | 1.34 |
 | mobilenet_v1_1.0_128_quant |4.64 | 4.44 | 1.05 |
 | mobilenet_v1_1.0_224_quant | 12.9 | 11.6 | 1.11 |
@@ -63,5 +63,5 @@ The app reports timing for each, and compares the results, reporting significant
 
 Usage:
 
-    benchmark a.tflite [b.tflite ...]
+    compare_vs_tflite a.tflite [b.tflite ...]
 
