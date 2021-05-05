@@ -13,6 +13,11 @@ set(TFLITE_ENABLE_RUY OFF)
 set(TFLITE_ENABLE_XNNPACK OFF)
 
 # Also have to disable some stuff dragged in by TFLite
+if(POLICY CMP0077)
+  # This won't do the trick -- we need to use CMAKE_POLICY_DEFAULT_CMP0077, alas
+  # cmake_policy(SET CMP0077 NEW)
+  set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+endif()
 set(FLATBUFFERS_BUILD_TESTS OFF)
 set(FLATBUFFERS_INSTALL OFF)
 set(FLATBUFFERS_BUILD_FLATC OFF)
@@ -66,6 +71,8 @@ target_include_directories(tflite_parser
                            PUBLIC $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>
                            PRIVATE $<BUILD_INTERFACE:${hannk_BINARY_DIR}>
                            $<BUILD_INTERFACE:${tflite_SOURCE_DIR}>)
-target_include_directories(tflite_parser AFTER
-                           PRIVATE $<BUILD_INTERFACE:${hannk_BINARY_DIR}/flatbuffers/include>)
+# Ensure that the includes from TFLite's captive flatbuffer library get precedence;
+# in case the system may have a too-old version installed.
+target_include_directories(tflite_parser BEFORE
+                           PRIVATE $<BUILD_INTERFACE:${FlatBuffers_SOURCE_DIR}/include>)
 target_link_libraries(tflite_parser PRIVATE Halide::Runtime)
