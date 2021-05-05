@@ -30,7 +30,12 @@ FetchContent_Declare(tflite
 FetchContent_GetProperties(tflite)
 if (NOT tflite_POPULATED)
     FetchContent_Populate(tflite)
+    # Some of the subprojects (e.g. Eigen) are very noisy and emit status messages all the time.
+    # Temporary ignore status messages while adding this to silence it. Ugly but effective.
+    set(OLD_CMAKE_MESSAGE_LOG_LEVEL ${CMAKE_MESSAGE_LOG_LEVEL})
+    set(CMAKE_MESSAGE_LOG_LEVEL WARNING)
     add_subdirectory(${tflite_SOURCE_DIR}/tensorflow/lite/c ${tflite_BINARY_DIR})
+    set(CMAKE_MESSAGE_LOG_LEVEL ${OLD_CMAKE_MESSAGE_LOG_LEVEL})
 endif ()
 
 
