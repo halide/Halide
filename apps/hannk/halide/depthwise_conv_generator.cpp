@@ -177,7 +177,6 @@ public:
             .vectorize(c);
         convolved.update()
             .specialize(filter_width == 3 && filter_height == 3)
-            .reorder(x, r.x, y, r.y)
             .unroll(r.x)
             .unroll(r.y);
 
