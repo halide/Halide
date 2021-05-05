@@ -5,6 +5,8 @@
 cmake_minimum_required(VERSION 3.16)
 project(Halide_apps)
 
+option(ENABLE_APPS_HANNK "Build apps/hannk" ON)
+
 enable_testing()
 
 # add_subdirectory(HelloAndroid)  # TODO(#5374): missing CMake build
@@ -23,6 +25,9 @@ add_subdirectory(conv_layer)
 add_subdirectory(cuda_mat_mul)
 add_subdirectory(depthwise_separable_conv)
 add_subdirectory(fft)
+if (ENABLE_APPS_HANNK)
+add_subdirectory(hannk)
+endif ()
 add_subdirectory(harris)
 # add_subdirectory(hexagon_benchmarks)  # TODO(#5374): missing CMake build
 # add_subdirectory(hexagon_dma)  # TODO(#5374): missing CMake build
