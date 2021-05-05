@@ -35,7 +35,7 @@ public:
         }
     }
     SmallVector(std::initializer_list<T> values) {
-        for (T &i : values) {
+        for (const T &i : values) {
             push_back(i);
         }
     }

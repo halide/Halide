@@ -1559,6 +1559,36 @@ void TileConvFilterOp::execute() {
     }
 }
 
+BoundsMap TransposeOp::map_bounds(int input_idx, int output_idx) const {
+    assert(output_idx == 0);
+    if (input_idx == 0) {
+        // TODO: Maybe we can do better here for dimensions that aren't reordered.
+        return BoundsMap::all(input(0)->bounds(), output()->rank());
+    } else {
+        assert(input_idx == 1);
+        return BoundsMap::all({Interval(0, output()->rank() - 1)}, output()->rank());
+    }
+}
+
+void TransposeOp::execute() {
+    auto in_buf = input(0)->buffer();
+    const auto &dims_buf = input(1)->buffer<const int32_t>();
+    auto out_buf = output()->buffer();
+
+    // Adjust the ordering of the output to match the input.
+    const int transpose_rank = in_buf.dimensions();
+    assert(dims_buf.dim(0).extent() == transpose_rank);
+    std::vector<int> order(transpose_rank);
+    for (int i = 0; i < dims_buf.dim(0).extent(); i++) {
+        order[transpose_rank - 1 - i] = transpose_rank - 1 - dims_buf(i);
+    }
+    out_buf.transpose(order);
+
+    // Copy the buffers.
+    // TODO: This is slow if one of the transposed dimensions is the dimension with stride 1.
+    out_buf.copy_from(in_buf);
+}
+
 const char *UnaryOp::to_string(UnaryOp::Operator op) {
     switch (op) {
     case Logistic:
@@ -1719,6 +1749,10 @@ void ReshapeOp::accept(OpVisitor *v) {
 }
 
 void TileConvFilterOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void TransposeOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 
