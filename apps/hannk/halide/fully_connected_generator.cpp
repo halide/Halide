@@ -44,8 +44,8 @@ public:
         RDom rc(0, filter_extent);
 
         Func sum_input("sum_input");
+        Func sum_filter("sum_filter");
         Func multiplied("multiplied");
-        Func multiplied_sums("multiplied_sums");
         if (use_8bit_multiply(target)) {
             // We want to compute the reduction:
             // multiplied(c, b) = bias_(c)
@@ -67,30 +67,18 @@ public:
             // is a constant, and the middle two reductions can be computed once for
             // each c or b, instead of each (c, b).
             sum_input(b) += u32(input_(rc, b));
+            sum_filter(c) += u32(filter_(rc, c));
 
-            // We actually do these two reductions together as a tuple. The first tuple
-            // element is the positive terms, the second tuple element is the negative
-            // terms. We separate them because doing a multiply subtract is hard on most
-            // targets. It is marginally faster to move the filter * input_zero reduction
-            // out of this loop, but it's a pain to implement well. This ends up not
-            // being too bad on most targets, because we can only do 1 multiply-add per
-            // load anyways. Doing an extra multiply-add for each load is ~free.
-            // TODO: Often the filter is constant, and we could precompute the sum of
-            // it elsewhere.
-            multiplied_sums(c, b) = {
-                bias_(c) + filter_extent * filter_zero_ * input_zero_,
+            multiplied(c, b) =
+                bias_(c) + filter_extent * filter_zero_ * input_zero_ -
                 i32(sum_input(b)) * filter_zero_,
-            };
 
-            multiplied_sums(c, b) = {
-                multiplied_sums(c, b)[0] + i32(u16(filter_(rc, c)) * u16(input_(rc, b))),
-                multiplied_sums(c, b)[1] + i32(u16(filter_(rc, c)) * u16(input_zero_)),
-            };
+            multiplied(c, b) += i32(u16(filter_(rc, c)) * u16(input_(rc, b)));
 
             // TODO: This subtract happens after the total vector reductions from the
             // above reduction. It would be a lot better if we could do this subtract
             // first somehow.
-            multiplied(c, b) = multiplied_sums(c, b)[0] - multiplied_sums(c, b)[1];
+            multiplied(c, b) = multiplied(c, b) - i32(sum_filter(c)) * i32(input_zero_);
         } else {
             multiplied(c, b) = bias_(c);
             multiplied(c, b) +=
@@ -111,27 +99,35 @@ public:
         // Reorder batches inside the outer loop over channels to improve locality
         // of accesses to the filter. This also allows us to compute the sum of the
         // filter for only a subset of channels at a time.
-        Var co("co");
+        Var co("co"), bo("bo");
         Expr output_channels = output_.dim(0).extent();
+        Expr output_batches = output_.dim(1).extent();
         // Use half of the registers as accumulators.
-        const int accum_registers = 8;
+        const int accum_registers = get_register_count(target) / 2;
+        // When we have enough batches, compute a few of them at a time, so we can
+        // re-use the filter a few times.
+        const int tile_batches = 4;
         output_.compute_root()
-            .specialize(output_channels >= accum_registers)
-            .split(c, co, c, accum_registers, TailStrategy::ShiftInwards)
-            .reorder(c, b, co)
-            .vectorize(c);
+            .specialize(output_channels >= accum_registers / 4 && output_batches >= tile_batches)
+            .tile(c, b, co, bo, c, b, accum_registers / tile_batches, tile_batches, TailStrategy::ShiftInwards)
+            .vectorize(c)
+            .unroll(b);
 
-        // Make a dummy outer loop if there aren't enough channels.
+        // Handle the batch 1 case. In this case, we need an accumulator for both
+        // the filter and the input.
         output_
-            .split(c, co, c, 1)
-            .reorder(c, b, co);
+            .specialize(output_channels >= accum_registers)
+            .tile(c, b, co, bo, c, b, accum_registers / 2, 1, TailStrategy::ShiftInwards)
+            .vectorize(c)
+            .unroll(b);
 
-        if (use_8bit_multiply(target)) {
-            multiplied = multiplied_sums;
-        }
+        // Make a dummy outer loop if there aren't enough channels or batches.
+        output_
+            .tile(c, b, co, bo, c, b, 1, 1);
 
-        multiplied.compute_at(output_, b)
-            .vectorize(c);
+        multiplied.compute_at(output_, co)
+            .vectorize(c)
+            .unroll(b);
         // Enable sum_filter to be skipped if it isn't needed.
         multiplied.specialize(filter_zero_ == 0);
 
@@ -149,13 +145,15 @@ public:
             .split(rc, rco, rc, accum_vector_size);
         Func multiplied_intm = multiplied.update().rfactor(rc, co);
 
-        multiplied_intm.compute_at(multiplied, b)
+        multiplied_intm.compute_at(output_, co)
             .reorder_storage(co, c)
             .vectorize(co)
             .unroll(c)
+            .unroll(b)
             .update()
-            .reorder(rci, co, c, rco)
+            .reorder(rci, co, c, b, rco)
             .unroll(c)
+            .unroll(b)
             .vectorize(co)
             .atomic()
             .vectorize(rci)
@@ -173,6 +171,37 @@ public:
             .vectorize(rc);
 
         if (use_8bit_multiply(target)) {
+            // We schedule this to use the same loops as multiplied_intm above, so we can
+            // compute_with it.
+            sum_filter.compute_at(output_, co)
+                .vectorize(c);
+            sum_filter.update()
+                .split(rc, rc, rci, vector_reduction_factor)
+                .split(rc, rco, rc, accum_vector_size);
+            Func sum_filter_intm = sum_filter.update().rfactor(rc, co);
+
+            sum_filter_intm.compute_at(output_, co)
+                .reorder_storage(co, c)
+                .vectorize(co)
+                .unroll(c)
+                .update()
+                .reorder(rci, co, c, rco)
+                .unroll(c)
+                .vectorize(co)
+                .atomic()
+                .vectorize(rci);
+            sum_filter_intm.update().compute_with(multiplied_intm.update(), rco);
+
+            sum_filter.update()
+                .reorder(c, rc)
+                .unroll(c)
+                .atomic()
+                .vectorize(rc);
+
+            multiplied.update(1)
+                .vectorize(c)
+                .unroll(b);
+
             // This reduction could be optimized better, but it rarely matters much.
             const int reduce_vector_size = natural_vector_size<uint8_t>();
             sum_input.compute_root()
