@@ -2139,8 +2139,7 @@ using GeneratorInputImplBase =
         cond<std::is_same<TBase, Func>::value, GeneratorInput_Func<T>>,
         cond<std::is_arithmetic<TBase>::value, GeneratorInput_Arithmetic<T>>,
         cond<std::is_scalar<TBase>::value, GeneratorInput_Scalar<T>>,
-        cond<std::is_same<TBase, Expr>::value, GeneratorInput_DynamicScalar<T>>
-    >::type;
+        cond<std::is_same<TBase, Expr>::value, GeneratorInput_DynamicScalar<T>>>::type;
 
 }  // namespace Internal
 
