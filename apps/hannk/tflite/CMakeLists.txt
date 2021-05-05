@@ -20,9 +20,14 @@ set(FLATBUFFERS_BUILD_FLATC OFF)
 FetchContent_Declare(tflite
                      GIT_REPOSITORY https://github.com/tensorflow/tensorflow
                      GIT_TAG ${TFLITE_TAG}
-                     GIT_SHALLOW TRUE
-                     SOURCE_SUBDIR tensorflow/lite/c)
-FetchContent_MakeAvailable(tflite)
+                     GIT_SHALLOW TRUE)
+
+FetchContent_GetProperties(tflite)
+if (NOT tflite_POPULATED)
+    FetchContent_Populate(tflite)
+    add_subdirectory(${tflite_SOURCE_DIR}/tensorflow/lite/c ${tflite_BINARY_DIR})
+endif ()
+
 
 # tensorflowlite_c is implicitly declared by this FetchContent
 
