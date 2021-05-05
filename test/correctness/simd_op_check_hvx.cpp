@@ -652,6 +652,10 @@ public:
         check("vnormamt(v*.w)", hvx_width / 4, max(count_leading_zeros(i32_1), count_leading_zeros(~i32_1)));
         check("vpopcount(v*.h)", hvx_width / 2, popcount(u16_1));
 
+        check("v* = vdelta(v*, v*)", hvx_width, in_u8((x / 8) * 9 + x % 8));
+        check("v* = vdelta(v*, v*)", hvx_width / 2, in_u16((x / 8) * 9 + x % 8));
+        check("v* = vdelta(v*, v*)", hvx_width / 4, in_u32((x / 8) * 9 + x % 8));
+
         int rfac = 4;
         RDom r(0, rfac);
         check("v*.uw = vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u16(in_u8(rfac * x + r))));

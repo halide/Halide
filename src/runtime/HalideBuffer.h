@@ -1051,34 +1051,28 @@ public:
      * a reference to a Buffer<void> to a reference to, for example, a
      * Buffer<const uint8_t>, or converting a Buffer<T>& to Buffer<const T>&.
      * Does a runtime assert if the source buffer type is void. */
-    template<typename T2, int D2 = D,
-             typename = typename std::enable_if<(D2 <= D)>::type>
-    HALIDE_ALWAYS_INLINE
-        Buffer<T2, D2> &
-        as() & {
+    template<typename T2>
+    HALIDE_ALWAYS_INLINE Buffer<T2, D> &as() & {
         Buffer<T2, D>::assert_can_convert_from(*this);
-        return *((Buffer<T2, D2> *)this);
+        return *((Buffer<T2, D> *)this);
     }
 
     /** Return a const typed reference to this Buffer. Useful for
      * converting a conference reference to one Buffer type to a const
      * reference to another Buffer type. Does a runtime assert if the
      * source buffer type is void. */
-    template<typename T2, int D2 = D,
-             typename = typename std::enable_if<(D2 <= D)>::type>
-    HALIDE_ALWAYS_INLINE const Buffer<T2, D2> &as() const & {
+    template<typename T2>
+    HALIDE_ALWAYS_INLINE const Buffer<T2, D> &as() const & {
         Buffer<T2, D>::assert_can_convert_from(*this);
-        return *((const Buffer<T2, D2> *)this);
+        return *((const Buffer<T2, D> *)this);
     }
 
     /** Returns this rval Buffer with a different type attached. Does
      * a dynamic type check if the source type is void. */
-    template<typename T2, int D2 = D>
-    HALIDE_ALWAYS_INLINE
-        Buffer<T2, D2>
-        as() && {
-        Buffer<T2, D2>::assert_can_convert_from(*this);
-        return *((Buffer<T2, D2> *)this);
+    template<typename T2>
+    HALIDE_ALWAYS_INLINE Buffer<T2, D> as() && {
+        Buffer<T2, D>::assert_can_convert_from(*this);
+        return *((Buffer<T2, D> *)this);
     }
 
     /** as_const() is syntactic sugar for .as<const T>(), to avoid the need
@@ -1088,17 +1082,17 @@ public:
     Buffer<typename std::add_const<T>::type, D> &as_const() & {
         // Note that we can skip the assert_can_convert_from(), since T -> const T
         // conversion is always legal.
-        return *((Buffer<typename std::add_const<T>::type> *)this);
+        return *((Buffer<typename std::add_const<T>::type, D> *)this);
     }
 
     HALIDE_ALWAYS_INLINE
     const Buffer<typename std::add_const<T>::type, D> &as_const() const & {
-        return *((const Buffer<typename std::add_const<T>::type> *)this);
+        return *((const Buffer<typename std::add_const<T>::type, D> *)this);
     }
 
     HALIDE_ALWAYS_INLINE
     Buffer<typename std::add_const<T>::type, D> as_const() && {
-        return *((Buffer<typename std::add_const<T>::type> *)this);
+        return *((Buffer<typename std::add_const<T>::type, D> *)this);
     }
     // @}
 
@@ -1210,12 +1204,11 @@ public:
      * framebuffer.copy_from(sprite.translated({x, y})); \endcode
     */
     template<typename T2, int D2>
-    void copy_from(const Buffer<T2, D2> &other) {
+    void copy_from(Buffer<T2, D2> src) {
         static_assert(!std::is_const<T>::value, "Cannot call copy_from() on a Buffer<const T>");
         assert(!device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty destination.");
-        assert(!other.device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty source.");
+        assert(!src.device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty source.");
 
-        Buffer<const T, D> src(other);
         Buffer<T, D> dst(*this);
 
         assert(src.dimensions() == dst.dimensions());
