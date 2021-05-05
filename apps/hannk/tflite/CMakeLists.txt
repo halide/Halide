@@ -66,6 +66,6 @@ target_include_directories(tflite_parser
                            PUBLIC $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>
                            PRIVATE $<BUILD_INTERFACE:${hannk_BINARY_DIR}>
                            $<BUILD_INTERFACE:${tflite_SOURCE_DIR}>)
-target_include_directories(tflite_parser BEFORE
+target_include_directories(tflite_parser AFTER
                            PRIVATE $<BUILD_INTERFACE:${hannk_BINARY_DIR}/flatbuffers/include>)
 target_link_libraries(tflite_parser PRIVATE Halide::Runtime)
