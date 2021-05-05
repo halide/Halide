@@ -21,7 +21,7 @@ find_package(Halide REQUIRED)
 # Set up the version of TFLite we expect
 set(TFLITE_VERSION_MAJOR "2" CACHE STRING "Major version of TFLite to assume")
 set(TFLITE_VERSION_MINOR "5" CACHE STRING "Minor version of TFLite to assume")
-set(TFLITE_VERSION_PATCH "0-rc2" CACHE STRING "Patch version of TFLite to assume")
+set(TFLITE_VERSION_PATCH "0-rc3" CACHE STRING "Patch version of TFLite to assume")
 
 set(TFLITE_VERSION "${TFLITE_VERSION_MAJOR}.${TFLITE_VERSION_MINOR}.${TFLITE_VERSION_PATCH}")
 
