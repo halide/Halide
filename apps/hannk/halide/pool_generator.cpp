@@ -29,21 +29,34 @@ public:
         // The algorithm.
         Var c("c"), x("x"), y("y"), b("b");
 
+        Expr min_x = input_.dim(1).min();
+        Expr max_x = input_.dim(1).max();
+        Expr min_y = input_.dim(2).min();
+        Expr max_y = input_.dim(2).max();
+
+        // This pipeline conceptually requires a zero padding boundary condition.
+        // However, zero padding is messy. To avoid this, we'll just use a clamp to
+        // avoid out of bounds reads, and then use 'where' on the RDom to avoid
+        // including these values in the reduction.
         Func input_bounded("input_bounded");
-        input_bounded(c, x, y, b) = constant_exterior(input_, 0)(c, x, y, b);
+        input_bounded(c, x, y, b) =
+            input_(c, clamp(x, min_x, max_x), clamp(y, min_y, max_y), b);
+
+        RDom r(0, filter_width_, 0, filter_height_);
+        Expr x_rx = x * stride_x_ + r.x;
+        Expr y_ry = y * stride_y_ + r.y;
+        r.where(min_x <= x_rx && x_rx <= max_x && min_y <= y_ry && y_ry <= max_y);
 
         Func sum("sum");
-        RDom r(0, filter_width_, 0, filter_height_);
-        sum(c, x, y, b) += u16(
-            input_bounded(c, x * stride_x_ + r.x, y * stride_y_ + r.y, b));
+        sum(c, x, y, b) += u16(input_bounded(c, x_rx, y_ry, b));
 
         Func average("average");
         // TODO: We should probably specialize/optimize for the case
         // where filter_count = filter_width * filter_height.
-        Expr x_start = max(x * stride_x_, input_.dim(1).min());
-        Expr x_end = min(x * stride_x_ + filter_width_, input_.dim(1).max() + 1);
-        Expr y_start = max(y * stride_y_, input_.dim(2).min());
-        Expr y_end = min(y * stride_y_ + filter_height_, input_.dim(2).max() + 1);
+        Expr x_start = max(x * stride_x_, min_x);
+        Expr x_end = min(x * stride_x_ + filter_width_, max_x + 1);
+        Expr y_start = max(y * stride_y_, min_y);
+        Expr y_end = min(y * stride_y_ + filter_height_, max_y + 1);
         Expr filter_count = (x_end - x_start) * (y_end - y_start);
         average(c, x, y, b) = u8_sat((sum(c, x, y, b) + filter_count / 2) / filter_count);
 
@@ -82,11 +95,24 @@ public:
         // The algorithm.
         Var c("c"), x("x"), y("y"), b("b");
 
+        Expr min_x = input_.dim(1).min();
+        Expr max_x = input_.dim(1).max();
+        Expr min_y = input_.dim(2).min();
+        Expr max_y = input_.dim(2).max();
+
+        Func input_bounded("input_bounded");
+        input_bounded(c, x, y, b) =
+            input_(c, clamp(x, min_x, max_x), clamp(y, min_y, max_y), b);
+
         Func maximum("maximum");
         RDom r(0, filter_width_, 0, filter_height_);
+        Expr x_rx = x * stride_x_ + r.x;
+        Expr y_ry = y * stride_y_ + r.y;
+        // Unlike pools that sum the input, we can use a clamp boundary condition
+        // here. However, it still seems faster to include this where clause.
+        r.where(min_x <= x_rx && x_rx <= max_x && min_y <= y_ry && y_ry <= max_y);
         maximum(c, x, y, b) = output_min_;
-        maximum(c, x, y, b) =
-            max(maximum(c, x, y, b), input_(c, x * stride_x_ + r.x, y * stride_y_ + r.y, b));
+        maximum(c, x, y, b) = max(maximum(c, x, y, b), input_bounded(c, x_rx, y_ry, b));
 
         output_(c, x, y, b) = min(maximum(c, x, y, b), output_max_);
 
