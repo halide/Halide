@@ -64,8 +64,11 @@ target_include_directories(compare_vs_tflite
 # Tests
 file(GLOB TEST_FILES CONFIGURE_DEPENDS "test/*/*")
 foreach (t IN LISTS TEST_FILES)
-    add_test(NAME hannk_test_${t} COMMAND compare_vs_tflite ${t} --benchmark 0)
-    set_tests_properties(hannk_test_${t} PROPERTIES
+    file(RELATIVE_PATH test_name ${hannk_SOURCE_DIR} ${t})
+    string(REPLACE "." "_" test_name ${test_name})
+    string(REPLACE "/" "_" test_name ${test_name})
+    add_test(NAME ${test_name} COMMAND compare_vs_tflite ${t} --benchmark 0)
+    set_tests_properties(${test_name} PROPERTIES
                          LABELS hannk_tests)
 endforeach()
 
