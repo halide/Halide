@@ -779,6 +779,8 @@ private:
             {"halide_xtensa_sat_narrow_with_shift_i8", i8_sat(rounding_shift_right(wild_i16x, wild_u16))},
             {"halide_xtensa_sat_narrow_with_shift_u8", u8_sat(rounding_shift_right(wild_i16x, wild_u16))},
             {"halide_xtensa_sat_narrow_with_shift_i16", i16_sat(rounding_shift_right(wild_i32x, wild_u32))},
+            {"halide_xtensa_sat_narrow_with_shift_i32", i32_sat(rounding_shift_right(wild_i64x, wild_u64))},
+
             // Looks like there is no such instruction.
             // {"halide_xtensa_sat_narrow_with_shift_u16", u16_sat(rounding_shift_right(wild_i32x, wild_u32))},
 
@@ -1011,6 +1013,7 @@ private:
         if (op->is_intrinsic()) {
             Expr lowered = lower_intrinsic(op);
             if (lowered.defined()) {
+                debug(0) << "Lowered intrinsic - " << op->name << "\n";
                 lowered = simplify(lowered);
                 return mutate(lowered);
             }
@@ -1912,6 +1915,7 @@ Stmt match_xtensa_patterns(Stmt s) {
     // s = simplify(common_subexpression_elimination(s));
     s = DualQuadMulMutator().mutate(s);
     s = common_subexpression_elimination(s);
+
     return s;
 }
 

@@ -556,6 +556,32 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x64_t widening_load<int16x64_t, ui
     return int16x64_t(int16x64_t::from_native_vector, r1, r2);
 }
 
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint16x64_t widening_load<uint16x64_t, uint8x64_t>(const void *base, int32_t offset) {
+    xb_vecNx16 r1, r2;
+    const xb_vec2Nx8* __restrict ptr8 = (const xb_vec2Nx8*)((const uint8_t*)base + offset);
+    valign align = IVP_LA_PP(ptr8);
+    IVP_LANX8U_IP(r1, align, (const xb_vecNx8U*)ptr8);
+    // Pointer is automatically incremented by previous call.
+    IVP_LANX8U_IP(r2, align, (const xb_vecNx8U*)ptr8);
+
+    return uint16x64_t(uint16x64_t::from_native_vector, r1, r2);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x64_t widening_load<int32x64_t, uint16x64_t>(const void *base, int32_t offset) {
+    int32x16_t r1, r2, r3, r4;
+    const xb_vec2Nx8* __restrict ptr8 = (const xb_vec2Nx8*)((const uint16_t*)base + offset);
+    valign align = IVP_LA_PP(ptr8);
+    IVP_LAN_2X16U_IP(r1, align, (const xb_vecN_2x16U*)ptr8);
+    // Pointers is automatically incremented by previous call.
+    IVP_LAN_2X16U_IP(r2, align, (const xb_vecN_2x16U*)ptr8);
+    IVP_LAN_2X16U_IP(r3, align, (const xb_vecN_2x16U*)ptr8);
+    IVP_LAN_2X16U_IP(r4, align, (const xb_vecN_2x16U*)ptr8);
+
+    return int32x64_t(int32x64_t::from_native_vector, r1, r2, r3, r4);
+}
+
 HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_interleave_i16(const int16x32_t& a, const int16x32_t& b) {
   return int16x64_t(int16x64_t::from_native_vector,
                                 IVP_SELNX16I(b, a, IVP_SELI_16B_INTERLEAVE_1_LO),
@@ -1260,6 +1286,10 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_sat_narrow_with_shift_i16(const in
   return IVP_PACKVRNX48(wide, shift);
 }
 
+HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_sat_narrow_with_shift_i32(const int64x16_t& a, uint32_t shift) {
+  return IVP_PACKVRN_2X64W(a, shift);
+}
+
 /* Looks like there is no such instruction.
 HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_sat_narrow_with_shift_u16(const int32x32_t& a, uint32_t shift) {
   xb_vecNx48 wide = IVP_CVT48SNX32(a.native_vector[1], a.native_vector[0]);
@@ -1604,10 +1634,9 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
 
     if (op->name == "halide_xtensa_widening_load") {
         internal_assert(op->args.size() == 3);
-        // We are only using this argument to get the type of the load.
-        internal_assert(is_const_one(op->args[2]));
         args[0] = print_name(op->args[0].as<StringImm>()->value);
         args[1] = print_expr(op->args[1]);
+        // We are only using args[2] argument to get the type of the load.
 
         rhs << "widening_load<" << print_type(op->type) << ", " << print_type(op->args[2].type()) << ">(" << args[0] << ", " << args[1] << ")";
         return rhs.str();
@@ -2056,7 +2085,7 @@ void CodeGen_Xtensa::visit(const Load *op) {
                 << print_type(t.element_of()) << ", " << t.lanes()
                 << ">(" << name << ", " << id_ramp_base << ", " << id_count << ")";
         } else {
-            user_assert(is_const_one(op->predicate)) << "This predicated load is not supported by Xtensa backend." << op->predicate << "\n";
+            user_assert(is_const_one(op->predicate)) << "This predicated load is not supported by Xtensa backend." << op->index << " " << op->predicate << "\n";
         }
     } else if (dense_ramp_base.defined()) {
         internal_assert(t.is_vector());
