@@ -1404,9 +1404,6 @@ class NodeSupport {
         if (!IsVersionOK(1, 2)) {
             return false;
         }
-        if (!InputsHaveCorrectTypes({ANY})) {
-            return false;
-        }
         return true;
     }
 
@@ -1482,9 +1479,6 @@ class NodeSupport {
         if (!IsVersionOK(1, 2)) {
             return false;
         }
-        if (!InputsHaveCorrectTypes({U8})) {
-            return false;
-        }
         return true;
     }
 
@@ -1492,14 +1486,14 @@ class NodeSupport {
         if (!IsVersionOK(1, 2)) {
             return false;
         }
-        if (!InputsHaveCorrectTypes({U8})) {
-            return false;
-        }
         return true;
     }
 
     bool IsNodeSupported_Transpose() const {
         if (!IsVersionOK(1, 2)) {
+            return false;
+        }
+        if (!InputHasType(1, I32)) {
             return false;
         }
         return true;
