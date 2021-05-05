@@ -17,12 +17,12 @@ struct InterpreterOptions {
 };
 
 class Interpreter {
-    std::unique_ptr<OpGroup> model_;
+    std::shared_ptr<OpGroup> model_;
 
     void init(InterpreterOptions options);
 
 public:
-    explicit Interpreter(std::unique_ptr<OpGroup> m, InterpreterOptions options = InterpreterOptions());
+    explicit Interpreter(std::shared_ptr<OpGroup> m, InterpreterOptions options = InterpreterOptions());
     ~Interpreter();
 
     // Return the Tensor in the current Model with the given name.

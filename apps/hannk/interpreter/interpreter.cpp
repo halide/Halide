@@ -7,7 +7,7 @@
 
 namespace hannk {
 
-Interpreter::Interpreter(std::unique_ptr<OpGroup> m, InterpreterOptions options)
+Interpreter::Interpreter(std::shared_ptr<OpGroup> m, InterpreterOptions options)
     : model_(std::move(m)) {
     init(options);
 }
@@ -29,6 +29,11 @@ class AllocateAll : public OpVisitor {
             }
             op->accept(this);
         }
+    }
+
+    void visit(WhileOp *op) {
+        op->cond()->accept(this);
+        op->body()->accept(this);
     }
 };
 

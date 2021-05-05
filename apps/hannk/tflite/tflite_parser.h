@@ -14,11 +14,11 @@ struct Model;
 namespace hannk {
 
 // Translate from a tflite::Model to our own model representation.
-std::unique_ptr<OpGroup> parse_tflite_model(const tflite::Model *model);
+std::shared_ptr<OpGroup> parse_tflite_model(const tflite::Model *model);
 
 // Call tflite::GetModel() and then call parse_tflite_model() on the result --
 // avoids the need for client to include any tflite-specific files.
-std::unique_ptr<OpGroup> parse_tflite_model_from_buffer(const void *model);
+std::shared_ptr<OpGroup> parse_tflite_model_from_buffer(const void *model);
 
 }  // namespace hannk
 

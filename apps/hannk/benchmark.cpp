@@ -19,7 +19,7 @@ void run_benchmark(const std::string &filename, const InterpreterOptions &option
     }
 
     std::vector<char> buffer = read_entire_file(filename);
-    std::unique_ptr<OpGroup> model = parse_tflite_model_from_buffer(buffer.data());
+    std::shared_ptr<OpGroup> model = parse_tflite_model_from_buffer(buffer.data());
 
     if (options.verbose) {
         model->dump(std::cout);

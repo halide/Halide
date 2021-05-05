@@ -214,7 +214,7 @@ int Runner::seed_for_name(const std::string &name) {
 Runner::RunResult Runner::run_in_hannk(const std::vector<char> &buffer) {
     RunResult result;
 
-    std::unique_ptr<OpGroup> model = parse_tflite_model_from_buffer(buffer.data());
+    std::shared_ptr<OpGroup> model = parse_tflite_model_from_buffer(buffer.data());
     if (verbosity) {
         model->dump(std::cout);
     }

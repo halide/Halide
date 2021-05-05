@@ -21,7 +21,7 @@ tflite::BuiltinOperator get_builtin_code(const tflite::OperatorCode *op_code) {
 class Parser {
     const tflite::Model *model_;
     std::vector<TensorPtr> tensors_;
-    std::vector<std::unique_ptr<OpGroup>> subgraphs_;
+    std::map<const tflite::SubGraph *, std::shared_ptr<OpGroup>> subgraphs_;
 
 public:
     explicit Parser(const tflite::Model *model)
@@ -322,8 +322,8 @@ public:
     OpPtr parse_split(const tflite::Operator *op, int axis_tensor_index, int input_tensor_index) {
         assert(axis_tensor_index < (int)op->inputs()->size());
         TensorPtr axis_tensor = tensors_[op->inputs()->Get(axis_tensor_index)];
-        CHECK(axis_tensor->is_allocated()) << "Can't handle dynamic axis for Split.\n";
-        int axis = axis_tensor->buffer<int32_t>()();
+        //CHECK(axis_tensor->is_allocated()) << "Can't handle dynamic axis for Split.\n";
+        int axis = axis_tensor->is_allocated() ? axis_tensor->buffer<int32_t>()() : 0;
 
         assert(input_tensor_index < (int)op->inputs()->size());
         TensorPtr input = tensors_[op->inputs()->Get(input_tensor_index)];
@@ -399,6 +399,21 @@ public:
 
         return lower_tflite_lstm(data_input, prev_activ_input, weights_input, biases_input, prev_state_input,
                                  activ_output, state_output, concat_temp, activ_temp, activation);
+    }
+
+    OpPtr parse_while(const tflite::Operator *op) {
+        const tflite::WhileOptions *options = op->builtin_options_as_WhileOptions();
+        std::vector<TensorPtr> inputs;
+        for (auto i = op->inputs()->cbegin(); i != op->inputs()->cend(); ++i) {
+            inputs.push_back(tensors_[*i]);
+        }
+        std::vector<TensorPtr> outputs;
+        for (auto i = op->outputs()->cbegin(); i != op->outputs()->cend(); ++i) {
+            outputs.push_back(tensors_[*i]);
+        }
+        OpPtr cond = parse_subgraph(options->cond_subgraph_index());
+        OpPtr body = parse_subgraph(options->body_subgraph_index());
+        return make_op<WhileOp>(std::move(inputs), std::move(outputs), cond, body);
     }
 
     OpPtr parse_op(const tflite::Operator *op) {
@@ -477,6 +492,8 @@ public:
             return PARSE_BINARY_WITH_ACTIVATION(op, Sub);
         case tflite::BuiltinOperator_TANH:
             return parse_unary(op, UnaryOp::Tanh);
+        case tflite::BuiltinOperator_WHILE:
+            return parse_while(op);
 
         default:
             CHECK(0) << "Unsupported op "
@@ -484,7 +501,12 @@ public:
         }
     }
 
-    std::unique_ptr<OpGroup> parse_subgraph(const tflite::SubGraph *subgraph) {
+    std::shared_ptr<OpGroup> parse_subgraph(const tflite::SubGraph *subgraph) {
+        const auto found = subgraphs_.find(subgraph);
+        if (found != subgraphs_.end()) {
+            return found->second;
+        }
+
         std::vector<TensorPtr> old_tensors;
         std::swap(old_tensors, tensors_);
 
@@ -510,16 +532,17 @@ public:
 
         std::swap(tensors_, old_tensors);
 
-        return make_op<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
+        std::shared_ptr<OpGroup> result = std::make_shared<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
+        subgraphs_[subgraph] = result;
+        return result;
     }
 
-    std::unique_ptr<OpGroup> parse() {
-        for (const tflite::SubGraph *s : *model_->subgraphs()) {
-            subgraphs_.push_back(parse_subgraph(s));
-        }
+    std::shared_ptr<OpGroup> parse_subgraph(int subgraph) {
+        return parse_subgraph(model_->subgraphs()->Get(subgraph));
+    }
 
-        CHECK(subgraphs_.size() == 1) << "Zero or multiple entry points found.";
-        return std::move(subgraphs_.front());
+    std::shared_ptr<OpGroup> parse() {
+        return parse_subgraph(0);
     }
 
     // Movable but not copyable.
@@ -532,11 +555,11 @@ public:
 
 }  // namespace
 
-std::unique_ptr<OpGroup> parse_tflite_model(const tflite::Model *model) {
+std::shared_ptr<OpGroup> parse_tflite_model(const tflite::Model *model) {
     return Parser(model).parse();
 }
 
-std::unique_ptr<OpGroup> parse_tflite_model_from_buffer(const void *buffer) {
+std::shared_ptr<OpGroup> parse_tflite_model_from_buffer(const void *buffer) {
     return parse_tflite_model(tflite::GetModel(buffer));
 }
 

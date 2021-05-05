@@ -619,6 +619,42 @@ public:
     }
 };
 
+class WhileOp : public Op {
+    OpPtr cond_;
+    OpPtr body_;
+
+public:
+    WhileOp(std::vector<TensorPtr> inputs, std::vector<TensorPtr> outputs, OpPtr cond, OpPtr body)
+        : Op(std::move(inputs), std::move(outputs)), cond_(std::move(cond)), body_(std::move(body)) {
+    }
+
+    OpPtr clone(TensorMap &map) const {
+        OpPtr cond = cond_->clone(map);
+        OpPtr body = body_->clone(map);
+        std::vector<TensorPtr> inputs, outputs;
+        for (int i = 0; i < input_count(); i++) {
+            inputs.push_back(apply(map, input(i)));
+        }
+        for (int i = 0; i < output_count(); i++) {
+            outputs.push_back(apply(map, output(i)));
+        }
+        return std::make_shared<WhileOp>(std::move(inputs), std::move(outputs), std::move(cond), std::move(body));
+    }
+
+    OpPtr cond() { return cond_; }
+    OpPtr body() { return body_; }
+
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
+
+    void accept(OpVisitor *v);
+
+    void execute();
+
+    void dump(std::ostream &os) const {
+        os << "  While" << std::endl;
+    }
+};
+
 class OpVisitor {
 public:
     virtual ~OpVisitor() = default;
@@ -658,6 +694,8 @@ public:
     virtual void visit(TileConvFilterOp *op) {
     }
     virtual void visit(UnaryOp *op) {
+    }
+    virtual void visit(WhileOp *op) {
     }
     virtual void visit(OpGroup *op) {
     }

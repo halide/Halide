@@ -67,6 +67,11 @@ namespace {
 // We can alias two tensors if the input is not used after the output is written,
 // and we meet a number of other requirements.
 bool maybe_alias_tensors(TensorPtr input, TensorPtr output, SmallVector<int, max_rank> offset = {}) {
+    // Hack around bug with scalar aliasing.
+    if (input->rank() == 0 || output->rank() == 0) {
+        return false;
+    }
+
     // If the input is used anywhere else, we should not alias it.
     // TODO: This is conservative, we could alias it if it is the *last* use.
     if (input->consumers().size() != 1) {
@@ -198,6 +203,12 @@ class InPlace : public OpVisitor {
         for (int i = 0; i < op->op_count(); i++) {
             op->op(i)->accept(this);
         }
+    }
+
+    // TODO: We shouldn't need this.
+    void visit(WhileOp *op) {
+        op->cond()->accept(this);
+        op->body()->accept(this);
     }
 };
 

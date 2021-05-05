@@ -1654,6 +1654,53 @@ void UnaryOp::execute() {
         << " for types " << in->type() << ", " << out->type();
 }
 
+BoundsMap WhileOp::map_bounds(int input_idx, int output_idx) const {
+    LOG(FATAL) << "Not implemented\n";
+    return BoundsMap(0, 0);
+}
+
+namespace {
+
+void copy_contents(const Tensor &src, Tensor &dst) {
+    if (dst.is_dynamic()) {
+        dst.resize(src.bounds());
+    }
+    dst.allocate();
+    const HalideBuffer<const void> &src_buf = src.buffer();
+    const HalideBuffer<void> &dst_buf = dst.buffer();
+    memcpy(dst_buf.data(), src_buf.data(), src_buf.number_of_elements() * src_buf.type().bytes());
+}
+
+}  // namespace
+
+void WhileOp::execute() {
+    HalideBuffer<bool> cond = cond_->output()->buffer<bool>();
+
+    // Copy inputs for the condition.
+    for (int i = 0; i < input_count(); i++) {
+        copy_contents(*input(i), *cond_->input(i));
+    }
+
+    while (true) {
+        cond_->execute();
+        if (!cond()) {
+            break;
+        }
+        for (int i = 0; i < cond_->input_count(); i++) {
+            copy_contents(*cond_->input(i), *body_->input(i));
+        }
+        body_->execute();
+        for (int i = 0; i < body_->output_count(); i++) {
+            copy_contents(*body_->output(i), *cond_->input(i));
+        }
+    }
+
+    // Copy from the cond input, in case the body never ran.
+    for (int i = 0; i < cond_->input_count(); i++) {
+        copy_contents(*cond_->input(i), *body_->output(i));
+    }
+}
+
 void BinaryOp::accept(OpVisitor *v) {
     v->visit(this);
 }
@@ -1723,6 +1770,10 @@ void TileConvFilterOp::accept(OpVisitor *v) {
 }
 
 void UnaryOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void WhileOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 

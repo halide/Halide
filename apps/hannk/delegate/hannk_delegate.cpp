@@ -820,7 +820,7 @@ private:
     }
 
     const HannkDelegateOptions options_;
-    std::unique_ptr<OpGroup> model_;
+    std::shared_ptr<OpGroup> model_;
     std::unique_ptr<Interpreter> interpreter_;
     // TODO: unordered_map might be a better choice.
     std::map<int, TensorPtr> tensors_;
