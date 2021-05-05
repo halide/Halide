@@ -13,11 +13,6 @@ set(TFLITE_ENABLE_RUY OFF)
 set(TFLITE_ENABLE_XNNPACK OFF)
 
 # Also have to disable some stuff dragged in by TFLite
-if(POLICY CMP0077)
-  # This won't do the trick -- we need to use CMAKE_POLICY_DEFAULT_CMP0077, alas
-  # cmake_policy(SET CMP0077 NEW)
-  set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
-endif()
 set(FLATBUFFERS_BUILD_TESTS OFF)
 set(FLATBUFFERS_INSTALL OFF)
 set(FLATBUFFERS_BUILD_FLATC OFF)
