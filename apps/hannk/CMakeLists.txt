@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 project(hannk)
 
+# We need to set this for some of the subprojects pulled in by TFLite (eg flatbuffers)
+set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+
 enable_testing()
 
 # -fPIC is necessary for .so builds (at least on Linux); not necessary for the non-delegate
