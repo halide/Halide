@@ -109,7 +109,9 @@ public:
         const int tile_batches = 4;
         output_.compute_root()
             .specialize(output_channels >= accum_registers / 4 && output_batches >= tile_batches)
-            .tile(c, b, co, bo, c, b, accum_registers / tile_batches, tile_batches, TailStrategy::ShiftInwards)
+            .split(c, co, c, accum_registers / tile_batches, TailStrategy::ShiftInwards)
+            .split(b, bo, b, tile_batches, TailStrategy::ShiftInwards)
+            .reorder(c, b, bo, co)
             .vectorize(c)
             .unroll(b);
 
@@ -117,15 +119,19 @@ public:
         // the filter and the input.
         output_
             .specialize(output_channels >= accum_registers)
-            .tile(c, b, co, bo, c, b, accum_registers / 2, 1, TailStrategy::ShiftInwards)
+            .split(c, co, c, accum_registers / 2, TailStrategy::ShiftInwards)
+            .split(b, bo, b, 1)
+            .reorder(c, b, bo, co)
             .vectorize(c)
             .unroll(b);
 
-        // Make a dummy outer loop if there aren't enough channels or batches.
+        // Make dummy outer loops if there aren't enough channels or batches.
         output_
-            .tile(c, b, co, bo, c, b, 1, 1);
+            .split(c, co, c, 1)
+            .split(b, bo, b, 1)
+            .reorder(c, b, bo, co);
 
-        multiplied.compute_at(output_, co)
+        multiplied.compute_at(output_, bo)
             .vectorize(c)
             .unroll(b);
         // Enable sum_filter to be skipped if it isn't needed.
@@ -145,7 +151,7 @@ public:
             .split(rc, rco, rc, accum_vector_size);
         Func multiplied_intm = multiplied.update().rfactor(rc, co);
 
-        multiplied_intm.compute_at(output_, co)
+        multiplied_intm.compute_at(output_, bo)
             .reorder_storage(co, c)
             .vectorize(co)
             .unroll(c)
@@ -173,14 +179,14 @@ public:
         if (use_8bit_multiply(target)) {
             // We schedule this to use the same loops as multiplied_intm above, so we can
             // compute_with it.
-            sum_filter.compute_at(output_, co)
+            sum_filter.compute_at(output_, bo)
                 .vectorize(c);
             sum_filter.update()
                 .split(rc, rc, rci, vector_reduction_factor)
                 .split(rc, rco, rc, accum_vector_size);
             Func sum_filter_intm = sum_filter.update().rfactor(rc, co);
 
-            sum_filter_intm.compute_at(output_, co)
+            sum_filter_intm.compute_at(output_, bo)
                 .reorder_storage(co, c)
                 .vectorize(co)
                 .unroll(c)
