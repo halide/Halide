@@ -284,15 +284,6 @@ class PadForOps : public OpVisitor {
         pad_for_op(op, 0, 0);
     }
 
-    void visit(Pool2DOp *op) {
-        if (op->op() == Pool2DOp::Average && op->padding() == Padding::Same) {
-            // Pooling ops that normalize can't be padded :(.
-            return;
-        }
-
-        pad_for_op(op, 0, 0);
-    }
-
     void visit(OpGroup *op) {
         for (int i = 0; i < op->op_count(); i++) {
             op->op(i)->accept(this);

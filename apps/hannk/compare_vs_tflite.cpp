@@ -58,7 +58,7 @@ halide_type_t tf_lite_type_to_halide_type(TfLiteType t) {
     }
 }
 
-Buffer<void> wrap_tf_lite_tensor_with_halide_buffer(const TfLiteTensor *t) {
+HalideBuffer<void> wrap_tf_lite_tensor_with_halide_buffer(const TfLiteTensor *t) {
     // Wrap a Halide buffer around it.
     std::vector<halide_dimension_t> shape(t->dims->size);
     size_t shape_size = 1;
@@ -71,7 +71,7 @@ Buffer<void> wrap_tf_lite_tensor_with_halide_buffer(const TfLiteTensor *t) {
     void *buffer_data = t->data.data;
 
     halide_type_t type = tf_lite_type_to_halide_type(t->type);
-    Buffer<void> b(type, buffer_data, shape.size(), shape.data());
+    HalideBuffer<void> b(type, buffer_data, shape.size(), shape.data());
     assert(b.size_in_bytes() == t->bytes);
     return b;
 }
@@ -193,7 +193,7 @@ private:
     int seed_for_name(const std::string &name);
 
     struct RunResult {
-        std::vector<Buffer<const void>> outputs;
+        std::vector<HalideBuffer<const void>> outputs;
         std::chrono::duration<double> time{0};
     };
     RunResult run_in_hannk(const std::vector<char> &buffer);
@@ -337,8 +337,8 @@ bool Runner::compare_results(const std::string &msg, const RunResult &a, const R
     bool all_matched = true;
     CHECK(a.outputs.size() == b.outputs.size());
     for (size_t i = 0; i < a.outputs.size(); ++i) {
-        const Buffer<const void> &tflite_buf = a.outputs[i];
-        const Buffer<const void> &halide_buf = b.outputs[i];
+        const HalideBuffer<const void> &tflite_buf = a.outputs[i];
+        const HalideBuffer<const void> &halide_buf = b.outputs[i];
         CHECK(tflite_buf.type() == halide_buf.type()) << "Expected type " << tflite_buf.type() << "; saw type " << halide_buf.type();
         CHECK(tflite_buf.dimensions() == halide_buf.dimensions());
         for (int d = 0; d < tflite_buf.dimensions(); d++) {

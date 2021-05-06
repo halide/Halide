@@ -224,8 +224,7 @@ void CodeGen_X86::init_module() {
 }
 
 // i32(i16_a)*i32(i16_b) +/- i32(i16_c)*i32(i16_d) can be done by
-// interleaving a, c, and b, d, and then using pmaddwd. We
-// recognize it here, and implement it in the initial module.
+// interleaving a, c, and b, d, and then using pmaddwd.
 bool should_use_pmaddwd(const Expr &a, const Expr &b, vector<Expr> &result) {
     Type t = a.type();
     internal_assert(b.type() == t);
@@ -433,10 +432,9 @@ void CodeGen_X86::visit(const Cast *op) {
     // clang-format on
 
     vector<Expr> matches;
-    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
-        const Pattern &pattern = patterns[i];
-        if (expr_match(pattern.pattern, op, matches)) {
-            value = call_overloaded_intrin(op->type, pattern.intrin, matches);
+    for (const Pattern &p : patterns) {
+        if (expr_match(p.pattern, op, matches)) {
+            value = call_overloaded_intrin(op->type, p.intrin, matches);
             if (value) {
                 return;
             }
@@ -452,28 +450,6 @@ void CodeGen_X86::visit(const Cast *op) {
             value = codegen(simplify(Mul::make(Cast::make(op->type, mul->args[0]), Cast::make(op->type, mul->args[1]))));
             return;
         }
-    }
-
-    // Workaround for https://llvm.org/bugs/show_bug.cgi?id=24512
-    // LLVM uses a numerically unstable method for vector
-    // uint32->float conversion before AVX.
-    if (op->value.type().element_of() == UInt(32) &&
-        op->type.is_float() &&
-        op->type.is_vector() &&
-        !target.has_feature(Target::AVX)) {
-        Type signed_type = Int(32, op->type.lanes());
-
-        // Convert the top 31 bits to float using the signed version
-        Expr top_bits = cast(signed_type, op->value >> 1);
-        top_bits = cast(op->type, top_bits);
-
-        // Convert the bottom bit
-        Expr bottom_bit = cast(signed_type, op->value % 2);
-        bottom_bit = cast(op->type, bottom_bit);
-
-        // Recombine as floats
-        codegen(top_bits + top_bits + bottom_bit);
-        return;
     }
 
     CodeGen_Posix::visit(op);

@@ -20,9 +20,19 @@ set(FLATBUFFERS_BUILD_FLATC OFF)
 FetchContent_Declare(tflite
                      GIT_REPOSITORY https://github.com/tensorflow/tensorflow
                      GIT_TAG ${TFLITE_TAG}
-                     GIT_SHALLOW TRUE
-                     SOURCE_SUBDIR tensorflow/lite/c)
-FetchContent_MakeAvailable(tflite)
+                     GIT_SHALLOW TRUE)
+
+FetchContent_GetProperties(tflite)
+if (NOT tflite_POPULATED)
+    FetchContent_Populate(tflite)
+    # Some of the subprojects (e.g. Eigen) are very noisy and emit status messages all the time.
+    # Temporary ignore status messages while adding this to silence it. Ugly but effective.
+    set(OLD_CMAKE_MESSAGE_LOG_LEVEL ${CMAKE_MESSAGE_LOG_LEVEL})
+    set(CMAKE_MESSAGE_LOG_LEVEL WARNING)
+    add_subdirectory(${tflite_SOURCE_DIR}/tensorflow/lite/c ${tflite_BINARY_DIR})
+    set(CMAKE_MESSAGE_LOG_LEVEL ${OLD_CMAKE_MESSAGE_LOG_LEVEL})
+endif ()
+
 
 # tensorflowlite_c is implicitly declared by this FetchContent
 
@@ -60,6 +70,9 @@ add_library(tflite_parser STATIC tflite_parser.cpp)
 target_include_directories(tflite_parser
                            PUBLIC $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>
                            PRIVATE $<BUILD_INTERFACE:${hannk_BINARY_DIR}>
-                           $<BUILD_INTERFACE:${tflite_SOURCE_DIR}>
-                           $<BUILD_INTERFACE:${hannk_BINARY_DIR}/flatbuffers/include>)
+                           $<BUILD_INTERFACE:${tflite_SOURCE_DIR}>)
+# Ensure that the includes from TFLite's captive flatbuffer library get precedence;
+# in case the system may have a too-old version installed.
+target_include_directories(tflite_parser BEFORE
+                           PRIVATE $<BUILD_INTERFACE:${FlatBuffers_SOURCE_DIR}/include>)
 target_link_libraries(tflite_parser PRIVATE Halide::Runtime)

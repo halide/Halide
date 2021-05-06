@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 project(hannk)
 
+# We need to set this for some of the subprojects pulled in by TFLite (eg flatbuffers)
+set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+
 enable_testing()
 
 # -fPIC is necessary for .so builds (at least on Linux); not necessary for the non-delegate
@@ -18,7 +21,7 @@ find_package(Halide REQUIRED)
 # Set up the version of TFLite we expect
 set(TFLITE_VERSION_MAJOR "2" CACHE STRING "Major version of TFLite to assume")
 set(TFLITE_VERSION_MINOR "5" CACHE STRING "Minor version of TFLite to assume")
-set(TFLITE_VERSION_PATCH "0-rc2" CACHE STRING "Patch version of TFLite to assume")
+set(TFLITE_VERSION_PATCH "0-rc3" CACHE STRING "Patch version of TFLite to assume")
 
 set(TFLITE_VERSION "${TFLITE_VERSION_MAJOR}.${TFLITE_VERSION_MINOR}.${TFLITE_VERSION_PATCH}")
 
@@ -61,8 +64,11 @@ target_include_directories(compare_vs_tflite
 # Tests
 file(GLOB TEST_FILES CONFIGURE_DEPENDS "test/*/*")
 foreach (t IN LISTS TEST_FILES)
-    add_test(NAME hannk_test_${t} COMMAND compare_vs_tflite ${t} --benchmark 0)
-    set_tests_properties(hannk_test_${t} PROPERTIES
+    file(RELATIVE_PATH test_name ${hannk_SOURCE_DIR} ${t})
+    string(REPLACE "." "_" test_name ${test_name})
+    string(REPLACE "/" "_" test_name ${test_name})
+    add_test(NAME ${test_name} COMMAND compare_vs_tflite ${t} --benchmark 0)
+    set_tests_properties(${test_name} PROPERTIES
                          LABELS hannk_tests)
 endforeach()
 
