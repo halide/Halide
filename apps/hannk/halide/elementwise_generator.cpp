@@ -21,7 +21,6 @@ public:
     Input<uint32_t> input2_shift_{"input2_shift"};
 
     Input<uint8_t> output_zero_{"output_zero"};
-    Input<uint32_t> output_shift_{"output_shift"};
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
@@ -38,7 +37,8 @@ public:
         input1 = rounding_shift_right(multiply_2x_high(input1, input1_multiplier_), input1_shift_);
         input2 = rounding_shift_right(multiply_2x_high(input2, input2_multiplier_), input2_shift_);
 
-        Expr output = i16_sat(rounding_shift_right(input1 + input2, output_shift_));
+        // It's significantly faster if this right shift is by a constant on ARM.
+        Expr output = i16_sat(rounding_shift_right(input1 + input2, 8));
         output = u8_sat(saturating_add(output, output_zero_));
         output_(x, y) = clamp(output, output_min_, output_max_);
 

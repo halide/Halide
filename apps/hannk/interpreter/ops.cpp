@@ -404,14 +404,18 @@ void add_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q
 
     auto in1_mul_and_shift = get_quantized_mul_and_shift(real_in1_multiplier);
     auto in2_mul_and_shift = get_quantized_mul_and_shift(real_in2_multiplier);
+    // We maintain some extra precision until after the addition.
+    // TODO: This is a little risky due to the asserts below, but
+    // these should only be hit in absurd conditions where one of
+    // the operands is constantly over 256 times closer to 0 than
+    // the other operand. It could be handled by adjusting the
+    // multipliers if necessary, but to do this, we should do a
+    // larger cleanup of these fixed point multipliers.
+    const int output_shift = 8;
+    in1_mul_and_shift.shift += output_shift;
+    in2_mul_and_shift.shift += output_shift;
     assert(in1_mul_and_shift.shift <= 0);
     assert(in2_mul_and_shift.shift <= 0);
-
-    // We want to maintain as much precision as possible until after
-    // the addition.
-    const int output_shift = std::max(in1_mul_and_shift.shift, in2_mul_and_shift.shift);
-    in1_mul_and_shift.shift -= output_shift;
-    in2_mul_and_shift.shift -= output_shift;
 
     in1_mul_and_shift.multiplier *= in1sign;
     in2_mul_and_shift.multiplier *= in2sign;
@@ -421,7 +425,7 @@ void add_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q
     auto add_rank2 = [&](halide_buffer_t *in1_buf, halide_buffer_t *in2_buf, halide_buffer_t *out_buf) {
         add_uint8_uint8(in1_buf, in1_zero, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
                         in2_buf, in2_zero, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
-                        out_zero, -output_shift, out_range.min, out_range.max, out_buf);
+                        out_zero, out_range.min, out_range.max, out_buf);
     };
     elementwise_loop_nest<2>(add_rank2, in1, in2, out);
 }
