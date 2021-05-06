@@ -56,9 +56,7 @@ public:
         resampled_input(c, x, y, b) = input_(c_resampled, x, y, b);
 
         Func filter_zeroed("filter_zeroed");
-        Func input_zeroed("input_zeroed");
         filter_zeroed(c, x, y) = i16(filter_(c, x, y)) - i16(filter_zero_);
-        input_zeroed(c, x, y, b) = i16(resampled_input(c, x, y, b)) - i16(input_zero_);
 
         // Do the convolution in 32-bit.
         filter_.dim(1).set_min(0);
@@ -66,12 +64,32 @@ public:
         Expr filter_width = filter_.dim(1).extent();
         Expr filter_height = filter_.dim(2).extent();
         RDom r(0, filter_width, 0, filter_height);
-        Expr filter_drxy = filter_zeroed(c, r.x, r.y);
-        Expr input_drxyb =
-            input_zeroed(c, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
+        Expr filter_zeroed_rdxy = filter_zeroed(c, r.x, r.y);
+
+        // We want to compute the reduction:
+        // convolved(c, x, y, b) = bias_(c)
+        // convolved(c, x, y, b) +=
+        //    i32(filter_zeroed_rdxy) *
+        //    (i32(input_rdxy) - i32(input_zero_))
+        //
+        // However, this requires subtracting the input zero at every output.
+        // We can factor the reduction like so:
+        //
+        // convolved(c, x, y, b) = bias_(c)
+        // convolved(c, x, y, b) +=
+        //    i32(filter_zeroed_rdxy) * i32(input_rdxyc) -
+        //    i32(filter_zeroed_rdxy) * i32(input_zero_)
+        //
+        // The latter reduction can be computed once per output channel.
+        Func offset_c("offset_c");
+        offset_c(c) = bias_(c);
+        offset_c(c) -= i32(filter_zeroed_rdxy) * i32(input_zero_);
+
+        Expr input_rdxy =
+            resampled_input(c, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
         Func convolved("convolved");
-        convolved(c, x, y, b) = bias_(c);
-        convolved(c, x, y, b) += i32(filter_drxy) * i32(input_drxyb);
+        convolved(c, x, y, b) = offset_c(c);
+        convolved(c, x, y, b) += i32(filter_zeroed_rdxy) * i32(input_rdxy);
 
         // Saturate and narrow the output.
         Expr output = multiply_2x_high(convolved(c, x, y, b), output_multiplier_);
@@ -162,10 +180,6 @@ public:
             .unroll(r.x)
             .unroll(r.y);
 
-        // TODO: This is a padded wrapper on a constant buffer, we could
-        // pad it and constant fold it outside.
-        bias_.in().compute_at(output_, co).store_in(MemoryType::Stack);
-
         if (inv_depth_multiplier_ < 0) {
             // The reason inv_depth_multiplier_ is a GeneratorParam and not a
             // specialization is that we can't specialize the (lack of) compute_at here.
@@ -177,12 +191,19 @@ public:
             resampled_input.specialize(depth_multiplier_ == 1);
         }
 
-        filter_zeroed
-            .compute_at(output_, co)
+        filter_zeroed.compute_at(output_, co)
             .store_in(MemoryType::Stack)
             .align_storage(c, natural_vector_size<int16_t>())
             .vectorize(c, natural_vector_size<int16_t>(), TailStrategy::GuardWithIf)
             .unroll(c, 2, TailStrategy::GuardWithIf);
+
+        offset_c.compute_at(output_, co)
+            .store_in(MemoryType::Stack)
+            .align_storage(c, natural_vector_size<int16_t>())
+            .vectorize(c, vector_size, TailStrategy::GuardWithIf);
+        offset_c.update(0)
+            .reorder(r.x, r.y, c)
+            .vectorize(c, vector_size, TailStrategy::GuardWithIf);
     }
 };
 
