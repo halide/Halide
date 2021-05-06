@@ -108,7 +108,7 @@ public:
         // re-use the filter a few times.
         const int tile_batches = 4;
         output_.compute_root()
-            .specialize(output_channels >= accum_registers / 4 && output_batches >= tile_batches)
+            .specialize(output_channels >= accum_registers / tile_batches && output_batches >= tile_batches)
             .split(c, co, c, accum_registers / tile_batches, TailStrategy::ShiftInwards)
             .split(b, bo, b, tile_batches, TailStrategy::ShiftInwards)
             .reorder(c, b, bo, co)
