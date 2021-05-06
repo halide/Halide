@@ -1227,12 +1227,20 @@ HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_slice_to_native_i32x32_t(const int
   return int32x32_t(int32x32_t::from_native_vector, src.native_vector[2 * index], src.native_vector[2 * index + 1]);
 }
 
+HALIDE_ALWAYS_INLINE uint32x32_t halide_xtensa_slice_to_native_u32x32_t(const uint32x64_t& src, int index) {
+  return uint32x32_t(uint32x32_t::from_native_vector, src.native_vector[2 * index], src.native_vector[2 * index + 1]);
+}
+
 HALIDE_ALWAYS_INLINE int32x64_t halide_xtensa_concat_from_native(const int32x16_t& a, const int32x16_t& b, const int32x16_t& c, const int32x16_t& d) {
     return int32x64_t(int32x64_t::from_native_vector, a, b, c, d);
 }
 
 HALIDE_ALWAYS_INLINE uint32x32_t halide_xtensa_concat_from_native(const uint32x16_t& a, const uint32x16_t& b) {
     return uint32x32_t(uint32x32_t::from_native_vector, a, b);
+}
+
+HALIDE_ALWAYS_INLINE uint32x64_t halide_xtensa_concat_from_native(const uint32x16_t& a, const uint32x16_t& b, const uint32x16_t& c, const uint32x16_t& d) {
+    return uint32x64_t(uint32x64_t::from_native_vector, a, b, c, d);
 }
 
 HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_convert_i16_low_i32(const int16x32_t& src) {

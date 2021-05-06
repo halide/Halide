@@ -984,7 +984,7 @@ private:
             {"halide_xtensa_convert_i16_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 1, 16, 32)},
 
             // TODO(vksnk): fix this.
-            {"halide_xtensa_slice_to_native_i32x32_t", halide_xtensa_slice_to_native_i32(wild_i32x, wild_i32, 32, 64)},
+            {"halide_xtensa_slice_to_native_u32x32_t", halide_xtensa_slice_to_native_u32(wild_u32x, wild_i32, 32, 64)},
             {"halide_xtensa_slice_to_native_i32x32_t", halide_xtensa_slice_to_native_i32(wild_i32x, wild_i32, 32, 64)},
 
             {"halide_xtensa_convert_to_int32x16_t_from_uint1x16_t", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_u1(wild_u1x, wild_u1x, wild_u1x, wild_u1x)), 0, 16, 64), Pattern::PassOnlyOp0},
