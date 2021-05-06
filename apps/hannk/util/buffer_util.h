@@ -6,7 +6,7 @@
 
 #include "HalideBuffer.h"
 #include "HalideRuntime.h"
-#include "interpreter/interval.h"  // for max_rank
+#include "interpreter/interval.h"
 #include "util/error_util.h"
 
 namespace hannk {
