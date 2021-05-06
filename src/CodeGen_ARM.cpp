@@ -776,9 +776,9 @@ void CodeGen_ARM::visit(const Sub *op) {
 
     if (op->type.is_vector()) {
         vector<Expr> matches;
-        for (size_t i = 0; i < negations.size(); i++) {
-            if (expr_match(negations[i].pattern, op, matches)) {
-                value = call_overloaded_intrin(op->type, negations[i].intrin, matches);
+        for (const auto &i : negations) {
+            if (expr_match(i.pattern, op, matches)) {
+                value = call_overloaded_intrin(op->type, i.intrin, matches);
                 return;
             }
         }
