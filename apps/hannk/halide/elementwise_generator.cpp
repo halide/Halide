@@ -43,7 +43,7 @@ public:
         const int vector_size = natural_vector_size<uint8_t>();
 
         output_.compute_root()
-            .vectorize(x, vector_size, TailStrategy::Predicate);
+            .vectorize(x, vector_size * 2, TailStrategy::Predicate);
 
         // Support broadcasting in the c dimension for input2.
         input2_.dim(0).set_stride(Expr());
@@ -84,7 +84,7 @@ public:
         const int vector_size = natural_vector_size<uint8_t>();
 
         output_.compute_root()
-            .vectorize(x, vector_size, TailStrategy::Predicate);
+            .vectorize(x, vector_size * 2, TailStrategy::Predicate);
 
         // Support broadcasting in the c dimension for input2.
         input2_.dim(0).set_stride(Expr());
