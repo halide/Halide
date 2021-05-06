@@ -393,8 +393,8 @@ if (Halide_WITH_INTROSPECTION)
     target_compile_definitions(Halide PRIVATE WITH_INTROSPECTION)
 endif ()
 
-if (TARGET wabt-obj)
-    target_link_libraries(Halide PRIVATE wabt-obj)
+if (TARGET Halide_wabt)
+    target_link_libraries(Halide PRIVATE Halide_wabt)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
 endif ()
 

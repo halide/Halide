@@ -583,6 +583,27 @@ public:
     }
 };
 
+class TransposeOp : public Op {
+public:
+    TransposeOp(const TensorPtr &input, const TensorPtr &dims, const TensorPtr &output)
+        : Op({input, dims}, {output}) {
+    }
+
+    OpPtr clone(TensorMap &map) const {
+        return make_op<TransposeOp>(apply(map, input(0)), apply(map, input(1)), apply(map, output()));
+    }
+
+    void accept(OpVisitor *v);
+
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
+
+    void execute();
+
+    void dump(std::ostream &os) const {
+        os << "  TransposeOp " << output()->name() << std::endl;
+    }
+};
+
 class UnaryOp : public ElementwiseOp {
 public:
     enum Operator {
@@ -656,6 +677,8 @@ public:
     virtual void visit(SplitOp *op) {
     }
     virtual void visit(TileConvFilterOp *op) {
+    }
+    virtual void visit(TransposeOp *op) {
     }
     virtual void visit(UnaryOp *op) {
     }
