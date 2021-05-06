@@ -47,7 +47,8 @@
     KNOWN_OP(SplitV)          \
     KNOWN_OP(Square)          \
     KNOWN_OP(Sub)             \
-    KNOWN_OP(Tanh)
+    KNOWN_OP(Tanh)            \
+    KNOWN_OP(Transpose)
 
 namespace hannk {
 namespace {
@@ -819,6 +820,13 @@ private:
                                  activ_output, state_output, concat_temp, activ_temp);
     }
 
+    OpPtr BuildTranspose(TfLiteContext *context, TfLiteNode *node) {
+        auto input = GetTensorById(context, node->inputs->data[0]);
+        auto dims = GetTensorById(context, node->inputs->data[1]);
+        auto output = GetTensorById(context, node->outputs->data[0]);
+        return make_op<TransposeOp>(input, dims, output);
+    }
+
     const HannkDelegateOptions options_;
     std::unique_ptr<OpGroup> model_;
     std::unique_ptr<Interpreter> interpreter_;
@@ -1295,11 +1303,9 @@ class NodeSupport {
         if (!IsVersionOK(1, 2)) {
             return false;
         }
-
-        if (!InputHasType(1, I32)) {
+        if (!InputsHaveCorrectTypes({ANY, I32})) {
             return false;
         }
-
         return true;
     }
 
@@ -1474,7 +1480,7 @@ class NodeSupport {
         if (!IsVersionOK(1, 2)) {
             return false;
         }
-        if (!InputsHaveCorrectTypes({U8})) {
+        if (!InputsHaveCorrectTypes({ANY})) {
             return false;
         }
         return true;
@@ -1484,7 +1490,17 @@ class NodeSupport {
         if (!IsVersionOK(1, 2)) {
             return false;
         }
-        if (!InputsHaveCorrectTypes({U8})) {
+        if (!InputsHaveCorrectTypes({ANY})) {
+            return false;
+        }
+        return true;
+    }
+
+    bool IsNodeSupported_Transpose() const {
+        if (!IsVersionOK(1, 2)) {
+            return false;
+        }
+        if (!InputsHaveCorrectTypes({ANY, I32})) {
             return false;
         }
         return true;

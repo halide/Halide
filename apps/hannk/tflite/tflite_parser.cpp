@@ -401,6 +401,13 @@ public:
                                  activ_output, state_output, concat_temp, activ_temp, activation);
     }
 
+    OpPtr parse_transpose(const tflite::Operator *op) {
+        TensorPtr input = tensors_[op->inputs()->Get(0)];
+        TensorPtr dims = tensors_[op->inputs()->Get(1)];
+        TensorPtr output = tensors_[op->outputs()->Get(0)];
+        return make_op<TransposeOp>(input, dims, output);
+    }
+
     OpPtr parse_op(const tflite::Operator *op) {
         const auto *opcodes = model_->operator_codes();
 
@@ -477,6 +484,8 @@ public:
             return PARSE_BINARY_WITH_ACTIVATION(op, Sub);
         case tflite::BuiltinOperator_TANH:
             return parse_unary(op, UnaryOp::Tanh);
+        case tflite::BuiltinOperator_TRANSPOSE:
+            return parse_transpose(op);
 
         default:
             CHECK(0) << "Unsupported op "
