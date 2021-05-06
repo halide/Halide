@@ -1996,6 +1996,24 @@ build_apps: $(BUILD_APPS_DEPS)
 test_apps: $(BUILD_APPS_DEPS)
 	$(MAKE) -f $(THIS_MAKEFILE) -j1 $(TEST_APPS_DEPS)
 
+build_hannk: distrib
+	@echo Building apps/hannk for ${HL_TARGET}...
+	@$(MAKE) -C $(ROOT_DIR)/apps/hannk build \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+		HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings \
+		BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/hannk/bin \
+		HL_TARGET=$(HL_TARGET) \
+		|| exit 1 ; \
+
+test_hannk: build_hannk
+	@echo Testing apps/hannk for ${HL_TARGET}...
+	@$(MAKE) -C $(ROOT_DIR)/apps/hannk test \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
+		HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings \
+		BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/hannk/bin \
+		HL_TARGET=$(HL_TARGET) \
+		|| exit 1 ; \
+
 BENCHMARK_APPS=\
 	bilateral_grid \
 	camera_pipe \

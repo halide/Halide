@@ -297,16 +297,18 @@ Interval random_interval(Type T) {
 
     Type t = T.element_of();
     if ((t.is_uint() || (t.is_int() && t.bits() <= 16))) {
-        if (auto ptr = as_const_int(t.min())) {
+        Expr t_min = t.min();
+        Expr t_max = t.max();
+        if (auto ptr = as_const_int(t_min)) {
             min_value = *ptr;
-        } else if (auto ptr = as_const_uint(t.min())) {
+        } else if (auto ptr = as_const_uint(t_min)) {
             min_value = *ptr;
         } else {
             std::cerr << "random_interval failed to find min of: " << T << "\n";
         }
-        if (auto ptr = as_const_int(t.max())) {
+        if (auto ptr = as_const_int(t_max)) {
             max_value = *ptr;
-        } else if (auto ptr = as_const_uint(t.max())) {
+        } else if (auto ptr = as_const_uint(t_max)) {
             // can't represent all uint32_t in int type
             if (*ptr <= 128) {
                 max_value = *ptr;

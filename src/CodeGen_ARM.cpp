@@ -29,11 +29,6 @@ using namespace llvm;
 
 namespace {
 
-// Broadcast to an unknown number of lanes, for making patterns.
-Expr bc(Expr x) {
-    return Broadcast::make(std::move(x), 0);
-}
-
 /** A code generator that emits ARM code from a given Halide stmt. */
 class CodeGen_ARM : public CodeGen_Posix {
 public:
@@ -71,7 +66,7 @@ protected:
             : intrin(intrin), pattern(std::move(p)) {
         }
     };
-    vector<Pattern> casts, averagings, negations;
+    vector<Pattern> casts, calls, averagings, negations;
 
     string mcpu() const override;
     string mattrs() const override;
@@ -89,62 +84,62 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
 
     // RADDHN - Add and narrow with rounding
     // These must come before other narrowing rounding shift patterns
-    casts.emplace_back("rounding_add_narrow", i8(rounding_shift_right(wild_i16x_ + wild_i16x_, u16(8))));
-    casts.emplace_back("rounding_add_narrow", u8(rounding_shift_right(wild_u16x_ + wild_u16x_, u16(8))));
-    casts.emplace_back("rounding_add_narrow", i16(rounding_shift_right(wild_i32x_ + wild_i32x_, u32(16))));
-    casts.emplace_back("rounding_add_narrow", u16(rounding_shift_right(wild_u32x_ + wild_u32x_, u32(16))));
-    casts.emplace_back("rounding_add_narrow", i32(rounding_shift_right(wild_i64x_ + wild_i64x_, u64(32))));
-    casts.emplace_back("rounding_add_narrow", u32(rounding_shift_right(wild_u64x_ + wild_u64x_, u64(32))));
+    casts.emplace_back("rounding_add_narrow", i8(rounding_shift_right(wild_i16x_ + wild_i16x_, 8)));
+    casts.emplace_back("rounding_add_narrow", u8(rounding_shift_right(wild_u16x_ + wild_u16x_, 8)));
+    casts.emplace_back("rounding_add_narrow", i16(rounding_shift_right(wild_i32x_ + wild_i32x_, 16)));
+    casts.emplace_back("rounding_add_narrow", u16(rounding_shift_right(wild_u32x_ + wild_u32x_, 16)));
+    casts.emplace_back("rounding_add_narrow", i32(rounding_shift_right(wild_i64x_ + wild_i64x_, 32)));
+    casts.emplace_back("rounding_add_narrow", u32(rounding_shift_right(wild_u64x_ + wild_u64x_, 32)));
 
     // RSUBHN - Add and narrow with rounding
     // These must come before other narrowing rounding shift patterns
-    casts.emplace_back("rounding_sub_narrow", i8(rounding_shift_right(wild_i16x_ - wild_i16x_, u16(8))));
-    casts.emplace_back("rounding_sub_narrow", u8(rounding_shift_right(wild_u16x_ - wild_u16x_, u16(8))));
-    casts.emplace_back("rounding_sub_narrow", i16(rounding_shift_right(wild_i32x_ - wild_i32x_, u32(16))));
-    casts.emplace_back("rounding_sub_narrow", u16(rounding_shift_right(wild_u32x_ - wild_u32x_, u32(16))));
-    casts.emplace_back("rounding_sub_narrow", i32(rounding_shift_right(wild_i64x_ - wild_i64x_, u64(32))));
-    casts.emplace_back("rounding_sub_narrow", u32(rounding_shift_right(wild_u64x_ - wild_u64x_, u64(32))));
+    casts.emplace_back("rounding_sub_narrow", i8(rounding_shift_right(wild_i16x_ - wild_i16x_, 8)));
+    casts.emplace_back("rounding_sub_narrow", u8(rounding_shift_right(wild_u16x_ - wild_u16x_, 8)));
+    casts.emplace_back("rounding_sub_narrow", i16(rounding_shift_right(wild_i32x_ - wild_i32x_, 16)));
+    casts.emplace_back("rounding_sub_narrow", u16(rounding_shift_right(wild_u32x_ - wild_u32x_, 16)));
+    casts.emplace_back("rounding_sub_narrow", i32(rounding_shift_right(wild_i64x_ - wild_i64x_, 32)));
+    casts.emplace_back("rounding_sub_narrow", u32(rounding_shift_right(wild_u64x_ - wild_u64x_, 32)));
 
     // QDMULH - Saturating doubling multiply keep high half
-    casts.emplace_back("qdmulh", i16_sat(widening_mul(wild_i16x_, wild_i16x_) >> u16(15)));
-    casts.emplace_back("qdmulh", i32_sat(widening_mul(wild_i32x_, wild_i32x_) >> u32(31)));
+    calls.emplace_back("qdmulh", mul_shift_right(wild_i16x_, wild_i16x_, 15));
+    calls.emplace_back("qdmulh", mul_shift_right(wild_i32x_, wild_i32x_, 31));
 
     // QRDMULH - Saturating doubling multiply keep high half with rounding
-    casts.emplace_back("qrdmulh", i16_sat(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), u16(15))));
-    casts.emplace_back("qrdmulh", i32_sat(rounding_shift_right(widening_mul(wild_i32x_, wild_i32x_), u32(31))));
+    calls.emplace_back("qrdmulh", rounding_mul_shift_right(wild_i16x_, wild_i16x_, 15));
+    calls.emplace_back("qrdmulh", rounding_mul_shift_right(wild_i32x_, wild_i32x_, 31));
 
     // RSHRN - Rounding shift right narrow (by immediate in [1, output bits])
-    casts.emplace_back("rounding_shift_right_narrow", i8(rounding_shift_right(wild_i16x_, bc(wild_u16_))));
-    casts.emplace_back("rounding_shift_right_narrow", u8(rounding_shift_right(wild_u16x_, bc(wild_u16_))));
-    casts.emplace_back("rounding_shift_right_narrow", u8(rounding_shift_right(wild_i16x_, bc(wild_u16_))));
-    casts.emplace_back("rounding_shift_right_narrow", i16(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
-    casts.emplace_back("rounding_shift_right_narrow", u16(rounding_shift_right(wild_u32x_, bc(wild_u32_))));
-    casts.emplace_back("rounding_shift_right_narrow", u16(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
-    casts.emplace_back("rounding_shift_right_narrow", i32(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
-    casts.emplace_back("rounding_shift_right_narrow", u32(rounding_shift_right(wild_u64x_, bc(wild_u64_))));
-    casts.emplace_back("rounding_shift_right_narrow", u32(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
+    casts.emplace_back("rounding_shift_right_narrow", i8(rounding_shift_right(wild_i16x_, wild_u16_)));
+    casts.emplace_back("rounding_shift_right_narrow", u8(rounding_shift_right(wild_u16x_, wild_u16_)));
+    casts.emplace_back("rounding_shift_right_narrow", u8(rounding_shift_right(wild_i16x_, wild_u16_)));
+    casts.emplace_back("rounding_shift_right_narrow", i16(rounding_shift_right(wild_i32x_, wild_u32_)));
+    casts.emplace_back("rounding_shift_right_narrow", u16(rounding_shift_right(wild_u32x_, wild_u32_)));
+    casts.emplace_back("rounding_shift_right_narrow", u16(rounding_shift_right(wild_i32x_, wild_u32_)));
+    casts.emplace_back("rounding_shift_right_narrow", i32(rounding_shift_right(wild_i64x_, wild_u64_)));
+    casts.emplace_back("rounding_shift_right_narrow", u32(rounding_shift_right(wild_u64x_, wild_u64_)));
+    casts.emplace_back("rounding_shift_right_narrow", u32(rounding_shift_right(wild_i64x_, wild_u64_)));
 
     // SHRN - Shift right narrow (by immediate in [1, output bits])
-    casts.emplace_back("shift_right_narrow", i8(wild_i16x_ >> bc(wild_u16_)));
-    casts.emplace_back("shift_right_narrow", u8(wild_u16x_ >> bc(wild_u16_)));
-    casts.emplace_back("shift_right_narrow", i16(wild_i32x_ >> bc(wild_u32_)));
-    casts.emplace_back("shift_right_narrow", u16(wild_u32x_ >> bc(wild_u32_)));
-    casts.emplace_back("shift_right_narrow", i32(wild_i64x_ >> bc(wild_u64_)));
-    casts.emplace_back("shift_right_narrow", u32(wild_u64x_ >> bc(wild_u64_)));
+    casts.emplace_back("shift_right_narrow", i8(wild_i16x_ >> wild_u16_));
+    casts.emplace_back("shift_right_narrow", u8(wild_u16x_ >> wild_u16_));
+    casts.emplace_back("shift_right_narrow", i16(wild_i32x_ >> wild_u32_));
+    casts.emplace_back("shift_right_narrow", u16(wild_u32x_ >> wild_u32_));
+    casts.emplace_back("shift_right_narrow", i32(wild_i64x_ >> wild_u64_));
+    casts.emplace_back("shift_right_narrow", u32(wild_u64x_ >> wild_u64_));
 
     // SQRSHL, UQRSHL - Saturating rounding shift left (by signed vector)
     // TODO: We need to match rounding shift right, and negate the RHS.
 
     // SQRSHRN, SQRSHRUN, UQRSHRN - Saturating rounding narrowing shift right narrow (by immediate in [1, output bits])
-    casts.emplace_back("saturating_rounding_shift_right_narrow", i8_sat(rounding_shift_right(wild_i16x_, bc(wild_u16_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_u16x_, bc(wild_u16_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_i16x_, bc(wild_u16_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", i16_sat(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_u32x_, bc(wild_u32_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", i32_sat(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_u64x_, bc(wild_u64_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", i8_sat(rounding_shift_right(wild_i16x_, wild_u16_)));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_u16x_, wild_u16_)));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_i16x_, wild_u16_)));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", i16_sat(rounding_shift_right(wild_i32x_, wild_u32_)));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_u32x_, wild_u32_)));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_i32x_, wild_u32_)));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", i32_sat(rounding_shift_right(wild_i64x_, wild_u64_)));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_u64x_, wild_u64_)));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_i64x_, wild_u64_)));
 
     // SQSHL, UQSHL, SQSHLU - Saturating shift left by signed register.
     for (const Expr &rhs : {wild_i8x_, wild_u8x_}) {
@@ -164,15 +159,15 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
     }
 
     // SQSHRN, UQSHRN, SQRSHRUN Saturating narrowing shift right by an (by immediate in [1, output bits])
-    casts.emplace_back("saturating_shift_right_narrow", i8_sat(wild_i16x_ >> bc(wild_u16_)));
-    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_u16x_ >> bc(wild_u16_)));
-    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_i16x_ >> bc(wild_u16_)));
-    casts.emplace_back("saturating_shift_right_narrow", i16_sat(wild_i32x_ >> bc(wild_u32_)));
-    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_u32x_ >> bc(wild_u32_)));
-    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_i32x_ >> bc(wild_u32_)));
-    casts.emplace_back("saturating_shift_right_narrow", i32_sat(wild_i64x_ >> bc(wild_u64_)));
-    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_u64x_ >> bc(wild_u64_)));
-    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_i64x_ >> bc(wild_u64_)));
+    casts.emplace_back("saturating_shift_right_narrow", i8_sat(wild_i16x_ >> wild_u16_));
+    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_u16x_ >> wild_u16_));
+    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_i16x_ >> wild_u16_));
+    casts.emplace_back("saturating_shift_right_narrow", i16_sat(wild_i32x_ >> wild_u32_));
+    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_u32x_ >> wild_u32_));
+    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_i32x_ >> wild_u32_));
+    casts.emplace_back("saturating_shift_right_narrow", i32_sat(wild_i64x_ >> wild_u64_));
+    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_u64x_ >> wild_u64_));
+    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_i64x_ >> wild_u64_));
 
     // SRSHL, URSHL - Rounding shift left (by signed vector)
     // These are already written as rounding_shift_left
@@ -781,9 +776,9 @@ void CodeGen_ARM::visit(const Sub *op) {
 
     if (op->type.is_vector()) {
         vector<Expr> matches;
-        for (size_t i = 0; i < negations.size(); i++) {
-            if (expr_match(negations[i].pattern, op, matches)) {
-                value = call_overloaded_intrin(op->type, negations[i].intrin, matches);
+        for (const auto &i : negations) {
+            if (expr_match(i.pattern, op, matches)) {
+                value = call_overloaded_intrin(op->type, i.intrin, matches);
                 return;
             }
         }
@@ -1090,6 +1085,18 @@ void CodeGen_ARM::visit(const Call *op) {
         return;
     }
 
+    if (op->type.is_vector()) {
+        vector<Expr> matches;
+        for (const Pattern &pattern : calls) {
+            if (expr_match(pattern.pattern, op, matches)) {
+                value = call_overloaded_intrin(op->type, pattern.intrin, matches);
+                if (value) {
+                    return;
+                }
+            }
+        }
+    }
+
     CodeGen_Posix::visit(op);
 }
 
@@ -1136,12 +1143,18 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         Expr pattern;
         const char *intrin;
         Target::Feature required_feature;
+        std::vector<int> extra_operands;
     };
     // clang-format off
     static const Pattern patterns[] = {
         {VectorReduce::Add, 4, i32(widening_mul(wild_i8x_, wild_i8x_)), "dot_product", Target::ARMDotProd},
         {VectorReduce::Add, 4, i32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
         {VectorReduce::Add, 4, u32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
+        // A sum is the same as a dot product with a vector of ones, and this appears to
+        // be a bit faster.
+        {VectorReduce::Add, 4, i32(wild_i8x_), "dot_product", Target::ARMDotProd, {1}},
+        {VectorReduce::Add, 4, i32(wild_u8x_), "dot_product", Target::ARMDotProd, {1}},
+        {VectorReduce::Add, 4, u32(wild_u8x_), "dot_product", Target::ARMDotProd, {1}},
     };
     // clang-format on
 
@@ -1155,11 +1168,15 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             continue;
         }
         if (expr_match(p.pattern, op->value, matches)) {
-            if (factor != 4) {
-                Expr equiv = VectorReduce::make(op->op, op->value, op->value.type().lanes() / 4);
+            if (factor != p.factor) {
+                Expr equiv = VectorReduce::make(op->op, op->value, op->value.type().lanes() / p.factor);
                 equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
                 codegen_vector_reduce(equiv.as<VectorReduce>(), init);
                 return;
+            }
+
+            for (int i : p.extra_operands) {
+                matches.push_back(make_const(matches[0].type(), i));
             }
 
             Expr i = init;

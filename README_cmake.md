@@ -805,6 +805,7 @@ add_halide_library(<target> FROM <generator-target>
                    [GRADIENT_DESCENT]
                    [C_BACKEND]
                    [REGISTRATION OUTVAR]
+                   [HEADER OUTVAR]
                    [<extra-output> OUTVAR])
 
 extra-output = ASSEMBLY | BITCODE | COMPILER_LOG | CPP_STUB
@@ -869,10 +870,16 @@ compiler on a generated source. Note that a `<target>.runtime` target is _not_
 created in this case, and the `USE_RUNTIME` option is ignored. Other options
 work as expected.
 
-If `REGISTRATION` is set, the path to the generated `.registration.cpp` file
-will be set in `OUTVAR`. This can be used to generate a runner for a Halide
-library that is useful for benchmarking and testing, as documented above. This
-is equivalent to setting `-e registration` at the generator command line.
+If `REGISTRATION` is set, the path (relative to `CMAKE_CURRENT_BINARY_DIR`)
+to the generated `.registration.cpp` file will be set in `OUTVAR`. This can be
+used to generate a runner for a Halide library that is useful for benchmarking
+and testing, as documented above. This is equivalent to setting
+`-e registration` at the generator command line.
+
+If `HEADER` is set, the path (relative to `CMAKE_CURRENT_BINARY_DIR`) to the
+generated `.h` header file will be set in `OUTVAR`. This can be used with
+`install(FILES)` to conveniently deploy the generated header along with your
+library.
 
 Lastly, each of the `extra-output` arguments directly correspond to an extra
 output (via `-e`) from the generator. The value `OUTVAR` names a variable into
