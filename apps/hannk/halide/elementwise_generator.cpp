@@ -12,13 +12,11 @@ public:
     // Input buffers and quantization parameters.
     Input<Buffer<uint8_t>> input1_{"input1", 2};
     Input<uint8_t> input1_zero_{"input1_zero"};
-    Input<int32_t> input1_multiplier_{"input1_multiplier"};
-    Input<uint32_t> input1_shift_{"input1_shift"};
+    Input<int16_t> input1_multiplier_{"input1_multiplier"};
 
     Input<Buffer<uint8_t>> input2_{"input2", 2};
     Input<uint8_t> input2_zero_{"input2_zero"};
-    Input<int32_t> input2_multiplier_{"input2_multiplier"};
-    Input<uint32_t> input2_shift_{"input2_shift"};
+    Input<int16_t> input2_multiplier_{"input2_multiplier"};
 
     Input<uint8_t> output_zero_{"output_zero"};
     Input<uint8_t> output_min_{"output_min"};
@@ -29,16 +27,13 @@ public:
     void generate() {
         Var x("x"), y("y");
 
-        // If this shift is larger than 16, it gets a lot harder to implement this
-        // efficiently on ARM.
-        Expr input1 = i32(i16(input1_(x, y)) - i16(input1_zero_)) << 16;
-        Expr input2 = i32(i16(input2_(x, y)) - i16(input2_zero_)) << 16;
+        Expr input1 = (i16(input1_(x, y)) - i16(input1_zero_)) << 6;
+        Expr input2 = (i16(input2_(x, y)) - i16(input2_zero_)) << 6;
 
-        input1 = rounding_shift_right(multiply_2x_high(input1, input1_multiplier_), input1_shift_);
-        input2 = rounding_shift_right(multiply_2x_high(input2, input2_multiplier_), input2_shift_);
+        input1 = widening_mul(input1, input1_multiplier_);
+        input2 = widening_mul(input2, input2_multiplier_);
+        Expr output = i16_sat(rounding_shift_right(input1 + input2, 16));
 
-        // It's significantly faster if this right shift is by a constant on ARM.
-        Expr output = i16_sat(rounding_shift_right(input1 + input2, 8));
         output = u8_sat(saturating_add(output, output_zero_));
         output_(x, y) = clamp(output, output_min_, output_max_);
 
