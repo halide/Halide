@@ -10,12 +10,10 @@
 
 #include "HalideBuffer.h"
 #include "interpreter/interval.h"
+#include "util/buffer_util.h"
 #include "util/error_util.h"
 
 namespace hannk {
-
-template<typename T>
-using HalideBuffer = Halide::Runtime::Buffer<T>;
 
 struct QuantizationInfo {
     std::vector<float> scale;
