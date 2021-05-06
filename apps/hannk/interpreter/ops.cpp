@@ -821,7 +821,7 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
 #if defined(__arm__) || defined(__aarch64__)
             result.align(0, 16);
 #else
-            result.align(0, 32);
+            result.align(0, 64);  // 64 needed in case AVX512 features are enabled
 #endif
         }
         return result;

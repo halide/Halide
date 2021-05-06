@@ -53,14 +53,6 @@ public:
         // Apply the c multiplier.
         Func resampled_input("resampled_input");
         Expr c_resampled = inv_depth_multiplier_ >= 0 ? c * inv_depth_multiplier_ : c / depth_multiplier_;
-        if (inv_depth_multiplier_ > 0) {
-            // If the natural vector width is large (e.g. AVX512),
-            // we can get OOB reads for this when it is inlined into
-            // the output_ calculation. Use a clamp here to avoid that.
-            Expr min_c = input_.dim(0).min();
-            Expr max_c = input_.dim(0).max();
-            c_resampled = clamp(c_resampled, min_c, max_c);
-        }
         resampled_input(c, x, y, b) = input_(c_resampled, x, y, b);
 
         Func filter_zeroed("filter_zeroed");
