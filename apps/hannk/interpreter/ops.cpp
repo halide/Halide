@@ -400,8 +400,8 @@ void add_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q
     const float in2_scale = in2q.uniform_scale() * (1 << output_shift);
     const float out_scale = outq.uniform_scale() * (1 << input_shift);
 
-    const int in1_multiplier = std::lround(in1_scale / out_scale);
-    const int in2_multiplier = std::lround(in2_scale / out_scale);
+    const int in1_multiplier = std::lround(in1_scale / out_scale) * in1sign;
+    const int in2_multiplier = std::lround(in2_scale / out_scale) * in2sign;
 
     const auto out_range = get_output_range(activation, outq);
 
