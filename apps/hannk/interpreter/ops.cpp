@@ -398,18 +398,17 @@ void add_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q
     const float in2_scale = in2q.uniform_scale();
     const float out_scale = outq.uniform_scale();
 
-    const int left_shift = 20;
-    const double twice_max_input_scale = 2 * std::max(in1_scale, in2_scale);
-    const double real_in1_multiplier = in1_scale / twice_max_input_scale;
-    const double real_in2_multiplier = in2_scale / twice_max_input_scale;
-    const double real_out_multiplier = twice_max_input_scale / ((1 << left_shift) * out_scale);
+    const int input_shift = 20;
+    const int output_shift = 16;
+    const double real_in1_multiplier =
+        in1_scale * (1 << output_shift) / ((1 << input_shift) * out_scale);
+    const double real_in2_multiplier =
+        in2_scale * (1 << output_shift) / ((1 << input_shift) * out_scale);
 
     auto in1_mul_and_shift = get_quantized_mul_and_shift(real_in1_multiplier);
     auto in2_mul_and_shift = get_quantized_mul_and_shift(real_in2_multiplier);
-    auto out_mul_and_shift = get_quantized_mul_and_shift(real_out_multiplier);
     assert(in1_mul_and_shift.shift <= 0);
     assert(in2_mul_and_shift.shift <= 0);
-    assert(out_mul_and_shift.shift <= 0);
 
     in1_mul_and_shift.multiplier *= in1sign;
     in2_mul_and_shift.multiplier *= in2sign;
@@ -419,8 +418,7 @@ void add_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q
     auto add_rank2 = [&](halide_buffer_t *in1_buf, halide_buffer_t *in2_buf, halide_buffer_t *out_buf) {
         add_uint8_uint8(in1_buf, in1_zero, in1_mul_and_shift.multiplier, -in1_mul_and_shift.shift,
                         in2_buf, in2_zero, in2_mul_and_shift.multiplier, -in2_mul_and_shift.shift,
-                        out_zero, out_mul_and_shift.multiplier, -out_mul_and_shift.shift,
-                        out_range.min, out_range.max, out_buf);
+                        out_zero, out_range.min, out_range.max, out_buf);
     };
     elementwise_loop_nest<2>(add_rank2, in1, in2, out);
 }
