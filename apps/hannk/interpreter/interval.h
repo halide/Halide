@@ -10,7 +10,7 @@
 namespace hannk {
 
 // The maximum rank of any shape or array of dimension information.
-const int max_rank = 6;
+constexpr int max_rank = 6;
 
 // This class mimics std::vector, but never dynamically allocates memory.
 // It can only grow to Capacity elements.
