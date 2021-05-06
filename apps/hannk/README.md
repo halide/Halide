@@ -21,21 +21,21 @@ x86 OSX laptop w/ AVX2:
 | inception_v3_quant | 267 | 105.3 | 2.54 |
 | inception_v4_299_quant | 566 | 227 | 2.49 |
 | mobilenet_v1_0.25_128_quant | 1.9 | 0.68 | 2.78 |
-| mobilenet_v1_1.0_224_quant | 38.4 | 12.9 | 2.98 |
+| mobilenet_v1_1.0_224_quant | 38.4 | 12.7 | 3.02 |
 | mobilenet_v2_1.0_224_quant | 30.6 | 9.85 | 3.11 |
 
 Qualcomm Snapdragon 855 A76 core (Pixel 4):
 
 | Network | TFlite (ms)|Halide (ms)| Speedup
 | ---- | ---- | ---- | ---- |
-| inception_v1_224_quant | 24.7 | 26.3 | 0.94 |
-| inception_v2_224_quant | 49.8 | 34.8 | 1.43 |
-| inception_v3_quant | 97 | 90.9 | 1.07 |
-| inception_v4_299_quant | 198 | 190.8 | 1.04 |
+| inception_v1_224_quant | 24.7 | 25.9 | 0.95 |
+| inception_v2_224_quant | 49.8 | 34.2 | 1.46 |
+| inception_v3_quant | 97 | 89 | 1.09 |
+| inception_v4_299_quant | 198 | 186.7 | 1.06 |
 | mobilenet_v1_0.25_128_quant	| 0.97 | 0.72 | 1.34 |
 | mobilenet_v1_1.0_128_quant |4.64 | 4.44 | 1.05 |
 | mobilenet_v1_1.0_224_quant | 12.9 | 11.6 | 1.11 |
-| mobilenet_v2_1.0_224_quant | 11.8 | 10 | 1.18 |
+| mobilenet_v2_1.0_224_quant | 11.8 | 9.89 | 1.19 |
 
 ### Planned but still TODO
 - More op support
