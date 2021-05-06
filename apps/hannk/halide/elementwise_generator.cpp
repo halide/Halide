@@ -21,6 +21,7 @@ public:
     Input<uint32_t> input2_shift_{"input2_shift"};
 
     Input<uint8_t> output_zero_{"output_zero"};
+    Input<uint32_t> output_shift_{"output_shift"};
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
@@ -29,13 +30,15 @@ public:
     void generate() {
         Var x("x"), y("y");
 
-        Expr input1 = i32(i16(input1_(x, y)) - i16(input1_zero_)) << 20;
-        Expr input2 = i32(i16(input2_(x, y)) - i16(input2_zero_)) << 20;
+        // If this shift is larger than 16, it gets a lot harder to implement this
+        // efficiently on ARM.
+        Expr input1 = i32(i16(input1_(x, y)) - i16(input1_zero_)) << 16;
+        Expr input2 = i32(i16(input2_(x, y)) - i16(input2_zero_)) << 16;
 
         input1 = rounding_shift_right(multiply_2x_high(input1, input1_multiplier_), input1_shift_);
         input2 = rounding_shift_right(multiply_2x_high(input2, input2_multiplier_), input2_shift_);
 
-        Expr output = i16(rounding_shift_right(input1 + input2, 16));
+        Expr output = i16_sat(rounding_shift_right(input1 + input2, output_shift_));
         output = u8_sat(saturating_add(output, output_zero_));
         output_(x, y) = clamp(output, output_min_, output_max_);
 
