@@ -132,9 +132,7 @@ function(add_halide_library TARGET)
     ##
 
     _Halide_get_platform_details(
-            ${ARG_FROM}
-            generator_cmd
-            crosscompiling
+            is_crosscompiling
             object_suffix
             static_library_suffix
             ${ARG_TARGETS})
@@ -150,7 +148,7 @@ function(add_halide_library TARGET)
     if (ARG_C_BACKEND)
         list(APPEND generator_outputs c_source)
         set(generator_sources "${TARGET}.halide_generated.cpp")
-    elseif (crosscompiling)
+    elseif (is_crosscompiling)
         # When cross-compiling, we need to use a static, imported library
         list(APPEND generator_outputs static_library)
         set(generator_sources "${TARGET}${static_library_suffix}")
@@ -205,7 +203,7 @@ function(add_halide_library TARGET)
     # Main library target for filter.
     ##
 
-    if (crosscompiling)
+    if (is_crosscompiling)
         add_library("${TARGET}" STATIC IMPORTED GLOBAL)
         set_target_properties("${TARGET}" PROPERTIES
                               IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/${generator_sources}")
@@ -226,7 +224,7 @@ function(add_halide_library TARGET)
     endif ()
 
     add_custom_command(OUTPUT ${generator_output_files}
-                       COMMAND ${generator_cmd}
+                       COMMAND ${ARG_FROM}
                        -n "${TARGET}"
                        -d "${gradient_descent}"
                        -g "${ARG_GENERATOR}"
@@ -256,14 +254,12 @@ endfunction()
 function(_Halide_add_halide_runtime RT)
     cmake_parse_arguments(ARG "" "FROM" "TARGETS" ${ARGN})
     _Halide_get_platform_details(
-            ${ARG_FROM}
-            generator_cmd
-            crosscompiling
+            is_crosscompiling
             object_suffix
             static_library_suffix
             ${ARG_TARGETS})
 
-    if (crosscompiling)
+    if (is_crosscompiling)
         set(GEN_OUTS "${RT}${static_library_suffix}")
         set(GEN_ARGS "")
     else ()
@@ -272,14 +268,14 @@ function(_Halide_add_halide_runtime RT)
     endif ()
 
     add_custom_command(OUTPUT ${GEN_OUTS}
-                       COMMAND ${generator_cmd} -r "${TARGET}.runtime" -o . ${GEN_ARGS}
+                       COMMAND ${ARG_FROM} -r "${TARGET}.runtime" -o . ${GEN_ARGS}
                        # Defers reading the list of targets for which to generate a common runtime to CMake _generation_ time.
                        # This prevents issues where a lower GCD is required by a later Halide library linking to this runtime.
                        target=$<JOIN:$<TARGET_PROPERTY:${TARGET}.runtime,Halide_RT_TARGETS>,$<COMMA>>
                        DEPENDS "${ARG_FROM}"
                        VERBATIM)
 
-    if (crosscompiling)
+    if (is_crosscompiling)
         add_custom_target("${RT}.update" DEPENDS "${GEN_OUTS}")
 
         add_library("${RT}" STATIC IMPORTED GLOBAL)
@@ -296,7 +292,7 @@ function(_Halide_add_halide_runtime RT)
     _Halide_add_targets_to_runtime("${RT}" TARGETS ${ARG_TARGETS})
 endfunction()
 
-function(_Halide_get_platform_details ARG_FROM OUT_GEN OUT_XC OUT_OBJ OUT_STATIC)
+function(_Halide_get_platform_details OUT_XC OUT_OBJ OUT_STATIC)
     if ("${ARGN}" MATCHES "host")
         set(ARGN "${Halide_HOST_TARGET}")
     endif ()
@@ -309,15 +305,6 @@ function(_Halide_get_platform_details ARG_FROM OUT_GEN OUT_XC OUT_OBJ OUT_STATIC
         # All other targets use .a
         set(${OUT_OBJ} ".o" PARENT_SCOPE)
         set(${OUT_STATIC} ".a" PARENT_SCOPE)
-    endif ()
-
-    if (WIN32)
-        # On Linux, RPATH allows the generator to find Halide, but we need to add it to the PATH on Windows.
-        set(newPath "$<TARGET_FILE_DIR:Halide::Halide>" $ENV{PATH})
-        string(REPLACE ";" "$<SEMICOLON>" newPath "${newPath}")
-        set(${OUT_GEN} ${CMAKE_COMMAND} -E env "PATH=$<SHELL_PATH:${newPath}>" "$<TARGET_FILE:${ARG_FROM}>" PARENT_SCOPE)
-    else ()
-        set(${OUT_GEN} ${ARG_FROM} PARENT_SCOPE)
     endif ()
 
     # Well-formed targets must either start with "host" or a target triple.
