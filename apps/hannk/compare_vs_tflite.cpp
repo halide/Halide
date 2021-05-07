@@ -53,7 +53,7 @@ halide_type_t tf_lite_type_to_halide_type(TfLiteType t) {
     case kTfLiteComplex64:
     case kTfLiteComplex128:
     default:
-        CHECK(0) << "Unsupported TfLiteType: " << TfLiteTypeGetName(t);
+        HCHECK(0) << "Unsupported TfLiteType: " << TfLiteTypeGetName(t);
         return halide_type_t();
     }
 }
@@ -89,7 +89,7 @@ public:
     DelegatePtr() = default;
 
     bool init(const std::string &external_delegate_path, int verbosity) {
-        CHECK(delegate_lib_ == nullptr);
+        HCHECK(delegate_lib_ == nullptr);
         // Look for it in the normal library path if no explicit path specified
         std::string path = external_delegate_path.empty() ? "libHannkDelegate.so" : external_delegate_path;
         delegate_lib_ = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
@@ -265,24 +265,24 @@ Runner::RunResult Runner::run_in_tflite(const std::vector<char> &buffer, TfLiteD
     RunResult result;
 
     TfLiteModel *tf_model = TfLiteModelCreate(buffer.data(), buffer.size());
-    CHECK(tf_model);
+    HCHECK(tf_model);
 
     TfLiteInterpreterOptions *tf_options = TfLiteInterpreterOptionsCreate();
-    CHECK(tf_options);
+    HCHECK(tf_options);
     TfLiteInterpreterOptionsSetNumThreads(tf_options, threads);
     if (delegate) {
         TfLiteInterpreterOptionsAddDelegate(tf_options, delegate);
     }
 
     TfLiteInterpreter *tf_interpreter = TfLiteInterpreterCreate(tf_model, tf_options);
-    CHECK(tf_interpreter != nullptr);
+    HCHECK(tf_interpreter != nullptr);
 
     // The options/model can be deleted immediately after interpreter creation.
     TfLiteInterpreterOptionsDelete(tf_options);
     TfLiteModelDelete(tf_model);
 
     TfLiteStatus status;
-    CHECK((status = TfLiteInterpreterAllocateTensors(tf_interpreter)) == kTfLiteOk) << status;
+    HCHECK((status = TfLiteInterpreterAllocateTensors(tf_interpreter)) == kTfLiteOk) << status;
 
     const int inputs = TfLiteInterpreterGetInputTensorCount(tf_interpreter);
     const int outputs = TfLiteInterpreterGetOutputTensorCount(tf_interpreter);
@@ -308,7 +308,7 @@ Runner::RunResult Runner::run_in_tflite(const std::vector<char> &buffer, TfLiteD
     }
 
     // Execute once, to prime the pump
-    CHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
+    HCHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
 
     // Save the outputs from that execution (before benchmarking)
     for (int i = 0; i < outputs; i++) {
@@ -324,7 +324,7 @@ Runner::RunResult Runner::run_in_tflite(const std::vector<char> &buffer, TfLiteD
     if (do_benchmark) {
         result.time = bench([&tf_interpreter]() {
             TfLiteStatus status;
-            CHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
+            HCHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
         });
     }
 
@@ -335,16 +335,16 @@ Runner::RunResult Runner::run_in_tflite(const std::vector<char> &buffer, TfLiteD
 
 bool Runner::compare_results(const std::string &msg, const RunResult &a, const RunResult &b) {
     bool all_matched = true;
-    CHECK(a.outputs.size() == b.outputs.size());
+    HCHECK(a.outputs.size() == b.outputs.size());
     for (size_t i = 0; i < a.outputs.size(); ++i) {
         const HalideBuffer<const void> &tflite_buf = a.outputs[i];
         const HalideBuffer<const void> &halide_buf = b.outputs[i];
-        CHECK(tflite_buf.type() == halide_buf.type()) << "Expected type " << tflite_buf.type() << "; saw type " << halide_buf.type();
-        CHECK(tflite_buf.dimensions() == halide_buf.dimensions());
+        HCHECK(tflite_buf.type() == halide_buf.type()) << "Expected type " << tflite_buf.type() << "; saw type " << halide_buf.type();
+        HCHECK(tflite_buf.dimensions() == halide_buf.dimensions());
         for (int d = 0; d < tflite_buf.dimensions(); d++) {
-            CHECK(tflite_buf.dim(d).min() == halide_buf.dim(d).min());
-            CHECK(tflite_buf.dim(d).extent() == halide_buf.dim(d).extent());
-            CHECK(tflite_buf.dim(d).stride() == halide_buf.dim(d).stride());  // TODO: must the strides match?
+            HCHECK(tflite_buf.dim(d).min() == halide_buf.dim(d).min());
+            HCHECK(tflite_buf.dim(d).extent() == halide_buf.dim(d).extent());
+            HCHECK(tflite_buf.dim(d).stride() == halide_buf.dim(d).stride());  // TODO: must the strides match?
         }
         CompareBuffersOptions options;
         options.close_thresh = std::ceil((1ull << tflite_buf.type().bits) * tolerance);
@@ -389,7 +389,7 @@ void Runner::run(const std::string &filename) {
     };
     const auto exec_hannk_external_delegate = [this, &buffer]() {
         DelegatePtr delegate_ptr;
-        CHECK(delegate_ptr.init(external_delegate_path, verbosity));
+        HCHECK(delegate_ptr.init(external_delegate_path, verbosity));
         return run_in_tflite(buffer, delegate_ptr.get());
     };
     const auto exec_hannk_internal_delegate = [this, &buffer]() {
