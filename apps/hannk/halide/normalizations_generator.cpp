@@ -1,5 +1,6 @@
 #include "Halide.h"
 #include "halide/common_halide.h"
+#include "halide/constants.h"
 
 using namespace Halide;
 using namespace Halide::ConciseCasts;
@@ -80,7 +81,7 @@ public:
         max_x(y) = u8(0);
         max_x(y) = max(max_x(y), input_(rx, y));
 
-        Expr diff = (i16(input_(x, y)) - i16(max_x(y))) << 6;
+        Expr diff = (i16(input_(x, y)) - i16(max_x(y))) << softmax_input_shift;
         Expr diff_beta = multiply_2x_high(diff, beta_multiplier_);
 
         // Since we know that diff_beta is less than 0, we can use the full
