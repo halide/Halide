@@ -13,6 +13,6 @@ constexpr int mul_input_shift = 6;
 
 constexpr int softmax_input_shift = 6;
 
-};
+}  // namespace hannk
 
 #endif  // HANNK_CONSTANTS_H
