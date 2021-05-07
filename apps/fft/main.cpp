@@ -59,11 +59,11 @@ int main(int argc, char **argv) {
 
     Func filtered_c2c;
     {
-        // Stack the input and the kernel together.
+        // Group the input and the kernel together as two channels.
         ComplexFunc concat_in_kernel("concat_in_kernel");
         concat_in_kernel(x, y, c) = mux(c, {kernel(x, y), in(x, y)});
 
-        // Compute the DFT of the stacked input the kernel.
+        // Compute the DFT of the input and kernel channels.
         ComplexFunc dft_in_kernel = fft2d_c2c(concat_in_kernel, W, H, -1, target, fwd_desc);
         dft_in_kernel.compute_root();
 
@@ -86,11 +86,11 @@ int main(int argc, char **argv) {
 
     Func filtered_r2c;
     {
-        // Stack the input and the kernel together.
+        // Group the input and the kernel together as two channels.
         Func concat_in_kernel("concat_in_kernel");
         concat_in_kernel(x, y, c) = mux(c, {kernel(x, y), in(x, y)});
 
-        // Compute the DFT of the stacked input the kernel.
+        // Compute the DFT of the input and kernel channels.
         ComplexFunc dft_in_kernel = fft2d_r2c(concat_in_kernel, W, H, target, fwd_desc);
         dft_in_kernel.compute_root();
 
