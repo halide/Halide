@@ -1959,8 +1959,8 @@ private:
     // (all of different types), advance the pointers using the
     // strides.
     template<typename Ptr, typename... Ptrs>
-    HALIDE_ALWAYS_INLINE static void advance_ptrs(const std::ptrdiff_t *stride, Ptr *ptr, Ptrs... ptrs) {
-        (*ptr) += *stride;
+    HALIDE_ALWAYS_INLINE static void advance_ptrs(const std::ptrdiff_t *stride, Ptr &ptr, Ptrs... ptrs) {
+        ptr += *stride;
         advance_ptrs(stride + 1, ptrs...);
     }
 
@@ -1980,13 +1980,13 @@ private:
             } else {
                 for (std::ptrdiff_t i = t[0].extent; i != 0; i--) {
                     f(*ptr, (*ptrs)...);
-                    advance_ptrs(t[0].stride, &ptr, (&ptrs)...);
+                    advance_ptrs(t[0].stride, ptr, ptrs...);
                 }
             }
         } else {
             for (std::ptrdiff_t i = t[d].extent; i != 0; i--) {
                 for_each_value_helper(f, d - 1, innermost_strides_are_one, t, ptr, ptrs...);
-                advance_ptrs(t[d].stride, &ptr, (&ptrs)...);
+                advance_ptrs(t[d].stride, ptr, ptrs...);
             }
         }
     }
