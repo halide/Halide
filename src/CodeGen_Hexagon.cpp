@@ -268,13 +268,8 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
                     << "The extreme lanes of a bool vector should be scalar bools\n";
                 condition = simplify(v.first || v.second);
             } else {
-                // Take an OR over all lanes. Consider replacing this
-                // with a VectorReduce node once those are available
-                // and codegen to something useful on hexagon.
-                condition = Shuffle::make({predicate}, {0});
-                for (int i = 1; i < op->type.lanes(); i++) {
-                    condition = condition || Shuffle::make({predicate}, {i});
-                }
+                // Take an OR over all lanes.
+                condition = VectorReduce::make(VectorReduce::Or, predicate, 1);
                 condition = simplify(condition);
             }
 
