@@ -1611,14 +1611,13 @@ private:
         if (op->name == "halide_xtensa_widening_load") {
             int native_lanes = get_native_vector_lanes_num(op->type);
 
-            if ((native_lanes > 0) && (2 * native_lanes <= op->type.lanes())) {
+            if ((native_lanes > 0) && (2 * native_lanes < op->type.lanes())) {
                 const int total_lanes = op->type.lanes();
                 int split_to = total_lanes / (2 * native_lanes);
                 std::vector<Expr> sliced_loads;
 
                 for (int ix = 0; ix < split_to; ix++) {
                     Expr sliced_load = Call::make(op->type.with_lanes(2 * native_lanes), op->name, {op->args[0], op->args[1] + 2 * native_lanes * ix, make_one(op->args[2].type().with_lanes(2 * native_lanes))}, Call::PureExtern);
-                    debug(0) << sliced_load << "\n";
                     sliced_loads.push_back(sliced_load);
                 }
                 return Call::make(op->type,
