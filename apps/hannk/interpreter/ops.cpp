@@ -302,33 +302,58 @@ void crop_to_union(HalideBuffer<T> &a, HalideBuffer<U> &b) {
     }
 }
 
-struct QuantizedMulAndShift {
-    int multiplier, shift;
+// A constant power of two.
+template<int N>
+struct power_of_two {
 };
 
-QuantizedMulAndShift get_quantized_mul_and_shift(double double_multiplier, int bits = 32) {
-    if (double_multiplier == 0.) {
-        return {0, 0};
+// Represents a number as base*2^exponent/2^(bits - 1), where bits = 8*sizeof(T)
+// This is very similar to a float.
+template<typename T>
+class IntFloat {
+    T base_;
+    T exponent_;
+
+    static constexpr int log2_one = sizeof(T) * 8 - 1;
+    static constexpr int64_t one = 1LL << log2_one;
+
+public:
+    IntFloat()
+        : base_(0), exponent_(0) {
     }
 
-    int shift = 0;
-    const double q = std::frexp(double_multiplier, &shift);
-    int64_t q_fixed = (int64_t)std::round(q * (1LL << (bits - 1)));
-    assert(std::abs(q_fixed) <= (1LL << (bits - 1)));
-
-    if (std::abs(q_fixed) == (1LL << (bits - 1))) {
-        q_fixed /= 2;
-        ++shift;
-    }
-    assert(std::abs(q_fixed) <= std::numeric_limits<int32_t>::max());
-
-    if (shift < -(bits - 1)) {
-        shift = 0;
-        q_fixed = 0;
+    IntFloat(float x) {
+        int exponent;
+        float base_float = std::frexp(x, &exponent);
+        int64_t base_long = (int64_t)std::round(base_float * one);
+        assert(std::abs(base_long) <= one);
+        if (base_long == one) {
+            base_long >>= 1;
+            ++exponent;
+        }
+        base_ = base_long;
+        exponent_ = exponent;
     }
 
-    return {(int)q_fixed, shift};
-}
+    // Multiply this value by a constant power of 2.
+    template<int N>
+    IntFloat operator*=(power_of_two<N>) {
+        exponent_ += N;
+        return *this;
+    }
+
+    T base() const {
+        if (exponent_ < -log2_one) {
+            return 0;
+        } else {
+            return base_;
+        }
+    }
+
+    T exponent() const {
+        return std::min<T>(std::max<T>(exponent_, -log2_one), log2_one);
+    }
+};
 
 Interval get_quantized_min_max(ActivationFunction activation, int zero_point, double scale) {
     int min = 0;
@@ -367,7 +392,7 @@ struct MultiplyParams {
     int a_zero;
     int b_zero;
     int c_zero;
-    QuantizedMulAndShift c;
+    IntFloat<int32_t> c;
 };
 
 MultiplyParams get_quantized_multiply_params(const QuantizationInfo &a, const QuantizationInfo &b, const QuantizationInfo &c) {
@@ -379,9 +404,7 @@ MultiplyParams get_quantized_multiply_params(const QuantizationInfo &a, const Qu
     const float a_scale = a.uniform_scale();
     const float b_scale = b.uniform_scale();
     const float c_scale = c.uniform_scale();
-    const double ab_scale = a_scale * b_scale;
-    result.c = get_quantized_mul_and_shift(ab_scale / c_scale);
-    result.c.shift = -result.c.shift;
+    result.c = IntFloat<int32_t>(a_scale * b_scale / c_scale);
 
     return result;
 }
@@ -424,17 +447,15 @@ void mul_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q
     const float in2_scale = in2q.uniform_scale();
     const float out_scale = outq.uniform_scale();
 
-    const int left_shift = 6;
-    const double multiplier = in1_scale * in2_scale / (out_scale * (1 << (2 * left_shift)));
-
-    auto mul_and_shift = get_quantized_mul_and_shift(multiplier);
-    assert(mul_and_shift.shift <= 0);
+    IntFloat<int32_t> multiplier(in1_scale * in2_scale / out_scale);
+    multiplier *= power_of_two<-2 * 6>();
+    assert(multiplier.exponent() <= 0);
 
     const auto out_range = get_output_range(activation, outq);
 
     auto mul_rank2 = [&](halide_buffer_t *in1_buf, halide_buffer_t *in2_buf, halide_buffer_t *out_buf) {
         mul_uint8_uint8_uint8(in1_buf, in1_zero, in2_buf, in2_zero,
-                              out_zero, mul_and_shift.multiplier, -mul_and_shift.shift,
+                              out_zero, multiplier.base(), -multiplier.exponent(),
                               out_range.min, out_range.max, out_buf);
     };
     elementwise_loop_nest<2>(mul_rank2, in1, in2, out);
@@ -718,22 +739,22 @@ void conv_uint8(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t
                 const MultiplyParams &params, const std::array<int, 2> &stride,
                 const std::array<int, 2> &dilation, const Interval &output_range,
                 halide_buffer_t *output) {
-    assert(params.c.shift >= 0);
+    assert(params.c.exponent() <= 0);
 #ifdef CONV_R16
     if (input->dim[0].extent >= 16) {
         // For large reductions, use the big reduction version.
         // TODO: We really ought to be able to do this with GuardWithIf
         // and/or specialize.
         conv_r16_uint8(input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias,
-                       stride[0], stride[1], dilation[0], dilation[1], params.c.multiplier,
-                       params.c.shift, (uint8_t)params.c_zero, output_range.min, output_range.max,
+                       stride[0], stride[1], dilation[0], dilation[1], params.c.base(),
+                       -params.c.exponent(), (uint8_t)params.c_zero, output_range.min, output_range.max,
                        output);
     } else
 #endif
     {
         ::hannk::conv_uint8(input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias,
-                            stride[0], stride[1], dilation[0], dilation[1], params.c.multiplier,
-                            params.c.shift, (uint8_t)params.c_zero, output_range.min, output_range.max,
+                            stride[0], stride[1], dilation[0], dilation[1], params.c.base(),
+                            -params.c.exponent(), (uint8_t)params.c_zero, output_range.min, output_range.max,
                             output);
     }
 }
@@ -785,21 +806,21 @@ void depthwise_conv_uint8(
     halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t *bias,
     int depth_multiplier, const MultiplyParams &params, const std::array<int, 2> &stride, const std::array<int, 2> &dilation,
     const Interval &output_range, halide_buffer_t *output) {
-    assert(params.c.shift >= 0);
+    assert(params.c.exponent() <= 0);
     if (depth_multiplier >= output->dim[0].extent) {
         depthwise_conv_broadcast_uint8(
             input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
-            stride[0], stride[1], dilation[0], dilation[1], params.c.multiplier, params.c.shift,
+            stride[0], stride[1], dilation[0], dilation[1], params.c.base(), -params.c.exponent(),
             (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output);
     } else if (depth_multiplier == 1) {
         depthwise_conv_dm1_uint8(
             input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
-            stride[0], stride[1], dilation[0], dilation[1], params.c.multiplier, params.c.shift,
+            stride[0], stride[1], dilation[0], dilation[1], params.c.base(), -params.c.exponent(),
             (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output);
     } else {
         ::hannk::depthwise_conv_uint8(
             input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
-            stride[0], stride[1], dilation[0], dilation[1], params.c.multiplier, params.c.shift,
+            stride[0], stride[1], dilation[0], dilation[1], params.c.base(), -params.c.exponent(),
             (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output);
     }
 }
@@ -977,13 +998,13 @@ void FullyConnectedOp::execute() {
 
             fully_connected_uint8_uint8(
                 input_buf, (uint8_t)params.a_zero, filter_buf, (uint8_t)params.b_zero, bias_buf,
-                (uint8_t)params.c_zero, params.c.multiplier, params.c.shift, (uint8_t)output_range.min,
+                (uint8_t)params.c_zero, params.c.base(), -params.c.exponent(), (uint8_t)output_range.min,
                 (uint8_t)output_range.max, output_buf);
             return;
         } else if (out->type() == halide_type_of<int16_t>()) {
             fully_connected_uint8_int16(
                 input_buf, (uint8_t)params.a_zero, filter_buf, (uint8_t)params.b_zero, bias_buf,
-                0, params.c.multiplier, params.c.shift, 0, 0, output_buf);
+                0, params.c.base(), -params.c.exponent(), 0, 0, output_buf);
             return;
         }
     }
@@ -1407,17 +1428,16 @@ void SoftmaxOp::execute() {
         // wrong with the fixed point tricks in the implementation.
         const float output_scale = out->quantization().uniform_scale() * 2.0f;
 
-        const int left_shift = 6;
-        const double real_in_multiplier = in_scale * beta2 / (1 << left_shift);
+        IntFloat<int16_t> input_multiplier(in_scale * beta2);
+        input_multiplier *= power_of_two<-6>();
+        assert(input_multiplier.exponent() <= 0);
 
-        auto in_mul_and_shift = get_quantized_mul_and_shift(real_in_multiplier, 16);
-        auto output_mul_and_shift = get_quantized_mul_and_shift(output_scale, 16);
-        assert(in_mul_and_shift.shift <= 0);
-        assert(output_mul_and_shift.shift <= 0);
+        IntFloat<int16_t> output_multiplier(output_scale);
+        assert(output_multiplier.shift <= 0);
 
         auto softmax_rank2 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
-            softmax_uint8(in_buf, in_mul_and_shift.multiplier, -in_mul_and_shift.shift,
-                          output_zero, output_mul_and_shift.multiplier, -output_mul_and_shift.shift, out_buf);
+            softmax_uint8(in_buf, input_multiplier.base(), -input_multiplier.exponent(),
+                          output_zero, output_multiplier.base(), -output_multiplier.exponent(), out_buf);
         };
         loop_nest<2>(softmax_rank2, in_buf, out_buf);
     } else {
@@ -1614,10 +1634,9 @@ void UnaryOp::execute() {
 
         std::array<int16_t, 64> program_buffer;
         if (op_ == Logistic) {
-            const double real_in_multiplier = in_scale / (1 << left_shift);
-
-            auto in_mul_and_shift = get_quantized_mul_and_shift(real_in_multiplier, 16);
-            assert(in_mul_and_shift.shift <= 0);
+            IntFloat<int16_t> in_multiplier(in_scale);
+            in_multiplier *= power_of_two<-left_shift>();
+            assert(in_multiplier.exponent() <= 0);
 
             assert(out->quantization().uniform_scale() == 1.0f / 256.0f);
             assert(out->quantization().uniform_zero() == 0);
@@ -1625,8 +1644,8 @@ void UnaryOp::execute() {
             // Build a program to implement the logistic op.
             ElementwiseAssembler p(program_buffer);
             auto input_zeroed = p.sub(p.input(0), input_zero);
-            auto input_scaled = p.mul_shift(input_zeroed, in_mul_and_shift.multiplier, 15 - left_shift);
-            auto result = p.logistic(8, input_scaled, -in_mul_and_shift.shift);
+            auto input_scaled = p.mul_shift(input_zeroed, in_multiplier.base(), 15 - left_shift);
+            auto result = p.logistic(8, input_scaled, -in_multiplier.exponent());
             auto program_buf = p.assemble({result});
 
             auto logistic_rank2 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
@@ -1635,10 +1654,9 @@ void UnaryOp::execute() {
             elementwise_loop_nest<2>(logistic_rank2, in_buf, out_buf);
             return;
         } else if (op_ == Tanh) {
-            const double real_in_multiplier = in_scale / (1 << left_shift);
-
-            auto in_mul_and_shift = get_quantized_mul_and_shift(real_in_multiplier, 16);
-            assert(in_mul_and_shift.shift <= 0);
+            IntFloat<int16_t> in_multiplier(in_scale);
+            in_multiplier *= power_of_two<-left_shift>();
+            assert(in_multiplier.exponent() <= 0);
 
             assert(out->quantization().uniform_scale() == 1.0f / 128.0f);
             assert(out->quantization().uniform_zero() == 128);
@@ -1646,8 +1664,8 @@ void UnaryOp::execute() {
             // Build a program to implement the tanh op.
             ElementwiseAssembler p(program_buffer);
             auto input_zeroed = p.sub(p.input(0), input_zero);
-            auto input_scaled = p.mul_shift(input_zeroed, in_mul_and_shift.multiplier, 15 - left_shift);
-            auto result = p.add(p.tanh(7, input_scaled, -in_mul_and_shift.shift), 128);
+            auto input_scaled = p.mul_shift(input_zeroed, in_multiplier.base(), 15 - left_shift);
+            auto result = p.add(p.tanh(7, input_scaled, -in_multiplier.exponent()), 128);
             auto program_buf = p.assemble({result});
 
             auto tanh_rank2 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
