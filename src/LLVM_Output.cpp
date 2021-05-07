@@ -306,7 +306,7 @@ void write_coff_archive(std::ostream &out,
 std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &filename) {
     std::string error_string;
     std::error_code err;
-    std::unique_ptr<llvm::raw_fd_ostream> raw_out(new llvm::raw_fd_ostream(filename, err, llvm::sys::fs::F_None));
+    std::unique_ptr<llvm::raw_fd_ostream> raw_out(new llvm::raw_fd_ostream(filename, err, llvm::sys::fs::OF_None));
     if (err) {
         error_string = err.message();
     }

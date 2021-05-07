@@ -5,8 +5,7 @@ include(CMakePackageConfigHelpers)
 # Custom locations
 ##
 
-set(HALIDE_INSTALL_CMAKEDIR
-    "${CMAKE_INSTALL_LIBDIR}/cmake/Halide"
+set(Halide_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/Halide"
     CACHE STRING "Path to Halide cmake files")
 
 ##
@@ -14,7 +13,7 @@ set(HALIDE_INSTALL_CMAKEDIR
 ##
 
 set(optional_dependencies "")
-foreach (target IN ITEMS wabt-obj)
+foreach (target IN ITEMS Halide_wabt)
     if (TARGET ${target})
         list(APPEND optional_dependencies ${target})
     endif ()
@@ -158,24 +157,24 @@ if (Halide_SHARED_LLVM OR (NOT BUILD_SHARED_LIBS AND NOT Halide_BUNDLE_LLVM))
     endif ()
 
     install(FILES "${depFile}"
-            DESTINATION ${HALIDE_INSTALL_CMAKEDIR}
+            DESTINATION ${Halide_INSTALL_CMAKEDIR}
             COMPONENT Halide_Development)
 endif ()
 
 install(EXPORT Halide_Targets
-        DESTINATION ${HALIDE_INSTALL_CMAKEDIR}
+        DESTINATION ${Halide_INSTALL_CMAKEDIR}
         NAMESPACE Halide::${LIB_TYPE}::
         FILE Halide-Targets-ns-${LIB_TYPE}.cmake
         COMPONENT Halide_Development)
 
 install(EXPORT Halide_Targets
-        DESTINATION ${HALIDE_INSTALL_CMAKEDIR}
+        DESTINATION ${Halide_INSTALL_CMAKEDIR}
         NAMESPACE Halide::
         FILE Halide-Targets-${LIB_TYPE}.cmake
         COMPONENT Halide_Development)
 
 install(EXPORT Halide_Interfaces
-        DESTINATION ${HALIDE_INSTALL_CMAKEDIR}
+        DESTINATION ${Halide_INSTALL_CMAKEDIR}
         NAMESPACE Halide::
         FILE Halide-Interfaces.cmake
         COMPONENT Halide_Development)
@@ -191,7 +190,7 @@ install(FILES
         ${CMAKE_CURRENT_BINARY_DIR}/HalideConfigVersion.cmake
         ${Halide_SOURCE_DIR}/cmake/HalideGeneratorHelpers.cmake
         ${Halide_SOURCE_DIR}/cmake/HalideTargetHelpers.cmake
-        DESTINATION ${HALIDE_INSTALL_CMAKEDIR}
+        DESTINATION ${Halide_INSTALL_CMAKEDIR}
         COMPONENT Halide_Development)
 
 ##

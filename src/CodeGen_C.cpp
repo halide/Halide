@@ -2476,6 +2476,62 @@ void CodeGen_C::visit(const Select *op) {
     print_assignment(op->type, rhs.str());
 }
 
+Expr CodeGen_C::scalarize_vector_reduce(const VectorReduce *op) {
+    Expr (*binop)(Expr, Expr) = nullptr;
+    switch (op->op) {
+    case VectorReduce::Add:
+        binop = Add::make;
+        break;
+    case VectorReduce::Mul:
+        binop = Mul::make;
+        break;
+    case VectorReduce::Min:
+        binop = Min::make;
+        break;
+    case VectorReduce::Max:
+        binop = Max::make;
+        break;
+    case VectorReduce::And:
+        binop = And::make;
+        break;
+    case VectorReduce::Or:
+        binop = Or::make;
+        break;
+    case VectorReduce::SaturatingAdd:
+        binop = saturating_add;
+        break;
+    }
+
+    std::vector<Expr> lanes;
+    int outer_lanes = op->type.lanes();
+    int inner_lanes = op->value.type().lanes() / outer_lanes;
+    for (int outer = 0; outer < outer_lanes; outer++) {
+        Expr reduction = extract_lane(op->value, outer * inner_lanes);
+        for (int inner = 1; inner < inner_lanes; inner++) {
+            reduction = binop(reduction, extract_lane(op->value, outer * inner_lanes + inner));
+        }
+        lanes.push_back(reduction);
+    }
+
+    // No need to concat if there is only a single value.
+    if (lanes.size() == 1) {
+        return lanes[0];
+    }
+
+    return Shuffle::make_concat(lanes);
+}
+
+void CodeGen_C::visit(const VectorReduce *op) {
+    stream << get_indent() << "// Vector reduce: " << op->op << "\n";
+
+    Expr scalarized = scalarize_vector_reduce(op);
+    if (scalarized.type().is_scalar()) {
+        print_assignment(op->type, print_expr(scalarized));
+    } else {
+        print_assignment(op->type, print_scalarized_expr(scalarized));
+    }
+}
+
 void CodeGen_C::visit(const LetStmt *op) {
     string id_value = print_expr(op->value);
     Stmt body = op->body;
