@@ -51,7 +51,7 @@ halide_type_t tf_lite_type_to_halide_type(TfLiteType t) {
     case kTfLiteComplex64:
     case kTfLiteComplex128:
     default:
-        CHECK(0) << "Unsupported TfLiteType: " << TfLiteTypeGetName(t);
+        HCHECK(0) << "Unsupported TfLiteType: " << TfLiteTypeGetName(t);
         return halide_type_t();
     }
 }
@@ -87,7 +87,7 @@ public:
     DelegatePtr() = default;
 
     bool init(const std::string &external_delegate_path, int verbosity) {
-        CHECK(delegate_lib_ == nullptr);
+        HCHECK(delegate_lib_ == nullptr);
         // Look for it in the normal library path if no explicit path specified
         std::string path = external_delegate_path.empty() ? "libHannkDelegate.so" : external_delegate_path;
         delegate_lib_ = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
@@ -147,6 +147,116 @@ static const char *const RunNames[ModelRunner::kNumRuns] = {
 
 }  // namespace
 
+void SeedTracker::reset(int seed) {
+    next_seed_ = seed;
+    seeds_.clear();
+}
+
+int SeedTracker::next_seed() const {
+    return next_seed_;
+}
+
+int SeedTracker::seed_for_name(const std::string &name) {
+    auto it = seeds_.find(name);
+    if (it != seeds_.end()) {
+        return it->second;
+    }
+    const int seed_here = next_seed_++;
+    seeds_[name] = seed_here;
+    return seed_here;
+}
+
+TfLiteModelRunner::TfLiteModelRunner(const std::vector<char> &buffer,
+                                     int threads,
+                                     SeedTracker &seed_tracker,
+                                     std::ostream *verbose_output,
+                                     TfLiteDelegate *delegate)
+    : verbose_output_(verbose_output) {
+    tf_model_ = TfLiteModelCreate(buffer.data(), buffer.size());
+    HCHECK(tf_model_);
+
+    tf_options_ = TfLiteInterpreterOptionsCreate();
+    HCHECK(tf_options_);
+    TfLiteInterpreterOptionsSetNumThreads(tf_options_, threads);
+    if (delegate) {
+        TfLiteInterpreterOptionsAddDelegate(tf_options_, delegate);
+    }
+
+    tf_interpreter_ = TfLiteInterpreterCreate(tf_model_, tf_options_);
+    HCHECK(tf_interpreter_);
+
+    // The options/model can be deleted immediately after interpreter creation.
+    TfLiteInterpreterOptionsDelete(tf_options_);
+    tf_options_ = nullptr;
+    TfLiteModelDelete(tf_model_);
+    tf_model_ = nullptr;
+
+    TfLiteStatus status;
+    HCHECK((status = TfLiteInterpreterAllocateTensors(tf_interpreter_)) ==
+          kTfLiteOk)
+        << status;
+
+    const int inputs = TfLiteInterpreterGetInputTensorCount(tf_interpreter_);
+
+    // Fill in the inputs with predictable pseudorandom data as before.
+    for (int i = 0; i < inputs; i++) {
+        TfLiteTensor *t = TfLiteInterpreterGetInputTensor(tf_interpreter_, i);
+        if (t->allocation_type == kTfLiteMmapRo) {
+            // The Tensor references data from the flatbuffer and is read-only;
+            // presumably it is data we want to keep as-is
+            if (verbose_output_) {
+                *verbose_output_ << "TFLITE input " << t->name
+                                 << " is being used as-is\n";
+            }
+            continue;
+        }
+        const int seed_here = seed_tracker.seed_for_name(t->name);
+        auto input_buf = wrap_tf_lite_tensor_with_halide_buffer(t);
+        dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf,
+                                              seed_here);
+        if (verbose_output_) {
+            *verbose_output_ << "TFLITE input " << t->name
+                             << " inited with seed = " << seed_here << " type "
+                             << input_buf.type() << " from "
+                             << TfLiteTypeGetName(t->type) << "\n";
+        }
+    }
+}
+
+void TfLiteModelRunner::run_once() {
+    TfLiteStatus status;
+    HCHECK((status = TfLiteInterpreterInvoke(tf_interpreter_)) == kTfLiteOk) << status;
+}
+
+std::vector<HalideBuffer<const void>> TfLiteModelRunner::copy_outputs() {
+    std::vector<HalideBuffer<const void>> results;
+    const int outputs = TfLiteInterpreterGetOutputTensorCount(tf_interpreter_);
+    for (int i = 0; i < outputs; i++) {
+        const TfLiteTensor *t =
+            TfLiteInterpreterGetOutputTensor(tf_interpreter_, i);
+        if (verbose_output_) {
+            *verbose_output_ << "TFLITE output is " << t->name << " type "
+                             << TfLiteTypeGetName(t->type) << "\n";
+        }
+        // Make a copy since the Buffer might reference memory owned by the
+        // tf_interpreter_
+        results.emplace_back(wrap_tf_lite_tensor_with_halide_buffer(t).copy());
+    }
+    return results;
+}
+
+TfLiteModelRunner::~TfLiteModelRunner() {
+    if (tf_interpreter_) {
+        TfLiteInterpreterDelete(tf_interpreter_);
+    }
+    if (tf_options_) {
+        TfLiteInterpreterOptionsDelete(tf_options_);
+    }
+    if (tf_model_) {
+        TfLiteModelDelete(tf_model_);
+    }
+}
+
 ModelRunner::ModelRunner() {
     for (int i = 0; i < kNumRuns; i++) {
         do_run[i] = true;
@@ -166,14 +276,23 @@ ModelRunner::ModelRunner() {
 #endif
 }
 
-int ModelRunner::seed_for_name(const std::string &name) {
-    auto it = seeds_.find(name);
-    if (it != seeds_.end()) {
-        return it->second;
+void ModelRunner::set_seed(int seed) {
+    seed_tracker_.reset(seed);
+}
+
+void ModelRunner::status() {
+    std::cout << "Using random seed: " << seed_tracker_.next_seed() << "\n";
+    std::cout << "Using threads: " << threads << "\n";
+
+    {
+        std::string tf_ver = TfLiteVersion();
+        std::cout << "Using TFLite version: " << tf_ver << "\n";
+        std::string expected = std::to_string(TFLITE_VERSION_MAJOR) + "." + std::to_string(TFLITE_VERSION_MINOR) + ".";
+        if (tf_ver.find(expected) != 0) {
+            std::cerr << "*** WARNING: compare_vs_tflite has been tested against TFLite v" << expected << "x, "
+                      << "but is using " << tf_ver << "; results may be inaccurate or wrong.\n";
+        }
     }
-    const int seed_here = seed++;
-    seeds_[name] = seed_here;
-    return seed_here;
 }
 
 ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer) {
@@ -192,7 +311,7 @@ ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer
             // Skip constant buffers, just like TFlite does later on.
             continue;
         }
-        const int seed_here = seed_for_name(t->name());
+        const int seed_here = seed_tracker_.seed_for_name(t->name());
         auto input_buf = t->buffer();
         dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
         if (verbosity) {
@@ -229,87 +348,36 @@ ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer
 ModelRunner::RunResult ModelRunner::run_in_tflite(const std::vector<char> &buffer, TfLiteDelegate *delegate) {
     RunResult result;
 
-    TfLiteModel *tf_model = TfLiteModelCreate(buffer.data(), buffer.size());
-    CHECK(tf_model);
-
-    TfLiteInterpreterOptions *tf_options = TfLiteInterpreterOptionsCreate();
-    CHECK(tf_options);
-    TfLiteInterpreterOptionsSetNumThreads(tf_options, threads);
-    if (delegate) {
-        TfLiteInterpreterOptionsAddDelegate(tf_options, delegate);
-    }
-
-    TfLiteInterpreter *tf_interpreter = TfLiteInterpreterCreate(tf_model, tf_options);
-    CHECK(tf_interpreter != nullptr);
-
-    // The options/model can be deleted immediately after interpreter creation.
-    TfLiteInterpreterOptionsDelete(tf_options);
-    TfLiteModelDelete(tf_model);
-
-    TfLiteStatus status;
-    CHECK((status = TfLiteInterpreterAllocateTensors(tf_interpreter)) == kTfLiteOk) << status;
-
-    const int inputs = TfLiteInterpreterGetInputTensorCount(tf_interpreter);
-    const int outputs = TfLiteInterpreterGetOutputTensorCount(tf_interpreter);
-
-    // Fill in the inputs with the same pseudorandom data as before.
-    for (int i = 0; i < inputs; i++) {
-        TfLiteTensor *t = TfLiteInterpreterGetInputTensor(tf_interpreter, i);
-        if (t->allocation_type == kTfLiteMmapRo) {
-            // The Tensor references data from the flatbuffer and is read-only;
-            // presumably it is data we want to keep as-is
-            if (verbosity) {
-                std::cout << "TFLITE input " << t->name << " is being used as-is\n";
-            }
-            continue;
-        }
-        const int seed_here = seed_for_name(t->name);
-        auto input_buf = wrap_tf_lite_tensor_with_halide_buffer(t);
-        dynamic_type_dispatch<FillWithRandom>(input_buf.type(), input_buf, seed_here);
-        if (verbosity) {
-            std::cout << "TFLITE input " << t->name << " inited with seed = " << seed_here
-                      << " type " << input_buf.type() << " from " << TfLiteTypeGetName(t->type) << "\n";
-        }
-    }
+    TfLiteModelRunner tfrunner(buffer, threads, seed_tracker_, &std::cout, delegate);
 
     // Execute once, to prime the pump
-    CHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
+    tfrunner.run_once();
 
     // Save the outputs from that execution (before benchmarking)
-    for (int i = 0; i < outputs; i++) {
-        const TfLiteTensor *t = TfLiteInterpreterGetOutputTensor(tf_interpreter, i);
-        if (verbosity) {
-            std::cout << "TFLITE output is " << t->name << " type " << TfLiteTypeGetName(t->type) << "\n";
-        }
-        // Make a copy since the Buffer might reference memory owned by the tf_interpreter
-        result.outputs.emplace_back(wrap_tf_lite_tensor_with_halide_buffer(t).copy());
-    }
+    result.outputs = tfrunner.copy_outputs();
 
     // Now benchmark it
     if (do_benchmark) {
-        result.time = bench([&tf_interpreter]() {
-            TfLiteStatus status;
-            CHECK((status = TfLiteInterpreterInvoke(tf_interpreter)) == kTfLiteOk) << status;
+        result.time = bench([&tfrunner]() {
+            tfrunner.run_once();
         });
     }
-
-    TfLiteInterpreterDelete(tf_interpreter);
 
     return result;
 }
 
 bool ModelRunner::compare_results(const std::string &msg, const RunResult &a, const RunResult &b) {
     bool all_matched = true;
-    CHECK(a.outputs.size() == b.outputs.size());
+    HCHECK(a.outputs.size() == b.outputs.size());
     for (size_t i = 0; i < a.outputs.size(); ++i) {
         const HalideBuffer<const void> &tflite_buf = a.outputs[i];
         const HalideBuffer<const void> &halide_buf = b.outputs[i];
-        CHECK(tflite_buf.type() == halide_buf.type()) << "Expected type " << tflite_buf.type() << "; saw type " << halide_buf.type();
-        CHECK(tflite_buf.dimensions() == halide_buf.dimensions());
+        HCHECK(tflite_buf.type() == halide_buf.type()) << "Expected type " << tflite_buf.type() << "; saw type " << halide_buf.type();
+        HCHECK(tflite_buf.dimensions() == halide_buf.dimensions());
         for (int d = 0; d < tflite_buf.dimensions(); d++) {
-            CHECK(tflite_buf.dim(d).min() == halide_buf.dim(d).min());
-            CHECK(tflite_buf.dim(d).extent() == halide_buf.dim(d).extent());
-            CHECK(tflite_buf.dim(d).stride() == halide_buf.dim(d).stride());  // TODO: must the strides match?
+            HCHECK(tflite_buf.dim(d).min() == halide_buf.dim(d).min());
+            HCHECK(tflite_buf.dim(d).extent() == halide_buf.dim(d).extent());
+            HCHECK(tflite_buf.dim(d).stride() == halide_buf.dim(d).stride());  // TODO: must the strides match?
         }
         CompareBuffersOptions options;
         options.close_thresh = std::ceil((1ull << tflite_buf.type().bits) * tolerance);
@@ -337,12 +405,10 @@ void ModelRunner::run(const std::string &filename) {
 
     std::map<WhichRun, RunResult> results;
 
-    const std::array<WhichRun, kNumRuns> all_runs = {kTfLite, kHannk, kExternalDelegate, kInternalDelegate};
-
     std::vector<WhichRun> active_runs;
-    for (WhichRun i : all_runs) {
+    for (int i = 0; i < kNumRuns; i++) {
         if (do_run[i]) {
-            active_runs.push_back(i);
+            active_runs.push_back((WhichRun)i);
         }
     }
 
@@ -354,7 +420,7 @@ void ModelRunner::run(const std::string &filename) {
     };
     const auto exec_hannk_external_delegate = [this, &buffer]() {
         DelegatePtr delegate_ptr;
-        CHECK(delegate_ptr.init(external_delegate_path, verbosity));
+        HCHECK(delegate_ptr.init(external_delegate_path, verbosity));
         return run_in_tflite(buffer, delegate_ptr.get());
     };
     const auto exec_hannk_internal_delegate = [this, &buffer]() {
