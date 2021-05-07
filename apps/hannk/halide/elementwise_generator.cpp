@@ -28,9 +28,6 @@ public:
     void generate() {
         Var x("x"), y("y");
 
-        // After subtracing the zero point, we have 9 bits. We can shift
-        // up by a further 6 bits to 15 bits total to get more precision
-        // for the later operations.
         Expr input1 = (i16(input1_(x, y)) - i16(input1_zero_)) << add_input_shift;
         Expr input2 = (i16(input2_(x, y)) - i16(input2_zero_)) << add_input_shift;
 
