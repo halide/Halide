@@ -816,13 +816,13 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
             .downsample(2, 2, stride_[1], Interval(0, dilation_[1] * (filter()->extent(2) - 1)))
             .elementwise(3, 3);
         if (depth_multiplier_ == 1) {
-            // TODO: Handle this padding for SIMD width elsewhere. Either fix depthwise
-            // so it doesn't need this, or pass alignment information somewhere else.
-#if defined(__arm__) || defined(__aarch64__)
-            result.align(0, 16);
-#else
-            result.align(0, 32);
-#endif
+            // Pass minimal sized buffers to learn about the alignment requirements.
+            HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
+            HalideBuffer<int32_t> bias_buf(nullptr, 1);
+            HalideBuffer<uint8_t> filter_buf(nullptr, 1, 1, 1);
+            HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
+            depthwise_conv_dm1_uint8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf);
+            result.align(0, input_buf.dim(0).extent());
         }
         return result;
     } else if (input_idx == 1) {
