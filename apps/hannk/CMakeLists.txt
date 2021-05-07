@@ -56,7 +56,7 @@ target_link_libraries(compare_vs_tflite PRIVATE
                       file_util
                       hannk_log_stderr
                       hannk_delegate_registrar
-                      Halide::Tools  # for halide_benchmark.h
+                      model_runner
                       Halide::Runtime)
 target_include_directories(compare_vs_tflite
                            PUBLIC $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
@@ -65,8 +65,6 @@ target_include_directories(compare_vs_tflite
 file(GLOB TEST_FILES CONFIGURE_DEPENDS "test/*/*")
 foreach (t IN LISTS TEST_FILES)
     file(RELATIVE_PATH test_name ${hannk_SOURCE_DIR} ${t})
-    string(REPLACE "." "_" test_name ${test_name})
-    string(REPLACE "/" "_" test_name ${test_name})
     add_test(NAME ${test_name} COMMAND compare_vs_tflite ${t} --benchmark 0)
     set_tests_properties(${test_name} PROPERTIES
                          LABELS hannk_tests)

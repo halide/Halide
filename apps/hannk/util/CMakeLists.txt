@@ -27,3 +27,12 @@ target_include_directories(file_util INTERFACE
 add_library(hannk_log_hdr INTERFACE)
 target_include_directories(hannk_log_hdr INTERFACE
                            $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
+
+add_library(model_runner STATIC
+            model_runner.cpp)
+target_include_directories(model_runner PUBLIC
+                           $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
+target_link_libraries(model_runner PRIVATE
+                      Halide::Tools  # for halide_benchmark.h
+                      Halide::Runtime
+                      tensorflowlite_headers)
