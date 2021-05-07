@@ -1451,6 +1451,7 @@ METADATA_TESTER_GENERATOR_ARGS=\
 	buffer_array_input8.dim=3 \
 	buffer_array_input8.type=float32 \
 	buffer_f16_untyped.type=float16 \
+	untyped_scalar_input.type=uint8 \
 	array_outputs.size=2 \
 	array_outputs7.size=2 \
 	array_outputs8.size=2 \
