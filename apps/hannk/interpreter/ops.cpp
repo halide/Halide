@@ -307,11 +307,11 @@ template<int N>
 struct power_of_two {
 };
 
-// Represents a number as base*2^exponent/2^(bits - 1), where bits = 8*sizeof(T)
+// Represents a number as mantissa*2^exponent/2^(bits - 1), where bits = 8*sizeof(T)
 // This is very similar to a float.
 template<typename T>
 class IntFloat {
-    T base_;
+    T mantissa_;
     T exponent_;
 
     static constexpr int log2_one = sizeof(T) * 8 - 1;
@@ -319,19 +319,19 @@ class IntFloat {
 
 public:
     IntFloat()
-        : base_(0), exponent_(0) {
+        : mantissa_(0), exponent_(0) {
     }
 
     IntFloat(float x) {
         int exponent;
-        float base_float = std::frexp(x, &exponent);
-        int64_t base_long = (int64_t)std::round(base_float * one);
-        assert(std::abs(base_long) <= one);
-        if (base_long == one) {
-            base_long >>= 1;
+        float mantissa_float = std::frexp(x, &exponent);
+        int64_t mantissa_long = (int64_t)std::round(mantissa_float * one);
+        assert(std::abs(mantissa_long) <= one);
+        if (mantissa_long == one) {
+            mantissa_long >>= 1;
             ++exponent;
         }
-        base_ = base_long;
+        mantissa_ = mantissa_long;
         exponent_ = exponent;
     }
 
@@ -342,11 +342,11 @@ public:
         return *this;
     }
 
-    T base() const {
+    T mantissa() const {
         if (exponent_ < -log2_one) {
             return 0;
         } else {
-            return base_;
+            return mantissa_;
         }
     }
 
@@ -455,7 +455,7 @@ void mul_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q
 
     auto mul_rank2 = [&](halide_buffer_t *in1_buf, halide_buffer_t *in2_buf, halide_buffer_t *out_buf) {
         mul_uint8_uint8_uint8(in1_buf, in1_zero, in2_buf, in2_zero,
-                              out_zero, multiplier.base(), -multiplier.exponent(),
+                              out_zero, multiplier.mantissa(), -multiplier.exponent(),
                               out_range.min, out_range.max, out_buf);
     };
     elementwise_loop_nest<2>(mul_rank2, in1, in2, out);
@@ -746,14 +746,14 @@ void conv_uint8(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t
         // TODO: We really ought to be able to do this with GuardWithIf
         // and/or specialize.
         conv_r16_uint8(input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias,
-                       stride[0], stride[1], dilation[0], dilation[1], params.c.base(),
+                       stride[0], stride[1], dilation[0], dilation[1], params.c.mantissa(),
                        -params.c.exponent(), (uint8_t)params.c_zero, output_range.min, output_range.max,
                        output);
     } else
 #endif
     {
         ::hannk::conv_uint8(input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias,
-                            stride[0], stride[1], dilation[0], dilation[1], params.c.base(),
+                            stride[0], stride[1], dilation[0], dilation[1], params.c.mantissa(),
                             -params.c.exponent(), (uint8_t)params.c_zero, output_range.min, output_range.max,
                             output);
     }
@@ -810,17 +810,17 @@ void depthwise_conv_uint8(
     if (depth_multiplier >= output->dim[0].extent) {
         depthwise_conv_broadcast_uint8(
             input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
-            stride[0], stride[1], dilation[0], dilation[1], params.c.base(), -params.c.exponent(),
+            stride[0], stride[1], dilation[0], dilation[1], params.c.mantissa(), -params.c.exponent(),
             (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output);
     } else if (depth_multiplier == 1) {
         depthwise_conv_dm1_uint8(
             input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
-            stride[0], stride[1], dilation[0], dilation[1], params.c.base(), -params.c.exponent(),
+            stride[0], stride[1], dilation[0], dilation[1], params.c.mantissa(), -params.c.exponent(),
             (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output);
     } else {
         ::hannk::depthwise_conv_uint8(
             input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
-            stride[0], stride[1], dilation[0], dilation[1], params.c.base(), -params.c.exponent(),
+            stride[0], stride[1], dilation[0], dilation[1], params.c.mantissa(), -params.c.exponent(),
             (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output);
     }
 }
@@ -998,13 +998,13 @@ void FullyConnectedOp::execute() {
 
             fully_connected_uint8_uint8(
                 input_buf, (uint8_t)params.a_zero, filter_buf, (uint8_t)params.b_zero, bias_buf,
-                (uint8_t)params.c_zero, params.c.base(), -params.c.exponent(), (uint8_t)output_range.min,
+                (uint8_t)params.c_zero, params.c.mantissa(), -params.c.exponent(), (uint8_t)output_range.min,
                 (uint8_t)output_range.max, output_buf);
             return;
         } else if (out->type() == halide_type_of<int16_t>()) {
             fully_connected_uint8_int16(
                 input_buf, (uint8_t)params.a_zero, filter_buf, (uint8_t)params.b_zero, bias_buf,
-                0, params.c.base(), -params.c.exponent(), 0, 0, output_buf);
+                0, params.c.mantissa(), -params.c.exponent(), 0, 0, output_buf);
             return;
         }
     }
@@ -1436,8 +1436,8 @@ void SoftmaxOp::execute() {
         assert(output_multiplier.shift <= 0);
 
         auto softmax_rank2 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
-            softmax_uint8(in_buf, input_multiplier.base(), -input_multiplier.exponent(),
-                          output_zero, output_multiplier.base(), -output_multiplier.exponent(), out_buf);
+            softmax_uint8(in_buf, input_multiplier.mantissa(), -input_multiplier.exponent(),
+                          output_zero, output_multiplier.mantissa(), -output_multiplier.exponent(), out_buf);
         };
         loop_nest<2>(softmax_rank2, in_buf, out_buf);
     } else {
@@ -1644,7 +1644,7 @@ void UnaryOp::execute() {
             // Build a program to implement the logistic op.
             ElementwiseAssembler p(program_buffer);
             auto input_zeroed = p.sub(p.input(0), input_zero);
-            auto input_scaled = p.mul_shift(input_zeroed, in_multiplier.base(), 15 - left_shift);
+            auto input_scaled = p.mul_shift(input_zeroed, in_multiplier.mantissa(), 15 - left_shift);
             auto result = p.logistic(8, input_scaled, -in_multiplier.exponent());
             auto program_buf = p.assemble({result});
 
@@ -1664,7 +1664,7 @@ void UnaryOp::execute() {
             // Build a program to implement the tanh op.
             ElementwiseAssembler p(program_buffer);
             auto input_zeroed = p.sub(p.input(0), input_zero);
-            auto input_scaled = p.mul_shift(input_zeroed, in_multiplier.base(), 15 - left_shift);
+            auto input_scaled = p.mul_shift(input_zeroed, in_multiplier.mantissa(), 15 - left_shift);
             auto result = p.add(p.tanh(7, input_scaled, -in_multiplier.exponent()), 128);
             auto program_buf = p.assemble({result});
 
