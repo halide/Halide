@@ -24,43 +24,50 @@ using std::vector;
 using namespace Halide::ConciseCasts;
 
 template<>
-bool is_native_xtensa_vector<int8_t>(Type t) {
+bool is_native_xtensa_vector<int8_t>(const Type &t) {
     return t.is_int() && (t.bits() == 8) && (t.lanes() == 64);
 }
 
 template<>
-bool is_native_xtensa_vector<uint8_t>(Type t) {
+bool is_native_xtensa_vector<uint8_t>(const Type &t) {
     return t.is_uint() && (t.bits() == 8) && (t.lanes() == 64);
 }
 
 template<>
-bool is_native_xtensa_vector<int16_t>(Type t) {
+bool is_native_xtensa_vector<int16_t>(const Type &t) {
     return t.is_int() && (t.bits() == 16) && (t.lanes() == 32);
 }
 
 template<>
-bool is_native_xtensa_vector<uint16_t>(Type t) {
+bool is_native_xtensa_vector<uint16_t>(const Type &t) {
     return t.is_uint() && (t.bits() == 16) && (t.lanes() == 32);
 }
 
 template<>
-bool is_native_xtensa_vector<int32_t>(Type t) {
+bool is_native_xtensa_vector<int32_t>(const Type &t) {
     return t.is_int() && (t.bits() == 32) && (t.lanes() == 16);
 }
 
 template<>
-bool is_native_xtensa_vector<uint32_t>(Type t) {
+bool is_native_xtensa_vector<uint32_t>(const Type &t) {
     return t.is_uint() && (t.bits() == 32) && (t.lanes() == 16);
 }
 
 template<>
-bool is_native_xtensa_vector<float>(Type t) {
+bool is_native_xtensa_vector<float>(const Type &t) {
     return t.is_float() && (t.bits() == 32) && (t.lanes() == 16);
 }
 
-bool is_double_native_vector_type(Type t) {
+bool is_double_native_vector_type(const Type &t) {
     constexpr int double_vector_bitwidth = 512 * 2;
     return (t.bits() % 8 == 0) && (double_vector_bitwidth % t.bits() == 0) && (double_vector_bitwidth / t.bits() == t.lanes());
+}
+
+Type get_native_xtensa_vector(const Type &t) {
+    if (t.bits() == 24 || t.bits() == 48) {
+        return t.with_lanes(1536 / t.bits());
+    }
+    return t.with_lanes(512 / t.bits());
 }
 
 struct Pattern {
@@ -983,10 +990,6 @@ private:
             {"halide_xtensa_convert_i16_low_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 0, 16, 32)},
             {"halide_xtensa_convert_i16_high_i32", halide_xtensa_slice_to_native_i32(i32(wild_i16x), 1, 16, 32)},
 
-            // TODO(vksnk): fix this.
-            {"halide_xtensa_slice_to_native_u32x32_t", halide_xtensa_slice_to_native_u32(wild_u32x, wild_i32, 32, 64)},
-            {"halide_xtensa_slice_to_native_i32x32_t", halide_xtensa_slice_to_native_i32(wild_i32x, wild_i32, 32, 64)},
-
             {"halide_xtensa_convert_to_int32x16_t_from_uint1x16_t", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_u1(wild_u1x, wild_u1x, wild_u1x, wild_u1x)), 0, 16, 64), Pattern::PassOnlyOp0},
             {"halide_xtensa_convert_to_int32x16_t_from_uint1x16_t", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_u1(wild_u1x, wild_u1x, wild_u1x, wild_u1x)), 1, 16, 64), Pattern::PassOnlyOp1},
             {"halide_xtensa_convert_to_int32x16_t_from_uint1x16_t", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_u1(wild_u1x, wild_u1x, wild_u1x, wild_u1x)), 2, 16, 64), Pattern::PassOnlyOp2},
@@ -1602,6 +1605,25 @@ private:
                 }
 
                 return Call::make(op->type, op->name, {partial_sum}, op->call_type);
+            }
+        }
+
+        if (op->name == "halide_xtensa_widening_load") {
+            int native_lanes = get_native_vector_lanes_num(op->type);
+
+            if ((native_lanes > 0) && (2 * native_lanes <= op->type.lanes())) {
+                const int total_lanes = op->type.lanes();
+                int split_to = total_lanes / (2 * native_lanes);
+                std::vector<Expr> sliced_loads;
+
+                for (int ix = 0; ix < split_to; ix++) {
+                    Expr sliced_load = Call::make(op->type.with_lanes(2 * native_lanes), op->name, {op->args[0], op->args[1] + 2 * native_lanes * ix, make_one(op->args[2].type().with_lanes(2 * native_lanes))}, Call::PureExtern);
+                    debug(0) << sliced_load << "\n";
+                    sliced_loads.push_back(sliced_load);
+                }
+                return Call::make(op->type,
+                                  "halide_xtensa_concat_from_native",
+                                  sliced_loads, Call::PureExtern);
             }
         }
 

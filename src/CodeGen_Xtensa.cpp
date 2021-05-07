@@ -196,16 +196,55 @@ struct MultipleOfNativeVector {
   // TODO(vksnk): figure out a better/safer way to construct it.
   enum FromCppVector { from_native_vector };
   inline MultipleOfNativeVector(FromCppVector, const NativeVector &src1, const NativeVector &src2) {
+      static_assert(N == 2, "Wrong kind of constructor");
       native_vector[0] = src1;
       native_vector[1] = src2;
   }
 
   inline MultipleOfNativeVector(FromCppVector, const NativeVector &src1, const NativeVector &src2, const NativeVector &src3, const NativeVector &src4) {
+      static_assert(N == 4, "Wrong kind of constructor");
       native_vector[0] = src1;
       native_vector[1] = src2;
       native_vector[2] = src3;
       native_vector[3] = src4;
   }
+
+  inline MultipleOfNativeVector(FromCppVector, const NativeVector &src1, const NativeVector &src2, const NativeVector &src3, const NativeVector &src4,
+                                                const NativeVector &src5, const NativeVector &src6, const NativeVector &src7, const NativeVector &src8) {
+      static_assert(N == 8, "Wrong kind of constructor");
+      native_vector[0] = src1;
+      native_vector[1] = src2;
+      native_vector[2] = src3;
+      native_vector[3] = src4;
+      native_vector[4] = src5;
+      native_vector[5] = src6;
+      native_vector[6] = src7;
+      native_vector[7] = src8;
+  }
+
+  inline MultipleOfNativeVector(FromCppVector, const NativeVector &src1, const NativeVector &src2, const NativeVector &src3, const NativeVector &src4,
+                                                const NativeVector &src5, const NativeVector &src6, const NativeVector &src7, const NativeVector &src8,
+                                                const NativeVector &src9, const NativeVector &src10, const NativeVector &src11, const NativeVector &src12,
+                                                const NativeVector &src13, const NativeVector &src14, const NativeVector &src15, const NativeVector &src16) {
+      static_assert(N == 16, "Wrong kind of constructor");
+      native_vector[0] = src1;
+      native_vector[1] = src2;
+      native_vector[2] = src3;
+      native_vector[3] = src4;
+      native_vector[4] = src5;
+      native_vector[5] = src6;
+      native_vector[6] = src7;
+      native_vector[7] = src8;
+      native_vector[8] = src9;
+      native_vector[9] = src10;
+      native_vector[10] = src11;
+      native_vector[11] = src12;
+      native_vector[12] = src13;
+      native_vector[13] = src14;
+      native_vector[14] = src15;
+      native_vector[15] = src16;
+  }
+
 };
 
 using int8x128_t = MultipleOfNativeVector<int8x64_t, 2>;
@@ -1203,44 +1242,8 @@ HALIDE_ALWAYS_INLINE int16x32_t convert_to_int16x32_t_from_float32x32_t(const fl
 }
 
 
-HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_concat_from_native(const int16x32_t& a, const int16x32_t& b) {
-    return int16x64_t(int16x64_t::from_native_vector, a, b);
-}
-
-HALIDE_ALWAYS_INLINE uint16x64_t halide_xtensa_concat_from_native(const uint16x32_t& a, const uint16x32_t& b) {
-    return uint16x64_t(uint16x64_t::from_native_vector, a, b);
-}
-
-HALIDE_ALWAYS_INLINE int48x64_t halide_xtensa_concat_from_native(const int48x32_t& a, const int48x32_t& b) {
-    return int48x64_t(int48x64_t::from_native_vector, a, b);
-}
-
-HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_concat_from_native(const int32x16_t& a, const int32x16_t& b) {
-    return int32x32_t(int32x32_t::from_native_vector, a, b);
-}
-
 HALIDE_ALWAYS_INLINE uint1x16_t halide_xtensa_slice_to_native(const uint1x32_t& src, int index, int native_lanes, int total_lanes) {
   return (index == 0)?IVP_EXTRACTBLN(src):IVP_EXTRACTBHN(src);
-}
-
-HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_slice_to_native_i32x32_t(const int32x64_t& src, int index) {
-  return int32x32_t(int32x32_t::from_native_vector, src.native_vector[2 * index], src.native_vector[2 * index + 1]);
-}
-
-HALIDE_ALWAYS_INLINE uint32x32_t halide_xtensa_slice_to_native_u32x32_t(const uint32x64_t& src, int index) {
-  return uint32x32_t(uint32x32_t::from_native_vector, src.native_vector[2 * index], src.native_vector[2 * index + 1]);
-}
-
-HALIDE_ALWAYS_INLINE int32x64_t halide_xtensa_concat_from_native(const int32x16_t& a, const int32x16_t& b, const int32x16_t& c, const int32x16_t& d) {
-    return int32x64_t(int32x64_t::from_native_vector, a, b, c, d);
-}
-
-HALIDE_ALWAYS_INLINE uint32x32_t halide_xtensa_concat_from_native(const uint32x16_t& a, const uint32x16_t& b) {
-    return uint32x32_t(uint32x32_t::from_native_vector, a, b);
-}
-
-HALIDE_ALWAYS_INLINE uint32x64_t halide_xtensa_concat_from_native(const uint32x16_t& a, const uint32x16_t& b, const uint32x16_t& c, const uint32x16_t& d) {
-    return uint32x64_t(uint32x64_t::from_native_vector, a, b, c, d);
 }
 
 HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_convert_i16_low_i32(const int16x32_t& src) {
@@ -1669,7 +1672,24 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
     }
 
     if (op->name == "halide_xtensa_slice_to_native" && !op->type.is_bool()) {
-        rhs << args[0] << ".native_vector[" << args[1] << "]";
+        Type native_vector_type = get_native_xtensa_vector(op->type);
+        int vector_count = op->type.lanes() / native_vector_type.lanes();
+
+        if (vector_count == 1) {
+            rhs << args[0] << ".native_vector[" << args[1] << "]";
+        } else {
+            rhs << print_type(op->type) << "(" << print_type(op->type) << "::from_native_vector, ";
+            std::vector<std::string> native_vectors;
+            for (int ix = 0; ix < vector_count; ix++) {
+                native_vectors.push_back(args[0] + ".native_vector[" + args[1] + " * " + std::to_string(vector_count) + " + " + std::to_string(ix) + "]");
+            }
+            rhs << with_commas(native_vectors) << ")";
+        }
+        return rhs.str();
+    }
+
+    if (op->name == "halide_xtensa_concat_from_native" && !op->type.is_bool()) {
+        rhs << print_type(op->type) << "(" << print_type(op->type) << "::from_native_vector, " << with_commas(args) << ")";
         return rhs.str();
     }
 
@@ -2336,14 +2356,14 @@ void CodeGen_Xtensa::visit(const For *op) {
     }
 
     // NOTE(vksnk): poor man's profiling below.
-    // if (current_loop_level == 1) {
-    //     open_scope();
-    //     stream << get_indent() << "int cycles_start, cycles_stop, cyclesAV; (void)cycles_stop; (void)cyclesAV;\n";
-    //     stream << get_indent() << "cycles_start = GetCycleCount();\n";
-    // }
-    // if (current_loop_level == 1) {
-    //     stream << get_indent() << "cycles_start = GetCycleCount();\n";
-    // }
+    if (current_loop_level == 1) {
+        open_scope();
+        stream << get_indent() << "int cycles_start, cycles_stop, cyclesAV; (void)cycles_stop; (void)cyclesAV;\n";
+        stream << get_indent() << "cycles_start = GetCycleCount();\n";
+    }
+    if (current_loop_level == 1) {
+        stream << get_indent() << "cycles_start = GetCycleCount();\n";
+    }
 
     stream << get_indent() << "for (int "
            << print_name(op->name)
@@ -2361,14 +2381,14 @@ void CodeGen_Xtensa::visit(const For *op) {
 
     close_scope("for " + print_name(op->name));
     // NOTE(vksnk): Second part of the poor man's profiling below.
-    // if (current_loop_level == 1) {
-    //     stream << get_indent() << "cycles_stop = GetCycleCount();\n";
-    //     stream << get_indent() << "cyclesAV = cycles_stop - cycles_start;\n";
-    //     stream << get_indent() << "printf(\"" << op->name << ": %d\\n\", cyclesAV);\n";
-    // }
-    // if (current_loop_level == 1) {
-    //     close_scope("profiler" + print_name(op->name));
-    // }
+    if (current_loop_level == 1) {
+        stream << get_indent() << "cycles_stop = GetCycleCount();\n";
+        stream << get_indent() << "cyclesAV = cycles_stop - cycles_start;\n";
+        stream << get_indent() << "printf(\"" << op->name << ": %d\\n\", cyclesAV);\n";
+    }
+    if (current_loop_level == 1) {
+        close_scope("profiler" + print_name(op->name));
+    }
     current_loop_level--;
 }
 
