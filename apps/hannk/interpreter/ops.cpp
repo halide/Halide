@@ -4,6 +4,7 @@
 
 #include "halide/add_uint8_uint8.h"
 #include "halide/average_pool_uint8.h"
+#include "halide/constants.h"
 #include "halide/conv_uint8.h"
 #ifdef CONV_R16
 #include "halide/conv_r16_uint8.h"
@@ -417,11 +418,9 @@ void add_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q
     const int in2_zero = in2q.uniform_zero();
     const int out_zero = outq.uniform_zero();
 
-    const int input_shift = 6;
-    const int output_shift = 16;
-    const float in1_scale = in1q.uniform_scale() * (1 << output_shift);
-    const float in2_scale = in2q.uniform_scale() * (1 << output_shift);
-    const float out_scale = outq.uniform_scale() * (1 << input_shift);
+    const float in1_scale = in1q.uniform_scale() * (1 << add_output_shift);
+    const float in2_scale = in2q.uniform_scale() * (1 << add_output_shift);
+    const float out_scale = outq.uniform_scale() * (1 << add_input_shift);
 
     const int in1_multiplier = std::lround(in1_scale / out_scale) * in1sign;
     const int in2_multiplier = std::lround(in2_scale / out_scale) * in2sign;
@@ -448,7 +447,7 @@ void mul_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q
     const float out_scale = outq.uniform_scale();
 
     IntFloat<int32_t> multiplier(in1_scale * in2_scale / out_scale);
-    multiplier *= power_of_two<-2 * 6>();
+    multiplier *= power_of_two<-2 * mul_input_shift>();
     assert(multiplier.exponent() <= 0);
 
     const auto out_range = get_output_range(activation, outq);
@@ -1415,25 +1414,22 @@ void SoftmaxOp::execute() {
         const auto &in_buf = in->buffer();
         const auto &out_buf = out->buffer();
 
-        // It's a easier to compute 2^(x*(B*log2(e))) than e^(x*B).
-        const float beta2 = beta_ * std::log2(std::exp(1.0f));
-
         // We don't need the input zero point because this op exploits the
         // identity exp(x_i)/sum(exp(x_i)) == exp(x_i + C)/sum(exp(x_i + C))
         const int output_zero = out->quantization().uniform_zero();
         assert(output_zero >= 0 && output_zero <= 255);
 
-        const float in_scale = in->quantization().uniform_scale();
-        // TODO: Debug why this extra factor of 2 is needed. There's something
-        // wrong with the fixed point tricks in the implementation.
-        const float output_scale = out->quantization().uniform_scale() * 2.0f;
-
-        IntFloat<int16_t> input_multiplier(in_scale * beta2);
-        input_multiplier *= power_of_two<-6>();
+        // It's a easier to compute 2^(x*(B*log2(e))) than e^(x*B).
+        const float beta2 = beta_ * std::log2(std::exp(1.0f));
+        IntFloat<int16_t> input_multiplier(beta2 * in->quantization().uniform_scale());
+        input_multiplier *= power_of_two<-softmax_input_shift>();
         assert(input_multiplier.exponent() <= 0);
 
-        IntFloat<int16_t> output_multiplier(output_scale);
-        assert(output_multiplier.shift <= 0);
+        IntFloat<int16_t> output_multiplier(out->quantization().uniform_scale());
+        // TODO: Debug why this extra factor of 2 is needed. There's something
+        // wrong with the fixed point tricks in the implementation.
+        output_multiplier *= power_of_two<1>();
+        assert(output_multiplier.exponent() <= 0);
 
         auto softmax_rank2 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
             softmax_uint8(in_buf, input_multiplier.mantissa(), -input_multiplier.exponent(),
