@@ -303,9 +303,13 @@ void crop_to_union(HalideBuffer<T> &a, HalideBuffer<U> &b) {
     }
 }
 
-// A constant power of two.
-template<int N>
+// A type safe power of two.
 struct power_of_two {
+    int value;
+
+    power_of_two(int value)
+        : value(value) {
+    }
 };
 
 // Represents a number as mantissa*2^exponent/2^(bits - 1), where bits = 8*sizeof(T)
@@ -337,9 +341,8 @@ public:
     }
 
     // Multiply this value by a constant power of 2.
-    template<int N>
-    IntFloat operator*=(power_of_two<N>) {
-        exponent_ += N;
+    IntFloat operator*=(power_of_two x) {
+        exponent_ += x.value;
         return *this;
     }
 
@@ -453,7 +456,7 @@ void mul_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q
     const float out_scale = outq.uniform_scale();
 
     IntFloat<int32_t> multiplier(in1_scale * in2_scale / out_scale);
-    multiplier *= power_of_two<-2 * mul_input_shift>();
+    multiplier *= power_of_two(-2 * mul_input_shift);
     assert(multiplier.exponent() <= 0);
 
     const auto out_range = get_output_range(activation, outq);
@@ -1428,13 +1431,13 @@ void SoftmaxOp::execute() {
         // It's a easier to compute 2^(x*(B*log2(e))) than e^(x*B).
         const float beta2 = beta_ * std::log2(std::exp(1.0f));
         IntFloat<int16_t> input_multiplier(beta2 * in->quantization().uniform_scale());
-        input_multiplier *= power_of_two<-softmax_input_shift>();
+        input_multiplier *= power_of_two(-softmax_input_shift);
         assert(input_multiplier.exponent() <= 0);
 
         IntFloat<int16_t> output_multiplier(out->quantization().uniform_scale());
         // TODO: Debug why this extra factor of 2 is needed. There's something
         // wrong with the fixed point tricks in the implementation.
-        output_multiplier *= power_of_two<1>();
+        output_multiplier *= power_of_two(1);
         assert(output_multiplier.exponent() <= 0);
 
         auto softmax_rank2 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
@@ -1637,7 +1640,7 @@ void UnaryOp::execute() {
         std::array<int16_t, 64> program_buffer;
         if (op_ == Logistic) {
             IntFloat<int16_t> in_multiplier(in_scale);
-            in_multiplier *= power_of_two<-left_shift>();
+            in_multiplier *= power_of_two(-left_shift);
             assert(in_multiplier.exponent() <= 0);
 
             assert(out->quantization().uniform_scale() == 1.0f / 256.0f);
@@ -1657,7 +1660,7 @@ void UnaryOp::execute() {
             return;
         } else if (op_ == Tanh) {
             IntFloat<int16_t> in_multiplier(in_scale);
-            in_multiplier *= power_of_two<-left_shift>();
+            in_multiplier *= power_of_two(-left_shift);
             assert(in_multiplier.exponent() <= 0);
 
             assert(out->quantization().uniform_scale() == 1.0f / 128.0f);
