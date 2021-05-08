@@ -352,7 +352,13 @@ public:
     }
 
     T exponent() const {
-        return std::min<T>(std::max<T>(exponent_, -log2_one), log2_one);
+        if (exponent_ < -log2_one) {
+            return -log2_one;
+        } else if (exponent_ > log2_one) {
+            return log2_one;
+        } else {
+            return exponent_;
+        }
     }
 };
 
