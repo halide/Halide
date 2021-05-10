@@ -1,5 +1,7 @@
 #include "Simplify_Internal.h"
 
+using std::string;
+
 namespace Halide {
 namespace Internal {
 
@@ -305,6 +307,21 @@ Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
 
     ExprInfo index_info;
     Expr index = mutate(op->index, &index_info);
+
+    // If the load is fully out of bounds, replace it with undef.
+    // This should only occur inside branches that make the load unreachable,
+    // but perhaps the branch was hard to prove constant true or false. This
+    // provides an alternative mechanism to simplify these unreachable loads.
+    string alloc_extent_name = op->name + ".total_extent";
+    if (bounds_and_alignment_info.contains(alloc_extent_name)) {
+        if (index_info.max_defined && index_info.max < 0) {
+            return undef(op->type);
+        }
+        const ExprInfo &alloc_info = bounds_and_alignment_info.get(alloc_extent_name);
+        if (alloc_info.max_defined && index_info.min_defined && index_info.min > alloc_info.max) {
+            return undef(op->type);
+        }
+    }
 
     ExprInfo base_info;
     if (const Ramp *r = index.as<Ramp>()) {

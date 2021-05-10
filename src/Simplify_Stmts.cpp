@@ -65,6 +65,8 @@ Stmt Simplify::visit(const IfThenElse *op) {
     const Block *then_block = then_case.as<Block>();
     const Block *else_block = else_case.as<Block>();
     const For *then_for = then_case.as<For>();
+    const IfThenElse *then_if = then_case.as<IfThenElse>();
+    const IfThenElse *else_if = else_case.as<IfThenElse>();
     if (then_acquire &&
         else_acquire &&
         equal(then_acquire->semaphore, else_acquire->semaphore) &&
@@ -120,6 +122,13 @@ Stmt Simplify::visit(const IfThenElse *op) {
                equal(unwrapped_condition, 0 < then_for->extent)) {
         // This guard is redundant
         return then_case;
+    } else if (then_if &&
+               else_if &&
+               !then_if->else_case.defined() &&
+               !else_if->else_case.defined() &&
+               equal(then_if->condition, else_if->condition)) {
+        return mutate(IfThenElse::make(then_if->condition,
+                                       IfThenElse::make(condition, then_if->then_case, else_if->then_case)));
     } else if (condition.same_as(op->condition) &&
                then_case.same_as(op->then_case) &&
                else_case.same_as(op->else_case)) {
@@ -203,9 +212,13 @@ Stmt Simplify::visit(const For *op) {
     } else if (extent_bounds.max_defined &&
                extent_bounds.max <= 0) {
         return Evaluate::make(0);
-    } else if (is_const_one(new_extent) &&
+    } else if (extent_bounds.max_defined &&
+               extent_bounds.max <= 1 &&
                op->device_api == DeviceAPI::None) {
         Stmt s = LetStmt::make(op->name, new_min, new_body);
+        if (extent_bounds.min < 1) {
+            s = IfThenElse::make(0 < new_extent, s);
+        }
         return mutate(s);
     } else if (!stmt_uses_var(new_body, op->name) && !is_const_zero(op->min)) {
         return For::make(op->name, make_zero(Int(32)), new_extent, op->for_type, op->device_api, new_body);
@@ -260,6 +273,23 @@ Stmt Simplify::visit(const Store *op) {
     ExprInfo index_info;
     Expr index = mutate(op->index, &index_info);
 
+    // If the store is fully out of bounds, drop it.
+    // This should only occur inside branches that make the store unreachable,
+    // but perhaps the branch was hard to prove constant true or false. This
+    // provides an alternative mechanism to simplify these unreachable stores.
+    string alloc_extent_name = op->name + ".total_extent";
+    if (bounds_and_alignment_info.contains(alloc_extent_name)) {
+        if (index_info.max_defined && index_info.max < 0) {
+            // TODO: We should turn this into some form of unreachable flag,
+            // and further simplify neighboring IR.
+            return Evaluate::make(0);
+        }
+        const ExprInfo &alloc_info = bounds_and_alignment_info.get(alloc_extent_name);
+        if (alloc_info.max_defined && index_info.min_defined && index_info.min > alloc_info.max) {
+            return Evaluate::make(0);
+        }
+    }
+
     ExprInfo base_info;
     if (const Ramp *r = index.as<Ramp>()) {
         mutate(r->base, &base_info);
@@ -290,10 +320,32 @@ Stmt Simplify::visit(const Store *op) {
 Stmt Simplify::visit(const Allocate *op) {
     std::vector<Expr> new_extents;
     bool all_extents_unmodified = true;
+    ExprInfo total_extent_info;
+    total_extent_info.min_defined = true;
+    total_extent_info.max_defined = true;
+    total_extent_info.min = 1;
+    total_extent_info.max = 1;
     for (size_t i = 0; i < op->extents.size(); i++) {
-        new_extents.push_back(mutate(op->extents[i], nullptr));
+        ExprInfo extent_info;
+        new_extents.push_back(mutate(op->extents[i], &extent_info));
         all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
+        if (extent_info.min_defined) {
+            total_extent_info.min *= extent_info.min;
+        } else {
+            total_extent_info.min_defined = false;
+        }
+        if (extent_info.max_defined) {
+            total_extent_info.max *= extent_info.max + 1;
+        } else {
+            total_extent_info.max_defined = false;
+        }
     }
+    if (total_extent_info.max_defined) {
+        total_extent_info.max -= 1;
+    }
+
+    ScopedBinding<ExprInfo> b(bounds_and_alignment_info, op->name + ".total_extent", total_extent_info);
+
     Stmt body = mutate(op->body);
     Expr condition = mutate(op->condition, nullptr);
     Expr new_expr;

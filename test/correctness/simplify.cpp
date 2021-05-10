@@ -1606,6 +1606,12 @@ void check_boolean() {
           Block::make(IfThenElse::make(x < y, Evaluate::make(0), Evaluate::make(x + 1)),
                       Evaluate::make(x + 2)));
 
+    check(IfThenElse::make(x < y,
+                           IfThenElse::make(z < 4, Evaluate::make(x + 2)),
+                           IfThenElse::make(z < 4, Evaluate::make(x + 3))),
+          IfThenElse::make(z < 4,
+                           IfThenElse::make(x < y, Evaluate::make(x + 2), Evaluate::make(x + 3))));
+
     // A for loop is also an if statement that the extent is greater than zero
     Stmt body = AssertStmt::make(y == z, y);
     Stmt loop = For::make("t", 0, x, ForType::Serial, DeviceAPI::None, body);
