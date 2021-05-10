@@ -379,7 +379,7 @@ Interval get_quantized_min_max(ActivationFunction activation, int zero_point, do
         min = zero_point + (int)std::round(-1.0 / scale);
         max = zero_point + (int)std::round(1.0 / scale);
     } else {
-        LOG(FATAL) << "Unsupported quantized activation function type.";
+        HLOG(FATAL) << "Unsupported quantized activation function type.";
     }
     return {std::max(min, 0), std::min(max, 255)};
 }
@@ -485,7 +485,7 @@ void requantize(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
         // could be a little faster, and avoid some quantization error.
         add_uint8(in, inq, 1, in, inq, 0, out, outq, activation);
     } else {
-        LOG(FATAL) << "Unable to requantize " << in.type() << " -> " << out.type() << "\n";
+        HLOG(FATAL) << "Unable to requantize " << in.type() << " -> " << out.type() << "\n";
     }
 }
 
@@ -500,7 +500,7 @@ ActivationFunction to_activation(UnaryOp::Operator op) {
     case UnaryOp::Tanh:
         return ActivationFunction::Tanh;
     default:
-        LOG(FATAL) << UnaryOp::to_string(op) << " is not an activation function";
+        HLOG(FATAL) << UnaryOp::to_string(op) << " is not an activation function";
         return ActivationFunction::None;
     }
 }
@@ -530,7 +530,7 @@ const char *BinaryOp::to_string(BinaryOp::Operator op) {
     case NotEqual:
         return "NotEqual";
     default:
-        LOG(FATAL) << "Unsupported binary op\n";
+        HLOG(FATAL) << "Unsupported binary op\n";
         return nullptr;
     }
 }
@@ -567,7 +567,7 @@ double dequantize_scalar(const Tensor *t) {
     } else if (buf.type() == halide_type_of<double>()) {
         return (as_scalar<double>(buf) - zero) * scale;
     } else {
-        LOG(FATAL) << "Unsupported type " << buf.type();
+        HLOG(FATAL) << "Unsupported type " << buf.type();
         return std::numeric_limits<double>::quiet_NaN();
     }
 }
@@ -590,7 +590,7 @@ TResult implement_binary(BinaryOp::Operator op, TOperand a, TOperand b) {
     case BinaryOp::NotEqual:
         return a != b;
     default:
-        LOG(FATAL) << "Unknown binary operator " << BinaryOp::to_string(op);
+        HLOG(FATAL) << "Unknown binary operator " << BinaryOp::to_string(op);
         return TResult();
     }
 }
@@ -655,7 +655,7 @@ void BinaryOp::execute() {
             break;
         }
     }
-    LOG(FATAL)
+    HLOG(FATAL)
         << "Unsupported binary op " << to_string(op_)
         << " for types " << in1->type() << ", " << in2->type() << ", " << out->type();
 }
@@ -698,7 +698,7 @@ halide_type_t Conv2DOp::filter_type() const {
         const halide_filter_metadata_t *metadata = conv_uint8_metadata();
         return metadata->arguments[2].type;
     } else {
-        LOG(FATAL) << "Unsupported type " << output()->type() << "\n";
+        HLOG(FATAL) << "Unsupported type " << output()->type() << "\n";
         return halide_type_t(halide_type_int, 0, 0);
     }
 }
@@ -803,7 +803,7 @@ void Conv2DOp::execute() {
 
         conv_uint8(input_buf, filter_buf, bias_buf, params, stride_, dilation_, output_range, output_buf);
     } else {
-        LOG(FATAL) << "Unsupported type " << out->type() << "\n";
+        HLOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -887,7 +887,7 @@ void DepthwiseConv2DOp::execute() {
         depthwise_conv_uint8(input_buf, filter_buf, bias_buf, depth_multiplier_, params,
                              stride_, dilation_, output_range, output_buf);
     } else {
-        LOG(FATAL) << "Unsupported type " << out->type() << "\n";
+        HLOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -963,7 +963,7 @@ void ElementwiseProgramOp::execute() {
         elementwise_loop_nest<2>(rank2, in0, in1, in2, in3, in4, out0, out1);
         return;
     }
-    LOG(FATAL) << "Unsupported elementwise program\n";
+    HLOG(FATAL) << "Unsupported elementwise program\n";
 }
 
 BoundsMap FullyConnectedOp::map_bounds(int input_idx, int output_idx) const {
@@ -1016,7 +1016,7 @@ void FullyConnectedOp::execute() {
             return;
         }
     }
-    LOG(FATAL) << "Unsupported type " << out->type() << "\n";
+    HLOG(FATAL) << "Unsupported type " << out->type() << "\n";
 }
 
 BoundsMap GatherOp::map_bounds(int input_idx, int output_idx) const {
@@ -1077,7 +1077,7 @@ void L2NormalizationOp::execute() {
         };
         loop_nest<2>(l2_normalization_rank2, in_buf, out_buf);
     } else {
-        LOG(FATAL) << "Unsupported type " << out->type() << "\n";
+        HLOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -1172,7 +1172,7 @@ void PadOp::execute() {
             copy_uint8_uint8(input_buf, pad_value, output_buf);
         }
     } else {
-        LOG(FATAL) << "Unsupported type " << out->type() << "\n";
+        HLOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -1193,7 +1193,7 @@ const char *Pool2DOp::to_string(Pool2DOp::Operator op) {
     case Max:
         return "Max";
     default:
-        LOG(FATAL) << "Unsupported pool op\n";
+        HLOG(FATAL) << "Unsupported pool op\n";
         return nullptr;
     }
 }
@@ -1236,7 +1236,7 @@ void Pool2DOp::execute() {
             break;
         }
     } else {
-        LOG(FATAL) << "Unsupported type " << out->type() << "\n";
+        HLOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -1245,7 +1245,7 @@ const char *ReductionOp::to_string(Operator op) {
     case Mean:
         return "Mean";
     default:
-        LOG(FATAL) << "Unsupported reduction operator.\n";
+        HLOG(FATAL) << "Unsupported reduction operator.\n";
         return nullptr;
     }
 }
@@ -1402,7 +1402,7 @@ void ShapeOp::execute() {
             out_buf(i) = in->extent(i);
         }
     } else {
-        LOG(FATAL) << "Unsupported type " << out->type() << "\n";
+        HLOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -1446,7 +1446,7 @@ void SoftmaxOp::execute() {
         };
         loop_nest<2>(softmax_rank2, in_buf, out_buf);
     } else {
-        LOG(FATAL) << "Unsupported type " << out->type() << "\n";
+        HLOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
 }
 
@@ -1567,7 +1567,7 @@ void TileConvFilterOp::execute() {
 
         tile_conv_filter_uint8(input_buf, input_zero, output_zero, output_buf);
     } else {
-        LOG(FATAL) << "Unsupported type " << in->type() << "\n";
+        HLOG(FATAL) << "Unsupported type " << in->type() << "\n";
     }
 }
 
@@ -1618,7 +1618,7 @@ const char *UnaryOp::to_string(UnaryOp::Operator op) {
     case Tanh:
         return "Tanh";
     default:
-        LOG(FATAL) << "Unsupported unary op\n";
+        HLOG(FATAL) << "Unsupported unary op\n";
         return nullptr;
     }
 }
@@ -1689,7 +1689,7 @@ void UnaryOp::execute() {
             return;
         }
     }
-    LOG(FATAL)
+    HLOG(FATAL)
         << "Unsupported unary op " << to_string(op_)
         << " for types " << in->type() << ", " << out->type();
 }

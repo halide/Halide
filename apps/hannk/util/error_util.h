@@ -104,16 +104,16 @@ public:
 
 #ifndef NDEBUG
 // In debug builds, include file-and-line
-#define LOG(SEVERITY) \
+#define HLOG(SEVERITY) \
     ::hannk::internal::Logger(::hannk::SEVERITY, __FILE__, __LINE__)
 #else
 // In nondebug builds, don't include file-and-line
-#define LOG(SEVERITY) \
+#define HLOG(SEVERITY) \
     ::hannk::internal::Logger(::hannk::SEVERITY)
 #endif
 
 /**
- * CHECK() is used to implement our assertion macros
+ * HCHECK() is used to implement our assertion macros
  * in such a way that the messages output for the assertion are only
  * evaluated if the assertion's value is false.
  *
@@ -128,11 +128,11 @@ public:
  */
 #ifndef NDEBUG
 // In debug builds, include file-and-line
-#define CHECK(condition) \
+#define HCHECK(condition) \
     (condition) ? (void)0 : ::hannk::internal::Voidifier() & ::hannk::internal::Checker(__FILE__, __LINE__, #condition).ref()
 #else
 // In nondebug builds, don't include file-and-line
-#define CHECK(condition) \
+#define HCHECK(condition) \
     (condition) ? (void)0 : ::hannk::internal::Voidifier() & ::hannk::internal::Checker(#condition).ref()
 #endif
 }  // namespace hannk
