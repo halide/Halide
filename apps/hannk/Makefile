@@ -226,6 +226,13 @@ UTIL_DEPS = \
 	$(BIN)/%/error_util.o \
 	$(BIN)/%/hannk_log_stderr.o
 
+$(BIN)/%/model_runner.o: util/model_runner.cpp
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -I$(TFLITE_INCLUDES) -c $< -o $@
+
+MODEL_RUNNER_DEPS = \
+	$(BIN)/%/model_runner.o
+
 # ---------------------- interpreter
 
 $(BIN)/%/interpreter.o: interpreter/interpreter.cpp
@@ -339,6 +346,7 @@ $(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp \
 		$(INTERPRETER_DEPS) \
 		$(TFLITE_PARSER_DEPS) \
 		$(UTIL_DEPS) \
+		$(MODEL_RUNNER_DEPS) \
 		$(TFLITE_SHARED_LIBRARY) \
 		$(HANNK_INTERNAL_DELEGATE_DEPS) \
 		$(BIN)/$(HL_TARGET)/libHannkDelegate.so
