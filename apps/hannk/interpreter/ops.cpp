@@ -307,7 +307,7 @@ void crop_to_union(HalideBuffer<T> &a, HalideBuffer<U> &b) {
 struct power_of_two {
     int value;
 
-    power_of_two(int value)
+    explicit power_of_two(int value)
         : value(value) {
     }
 };
