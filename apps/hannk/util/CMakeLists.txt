@@ -32,6 +32,10 @@ add_library(model_runner STATIC
             model_runner.cpp)
 target_include_directories(model_runner PUBLIC
                            $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
+target_compile_definitions(model_runner PRIVATE
+                           -DTFLITE_VERSION_MAJOR=${TFLITE_VERSION_MAJOR}
+                           -DTFLITE_VERSION_MINOR=${TFLITE_VERSION_MINOR}
+                           -DTFLITE_VERSION_PATCH=${TFLITE_VERSION_PATCH})
 target_link_libraries(model_runner PRIVATE
                       Halide::Tools  # for halide_benchmark.h
                       Halide::Runtime

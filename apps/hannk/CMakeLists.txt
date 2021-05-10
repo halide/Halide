@@ -43,11 +43,6 @@ target_link_libraries(benchmark PRIVATE
                       Halide::Runtime)
 
 add_executable(compare_vs_tflite compare_vs_tflite.cpp)
-target_compile_definitions(compare_vs_tflite PRIVATE
-                           -DTFLITE_VERSION_MAJOR=${TFLITE_VERSION_MAJOR}
-                           -DTFLITE_VERSION_MINOR=${TFLITE_VERSION_MINOR}
-                           -DTFLITE_VERSION_PATCH=${TFLITE_VERSION_PATCH}
-                           -DHANNK_USE_REGISTRAR_DELEGATE)
 target_link_libraries(compare_vs_tflite PRIVATE
                       tensorflowlite_c
                       tflite_parser
