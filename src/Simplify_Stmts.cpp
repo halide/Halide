@@ -340,6 +340,9 @@ Stmt Simplify::visit(const Allocate *op) {
             total_extent_info.max_defined = false;
         }
     }
+    if (total_extent_info.min_defined) {
+        total_extent_info.min -= 1;
+    }
     if (total_extent_info.max_defined) {
         total_extent_info.max -= 1;
     }
