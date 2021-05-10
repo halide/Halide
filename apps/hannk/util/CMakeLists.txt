@@ -37,6 +37,12 @@ target_compile_definitions(model_runner PRIVATE
                            -DTFLITE_VERSION_MINOR=${TFLITE_VERSION_MINOR}
                            -DTFLITE_VERSION_PATCH=${TFLITE_VERSION_PATCH})
 target_link_libraries(model_runner PRIVATE
+                      tensorflowlite_c
+                      interpreter
+                      error_util
+                      file_util
+                      hannk_delegate_registrar
+                      tflite_parser
                       Halide::Tools  # for halide_benchmark.h
                       Halide::Runtime
                       tensorflowlite_headers)

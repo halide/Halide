@@ -44,13 +44,7 @@ target_link_libraries(benchmark PRIVATE
 
 add_executable(compare_vs_tflite compare_vs_tflite.cpp)
 target_link_libraries(compare_vs_tflite PRIVATE
-                      tensorflowlite_c
-                      tflite_parser
-                      interpreter
-                      error_util
-                      file_util
                       hannk_log_stderr
-                      hannk_delegate_registrar
                       model_runner
                       Halide::Runtime)
 target_include_directories(compare_vs_tflite
