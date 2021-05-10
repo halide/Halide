@@ -388,15 +388,11 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               rewrite((x/c1)*c1 < x, (x % c1) != 0, c1 > 0) ||
               rewrite(x < (x/c1)*c1, false, c1 > 0) ||
 
-              // Cancel a division
-              rewrite((x + c1)/c0 < (x + c2)/c0, x%c0 < c2 - c1, c0 > 0) ||
-              // c1 == 0
-              rewrite(x/c0 < (x + c2)/c0, x%c0 < c2, c0 > 0) ||
-              // c2 == 0
-              rewrite((x + c1)/c0 < x/c0, x%c0 < -c1, c0 > 0) ||
-
-              // The addition on the right could be outside
-              rewrite((x + c1)/c0 < x/c0 + c2, x%c0 < c2 * c0 - c1, c0 > 0) ||
+              rewrite(((x + c0)/c1) < ((x/c1) + c2), (x % c1) < fold((c2*c1) - c0), c1 > 0) ||
+              rewrite((x/c0) < ((x + y)/c0), (x % c0) < y, c0 > 0) ||
+              rewrite((x/c0) < ((y + x)/c0), (x % c0) < y, c0 > 0) ||
+              rewrite(((x + c0)/c1) < (x/c1), (x % c1) < fold(0 - c0), c1 > 0) ||
+              rewrite(((x + c0)/c1) < ((x + c2)/c1), (x % c1) < fold(c2 - c0), c1 > 0) ||
 
               // With a confounding max or min
               rewrite((x + c1)/c0 < (min(x/c0, y) + c2), false, c0 > 0 && c1 >= c2 * c0) ||
