@@ -25,11 +25,11 @@ bool ParseOptions(char **options_keys,
     for (size_t i = 0; i < num_options; ++i) {
         if (!strcmp(options_keys[i], "verbosity")) {
             if (!ParseValue(options_values[i], options->verbosity)) {
-                LOG(WARNING) << "ParseOptions: malformed option " << options_keys[i] << "\n";
+                HLOG(WARNING) << "ParseOptions: malformed option " << options_keys[i] << "\n";
                 return false;
             }
         } else {
-            LOG(WARNING) << "ParseOptions: unknown option " << options_keys[i] << "\n";
+            HLOG(WARNING) << "ParseOptions: unknown option " << options_keys[i] << "\n";
             return false;
         }
     }
@@ -55,8 +55,8 @@ TFL_CAPI_EXPORT TfLiteDelegate *tflite_plugin_create_delegate(char **options_key
     }
 
     if (options.verbosity >= 1) {
-        LOG(INFO) << "External HannkDelegate: verbosity set to "
-                  << options.verbosity << ".";
+        HLOG(INFO) << "External HannkDelegate: verbosity set to "
+                   << options.verbosity << ".";
     }
 
     return HannkDelegateCreate(&options);
