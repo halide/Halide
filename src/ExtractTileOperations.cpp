@@ -137,7 +137,6 @@ NewMatmul convert_to_matmul(const Store *op, const string &new_name) {
     }
 
     const auto *lhs_load = matches[0].as<Load>();
-    // FIXME: When tile_r is not 4 the broadcast is inside the index, not of the value
     const auto *rhs_broadcast = matches[1].as<Broadcast>();
     if (!lhs_load || !rhs_broadcast) {
         return {};
@@ -159,7 +158,6 @@ NewMatmul convert_to_matmul(const Store *op, const string &new_name) {
 
     const auto lhs_tile = is_3d_tile_index(lhs_load->index);
     const auto rhs_tile = is_2d_tile_index(rhs_load->index);
-    // FIXME: When tile_r is not 4 the RHS load will be 4D (x, r/4, y, r%4)
     if (!lhs_tile.result || !rhs_tile.result) {
         return {};
     }
@@ -252,7 +250,6 @@ class ExtractTileOperations : public IRMutator {
         if (op->memory_type == MemoryType::AMXTile) {
             user_assert(op->type.is_int() && op->type.bits() == 32) << "scheduled tile operations must yield 32-bit integers";
 
-            // FIXME: Handle nested allocations better
             user_assert(!in_allocate) << "Found two possible tile allocations for AMX allocation";
             ScopedValue<string> old_amx_name(amx_name, op->name + ".amx");
             ScopedValue<string> old_tile_name(tile_name, op->name);
