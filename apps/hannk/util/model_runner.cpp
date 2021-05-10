@@ -193,7 +193,7 @@ TfLiteModelRunner::TfLiteModelRunner(const std::vector<char> &buffer,
 
     TfLiteStatus status;
     HCHECK((status = TfLiteInterpreterAllocateTensors(tf_interpreter_)) ==
-          kTfLiteOk)
+           kTfLiteOk)
         << status;
 
     const int inputs = TfLiteInterpreterGetInputTensorCount(tf_interpreter_);
