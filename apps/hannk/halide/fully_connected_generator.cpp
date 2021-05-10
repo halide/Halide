@@ -39,7 +39,8 @@ public:
         Var c("c"), b("b");
 
         // We require the reduction dimension to be aligned to a uint8 vector.
-        Expr filter_extent = align(filter_.dim(0).extent(), natural_vector_size<uint8_t>());
+        const int filter_alignment = natural_vector_size<uint8_t>();
+        Expr filter_extent = align(filter_.dim(0).extent(), filter_alignment);
         filter_.dim(0).set_min(0);
         RDom rc(0, filter_extent);
 
@@ -215,6 +216,14 @@ public:
                 .atomic()
                 .reorder(rc, b)
                 .vectorize(rc, reduce_vector_size);
+        }
+
+        if (get_target().arch == Target::ARM) {
+            // For some absurd reason, making a copy of this buffer makes this pipeline
+            // up to 10x faster on ARM (e.g. the fully connected layer of resnet with 8
+            // batches). It also appears to have negligible impact in other cases.
+            // TODO: Figure out why this is, and figure out how to avoid this dumb copy.
+            input_.in().compute_root();
         }
     }
 };
