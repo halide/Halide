@@ -22,6 +22,7 @@ struct SeedTracker {
     void reset(int seed);
     int next_seed() const;
     int seed_for_name(const std::string &name);
+
 private:
     int next_seed_ = 0;
     std::map<std::string, int> seeds_;
