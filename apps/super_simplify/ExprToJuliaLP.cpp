@@ -29,6 +29,7 @@ class ExprToJuliaLP : public IRVisitor {
     std::set<std::string> present_exprs;
     std::map<std::string, string_pair> names_to_maxs;
     std::map<std::string, string_pair> names_to_mins;
+    std::map<std::string, std::string> names_to_conditionals;
 
     // Indicator Name -> ((Var name, cond), (a, b))
     std::map<std::string, std::pair<string_pair, string_pair>> names_of_indicators;
@@ -166,7 +167,8 @@ class ExprToJuliaLP : public IRVisitor {
 
     // here's where things get messy!
     void visit(const Max *op) override {
-        std::string name = get_new_var_name();
+        const std::string name = get_new_var_name();
+        const std::string cond_name = get_new_var_name();
         possibly_correlated_expressions[name] = Expr(op);
         current << name;
         // Save this for later
@@ -179,13 +181,16 @@ class ExprToJuliaLP : public IRVisitor {
         std::string b_str = clear_current();
 
         names_to_maxs[name] = std::make_pair(std::move(a_str), std::move(b_str));
+        // For big M method
+        names_to_conditionals[name] = cond_name;
 
         // Re-add what the expression is.
         current << keeper;
     }
 
     void visit(const Min *op) override {
-        std::string name = get_new_var_name();
+        const std::string name = get_new_var_name();
+        const std::string cond_name = get_new_var_name();
         possibly_correlated_expressions[name] = Expr(op);
         current << name;
         // Save this for later
@@ -198,6 +203,8 @@ class ExprToJuliaLP : public IRVisitor {
         std::string b_str = clear_current();
 
         names_to_mins[name] = std::make_pair(std::move(a_str), std::move(b_str));
+        // For big M method
+        names_to_conditionals[name] = cond_name;
 
         // Re-add what the expression is.
         current << keeper;
@@ -242,7 +249,10 @@ public:
     std::string compile_result(bool upper) {
         std::string objective = clear_current();
 
-        current << "TODO: DECLARE A MODEL\n\n";
+        current << "# TODO: DECLARE A MODEL\n\n";
+        current << "# TODO: change M\n\n";
+
+        current << "M = " << (1 << 20) << "\n";
 
         current << "# Variable declarations\n";
 
@@ -259,6 +269,11 @@ public:
             current << "@variable(model, " << p.first << ")\n";
         }
 
+        for (const auto &p : names_to_conditionals) {
+            // current << "@variable(model, 0 <= " << p.second << " <= 1)\n";
+            current << "@variable(model, " << p.second << ", Bin)\n";
+        }
+
         current << "\n# Indicator variables for selects\n";
         for (const auto &p : names_of_indicators) {
             current << "@variable(model, " << p.first << ", Bin)\n";
@@ -270,20 +285,32 @@ public:
         // Construct min constraints
         for (const auto &p : names_to_maxs) {
             current << "@constraint(model, " << p.first << " >= " << p.second.first << ")\n";
-            current << "@constraint(model, " << p.first << " >= " << p.second.second << ")\n\n";
+            current << "@constraint(model, " << p.first << " >= " << p.second.second << ")\n";
+
+            // Big M method
+            current << "# Big M variable constraints\n";
+            current << "@constraint(model, " << p.first << " <= " << p.second.first << " + (M * " << names_to_conditionals[p.first] << "))\n";
+            current << "@constraint(model, " << p.first << " <= " << p.second.second << " + (M * (1 - " << names_to_conditionals[p.first] << ")))\n\n";
         }
 
         current << "# Add minimum constraints\n";
 
         for (const auto &p : names_to_mins) {
             current << "@constraint(model, " << p.first << " <= " << p.second.first << ")\n";
-            current << "@constraint(model, " << p.first << " <= " << p.second.second << ")\n\n";
+            current << "@constraint(model, " << p.first << " <= " << p.second.second << ")\n";
+
+            // Big M method
+            current << "# Big M variable constraints\n";
+            current << "@constraint(model, " << p.first << " >= " << p.second.first << " - (M * " << names_to_conditionals[p.first] << "))\n";
+            current << "@constraint(model, " << p.first << " >= " << p.second.second << " - (M * (1 - " << names_to_conditionals[p.first] << ")))\n\n";
         }
 
+        /*
         current << "# Add possibly correlated (loose) constraints.\n";
         current << "# Some of these will be trivial, because I didn't come up with a smarter loop.\n\n";
 
         // This is n^2, oops....
+
         for (const auto &p1 : possibly_correlated_expressions) {
             Expr e1 = p1.second;
             for (const auto &p2 : possibly_correlated_expressions) {
@@ -306,6 +333,7 @@ public:
             }
             current << "# Finished with: " << p1.first << "'s correlated differences\n\n"; 
         }
+        */
 
         current << "# Add select binary constraints\n";
 

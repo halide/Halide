@@ -418,6 +418,9 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
 
     // size_t max_iters = 32;
 
+    size_t n_tightness_counterexamples = 0;
+    const size_t max_tightness_counterexamples = 10;
+
 
     while (true) {
         if (counterexamples.size() > 100) {
@@ -479,6 +482,8 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
             // TODO: should this just use current_program?
             map<string, Expr> tighter_program;
             bool found_tighter = false;
+
+            // TODO: might want a restriction on the number of iterations here, I don't want it to get stuck...
 
             // Iteratively find a tighter RHS
             while (true) {
@@ -598,9 +603,16 @@ Expr generate_bound(Expr e, bool upper, int size, int max_leaves) {
 
                 map<string, Expr> tightness_counterexample = all_vars_zero;
 
+                if (n_tightness_counterexamples >= max_tightness_counterexamples) {
+                    std::cerr << "*** Choosing loose bound:\n";
+                    std::cout << "*** Success: " << e << " -> " << RHS << "\n\n";
+                    return RHS;
+                }
+
                 if (found_tightness_counterexample(e, RHS, counterexamples, tightness_counterexample, intervals_to_vars, upper, vars, z3_comment, z3_timeout)) {
                     std::cerr << "*** Found sub-optimal bound: " << e << " -> " << RHS << "\n\n";
                     counterexamples.push_back(tightness_counterexample);
+                    n_tightness_counterexamples++;
                     continue; // TODO(rootjalex): should this be a continue???
                 } else {
                     std::cout << "*** Success: " << e << " -> " << RHS << "\n\n";

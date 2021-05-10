@@ -9,6 +9,8 @@
 // times each is used.
 std::map<std::string, std::pair<Halide::Expr, int>> find_vars(const Halide::Expr &e);
 
+std::map<Halide::Expr, int, Halide::Internal::IRDeepCompare> find_consts(const Halide::Expr &e);
+
 // Does expr a describe a pattern that expr b would match. For example
 // more_general_than(x + y, (x*3) + y) returns true. bindings is an
 // in-out parameter. If some var in a is already in the bindings, it

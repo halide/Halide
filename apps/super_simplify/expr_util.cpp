@@ -38,6 +38,33 @@ std::map<std::string, std::pair<Expr, int>> find_vars(const Expr &e) {
     return f.vars;
 }
 
+class FindConsts : public IRVisitor {
+    void visit(const IntImm *op) override {
+        constant_counts[op]++;
+    }
+
+    void visit(const UIntImm *op) override {
+        constant_counts[op]++;
+    }
+
+    void visit(const FloatImm *op) override {
+        constant_counts[op]++;
+    }
+
+    void visit(const StringImm *op) override {
+        constant_counts[op]++;
+    }
+
+public:
+    std::map<Expr, int, IRDeepCompare> constant_counts;
+};
+
+std::map<Expr, int, IRDeepCompare> find_consts(const Expr &e) {
+    FindConsts f;
+    e.accept(&f);
+    return f.constant_counts;
+}
+
 template<typename Op>
 bool more_general_than(const Expr &a, const Op *b, map<string, Expr> &bindings, bool entered_a) {
     if (!entered_a) {
