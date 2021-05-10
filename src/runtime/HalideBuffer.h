@@ -1202,7 +1202,7 @@ public:
      * sprite onto a framebuffer, you'll want to translate the sprite
      * to the correct location first like so: \code
      * framebuffer.copy_from(sprite.translated({x, y})); \endcode
-    */
+     */
     template<typename T2, int D2>
     void copy_from(Buffer<T2, D2> src) {
         static_assert(!std::is_const<T>::value, "Cannot call copy_from() on a Buffer<const T>");
@@ -1951,55 +1951,42 @@ private:
     // @{
     template<int N>
     struct for_each_value_task_dim {
-        int extent;
-        int stride[N];
+        std::ptrdiff_t extent;
+        std::ptrdiff_t stride[N];
     };
 
     // Given an array of strides, and a bunch of pointers to pointers
     // (all of different types), advance the pointers using the
     // strides.
     template<typename Ptr, typename... Ptrs>
-    HALIDE_ALWAYS_INLINE static void advance_ptrs(const int *stride, Ptr *ptr, Ptrs... ptrs) {
-        (*ptr) += *stride;
+    HALIDE_ALWAYS_INLINE static void advance_ptrs(const std::ptrdiff_t *stride, Ptr &ptr, Ptrs &...ptrs) {
+        ptr += *stride;
         advance_ptrs(stride + 1, ptrs...);
     }
 
     HALIDE_ALWAYS_INLINE
-    static void advance_ptrs(const int *) {
+    static void advance_ptrs(const std::ptrdiff_t *) {
     }
 
-    // Same as the above, but just increments the pointers.
-    template<typename Ptr, typename... Ptrs>
-    HALIDE_ALWAYS_INLINE static void increment_ptrs(Ptr *ptr, Ptrs... ptrs) {
-        (*ptr)++;
-        increment_ptrs(ptrs...);
-    }
-
-    HALIDE_ALWAYS_INLINE
-    static void increment_ptrs() {
-    }
-
-    template<typename Fn, typename... Ptrs>
+    template<typename Fn, typename Ptr, typename... Ptrs>
     HALIDE_NEVER_INLINE static void for_each_value_helper(Fn &&f, int d, bool innermost_strides_are_one,
-                                                          const for_each_value_task_dim<sizeof...(Ptrs)> *t, Ptrs... ptrs) {
-        if (d == -1) {
-            f((*ptrs)...);
-        } else if (d == 0) {
+                                                          const for_each_value_task_dim<sizeof...(Ptrs) + 1> *t, Ptr ptr, Ptrs... ptrs) {
+        if (d == 0) {
             if (innermost_strides_are_one) {
-                for (int i = t[0].extent; i != 0; i--) {
-                    f((*ptrs)...);
-                    increment_ptrs((&ptrs)...);
+                Ptr end = ptr + t[0].extent;
+                while (ptr != end) {
+                    f(*ptr++, (*ptrs++)...);
                 }
             } else {
-                for (int i = t[0].extent; i != 0; i--) {
-                    f((*ptrs)...);
-                    advance_ptrs(t[0].stride, (&ptrs)...);
+                for (std::ptrdiff_t i = t[0].extent; i != 0; i--) {
+                    f(*ptr, (*ptrs)...);
+                    advance_ptrs(t[0].stride, ptr, ptrs...);
                 }
             }
         } else {
-            for (int i = t[d].extent; i != 0; i--) {
-                for_each_value_helper(f, d - 1, innermost_strides_are_one, t, ptrs...);
-                advance_ptrs(t[d].stride, (&ptrs)...);
+            for (std::ptrdiff_t i = t[d].extent; i != 0; i--) {
+                for_each_value_helper(f, d - 1, innermost_strides_are_one, t, ptr, ptrs...);
+                advance_ptrs(t[d].stride, ptr, ptrs...);
             }
         }
     }
@@ -2034,7 +2021,9 @@ private:
             t[i].extent = buffers[0]->dim[i].extent;
 
             // Order the dimensions by stride, so that the traversal is cache-coherent.
-            for (int j = i; j > 0 && t[j].stride[0] < t[j - 1].stride[0]; j--) {
+            // Use the last dimension for this, because this is the source in copies.
+            // It appears to be better to optimize read order than write order.
+            for (int j = i; j > 0 && t[j].stride[N - 1] < t[j - 1].stride[N - 1]; j--) {
                 std::swap(t[j], t[j - 1]);
             }
         }
@@ -2070,17 +2059,21 @@ private:
 
     template<typename Fn, typename... Args, int N = sizeof...(Args) + 1>
     void for_each_value_impl(Fn &&f, Args &&...other_buffers) const {
-        Buffer<>::for_each_value_task_dim<N> *t =
-            (Buffer<>::for_each_value_task_dim<N> *)HALIDE_ALLOCA((dimensions() + 1) * sizeof(for_each_value_task_dim<N>));
-        // Move the preparatory code into a non-templated helper to
-        // save code size.
-        const halide_buffer_t *buffers[] = {&buf, (&other_buffers.buf)...};
-        bool innermost_strides_are_one = Buffer<>::for_each_value_prep(t, buffers);
+        if (dimensions() > 0) {
+            Buffer<>::for_each_value_task_dim<N> *t =
+                (Buffer<>::for_each_value_task_dim<N> *)HALIDE_ALLOCA((dimensions() + 1) * sizeof(for_each_value_task_dim<N>));
+            // Move the preparatory code into a non-templated helper to
+            // save code size.
+            const halide_buffer_t *buffers[] = {&buf, (&other_buffers.buf)...};
+            bool innermost_strides_are_one = Buffer<>::for_each_value_prep(t, buffers);
 
-        Buffer<>::for_each_value_helper(f, dimensions() - 1,
-                                        innermost_strides_are_one,
-                                        t,
-                                        data(), (other_buffers.data())...);
+            Buffer<>::for_each_value_helper(f, dimensions() - 1,
+                                            innermost_strides_are_one,
+                                            t,
+                                            data(), (other_buffers.data())...);
+        } else {
+            f(*data(), (*other_buffers.data())...);
+        }
     }
     // @}
 
