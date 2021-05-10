@@ -51,8 +51,9 @@ int process_args(int argc, char **argv, const FlagFnMap &m, FlagFn nonflags) {
 int main(int argc, char **argv) {
     using namespace hannk;
 
+    int seed = time(nullptr);
+
     ModelRunner runner;
-    runner.seed = time(nullptr);
     std::vector<std::string> files;
 
     // Default the exernal delegate to disabled, since it may
@@ -103,8 +104,8 @@ int main(int argc, char **argv) {
              runner.external_delegate_path = value;
              return 0;
          }},
-        {"seed", [&runner](const std::string &value) {
-             runner.seed = std::stoi(value);
+        {"seed", [&seed](const std::string &value) {
+             seed = std::stoi(value);
              return 0;
          }},
         {"threads", [&runner](const std::string &value) {
@@ -135,18 +136,8 @@ int main(int argc, char **argv) {
 #endif
     }
 
-    std::cout << "Using random seed: " << runner.seed << "\n";
-    std::cout << "Using threads: " << runner.threads << "\n";
-
-    {
-        std::string tf_ver = TfLiteVersion();
-        std::cout << "Using TFLite version: " << tf_ver << "\n";
-        std::string expected = std::to_string(TFLITE_VERSION_MAJOR) + "." + std::to_string(TFLITE_VERSION_MINOR) + ".";
-        if (tf_ver.find(expected) != 0) {
-            std::cerr << "*** WARNING: compare_vs_tflite has been tested against TFLite v" << expected << "x, "
-                      << "but is using " << tf_ver << "; results may be inaccurate or wrong.\n";
-        }
-    }
+    runner.set_seed(seed);
+    runner.status();
 
     for (auto f : files) {
         runner.run(f);
