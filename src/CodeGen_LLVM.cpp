@@ -1095,10 +1095,17 @@ void CodeGen_LLVM::optimize_module() {
 
     bool debug_pass_manager = false;
     // These analysis managers have to be declared in this order.
+#if LLVM_VERSION >= 130
+    llvm::LoopAnalysisManager lam;
+    llvm::FunctionAnalysisManager fam;
+    llvm::CGSCCAnalysisManager cgam;
+    llvm::ModuleAnalysisManager mam;
+#else
     llvm::LoopAnalysisManager lam(debug_pass_manager);
     llvm::FunctionAnalysisManager fam(debug_pass_manager);
     llvm::CGSCCAnalysisManager cgam(debug_pass_manager);
     llvm::ModuleAnalysisManager mam(debug_pass_manager);
+#endif
 
     llvm::AAManager aa = pb.buildDefaultAAPipeline();
     fam.registerPass([&] { return std::move(aa); });
@@ -1109,7 +1116,11 @@ void CodeGen_LLVM::optimize_module() {
     pb.registerFunctionAnalyses(fam);
     pb.registerLoopAnalyses(lam);
     pb.crossRegisterProxies(lam, fam, cgam, mam);
+#if LLVM_VERSION >= 130
+    ModulePassManager mpm;
+#else
     ModulePassManager mpm(debug_pass_manager);
+#endif
 
     PassBuilder::OptimizationLevel level = PassBuilder::OptimizationLevel::O3;
 
