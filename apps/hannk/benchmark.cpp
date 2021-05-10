@@ -54,13 +54,13 @@ int main(int argc, char **argv) {
             continue;
         }
         if (argv[i][0] == '-') {
-            LOG(ERROR) << "Unknown flag: " << argv[i] << ".\n";
+            HLOG(ERROR) << "Unknown flag: " << argv[i] << ".\n";
             exit(-1);
         }
     }
 
     if (options.verbose && options.trace) {
-        LOG(ERROR) << "You cannot specify --trace and --verbose at the same time.\n";
+        HLOG(ERROR) << "You cannot specify --trace and --verbose at the same time.\n";
         exit(-1);
     }
 

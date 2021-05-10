@@ -44,7 +44,7 @@ public:
         case tflite::ActivationFunctionType_SIGN_BIT:
             return ActivationFunction::SignBit;
         default:
-            CHECK(0) << "Unknown tflite::ActivationFunctionType";
+            HCHECK(0) << "Unknown tflite::ActivationFunctionType";
         }
     }
 
@@ -73,7 +73,7 @@ public:
         case tflite::TensorType_COMPLEX64:
         case tflite::TensorType_COMPLEX128:
         default:
-            CHECK(0) << "Unhandled type in ConvertTfLiteType";
+            HCHECK(0) << "Unhandled type in ConvertTfLiteType";
             return halide_type_t();
         }
     }
@@ -85,7 +85,7 @@ public:
         case tflite::Padding_VALID:
             return Padding::Valid;
         default:
-            CHECK(0) << "Unknown tflite::Padding";
+            HCHECK(0) << "Unknown tflite::Padding";
         }
     }
 
@@ -98,7 +98,7 @@ public:
                 shape.push_back(t->shape()->Get(shape_size - 1 - i));
             }
         }
-        //CHECK(t->shape()) << "Dynamic shapes not supported.";
+        //HCHECK(t->shape()) << "Dynamic shapes not supported.";
 
         halide_type_t type = parse_type(t->type());
 
@@ -178,7 +178,7 @@ public:
             op->builtin_options_as_ConcatenationOptions();
         ActivationFunction activation =
             parse_activation_function(options->fused_activation_function());
-        CHECK(activation == ActivationFunction::None);
+        HCHECK(activation == ActivationFunction::None);
         std::vector<TensorPtr> inputs;
         for (auto i = op->inputs()->cbegin(); i != op->inputs()->cend(); ++i) {
             inputs.push_back(tensors_[*i]);
@@ -322,7 +322,7 @@ public:
     OpPtr parse_split(const tflite::Operator *op, int axis_tensor_index, int input_tensor_index) {
         assert(axis_tensor_index < (int)op->inputs()->size());
         TensorPtr axis_tensor = tensors_[op->inputs()->Get(axis_tensor_index)];
-        //CHECK(axis_tensor->is_allocated()) << "Can't handle dynamic axis for Split.\n";
+        //HCHECK(axis_tensor->is_allocated()) << "Can't handle dynamic axis for Split.\n";
         int axis = axis_tensor->is_allocated() ? axis_tensor->buffer<int32_t>()() : 0;
 
         assert(input_tensor_index < (int)op->inputs()->size());
@@ -505,8 +505,8 @@ public:
             return parse_while(op);
 
         default:
-            CHECK(0) << "Unsupported op "
-                     << tflite::EnumNameBuiltinOperator(builtin_code);
+            HCHECK(0) << "Unsupported op "
+                      << tflite::EnumNameBuiltinOperator(builtin_code);
         }
     }
 

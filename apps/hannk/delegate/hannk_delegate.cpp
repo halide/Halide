@@ -148,7 +148,7 @@ halide_type_t ConvertTfLiteType(TfLiteType t) {
     case kTfLiteComplex64:
     case kTfLiteComplex128:
     default:
-        CHECK(0) << "Unhandled type in ConvertTfLiteType";
+        HCHECK(0) << "Unhandled type in ConvertTfLiteType";
         return halide_type_t();
     }
 }
@@ -169,7 +169,7 @@ ActivationFunction ConvertTfLiteActivation(TfLiteFusedActivation a) {
         return ActivationFunction::SignBit;
     case kTfLiteActSigmoid:
     default:
-        CHECK(0) << "Unknown TfLiteFusedActivation";
+        HCHECK(0) << "Unknown TfLiteFusedActivation";
     }
 }
 
@@ -180,7 +180,7 @@ Padding ConvertTfLitePadding(TfLitePadding p) {
     case kTfLitePaddingValid:
         return Padding::Valid;
     default:
-        CHECK(0) << "Unknown TfLitePadding";
+        HCHECK(0) << "Unknown TfLitePadding";
     }
 }
 
@@ -248,7 +248,7 @@ public:
     TfLiteStatus Init(TfLiteContext *context,
                       const TfLiteDelegateParams *params) {
         if (options_.verbosity >= 1) {
-            LOG(INFO) << "Delegate " << (void *)this << " Init\n";
+            HLOG(INFO) << "Delegate " << (void *)this << " Init\n";
         }
 
         if (interpreter_ != nullptr) {
@@ -262,7 +262,7 @@ public:
             node_indices[i] = node_index;
         }
         if (options_.verbosity >= 1) {
-            LOG(INFO) << "Delegate " << (void *)this << " Init nodes: " << node_indices << "\n";
+            HLOG(INFO) << "Delegate " << (void *)this << " Init nodes: " << node_indices << "\n";
         }
 
         // Pre-emptively map *all* the TFLiteTensors into our Tensor type.
@@ -293,7 +293,7 @@ public:
             t->set_input(true);
             inputs.push_back(t);
             if (options_.verbosity >= 2) {
-                LOG(INFO) << "Delegate " << (void *)this << (t->is_constant() ? " Const" : "") << " Input tensor: " << tensor_id << "\n";
+                HLOG(INFO) << "Delegate " << (void *)this << (t->is_constant() ? " Const" : "") << " Input tensor: " << tensor_id << "\n";
             }
         }
 
@@ -305,7 +305,7 @@ public:
                 continue;
             }
             if (options_.verbosity >= 2) {
-                LOG(INFO) << "Delegate " << (void *)this << " Output tensor: " << tensor_id << "\n";
+                HLOG(INFO) << "Delegate " << (void *)this << " Output tensor: " << tensor_id << "\n";
             }
             auto t = GetTensorById(context, tensor_id);
             t->set_output(true);
@@ -349,7 +349,7 @@ public:
     // to do all memory allocation in Prepare(), rather than Eval(), if possible.
     TfLiteStatus Prepare(TfLiteContext *context, TfLiteNode *node) {
         if (options_.verbosity >= 1) {
-            LOG(INFO) << "Delegate " << (void *)this << " Prepare\n";
+            HLOG(INFO) << "Delegate " << (void *)this << " Prepare\n";
         }
 
         assert(model_ != nullptr);
@@ -369,7 +369,7 @@ public:
             auto t = GetTensorById(context, tensor_id);
             if (t && t->is_dynamic()) {
                 if (options_.verbosity >= 2) {
-                    LOG(INFO) << "SetTensorToDynamic " << tensor_id;
+                    HLOG(INFO) << "SetTensorToDynamic " << tensor_id;
                 }
                 SetTensorToDynamic(context, tensor_id);
             }
@@ -382,7 +382,7 @@ public:
     // have been called for the current set of tensor shape(s).
     TfLiteStatus Eval(TfLiteContext *context, TfLiteNode *node) {
         if (options_.verbosity >= 3) {
-            LOG(INFO) << "Delegate " << (void *)this << " Eval\n";
+            HLOG(INFO) << "Delegate " << (void *)this << " Eval\n";
         }
 
         if (interpreter_ == nullptr) {
@@ -424,7 +424,7 @@ public:
             auto t = GetTensorById(context, tensor_id);
             assert(t->is_output() && !t->is_constant() && t->is_allocated());
             if (t->is_dynamic()) {
-                CHECK(IsDynamicTensor(tensor));
+                HCHECK(IsDynamicTensor(tensor));
                 const Box b = t->bounds();
                 TfLiteIntArray *new_size = TfLiteIntArrayCreate((int)b.size());
                 for (size_t i = 0; i < b.size(); i++) {
@@ -467,13 +467,13 @@ private:
     static void *InitImpl(TfLiteContext *context, const char *buffer, size_t length) {
         const TfLiteDelegateParams *params = (const TfLiteDelegateParams *)buffer;
         if (params == nullptr) {
-            LOG(ERROR) << "HannkDelegate.init: NULL params";
+            HLOG(ERROR) << "HannkDelegate.init: NULL params";
             return nullptr;
         }
         HannkDelegate *hannk_delegate = (HannkDelegate *)params->delegate;
         std::unique_ptr<HannkDelegateKernel> self(new HannkDelegateKernel(hannk_delegate->options_));
         if (self->Init(context, params) != kTfLiteOk) {
-            LOG(ERROR) << "HannkDelegate.init: NULL params";
+            HLOG(ERROR) << "HannkDelegate.init: NULL params";
             return nullptr;
         }
         return self.release();
@@ -486,7 +486,7 @@ private:
 
     static TfLiteStatus PrepareImpl(TfLiteContext *context, TfLiteNode *node) {
         if (node->user_data == nullptr) {
-            LOG(ERROR) << "Delegate kernel was not initialized";
+            HLOG(ERROR) << "Delegate kernel was not initialized";
             return kTfLiteDelegateError;
         }
         HannkDelegateKernel *self = (HannkDelegateKernel *)node->user_data;
@@ -502,7 +502,7 @@ private:
     TensorPtr GetTensorById(TfLiteContext *context, int tensor_id) {
         auto it = tensors_.find(tensor_id);
         if (it == tensors_.end()) {
-            LOG(ERROR) << "tensor_id not found: " << tensor_id;
+            HLOG(ERROR) << "tensor_id not found: " << tensor_id;
             return nullptr;
         }
         return it->second;
@@ -597,7 +597,7 @@ private:
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteConcatenationParams *params = (const TfLiteConcatenationParams *)(node->builtin_data);
         auto activation = ConvertTfLiteActivation(params->activation);
-        CHECK(activation == ActivationFunction::None);
+        HCHECK(activation == ActivationFunction::None);
         int axis = params->axis;
         // Handle negative values, which are legal
         if (axis < 0) {
@@ -662,7 +662,7 @@ private:
 
     OpPtr BuildPad(TfLiteContext *context, TfLiteNode *node) {
         // TODO: handle the PadOp that has 3 inputs
-        CHECK(node->inputs->size == 2);
+        HCHECK(node->inputs->size == 2);
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto padding = GetTensorById(context, node->inputs->data[1]);
         auto output = GetTensorById(context, node->outputs->data[0]);
@@ -764,7 +764,7 @@ private:
     OpPtr BuildSplit(TfLiteContext *context, TfLiteNode *node, int axis_tensor_index, int input_tensor_index) {
         assert(axis_tensor_index < node->inputs->size);
         auto axis_tensor = GetTensorById(context, node->inputs->data[axis_tensor_index]);
-        CHECK(axis_tensor->is_allocated()) << "Can't handle dynamic axis for Split.\n";
+        HCHECK(axis_tensor->is_allocated()) << "Can't handle dynamic axis for Split.\n";
         int axis = axis_tensor->buffer<int32_t>()();
 
         assert(input_tensor_index < node->inputs->size);
@@ -911,7 +911,7 @@ const char *GetOpName(int op) {
         "EXPANDDIMS",
         "EQUAL",
         "NOTEQUAL",
-        "LOG",
+        "HLOG",
         "SUM",
         "SQRT",
         "RSQRT",
@@ -1609,7 +1609,7 @@ public:
 
     TfLiteIntArray *plan = nullptr;
     if ((status = context->GetExecutionPlan(context, &plan)) != kTfLiteOk) {
-        LOG(ERROR) << "GetExecutionPlan failed";
+        HLOG(ERROR) << "GetExecutionPlan failed";
         return status;
     }
 
@@ -1620,26 +1620,26 @@ public:
         TfLiteNode *node;
         TfLiteRegistration *registration;
         if ((status = context->GetNodeAndRegistration(context, node_index, &node, &registration)) != kTfLiteOk) {
-            LOG(ERROR) << "GetNodeAndRegistration failed";
+            HLOG(ERROR) << "GetNodeAndRegistration failed";
             return status;
         }
 
         NodeSupport support(context, node, registration, verbosity >= 1);
         if (support.IsNodeSupported()) {
             if (verbosity >= 2) {
-                LOG(INFO) << "Handling node, index=" << node_index
-                          << " code=" << registration->builtin_code
-                          << " (" << GetOpName(registration->builtin_code) << ")";
+                HLOG(INFO) << "Handling node, index=" << node_index
+                           << " code=" << registration->builtin_code
+                           << " (" << GetOpName(registration->builtin_code) << ")";
             }
             supported_nodes.push_back(node_index);
         } else {
             if (verbosity >= 1) {
-                LOG(INFO) << "Skipping unsupported node, index=" << node_index
-                          << " code=" << registration->builtin_code
-                          << " (" << GetOpName(registration->builtin_code) << ")"
-                          << " version=" << registration->version
-                          << " custom_name=(" << (registration->custom_name ? registration->custom_name : "null") << "); "
-                          << "Reason(s): " << support.Failures();
+                HLOG(INFO) << "Skipping unsupported node, index=" << node_index
+                           << " code=" << registration->builtin_code
+                           << " (" << GetOpName(registration->builtin_code) << ")"
+                           << " version=" << registration->version
+                           << " custom_name=(" << (registration->custom_name ? registration->custom_name : "null") << "); "
+                           << "Reason(s): " << support.Failures();
             }
         }
     }
@@ -1648,7 +1648,7 @@ public:
                                                                  HannkDelegateKernel::GetRegistration(),
                                                                  BuildTfLiteIntArray(supported_nodes).get(),
                                                                  delegate)) != kTfLiteOk) {
-        LOG(ERROR) << "ReplaceNodeSubsetsWithDelegateKernels failed";
+        HLOG(ERROR) << "ReplaceNodeSubsetsWithDelegateKernels failed";
         return status;
     }
 
