@@ -151,7 +151,7 @@ public:
     }
 #endif
 
-    bool remove_dead_lets;
+    bool remove_dead_code;
     bool no_float_simplify;
 
     HALIDE_ALWAYS_INLINE
