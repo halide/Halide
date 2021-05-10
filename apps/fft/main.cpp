@@ -18,21 +18,7 @@
 using namespace Halide;
 using namespace Halide::Tools;
 
-Var x("x"), y("y");
-
-template<typename T>
-Func make_real(const Buffer<T> &re) {
-    Func ret;
-    ret(x, y) = re(x, y);
-    return ret;
-}
-
-template<typename T>
-ComplexFunc make_complex(const Buffer<T> &re) {
-    ComplexFunc ret;
-    ret(x, y) = re(x, y);
-    return ret;
-}
+Var x("x"), y("y"), c("c");
 
 int main(int argc, char **argv) {
     int W = 32;
@@ -73,11 +59,18 @@ int main(int argc, char **argv) {
 
     Func filtered_c2c;
     {
-        // Compute the DFT of the input and the kernel.
-        ComplexFunc dft_in = fft2d_c2c(make_complex(in), W, H, -1, target, fwd_desc);
-        ComplexFunc dft_kernel = fft2d_c2c(make_complex(kernel), W, H, -1, target, fwd_desc);
-        dft_in.compute_root();
-        dft_kernel.compute_root();
+        // Group the input and the kernel together as two channels.
+        ComplexFunc concat_in_kernel("concat_in_kernel");
+        concat_in_kernel(x, y, c) = mux(c, {kernel(x, y), in(x, y)});
+
+        // Compute the DFT of the input and kernel channels.
+        ComplexFunc dft_in_kernel = fft2d_c2c(concat_in_kernel, W, H, -1, target, fwd_desc);
+        dft_in_kernel.compute_root();
+
+        // Extract the DFT of the input and kernel.
+        ComplexFunc dft_kernel("dft_kernel"), dft_in("dft_in");
+        dft_kernel(x, y) = dft_in_kernel(x, y, 0);
+        dft_in(x, y) = dft_in_kernel(x, y, 1);
 
         // Compute the convolution.
         ComplexFunc dft_filtered("dft_filtered");
@@ -93,11 +86,18 @@ int main(int argc, char **argv) {
 
     Func filtered_r2c;
     {
-        // Compute the DFT of the input and the kernel.
-        ComplexFunc dft_in = fft2d_r2c(make_real(in), W, H, target, fwd_desc);
-        ComplexFunc dft_kernel = fft2d_r2c(make_real(kernel), W, H, target, fwd_desc);
-        dft_in.compute_root();
-        dft_kernel.compute_root();
+        // Group the input and the kernel together as two channels.
+        Func concat_in_kernel("concat_in_kernel");
+        concat_in_kernel(x, y, c) = mux(c, {kernel(x, y), in(x, y)});
+
+        // Compute the DFT of the input and kernel channels.
+        ComplexFunc dft_in_kernel = fft2d_r2c(concat_in_kernel, W, H, target, fwd_desc);
+        dft_in_kernel.compute_root();
+
+        // Extract the DFT of the input and kernel.
+        ComplexFunc dft_kernel("dft_kernel"), dft_in("dft_in");
+        dft_kernel(x, y) = dft_in_kernel(x, y, 0);
+        dft_in(x, y) = dft_in_kernel(x, y, 1);
 
         // Compute the convolution.
         ComplexFunc dft_filtered("dft_filtered");
