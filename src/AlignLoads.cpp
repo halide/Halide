@@ -16,7 +16,7 @@ namespace Internal {
 namespace {
 
 int align_up(int x, int n) {
-    return (x + (n - 1)) & ~(n - 1);
+    return ((x + n - 1) / n) * n;
 }
 
 // This mutator attempts to rewrite unaligned or strided loads to
