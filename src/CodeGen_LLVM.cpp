@@ -1087,7 +1087,9 @@ void CodeGen_LLVM::optimize_module() {
     // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
     pto.ForgetAllSCEVInLoopUnroll = true;
 
-#if LLVM_VERSION >= 120
+#if LLVM_VERSION >= 130
+    llvm::PassBuilder pb(tm.get(), pto);
+#elif LLVM_VERSION >= 120
     llvm::PassBuilder pb(/*DebugLogging*/ false, tm.get(), pto);
 #else
     llvm::PassBuilder pb(tm.get(), pto);
@@ -1198,7 +1200,11 @@ void CodeGen_LLVM::optimize_module() {
         }
     }
 
-#if LLVM_VERSION >= 120
+#if LLVM_VERSION >= 130
+    if (tm) {
+        tm->registerPassBuilderCallbacks(pb);
+    }
+#elif LLVM_VERSION >= 120
     if (tm) {
         tm->registerPassBuilderCallbacks(pb, debug_pass_manager);
     }
