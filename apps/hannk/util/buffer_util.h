@@ -60,7 +60,7 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args &&...args)
         // require handling pointer types in our functors
         // HANDLE_CASE(halide_type_handle, 64, void *)
     default:
-        CHECK(0) << "Unsupported type";
+        HCHECK(0) << "Unsupported type";
         using ReturnType = decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...));
         return ReturnType();
     }
@@ -69,10 +69,10 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args &&...args)
 
 inline void check_shapes_match(const HalideBuffer<const void> &a,
                                const HalideBuffer<const void> &b) {
-    CHECK(a.dimensions() == b.dimensions());
+    HCHECK(a.dimensions() == b.dimensions());
     for (int d = 0; d < a.dimensions(); d++) {
-        CHECK(a.dim(d).min() == b.dim(d).min());
-        CHECK(a.dim(d).extent() == b.dim(d).extent());
+        HCHECK(a.dim(d).min() == b.dim(d).min());
+        HCHECK(a.dim(d).extent() == b.dim(d).extent());
     }
 }
 
