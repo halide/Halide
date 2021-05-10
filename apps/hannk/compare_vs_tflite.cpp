@@ -3,7 +3,6 @@
 #include <unistd.h>
 #include <vector>
 
-#include "tensorflow/lite/c/c_api.h"
 #include "util/model_runner.h"
 
 namespace {
