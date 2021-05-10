@@ -41,7 +41,9 @@ Tile<2> is_2d_tile_index(const Expr &e) {
 Tile<3> is_3d_tile_index(const Expr &e) {
     vector<Expr> matches;
     auto add_sub_pattern = (wild_i32x + wild_i32x) - wild_i32x;
-    if (!expr_match(add_sub_pattern, e, matches)) { return {}; }
+    if (!expr_match(add_sub_pattern, e, matches)) {
+        return {};
+    }
     // ramp(x16(base), x16(stride), 4) + x16(ramp(idx, 1, 4)) y: 4, x: 4, r: 4
     // ramp(x10(base), x10(stride), 3) + x6(ramp(idx, 1, 5))  y: 2, x: 3, r: 5
     Expr first = std::move(matches[0]);
@@ -54,30 +56,42 @@ Tile<3> is_3d_tile_index(const Expr &e) {
         r1 = second.as<Ramp>();
         b2 = first.as<Broadcast>();
     }
-    if (!r1 || !b2) { return {}; }
+    if (!r1 || !b2) {
+        return {};
+    }
 
     const auto *b1 = r1->base.as<Broadcast>();
     const auto *r2 = b2->value.as<Ramp>();
 
-    if (!b1 || !r2) { return {}; }
+    if (!b1 || !r2) {
+        return {};
+    }
 
     int x_tile = r1->lanes;
     int r_tile = r2->lanes;
     int y_tile = b1->lanes / r_tile;
-    if (y_tile != b2->lanes / x_tile) { return {}; }
+    if (y_tile != b2->lanes / x_tile) {
+        return {};
+    }
 
     auto pattern1 = Ramp::make(Broadcast::make(wild_i32, b1->lanes), Broadcast::make(wild_i32, b1->lanes), r1->lanes);
-    if (!expr_match(pattern1, first, matches)) { return {}; }
+    if (!expr_match(pattern1, first, matches)) {
+        return {};
+    }
     Expr base = std::move(matches[0]);
     Expr x_stride = std::move(matches[1]);
 
     auto pattern2 = Broadcast::make(Ramp::make(wild_i32, wild_i32, r2->lanes), b2->lanes);
-    if (!expr_match(pattern2, second, matches)) { return {}; }
+    if (!expr_match(pattern2, second, matches)) {
+        return {};
+    }
     base += std::move(matches[0]);
     Expr r_stride = std::move(matches[1]);
 
     auto pattern3 = Broadcast::make(wild_i32, b1->lanes * r1->lanes);
-    if (!expr_match(pattern3, adj, matches)) { return {}; }
+    if (!expr_match(pattern3, adj, matches)) {
+        return {};
+    }
     base -= std::move(matches[0]);
 
     return {true, base, {x_stride, 0, r_stride}, {x_tile, y_tile, r_tile}};
@@ -91,18 +105,23 @@ struct NewMatmul {
     int tile_r;
 };
 
-NewMatmul
-convert_to_matmul(const Store *op, const string &new_name) {
+NewMatmul convert_to_matmul(const Store *op, const string &new_name) {
     // m[ramp(0, 1, S)] = VectorAdd(lhs[{XYR tile}] * xX(rhs[{YR tile}])) + m[ramp(0, 1, S)]
     const auto wild_i8x = Variable::make(Int(8, 0), "*");
     const auto wild_u8x = Variable::make(UInt(8, 0), "*");
     vector<Expr> matches;
     const auto pattern1 = wild_i32x + wild_i32x;
-    if (!expr_match(pattern1, op->value, matches)) { return {}; }
+    if (!expr_match(pattern1, op->value, matches)) {
+        return {};
+    }
     const auto *reduce = matches[0].as<VectorReduce>();
     const auto *load = matches[1].as<Load>();
-    if (!reduce || reduce->op != VectorReduce::Add) { return {}; }
-    if (!load || load->name != op->name || !equal(load->index, op->index)) { return {}; }
+    if (!reduce || reduce->op != VectorReduce::Add) {
+        return {};
+    }
+    if (!load || load->name != op->name || !equal(load->index, op->index)) {
+        return {};
+    }
 
     // FIXME: Add support for bf16 for LLVM 13+
     auto pattern2 = cast(Int(32, 0), cast(Int(32, 0), wild_i8x) * wild_i32x);
@@ -118,9 +137,10 @@ convert_to_matmul(const Store *op, const string &new_name) {
     }
 
     const auto *lhs_load = matches[0].as<Load>();
-    // FIXME: When tile_r is not 4 the broadcast is inside the index, not of the value
     const auto *rhs_broadcast = matches[1].as<Broadcast>();
-    if (!lhs_load || !rhs_broadcast) { return {}; }
+    if (!lhs_load || !rhs_broadcast) {
+        return {};
+    }
     const auto *rhs_cast = rhs_broadcast->value.as<Cast>();
     bool rhs_signed = false;
     if (rhs_cast && rhs_cast->value.type().element_of() == Int(8)) {
@@ -132,12 +152,15 @@ convert_to_matmul(const Store *op, const string &new_name) {
     }
 
     const auto *rhs_load = rhs_cast->value.as<Load>();
-    if (!rhs_load) { return {}; }
+    if (!rhs_load) {
+        return {};
+    }
 
     const auto lhs_tile = is_3d_tile_index(lhs_load->index);
     const auto rhs_tile = is_2d_tile_index(rhs_load->index);
-    // FIXME: When tile_r is not 4 the RHS load will be 4D (x, r/4, y, r%4)
-    if (!lhs_tile.result || !rhs_tile.result) { return {}; }
+    if (!lhs_tile.result || !rhs_tile.result) {
+        return {};
+    }
 
     const int tile_x = lhs_tile.extent[0];
     const int tile_y = lhs_tile.extent[1];
@@ -227,7 +250,6 @@ class ExtractTileOperations : public IRMutator {
         if (op->memory_type == MemoryType::AMXTile) {
             user_assert(op->type.is_int() && op->type.bits() == 32) << "scheduled tile operations must yield 32-bit integers";
 
-            // FIXME: Handle nested allocations better
             user_assert(!in_allocate) << "Found two possible tile allocations for AMX allocation";
             ScopedValue<string> old_amx_name(amx_name, op->name + ".amx");
             ScopedValue<string> old_tile_name(tile_name, op->name);
@@ -317,6 +339,5 @@ class ExtractTileOperations : public IRMutator {
 Stmt extract_tile_operations(const Stmt &s) {
     return ExtractTileOperations().mutate(s);
 }
-
 }  // namespace Internal
 }  // namespace Halide
