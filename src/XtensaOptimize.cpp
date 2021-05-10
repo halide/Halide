@@ -788,6 +788,12 @@ private:
             {"halide_xtensa_sat_narrow_with_shift_i16", i16_sat(rounding_shift_right(wild_i32x, wild_u32))},
             {"halide_xtensa_sat_narrow_with_shift_i32", i32_sat(rounding_shift_right(wild_i64x, wild_u64))},
 
+            {"halide_xtensa_sat_left_shift_i16",i16_sat(widening_shift_left(wild_i16x, wild_i16x))},
+            {"halide_xtensa_sat_left_shift_i16",i16_sat(widening_shift_left(wild_i16x, wild_u16x))},
+
+            {"halide_xtensa_sat_left_shift_i32",i32_sat(widening_shift_left(wild_i32x, wild_i32x))},
+            {"halide_xtensa_sat_left_shift_i32",i32_sat(widening_shift_left(wild_i32x, wild_u32x))},
+
             // Looks like there is no such instruction.
             // {"halide_xtensa_sat_narrow_with_shift_u16", u16_sat(rounding_shift_right(wild_i32x, wild_u32))},
 
@@ -956,7 +962,7 @@ private:
              call("halide_xtensa_widen_mul_add_i48", wild_i48x,
                   {call("halide_xtensa_widen_mul_add_i48", wild_i48x, {wild_i48x, wild_i16x, wild_i16x}), wild_i16x, wild_i16x})},
 
-            {"halide_xtensa_sat_narrow_with_shift_i16", call("halide_xtensa_sat_narrow_with_shift_i16", wild_i16x, {i32(wild_i48x), wild_u32})},
+            {"halide_xtensa_sat_narrow_i48_with_shift_i16", call("halide_xtensa_sat_narrow_with_shift_i16", wild_i16x, {i32(wild_i48x), wild_u32})},
             // NOTE(vksnk): looked like a good idea, but seems to be slower. Need to double-check.
             // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(i32(wild_i48x))},
             // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(u32(wild_i48x))},

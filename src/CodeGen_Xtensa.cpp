@@ -998,10 +998,6 @@ HALIDE_ALWAYS_INLINE int8x64_t halide_xtensa_narrow_i24_with_shift_i8(const int2
   return IVP_PACKVR2NX24(a, shift);
 }
 
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_narrow_i48_with_shift_i16(const int48x32_t& a, int shift) {
-  return IVP_PACKVRNRNX48(a, shift);
-}
-
 HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_narrow_i48_with_shift_u16(const int48x32_t& a, int shift) {
   return xb_vecNx16_rtor_xb_vecNx16U(IVP_PACKVRNRNX48(a, shift));
 }
@@ -1286,10 +1282,6 @@ HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_sat_narrow_u8(const int16x64_t& a)
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_sat_narrow_i16(const int32x32_t& a) {
   xb_vecNx48 wide = IVP_CVT48SNX32(a.native_vector[1], a.native_vector[0]);
   return IVP_PACKVRNX48(wide, 0);
-}
-
-HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_sat_narrow_with_shift_i16(const int48x32_t& a, uint32_t shift) {
-  return IVP_PACKVRNX48(a, shift);
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_sat_narrow_with_shift_i16(const int32x32_t& a, uint32_t shift) {
@@ -1774,7 +1766,7 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         {"halide_xtensa_convert_i48_high_u32", "IVP_CVT32UNX48H"},
         {"halide_xtensa_convert_to_int32x16_t_from_uint1x16_t", "convert_to_int32x16_t_from_uint1x16_t"},
         {"halide_xtensa_narrow_i48_with_shift_i16", "IVP_PACKVRNRNX48"},
-
+        {"halide_xtensa_sat_narrow_i48_with_shift_i16", "IVP_PACKVRNX48"},
         {"halide_xtensa_full_reduce_add_i8", "IVP_RADD2NX8"},
         {"halide_xtensa_full_reduce_add_i16", "IVP_RADDNX16"},
 
@@ -1791,6 +1783,9 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         {"halide_xtensa_full_reduce_max_i8", "IVP_RMAX2NX8"},
         {"halide_xtensa_full_reduce_max_i16", "IVP_RMAXNX16"},
         {"halide_xtensa_full_reduce_max_i32", "IVP_RMAXN_2X32"},
+
+        {"halide_xtensa_sat_left_shift_i16", "IVP_SLSNX16"},
+        {"halide_xtensa_sat_left_shift_i32", "IVP_SLSN_2X32"},
     };
 
     if (op_name_to_intrinsic.count(op_name) > 0) {
