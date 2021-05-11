@@ -229,33 +229,36 @@ private:
             alloc = nullptr;
             set_host_dirty(false);
         }
+        int new_count = 0;
         if (dev_ref_count) {
-            int new_count = --(dev_ref_count->count);
-            if (new_count == 0) {
-                if (buf.device) {
-                    assert(!(alloc && device_dirty()) &&
-                           "Implicitly freeing a dirty device allocation while a host allocation still lives. "
-                           "Call device_free explicitly if you want to drop dirty device-side data. "
-                           "Call copy_to_host explicitly if you want the data copied to the host allocation "
-                           "before the device allocation is freed.");
-                    if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::WrappedNative) {
-                        buf.device_interface->detach_native(nullptr, &buf);
-                    } else if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::AllocatedDeviceAndHost) {
-                        buf.device_interface->device_and_host_free(nullptr, &buf);
-                    } else if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
-                        buf.device_interface->device_release_crop(nullptr, &buf);
-                    } else if (dev_ref_count == nullptr || dev_ref_count->ownership == BufferDeviceOwnership::Allocated) {
-                        buf.device_interface->device_free(nullptr, &buf);
-                    }
+            new_count = --(dev_ref_count->count);
+        }
+        if (new_count == 0) {
+            if (buf.device) {
+                assert(!(alloc && device_dirty()) &&
+                       "Implicitly freeing a dirty device allocation while a host allocation still lives. "
+                       "Call device_free explicitly if you want to drop dirty device-side data. "
+                       "Call copy_to_host explicitly if you want the data copied to the host allocation "
+                       "before the device allocation is freed.");
+                if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::WrappedNative) {
+                    buf.device_interface->detach_native(nullptr, &buf);
+                } else if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::AllocatedDeviceAndHost) {
+                    buf.device_interface->device_and_host_free(nullptr, &buf);
+                } else if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
+                    buf.device_interface->device_release_crop(nullptr, &buf);
+                } else if (dev_ref_count == nullptr || dev_ref_count->ownership == BufferDeviceOwnership::Allocated) {
+                    buf.device_interface->device_free(nullptr, &buf);
                 }
+            }
+            if (dev_ref_count) {
                 if (dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
                     delete (DevRefCountCropped *)dev_ref_count;
                 } else {
                     delete dev_ref_count;
                 }
             }
-            dev_ref_count = nullptr;
         }
+        dev_ref_count = nullptr;
         buf.device = 0;
         buf.device_interface = nullptr;
     }
