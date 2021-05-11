@@ -312,14 +312,17 @@ Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
     // This should only occur inside branches that make the load unreachable,
     // but perhaps the branch was hard to prove constant true or false. This
     // provides an alternative mechanism to simplify these unreachable loads.
-    string alloc_extent_name = op->name + ".total_extent";
+    string alloc_extent_name = op->name + ".total_extent_bytes";
     if (bounds_and_alignment_info.contains(alloc_extent_name)) {
         if (index_info.max_defined && index_info.max < 0) {
             return undef(op->type);
         }
         const ExprInfo &alloc_info = bounds_and_alignment_info.get(alloc_extent_name);
-        if (alloc_info.max_defined && index_info.min_defined && index_info.min > alloc_info.max) {
-            return undef(op->type);
+        if (alloc_info.max_defined && index_info.min_defined) {
+            int index_min_bytes = index_info.min * op->type.bytes();
+            if (index_min_bytes > alloc_info.max) {
+                return undef(op->type);
+            }
         }
     }
 
