@@ -1920,6 +1920,46 @@ public:
 };
 
 template<typename T>
+class GeneratorInput_DynamicScalar : public GeneratorInputImpl<T, Expr> {
+private:
+    using Super = GeneratorInputImpl<T, Expr>;
+
+    static_assert(std::is_same<typename std::remove_all_extents<T>::type, Expr>::value, "GeneratorInput_DynamicScalar is only legal to use with T=Expr for now");
+
+protected:
+    std::string get_c_type() const override {
+        return "Expr";
+    }
+
+public:
+    explicit GeneratorInput_DynamicScalar(const std::string &name)
+        : Super(name, IOKind::Scalar, {}, 0) {
+        user_assert(!std::is_array<T>::value) << "Input<Expr[]> is not allowed";
+    }
+
+    /** You can use this Input as an expression in a halide
+     * function definition */
+    operator Expr() const {
+        this->check_gio_access();
+        return this->exprs().at(0);
+    }
+
+    /** Using an Input as the argument to an external stage treats it
+     * as an Expr */
+    operator ExternFuncArgument() const {
+        this->check_gio_access();
+        return ExternFuncArgument(this->exprs().at(0));
+    }
+
+    void set_estimate(const Expr &value) {
+        this->check_gio_access();
+        for (Parameter &p : this->parameters_) {
+            p.set_estimate(value);
+        }
+    }
+};
+
+template<typename T>
 class GeneratorInput_Scalar : public GeneratorInputImpl<T, Expr> {
 private:
     using Super = GeneratorInputImpl<T, Expr>;
@@ -2098,7 +2138,8 @@ using GeneratorInputImplBase =
         cond<has_static_halide_type_method<TBase>::value, GeneratorInput_Buffer<T>>,
         cond<std::is_same<TBase, Func>::value, GeneratorInput_Func<T>>,
         cond<std::is_arithmetic<TBase>::value, GeneratorInput_Arithmetic<T>>,
-        cond<std::is_scalar<TBase>::value, GeneratorInput_Scalar<T>>>::type;
+        cond<std::is_scalar<TBase>::value, GeneratorInput_Scalar<T>>,
+        cond<std::is_same<TBase, Expr>::value, GeneratorInput_DynamicScalar<T>>>::type;
 
 }  // namespace Internal
 
@@ -3148,6 +3189,19 @@ public:
         check_exact_phase(GeneratorBase::ConfigureCalled);
         auto *p = new GeneratorInput<T>(name);
         p->generator = this;
+        param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
+        param_info_ptr->filter_inputs.push_back(p);
+        return p;
+    }
+
+    // Create Input<Expr> with dynamic type
+    template<typename T,
+             typename std::enable_if<std::is_same<T, Expr>::value>::type * = nullptr>
+    GeneratorInput<T> *add_input(const std::string &name, const Type &type) {
+        check_exact_phase(GeneratorBase::ConfigureCalled);
+        auto *p = new GeneratorInput<Expr>(name);
+        p->generator = this;
+        p->set_type(type);
         param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
         param_info_ptr->filter_inputs.push_back(p);
         return p;
