@@ -49,9 +49,13 @@ Stmt Simplify::visit(const IfThenElse *op) {
         }
     }
 
-    // If both sides are no-ops, bail out.
-    if (is_no_op(then_case) && is_no_op(else_case)) {
-        return then_case;
+    if (is_no_op(else_case)) {
+        // If both sides are no-ops, bail out.
+        if (is_no_op(then_case)) {
+            return then_case;
+        }
+        // Replace no-ops with empty stmts.
+        else_case = Stmt();
     }
 
     // Pull out common nodes, but only when the "late in lowering" flag is set. This
