@@ -91,11 +91,7 @@ public:
 
         // Align the reduction loop of filter.
         const int vector_reduction = get_vector_reduction_factor(target, UInt(8));
-        // TODO: On Hexagon, we have to unroll the reduction a little to work around
-        // a compiler bug.
-        const int min_unroll_reduction =
-            vector_reduction * (get_target().has_feature(Target::HVX) ? 2 : 1);
-        const int unroll_reduction = std::max<int>(min_unroll_reduction, unroll_reduction_);
+        const int unroll_reduction = std::max<int>(vector_reduction, unroll_reduction_);
         const int accum_vector_size = natural_vector_size<int32_t>();
 
         // Set up the reduction loop and inputs.
