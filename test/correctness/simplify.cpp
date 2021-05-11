@@ -1497,8 +1497,7 @@ void check_boolean() {
                            Evaluate::make(select(b1, x + 3, y + 4) + select(b2, x + 5, y + 7)),
                            Evaluate::make(select(b1, x + 3, y + 8) - select(b2, x + 5, y + 7))),
           IfThenElse::make(b1 || b2,
-                           Evaluate::make(select(b1, x + 3, y + 4) + select(b2, x + 5, y + 7)),
-                           Evaluate::make(1)));
+                           Evaluate::make(select(b1, x + 3, y + 4) + select(b2, x + 5, y + 7))));
 
     // Check single conditions apply to both cases of an ifthenelse
     check(IfThenElse::make(b1,
