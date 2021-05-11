@@ -217,8 +217,8 @@ private:
 
     /** Decrement the reference count of any owned allocation and free host
      * and device memory if it hits zero. Sets alloc to nullptr. */
-    void decref() {
-        if (owns_host_memory()) {
+    void decref(bool device_only = false) {
+        if (owns_host_memory() && !device_only) {
             int new_count = --(alloc->ref_count);
             if (new_count == 0) {
                 void (*fn)(void *) = alloc->deallocate_fn;
@@ -229,10 +229,6 @@ private:
             alloc = nullptr;
             set_host_dirty(false);
         }
-        decref_dev();
-    }
-
-    void decref_dev() {
         int new_count = 0;
         if (dev_ref_count) {
             new_count = --(dev_ref_count->count);
@@ -262,9 +258,9 @@ private:
                 }
             }
         }
+        dev_ref_count = nullptr;
         buf.device = 0;
         buf.device_interface = nullptr;
-        dev_ref_count = nullptr;
     }
 
     void free_shape_storage() {
@@ -517,11 +513,7 @@ public:
     /** The total number of elements this buffer represents. Equal to
      * the product of the extents */
     size_t number_of_elements() const {
-        size_t s = 1;
-        for (int i = 0; i < dimensions(); i++) {
-            s *= dim(i).extent();
-        }
-        return s;
+        return buf.number_of_elements();
     }
 
     /** Get the dimensionality of the buffer. */
@@ -534,49 +526,22 @@ public:
         return buf.type;
     }
 
-private:
-    /** Offset to the element with the lowest address. If all
-     * strides are positive, equal to zero. Offset is in elements, not bytes. */
-    ptrdiff_t begin_offset() const {
-        ptrdiff_t index = 0;
-        for (int i = 0; i < dimensions(); i++) {
-            if (dim(i).stride() < 0) {
-                index += dim(i).stride() * (ptrdiff_t)(dim(i).extent() - 1);
-            }
-        }
-        return index;
-    }
-
-    /** An offset to one beyond the element with the highest address.
-     * Offset is in elements, not bytes. */
-    ptrdiff_t end_offset() const {
-        ptrdiff_t index = 0;
-        for (int i = 0; i < dimensions(); i++) {
-            if (dim(i).stride() > 0) {
-                index += dim(i).stride() * (ptrdiff_t)(dim(i).extent() - 1);
-            }
-        }
-        index += 1;
-        return index;
-    }
-
-public:
     /** A pointer to the element with the lowest address. If all
      * strides are positive, equal to the host pointer. */
     T *begin() const {
         assert(buf.host != nullptr);  // Cannot call begin() on an unallocated Buffer.
-        return (T *)(buf.host + begin_offset() * type().bytes());
+        return (T *)buf.begin();
     }
 
     /** A pointer to one beyond the element with the highest address. */
     T *end() const {
         assert(buf.host != nullptr);  // Cannot call end() on an unallocated Buffer.
-        return (T *)(buf.host + end_offset() * type().bytes());
+        return (T *)buf.end();
     }
 
     /** The total number of bytes spanned by the data in memory. */
     size_t size_in_bytes() const {
-        return (size_t)(end_offset() - begin_offset()) * type().bytes();
+        return buf.size_in_bytes();
     }
 
     /** Reset the Buffer to be equivalent to a default-constructed Buffer
@@ -807,7 +772,7 @@ public:
      * if this buffer held the last reference to it. Asserts that
      * device_dirty is false. */
     void device_deallocate() {
-        decref_dev();
+        decref(true);
     }
 
     /** Allocate a new image of the given size with a runtime
@@ -1202,7 +1167,7 @@ public:
      * sprite onto a framebuffer, you'll want to translate the sprite
      * to the correct location first like so: \code
      * framebuffer.copy_from(sprite.translated({x, y})); \endcode
-    */
+     */
     template<typename T2, int D2>
     void copy_from(Buffer<T2, D2> src) {
         static_assert(!std::is_const<T>::value, "Cannot call copy_from() on a Buffer<const T>");
@@ -1688,11 +1653,7 @@ public:
     }
 
     int device_sync(void *ctx = nullptr) {
-        if (buf.device_interface) {
-            return buf.device_interface->device_sync(ctx, &buf);
-        } else {
-            return 0;
-        }
+        return buf.device_sync(ctx);
     }
 
     bool has_device_allocation() const {
@@ -1951,55 +1912,42 @@ private:
     // @{
     template<int N>
     struct for_each_value_task_dim {
-        int extent;
-        int stride[N];
+        std::ptrdiff_t extent;
+        std::ptrdiff_t stride[N];
     };
 
     // Given an array of strides, and a bunch of pointers to pointers
     // (all of different types), advance the pointers using the
     // strides.
     template<typename Ptr, typename... Ptrs>
-    HALIDE_ALWAYS_INLINE static void advance_ptrs(const int *stride, Ptr *ptr, Ptrs... ptrs) {
-        (*ptr) += *stride;
+    HALIDE_ALWAYS_INLINE static void advance_ptrs(const std::ptrdiff_t *stride, Ptr &ptr, Ptrs &...ptrs) {
+        ptr += *stride;
         advance_ptrs(stride + 1, ptrs...);
     }
 
     HALIDE_ALWAYS_INLINE
-    static void advance_ptrs(const int *) {
+    static void advance_ptrs(const std::ptrdiff_t *) {
     }
 
-    // Same as the above, but just increments the pointers.
-    template<typename Ptr, typename... Ptrs>
-    HALIDE_ALWAYS_INLINE static void increment_ptrs(Ptr *ptr, Ptrs... ptrs) {
-        (*ptr)++;
-        increment_ptrs(ptrs...);
-    }
-
-    HALIDE_ALWAYS_INLINE
-    static void increment_ptrs() {
-    }
-
-    template<typename Fn, typename... Ptrs>
+    template<typename Fn, typename Ptr, typename... Ptrs>
     HALIDE_NEVER_INLINE static void for_each_value_helper(Fn &&f, int d, bool innermost_strides_are_one,
-                                                          const for_each_value_task_dim<sizeof...(Ptrs)> *t, Ptrs... ptrs) {
-        if (d == -1) {
-            f((*ptrs)...);
-        } else if (d == 0) {
+                                                          const for_each_value_task_dim<sizeof...(Ptrs) + 1> *t, Ptr ptr, Ptrs... ptrs) {
+        if (d == 0) {
             if (innermost_strides_are_one) {
-                for (int i = t[0].extent; i != 0; i--) {
-                    f((*ptrs)...);
-                    increment_ptrs((&ptrs)...);
+                Ptr end = ptr + t[0].extent;
+                while (ptr != end) {
+                    f(*ptr++, (*ptrs++)...);
                 }
             } else {
-                for (int i = t[0].extent; i != 0; i--) {
-                    f((*ptrs)...);
-                    advance_ptrs(t[0].stride, (&ptrs)...);
+                for (std::ptrdiff_t i = t[0].extent; i != 0; i--) {
+                    f(*ptr, (*ptrs)...);
+                    advance_ptrs(t[0].stride, ptr, ptrs...);
                 }
             }
         } else {
-            for (int i = t[d].extent; i != 0; i--) {
-                for_each_value_helper(f, d - 1, innermost_strides_are_one, t, ptrs...);
-                advance_ptrs(t[d].stride, (&ptrs)...);
+            for (std::ptrdiff_t i = t[d].extent; i != 0; i--) {
+                for_each_value_helper(f, d - 1, innermost_strides_are_one, t, ptr, ptrs...);
+                advance_ptrs(t[d].stride, ptr, ptrs...);
             }
         }
     }
@@ -2034,7 +1982,9 @@ private:
             t[i].extent = buffers[0]->dim[i].extent;
 
             // Order the dimensions by stride, so that the traversal is cache-coherent.
-            for (int j = i; j > 0 && t[j].stride[0] < t[j - 1].stride[0]; j--) {
+            // Use the last dimension for this, because this is the source in copies.
+            // It appears to be better to optimize read order than write order.
+            for (int j = i; j > 0 && t[j].stride[N - 1] < t[j - 1].stride[N - 1]; j--) {
                 std::swap(t[j], t[j - 1]);
             }
         }
@@ -2070,17 +2020,21 @@ private:
 
     template<typename Fn, typename... Args, int N = sizeof...(Args) + 1>
     void for_each_value_impl(Fn &&f, Args &&...other_buffers) const {
-        Buffer<>::for_each_value_task_dim<N> *t =
-            (Buffer<>::for_each_value_task_dim<N> *)HALIDE_ALLOCA((dimensions() + 1) * sizeof(for_each_value_task_dim<N>));
-        // Move the preparatory code into a non-templated helper to
-        // save code size.
-        const halide_buffer_t *buffers[] = {&buf, (&other_buffers.buf)...};
-        bool innermost_strides_are_one = Buffer<>::for_each_value_prep(t, buffers);
+        if (dimensions() > 0) {
+            Buffer<>::for_each_value_task_dim<N> *t =
+                (Buffer<>::for_each_value_task_dim<N> *)HALIDE_ALLOCA((dimensions() + 1) * sizeof(for_each_value_task_dim<N>));
+            // Move the preparatory code into a non-templated helper to
+            // save code size.
+            const halide_buffer_t *buffers[] = {&buf, (&other_buffers.buf)...};
+            bool innermost_strides_are_one = Buffer<>::for_each_value_prep(t, buffers);
 
-        Buffer<>::for_each_value_helper(f, dimensions() - 1,
-                                        innermost_strides_are_one,
-                                        t,
-                                        data(), (other_buffers.data())...);
+            Buffer<>::for_each_value_helper(f, dimensions() - 1,
+                                            innermost_strides_are_one,
+                                            t,
+                                            data(), (other_buffers.data())...);
+        } else {
+            f(*data(), (*other_buffers.data())...);
+        }
     }
     // @}
 

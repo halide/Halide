@@ -11,7 +11,7 @@ extern "C" {
 struct TFL_CAPI_EXPORT HannkDelegateOptions {
     // Verbosity to use.
     // 0 means "only bare minimum TFKERNEL logs, etc"
-    // 1 means "also do LOG(INFO)"
+    // 1 means "also do HLOG(INFO)"
     // higher numbers may produce additional output
     int verbosity;
 

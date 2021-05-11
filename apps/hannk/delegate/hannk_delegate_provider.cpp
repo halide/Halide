@@ -30,8 +30,8 @@ public:
             HannkDelegateOptions options = {};
             options.verbosity = params.Get<int32_t>("hannk_verbosity");
             if (options.verbosity >= 1) {
-                LOG(INFO) << "Registrar HannkDelegate: verbosity set to "
-                          << options.verbosity << ".";
+                HLOG(INFO) << "Registrar HannkDelegate: verbosity set to "
+                           << options.verbosity << ".";
             }
             return TfLiteDelegatePtr(HannkDelegateCreate(&options), &HannkDelegateDelete);
         } else {
