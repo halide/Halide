@@ -15,10 +15,6 @@ namespace Internal {
 
 namespace {
 
-int align_up(int x, int n) {
-    return ((x + n - 1) / n) * n;
-}
-
 // This mutator attempts to rewrite unaligned or strided loads to
 // sequences of aligned loads by loading aligned vectors that cover
 // the original unaligned load, and then slicing or shuffling the
@@ -66,6 +62,11 @@ private:
             return IRMutator::visit(op);
         }
 
+        if (op->type.bytes() * op->type.lanes() <= 64) {
+            // These can probably be treated as scalars instead.
+            return IRMutator::visit(op);
+        }
+
         Expr index = mutate(op->index);
         const Ramp *ramp = index.as<Ramp>();
         const int64_t *const_stride = ramp ? as_const_int(ramp->stride) : nullptr;
@@ -110,9 +111,9 @@ private:
 
         // We now have a dense vector load to deal with.
         internal_assert(stride == 1);
-        if (lanes < native_lanes && lanes * op->type.bits() > 32) {
-            // This load is smaller than a native vector, and bigger than
-            // 32 bits (which could be loaded by a scalar). Load a native vector.
+        if (lanes < native_lanes) {
+            // This load is smaller than a native vector. Load a
+            // native vector.
             Expr ramp_base = ramp->base;
             ModulusRemainder alignment = op->alignment;
             int slice_offset = 0;
@@ -150,8 +151,7 @@ private:
             // native vectors, followed by a shuffle.
             Expr aligned_base = simplify(ramp->base - (int)aligned_offset);
             ModulusRemainder alignment = op->alignment - (int)aligned_offset;
-            const int load_lanes = align_up(aligned_offset + lanes, native_lanes);
-            Expr aligned_load = make_load(op, Ramp::make(aligned_base, 1, load_lanes), alignment);
+            Expr aligned_load = make_load(op, Ramp::make(aligned_base, 1, lanes * 2), alignment);
 
             return Shuffle::make_slice(aligned_load, (int)aligned_offset, 1, lanes);
         }
