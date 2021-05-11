@@ -526,7 +526,6 @@ public:
         return buf.type;
     }
 
-public:
     /** A pointer to the element with the lowest address. If all
      * strides are positive, equal to the host pointer. */
     T *begin() const {
