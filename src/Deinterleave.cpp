@@ -660,7 +660,7 @@ class Interleaver : public IRMutator {
 
         // Too many stores and lanes to represent in a single vector
         // type.
-        if (stores.size() * lanes > 0xffff) {
+        if (stores.size() * lanes > std::numeric_limits<decltype(halide_type_t{}.lanes)>::max()) {
             return Stmt();
         }
 
