@@ -658,6 +658,12 @@ class Interleaver : public IRMutator {
             return Stmt();
         }
 
+        // Too many stores and lanes to represent in a single vector
+        // type.
+        if (stores.size() * lanes > 0xffff) {
+            return Stmt();
+        }
+
         Type t = store->value.type();
         Expr base;
         std::vector<Expr> args(stores.size());
