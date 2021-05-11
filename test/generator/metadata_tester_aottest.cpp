@@ -226,7 +226,7 @@ void verify(const Buffer<uint8_t> &input,
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
             for (int c = 0; c < 3; c++) {
-                const float expected0 = static_cast<float>(input(x, y, c));
+                const float expected0 = static_cast<float>(input(x, y, c) + 1);
                 const float expected1 = expected0 + 1;
                 const float actual0 = output0(x, y, c);
                 const float actual1 = output1(x, y, c);
@@ -1000,6 +1000,17 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
             nullptr,
         },
         {
+            "untyped_scalar_input",
+            halide_argument_kind_input_scalar,
+            0,
+            halide_type_t(halide_type_uint, 8),
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr,
+        },
+        {
             "output.0",
             halide_argument_kind_output_buffer,
             3,
@@ -1412,6 +1423,7 @@ int main(int argc, char **argv) {
         input_array[0], input_array[1],                                          // Input<Buffer<float>[2]>
         input_f16,                                                               // Input<Buffer<float16>>
         input_f16,                                                               // Input<Buffer<float16>>
+        1,                                                                       // Input<u8>
         output0, output1,                                                        // Output<Tuple(Func, Func)>
         typed_output_buffer,                                                     // Output<Buffer<float>>(3)
         type_only_output_buffer,                                                 // Output<Buffer<float>>
@@ -1473,6 +1485,7 @@ int main(int argc, char **argv) {
         input_array[0], input_array[1],                                          // Input<Buffer<float>[2]>
         input_f16,                                                               // Input<Buffer<float16>>
         input_f16,                                                               // Input<Buffer<float16>>
+        1,                                                                       // Input<u8>
         output0, output1,                                                        // Output<Tuple(Func, Func)>
         typed_output_buffer,                                                     // Output<Buffer<float>>(3)
         type_only_output_buffer,                                                 // Output<Buffer<float>>

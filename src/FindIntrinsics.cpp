@@ -604,25 +604,17 @@ Expr lower_widening_shift_right(const Expr &a, const Expr &b) {
 }
 
 Expr lower_rounding_shift_left(const Expr &a, const Expr &b) {
-    Expr round = simplify((make_one(a.type()) >> min(b, 0)) >> 1);
-    if ((a.type().is_uint() && a.type().bits() <= 32) || a.type().bits() < 32) {
-        return narrow(widening_add(a, round) << b);
-    } else {
-        // Avoid widening arithmetic when signed integer overflow is undefined,
-        // or when the intermediate would be 128 bits.
-        return (a + round) << b;
-    }
+    // Shift left, then add one to the result if bits were dropped
+    // (because b < 0) and the most significant dropped bit was a one.
+    Expr b_negative = select(b < 0, make_one(a.type()), make_zero(a.type()));
+    return simplify((a << b) + (b_negative & (a << (b + 1))));
 }
 
 Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
-    Expr round = simplify((make_one(a.type()) << max(b, 0)) >> 1);
-    if ((a.type().is_uint() && a.type().bits() <= 32) || a.type().bits() < 32) {
-        return narrow(widening_add(a, round) >> b);
-    } else {
-        // Avoid widening arithmetic when signed integer overflow is undefined,
-        // or when the intermediate would be 128 bits.
-        return (a + round) >> b;
-    }
+    // Shift right, then add one to the result if bits were dropped
+    // (because b > 0) and the most significant dropped bit was a one.
+    Expr b_positive = select(b > 0, make_one(a.type()), make_zero(a.type()));
+    return simplify((a >> b) + (b_positive & (a >> (b - 1))));
 }
 
 Expr lower_saturating_add(const Expr &a, const Expr &b) {
