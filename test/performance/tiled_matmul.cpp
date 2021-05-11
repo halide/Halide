@@ -151,10 +151,67 @@ auto matmul_us = &matmul<uint8_t, int8_t>;
 auto matmul_su = &matmul<int8_t, uint8_t>;
 auto matmul_uu = &matmul<uint8_t, uint8_t>;
 
+void tiled_matmul_bf16() {
+    // lhs: 32x16, rhs: 16x32
+    const int row = 32;
+    const int col = 32;
+    const int acc = 16;
+
+    Var x("x"), y("y");
+    ImageParam A(Float(32), 2, "lhs");
+    ImageParam B(Float(32), 3, "rhs");
+
+    RDom r(0, acc, "racc");
+
+    Func mm("matmul");
+    mm(x, y) = cast<float>(0);
+    mm(x, y) += cast<float>(A(r.x, y)) * B(r.x % 2, x, r.x / 2);
+
+    int tile_x = 8;
+    int tile_y = 8;
+    int tile_r = 2;
+
+    Var rxi("rxi"), ryi("ryi");
+    RVar rri("rri"), rro("rro");
+
+    mm.compute_at(mm.in(), x)
+        .update()
+        .tile(x, y, rxi, ryi, tile_x, tile_y, TailStrategy::GuardWithIf)
+        .split(r.x, rro, rri, tile_r)
+        .reorder({rri, rxi, ryi, rro, x, y});
+
+    //Var ixi("ixi"), iyi("iyi");
+    //mm.compute_at(mm.in(), x);
+    //    .tile(x, y, ixi, iyi, tile_x, tile_y)
+    //    .vectorize(ixi)
+    //    .vectorize(iyi);
+
+    //Var mmxi("mmxi"), mmyi("mmyi");
+    //mm.in()
+    //    .tile(x, y, mmxi, mmyi, tile_x, tile_y)
+    //    .vectorize(mmxi)
+    //    .vectorize(mmyi);
+        
+
+    Func result = mm.in();
+    result.print_loop_nest();
+
+    result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.ll", {A, B}, get_jit_target_from_environment());
+
+}
+
 int main(int argc, char **argv) {
-    matmul_ss();
-    matmul_us();
-    matmul_su();
-    matmul_uu();
+    Target target = get_jit_target_from_environment();
+    if (!target.has_feature(Target::AVX512_SapphireRapids)) {
+        std::cout << "[SKIP] The tiled matmul test is only designed to test AMX support.\n";
+        return 0;
+    }
+
+    //matmul_ss();
+    //matmul_us();
+    //matmul_su();
+    //matmul_uu();
+    
+    tiled_matmul_bf16();
     return 0;
 }
