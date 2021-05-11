@@ -19,6 +19,21 @@ bool use_8bit_multiply(const Target &target) {
     return target.arch != Target::X86 || target.has_feature(Target::AVX512_SapphireRapids);
 }
 
+// How many registers to use as accumulators, as a function of the target.
+int get_accumulator_count(const Target &target) {
+    if (target.has_feature(Target::HVX)) {
+        // Hexagon has dot products between vector and scalar registers, so
+        // we don't need to use any vector registers for the input, so we
+        // can use a lot of registers as accumulators without spilling to
+        // the stack.
+        return 24;
+    } else if (get_register_count(target) >= 32) {
+        return 20;
+    } else {
+        return 8;
+    }
+}
+
 class Conv : public Generator<Conv> {
 public:
     // How much to unroll the reduction loop over channels. On some targets,
@@ -171,7 +186,7 @@ public:
         // Figure out how big the tiles we should optimize for should be by getting
         // the total number of accumulators best for this target and figuring out
         // tile sizes.
-        const int accumulators = get_register_count(target) >= 32 ? 20 : 8;
+        const int accumulators = get_accumulator_count(target);
         std::vector<std::pair<int, int>> tile_sizes;
         const int min_tile_c = 1;
         const int max_tile_c = 4;
