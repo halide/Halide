@@ -81,9 +81,11 @@ public:
         //    i32(filter_zeroed_rdxy) * i32(input_zero_)
         //
         // The latter reduction can be computed once per output channel.
+        Func sum_filter("sum_filter");
+        sum_filter(c) += i32(filter_zeroed_rdxy);
+
         Func offset_c("offset_c");
-        offset_c(c) = bias_(c);
-        offset_c(c) -= i32(filter_zeroed_rdxy) * i32(input_zero_);
+        offset_c(c) = bias_(c) - sum_filter(c) * i32(input_zero_);
 
         Expr input_rdxy =
             resampled_input(c, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
@@ -110,14 +112,11 @@ public:
             // When we're broadcasting input channels, require that the input has only
             // one channel.
             input_.dim(0).set_extent(1);
-            input_.dim(1).set_stride(1);
         }
 
         int vector_size = natural_vector_size<uint8_t>();
         if (get_register_count(target) < 32) {
-            // If we are compiling without simd, vector_size can be 1.
-            // Don't let it go to zero.
-            vector_size = std::max(vector_size / 2, 1);
+            vector_size = natural_vector_size<int16_t>();
         }
 
         // Tile the output, so we can try to re-use loads spatially when performing
@@ -199,10 +198,7 @@ public:
 
         offset_c.compute_at(output_, co)
             .store_in(MemoryType::Stack)
-            .align_storage(c, natural_vector_size<int16_t>())
-            .vectorize(c, vector_size, TailStrategy::GuardWithIf);
-        offset_c.update(0)
-            .reorder(r.x, r.y, c)
+            .align_storage(c, natural_vector_size<int32_t>())
             .vectorize(c, vector_size, TailStrategy::GuardWithIf);
     }
 };
