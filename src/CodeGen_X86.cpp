@@ -162,12 +162,6 @@ const x86Intrinsic intrinsic_defs[] = {
     {"llvm.x86.ssse3.pmul.hr.sw.128", Int(16, 8), "pmulhrs", {Int(16, 8), Int(16, 8)}, Target::SSE41},
     {"saturating_pmulhrswx8", Int(16, 8), "saturating_pmulhrs", {Int(16, 8), Int(16, 8)}, Target::SSE41},
 
-    // Pairwise multiply-add
-    {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "pmaddwd", {Int(16, 32), Int(16, 32)}, Target::AVX512_Skylake},
-    {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "pmaddwd", {Int(16, 32), Int(16, 32)}, Target::AVX512_Cannonlake},
-    {"llvm.x86.avx2.pmadd.wd", Int(32, 8), "pmaddwd", {Int(16, 16), Int(16, 16)}, Target::AVX2},
-    {"llvm.x86.sse2.pmadd.wd", Int(32, 4), "pmaddwd", {Int(16, 8), Int(16, 8)}},
-
     // Convert FP32 to BF16
     {"vcvtne2ps2bf16x32", BFloat(16, 32), "f32_to_bf16", {Float(32, 32)}, Target::AVX512_SapphireRapids},
     {"llvm.x86.avx512bf16.cvtneps2bf16.512", BFloat(16, 16), "f32_to_bf16", {Float(32, 16)}, Target::AVX512_SapphireRapids},
@@ -175,7 +169,7 @@ const x86Intrinsic intrinsic_defs[] = {
     // LLVM does not provide an unmasked 128bit cvtneps2bf16 intrinsic, so provide a wrapper around the masked version.
     {"vcvtneps2bf16x4", BFloat(16, 4), "f32_to_bf16", {Float(32, 4)}, Target::AVX512_SapphireRapids},
 
-    // Dot product vector reduction
+    // 4-way dot product vector reduction
     // The LLVM intrinsics combine the bf16 pairs into i32, so provide a wrapper to correctly call the intrinsic.
     {"dpbf16psx16", Float(32, 16), "dot_product", {Float(32, 16), BFloat(16, 32), BFloat(16, 32)}, Target::AVX512_SapphireRapids},
     {"dpbf16psx8", Float(32, 8), "dot_product", {Float(32, 8), BFloat(16, 16), BFloat(16, 16)}, Target::AVX512_SapphireRapids},
@@ -196,6 +190,15 @@ const x86Intrinsic intrinsic_defs[] = {
     {"dpwssdsx16", Int(32, 16), "saturating_dot_product", {Int(32, 16), Int(16, 32), Int(16, 32)}, Target::AVX512_SapphireRapids},
     {"dpwssdsx8", Int(32, 8), "saturating_dot_product", {Int(32, 8), Int(16, 16), Int(16, 16)}, Target::AVX512_SapphireRapids},
     {"dpwssdsx4", Int(32, 4), "saturating_dot_product", {Int(32, 4), Int(16, 8), Int(16, 8)}, Target::AVX512_SapphireRapids},
+
+    // 2-way dot products
+    {"llvm.x86.avx2.pmadd.ub.sw", Int(16, 16), "saturating_dot_product", {UInt(8, 32), Int(8, 32)}, Target::AVX2},
+    {"llvm.x86.ssse3.pmadd.ub.sw.128", Int(16, 8), "saturating_dot_product", {UInt(8, 16), Int(8, 16)}, Target::SSE41},
+
+    {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "dot_product", {Int(16, 32), Int(16, 32)}, Target::AVX512_Skylake},
+    {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "dot_product", {Int(16, 32), Int(16, 32)}, Target::AVX512_Cannonlake},
+    {"llvm.x86.avx2.pmadd.wd", Int(32, 8), "dot_product", {Int(16, 16), Int(16, 16)}, Target::AVX2},
+    {"llvm.x86.sse2.pmadd.wd", Int(32, 4), "dot_product", {Int(16, 8), Int(16, 8)}},
 };
 // clang-format on
 
@@ -224,8 +227,8 @@ void CodeGen_X86::init_module() {
 }
 
 // i32(i16_a)*i32(i16_b) +/- i32(i16_c)*i32(i16_d) can be done by
-// interleaving a, c, and b, d, and then using pmaddwd.
-bool should_use_pmaddwd(const Expr &a, const Expr &b, vector<Expr> &result) {
+// interleaving a, c, and b, d, and then using dot_product.
+bool should_use_dot_product(const Expr &a, const Expr &b, vector<Expr> &result) {
     Type t = a.type();
     internal_assert(b.type() == t);
 
@@ -235,7 +238,7 @@ bool should_use_pmaddwd(const Expr &a, const Expr &b, vector<Expr> &result) {
 
     const Call *ma = Call::as_intrinsic(a, {Call::widening_mul});
     const Call *mb = Call::as_intrinsic(b, {Call::widening_mul});
-    // pmaddwd can't handle mixed type widening muls.
+    // dot_product can't handle mixed type widening muls.
     if (ma && ma->args[0].type() != ma->args[1].type()) {
         return false;
     }
@@ -268,10 +271,10 @@ bool should_use_pmaddwd(const Expr &a, const Expr &b, vector<Expr> &result) {
 
 void CodeGen_X86::visit(const Add *op) {
     vector<Expr> matches;
-    if (should_use_pmaddwd(op->a, op->b, matches)) {
+    if (should_use_dot_product(op->a, op->b, matches)) {
         Expr ac = Shuffle::make_interleave({matches[0], matches[2]});
         Expr bd = Shuffle::make_interleave({matches[1], matches[3]});
-        value = call_overloaded_intrin(op->type, "pmaddwd", {ac, bd});
+        value = call_overloaded_intrin(op->type, "dot_product", {ac, bd});
         if (value) {
             return;
         }
@@ -281,18 +284,22 @@ void CodeGen_X86::visit(const Add *op) {
 
 void CodeGen_X86::visit(const Sub *op) {
     vector<Expr> matches;
-    if (should_use_pmaddwd(op->a, op->b, matches)) {
+    if (should_use_dot_product(op->a, op->b, matches)) {
         // Negate one of the factors in the second expression
-        if (is_const(matches[2])) {
-            matches[2] = -matches[2];
-        } else {
-            matches[3] = -matches[3];
-        }
-        Expr ac = Shuffle::make_interleave({matches[0], matches[2]});
-        Expr bd = Shuffle::make_interleave({matches[1], matches[3]});
-        value = call_overloaded_intrin(op->type, "pmaddwd", {ac, bd});
-        if (value) {
-            return;
+        Expr negative_2 = lossless_negate(matches[2]);
+        Expr negative_3 = lossless_negate(matches[3]);
+        if (negative_2.defined() || negative_3.defined()) {
+            if (negative_2.defined()) {
+                matches[2] = negative_2;
+            } else {
+                matches[3] = negative_3;
+            }
+            Expr ac = Shuffle::make_interleave({matches[0], matches[2]});
+            Expr bd = Shuffle::make_interleave({matches[1], matches[3]});
+            value = call_overloaded_intrin(op->type, "dot_product", {ac, bd});
+            if (value) {
+                return;
+            }
         }
     }
     CodeGen_Posix::visit(op);
@@ -510,20 +517,24 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
     };
     // clang-format off
     static const Pattern patterns[] = {
-        {VectorReduce::Add, 2, wild_f32x_ * wild_f32x_, "dot_product", BFloat(16), Pattern::CombineInit},
-        {VectorReduce::Add, 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "dot_product", {}, Pattern::CombineInit},
+        // 4-way dot products
         {VectorReduce::Add, 4, i32(widening_mul(wild_u8x_, wild_i8x_)), "dot_product", {}, Pattern::CombineInit},
         {VectorReduce::Add, 4, i32(widening_mul(wild_i8x_, wild_u8x_)), "dot_product", {}, Pattern::CombineInit | Pattern::SwapOperands},
-        {VectorReduce::SaturatingAdd, 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "saturating_dot_product", {}, Pattern::CombineInit},
         {VectorReduce::SaturatingAdd, 4, i32(widening_mul(wild_u8x_, wild_i8x_)), "saturating_dot_product", {}, Pattern::CombineInit},
         {VectorReduce::SaturatingAdd, 4, i32(widening_mul(wild_i8x_, wild_u8x_)), "saturating_dot_product", {}, Pattern::CombineInit | Pattern::SwapOperands},
-        {VectorReduce::Add, 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "pmaddwd", Int(16)},
-        {VectorReduce::Add, 2, i32(widening_mul(wild_i8x_, wild_i8x_)), "pmaddwd", Int(16)},
-        {VectorReduce::Add, 2, i32(widening_mul(wild_i8x_, wild_u8x_)), "pmaddwd", Int(16)},
-        {VectorReduce::Add, 2, i32(widening_mul(wild_u8x_, wild_i8x_)), "pmaddwd", Int(16)},
-        {VectorReduce::Add, 2, i32(widening_mul(wild_u8x_, wild_u8x_)), "pmaddwd", Int(16)},
+
+        // 2-way dot products
+        {VectorReduce::SaturatingAdd, 2, i32(widening_mul(wild_u8x_, wild_i8x_)), "saturating_dot_product", {}, Pattern::CombineInit},
+        {VectorReduce::SaturatingAdd, 2, i32(widening_mul(wild_i8x_, wild_u8x_)), "saturating_dot_product", {}, Pattern::CombineInit | Pattern::SwapOperands},
+        {VectorReduce::SaturatingAdd, 2, widening_mul(wild_u8x_, wild_i8x_), "saturating_dot_product"},
+        {VectorReduce::SaturatingAdd, 2, widening_mul(wild_i8x_, wild_u8x_), "saturating_dot_product", {}, Pattern::SwapOperands},
+        {VectorReduce::Add, 2, widening_mul(wild_i16x_, wild_i16x_), "dot_product", {}, Pattern::CombineInit},
+        {VectorReduce::Add, 2, widening_mul(wild_i16x_, wild_i16x_), "dot_product"},
+        {VectorReduce::SaturatingAdd, 2, widening_mul(wild_i16x_, wild_i16x_), "saturating_dot_product", {}, Pattern::CombineInit},
+        {VectorReduce::Add, 2, wild_f32x_ * wild_f32x_, "dot_product", BFloat(16), Pattern::CombineInit},
+
         // One could do a horizontal widening addition with
-        // pmaddwd against a vector of ones. Currently disabled
+        // dot_product against a vector of ones. Currently disabled
         // because I haven't found case where it's clearly better.
     };
     // clang-format on
@@ -545,7 +556,7 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             }
             if (!a.defined() || !b.defined()) { continue; }
 
-            if (p.flags & Pattern::CombineInit) {
+            if (init.defined() && (p.flags & Pattern::CombineInit)) {
                 value = call_overloaded_intrin(op->type, p.intrin, {init, a, b});
                 if (value) { return; }
             } else {
