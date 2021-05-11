@@ -277,7 +277,15 @@ public:
             i.second->init_module();
         }
 
-        Stmt result = mutate(s);
+        Stmt result = s;
+
+        if (target.features_any_of({Target::CUDACapability70, Target::CUDACapability75, Target::CUDACapability80})) {
+            debug(2) << "Extracting CUDA Tensor Core Operations...\n";
+            result = ExtractTensorCoreOperations{}.mutate(s);
+            debug(2) << "After extracting CUDA Tensor Core Operations" << result << "\n";
+        }
+
+        result = mutate(result);
 
         for (auto &i : cgdev) {
             string api_unique_name = i.second->api_unique_name();
