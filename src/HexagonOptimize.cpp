@@ -236,9 +236,14 @@ bool check_pattern_target(int flags, const Target &target) {
     return true;
 }
 
+bool is_double_vector(const Expr &x, const Target &target) {
+    int native_vector_lanes = target.natural_vector_size(x.type());
+    return x.type().lanes() % (2 * native_vector_lanes) == 0;
+}
+
 // Check if the matches satisfy the given pattern flags, and mutate the matches
 // as specified by the flags.
-bool process_match_flags(vector<Expr> &matches, int flags) {
+bool process_match_flags(vector<Expr> &matches, int flags, const Target &target) {
     // The Pattern::Narrow*Op* flags are ordered such that the operand
     // corresponds to the bit (with operand 0 corresponding to the least
     // significant bit), so we can check for them all in a loop.
@@ -257,6 +262,9 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
     for (size_t i = Pattern::BeginDeinterleaveOp; i < Pattern::EndDeinterleaveOp; i++) {
         if (flags & (Pattern::DeinterleaveOp0 << (i - Pattern::BeginDeinterleaveOp))) {
             internal_assert(matches[i].type().is_vector());
+            if (!is_double_vector(matches[i], target)) {
+                return false;
+            }
             matches[i] = native_deinterleave(matches[i]);
         }
     }
@@ -281,11 +289,6 @@ Expr replace_pattern(Expr x, const vector<Expr> &matches, const Pattern &p) {
     return x;
 }
 
-bool is_double_vector(const Expr &x, const Target &target) {
-    int native_vector_lanes = target.natural_vector_size(x.type());
-    return x.type().lanes() % (2 * native_vector_lanes) == 0;
-}
-
 // Attempt to apply one of the patterns to x. If a match is
 // successful, the expression is replaced with a call using the
 // matched operands. Prior to substitution, the matches are mutated
@@ -306,7 +309,7 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, const Target &targe
                 debug(debug_level) << i << "\n";
             }
 
-            if (!process_match_flags(matches, p.flags)) {
+            if (!process_match_flags(matches, p.flags, target)) {
                 continue;
             }
 

@@ -173,12 +173,8 @@ public:
         // tile sizes.
         const int accumulators = get_register_count(target) >= 32 ? 20 : 8;
         std::vector<std::pair<int, int>> tile_sizes;
+        const int min_tile_c = 1;
         const int max_tile_c = 4;
-        // On Hexagon, we have to produce a full vector of output channels.
-        // TODO: We should fix the deinterleaving issue that occurs when this is 1.
-        // This is important so we can reduce our alignment requirement from 128
-        // channels to 32.
-        const int min_tile_c = get_target().has_feature(Target::HVX) ? 4 : 1;
         for (int tile_c = max_tile_c; tile_c >= min_tile_c; tile_c /= 2) {
             int tile_x = std::min(8, accumulators / tile_c);
             tile_sizes.emplace_back(tile_c, tile_x);
