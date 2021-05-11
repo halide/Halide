@@ -62,7 +62,7 @@ private:
             return IRMutator::visit(op);
         }
 
-        if (op->type.bytes() * op->type.lanes() <= 64) {
+        if (op->type.bytes() * op->type.lanes() <= 8) {
             // These can probably be treated as scalars instead.
             return IRMutator::visit(op);
         }
