@@ -283,6 +283,15 @@ public:
             check("phminposuw", 1, maximum(in_u8(RDom(0, 16) + 16 * x)));
             check("phminposuw", 1, minimum(in_i8(RDom(0, 16) + 16 * x)));
             check("phminposuw", 1, maximum(in_i8(RDom(0, 16) + 16 * x)));
+
+            for (int w = 2; w <= 8; w++) {
+                const char *check_pmaddubsw =
+                    (use_avx2 && w >= 4) ? "vpmaddubsw" : "pmaddubsw";
+
+                RDom r2(0, 2);
+                check(check_pmaddubsw, 4 * w, saturating_sum(i16(in_u8(2 * x + r2)) * in_i8(2 * x + r2 + 32)));
+                check(check_pmaddubsw, 4 * w, saturating_sum(i16(in_i8(2 * x + r2)) * in_u8(2 * x + r2 + 32)));
+            }
         }
 
         // SSE 4.1
@@ -291,18 +300,12 @@ public:
             // We generated pmaddwd when we do a sum of widening multiplies
             const char *check_pmaddwd =
                 (use_avx2 && w >= 4) ? "vpmaddwd" : "pmaddwd";
-            const char *check_pmaddubsw =
-                (use_avx2 && w >= 4) ? "vpmaddubsw" : "pmaddubsw";
             check(check_pmaddwd, 2 * w, i32(i16_1) * 3 + i32(i16_2) * 4);
             check(check_pmaddwd, 2 * w, i32(i16_1) * 3 - i32(i16_2) * 4);
 
             // And also for dot-products
             RDom r4(0, 4);
             check(check_pmaddwd, 2 * w, sum(i32(in_i16(x * 4 + r4)) * in_i16(x * 4 + r4 + 32)));
-
-            RDom r2(0, 2);
-            check(check_pmaddubsw, 4 * w, saturating_sum(i16(in_u8(2 * x + r2)) * in_i8(2 * x + r2 + 32)));
-            check(check_pmaddubsw, 4 * w, saturating_sum(i16(in_i8(2 * x + r2)) * in_u8(2 * x + r2 + 32)));
         }
 
         // llvm doesn't distinguish between signed and unsigned multiplies
