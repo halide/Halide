@@ -134,7 +134,7 @@ Expr as_mul(const Expr &a) {
     } else if (const Call *s = Call::as_intrinsic(a, {Call::shift_left, Call::widening_shift_left})) {
         const uint64_t *log2_b = as_const_uint(s->args[1]);
         if (log2_b) {
-            Expr b = make_one(s->type) << cast(UInt(s->type.bits()), (int)*log2_b);
+            Expr b = simplify(make_one(s->type) << cast(UInt(s->type.bits()), (int)*log2_b));
             return simplify(Mul::make(cast(s->type, s->args[0]), b));
         }
     }
