@@ -855,7 +855,6 @@ public:
 
                         if (load_a && load_b) {
                             const Expr wild_i32x = Variable::make(Int(32), "*");
-                            const Expr k_var_expr = Variable::make(Int(32), k_var_name);
                             // Check if the reduction domain is being used in both A and B to
                             // validate the matrix multiply
                             const Expr load_a_pattern = wild_i32x + wild_i32x;
