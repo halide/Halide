@@ -49,11 +49,6 @@ bool matmul() {
     auto lhs = typename std::conditional<lhs_signed, make_int_t, make_uint_t>::type{};
     auto rhs = typename std::conditional<rhs_signed, make_int_t, make_uint_t>::type{};
 
-    Target target = get_jit_target_from_environment();
-    if (!target.has_feature(Target::AVX512_SapphireRapids)) {
-        std::cout << "[SKIP] The tiled matmul test is only designed to test AMX support.\n";
-        return true;
-    }
     const int row = 16;
     const int col = 16;
     const int acc = 16;
@@ -81,32 +76,32 @@ bool matmul() {
     Var rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
     mm.compute_at(mm.in(), y)
-        .store_in(MemoryType::AMXTile)
+        //.store_in(MemoryType::AMXTile)
         .update()
         // Split into (x,y) tile
         .tile(y, x, ryi, rxi, tile_y, tile_x, TailStrategy::GuardWithIf)
         // Split reduction dim by tile_r
         .split(r.x, rro, rri, tile_r)
         // Reorder so that the (x,y) tile is inside the inner ro loop
-        .reorder({rri, ryi, rxi, rro, y, x})
-        .atomic()
-        .vectorize(rri)
-        .vectorize(ryi)
-        .vectorize(rxi);
+        .reorder({rri, ryi, rxi, rro, y, x});
+        //.atomic()
+        //.vectorize(rri)
+        //.vectorize(ryi)
+        //.vectorize(rxi);
 
     // Schedule the initialization
     Var ixi("ixi"), iyi("iyi");
     mm.compute_at(mm.in(), y)
-        .tile(y, x, iyi, ixi, tile_y, tile_x)
-        .vectorize(iyi)
-        .vectorize(ixi);
+        .tile(y, x, iyi, ixi, tile_y, tile_x);
+    //    .vectorize(iyi)
+    //    .vectorize(ixi);
 
     // Schedule the consumer
     Var mmxi("mmxi"), mmyi("mmyi");
     mm.in()
-        .tile(y, x, mmyi, mmxi, tile_y, tile_x)
-        .vectorize(mmyi)
-        .vectorize(mmxi);
+        .tile(y, x, mmyi, mmxi, tile_y, tile_x);
+    //    .vectorize(mmyi)
+    //    .vectorize(mmxi);
 
     Buffer<LhsInt8> a_buf(acc, row);
     fill_buffer_a(a_buf, row, acc);
@@ -151,7 +146,7 @@ auto matmul_us = &matmul<uint8_t, int8_t>;
 auto matmul_su = &matmul<int8_t, uint8_t>;
 auto matmul_uu = &matmul<uint8_t, uint8_t>;
 
-void tiled_matmul_bf16() {
+void matmul_bf16() {
     // lhs: 32x16, rhs: 16x32
     const int row = 32;
     const int col = 32;
@@ -175,22 +170,27 @@ void tiled_matmul_bf16() {
     RVar rri("rri"), rro("rro");
 
     mm.compute_at(mm.in(), x)
+        .store_in(MemoryType::AMXTile)
         .update()
         .tile(x, y, rxi, ryi, tile_x, tile_y, TailStrategy::GuardWithIf)
         .split(r.x, rro, rri, tile_r)
-        .reorder({rri, rxi, ryi, rro, x, y});
+        .reorder({rri, rxi, ryi, rro, x, y})
+        .atomic()
+        .vectorize(rri)
+        .vectorize(rxi)
+        .vectorize(ryi);
+        
+    Var ixi("ixi"), iyi("iyi");
+    mm.compute_at(mm.in(), x)
+        .tile(x, y, ixi, iyi, tile_x, tile_y)
+        .vectorize(ixi)
+        .vectorize(iyi);
 
-    //Var ixi("ixi"), iyi("iyi");
-    //mm.compute_at(mm.in(), x);
-    //    .tile(x, y, ixi, iyi, tile_x, tile_y)
-    //    .vectorize(ixi)
-    //    .vectorize(iyi);
-
-    //Var mmxi("mmxi"), mmyi("mmyi");
-    //mm.in()
-    //    .tile(x, y, mmxi, mmyi, tile_x, tile_y)
-    //    .vectorize(mmxi)
-    //    .vectorize(mmyi);
+    Var mmxi("mmxi"), mmyi("mmyi");
+    mm.in()
+        .tile(x, y, mmxi, mmyi, tile_x, tile_y)
+        .vectorize(mmxi)
+        .vectorize(mmyi);
         
 
     Func result = mm.in();
@@ -212,6 +212,6 @@ int main(int argc, char **argv) {
     //matmul_su();
     //matmul_uu();
     
-    tiled_matmul_bf16();
+    matmul_bf16();
     return 0;
 }
