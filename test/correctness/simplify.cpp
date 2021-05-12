@@ -1627,7 +1627,7 @@ void check_boolean() {
     // A for loop where the extent is exactly one is just the body
     check(IfThenElse::make(x == 1, loop), IfThenElse::make(x == 1, body));
 
-    // Check we can learn from bounds on variables
+    // Check we can learn from conditions on variables
     check(IfThenElse::make(x < 5, not_no_op(min(x, 17))),
           IfThenElse::make(x < 5, not_no_op(x)));
 
@@ -1666,6 +1666,13 @@ void check_boolean() {
           // z can't possibly be two, because x is at least one, so y
           // is at least two, so z must be at least three.
           Evaluate::make(0));
+
+    check(IfThenElse::make(x / 4 == 0, IfThenElse::make(x < 1, AssertStmt::make(x == 0, x))),
+          Evaluate::make(0));
+
+    check(IfThenElse::make((x / 4) * 4 == 8, IfThenElse::make(x % 4 == 2, AssertStmt::make(x == 10, x))),
+          Evaluate::make(0));
+
     // Simplifications of selects
     check(select(x == 3, 5, 7) + 7, select(x == 3, 12, 14));
     check(select(x == 3, 5, 7) - 7, select(x == 3, -2, 0));

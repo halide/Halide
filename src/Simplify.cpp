@@ -4,6 +4,7 @@
 #include "CSE.h"
 #include "CompilerLogger.h"
 #include "IRMutator.h"
+#include "Solve.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -198,6 +199,9 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
     } else if (const EQ *eq = fact.as<EQ>()) {
         const Variable *v = eq->a.as<Variable>();
         const Mod *m = eq->a.as<Mod>();
+        const Mul *mul = eq->a.as<Mul>();
+        const Div *div = eq->a.as<Div>();
+        const Div *div_mul = mul ? mul->a.as<Div>() : nullptr;
         const int64_t *modulus = m ? as_const_int(m->b) : nullptr;
         const int64_t *remainder = m ? as_const_int(eq->b) : nullptr;
         if (v) {
@@ -247,6 +251,27 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
             }
             simplify->bounds_and_alignment_info.push(v->name, expr_info);
             bounds_pop_list.push_back(v);
+        } else if ((div && (v = div->a.as<Variable>())) ||
+                   (div_mul && (v = div_mul->a.as<Variable>()))) {
+            // Learn from expressions of the form (x / a) * b == c
+            // We might know the bounds of the variable.
+            Interval range = solve_for_inner_interval(eq, v->name);
+            const int64_t *min = as_const_int(range.min);
+            const int64_t *max = as_const_int(range.max);
+            if (min || max) {
+                Simplify::ExprInfo expr_info;
+                expr_info.min_defined = min != nullptr;
+                expr_info.min = min ? *min : 0;
+                expr_info.max_defined = max != nullptr;
+                expr_info.max = max ? *max : 0;
+                if (simplify->bounds_and_alignment_info.contains(v->name)) {
+                    // We already know something about this variable and don't want to suppress it.
+                    auto existing_knowledge = simplify->bounds_and_alignment_info.get(v->name);
+                    expr_info.intersect(existing_knowledge);
+                }
+                simplify->bounds_and_alignment_info.push(v->name, expr_info);
+                bounds_pop_list.push_back(v);
+            }
         }
     } else if (const LT *lt = fact.as<LT>()) {
         const Variable *v = lt->a.as<Variable>();
