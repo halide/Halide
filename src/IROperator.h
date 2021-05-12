@@ -1356,7 +1356,7 @@ inline Expr unreachable() {
     return unreachable(type_of<T>());
 }
 
-}
+}  // namespace Internal
 
 /** Control the values used in the memoization cache key for memoize.
  * Normally parameters and other external dependencies are
