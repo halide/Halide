@@ -5,6 +5,13 @@ using namespace Halide::Internal;
 
 #define internal_assert _halide_user_assert
 
+// Helper to wrap an expression in a statement using the expression
+// that won't be simplified away.
+Stmt not_no_op(Expr x) {
+    x = Call::make(x.type(), "not_no_op", {x}, Call::Extern);
+    return Evaluate::make(x);
+}
+
 void check_is_sio(const Expr &e) {
     Expr simpler = simplify(e);
     if (!Call::as_intrinsic(simpler, {Call::signed_integer_overflow})) {
@@ -1486,76 +1493,77 @@ void check_boolean() {
 
     // Check anded conditions apply to the then case only
     check(IfThenElse::make(x == 4 && y == 5,
-                           Evaluate::make(z + x + y),
-                           Evaluate::make(z + x - y)),
+                           not_no_op(z + x + y),
+                           not_no_op(z + x - y)),
           IfThenElse::make(x == 4 && y == 5,
-                           Evaluate::make(z + 9),
-                           Evaluate::make(x + z - y)));
+                           not_no_op(z + 9),
+                           not_no_op(x + z - y)));
 
     // Check ored conditions apply to the else case only
     check(IfThenElse::make(b1 || b2,
-                           Evaluate::make(select(b1, x + 3, y + 4) + select(b2, x + 5, y + 7)),
-                           Evaluate::make(select(b1, x + 3, y + 8) - select(b2, x + 5, y + 7))),
+                           not_no_op(select(b1, x + 3, y + 4) + select(b2, x + 5, y + 7)),
+                           not_no_op(select(b1, x + 3, y + 8) - select(b2, x + 5, y + 7))),
           IfThenElse::make(b1 || b2,
-                           Evaluate::make(select(b1, x + 3, y + 4) + select(b2, x + 5, y + 7))));
+                           not_no_op(select(b1, x + 3, y + 4) + select(b2, x + 5, y + 7)),
+                           not_no_op(1)));
 
     // Check single conditions apply to both cases of an ifthenelse
     check(IfThenElse::make(b1,
-                           Evaluate::make(select(b1, x, y)),
-                           Evaluate::make(select(b1, z, w))),
+                           not_no_op(select(b1, x, y)),
+                           not_no_op(select(b1, z, w))),
           IfThenElse::make(b1,
-                           Evaluate::make(x),
-                           Evaluate::make(w)));
+                           not_no_op(x),
+                           not_no_op(w)));
 
     check(IfThenElse::make(x < y,
-                           IfThenElse::make(x < y, Evaluate::make(y), Evaluate::make(x)),
-                           Evaluate::make(x)),
+                           IfThenElse::make(x < y, not_no_op(y), not_no_op(x)),
+                           not_no_op(x)),
           IfThenElse::make(x < y,
-                           Evaluate::make(y),
-                           Evaluate::make(x)));
+                           not_no_op(y),
+                           not_no_op(x)));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                      IfThenElse::make(x < y, Evaluate::make(x + 3), Evaluate::make(x + 4))),
+    check(Block::make(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 2)),
+                      IfThenElse::make(x < y, not_no_op(x + 3), not_no_op(x + 4))),
           IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 3)),
-                           Block::make(Evaluate::make(x + 2), Evaluate::make(x + 4))));
+                           Block::make(not_no_op(x + 1), not_no_op(x + 3)),
+                           Block::make(not_no_op(x + 2), not_no_op(x + 4))));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1)),
-                      IfThenElse::make(x < y, Evaluate::make(x + 2))),
-          IfThenElse::make(x < y, Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2))));
+    check(Block::make(IfThenElse::make(x < y, not_no_op(x + 1)),
+                      IfThenElse::make(x < y, not_no_op(x + 2))),
+          IfThenElse::make(x < y, Block::make(not_no_op(x + 1), not_no_op(x + 2))));
 
-    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                       IfThenElse::make(x < y, Evaluate::make(x + 3), Evaluate::make(x + 4)),
-                       Evaluate::make(x + 5)}),
+    check(Block::make({IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 2)),
+                       IfThenElse::make(x < y, not_no_op(x + 3), not_no_op(x + 4)),
+                       not_no_op(x + 5)}),
           Block::make(IfThenElse::make(x < y,
-                                       Block::make(Evaluate::make(x + 1), Evaluate::make(x + 3)),
-                                       Block::make(Evaluate::make(x + 2), Evaluate::make(x + 4))),
-                      Evaluate::make(x + 5)));
+                                       Block::make(not_no_op(x + 1), not_no_op(x + 3)),
+                                       Block::make(not_no_op(x + 2), not_no_op(x + 4))),
+                      not_no_op(x + 5)));
 
-    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x + 1)),
-                       IfThenElse::make(x < y, Evaluate::make(x + 2)),
-                       IfThenElse::make(x < y, Evaluate::make(x + 3)),
-                       Evaluate::make(x + 4)}),
-          Block::make(IfThenElse::make(x < y, Block::make({Evaluate::make(x + 1), Evaluate::make(x + 2), Evaluate::make(x + 3)})),
-                      Evaluate::make(x + 4)));
+    check(Block::make({IfThenElse::make(x < y, not_no_op(x + 1)),
+                       IfThenElse::make(x < y, not_no_op(x + 2)),
+                       IfThenElse::make(x < y, not_no_op(x + 3)),
+                       not_no_op(x + 4)}),
+          Block::make(IfThenElse::make(x < y, Block::make({not_no_op(x + 1), not_no_op(x + 2), not_no_op(x + 3)})),
+                      not_no_op(x + 4)));
 
-    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x + 1)),
-                       IfThenElse::make(x < y, Evaluate::make(x + 2)),
-                       Evaluate::make(x + 3)}),
-          Block::make(IfThenElse::make(x < y, Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2))),
-                      Evaluate::make(x + 3)));
+    check(Block::make({IfThenElse::make(x < y, not_no_op(x + 1)),
+                       IfThenElse::make(x < y, not_no_op(x + 2)),
+                       not_no_op(x + 3)}),
+          Block::make(IfThenElse::make(x < y, Block::make(not_no_op(x + 1), not_no_op(x + 2))),
+                      not_no_op(x + 3)));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                      IfThenElse::make(x < y, Evaluate::make(x + 3))),
+    check(Block::make(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 2)),
+                      IfThenElse::make(x < y, not_no_op(x + 3))),
           IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 3)),
-                           Evaluate::make(x + 2)));
+                           Block::make(not_no_op(x + 1), not_no_op(x + 3)),
+                           not_no_op(x + 2)));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1)),
-                      IfThenElse::make(x < y, Evaluate::make(x + 2), Evaluate::make(x + 3))),
+    check(Block::make(IfThenElse::make(x < y, not_no_op(x + 1)),
+                      IfThenElse::make(x < y, not_no_op(x + 2), not_no_op(x + 3))),
           IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                           Evaluate::make(x + 3)));
+                           Block::make(not_no_op(x + 1), not_no_op(x + 2)),
+                           not_no_op(x + 3)));
 
     // The construct
     //     if (var == expr) then a else b;
@@ -1566,50 +1574,50 @@ void check_boolean() {
           IfThenElse::make(b1 == b2, then_clause, else_clause));
 
     // Check common statements are pulled out of ifs.
-    check(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 1)),
-          Evaluate::make(x + 1));
+    check(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 1)),
+          not_no_op(x + 1));
 
     check(IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 3))),
-          Block::make(Evaluate::make(x + 1),
-                      IfThenElse::make(x < y, Evaluate::make(x + 2), Evaluate::make(x + 3))));
+                           Block::make(not_no_op(x + 1), not_no_op(x + 2)),
+                           Block::make(not_no_op(x + 1), not_no_op(x + 3))),
+          Block::make(not_no_op(x + 1),
+                      IfThenElse::make(x < y, not_no_op(x + 2), not_no_op(x + 3))));
 
     check(IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                           Block::make(Evaluate::make(x + 3), Evaluate::make(x + 2))),
-          Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 3)),
-                      Evaluate::make(x + 2)));
+                           Block::make(not_no_op(x + 1), not_no_op(x + 2)),
+                           Block::make(not_no_op(x + 3), not_no_op(x + 2))),
+          Block::make(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 3)),
+                      not_no_op(x + 2)));
 
     check(IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                           Evaluate::make(x + 2)),
-          Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1)),
-                      Evaluate::make(x + 2)));
+                           Block::make(not_no_op(x + 1), not_no_op(x + 2)),
+                           not_no_op(x + 2)),
+          Block::make(IfThenElse::make(x < y, not_no_op(x + 1)),
+                      not_no_op(x + 2)));
 
     check(IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                           Evaluate::make(x + 1)),
-          Block::make(Evaluate::make(x + 1),
-                      IfThenElse::make(x < y, Evaluate::make(x + 2))));
+                           Block::make(not_no_op(x + 1), not_no_op(x + 2)),
+                           not_no_op(x + 1)),
+          Block::make(not_no_op(x + 1),
+                      IfThenElse::make(x < y, not_no_op(x + 2))));
 
     check(IfThenElse::make(x < y,
-                           Evaluate::make(x + 1),
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2))),
-          Block::make(Evaluate::make(x + 1),
-                      IfThenElse::make(x < y, Evaluate::make(0), Evaluate::make(x + 2))));
+                           not_no_op(x + 1),
+                           Block::make(not_no_op(x + 1), not_no_op(x + 2))),
+          Block::make(not_no_op(x + 1),
+                      IfThenElse::make(x < y, Evaluate::make(0), not_no_op(x + 2))));
 
     check(IfThenElse::make(x < y,
-                           Evaluate::make(x + 2),
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2))),
-          Block::make(IfThenElse::make(x < y, Evaluate::make(0), Evaluate::make(x + 1)),
-                      Evaluate::make(x + 2)));
+                           not_no_op(x + 2),
+                           Block::make(not_no_op(x + 1), not_no_op(x + 2))),
+          Block::make(IfThenElse::make(x < y, Evaluate::make(0), not_no_op(x + 1)),
+                      not_no_op(x + 2)));
 
     check(IfThenElse::make(x < y,
-                           IfThenElse::make(z < 4, Evaluate::make(x + 2)),
-                           IfThenElse::make(z < 4, Evaluate::make(x + 3))),
+                           IfThenElse::make(z < 4, not_no_op(x + 2)),
+                           IfThenElse::make(z < 4, not_no_op(x + 3))),
           IfThenElse::make(z < 4,
-                           IfThenElse::make(x < y, Evaluate::make(x + 2), Evaluate::make(x + 3))));
+                           IfThenElse::make(x < y, not_no_op(x + 2), not_no_op(x + 3))));
 
     // A for loop is also an if statement that the extent is greater than zero
     Stmt body = AssertStmt::make(y == z, y);
@@ -1620,29 +1628,29 @@ void check_boolean() {
     check(IfThenElse::make(x == 1, loop), IfThenElse::make(x == 1, body));
 
     // Check we can learn from bounds on variables
-    check(IfThenElse::make(x < 5, Evaluate::make(min(x, 17))),
-          IfThenElse::make(x < 5, Evaluate::make(x)));
+    check(IfThenElse::make(x < 5, not_no_op(min(x, 17))),
+          IfThenElse::make(x < 5, not_no_op(x)));
 
-    check(IfThenElse::make(x < min(y, 5), Evaluate::make(min(x, 17))),
-          IfThenElse::make(x < min(y, 5), Evaluate::make(x)));
+    check(IfThenElse::make(x < min(y, 5), not_no_op(min(x, 17))),
+          IfThenElse::make(x < min(y, 5), not_no_op(x)));
 
-    check(IfThenElse::make(5 < x, Evaluate::make(max(x, 2))),
-          IfThenElse::make(5 < x, Evaluate::make(x)));
+    check(IfThenElse::make(5 < x, not_no_op(max(x, 2))),
+          IfThenElse::make(5 < x, not_no_op(x)));
 
-    check(IfThenElse::make(max(y, 5) < x, Evaluate::make(max(x, 2))),
-          IfThenElse::make(max(y, 5) < x, Evaluate::make(x)));
+    check(IfThenElse::make(max(y, 5) < x, not_no_op(max(x, 2))),
+          IfThenElse::make(max(y, 5) < x, not_no_op(x)));
 
-    check(IfThenElse::make(x <= 5, Evaluate::make(min(x, 17))),
-          IfThenElse::make(x <= 5, Evaluate::make(x)));
+    check(IfThenElse::make(x <= 5, not_no_op(min(x, 17))),
+          IfThenElse::make(x <= 5, not_no_op(x)));
 
-    check(IfThenElse::make(x <= min(y, 5), Evaluate::make(min(x, 17))),
-          IfThenElse::make(x <= min(y, 5), Evaluate::make(x)));
+    check(IfThenElse::make(x <= min(y, 5), not_no_op(min(x, 17))),
+          IfThenElse::make(x <= min(y, 5), not_no_op(x)));
 
-    check(IfThenElse::make(5 <= x, Evaluate::make(max(x, 2))),
-          IfThenElse::make(5 <= x, Evaluate::make(x)));
+    check(IfThenElse::make(5 <= x, not_no_op(max(x, 2))),
+          IfThenElse::make(5 <= x, not_no_op(x)));
 
-    check(IfThenElse::make(max(y, 5) <= x, Evaluate::make(max(x, 2))),
-          IfThenElse::make(max(y, 5) <= x, Evaluate::make(x)));
+    check(IfThenElse::make(max(y, 5) <= x, not_no_op(max(x, 2))),
+          IfThenElse::make(max(y, 5) <= x, not_no_op(x)));
 
     // Concretely, this lets us skip some redundant assertions
     check(Block::make(AssertStmt::make(max(y, 3) < x, x),
@@ -1654,10 +1662,10 @@ void check_boolean() {
     check(IfThenElse::make(0 < x,
                            IfThenElse::make(x < y,
                                             IfThenElse::make(y < z,
-                                                             Evaluate::make(z == 2)))),
+                                                             AssertStmt::make(z != 2, x)))),
           // z can't possibly be two, because x is at least one, so y
           // is at least two, so z must be at least three.
-          Evaluate::make(const_false()));
+          Evaluate::make(0));
     // Simplifications of selects
     check(select(x == 3, 5, 7) + 7, select(x == 3, 12, 14));
     check(select(x == 3, 5, 7) - 7, select(x == 3, -2, 0));
