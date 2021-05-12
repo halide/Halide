@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
     Buffer<float> output_halide(matrix_size, matrix_size);
 
     simple_version(mat_A.data(), mat_B.data(), output_ref.data(), mat_A.width(), mat_A.stride(1));
-    output_halide = out.realize(matrix_size, matrix_size);
+    output_halide = out.realize({matrix_size, matrix_size});
 
     bool halide_correct = true;
     for (int iy = 0; iy < matrix_size && halide_correct; iy++) {
