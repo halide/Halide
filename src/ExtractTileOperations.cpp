@@ -248,7 +248,10 @@ class ExtractTileOperations : public IRMutator {
 
     Stmt visit(const Allocate *op) override {
         if (op->memory_type == MemoryType::AMXTile) {
-            user_assert(op->type.is_int() && op->type.bits() == 32) << "scheduled tile operations must yield 32-bit integers";
+            user_assert(
+                (op->type.is_int() && op->type.bits() == 32) || 
+                (op->type.is_float() && op->type.bits() == 32)) << 
+                "scheduled tile operations must yield 32-bit integers or 32-bit floats";
 
             user_assert(!in_allocate) << "Found two possible tile allocations for AMX allocation";
             ScopedValue<string> old_amx_name(amx_name, op->name + ".amx");
