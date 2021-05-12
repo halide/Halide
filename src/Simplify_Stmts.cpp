@@ -51,7 +51,7 @@ Stmt Simplify::visit(const IfThenElse *op) {
 
     if (is_no_op(else_case)) {
         // If both sides are no-ops, bail out.
-        if (is_no_op(then_case)) {
+        if (is_pure(condition) && is_no_op(then_case)) {
             return then_case;
         }
         // Replace no-ops with empty stmts.
@@ -131,7 +131,12 @@ Stmt Simplify::visit(const IfThenElse *op) {
                else_if &&
                !then_if->else_case.defined() &&
                !else_if->else_case.defined() &&
+               is_pure(condition) &&
+               is_pure(then_if->condition) &&
+               is_pure(else_if->condition) &&
                equal(then_if->condition, else_if->condition)) {
+        // Rewrite if(a) { if(b) X } else { if(b) Y }
+        // to if(b) { if(a) X else Y }
         return mutate(IfThenElse::make(then_if->condition,
                                        IfThenElse::make(condition, then_if->then_case, else_if->then_case)));
     } else if (condition.same_as(op->condition) &&
@@ -287,13 +292,13 @@ Stmt Simplify::visit(const Store *op) {
         if (index_info.max_defined && index_info.max < 0) {
             // TODO: We should turn this into some form of unreachable flag,
             // and further simplify neighboring IR.
-            return Evaluate::make(0);
+            return Evaluate::make(unreachable());
         }
         const ExprInfo &alloc_info = bounds_and_alignment_info.get(alloc_extent_name);
         if (alloc_info.max_defined && index_info.min_defined) {
             int index_min_bytes = index_info.min * op->value.type().bytes();
             if (index_min_bytes > alloc_info.max) {
-                return Evaluate::make(0);
+                return Evaluate::make(unreachable());
             }
         }
     }

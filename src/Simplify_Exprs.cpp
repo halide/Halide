@@ -315,13 +315,13 @@ Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
     string alloc_extent_name = op->name + ".total_extent_bytes";
     if (bounds_and_alignment_info.contains(alloc_extent_name)) {
         if (index_info.max_defined && index_info.max < 0) {
-            return undef(op->type);
+            return unreachable(op->type);
         }
         const ExprInfo &alloc_info = bounds_and_alignment_info.get(alloc_extent_name);
         if (alloc_info.max_defined && index_info.min_defined) {
             int index_min_bytes = index_info.min * op->type.bytes();
             if (index_min_bytes > alloc_info.max) {
-                return undef(op->type);
+                return unreachable(op->type);
             }
         }
     }
