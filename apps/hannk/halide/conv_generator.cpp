@@ -289,7 +289,7 @@ public:
                 .unroll(rci)
                 .vectorize(c);
             offset_c.update(1)
-                .vectorize(c, accum_vector_size, TailStrategy::RoundUp);
+                .vectorize(c, accum_vector_size, TailStrategy::GuardWithIf);
 
             // Compute the sum of the input outside the loops over channels.
             sum_input.compute_at(output_, xo)
@@ -301,10 +301,10 @@ public:
                 .vectorize(rci)
                 .vectorize(x)
                 .specialize(stride_x_ == 1 && is_interleaved(input_, unroll_reduction));
+        } else {
+            // TODO: This could be padded outside, when we pad the filter.
+            bias_.in().compute_root().store_in(MemoryType::Stack);
         }
-
-        // TODO: Pad this outside and let it constant fold.
-        bias_.in().compute_root().store_in(MemoryType::Stack);
     }
 };
 
