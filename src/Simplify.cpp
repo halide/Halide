@@ -100,6 +100,58 @@ bool Simplify::const_uint(const Expr &e, uint64_t *u) {
     }
 }
 
+namespace {
+
+// Returns true if x is a constant equation of a single variable, and
+// is likely to produce a constant interval if solved for the variable.
+bool is_constant_equation(const Expr &x, const Variable *& var) {
+    if (is_const(x)) {
+        return true;
+    } else if (const Add *bin = x.as<Add>()) {
+        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
+    } else if (const Sub *bin = x.as<Sub>()) {
+        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
+    } else if (const Mul *bin = x.as<Mul>()) {
+        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
+    } else if (const Div *bin = x.as<Div>()) {
+        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
+    } else if (const Mod *bin = x.as<Mod>()) {
+        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
+    } else if (const Min *bin = x.as<Min>()) {
+        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
+    } else if (const Max *bin = x.as<Max>()) {
+        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
+    } else if (const EQ *bin = x.as<EQ>()) {
+        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
+    } else if (const NE *bin = x.as<NE>()) {
+        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
+    } else if (const LT *bin = x.as<LT>()) {
+        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
+    } else if (const LE *bin = x.as<LE>()) {
+        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
+    } else if (const GT *bin = x.as<GT>()) {
+        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
+    } else if (const GE *bin = x.as<GE>()) {
+        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
+    } else if (const Cast *c = x.as<Cast>()) {
+        return is_constant_equation(c->value, var);
+    } else if (const Variable *v = x.as<Variable>()) {
+        if (var && var->name == v->name) {
+            // We already found this variable.
+            return true;
+        } else if (var) {
+            // This is an equation of more than one variable.
+            return false;
+        } else if (!var && v->type.is_int() && v->type.bits() >= 32) {
+            var = v;
+            return true;
+        }
+    }
+    return false;
+}
+
+}  // namespace
+
 void Simplify::ScopedFact::learn_false(const Expr &fact) {
     Simplify::VarInfo info;
     info.old_uses = info.new_uses = 0;
@@ -199,9 +251,6 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
     } else if (const EQ *eq = fact.as<EQ>()) {
         const Variable *v = eq->a.as<Variable>();
         const Mod *m = eq->a.as<Mod>();
-        const Mul *mul = eq->a.as<Mul>();
-        const Div *div = eq->a.as<Div>();
-        const Div *div_mul = mul ? mul->a.as<Div>() : nullptr;
         const int64_t *modulus = m ? as_const_int(m->b) : nullptr;
         const int64_t *remainder = m ? as_const_int(eq->b) : nullptr;
         if (v) {
@@ -251,10 +300,7 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
             }
             simplify->bounds_and_alignment_info.push(v->name, expr_info);
             bounds_pop_list.push_back(v);
-        } else if (as_const_int(eq->b) && ((div && as_const_int(div->b) && (v = div->a.as<Variable>())) ||
-                                           (mul && div_mul && as_const_int(div_mul->b) && as_const_int(mul->b) && (v = div_mul->a.as<Variable>())))) {
-            // Learn from expressions of the form (x / a) * b == c
-            // We might know the bounds of the variable.
+        } else if (is_constant_equation(eq, v)) {
             Interval range = solve_for_inner_interval(eq, v->name);
             const int64_t *min = as_const_int(range.min);
             const int64_t *max = as_const_int(range.max);

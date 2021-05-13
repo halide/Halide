@@ -1670,6 +1670,9 @@ void check_boolean() {
     check(IfThenElse::make(x / 4 == 0, IfThenElse::make(x < 1, AssertStmt::make(x == 0, x))),
           Evaluate::make(0));
 
+    check(IfThenElse::make(x * 4 == 8, AssertStmt::make(x == 2, x)),
+          Evaluate::make(0));
+
     check(IfThenElse::make((x / 4) * 4 == 8, IfThenElse::make(x % 4 == 2, AssertStmt::make(x == 10, x))),
           Evaluate::make(0));
 
