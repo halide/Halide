@@ -251,8 +251,9 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
             }
             simplify->bounds_and_alignment_info.push(v->name, expr_info);
             bounds_pop_list.push_back(v);
-        } else if ((div && (v = div->a.as<Variable>())) ||
-                   (div_mul && (v = div_mul->a.as<Variable>()))) {
+        } else if (as_const_int(eq->b) && (
+                   (div && as_const_int(div->b) && (v = div->a.as<Variable>())) ||
+                   (mul && div_mul && as_const_int(div_mul->b) && as_const_int(mul->b) && (v = div_mul->a.as<Variable>())))) {
             // Learn from expressions of the form (x / a) * b == c
             // We might know the bounds of the variable.
             Interval range = solve_for_inner_interval(eq, v->name);

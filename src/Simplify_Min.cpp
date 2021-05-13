@@ -274,15 +274,6 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                rewrite(min(x / c0, y / c0), min(x, y) / c0, c0 > 0) ||
                rewrite(min(x / c0, y / c0), max(x, y) / c0, c0 < 0) ||
 
-               rewrite(min((x/c0)*c1, (x/c2)*c3), (x/c2)*c3, ((c0*c1) <= 0) && ((c1*c2) <= (c3*c0))) ||
-               rewrite(min((x/c0)*c1, (x/c2)*c3), (x/c0)*c1, ((c0*c1) <= 0) && ((c1*c2) >= (c3*c0))) ||
-               rewrite(min((x/c0)*c1, (x/c2)*c3), (x/c0)*c1, ((c0*c1) > 0) && ((c1*c2) <= (c3*c0))) ||
-               rewrite(min((x/c0)*c1, (x/c2)*c3), (x/c2)*c3, ((c0*c1) > 0) && ((c1*c2) >= (c3*c0))) ||
-               rewrite(min(x/c0, (x/c1)*c2), (x/c1)*c2, (c0 <= 0) && (c1 <= (c2*c0))) ||
-               rewrite(min(x/c0, (x/c1)*c2), x/c0, (c0 <= 0) && (c1 >= (c2*c0))) ||
-               rewrite(min(x/c0, (x/c1)*c2), x/c0, (c0 > 0) && (c1 <= (c2*c0))) ||
-               rewrite(min(x/c0, (x/c1)*c2), (x/c1)*c2, (c0 > 0) && (c1 >= (c2*c0))) ||
-
                /* Causes some things to cancel, but also creates large constants and breaks peephole patterns
                rewrite(min(x / c0, c1), min(x, fold(c1 * c0)) / c0, c0 > 0 && !overflows(c1 * c0)) ||
                rewrite(min(x / c0, c1), max(x, fold(c1 * c0)) / c0, c0 < 0 && !overflows(c1 * c0)) ||
