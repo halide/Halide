@@ -2304,12 +2304,12 @@ string CodeGen_C::print_scalarized_expr(const Expr &e) {
     Type t = e.type();
     internal_assert(t.is_vector());
     string v = unique_name('_');
-    stream << get_indent() << print_type(t, AppendSpace) << v << ";\n";
+    stream << get_indent() << print_type(t, AppendSpace) << v << " = 0;\n";
     for (int lane = 0; lane < t.lanes(); lane++) {
         Expr e2 = extract_lane(e, lane);
         string elem = print_expr(e2);
         ostringstream rhs;
-        rhs << v << ".replace(" << lane << ", " << elem << ")";
+        rhs << print_type(t) + "_ops::replace(" << v << ", " << lane << ", " << elem << ")";
         v = print_assignment(t, rhs.str());
     }
     return v;
