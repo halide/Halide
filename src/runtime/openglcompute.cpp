@@ -90,10 +90,10 @@ WEAK const char *gl_error_name(int32_t err) {
 }
 
 struct HalideMalloc {
-    ALWAYS_INLINE HalideMalloc(void *user_context, size_t size)
+    WEAK HalideMalloc(void *user_context, size_t size)
         : user_context(user_context), ptr(halide_malloc(user_context, size)) {
     }
-    ALWAYS_INLINE ~HalideMalloc() {
+    WEAK ~HalideMalloc() {
         halide_free(user_context, ptr);
     }
     void *const user_context;
@@ -370,10 +370,8 @@ WEAK int halide_openglcompute_device_free(void *user_context, halide_buffer_t *b
     return 0;
 }
 
-namespace {
-
 template<typename Source, typename Dest>
-ALWAYS_INLINE void converting_copy_memory_helper(const device_copy &copy, int d, int64_t src_off, int64_t dst_off) {
+WEAK void converting_copy_memory_helper(const device_copy &copy, int d, int64_t src_off, int64_t dst_off) {
     // Skip size-1 dimensions
     while (d >= 0 && copy.extent[d] == 1) {
         d--;
@@ -394,7 +392,6 @@ ALWAYS_INLINE void converting_copy_memory_helper(const device_copy &copy, int d,
     }
 }
 
-}  // namespace
 // Copy image data from host memory to texture.
 WEAK int halide_openglcompute_copy_to_device(void *user_context, halide_buffer_t *buf) {
 #ifdef DEBUG_RUNTIME

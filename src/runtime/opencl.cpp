@@ -53,7 +53,7 @@ extern "C" WEAK void *halide_opencl_get_symbol(void *user_context, const char *n
 }
 
 template<typename T>
-ALWAYS_INLINE T get_cl_symbol(void *user_context, const char *name, bool req) {
+WEAK T get_cl_symbol(void *user_context, const char *name, bool req) {
     T s = (T)halide_opencl_get_symbol(user_context, name);
     if (!s && req) {
         error(user_context) << "OpenCL API not found: " << name << "\n";
@@ -257,7 +257,7 @@ public:
     cl_int error_code;
 
     // Constructor sets 'error_code' if any occurs.
-    ALWAYS_INLINE ClContext(void *user_context)
+    WEAK ClContext(void *user_context)
         : user_context(user_context),
           context(nullptr),
           cmd_queue(nullptr),
@@ -278,7 +278,7 @@ public:
         }
     }
 
-    ALWAYS_INLINE ~ClContext() {
+    WEAK ~ClContext() {
         halide_release_cl_context(user_context);
     }
 };

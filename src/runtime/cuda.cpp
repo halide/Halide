@@ -61,7 +61,7 @@ extern "C" WEAK void *halide_cuda_get_symbol(void *user_context, const char *nam
 }
 
 template<typename T>
-ALWAYS_INLINE T get_cuda_symbol(void *user_context, const char *name, bool optional = false) {
+WEAK T get_cuda_symbol(void *user_context, const char *name, bool optional = false) {
     T s = (T)halide_cuda_get_symbol(user_context, name);
     if (!optional && !s) {
         error(user_context) << "CUDA API not found: " << name << "\n";
@@ -212,7 +212,7 @@ public:
     int error;
 
     // Constructor sets 'error' if any occurs.
-    ALWAYS_INLINE Context(void *user_context)
+    WEAK Context(void *user_context)
         : user_context(user_context),
           context(nullptr),
           error(CUDA_SUCCESS) {
@@ -235,7 +235,7 @@ public:
         error = cuCtxPushCurrent(context);
     }
 
-    ALWAYS_INLINE ~Context() {
+    WEAK ~Context() {
         if (error == 0) {
             CUcontext old;
             cuCtxPopCurrent(&old);

@@ -401,10 +401,10 @@ public:
     mtl_command_queue *queue;
     int error;
 
-    ALWAYS_INLINE MetalContextHolder(void *user_context, bool create) {
+    WEAK MetalContextHolder(void *user_context, bool create) {
         save(user_context, create);
     }
-    ALWAYS_INLINE ~MetalContextHolder() {
+    WEAK ~MetalContextHolder() {
         restore();
     }
 };
