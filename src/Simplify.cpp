@@ -104,7 +104,7 @@ namespace {
 
 // Returns true if x is a constant equation of a single variable, and
 // is likely to produce a constant interval if solved for the variable.
-bool is_constant_equation(const Expr &x, const Variable *& var) {
+bool is_constant_equation(const Expr &x, const Variable *&var) {
     if (is_const(x)) {
         return true;
     } else if (const Add *bin = x.as<Add>()) {
