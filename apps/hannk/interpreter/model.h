@@ -10,12 +10,10 @@
 
 #include "HalideBuffer.h"
 #include "interpreter/interval.h"
+#include "util/buffer_util.h"
 #include "util/error_util.h"
 
 namespace hannk {
-
-template<typename T>
-using HalideBuffer = Halide::Runtime::Buffer<T>;
 
 struct QuantizationInfo {
     std::vector<float> scale;
@@ -486,7 +484,7 @@ public:
         if (output_count() == 1) {
             return map_bounds(input_idx, 0);
         } else {
-            LOG(FATAL) << "More than one output requires get_full_crop override.";
+            HLOG(FATAL) << "More than one output requires get_full_crop override.";
             return BoundsMap(0, 0);
         }
     }

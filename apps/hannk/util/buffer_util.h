@@ -6,9 +6,15 @@
 
 #include "HalideBuffer.h"
 #include "HalideRuntime.h"
+#include "interpreter/interval.h"
 #include "util/error_util.h"
 
 namespace hannk {
+
+// Using a Buffer with space for max_rank dimensions is a meaningful
+// win for some corner cases (when adding dimensions to > 4).
+template<typename T>
+using HalideBuffer = Halide::Runtime::Buffer<T, max_rank>;
 
 // Must be constexpr to allow use in case clauses.
 inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
@@ -54,19 +60,19 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args &&...args)
         // require handling pointer types in our functors
         // HANDLE_CASE(halide_type_handle, 64, void *)
     default:
-        CHECK(0) << "Unsupported type";
+        HCHECK(0) << "Unsupported type";
         using ReturnType = decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...));
         return ReturnType();
     }
 #undef HANDLE_CASE
 }
 
-inline void check_shapes_match(const Halide::Runtime::Buffer<const void> &a,
-                               const Halide::Runtime::Buffer<const void> &b) {
-    CHECK(a.dimensions() == b.dimensions());
+inline void check_shapes_match(const HalideBuffer<const void> &a,
+                               const HalideBuffer<const void> &b) {
+    HCHECK(a.dimensions() == b.dimensions());
     for (int d = 0; d < a.dimensions(); d++) {
-        CHECK(a.dim(d).min() == b.dim(d).min());
-        CHECK(a.dim(d).extent() == b.dim(d).extent());
+        HCHECK(a.dim(d).min() == b.dim(d).min());
+        HCHECK(a.dim(d).extent() == b.dim(d).extent());
     }
 }
 
@@ -108,11 +114,11 @@ struct CompareBuffersResult {
 // type/shape mismatch will check-fail immediately.
 template<typename T>
 struct CompareBuffers {
-    CompareBuffersResult operator()(const Halide::Runtime::Buffer<const void> &expected_buf_dynamic,
-                                    const Halide::Runtime::Buffer<const void> &actual_buf_dynamic,
+    CompareBuffersResult operator()(const HalideBuffer<const void> &expected_buf_dynamic,
+                                    const HalideBuffer<const void> &actual_buf_dynamic,
                                     const CompareBuffersOptions &opts) {
-        Halide::Runtime::Buffer<const T> expected_buf = expected_buf_dynamic;
-        Halide::Runtime::Buffer<const T> actual_buf = actual_buf_dynamic;
+        HalideBuffer<const T> expected_buf = expected_buf_dynamic;
+        HalideBuffer<const T> actual_buf = actual_buf_dynamic;
         check_shapes_match(expected_buf, actual_buf);
 
         assert(opts.exact_thresh >= 0.0);
@@ -180,14 +186,14 @@ struct CompareBuffers {
 // with pseudorandom data.
 template<typename T>
 struct FillWithRandom {
-    void operator()(Halide::Runtime::Buffer<> &b_dynamic, int seed) {
-        Halide::Runtime::Buffer<T> b = b_dynamic;
+    void operator()(HalideBuffer<void> &b_dynamic, int seed) {
+        HalideBuffer<T> b = b_dynamic;
         std::mt19937 rng(seed);
         fill_with_random_impl(b, rng);
     }
 
 private:
-    inline static void fill_with_random_impl(Halide::Runtime::Buffer<T> &b, std::mt19937 &rng) {
+    inline static void fill_with_random_impl(HalideBuffer<T> &b, std::mt19937 &rng) {
         std::uniform_int_distribution<T> dis(std::numeric_limits<T>::min(),
                                              std::numeric_limits<T>::max());
         b.for_each_value([&rng, &dis](T &value) {
@@ -198,7 +204,7 @@ private:
 
 // Specializations must be at namespace scope, not class scope
 template<>
-inline /*static*/ void FillWithRandom<float>::fill_with_random_impl(Halide::Runtime::Buffer<float> &b, std::mt19937 &rng) {
+inline /*static*/ void FillWithRandom<float>::fill_with_random_impl(HalideBuffer<float> &b, std::mt19937 &rng) {
     // Floating point. We arbitrarily choose to use the range [0.0, 1.0].
     std::uniform_real_distribution<float> dis(0.0, 1.0);
     b.for_each_value([&rng, &dis](float &value) {
@@ -207,7 +213,7 @@ inline /*static*/ void FillWithRandom<float>::fill_with_random_impl(Halide::Runt
 }
 
 template<>
-inline /*static*/ void FillWithRandom<double>::fill_with_random_impl(Halide::Runtime::Buffer<double> &b, std::mt19937 &rng) {
+inline /*static*/ void FillWithRandom<double>::fill_with_random_impl(HalideBuffer<double> &b, std::mt19937 &rng) {
     // Floating point. We arbitrarily choose to use the range [0.0, 1.0].
     std::uniform_real_distribution<double> dis(0.0, 1.0);
     b.for_each_value([&rng, &dis](double &value) {
@@ -216,7 +222,7 @@ inline /*static*/ void FillWithRandom<double>::fill_with_random_impl(Halide::Run
 }
 
 template<>
-inline /*static*/ void FillWithRandom<bool>::fill_with_random_impl(Halide::Runtime::Buffer<bool> &b, std::mt19937 &rng) {
+inline /*static*/ void FillWithRandom<bool>::fill_with_random_impl(HalideBuffer<bool> &b, std::mt19937 &rng) {
     std::uniform_int_distribution<int> dis(0, 1);
     b.for_each_value([&rng, &dis](bool &value) {
         value = static_cast<bool>(dis(rng));
@@ -227,8 +233,8 @@ inline /*static*/ void FillWithRandom<bool>::fill_with_random_impl(Halide::Runti
 // to std::cerr in a very simple way. Intended only for temporary debugging.
 template<typename T>
 struct DumpBuffer {
-    void operator()(const Halide::Runtime::Buffer<const void> &buf_dynamic) {
-        Halide::Runtime::Buffer<const T> buf = buf_dynamic;
+    void operator()(const HalideBuffer<const void> &buf_dynamic) {
+        HalideBuffer<const T> buf = buf_dynamic;
         buf.for_each_element([&](const int *pos) {
             T val = buf(pos);
             std::cerr << "Value at (";

@@ -11,7 +11,7 @@ namespace hannk {
 
 inline std::vector<char> read_entire_file(const std::string &filename) {
     std::ifstream f(filename, std::ios::in | std::ios::binary);
-    CHECK(f.is_open()) << "Unable to open file: " << filename;
+    HCHECK(f.is_open()) << "Unable to open file: " << filename;
 
     std::vector<char> result;
 
@@ -20,7 +20,7 @@ inline std::vector<char> read_entire_file(const std::string &filename) {
     result.resize(size);
     f.seekg(0, std::ifstream::beg);
     f.read(result.data(), result.size());
-    CHECK(f.good()) << "Unable to read file: " << filename;
+    HCHECK(f.good()) << "Unable to read file: " << filename;
     f.close();
     return result;
 }
