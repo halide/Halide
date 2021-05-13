@@ -217,8 +217,8 @@ private:
 
     /** Decrement the reference count of any owned allocation and free host
      * and device memory if it hits zero. Sets alloc to nullptr. */
-    void decref() {
-        if (owns_host_memory()) {
+    void decref(bool device_only = false) {
+        if (owns_host_memory() && !device_only) {
             int new_count = --(alloc->ref_count);
             if (new_count == 0) {
                 void (*fn)(void *) = alloc->deallocate_fn;
@@ -229,10 +229,6 @@ private:
             alloc = nullptr;
             set_host_dirty(false);
         }
-        decref_dev();
-    }
-
-    void decref_dev() {
         int new_count = 0;
         if (dev_ref_count) {
             new_count = --(dev_ref_count->count);
@@ -262,9 +258,9 @@ private:
                 }
             }
         }
+        dev_ref_count = nullptr;
         buf.device = 0;
         buf.device_interface = nullptr;
-        dev_ref_count = nullptr;
     }
 
     void free_shape_storage() {
@@ -517,11 +513,7 @@ public:
     /** The total number of elements this buffer represents. Equal to
      * the product of the extents */
     size_t number_of_elements() const {
-        size_t s = 1;
-        for (int i = 0; i < dimensions(); i++) {
-            s *= dim(i).extent();
-        }
-        return s;
+        return buf.number_of_elements();
     }
 
     /** Get the dimensionality of the buffer. */
@@ -534,49 +526,22 @@ public:
         return buf.type;
     }
 
-private:
-    /** Offset to the element with the lowest address. If all
-     * strides are positive, equal to zero. Offset is in elements, not bytes. */
-    ptrdiff_t begin_offset() const {
-        ptrdiff_t index = 0;
-        for (int i = 0; i < dimensions(); i++) {
-            if (dim(i).stride() < 0) {
-                index += dim(i).stride() * (ptrdiff_t)(dim(i).extent() - 1);
-            }
-        }
-        return index;
-    }
-
-    /** An offset to one beyond the element with the highest address.
-     * Offset is in elements, not bytes. */
-    ptrdiff_t end_offset() const {
-        ptrdiff_t index = 0;
-        for (int i = 0; i < dimensions(); i++) {
-            if (dim(i).stride() > 0) {
-                index += dim(i).stride() * (ptrdiff_t)(dim(i).extent() - 1);
-            }
-        }
-        index += 1;
-        return index;
-    }
-
-public:
     /** A pointer to the element with the lowest address. If all
      * strides are positive, equal to the host pointer. */
     T *begin() const {
         assert(buf.host != nullptr);  // Cannot call begin() on an unallocated Buffer.
-        return (T *)(buf.host + begin_offset() * type().bytes());
+        return (T *)buf.begin();
     }
 
     /** A pointer to one beyond the element with the highest address. */
     T *end() const {
         assert(buf.host != nullptr);  // Cannot call end() on an unallocated Buffer.
-        return (T *)(buf.host + end_offset() * type().bytes());
+        return (T *)buf.end();
     }
 
     /** The total number of bytes spanned by the data in memory. */
     size_t size_in_bytes() const {
-        return (size_t)(end_offset() - begin_offset()) * type().bytes();
+        return buf.size_in_bytes();
     }
 
     /** Reset the Buffer to be equivalent to a default-constructed Buffer
@@ -807,7 +772,7 @@ public:
      * if this buffer held the last reference to it. Asserts that
      * device_dirty is false. */
     void device_deallocate() {
-        decref_dev();
+        decref(true);
     }
 
     /** Allocate a new image of the given size with a runtime
@@ -1688,11 +1653,7 @@ public:
     }
 
     int device_sync(void *ctx = nullptr) {
-        if (buf.device_interface) {
-            return buf.device_interface->device_sync(ctx, &buf);
-        } else {
-            return 0;
-        }
+        return buf.device_sync(ctx);
     }
 
     bool has_device_allocation() const {
