@@ -958,7 +958,7 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
 
                         Expr offset_c_value = i32(global_N * wmma_M * warp_y + wmma_N * warp_x);
 
-#define INLINE_TILE_LOOP 1
+#define INLINE_TILE_LOOP 0
 #if INLINE_TILE_LOOP
                         Expr offset_c = offset_c_value;
 
@@ -1106,8 +1106,8 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
             //       stream multiprocessors load.
             //       Doing gives almost 5x speedup compared to a regular CUDA matrix multiply, but
             //       it can be improved even further
-            Expr max_threads_x = i32(1);
-            Expr max_threads_y = i32(1);
+            Expr max_threads_x = i32(2);
+            Expr max_threads_y = i32(2);
 
             Expr num_threads_x = min(max_threads_x, num_tiles_x) * warp_size;
             Expr num_threads_y = min(max_threads_y, num_tiles_y);
