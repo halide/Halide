@@ -561,14 +561,24 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x64_t load<int16x64_t, int16_t, 64
 */
 template<>
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x32_t load<int32x32_t, int32_t, 32>(const void *base, int32_t offset) {
-    xb_vec2Nx8 nv8_0, nv8_1;
-    const xb_vec2Nx8* ptr = (const xb_vec2Nx8*)((const int32_t*)base + offset);
-    IVP_L2U2NX8_XP(nv8_0, ptr, 0);
-    ptr++;
-    IVP_L2U2NX8_XP(nv8_1, ptr, 0);
-    return int32x32_t(int32x32_t::from_native_vector,
-                IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(nv8_0)),
-                IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(nv8_1)));
+    xb_vecN_2x32v nv8_0, nv8_1;
+    const xb_vecN_2x32v* __restrict ptr = (const xb_vecN_2x32v*)((const int32_t*)base + offset);
+    valign align = IVP_LA_PP((const xb_vec2Nx8 *)ptr);
+    IVP_LAN_2X32_IP(nv8_0, align, ptr);
+    IVP_LAN_2X32_IP(nv8_1, align, ptr);
+    return int32x32_t(int32x32_t::from_native_vector, nv8_0, nv8_1);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x64_t load<int32x64_t, int32_t, 32>(const void *base, int32_t offset) {
+    xb_vecN_2x32v nv8_0, nv8_1, nv8_2, nv8_3;
+    const xb_vecN_2x32v* __restrict ptr = (const xb_vecN_2x32v*)((const int32_t*)base + offset);
+    valign align = IVP_LA_PP((const xb_vec2Nx8 *)ptr);
+    IVP_LAN_2X32_IP(nv8_0, align, ptr);
+    IVP_LAN_2X32_IP(nv8_1, align, ptr);
+    IVP_LAN_2X32_IP(nv8_2, align, ptr);
+    IVP_LAN_2X32_IP(nv8_3, align, ptr);
+    return int32x64_t(int32x64_t::from_native_vector, nv8_0, nv8_1, nv8_2, nv8_3);
 }
 
 template <typename ResultType, typename LoadType>
@@ -1769,6 +1779,7 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         {"halide_xtensa_sat_narrow_i48_with_shift_i16", "IVP_PACKVRNX48"},
         {"halide_xtensa_full_reduce_add_i8", "IVP_RADD2NX8"},
         {"halide_xtensa_full_reduce_add_i16", "IVP_RADDNX16"},
+        {"halide_xtensa_full_reduce_add_i32", "IVP_RADDN_2X32"},
 
         {"halide_xtensa_full_reduce_min_u8", "IVP_RMINU2NX8U"},
         {"halide_xtensa_full_reduce_min_u16", "IVP_RMINUNX16U"},
@@ -2389,7 +2400,6 @@ void CodeGen_Xtensa::visit(const For *op) {
 
 void CodeGen_Xtensa::visit(const Shuffle *op) {
     internal_assert(!op->vectors.empty());
-    internal_assert(op->vectors[0].type().is_vector());
     for (size_t i = 1; i < op->vectors.size(); i++) {
         internal_assert(op->vectors[0].type() == op->vectors[i].type());
     }

@@ -1037,6 +1037,7 @@ private:
             static const std::vector<Pattern> reduces = {
                 {"halide_xtensa_full_reduce_add_i8", vector_reduce(VectorReduce::Add, wild_i16x), Pattern::NarrowOps},
                 {"halide_xtensa_full_reduce_add_i16", vector_reduce(VectorReduce::Add, wild_i32x), Pattern::NarrowOps},
+                {"halide_xtensa_full_reduce_add_i32", vector_reduce(VectorReduce::Add, wild_i32x)},
 
                 // Min reduction.
                 {"halide_xtensa_full_reduce_min_u8", vector_reduce(VectorReduce::Min, wild_u8x)},
