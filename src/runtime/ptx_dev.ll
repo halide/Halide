@@ -561,7 +561,7 @@ define <8 x float> @wmma.m16n16k16.load.c.row.f32.p0i8(i8 addrspace(0)* %src, i3
     ret <8 x float> %result7
 }
 
-define weak_odr <2 x half> @extract_wmma_half_fragment(<16 x half> %v, i32 %idx1, i32 %idx2) nounwind uwtable readnone alwaysinline {
+define weak_odr <2 x half> @extract_wmma_half_fragment(<16 x half> %v, i32 %idx1, i32 %idx2) nounwind readnone alwaysinline {
     %a = extractelement <16 x half> %v, i32 %idx1
     %b = extractelement <16 x half> %v, i32 %idx2
     %frag_ptr = alloca <2 x half>, align 128
@@ -571,7 +571,7 @@ define weak_odr <2 x half> @extract_wmma_half_fragment(<16 x half> %v, i32 %idx1
     ret <2 x half> %frag_1
 }
 
-define weak_odr <8 x float> @wmma.m16n16k16.mma.row.row.f32.f32(<16 x half> %a, <16 x half> %b, <8 x float> %c) nounwind uwtable readnone alwaysinline {
+define weak_odr <8 x float> @wmma.m16n16k16.mma.row.row.f32.f32(<16 x half> %a, <16 x half> %b, <8 x float> %c) nounwind readnone alwaysinline {
     %a0 = call <2 x half> @extract_wmma_half_fragment(<16 x half> %a, i32 0, i32 1)
     %a1 = call <2 x half> @extract_wmma_half_fragment(<16 x half> %a, i32 2, i32 3)
     %a2 = call <2 x half> @extract_wmma_half_fragment(<16 x half> %a, i32 4, i32 5)
