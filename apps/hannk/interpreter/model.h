@@ -244,7 +244,7 @@ struct DimMap {
     Interval bounds;
 
     DimMap()
-        : pre_bounds(0, 0), stride(0), inv_stride(1), bounds(0, 0) {
+        : pre_bounds(0, 0), stride(0), inv_stride(1), bounds(0, -1) {
     }
     DimMap(int stride, int inv_stride, const Interval &bounds)
         : pre_bounds(0, 0), stride(stride), inv_stride(inv_stride), bounds(bounds) {
@@ -324,9 +324,8 @@ struct DimMap {
         pre_bounds.max += alignment - 1;
         stride *= alignment;
         inv_stride *= alignment;
-        bounds /= alignment;
         bounds.min = align_down(bounds.min, alignment);
-        bounds.max = align_up(bounds.max, alignment);
+        bounds.max = align_up(bounds.max + 1, alignment) - 1;
         return *this;
     }
 };
@@ -364,7 +363,7 @@ public:
     Interval evaluate(int dim_in, const Box &output) const {
         Interval result = at(dim_in).bounds;
         for (int i = 0; i < (int)output.size(); i++) {
-            result += at(dim_in, i).evaluate(output[i]);
+            result = Union(result, at(dim_in, i).evaluate(output[i]));
         }
         return result;
     }
@@ -438,9 +437,9 @@ public:
         return *this;
     }
 
-    BoundsMap &align(int dim_out, int alignment) {
-        for (int i = 0; i < dims_in_; i++) {
-            at(i, dim_out).align(alignment);
+    BoundsMap &align_input(int dim_in, int alignment) {
+        for (int i = 0; i < dims_out_ + 1; i++) {
+            at(dim_in, i).align(alignment);
         }
         return *this;
     }
