@@ -57,7 +57,7 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
         if (rewrite(max(x, x), x) ||
             rewrite(max(c0, c1), fold(max(c0, c1))) ||
             rewrite(max(IRMatcher::Overflow(), x), a) ||
-            rewrite(max(x,IRMatcher::Overflow()), b)) {
+            rewrite(max(x, IRMatcher::Overflow()), b)) {
 
             if (is_signed_integer_overflow(rewrite.result)) {
                 clear_bounds_info(bounds);

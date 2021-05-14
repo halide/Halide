@@ -42,10 +42,10 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
             rewrite(IRMatcher::Overflow() + x, a) ||
             rewrite(x + IRMatcher::Overflow(), b)) {
 
-          if (is_signed_integer_overflow(rewrite.result)) {
-              clear_bounds_info(bounds);
-          }
-          return rewrite.result;
+            if (is_signed_integer_overflow(rewrite.result)) {
+                clear_bounds_info(bounds);
+            }
+            return rewrite.result;
         }
 
         if (rewrite(x + 0, x) ||
