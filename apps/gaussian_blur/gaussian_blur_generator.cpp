@@ -16,53 +16,73 @@ public:
     Var x{"x"}, y{"y"};
 
     Func blur_cols_transpose(Func in, Expr height, Expr radius) {
-        Func blur{"blur"};
 
-        Type t = UInt(32);
+        Func blur32, blur64;
+        RDom ry(0, height + radius * 3);
 
-        // This is going to work up to radius 256, after which we'll
-        // get overflow.
-        Expr scale = cast(t, pow(radius, 3));
+        for (int bits : {32, 64}) {
 
-        Expr inv_scale = 1.0f / scale;
+            Func blur{"blur_" + std::to_string(bits)};
 
-        // Pure definition: do nothing.
-        blur(x, y) = undef(t);
+            Type t = UInt(bits);
 
-        // Update 0-2: set the top row of the result to the input.
-        blur(x, -1) = scale * cast(t, in(x, 0));  // Tracks output
-        blur(x, -2) = cast(t, 0);                    // Tracks derviative of the output
-        blur(x, -3) = cast(t, 0);                    // Tracks 2nd derivative of the output
+            // This is going to work up to radius 256, after which we'll
+            // get overflow.
+            Expr scale = pow(cast(t, radius), 3);
 
-        RDom ry(0, 3, 0, height + radius * 3);
+            // Pure definition: do nothing.
+            blur(x, y) = undef(t);
 
-        std::vector<Expr> lhs{-3, -2, ry.y};
+            // Update 0-2: set the top row of the result to the input.
+            blur(x, -1) = scale * cast(t, in(x, 0));  // Tracks output
+            blur(x, -2) = blur(x, -1);
+            blur(x, -3) = blur(x, -1);
 
-        // Third derivative of an approximate Gaussian evaluated at ry.y
-        Expr v = ((cast<int16_t>(in(x, ry.y)) -
-                   in(x, ry.y - radius * 3)) +
-                  3 * (cast<int16_t>(in(x, ry.y - radius * 2)) -
-                       in(x, ry.y - radius)));
+            Func in16;
+            in16(x, y) = cast<int16_t>(in(x, y));
 
-        // Sign-extend then treat it as a uint32 with wrap-around. We
-        // know that the result can't possibly be negative in the end,
-        // so this gives us an extra bit of headroom while
-        // accumulating.
-        v = cast<uint32_t>(cast<int32_t>(v));
+            // A Gaussian blur can be done as an IIR filter. The taps on
+            // the input are 1, -3, 3, 1, spaced apart by the radius. The
+            // taps on the previous three outputs are 3, -3, 1. The input
+            // taps represent the third derivative of the kernel you get
+            // if you iterate a box filter three times, and the taps on
+            // the output are effectively triple integration of that
+            // result. The following expression computes this IIR, nested
+            // such that there's only one multiplication by three. Values
+            // that have just been upcast from 8 to 16-bit are nested
+            // together so that widening subtracts can be used on
+            // architectures that support them (e.g. ARM).
+            Expr v = (blur(x, ry - 3) +
+                      (in16(x, ry) -
+                       in16(x, ry - radius * 3)) +
+                      3 * ((blur(x, ry - 1) -
+                            blur(x, ry - 2)) +
+                           (in16(x, ry - radius * 2) -
+                            in16(x, ry - radius))));
 
-        std::vector<Expr> rhs{
-            // Update the second derivative using the third derviative
-            blur(x, -3) + v,
-            // Update the first derivative using the second derivative
-            blur(x, -2) + blur(x, -3),
-            // Update the previous output using the first derivative
-            blur(x, ry.y - 1) + blur(x, -2)};
+            // Sign-extend then treat it as a uint32 with wrap-around. We
+            // know that the result can't possibly be negative in the end,
+            // so this gives us an extra bit of headroom while
+            // accumulating.
+            v = cast(UInt(bits), cast(Int(bits), v));
 
-        // Update 3
-        blur(x, mux(ry.x, lhs)) = mux(ry.x, rhs);
+            // Update 3
+            blur(x, ry) = v;
+
+            if (bits == 32) {
+                blur32 = blur;
+            } else {
+                blur64 = blur;
+            }
+        }
+
+        Func blur;
+        blur(x, y) = select(radius >= 256, cast<float>(blur64(x, y)), cast<float>(blur32(x, y)));
 
         // Transpose the blur and normalize.
         Func transpose("transpose");
+
+        Expr inv_scale = 1.0f / pow(cast<float>(radius), 3);
 
         transpose(x, y) = cast<uint8_t>(round(clamp(blur(y, x + (radius * 3) / 2 - 1) * inv_scale, 0.0f, 255.0f)));
 
@@ -77,19 +97,20 @@ public:
             .reorder(x, y, xo, yo)
             .parallel(yo);
 
-        // Run the filter on each row of tiles (which corresponds to a strip of
-        // columns in the input).
-        blur.compute_at(transpose, yo);
+        for (Func b : {blur32, blur64}) {
+            // Run the filter on each row of tiles (which corresponds to a strip of
+            // columns in the input).
+            b.compute_at(transpose, yo);
 
-        for (int i = 0; i < 3; i++) {
-            blur.update(i).vectorize(x, vec);
+            for (int i = 0; i < 3; i++) {
+                b.update(i).vectorize(x, vec);
+            }
+
+            // Vectorize computations within the strips.
+            b.update(3)
+                .reorder(x, ry)
+                .vectorize(x, vec);
         }
-
-        // Vectorize computations within the strips.
-        blur.update(3)
-            .reorder(ry.x, x, ry.y)
-            .unroll(ry.x)
-            .vectorize(x, vec);
 
         // Load the input strip required in a pre-pass so that we
         // don't incur stalls due to memory latency when running the
