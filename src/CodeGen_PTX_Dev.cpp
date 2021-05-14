@@ -956,10 +956,12 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
                         Expr warp_x = (block_id_x * block_dim_x + thread_id_x) / warp_size;
                         Expr warp_y = block_id_y * block_dim_y + thread_id_y;
 
-                        Expr offset_c = i64(global_N * wmma_M * warp_y + wmma_N * warp_x);
+                        Expr offset_c_value = i32(global_N * wmma_M * warp_y + wmma_N * warp_x);
 
 #define INLINE_TILE_LOOP 1
 #if INLINE_TILE_LOOP
+                        Expr offset_c = offset_c_value;
+
                         Expr frag_accumulator = Call::make(Float(32, 8), "wmma.m16n16k16.load.c.row", {var_c, offset_c, stride_c}, Call::Intrinsic);
 
                         std::vector<Stmt> wmma_ops;
@@ -980,27 +982,102 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
 
                         Stmt tiled_for = Block::make(wmma_ops);
 #else
-                        // WIP Code: Trying to create a Halide For loop to do the computation
-                        Expr load_frag_c = Call::make(Float(32, 8), "wmma.m16n16k16.load.c.row", {c_var, offset_c, stride_c}, Call::Intrinsic);
+                        // WIP Code: Trying to create a Halide For loop to do the computation                        
 
                         // Creates a for to loop over the k tiles to perform the matrix multiply accumulate
                         Expr tile_k = Variable::make(Int(32), "tile_k");
 
                         // Calculates the offsets to access tiles of matrices A, B and C
                         // Note that the offsets are based on the global warp indices
-                        Expr offset_a = i64(global_K * wmma_M * warp_y + wmma_K * tile_k);
-                        Expr offset_b = i64(global_N * wmma_K * tile_k + wmma_N * warp_x);
+                        Expr col_a_value = i32(wmma_K * tile_k);
+                        Expr row_a_value = i32(wmma_M * warp_y);
 
-                        Expr frag_a = Call::make(Float(16, 16), "wmma.m16n16k16.load.a.row", {a_var, offset_a, stride_a}, Call::Intrinsic);
-                        Expr frag_b = Call::make(Float(16, 16), "wmma.m16n16k16.load.b.row", {b_var, offset_b, stride_b}, Call::Intrinsic);
-                        Expr frag_c = Call::make(Float(32, 8), "wmma.m16n16k16.mma.row.row", {frag_a, frag_b, load_frag_c}, Call::Intrinsic);
+                        Expr col_b_value = i32(wmma_N * warp_x);
+                        Expr row_b_value = i32(wmma_K * tile_k);
 
-                        Stmt mma_for = For::make("tile_k", 0, num_tiles_k, loop->for_type, loop->device_api, Evaluate::make(frag_c));
-                        Expr store_frag_c = Call::make(Handle(), "wmma.m16n16k16.store.d.row", {c_var, offset_c, stride_c, frag_c}, Call::Intrinsic);
-                        Stmt tiled_for = Block::make({Evaluate::make(load_frag_c),
-                                                      mma_for,
-                                                      Evaluate::make(store_frag_c)});
+                        Expr col_c_value = i32(wmma_N * warp_x);
+                        Expr row_c_value = i32(wmma_M * warp_y);
 
+                        Expr col_a_var = Variable::make(Int(32), "col_a");
+                        Expr row_a_var = Variable::make(Int(32), "row_a");
+                        Expr col_b_var = Variable::make(Int(32), "col_b");
+                        Expr row_b_var = Variable::make(Int(32), "row_b");
+                        Expr col_c_var = Variable::make(Int(32), "col_c");
+                        Expr row_c_var = Variable::make(Int(32), "row_c");
+
+                        Expr offset_a_value = i32(global_K * wmma_M * warp_y + wmma_K * tile_k);
+                        Expr offset_b_value = i32(global_N * wmma_K * tile_k + wmma_N * warp_x);
+
+                        Expr offset_a_var = Variable::make(Int(32), "offset_a");
+                        Expr offset_b_var = Variable::make(Int(32), "offset_b");
+                        Expr offset_c_var = Variable::make(Int(32), "offset_c");                        
+
+                        Expr load_frag_a_call = Call::make(Float(16, 16), "wmma.m16n16k16.load.a.row", {var_a, offset_a_var, stride_a}, Call::Intrinsic);
+                        Expr load_frag_b_call = Call::make(Float(16, 16), "wmma.m16n16k16.load.b.row", {var_b, offset_b_var, stride_b}, Call::Intrinsic);
+                        Expr load_frag_c_call = Call::make(Float(32, 8), "wmma.m16n16k16.load.c.row", {var_c, offset_c_var, stride_c}, Call::Intrinsic);
+
+                        Expr var_frag_a = Variable::make(Float(16, 16), "frag_a");
+                        Expr var_frag_b = Variable::make(Float(16, 16), "frag_b");
+                        Expr var_frag_c = Variable::make(Float(32, 8), "frag_c");
+
+                        Expr frac_c_index = Ramp::make(make_zero(Int(32)), 1, 8);
+                        Expr load_frag_c = Load::make(Float(32, 8), "frag_c", frac_c_index, Buffer<>(), Parameter(), const_true(8), ModulusRemainder{});
+
+                        Expr mma = Call::make(Float(32, 8), "wmma.m16n16k16.mma.row.row", {var_frag_a, var_frag_b, load_frag_c}, Call::Intrinsic);                        
+                        Expr store_frag_c = Call::make(Handle(), "wmma.m16n16k16.store.d.row", {var_c, offset_c_var, stride_c, load_frag_c}, Call::Intrinsic);                        
+
+                        Expr bounds_checking_tile = row_a_var < global_M &&
+                                               col_a_var < global_K && 
+                                               row_b_var < global_K &&
+                                               col_b_var < global_N;
+
+
+                        // clang-format off
+                        Stmt mma_for = 
+                            For::make("tile_k", 0, num_tiles_k, loop->for_type, loop->device_api,
+                                LetStmt::make("row_a", row_a_value,
+                                    LetStmt::make("col_a", col_a_value,
+                                        LetStmt::make("row_b", row_b_value,
+                                            LetStmt::make("col_b", col_b_value,
+                                                IfThenElse::make(bounds_checking_tile,
+                                                    LetStmt::make("offset_a", offset_a_value,
+                                                        LetStmt::make("offset_b", offset_b_value,
+                                                            LetStmt::make("frag_a", load_frag_a_call, 
+                                                                LetStmt::make("frag_b", load_frag_b_call,
+                                                                    Store::make("frag_c", mma, frac_c_index, Parameter{}, const_true(8), ModulusRemainder{})
+                                                                )
+                                                            )
+                                                        )
+                                                    )
+                                               )
+                                            )
+                                       )
+                                   )
+                                )
+                            );
+
+                        Expr bounds_checking_store = col_c_var < global_N &&
+                                                     row_c_var < global_M;
+
+                        Stmt wmma_op =
+                            LetStmt::make("offset_c", offset_c_value,
+                                Allocate::make("frag_c", Float(32, 8), MemoryType::Stack, {make_one(Int(32))}, const_true(8),
+                                    Block::make({
+                                        Store::make("frag_c", load_frag_c_call, frac_c_index, Parameter{}, const_true(8), ModulusRemainder{}),
+                                        mma_for,
+                                        LetStmt::make("row_c", row_c_value,
+                                            LetStmt::make("col_c", col_c_value,
+                                                IfThenElse::make(bounds_checking_store, 
+                                                    Evaluate::make(store_frag_c)
+                                                )
+                                            )
+                                        )
+                                    })                                   
+                                )
+                            );
+                        // clang-format on
+                        Stmt tiled_for = wmma_op;
+                      
 #endif  // INLINE_TILE_LOOP
 
                         tensorcore_op_found = true;
