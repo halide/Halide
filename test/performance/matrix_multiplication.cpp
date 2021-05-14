@@ -98,6 +98,10 @@ int main(int argc, char **argv) {
 
     double t = benchmark([&]() {
         out.realize(output);
+        
+        if (target.has_gpu_feature()) {
+            output.device_sync();
+        }        
     });
 
     // check results
