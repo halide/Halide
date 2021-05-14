@@ -13,7 +13,7 @@ void simple_version(float16_t *A, float16_t *B, float *C, int width, int stride)
             *cc = 0.0f;
 
             for (int ik = 0; ik < width; ik++) {
-                *cc = *cc + static_cast<float>(A[iy * stride + ik] * B[ik * stride + ix]);
+                *cc = *cc + static_cast<float>(A[iy * stride + ik]) * static_cast<float>(B[ik * stride + ix]);
             }
         }
     }
@@ -110,7 +110,7 @@ int main(int argc, char **argv) {
     bool halide_correct = true;
     for (int iy = 0; iy < matrix_size && halide_correct; iy++) {
         for (int ix = 0; ix < matrix_size; ix++) {
-            halide_correct = halide_correct && (std::abs(output_ref(ix, iy) - output_halide(ix, iy)) < 0.015f);
+            halide_correct = halide_correct && (std::abs(output_ref(ix, iy) - output_halide(ix, iy)) < 0.001f);
         }
     }
 
