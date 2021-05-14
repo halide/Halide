@@ -107,6 +107,9 @@ inline Expr make_const(Type t, float16_t val) {
 /** Construct a unique signed_integer_overflow Expr */
 Expr make_signed_integer_overflow(Type type);
 
+/** Check if an expression is a signed_integer_overflow */
+bool is_signed_integer_overflow(const Expr &expr);
+
 /** Check if a constant value can be correctly represented as the given type. */
 void check_representable(Type t, int64_t val);
 

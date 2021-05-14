@@ -64,8 +64,15 @@ Expr Simplify::visit(const Mod *op, ExprInfo *bounds) {
 
         if (rewrite(c0 % c1, fold(c0 % c1)) ||
             rewrite(IRMatcher::Overflow() % x, a) ||
-            rewrite(x % IRMatcher::Overflow(), b) ||
-            rewrite(0 % x, 0) ||
+            rewrite(x % IRMatcher::Overflow(), b)) {
+
+            if (is_signed_integer_overflow(rewrite.result)) {
+                clear_bounds_info(bounds);
+            }
+            return rewrite.result;
+        }
+
+        if (rewrite(0 % x, 0) ||
             rewrite(x % x, 0) ||
             rewrite(x % 0, 0) ||
             (!op->type.is_float() &&

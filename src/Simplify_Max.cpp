@@ -54,13 +54,20 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
         int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::max(a, b), op->type);
 
+        if (rewrite(max(x, x), x) ||
+            rewrite(max(c0, c1), fold(max(c0, c1))) ||
+            rewrite(max(IRMatcher::Overflow(), x), a) ||
+            rewrite(max(x,IRMatcher::Overflow()), b)) {
+
+            if (is_signed_integer_overflow(rewrite.result)) {
+                clear_bounds_info(bounds);
+            }
+            return rewrite.result;
+        }
+
         // clang-format off
         if (EVAL_IN_LAMBDA
-            (rewrite(max(x, x), x) ||
-             rewrite(max(c0, c1), fold(max(c0, c1))) ||
-             rewrite(max(IRMatcher::Overflow(), x), a) ||
-             rewrite(max(x,IRMatcher::Overflow()), b) ||
-             // Cases where one side dominates:
+            (// Cases where one side dominates:
              rewrite(max(x, c0), b, is_max_value(c0)) ||
              rewrite(max(x, c0), x, is_min_value(c0)) ||
              rewrite(max((x/c0)*c0, x), b, c0 > 0) ||

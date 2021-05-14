@@ -197,6 +197,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             // LLVM shl and shr instructions produce poison for
             // shifts >= typesize, so we will follow suit in our simplifier.
             if (ub >= (uint64_t)(t.bits())) {
+                clear_bounds_info(bounds);
                 return make_signed_integer_overflow(t);
             }
             if (a.type().is_uint() || ub < ((uint64_t)t.bits() - 1)) {

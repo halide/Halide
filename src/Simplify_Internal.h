@@ -103,6 +103,14 @@ public:
         }
     };
 
+    HALIDE_ALWAYS_INLINE
+    void clear_bounds_info(ExprInfo *b) {
+        if (b) {
+            b->min_defined = false;
+            b->max_defined = false;
+        }
+    }
+
 #if (LOG_EXPR_MUTATORIONS || LOG_STMT_MUTATIONS)
     static int debug_indent;
 #endif

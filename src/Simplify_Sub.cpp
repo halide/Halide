@@ -38,6 +38,10 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
             rewrite(IRMatcher::Overflow() - x, a) ||
             rewrite(x - IRMatcher::Overflow(), b) ||
             rewrite(x - 0, x)) {
+
+            if (is_signed_integer_overflow(rewrite.result)) {
+                clear_bounds_info(bounds);
+            }
             return rewrite.result;
         }
 
