@@ -95,7 +95,8 @@ public:
             .tile(x, y, xo, yo, x, y, vec, vec)
             .vectorize(x)
             .reorder(x, y, xo, yo)
-            .parallel(yo);
+            .parallel(yo)
+            .specialize(radius >= 256);
 
         for (Func b : {blur32, blur64}) {
             // Run the filter on each row of tiles (which corresponds to a strip of
