@@ -1,4 +1,3 @@
-#include "IROperator.h"
 #include "Simplify_Internal.h"
 
 namespace Halide {
