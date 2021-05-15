@@ -54,8 +54,7 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
         int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::max(a, b), op->type);
 
-        if (rewrite(max(x, x), x) ||
-            rewrite(max(c0, c1), fold(max(c0, c1))) ||
+        if (rewrite(max(c0, c1), fold(max(c0, c1))) ||
             rewrite(max(IRMatcher::Overflow(), x), a) ||
             rewrite(max(x, IRMatcher::Overflow()), b)) {
 
@@ -67,7 +66,8 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
 
         // clang-format off
         if (EVAL_IN_LAMBDA
-            (// Cases where one side dominates:
+            (rewrite(max(x, x), x) ||
+             // Cases where one side dominates:
              rewrite(max(x, c0), b, is_max_value(c0)) ||
              rewrite(max(x, c0), x, is_min_value(c0)) ||
              rewrite(max((x/c0)*c0, x), b, c0 > 0) ||
