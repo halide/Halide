@@ -311,11 +311,13 @@ Stmt remove_likelies(const Stmt &s);
  * the tagged expression. If not, returns the expression. */
 Expr unwrap_tags(const Expr &e);
 
-/** Expressions tagged with this intrinsic are suggestions that
+/** Expressions tagged with these intrinsics are suggestions that
  * vectorization of loops with guard ifs should be implemented with
  * non-faulting predicated loads and stores, instead of scalarizing
  * an if statement. */
 Expr predicate(Expr e);
+Expr predicate_loads(Expr e);
+Expr predicate_stores(Expr e);
 
 // Secondary args to print can be Exprs or const char *
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {

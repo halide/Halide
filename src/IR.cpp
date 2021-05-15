@@ -618,6 +618,8 @@ const char *const intrinsic_op_names[] = {
     "mux",
     "popcount",
     "predicate",
+    "predicate_loads",
+    "predicate_stores",
     "prefetch",
     "promise_clamped",
     "random",

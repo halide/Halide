@@ -70,23 +70,40 @@ public:
 
 int predicated_tail_test(const Target &t) {
     int size = 73;
-    Var x("x"), y("y");
-    Func f("f"), g("g"), ref("ref");
+    for (auto i : {TailStrategy::Predicate, TailStrategy::PredicateLoads, TailStrategy::PredicateStores}) {
+        Var x("x"), y("y");
+        Func f("f");
 
-    f(x, y) = x;
+        ImageParam p(Int(32), 2);
 
-    f.vectorize(x, 32, TailStrategy::Predicate);
-    if (t.has_feature(Target::HVX)) {
-        f.hexagon();
-    }
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 0));
+        f(x, y) = p(x, y);
 
-    Buffer<int> im = f.realize({size, size});
-    auto func = [](int x, int y) {
-        return x;
-    };
-    if (check_image(im, func)) {
-        return -1;
+        const int vector_size = 32;
+        f.vectorize(x, vector_size, i);
+        if (t.has_feature(Target::HVX)) {
+            f.hexagon();
+        }
+        int predicated_loads = i != TailStrategy::PredicateStores ? 1 : 0;
+        int predicated_stores = i != TailStrategy::PredicateLoads ? 1 : 0;
+        f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(predicated_stores, predicated_loads));
+
+        int buffer_size = size;
+        if (i != TailStrategy::Predicate) {
+            // TODO: PredicateLoads shouldn't require this.
+            buffer_size = ((buffer_size + vector_size - 1) / vector_size) * vector_size;
+        }
+
+        Buffer<int> input(buffer_size, size);
+        input.fill([](int x, int y) { return x; });
+        p.set(input);
+
+        Buffer<int> im = f.realize({size, size});
+        auto func = [](int x, int y) {
+            return x;
+        };
+        if (check_image(im, func)) {
+            return -1;
+        }
     }
     return 0;
 }

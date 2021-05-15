@@ -1906,6 +1906,12 @@ class SolveIfThenElse : public IRMutator {
         op->condition.accept(&find);
         if (!find.innermost_var.empty()) {
             Expr condition = solve_expression(op->condition, find.innermost_var).result;
+            // solve_expression drops tags, but bounds needs to know about these tags.
+            if (Call::as_intrinsic(op->condition, {Call::predicate_loads})) {
+                condition = predicate_loads(condition);
+            } else if (Call::as_intrinsic(op->condition, {Call::predicate_stores})) {
+                condition = predicate_stores(condition);
+            }
             if (!condition.same_as(op->condition)) {
                 stmt = IfThenElse::make(condition, op->then_case, op->else_case);
             }
@@ -2471,7 +2477,15 @@ private:
                 Expr c = pair.first;
                 Stmt body = pair.second;
                 const Call *call = Call::as_tag(c);
+                // If we're predicating only calls or provides for this if, we might
+                // want to ignore the condition.
+                bool ignore_condition = false;
                 if (call) {
+                    if (consider_calls && call->is_intrinsic(Call::predicate_stores)) {
+                        ignore_condition = true;
+                    } else if (consider_provides && call->is_intrinsic(Call::predicate_loads)) {
+                        ignore_condition = true;
+                    }
                     c = call->args[0];
                 }
 
@@ -2488,90 +2502,92 @@ private:
                     vector<LetBound> let_bounds;
                 };
                 vector<RestrictedVar> to_pop;
-                auto vars = find_free_vars(op->condition);
-                for (const auto *v : vars) {
-                    auto result = solve_expression(c, v->name);
-                    if (!result.fully_solved) {
-                        continue;
-                    }
-                    Expr solved = result.result;
+                if (!ignore_condition) {
+                    auto vars = find_free_vars(op->condition);
+                    for (const auto *v : vars) {
+                        auto result = solve_expression(c, v->name);
+                        if (!result.fully_solved) {
+                            continue;
+                        }
+                        Expr solved = result.result;
 
-                    // Trim the scope down to represent the fact that the
-                    // condition is true. We only understand certain types
-                    // of conditions for now.
+                        // Trim the scope down to represent the fact that the
+                        // condition is true. We only understand certain types
+                        // of conditions for now.
 
-                    const LT *lt = solved.as<LT>();
-                    const LE *le = solved.as<LE>();
-                    const GT *gt = solved.as<GT>();
-                    const GE *ge = solved.as<GE>();
-                    const EQ *eq = solved.as<EQ>();
-                    Expr lhs, rhs;
-                    if (lt) {
-                        lhs = lt->a;
-                        rhs = lt->b;
-                    } else if (le) {
-                        lhs = le->a;
-                        rhs = le->b;
-                    } else if (gt) {
-                        lhs = gt->a;
-                        rhs = gt->b;
-                    } else if (ge) {
-                        lhs = ge->a;
-                        rhs = ge->b;
-                    } else if (eq) {
-                        lhs = eq->a;
-                        rhs = eq->b;
-                    }
-
-                    if (!rhs.defined() || rhs.type() != Int(32)) {
-                        continue;
-                    }
-
-                    if (!equal(lhs, v)) {
-                        continue;
-                    }
-
-                    Expr inner_min, inner_max;
-                    Interval i = scope.get(v->name);
-
-                    // If the original condition is likely, then
-                    // the additional trimming of the domain due
-                    // to the condition is probably unnecessary,
-                    // which means the mins/maxes below should
-                    // probably just be the LHS.
-                    Interval likely_i = i;
-                    if (call && call->is_intrinsic(Call::likely)) {
-                        likely_i.min = likely(i.min);
-                        likely_i.max = likely(i.max);
-                    } else if (call && call->is_intrinsic(Call::likely_if_innermost)) {
-                        likely_i.min = likely_if_innermost(i.min);
-                        likely_i.max = likely_if_innermost(i.max);
-                    }
-
-                    Interval bi = bounds_of_expr_in_scope(rhs, scope, func_bounds);
-                    if (bi.has_upper_bound() && i.has_upper_bound()) {
+                        const LT *lt = solved.as<LT>();
+                        const LE *le = solved.as<LE>();
+                        const GT *gt = solved.as<GT>();
+                        const GE *ge = solved.as<GE>();
+                        const EQ *eq = solved.as<EQ>();
+                        Expr lhs, rhs;
                         if (lt) {
-                            i.max = min(likely_i.max, bi.max - 1);
+                            lhs = lt->a;
+                            rhs = lt->b;
+                        } else if (le) {
+                            lhs = le->a;
+                            rhs = le->b;
+                        } else if (gt) {
+                            lhs = gt->a;
+                            rhs = gt->b;
+                        } else if (ge) {
+                            lhs = ge->a;
+                            rhs = ge->b;
+                        } else if (eq) {
+                            lhs = eq->a;
+                            rhs = eq->b;
                         }
-                        if (le || eq) {
-                            i.max = min(likely_i.max, bi.max);
+
+                        if (!rhs.defined() || rhs.type() != Int(32)) {
+                            continue;
                         }
+
+                        if (!equal(lhs, v)) {
+                            continue;
+                        }
+
+                        Expr inner_min, inner_max;
+                        Interval i = scope.get(v->name);
+
+                        // If the original condition is likely, then
+                        // the additional trimming of the domain due
+                        // to the condition is probably unnecessary,
+                        // which means the mins/maxes below should
+                        // probably just be the LHS.
+                        Interval likely_i = i;
+                        if (call && call->is_intrinsic(Call::likely)) {
+                            likely_i.min = likely(i.min);
+                            likely_i.max = likely(i.max);
+                        } else if (call && call->is_intrinsic(Call::likely_if_innermost)) {
+                            likely_i.min = likely_if_innermost(i.min);
+                            likely_i.max = likely_if_innermost(i.max);
+                        }
+
+                        Interval bi = bounds_of_expr_in_scope(rhs, scope, func_bounds);
+                        if (bi.has_upper_bound() && i.has_upper_bound()) {
+                            if (lt) {
+                                i.max = min(likely_i.max, bi.max - 1);
+                            }
+                            if (le || eq) {
+                                i.max = min(likely_i.max, bi.max);
+                            }
+                        }
+                        if (bi.has_lower_bound() && i.has_lower_bound()) {
+                            if (gt) {
+                                i.min = max(likely_i.min, bi.min + 1);
+                            }
+                            if (ge || eq) {
+                                i.min = max(likely_i.min, bi.min);
+                            }
+                        }
+                        RestrictedVar p;
+                        p.v = v;
+                        p.i = i;
+                        to_pop.emplace_back(std::move(p));
                     }
-                    if (bi.has_lower_bound() && i.has_lower_bound()) {
-                        if (gt) {
-                            i.min = max(likely_i.min, bi.min + 1);
-                        }
-                        if (ge || eq) {
-                            i.min = max(likely_i.min, bi.min);
-                        }
+                    for (auto &p : to_pop) {
+                        trim_scope_push(p.v->name, p.i, p.let_bounds);
                     }
-                    RestrictedVar p;
-                    p.v = v;
-                    p.i = i;
-                    to_pop.emplace_back(std::move(p));
-                }
-                for (auto &p : to_pop) {
-                    trim_scope_push(p.v->name, p.i, p.let_bounds);
                 }
                 body.accept(this);
                 while (!to_pop.empty()) {

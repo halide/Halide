@@ -373,6 +373,8 @@ class PredicateLoadStore : public IRMutator {
     string var;
     Expr vector_predicate;
     bool is_explicit;
+    bool loads_safe;
+    bool stores_safe;
     bool in_hexagon;
     const Target &target;
     int lanes;
@@ -400,7 +402,12 @@ class PredicateLoadStore : public IRMutator {
         return false;
     }
 
-    Expr merge_predicate(Expr pred, const Expr &new_pred) {
+    Expr merge_predicate(Expr pred, const Expr &new_pred, bool load) {
+        if ((load && loads_safe) || (!load && stores_safe)) {
+            // This is a safe load or store, we don't need to include the new
+            // predicate.
+            return pred;
+        }
         if (pred.type().lanes() == new_pred.type().lanes()) {
             Expr res = simplify(pred && new_pred);
             return res;
@@ -430,7 +437,7 @@ class PredicateLoadStore : public IRMutator {
             return IRMutator::visit(op);
         }
 
-        predicate = merge_predicate(predicate, vector_predicate);
+        predicate = merge_predicate(predicate, vector_predicate, true);
         if (!valid) {
             return op;
         }
@@ -462,7 +469,7 @@ class PredicateLoadStore : public IRMutator {
             return IRMutator::visit(op);
         }
 
-        predicate = merge_predicate(predicate, vector_predicate);
+        predicate = merge_predicate(predicate, vector_predicate, false);
         if (!valid) {
             return op;
         }
@@ -477,8 +484,8 @@ class PredicateLoadStore : public IRMutator {
     }
 
 public:
-    PredicateLoadStore(string v, const Expr &vpred, bool is_explicit, bool in_hexagon, const Target &t)
-        : var(std::move(v)), vector_predicate(vpred), is_explicit(is_explicit), in_hexagon(in_hexagon),
+    PredicateLoadStore(string v, const Expr &vpred, bool is_explicit, bool loads_safe, bool stores_safe, bool in_hexagon, const Target &t)
+        : var(std::move(v)), vector_predicate(vpred), is_explicit(is_explicit), loads_safe(loads_safe), stores_safe(stores_safe), in_hexagon(in_hexagon),
           target(t), lanes(vpred.type().lanes()), valid(true), vectorized(false) {
         internal_assert(lanes > 1);
     }
@@ -841,9 +848,19 @@ class VectorSubs : public IRMutator {
         int lanes = cond.type().lanes();
 
         bool explicit_predicate = false;
-        if (const Call *pred = Call::as_intrinsic(cond, {Call::predicate})) {
+        bool loads_safe = false;
+        bool stores_safe = false;
+        if (const Call *pred = Call::as_intrinsic(cond, {Call::predicate, Call::predicate_loads, Call::predicate_stores})) {
             explicit_predicate = true;
             cond = pred->args[0];
+
+            // This is a little bit confusing. The way to interpret predicate_loads is that
+            // we *don't* need to predicate stores, and vice versa.
+            if (pred->is_intrinsic(Call::predicate_loads)) {
+                stores_safe = true;
+            } else if (pred->is_intrinsic(Call::predicate_stores)) {
+                loads_safe = true;
+            }
         }
 
         debug(3) << "Vectorizing \n"
@@ -863,12 +880,12 @@ class VectorSubs : public IRMutator {
 
             Stmt predicated_stmt;
             if (vectorize_predicate) {
-                PredicateLoadStore p(vectorized_vars.front().name, cond, explicit_predicate, in_hexagon, target);
+                PredicateLoadStore p(vectorized_vars.front().name, cond, explicit_predicate, loads_safe, stores_safe, in_hexagon, target);
                 predicated_stmt = p.mutate(then_case);
                 vectorize_predicate = p.is_vectorized();
             }
             if (vectorize_predicate && else_case.defined()) {
-                PredicateLoadStore p(vectorized_vars.front().name, !cond, explicit_predicate, in_hexagon, target);
+                PredicateLoadStore p(vectorized_vars.front().name, !cond, explicit_predicate, loads_safe, stores_safe, in_hexagon, target);
                 predicated_stmt = Block::make(predicated_stmt, p.mutate(else_case));
                 vectorize_predicate = p.is_vectorized();
             }
@@ -1647,7 +1664,7 @@ class RemovePredicateHints : public IRMutator {
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::predicate)) {
+        if (op->is_intrinsic({Call::predicate, Call::predicate_loads, Call::predicate_stores})) {
             return op->args[0];
         } else {
             return IRMutator::visit(op);

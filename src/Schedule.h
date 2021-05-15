@@ -53,10 +53,30 @@ enum class TailStrategy {
      * if statement should be implemented with predicated operations.
      * Always legal. The if statement is treated like a boundary
      * condition, and factored out into a loop epilogue if possible.
-     * Pros: no redundant re-evaluation; does not constrain input our
+     * Pros: no redundant re-evaluation; does not constrain input or
      * output sizes. Cons: increases code size due to separate
      * tail-case handling. */
     Predicate,
+
+    /** Guard the inner loop with an if statement that prevents
+     * evaluation beyond the original extent, with a hint that the
+     * if statement should be implemented with predicated operations.
+     * The if statement is treated like a boundary condition, and
+     * factored out into a loop epilogue if possible.
+     * Pros: no redundant re-evaluation; does not constrain output
+     * sizes. Cons: increases code size due to separate tail-case
+     * handling. */
+    PredicateLoads,
+
+    /** Guard the inner loop with an if statement that prevents
+     * evaluation beyond the original extent, with a hint that the
+     * if statement should be implemented with predicated operations.
+     * Always legal. The if statement is treated like a boundary
+     * condition, and factored out into a loop epilogue if possible.
+     * Pros: no redundant re-evaluation; does not constrain output
+     * sizes. Cons: increases code size due to separate tail-case
+     * handling. */
+    PredicateStores,
 
     /** Prevent evaluation beyond the original extent by shifting
      * the tail case inwards, re-evaluating some points near the

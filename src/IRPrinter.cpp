@@ -150,6 +150,12 @@ std::ostream &operator<<(std::ostream &out, const TailStrategy &t) {
     case TailStrategy::Predicate:
         out << "Predicate";
         break;
+    case TailStrategy::PredicateLoads:
+        out << "PredicateLoads";
+        break;
+    case TailStrategy::PredicateStores:
+        out << "PredicateStores";
+        break;
     case TailStrategy::ShiftInwards:
         out << "ShiftInwards";
         break;

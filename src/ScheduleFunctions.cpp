@@ -79,6 +79,53 @@ bool contains_impure_call(const Expr &expr) {
     return is_not_pure.result;
 }
 
+class SubstituteIn : public IRMutator {
+    const string &name;
+    const Expr &value;
+    IRNodeType type;
+
+    Stmt visit(const Provide *p) {
+        if (type != IRNodeType::Provide) {
+            return IRMutator::visit(p);
+        }
+
+        vector<Expr> values;
+        vector<Expr> args;
+        bool changed = false;
+        for (const Expr &i : p->args) {
+            args.push_back(substitute(name, value, i));
+            changed = changed || !args.back().same_as(i);
+        }
+        for (const Expr &i : p->values) {
+            values.push_back(mutate(i));
+            changed = changed || !values.back().same_as(i);
+        }
+        if (changed) {
+            return Provide::make(p->name, values, args);
+        } else {
+            return p;
+        }
+    }
+
+public:
+    SubstituteIn(const string &name, const Expr &value, IRNodeType type)
+        : name(name), value(value), type(type) {
+    }
+
+    using IRMutator::mutate;
+    Expr mutate(const Expr &e) {
+        if (e.get()->node_type == type) {
+            return substitute(name, value, e);
+        } else {
+            return IRMutator::mutate(e);
+        }
+    }
+};
+
+Stmt substitute_in(const string &name, const Expr &value, IRNodeType type, const Stmt &s) {
+    return SubstituteIn(name, value, type).mutate(s);
+}
+
 // Build a loop nest about a provide node using a schedule
 Stmt build_loop_nest(
     const Stmt &body,
@@ -125,6 +172,10 @@ Stmt build_loop_nest(
         for (const auto &res : splits_result) {
             if (res.is_substitution()) {
                 stmt = substitute(res.name, res.value, stmt);
+            } else if (res.is_call_substitution()) {
+                stmt = substitute_in(res.name, res.value, IRNodeType::Call, stmt);
+            } else if (res.is_provide_substitution()) {
+                stmt = substitute_in(res.name, res.value, IRNodeType::Provide, stmt);
             } else if (res.is_let()) {
                 stmt = LetStmt::make(res.name, res.value, stmt);
             } else {

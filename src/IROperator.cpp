@@ -1048,6 +1048,18 @@ Expr predicate(Expr e) {
                                 {std::move(e)}, Internal::Call::PureIntrinsic);
 }
 
+Expr predicate_loads(Expr e) {
+    Type t = e.type();
+    return Internal::Call::make(t, Internal::Call::predicate_loads,
+                                {std::move(e)}, Internal::Call::PureIntrinsic);
+}
+
+Expr predicate_stores(Expr e) {
+    Type t = e.type();
+    return Internal::Call::make(t, Internal::Call::predicate_stores,
+                                {std::move(e)}, Internal::Call::PureIntrinsic);
+}
+
 Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args) {
     return Internal::Call::make(Int(32),
                                 "halide_error_requirement_failed",

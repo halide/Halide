@@ -530,6 +530,8 @@ struct Call : public ExprNode<Call> {
         mux,
         popcount,
         predicate,
+        predicate_loads,
+        predicate_stores,
         prefetch,
         promise_clamped,
         random,
@@ -650,6 +652,15 @@ struct Call : public ExprNode<Call> {
         return is_intrinsic() && this->name == get_intrinsic_name(op);
     }
 
+    bool is_intrinsic(std::initializer_list<IntrinsicOp> intrinsics) const {
+        for (IntrinsicOp i : intrinsics) {
+            if (is_intrinsic(i)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Returns a pointer to a call node if the expression is a call to
      * one of the requested intrinsics. */
     static const Call *as_intrinsic(const Expr &e, std::initializer_list<IntrinsicOp> intrinsics) {
@@ -664,7 +675,7 @@ struct Call : public ExprNode<Call> {
     }
 
     static const Call *as_tag(const Expr &e) {
-        return as_intrinsic(e, {Call::likely, Call::likely_if_innermost, Call::predicate, Call::strict_float});
+        return as_intrinsic(e, {Call::likely, Call::likely_if_innermost, Call::predicate, Call::predicate_loads, Call::predicate_stores, Call::strict_float});
     }
 
     bool is_extern() const {
