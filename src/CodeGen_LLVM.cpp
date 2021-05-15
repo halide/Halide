@@ -2169,7 +2169,7 @@ void CodeGen_LLVM::scalarize(const Expr &e) {
 
 void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
     const Ramp *ramp = op->index.as<Ramp>();
-    if (ramp && is_const_one(ramp->stride)) {  // Dense vector store
+    if (ramp && is_const_one(ramp->stride) && !emit_atomic_stores) {  // Dense vector store
         debug(4) << "Predicated dense vector store\n\t" << Stmt(op) << "\n";
         Value *vpred = codegen(op->predicate);
         Halide::Type value_type = op->value.type();
@@ -2212,9 +2212,9 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
             Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_val->getType()->getPointerTo());
 
             Value *slice_mask = slice_vector(vpred, i, slice_lanes);
-            Instruction *store_inst =
+            Instruction *store =
                 builder->CreateMaskedStore(slice_val, vec_ptr, llvm::Align(alignment), slice_mask);
-            add_tbaa_metadata(store_inst, op->name, slice_index);
+            add_tbaa_metadata(store, op->name, slice_index);
         }
     } else {  // It's not dense vector store, we need to scalarize it
         debug(4) << "Scalarize predicated vector store\n";
@@ -2241,7 +2241,10 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
 
             // Scalar
             Value *ptr = codegen_buffer_pointer(op->name, value_type, idx);
-            builder->CreateAlignedStore(v, ptr, llvm::Align(value_type.bytes()));
+            StoreInst *store = builder->CreateAlignedStore(v, ptr, llvm::Align(value_type.bytes()));
+            if (emit_atomic_stores) {
+                store->setAtomic(AtomicOrdering::Monotonic);
+            }
 
             builder->CreateBr(after_bb);
             builder->SetInsertPoint(after_bb);
@@ -2366,7 +2369,7 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
     }
 }
 
-void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
+void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
     // TODO: predicated store (see https://github.com/halide/Halide/issues/4298).
     user_assert(is_const_one(op->predicate)) << "Atomic predicated store is not supported.\n";
 
@@ -2375,6 +2378,7 @@ void CodeGen_LLVM::codegen_atomic_store(const Store *op) {
     // Currently we only test for atomicAdd.
     Expr val_expr = op->value;
     Halide::Type value_type = op->value.type();
+
     // For atomicAdd, we check if op->value - store[index] is independent of store.
     // For llvm version < 9, the atomicRMW operations only support integers so we also check that.
     Expr equiv_load = Load::make(value_type, op->name,
@@ -3962,6 +3966,17 @@ void CodeGen_LLVM::visit(const Fork *op) {
 }
 
 void CodeGen_LLVM::visit(const Store *op) {
+    if (!emit_atomic_stores) {
+        // Peel lets off the index to make us more likely to pattern
+        // match a ramp.
+        if (const Let *let = op->index.as<Let>()) {
+            Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate, op->alignment);
+            codegen(LetStmt::make(let->name, let->value, s));
+            return;
+        }
+    }
+
+    // Fix up the type
     Halide::Type value_type = op->value.type();
     Halide::Type storage_type = upgrade_type_for_storage(value_type);
     if (value_type != storage_type) {
@@ -3976,9 +3991,11 @@ void CodeGen_LLVM::visit(const Store *op) {
             << " is lowered into a mutex lock, which does not support vectorization.\n";
     }
 
+    bool recursive = (expr_uses_var(op->index, op->name) ||
+                      expr_uses_var(op->value, op->name));
     // Issue atomic store if we are inside an atomic node.
-    if (emit_atomic_stores) {
-        codegen_atomic_store(op);
+    if (emit_atomic_stores && recursive) {
+        codegen_atomic_rmw(op);
         return;
     }
 
@@ -3988,13 +4005,21 @@ void CodeGen_LLVM::visit(const Store *op) {
         return;
     }
 
+    auto annotate_store = [&](StoreInst *store, const Expr &index) {
+        add_tbaa_metadata(store, op->name, index);
+        if (emit_atomic_stores) {
+            store->setAtomic(AtomicOrdering::Monotonic);
+        }
+    };
+
     Value *val = codegen(op->value);
     bool is_external = (external_buffer.find(op->name) != external_buffer.end());
-    // Scalar
+
     if (value_type.is_scalar()) {
+        // Scalar
         Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
         StoreInst *store = builder->CreateAlignedStore(val, ptr, llvm::Align(value_type.bytes()));
-        add_tbaa_metadata(store, op->name, op->index);
+        annotate_store(store, op->index);
     } else if (const Let *let = op->index.as<Let>()) {
         Stmt s = Store::make(op->name, op->value, let->body, op->param, op->predicate, op->alignment);
         codegen(LetStmt::make(let->name, let->value, s));
@@ -4038,7 +4063,7 @@ void CodeGen_LLVM::visit(const Store *op) {
                 Value *elt_ptr = codegen_buffer_pointer(op->name, value_type.element_of(), slice_base);
                 Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_val->getType()->getPointerTo());
                 StoreInst *store = builder->CreateAlignedStore(slice_val, vec_ptr, llvm::Align(alignment));
-                add_tbaa_metadata(store, op->name, slice_index);
+                annotate_store(store, slice_index);
             }
         } else if (ramp) {
             Type ptr_type = value_type.element_of();
@@ -4057,11 +4082,11 @@ void CodeGen_LLVM::visit(const Store *op) {
                             ptr,
                             const_stride->value * i);
                     StoreInst *store = builder->CreateStore(v, p);
-                    add_tbaa_metadata(store, op->name, op->index);
+                    annotate_store(store, op->index);
                 } else {
                     // Increment the pointer by the stride for each element
                     StoreInst *store = builder->CreateStore(v, ptr);
-                    add_tbaa_metadata(store, op->name, op->index);
+                    annotate_store(store, op->index);
                     ptr = builder->CreateInBoundsGEP(ptr, stride);
                 }
             }
@@ -4074,7 +4099,7 @@ void CodeGen_LLVM::visit(const Store *op) {
                 Value *v = builder->CreateExtractElement(val, lane);
                 Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), idx);
                 StoreInst *store = builder->CreateStore(v, ptr);
-                add_tbaa_metadata(store, op->name, op->index);
+                annotate_store(store, op->index);
             }
         }
     }
