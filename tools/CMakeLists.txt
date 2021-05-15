@@ -32,7 +32,7 @@ target_include_directories(Halide_ImageIO INTERFACE $<BUILD_INTERFACE:${CMAKE_CU
 add_library(Halide_RunGenMain INTERFACE)
 add_library(Halide::RunGenMain ALIAS Halide_RunGenMain)
 target_sources(Halide_RunGenMain INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/RunGenMain.cpp>)
-target_link_libraries(Halide_RunGenMain INTERFACE Halide::Runtime Halide::ImageIO Threads::Threads ${CMAKE_DL_LIBS})
+target_link_libraries(Halide_RunGenMain INTERFACE Halide::Runtime Halide::ImageIO Threads::Threads)
 set_target_properties(Halide_RunGenMain PROPERTIES EXPORT_NAME RunGenMain)
 
 add_library(Halide_Generator INTERFACE)
