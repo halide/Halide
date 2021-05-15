@@ -4,7 +4,6 @@
 #include "CSE.h"
 #include "CompilerLogger.h"
 #include "IRMutator.h"
-#include "Solve.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -99,58 +98,6 @@ bool Simplify::const_uint(const Expr &e, uint64_t *u) {
         return false;
     }
 }
-
-namespace {
-
-// Returns true if x is a constant equation of a single variable, and
-// is likely to produce a constant interval if solved for the variable.
-bool is_constant_equation(const Expr &x, const Variable *&var) {
-    if (is_const(x)) {
-        return true;
-    } else if (const Add *bin = x.as<Add>()) {
-        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
-    } else if (const Sub *bin = x.as<Sub>()) {
-        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
-    } else if (const Mul *bin = x.as<Mul>()) {
-        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
-    } else if (const Div *bin = x.as<Div>()) {
-        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
-    } else if (const Mod *bin = x.as<Mod>()) {
-        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
-    } else if (const Min *bin = x.as<Min>()) {
-        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
-    } else if (const Max *bin = x.as<Max>()) {
-        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
-    } else if (const EQ *bin = x.as<EQ>()) {
-        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
-    } else if (const NE *bin = x.as<NE>()) {
-        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
-    } else if (const LT *bin = x.as<LT>()) {
-        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
-    } else if (const LE *bin = x.as<LE>()) {
-        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
-    } else if (const GT *bin = x.as<GT>()) {
-        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
-    } else if (const GE *bin = x.as<GE>()) {
-        return is_constant_equation(bin->a, var) && is_constant_equation(bin->b, var);
-    } else if (const Cast *c = x.as<Cast>()) {
-        return is_constant_equation(c->value, var);
-    } else if (const Variable *v = x.as<Variable>()) {
-        if (var && var->name == v->name) {
-            // We already found this variable.
-            return true;
-        } else if (var) {
-            // This is an equation of more than one variable.
-            return false;
-        } else if (!var && v->type.is_int() && v->type.bits() >= 32) {
-            var = v;
-            return true;
-        }
-    }
-    return false;
-}
-
-}  // namespace
 
 void Simplify::ScopedFact::learn_false(const Expr &fact) {
     Simplify::VarInfo info;
@@ -300,24 +247,6 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
             }
             simplify->bounds_and_alignment_info.push(v->name, expr_info);
             bounds_pop_list.push_back(v);
-        } else if (is_constant_equation(eq, v)) {
-            Interval range = solve_for_inner_interval(eq, v->name);
-            const int64_t *min = as_const_int(range.min);
-            const int64_t *max = as_const_int(range.max);
-            if (min || max) {
-                Simplify::ExprInfo expr_info;
-                expr_info.min_defined = min != nullptr;
-                expr_info.min = min ? *min : 0;
-                expr_info.max_defined = max != nullptr;
-                expr_info.max = max ? *max : 0;
-                if (simplify->bounds_and_alignment_info.contains(v->name)) {
-                    // We already know something about this variable and don't want to suppress it.
-                    auto existing_knowledge = simplify->bounds_and_alignment_info.get(v->name);
-                    expr_info.intersect(existing_knowledge);
-                }
-                simplify->bounds_and_alignment_info.push(v->name, expr_info);
-                bounds_pop_list.push_back(v);
-            }
         }
     } else if (const LT *lt = fact.as<LT>()) {
         const Variable *v = lt->a.as<Variable>();

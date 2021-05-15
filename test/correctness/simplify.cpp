@@ -1667,15 +1667,6 @@ void check_boolean() {
           // is at least two, so z must be at least three.
           Evaluate::make(0));
 
-    check(IfThenElse::make(x / 4 == 0, IfThenElse::make(x < 1, AssertStmt::make(x == 0, x))),
-          Evaluate::make(0));
-
-    check(IfThenElse::make(x * 4 == 8, AssertStmt::make(x == 2, x)),
-          Evaluate::make(0));
-
-    check(IfThenElse::make((x / 4) * 4 == 8, IfThenElse::make(x % 4 == 2, AssertStmt::make(x == 10, x))),
-          Evaluate::make(0));
-
     // Simplifications of selects
     check(select(x == 3, 5, 7) + 7, select(x == 3, 12, 14));
     check(select(x == 3, 5, 7) - 7, select(x == 3, -2, 0));
