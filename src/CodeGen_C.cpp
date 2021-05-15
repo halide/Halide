@@ -2309,7 +2309,7 @@ string CodeGen_C::print_scalarized_expr(const Expr &e) {
         Expr e2 = extract_lane(e, lane);
         string elem = print_expr(e2);
         ostringstream rhs;
-        rhs << v << ".replace(" << lane << ", " << elem << ")";
+        rhs << print_type(t) + "_ops::replace(" << v << ", " << lane << ", " << elem << ")";
         v = print_assignment(t, rhs.str());
     }
     return v;
