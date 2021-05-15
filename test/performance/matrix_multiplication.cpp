@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
     RDom k(0, matrix_size);
     RVar ki;
 
-    matrix_mul(x, y) += f32(A(k, y) * B(x, k));
+    matrix_mul(x, y) += f32(A(k, y)) * f32(B(x, k));
 
     Func out;
 
@@ -98,10 +98,10 @@ int main(int argc, char **argv) {
 
     double t = benchmark([&]() {
         out.realize(output);
-        
+
         if (target.has_gpu_feature()) {
             output.device_sync();
-        }        
+        }
     });
 
     // check results

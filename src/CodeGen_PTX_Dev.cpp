@@ -826,66 +826,56 @@ public:
     }
 
     void visit(const Store *store) override {
-        //  matmul$1[t26] = matmul$1[t26] + float32((A[((A.stride.1*t34) - t33) + matmul$1.s1.k$x]*B[(B.stride.1*matmul$1.s1.k$x) + t35]))
+        //  matmul$1[t26] = (float32)matmul$1[t26]
+        //      + (float32((float16)A[((A.stride.1*t34) - t33) + matmul$1.s1.k$x])
+        //      * *float32((float16)B[(B.stride.1*matmul$1.s1.k$x) + t35]))
         const Expr wild_f32x = Variable::make(Float(32), "*");
+        const Expr wild_f16x = Variable::make(Float(16), "*");
+        const Expr acc_pattern = wild_f32x + f32(wild_f16x) * f32(wild_f16x);
         vector<Expr> matches;
-        const Expr acc_pattern = wild_f32x + wild_f32x;
         if (expr_match(acc_pattern, store->value, matches)) {
-            // matmul[t26]
-            const Load *matmul_load = matches[0].as<Load>();
+            // (float32)matmul$1[t26]
+            const Load *load_c = matches[0].as<Load>();
+            // (float16) A[((A.stride.1 * t34) - t33) + matmul$1.s1.k$x]
+            const Load *load_a = matches[1].as<Load>();
+            // (float16)B[(B.stride.1*matmul$1.s1.k$x) + t35]
+            const Load *load_b = matches[2].as<Load>();
 
-            // float32((A[((A.stride.1*t34) - t33) + matmul$1.s1.k$x]*B[(B.stride.1*matmul$1.s1.k$x) + t35]))
-            const Cast *cast = matches[1].as<Cast>();
-
-            if (matmul_load && cast) {
+            if (load_c && load_a && load_b) {
                 // Check if the load is loading from the same place where the store is storing
                 // i.e. if this is an update operation
-                if (matmul_load->name == store->name && equal(matmul_load->index, store->index)) {
+                if (load_c->name == store->name && equal(load_c->index, store->index)) {
                     // Yes, this is an update operation, now let's check cast to see if it is a matmul that can be converted
                     // to wmma intrinsic
+                    const Expr wild_i32x = Variable::make(Int(32), "*");
+                    // Check if the reduction domain is being used in both A and B to
+                    // validate the matrix multiply
+                    const Expr load_a_pattern = wild_i32x + wild_i32x;
+                    const Expr load_b_pattern = wild_i32x * wild_i32x + wild_i32x;
 
-                    // float32((A[((A.stride.1*t34) - t33) + matmul$1.s1.k$x]*B[(B.stride.1*matmul$1.s1.k$x) + t35]))
-                    const Expr wild_f16x = Variable::make(Float(16), "*");
-                    const Expr mul_pattern = wild_f16x * wild_f16x;
-                    if (expr_match(mul_pattern, cast->value, matches)) {
-                        // A[((A.stride.1*t34) - t33) + matmul$1.s1.k$x]
-                        const Load *load_a = matches[0].as<Load>();
-                        // B[(B.stride.1 * matmul$1.s1.k$x) + t35]
-                        const Load *load_b = matches[1].as<Load>();
+                    vector<Expr> matches_a, matches_b;
+                    const bool match_a = expr_match(load_a_pattern, load_a->index, matches_a);
+                    const bool match_b = expr_match(load_b_pattern, load_b->index, matches_b);
+                    if (match_a && match_b) {
+                        // Check if the k_var_name is present in the expressions for load_a and load_b
+                        const Variable *load_a_var_1 = matches_a[0].as<Variable>();
+                        const Variable *load_a_var_2 = matches_a[1].as<Variable>();
+                        const Variable *load_b_var_1 = matches_b[0].as<Variable>();
+                        const Variable *load_b_var_2 = matches_b[1].as<Variable>();
 
-                        if (load_a && load_b) {
-                            const Expr wild_i32x = Variable::make(Int(32), "*");
-                            // Check if the reduction domain is being used in both A and B to
-                            // validate the matrix multiply
-                            const Expr load_a_pattern = wild_i32x + wild_i32x;
-                            const Expr load_b_pattern = wild_i32x * wild_i32x + wild_i32x;
-                            vector<Expr> matches_a, matches_b;
-                            const bool match_a = expr_match(load_a_pattern, load_a->index, matches_a);
-                            const bool match_b = expr_match(load_b_pattern, load_b->index, matches_b);
-                            if (match_a && match_b) {
-                                // Check if the k_var_name is present in the expressions for load_a and load_b
-                                const Variable *load_a_var_1 = matches_a[0].as<Variable>();
-                                const Variable *load_a_var_2 = matches_a[1].as<Variable>();
-                                const Variable *load_b_var_1 = matches_b[0].as<Variable>();
-                                const Variable *load_b_var_2 = matches_b[1].as<Variable>();
+                        // TODO: Can this checks be improved?
+                        const bool load_a_ok = (load_a_var_1 && load_a_var_1->name == k_var_name) || (load_a_var_2 && load_a_var_2->name == k_var_name);
+                        const bool load_b_ok = (load_b_var_1 && load_b_var_1->name == k_var_name) || (load_b_var_2 && load_b_var_2->name == k_var_name);
 
-                                // TODO: Can this checks be improved?
-                                const bool load_a_ok = (load_a_var_1 && load_a_var_1->name == k_var_name) || (load_a_var_2 && load_a_var_2->name == k_var_name);
-                                const bool load_b_ok = (load_b_var_1 && load_b_var_1->name == k_var_name) || (load_b_var_2 && load_b_var_2->name == k_var_name);
+                        if (load_a_ok && load_b_ok) {
+                            // This matches A(k, y) * B(x, k) where both A and B
+                            matmul_found = true;
 
-                                if (load_a_ok && load_b_ok) {
-                                    // This matches A(k, y) * B(x, k) where both A and B
-                                    // are row-major
+                            A = load_a;
+                            B = load_b;
+                            C = load_c;
 
-                                    matmul_found = true;
-
-                                    A = load_a;
-                                    B = load_b;
-                                    C = matmul_load;
-
-                                    return;
-                                }
-                            }
+                            return;
                         }
                     }
                 }
@@ -982,7 +972,7 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
 
                         Stmt tiled_for = Block::make(wmma_ops);
 #else
-                        // WIP Code: Trying to create a Halide For loop to do the computation                        
+                        // WIP Code: Trying to create a Halide For loop to do the computation
 
                         // Creates a for to loop over the k tiles to perform the matrix multiply accumulate
                         Expr tile_k = Variable::make(Int(32), "tile_k");
@@ -1010,7 +1000,7 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
 
                         Expr offset_a_var = Variable::make(Int(32), "offset_a");
                         Expr offset_b_var = Variable::make(Int(32), "offset_b");
-                        Expr offset_c_var = Variable::make(Int(32), "offset_c");                        
+                        Expr offset_c_var = Variable::make(Int(32), "offset_c");
 
                         Expr load_frag_a_call = Call::make(Float(16, 16), "wmma.m16n16k16.load.a.row", {var_a, offset_a_var, stride_a}, Call::Intrinsic);
                         Expr load_frag_b_call = Call::make(Float(16, 16), "wmma.m16n16k16.load.b.row", {var_b, offset_b_var, stride_b}, Call::Intrinsic);
@@ -1023,17 +1013,16 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
                         Expr frac_c_index = Ramp::make(make_zero(Int(32)), 1, 8);
                         Expr load_frag_c = Load::make(Float(32, 8), "frag_c", frac_c_index, Buffer<>(), Parameter(), const_true(8), ModulusRemainder{});
 
-                        Expr mma = Call::make(Float(32, 8), "wmma.m16n16k16.mma.row.row", {var_frag_a, var_frag_b, load_frag_c}, Call::Intrinsic);                        
-                        Expr store_frag_c = Call::make(Handle(), "wmma.m16n16k16.store.d.row", {var_c, offset_c_var, stride_c, load_frag_c}, Call::Intrinsic);                        
+                        Expr mma = Call::make(Float(32, 8), "wmma.m16n16k16.mma.row.row", {var_frag_a, var_frag_b, load_frag_c}, Call::Intrinsic);
+                        Expr store_frag_c = Call::make(Handle(), "wmma.m16n16k16.store.d.row", {var_c, offset_c_var, stride_c, load_frag_c}, Call::Intrinsic);
 
                         Expr bounds_checking_tile = row_a_var < global_M &&
-                                               col_a_var < global_K && 
-                                               row_b_var < global_K &&
-                                               col_b_var < global_N;
-
+                                                    col_a_var < global_K &&
+                                                    row_b_var < global_K &&
+                                                    col_b_var < global_N;
 
                         // clang-format off
-                        Stmt mma_for = 
+                        Stmt mma_for =
                             For::make("tile_k", 0, num_tiles_k, loop->for_type, loop->device_api,
                                 LetStmt::make("row_a", row_a_value,
                                     LetStmt::make("col_a", col_a_value,
@@ -1042,7 +1031,7 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
                                                 IfThenElse::make(bounds_checking_tile,
                                                     LetStmt::make("offset_a", offset_a_value,
                                                         LetStmt::make("offset_b", offset_b_value,
-                                                            LetStmt::make("frag_a", load_frag_a_call, 
+                                                            LetStmt::make("frag_a", load_frag_a_call,
                                                                 LetStmt::make("frag_b", load_frag_b_call,
                                                                     Store::make("frag_c", mma, frac_c_index, Parameter{}, const_true(8), ModulusRemainder{})
                                                                 )
@@ -1067,17 +1056,17 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
                                         mma_for,
                                         LetStmt::make("row_c", row_c_value,
                                             LetStmt::make("col_c", col_c_value,
-                                                IfThenElse::make(bounds_checking_store, 
+                                                IfThenElse::make(bounds_checking_store,
                                                     Evaluate::make(store_frag_c)
                                                 )
                                             )
                                         )
-                                    })                                   
+                                    })
                                 )
                             );
                         // clang-format on
                         Stmt tiled_for = wmma_op;
-                      
+
 #endif  // INLINE_TILE_LOOP
 
                         tensorcore_op_found = true;
