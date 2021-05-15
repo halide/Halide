@@ -84,7 +84,9 @@ class SubstituteIn : public IRMutator {
     const Expr &value;
     IRNodeType type;
 
-    Stmt visit(const Provide *p) {
+    using IRMutator::visit;
+
+    Stmt visit(const Provide *p) override {
         if (type != IRNodeType::Provide) {
             return IRMutator::visit(p);
         }
@@ -113,7 +115,7 @@ public:
     }
 
     using IRMutator::mutate;
-    Expr mutate(const Expr &e) {
+    Expr mutate(const Expr &e) override {
         if (e.get()->node_type == type) {
             return substitute(name, value, e);
         } else {
