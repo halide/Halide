@@ -66,8 +66,10 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::eq(delta, 0), op->type, delta.type());
 
+    bool allowed_overflow = no_overflow(delta.type());
+
     if (rewrite(broadcast(x, c0) == 0, broadcast(x == 0, c0)) ||
-        (no_overflow(delta.type()) &&
+        (allowed_overflow &&
          (rewrite(x * y == 0, (x == 0) || (y == 0)) ||
           rewrite(x * c0 + c1 == 0, x == fold((0 - c1) / c0), c1 % c0 == 0))) ||
         rewrite(select(x, 0, y) == 0, x || (y == 0)) ||
@@ -88,12 +90,16 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         rewrite(y - min(x, y) == 0, y <= x) ||
         rewrite(y - max(y, x) == 0, x <= y) ||
         rewrite(y - min(y, x) == 0, y <= x) ||
-        rewrite(max(x, c0) + c1 == 0, x == fold(-c1), c0 + c1 < 0) ||
-        rewrite(min(x, c0) + c1 == 0, x == fold(-c1), c0 + c1 > 0) ||
-        rewrite(max(x, c0) + c1 == 0, false, c0 + c1 > 0) ||
-        rewrite(min(x, c0) + c1 == 0, false, c0 + c1 < 0) ||
-        rewrite(max(x, c0) + c1 == 0, x <= c0, c0 + c1 == 0) ||
-        rewrite(min(x, c0) + c1 == 0, c0 <= x, c0 + c1 == 0) ||
+
+        // Guard against `c0 + c1` overflowing.
+        (allowed_overflow &&
+         (rewrite(max(x, c0) + c1 == 0, x == fold(-c1), c0 + c1 < 0) ||
+          rewrite(min(x, c0) + c1 == 0, x == fold(-c1), c0 + c1 > 0) ||
+          rewrite(max(x, c0) + c1 == 0, false, c0 + c1 > 0) ||
+          rewrite(min(x, c0) + c1 == 0, false, c0 + c1 < 0) ||
+          rewrite(max(x, c0) + c1 == 0, x <= c0, c0 + c1 == 0) ||
+          rewrite(min(x, c0) + c1 == 0, c0 <= x, c0 + c1 == 0))) ||
+
         // Special case the above where c1 == 0
         rewrite(max(x, c0) == 0, x == 0, c0 < 0) ||
         rewrite(min(x, c0) == 0, x == 0, c0 > 0) ||
