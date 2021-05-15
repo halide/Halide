@@ -76,7 +76,11 @@ public:
 
         // Align the reduction loop of filter.
         const int vector_reduction = get_vector_reduction_factor(target, UInt(8));
-        const int unroll_reduction = std::max<int>(unroll_reduction_, vector_reduction);
+        // TODO: On Hexagon, we have to unroll the reduction a little to work around
+        // a compiler bug.
+        const int min_unroll_reduction =
+            vector_reduction * (get_target().has_feature(Target::HVX) ? 2 : 1);
+        const int unroll_reduction = std::max<int>(min_unroll_reduction, unroll_reduction_);
         const int accum_vector_size = natural_vector_size<int32_t>();
 
         // Set up the reduction loop and inputs.
@@ -145,7 +149,22 @@ public:
         interpret_as_tensor(output_);
         require_same_min_extent(3, input_, output_);
         require_same_min_extent(0, bias_, output_);
+
+        const int filter_alignment = vector_reduction * accum_vector_size;
+        filter_.set_host_alignment(filter_alignment * filter_.type().bytes());
+        filter_.dim(0).set_min(0).set_extent(vector_reduction).set_stride(1);
+        filter_.dim(1).set_min(0).set_extent(accum_vector_size).set_stride(vector_reduction);
+        filter_.dim(2).set_min(0).set_stride(filter_alignment);
+        for (int d = 3; d < filter_.dimensions(); d++) {
+            filter_.dim(d).set_min(0).set_stride(align(filter_.dim(d).stride(), filter_alignment));
+        }
+
+        const int input_alignment = unroll_reduction;
+        input_.set_host_alignment(input_alignment);
         input_.dim(0).set_min(0).set_extent(filter_depth);
+        for (int d = 1; d < input_.dimensions(); d++) {
+            input_.dim(d).set_stride(align(input_.dim(d).stride(), input_alignment));
+        }
 
         output_.compute_root();
 
@@ -155,7 +174,12 @@ public:
         const int accumulators = get_register_count(target) >= 32 ? 20 : 8;
         std::vector<std::pair<int, int>> tile_sizes;
         const int max_tile_c = 4;
-        for (int tile_c = max_tile_c; tile_c >= 1; tile_c /= 2) {
+        // On Hexagon, we have to produce a full vector of output channels.
+        // TODO: We should fix the deinterleaving issue that occurs when this is 1.
+        // This is important so we can reduce our alignment requirement from 128
+        // channels to 32.
+        const int min_tile_c = get_target().has_feature(Target::HVX) ? 4 : 1;
+        for (int tile_c = max_tile_c; tile_c >= min_tile_c; tile_c /= 2) {
             int tile_x = std::min(8, accumulators / tile_c);
             tile_sizes.emplace_back(tile_c, tile_x);
         }
@@ -183,7 +207,7 @@ public:
         // In case there are no suitable tile sizes, just make a dummy split so the
         // rest of the schedule still works.
         output_
-            .split(c, co, c, accum_vector_size, TailStrategy::Predicate)
+            .split(c, co, c, accum_vector_size * min_tile_c, TailStrategy::Predicate)
             .split(x, xo, x, 1)
             .reorder(c, x, co, xo, y, b)
             .vectorize(c);
@@ -193,7 +217,7 @@ public:
         convolved.compute_at(output_, co)
             .store_in(MemoryType::Stack)
             .reorder(x, c)
-            .vectorize(c, accum_vector_size, TailStrategy::RoundUp)
+            .vectorize(c, accum_vector_size * min_tile_c, TailStrategy::RoundUp)
             .unroll(c, max_tile_c, TailStrategy::GuardWithIf)
             .unroll(x);
 
@@ -274,27 +298,6 @@ public:
 
         // TODO: Pad this outside and let it constant fold.
         bias_.in().compute_root().store_in(MemoryType::Stack);
-
-        // TODO: It looks like our loads aren't getting aligned, despite all of these
-        // requirements.
-        const int filter_alignment = vector_reduction * accum_vector_size;
-        filter_.set_host_alignment(filter_alignment * filter_.type().bytes());
-        filter_.dim(0)
-            .set_min(0)
-            .set_extent(vector_reduction)
-            .set_stride(1);
-        filter_.dim(1)
-            .set_min(0)
-            .set_extent(accum_vector_size)
-            .set_stride(vector_reduction);
-        filter_.dim(2)
-            .set_min(0)
-            .set_stride(filter_alignment);
-        for (int d = 3; d < filter_.dimensions(); d++) {
-            filter_.dim(d)
-                .set_min(0)
-                .set_stride(align(filter_.dim(d).stride(), filter_alignment));
-        }
     }
 };
 
