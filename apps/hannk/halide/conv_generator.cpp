@@ -293,7 +293,7 @@ public:
                 .atomic()
                 .vectorize(rci)
                 .vectorize(x)
-                .specialize(stride_x_ == 1 && is_interleaved(input_, unroll_reduction));
+                .specialize(stride_x_ == 1 && filter_depth == unroll_reduction && is_interleaved(input_, unroll_reduction));
         }
 
         // TODO: Pad this outside and let it constant fold.
