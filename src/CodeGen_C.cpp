@@ -2309,7 +2309,7 @@ string CodeGen_C::print_scalarized_expr(const Expr &e) {
         Expr e2 = extract_lane(e, lane);
         string elem = print_expr(e2);
         ostringstream rhs;
-        rhs << v << ".replace(" << lane << ", " << elem << ")";
+        rhs << print_type(t) + "_ops::replace(" << v << ", " << lane << ", " << elem << ")";
         v = print_assignment(t, rhs.str());
     }
     return v;
@@ -2852,7 +2852,6 @@ void CodeGen_C::visit(const Evaluate *op) {
 
 void CodeGen_C::visit(const Shuffle *op) {
     internal_assert(!op->vectors.empty());
-    internal_assert(op->vectors[0].type().is_vector());
     for (size_t i = 1; i < op->vectors.size(); i++) {
         internal_assert(op->vectors[0].type() == op->vectors[i].type());
     }
@@ -2875,13 +2874,17 @@ void CodeGen_C::visit(const Shuffle *op) {
         for (size_t vec_idx = 0; vec_idx < op->vectors.size(); vec_idx++) {
             const int vec_lanes = op->vectors[vec_idx].type().lanes();
             if (idx < vec_lanes) {
-                rhs << vecs[vec_idx] << "[" << idx << "]";
+                rhs << vecs[vec_idx];
+                if (op->vectors[vec_idx].type().is_vector()) {
+                    rhs << "[" << idx << "]";
+                }
                 break;
             }
             idx -= vec_lanes;
         }
         internal_assert(!rhs.str().empty());
     } else {
+        internal_assert(op->vectors[0].type().is_vector());
         string src = vecs[0];
         if (op->vectors.size() > 1) {
             // This code has always assumed/required that all the vectors
