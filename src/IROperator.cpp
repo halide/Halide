@@ -2592,7 +2592,7 @@ namespace Internal {
 Expr unreachable(Type t) {
     return Internal::Call::make(t, Internal::Call::unreachable,
                                 std::vector<Expr>(),
-                                Internal::Call::PureIntrinsic);
+                                Internal::Call::Intrinsic);
 }
 }  // namespace Internal
 

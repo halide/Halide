@@ -720,6 +720,46 @@ void check_vectors() {
         check(stmt, Evaluate::make(0));
     }
 
+    auto make_allocation = [](const char *name, Type t, Stmt body) {
+        return Allocate::make(name, t.element_of(), MemoryType::Stack, {t.lanes()}, const_true(), body);
+    };
+
+    {
+        // A store completely out of bounds.
+        Expr index = ramp(-8, 1, 8);
+        Expr value = Broadcast::make(0, 8);
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(8, 0));
+        stmt = make_allocation("f", value.type(), stmt);
+        check(stmt, make_allocation("f", value.type(), Evaluate::make(unreachable())));
+    }
+
+    {
+        // A store with one lane in bounds at the min.
+        Expr index = ramp(-7, 1, 8);
+        Expr value = Broadcast::make(0, 8);
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(0, -7));
+        stmt = make_allocation("f", value.type(), stmt);
+        check(stmt, stmt);
+    }
+
+    {
+        // A store with one lane in bounds at the max.
+        Expr index = ramp(7, 1, 8);
+        Expr value = Broadcast::make(0, 8);
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(0, 7));
+        stmt = make_allocation("f", value.type(), stmt);
+        check(stmt, stmt);
+    }
+
+    {
+        // A store completely out of bounds.
+        Expr index = ramp(8, 1, 8);
+        Expr value = Broadcast::make(0, 8);
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(8, 0));
+        stmt = make_allocation("f", value.type(), stmt);
+        check(stmt, make_allocation("f", value.type(), Evaluate::make(unreachable())));
+    }
+
     Expr bool_vector = Variable::make(Bool(4), "bool_vector");
     Expr int_vector = Variable::make(Int(32, 4), "int_vector");
     check(VectorReduce::make(VectorReduce::And, Broadcast::make(bool_vector, 4), 1),

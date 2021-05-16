@@ -204,6 +204,12 @@ private:
         if (op->is_intrinsic(Call::undef)) {
             return Expr();
         }
+        if (op->is_intrinsic(Call::unreachable)) {
+            // TODO: We can do better than this, unreachable
+            // makes everything that unconditionally leads to
+            // or from this expression unreachable as well.
+            return Expr();
+        }
 
         vector<Expr> new_args(op->args.size());
         bool changed = false;
