@@ -665,10 +665,13 @@ public:
         check("v*.w  = vrmpy(v*.ub,v*.b)", hvx_width / 4, sum(i16(in_u8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
         check("v*.w  = vrmpy(v*.b,v*.b)", hvx_width / 4, sum(i16(in_i8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
         check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r))));
+        check("v*.w += vrmpy(v*.ub,r*.b)", hvx_width / 4, sum(i32(in_u8(rfac * x + r))));
         check("v*.uw = vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * 34));
         check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * u8(r)));
+        check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(i32(in_u8(rfac * x + r)) * u8(r)));
         check("v*.w  += vrmpy(v*.ub,r*.b)", hvx_width / 4, sum(i32(in_u8(rfac * x + r)) * i8(r)));
         check("v*.uw += vrmpy(v*.ub,v*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * in_u8(rfac * x + r + 32)));
+        check("v*.uw += vrmpy(v*.ub,v*.ub)", hvx_width / 4, sum(i32(in_u8(rfac * x + r)) * in_u8(rfac * x + r + 32)));
         check("v*.w  += vrmpy(v*.ub,v*.b)", hvx_width / 4, sum(i32(in_u8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
         check("v*.w  += vrmpy(v*.b,v*.b)", hvx_width / 4, sum(i32(in_i8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
         // Sliding window
