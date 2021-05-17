@@ -730,7 +730,7 @@ void check_vectors() {
         Expr value = Broadcast::make(0, 8);
         Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(8, 0));
         stmt = make_allocation("f", value.type(), stmt);
-        check(stmt, make_allocation("f", value.type(), Evaluate::make(unreachable())));
+        check(stmt, Evaluate::make(unreachable()));
     }
 
     {
@@ -757,7 +757,7 @@ void check_vectors() {
         Expr value = Broadcast::make(0, 8);
         Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(8, 0));
         stmt = make_allocation("f", value.type(), stmt);
-        check(stmt, make_allocation("f", value.type(), Evaluate::make(unreachable())));
+        check(stmt, Evaluate::make(unreachable()));
     }
 
     Expr bool_vector = Variable::make(Bool(4), "bool_vector");
@@ -2085,6 +2085,36 @@ void check_invariant() {
     }
 }
 
+void check_unreachable() {
+    Var x("x"), y("y");
+
+    check(x + unreachable(), unreachable());
+
+    check(IfThenElse::make(x != 0, Evaluate::make(unreachable()), Evaluate::make(unreachable())),
+          Evaluate::make(unreachable()));
+    check(IfThenElse::make(x != 0, not_no_op(y), Evaluate::make(unreachable())),
+          IfThenElse::make(x != 0, not_no_op(y)));
+    check(IfThenElse::make(x != 0, Evaluate::make(unreachable()), not_no_op(y)),
+          IfThenElse::make(x == 0, not_no_op(y)));
+
+    check(Call::make(Int(32), Call::if_then_else, {x != 0, unreachable(), unreachable()}, Call::Intrinsic),
+          unreachable());
+    check(Call::make(Int(32), Call::if_then_else, {x != 0, y, unreachable()}, Call::Intrinsic),
+          Call::make(Int(32), Call::if_then_else, {x != 0, y, unreachable()}, Call::Intrinsic));
+    check(Call::make(Int(32), Call::if_then_else, {x != 0, unreachable(), y}, Call::Intrinsic),
+          Call::make(Int(32), Call::if_then_else, {x != 0, unreachable(), y}, Call::Intrinsic));
+
+    check(For::make("i", 0, 1, ForType::Serial, DeviceAPI::None, Evaluate::make(unreachable())),
+          Evaluate::make(unreachable()));
+    check(For::make("i", 0, x, ForType::Serial, DeviceAPI::None, Evaluate::make(unreachable())),
+          For::make("i", 0, x, ForType::Serial, DeviceAPI::None, Evaluate::make(unreachable())));
+
+    check(Block::make(not_no_op(x), Evaluate::make(unreachable())),
+          Evaluate::make(unreachable()));
+    check(Block::make(Evaluate::make(unreachable()), not_no_op(x)),
+          Evaluate::make(unreachable()));
+}
+
 int main(int argc, char **argv) {
     check_invariant();
     check_casts();
@@ -2096,6 +2126,7 @@ int main(int argc, char **argv) {
     check_overflow();
     check_bitwise();
     check_lets();
+    check_unreachable();
 
     // Miscellaneous cases that don't fit into one of the categories above.
     Expr x = Var("x"), y = Var("y");

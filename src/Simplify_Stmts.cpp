@@ -13,6 +13,9 @@ using std::vector;
 
 Stmt Simplify::visit(const IfThenElse *op) {
     Expr condition = mutate(op->condition, nullptr);
+    if (in_unreachable) {
+        return op;
+    }
 
     // Remove tags
     Expr unwrapped_condition = unwrap_tags(condition);
@@ -40,6 +43,9 @@ Stmt Simplify::visit(const IfThenElse *op) {
             then_case = mutate(learned_then_case);
         }
     }
+    bool then_unreachable = in_unreachable;
+    in_unreachable = false;
+
     {
         auto f = scoped_falsehood(unwrapped_condition);
         else_case = mutate(op->else_case);
@@ -47,6 +53,18 @@ Stmt Simplify::visit(const IfThenElse *op) {
         if (!learned_else_case.same_as(else_case)) {
             else_case = mutate(learned_else_case);
         }
+    }
+    bool else_unreachable = in_unreachable;
+
+    if (then_unreachable && else_unreachable) {
+        return then_case;
+    } else if (else_unreachable) {
+        else_case = Evaluate::make(0);
+        in_unreachable = false;
+    } else if (then_unreachable) {
+        condition = mutate(!condition, nullptr);
+        then_case = else_case;
+        else_case = Evaluate::make(0);
     }
 
     if (is_no_op(else_case)) {
@@ -184,7 +202,13 @@ Stmt Simplify::visit(const AssertStmt *op) {
 Stmt Simplify::visit(const For *op) {
     ExprInfo min_bounds, extent_bounds;
     Expr new_min = mutate(op->min, &min_bounds);
+    if (in_unreachable) {
+        return Evaluate::make(new_min);
+    }
     Expr new_extent = mutate(op->extent, &extent_bounds);
+    if (in_unreachable) {
+        return Evaluate::make(new_extent);
+    }
 
     ScopedValue<bool> old_in_vector_loop(in_vector_loop,
                                          (in_vector_loop ||
@@ -204,6 +228,13 @@ Stmt Simplify::visit(const For *op) {
         // If we're in the loop, the extent must be greater than 0.
         ScopedFact fact = scoped_truth(0 < new_extent);
         new_body = mutate(op->body);
+    }
+    if (in_unreachable) {
+        if (is_const_one(mutate(0 < new_extent, nullptr))) {
+            // If we know the loop executes once, the code that runs this loop is unreachable.
+            return new_body;
+        }
+        in_unreachable = false;
     }
 
     if (bounds_tracked) {
@@ -290,14 +321,14 @@ Stmt Simplify::visit(const Store *op) {
     string alloc_extent_name = op->name + ".total_extent_bytes";
     if (bounds_and_alignment_info.contains(alloc_extent_name)) {
         if (index_info.max_defined && index_info.max < 0) {
-            // TODO: We should turn this into some form of unreachable flag,
-            // and further simplify neighboring IR.
+            in_unreachable = true;
             return Evaluate::make(unreachable());
         }
         const ExprInfo &alloc_info = bounds_and_alignment_info.get(alloc_extent_name);
         if (alloc_info.max_defined && index_info.min_defined) {
             int index_min_bytes = index_info.min * op->value.type().bytes();
             if (index_min_bytes > alloc_info.max) {
+                in_unreachable = true;
                 return Evaluate::make(unreachable());
             }
         }
