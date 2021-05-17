@@ -300,7 +300,7 @@ public:
                 .atomic()
                 .vectorize(rci)
                 .vectorize(x)
-                .specialize(stride_x_ == 1 && is_interleaved(input_, unroll_reduction));
+                .specialize(stride_x_ == 1 && filter_depth == unroll_reduction && is_interleaved(input_, unroll_reduction));
         } else {
             // TODO: This could be padded outside, when we pad the filter.
             bias_.in().compute_root().store_in(MemoryType::Stack);

@@ -593,9 +593,13 @@ Stmt add_image_checks_inner(Stmt s,
             ss << constraints[i].second;
             string constrained_var_str = ss.str();
 
-            replace_with_constrained[name] = constrained_var;
-
             lets_constrained.emplace_back(name + ".constrained", constraints[i].second);
+
+            // Substituting in complex expressions is not typically a good idea
+            if (constraints[i].second.as<Variable>() ||
+                is_const(constraints[i].second)) {
+                replace_with_constrained[name] = constrained_var;
+            }
 
             Expr error = 0;
             if (!no_asserts) {

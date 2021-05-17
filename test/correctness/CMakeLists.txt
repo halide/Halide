@@ -235,6 +235,7 @@ tests(GROUPS correctness
       parallel_gpu_nested.cpp
       parallel_nested.cpp
       parallel_nested_1.cpp
+      parallel_scatter.cpp
       parallel_reductions.cpp
       parallel_rvar.cpp
       param.cpp
