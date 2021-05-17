@@ -2107,7 +2107,7 @@ void check_unreachable() {
     check(Call::make(Int(32), Call::if_then_else, {x != 0, y, unreachable()}, Call::Intrinsic), y);
     check(Call::make(Int(32), Call::if_then_else, {x != 0, unreachable(), y}, Call::Intrinsic), y);
 
-    check(For::make("i", 0, 1, ForType::Serial, DeviceAPI::None, Evaluate::make(unreachable())),
+    check(Block::make(not_no_op(y), For::make("i", 0, 1, ForType::Serial, DeviceAPI::None, Evaluate::make(unreachable()))),
           Evaluate::make(unreachable()));
     check(For::make("i", 0, x, ForType::Serial, DeviceAPI::None, Evaluate::make(unreachable())),
           Evaluate::make(0));
