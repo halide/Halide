@@ -9,8 +9,15 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
     if (bounds) {
         if (bounds->min_defined && !op->type.can_represent(bounds->min)) {
             bounds->min_defined = false;
+            if (!no_overflow(op->type)) {
+                // If the type overflows, this invalidates the max too.
+                bounds->max_defined = false;
+            }
         }
         if (bounds->max_defined && !op->type.can_represent(bounds->max)) {
+            if (!no_overflow(op->type)) {
+                bounds->min_defined = false;
+            }
             bounds->max_defined = false;
         }
     }
