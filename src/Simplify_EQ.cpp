@@ -69,8 +69,9 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
     bool allowed_overflow = no_overflow(delta.type());
 
     if (rewrite(broadcast(x, c0) == 0, broadcast(x == 0, c0)) ||
-        (allowed_overflow && rewrite(x * y == 0, (x == 0) || (y == 0))) ||
-
+        (allowed_overflow &&
+         (rewrite(x * y == 0, (x == 0) || (y == 0)) ||
+          rewrite(x * c0 + c1 == 0, x == fold((0 - c1) / c0), c1 % c0 == 0))) ||
         rewrite(select(x, 0, y) == 0, x || (y == 0)) ||
         rewrite(select(x, c0, y) == 0, !x && (y == 0), c0 != 0) ||
         rewrite(select(x, y, 0) == 0, !x || (y == 0)) ||
@@ -108,7 +109,6 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         rewrite(min(x, 0) == 0, 0 <= x) ||
 
         false) {
-
         return mutate(rewrite.result, bounds);
     }
 
@@ -118,7 +118,6 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         rewrite(c0 - x == 0, x == c0) ||
         rewrite(x - y == 0, x == y) ||
         rewrite(x == 0, x == 0)) {
-
         const EQ *eq = rewrite.result.as<EQ>();
         if (eq &&
             eq->a.same_as(op->a) &&
