@@ -236,6 +236,12 @@ public:
             .vectorize(rci, vector_reduction)
             .unroll(rci)
             .unroll(x);
+        if (unroll_reduction == vector_reduction) {
+            // TODO: We used to not need this, but currently, it is a massive
+            // savings (e.g. first conv layer of mobilenet drops from 760us to
+            // 540us on ARM, at some point it was 560us on ARM without this).
+            convolved.update().specialize(filter_depth == vector_reduction);
+        }
 
         if (!use_8bit_multiply(target) && get_target().arch == Target::X86) {
             // On x86, widening subtracts eat up a lot of the already scarce
