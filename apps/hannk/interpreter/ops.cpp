@@ -851,7 +851,7 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
             HalideBuffer<uint8_t> filter_buf(nullptr, 1, 1, 1);
             HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
             depthwise_conv_dm1_uint8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf);
-            result.align(0, input_buf.dim(0).extent());
+            result.align_input(0, input_buf.dim(0).extent());
         }
         return result;
     } else if (input_idx == 1) {

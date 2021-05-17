@@ -62,6 +62,11 @@ private:
             return IRMutator::visit(op);
         }
 
+        if (op->type.bytes() * op->type.lanes() <= 8) {
+            // These can probably be treated as scalars instead.
+            return IRMutator::visit(op);
+        }
+
         Expr index = mutate(op->index);
         const Ramp *ramp = index.as<Ramp>();
         const int64_t *const_stride = ramp ? as_const_int(ramp->stride) : nullptr;
