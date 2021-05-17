@@ -19,6 +19,21 @@ bool use_8bit_multiply(const Target &target) {
     return target.arch != Target::X86 || target.has_feature(Target::AVX512_SapphireRapids);
 }
 
+// How many registers to use as accumulators, as a function of the target.
+int get_accumulator_count(const Target &target) {
+    if (target.has_feature(Target::HVX)) {
+        // Hexagon has dot products between vector and scalar registers, so
+        // we don't need to use any vector registers for the input, so we
+        // can use a lot of registers as accumulators without spilling to
+        // the stack.
+        return 24;
+    } else if (get_register_count(target) >= 32) {
+        return 20;
+    } else {
+        return 8;
+    }
+}
+
 class Conv : public Generator<Conv> {
 public:
     // How much to unroll the reduction loop over channels. On some targets,
@@ -76,11 +91,7 @@ public:
 
         // Align the reduction loop of filter.
         const int vector_reduction = get_vector_reduction_factor(target, UInt(8));
-        // TODO: On Hexagon, we have to unroll the reduction a little to work around
-        // a compiler bug.
-        const int min_unroll_reduction =
-            vector_reduction * (get_target().has_feature(Target::HVX) ? 2 : 1);
-        const int unroll_reduction = std::max<int>(min_unroll_reduction, unroll_reduction_);
+        const int unroll_reduction = std::max<int>(vector_reduction, unroll_reduction_);
         const int accum_vector_size = natural_vector_size<int32_t>();
 
         // Set up the reduction loop and inputs.
@@ -171,14 +182,10 @@ public:
         // Figure out how big the tiles we should optimize for should be by getting
         // the total number of accumulators best for this target and figuring out
         // tile sizes.
-        const int accumulators = get_register_count(target) >= 32 ? 20 : 8;
+        const int accumulators = get_accumulator_count(target);
         std::vector<std::pair<int, int>> tile_sizes;
+        const int min_tile_c = 1;
         const int max_tile_c = 4;
-        // On Hexagon, we have to produce a full vector of output channels.
-        // TODO: We should fix the deinterleaving issue that occurs when this is 1.
-        // This is important so we can reduce our alignment requirement from 128
-        // channels to 32.
-        const int min_tile_c = get_target().has_feature(Target::HVX) ? 4 : 1;
         for (int tile_c = max_tile_c; tile_c >= min_tile_c; tile_c /= 2) {
             int tile_x = std::min(8, accumulators / tile_c);
             tile_sizes.emplace_back(tile_c, tile_x);
