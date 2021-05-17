@@ -809,82 +809,81 @@ bool CodeGen_PTX_Dev::supports_atomic_add(const Type &t) const {
 
 }  // namespace
 
-class IsMatrixMultiply : public IRVisitor {
-    using IRVisitor::visit;
-
-public:
-    bool matmul_found = false;
-
+struct MatrixMultiplyInfo {
     Expr A;
     Expr B;
     Expr C;
 
-    std::string k_var_name;
-
-    IsMatrixMultiply(std::string k_var)
-        : k_var_name{std::move(k_var)} {
+    bool is_valid() const {
+        return A.defined() && B.defined() && C.defined();
     }
+};
 
-    void visit(const Store *store) override {
-        //  matmul$1[t26] = (float32)matmul$1[t26]
-        //      + (float32((float16)A[((A.stride.1*t34) - t33) + matmul$1.s1.k$x])
-        //      * *float32((float16)B[(B.stride.1*matmul$1.s1.k$x) + t35]))
-        const Expr wild_f32x = Variable::make(Float(32), "*");
-        const Expr wild_f16x = Variable::make(Float(16), "*");
-        const Expr acc_pattern = wild_f32x + f32(wild_f16x) * f32(wild_f16x);
-        vector<Expr> matches;
-        if (expr_match(acc_pattern, store->value, matches)) {
-            // (float32)matmul$1[t26]
-            const Load *load_c = matches[0].as<Load>();
-            // (float16) A[((A.stride.1 * t34) - t33) + matmul$1.s1.k$x]
-            const Load *load_a = matches[1].as<Load>();
-            // (float16)B[(B.stride.1*matmul$1.s1.k$x) + t35]
-            const Load *load_b = matches[2].as<Load>();
+MatrixMultiplyInfo is_matrix_multiply(const For *loop) {
+    if ((loop->for_type != ForType::Serial) || !is_const_zero(loop->min) || !is_const(loop->extent)) {
+        if (const LetStmt *let = loop->body.as<LetStmt>()) {
+            if (const Store *store = let->body.as<Store>()) {
+                //  matmul$1[t26] = (float32)matmul$1[t26]
+                //      + (float32((float16)A[((A.stride.1*t34) - t33) + matmul$1.s1.k$x])
+                //      * *float32((float16)B[(B.stride.1*matmul$1.s1.k$x) + t35]))
+                const Expr wild_f32x = Variable::make(Float(32), "*");
+                const Expr wild_f16x = Variable::make(Float(16), "*");
+                const Expr acc_pattern = wild_f32x + f32(wild_f16x) * f32(wild_f16x);
+                vector<Expr> matches;
+                if (expr_match(acc_pattern, store->value, matches)) {
+                    // (float32)matmul$1[t26]
+                    const Load *load_c = matches[0].as<Load>();
+                    // (float16) A[((A.stride.1 * t34) - t33) + matmul$1.s1.k$x]
+                    const Load *load_a = matches[1].as<Load>();
+                    // (float16)B[(B.stride.1*matmul$1.s1.k$x) + t35]
+                    const Load *load_b = matches[2].as<Load>();
 
-            if (load_c && load_a && load_b) {
-                // Check if the load is loading from the same place where the store is storing
-                // i.e. if this is an update operation
-                if (load_c->name == store->name && equal(load_c->index, store->index)) {
-                    // Yes, this is an update operation, now let's check cast to see if it is a matmul that can be converted
-                    // to wmma intrinsic
-                    const Expr wild_i32x = Variable::make(Int(32), "*");
-                    // Check if the reduction domain is being used in both A and B to
-                    // validate the matrix multiply
-                    const Expr load_a_pattern = wild_i32x + wild_i32x;
-                    const Expr load_b_pattern = wild_i32x * wild_i32x + wild_i32x;
+                    if (load_c && load_a && load_b) {
+                        // Check if the load is loading from the same place where the store is storing
+                        // i.e. if this is an update operation
+                        if (load_c->name == store->name && equal(load_c->index, store->index)) {
+                            // Yes, this is an update operation, now let's check cast to see if it is a matmul that can be converted
+                            // to wmma intrinsic
+                            const Expr wild_i32x = Variable::make(Int(32), "*");
+                            // Check if the reduction domain is being used in both A and B to
+                            // validate the matrix multiply
+                            const Expr load_a_pattern = wild_i32x + wild_i32x;
+                            const Expr load_b_pattern = wild_i32x * wild_i32x + wild_i32x;
 
-                    vector<Expr> matches_a, matches_b;
-                    const bool match_a = expr_match(load_a_pattern, load_a->index, matches_a);
-                    const bool match_b = expr_match(load_b_pattern, load_b->index, matches_b);
-                    if (match_a && match_b) {
-                        // Check if the k_var_name is present in the expressions for load_a and load_b
-                        const Variable *load_a_var_1 = matches_a[0].as<Variable>();
-                        const Variable *load_a_var_2 = matches_a[1].as<Variable>();
-                        const Variable *load_b_var_1 = matches_b[0].as<Variable>();
-                        const Variable *load_b_var_2 = matches_b[1].as<Variable>();
+                            vector<Expr> matches_a, matches_b;
+                            const bool match_a = expr_match(load_a_pattern, load_a->index, matches_a);
+                            const bool match_b = expr_match(load_b_pattern, load_b->index, matches_b);
+                            if (match_a && match_b) {
+                                // Check if the k_var_name is present in the expressions for load_a and load_b
+                                const Variable *load_a_var_1 = matches_a[0].as<Variable>();
+                                const Variable *load_a_var_2 = matches_a[1].as<Variable>();
+                                const Variable *load_b_var_1 = matches_b[0].as<Variable>();
+                                const Variable *load_b_var_2 = matches_b[1].as<Variable>();
 
-                        // TODO: Can this checks be improved?
-                        const bool load_a_ok = (load_a_var_1 && load_a_var_1->name == k_var_name) || (load_a_var_2 && load_a_var_2->name == k_var_name);
-                        const bool load_b_ok = (load_b_var_1 && load_b_var_1->name == k_var_name) || (load_b_var_2 && load_b_var_2->name == k_var_name);
+                                const std::string k_var_name = loop->name;
 
-                        if (load_a_ok && load_b_ok) {
-                            // This matches A(k, y) * B(x, k) where both A and B
-                            matmul_found = true;
+                                // TODO: Can this checks be improved?
+                                const bool load_a_ok = (load_a_var_1 && load_a_var_1->name == k_var_name) || (load_a_var_2 && load_a_var_2->name == k_var_name);
+                                const bool load_b_ok = (load_b_var_1 && load_b_var_1->name == k_var_name) || (load_b_var_2 && load_b_var_2->name == k_var_name);
 
-                            A = load_a;
-                            B = load_b;
-                            C = load_c;
-
-                            return;
+                                if (load_a_ok && load_b_ok) {
+                                    // This matches A(k, y) * B(x, k) where both A and B
+                                    MatrixMultiplyInfo matMulInfo;
+                                    matMulInfo.A = load_a;
+                                    matMulInfo.B = load_b;
+                                    matMulInfo.C = load_c;
+                                    return matMulInfo;
+                                }
+                            }
                         }
                     }
                 }
             }
         }
-
-        IRVisitor::visit(store);
     }
-};
+
+    return {};
+}
 
 ExtractTensorCoreOperations::ExtractTensorCoreOperations() {
     thread_id_y = Call::make(Int(32), CodeGen_PTX_Dev::simt_intrinsic(".__thread_id_y"), std::vector<Expr>(), Call::Extern);
@@ -919,13 +918,11 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
                 wmma_K = 16;
 
                 // Now check the loop body to confirm this is a matrix multiply expression
-                IsMatrixMultiply is_matrix_multiply{loop->name};
-                loop->body.accept(&is_matrix_multiply);
-
-                if (is_matrix_multiply.matmul_found) {
-                    const Load *load_a = is_matrix_multiply.A.as<Load>();
-                    const Load *load_b = is_matrix_multiply.B.as<Load>();
-                    const Load *load_c = is_matrix_multiply.C.as<Load>();
+                MatrixMultiplyInfo matMulInfo = is_matrix_multiply(loop);
+                if (matMulInfo.is_valid()) {
+                    const Load *load_a = matMulInfo.A.as<Load>();
+                    const Load *load_b = matMulInfo.B.as<Load>();
+                    const Load *load_c = matMulInfo.C.as<Load>();
 
                     // Check the possible types for A, B and C
                     if (load_c->type == Float(32) && load_a->type == Float(16) && load_b->type == Float(16)) {
