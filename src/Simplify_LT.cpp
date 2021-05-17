@@ -298,28 +298,36 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               rewrite(ramp(z + x, y, lanes) < broadcast(x + w, lanes), ramp(z, y, lanes) < broadcast(w, lanes)) ||
               rewrite(ramp(x + z, y, lanes) < broadcast(w + x, lanes), ramp(z, y, lanes) < broadcast(w, lanes)) ||
               rewrite(ramp(z + x, y, lanes) < broadcast(w + x, lanes), ramp(z, y, lanes) < broadcast(w, lanes)) ||
+              rewrite(ramp(x - z, y, lanes) < broadcast(x - w, lanes), ramp(0 - z, y, lanes) < broadcast(0 - w, lanes), x != 0) ||
+              rewrite(ramp(z - x, y, lanes) < broadcast(w - x, lanes), ramp(z, y, lanes) < broadcast(w, lanes)) ||
 
               // z = 0
               rewrite(ramp(x, y, lanes) < broadcast(x + w, lanes), ramp(0, y, lanes) < broadcast(w, lanes)) ||
               rewrite(ramp(x, y, lanes) < broadcast(w + x, lanes), ramp(0, y, lanes) < broadcast(w, lanes)) ||
+              rewrite(ramp(x, y, lanes) < broadcast(x - w, lanes), ramp(0, y, lanes) < broadcast(0 - w, lanes), x != 0) ||
 
               // w = 0
               rewrite(ramp(x + z, y, lanes) < broadcast(x, lanes), ramp(z, y, lanes) < 0) ||
               rewrite(ramp(z + x, y, lanes) < broadcast(x, lanes), ramp(z, y, lanes) < 0) ||
+              rewrite(ramp(x - z, y, lanes) < broadcast(x, lanes), ramp(0 - z, y, lanes) < 0, x != 0) ||
 
               // With the args flipped
               rewrite(broadcast(x + w, lanes) < ramp(x + z, y, lanes), broadcast(w, lanes) < ramp(z, y, lanes)) ||
               rewrite(broadcast(x + w, lanes) < ramp(z + x, y, lanes), broadcast(w, lanes) < ramp(z, y, lanes)) ||
               rewrite(broadcast(w + x, lanes) < ramp(x + z, y, lanes), broadcast(w, lanes) < ramp(z, y, lanes)) ||
               rewrite(broadcast(w + x, lanes) < ramp(z + x, y, lanes), broadcast(w, lanes) < ramp(z, y, lanes)) ||
+              rewrite(broadcast(x - w, lanes) < ramp(x - z, y, lanes), broadcast(0 - w, lanes) < ramp(0 - z, y, lanes), x != 0) ||
+              rewrite(broadcast(w - x, lanes) < ramp(z - x, y, lanes), broadcast(w, lanes) < ramp(z, y, lanes)) ||
 
               // z = 0
               rewrite(broadcast(x + w, lanes) < ramp(x, y, lanes), broadcast(w, lanes) < ramp(0, y, lanes)) ||
               rewrite(broadcast(w + x, lanes) < ramp(x, y, lanes), broadcast(w, lanes) < ramp(0, y, lanes)) ||
+              rewrite(broadcast(x - w, lanes) < ramp(x, y, lanes), broadcast(0 - w, lanes) < ramp(0, y, lanes), x != 0) ||
 
               // w = 0
               rewrite(broadcast(x, lanes) < ramp(x + z, y, lanes), 0 < ramp(z, y, lanes)) ||
               rewrite(broadcast(x, lanes) < ramp(z + x, y, lanes), 0 < ramp(z, y, lanes)) ||
+              rewrite(broadcast(x, lanes) < ramp(x - z, y, lanes), 0 < ramp(0 - z, y, lanes), x != 0) ||
 
               false)) ||
             (no_overflow_int(ty) && EVAL_IN_LAMBDA

@@ -96,6 +96,14 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
              rewrite(x*y - y*z, (x - z)*y) ||
              rewrite(y*x - z*y, y*(x - z)) ||
              rewrite(y*x - y*z, y*(x - z)) ||
+             rewrite((u + x*y) - z*y, u + (x - z)*y) ||
+             rewrite((u + x*y) - y*z, u + (x - z)*y) ||
+             rewrite((u + y*x) - z*y, u + y*(x - z)) ||
+             rewrite((u + y*x) - y*z, u + y*(x - z)) ||
+             rewrite(x*y - (u + z*y), (x - z)*y - u) ||
+             rewrite(x*y - (u + y*z), (x - z)*y - u) ||
+             rewrite(y*x - (u + z*y), y*(x - z) - u) ||
+             rewrite(y*x - (u + y*z), y*(x - z) - u) ||
              rewrite((x + y) - (x + z), y - z) ||
              rewrite((x + y) - (z + x), y - z) ||
              rewrite((y + x) - (x + z), y - z) ||
@@ -166,10 +174,10 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite(max(x, y) - (y + x), 0 - min(y, x)) ||
 
                // Negate a clamped subtract
-               rewrite(0 - max(x - y, c0), min(y - x, fold(-c0))) ||
-               rewrite(0 - min(x - y, c0), max(y - x, fold(-c0))) ||
-               rewrite(0 - max(min(x - y, c0), c1), min(max(y - x, fold(-c0)), fold(-c1))) ||
-               rewrite(0 - min(max(x - y, c0), c1), max(min(y - x, fold(-c0)), fold(-c1))) ||
+               rewrite(z - max(x - y, c0), z + min(y - x, fold(-c0))) ||
+               rewrite(z - min(x - y, c0), z + max(y - x, fold(-c0))) ||
+               rewrite(z - max(min(x - y, c0), c1), z + min(max(y - x, fold(-c0)), fold(-c1))) ||
+               rewrite(z - min(max(x - y, c0), c1), z + max(min(y - x, fold(-c0)), fold(-c1))) ||
 
                rewrite(x*y - x, x*(y - 1)) ||
                rewrite(x*y - y, (x - 1)*y) ||
