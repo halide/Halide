@@ -48,19 +48,17 @@ enum class TailStrategy {
      * case to handle the if statement. */
     GuardWithIf,
 
-    /** Guard the inner loop with an if statement that prevents
-     * evaluation beyond the original extent, with a hint that the
-     * if statement should be implemented with predicated operations.
-     * Always legal. The if statement is treated like a boundary
-     * condition, and factored out into a loop epilogue if possible.
+    /** Guard the loads and stores in the loop with an if statement
+     * that prevents evaluation beyond the original extent. Always
+     * legal. The if statement is treated like a boundary condition,
+     * and factored out into a loop epilogue if possible.
      * Pros: no redundant re-evaluation; does not constrain input or
      * output sizes. Cons: increases code size due to separate
      * tail-case handling. */
     Predicate,
 
-    /** Guard the inner loop with an if statement that prevents
-     * evaluation beyond the original extent, with a hint that the
-     * if statement should be implemented with predicated operations.
+    /** Guard the loads in the loop with an if statement that
+     * prevents evaluation beyond the original extent. Always legal.
      * The if statement is treated like a boundary condition, and
      * factored out into a loop epilogue if possible.
      * Pros: no redundant re-evaluation; does not constrain output
@@ -68,11 +66,10 @@ enum class TailStrategy {
      * handling. */
     PredicateLoads,
 
-    /** Guard the inner loop with an if statement that prevents
-     * evaluation beyond the original extent, with a hint that the
-     * if statement should be implemented with predicated operations.
-     * Always legal. The if statement is treated like a boundary
-     * condition, and factored out into a loop epilogue if possible.
+    /** Guard the stores in the loop with an if statement that
+     * prevents evaluation beyond the original extent. Always legal.
+     * The if statement is treated like a boundary condition, and
+     * factored out into a loop epilogue if possible.
      * Pros: no redundant re-evaluation; does not constrain output
      * sizes. Cons: increases code size due to separate tail-case
      * handling. */
