@@ -234,6 +234,7 @@ Stmt Simplify::visit(const For *op) {
             return new_body;
         }
         in_unreachable = false;
+        return Evaluate::make(0);
     }
 
     if (bounds_tracked) {

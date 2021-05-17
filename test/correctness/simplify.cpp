@@ -2105,7 +2105,7 @@ void check_unreachable() {
     check(For::make("i", 0, 1, ForType::Serial, DeviceAPI::None, Evaluate::make(unreachable())),
           Evaluate::make(unreachable()));
     check(For::make("i", 0, x, ForType::Serial, DeviceAPI::None, Evaluate::make(unreachable())),
-          For::make("i", 0, x, ForType::Serial, DeviceAPI::None, Evaluate::make(unreachable())));
+          Evaluate::make(0));
 
     check(Block::make(not_no_op(x), Evaluate::make(unreachable())),
           Evaluate::make(unreachable()));
