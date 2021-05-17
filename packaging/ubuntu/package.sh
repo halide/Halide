@@ -34,8 +34,7 @@ export LD_LIBRARY_PATH="$halide_build_root/shared-Release/src"
 
 cpack -G DEB -C Release --config "$halide_source/packaging/ubuntu/config.cmake"
 
-# Lintian: some love it, some hate it---but everyone listens.
-# https://lintian.debian.org/tags.html
+# Lintian: https://lintian.debian.org/tags
 
 group "Run strict Lintian checks"
 lintian --no-tag-display-limit -i ./*.deb
