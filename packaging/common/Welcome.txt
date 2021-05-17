@@ -1,0 +1,4 @@
+Welcome to the Halide installer.
+
+This program will guide you through the installation of the Halide libraries,
+autoschedulers, development files, and documentation.

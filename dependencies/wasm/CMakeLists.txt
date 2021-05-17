@@ -43,14 +43,15 @@ if (WITH_WABT)
     # TODO: we want to require unique prefixes to include these files, to avoid ambiguity;
     # this means we have to prefix with "wabt-src/...", which is less bad than other alternatives,
     # but perhaps we could do better (esp. if wabt was smarter about what it exposed?)
-    add_library(wabt-obj INTERFACE)
-    target_sources(wabt-obj INTERFACE $<BUILD_INTERFACE:$<TARGET_OBJECTS:wabt>>)
-    target_include_directories(wabt-obj
+    add_library(Halide_wabt INTERFACE)
+    target_sources(Halide_wabt INTERFACE $<BUILD_INTERFACE:$<TARGET_OBJECTS:wabt>>)
+    target_include_directories(Halide_wabt
                                SYSTEM # Use -isystem instead of -I; this is a trick so that clang-tidy won't analyze these includes
                                INTERFACE
                                $<BUILD_INTERFACE:${wabt_SOURCE_DIR}>
                                $<BUILD_INTERFACE:${wabt_BINARY_DIR}>
                                $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/_deps>)
+    set_target_properties(Halide_wabt PROPERTIES EXPORT_NAME wabt)
 endif ()
 
 if (WITH_WASM_SHELL)

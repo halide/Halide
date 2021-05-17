@@ -232,6 +232,7 @@ public:
         if (use_ssse3) {
             for (int w = 2; w <= 4; w++) {
                 check("pmulhrsw", 4 * w, i16((i32(i16_1) * i32(i16_2) + 16384) >> 15));
+                check("pmulhrsw", 4 * w, i16_sat((i32(i16_1) * i32(i16_2) + 16384) >> 15));
                 check("pabsb", 8 * w, abs(i8_1));
                 check("pabsw", 4 * w, abs(i16_1));
                 check("pabsd", 2 * w, abs(i32_1));
@@ -282,6 +283,15 @@ public:
             check("phminposuw", 1, maximum(in_u8(RDom(0, 16) + 16 * x)));
             check("phminposuw", 1, minimum(in_i8(RDom(0, 16) + 16 * x)));
             check("phminposuw", 1, maximum(in_i8(RDom(0, 16) + 16 * x)));
+
+            for (int w = 2; w <= 8; w++) {
+                const char *check_pmaddubsw =
+                    (use_avx2 && w >= 4) ? "vpmaddubsw" : "pmaddubsw";
+
+                RDom r2(0, 2);
+                check(check_pmaddubsw, 4 * w, saturating_sum(i16(in_u8(2 * x + r2)) * in_i8(2 * x + r2 + 32)));
+                check(check_pmaddubsw, 4 * w, saturating_sum(i16(in_i8(2 * x + r2)) * in_u8(2 * x + r2 + 32)));
+            }
         }
 
         // SSE 4.1
@@ -294,8 +304,8 @@ public:
             check(check_pmaddwd, 2 * w, i32(i16_1) * 3 - i32(i16_2) * 4);
 
             // And also for dot-products
-            RDom r(0, 4);
-            check(check_pmaddwd, 2 * w, sum(i32(in_i16(x * 4 + r)) * in_i16(x * 4 + r + 32)));
+            RDom r4(0, 4);
+            check(check_pmaddwd, 2 * w, sum(i32(in_i16(x * 4 + r4)) * in_i16(x * 4 + r4 + 32)));
         }
 
         // llvm doesn't distinguish between signed and unsigned multiplies
@@ -422,6 +432,7 @@ public:
             check("vpmullw*ymm", 16, i16_1 * i16_2);
 
             check("vpmulhrsw*ymm", 16, i16((((i32(i16_1) * i32(i16_2)) + 16384)) / 32768));
+            check("vpmulhrsw*ymm", 16, i16_sat((((i32(i16_1) * i32(i16_2)) + 16384)) / 32768));
 
             check("vpcmp*b*ymm", 32, select(u8_1 == u8_2, u8(1), u8(2)));
             check("vpcmp*b*ymm", 32, select(u8_1 > u8_2, u8(1), u8(2)));
@@ -1108,6 +1119,14 @@ public:
                         for (int v : {2, 4}) {
                             check("udot", v, sum(u32(in_u8(f * x + r)) * in_u8(f * x + r + 32)));
                             check("sdot", v, sum(i32(in_i8(f * x + r)) * in_i8(f * x + r + 32)));
+                            if (f == 4) {
+                                // This doesn't generate for higher reduction factors because the
+                                // intermediate is 16-bit instead of 32-bit. It seems like it would
+                                // be slower to fix this (because the intermediate sum would be
+                                // 32-bit instead of 16-bit).
+                                check("udot", v, sum(u32(in_u8(f * x + r))));
+                                check("sdot", v, sum(i32(in_i8(f * x + r))));
+                            }
                         }
                     }
                 }
@@ -1267,6 +1286,7 @@ public:
             Expr shift_8 = (i8_2 % 8) - 4;
             Expr shift_16 = (i16_2 % 16) - 8;
             Expr shift_32 = (i32_2 % 32) - 16;
+            Expr shift_64 = (i64_2 % 64) - 32;
             Expr round_s8 = (i8(1) >> min(shift_8, 0)) / 2;
             Expr round_s16 = (i16(1) >> min(shift_16, 0)) / 2;
             Expr round_s32 = (i32(1) >> min(shift_32, 0)) / 2;
@@ -1340,6 +1360,22 @@ public:
             check(arm32 ? "vshl.i16" : "shl", 4 * w, u16_1 * 16);
             check(arm32 ? "vshl.i32" : "shl", 2 * w, u32_1 * 16);
             check(arm32 ? "vshl.i64" : "shl", 2 * w, u64_1 * 16);
+            check(arm32 ? "vshl.s8" : "sshl", 8 * w, i8_1 << shift_8);
+            check(arm32 ? "vshl.s8" : "sshl", 8 * w, i8_1 >> shift_8);
+            check(arm32 ? "vshl.s16" : "sshl", 4 * w, i16_1 << shift_16);
+            check(arm32 ? "vshl.s16" : "sshl", 4 * w, i16_1 >> shift_16);
+            check(arm32 ? "vshl.s32" : "sshl", 2 * w, i32_1 << shift_32);
+            check(arm32 ? "vshl.s32" : "sshl", 2 * w, i32_1 >> shift_32);
+            check(arm32 ? "vshl.s64" : "sshl", 2 * w, i64_1 << shift_64);
+            check(arm32 ? "vshl.s64" : "sshl", 2 * w, i64_1 >> shift_64);
+            check(arm32 ? "vshl.u8" : "ushl", 8 * w, u8_1 << shift_8);
+            check(arm32 ? "vshl.u8" : "ushl", 8 * w, u8_1 >> shift_8);
+            check(arm32 ? "vshl.u16" : "ushl", 4 * w, u16_1 << shift_16);
+            check(arm32 ? "vshl.u16" : "ushl", 4 * w, u16_1 >> shift_16);
+            check(arm32 ? "vshl.u32" : "ushl", 2 * w, u32_1 << shift_32);
+            check(arm32 ? "vshl.u32" : "ushl", 2 * w, u32_1 >> shift_32);
+            check(arm32 ? "vshl.u64" : "ushl", 2 * w, u64_1 << shift_64);
+            check(arm32 ? "vshl.u64" : "ushl", 2 * w, u64_1 >> shift_64);
 
             // VSHLL    I       -       Shift Left Long
             check(arm32 ? "vshll.s8" : "sshll", 8 * w, i16(i8_1) * 16);
@@ -1435,9 +1471,6 @@ public:
             check(arm32 ? "vsubw.u16" : "usubw", 4 * w, u32_1 - u16_1);
             check(arm32 ? "vsubw.s32" : "ssubw", 2 * w, i64_1 - i32_1);
             check(arm32 ? "vsubw.u32" : "usubw", 2 * w, u64_1 - u32_1);
-
-            // VST1     X       -       Store single-element structures
-            check(arm32 ? "vst1.8" : "st", 8 * w, i8_1);
         }
 
         // VST2 X       -       Store two-element structures

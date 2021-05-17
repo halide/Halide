@@ -268,13 +268,8 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
                     << "The extreme lanes of a bool vector should be scalar bools\n";
                 condition = simplify(v.first || v.second);
             } else {
-                // Take an OR over all lanes. Consider replacing this
-                // with a VectorReduce node once those are available
-                // and codegen to something useful on hexagon.
-                condition = Shuffle::make({predicate}, {0});
-                for (int i = 1; i < op->type.lanes(); i++) {
-                    condition = condition || Shuffle::make({predicate}, {i});
-                }
+                // Take an OR over all lanes.
+                condition = VectorReduce::make(VectorReduce::Or, predicate, 1);
                 condition = simplify(condition);
             }
 
@@ -1240,7 +1235,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             // Let LLVM handle concat or slices.
             return CodeGen_Posix::shuffle_vectors(a, b, indices);
         }
-        return vlut(concat_vectors({a, b}), indices);
+        return vdelta(concat_vectors({a, b}), indices);
     }
 
     if (stride == 1) {
@@ -1529,6 +1524,7 @@ bool generate_vdelta(const std::vector<int> &indices, bool reverse,
     return true;
 }
 
+// Try generating vdelta/vrdelta before falling back to vlut.
 Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
     llvm::Type *lut_ty = lut->getType();
     int lut_elements = get_vector_num_elements(lut_ty);
@@ -1552,8 +1548,8 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
             }
         }
         Value *result = vdelta(i8_lut, i8_indices);
-        result = builder->CreateBitCast(result, lut_ty);
-        return result;
+        llvm::Type *result_ty = get_vector_type(get_vector_element_type(lut_ty), indices.size());
+        return builder->CreateBitCast(result, result_ty);
     }
 
     // We can only use vdelta to produce a single native vector at a
@@ -1635,8 +1631,6 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
 
     // TODO: If the above fails, we might be able to use a vdelta and
     // vrdelta instruction together to implement the shuffle.
-    internal_error << "Unsupported vdelta operation.\n";
-
     // TODO: If the vdelta results are sparsely used, it might be
     // better to use vlut.
     return vlut(lut, indices);
@@ -2055,33 +2049,6 @@ void CodeGen_Hexagon::visit(const Call *op) {
         Value *ptr = codegen(op->args[0]);
         llvm::Function *fn = module->getFunction("halide.hexagon.scatter.release");
         value = builder->CreateCall(fn, {ptr});
-        return;
-    } else if (op->is_intrinsic(Call::mulhi_shr) && op->type.is_vector() &&
-               (op->type.bits() == 8 || op->type.bits() == 16)) {
-        internal_assert(op->args.size() == 3);
-        Type wide_ty = op->type.widen();
-
-        // Generate a widening multiply.
-        Expr p_wide = Call::make(
-            wide_ty, "halide.hexagon.mpy" + type_suffix(op->args[0], op->args[1]),
-            {op->args[0], op->args[1]}, Call::PureExtern);
-
-        // Keep the high half (truncate the low half). This also
-        // re-interleaves after mpy deinterleaved.
-        Expr p = Call::make(op->type,
-                            "halide.hexagon.trunclo" + type_suffix(p_wide, false),
-                            {p_wide}, Call::PureExtern);
-
-        // Apply the remaining shift.
-        const UIntImm *shift = op->args[2].as<UIntImm>();
-        internal_assert(shift != nullptr)
-            << "Third argument to mulhi_shr intrinsic must be an unsigned integer "
-               "immediate.\n";
-        if (shift->value != 0) {
-            p = p >> make_const(p.type(), shift->value);
-        }
-
-        value = codegen(p);
         return;
     } else if (op->is_intrinsic(Call::sorted_avg) && op->type.is_vector() &&
                ((op->type.is_uint() &&
