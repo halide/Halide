@@ -188,9 +188,6 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
                rewrite(x + ((c0 - x)/c1 + y)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
                rewrite(x + (y + (c0 - x)/c1)*c1, y * c1 - ((c0 - x) % c1) + c0, c1 > 0) ||
 
-               rewrite((x/c0) + (y*(x/c1)), (y*(x/c1))*fold((c1/c0) + 1), (c1 % c0) == 0) ||
-               rewrite((x/c0) + ((x/c1)*y), ((x/c1)*y)*fold((c1/c0) + 1), (c1 % c0) == 0) ||
-
                false)))) {
             return mutate(rewrite.result, bounds);
         }
