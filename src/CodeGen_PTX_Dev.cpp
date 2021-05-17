@@ -16,6 +16,7 @@
 #include "Simplify.h"
 #include "Solve.h"
 #include "Target.h"
+#include "UnrollLoops.h"
 
 #include <fstream>
 
@@ -820,60 +821,67 @@ struct MatrixMultiplyInfo {
 };
 
 MatrixMultiplyInfo is_matrix_multiply(const For *loop) {
-    if ((loop->for_type != ForType::Serial) || !is_const_zero(loop->min) || !is_const(loop->extent)) {
-        if (const LetStmt *let = loop->body.as<LetStmt>()) {
-            if (const Store *store = let->body.as<Store>()) {
-                //  matmul$1[t26] = (float32)matmul$1[t26]
-                //      + (float32((float16)A[((A.stride.1*t34) - t33) + matmul$1.s1.k$x])
-                //      * *float32((float16)B[(B.stride.1*matmul$1.s1.k$x) + t35]))
-                const Expr wild_f32x = Variable::make(Float(32), "*");
-                const Expr wild_f16x = Variable::make(Float(16), "*");
-                const Expr acc_pattern = wild_f32x + f32(wild_f16x) * f32(wild_f16x);
-                vector<Expr> matches;
-                if (expr_match(acc_pattern, store->value, matches)) {
-                    // (float32)matmul$1[t26]
-                    const Load *load_c = matches[0].as<Load>();
-                    // (float16) A[((A.stride.1 * t34) - t33) + matmul$1.s1.k$x]
-                    const Load *load_a = matches[1].as<Load>();
-                    // (float16)B[(B.stride.1*matmul$1.s1.k$x) + t35]
-                    const Load *load_b = matches[2].as<Load>();
+    if ((loop->for_type == ForType::Serial) && is_const_zero(loop->min) && is_const(loop->extent)) {
+        // The body of the loop can be a LetStmt or a Store
+        const LetStmt *let = loop->body.as<LetStmt>();
+        const Store *store = loop->body.as<Store>();
 
-                    if (load_c && load_a && load_b) {
-                        // Check if the load is loading from the same place where the store is storing
-                        // i.e. if this is an update operation
-                        if (load_c->name == store->name && equal(load_c->index, store->index)) {
-                            // Yes, this is an update operation, now let's check cast to see if it is a matmul that can be converted
-                            // to wmma intrinsic
-                            const Expr wild_i32x = Variable::make(Int(32), "*");
-                            // Check if the reduction domain is being used in both A and B to
-                            // validate the matrix multiply
-                            const Expr load_a_pattern = wild_i32x + wild_i32x;
-                            const Expr load_b_pattern = wild_i32x * wild_i32x + wild_i32x;
+        // If it is a let and the body is a store, use it
+        if (let && let->body.as<Store>()) {
+            store = let->body.as<Store>();
+        }
 
-                            vector<Expr> matches_a, matches_b;
-                            const bool match_a = expr_match(load_a_pattern, load_a->index, matches_a);
-                            const bool match_b = expr_match(load_b_pattern, load_b->index, matches_b);
-                            if (match_a && match_b) {
-                                // Check if the k_var_name is present in the expressions for load_a and load_b
-                                const Variable *load_a_var_1 = matches_a[0].as<Variable>();
-                                const Variable *load_a_var_2 = matches_a[1].as<Variable>();
-                                const Variable *load_b_var_1 = matches_b[0].as<Variable>();
-                                const Variable *load_b_var_2 = matches_b[1].as<Variable>();
+        if (store) {
+            //  matmul$1[t26] = (float32)matmul$1[t26]
+            //      + (float32((float16)A[((A.stride.1*t34) - t33) + matmul$1.s1.k$x])
+            //      * *float32((float16)B[(B.stride.1*matmul$1.s1.k$x) + t35]))
+            const Expr wild_f32x = Variable::make(Float(32), "*");
+            const Expr wild_f16x = Variable::make(Float(16), "*");
+            const Expr acc_pattern = wild_f32x + f32(wild_f16x) * f32(wild_f16x);
+            vector<Expr> matches;
+            if (expr_match(acc_pattern, store->value, matches)) {
+                // (float32)matmul$1[t26]
+                const Load *load_c = matches[0].as<Load>();
+                // (float16) A[((A.stride.1 * t34) - t33) + matmul$1.s1.k$x]
+                const Load *load_a = matches[1].as<Load>();
+                // (float16)B[(B.stride.1*matmul$1.s1.k$x) + t35]
+                const Load *load_b = matches[2].as<Load>();
 
-                                const std::string k_var_name = loop->name;
+                if (load_c && load_a && load_b) {
+                    // Check if the load is loading from the same place where the store is storing
+                    // i.e. if this is an update operation
+                    if (load_c->name == store->name && equal(load_c->index, store->index)) {
+                        // Yes, this is an update operation, now let's check cast to see if it is a matmul that can be converted
+                        // to wmma intrinsic
+                        const Expr wild_i32x = Variable::make(Int(32), "*");
+                        // Check if the reduction domain is being used in both A and B to
+                        // validate the matrix multiply
+                        const Expr load_a_pattern = wild_i32x + wild_i32x;
+                        const Expr load_b_pattern = wild_i32x * wild_i32x + wild_i32x;
 
-                                // TODO: Can this checks be improved?
-                                const bool load_a_ok = (load_a_var_1 && load_a_var_1->name == k_var_name) || (load_a_var_2 && load_a_var_2->name == k_var_name);
-                                const bool load_b_ok = (load_b_var_1 && load_b_var_1->name == k_var_name) || (load_b_var_2 && load_b_var_2->name == k_var_name);
+                        vector<Expr> matches_a, matches_b;
+                        const bool match_a = expr_match(load_a_pattern, load_a->index, matches_a);
+                        const bool match_b = expr_match(load_b_pattern, load_b->index, matches_b);
+                        if (match_a && match_b) {
+                            // Check if the k_var_name is present in the expressions for load_a and load_b
+                            const Variable *load_a_var_1 = matches_a[0].as<Variable>();
+                            const Variable *load_a_var_2 = matches_a[1].as<Variable>();
+                            const Variable *load_b_var_1 = matches_b[0].as<Variable>();
+                            const Variable *load_b_var_2 = matches_b[1].as<Variable>();
 
-                                if (load_a_ok && load_b_ok) {
-                                    // This matches A(k, y) * B(x, k) where both A and B
-                                    MatrixMultiplyInfo matMulInfo;
-                                    matMulInfo.A = load_a;
-                                    matMulInfo.B = load_b;
-                                    matMulInfo.C = load_c;
-                                    return matMulInfo;
-                                }
+                            const std::string k_var_name = loop->name;
+
+                            // TODO: Can this checks be improved?
+                            const bool load_a_ok = (load_a_var_1 && load_a_var_1->name == k_var_name) || (load_a_var_2 && load_a_var_2->name == k_var_name);
+                            const bool load_b_ok = (load_b_var_1 && load_b_var_1->name == k_var_name) || (load_b_var_2 && load_b_var_2->name == k_var_name);
+
+                            if (load_a_ok && load_b_ok) {
+                                // This matches A(k, y) * B(x, k) where both A and B
+                                MatrixMultiplyInfo matMulInfo;
+                                matMulInfo.A = load_a;
+                                matMulInfo.B = load_b;
+                                matMulInfo.C = load_c;
+                                return matMulInfo;
                             }
                         }
                     }
@@ -1020,7 +1028,7 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
 
                         // clang-format off
                         Stmt mma_for =
-                            For::make("tile_k", 0, num_tiles_k, loop->for_type, loop->device_api,
+                            For::make("tile_k", 0, num_tiles_k, ForType::Unrolled, loop->device_api,
                                 LetStmt::make("row_a", row_a_value,
                                     LetStmt::make("col_a", col_a_value,
                                         LetStmt::make("row_b", row_b_value,
@@ -1062,7 +1070,7 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
                                 )
                             );
                         // clang-format on
-                        Stmt tiled_for = wmma_op;
+                        Stmt tiled_for = unroll_loops(wmma_op);
 
 #endif  // INLINE_TILE_LOOP
 
@@ -1092,8 +1100,8 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
             //       stream multiprocessors load.
             //       Doing gives almost 5x speedup compared to a regular CUDA matrix multiply, but
             //       it can be improved even further
-            Expr max_threads_x = i32(2);
-            Expr max_threads_y = i32(2);
+            Expr max_threads_x = i32(4);
+            Expr max_threads_y = i32(4);
 
             Expr num_threads_x = min(max_threads_x, num_tiles_x) * warp_size;
             Expr num_threads_y = min(max_threads_y, num_tiles_y);
