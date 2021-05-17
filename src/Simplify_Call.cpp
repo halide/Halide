@@ -632,8 +632,12 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
 
             if (true_unreachable && false_unreachable) {
                 // just let the unreachable flag fall through.
-            } else {
-                in_unreachable = false;
+            }
+            in_unreachable = false;
+            if (true_unreachable) {
+                return false_value;
+            } else if (false_unreachable) {
+                return true_value;
             }
 
             if (cond_value.same_as(op->args[0]) &&

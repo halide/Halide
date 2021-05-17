@@ -58,13 +58,12 @@ Stmt Simplify::visit(const IfThenElse *op) {
 
     if (then_unreachable && else_unreachable) {
         return then_case;
-    } else if (else_unreachable) {
-        else_case = Evaluate::make(0);
-        in_unreachable = false;
+    }
+    in_unreachable = false;
+    if (else_unreachable) {
+        return then_case;
     } else if (then_unreachable) {
-        condition = mutate(!condition, nullptr);
-        then_case = else_case;
-        else_case = Evaluate::make(0);
+        return else_case;
     }
 
     if (is_no_op(else_case)) {
@@ -230,7 +229,7 @@ Stmt Simplify::visit(const For *op) {
         new_body = mutate(op->body);
     }
     if (in_unreachable) {
-        if (is_const_one(mutate(0 < new_extent, nullptr))) {
+        if (extent_bounds.min_defined && extent_bounds.min >= 1) {
             // If we know the loop executes once, the code that runs this loop is unreachable.
             return new_body;
         }
