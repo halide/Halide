@@ -275,7 +275,9 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
                */
 
                rewrite(max(x / c0, y / c0 + c1), max(x, y + fold(c1 * c0)) / c0, c0 > 0 && !overflows(c1 * c0)) ||
+               rewrite(max(x / c0, c1 - y / c0), max(x, fold(c1 * c0) - y) / c0, c0 > 0 && !overflows(c1 * c0)) ||
                rewrite(max(x / c0, y / c0 + c1), min(x, y + fold(c1 * c0)) / c0, c0 < 0 && !overflows(c1 * c0)) ||
+               rewrite(max(x / c0, c1 - y / c0), min(x, fold(c1 * c0) - y) / c0, c0 < 0 && !overflows(c1 * c0)) ||
 
                rewrite(max(((x + c0) / c1) * c1, x + c2), ((x + c0) / c1) * c1, c1 > 0 && c0 + 1 >= c1 + c2) ||
 
