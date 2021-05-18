@@ -79,10 +79,10 @@ bool contains_impure_call(const Expr &expr) {
     return is_not_pure.result;
 }
 
-// A mutator that performs a substitute operation only for a certain kind
-// of IR. Any expression type is supported, and Provide is the only statement
-// supported.
-class SubstituteIn : public IRMutator {
+// A mutator that performs a substitute operation only for the arguments of
+// `type` kind of IR. Any expression type is supported, and Provide is the
+// only statement supported.
+class SubstituteInArguments : public IRMutator {
     const string &name;
     const Expr &value;
     IRNodeType type;
@@ -113,7 +113,7 @@ class SubstituteIn : public IRMutator {
     }
 
 public:
-    SubstituteIn(const string &name, const Expr &value, IRNodeType type)
+    SubstituteInArguments(const string &name, const Expr &value, IRNodeType type)
         : name(name), value(value), type(type) {
     }
 
@@ -127,8 +127,8 @@ public:
     }
 };
 
-Stmt substitute_in(const string &name, const Expr &value, IRNodeType type, const Stmt &s) {
-    return SubstituteIn(name, value, type).mutate(s);
+Stmt substitute_in_arguments(const string &name, const Expr &value, IRNodeType type, const Stmt &s) {
+    return SubstituteInArguments(name, value, type).mutate(s);
 }
 
 // Build a loop nest about a provide node using a schedule
@@ -178,9 +178,9 @@ Stmt build_loop_nest(
             if (res.is_substitution()) {
                 stmt = substitute(res.name, res.value, stmt);
             } else if (res.is_call_substitution()) {
-                stmt = substitute_in(res.name, res.value, IRNodeType::Call, stmt);
+                stmt = substitute_in_arguments(res.name, res.value, IRNodeType::Call, stmt);
             } else if (res.is_provide_substitution()) {
-                stmt = substitute_in(res.name, res.value, IRNodeType::Provide, stmt);
+                stmt = substitute_in_arguments(res.name, res.value, IRNodeType::Provide, stmt);
             } else if (res.is_let()) {
                 stmt = LetStmt::make(res.name, res.value, stmt);
             } else {
