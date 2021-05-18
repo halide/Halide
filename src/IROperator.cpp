@@ -1045,19 +1045,19 @@ Expr unwrap_tags(const Expr &e) {
 Expr predicate(Expr e) {
     Type t = e.type();
     return Internal::Call::make(t, Internal::Call::predicate,
-                                {std::move(e)}, Internal::Call::PureIntrinsic);
+                                {std::move(e)}, Internal::Call::Intrinsic);
 }
 
 Expr predicate_loads(Expr e) {
     Type t = e.type();
     return Internal::Call::make(t, Internal::Call::predicate_loads,
-                                {std::move(e)}, Internal::Call::PureIntrinsic);
+                                {std::move(e)}, Internal::Call::Intrinsic);
 }
 
 Expr predicate_stores(Expr e) {
     Type t = e.type();
     return Internal::Call::make(t, Internal::Call::predicate_stores,
-                                {std::move(e)}, Internal::Call::PureIntrinsic);
+                                {std::move(e)}, Internal::Call::Intrinsic);
 }
 
 Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args) {
