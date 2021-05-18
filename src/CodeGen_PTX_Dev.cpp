@@ -946,6 +946,7 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
 
                     // Check the possible types for A, B and C
                     if (load_c->type == Float(32) && load_a->type == Float(16) && load_b->type == Float(16)) {
+                        // Variables to access the extents of the matrix C
                         global_M = Variable::make(Int(32), load_c->name + ".extent.1");
                         global_N = Variable::make(Int(32), load_c->name + ".extent.0");
                         global_K = num_tiles_k * wmma_K;
@@ -954,6 +955,7 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
                         Expr stride_b = global_N;
                         Expr stride_c = global_N;
 
+                        // Variables with the pointers to the beginning of each matrix
                         Expr var_a = Variable::make(Handle(), load_a->name);
                         Expr var_b = Variable::make(Handle(), load_b->name);
                         Expr var_c = Variable::make(Handle(), load_c->name);
@@ -963,39 +965,10 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
                         Expr warp_x = (block_id_x * block_dim_x + thread_id_x) / warp_size;
                         Expr warp_y = block_id_y * block_dim_y + thread_id_y;
 
-                        Expr offset_c_value = i32(global_N * wmma_M * warp_y + wmma_N * warp_x);
-
-#define INLINE_TILE_LOOP 0
-#if INLINE_TILE_LOOP
-                        Expr offset_c = offset_c_value;
-
-                        Expr frag_accumulator = Call::make(Float(32, 8), "wmma.m16n16k16.load.c.row", {var_c, offset_c, stride_c}, Call::Intrinsic);
-
-                        std::vector<Stmt> wmma_ops;
-                        for (int32_t tile_k = 0; tile_k < num_tiles_k; ++tile_k) {
-                            // Calculates the offsets to access tiles of matrices A, B and C
-                            // Note that the offsets are based on the global warp indices
-                            Expr offset_a = i64(global_K * wmma_M * warp_y + wmma_K * tile_k);
-                            Expr offset_b = i64(global_N * wmma_K * tile_k + wmma_N * warp_x);
-
-                            Expr frag_a = Call::make(Float(16, 16), "wmma.m16n16k16.load.a.row", {var_a, offset_a, stride_a}, Call::Intrinsic);
-                            Expr frag_b = Call::make(Float(16, 16), "wmma.m16n16k16.load.b.row", {var_b, offset_b, stride_b}, Call::Intrinsic);
-                            frag_accumulator = Call::make(Float(32, 8), "wmma.m16n16k16.mma.row.row", {frag_a, frag_b, frag_accumulator}, Call::Intrinsic);
-
-                            wmma_ops.push_back(Evaluate::make(frag_accumulator));
-                        }
-                        Expr store_frag = Call::make(Handle(), "wmma.m16n16k16.store.d.row", {var_c, offset_c, stride_c, frag_accumulator}, Call::Intrinsic);
-                        wmma_ops.push_back(Evaluate::make(store_frag));
-
-                        Stmt tiled_for = Block::make(wmma_ops);
-#else
-                        // WIP Code: Trying to create a Halide For loop to do the computation
-
                         // Creates a for to loop over the k tiles to perform the matrix multiply accumulate
                         Expr tile_k = Variable::make(Int(32), "tile_k");
 
-                        // Calculates the offsets to access tiles of matrices A, B and C
-                        // Note that the offsets are based on the global warp indices
+                        // Expressions with the values of row/col indices of each matrix
                         Expr col_a_value = i32(wmma_K * tile_k);
                         Expr row_a_value = i32(wmma_M * warp_y);
 
@@ -1005,6 +978,7 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
                         Expr col_c_value = i32(wmma_N * warp_x);
                         Expr row_c_value = i32(wmma_M * warp_y);
 
+                        // Variables to access the row/col index of each matrix
                         Expr col_a_var = Variable::make(Int(32), "col_a");
                         Expr row_a_var = Variable::make(Int(32), "row_a");
                         Expr col_b_var = Variable::make(Int(32), "col_b");
@@ -1012,33 +986,42 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
                         Expr col_c_var = Variable::make(Int(32), "col_c");
                         Expr row_c_var = Variable::make(Int(32), "row_c");
 
-                        Expr offset_a_value = i32(global_K * wmma_M * warp_y + wmma_K * tile_k);
-                        Expr offset_b_value = i32(global_N * wmma_K * tile_k + wmma_N * warp_x);
+                        // Calculates the offsets to access tiles of matrices A, B and C
+                        // Note that the offsets are based on the global warp indices
+                        Expr offset_a_value = i32(global_K * row_a_var + col_a_var);
+                        Expr offset_b_value = i32(global_N * row_b_var + col_b_var);
+                        Expr offset_c_value = i32(global_N * row_c_var + col_c_var);
 
+                        // Variables to access each offset
                         Expr offset_a_var = Variable::make(Int(32), "offset_a");
                         Expr offset_b_var = Variable::make(Int(32), "offset_b");
                         Expr offset_c_var = Variable::make(Int(32), "offset_c");
 
+                        // Calls to the wmma load instrinsics
                         Expr load_frag_a_call = Call::make(Float(16, 16), "wmma.m16n16k16.load.a.row", {var_a, offset_a_var, stride_a}, Call::Intrinsic);
                         Expr load_frag_b_call = Call::make(Float(16, 16), "wmma.m16n16k16.load.b.row", {var_b, offset_b_var, stride_b}, Call::Intrinsic);
                         Expr load_frag_c_call = Call::make(Float(32, 8), "wmma.m16n16k16.load.c.row", {var_c, offset_c_var, stride_c}, Call::Intrinsic);
 
+                        // Variables used to access each wmma fragment
                         Expr var_frag_a = Variable::make(Float(16, 16), "frag_a");
                         Expr var_frag_b = Variable::make(Float(16, 16), "frag_b");
                         Expr var_frag_c = Variable::make(Float(32, 8), "frag_c");
 
+                        // The fragment C needs to be passed to the wmma.mma intrinsic so we use this ramp to pass the whole vector around
                         Expr frac_c_index = Ramp::make(make_zero(Int(32)), 1, 8);
                         Expr load_frag_c = Load::make(Float(32, 8), "frag_c", frac_c_index, Buffer<>(), Parameter(), const_true(8), ModulusRemainder{});
 
                         Expr mma = Call::make(Float(32, 8), "wmma.m16n16k16.mma.row.row", {var_frag_a, var_frag_b, load_frag_c}, Call::Intrinsic);
                         Expr store_frag_c = Call::make(Handle(), "wmma.m16n16k16.store.d.row", {var_c, offset_c_var, stride_c, load_frag_c}, Call::Intrinsic);
 
+                        // Expression to check if the row/col are within the bounds of the input matrices
                         Expr bounds_checking_tile = row_a_var < global_M &&
                                                     col_a_var < global_K &&
                                                     row_b_var < global_K &&
                                                     col_b_var < global_N;
 
                         // clang-format off
+                        // Creates a Stmt with the loop over the k tiles
                         Stmt mma_for =
                             For::make("tile_k", 0, num_tiles_k, ForType::Unrolled, loop->device_api,
                                 LetStmt::make("row_a", row_a_value,
@@ -1061,30 +1044,36 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
                                    )
                                 )
                             );
+                        // clang-format on
 
+                        // Expression to check if the row/col index of the C var are within the bounds of the output matrix
                         Expr bounds_checking_store = col_c_var < global_N &&
                                                      row_c_var < global_M;
 
+                        // clang-format off
+                        // Creates a Stmt with the whole wmma operation. Note that the frag_c is loaded only once before the loop
+                        // and stored only once after the loop
                         Stmt wmma_op =
-                            LetStmt::make("offset_c", offset_c_value,
-                                Allocate::make("frag_c", Float(32, 8), MemoryType::Stack, {make_one(Int(32))}, const_true(8),
-                                    Block::make({
-                                        Store::make("frag_c", load_frag_c_call, frac_c_index, Parameter{}, const_true(8), ModulusRemainder{}),
-                                        mma_for,
-                                        LetStmt::make("row_c", row_c_value,
-                                            LetStmt::make("col_c", col_c_value,
+                            LetStmt::make("row_c", row_c_value,
+                                LetStmt::make("col_c", col_c_value,
+                                    LetStmt::make("offset_c", offset_c_value,
+                                        Allocate::make("frag_c", Float(32, 8), MemoryType::Stack, {make_one(Int(32))}, const_true(8),
+                                            Block::make({
+                                                Store::make("frag_c", load_frag_c_call, frac_c_index, Parameter{}, const_true(8), ModulusRemainder{}),
+                                                mma_for,
                                                 IfThenElse::make(bounds_checking_store,
                                                     Evaluate::make(store_frag_c)
                                                 )
-                                            )
+                                            })
                                         )
-                                    })
+                                    )
                                 )
                             );
                         // clang-format on
-                        Stmt tiled_for = unroll_loops(wmma_op);
 
-#endif  // INLINE_TILE_LOOP
+                        // Unrolls the wmma loop for better performance
+                        // If printing wmma_op, it is better to do it before the unroll_loops pass
+                        Stmt tiled_for = unroll_loops(wmma_op);
 
                         tensorcore_op_found = true;
 
@@ -1099,21 +1088,18 @@ Stmt ExtractTensorCoreOperations::visit(const For *loop) {
 
     if (tensorcore_op_found) {
         // We have a tensorcore loop, now calculate the correct number of blocks/threads
-        // required to perform the matrix multiplies
+        // required to perform the tiled matrix multiplies
 
-        const bool is_gpu_var = CodeGen_GPU_Dev::is_gpu_var(loop->name);
-        if (is_gpu_var) {
+        if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
             Expr num_tiles_x = global_N / wmma_N;
             Expr num_tiles_y = global_M / wmma_M;
 
-            // TODO: This will effectively launch 1 block for each 16x16 tile of the input matrix.
-            //       This works but its probably not very efficient.
-            //       Need to find a way to calculate the maximum possible block size to maximize
-            //       stream multiprocessors load.
-            //       Doing gives almost 5x speedup compared to a regular CUDA matrix multiply, but
-            //       it can be improved even further
-            Expr max_threads_x = i32(4);
-            Expr max_threads_y = i32(4);
+            // This will effectively launch 1 block of 32 threads for each 16x16 tile of the input matrix.
+            // Increasing this number brings little to no performance benefits as the currently implementation
+            // doesn't use shared memory so each iteration needs to load tiles from global memory. These numbers
+            // should probably be changed when shared memory is used.
+            Expr max_threads_x = i32(1);
+            Expr max_threads_y = i32(1);
 
             Expr num_threads_x = min(max_threads_x, num_tiles_x) * warp_size;
             Expr num_threads_y = min(max_threads_y, num_tiles_y);
