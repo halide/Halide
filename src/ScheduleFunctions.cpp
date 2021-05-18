@@ -79,6 +79,9 @@ bool contains_impure_call(const Expr &expr) {
     return is_not_pure.result;
 }
 
+// A mutator that performs a substitute operation only for a certain kind
+// of IR. Any expression type is supported, and Provide is the only statement
+// supported.
 class SubstituteIn : public IRMutator {
     const string &name;
     const Expr &value;
