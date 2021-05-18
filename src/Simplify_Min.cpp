@@ -280,9 +280,7 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                */
 
                rewrite(min(x / c0, y / c0 + c1), min(x, y + fold(c1 * c0)) / c0, c0 > 0 && !overflows(c1 * c0)) ||
-               rewrite(min(x / c0, c1 - y / c0), min(x, fold(c1 * c0) - y) / c0, c0 > 0 && !overflows(c1 * c0)) ||
                rewrite(min(x / c0, y / c0 + c1), max(x, y + fold(c1 * c0)) / c0, c0 < 0 && !overflows(c1 * c0)) ||
-               rewrite(min(x / c0, c1 - y / c0), max(x, fold(c1 * c0) - y) / c0, c0 < 0 && !overflows(c1 * c0)) ||
 
                rewrite(min(((x + c0) / c1) * c1, x + c2), x + c2, c1 > 0 && c0 + 1 >= c1 + c2) ||
 
@@ -291,6 +289,13 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                // Required for nested GuardWithIf tilings
                rewrite(min((min(((y + c0)/c1), x)*c1), y + c2), min(x * c1, y + c2), c1 > 0 && c1 + c2 <= c0 + 1) ||
                rewrite(min((min(((y + c0)/c1), x)*c1) + c2, y), min(x * c1 + c2, y), c1 > 0 && c1 <= c0 + c2 + 1) ||
+
+               rewrite(min((x + c0)/c1, ((x + c2)/c3)*c4), (x + c0)/c1, c0 + c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(min((x + c0)/c1, ((x + c2)/c3)*c4), ((x + c2)/c3)*c4, c2 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(min(x/c1, ((x + c2)/c3)*c4), x/c1, c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(min(x/c1, ((x + c2)/c3)*c4), ((x + c2)/c3)*c4, c2 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(min((x + c0)/c1, (x/c3)*c4), (x + c0)/c1, c0 + c3 - c1 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(min((x + c0)/c1, (x/c3)*c4), (x/c3)*c4, 0 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
 
                false )))) {
 

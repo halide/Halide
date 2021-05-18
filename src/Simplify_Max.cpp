@@ -275,11 +275,16 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
                */
 
                rewrite(max(x / c0, y / c0 + c1), max(x, y + fold(c1 * c0)) / c0, c0 > 0 && !overflows(c1 * c0)) ||
-               rewrite(max(x / c0, c1 - y / c0), max(x, fold(c1 * c0) - y) / c0, c0 > 0 && !overflows(c1 * c0)) ||
                rewrite(max(x / c0, y / c0 + c1), min(x, y + fold(c1 * c0)) / c0, c0 < 0 && !overflows(c1 * c0)) ||
-               rewrite(max(x / c0, c1 - y / c0), min(x, fold(c1 * c0) - y) / c0, c0 < 0 && !overflows(c1 * c0)) ||
 
                rewrite(max(((x + c0) / c1) * c1, x + c2), ((x + c0) / c1) * c1, c1 > 0 && c0 + 1 >= c1 + c2) ||
+
+               rewrite(max((x + c0)/c1, ((x + c2)/c3)*c4), (x + c0)/c1, c2 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(max((x + c0)/c1, ((x + c2)/c3)*c4), ((x + c2)/c3)*c4, c0 + c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(max(x/c1, ((x + c2)/c3)*c4), x/c1, c2 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(max(x/c1, ((x + c2)/c3)*c4), ((x + c2)/c3)*c4, c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(max((x + c0)/c1, (x/c3)*c4), (x + c0)/c1, 0 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(max((x + c0)/c1, (x/c3)*c4), (x/c3)*c4, c0 + c3 - c1 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
 
                rewrite(max(c0 - x, c1), c0 - min(x, fold(c0 - c1))))))) {
 

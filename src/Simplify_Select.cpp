@@ -76,9 +76,6 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x, z * y, 0 - w * y), select(x, z, 0 - w) * y) ||
 
              rewrite(select(x, z / y, w / y), select(x, z, w) / y) ||
-             rewrite(select(x, 0 - z / y, w / y), select(x, 0 - z, w) / y) ||
-             rewrite(select(x, z / y, 0 - w / y), select(x, z, 0 - w) / y) ||
-
              rewrite(select(x, z % y, w % y), select(x, z, w) % y) ||
 
              rewrite(select(x, (y + z) + u, y + w), y + select(x, z + u, w)) ||
@@ -184,8 +181,8 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x, y + z, y), y + select(x, z, 0)) ||
              rewrite(select(x, y, y + z), y + select(x, 0, z)) ||
 
-             rewrite(select(x, y - z, y), y + select(x, -z, 0), y != 0) ||
-             rewrite(select(x, y, y - z), y + select(x, 0, -z), y != 0) ||
+             rewrite(select(x, y - z, y), y + select(x, 0 - z, 0), !is_const(y)) ||
+             rewrite(select(x, y, y - z), y + select(x, 0, 0 - z), !is_const(y)) ||
 
              (no_overflow_int(op->type) &&
               (rewrite(select(x, y * c0, c1), select(x, y, fold(c1 / c0)) * c0, c1 % c0 == 0) ||
