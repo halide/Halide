@@ -719,17 +719,18 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     }
     debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
 
-#define DEBUG_PTX 0
-#if DEBUG_PTX
-    // Adding this in the PTX allows the use of Nsight to debug the PTX
-    // TODO: Could this an official Halide feature?
-    std::string ptx_src(outstr.begin(), outstr.end());
-    ptx_src = replace_all(ptx_src, ".target sm_70", ".target sm_70, debug");
-    ptx_src.append("\n.section  .debug_abbrev\n{\n\n}\n\n");
-    vector<char> buffer(ptx_src.begin(), ptx_src.end());
-#else
-    std::vector<char> buffer(outstr.begin(), outstr.end());
-#endif
+    std::vector<char> buffer;
+
+    if (target.has_feature(Target::Debug)) {
+        // This allows the PTX to be debugged with nsight
+        debug(2) << "Adding debug information to the generated PTX";
+        std::string ptx_src(outstr.begin(), outstr.end());
+        ptx_src = replace_all(ptx_src, ".target sm_70", ".target sm_70, debug");
+        ptx_src.append("\n.section  .debug_abbrev\n{\n\n}\n\n");
+        buffer = std::vector<char>(ptx_src.begin(), ptx_src.end());
+    } else {
+        buffer = std::vector<char>(outstr.begin(), outstr.end());
+    }
 
     debug(1) << "PTX kernel:\n"
              << buffer.data() << "\n";
