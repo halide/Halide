@@ -118,7 +118,7 @@ bool is_no_op(const Stmt &s) {
         return true;
     }
     const Evaluate *e = s.as<Evaluate>();
-    return e && is_const(e->value);
+    return e && is_pure(e->value);
 }
 
 namespace {
@@ -2599,6 +2599,14 @@ Expr undef(Type t) {
                                 std::vector<Expr>(),
                                 Internal::Call::PureIntrinsic);
 }
+
+namespace Internal {
+Expr unreachable(Type t) {
+    return Internal::Call::make(t, Internal::Call::unreachable,
+                                std::vector<Expr>(),
+                                Internal::Call::Intrinsic);
+}
+}  // namespace Internal
 
 namespace {
 Expr make_scatter_gather(const std::vector<Expr> &args) {

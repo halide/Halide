@@ -646,6 +646,7 @@ const char *const intrinsic_op_names[] = {
     "strict_float",
     "stringify",
     "undef",
+    "unreachable",
     "unsafe_promise_clamped",
     "widening_add",
     "widening_mul",

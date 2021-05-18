@@ -248,7 +248,10 @@ bool test_expression(Expr test, int samples) {
 
     for (int i = 0; i < samples; i++) {
         for (std::map<string, Expr>::iterator v = vars.begin(); v != vars.end(); v++) {
-            v->second = random_leaf(test.type().element_of(), true);
+            // Don't let the random leaf depend on v itself.
+            do {
+                v->second = random_leaf(test.type().element_of(), true);
+            } while (expr_uses_var(v->second, v->first));
         }
 
         if (!test_simplification(test, simplified, test.type(), vars)) {
