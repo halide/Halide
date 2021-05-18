@@ -166,6 +166,21 @@ int SeedTracker::seed_for_name(const std::string &name) {
     return seed_here;
 }
 
+/*static*/ void TfLiteModelRunner::ErrorReporter(void *user_data, const char *format, va_list args) {
+    TfLiteModelRunner *self = (TfLiteModelRunner *)user_data;
+    if (self->verbose_output_) {
+        // 1k of error message ought to be enough for anybody...
+        char buffer[1024];
+
+        va_list args_copy;
+        va_copy(args_copy, args);
+        vsnprintf(buffer, sizeof(buffer), format, args_copy);
+        va_end(args_copy);
+
+        *self->verbose_output_ << format;
+    }
+}
+
 TfLiteModelRunner::TfLiteModelRunner(const std::vector<char> &buffer,
                                      int threads,
                                      SeedTracker &seed_tracker,
@@ -178,6 +193,7 @@ TfLiteModelRunner::TfLiteModelRunner(const std::vector<char> &buffer,
     tf_options_ = TfLiteInterpreterOptionsCreate();
     HCHECK(tf_options_);
     TfLiteInterpreterOptionsSetNumThreads(tf_options_, threads);
+    TfLiteInterpreterOptionsSetErrorReporter(tf_options_, ErrorReporter, (void *)this);
     if (delegate) {
         TfLiteInterpreterOptionsAddDelegate(tf_options_, delegate);
     }
