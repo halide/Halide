@@ -1346,6 +1346,21 @@ inline Expr undef() {
     return undef(type_of<T>());
 }
 
+namespace Internal {
+
+/** Return an expression that should never be evaluated. Expressions
+ * that depend on unreachabale values are also unreachable, and
+ * statements that execute unreachable expressions are also considered
+ * unreachable. */
+Expr unreachable(Type t = Int(32));
+
+template<typename T>
+inline Expr unreachable() {
+    return unreachable(type_of<T>());
+}
+
+}  // namespace Internal
+
 /** Control the values used in the memoization cache key for memoize.
  * Normally parameters and other external dependencies are
  * automatically inferred and added to the cache key. The memoize_tag

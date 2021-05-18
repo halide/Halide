@@ -50,6 +50,8 @@ public:
     std::vector<HalideBuffer<const void>> copy_outputs();
     ~TfLiteModelRunner();
 
+    static void ErrorReporter(void *user_data, const char *format, va_list args);
+
     // Movable but not copyable.
     TfLiteModelRunner(const TfLiteModelRunner &) = delete;
     TfLiteModelRunner &operator=(const TfLiteModelRunner &) = delete;
