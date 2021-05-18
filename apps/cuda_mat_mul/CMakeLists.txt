@@ -29,15 +29,19 @@ add_executable(mat_mul.generator mat_mul_generator.cpp)
 target_link_libraries(mat_mul.generator PRIVATE Halide::Generator)
 
 # Filters
-add_halide_library(mat_mul FROM mat_mul.generator
+add_halide_library(mat_mul_50 FROM mat_mul.generator
                    TARGETS host
                    FEATURES cuda cuda_capability_50
-                   PARAMS size=1024)
+                   PARAMS size=2048)
+add_halide_library(mat_mul_70 FROM mat_mul.generator
+                   TARGETS host
+                   FEATURES cuda cuda_capability_70
+                   PARAMS size=2048)
 
 # Main executable
 add_executable(runner runner.cpp)
 target_include_directories(runner PRIVATE ${CUDA_INCLUDE_DIRS})
-target_link_libraries(runner PRIVATE Halide::Tools mat_mul ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES})
+target_link_libraries(runner PRIVATE Halide::Halide Halide::Tools mat_mul_50 mat_mul_70 ${CUDA_LIBRARIES} ${CUDA_CUBLAS_LIBRARIES})
 
 # Test that the app actually works!
 add_test(NAME mat_mul COMMAND runner)

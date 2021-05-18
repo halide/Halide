@@ -1,7 +1,9 @@
+#include "Halide.h"
 #include "HalideBuffer.h"
 #include "HalideRuntimeCuda.h"
 #include "halide_benchmark.h"
-#include "mat_mul.h"
+#include "mat_mul_50.h"
+#include "mat_mul_70.h"
 #include <cstdio>
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
@@ -17,31 +19,32 @@ int main(int argc, char **argv) {
     int major, minor;
     int err = interface->compute_capability(nullptr, &major, &minor);
     assert(err == 0);
-    int ver = major * 10 + minor;
-    if (ver < 50) {
+    int cuda_version = major * 10 + minor;
+    if (cuda_version < 50) {
         printf("[SKIP] This system supports only Cuda compute capability %d.%d, but compute capability 5.0+ is required.\n", major, minor);
         return 0;
     }
 
-    int size = 1024;
+    int size = 2048;
     if (argc > 1) {
         size = atoi(argv[1]);
     }
 
     // Check correctness using small-integer matrices
     if (1) {
-        Buffer<float> A(size, size), B(size, size), C(size, size);
-        A.for_each_value([](float &v) { v = (rand() & 3) - 1; });
-        B.for_each_value([](float &v) { v = (rand() & 3) - 1; });
+        Buffer<Halide::float16_t> A(size, size), B(size, size);
+        Buffer<float> C(size, size);
+        A.for_each_value([](Halide::float16_t &v) { v = static_cast<Halide::float16_t>((rand() & 3) - 1); });
+        B.for_each_value([](Halide::float16_t &v) { v = static_cast<Halide::float16_t>((rand() & 3) - 1); });
         A.set_host_dirty();
         B.set_host_dirty();
-        mat_mul(A, B, C);
+        mat_mul_50(A, B, C);
         C.copy_to_host();
         for (int y = 0; y < size; y++) {
             for (int x = 0; x < size; x++) {
                 float correct = 0.f;
                 for (int k = 0; k < size; k++) {
-                    correct += A(x, k) * B(k, y);
+                    correct += static_cast<float>(A(x, k)) * static_cast<float>(B(k, y));
                 }
                 float actual = C(x, y);
                 if (correct != actual) {
@@ -52,14 +55,28 @@ int main(int argc, char **argv) {
         }
     }
 
+    const float gflops = 2.0f * size * size * size / 1e9f;
+
     // Benchmark it
     {
-        Buffer<float> A(size, size), B(size, size), C(size, size);
+        Buffer<Halide::float16_t> A(size, size), B(size, size);
+        Buffer<float> C(size, size);
         double t = Halide::Tools::benchmark(5, 5, [&]() {
-            mat_mul(A, B, C);
+            mat_mul_50(A, B, C);
             C.device_sync();
         });
-        printf("Halide time: %f\n", t);
+        printf("Halide time (CUDA 5.0): %f (ms) GFLOPS: %f \n", t * 1000.0, gflops / t);
+    }
+
+    if (cuda_version >= 70)
+    {
+        Buffer<Halide::float16_t> A(size, size), B(size, size);
+        Buffer<float> C(size, size);
+        double t = Halide::Tools::benchmark(5, 5, [&]() {
+            mat_mul_70(A, B, C);
+            C.device_sync();
+        });
+        printf("Halide time (CUDA 7.0): %f (ms) GFLOPS: %f \n", t * 1000.0, gflops / t);
     }
 
     // Benchmark cublas
