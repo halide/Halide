@@ -764,7 +764,7 @@ private:
             Expr dense_ramp_base = strided_ramp_base(load->index, 1);
             if (dense_ramp_base.defined() && is_const_one(load->predicate) && (op->type.is_int_or_uint()) && ((op->type.bits() == 16) || (op->type.bits() == 32)) && (load->type.is_int_or_uint()) && (2 * load->type.bits() == op->type.bits())) {
                 // The third argument is just to pass the type of load.
-                return Call::make(op->type, "halide_xtensa_widening_load", {load->name, dense_ramp_base, make_one(load->type)}, Call::PureExtern);
+                return Call::make(op->type, "halide_xtensa_widening_load", {load->name, dense_ramp_base, make_one(load->type.element_of())}, Call::PureExtern);
             }
         }
 
@@ -788,11 +788,11 @@ private:
             {"halide_xtensa_sat_narrow_with_shift_i16", i16_sat(rounding_shift_right(wild_i32x, wild_u32))},
             {"halide_xtensa_sat_narrow_with_shift_i32", i32_sat(rounding_shift_right(wild_i64x, wild_u64))},
 
-            {"halide_xtensa_sat_left_shift_i16",i16_sat(widening_shift_left(wild_i16x, wild_i16x))},
-            {"halide_xtensa_sat_left_shift_i16",i16_sat(widening_shift_left(wild_i16x, wild_u16x))},
+            {"halide_xtensa_sat_left_shift_i16", i16_sat(widening_shift_left(wild_i16x, wild_i16x))},
+            {"halide_xtensa_sat_left_shift_i16", i16_sat(widening_shift_left(wild_i16x, wild_u16x))},
 
-            {"halide_xtensa_sat_left_shift_i32",i32_sat(widening_shift_left(wild_i32x, wild_i32x))},
-            {"halide_xtensa_sat_left_shift_i32",i32_sat(widening_shift_left(wild_i32x, wild_u32x))},
+            {"halide_xtensa_sat_left_shift_i32", i32_sat(widening_shift_left(wild_i32x, wild_i32x))},
+            {"halide_xtensa_sat_left_shift_i32", i32_sat(widening_shift_left(wild_i32x, wild_u32x))},
 
             // Looks like there is no such instruction.
             // {"halide_xtensa_sat_narrow_with_shift_u16", u16_sat(rounding_shift_right(wild_i32x, wild_u32))},
@@ -890,11 +890,11 @@ private:
                 if (const Load *load = cast->value.as<Load>()) {
                     Expr dense_ramp_base = strided_ramp_base(load->index, 1);
 
-                    if (dense_ramp_base.defined() && is_const_one(load->predicate)) {
+                    if (dense_ramp_base.defined() && is_const_one(load->predicate) && (cast->type.is_int_or_uint()) && ((cast->type.bits() == 16) || (cast->type.bits() == 32)) && (load->type.is_int_or_uint()) && (2 * load->type.bits() == cast->type.bits())) {
                         // arg1 is an index and arg2 is a native vector size.
                         dense_ramp_base = dense_ramp_base + op->args[1] * op->args[2];
                         // The third argument is just to pass the type of load.
-                        return Call::make(op->type, "halide_xtensa_widening_load", {load->name, dense_ramp_base, make_one(load->type)}, Call::PureExtern);
+                        return Call::make(op->type, "halide_xtensa_widening_load", {load->name, dense_ramp_base, make_one(load->type.element_of())}, Call::PureExtern);
                     }
                 }
             }
@@ -1624,7 +1624,7 @@ private:
                 std::vector<Expr> sliced_loads;
 
                 for (int ix = 0; ix < split_to; ix++) {
-                    Expr sliced_load = Call::make(op->type.with_lanes(2 * native_lanes), op->name, {op->args[0], op->args[1] + 2 * native_lanes * ix, make_one(op->args[2].type().with_lanes(2 * native_lanes))}, Call::PureExtern);
+                    Expr sliced_load = Call::make(op->type.with_lanes(2 * native_lanes), op->name, {op->args[0], op->args[1] + 2 * native_lanes * ix, op->args[2]}, Call::PureExtern);
                     sliced_loads.push_back(sliced_load);
                 }
                 return Call::make(op->type,
@@ -1783,6 +1783,12 @@ private:
     using IRGraphMutator::visit;
 
     Expr visit(const Call *op) override {
+        if (op->name == "halide_xtensa_concat_from_native") {
+            if (op->args.size() == 1) {
+                return mutate(op->args[0]);
+            }
+        }
+
         if (op->name == "halide_xtensa_slice_to_native") {
             Expr first_arg = mutate(op->args[0]);
             const Call *maybe_concat_call = first_arg.as<Call>();
@@ -1934,7 +1940,10 @@ Stmt match_xtensa_patterns(Stmt s) {
     // Split to the native vectors sizes.
     s = substitute_in_all_lets(s);
     s = SplitVectorsToNativeSizes().mutate(s);
-    s = SimplifySliceConcat().mutate(s);
+    for (int ix = 0; ix < 3; ix++) {
+        s = SimplifySliceConcat().mutate(s);
+    }
+
     // Extra run to replace cast + concat, etc.
     for (int ix = 0; ix < 10; ix++) {
         s = MatchXtensaPatterns().mutate(s);

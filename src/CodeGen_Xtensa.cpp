@@ -482,6 +482,16 @@ HALIDE_ALWAYS_INLINE uint1x32_t halide_xtensa_pad_to_native<uint1x16_t, uint1x32
     return IVP_JOINBN_2(a, a);
 }
 
+template <>
+HALIDE_ALWAYS_INLINE uint1x64_t halide_xtensa_pad_to_native<uint1x32_t, uint1x64_t, bool, 32, 64>(const uint1x32_t& a, int lanes) {
+    return IVP_JOINBN(a, a);
+}
+
+template <>
+HALIDE_ALWAYS_INLINE uint1x64_t halide_xtensa_pad_to_native<uint1x16_t, uint1x64_t, bool, 16, 64>(const uint1x16_t& a, int lanes) {
+    return IVP_JOINBN(IVP_JOINBN_2(a, a), IVP_JOINBN_2(a, a));
+}
+
 template<>
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int8x4_t load<int8x4_t, int8_t, 4>(const void *base, int32_t offset) {
     return *((const int8x4_t*)((const int8_t*)base + offset));
@@ -585,7 +595,7 @@ template <typename ResultType, typename LoadType>
 HALIDE_ALWAYS_INLINE ResultType widening_load(const void *base, int32_t offset) = delete;
 
 template<>
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x32_t widening_load<int16x32_t, uint8x64_t>(const void *base, int32_t offset) {
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x32_t widening_load<int16x32_t, uint8_t>(const void *base, int32_t offset) {
     xb_vecNx16 r;
     const xb_vec2Nx8* __restrict ptr8 = (const xb_vec2Nx8*)((const uint8_t*)base + offset);
     valign align = IVP_LA_PP(ptr8);
@@ -594,7 +604,7 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x32_t widening_load<int16x32_t, ui
 }
 
 template<>
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x64_t widening_load<int16x64_t, uint8x64_t>(const void *base, int32_t offset) {
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x64_t widening_load<int16x64_t, uint8_t>(const void *base, int32_t offset) {
     xb_vecNx16 r1, r2;
     const xb_vec2Nx8* __restrict ptr8 = (const xb_vec2Nx8*)((const uint8_t*)base + offset);
     valign align = IVP_LA_PP(ptr8);
@@ -606,7 +616,7 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x64_t widening_load<int16x64_t, ui
 }
 
 template<>
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint16x64_t widening_load<uint16x64_t, uint8x64_t>(const void *base, int32_t offset) {
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint16x64_t widening_load<uint16x64_t, uint8_t>(const void *base, int32_t offset) {
     xb_vecNx16 r1, r2;
     const xb_vec2Nx8* __restrict ptr8 = (const xb_vec2Nx8*)((const uint8_t*)base + offset);
     valign align = IVP_LA_PP(ptr8);
@@ -618,7 +628,7 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint16x64_t widening_load<uint16x64_t, 
 }
 
 template<>
-HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x64_t widening_load<int32x64_t, uint16x64_t>(const void *base, int32_t offset) {
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x64_t widening_load<int32x64_t, uint16_t>(const void *base, int32_t offset) {
     int32x16_t r1, r2, r3, r4;
     const xb_vec2Nx8* __restrict ptr8 = (const xb_vec2Nx8*)((const uint16_t*)base + offset);
     valign align = IVP_LA_PP(ptr8);
@@ -1664,7 +1674,7 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         // TODO(vksnk): bools are tricky, because they are bitmasks, so need to be
         // handled differently.
         if (op->type.is_bool()) {
-            internal_assert(op->type.lanes() == 32 && op->args[0].type().lanes() == 16);
+            internal_assert((op->type.lanes() == 64 && op->args[0].type().lanes() == 32) || (op->type.lanes() == 32 && op->args[0].type().lanes() == 16) || (op->type.lanes() == 64 && op->args[0].type().lanes() == 16)) << Expr(op);
         }
         rhs << op->name << "<" << print_type(op->args[0].type()) << ", "
             << print_type(op->type) << ", " << print_type(op->type.element_of())
