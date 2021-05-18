@@ -79,31 +79,34 @@ bool contains_impure_call(const Expr &expr) {
     return is_not_pure.result;
 }
 
-// A mutator that performs a substitute operation only for the arguments of
-// `type` kind of IR. Any expression type is supported, and Provide is the
-// only statement supported.
-class SubstituteInArguments : public IRMutator {
+// A mutator that performs a substitute operation only on either the values or the
+// arguments of Provide nodes.
+class SubstituteInProvides : public IRMutator {
     const string &name;
     const Expr &value;
-    IRNodeType type;
+    bool substitute_arguments;
 
     using IRMutator::visit;
 
     Stmt visit(const Provide *p) override {
-        if (type != IRNodeType::Provide) {
-            return IRMutator::visit(p);
-        }
-
         vector<Expr> values;
         vector<Expr> args;
         bool changed = false;
         for (const Expr &i : p->args) {
-            args.push_back(substitute(name, value, i));
-            changed = changed || !args.back().same_as(i);
+            if (substitute_arguments) {
+                args.push_back(substitute(name, value, i));
+                changed = changed || !args.back().same_as(i);
+            } else {
+                args.push_back(i);
+            }
         }
         for (const Expr &i : p->values) {
-            values.push_back(mutate(i));
-            changed = changed || !values.back().same_as(i);
+            if (!substitute_arguments) {
+                values.push_back(substitute(name, value, i));
+                changed = changed || !values.back().same_as(i);
+            } else {
+                values.push_back(i);
+            }
         }
         if (changed) {
             return Provide::make(p->name, values, args);
@@ -113,22 +116,13 @@ class SubstituteInArguments : public IRMutator {
     }
 
 public:
-    SubstituteInArguments(const string &name, const Expr &value, IRNodeType type)
-        : name(name), value(value), type(type) {
-    }
-
-    using IRMutator::mutate;
-    Expr mutate(const Expr &e) override {
-        if (e.get()->node_type == type) {
-            return substitute(name, value, e);
-        } else {
-            return IRMutator::mutate(e);
-        }
+    SubstituteInProvides(const string &name, const Expr &value, bool substitute_arguments)
+        : name(name), value(value), substitute_arguments(substitute_arguments) {
     }
 };
 
-Stmt substitute_in_arguments(const string &name, const Expr &value, IRNodeType type, const Stmt &s) {
-    return SubstituteInArguments(name, value, type).mutate(s);
+Stmt substitute_in_provides(const string &name, const Expr &value, bool substitute_arguments, const Stmt &s) {
+    return SubstituteInProvides(name, value, substitute_arguments).mutate(s);
 }
 
 // Build a loop nest about a provide node using a schedule
@@ -177,10 +171,10 @@ Stmt build_loop_nest(
         for (const auto &res : splits_result) {
             if (res.is_substitution()) {
                 stmt = substitute(res.name, res.value, stmt);
-            } else if (res.is_call_substitution()) {
-                stmt = substitute_in_arguments(res.name, res.value, IRNodeType::Call, stmt);
-            } else if (res.is_provide_substitution()) {
-                stmt = substitute_in_arguments(res.name, res.value, IRNodeType::Provide, stmt);
+            } else if (res.is_provide_arg_substitution()) {
+                stmt = substitute_in_provides(res.name, res.value, true, stmt);
+            } else if (res.is_provide_value_substitution()) {
+                stmt = substitute_in_provides(res.name, res.value, false, stmt);
             } else if (res.is_let()) {
                 stmt = LetStmt::make(res.name, res.value, stmt);
             } else {

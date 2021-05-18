@@ -662,6 +662,10 @@ struct Call : public ExprNode<Call> {
         return false;
     }
 
+    bool is_tag() const {
+        return is_intrinsic({Call::likely, Call::likely_if_innermost, Call::predicate, Call::predicate_loads, Call::predicate_stores, Call::strict_float});
+    }
+
     /** Returns a pointer to a call node if the expression is a call to
      * one of the requested intrinsics. */
     static const Call *as_intrinsic(const Expr &e, std::initializer_list<IntrinsicOp> intrinsics) {

@@ -20,18 +20,19 @@ namespace Internal {
 
 struct ApplySplitResult {
     // If type is "Substitution", then this represents a substitution of
-    // variable "name" to value. CallSubstitution and ProvideSubstitution
-    // are similar, but only apply to instances found in calls or provides,
-    // respectively. If type is "LetStmt", we should insert a new let stmt
-    // defining "name" with value "value". If type is "Predicate", we
-    // should ignore "name" and the predicate is "value".
+    // variable "name" to value. ProvideValueSubstitution and
+    // ProvideArgSubstitution are similar, but only apply to instances
+    // found on the LHS or RHS of a call or provide. respectively. If
+    // type is "LetStmt", we should insert a new let stmt defining
+    // "name" with value "value". If type is "Predicate", we should
+    // ignore "name" and the predicate is "value".
 
     std::string name;
     Expr value;
 
     enum Type { Substitution = 0,
-                CallSubstitution,
-                ProvideSubstitution,
+                ProvideValueSubstitution,
+                ProvideArgSubstitution,
                 LetStmt,
                 Predicate };
     Type type;
@@ -46,11 +47,11 @@ struct ApplySplitResult {
     bool is_substitution() const {
         return (type == Substitution);
     }
-    bool is_call_substitution() const {
-        return (type == CallSubstitution);
+    bool is_provide_value_substitution() const {
+        return (type == ProvideValueSubstitution);
     }
-    bool is_provide_substitution() const {
-        return (type == ProvideSubstitution);
+    bool is_provide_arg_substitution() const {
+        return (type == ProvideArgSubstitution);
     }
     bool is_let() const {
         return (type == LetStmt);
