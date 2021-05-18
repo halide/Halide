@@ -851,9 +851,6 @@ class VectorSubs : public IRMutator {
         bool loads_safe = false;
         bool stores_safe = false;
         if (const Call *pred = Call::as_intrinsic(cond, {Call::predicate, Call::predicate_loads, Call::predicate_stores})) {
-            explicit_predicate = true;
-            cond = pred->args[0];
-
             // This is a little bit confusing. The way to interpret predicate_loads is that
             // we *don't* need to predicate stores, and vice versa.
             if (pred->is_intrinsic(Call::predicate_loads)) {
@@ -861,6 +858,8 @@ class VectorSubs : public IRMutator {
             } else if (pred->is_intrinsic(Call::predicate_stores)) {
                 loads_safe = true;
             }
+            explicit_predicate = true;
+            cond = pred->args[0];
         }
 
         debug(3) << "Vectorizing \n"
