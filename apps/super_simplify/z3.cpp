@@ -445,9 +445,10 @@ satisfy(Expr e, map<string, Expr> *bindings, const string &comment, int timeout)
               << "(check-sat)\n"
               << "(get-model)\n";
 
-    std::cout << "z3 query:\n"
-              << z3_source.str() << "\n";
-
+    /*
+std::cout << "z3 query:\n"
+          << z3_source.str() << "\n";
+    */
     string src = z3_source.str();
 
     TemporaryFile z3_file("query", "z3");
@@ -456,13 +457,13 @@ satisfy(Expr e, map<string, Expr> *bindings, const string &comment, int timeout)
 
     std::string cmd = "z3 -T:" + std::to_string(timeout) + " " + z3_file.pathname() + " > " + z3_output.pathname();
 
-    //int ret = system(cmd.c_str());
+    // int ret = system(cmd.c_str());
     int ret = pclose(popen(cmd.c_str(), "r"));
 
     auto result_vec = read_entire_file(z3_output.pathname());
     string result(result_vec.begin(), result_vec.end());
 
-    std::cout << "z3 produced: " << result << "\n";
+    // std::cout << "z3 produced: " << result << "\n";
 
     if (starts_with(result, "unknown") || starts_with(result, "timeout")) {
         return Z3Result::Unknown;

@@ -41,34 +41,39 @@ Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemaind
     use_synthesized_rules = get_use_synthesized_rules_from_environment();
 
     // Only respect the constant bounds from the containing scope.
-    for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
-        ExprInfo bounds;
-        if (const int64_t *i_min = as_const_int(iter.value().min)) {
-            bounds.min_defined = true;
-            bounds.min = *i_min;
-        }
-        if (const int64_t *i_max = as_const_int(iter.value().max)) {
-            bounds.max_defined = true;
-            bounds.max = *i_max;
-        }
+    if (bi) {
+        for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
+            ExprInfo bounds;
+            if (const int64_t *i_min = as_const_int(iter.value().min)) {
+                bounds.min_defined = true;
+                bounds.min = *i_min;
+            }
+            if (const int64_t *i_max = as_const_int(iter.value().max)) {
+                bounds.max_defined = true;
+                bounds.max = *i_max;
+            }
 
-        if (ai->contains(iter.name())) {
-            bounds.alignment = ai->get(iter.name());
-        }
+            if (ai->contains(iter.name())) {
+                bounds.alignment = ai->get(iter.name());
+            }
 
-        if (bounds.min_defined || bounds.max_defined || bounds.alignment.modulus != 1) {
-            bounds_and_alignment_info.push(iter.name(), bounds);
+            if (bounds.min_defined || bounds.max_defined || bounds.alignment.modulus != 1) {
+                bounds_and_alignment_info.push(iter.name(), bounds);
+            }
         }
     }
 
-    for (auto iter = ai->cbegin(); iter != ai->cend(); ++iter) {
-        if (bounds_and_alignment_info.contains(iter.name())) {
-            // Already handled
-            continue;
+    if (ai) {
+
+        for (auto iter = ai->cbegin(); iter != ai->cend(); ++iter) {
+            if (bounds_and_alignment_info.contains(iter.name())) {
+                // Already handled
+                continue;
+            }
+            ExprInfo bounds;
+            bounds.alignment = iter.value();
+            bounds_and_alignment_info.push(iter.name(), bounds);
         }
-        ExprInfo bounds;
-        bounds.alignment = iter.value();
-        bounds_and_alignment_info.push(iter.name(), bounds);
     }
 }
 

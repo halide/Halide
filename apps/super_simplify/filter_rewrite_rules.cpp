@@ -396,7 +396,7 @@ void check_rule(Rule &r) {
     }
 
     map<string, Expr> binding;
-    if (true || is_const_zero(r.predicate)) {
+    if (is_const_zero(r.predicate)) {
         std::cout << "Re-synthesizing predicate for " << r.orig << " with a larger beam size\n";
         Expr new_predicate = const_false();
         if (false) {
@@ -679,7 +679,7 @@ int main(int argc, char **argv) {
             generalized.push_back(new_e);
         }
     }
-    exprs.insert(generalized.begin(), generalized.end());
+    // exprs.insert(generalized.begin(), generalized.end());
 
     for (Expr e : exprs) {
         if (const Call *call = e.as<Call>()) {
@@ -715,7 +715,7 @@ int main(int argc, char **argv) {
 #endif
 
             // Get the RHS in canonical form. Ditch any existing predicate.
-            rules.emplace_back(Rule{call->args[0], call->args[1], const_true(), e});
+            rules.emplace_back(Rule{call->args[0], call->args[1], call->args[2], e});
         } else {
             std::cerr << "Expr is not a rewrite rule: " << e << "\n";
             return -1;
@@ -725,7 +725,6 @@ int main(int argc, char **argv) {
     // Re-synthesize the predicates if you don't currently trust them
     vector<std::future<void>> futures;
     ThreadPool<void> pool;
-
     for (Rule &r : rules) {
         futures.emplace_back(pool.async([=, &r]() { check_rule(r); }));
     }
