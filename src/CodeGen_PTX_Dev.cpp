@@ -726,6 +726,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         debug(2) << "Adding debug information to the generated PTX";
         std::string ptx_src(outstr.begin(), outstr.end());
         ptx_src = replace_all(ptx_src, ".target sm_70", ".target sm_70, debug");
+        ptx_src = replace_all(ptx_src, ".target sm_75", ".target sm_75, debug");
+        ptx_src = replace_all(ptx_src, ".target sm_80", ".target sm_80, debug");
         ptx_src.append("\n.section  .debug_abbrev\n{\n\n}\n\n");
         buffer = std::vector<char>(ptx_src.begin(), ptx_src.end());
     } else {
