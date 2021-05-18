@@ -100,10 +100,34 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
              rewrite((u + x*y) - y*z, u + (x - z)*y) ||
              rewrite((u + y*x) - z*y, u + y*(x - z)) ||
              rewrite((u + y*x) - y*z, u + y*(x - z)) ||
+             rewrite((u - x*y) - z*y, u - (x + z)*y) ||
+             rewrite((u - x*y) - y*z, u - (x + z)*y) ||
+             rewrite((u - y*x) - z*y, u - y*(x + z)) ||
+             rewrite((u - y*x) - y*z, u - y*(x + z)) ||
+             rewrite((x*y + u) - z*y, u + (x - z)*y) ||
+             rewrite((x*y + u) - y*z, u + (x - z)*y) ||
+             rewrite((y*x + u) - z*y, u + y*(x - z)) ||
+             rewrite((y*x + u) - y*z, u + y*(x - z)) ||
+             rewrite((x*y - u) - z*y, (x - z)*y - u) ||
+             rewrite((x*y - u) - y*z, (x - z)*y - u) ||
+             rewrite((y*x - u) - z*y, y*(x - z) - u) ||
+             rewrite((y*x - u) - y*z, y*(x - z) - u) ||
              rewrite(x*y - (u + z*y), (x - z)*y - u) ||
              rewrite(x*y - (u + y*z), (x - z)*y - u) ||
              rewrite(y*x - (u + z*y), y*(x - z) - u) ||
              rewrite(y*x - (u + y*z), y*(x - z) - u) ||
+             rewrite(x*y - (u - z*y), (x + z)*y - u) ||
+             rewrite(x*y - (u - y*z), (x + z)*y - u) ||
+             rewrite(y*x - (u - z*y), y*(x + z) - u) ||
+             rewrite(y*x - (u - y*z), y*(x + z) - u) ||
+             rewrite(x*y - (z*y + u), (x - z)*y - u) ||
+             rewrite(x*y - (y*z + u), (x - z)*y - u) ||
+             rewrite(y*x - (z*y + u), y*(x - z) - u) ||
+             rewrite(y*x - (y*z + u), y*(x - z) - u) ||
+             rewrite(x*y - (z*y - u), (x - z)*y + u) ||
+             rewrite(x*y - (y*z - u), (x - z)*y + u) ||
+             rewrite(y*x - (z*y - u), y*(x - z) + u) ||
+             rewrite(y*x - (y*z - u), y*(x - z) + u) ||
              rewrite((x + y) - (x + z), y - z) ||
              rewrite((x + y) - (z + x), y - z) ||
              rewrite((y + x) - (x + z), y - z) ||
