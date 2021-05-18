@@ -874,11 +874,22 @@ MatrixMultiplyInfo is_matrix_multiply(const For *loop) {
         const Expr load_a_pattern = wild_i32x + wild_i32x;
         const Expr load_b_pattern = wild_i32x * wild_i32x + wild_i32x;
 
+        // Try again with the patterns swaped
         vector<Expr> matches_a, matches_b;
-        const bool match_a = expr_match(load_a_pattern, load_a->index, matches_a);
-        const bool match_b = expr_match(load_b_pattern, load_b->index, matches_b);
+        bool match_a = expr_match(load_a_pattern, load_a->index, matches_a);
+        bool match_b = expr_match(load_b_pattern, load_b->index, matches_b);
         if (!match_a || !match_b) {
-            return MatrixMultiplyInfo{};
+            // Try again with the patterns swapped
+            match_a = expr_match(load_b_pattern, load_a->index, matches_a);
+            match_b = expr_match(load_a_pattern, load_b->index, matches_b);
+
+            if (!match_a || !match_b) {
+                // If it fails now, is not a matrix multiply
+                return MatrixMultiplyInfo{};
+            }
+
+            // If the swapped pattern works, swap load_a and load_b as matrix multiplies are non-commutative
+            std::swap(load_a, load_b);
         }
 
         // Check if the k_var_name is present in the expressions for load_a and load_b
