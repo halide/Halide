@@ -199,7 +199,8 @@ public:
             .align_storage(c, vector_size)
             .vectorize(c, vector_size, TailStrategy::PredicateLoads);
 
-        bias_.in().compute_at(output_, co)
+        bias_.in()
+            .compute_at(output_, co)
             .store_in(MemoryType::Stack)
             .vectorize(_0, vector_size, TailStrategy::PredicateLoads);
     }
