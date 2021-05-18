@@ -450,6 +450,36 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               rewrite(max(y, (x + c2)/c0) < x/c0, false, c0 > 0 && c2 >= 0) ||
               rewrite(min(y, (x + c2)/c0) < x/c0, true, c0 > 0 && c2 + c0 <= 0) ||
 
+              rewrite(((max(x, (y*c0) + c1) + c2)/c0) < y, ((x + c2)/c0) < y, c0 > 0 && (c1 + c2) < 0) ||
+              rewrite(((max(x, (y*c0) + c1) + c2)/c0) < y, false, c0 > 0 && (c1 + c2) >= 0) ||
+              rewrite(((max(x, y*c0) + c1)/c0) < y, ((x + c1)/c0) < y, c0 > 0 && c1 < 0) ||
+              rewrite(((max(x, y*c0) + c1)/c0) < y, false, c0 > 0 && c1 >= 0) ||
+              rewrite(((max((x*c0) + c1, y) + c2)/c0) < x, ((y + c2)/c0) < x, c0 > 0 && (c1 + c2) < 0) ||
+              rewrite(((max((x*c0) + c1, y) + c2)/c0) < x, false, c0 > 0 && (c1 + c2) >= 0) ||
+              rewrite(((max(x*c0, y) + c1)/c0) < x, ((y + c1)/c0) < x, c0 > 0 && c1 < 0) ||
+              rewrite(((max(x*c0, y) + c1)/c0) < x, false, c0 > 0 && c1 >= 0) ||
+              rewrite((max(x, (y*c0) + c1)/c0) < y, (x/c0) < y, c0 > 0 && c1 < 0) ||
+              rewrite((max(x, (y*c0) + c1)/c0) < y, false, c0 > 0 && c1 >= 0) ||
+              rewrite((max(x, y*c0)/c0) < y, false, c0 > 0) ||
+              rewrite((max((x*c0) + c1, y)/c0) < x, (y/c0) < x, c0 > 0 && c1 < 0) ||
+              rewrite((max((x*c0) + c1, y)/c0) < x, false, c0 > 0 && c1 >= 0) ||
+              rewrite((max(x*c0, y)/c0) < x, false, c0 > 0) ||
+
+              rewrite(((min(x, (y*c0) + c1) + c2)/c0) < y, true, c0 > 0 && (c1 + c2) < 0) ||
+              rewrite(((min(x, (y*c0) + c1) + c2)/c0) < y, ((x + c2)/c0) < y, c0 > 0 && (c1 + c2) >= 0) ||
+              rewrite(((min(x, y*c0) + c1)/c0) < y, true, c0 > 0 && c1 < 0) ||
+              rewrite(((min(x, y*c0) + c1)/c0) < y, ((x + c1)/c0) < y, c0 > 0 && c1 >= 0) ||
+              rewrite(((min((x*c0) + c1, y) + c2)/c0) < x, true, c0 > 0 && (c1 + c2) < 0) ||
+              rewrite(((min((x*c0) + c1, y) + c2)/c0) < x, ((y + c2)/c0) < x, c0 > 0 && (c1 + c2) >= 0) ||
+              rewrite(((min(x*c0, y) + c1)/c0) < x, true, c0 > 0 && c1 < 0) ||
+              rewrite(((min(x*c0, y) + c1)/c0) < x, ((y + c1)/c0) < x, c0 > 0 && c1 >= 0) ||
+              rewrite((min(x, (y*c0) + c1)/c0) < y, true, c0 > 0 && c1 < 0) ||
+              rewrite((min(x, (y*c0) + c1)/c0) < y, (x/c0) < y, c0 > 0 && c1 >= 0) ||
+              rewrite((min(x, y*c0)/c0) < y, (x/c0) < y, c0 > 0) ||
+              rewrite((min((x*c0) + c1, y)/c0) < x, true, c0 > 0 && c1 < 0) ||
+              rewrite((min((x*c0) + c1, y)/c0) < x, (y/c0) < x, c0 > 0 && c1 >= 0) ||
+              rewrite((min(x*c0, y)/c0) < x, (y/c0) < x, c0 > 0) ||
+
               // Comparison of two mins/maxes that don't cancel when subtracted
               rewrite(min(x, c0) < min(x, c1), false, c0 >= c1) ||
               rewrite(min(x, c0) < min(x, c1) + c2, false, c0 >= c1 + c2 && c2 <= 0) ||
