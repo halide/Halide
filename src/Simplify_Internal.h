@@ -206,6 +206,9 @@ public:
     // vectorized.
     bool in_vector_loop = false;
 
+    // Tracks whether or not the current IR is unconditionally unreachable.
+    bool in_unreachable = false;
+
     // If we encounter a reference to a buffer (a Load, Store, Call,
     // or Provide), there's an implicit dependence on some associated
     // symbols.
