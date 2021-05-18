@@ -68,8 +68,7 @@ int main(int argc, char **argv) {
         printf("Halide time (CUDA 5.0): %f (ms) GFLOPS: %f \n", t * 1000.0, gflops / t);
     }
 
-    if (cuda_version >= 70)
-    {
+    if (cuda_version >= 70) {
         Buffer<Halide::float16_t> A(size, size), B(size, size);
         Buffer<float> C(size, size);
         double t = Halide::Tools::benchmark(5, 5, [&]() {
