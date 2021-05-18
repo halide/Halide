@@ -62,18 +62,20 @@ enum class TailStrategy {
      * for RVars, as it would change the meaning of the algorithm.
      * The if statement is treated like a boundary condition, and
      * factored out into a loop epilogue if possible.
-     * Pros: no redundant re-evaluation; does not constrain output
-     * sizes. Cons: increases code size due to separate tail-case
-     * handling. */
+     * Pros: does not constrain input sizes, output size constraints
+     * are simpler than full predication. Cons: increases code size
+     * due to separate tail-case handling, constrains the output size
+     * to be a multiple of the split factor. */
     PredicateLoads,
 
     /** Guard the stores in the loop with an if statement that
      * prevents evaluation beyond the original extent. Always legal.
      * The if statement is treated like a boundary condition, and
      * factored out into a loop epilogue if possible.
-     * Pros: no redundant re-evaluation; does not constrain output
-     * sizes. Cons: increases code size due to separate tail-case
-     * handling. */
+     * Pros: does not constrain output sizes, input size constraints
+     * are simpler than full predication. Cons: increases code size
+     * due to separate tail-case handling, constraints the input size
+     * to be a multiple of the split factor.. */
     PredicateStores,
 
     /** Prevent evaluation beyond the original extent by shifting
