@@ -7,6 +7,27 @@
 
 using namespace Halide;
 
+void fill_buffer_a_bf16(Buffer<bfloat16_t> &buf, int row, int acc) {
+    for (int iy = 0; iy < row; ++iy) {
+        for (int ix = 0; ix < acc; ++ix) {
+            // value between 0 and 100
+            bfloat16_t val = bfloat16_t(((float)rand() / (float)(RAND_MAX)) * 100.f);
+            buf(ix, iy) = val;
+        }
+    }
+}
+
+void fill_buffer_b_bf16(Buffer<bfloat16_t> &buf, int col, int acc) {
+    for (int iy = 0; iy < acc / 2; ++iy) {
+        for (int ix = 0; ix < col; ++ix) {
+            for (int ik = 0; ik < 2; ++ik) {
+                bfloat16_t val = bfloat16_t(((float)rand() / (float)(RAND_MAX)) * 100.f);
+                buf(ik, ix, iy) = val;
+            }
+        }
+    }
+}
+
 struct make_uint_t {
     template<typename... Args>
     Type operator()(Args &&...args) const {
@@ -76,32 +97,32 @@ bool matmul() {
     Var rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
     mm.compute_at(mm.in(), y)
-        //.store_in(MemoryType::AMXTile)
+        .store_in(MemoryType::AMXTile)
         .update()
         // Split into (x,y) tile
         .tile(y, x, ryi, rxi, tile_y, tile_x, TailStrategy::GuardWithIf)
         // Split reduction dim by tile_r
         .split(r.x, rro, rri, tile_r)
         // Reorder so that the (x,y) tile is inside the inner ro loop
-        .reorder({rri, ryi, rxi, rro, y, x});
-        //.atomic()
-        //.vectorize(rri)
-        //.vectorize(ryi)
-        //.vectorize(rxi);
+        .reorder({rri, ryi, rxi, rro, y, x})
+        .atomic()
+        .vectorize(rri)
+        .vectorize(ryi)
+        .vectorize(rxi);
 
     // Schedule the initialization
     Var ixi("ixi"), iyi("iyi");
     mm.compute_at(mm.in(), y)
-        .tile(y, x, iyi, ixi, tile_y, tile_x);
-    //    .vectorize(iyi)
-    //    .vectorize(ixi);
+        .tile(y, x, iyi, ixi, tile_y, tile_x)
+        .vectorize(iyi)
+        .vectorize(ixi);
 
     // Schedule the consumer
     Var mmxi("mmxi"), mmyi("mmyi");
     mm.in()
-        .tile(y, x, mmyi, mmxi, tile_y, tile_x);
-    //    .vectorize(mmyi)
-    //    .vectorize(mmxi);
+        .tile(y, x, mmyi, mmxi, tile_y, tile_x)
+        .vectorize(mmyi)
+        .vectorize(mmxi);
 
     Buffer<LhsInt8> a_buf(acc, row);
     fill_buffer_a(a_buf, row, acc);
@@ -153,10 +174,10 @@ void matmul_bf16() {
     const int acc = 16;
 
     Var x("x"), y("y");
-    ImageParam A(Float(32), 2, "lhs");
-    ImageParam B(Float(32), 3, "rhs");
+    ImageParam A(BFloat(16), 2, "lhs");
+    ImageParam B(BFloat(16), 3, "rhs");
 
-    RDom r(0, acc, "racc");
+    RDom r(0, acc, "acc");
 
     Func mm("matmul");
     mm(x, y) = cast<float>(0);
@@ -186,18 +207,33 @@ void matmul_bf16() {
         .vectorize(ixi)
         .vectorize(iyi);
 
+    // schedule the consumer
     Var mmxi("mmxi"), mmyi("mmyi");
     mm.in()
         .tile(x, y, mmxi, mmyi, tile_x, tile_y)
         .vectorize(mmxi)
         .vectorize(mmyi);
         
-
     Func result = mm.in();
     result.print_loop_nest();
 
-    result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.ll", {A, B}, get_jit_target_from_environment());
+    Buffer<bfloat16_t> a_buf(acc, row);
+    fill_buffer_a_bf16(a_buf, row, acc);
+    A.set(a_buf);
 
+    Buffer<bfloat16_t> b_buf(2, col, acc / 2);
+    fill_buffer_b_bf16(b_buf, col, acc);
+    B.set(b_buf);
+
+    Buffer<float> out(col, row);
+
+    // Uncomment to check the asm
+    //result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.ll", {A, B}, target);
+    //result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
+
+    auto time = Tools::benchmark(20, 20, [&]() {
+        result.realize(out);
+    });
 }
 
 int main(int argc, char **argv) {

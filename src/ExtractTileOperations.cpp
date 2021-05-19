@@ -21,6 +21,11 @@ struct Tile {
     int extent[Dim];
 };
 
+enum class AMXOpType {
+    Int8,
+    Bf16,
+};
+
 const auto wild_i32 = Variable::make(Int(32), "*");
 const auto wild_i32x = Variable::make(Int(32, 0), "*");
 
@@ -105,15 +110,27 @@ struct NewMatmul {
     int tile_r;
 };
 
-NewMatmul convert_to_matmul(const Store *op, const string &new_name) {
+NewMatmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType op_type) {
     // m[ramp(0, 1, S)] = VectorAdd(lhs[{XYR tile}] * xX(rhs[{YR tile}])) + m[ramp(0, 1, S)]
     const auto wild_i8x = Variable::make(Int(8, 0), "*");
     const auto wild_u8x = Variable::make(UInt(8, 0), "*");
+    const auto wild_bf16x = Variable::make(BFloat(16, 0), "*");
+    const auto wild_f32x = Variable::make(Float(32, 0), "*");
+
     vector<Expr> matches;
+    if (op_type == AMXOpType::Int8) {
     const auto pattern1 = wild_i32x + wild_i32x;
     if (!expr_match(pattern1, op->value, matches)) {
         return {};
     }
+    } else  // AMXOpType::Bf16
+    {
+        const auto pattern1 = wild_f32x + wild_f32x;
+        if (!expr_match(pattern1, op->value, matches)) {
+            return {};
+        }
+    }
+
     const auto *reduce = matches[0].as<VectorReduce>();
     const auto *load = matches[1].as<Load>();
     if (!reduce || reduce->op != VectorReduce::Add) {
@@ -123,17 +140,24 @@ NewMatmul convert_to_matmul(const Store *op, const string &new_name) {
         return {};
     }
 
-    // FIXME: Add support for bf16 for LLVM 13+
+    bool lhs_signed = false;
+    if (op_type == AMXOpType::Int8) {
     auto pattern2 = cast(Int(32, 0), cast(Int(32, 0), wild_i8x) * wild_i32x);
     auto pattern2_unsigned = cast(Int(32, 0), cast(Int(32, 0), wild_u8x) * wild_i32x);
 
-    bool lhs_signed = false;
     if (expr_match(pattern2, reduce->value, matches)) {
         lhs_signed = true;
     } else if (expr_match(pattern2_unsigned, reduce->value, matches)) {
         lhs_signed = false;
     } else {
         return {};
+    }
+    } else {
+        auto pattern2 = cast(Float(32, 0), cast(Float(32, 0), wild_bf16x) * wild_f32x);
+
+        if (!expr_match(pattern2, reduce->value, matches)) {
+            return {};
+        }
     }
 
     const auto *lhs_load = matches[0].as<Load>();
@@ -143,10 +167,19 @@ NewMatmul convert_to_matmul(const Store *op, const string &new_name) {
     }
     const auto *rhs_cast = rhs_broadcast->value.as<Cast>();
     bool rhs_signed = false;
-    if (rhs_cast && rhs_cast->value.type().element_of() == Int(8)) {
+    if (rhs_cast) {
+        if (op_type == AMXOpType::Int8) {
+            if (rhs_cast->value.type().element_of() == Int(8)) {
         rhs_signed = true;
-    } else if (rhs_cast && rhs_cast->value.type().element_of() == UInt(8)) {
+            } else if (rhs_cast->value.type().element_of() == UInt(8)) {
         rhs_signed = false;
+    } else {
+                user_assert(false) << "Expected rhs cast of i8/u8";
+            }
+        } else  // AMXOpType::Bf16
+        {
+            user_assert(rhs_cast->value.type().element_of() == BFloat(16)) << "Expected rhs cast of bf16";
+        }
     } else {
         return {};
     }
@@ -174,36 +207,75 @@ NewMatmul convert_to_matmul(const Store *op, const string &new_name) {
     }
 
 #if LLVM_VERSION < 130
-    user_assert(lhs_signed && rhs_signed) << "LLVM 13 or above is required for unsigned AMX instructions";
+    user_assert(op_type != AMXOpType::Bf16 && lhs_signed && rhs_signed) << "LLVM 13 or above is required for unsigned or float AMX instructions";
 #endif
 
     // {rows, colbytes, var, index}
     auto lhs_var = Variable::make(Handle(), lhs_load->name);
-    auto lhs = [&]() {
+    auto lhs_type = [&]() {
+        switch (op_type) {
+        case AMXOpType::Int8:
         if (lhs_signed) {
-            return Call::make(Int(8, 1024), "tile_load", {tile_x, tile_r, lhs_var, lhs_tile.base, lhs_tile.stride[0]}, Call::Intrinsic);
+                return Int(8, 1024);
         } else {
-            return Call::make(UInt(8, 1024), "tile_load", {tile_x, tile_r, lhs_var, lhs_tile.base, lhs_tile.stride[0]}, Call::Intrinsic);
+                return UInt(8, 1024);
+            }
+        case AMXOpType::Bf16:
+            return BFloat(16, 512);
+        default:
+            return Type();
         }
     }();
+    int element_width = 0;
+    switch (op_type) {
+    case AMXOpType::Int8:
+        element_width = 1;
+        break;
+    case AMXOpType::Bf16:
+        element_width = 2;
+        break;
+    }
+    auto lhs = Call::make(lhs_type, "tile_load", {tile_x, tile_r * element_width, lhs_var, lhs_tile.base, lhs_tile.stride[0]}, Call::Intrinsic);
+
     auto rhs_var = Variable::make(Handle(), rhs_load->name);
-    auto rhs = [&]() {
+    auto rhs_type = [&]() -> Type {
+        switch (op_type) {
+        case AMXOpType::Int8:
         if (rhs_signed) {
-            return Call::make(Int(8, 1024), "tile_load", {1, tile_y * tile_r, rhs_var, rhs_tile.base, rhs_tile.stride[0]}, Call::Intrinsic);
+                return Int(8, 1024);
         } else {
-            return Call::make(UInt(8, 1024), "tile_load", {1, tile_y * tile_r, rhs_var, rhs_tile.base, rhs_tile.stride[0]}, Call::Intrinsic);
+                return UInt(8, 1024);
+            }
+        case AMXOpType::Bf16:
+            return BFloat(16, 512);
+        default:
+            return Type();
+        }
+    }();
+    auto rhs = Call::make(rhs_type, "tile_load", {1, tile_y * tile_r, rhs_var, rhs_tile.base, rhs_tile.stride[0]}, Call::Intrinsic);
+
+    auto res_type = [&]() {
+        switch (op_type) {
+        case AMXOpType::Int8:
+            return Int(32, 256);
+        case AMXOpType::Bf16:
+            return Float(32, 256);
+        default:
+            return Type();
         }
     }();
 
     // {rows, colbytes, acc, out, lhs, rhs}
-    auto out = Load::make(Int(32, 256), new_name, Ramp::make(0, 1, 256), {}, {}, const_true(256), {});
+    auto out = Load::make(res_type, new_name, Ramp::make(0, 1, 256), {}, {}, const_true(256), {});
+
     auto colbytes = tile_y * 32 / rhs_load->type.bits();
-    auto matmul = Call::make(Int(32, 256), "tile_matmul", {tile_x, colbytes, tile_r, out, lhs, rhs}, Call::Intrinsic);
+    auto matmul =
+        Call::make(res_type, "tile_matmul", {tile_x, colbytes, tile_r, out, lhs, rhs}, Call::Intrinsic);
     auto store = Store::make(new_name, matmul, Ramp::make(0, 1, 256), Parameter(), const_true(256), ModulusRemainder());
     return {true, std::move(store), tile_x, tile_y, tile_r};
 }
 
-Stmt convert_to_zero(const Store *op, int tile_x, int tile_y, const string &new_name) {
+Stmt convert_to_zero(const Store *op, int tile_x, int tile_y, const string &new_name, AMXOpType op_type) {
     if (const auto *ramp = op->index.as<Ramp>()) {
         if (const auto *bcast = op->value.as<Broadcast>()) {
             if (is_const_one(ramp->stride) &&
@@ -212,7 +284,17 @@ Stmt convert_to_zero(const Store *op, int tile_x, int tile_y, const string &new_
                 auto rows = Cast::make(Int(16), tile_x);
                 auto bytes = op->value.type().bytes();
                 auto colbytes = Cast::make(Int(16), tile_y * bytes);
-                auto val = Call::make(Int(32, 256), "tile_zero", {rows, colbytes}, Call::Intrinsic);
+                auto type = [&]() {
+                    switch (op_type) {
+                    case AMXOpType::Int8:
+                        return Int(32, 256);
+                    case AMXOpType::Bf16:
+                        return Float(32, 256);
+                    default:
+                        return Type();
+                    }
+                }();
+                auto val = Call::make(type, "tile_zero", {rows, colbytes}, Call::Intrinsic);
                 auto store = Store::make(new_name, val, Ramp::make(0, 1, 256), Parameter(), const_true(256), ModulusRemainder());
                 return store;
             }
@@ -221,11 +303,21 @@ Stmt convert_to_zero(const Store *op, int tile_x, int tile_y, const string &new_
     return {};
 }
 
-Stmt convert_to_tile_store(const Store *op, const string &amx_name, int tile_x, int tile_y) {
+Stmt convert_to_tile_store(const Store *op, const string &amx_name, int tile_x, int tile_y, AMXOpType op_type) {
     auto tile = is_2d_tile_index(op->index);
     if (tile.result && tile.extent[0] == tile_x && tile.extent[1] == tile_y) {
         auto out = Variable::make(Handle(), op->name);
-        auto tile_val = Load::make(Int(32, 256), amx_name, Ramp::make(0, 1, 256), {}, {}, const_true(256), {});
+        auto tile_type = [&]() {
+            switch (op_type) {
+            case AMXOpType::Int8:
+                return Int(32, 256);
+            case AMXOpType::Bf16:
+                return Float(32, 256);
+            default:
+                return Type();
+            }
+        }();
+        auto tile_val = Load::make(tile_type, amx_name, Ramp::make(0, 1, 256), {}, {}, const_true(256), {});
         auto bytes = op->value.type().bytes();
         internal_assert(bytes == 4) << "AMX store only supported for int32 and float32, not for " << op->value.type() << "\n";
         // {tile_x, tile_y, var, base, stride}
@@ -245,6 +337,7 @@ class ExtractTileOperations : public IRMutator {
     int found_tile_x = -1;
     int found_tile_y = -1;
     int found_tile_r = -1;
+    AMXOpType op_type;
 
     Stmt visit(const Allocate *op) override {
         if (op->memory_type == MemoryType::AMXTile) {
@@ -252,6 +345,12 @@ class ExtractTileOperations : public IRMutator {
                 (op->type.is_int() && op->type.bits() == 32) || 
                 (op->type.is_float() && op->type.bits() == 32))
                 << "scheduled tile operations must yield 32-bit integers or 32-bit floats";
+
+            if (op->type.is_int() && op->type.bits() == 32) {
+                op_type = AMXOpType::Int8;
+            } else {
+                op_type = AMXOpType::Bf16;
+            }
 
             user_assert(!in_allocate) << "Found two possible tile allocations for AMX allocation";
             ScopedValue<string> old_amx_name(amx_name, op->name + ".amx");
@@ -269,7 +368,18 @@ class ExtractTileOperations : public IRMutator {
                 body = mutate(body);
             }
 
-            return Allocate::make(amx_name, Int(32, 256), MemoryType::AMXTile, {1}, const_true(), body);
+            auto alloc_type = [&]() {
+                switch(op_type) {
+                    case AMXOpType::Int8:
+                        return Int(32, 256);
+                    case AMXOpType::Bf16:
+                        return Float(32, 256);
+                    default:
+                        return Type();
+                }
+            }();
+
+            return Allocate::make(amx_name, alloc_type, MemoryType::AMXTile, {1}, const_true(), body);
         }
         return IRMutator::visit(op);
     }
@@ -303,12 +413,12 @@ class ExtractTileOperations : public IRMutator {
             if (!load || load->name != tile_name) {
                 return op;
             }
-            auto store = convert_to_tile_store(op, amx_name, found_tile_x, found_tile_y);
+            auto store = convert_to_tile_store(op, amx_name, found_tile_x, found_tile_y, op_type);
             user_assert(store.defined()) << "Store to AMX tile allocation of a non-tile value";
             return store;
         }
 
-        auto matmul = convert_to_matmul(op, amx_name);
+        auto matmul = convert_to_matmul(op, amx_name, op_type);
         if (matmul.result) {
             user_assert(
                 (found_tile_x < 0 || matmul.tile_x == found_tile_x) &&
@@ -326,7 +436,7 @@ class ExtractTileOperations : public IRMutator {
             return op;
         }
 
-        auto zero = convert_to_zero(op, found_tile_x, found_tile_y, amx_name);
+        auto zero = convert_to_zero(op, found_tile_x, found_tile_y, amx_name, op_type);
         if (zero.defined()) {
             return zero;
         }
