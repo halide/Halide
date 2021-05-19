@@ -1904,8 +1904,9 @@ public:
                 check("i8x16.abs", 16 * w, abs(i8_1));
                 check("i16x8.abs", 8 * w, abs(i16_1));
                 check("i32x4.abs", 4 * w, abs(i32_1));
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i64x2.abs", 2 * w, abs(i64_1));
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    check("i64x2.abs", 2 * w, abs(i64_1));
+                }
 
                 // Left shift by constant scalar
                 check("i8x16.shl", 16 * w, i8_1 << i8(7));
