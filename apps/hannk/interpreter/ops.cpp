@@ -814,7 +814,6 @@ void depthwise_conv_uint8(
     halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t *bias,
     int depth_multiplier, const MultiplyParams &params, const std::array<int, 2> &stride, const std::array<int, 2> &dilation,
     const Interval &output_range, halide_buffer_t *output) {
-    assert(params.c.exponent() <= 0);
     if (depth_multiplier >= output->dim[0].extent) {
         depthwise_conv_broadcast_uint8(
             input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
