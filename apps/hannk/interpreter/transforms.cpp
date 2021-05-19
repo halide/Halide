@@ -64,6 +64,11 @@ void remove_dead_ops(OpGroup *root) {
 
 namespace {
 
+// Check if a tensor already has storage configured.
+bool has_storage(const TensorPtr &t) {
+    return t->is_alias() || t->is_allocated();
+}
+
 // We can alias two tensors if the input is not used after the output is written,
 // and we meet a number of other requirements.
 bool maybe_alias_tensors(TensorPtr input, TensorPtr output, SmallVector<int, max_rank> offset = {}) {
@@ -110,10 +115,10 @@ bool maybe_alias_tensors(TensorPtr input, TensorPtr output, SmallVector<int, max
     }
     bool input_subset_of_output = is_subset_of(input_bounds_with_offset, output->bounds());
     bool output_subset_of_input = is_subset_of(output_bounds_with_negative_offset, input->bounds());
-    if (input_subset_of_output && !input->is_alias()) {
+    if (input_subset_of_output && !has_storage(input)) {
         input->set_alias_of(output, offset);
         return true;
-    } else if (output_subset_of_input && !output->is_alias()) {
+    } else if (output_subset_of_input && !has_storage(output)) {
         for (int &i : offset) {
             i = -i;
         }
@@ -121,7 +126,7 @@ bool maybe_alias_tensors(TensorPtr input, TensorPtr output, SmallVector<int, max
         return true;
     }
 
-    return true;
+    return false;
 }
 
 // Try to alias outputs to inputs when it is safe.
