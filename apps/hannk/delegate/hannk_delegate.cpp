@@ -93,9 +93,11 @@ bool IsConstantTensor(const TfLiteTensor &tensor) {
     return tensor.allocation_type == kTfLiteMmapRo;
 }
 
+#ifndef NDEBUG
 bool IsDynamicTensor(const TfLiteTensor &tensor) {
     return tensor.allocation_type == kTfLiteDynamic;
 }
+#endif
 
 void SetTensorToDynamic(TfLiteContext *context, int tensor_id) {
     TfLiteTensor &tensor = context->tensors[tensor_id];
