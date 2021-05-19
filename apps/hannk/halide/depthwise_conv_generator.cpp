@@ -37,7 +37,7 @@ public:
     Input<int> dilation_y_{"dilation_y"};
 
     Input<int32_t> output_multiplier_{"output_multiplier"};
-    Input<uint32_t> output_shift_{"output_shift"};
+    Input<int32_t> output_shift_{"output_shift"};
     Input<uint8_t> output_zero_{"output_zero"};
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
