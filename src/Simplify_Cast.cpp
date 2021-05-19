@@ -20,6 +20,10 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
             }
             bounds->max_defined = false;
         }
+        if (!op->type.can_represent(bounds->alignment.modulus) ||
+            !op->type.can_represent(bounds->alignment.remainder)) {
+            bounds->alignment = ModulusRemainder();
+        }
     }
 
     if (may_simplify(op->type) && may_simplify(op->value.type())) {
