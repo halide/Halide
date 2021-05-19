@@ -848,75 +848,75 @@ MatrixMultiplyInfo is_matrix_multiply(const For *loop) {
     const Expr wild_f16x = Variable::make(Float(16), "*");
     const Expr acc_pattern = wild_f32x + f32(wild_f16x) * f32(wild_f16x);
     vector<Expr> matches;
-    if (expr_match(acc_pattern, store->value, matches)) {
-        // (float32)matmul$1[t26]
-        const Load *load_c = matches[0].as<Load>();
-        // (float16) A[((A.stride.1 * t34) - t33) + matmul$1.s1.k$x]
-        const Load *load_a = matches[1].as<Load>();
-        // (float16)B[(B.stride.1*matmul$1.s1.k$x) + t35]
-        const Load *load_b = matches[2].as<Load>();
-
-        if (!load_a || !load_b || !load_c) {
-            return MatrixMultiplyInfo{};
-        }
-
-        // Check if the load is loading from the same place where the store is storing
-        // i.e. if this is an update operation
-        if (load_c->name != store->name || !equal(load_c->index, store->index)) {
-            return MatrixMultiplyInfo{};
-        }
-
-        // Yes, this is an update operation, now let's check cast to see if it is a matmul that can be converted
-        // to wmma intrinsic
-        const Expr wild_i32x = Variable::make(Int(32), "*");
-        // Check if the reduction domain is being used in both A and B to
-        // validate the matrix multiply
-        const Expr load_a_pattern = wild_i32x + wild_i32x;
-        const Expr load_b_pattern = wild_i32x * wild_i32x + wild_i32x;
-
-        // Try again with the patterns swaped
-        vector<Expr> matches_a, matches_b;
-        bool match_a = expr_match(load_a_pattern, load_a->index, matches_a);
-        bool match_b = expr_match(load_b_pattern, load_b->index, matches_b);
-        if (!match_a || !match_b) {
-            // Try again with the patterns swapped
-            match_a = expr_match(load_b_pattern, load_a->index, matches_a);
-            match_b = expr_match(load_a_pattern, load_b->index, matches_b);
-
-            if (!match_a || !match_b) {
-                // If it fails now, is not a matrix multiply
-                return MatrixMultiplyInfo{};
-            }
-
-            // If the swapped pattern works, swap load_a and load_b as matrix multiplies are non-commutative
-            std::swap(load_a, load_b);
-        }
-
-        // Check if the k_var_name is present in the expressions for load_a and load_b
-        const Variable *load_a_var_1 = matches_a[0].as<Variable>();
-        const Variable *load_a_var_2 = matches_a[1].as<Variable>();
-        const Variable *load_b_var_1 = matches_b[0].as<Variable>();
-        const Variable *load_b_var_2 = matches_b[1].as<Variable>();
-
-        const std::string &k_var_name = loop->name;
-
-        // TODO: Can this checks be improved?
-        const bool load_a_ok = (load_a_var_1 && load_a_var_1->name == k_var_name) || (load_a_var_2 && load_a_var_2->name == k_var_name);
-        const bool load_b_ok = (load_b_var_1 && load_b_var_1->name == k_var_name) || (load_b_var_2 && load_b_var_2->name == k_var_name);
-
-        if (!load_a_ok || !load_b_ok) {
-            return MatrixMultiplyInfo{};
-        }
-
-        // This matches A(k, y) * B(x, k) where both A and B
-        MatrixMultiplyInfo matMulInfo;
-        matMulInfo.A = load_a;
-        matMulInfo.B = load_b;
-        matMulInfo.C = load_c;
-        return matMulInfo;
+    if (!expr_match(acc_pattern, store->value, matches)) {
+        return MatrixMultiplyInfo{};
     }
 
-    return MatrixMultiplyInfo{};
+    // (float32)matmul$1[t26]
+    const Load *load_c = matches[0].as<Load>();
+    // (float16) A[((A.stride.1 * t34) - t33) + matmul$1.s1.k$x]
+    const Load *load_a = matches[1].as<Load>();
+    // (float16)B[(B.stride.1*matmul$1.s1.k$x) + t35]
+    const Load *load_b = matches[2].as<Load>();
+
+    if (!load_a || !load_b || !load_c) {
+        return MatrixMultiplyInfo{};
+    }
+
+    // Check if the load is loading from the same place where the store is storing
+    // i.e. if this is an update operation
+    if (load_c->name != store->name || !equal(load_c->index, store->index)) {
+        return MatrixMultiplyInfo{};
+    }
+
+    // Yes, this is an update operation, now let's check cast to see if it is a matmul that can be converted
+    // to wmma intrinsic
+    const Expr wild_i32x = Variable::make(Int(32), "*");
+    // Check if the reduction domain is being used in both A and B to
+    // validate the matrix multiply
+    const Expr load_a_pattern = wild_i32x + wild_i32x;
+    const Expr load_b_pattern = wild_i32x * wild_i32x + wild_i32x;
+
+    // Try again with the patterns swaped
+    vector<Expr> matches_a, matches_b;
+    bool match_a = expr_match(load_a_pattern, load_a->index, matches_a);
+    bool match_b = expr_match(load_b_pattern, load_b->index, matches_b);
+    if (!match_a || !match_b) {
+        // Try again with the patterns swapped
+        match_a = expr_match(load_b_pattern, load_a->index, matches_a);
+        match_b = expr_match(load_a_pattern, load_b->index, matches_b);
+
+        if (!match_a || !match_b) {
+            // If it fails now, is not a matrix multiply
+            return MatrixMultiplyInfo{};
+        }
+
+        // If the swapped pattern works, swap load_a and load_b as matrix multiplies are non-commutative
+        std::swap(load_a, load_b);
+    }
+
+    // Check if the k_var_name is present in the expressions for load_a and load_b
+    const Variable *load_a_var_1 = matches_a[0].as<Variable>();
+    const Variable *load_a_var_2 = matches_a[1].as<Variable>();
+    const Variable *load_b_var_1 = matches_b[0].as<Variable>();
+    const Variable *load_b_var_2 = matches_b[1].as<Variable>();
+
+    const std::string &k_var_name = loop->name;
+
+    // TODO: Can this checks be improved?
+    const bool load_a_ok = (load_a_var_1 && load_a_var_1->name == k_var_name) || (load_a_var_2 && load_a_var_2->name == k_var_name);
+    const bool load_b_ok = (load_b_var_1 && load_b_var_1->name == k_var_name) || (load_b_var_2 && load_b_var_2->name == k_var_name);
+
+    if (!load_a_ok || !load_b_ok) {
+        return MatrixMultiplyInfo{};
+    }
+
+    // This matches A(k, y) * B(x, k) where both A and B
+    MatrixMultiplyInfo matMulInfo;
+    matMulInfo.A = load_a;
+    matMulInfo.B = load_b;
+    matMulInfo.C = load_c;
+    return matMulInfo;
 }
 
 ExtractTensorCoreOperations::ExtractTensorCoreOperations() {
