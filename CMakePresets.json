@@ -98,7 +98,8 @@
         "BUILD_SHARED_LIBS": "YES",
         "CMAKE_INSTALL_BINDIR": "bin/$<CONFIG>",
         "CMAKE_INSTALL_LIBDIR": "lib/$<CONFIG>",
-        "Halide_INSTALL_CMAKEDIR": "lib/cmake/Halide"
+        "Halide_INSTALL_CMAKEDIR": "lib/cmake/Halide",
+        "Halide_INSTALL_HELPERSDIR": "lib/cmake/HalideHelpers"
       }
     },
     {

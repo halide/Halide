@@ -6,10 +6,10 @@ include(CMakePackageConfigHelpers)
 ##
 
 set(Halide_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/Halide"
-    CACHE STRING "Path to Halide cmake files")
+    CACHE STRING "Path to Halide CMake files")
 
 set(Halide_INSTALL_HELPERSDIR "${CMAKE_INSTALL_LIBDIR}/cmake/HalideHelpers"
-    CACHE STRING "Path to Halide cmake files")
+    CACHE STRING "Path to Halide platform-independent CMake files")
 
 set(Halide_INSTALL_PLUGINDIR "${CMAKE_INSTALL_LIBDIR}"
     CACHE STRING "Path to Halide plugins folder")
