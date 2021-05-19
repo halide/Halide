@@ -98,7 +98,7 @@ public:
                 shape.push_back(t->shape()->Get(shape_size - 1 - i));
             }
         }
-        //HCHECK(t->shape()) << "Dynamic shapes not supported.";
+        // HCHECK(t->shape()) << "Dynamic shapes not supported.";
 
         halide_type_t type = parse_type(t->type());
 
@@ -511,12 +511,12 @@ public:
 
         std::vector<TensorPtr> inputs;
         for (int i : *subgraph->inputs()) {
-            tensors_[i]->set_input(true);
+            tensors_[i]->set_input();
             inputs.push_back(tensors_[i]);
         }
         std::vector<TensorPtr> outputs;
         for (int i : *subgraph->outputs()) {
-            tensors_[i]->set_output(true);
+            tensors_[i]->set_output();
             outputs.push_back(tensors_[i]);
         }
 

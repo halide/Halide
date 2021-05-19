@@ -137,6 +137,13 @@ void Tensor::set_external_host(void *host) {
     buffer_.raw_buffer()->host = (uint8_t *)host;
 }
 
+void Tensor::set_external_dynamic_resizer(const std::function<void *(const Box &new_shape)> &fn) {
+    assert(is_external());
+    assert(is_dynamic());
+    assert(external_dynamic_resizer_fn_ == nullptr);
+    external_dynamic_resizer_fn_ = fn;
+}
+
 namespace {
 
 // Copy a Halide buffer without the internal reference counting.
@@ -176,9 +183,6 @@ void Tensor::allocate() {
 }
 
 void Tensor::resize(const Box &new_shape) {
-    assert(is_dynamic());
-    assert(!is_external());
-
     SmallVector<halide_dimension_t, max_rank> new_dims;
 
     const halide_dimension_t *old_dims = buffer_.raw_buffer()->dim;
@@ -199,12 +203,29 @@ void Tensor::resize(const Box &new_shape) {
         new_dims.emplace_back(d_min, d_extent, stride);
         stride *= d_extent;
     }
-    if (all_same) {
-        return;
+
+    HalideBuffer<void> new_buffer;
+    if (is_external()) {
+        // Don't return early if all_same==true; in this path, we must call
+        // external_dynamic_resizer_fn_() every time.
+        // (It is expected to be smart and avoid unnecessary resizes.)
+
+        assert(external_dynamic_resizer_fn_);
+        void *new_host = external_dynamic_resizer_fn_(new_shape);
+        assert(new_host != nullptr);
+        new_buffer = HalideBuffer<void>(buffer_.type(), new_host, (int)new_dims.size(), new_dims.data());
+
+        // It's important we clear this after each use.
+        external_dynamic_resizer_fn_ = nullptr;
+    } else {
+        if (all_same) {
+            return;
+        }
+
+        new_buffer = HalideBuffer<void>(buffer_.type(), nullptr, (int)new_dims.size(), new_dims.data());
+        new_buffer.allocate();
     }
 
-    HalideBuffer<void> new_buffer(buffer_.type(), nullptr, (int)new_dims.size(), new_dims.data());
-    new_buffer.allocate();
     if (buffer_.data()) {
         new_buffer.copy_from(buffer_);
     }

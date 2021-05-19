@@ -104,9 +104,16 @@ class Tensor {
     bool is_output_ = false;
     // If true, this Tensor is 'dynamic' (i.e., it's an output whose size
     // is calculated during evaluation, rather than ahead of time).  It is an error
-    // for a Tensor to be dynamic if it is also constant or external.
+    // for a Tensor to be dynamic if it is also constant.
     // Currently only used in conjunction with the TFLite delegate.
     bool is_dynamic_ = false;
+
+    // If both is_external_ and is_dynamic_ are true, this function is used by resize() to
+    // reallocate the buffer storage. It returns the new host pointer to be used (or null
+    // in the event of an error). Note that this is a 'single-shot' method: it
+    // should only be used a single time, and nulled out after use, as it may have
+    // captured state that isn't guaranteed to outlast the next call to Interpreter::execute().
+    std::function<void *(const Box &new_shape)> external_dynamic_resizer_fn_;
 
     // Possibly shared storage for this tensor.
     std::shared_ptr<TensorStorage> storage_;
@@ -172,28 +179,29 @@ public:
         return is_constant_;
     }
 
-    void set_constant(bool constant = true) {
-        is_constant_ = constant;
+    void set_constant() {
+        assert(!is_dynamic());
+        is_constant_ = true;
     }
 
     bool is_external() const {
         return is_external_;
     }
 
-    void set_external(bool external = true) {
-        assert(!(external && is_dynamic()));
-        is_external_ = external;
+    void set_external() {
+        is_external_ = true;
     }
 
     void set_external_host(void *host);
+    void set_external_dynamic_resizer(const std::function<void *(const Box &new_shape)> &fn);
 
     bool is_dynamic() const {
         return is_dynamic_;
     }
 
-    void set_dynamic(bool dynamic = true) {
-        assert(!(dynamic && (is_constant() || is_external())));
-        is_dynamic_ = dynamic;
+    void set_dynamic() {
+        assert(!is_constant());
+        is_dynamic_ = true;
     }
 
     bool is_input() const {
@@ -204,12 +212,12 @@ public:
         return is_output_;
     }
 
-    void set_input(bool is_input) {
-        is_input_ = is_input;
+    void set_input() {
+        is_input_ = true;
     }
 
-    void set_output(bool is_output) {
-        is_output_ = is_output;
+    void set_output() {
+        is_output_ = true;
     }
 
     template<class T = void>

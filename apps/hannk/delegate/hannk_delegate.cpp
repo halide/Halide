@@ -296,7 +296,7 @@ public:
                 continue;
             }
             auto t = GetTensorById(context, tensor_id);
-            t->set_input(true);
+            t->set_input();
             inputs.push_back(t);
             if (options_.verbosity >= 2) {
                 HLOG(INFO) << "Delegate " << (void *)this << (t->is_constant() ? " Const" : "") << " Input tensor: " << tensor_id << "\n";
@@ -314,7 +314,7 @@ public:
                 HLOG(INFO) << "Delegate " << (void *)this << " Output tensor: " << tensor_id << "\n";
             }
             auto t = GetTensorById(context, tensor_id);
-            t->set_output(true);
+            t->set_output();
             outputs.push_back(t);
         }
 
@@ -365,15 +365,16 @@ public:
             return kTfLiteDelegateError;
         }
 
-        // All inputs and outputs that aren't dynamic are marked as 'external',
-        // so that we can share memory between TFLite and Hannk. (Note that the
-        // TFLite Tensors haven't been allocated yet; we must update the host
-        // pointers in Eval.)
+        // All inputs and outputs are marked as 'external', so that we can share
+        // memory between TFLite and Hannk. (Note that the TFLite Tensors haven't
+        // been allocated yet; we must update the host pointers in Eval.)
         const auto set_external = [this, context](int tensor_id) {
             assert(tensor_id != kTfLiteOptionalTensor);
             auto t = GetTensorById(context, tensor_id);
-            if (!t->is_dynamic()) {
-                t->set_external();
+            t->set_external();
+            if (t->is_dynamic()) {
+                // Go ahead and mark this now too; we'll need it set this way later.
+                SetTensorToDynamic(context, tensor_id);
             }
         };
 
@@ -389,22 +390,34 @@ public:
 
         interpreter_ = std::unique_ptr<Interpreter>(new Interpreter(std::move(model_)));
 
-        for (int tensor_id : TfLiteIntArrayView(node->outputs)) {
-            if (tensor_id == kTfLiteOptionalTensor) {
-                continue;
-            }
-            auto t = GetTensorById(context, tensor_id);
-            if (t && t->is_dynamic()) {
-                assert(!t->is_external());
-                if (options_.verbosity >= 2) {
-                    HLOG(INFO) << "SetTensorToDynamic " << tensor_id;
-                }
-                SetTensorToDynamic(context, tensor_id);
-            }
-        }
-
         return kTfLiteOk;
     }
+
+    void *ResizeExternalDynamicTensor(TfLiteContext *context, int tensor_id, const Box &new_shape) {
+        assert(tensor_id != kTfLiteOptionalTensor);
+        auto t = GetTensorById(context, tensor_id);
+        assert(t->is_external());
+        assert(t->is_dynamic());
+        assert(tensor_id >= 0 && tensor_id < context->tensors_size);
+        TfLiteTensor &tensor = context->tensors[tensor_id];
+        assert(IsDynamicTensor(tensor));
+        const Box b = t->bounds();
+        if (options_.verbosity >= 2) {
+            HLOG(INFO) << "ResizeTensor " << tensor_id << " to " << b;
+        }
+        TfLiteIntArray *new_size = TfLiteIntArrayCreate((int)b.size());
+        for (size_t i = 0; i < b.size(); i++) {
+            new_size->data[b.size() - i - 1] = b[i].extent();
+        }
+        // (Note that ResizeTensor takes ownership of new_size, even if an error is returned.)
+        auto status = context->ResizeTensor(context, &tensor, new_size);
+        if (status != kTfLiteOk) {
+            TF_LITE_KERNEL_LOG(context, "ResizeTensor() failed:", status);
+            return nullptr;
+        }
+        assert(tensor.data.data != nullptr);
+        return tensor.data.data;
+    };
 
     // Eval() will be called at least once. It can expect that Prepare() will
     // have been called for the current set of tensor shape(s).
@@ -418,63 +431,35 @@ public:
             return kTfLiteDelegateError;
         }
 
-        const auto set_host = [this, context](int tensor_id) {
+        const auto update_host = [this, context](int tensor_id) {
             assert(tensor_id != kTfLiteOptionalTensor);
             auto t = GetTensorById(context, tensor_id);
             if (t->is_external()) {
-                assert(!t->is_dynamic());
-                TfLiteTensor &tensor = context->tensors[tensor_id];
-                // TODO: should this be upgraded to a runtime-check-and-return-error?
-                assert(t->buffer().size_in_bytes() == tensor.bytes);
-                // We must reset it every time, as the tensor's data pointer
-                // can vary between calls in some scenatrios.
-                t->set_external_host(tensor.data.data);
+                if (t->is_dynamic()) {
+                    const auto external_dynamic_resizer = [this, context, tensor_id](const Box &new_shape) -> void * {
+                        return this->ResizeExternalDynamicTensor(context, tensor_id, new_shape);
+                    };
+                    t->set_external_dynamic_resizer(external_dynamic_resizer);
+                } else {
+                    TfLiteTensor &tensor = context->tensors[tensor_id];
+                    // TODO: should this be upgraded to a runtime-check-and-return-error?
+                    assert(t->buffer().size_in_bytes() == tensor.bytes);
+                    // We must reset it every time, as the tensor's data pointer
+                    // can vary between calls in some scenarios.
+                    t->set_external_host(tensor.data.data);
+                }
             }
         };
 
         for (int tensor_id : TfLiteIntArrayView(node->inputs)) {
-            set_host(tensor_id);
+            update_host(tensor_id);
         }
         for (int tensor_id : TfLiteIntArrayView(node->outputs)) {
-            set_host(tensor_id);
+            update_host(tensor_id);
         }
 
         // TODO: execute needs to return an error code.
         interpreter_->execute();
-
-        // Dynamic tensors can't share their memory, because we didn't
-        // necessarily know the size until the pipeline was executed,
-        // so we need to resize the TFLite tensor and copy the data
-        // back over. This is regrettable, but dynamic tensors tend to
-        // to be uncommon.
-        for (int tensor_id : TfLiteIntArrayView(node->outputs)) {
-            assert(tensor_id != kTfLiteOptionalTensor);
-            auto t = GetTensorById(context, tensor_id);
-            if (t->is_dynamic()) {
-                TfLiteTensor &tensor = context->tensors[tensor_id];
-                assert(IsDynamicTensor(tensor));
-                const Box b = t->bounds();
-                if (options_.verbosity >= 2) {
-                    HLOG(INFO) << "ResizeTensor " << tensor_id << " to " << b;
-                }
-                TfLiteIntArray *new_size = TfLiteIntArrayCreate((int)b.size());
-                for (size_t i = 0; i < b.size(); i++) {
-                    new_size->data[b.size() - i - 1] = b[i].extent();
-                }
-                // (Note that ResizeTensor takes ownership of new_size, even if an error is returned.)
-                auto status = context->ResizeTensor(context, &tensor, new_size);
-                if (status != kTfLiteOk) {
-                    TF_LITE_KERNEL_LOG(context, "ResizeTensor() failed:", status);
-                    return status;
-                }
-                auto buf = t->buffer();
-                assert(tensor.data.data != nullptr);
-                assert(buf.data() != nullptr);
-                assert(buf.size_in_bytes() == tensor.bytes);
-
-                memcpy(tensor.data.data, buf.data(), tensor.bytes);
-            }
-        }
 
         // Eval() could be called again with the same graph -- don't destroy the interpreter_ yet.
 
