@@ -895,17 +895,47 @@ MatrixMultiplyInfo is_matrix_multiply(const For *loop) {
         std::swap(load_a, load_b);
     }
 
-    // Check if the k_var_name is present in the expressions for load_a and load_b
-    const Variable *load_a_var_1 = matches_a[0].as<Variable>();
-    const Variable *load_a_var_2 = matches_a[1].as<Variable>();
-    const Variable *load_b_var_1 = matches_b[0].as<Variable>();
-    const Variable *load_b_var_2 = matches_b[1].as<Variable>();
-
     const std::string &k_var_name = loop->name;
 
-    // TODO: Can this checks be improved?
-    const bool load_a_ok = (load_a_var_1 && load_a_var_1->name == k_var_name) || (load_a_var_2 && load_a_var_2->name == k_var_name);
-    const bool load_b_ok = (load_b_var_1 && load_b_var_1->name == k_var_name) || (load_b_var_2 && load_b_var_2->name == k_var_name);
+    // Visitor that finds if a variable is used in an expression
+    class FindVarByName : public IRVisitor {
+        using IRVisitor::visit;
+
+        void visit(const Variable *var) override {
+            if (var->name == var_name) {
+                found = true;
+            }
+        }
+
+        const std::string &var_name;
+
+    public:
+        bool found = false;
+        FindVarByName(const std::string &name)
+            : var_name{name} {
+        }
+    };
+
+    // Check if the k_var_name is present in the expressions for load_a and load_b
+    bool load_a_ok = false;
+    for (Expr load_a_expr : matches_a) {
+        FindVarByName find_var_by_name{k_var_name};
+        load_a_expr.accept(&find_var_by_name);
+        if (find_var_by_name.found) {
+            load_a_ok = true;
+            break;
+        }
+    }
+
+    bool load_b_ok = false;
+    for (Expr load_b_expr : matches_b) {
+        FindVarByName find_var_by_name{k_var_name};
+        load_b_expr.accept(&find_var_by_name);
+        if (find_var_by_name.found) {
+            load_b_ok = true;
+            break;
+        }
+    }
 
     if (!load_a_ok || !load_b_ok) {
         return MatrixMultiplyInfo{};
