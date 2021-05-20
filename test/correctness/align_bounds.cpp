@@ -197,6 +197,31 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Try a case where aligning a buffer means that strided loads can
+    // do dense aligned loads and then shuffle. This used to trigger a
+    // bug in codegen.
+    {
+        Func f, g;
+        Var x;
+
+        f(x) = x;
+
+        // Do strided loads of every possible alignment
+        Expr e = 0;
+        for (int i = -32; i <= 32; i++) {
+            e += f(3 * x + i);
+        }
+        g(x) = e;
+
+        f.compute_root();
+
+        g.bound(x, 0, 1024).vectorize(x, 16, TailStrategy::RoundUp);
+
+        g.realize({1024});
+
+        g.compile_to_assembly("/dev/stdout", {}, Target{"x86-64-linux-avx2-no_runtime-no_bounds_query-disable_llvm_loop_opt-no_asserts"});
+    }
+
     printf("Success!\n");
     return 0;
 }
