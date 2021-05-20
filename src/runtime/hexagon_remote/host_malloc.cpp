@@ -19,15 +19,12 @@ void *dmabufAllocator = NULL;
 extern "C" {
 const char *dmabuf_heap = "qcom,system";
 
-__attribute__((weak)) extern void *CreateDmabufHeapBufferAllocator();
 typedef void *(*rem_dmabuf_create_fn)();
 rem_dmabuf_create_fn dmabuf_create_fn = NULL;
 
-__attribute__((weak)) extern int DmabufHeapAlloc(void *buffer_allocator, const char *heap_name, size_t len, unsigned int heap_flags, size_t legacy_align);
 typedef int (*rem_dmabuf_alloc_fn)(void *, const char *, size_t, unsigned int, size_t);
 rem_dmabuf_alloc_fn dmabuf_alloc_fn = NULL;
 
-__attribute__((weak)) extern void FreeDmabufHeapBufferAllocator(void *buffer_allocator);
 typedef void (*rem_dmabuf_deinit_fn)(void *);
 rem_dmabuf_deinit_fn dmabuf_deinit_fn = NULL;
 }
@@ -80,11 +77,9 @@ struct ion_handle_data {
 #define ION_IOC_MAP _IOWR('I', 2, ion_fd_data)
 
 extern "C" {
-__attribute__((weak)) extern int ion_open();
 typedef int (*rem_ion_open_fn)();
 rem_ion_open_fn ion_open_fn = NULL;
 
-__attribute__((weak)) extern int ion_alloc_fd(int ion_fd, size_t len, size_t align, unsigned int heap_id_mask, unsigned int flags, int *map_fd);
 typedef int (*rem_ion_alloc_fd_fn)(int ion_fd, size_t len, size_t align, unsigned int heap_id_mask, unsigned int flags, int *map_fd);
 rem_ion_alloc_fd_fn ion_alloc_fd_fn = NULL;
 }
