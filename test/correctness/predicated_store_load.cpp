@@ -91,6 +91,31 @@ int predicated_tail_test(const Target &t) {
     return 0;
 }
 
+int predicated_tail_with_scalar_test(const Target &t) {
+    int size = 73;
+    Var x("x"), y("y");
+    Func f("f"), g("g";
+
+    g(x) = 10;
+    f(x, y) = x + g(0);
+
+    g.compute_at(f, y);
+    f.vectorize(x, 32, TailStrategy::Predicate);
+    if (t.has_feature(Target::HVX)) {
+        f.hexagon();
+    }
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 0));
+
+    Buffer<int> im = f.realize({size, size});
+    auto func = [](int x, int y) {
+        return x + 10;
+    };
+    if (check_image(im, func)) {
+        return -1;
+    }
+    return 0;
+}
+
 int vectorized_predicated_store_scalarized_predicated_load_test(const Target &t) {
     Var x("x"), y("y");
     Func f("f"), g("g"), ref("ref");
@@ -427,6 +452,11 @@ int main(int argc, char **argv) {
 
     printf("Running vectorized dense load test\n");
     if (predicated_tail_test(t) != 0) {
+        return -1;
+    }
+
+    printf("Running vectorized dense load with scalar test\n");
+    if (predicated_tail_with_scalar_test(t) != 0) {
         return -1;
     }
 
