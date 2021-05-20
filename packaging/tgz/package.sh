@@ -1,8 +1,8 @@
 #!/bin/bash
-set -e
+set -e -o pipefail
 
-halide_source=$(readlink -f "$1")
-halide_build_root=$(readlink -f "$2")
+halide_source=$(realpath "$1")
+halide_build_root=$(realpath "$2")
 
 [ -z "$LLVM_DIR" ] && echo "Must set specific LLVM_DIR for packaging" && exit
 [ -z "$Clang_DIR" ] && echo "Must set specific Clang_DIR for packaging" && exit
