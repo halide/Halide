@@ -189,15 +189,15 @@ extern "C" {
 __attribute__((weak)) void remote_register_buf(void *buf, int size, int fd);
 
 void halide_hexagon_host_malloc_init() {
-    use_libdmabuf = false;
-    use_newer_ioctl = false;
-    use_libion = false;
     if (ion_fd != -1) {
         return;
     }
     if (dmabufAllocator != NULL) {
         return;
     }
+    use_libdmabuf = false;
+    use_newer_ioctl = false;
+    use_libion = false;
 
     __android_log_print(ANDROID_LOG_INFO, "halide", "entering halide_hexagon_host_malloc_init");
     pthread_mutex_init(&allocations_mutex, NULL);
