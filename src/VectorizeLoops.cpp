@@ -410,7 +410,7 @@ class PredicateLoadStore : public IRMutator {
     }
 
     Expr visit(const Load *op) override {
-        valid = valid && ((op->predicate.type().lanes() == lanes) || (op->predicate.type().is_scalar()));
+        valid = valid && ((op->predicate.type().lanes() == lanes) || (op->predicate.type().is_scalar() && !expr_uses_var(op->index, var)));
         valid = valid && should_predicate_store_load(op->type.bits());
         if (!valid) {
             return op;
@@ -439,7 +439,7 @@ class PredicateLoadStore : public IRMutator {
     }
 
     Stmt visit(const Store *op) override {
-        valid = valid && ((op->predicate.type().lanes() == lanes) || (op->predicate.type().is_scalar()));
+        valid = valid && ((op->predicate.type().lanes() == lanes) || (op->predicate.type().is_scalar() && !expr_uses_var(op->index, var)));
         valid = valid && should_predicate_store_load(op->value.type().bits());
         if (!valid) {
             return op;
