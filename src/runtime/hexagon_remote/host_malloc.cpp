@@ -20,7 +20,7 @@ extern "C" {
 const char *dmabuf_heap = "qcom,system";
 
 __attribute__((weak)) extern void *CreateDmabufHeapBufferAllocator();
-typedef void * (*rem_dmabuf_create_fn)();
+typedef void *(*rem_dmabuf_create_fn)();
 rem_dmabuf_create_fn dmabuf_create_fn = NULL;
 
 __attribute__((weak)) extern int DmabufHeapAlloc(void *buffer_allocator, const char *heap_name, size_t len, unsigned int heap_flags, size_t legacy_align);
@@ -209,7 +209,7 @@ void halide_hexagon_host_malloc_init() {
         use_libdmabuf = true;
         dmabuf_create_fn = (rem_dmabuf_create_fn)dlsym(lib, "CreateDmabufHeapBufferAllocator");
         dmabuf_deinit_fn = (rem_dmabuf_deinit_fn)dlsym(lib, "FreeDmabufHeapBufferAllocator");
-        dmabuf_alloc_fn  = (rem_dmabuf_alloc_fn)dlsym(lib, "DmabufHeapAlloc");
+        dmabuf_alloc_fn = (rem_dmabuf_alloc_fn)dlsym(lib, "DmabufHeapAlloc");
         if (!dmabuf_create_fn || !dmabuf_deinit_fn || !dmabuf_alloc_fn) {
             __android_log_print(ANDROID_LOG_ERROR, "halide", "huge problem in libdmabufheap.so");
             return;
