@@ -98,14 +98,12 @@ static volatile void *power_context = NULL;
 static void *get_HAP_power_context() {
     if (power_context == NULL) {
         power_context = (void *)malloc(1);
-        log_printf("get_HAP_power_context: %p\n", power_context);
     }
     return (void *)power_context;
 }
 static void free_HAP_power_context() {
     if (power_context) {
         free((void *)power_context);
-        log_printf("free_HAP_power_context: %p\n", power_context);
     }
     power_context = NULL;
 }
@@ -223,7 +221,7 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     power_info.type = HAP_power_get_max_mips;
     int retval = HAP_power_get(pwr_ctx, &power_info);
     if (0 != retval) {
-        log_printf("HAP_power_get(%p,HAP_power_get_max_mips) failed (%d)\n", pwr_ctx, retval);
+        log_printf("HAP_power_get(%p, HAP_power_get_max_mips) failed (%d)\n", pwr_ctx, retval);
         return -1;
     }
     max_mips = power_info.max_mips;

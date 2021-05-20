@@ -195,12 +195,11 @@ void halide_hexagon_host_malloc_init() {
     if (dmabufAllocator != NULL) {
         return;
     }
+
+    pthread_mutex_init(&allocations_mutex, NULL);
     use_libdmabuf = false;
     use_newer_ioctl = false;
     use_libion = false;
-
-    __android_log_print(ANDROID_LOG_INFO, "halide", "entering halide_hexagon_host_malloc_init");
-    pthread_mutex_init(&allocations_mutex, NULL);
     void *lib = NULL;
 
     // Try to access libdmabufheap.so, if it succeeds use DMA-BUF
@@ -220,8 +219,6 @@ void halide_hexagon_host_malloc_init() {
             __android_log_print(ANDROID_LOG_ERROR, "halide", "dmabuf init failed");
             return;
         }
-        __android_log_print(ANDROID_LOG_INFO, "halide",
-                            "halide_hexagon_host_malloc_init: using dmabuf. Finished.");
         return;
     }
 
@@ -239,15 +236,11 @@ void halide_hexagon_host_malloc_init() {
         if (ion_fd < 0) {
             __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_open failed");
         }
-        __android_log_print(ANDROID_LOG_INFO, "halide",
-                            "halide_hexagon_host_malloc_init: using libion. Finished.");
     } else {
         ion_fd = open("/dev/ion", O_RDONLY, 0);
         if (ion_fd < 0) {
             __android_log_print(ANDROID_LOG_ERROR, "halide", "open('/dev/ion') failed");
         }
-        __android_log_print(ANDROID_LOG_INFO, "halide",
-                            "halide_hexagon_host_malloc_init: Not using libion. Finished.");
     }
 }
 
@@ -256,14 +249,12 @@ void halide_hexagon_host_malloc_deinit() {
         if (dmabufAllocator == NULL) {
             return;
         }
-        __android_log_print(ANDROID_LOG_INFO, "halide", "entering halide_hexagon_host_malloc_deinit dmabuf");
         dmabuf_deinit_fn(dmabufAllocator);
         dmabufAllocator = NULL;
     } else {
         if (ion_fd == -1) {
             return;
         }
-        __android_log_print(ANDROID_LOG_INFO, "halide", "entering halide_hexagon_host_malloc_deinit ion");
         close(ion_fd);
         ion_fd = -1;
     }
