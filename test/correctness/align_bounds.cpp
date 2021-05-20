@@ -214,12 +214,10 @@ int main(int argc, char **argv) {
         g(x) = e;
 
         f.compute_root();
-
         g.bound(x, 0, 1024).vectorize(x, 16, TailStrategy::RoundUp);
 
+        // Just check if it crashes
         g.realize({1024});
-
-        g.compile_to_assembly("/dev/stdout", {}, Target{"x86-64-linux-avx2-no_runtime-no_bounds_query-disable_llvm_loop_opt-no_asserts"});
     }
 
     printf("Success!\n");
