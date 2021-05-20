@@ -1,12 +1,10 @@
 #include <android/log.h>
+#include <dlfcn.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
-#include <fcntl.h>
-#include <android/log.h>
-#include <dlfcn.h>
 #include <unistd.h>
 
 bool use_libdmabuf = false;
@@ -19,19 +17,19 @@ namespace {
 void *dmabufAllocator = NULL;
 
 extern "C" {
-     const char *dmabuf_heap = "qcom,system";
+const char *dmabuf_heap = "qcom,system";
 
-     __attribute__((weak)) extern void *CreateDmabufHeapBufferAllocator();
-     typedef void * (*rem_dmabuf_create_fn)();
-     rem_dmabuf_create_fn dmabuf_create_fn = NULL;
+__attribute__((weak)) extern void *CreateDmabufHeapBufferAllocator();
+typedef void * (*rem_dmabuf_create_fn)();
+rem_dmabuf_create_fn dmabuf_create_fn = NULL;
 
-     __attribute__((weak)) extern int DmabufHeapAlloc(void *buffer_allocator, const char *heap_name, size_t len, unsigned int heap_flags, size_t legacy_align);
-     typedef int (*rem_dmabuf_alloc_fn)(void *, const char *, size_t, unsigned int, size_t);
-     rem_dmabuf_alloc_fn dmabuf_alloc_fn = NULL;
+__attribute__((weak)) extern int DmabufHeapAlloc(void *buffer_allocator, const char *heap_name, size_t len, unsigned int heap_flags, size_t legacy_align);
+typedef int (*rem_dmabuf_alloc_fn)(void *, const char *, size_t, unsigned int, size_t);
+rem_dmabuf_alloc_fn dmabuf_alloc_fn = NULL;
 
-     __attribute__((weak)) extern void FreeDmabufHeapBufferAllocator(void *buffer_allocator);
-     typedef void (*rem_dmabuf_deinit_fn)(void *);
-     rem_dmabuf_deinit_fn dmabuf_deinit_fn = NULL;
+__attribute__((weak)) extern void FreeDmabufHeapBufferAllocator(void *buffer_allocator);
+typedef void (*rem_dmabuf_deinit_fn)(void *);
+rem_dmabuf_deinit_fn dmabuf_deinit_fn = NULL;
 }
 
 // ION support
@@ -82,13 +80,13 @@ struct ion_handle_data {
 #define ION_IOC_MAP _IOWR('I', 2, ion_fd_data)
 
 extern "C" {
-     __attribute__((weak)) extern int ion_open();
-     typedef int (*rem_ion_open_fn)();
-     rem_ion_open_fn ion_open_fn = NULL;
+__attribute__((weak)) extern int ion_open();
+typedef int (*rem_ion_open_fn)();
+rem_ion_open_fn ion_open_fn = NULL;
 
-     __attribute__((weak)) extern int ion_alloc_fd(int ion_fd, size_t len, size_t align, unsigned int heap_id_mask, unsigned int flags, int *map_fd);
-     typedef int (*rem_ion_alloc_fd_fn)(int ion_fd, size_t len, size_t align, unsigned int heap_id_mask, unsigned int flags, int *map_fd);
-     rem_ion_alloc_fd_fn ion_alloc_fd_fn = NULL;
+__attribute__((weak)) extern int ion_alloc_fd(int ion_fd, size_t len, size_t align, unsigned int heap_id_mask, unsigned int flags, int *map_fd);
+typedef int (*rem_ion_alloc_fd_fn)(int ion_fd, size_t len, size_t align, unsigned int heap_id_mask, unsigned int flags, int *map_fd);
+rem_ion_alloc_fd_fn ion_alloc_fd_fn = NULL;
 }
 // ION IOCTL approach
 // This function will first try older IOCTL approach provided we have not determined
@@ -203,15 +201,15 @@ void halide_hexagon_host_malloc_init() {
 
     __android_log_print(ANDROID_LOG_INFO, "halide", "entering halide_hexagon_host_malloc_init");
     pthread_mutex_init(&allocations_mutex, NULL);
-    void* lib = NULL;
+    void *lib = NULL;
 
     // Try to access libdmabufheap.so, if it succeeds use DMA-BUF
     lib = dlopen("libdmabufheap.so", RTLD_LAZY);
     if (lib) {
         use_libdmabuf = true;
-        dmabuf_create_fn = (rem_dmabuf_create_fn) dlsym(lib, "CreateDmabufHeapBufferAllocator");
-        dmabuf_deinit_fn = (rem_dmabuf_deinit_fn) dlsym(lib, "FreeDmabufHeapBufferAllocator");
-        dmabuf_alloc_fn  = (rem_dmabuf_alloc_fn)  dlsym(lib, "DmabufHeapAlloc");
+        dmabuf_create_fn = (rem_dmabuf_create_fn)dlsym(lib, "CreateDmabufHeapBufferAllocator");
+        dmabuf_deinit_fn = (rem_dmabuf_deinit_fn)dlsym(lib, "FreeDmabufHeapBufferAllocator");
+        dmabuf_alloc_fn  = (rem_dmabuf_alloc_fn)dlsym(lib, "DmabufHeapAlloc");
         if (!dmabuf_create_fn || !dmabuf_deinit_fn || !dmabuf_alloc_fn) {
             __android_log_print(ANDROID_LOG_ERROR, "halide", "huge problem in libdmabufheap.so");
             return;
@@ -231,8 +229,8 @@ void halide_hexagon_host_malloc_init() {
     lib = dlopen("libion.so", RTLD_LAZY);
     if (lib) {
         use_libion = true;
-        ion_open_fn = (rem_ion_open_fn) dlsym(lib, "ion_open");
-        ion_alloc_fd_fn = (rem_ion_alloc_fd_fn) dlsym(lib, "ion_alloc_fd");
+        ion_open_fn = (rem_ion_open_fn)dlsym(lib, "ion_open");
+        ion_alloc_fd_fn = (rem_ion_alloc_fd_fn)dlsym(lib, "ion_alloc_fd");
         if (!ion_open_fn || !ion_alloc_fd_fn) {
             __android_log_print(ANDROID_LOG_ERROR, "halide", "huge problem in libion.so");
             return;
@@ -310,7 +308,7 @@ void *halide_hexagon_host_malloc(size_t size) {
                                 ion_fd, size, alignment, 1 << heap_id, ion_flags);
             return NULL;
         }
-    } else { // !use_libion
+    } else {  // !use_libion
         handle = ion_alloc(ion_fd, size, alignment, 1 << heap_id, ion_flags);
         if (handle < 0) {
             __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_alloc(%d, %zd, %zd, %d, %d) failed",
