@@ -94,7 +94,7 @@ int predicated_tail_test(const Target &t) {
 int predicated_tail_with_scalar_test(const Target &t) {
     int size = 73;
     Var x("x"), y("y");
-    Func f("f"), g("g";
+    Func f("f"), g("g");
 
     g(x) = 10;
     f(x, y) = x + g(0);
