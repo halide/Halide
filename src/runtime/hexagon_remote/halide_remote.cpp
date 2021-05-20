@@ -93,15 +93,32 @@ int halide_hexagon_remote_load_library(const char *soname, int sonameLen,
 }
 
 volatile int power_ref_count = 0;
+static volatile void *power_context = NULL;
+
+static void *get_HAP_power_context() {
+    if (power_context == NULL) {
+        power_context = (void *)malloc(1);
+        log_printf("get_HAP_power_context: %p\n", power_context);
+    }
+    return (void *)power_context;
+}
+static void free_HAP_power_context() {
+    if (power_context) {
+        free((void *)power_context);
+        log_printf("free_HAP_power_context: %p\n", power_context);
+    }
+    power_context = NULL;
+}
 
 int halide_hexagon_remote_power_hvx_on() {
     if (power_ref_count == 0) {
+        void *pwr_ctx = get_HAP_power_context();
         HAP_power_request_t request;
         request.type = HAP_power_set_HVX;
         request.hvx.power_up = TRUE;
-        int result = HAP_power_set(NULL, &request);
+        int result = HAP_power_set(pwr_ctx, &request);
         if (0 != result) {
-            log_printf("HAP_power_set(HAP_power_set_HVX) failed (%d)\n", result);
+            log_printf("HAP_power_set(%p, HAP_power_set_HVX) failed (%d)\n", pwr_ctx, result);
             return -1;
         }
     }
@@ -113,12 +130,13 @@ int halide_hexagon_remote_power_hvx_on() {
 int halide_hexagon_remote_power_hvx_off() {
     power_ref_count--;
     if (power_ref_count == 0) {
+        void *pwr_ctx = get_HAP_power_context();
         HAP_power_request_t request;
         request.type = HAP_power_set_HVX;
         request.hvx.power_up = FALSE;
-        int result = HAP_power_set(NULL, &request);
+        int result = HAP_power_set(pwr_ctx, &request);
         if (0 != result) {
-            log_printf("HAP_power_set(HAP_power_set_HVX) failed (%d)\n", result);
+            log_printf("HAP_power_set(%p, HAP_power_set_HVX) failed (%d)\n", pwr_ctx, result);
             return -1;
         }
     }
@@ -135,16 +153,18 @@ int halide_hexagon_remote_set_performance(
     int set_latency,
     int latency) {
 
+    void *pwr_ctx = get_HAP_power_context();
     HAP_power_request_t request;
-
+    memset(&request, 0, sizeof(HAP_power_request_t));
     request.type = HAP_power_set_apptype;
     request.apptype = HAP_POWER_COMPUTE_CLIENT_CLASS;
-    int retval = HAP_power_set(NULL, &request);
+    int retval = HAP_power_set(pwr_ctx, &request);
     if (0 != retval) {
-        log_printf("HAP_power_set(HAP_power_set_apptype) failed (%d)\n", retval);
+        log_printf("HAP_power_set(%p, HAP_power_set_apptype) failed (%d)\n", pwr_ctx, retval);
         return -1;
     }
 
+    memset(&request, 0, sizeof(HAP_power_request_t));
     request.type = HAP_power_set_mips_bw;
     request.mips_bw.set_mips = set_mips;
     request.mips_bw.mipsPerThread = mipsPerThread;
@@ -154,9 +174,9 @@ int halide_hexagon_remote_set_performance(
     request.mips_bw.busbwUsagePercentage = busbwUsagePercentage;
     request.mips_bw.set_latency = set_latency;
     request.mips_bw.latency = latency;
-    retval = HAP_power_set(NULL, &request);
+    retval = HAP_power_set(pwr_ctx, &request);
     if (0 != retval) {
-        log_printf("HAP_power_set(HAP_power_set_mips_bw) failed (%d)\n", retval);
+        log_printf("HAP_power_set(%p, HAP_power_set_mips_bw) failed (%d)\n", pwr_ctx, retval);
         return -1;
     }
     return 0;
@@ -194,15 +214,16 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     int set_latency = 0;
     int latency = 0;
 
+    void *pwr_ctx = get_HAP_power_context();
     HAP_power_response_t power_info;
     unsigned int max_mips = 0;
     uint64 max_bus_bw = 0;
     HAP_power_request_t request;
 
     power_info.type = HAP_power_get_max_mips;
-    int retval = HAP_power_get(NULL, &power_info);
+    int retval = HAP_power_get(pwr_ctx, &power_info);
     if (0 != retval) {
-        log_printf("HAP_power_get(HAP_power_get_max_mips) failed (%d)\n", retval);
+        log_printf("HAP_power_get(%p,HAP_power_get_max_mips) failed (%d)\n", pwr_ctx, retval);
         return -1;
     }
     max_mips = power_info.max_mips;
@@ -214,9 +235,9 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     }
 
     power_info.type = HAP_power_get_max_bus_bw;
-    retval = HAP_power_get(NULL, &power_info);
+    retval = HAP_power_get(pwr_ctx, &power_info);
     if (0 != retval) {
-        log_printf("HAP_power_get(HAP_power_get_max_bus_bw) failed (%d)\n", retval);
+        log_printf("HAP_power_get(%p, HAP_power_get_max_bus_bw) failed (%d)\n", pwr_ctx, retval);
         return -1;
     }
     max_bus_bw = power_info.max_bus_bw;
@@ -240,12 +261,15 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     set_latency = TRUE;
     switch (mode) {
     case halide_hexagon_power_low:
+    case halide_hexagon_power_low_plus:
+    case halide_hexagon_power_low_2:
         mipsPerThread = max_mips / 4;
         bwBytePerSec = max_bus_bw / 2;
         busbwUsagePercentage = 25;
         latency = 1000;
         break;
     case halide_hexagon_power_nominal:
+    case halide_hexagon_power_nominal_plus:
         mipsPerThread = (3 * max_mips) / 8;
         bwBytePerSec = max_bus_bw;
         busbwUsagePercentage = 50;
@@ -274,9 +298,9 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     memset(&request, 0, sizeof(HAP_power_request_t));
     request.type = HAP_power_set_apptype;
     request.apptype = HAP_POWER_COMPUTE_CLIENT_CLASS;
-    retval = HAP_power_set(NULL, &request);
+    retval = HAP_power_set(pwr_ctx, &request);
     if (0 != retval) {
-        log_printf("HAP_power_set(HAP_power_set_apptype) failed (%d)\n", retval);
+        log_printf("HAP_power_set(%p, HAP_power_set_apptype) failed (%d)\n", pwr_ctx, retval);
         return -1;
     }
 
@@ -290,7 +314,7 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     request.dcvs_v2.dcvs_params.target_corner = halide_power_mode_to_voltage_corner(mode);
     request.dcvs_v2.set_latency = set_latency;
     request.dcvs_v2.latency = latency;
-    retval = HAP_power_set(NULL, &request);
+    retval = HAP_power_set(pwr_ctx, &request);
     if (0 == retval) {
         return 0;
     } else {
