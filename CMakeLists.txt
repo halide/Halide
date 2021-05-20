@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16...3.20)
 project(Halide
-        VERSION 12.0.0
+        VERSION 13.0.0
         DESCRIPTION "Halide compiler and libraries"
         HOMEPAGE_URL "https://halide-lang.org")
 

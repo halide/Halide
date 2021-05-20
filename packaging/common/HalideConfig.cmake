@@ -55,8 +55,6 @@ set(Halide_VERSION_MINOR @Halide_VERSION_MINOR@)
 set(Halide_VERSION_PATCH @Halide_VERSION_PATCH@)
 set(Halide_VERSION_TWEAK @Halide_VERSION_TWEAK@)
 
-set(Halide_HOST_TARGET @Halide_HOST_TARGET@)
-
 set(Halide_ENABLE_EXCEPTIONS @Halide_ENABLE_EXCEPTIONS@)
 set(Halide_ENABLE_RTTI @Halide_ENABLE_RTTI@)
 
@@ -67,7 +65,6 @@ set(Halide_ENABLE_RTTI @Halide_ENABLE_RTTI@)
 include(CMakeFindDependencyMacro)
 
 find_dependency(HalideHelpers "${Halide_VERSION}" EXACT)
-find_dependency(Threads)
 
 if (Halide_comp_PNG)
     Halide_find_component_dependency(PNG PNG)
