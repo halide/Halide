@@ -93,7 +93,7 @@ rem_ion_alloc_fd_fn ion_alloc_fd_fn = NULL;
 // that we should use the newer IOCTL. Once we have determined we should use the
 // newer IOCTL method , we cease calling the older IOCTL.
 
-int ion_alloc(int ion_fd, size_t len, size_t align, unsigned int heap_id_mask, unsigned int flags) {
+ion_user_handle_t ion_alloc(int ion_fd, size_t len, size_t align, unsigned int heap_id_mask, unsigned int flags) {
 
     if (use_libion) {
         int map_fd = 0;
@@ -151,7 +151,7 @@ int ion_free(int ion_fd, ion_user_handle_t ion_handle) {
         // We need to use this approach only if we are not using
         // libion. If we are using libion (use_libion == true),
         // then simply closing the fd (buf_fd) is enough. See
-        // alloc_ion_free below
+        // uses of ion_free below.
         if (ioctl(ion_fd, ION_IOC_FREE, &ion_handle) < 0) {
             return -1;
         }
@@ -408,7 +408,7 @@ void halide_hexagon_host_free(void *ptr) {
     close(rec->buf_fd);
     if (!use_libdmabuf && !use_libion && !use_newer_ioctl) {
         // We free rec->handle only if we are not using libion and are
-        // also using the older ioctl. See alloc_ion above for more
+        // also using the older ioctl. See ion_alloc above for more
         // information.
         if (ion_free(ion_fd, rec->handle) < 0) {
             __android_log_print(ANDROID_LOG_WARN, "halide", "ion_free(%d, %d) failed", ion_fd, rec->handle);
