@@ -207,12 +207,12 @@ NewMatmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType o
     const auto &lhs_load_type = lhs_load->type;
     int element_width = lhs_load_type.bytes();
     auto lhs_type = lhs_load_type.with_lanes(1024 / element_width);
-    auto lhs = Call::make(lhs_type, "tile_load", {tile_x, tile_r * element_width, lhs_var, lhs_tile.base * element_width, print(lhs_tile.stride[0] * element_width, " <- lhs load stride")}, Call::Intrinsic);
+    auto lhs = Call::make(lhs_type, "tile_load", {tile_x, tile_r * element_width, lhs_var, lhs_tile.base * element_width, lhs_tile.stride[0] * element_width}, Call::Intrinsic);
 
     auto rhs_var = Variable::make(Handle(), rhs_load->name);
     const auto &rhs_load_type = rhs_load->type;
     auto rhs_type = rhs_load_type.with_lanes(1024 / element_width);
-    auto rhs = Call::make(rhs_type, "tile_load", {1, tile_y * tile_r * element_width, rhs_var, rhs_tile.base * element_width, print(rhs_tile.stride[0] * tile_y * element_width, " <- rhs load stride, ", rhs_tile.stride[1], " <- rhs stride 1")}, Call::Intrinsic);
+    auto rhs = Call::make(rhs_type, "tile_load", {1, tile_y * tile_r * element_width, rhs_var, rhs_tile.base * element_width, rhs_tile.stride[0] * tile_y * element_width}, Call::Intrinsic);
 
     auto res_type = [&]() {
         switch (op_type) {
@@ -228,7 +228,8 @@ NewMatmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType o
     // {rows, colbytes, acc, out, lhs, rhs}
     auto out = Load::make(res_type, new_name, Ramp::make(0, 1, 256), {}, {}, const_true(256), {});
 
-    auto colbytes = tile_y * 32 / rhs_load->type.bits();
+    // 4 bytes for i32, f32
+    auto colbytes = tile_y * 4;
     auto matmul =
         Call::make(res_type, "tile_matmul", {tile_x, colbytes, tile_r, out, lhs, rhs}, Call::Intrinsic);
     auto store = Store::make(new_name, matmul, Ramp::make(0, 1, 256), Parameter(), const_true(256), ModulusRemainder());
