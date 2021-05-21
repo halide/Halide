@@ -63,7 +63,10 @@ void fill_buffer_b(Buffer<IntT> &buf, int col, int acc) {
 }
 
 template<typename LhsInt8, typename RhsInt8>
-bool matmul() {
+bool matmul(Halide::Target target) {
+    // used for compiling to llvm IR or asm
+    (void)target;
+
     constexpr bool lhs_signed = std::is_signed<LhsInt8>::value;
     constexpr bool rhs_signed = std::is_signed<RhsInt8>::value;
 
@@ -167,7 +170,13 @@ auto matmul_us = &matmul<uint8_t, int8_t>;
 auto matmul_su = &matmul<int8_t, uint8_t>;
 auto matmul_uu = &matmul<uint8_t, uint8_t>;
 
-void matmul_bf16() {
+bool equal_eps(float lhs, float rhs, float eps) {
+    return std::abs(lhs - rhs) < eps;
+}
+
+bool matmul_bf16(Halide::Target target) {
+    (void)target;
+
     // lhs: 32x16, rhs: 16x32
     const int row = 32;
     const int col = 32;
@@ -181,7 +190,7 @@ void matmul_bf16() {
 
     Func mm("matmul");
     mm(x, y) = cast<float>(0);
-    mm(x, y) += cast<float>(A(r.x, y)) * B(r.x % 2, x, r.x / 2);
+    mm(x, y) += cast<float>(cast<float>(A(r.x, y))) * cast<float>(B(r.x % 2, x, r.x / 2));
 
     int tile_x = 8;
     int tile_y = 8;
@@ -215,7 +224,7 @@ void matmul_bf16() {
         .vectorize(mmyi);
         
     Func result = mm.in();
-    result.print_loop_nest();
+    //result.print_loop_nest();
 
     Buffer<bfloat16_t> a_buf(acc, row);
     fill_buffer_a_bf16(a_buf, row, acc);
@@ -234,6 +243,24 @@ void matmul_bf16() {
     auto time = Tools::benchmark(20, 20, [&]() {
         result.realize(out);
     });
+
+    std::cout << "Exec time: " << time << "\n";
+
+    for (int j = 0; j < row; ++j) {
+        for (int i = 0; i < col; ++i) {
+            float val = 0.f;
+            for (int k = 0; k < acc; ++k) {
+                val += static_cast<float>(a_buf(k, j)) * static_cast<float>(b_buf(k % 2, i, k / 2));
+            }
+            if (!equal_eps(val, out(i, j), 0.01f)) {
+                std::cerr << "Invalid result at " << i << ", " << j << "\n"
+                          << out(i, j) << " != " << val << "\n";
+                return false;
+            }
+        }
+    }
+    std::cout << "Success!\n";
+    return true;
 }
 
 int main(int argc, char **argv) {
@@ -243,11 +270,11 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    //matmul_ss();
-    //matmul_us();
-    //matmul_su();
-    //matmul_uu();
+    matmul_ss(target);
+    matmul_us(target);
+    matmul_su(target);
+    matmul_uu(target);
     
-    matmul_bf16();
+    matmul_bf16(target);
     return 0;
 }
