@@ -24,6 +24,14 @@ typedef halide_hexagon_remote_scalar_t scalar_t;
 
 extern "C" {
 
+__attribute__((weak)) int HAP_power_destroy_client(void *context);
+
+static inline void HAP_power_destroy(void *context){
+    if (HAP_power_destroy_client) {
+        HAP_power_destroy_client(context);
+    }
+}
+
 // This is a basic implementation of the Halide runtime for Hexagon.
 void halide_print(void *user_context, const char *str) {
     if (str) {
@@ -100,7 +108,7 @@ static void free_HAP_power_context() {
         HAP_power_destroy((void*)power_context);
         free((void *)power_context);
     }
-    power_context = nullptr;
+    power_context = NULL;
 }
 
 static void *get_HAP_power_context() {
