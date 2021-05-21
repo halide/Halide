@@ -95,17 +95,20 @@ int halide_hexagon_remote_load_library(const char *soname, int sonameLen,
 volatile int power_ref_count = 0;
 static volatile void *power_context = NULL;
 
+static void free_HAP_power_context() {
+    if (power_context) {
+        HAP_power_destroy((void*)power_context);
+        free((void *)power_context);
+    }
+    power_context = nullptr;
+}
+
 static void *get_HAP_power_context() {
     if (power_context == NULL) {
+        atexit(free_HAP_power_context);
         power_context = (void *)malloc(1);
     }
     return (void *)power_context;
-}
-static void free_HAP_power_context() {
-    if (power_context) {
-        free((void *)power_context);
-    }
-    power_context = NULL;
 }
 
 int halide_hexagon_remote_power_hvx_on() {
