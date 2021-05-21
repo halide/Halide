@@ -69,7 +69,8 @@ enum class TailStrategy {
     PredicateLoads,
 
     /** Guard the stores in the loop with an if statement that
-     * prevents evaluation beyond the original extent. Always legal.
+     * prevents evaluation beyond the original extent. Not legal
+     * for RVars, as it would change the meaning of the algorithm.
      * The if statement is treated like a boundary condition, and
      * factored out into a loop epilogue if possible.
      * Pros: does not constrain output sizes, input size constraints
