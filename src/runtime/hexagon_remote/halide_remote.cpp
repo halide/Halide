@@ -106,15 +106,14 @@ static volatile void *power_context = NULL;
 static void free_HAP_power_context() {
     if (power_context) {
         HAP_power_destroy((void*)power_context);
-        free((void *)power_context);
+        power_context = NULL;
     }
-    power_context = NULL;
 }
 
 static void *get_HAP_power_context() {
     if (power_context == NULL) {
+        power_context = (void *)(&power_ref_count);
         atexit(free_HAP_power_context);
-        power_context = (void *)malloc(1);
     }
     return (void *)power_context;
 }
