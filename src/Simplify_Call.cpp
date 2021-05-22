@@ -834,6 +834,8 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // There are other PureExterns we don't bother with (e.g. fast_inverse_f32)...
         // just fall thru and take the general case.
         debug(2) << "Simplifier: unhandled PureExtern: " << op->name;
+    } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
+        clear_bounds_info(bounds);
     }
 
     // No else: we want to fall thru from the PureExtern clause.
