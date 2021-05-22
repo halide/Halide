@@ -1915,8 +1915,12 @@ void CodeGen_LLVM::visit(const Load *op) {
             // Try to rewrite strided loads as shuffles of dense loads,
             // aligned to the stride. This makes adjacent strided loads
             // share the same underlying dense loads.
-            ModulusRemainder align = op->alignment;
             Expr base = ramp->base;
+            // The variable align will track the alignment of the
+            // base. Every time we change base, we also need to update
+            // align.
+            ModulusRemainder align = op->alignment;
+
             int aligned_stride = gcd(stride->value, align.modulus);
             int offset = 0;
             if (aligned_stride == stride->value) {
@@ -1930,7 +1934,7 @@ void CodeGen_LLVM::visit(const Load *op) {
 
             if (offset) {
                 base = simplify(base - offset);
-                align.remainder -= offset;
+                align.remainder = mod_imp(align.remainder - offset, align.modulus);
             }
 
             // We want to load a few more bytes than the original load did.
@@ -1947,6 +1951,11 @@ void CodeGen_LLVM::visit(const Load *op) {
 
             int slice_lanes = native_vector_bits() / op->type.bits();
 
+            // We're going to add multiples of slice_lanes to base in
+            // the loop below, so reduce alignment modulo slice_lanes.
+            align.modulus = gcd(align.modulus, slice_lanes);
+            align.remainder = mod_imp(align.remainder, align.modulus);
+
             // We need to slice the result in to native vector lanes, otherwise
             // LLVM misses optimizations like using ldN on ARM.
             vector<Value *> results;
@@ -1957,7 +1966,7 @@ void CodeGen_LLVM::visit(const Load *op) {
                 Expr slice_base = simplify(base + load_base_i);
 
                 Value *load_i = codegen_dense_vector_load(op->type.with_lanes(load_lanes_i), op->name, slice_base,
-                                                          op->image, op->param, op->alignment, nullptr, false);
+                                                          op->image, op->param, align, nullptr, false);
 
                 SmallVector<Constant *, 256> constants;
                 for (int j = 0; j < lanes_i; j++) {

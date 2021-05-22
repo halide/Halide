@@ -719,10 +719,8 @@ BoundsMap Conv2DOp::map_bounds(int input_idx, int output_idx) const {
         // Pass minimal sized buffers to learn about the alignment requirements.
         HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
         HalideBuffer<int32_t> bias_buf(nullptr, 1);
-        HalideBuffer<void> filter_buf(filter_type(), 1, 1, 1, 1, 1, 1);
-        // TODO: How to initialize the above buffer without allocating?
-        filter_buf.deallocate();
-        HalideBuffer<uint8_t> output_buf;
+        HalideBuffer<void> filter_buf(filter_type(), nullptr, 1, 1, 1, 1, 1, 1);
+        HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
         conv_uint8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf);
 
         const int vector_reduction = filter_buf.dim(0).extent();
@@ -747,7 +745,6 @@ void conv_uint8(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t
                 const MultiplyParams &params, const std::array<int, 2> &stride,
                 const std::array<int, 2> &dilation, const Interval &output_range,
                 halide_buffer_t *output) {
-    assert(params.c.exponent() <= 0);
 #ifdef CONV_R16
     if (input->dim[0].extent >= 16) {
         // For large reductions, use the big reduction version.
