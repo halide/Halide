@@ -118,10 +118,10 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
 
         if (rewrite(IRMatcher::Overflow() / x, a) ||
             rewrite(x / IRMatcher::Overflow(), b) ||
+            rewrite(x / 1, x) ||
             (!op->type.is_float() && rewrite(x / 0, 0)) ||
             (!op->type.is_float() && denominator_non_zero && rewrite(x / x, 1)) ||
             rewrite(0 / x, 0) ||
-            rewrite(x / 1, x) ||
             false) {
             return rewrite.result;
         }

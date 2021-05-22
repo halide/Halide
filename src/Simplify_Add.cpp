@@ -38,10 +38,10 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::add(a, b), op->type);
 
-        if (rewrite(x + 0, x) ||
-            rewrite(0 + x, x) ||
-            rewrite(IRMatcher::Overflow() + x, a) ||
-            rewrite(x + IRMatcher::Overflow(), b)) {
+        if (rewrite(IRMatcher::Overflow() + x, a) ||
+            rewrite(x + IRMatcher::Overflow(), b) ||
+            rewrite(x + 0, x) ||
+            rewrite(0 + x, x)) {
             return rewrite.result;
         }
 
