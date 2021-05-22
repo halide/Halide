@@ -93,13 +93,9 @@ int halide_hexagon_remote_load_library(const char *soname, int sonameLen,
 }
 
 volatile int power_ref_count = 0;
-static volatile void *power_context = NULL;
 
-static void *get_HAP_power_context() {
-    if (power_context == NULL) {
-        power_context = (void *)(&power_ref_count);
-    }
-    return (void *)power_context;
+static inline void *get_HAP_power_context() {
+    return (void *)(&power_ref_count);
 }
 
 int halide_hexagon_remote_power_hvx_on() {
