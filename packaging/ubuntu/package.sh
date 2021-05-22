@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e -o pipefail
 
-halide_source=$(readlink -f "$1")
-halide_build_root=$(readlink -f "$2")
+halide_source=$(realpath "$1")
+halide_build_root=$(realpath "$2")
 
 [ -z "$halide_source" ] && echo "Usage: $0 <source-dir> <build-dir>" && exit
 [ -z "$halide_build_root" ] && echo "Usage: $0 <source-dir> <build-dir>" && exit
