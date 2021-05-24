@@ -237,8 +237,8 @@ private:
     Func upsample(Func f) {
         using Halide::_;
         Func upx, upy;
-        upx(x, y, _) = lerp(f(x / 2, y, _), f((x + 1) / 2, y, _), ((x % 2) * 2 + 1) / 4.0f);
-        upy(x, y, _) = lerp(upx(x, y / 2, _), upx(x, (y + 1) / 2, _), ((y % 2) * 2 + 1) / 4.0f);
+        upx(x, y, _) = lerp(f((x + 1) / 2, y, _), f((x - 1) / 2, y, _), ((x % 2) * 2 + 1) / 4.0f);
+        upy(x, y, _) = lerp(upx(x, (y + 1) / 2, _), upx(x, (y - 1) / 2, _), ((y % 2) * 2 + 1) / 4.0f);
         return upy;
     }
 };

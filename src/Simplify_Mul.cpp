@@ -57,18 +57,22 @@ Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
         }
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::mul(a, b), op->type);
-        if (rewrite(c0 * c1, fold(c0 * c1)) ||
-            rewrite(IRMatcher::Overflow() * x, a) ||
+
+        if (rewrite(IRMatcher::Overflow() * x, a) ||
             rewrite(x * IRMatcher::Overflow(), b) ||
             rewrite(0 * x, 0) ||
             rewrite(1 * x, x) ||
             rewrite(x * 0, 0) ||
             rewrite(x * 1, x)) {
+
             return rewrite.result;
         }
 
-        if (rewrite((x + c0) * c1, x * c1 + fold(c0 * c1), !overflows(c0 * c1)) ||
+        if (rewrite(c0 * c1, fold(c0 * c1)) ||
+            rewrite((x + c0) * c1, x * c1 + fold(c0 * c1), !overflows(c0 * c1)) ||
             rewrite((c0 - x) * c1, x * fold(-c1) + fold(c0 * c1), !overflows(c0 * c1)) ||
+            rewrite((0 - x) * y, 0 - x * y) ||
+            rewrite(x * (0 - y), 0 - x * y) ||
             rewrite((x - y) * c0, (y - x) * fold(-c0), c0 < 0 && -c0 > 0) ||
             rewrite((x * c0) * c1, x * fold(c0 * c1), !overflows(c0 * c1)) ||
             rewrite((x * c0) * y, (x * y) * c0, !is_const(y)) ||

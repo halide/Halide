@@ -13,6 +13,9 @@ set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release MinSizeRel RelWithDebInfo "")
 find_package(LLVM ${Halide_REQUIRE_LLVM_VERSION} REQUIRED)
 find_package(Clang REQUIRED CONFIG HINTS "${LLVM_DIR}/../clang")
 
+set(LLVM_PACKAGE_VERSION "${LLVM_PACKAGE_VERSION}"
+    CACHE INTERNAL "LLVM version")
+
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 message(STATUS "Using ClangConfig.cmake in: ${Clang_DIR}")

@@ -37,7 +37,7 @@ public:
     Input<int> dilation_y_{"dilation_y"};
 
     Input<int32_t> output_multiplier_{"output_multiplier"};
-    Input<uint32_t> output_shift_{"output_shift"};
+    Input<int32_t> output_shift_{"output_shift"};
     Input<uint8_t> output_zero_{"output_zero"};
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
@@ -108,15 +108,22 @@ public:
         require_same_min_extent(0, bias_, output_);
         require_same_min_extent(0, filter_, output_);
 
+        int vector_size = natural_vector_size<uint8_t>();
+        if (get_register_count(target) < 32) {
+            vector_size = natural_vector_size<int16_t>();
+        }
+
         if (inv_depth_multiplier_ == 0) {
             // When we're broadcasting input channels, require that the input has only
             // one channel.
             input_.dim(0).set_extent(1);
-        }
-
-        int vector_size = natural_vector_size<uint8_t>();
-        if (get_register_count(target) < 32) {
-            vector_size = natural_vector_size<int16_t>();
+        } else if (inv_depth_multiplier_ == 1) {
+            // Require the input to be aligned.
+            const int input_alignment = vector_size;
+            input_.set_host_alignment(input_alignment);
+            for (int d = 1; d < input_.dimensions(); d++) {
+                input_.dim(d).set_stride(align(input_.dim(d).stride(), input_alignment));
+            }
         }
 
         // Tile the output, so we can try to re-use loads spatially when performing

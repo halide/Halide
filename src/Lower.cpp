@@ -402,7 +402,8 @@ void lower_impl(const vector<Function> &output_funcs,
     s = remove_dead_allocations(s);
     s = simplify(s);
     s = hoist_loop_invariant_values(s);
-    log("Lowering after removing dead allocations and hoisting loop invariant values:", s);
+    s = hoist_loop_invariant_if_statements(s);
+    log("Lowering after removing dead allocations and hoisting loop invariants:", s);
 
     debug(1) << "Finding intrinsics...\n";
     s = find_intrinsics(s);
