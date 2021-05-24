@@ -400,6 +400,11 @@ Expr make_signed_integer_overflow(Type type) {
     return Call::make(type, Call::signed_integer_overflow, {counter++}, Call::Intrinsic);
 }
 
+bool is_signed_integer_overflow(const Expr &expr) {
+    const Call *call = expr.as<Call>();
+    return call && call->is_intrinsic(Call::signed_integer_overflow);
+}
+
 Expr const_true(int w) {
     return make_one(UInt(1, w));
 }
