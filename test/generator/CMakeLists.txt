@@ -144,10 +144,7 @@ endif ()
 
 # alias_aottest.cpp
 # alias_generator.cpp
-halide_define_aot_test(alias EXTRA_LIBS alias_with_offset_42)
-add_halide_library(alias_with_offset_42
-                   FROM alias.generator
-                   GENERATOR alias_with_offset_42)
+halide_define_aot_test(alias)
 
 # argvcall_aottest.cpp
 # argvcall_generator.cpp
