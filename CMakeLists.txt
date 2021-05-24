@@ -17,9 +17,7 @@ include(MakeShellPath)
 include(CMakeDependentOption)
 
 # Build Halide as a shared lib by default, but still honor command-line settings.
-if (NOT DEFINED BUILD_SHARED_LIBS)
-    set(BUILD_SHARED_LIBS YES)
-endif ()
+option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 
 # Warn if the user did not set a build type and is using a single-configuration generator.
 get_property(IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
