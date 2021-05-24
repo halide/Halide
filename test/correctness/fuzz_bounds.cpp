@@ -369,14 +369,6 @@ int sample_interval(const Interval &interval) {
     return value;
 }
 
-bool is_integer_overflow(const Expr &expr) {
-    if (const Call *call = expr.as<Call>()) {
-        return call->is_intrinsic(Call::signed_integer_overflow);
-    } else {
-        return false;
-    }
-}
-
 bool test_bounds(Expr test, const Interval &interval, Type T, const map<string, Expr> &vars) {
     for (int j = 0; j < T.lanes(); j++) {
         Expr a_j = test;
@@ -453,8 +445,8 @@ bool test_expression_bounds(Expr test, int trials, int samples_per_trial) {
             return true;  // any result is allowed
         }
 
-        if ((interval.has_upper_bound() && is_integer_overflow(interval.max)) ||
-            (interval.has_lower_bound() && is_integer_overflow(interval.min))) {
+        if ((interval.has_upper_bound() && is_signed_integer_overflow(interval.max)) ||
+            (interval.has_lower_bound() && is_signed_integer_overflow(interval.min))) {
             // Quit for now, assume other intervals will produce the same results.
             return true;
         }

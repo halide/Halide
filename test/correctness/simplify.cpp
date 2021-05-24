@@ -2262,6 +2262,14 @@ int main(int argc, char **argv) {
     }
 
     {
+        Expr m = Int(32).max();
+        Expr e = m + m;
+        Expr l = Let::make("x", e, x + 1);
+        Expr sl = substitute_in_all_lets(simplify(l));
+        check_is_sio(sl);
+    }
+
+    {
         using ConciseCasts::i16;
 
         const Expr a = Expr(std::numeric_limits<int16_t>::lowest());
