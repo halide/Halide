@@ -4,7 +4,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    Target t = get_jit_target_from_environment();
+    Target t = get_jit_target_from_environment().with_feature(Target::Debug);
     if (!t.has_gpu_feature()) {
         printf("[SKIP] No GPU target enabled.\n");
         return 0;
@@ -14,6 +14,8 @@ int main(int argc, char **argv) {
         printf("[SKIP] Skipping test for OpenGLCompute, as it does not support dynamically-sized shared memory\n");
         return 0;
     }
+
+    printf("Using target: %s\n", t.to_string().c_str());
 
     // Check dynamic allocations per-block and per-thread into both
     // shared and global
@@ -35,7 +37,7 @@ int main(int argc, char **argv) {
             f.store_in(memory_type);
 
             // The amount of shared/heap memory required varies with x
-            Buffer<int> out = g.realize({100});
+            Buffer<int> out = g.realize({100}, t);
             for (int x = 0; x < 100; x++) {
                 int correct = 3 * x;
                 if (out(x) != correct) {

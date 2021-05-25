@@ -879,8 +879,13 @@ WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
             return (int)err;
         }
     } else {
+        debug(user_context) << "CDMC: from " << (from_host ? "host" : "device")
+                            << " to " << (to_host ? "host" : "device") << ", "
+                            << " dim " << d
+                            << (void *)src << " -> " << (void *)dst << ", " << c.chunk_size << " bytes\n";
         ssize_t src_off = 0, dst_off = 0;
         for (int i = 0; i < (int)c.extent[d - 1]; i++) {
+            debug(user_context) << "CDMC: src_off = " << (int64_t)src_off << " dst_off = " << (int64_t)dst_off << " @ i = " << i << "\n";
             int err = cuda_do_multidimensional_copy(user_context, c, src + src_off, dst + dst_off, d - 1, from_host, to_host);
             dst_off += c.dst_stride_bytes[d - 1];
             src_off += c.src_stride_bytes[d - 1];
