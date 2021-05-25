@@ -15,7 +15,8 @@ int main(int argc, char **argv) {
     f(x) = foo(x);
     f.vectorize(x, 4);
     f.output_buffer().dim(0).set_min(0);
-    auto result = f.realize(4);
+    auto result = f.realize({4});
 
+    printf("Success!\n");
     return 0;
 }

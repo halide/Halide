@@ -1,4 +1,4 @@
-#include<iostream>
+#include <iostream>
 // Don't include Halide.h: it is not necessary for this test.
 #include "HalideBuffer.h"
 
@@ -85,7 +85,6 @@ void test_copy(Buffer<float> a, Buffer<float> b) {
     auto a_planar = a_interleaved.copy_to_planar();
     assert(a_planar.stride(0) == 1);
     check_equal(a, a_planar);
-
 }
 
 int main(int argc, char **argv) {
@@ -95,18 +94,17 @@ int main(int argc, char **argv) {
         test_copy(a, b);
     }
 
-
     {
         // Check copying a buffer, using the halide_dimension_t pointer ctors
         halide_dimension_t shape_a[] = {{0, 100, 1},
-                                        {0, 3, 1*100},
-                                        {0, 80, 1*100*3}};
+                                        {0, 3, 1 * 100},
+                                        {0, 80, 1 * 100 * 3}};
         Buffer<float> a(nullptr, 3, shape_a);
         a.allocate();
 
         halide_dimension_t shape_b[] = {{0, 120, 1},
-                                        {0, 80, 1*120},
-                                        {0, 3, 1*120*80}};
+                                        {0, 80, 1 * 120},
+                                        {0, 3, 1 * 120 * 80}};
         Buffer<float> b(nullptr, 3, shape_b);
         b.allocate();
 
@@ -116,13 +114,13 @@ int main(int argc, char **argv) {
     {
         // Check copying a buffer, using the vector<halide_dimension_t> ctors
         Buffer<float> a(nullptr, {{0, 100, 1},
-                                  {0, 3, 1*100},
-                                  {0, 80, 1*100*3}});
+                                  {0, 3, 1 * 100},
+                                  {0, 80, 1 * 100 * 3}});
         a.allocate();
 
         Buffer<float> b(nullptr, {{0, 120, 1},
-                                  {0, 80, 1*120},
-                                  {0, 3, 1*120*80}});
+                                  {0, 80, 1 * 120},
+                                  {0, 3, 1 * 120 * 80}});
         b.allocate();
 
         test_copy(a, b);
@@ -131,11 +129,11 @@ int main(int argc, char **argv) {
     {
         // Check make a Buffer from a Buffer of a different type
         Buffer<float, 2> a(100, 80);
-        Buffer<const float, 3> b(a); // statically safe
-        Buffer<const void, 4> c(b);  // statically safe
-        Buffer<const float, 3> d(c); // does runtime check of actual type.
-        Buffer<void, 3> e(a);        // statically safe
-        Buffer<float, 2> f(e);       // runtime checks
+        Buffer<const float, 3> b(a);  // statically safe
+        Buffer<const void, 4> c(b);   // statically safe
+        Buffer<const float, 3> d(c);  // does runtime check of actual type.
+        Buffer<void, 3> e(a);         // statically safe
+        Buffer<float, 2> f(e);        // runtime checks
     }
 
     {
@@ -161,8 +159,9 @@ int main(int argc, char **argv) {
             b = counter;
         });
         a.for_each_value([&](float &a, float b) {
-            a = 2*b;
-        }, b);
+            a = 2 * b;
+        },
+                         b);
 
         if (counter != W * H * C) {
             printf("for_each_value didn't hit every element\n");
@@ -205,7 +204,7 @@ int main(int argc, char **argv) {
     }
 
     {
-        int data[4] = { 42, 42, 42, 42 };
+        int data[4] = {42, 42, 42, 42};
 
         // Check that copy() works with const
         Buffer<const int> a(data, 2, 2);
@@ -301,7 +300,8 @@ int main(int argc, char **argv) {
         a.for_each_value([&](int a_value, const int &b_value, int &c_value_ref) {
             counter += 1;
             c_value_ref = 1;
-        }, b, c);
+        },
+                         b, c);
         assert(counter == 5 * 4 * 3);
         assert(a.all_equal(0));
         assert(b.all_equal(0));
@@ -311,7 +311,8 @@ int main(int argc, char **argv) {
         c.for_each_value([&](int &c_value_ref, const int &b_value, int a_value) {
             counter += 1;
             c_value_ref = 2;
-        }, b, a);
+        },
+                         b, a);
         assert(counter == 5 * 4 * 3);
         assert(a.all_equal(0));
         assert(b.all_equal(0));
@@ -321,7 +322,8 @@ int main(int argc, char **argv) {
         a_const.for_each_value([&](int a_value, const int &b_value, int &c_value_ref) {
             counter += 1;
             c_value_ref = 1;
-        }, b_const, c);
+        },
+                               b_const, c);
         assert(counter == 5 * 4 * 3);
         assert(a.all_equal(0));
         assert(b.all_equal(0));
@@ -331,7 +333,8 @@ int main(int argc, char **argv) {
         c.for_each_value([&](int &c_value_ref, const int &b_value, int a_value) {
             counter += 1;
             c_value_ref = 2;
-        }, b_const, a_const);
+        },
+                         b_const, a_const);
         assert(counter == 5 * 4 * 3);
         assert(a.all_equal(0));
         assert(b.all_equal(0));

@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
     Func g1, g2, g3, g4, g5;
 
     Var x, xi;
-    Expr v = x*1.34f + 1.0142f;
+    Expr v = x * 1.34f + 1.0142f;
 
     Param<float> p;
     p.set(1.0f);
@@ -78,17 +78,17 @@ int main(int argc, char **argv) {
         g5.gpu_tile(x, xi, 16);
     }
 
-    Buffer<float> imf1 = f1.realize(10000);
-    Buffer<float> imf2 = f2.realize(10000);
-    Buffer<float> imf3 = f3.realize(10000);
-    Buffer<float> imf4 = f4.realize(10000);
-    Buffer<float> imf5 = f5.realize(10000);
+    Buffer<float> imf1 = f1.realize({10000});
+    Buffer<float> imf2 = f2.realize({10000});
+    Buffer<float> imf3 = f3.realize({10000});
+    Buffer<float> imf4 = f4.realize({10000});
+    Buffer<float> imf5 = f5.realize({10000});
 
-    Buffer<float> img1 = g1.realize(10000);
-    Buffer<float> img2 = g2.realize(10000);
-    Buffer<float> img3 = g3.realize(10000);
-    Buffer<float> img4 = g4.realize(10000);
-    Buffer<float> img5 = g5.realize(10000);
+    Buffer<float> img1 = g1.realize({10000});
+    Buffer<float> img2 = g2.realize({10000});
+    Buffer<float> img3 = g3.realize({10000});
+    Buffer<float> img4 = g4.realize({10000});
+    Buffer<float> img5 = g5.realize({10000});
 
     printf("Testing accuracy of inverse\n");
     check(imf1, imf2);

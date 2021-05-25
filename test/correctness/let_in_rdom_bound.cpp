@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
     // internal variables created by lets.
     Param<int> p;
     Var x;
-    RDom r(0, Halide::Internal::Let::make(x.name(), (p + 8) / p, x*x));
+    RDom r(0, Halide::Internal::Let::make(x.name(), (p + 8) / p, x * x));
     Func f;
     f(x) = 0;
     f(x) += r;
@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     p.set(3);
     int rdom_bound = (3 + 8) / 3;
     rdom_bound *= rdom_bound;
-    Buffer<int> buf = f.realize(10);
+    Buffer<int> buf = f.realize({10});
 
     int correct = (rdom_bound * (rdom_bound - 1)) / 2;
 

@@ -1,11 +1,23 @@
 #include "Halide.h"
-#include <cstdio>
 #include "halide_benchmark.h"
+#include <cstdio>
 
 using namespace Halide;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
+    if (target.arch == Target::ARM &&
+        target.os == Target::OSX) {
+        printf("[SKIP] Apple M1 chips have division performance roughly on par with the reciprocal instruction\n");
+        return 0;
+    }
+
     Func slow, fast;
     Var x;
     Param<float> p(1.0f);
@@ -16,8 +28,8 @@ int main(int argc, char **argv) {
     RDom r(0, N);
     slow(x) = 1.0f;
     fast(x) = 1.0f;
-    slow(x) = p / (slow(x) + 1) + 0*r;
-    fast(x) = fast_inverse((fast(x) + 1) + 0*r);
+    slow(x) = p / (slow(x) + 1) + 0 * r;
+    fast(x) = fast_inverse((fast(x) + 1) + 0 * r);
 
     slow.update().vectorize(x, 4);
     fast.update().vectorize(x, 4);

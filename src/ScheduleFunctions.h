@@ -8,8 +8,10 @@
  */
 
 #include <map>
+#include <string>
+#include <vector>
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 

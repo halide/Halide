@@ -6,7 +6,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Target t(get_jit_target_from_environment());
     if (!t.has_gpu_feature()) {
-        printf("Not running test because no gpu target enabled\n");
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
 
@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     Var x, y, xi, yi;
     f(x, y) = in(x, y);
     f.gpu_tile(x, y, xi, yi, 8, 8);
-    Buffer<float> out = f.realize(100, 100);
+    Buffer<float> out = f.realize({100, 100});
 
     // Check the output has a device allocation, and was copied to
     // host by realize.

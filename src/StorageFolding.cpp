@@ -1,4 +1,5 @@
 #include "StorageFolding.h"
+
 #include "Bounds.h"
 #include "CSE.h"
 #include "Debug.h"
@@ -9,6 +10,7 @@
 #include "Monotonic.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -18,8 +20,6 @@ namespace {
 int64_t next_power_of_two(int64_t x) {
     return static_cast<int64_t>(1) << static_cast<int64_t>(std::ceil(std::log2(x)));
 }
-
-}  // namespace
 
 using std::map;
 using std::string;
@@ -47,7 +47,7 @@ public:
     }
 };
 
-int count_producers(Stmt in, const std::string &name) {
+int count_producers(const Stmt &in, const std::string &name) {
     CountProducers counter(name);
     in.accept(&counter);
     return counter.count;
@@ -69,7 +69,7 @@ class FoldStorageOfFunction : public IRMutator {
         if (op->name == func && op->call_type == Call::Halide) {
             vector<Expr> args = op->args;
             internal_assert(dim < (int)args.size());
-            args[dim] = is_one(factor) ? 0 : (args[dim] % factor);
+            args[dim] = is_const_one(factor) ? 0 : (args[dim] % factor);
             expr = Call::make(op->type, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         } else if (op->name == Call::buffer_crop) {
@@ -143,7 +143,7 @@ class FoldStorageOfFunction : public IRMutator {
         internal_assert(op);
         if (op->name == func) {
             vector<Expr> args = op->args;
-            args[dim] = is_one(factor) ? 0 : (args[dim] % factor);
+            args[dim] = is_const_one(factor) ? 0 : (args[dim] % factor);
             stmt = Provide::make(op->name, op->values, args);
         }
         return stmt;
@@ -151,7 +151,7 @@ class FoldStorageOfFunction : public IRMutator {
 
 public:
     FoldStorageOfFunction(string f, int d, Expr e, string p)
-        : func(f), dim(d), factor(e), dynamic_footprint(p) {
+        : func(std::move(f)), dim(d), factor(std::move(e)), dynamic_footprint(std::move(p)) {
     }
 };
 
@@ -390,8 +390,8 @@ public:
                        string head, string tail,
                        string loop_var, Expr sema_var,
                        int dim, const StorageDim &storage_dim)
-        : func(func),
-          head(head), tail(tail), loop_var(loop_var), sema_var(sema_var),
+        : func(std::move(func)),
+          head(std::move(head)), tail(std::move(tail)), loop_var(std::move(loop_var)), sema_var(std::move(sema_var)),
           dim(dim), storage_dim(storage_dim) {
     }
 };
@@ -400,6 +400,84 @@ struct Semaphore {
     string name;
     Expr var;
     Expr init;
+};
+
+class HasExternConsumer : public IRVisitor {
+
+    using IRVisitor::visit;
+
+    void visit(const Variable *op) override {
+        if (op->name == func + ".buffer") {
+            result = true;
+        }
+    }
+
+    const std::string &func;
+
+public:
+    HasExternConsumer(const std::string &func)
+        : func(func) {
+    }
+    bool result = false;
+};
+
+class VectorAccessOfFoldedDim : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Provide *op) override {
+        if (op->name == func) {
+            internal_assert(dim < (int)op->args.size());
+            if (expr_uses_vars(op->args[dim], vector_vars)) {
+                result = true;
+            }
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    void visit(const Call *op) override {
+        if (op->name == func &&
+            op->call_type == Call::Halide) {
+            internal_assert(dim < (int)op->args.size());
+            if (expr_uses_vars(op->args[dim], vector_vars)) {
+                result = true;
+            }
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    template<typename LetOrLetStmt>
+    void visit_let(const LetOrLetStmt *op) {
+        op->value.accept(this);
+        bool is_vec = expr_uses_vars(op->value, vector_vars);
+        ScopedBinding<> bind(is_vec, vector_vars, op->name);
+        op->body.accept(this);
+    }
+
+    void visit(const Let *op) override {
+        visit_let(op);
+    }
+
+    void visit(const LetStmt *op) override {
+        visit_let(op);
+    }
+
+    void visit(const For *op) override {
+        ScopedBinding<> bind(op->for_type == ForType::Vectorized,
+                             vector_vars, op->name);
+        IRVisitor::visit(op);
+    }
+
+    Scope<> vector_vars;
+    const string &func;
+    int dim;
+
+public:
+    bool result = false;
+    VectorAccessOfFoldedDim(const string &func, int dim)
+        : func(func), dim(dim) {
+    }
 };
 
 // Attempt to fold the storage of a particular function in a statement
@@ -434,6 +512,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
         Box provided = box_provided(body, func.name());
         Box required = box_required(body, func.name());
+        // For storage folding, we don't care about conditional reads.
+        required.used = Expr();
         Box box = box_union(provided, required);
 
         Expr loop_var = Variable::make(Int(32), op->name);
@@ -448,6 +528,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
         Scope<Interval> steady_bounds;
         steady_bounds.push(op->name, Interval(simplify(op->min + 1), simplify(op->min + op->extent - 1)));
 
+        HasExternConsumer has_extern_consumer(func.name());
+        body.accept(&has_extern_consumer);
+
         // Try each dimension in turn from outermost in
         for (size_t i = box.size(); i > 0; i--) {
             int dim = (int)(i - 1);
@@ -456,10 +539,18 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 continue;
             }
 
-            // TODO: should call cse() here, but there can be duplicate names in the Expr.
-            // https://github.com/halide/Halide/issues/3793
-            Expr min = simplify(box[dim].min);
-            Expr max = simplify(box[dim].max);
+            Expr min = simplify(common_subexpression_elimination(box[dim].min));
+            Expr max = simplify(common_subexpression_elimination(box[dim].max));
+
+            if (is_const(min) || is_const(max)) {
+                debug(3) << "\nNot considering folding " << func.name()
+                         << " over for loop over " << op->name
+                         << " dimension " << i - 1 << "\n"
+                         << " because the min or max are constants."
+                         << "Min: " << min << "\n"
+                         << "Max: " << max << "\n";
+                continue;
+            }
 
             Expr min_provided, max_provided, min_required, max_required;
             if (func.schedule().async() && !explicit_only) {
@@ -487,9 +578,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr extent_initial = simplify(substitute(loop_var, op->min, max_initial - min_initial + 1), true, bounds);
             Expr extent_steady = simplify(max_steady - min_steady + 1, true, steady_bounds);
             Expr extent = Max::make(extent_initial, extent_steady);
-            // TODO: should call cse() here, but there can be duplicate names in the Expr.
-            // https://github.com/halide/Halide/issues/3793
-            extent = simplify(extent, true, bounds);
+            extent = simplify(common_subexpression_elimination(extent), true, bounds);
 
             // Find the StorageDim corresponding to dim.
             const std::vector<StorageDim> &storage_dims = func.schedule().storage_dims();
@@ -501,6 +590,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             Expr explicit_factor;
             if (!is_pure(min) ||
                 !is_pure(max) ||
+                has_extern_consumer.result ||
                 expr_uses_var(min, op->name) ||
                 expr_uses_var(max, op->name)) {
                 // We only use the explicit fold factor if the fold is
@@ -510,11 +600,13 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 explicit_factor = storage_dim.fold_factor;
             }
 
-            debug(3) << "\nConsidering folding " << func.name() << " over for loop over " << op->name << " dimension " << i - 1 << '\n'
-                     << "Min: " << min << '\n'
-                     << "Max: " << max << '\n'
-                     << "Extent: " << extent << '\n'
-                     << "explicit_factor: " << explicit_factor << '\n';
+            debug(3) << "\nConsidering folding " << func.name()
+                     << " over for loop over " << op->name
+                     << " dimension " << i - 1 << "\n"
+                     << "Min: " << min << "\n"
+                     << "Max: " << max << "\n"
+                     << "Extent: " << extent << "\n"
+                     << "explicit_factor: " << explicit_factor << "\n";
 
             // First, attempt to detect if the loop is monotonically
             // increasing or decreasing (if we allow automatic folding).
@@ -592,9 +684,15 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                     }
                 } else {
                     // Can't do much with this dimension
-                    debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
-                             << "min = " << min << "\n"
-                             << "max = " << max << "\n";
+                    if (!explicit_only) {
+                        debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
+                                 << "min_initial = " << min_initial << "\n"
+                                 << "min_steady = " << min_steady << "\n"
+                                 << "max_initial = " << max_initial << "\n"
+                                 << "max_steady = " << max_steady << "\n";
+                    } else {
+                        debug(3) << "Not folding because there is no explicit storage folding factor\n";
+                    }
                     continue;
                 }
             }
@@ -648,6 +746,23 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
             internal_assert(factor.defined());
 
+            if (!explicit_factor.defined()) {
+                VectorAccessOfFoldedDim vector_access_of_folded_dim{func.name(), dim};
+                body.accept(&vector_access_of_folded_dim);
+                if (vector_access_of_folded_dim.result) {
+                    user_warning
+                        << "Not folding Func " << func.name() << " along dimension " << func.args()[dim]
+                        << " because there is vectorized access to that Func in that dimension and "
+                        << "storage folding was not explicitly requested in the schedule. In previous "
+                        << "versions of Halide this would have folded with factor " << factor
+                        << ". To restore the old behavior add " << func.name()
+                        << ".fold_storage(" << func.args()[dim] << ", " << factor
+                        << ") to your schedule.\n";
+                    // Try the next dimension
+                    continue;
+                }
+            }
+
             debug(3) << "Proceeding with factor " << factor << "\n";
 
             Fold fold = {(int)i - 1, factor};
@@ -688,22 +803,16 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                         to_release = max_required - max_required_next;  // This is the last time we use these entries
                     }
 
-                    // Logically we acquire the entire extent on
-                    // the first iteration:
-
-                    // to_acquire = select(loop_var > loop_min, to_acquire, extent);
-
-                    // However it's simpler to implement this by
-                    // just reducing the initial value on the
-                    // semaphore by the difference, as long as it
-                    // doesn't lift any inner names out of scope.
-
-                    Expr fudge = simplify(substitute(op->name, loop_min, extent - to_acquire));
-                    if (is_const(fudge) && can_prove(fudge <= sema.init)) {
-                        sema.init -= fudge;
-                    } else {
-                        to_acquire = select(loop_var > loop_min, likely(to_acquire), extent);
+                    if (provided.used.defined()) {
+                        to_acquire = select(provided.used, to_acquire, 0);
                     }
+                    // We should always release the required region, even if we don't use it.
+
+                    // On the first iteration, we need to acquire the extent of the region shared
+                    // between the producer and consumer, and we need to release it on the last
+                    // iteration.
+                    to_acquire = select(loop_var > loop_min, to_acquire, extent);
+                    to_release = select(loop_var < loop_max, to_release, extent);
 
                     // We may need dynamic assertions that a positive
                     // amount of the semaphore is acquired/released,
@@ -763,10 +872,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             } else {
                 stmt = op;
                 debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
-                         << "min_initial = " << min_initial << "\n"
-                         << "min_steady = " << min_steady << "\n"
-                         << "max_initial = " << max_initial << "\n"
-                         << "max_steady = " << max_steady << "\n";
+                         << "min = " << min << "\n"
+                         << "max = " << max << "\n";
                 break;
             }
         }
@@ -817,7 +924,7 @@ public:
     vector<Fold> dims_folded;
 
     AttemptStorageFoldingOfFunction(Function f, bool explicit_only)
-        : func(f), explicit_only(explicit_only) {
+        : func(std::move(f)), explicit_only(explicit_only) {
     }
 };
 
@@ -839,7 +946,11 @@ class StorageFolding : public IRMutator {
         // more than one produce node for this func.
         bool explicit_only = count_producers(body, op->name) != 1;
         AttemptStorageFoldingOfFunction folder(func, explicit_only);
-        debug(3) << "Attempting to fold " << op->name << "\n";
+        if (explicit_only) {
+            debug(3) << "Attempting to fold " << op->name << " explicitly\n";
+        } else {
+            debug(3) << "Attempting to fold " << op->name << " automatically or explicitly\n";
+        }
         body = folder.mutate(body);
 
         if (body.same_as(op->body)) {
@@ -899,59 +1010,10 @@ public:
     }
 };
 
-// Because storage folding runs before simplification, it's useful to
-// at least substitute in constants before running it, and also simplify the RHS of Let Stmts.
-class SubstituteInConstants : public IRMutator {
-    using IRMutator::visit;
+}  // namespace
 
-    Scope<Expr> scope;
-
-    Stmt visit(const LetStmt *op) override {
-        // Visit an entire chain of lets in a single method to conserve stack space.
-        Stmt result;
-        struct Frame {
-            const LetStmt *op;
-            Expr new_value;
-            ScopedBinding<Expr> binding;
-            Frame(const LetStmt *op, Expr v, Scope<Expr> &scope)
-                : op(op),
-                  new_value(std::move(v)),
-                  binding(is_const(new_value), scope, op->name, new_value) {
-            }
-        };
-        std::vector<Frame> frames;
-
-        do {
-            result = op->body;
-            frames.emplace_back(op, simplify(mutate(op->value)), scope);
-        } while ((op = result.as<LetStmt>()));
-
-        result = mutate(result);
-
-        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
-            if (it->new_value.same_as(it->op->value) && result.same_as(it->op->body)) {
-                result = it->op;
-            } else {
-                result = LetStmt::make(it->op->name, it->new_value, result);
-            }
-        }
-
-        return result;
-    }
-
-    Expr visit(const Variable *op) override {
-        if (scope.contains(op->name)) {
-            return scope.get(op->name);
-        } else {
-            return op;
-        }
-    }
-};
-
-Stmt storage_folding(Stmt s, const std::map<std::string, Function> &env) {
-    s = SubstituteInConstants().mutate(s);
-    s = StorageFolding(env).mutate(s);
-    return s;
+Stmt storage_folding(const Stmt &s, const std::map<std::string, Function> &env) {
+    return StorageFolding(env).mutate(s);
 }
 
 }  // namespace Internal

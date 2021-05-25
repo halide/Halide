@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     // Should be ok to unroll x because it's bounded by a constant in its only consumer
     f.compute_root().unroll(x);
 
-    g.realize(4);
+    g.realize({4});
 
     printf("Success!\n");
     return 0;

@@ -5,10 +5,10 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+
 class SelectGPUAPI : public IRMutator {
     using IRMutator::visit;
-
-    Target target;
 
     DeviceAPI default_api, parent_api;
 
@@ -41,14 +41,15 @@ class SelectGPUAPI : public IRMutator {
     }
 
 public:
-    SelectGPUAPI(Target t)
-        : target(t) {
+    SelectGPUAPI(const Target &t) {
         default_api = get_default_device_api_for_target(t);
         parent_api = DeviceAPI::Host;
-    };
+    }
 };
 
-Stmt select_gpu_api(Stmt s, Target t) {
+}  // namespace
+
+Stmt select_gpu_api(const Stmt &s, const Target &t) {
     return SelectGPUAPI(t).mutate(s);
 }
 

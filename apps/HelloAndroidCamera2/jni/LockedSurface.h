@@ -1,16 +1,15 @@
 #ifndef LOCKED_SURFACE_H
 #define LOCKED_SURFACE_H
 
-#include <jni.h>
 #include <android/bitmap.h>
 #include <android/native_window_jni.h>
+#include <jni.h>
 
 #include "YuvBufferT.h"
 
 // Wraps an RAII pattern around locking an ANativeWindow.
 class LockedSurface {
 public:
-
     // Lock a Surface, returning a lock object, or nullptr if it failed.
     static LockedSurface *lock(JNIEnv *env, jobject surface);
 
@@ -23,12 +22,10 @@ public:
     YuvBufferT yuvView() const;
 
 private:
-
     LockedSurface() = default;
 
     ANativeWindow *window_;
     ANativeWindow_Buffer buffer_;
-
 };
 
-#endif // LOCKED_SURFACE_H
+#endif  // LOCKED_SURFACE_H

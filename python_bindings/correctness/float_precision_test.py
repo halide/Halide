@@ -35,7 +35,7 @@ def test():
         x = hl.Var("x")
         f = hl.Func("f")
         f[x] = x * hl.f64(c) * (hl.f64(0.1) + hl.f64(0.2))
-        for i, hl_value in enumerate(numpy.asarray(f.realize(10))):
+        for i, hl_value in enumerate(numpy.asarray(f.realize([10]))):
             py_value = i * c * (0.1 + 0.2)
             check = math.isclose(hl_value, py_value)
             assert check, "{}[{}]: {} != {}".format(i, c, hl_value, py_value)
@@ -47,6 +47,10 @@ def test():
     with AssertWarnsContext(RuntimeWarning) as ctx:
         x + 0.123456789012345678
     assert ctx.occurred, "RuntimeWarning didn't occur."
+
+    with AssertWarnsContext(RuntimeWarning) as ctx:
+        x + hl.f64(0.123456789012345678)
+    assert not ctx.occurred, "RuntimeWarning occurred."
 
     with AssertWarnsContext(RuntimeWarning) as ctx:
         x + 0.75  # 0.5 + 0.25

@@ -1,12 +1,14 @@
 include ../support/Makefile.inc
 
-all: $(BIN)/$(HL_TARGET)/filter
+.PHONY: build clean test
+
+build: $(BIN)/$(HL_TARGET)/filter
 
 test: $(BIN)/$(HL_TARGET)/out.png
 
 $(GENERATOR_BIN)/hist.generator: hist_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 $(BIN)/%/hist.a: $(GENERATOR_BIN)/hist.generator
 	@mkdir -p $(@D)
@@ -22,7 +24,7 @@ $(BIN)/%/runtime.a: $(GENERATOR_BIN)/hist.generator
 
 $(BIN)/%/filter: filter.cpp $(BIN)/%/hist.a $(BIN)/%/hist_auto_schedule.a $(BIN)/%/runtime.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 
 $(BIN)/%/out.png: $(BIN)/%/filter
 	$< ../images/rgba.png $(BIN)/$*/out.png

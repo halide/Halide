@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include "HalideRuntime.h"
+#include <stdio.h>
 
 #if defined(_MSC_VER) || defined(__x86_64__) || defined(__i386__)
 #define TESTING_ON_X86 1
@@ -15,31 +15,31 @@ static void cpuid(int info[4], int infoType, int extra) {
 }
 #elif defined(_LP64)
 static void cpuid(int info[4], int infoType, int extra) {
-    __asm__ __volatile__ (
+    __asm__ __volatile__(
         "cpuid                 \n\t"
-        : "=a" (info[0]), "=b" (info[1]), "=c" (info[2]), "=d" (info[3])
-        : "0" (infoType), "2" (extra));
+        : "=a"(info[0]), "=b"(info[1]), "=c"(info[2]), "=d"(info[3])
+        : "0"(infoType), "2"(extra));
 }
 #else
 static void cpuid(int info[4], int infoType, int extra) {
     // We save %ebx in case it's the PIC register
-    __asm__ __volatile__ (
+    __asm__ __volatile__(
         "mov{l}\t{%%}ebx, %1  \n\t"
         "cpuid                 \n\t"
         "xchg{l}\t{%%}ebx, %1  \n\t"
-        : "=a" (info[0]), "=r" (info[1]), "=c" (info[2]), "=d" (info[3])
-        : "0" (infoType), "2" (extra));
+        : "=a"(info[0]), "=r"(info[1]), "=c"(info[2]), "=d"(info[3])
+        : "0"(infoType), "2"(extra));
 }
 #endif
 #endif  // TESTING_ON_X86
 
 struct HostFeatures {
     void set(halide_target_feature_t i) {
-        bits[i / 64] |= ((uint64_t) 1) << (i % 64);
+        bits[i / 64] |= ((uint64_t)1) << (i % 64);
     }
 
     bool test(halide_target_feature_t i) const {
-        return (bits[i / 64] & ((uint64_t) 1) << (i % 64)) != 0;
+        return (bits[i / 64] & ((uint64_t)1) << (i % 64)) != 0;
     }
 
     static constexpr int kWordCount = (halide_target_feature_end + 63) / (sizeof(uint64_t) * 8);
@@ -65,8 +65,8 @@ int main(int argc, char **argv) {
 
     // First, test that the host features are usable. If not, something is wrong.
     if (!halide_can_use_target_features(host_features.kWordCount, host_features.bits)) {
-      printf("Failure!\n");
-      return -1;
+        printf("Failure!\n");
+        return -1;
     }
 
     // Now start subtracting features; we should still be usable.
@@ -78,8 +78,8 @@ int main(int argc, char **argv) {
             host_features.bits[word] &= ~(1ULL << bit);
             printf("host_features are: %x %x\n", (unsigned)host_features.bits[word], (unsigned)(host_features.bits[word] >> 32));
             if (!halide_can_use_target_features(host_features.kWordCount, host_features.bits)) {
-              printf("Failure!\n");
-              return -1;
+                printf("Failure!\n");
+                return -1;
             }
         }
     }

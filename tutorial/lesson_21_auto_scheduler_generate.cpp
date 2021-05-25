@@ -7,12 +7,12 @@
 
 // On linux or os x, you can compile and run it like so:
 
-// g++ lesson_21_auto_scheduler_generate.cpp ../tools/GenGen.cpp -g -std=c++11 -fno-rtti -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_21_generate
-// export LD_LIBRARY_PATH=../bin   # For linux
-// export DYLD_LIBRARY_PATH=../bin # For OS X
+// g++ lesson_21_auto_scheduler_generate.cpp <path/to/tools/halide_image_io.h>/GenGen.cpp -g -std=c++11 -fno-rtti -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_21_generate
+// export LD_LIBRARY_PATH=<path/to/libHalide.so>   # For linux
+// export DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> # For OS X
 // ./lesson_21_generate -o . -g auto_schedule_gen -f auto_schedule_false -e static_library,h,schedule target=host auto_schedule=false
-// ./lesson_21_generate -o . -g auto_schedule_gen -f auto_schedule_true -e static_library,h,schedule target=host auto_schedule=true machine_params=32,16777216,40
-// g++ lesson_21_auto_scheduler_run.cpp -std=c++11 -I ../include -I ../tools auto_schedule_false.a auto_schedule_true.a -ldl -lpthread -o lesson_21_run
+// ./lesson_21_generate -o . -g auto_schedule_gen -f auto_schedule_true -e static_library,h,schedule -p <path/to/libautoschedule_mullapudi2016.so> -S Mullapudi2016 target=host auto_schedule=true machine_params=32,16777216,40
+// g++ lesson_21_auto_scheduler_run.cpp -std=c++11 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> auto_schedule_false.a auto_schedule_true.a -ldl -lpthread -o lesson_21_run
 // ./lesson_21_run
 
 // If you have the entire Halide source tree, you can also build it by
@@ -29,16 +29,16 @@ using namespace Halide;
 // We will define a generator to auto-schedule.
 class AutoScheduled : public Halide::Generator<AutoScheduled> {
 public:
-    Input<Buffer<float>>  input{"input", 3};
-    Input<float>          factor{"factor"};
+    Input<Buffer<float>> input{"input", 3};
+    Input<float> factor{"factor"};
 
     Output<Buffer<float>> output1{"output1", 2};
     Output<Buffer<float>> output2{"output2", 2};
 
     Expr sum3x3(Func f, Var x, Var y) {
-        return f(x-1, y-1) + f(x-1, y) + f(x-1, y+1) +
-               f(x, y-1)   + f(x, y)   + f(x, y+1) +
-               f(x+1, y-1) + f(x+1, y) + f(x+1, y+1);
+        return f(x - 1, y - 1) + f(x - 1, y) + f(x - 1, y + 1) +
+               f(x, y - 1) + f(x, y) + f(x, y + 1) +
+               f(x + 1, y - 1) + f(x + 1, y) + f(x + 1, y + 1);
     }
 
     void generate() {
@@ -47,13 +47,13 @@ public:
 
         gray(x, y) = 0.299f * in_b(x, y, 0) + 0.587f * in_b(x, y, 1) + 0.114f * in_b(x, y, 2);
 
-        Iy(x, y) = gray(x-1, y-1)*(-1.0f/12) + gray(x-1, y+1)*(1.0f/12) +
-                   gray(x, y-1)*(-2.0f/12) + gray(x, y+1)*(2.0f/12) +
-                   gray(x+1, y-1)*(-1.0f/12) + gray(x+1, y+1)*(1.0f/12);
+        Iy(x, y) = gray(x - 1, y - 1) * (-1.0f / 12) + gray(x - 1, y + 1) * (1.0f / 12) +
+                   gray(x, y - 1) * (-2.0f / 12) + gray(x, y + 1) * (2.0f / 12) +
+                   gray(x + 1, y - 1) * (-1.0f / 12) + gray(x + 1, y + 1) * (1.0f / 12);
 
-        Ix(x, y) = gray(x-1, y-1)*(-1.0f/12) + gray(x+1, y-1)*(1.0f/12) +
-                   gray(x-1, y)*(-2.0f/12) + gray(x+1, y)*(2.0f/12) +
-                   gray(x-1, y+1)*(-1.0f/12) + gray(x+1, y+1)*(1.0f/12);
+        Ix(x, y) = gray(x - 1, y - 1) * (-1.0f / 12) + gray(x + 1, y - 1) * (1.0f / 12) +
+                   gray(x - 1, y) * (-2.0f / 12) + gray(x + 1, y) * (2.0f / 12) +
+                   gray(x - 1, y + 1) * (-1.0f / 12) + gray(x + 1, y + 1) * (1.0f / 12);
 
         Ixx(x, y) = Ix(x, y) * Ix(x, y);
         Iyy(x, y) = Iy(x, y) * Iy(x, y);
@@ -94,7 +94,7 @@ public:
             // they are to the actual use-case values, the better the generated
             // schedule will be.
 
-            // To auto-schedule the the pipeline, we don't have to do anything else:
+            // To auto-schedule the pipeline, we don't have to do anything else:
             // every Generator implicitly has a GeneratorParam named "auto_schedule";
             // if this is set to true, Halide will call auto_schedule() on all of
             // our pipeline's outputs automatically.
@@ -219,6 +219,7 @@ public:
             Ix.compute_root();
         }
     }
+
 private:
     Var x{"x"}, y{"y"}, c{"c"};
     Func gray, Iy, Ix, Ixx, Iyy, Ixy, Sxx, Syy, Sxy, det, trace, harris;

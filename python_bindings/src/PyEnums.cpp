@@ -15,7 +15,6 @@ void define_enums(py::module &m) {
         .value("Default_GPU", DeviceAPI::Default_GPU)
         .value("CUDA", DeviceAPI::CUDA)
         .value("OpenCL", DeviceAPI::OpenCL)
-        .value("GLSL", DeviceAPI::GLSL)
         .value("OpenGLCompute", DeviceAPI::OpenGLCompute)
         .value("Metal", DeviceAPI::Metal)
         .value("Hexagon", DeviceAPI::Hexagon);
@@ -23,15 +22,13 @@ void define_enums(py::module &m) {
     py::enum_<LinkageType>(m, "LinkageType")
         .value("External", LinkageType::External)
         .value("ExternalPlusMetadata", LinkageType::ExternalPlusMetadata)
-        .value("Internal", LinkageType::Internal)
-    ;
+        .value("Internal", LinkageType::Internal);
 
     py::enum_<LoopAlignStrategy>(m, "LoopAlignStrategy")
         .value("AlignStart", LoopAlignStrategy::AlignStart)
         .value("AlignEnd", LoopAlignStrategy::AlignEnd)
         .value("NoAlign", LoopAlignStrategy::NoAlign)
-        .value("Auto", LoopAlignStrategy::Auto)
-    ;
+        .value("Auto", LoopAlignStrategy::Auto);
 
     py::enum_<MemoryType>(m, "MemoryType")
         .value("Auto", MemoryType::Auto)
@@ -39,19 +36,19 @@ void define_enums(py::module &m) {
         .value("Stack", MemoryType::Stack)
         .value("Register", MemoryType::Register)
         .value("GPUShared", MemoryType::GPUShared)
-    ;
+        .value("GPUTexture", MemoryType::GPUTexture)
+        .value("LockedCache", MemoryType::LockedCache)
+        .value("VTCM", MemoryType::VTCM);
 
     py::enum_<NameMangling>(m, "NameMangling")
         .value("Default", NameMangling::Default)
         .value("C", NameMangling::C)
-        .value("CPlusPlus", NameMangling::CPlusPlus)
-    ;
+        .value("CPlusPlus", NameMangling::CPlusPlus);
 
     py::enum_<PrefetchBoundStrategy>(m, "PrefetchBoundStrategy")
         .value("Clamp", PrefetchBoundStrategy::Clamp)
         .value("GuardWithIf", PrefetchBoundStrategy::GuardWithIf)
-        .value("NonFaulting", PrefetchBoundStrategy::NonFaulting)
-    ;
+        .value("NonFaulting", PrefetchBoundStrategy::NonFaulting);
 
     py::enum_<StmtOutputFormat>(m, "StmtOutputFormat")
         .value("Text", StmtOutputFormat::Text)
@@ -61,8 +58,7 @@ void define_enums(py::module &m) {
         .value("RoundUp", TailStrategy::RoundUp)
         .value("GuardWithIf", TailStrategy::GuardWithIf)
         .value("ShiftInwards", TailStrategy::ShiftInwards)
-        .value("Auto", TailStrategy::Auto)
-    ;
+        .value("Auto", TailStrategy::Auto);
 
     py::enum_<Target::OS>(m, "TargetOS")
         .value("OSUnknown", Target::OS::OSUnknown)
@@ -82,6 +78,7 @@ void define_enums(py::module &m) {
         .value("MIPS", Target::Arch::MIPS)
         .value("Hexagon", Target::Arch::Hexagon)
         .value("POWERPC", Target::Arch::POWERPC)
+        .value("RISCV", Target::Arch::RISCV)
         .value("WebAssembly", Target::Arch::WebAssembly);
 
     py::enum_<Target::Feature>(m, "TargetFeature")
@@ -109,7 +106,6 @@ void define_enums(py::module &m) {
         .value("CLDoubles", Target::Feature::CLDoubles)
         .value("CLHalf", Target::Feature::CLHalf)
         .value("CLAtomics64", Target::Feature::CLAtomics64)
-        .value("OpenGL", Target::Feature::OpenGL)
         .value("OpenGLCompute", Target::Feature::OpenGLCompute)
         .value("EGL", Target::Feature::EGL)
         .value("UserContext", Target::Feature::UserContext)
@@ -117,10 +113,9 @@ void define_enums(py::module &m) {
         .value("Profile", Target::Feature::Profile)
         .value("NoRuntime", Target::Feature::NoRuntime)
         .value("Metal", Target::Feature::Metal)
-        .value("MinGW", Target::Feature::MinGW)
         .value("CPlusPlusMangling", Target::Feature::CPlusPlusMangling)
         .value("LargeBuffers", Target::Feature::LargeBuffers)
-        .value("HVX_64", Target::Feature::HVX_64)
+        .value("HVX", Target::Feature::HVX)
         .value("HVX_128", Target::Feature::HVX_128)
         .value("HVX_v62", Target::Feature::HVX_v62)
         .value("HVX_v65", Target::Feature::HVX_v65)
@@ -133,12 +128,12 @@ void define_enums(py::module &m) {
         .value("AVX512_KNL", Target::Feature::AVX512_KNL)
         .value("AVX512_Skylake", Target::Feature::AVX512_Skylake)
         .value("AVX512_Cannonlake", Target::Feature::AVX512_Cannonlake)
+        .value("AVX512_SapphireRapids", Target::Feature::AVX512_SapphireRapids)
         .value("TraceLoads", Target::Feature::TraceLoads)
         .value("TraceStores", Target::Feature::TraceStores)
         .value("TraceRealizations", Target::Feature::TraceRealizations)
         .value("D3D12Compute", Target::Feature::D3D12Compute)
         .value("StrictFloat", Target::Feature::StrictFloat)
-        .value("LegacyBufferWrappers", Target::Feature::LegacyBufferWrappers)
         .value("TSAN", Target::Feature::TSAN)
         .value("ASAN", Target::Feature::ASAN)
         .value("CheckUnsafePromises", Target::Feature::CheckUnsafePromises)
@@ -148,8 +143,15 @@ void define_enums(py::module &m) {
         .value("DisableLLVMLoopOpt", Target::Feature::DisableLLVMLoopOpt)
         .value("WasmSimd128", Target::Feature::WasmSimd128)
         .value("WasmSignExt", Target::Feature::WasmSignExt)
+        .value("WasmSatFloatToInt", Target::Feature::WasmSatFloatToInt)
+        .value("WasmThreads", Target::Feature::WasmThreads)
+        .value("WasmBulkMemory", Target::Feature::WasmBulkMemory)
         .value("SVE", Target::Feature::SVE)
         .value("SVE2", Target::Feature::SVE2)
+        .value("ARMDotProd", Target::Feature::ARMDotProd)
+        .value("LLVMLargeCodeModel", Target::Feature::LLVMLargeCodeModel)
+        .value("RVV", Target::Feature::RVV)
+        .value("ARMv81a", Target::Feature::ARMv81a)
         .value("ARMv83a", Target::Feature::ARMv83a)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
@@ -174,7 +176,8 @@ void define_enums(py::module &m) {
         .value("schedule", Output::schedule)
         .value("static_library", Output::static_library)
         .value("stmt", Output::stmt)
-        .value("stmt_html", Output::stmt_html);
+        .value("stmt_html", Output::stmt_html)
+        .value("compiler_log", Output::compiler_log);
 }
 
 }  // namespace PythonBindings

@@ -53,7 +53,7 @@ void print_event(const event &e) {
 }
 
 // Print an event in a way suitable for inclusion in source code
-void print_event_source(const event & e) {
+void print_event_source(const event &e) {
     printf("{%d, %d, %d, %d, %d, %d, %d, %d, {%d, %d, %d, %d}, {%ff, %ff, %ff, %ff}, \"%s\"},\n",
            e.func, e.parent_id, e.event_type, e.type_code, e.bits, e.width, e.value_index,
            e.num_int_args, e.int_args[0], e.int_args[1], e.int_args[2], e.int_args[3],
@@ -115,7 +115,7 @@ int my_trace(void *user_context, const halide_trace_event_t *ev) {
     return n_trace;
 }
 
-bool check_trace_correct(event* correct_trace, int correct_trace_length) {
+bool check_trace_correct(event *correct_trace, int correct_trace_length) {
     int n = n_trace > correct_trace_length ? n_trace : correct_trace_length;
     for (int i = 0; i < n; i++) {
         event recorded = {0};
@@ -130,7 +130,7 @@ bool check_trace_correct(event* correct_trace, int correct_trace_length) {
             bool reordered = false;
             for (int radius = 1; radius <= radius_max; ++radius) {
                 if (i >= radius &&
-                    events_match(recorded, correct_trace[i-radius]) &&
+                    events_match(recorded, correct_trace[i - radius]) &&
                     recorded.event_type == 0 &&
                     correct.event_type == 0) {
                     // Phew.
@@ -138,8 +138,8 @@ bool check_trace_correct(event* correct_trace, int correct_trace_length) {
                     break;
                 }
 
-                if (i < correct_trace_length-radius &&
-                    events_match(recorded, correct_trace[i+radius]) &&
+                if (i < correct_trace_length - radius &&
+                    events_match(recorded, correct_trace[i + radius]) &&
                     recorded.event_type == 0 &&
                     correct.event_type == 0) {
                     // Phew.
@@ -153,7 +153,8 @@ bool check_trace_correct(event* correct_trace, int correct_trace_length) {
 
             printf("Traces differs at event %d:\n"
                    "-------------------------------\n"
-                   "Correct trace:\n", i);
+                   "Correct trace:\n",
+                   i);
             for (int j = 0; j < correct_trace_length; j++) {
                 if (j == i) printf(" ===> ");
                 print_event(correct_trace[j]);
@@ -186,8 +187,8 @@ int main(int argc, char **argv) {
 
     Func f("f"), g("g");
     Var x;
-    g(x) = Tuple(sin(x*0.1f), cos(x*0.1f));
-    f(x) = g(x)[0] + g(x+1)[1] + input(x);
+    g(x) = Tuple(sin(x * 0.1f), cos(x * 0.1f));
+    f(x) = g(x)[0] + g(x + 1)[1] + input(x);
 
     f.vectorize(x, 4);
     g.store_root().compute_at(f, x);
@@ -196,7 +197,7 @@ int main(int argc, char **argv) {
     f.set_custom_trace(&my_trace);
 
     // Check that Target::TracePipeline works.
-    f.realize(10, get_jit_target_from_environment().with_feature(Target::TracePipeline));
+    f.realize({10}, get_jit_target_from_environment().with_feature(Target::TracePipeline));
 
     // The golden trace, recorded when this test was written
     event correct_pipeline_trace[] = {
@@ -206,7 +207,6 @@ int main(int argc, char **argv) {
     if (!check_trace_correct(correct_pipeline_trace, 2)) {
         return -1;
     }
-
 
     // Test a more interesting trace.
     reset_trace();
@@ -222,7 +222,7 @@ int main(int argc, char **argv) {
 
     input.trace_loads();
 
-    f.realize(10, get_jit_target_from_environment());
+    f.realize({10}, get_jit_target_from_environment());
 
     // The golden trace, recorded when this test was written
     event correct_trace[] = {
@@ -243,9 +243,9 @@ int main(int argc, char **argv) {
         {103, 11, 1, 2, 32, 4, 1, 4, {1, 2, 3, 4}, {0.995004f, 0.980067f, 0.955337f, 0.921061f}, ""},
         {103, 11, 5, 3, 0, 0, 0, 2, {0, 5, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
         {103, 9, 6, 3, 0, 0, 0, 2, {0, 5, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
+        {105, 1, 0, 2, 32, 4, 0, 4, {0, 1, 2, 3}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
         {103, 17, 0, 2, 32, 4, 0, 4, {0, 1, 2, 3}, {0.000000f, 0.099833f, 0.198669f, 0.295520f}, ""},
         {103, 17, 0, 2, 32, 4, 1, 4, {1, 2, 3, 4}, {0.995004f, 0.980067f, 0.955337f, 0.921061f}, ""},
-        {105, 1, 0, 2, 32, 4, 0, 4, {0, 1, 2, 3}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
         {102, 10, 1, 2, 32, 4, 0, 4, {0, 1, 2, 3}, {0.995004f, 1.079900f, 1.154006f, 1.216581f}, ""},
         {103, 17, 7, 3, 0, 0, 0, 2, {0, 5, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
         {103, 9, 4, 3, 0, 0, 0, 2, {5, 4, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
@@ -253,9 +253,9 @@ int main(int argc, char **argv) {
         {103, 23, 1, 2, 32, 4, 1, 4, {5, 6, 7, 8}, {0.877583f, 0.825336f, 0.764842f, 0.696707f}, ""},
         {103, 23, 5, 3, 0, 0, 0, 2, {5, 4, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
         {103, 9, 6, 3, 0, 0, 0, 2, {5, 4, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
+        {105, 1, 0, 2, 32, 4, 0, 4, {4, 5, 6, 7}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
         {103, 27, 0, 2, 32, 4, 0, 4, {4, 5, 6, 7}, {0.389418f, 0.479426f, 0.564642f, 0.644218f}, ""},
         {103, 27, 0, 2, 32, 4, 1, 4, {5, 6, 7, 8}, {0.877583f, 0.825336f, 0.764842f, 0.696707f}, ""},
-        {105, 1, 0, 2, 32, 4, 0, 4, {4, 5, 6, 7}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
         {102, 10, 1, 2, 32, 4, 0, 4, {4, 5, 6, 7}, {1.267001f, 1.304761f, 1.329485f, 1.340924f}, ""},
         {103, 27, 7, 3, 0, 0, 0, 2, {5, 4, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
         {103, 9, 4, 3, 0, 0, 0, 2, {9, 2, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
@@ -263,9 +263,9 @@ int main(int argc, char **argv) {
         {103, 33, 1, 2, 32, 4, 1, 4, {7, 8, 9, 10}, {0.764842f, 0.696707f, 0.621610f, 0.540302f}, ""},
         {103, 33, 5, 3, 0, 0, 0, 2, {9, 2, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
         {103, 9, 6, 3, 0, 0, 0, 2, {9, 2, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
+        {105, 1, 0, 2, 32, 4, 0, 4, {6, 7, 8, 9}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
         {103, 37, 0, 2, 32, 4, 0, 4, {6, 7, 8, 9}, {0.564642f, 0.644218f, 0.717356f, 0.783327f}, ""},
         {103, 37, 0, 2, 32, 4, 1, 4, {7, 8, 9, 10}, {0.764842f, 0.696707f, 0.621610f, 0.540302f}, ""},
-        {105, 1, 0, 2, 32, 4, 0, 4, {6, 7, 8, 9}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
         {102, 10, 1, 2, 32, 4, 0, 4, {6, 7, 8, 9}, {1.329485f, 1.340924f, 1.338966f, 1.323629f}, ""},
         {103, 37, 7, 3, 0, 0, 0, 2, {9, 2, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
         {102, 10, 5, 3, 0, 0, 0, 2, {0, 10, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
@@ -274,7 +274,7 @@ int main(int argc, char **argv) {
         {102, 1, 9, 3, 0, 0, 0, 0, {0, 0, 0, 0}, {0.000000f, 0.000000f, 0.000000f, 0.000000f}, ""},
     };
 
-    int correct_trace_length = sizeof(correct_trace)/sizeof(correct_trace[0]);
+    int correct_trace_length = sizeof(correct_trace) / sizeof(correct_trace[0]);
     if (!check_trace_correct(correct_trace, correct_trace_length)) {
         return -1;
     }

@@ -2,40 +2,35 @@
 
 using namespace Halide;
 
-class CountConditionals : public Internal::IRVisitor {
+class CountConditionals : public Internal::IRMutator {
 public:
     int count = 0;
     int count_if = 0;
     int count_select = 0;
     bool in_produce = false;
-private:
-    using Internal::IRVisitor::visit;
 
-    void visit(const Internal::Select *op) override {
+private:
+    using Internal::IRMutator::visit;
+
+    Expr visit(const Internal::Select *op) override {
         if (in_produce) {
             count++;
             count_select++;
         }
-        Internal::IRVisitor::visit(op);
+        return Internal::IRMutator::visit(op);
     }
 
-    void visit(const Internal::IfThenElse *op) override {
+    Internal::Stmt visit(const Internal::IfThenElse *op) override {
         if (in_produce) {
             count++;
             count_if++;
         }
-        Internal::IRVisitor::visit(op);
+        return Internal::IRMutator::visit(op);
     }
 
-    void visit(const Internal::ProducerConsumer *op) override {
-        if (op->is_producer) {
-            bool old_in_produce = in_produce;
-            in_produce = true;
-            Internal::IRVisitor::visit(op);
-            in_produce = old_in_produce;
-        } else {
-            IRVisitor::visit(op);
-        }
+    Internal::Stmt visit(const Internal::ProducerConsumer *op) override {
+        Internal::ScopedValue<bool> v(in_produce, op->is_producer);
+        return Internal::IRMutator::visit(op);
     }
 };
 
@@ -51,17 +46,18 @@ int main(int argc, char **argv) {
         f(x) *= select(x > 20 && x < 30, 2, 1);
         f(x) = select(x >= 60 && x <= 100, 100 - f(x), f(x));
 
-        // There should be no selects after trim_no_ops runs
-        Module m = f.compile_to_module({});
         CountConditionals s;
-        m.functions().front().body.accept(&s);
+        f.add_custom_lowering_pass(&s, []() {});
+        Module m = f.compile_to_module({});
+
         if (s.count != 0) {
-            std::cerr << "There were selects in the lowered code: \n" << m.functions().front().body << "\n";
+            std::cerr << "There were conditionals in the lowered code: \n"
+                      << m.functions().front().body << "\n";
             return -1;
         }
 
         // Also check the output is correct
-        Buffer<int> im = f.realize(100);
+        Buffer<int> im = f.realize({100});
         for (int x = 0; x < im.width(); x++) {
             int correct = x;
             correct += (x > 10 && x < 20) ? 1 : 0;
@@ -84,22 +80,24 @@ int main(int argc, char **argv) {
         Var x, y;
         f(x, y) = x + y;
         f(x, y) += select((x == 10) && (x < y), 1, 0);
-        Module m = f.compile_to_module({});
 
         // There should be no selects after trim_no_ops runs
         CountConditionals s;
-        m.functions().front().body.accept(&s);
+        f.add_custom_lowering_pass(&s, []() {});
+        Module m = f.compile_to_module({});
+
         if (s.count != 0) {
-            std::cerr << "There were selects in the lowered code: \n" << m.functions().front().body << "\n";
+            std::cerr << "There were selects in the lowered code: \n"
+                      << m.functions().front().body << "\n";
             return -1;
         }
 
         // Also check the output is correct
-        Buffer<int> im = f.realize(100, 100);
+        Buffer<int> im = f.realize({100, 100});
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
                 int correct = x + y;
-                correct += ((x == 10) && (x < y))? 1 : 0;
+                correct += ((x == 10) && (x < y)) ? 1 : 0;
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n",
                            x, y, im(x, y), correct);
@@ -118,22 +116,25 @@ int main(int argc, char **argv) {
         f.compute_root();
 
         Func hist;
+        Buffer<int> hist_result;
         {
             RDom r(0, 10, 0, 10, 0, 10, 0, 10);
-            Expr xi = r[0] + r[2]*10, yi = r[1] + r[3]*10;
+            Expr xi = r[0] + r[2] * 10, yi = r[1] + r[3] * 10;
             hist(x) = 0;
             hist(f(clamp(xi, 0, 73), clamp(yi, 0, 73))) +=
                 select(xi >= 0 && xi <= 73 && yi >= 0 && yi <= 73, 1, 0);
 
-            Module m = hist.compile_to_module({});
             CountConditionals s;
-            m.functions().front().body.accept(&s);
+            hist.add_custom_lowering_pass(&s, []() {});
+            Module m = hist.compile_to_module({});
+
             if (s.count != 0) {
-                std::cerr << "There were selects in the lowered code: \n" << m.functions().front().body << "\n";
+                std::cerr << "There were selects in the lowered code: \n"
+                          << m.functions().front().body << "\n";
                 return -1;
             }
+            hist_result = hist.realize({256});
         }
-        Buffer<int> hist_result = hist.realize(256);
 
         // Also check the output is correct.
         Func true_hist;
@@ -142,7 +143,7 @@ int main(int argc, char **argv) {
             true_hist(x) = 0;
             true_hist(f(r.x, r.y)) += 1;
         }
-        Buffer<int> true_hist_result = true_hist.realize(256);
+        Buffer<int> true_hist_result = true_hist.realize({256});
 
         for (int i = 0; i < 256; i++) {
             if (hist_result(i) != true_hist_result(i)) {
@@ -159,25 +160,28 @@ int main(int argc, char **argv) {
         // if statement instead of a select.
         Func f;
         Var x, y;
-        f(x, y) = select(2*x < y, 5, undef<int>());
+        f(x, y) = select(2 * x < y, 5, undef<int>());
 
         Var xi, yi;
         f.tile(x, y, xi, yi, 4, 4);
 
         // Check there are no if statements.
-        Module m = f.compile_to_module({});
         CountConditionals s;
-        m.functions().front().body.accept(&s);
+        f.add_custom_lowering_pass(&s, []() {});
+        Module m = f.compile_to_module({});
+
         if (s.count != 0) {
-            std::cerr << "There were selects or ifs in the lowered code: \n" << m.functions().front().body << "\n";
+            std::cerr << "There were selects or ifs in the lowered code: \n"
+                      << m.functions().front().body << "\n";
             return -1;
         }
     }
 
-    // Test tiled iteration on the gpuif there is support for GPU.
+    // Test tiled iteration on the gpu if there is support for GPU.
     // The gpu loop variable should not depend on outer gpu loop var.
     if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("Not running the GPU test because no gpu feature enabled in target.\n");
+        // TODO: split this test apart so the GPU pieces can be split appropriately
+        // printf("[SKIP] No GPU target enabled.\n");
         printf("Success!\n");
         return 0;
     }
@@ -194,22 +198,25 @@ int main(int argc, char **argv) {
         RVar rxi, ryi;
         f.update(0).gpu_tile(r.x, r.y, rxi, ryi, 4, 4);
 
-        Buffer<int> im = f.realize(200, 200);
+        Buffer<int> im = f.realize({200, 200});
 
         // There should be no selects after trim_no_ops runs. The select should
         // be lifted out as if condition. We can't trim gpu loop r.x based on the
         // if condition since it depends on gpu outer loop r.y
         Target gpu_target(get_host_target());
         gpu_target.set_feature(Target::CUDA);
-        Module m = f.compile_to_module({}, "", gpu_target);
         CountConditionals s;
-        m.functions().front().body.accept(&s);
+        f.add_custom_lowering_pass(&s, []() {});
+        Module m = f.compile_to_module({}, "", gpu_target);
+
         if (s.count_select != 0) {
-            std::cerr << "There were selects in the lowered code: \n" << m.functions().front().body << "\n";
+            std::cerr << "There were selects in the lowered code: \n"
+                      << m.functions().front().body << "\n";
             return -1;
         }
         if (s.count_if != 1) {
-            std::cerr << "There should be 1 if in the lowered code: \n" << m.functions().front().body << "\n";
+            std::cerr << "There should be 1 if in the lowered code: \n"
+                      << m.functions().front().body << "\n";
             return -1;
         }
 

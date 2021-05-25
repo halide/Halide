@@ -4,7 +4,7 @@ using namespace Halide;
 
 int call_count = 0;
 
-void inline_everything(Pipeline,
+void inline_everything(const Pipeline &,
                        const Target &,
                        const MachineParams &,
                        AutoSchedulerResults *) {

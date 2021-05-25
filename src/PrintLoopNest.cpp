@@ -1,13 +1,21 @@
 #include "PrintLoopNest.h"
+#include "AllocationBoundsInference.h"
+#include "Bounds.h"
+#include "BoundsInference.h"
 #include "FindCalls.h"
 #include "Func.h"
 #include "Function.h"
 #include "IRPrinter.h"
 #include "RealizationOrder.h"
+#include "RemoveExternLoops.h"
+#include "RemoveUndef.h"
 #include "ScheduleFunctions.h"
 #include "Simplify.h"
+#include "SimplifyCorrelatedDifferences.h"
 #include "SimplifySpecializations.h"
+#include "SlidingWindow.h"
 #include "Target.h"
+#include "UniquifyVariableNames.h"
 #include "WrapCalls.h"
 
 #include <tuple>
@@ -18,6 +26,8 @@ namespace Internal {
 using std::map;
 using std::string;
 using std::vector;
+
+namespace {
 
 class PrintLoopNest : public IRVisitor {
 public:
@@ -75,7 +85,9 @@ private:
     }
 
     void visit(const For *op) override {
-        out << get_indent() << op->for_type << ' ' << simplify_var_name(op->name);
+        string simplified_loop_var_name = simplify_var_name(op->name);
+
+        out << get_indent() << op->for_type << " " << simplified_loop_var_name;
 
         // If the min or extent are constants, print them. At this
         // stage they're all variables.
@@ -148,12 +160,14 @@ private:
     }
 };
 
+}  // namespace
+
 string print_loop_nest(const vector<Function> &output_funcs) {
     // Do the first part of lowering:
 
     // Compute an environment
     map<string, Function> env;
-    for (Function f : output_funcs) {
+    for (const Function &f : output_funcs) {
         populate_environment(f, env);
     }
 
@@ -162,7 +176,7 @@ string print_loop_nest(const vector<Function> &output_funcs) {
     std::tie(outputs, env) = deep_copy(output_funcs, env);
 
     // Output functions should all be computed and stored at root.
-    for (Function f : outputs) {
+    for (const Function &f : outputs) {
         Func(f).compute_root().store_root();
     }
 
@@ -194,6 +208,22 @@ string print_loop_nest(const vector<Function> &output_funcs) {
     bool any_memoized = false;
     // Schedule the functions.
     Stmt s = schedule_functions(outputs, fused_groups, env, target, any_memoized);
+
+    // Compute the maximum and minimum possible value of each
+    // function. Used in later bounds inference passes.
+    FuncValueBounds func_bounds = compute_function_value_bounds(order, env);
+
+    // This pass injects nested definitions of variable names, so we
+    // can't simplify statements from here until we fix them up. (We
+    // can still simplify Exprs).
+    s = bounds_inference(s, outputs, order, fused_groups, env, func_bounds, target);
+    s = remove_extern_loops(s);
+    s = sliding_window(s, env);
+    s = simplify_correlated_differences(s);
+    s = allocation_bounds_inference(s, env, func_bounds);
+    s = remove_undef(s);
+    s = uniquify_variable_names(s);
+    s = simplify(s, false);
 
     // Now convert that to pseudocode
     std::ostringstream sstr;

@@ -4,12 +4,12 @@
 // subsets of a reduction domain using predicates.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_17*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_17 -std=c++11
-// LD_LIBRARY_PATH=../bin ./lesson_17
+// g++ lesson_17*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_17 -std=c++11
+// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_17
 
 // On os x:
-// g++ lesson_17*.cpp -g -I ../include -L ../bin -lHalide -o lesson_17 -std=c++11
-// DYLD_LIBRARY_PATH=../bin ./lesson_17
+// g++ lesson_17*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_17 -std=c++11
+// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_17
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
@@ -55,12 +55,12 @@ int main(int argc, char **argv) {
         // bounding box, such that the update is performed only if the
         // given predicate evaluates to true, i.e. within the circular
         // region.
-        r.where((r.x - 3)*(r.x - 3) + (r.y - 3)*(r.y - 3) <= 10);
+        r.where((r.x - 3) * (r.x - 3) + (r.y - 3) * (r.y - 3) <= 10);
 
         // After defining the predicate, we then define the update.
         circle(r.x, r.y) *= 2;
 
-        Buffer<int> halide_result = circle.realize(7, 7);
+        Buffer<int> halide_result = circle.realize({7, 7});
 
         // See figures/lesson_17_rdom_circular.mp4 for a visualization of
         // what this did.
@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
         for (int r_y = 0; r_y < 7; r_y++) {
             for (int r_x = 0; r_x < 7; r_x++) {
                 // Update is only performed if the predicate evaluates to true.
-                if ((r_x - 3)*(r_x - 3) + (r_y - 3)*(r_y - 3) <= 10) {
+                if ((r_x - 3) * (r_x - 3) + (r_y - 3) * (r_y - 3) <= 10) {
                     c_result[r_y][r_x] *= 2;
                 }
             }
@@ -107,8 +107,8 @@ int main(int argc, char **argv) {
         // Next, let's add the three predicates to the RDom using
         // multiple calls to RDom::where
         r.where(r.x + r.y > 5);
-        r.where(3*r.y - 2*r.x < 15);
-        r.where(4*r.x - r.y < 20);
+        r.where(3 * r.y - 2 * r.x < 15);
+        r.where(4 * r.x - r.y < 20);
 
         // We can also pack the multiple predicates into one like so:
         // r.where((r.x + r.y > 5) && (3*r.y - 2*r.x < 15) && (4*r.x - r.y < 20));
@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
         // Then define the update.
         triangle(r.x, r.y) *= 2;
 
-        Buffer<int> halide_result = triangle.realize(10, 10);
+        Buffer<int> halide_result = triangle.realize({10, 10});
 
         // See figures/lesson_17_rdom_triangular.mp4 for a
         // visualization of what this did.
@@ -131,7 +131,7 @@ int main(int argc, char **argv) {
         for (int r_y = 0; r_y < 10; r_y++) {
             for (int r_x = 0; r_x < 8; r_x++) {
                 // Update is only performed if the predicate evaluates to true.
-                if ((r_x + r_y > 5) && (3*r_y - 2*r_x < 15) && (4*r_x - r_y < 20)) {
+                if ((r_x + r_y > 5) && (3 * r_y - 2 * r_x < 15) && (4 * r_x - r_y < 20)) {
                     c_result[r_y][r_x] *= 2;
                 }
             }
@@ -172,7 +172,7 @@ int main(int argc, char **argv) {
         r2.where(f(r2.x, r2.y) < 1);
         g(r2.x, r2.y) += 17;
 
-        Buffer<int> halide_result_g = g.realize(5, 5);
+        Buffer<int> halide_result_g = g.realize({5, 5});
 
         // See figures/lesson_17_rdom_calls_in_predicate.mp4 for a
         // visualization of what this did.

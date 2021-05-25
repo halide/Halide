@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
     Var x;
     RDom r(0, img_size);
 
-    im(x) = (x*x) % hist_size;
+    im(x) = (x * x) % hist_size;
 
     hist(x) = cast<uint8_t>(0);
     hist(im(r)) += cast<uint8_t>(1);
@@ -25,6 +25,8 @@ int main(int argc, char **argv) {
         .gpu_threads(ri);
 
     // GPU doesn't support 8/16-bit atomics
-    Realization out = hist.realize(hist_size);
+    Realization out = hist.realize({hist_size});
+
+    printf("Success!\n");
     return 0;
 }

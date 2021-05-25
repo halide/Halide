@@ -6,11 +6,11 @@ WEAK int halide_msan_annotate_memory_is_initialized(void *user_context, const vo
     return 0;
 }
 
-WEAK int halide_msan_check_memory_is_initialized(void *user_context, const void *ptr, uint64_t len) {
+WEAK int halide_msan_check_memory_is_initialized(void *user_context, const void *ptr, uint64_t len, const char *name) {
     return 0;
 }
 
-WEAK int halide_msan_check_buffer_is_initialized(void *user_context, halide_buffer_t *b) {
+WEAK int halide_msan_check_buffer_is_initialized(void *user_context, halide_buffer_t *b, const char *buf_name) {
     return 0;
 }
 

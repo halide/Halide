@@ -33,19 +33,19 @@ bool test() {
 
     // Implement: output(x, y) = lut(input(x, 0), input(x, 1))
     // output and lut must have store_in(MemoryType::VTCM) to generate vgathers.
-    Expr xCoord = clamp(cast<int32_t>(input(x, 0)), 0, W_lut-1);
-    Expr yCoord = clamp(cast<int32_t>(input(x, 1)), 0, H_lut-1);
+    Expr xCoord = clamp(cast<int32_t>(input(x, 0)), 0, W_lut - 1);
+    Expr yCoord = clamp(cast<int32_t>(input(x, 1)), 0, H_lut - 1);
     lut_vtcm(x, y) = lut(x, y);
     output_vtcm(x, y) = lut_vtcm(xCoord, yCoord);
     output(x, y) = output_vtcm(x, y);
 
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        const int vector_size = target.has_feature(Target::HVX_128) ? 128 : 64;
+    if (target.has_feature(Target::HVX)) {
+        const int vector_size = target.has_feature(Target::HVX) ? 128 : 64;
         Var yi;
 
         output
             .hexagon()
-            .split(y, y, yi, H_img/2)
+            .split(y, y, yi, H_img / 2)
             .parallel(y)
             .vectorize(x, vector_size);
 
@@ -62,12 +62,12 @@ bool test() {
         }
     }
 
-    Buffer<ITYPE> output_buf = output.realize(W_img, H_img);
+    Buffer<ITYPE> output_buf = output.realize({W_img, H_img});
 
     for (int y = 0; y < H_img; y++) {
         for (int x = 0; x < W_img; x++) {
-            int xCoord = std::max(std::min((int)(input(x, 0)), W_lut-1), 0);
-            int yCoord = std::max(std::min((int)(input(x, 1)), H_lut-1), 0);
+            int xCoord = std::max(std::min((int)(input(x, 0)), W_lut - 1), 0);
+            int yCoord = std::max(std::min((int)(input(x, 1)), H_lut - 1), 0);
             ITYPE correct = lut(xCoord, yCoord);
             if (output_buf(x, y) != correct) {
                 printf("output(%d, %d) = %d instead of %d\n", x, y, output_buf(x, y), correct);
@@ -84,10 +84,10 @@ int main() {
     // uint16_t, int16_t, uint32_t, int32_t
     // For targets <v65 with hvx, we should generate dynamic_shuffle which are
     // compiled to vlut instructions.
-    if (!test<uint8_t>()  ||
-        !test<int8_t>()   ||
+    if (!test<uint8_t>() ||
+        !test<int8_t>() ||
         !test<uint16_t>() ||
-        !test<int16_t>()  ||
+        !test<int16_t>() ||
         !test<uint32_t>() ||
         !test<int32_t>()) return 1;
     printf("Success!\n");

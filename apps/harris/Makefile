@@ -6,7 +6,7 @@ test: $(BIN)/$(HL_TARGET)/out.png
 
 $(GENERATOR_BIN)/harris.generator: harris_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -g $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 $(BIN)/%/harris.a: $(GENERATOR_BIN)/harris.generator
 	@mkdir -p $(@D)
@@ -22,7 +22,7 @@ $(BIN)/%/runtime.a: $(GENERATOR_BIN)/harris.generator
 
 $(BIN)/%/filter: filter.cpp $(BIN)/%/harris.a $(BIN)/%/harris_auto_schedule.a $(BIN)/%/runtime.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 
 $(BIN)/%/out.png: $(BIN)/%/filter
 	$< ../images/rgba.png $(BIN)/$*/out.png

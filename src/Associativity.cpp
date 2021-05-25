@@ -37,8 +37,8 @@ vector<T> get_subvector(const vector<T> &v, const set<int> &indices) {
 
 // Replace self-references to 'func' with arguments 'args' at
 // 'value_index' in the Expr/Stmt with some Var
-class ConvertSelfRef : public IRMutator {
-    using IRMutator::visit;
+class ConvertSelfRef : public IRGraphMutator {
+    using IRGraphMutator::visit;
 
     const string &func;
     const vector<Expr> &args;
@@ -51,7 +51,7 @@ class ConvertSelfRef : public IRMutator {
         if (!is_solvable) {
             return op;
         }
-        Expr expr = IRMutator::visit(op);
+        Expr expr = IRGraphMutator::visit(op);
         op = expr.as<Call>();
         internal_assert(op);
 
@@ -59,7 +59,7 @@ class ConvertSelfRef : public IRMutator {
             internal_assert(args.size() == op->args.size())
                 << "Self-reference should have the same number of args as the original\n";
             for (size_t i = 0; i < op->args.size(); i++) {
-                if (!equal(op->args[i], args[i])) {
+                if (!graph_equal(op->args[i], args[i])) {
                     debug(5) << "Self-reference of " << op->name
                              << " with different args from the LHS. Operation is not associative\n";
                     is_solvable = false;
@@ -92,7 +92,7 @@ public:
     Expr x_part;              // Undefined if there is no self-reference at value_index
 };
 
-bool associative_op_pattern_match(Expr e,
+bool associative_op_pattern_match(const Expr &e,
                                   const Expr &op,
                                   const vector<string> &x_names,
                                   const vector<string> &y_names,
@@ -202,7 +202,7 @@ bool find_match(const vector<AssociativePattern> &table, const vector<string> &o
 
             assoc_op.xs[index] = {op_x_names[index], x_parts[index]};
             assoc_op.ys[index] = {op_y_names[index], y_part};
-            replacement.push_back({y_part, Variable::make(y_part.type(), op_y_names[index])});
+            replacement.emplace_back(y_part, Variable::make(y_part.type(), op_y_names[index]));
         }
         if (!matched) {
             continue;
@@ -227,7 +227,7 @@ bool find_match(const vector<AssociativePattern> &table, const vector<string> &o
 // Return a pair of booleans indicating if an operator is associative.
 // 'assoc_op' contains the the equivalent associative binary/unary operator
 // for that operator. If the operator is non-associative, 'assoc_op' is not valid.
-bool extract_associative_op(const vector<Expr> exprs, const vector<string> &op_x_names,
+bool extract_associative_op(const vector<Expr> &exprs, const vector<string> &op_x_names,
                             const vector<string> &op_y_names, const vector<Expr> &x_parts,
                             AssociativeOp &assoc_op) {
     if (exprs.size() == 1) {
@@ -273,7 +273,7 @@ void add_transitive_dependencies(vector<set<int>> &dependencies) {
                     for (const auto &idx : dependencies[j]) {
                         if (dependencies[i].count(idx) == 0) {
                             dependencies[i].insert(idx);
-                            change = false;
+                            change = true;
                         }
                     }
                 }
@@ -322,8 +322,10 @@ AssociativeOp prove_associativity(const string &f, vector<Expr> args, vector<Exp
     AssociativeOp assoc_op(exprs.size());
 
     for (Expr &arg : args) {
-        arg = common_subexpression_elimination(arg);
-        arg = simplify(arg);
+        // Undo the existing CSE pass done at function definition time
+        // to ensure things like += are in the expected form. Make no
+        // further transformations so that the LHS and RHS don't
+        // diverge.
         arg = substitute_in_all_lets(arg);
     }
 
@@ -340,10 +342,7 @@ AssociativeOp prove_associativity(const string &f, vector<Expr> args, vector<Exp
     // For a Tuple of exprs to be associative, each element of the Tuple
     // has to be associative.
     for (int idx = exprs.size() - 1; idx >= 0; --idx) {
-        exprs[idx] = simplify(exprs[idx]);
-        exprs[idx] = common_subexpression_elimination(exprs[idx]);
-        // Calling Simplify or the original expr itself might have let exprs,
-        // so we should substitutes in all lets first
+        // Undo the existing CSE pass done at function definition time.
         exprs[idx] = substitute_in_all_lets(exprs[idx]);
 
         // Replace any self-reference to Func 'f' with a Var
@@ -483,7 +482,7 @@ std::string print_args(const string &f, const vector<Expr> &args, const vector<E
     return stream.str();
 }
 
-void check_associativity(const string &f, vector<Expr> args, vector<Expr> exprs,
+void check_associativity(const string &f, const vector<Expr> &args, const vector<Expr> &exprs,
                          const AssociativeOp &assoc_op) {
     auto result = prove_associativity(f, args, exprs);
     internal_assert(result.associative() == assoc_op.associative())

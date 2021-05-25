@@ -9,15 +9,15 @@
  */
 
 #include <memory>
+#include <string>
 
 #include "Closure.h"
-#include "IR.h"
-#include "IRVisitor.h"
+#include "Expr.h"
 #include "Scope.h"
-#include "Target.h"
 
 namespace llvm {
 class ConstantFolder;
+class ElementCount;
 class Function;
 class IRBuilderDefaultInserter;
 class LLVMContext;
@@ -32,10 +32,13 @@ class IRBuilder;
 }  // namespace llvm
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
 
 /** The llvm type of a struct containing all of the externally referenced state of a Closure. */
-llvm::StructType *build_closure_type(const Closure &closure, llvm::StructType *buffer_t, llvm::LLVMContext *context);
+llvm::StructType *build_closure_type(const Closure &closure, llvm::StructType *halide_buffer_t_type, llvm::LLVMContext *context);
 
 /** Emit code that builds a struct containing all the externally
  * referenced state. Requires you to pass it a type and struct to fill in,
@@ -45,7 +48,7 @@ void pack_closure(llvm::StructType *type,
                   llvm::Value *dst,
                   const Closure &closure,
                   const Scope<llvm::Value *> &src,
-                  llvm::StructType *buffer_t,
+                  llvm::StructType *halide_buffer_t_type,
                   llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder);
 
 /** Emit code that unpacks a struct containing all the externally
@@ -61,6 +64,18 @@ void unpack_closure(const Closure &closure,
 /** Get the llvm type equivalent to a given halide type */
 llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t);
 
+/** Get the number of elements in an llvm vector type, or return 1 if
+ * it's not a vector type. */
+int get_vector_num_elements(llvm::Type *);
+
+/** Get the scalar type of an llvm vector type. Returns the argument
+ * if it's not a vector type. */
+llvm::Type *get_vector_element_type(llvm::Type *);
+
+llvm::ElementCount element_count(int e);
+
+llvm::Type *get_vector_type(llvm::Type *, int);
+
 /** Which built-in functions require a user-context first argument? */
 bool function_takes_user_context(const std::string &name);
 
@@ -69,13 +84,19 @@ bool function_takes_user_context(const std::string &name);
  * non-positive. */
 bool can_allocation_fit_on_stack(int64_t size);
 
+/** Does a {div/mod}_round_to_zero using binary long division for int/uint.
+ *  max_abs is the maximum absolute value of (a/b).
+ *  Returns the pair {div_round_to_zero, mod_round_to_zero}. */
+std::pair<Expr, Expr> long_div_mod_round_to_zero(const Expr &a, const Expr &b,
+                                                 const uint64_t *max_abs = nullptr);
+
 /** Given a Halide Euclidean division/mod operation, do constant optimizations
  * and possibly call lower_euclidean_div/lower_euclidean_mod if necessary.
  * Can introduce mulhi_shr and sorted_avg intrinsics as well as those from the
  * lower_euclidean_ operation -- div_round_to_zero or mod_round_to_zero. */
 ///@{
-Expr lower_int_uint_div(Expr a, Expr b);
-Expr lower_int_uint_mod(Expr a, Expr b);
+Expr lower_int_uint_div(const Expr &a, const Expr &b);
+Expr lower_int_uint_mod(const Expr &a, const Expr &b);
 ///@}
 
 /** Given a Halide Euclidean division/mod operation, define it in terms of
@@ -88,13 +109,12 @@ Expr lower_euclidean_mod(Expr a, Expr b);
 /** Given a Halide shift operation with a signed shift amount (may be negative), define
  * an equivalent expression using only shifts by unsigned amounts. */
 ///@{
-Expr lower_signed_shift_left(Expr a, Expr b);
-Expr lower_signed_shift_right(Expr a, Expr b);
+Expr lower_signed_shift_left(const Expr &a, const Expr &b);
+Expr lower_signed_shift_right(const Expr &a, const Expr &b);
 ///@}
 
-/** Replace predicated loads/stores with unpredicated equivalents
- * inside branches. */
-Stmt unpredicate_loads_stores(Stmt s);
+/** Reduce a mux intrinsic to a select tree */
+Expr lower_mux(const Call *mux);
 
 /** Given an llvm::Module, set llvm:TargetOptions, cpu and attr information */
 void get_target_options(const llvm::Module &module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs);
@@ -106,7 +126,7 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to);
 std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &module);
 
 /** Set the appropriate llvm Function attributes given a Target. */
-void set_function_attributes_for_target(llvm::Function *, Target);
+void set_function_attributes_for_target(llvm::Function *, const Target &);
 
 /** Save a copy of the llvm IR currently represented by the module as
  * data in the __LLVM,__bitcode section. Emulates clang's

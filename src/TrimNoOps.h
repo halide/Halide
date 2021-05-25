@@ -6,7 +6,7 @@
  * which they actually do something.
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {

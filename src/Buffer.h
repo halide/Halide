@@ -4,7 +4,6 @@
 #include "DeviceInterface.h"
 #include "Expr.h"
 #include "IntrusivePtr.h"
-#include "Util.h"
 #include "runtime/HalideBuffer.h"
 
 namespace Halide {
@@ -53,7 +52,7 @@ inline std::string get_name_from_end_of_parameter_pack() {
 template<typename First,
          typename Second,
          typename... Args>
-std::string get_name_from_end_of_parameter_pack(First first, Second second, Args &&... rest) {
+std::string get_name_from_end_of_parameter_pack(First first, Second second, Args &&...rest) {
     return get_name_from_end_of_parameter_pack(second, std::forward<Args>(rest)...);
 }
 
@@ -64,13 +63,13 @@ inline void get_shape_from_start_of_parameter_pack_helper(std::vector<int> &) {
 }
 
 template<typename... Args>
-void get_shape_from_start_of_parameter_pack_helper(std::vector<int> &result, int x, Args &&... rest) {
+void get_shape_from_start_of_parameter_pack_helper(std::vector<int> &result, int x, Args &&...rest) {
     result.push_back(x);
     get_shape_from_start_of_parameter_pack_helper(result, std::forward<Args>(rest)...);
 }
 
 template<typename... Args>
-std::vector<int> get_shape_from_start_of_parameter_pack(Args &&... args) {
+std::vector<int> get_shape_from_start_of_parameter_pack(Args &&...args) {
     std::vector<int> result;
     get_shape_from_start_of_parameter_pack_helper(result, std::forward<Args>(args)...);
     return result;
@@ -78,6 +77,29 @@ std::vector<int> get_shape_from_start_of_parameter_pack(Args &&... args) {
 
 template<typename T, typename T2>
 using add_const_if_T_is_const = typename std::conditional<std::is_const<T>::value, const T2, T2>::type;
+
+// Helpers to produce the name of a Buffer element type (a Halide
+// scalar type, or void, possibly with const). Useful for an error
+// messages.
+template<typename T>
+void buffer_type_name_non_const(std::ostream &s) {
+    s << type_to_c_type(type_of<T>(), false);
+}
+
+template<>
+inline void buffer_type_name_non_const<void>(std::ostream &s) {
+    s << "void";
+}
+
+template<typename T>
+std::string buffer_type_name() {
+    std::ostringstream oss;
+    if (std::is_const<T>::value) {
+        oss << "const ";
+    }
+    buffer_type_name_non_const<typename std::remove_const<T>::type>(oss);
+    return oss.str();
+}
 
 }  // namespace Internal
 
@@ -108,7 +130,17 @@ class Buffer {
                               std::is_void<T2>::value,
                           "type mismatch constructing Buffer");
         } else {
-            Runtime::Buffer<T>::assert_can_convert_from(*(other.get()));
+            // Don't delegate to
+            // Runtime::Buffer<T>::assert_can_convert_from. It might
+            // not assert is NDEBUG is defined. user_assert is
+            // friendlier anyway because it reports line numbers when
+            // debugging symbols are found, it throws an exception
+            // when exceptions are enabled, and we can print the
+            // actual types in question.
+            user_assert(Runtime::Buffer<T>::can_convert_from(*(other.get())))
+                << "Type mismatch constructing Buffer. Can't construct Buffer<"
+                << Internal::buffer_type_name<T>() << "> from Buffer<"
+                << type_to_c_type(other.type(), false) << ">\n";
         }
     }
 
@@ -128,6 +160,9 @@ public:
     /** Trivial copy assignment operator. */
     Buffer &operator=(const Buffer &that) = default;
 
+    /** Trivial move assignment operator. */
+    Buffer &operator=(Buffer &&) noexcept = default;
+
     /** Make a Buffer from a Buffer of a different type */
     template<typename T2>
     Buffer(const Buffer<T2> &other)
@@ -137,7 +172,7 @@ public:
 
     /** Move construct from a Buffer of a different type */
     template<typename T2>
-    Buffer(Buffer<T2> &&other) {
+    Buffer(Buffer<T2> &&other) noexcept {
         assert_can_convert_from(other);
         contents = std::move(other.contents);
     }
@@ -168,11 +203,6 @@ public:
     }
 
     explicit Buffer(const halide_buffer_t &buf,
-                    const std::string &name = "")
-        : Buffer(Runtime::Buffer<T>(buf), name) {
-    }
-
-    explicit Buffer(const buffer_t &buf,
                     const std::string &name = "")
         : Buffer(Runtime::Buffer<T>(buf), name) {
     }
@@ -218,7 +248,7 @@ public:
              typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
     explicit Buffer(Type t,
                     Internal::add_const_if_T_is_const<T, void> *data,
-                    int first, Args &&... rest)
+                    int first, Args &&...rest)
         : Buffer(Runtime::Buffer<T>(t, data, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
                  Internal::get_name_from_end_of_parameter_pack(rest...)) {
     }
@@ -235,7 +265,7 @@ public:
     template<typename... Args,
              typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
     explicit Buffer(T *data,
-                    int first, Args &&... rest)
+                    int first, Args &&...rest)
         : Buffer(Runtime::Buffer<T>(data, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
                  Internal::get_name_from_end_of_parameter_pack(rest...)) {
     }
@@ -334,7 +364,7 @@ public:
 
     /** Check if two Buffer objects point to the same underlying Buffer */
     template<typename T2>
-    bool same_as(const Buffer<T2> &other) {
+    bool same_as(const Buffer<T2> &other) const {
         return (const void *)(contents.get()) == (const void *)(other.contents.get());
     }
 
@@ -356,20 +386,19 @@ public:
     }
     // @}
 
-public:
     // We forward numerous methods from the underlying Buffer
-#define HALIDE_BUFFER_FORWARD_CONST(method)                                                                                      \
-    template<typename... Args>                                                                                                   \
-    auto method(Args &&... args) const->decltype(std::declval<const Runtime::Buffer<T>>().method(std::forward<Args>(args)...)) { \
-        user_assert(defined()) << "Undefined buffer calling const method " #method "\n";                                         \
-        return get()->method(std::forward<Args>(args)...);                                                                       \
+#define HALIDE_BUFFER_FORWARD_CONST(method)                                                                                     \
+    template<typename... Args>                                                                                                  \
+    auto method(Args &&...args) const->decltype(std::declval<const Runtime::Buffer<T>>().method(std::forward<Args>(args)...)) { \
+        user_assert(defined()) << "Undefined buffer calling const method " #method "\n";                                        \
+        return get()->method(std::forward<Args>(args)...);                                                                      \
     }
 
-#define HALIDE_BUFFER_FORWARD(method)                                                                                \
-    template<typename... Args>                                                                                       \
-    auto method(Args &&... args)->decltype(std::declval<Runtime::Buffer<T>>().method(std::forward<Args>(args)...)) { \
-        user_assert(defined()) << "Undefined buffer calling method " #method "\n";                                   \
-        return get()->method(std::forward<Args>(args)...);                                                           \
+#define HALIDE_BUFFER_FORWARD(method)                                                                               \
+    template<typename... Args>                                                                                      \
+    auto method(Args &&...args)->decltype(std::declval<Runtime::Buffer<T>>().method(std::forward<Args>(args)...)) { \
+        user_assert(defined()) << "Undefined buffer calling method " #method "\n";                                  \
+        return get()->method(std::forward<Args>(args)...);                                                          \
     }
 
 // This is a weird-looking but effective workaround for a deficiency in "perfect forwarding":
@@ -421,7 +450,7 @@ public:
     HALIDE_BUFFER_FORWARD(translate)
     HALIDE_BUFFER_FORWARD_INITIALIZER_LIST(translate, std::vector<int>)
     HALIDE_BUFFER_FORWARD(transpose)
-    HALIDE_BUFFER_FORWARD(transposed)
+    HALIDE_BUFFER_FORWARD_CONST(transposed)
     HALIDE_BUFFER_FORWARD(add_dimension)
     HALIDE_BUFFER_FORWARD(copy_to_host)
     HALIDE_BUFFER_FORWARD(copy_to_device)
@@ -507,12 +536,12 @@ public:
     }
 
     template<typename... Args>
-    auto operator()(int first, Args &&... args) -> decltype(std::declval<Runtime::Buffer<T>>()(first, std::forward<Args>(args)...)) {
+    auto operator()(int first, Args &&...args) -> decltype(std::declval<Runtime::Buffer<T>>()(first, std::forward<Args>(args)...)) {
         return (*get())(first, std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    auto operator()(int first, Args &&... args) const -> decltype(std::declval<const Runtime::Buffer<T>>()(first, std::forward<Args>(args)...)) {
+    auto operator()(int first, Args &&...args) const -> decltype(std::declval<const Runtime::Buffer<T>>()(first, std::forward<Args>(args)...)) {
         return (*get())(first, std::forward<Args>(args)...);
     }
 
@@ -536,15 +565,15 @@ public:
     /** Make an Expr that loads from this concrete buffer at a computed coordinate. */
     // @{
     template<typename... Args>
-    Expr operator()(Expr first, Args... rest) const {
+    Expr operator()(const Expr &first, Args... rest) const {
         std::vector<Expr> args = {first, rest...};
         return (*this)(args);
-    };
+    }
 
     template<typename... Args>
     Expr operator()(const std::vector<Expr> &args) const {
         return buffer_accessor(Buffer<>(*this), args);
-    };
+    }
     // @}
 
     /** Copy to the GPU, using the device API that is the default for the given Target. */

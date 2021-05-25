@@ -5,7 +5,6 @@
 #include <stdexcept>
 
 #include "Debug.h"
-#include "Introspection.h"
 #include "runtime/HalideRuntime.h"  // for HALIDE_ALWAYS_INLINE
 
 namespace Halide {
@@ -53,7 +52,7 @@ public:
 };
 
 /** The default error reporter logs to stderr, then throws an exception
- * (if WITH_EXCEPTIONS) or calls abort (if not). This allows customization
+ * (if HALIDE_WITH_EXCEPTIONS) or calls abort (if not). This allows customization
  * of that behavior if a more gentle response to error reporting is desired.
  * Note that error_reporter is expected to remain valid across all Halide usage;
  * it is up to the caller to ensure that this is the case (and to do any
@@ -129,6 +128,7 @@ public:
  * when the assertion is true.
  */
 #define _halide_internal_assertion(condition, flags) \
+    /* NOLINTNEXTLINE(bugprone-macro-parentheses) */ \
     (condition) ? (void)0 : ::Halide::Internal::Voidifier() & ::Halide::Internal::ErrorReport(__FILE__, __LINE__, #condition, flags).ref()
 
 #define internal_error Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, 0)

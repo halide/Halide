@@ -4,8 +4,10 @@
 /** \file
  * Defines the Var - the front-end variable
  */
+#include <string>
+#include <vector>
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 
@@ -15,7 +17,12 @@ namespace Halide {
  * definition, or as an Expr. As an Expr, it always has type
  * Int(32). */
 class Var {
-    std::string _name;
+    /* The expression representing the Var. Guaranteed to be an
+     * Internal::Variable of type Int(32). Created once on
+     * construction of the Var to avoid making a fresh Expr every time
+     * the Var is used in a context in which is will be converted to
+     * one. */
+    Expr e;
 
 public:
     /** Construct a Var with the given name */
@@ -25,13 +32,11 @@ public:
     Var();
 
     /** Get the name of a Var */
-    const std::string &name() const {
-        return _name;
-    }
+    const std::string &name() const;
 
     /** Test if two Vars are the same. This simply compares the names. */
     bool same_as(const Var &other) const {
-        return _name == other._name;
+        return name() == other.name();
     }
 
     /** Implicit var constructor. Implicit variables are injected
@@ -51,10 +56,10 @@ public:
      f(x, y) = 3;
      \endcode
      *
-     * A call to f with the placeholder symbol \ref _
-     * will have implicit arguments injected automatically, so f(2, \ref _)
-     * is equivalent to f(2, \ref _0), where \ref _0 = Var::implicit(0), and f(\ref _)
-     * (and indeed f when cast to an Expr) is equivalent to f(\ref _0, \ref _1).
+     * A call to f with the placeholder symbol _
+     * will have implicit arguments injected automatically, so f(2, _)
+     * is equivalent to f(2, _0), where _0 = ImplicitVar<0>(), and f(_)
+     * (and indeed f when cast to an Expr) is equivalent to f(_0, _1).
      * The following definitions are all equivalent, differing only in the
      * variable names.
      *
@@ -127,7 +132,7 @@ public:
     //}
 
     /** Return the argument index for a placeholder argument given its
-     *  name. Returns 0 for \ref _0, 1 for \ref _1, etc. Returns -1 if
+     *  name. Returns 0 for _0, 1 for _1, etc. Returns -1 if
      *  the variable is not of implicit form.
      */
     //{
@@ -139,7 +144,7 @@ public:
     }
     //}
 
-    /** Test if a var is the placeholder variable \ref _ */
+    /** Test if a var is the placeholder variable _ */
     //{
     static bool is_placeholder(const std::string &name) {
         return name == "_";
@@ -150,8 +155,8 @@ public:
     //}
 
     /** A Var can be treated as an Expr of type Int(32) */
-    operator Expr() const {
-        return Internal::Variable::make(Int(32), name());
+    operator const Expr &() const {
+        return e;
     }
 
     /** A Var that represents the location outside the outermost loop. */

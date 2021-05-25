@@ -5,7 +5,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping test for WebAssembly as the wasm JIT cannot support Param<> for pointer types.\n");
+        printf("[SKIP] WebAssembly JIT does not support Param<> for pointer types.\n");
         return 0;
     }
 
@@ -20,10 +20,10 @@ int main(int argc, char **argv) {
 
     handle.set(&foo);
 
-    Buffer<uint64_t> out1 = f.realize(4);
+    Buffer<uint64_t> out1 = f.realize({4});
 
     g.vectorize(x, 4);
-    Buffer<uint64_t> out2 = g.realize(4);
+    Buffer<uint64_t> out2 = g.realize({4});
 
     uint64_t correct = (uint64_t)((uintptr_t)(&foo));
 

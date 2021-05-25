@@ -55,7 +55,9 @@ class CountIfThenElse : public Internal::IRMutator {
     int producer_consumers;
 
 public:
-    CountIfThenElse() : producer_consumers(0) {}
+    CountIfThenElse()
+        : producer_consumers(0) {
+    }
 
     Internal::Stmt visit(const Internal::ProducerConsumer *op) override {
         // Only count ifs found inside a pipeline.
@@ -75,7 +77,7 @@ public:
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping test for WebAssembly as the wasm JIT cannot support set_custom_allocator.\n");
+        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
         return 0;
     }
 
@@ -84,7 +86,7 @@ int main(int argc, char **argv) {
 
         Func f;
         Var x;
-        f(x) = select(param, x*3, x*17);
+        f(x) = select(param, x * 3, x * 17);
 
         // Vectorize when the output is large enough
         Expr cond = (f.output_buffer().width() >= 4);
@@ -110,7 +112,7 @@ int main(int argc, char **argv) {
         reset_trace();
         f.realize(out);
         for (int i = 0; i < out.width(); i++) {
-            int correct = i*3;
+            int correct = i * 3;
             if (out(i) != correct) {
                 printf("out(%d) was %d instead of %d\n",
                        i, out(i), correct);
@@ -119,7 +121,7 @@ int main(int argc, char **argv) {
         param.set(false);
         f.realize(out);
         for (int i = 0; i < out.width(); i++) {
-            int correct = i*17;
+            int correct = i * 17;
             if (out(i) != correct) {
                 printf("out(%d) was %d instead of %d\n",
                        i, out(i), correct);
@@ -127,7 +129,7 @@ int main(int argc, char **argv) {
         }
 
         // Should have used vector stores
-        if (!vector_store  || scalar_store) {
+        if (!vector_store || scalar_store) {
             printf("This was supposed to use vector stores\n");
             return -1;
         }
@@ -138,7 +140,7 @@ int main(int argc, char **argv) {
         reset_trace();
         f.realize(out);
         for (int i = 0; i < out.width(); i++) {
-            int correct = i*3;
+            int correct = i * 3;
             if (out(i) != correct) {
                 printf("out(%d) was %d instead of %d\n",
                        i, out(i), correct);
@@ -147,7 +149,7 @@ int main(int argc, char **argv) {
         param.set(false);
         f.realize(out);
         for (int i = 0; i < out.width(); i++) {
-            int correct = i*17;
+            int correct = i * 17;
             if (out(i) != correct) {
                 printf("out(%d) was %d instead of %d\n",
                        i, out(i), correct);
@@ -159,7 +161,6 @@ int main(int argc, char **argv) {
             printf("This was supposed to use scalar stores\n");
             return -1;
         }
-
     }
 
     {
@@ -193,7 +194,7 @@ int main(int argc, char **argv) {
 
         reset_alloc_counts();
         param.set(true);
-        out.realize(100);
+        out.realize({100});
 
         if (empty_allocs != 1 || nonempty_allocs != 2 || frees != 3) {
             printf("There were supposed to be 1 empty alloc, 2 nonempty allocs, and 3 frees.\n"
@@ -204,7 +205,7 @@ int main(int argc, char **argv) {
 
         reset_alloc_counts();
         param.set(false);
-        out.realize(100);
+        out.realize({100});
 
         if (empty_allocs != 2 || nonempty_allocs != 1 || frees != 3) {
             printf("There were supposed to be 2 empty allocs, 1 nonempty alloc, and 3 frees.\n"
@@ -216,8 +217,8 @@ int main(int argc, char **argv) {
 
     {
         // Specialize for interleaved vs planar inputs
-        ImageParam im(Float(32), 1);
-        im.dim(0).set_stride(Expr()); // unconstrain the stride
+        ImageParam im(Int(32), 1);
+        im.dim(0).set_stride(Expr());  // unconstrain the stride
 
         Func f;
         Var x;
@@ -231,7 +232,7 @@ int main(int argc, char **argv) {
         f.set_custom_trace(&my_trace);
 
         // Check bounds inference is still cool with widths < 8
-        f.infer_input_bounds(5);
+        f.infer_input_bounds({5});
         int m = im.get().min(0), e = im.get().extent(0);
         if (m != 0 || e != 5) {
             printf("min, extent = %d, %d instead of 0, 5\n", m, e);
@@ -240,28 +241,66 @@ int main(int argc, char **argv) {
 
         // Check we don't crash with the small input, and that it uses scalar stores
         reset_trace();
-        f.realize(5);
+        f.realize({5});
         if (!scalar_store || vector_store) {
             printf("These stores were supposed to be scalar.\n");
             return -1;
         }
 
         // Check we don't crash with a larger input, and that it uses vector stores
-        Buffer<float> image(100);
+        Buffer<int> image(100);
         im.set(image);
 
         reset_trace();
-        f.realize(100);
+        f.realize({100});
         if (scalar_store || !vector_store) {
             printf("These stores were supposed to be vector.\n");
             return -1;
         }
+    }
 
+    {
+        // Specialize a copy for dense vs. non-dense inputs.
+        ImageParam im(Int(32), 1);
+        im.dim(0).set_stride(Expr());  // unconstrain the stride
+
+        Func f;
+        Var x;
+
+        f(x) = im(x);
+
+        f.specialize(im.dim(0).stride() == 1).vectorize(x, 8);
+
+        f.trace_stores();
+        f.set_custom_trace(&my_trace);
+
+        Buffer<int> strided_image(4, 100);
+        strided_image.slice(0, 0);
+        im.set(strided_image);
+
+        // Check we used scalar stores for a strided input.
+        reset_trace();
+        f.realize({100});
+        if (!scalar_store || vector_store) {
+            printf("These stores were supposed to be scalar.\n");
+            return -1;
+        }
+
+        // Check that we used vector stores for a dense input.
+        Buffer<int> image(100);
+        im.set(image);
+
+        reset_trace();
+        f.realize({100});
+        if (scalar_store || !vector_store) {
+            printf("These stores were supposed to be vector.\n");
+            return -1;
+        }
     }
 
     {
         // Bounds required of the input change depending on the param
-        ImageParam im(Float(32), 1);
+        ImageParam im(Int(32), 1);
         Param<bool> param;
 
         Func f;
@@ -270,7 +309,7 @@ int main(int argc, char **argv) {
         f.specialize(param);
 
         param.set(true);
-        f.infer_input_bounds(100);
+        f.infer_input_bounds({100});
         int m = im.get().min(0);
         if (m != 10) {
             printf("min %d instead of 10\n", m);
@@ -278,13 +317,12 @@ int main(int argc, char **argv) {
         }
         param.set(false);
         im.reset();
-        f.infer_input_bounds(100);
+        f.infer_input_bounds({100});
         m = im.get().min(0);
         if (m != -10) {
             printf("min %d instead of -10\n", m);
             return -1;
         }
-
     }
 
     {
@@ -307,28 +345,27 @@ int main(int argc, char **argv) {
         size.set(1);
 
         // Not crashing is enough
-        f.realize(100);
+        f.realize({100});
     }
 
     {
         // What happens to bounds inference if an input is not used at
         // all for a given specialization?
-        ImageParam im(Float(32), 1);
+        ImageParam im(Int(32), 1);
         Param<bool> param;
         Func f;
         Var x;
 
-        f(x) = select(param, im(x), 0.0f);
+        f(x) = select(param, im(x), 0);
 
         f.specialize(param);
 
         param.set(false);
-        Buffer<float> image(10);
+        Buffer<int> image(10);
         im.set(image);
         // The image is too small, but that should be OK, because the
         // param is false so the image will never be used.
-        f.realize(100);
-
+        f.realize({100});
     }
 
     {
@@ -349,7 +386,7 @@ int main(int argc, char **argv) {
         f.specialize(cond).vectorize(x, 4);
 
         // Confirm that the unrolling applies to both cases using bounds inference:
-        f.infer_input_bounds(3, 1);
+        f.infer_input_bounds({3, 1});
 
         if (im.get().extent(0) != 3) {
             printf("extent(0) was supposed to be 3.\n");
@@ -362,7 +399,6 @@ int main(int argc, char **argv) {
             printf("extent(1) was supposed to be 2.\n");
             return -1;
         }
-
     }
 
     {
@@ -455,7 +491,7 @@ int main(int argc, char **argv) {
         // Check specialization on a more complex expression used in a select.
         ImageParam im(Int(32), 2);
         Param<int> p;
-        Expr test = (p > 73) || (p*p + p + 1 == 0);
+        Expr test = (p > 73) || (p * p + p + 1 == 0);
 
         Func f;
         Var x;
@@ -470,7 +506,7 @@ int main(int argc, char **argv) {
         // depending on the param.
 
         p.set(100);
-        f.infer_input_bounds(10);
+        f.infer_input_bounds({10});
         int w = im.get().width();
         int h = im.get().height();
         if (w != 10 || h != 1) {
@@ -480,7 +516,7 @@ int main(int argc, char **argv) {
         im.reset();
 
         p.set(-100);
-        f.infer_input_bounds(10);
+        f.infer_input_bounds({10});
         w = im.get().width();
         h = im.get().height();
         if (w != 1 || h != 10) {
@@ -504,7 +540,7 @@ int main(int argc, char **argv) {
         // does when p is 100), we only access the first row of the
         // input, and bounds inference should recognize this.
         p.set(100);
-        f.infer_input_bounds(10);
+        f.infer_input_bounds({10});
         int w = im.get().width();
         int h = im.get().height();
         if (w != 10 || h != 1) {
@@ -519,7 +555,7 @@ int main(int argc, char **argv) {
         // are evaluated, so the image must be loaded over the full
         // square.
         p.set(-100);
-        f.infer_input_bounds(10);
+        f.infer_input_bounds({10});
         w = im.get().width();
         h = im.get().height();
         if (w != 10 || h != 10) {
@@ -551,19 +587,19 @@ int main(int argc, char **argv) {
         const auto &s = f.function().definition().specializations();
         _halide_user_assert(s.size() == 1);
         // should be (something) == 0
-        _halide_user_assert(s[0].condition.as<Internal::EQ>() && is_zero(s[0].condition.as<Internal::EQ>()->b));
+        _halide_user_assert(s[0].condition.as<Internal::EQ>() && is_const_zero(s[0].condition.as<Internal::EQ>()->b));
 
         f.set_custom_trace(&my_trace);
         f.trace_stores();
 
         vector_store_lanes = 0;
         p.set(0);
-        f.realize(100);
+        f.realize({100});
         _halide_user_assert(vector_store_lanes == 32);
 
         vector_store_lanes = 0;
         p.set(42);  // just a nonzero value
-        f.realize(100);
+        f.realize({100});
         _halide_user_assert(vector_store_lanes == 4);
     }
 
@@ -586,7 +622,7 @@ int main(int argc, char **argv) {
         // calls with the same Expr, but doesn't guarantee that all Exprs
         // that evaluate to the same value collapse. Use a deliberately-
         // different Expr here to check that we do elide these.
-        f.specialize(different_const_true);         // will be pruned
+        f.specialize(different_const_true);  // will be pruned
 
         _halide_user_assert(f.function().definition().specializations().size() == 5);
 
@@ -599,19 +635,19 @@ int main(int argc, char **argv) {
         // Specialization will be hoisted into the main Schedule.
         _halide_user_assert(s.size() == 1);
         // should be (something) == 0
-        _halide_user_assert(s[0].condition.as<Internal::EQ>() && is_zero(s[0].condition.as<Internal::EQ>()->b));
+        _halide_user_assert(s[0].condition.as<Internal::EQ>() && is_const_zero(s[0].condition.as<Internal::EQ>()->b));
 
         f.set_custom_trace(&my_trace);
         f.trace_stores();
 
         vector_store_lanes = 0;
         p.set(42);  // Chosen to ensure pruned branch is pruned
-        f.realize(100);
+        f.realize({100});
         _halide_user_assert(vector_store_lanes == 16);
 
         vector_store_lanes = 0;
         p.set(0);
-        f.realize(100);
+        f.realize({100});
         _halide_user_assert(vector_store_lanes == 32);
     }
 
@@ -625,7 +661,7 @@ int main(int argc, char **argv) {
         // implicit compute/store_root required for outputs.
         Func f("foof");
         f(x) = x;
-        f.specialize(p == 0).vectorize(x, 32);      // will *not* be pruned
+        f.specialize(p == 0).vectorize(x, 32);  // will *not* be pruned
         f.specialize(const_true).vectorize(x, 16);
 
         f.set_custom_trace(&my_trace);
@@ -633,12 +669,12 @@ int main(int argc, char **argv) {
 
         vector_store_lanes = 0;
         p.set(42);  // arbitrary nonzero value
-        f.realize(100);
+        f.realize({100});
         _halide_user_assert(vector_store_lanes == 16);
 
         vector_store_lanes = 0;
         p.set(0);
-        f.realize(100);
+        f.realize({100});
         _halide_user_assert(vector_store_lanes == 32);
     }
 
@@ -663,7 +699,7 @@ int main(int argc, char **argv) {
 
         vector_store_lanes = 0;
         p.set(0);
-        f.realize(100);
+        f.realize({100});
         _halide_user_assert(vector_store_lanes == 32);
     }
 

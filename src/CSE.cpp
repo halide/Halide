@@ -4,6 +4,7 @@
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Scope.h"
 #include "Simplify.h"
 
@@ -98,7 +99,7 @@ public:
         return Stmt();
     }
 
-    ExprWithCompareCache with_cache(Expr e) {
+    ExprWithCompareCache with_cache(const Expr &e) {
         return ExprWithCompareCache(e, &cache);
     }
 
@@ -172,7 +173,7 @@ public:
         if (iter != gvn.output_numbering.end()) {
             gvn.entries[iter->second]->use_count++;
         } else {
-            internal_error << "Expr not in shallow numbering!\n";
+            internal_error << "Expr not in shallow numbering: " << e << "\n";
         }
 
         // Visit the children if we haven't been here before.
@@ -228,6 +229,31 @@ class RemoveLets : public IRGraphMutator {
 
 class CSEEveryExprInStmt : public IRMutator {
     bool lift_all;
+    using IRMutator::visit;
+
+    Stmt visit(const Store *op) override {
+        // It's important to do CSE jointly on the index and value in
+        // a store to stop:
+        // f[x] = f[x] + y
+        // from turning into
+        // f[x] = f[z] + y
+        // due to the two equal x's indices being CSE'd differently due to the presence of y.
+        Expr dummy = Call::make(Int(32), Call::bundle, {op->value, op->index}, Call::PureIntrinsic);
+        dummy = common_subexpression_elimination(dummy, lift_all);
+        vector<pair<string, Expr>> lets;
+        while (const Let *let = dummy.as<Let>()) {
+            lets.emplace_back(let->name, let->value);
+            dummy = let->body;
+        }
+        const Call *bundle = Call::as_intrinsic(dummy, {Call::bundle});
+        internal_assert(bundle && bundle->args.size() == 2);
+        Stmt s = Store::make(op->name, bundle->args[0], bundle->args[1],
+                             op->param, mutate(op->predicate), op->alignment);
+        for (auto it = lets.rbegin(); it != lets.rend(); it++) {
+            s = LetStmt::make(it->first, it->second, s);
+        }
+        return s;
+    }
 
 public:
     using IRMutator::mutate;
@@ -247,7 +273,9 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     Expr e = e_in;
 
     // Early-out for trivial cases.
-    if (is_const(e) || e.as<Variable>()) return e;
+    if (is_const(e) || e.as<Variable>()) {
+        return e;
+    }
 
     debug(4) << "\n\n\nInput to CSE " << e << "\n";
 
@@ -287,7 +315,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     // Wrap the final expr in the lets.
     for (size_t i = lets.size(); i > 0; i--) {
         Expr value = lets[i - 1].second;
-        // Drop this variable as an acceptible replacement for this expr.
+        // Drop this variable as an acceptable replacement for this expr.
         replacer.erase(value);
         // Use containing lets in the value.
         value = replacer.mutate(lets[i - 1].second);
@@ -310,7 +338,7 @@ namespace {
 // Normalize all names in an expr so that expr compares can be done
 // without worrying about mere name differences.
 class NormalizeVarNames : public IRMutator {
-    int counter;
+    int counter = 0;
 
     map<string, string> new_names;
 
@@ -334,12 +362,10 @@ class NormalizeVarNames : public IRMutator {
     }
 
 public:
-    NormalizeVarNames()
-        : counter(0) {
-    }
+    NormalizeVarNames() = default;
 };
 
-void check(Expr in, Expr correct) {
+void check(const Expr &in, const Expr &correct) {
     Expr result = common_subexpression_elimination(in);
     NormalizeVarNames n;
     result = n.mutate(result);

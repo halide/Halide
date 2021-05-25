@@ -1,8 +1,7 @@
 #ifdef _WIN32
 #include <stdio.h>
-// MSAN isn't supported for any Windows variant
 int main(int argc, char **argv) {
-    printf("Skipping test on Windows\n");
+    printf("[SKIP] MSAN isn't supported for any Windows variant.\n");
     return 0;
 }
 #else
@@ -21,6 +20,7 @@ using namespace Halide::Runtime;
 
 enum {
     AnnotateBoundsInferenceBuffer,
+    AnnotateBoundsInferenceShape,
     AnnotateIntermediateBuffer,
     AnnotateIntermediateShape,
     AnnotateOutputBuffer,
@@ -124,8 +124,13 @@ extern "C" void __msan_unpoison(const void *mem, size_t size) {
     exit(-1);
 }
 
-extern "C" int halide_msan_check_memory_is_initialized(void *user_context, const void *ptr, uint64_t len) {
-    // printf("CHECK-MEM: %d:%p:%08x\n", (int)check_stage, ptr, (unsigned int)len);
+extern "C" long __msan_test_shadow(const void *mem, size_t size) {
+    fprintf(stderr, "Impossible\n");
+    exit(-1);
+}
+
+extern "C" int halide_msan_check_memory_is_initialized(void *user_context, const void *ptr, uint64_t len, const char *name) {
+    // printf("CHECK-MEM: %d:%p:%08x for buf %s\n", (int)check_stage, ptr, (unsigned int)len, name);
     if (check_stage == CheckInputBuffer) {
         if (len != sizeof(halide_buffer_t)) {
             fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int)len);
@@ -175,9 +180,17 @@ extern "C" int halide_msan_annotate_memory_is_initialized(void *user_context, co
             fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int)len);
             exit(-1);
         }
+        annotate_stage = AnnotateBoundsInferenceShape;
+    } else if (annotate_stage == AnnotateBoundsInferenceShape) {
+        if (output_previous != nullptr || len != sizeof(halide_dimension_t) * 3) {
+            fprintf(stderr, "Failure: Expected sizeof(halide_dimension_t) * 3, saw %d\n", (unsigned int)len);
+            exit(-1);
+        }
         bounds_inference_count += 1;
         if (bounds_inference_count == 4) {
             annotate_stage = AnnotateIntermediateBuffer;
+        } else {
+            annotate_stage = AnnotateBoundsInferenceBuffer;
         }
     } else if (annotate_stage == AnnotateIntermediateBuffer) {
         if (expect_intermediate_buffer_error) {

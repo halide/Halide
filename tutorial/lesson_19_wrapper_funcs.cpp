@@ -5,12 +5,12 @@
 // from a Func or an ImageParam.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_19*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_19 -std=c++11
-// LD_LIBRARY_PATH=../bin ./lesson_19
+// g++ lesson_19*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_19 -std=c++11
+// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_19
 
 // On os x:
-// g++ lesson_19*.cpp -g -I ../include -L ../bin -lHalide -o lesson_19 -std=c++11
-// DYLD_LIBRARY_PATH=../bin ./lesson_19
+// g++ lesson_19*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_19 -std=c++11
+// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_19
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
         //   for x:
         //     g(x, y) = 2 * f_in_g(x, y) + 3
 
-        g.realize(5, 5);
+        g.realize({5, 5});
 
         // See figures/lesson_19_wrapper_local.mp4 for a visualization.
 
@@ -122,7 +122,7 @@ int main(int argc, char **argv) {
         //   for x:
         //     h(x, y) = 3 + g(x, y) - f_in(x, y)
 
-        h.realize(5, 5);
+        h.realize({5, 5});
 
         // See figures/lesson_19_wrapper_global.mp4 and for a
         // visualization of what this did.
@@ -161,7 +161,7 @@ int main(int argc, char **argv) {
         //   for x:
         //     h(x, y) = 3 + g(x, y) - f_in_h(x, y)
 
-        h.realize(5, 5);
+        h.realize({5, 5});
         // See figures/lesson_19_wrapper_unique.mp4 for a visualization.
     }
 
@@ -205,7 +205,7 @@ int main(int argc, char **argv) {
         // Note that calling f.in(g) a second time returns the wrapper
         // already created by the first call, it doesn't make a new one.
 
-        h.realize(8, 8);
+        h.realize({8, 8});
         // See figures/lesson_19_wrapper_vary_schedule.mp4 for a
         // visualization.
 
@@ -258,7 +258,7 @@ int main(int argc, char **argv) {
         // effect. Allocations that are only ever accessed at constant
         // indices can be promoted into registers.
 
-        g.realize(16, 16);
+        g.realize({16, 16});
         // See figures/lesson_19_transpose.mp4 for a visualization
     }
 
@@ -274,7 +274,7 @@ int main(int argc, char **argv) {
         // We will compute a small blur of the input.
         Func blur("blur");
         blur(x, y) = (img(x - 1, y - 1) + img(x, y - 1) + img(x + 1, y - 1) +
-                      img(x - 1, y    ) + img(x, y    ) + img(x + 1, y    ) +
+                      img(x - 1, y) + img(x, y) + img(x + 1, y) +
                       img(x - 1, y + 1) + img(x, y + 1) + img(x + 1, y + 1));
 
         blur.compute_root().gpu_tile(x, y, xo, yo, xi, yi, 8, 8);
@@ -297,6 +297,14 @@ int main(int argc, char **argv) {
             target.set_feature(Target::OpenCL);
         }
 
+        // This check isn't strictly necessary, but it allows a more graceful
+        // exit if running on a system that doesn't have the expected drivers
+        // and/or hardware present.
+        if (!host_supports_target_device(target)) {
+            printf("Requested GPU is not supported; skipping this test. (Do you have the proper hardware and/or driver installed?)\n");
+            return 0;
+        }
+
         // Create an interesting input image to use.
         Buffer<int> input(258, 258);
         input.set_min(-1, -1);
@@ -308,14 +316,14 @@ int main(int argc, char **argv) {
 
         img.set(input);
         blur.compile_jit(target);
-        Buffer<int> out = blur.realize(256, 256);
+        Buffer<int> out = blur.realize({256, 256});
 
         // Check the output is what we expected
         for (int y = out.top(); y <= out.bottom(); y++) {
             for (int x = out.left(); x <= out.right(); x++) {
                 int val = out(x, y);
                 int expected = (input(x - 1, y - 1) + input(x, y - 1) + input(x + 1, y - 1) +
-                                input(x - 1, y    ) + input(x, y    ) + input(x + 1, y    ) +
+                                input(x - 1, y) + input(x, y) + input(x + 1, y) +
                                 input(x - 1, y + 1) + input(x, y + 1) + input(x + 1, y + 1));
                 if (val != expected) {
                     printf("out(%d, %d) = %d instead of %d\n",
@@ -395,7 +403,7 @@ int main(int argc, char **argv) {
         f.vectorize(x, 4);
         f.in(g).vectorize(x, 4);
 
-        g.realize(8, 8);
+        g.realize({8, 8});
         // See figures/lesson_19_group_updates.mp4 for a visualization.
     }
 

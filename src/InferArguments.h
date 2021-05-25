@@ -39,7 +39,7 @@ struct InferredArgument {
 
 class Function;
 
-std::vector<InferredArgument> infer_arguments(Stmt body, const std::vector<Function> &outputs);
+std::vector<InferredArgument> infer_arguments(const Stmt &body, const std::vector<Function> &outputs);
 
 }  // namespace Internal
 }  // namespace Halide

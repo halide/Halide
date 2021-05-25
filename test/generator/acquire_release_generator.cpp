@@ -4,7 +4,7 @@ namespace {
 
 class AcquireRelease : public Halide::Generator<AcquireRelease> {
 public:
-    Input<Buffer<float>>  input{"input", 2};
+    Input<Buffer<float>> input{"input", 2};
     Output<Buffer<float>> output{"output", 2};
 
     void generate() {

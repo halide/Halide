@@ -1,11 +1,13 @@
+// Ignore deprecation warnings inside our own runtime
+#define HALIDE_ALLOW_DEPRECATED 1
+
 #include "HalideRuntime.h"
 #include "HalideRuntimeCuda.h"
-#include "HalideRuntimeOpenGL.h"
-#include "HalideRuntimeOpenGLCompute.h"
-#include "HalideRuntimeOpenCL.h"
-#include "HalideRuntimeMetal.h"
-#include "HalideRuntimeHexagonHost.h"
 #include "HalideRuntimeD3D12Compute.h"
+#include "HalideRuntimeHexagonHost.h"
+#include "HalideRuntimeMetal.h"
+#include "HalideRuntimeOpenCL.h"
+#include "HalideRuntimeOpenGLCompute.h"
 #include "HalideRuntimeQurt.h"
 #include "cpu_features.h"
 
@@ -24,13 +26,12 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_cond_signal,
     (void *)&halide_cond_wait,
     (void *)&halide_copy_to_device,
-    (void *)&halide_copy_to_device_legacy,
     (void *)&halide_copy_to_host,
-    (void *)&halide_copy_to_host_legacy,
     (void *)&halide_cuda_detach_device_ptr,
     (void *)&halide_cuda_device_interface,
     (void *)&halide_cuda_get_device_ptr,
     (void *)&halide_cuda_initialize_kernels,
+    (void *)&halide_cuda_finalize_kernels,
     (void *)&halide_cuda_run,
     (void *)&halide_cuda_wrap_device_ptr,
     (void *)&halide_current_time_ns,
@@ -40,21 +41,16 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_device_and_host_free_as_destructor,
     (void *)&halide_device_and_host_malloc,
     (void *)&halide_device_free,
-    (void *)&halide_device_free_legacy,
     (void *)&halide_device_free_as_destructor,
     (void *)&halide_device_host_nop_free,
     (void *)&halide_device_malloc,
-    (void *)&halide_device_malloc_legacy,
     (void *)&halide_device_release,
     (void *)&halide_device_sync,
-    (void *)&halide_device_sync_legacy,
     (void *)&halide_do_par_for,
     (void *)&halide_do_parallel_tasks,
     (void *)&halide_do_task,
     (void *)&halide_do_loop_task,
     (void *)&halide_double_to_string,
-    (void *)&halide_downgrade_buffer_t,
-    (void *)&halide_downgrade_buffer_t_device_fields,
     (void *)&halide_error,
     (void *)&halide_error_access_out_of_bounds,
     (void *)&halide_error_bad_dimensions,
@@ -69,11 +65,11 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_error_constraint_violated,
     (void *)&halide_error_constraints_make_required_region_smaller,
     (void *)&halide_error_debug_to_file_failed,
+    (void *)&halide_error_device_dirty_with_no_device_support,
     (void *)&halide_error_explicit_bounds_too_small,
     (void *)&halide_error_extern_stage_failed,
     (void *)&halide_error_fold_factor_too_small,
     (void *)&halide_error_host_is_null,
-    (void *)&halide_error_integer_division_by_zero,
     (void *)&halide_error_out_of_memory,
     (void *)&halide_error_param_too_large_f64,
     (void *)&halide_error_param_too_large_i64,
@@ -98,6 +94,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_hexagon_get_device_handle,
     (void *)&halide_hexagon_get_device_size,
     (void *)&halide_hexagon_initialize_kernels,
+    (void *)&halide_hexagon_finalize_kernels,
     (void *)&halide_hexagon_power_hvx_off,
     (void *)&halide_hexagon_power_hvx_off_as_destructor,
     (void *)&halide_hexagon_power_hvx_on,
@@ -112,6 +109,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_malloc,
     (void *)&halide_matlab_call_pipeline,
     (void *)&halide_memoization_cache_cleanup,
+    (void *)&halide_memoization_cache_evict,
     (void *)&halide_memoization_cache_lookup,
     (void *)&halide_memoization_cache_release,
     (void *)&halide_memoization_cache_set_size,
@@ -122,6 +120,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_metal_get_buffer,
     (void *)&halide_metal_get_crop_offset,
     (void *)&halide_metal_initialize_kernels,
+    (void *)&halide_metal_finalize_kernels,
     (void *)&halide_metal_release_context,
     (void *)&halide_metal_run,
     (void *)&halide_metal_wrap_buffer,
@@ -143,24 +142,20 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_opencl_get_device_type,
     (void *)&halide_opencl_get_platform_name,
     (void *)&halide_opencl_get_crop_offset,
+    (void *)&halide_opencl_image_device_interface,
+    (void *)&halide_opencl_image_wrap_cl_mem,
     (void *)&halide_opencl_initialize_kernels,
+    (void *)&halide_opencl_finalize_kernels,
     (void *)&halide_opencl_run,
     (void *)&halide_opencl_set_build_options,
     (void *)&halide_opencl_set_device_type,
     (void *)&halide_opencl_set_platform_name,
     (void *)&halide_opencl_wrap_cl_mem,
-    (void *)&halide_opengl_context_lost,
     (void *)&halide_opengl_create_context,
-    (void *)&halide_opengl_detach_texture,
-    (void *)&halide_opengl_device_interface,
     (void *)&halide_opengl_get_proc_address,
-    (void *)&halide_opengl_get_texture,
-    (void *)&halide_opengl_initialize_kernels,
-    (void *)&halide_opengl_run,
-    (void *)&halide_opengl_wrap_render_target,
-    (void *)&halide_opengl_wrap_texture,
     (void *)&halide_openglcompute_device_interface,
     (void *)&halide_openglcompute_initialize_kernels,
+    (void *)&halide_openglcompute_finalize_kernels,
     (void *)&halide_openglcompute_run,
     (void *)&halide_pointer_to_string,
     (void *)&halide_print,
@@ -203,11 +198,11 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_trace,
     (void *)&halide_trace_helper,
     (void *)&halide_uint64_to_string,
-    (void *)&halide_upgrade_buffer_t,
     (void *)&halide_use_jit_module,
     (void *)&halide_d3d12compute_acquire_context,
     (void *)&halide_d3d12compute_device_interface,
     (void *)&halide_d3d12compute_initialize_kernels,
+    (void *)&halide_d3d12compute_finalize_kernels,
     (void *)&halide_d3d12compute_release_context,
     (void *)&halide_d3d12compute_run,
 };

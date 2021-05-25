@@ -5,7 +5,7 @@ using namespace Halide;
 
 int my_trace(void *user_context, const halide_trace_event_t *e) {
 
-    if (e->event == 2) { // begin realization
+    if (e->event == 2) {  // begin realization
         if (e->coordinates[1] != 4) {
             printf("Realization of f was supposed to be 4-wide\n");
             exit(-1);
@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
 
     f.trace_realizations();
     h.set_custom_trace(&my_trace);
-    h.realize(1);
+    h.realize({1});
 
     printf("Success!\n");
     return 0;

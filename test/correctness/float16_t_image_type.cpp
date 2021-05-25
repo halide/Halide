@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <cmath>
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -13,8 +13,8 @@ bool test() {
     // this checks the addressing math is doing the right thing for
     // float16_t.
     im.for_each_element([&](int x, int y) {
-            im(x, y) = T(x + y / 8.0);
-        });
+        im(x, y) = T(x + y / 8.0);
+    });
 
     if (im.size_in_bytes() != im.number_of_elements() * 2) {
         printf("Incorrect amount of memory allocated\n");

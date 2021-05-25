@@ -19,7 +19,8 @@ int main(int argc, char **argv) {
 
     p.compute_with(f, x);
     g.compute_with(f, x);
-    h.realize(200, 200);
+    h.realize({200, 200});
 
+    printf("Success!\n");
     return 0;
 }

@@ -1,10 +1,12 @@
 #include "InlineReductions.h"
+
 #include "CSE.h"
 #include "Debug.h"
 #include "Func.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
+#include <utility>
 
 namespace Halide {
 
@@ -13,6 +15,7 @@ using std::string;
 using std::vector;
 
 namespace Internal {
+namespace {
 
 class FindFreeVars : public IRMutator {
 public:
@@ -20,7 +23,7 @@ public:
     vector<Expr> call_args;
     RDom rdom;
 
-    FindFreeVars(RDom r, const string &n)
+    FindFreeVars(const RDom &r, const string &n)
         : rdom(r), explicit_rdom(r.defined()), name(n) {
     }
 
@@ -96,84 +99,167 @@ private:
             }
         }
 
-        free_vars.push_back(Var(var_name));
-        call_args.push_back(v);
+        free_vars.emplace_back(var_name);
+        call_args.emplace_back(v);
         return expr;
     }
 };
+
+}  // namespace
 }  // namespace Internal
 
 Expr sum(Expr e, const std::string &name) {
-    return sum(RDom(), e, name);
+    return sum(RDom(), std::move(e), Func(name));
 }
 
-Expr sum(RDom r, Expr e, const std::string &name) {
-    Internal::FindFreeVars v(r, name);
+Expr sum(Expr e, const Func &f) {
+    return sum(RDom(), std::move(e), f);
+}
+
+Expr sum(const RDom &r, Expr e, const std::string &name) {
+    return sum(r, std::move(e), Func(name));
+}
+
+Expr sum(const RDom &r, Expr e, const Func &f) {
+    user_assert(!f.defined())
+        << "Func " << f.name()
+        << " passed to sum already has a definition";
+
+    Internal::FindFreeVars v(r, f.name());
     e = v.mutate(common_subexpression_elimination(e));
 
     user_assert(v.rdom.defined()) << "Expression passed to sum must reference a reduction domain";
 
-    Func f(name);
     f(v.free_vars) += e;
     return f(v.call_args);
 }
 
-Expr product(Expr e, const std::string &name) {
-    return product(RDom(), e, name);
+Expr saturating_sum(Expr e, const std::string &name) {
+    return saturating_sum(RDom(), std::move(e), Func(name));
 }
 
-Expr product(RDom r, Expr e, const std::string &name) {
-    Internal::FindFreeVars v(r, name);
+Expr saturating_sum(Expr e, const Func &f) {
+    return saturating_sum(RDom(), std::move(e), f);
+}
+
+Expr saturating_sum(const RDom &r, Expr e, const std::string &name) {
+    return saturating_sum(r, std::move(e), Func(name));
+}
+
+Expr saturating_sum(const RDom &r, Expr e, const Func &f) {
+    user_assert(!f.defined())
+        << "Func " << f.name()
+        << " passed to saturating_sum already has a definition";
+
+    Internal::FindFreeVars v(r, f.name());
+    e = v.mutate(common_subexpression_elimination(e));
+
+    user_assert(v.rdom.defined()) << "Expression passed to saturating_sum must reference a reduction domain";
+
+    f(v.free_vars) = cast(e.type(), 0);
+    f(v.free_vars) = Internal::saturating_add(f(v.free_vars), e);
+    return f(v.call_args);
+}
+
+Expr product(Expr e, const std::string &name) {
+    return product(RDom(), std::move(e), Func(name));
+}
+
+Expr product(Expr e, const Func &f) {
+    return product(RDom(), std::move(e), f);
+}
+
+Expr product(const RDom &r, Expr e, const std::string &name) {
+    return product(r, std::move(e), Func(name));
+}
+
+Expr product(const RDom &r, Expr e, const Func &f) {
+    user_assert(!f.defined())
+        << "Func " << f.name()
+        << " passed to product already has a definition";
+
+    Internal::FindFreeVars v(r, f.name());
     e = v.mutate(common_subexpression_elimination(e));
 
     user_assert(v.rdom.defined()) << "Expression passed to product must reference a reduction domain";
 
-    Func f(name);
     f(v.free_vars) *= e;
     return f(v.call_args);
 }
 
 Expr maximum(Expr e, const std::string &name) {
-    return maximum(RDom(), e, name);
+    return maximum(RDom(), std::move(e), Func(name));
 }
 
-Expr maximum(RDom r, Expr e, const std::string &name) {
-    Internal::FindFreeVars v(r, name);
+Expr maximum(Expr e, const Func &f) {
+    return maximum(RDom(), std::move(e), f);
+}
+
+Expr maximum(const RDom &r, Expr e, const std::string &name) {
+    return maximum(r, std::move(e), Func(name));
+}
+
+Expr maximum(const RDom &r, Expr e, const Func &f) {
+    user_assert(!f.defined())
+        << "Func " << f.name()
+        << " passed to maximum already has a definition";
+
+    Internal::FindFreeVars v(r, f.name());
     e = v.mutate(common_subexpression_elimination(e));
 
     user_assert(v.rdom.defined()) << "Expression passed to maximum must reference a reduction domain";
 
-    Func f(name);
     f(v.free_vars) = e.type().min();
     f(v.free_vars) = max(f(v.free_vars), e);
     return f(v.call_args);
 }
 
 Expr minimum(Expr e, const std::string &name) {
-    return minimum(RDom(), e, name);
+    return minimum(RDom(), std::move(e), Func(name));
 }
 
-Expr minimum(RDom r, Expr e, const std::string &name) {
-    Internal::FindFreeVars v(r, name);
+Expr minimum(Expr e, const Func &f) {
+    return minimum(RDom(), std::move(e), f);
+}
+
+Expr minimum(const RDom &r, Expr e, const std::string &name) {
+    return minimum(r, std::move(e), Func(name));
+}
+
+Expr minimum(const RDom &r, Expr e, const Func &f) {
+    user_assert(!f.defined())
+        << "Func " << f.name()
+        << " passed to minimum already has a definition";
+
+    Internal::FindFreeVars v(r, f.name());
     e = v.mutate(common_subexpression_elimination(e));
 
     user_assert(v.rdom.defined()) << "Expression passed to minimum must reference a reduction domain";
 
-    Func f(name);
     f(v.free_vars) = e.type().max();
     f(v.free_vars) = min(f(v.free_vars), e);
     return f(v.call_args);
 }
 
 Tuple argmax(Expr e, const std::string &name) {
-    return argmax(RDom(), e, name);
+    return argmax(RDom(), std::move(e), Func(name));
 }
 
-Tuple argmax(RDom r, Expr e, const std::string &name) {
-    Internal::FindFreeVars v(r, name);
-    e = v.mutate(common_subexpression_elimination(e));
+Tuple argmax(Expr e, const Func &f) {
+    return argmax(RDom(), std::move(e), f);
+}
 
-    Func f(name);
+Tuple argmax(const RDom &r, Expr e, const std::string &name) {
+    return argmax(r, std::move(e), Func(name));
+}
+
+Tuple argmax(const RDom &r, Expr e, const Func &f) {
+    user_assert(!f.defined())
+        << "Func " << f.name()
+        << " passed to argmax already has a definition";
+
+    Internal::FindFreeVars v(r, f.name());
+    e = v.mutate(common_subexpression_elimination(e));
 
     user_assert(v.rdom.defined()) << "Expression passed to argmax must reference a reduction domain";
 
@@ -195,14 +281,24 @@ Tuple argmax(RDom r, Expr e, const std::string &name) {
 }
 
 Tuple argmin(Expr e, const std::string &name) {
-    return argmin(RDom(), e, name);
+    return argmin(RDom(), std::move(e), Func(name));
 }
 
-Tuple argmin(RDom r, Expr e, const std::string &name) {
-    Internal::FindFreeVars v(r, name);
-    e = v.mutate(common_subexpression_elimination(e));
+Tuple argmin(Expr e, const Func &f) {
+    return argmin(RDom(), std::move(e), f);
+}
 
-    Func f(name);
+Tuple argmin(const RDom &r, Expr e, const std::string &name) {
+    return argmin(r, std::move(e), Func(name));
+}
+
+Tuple argmin(const RDom &r, Expr e, const Func &f) {
+    user_assert(!f.defined())
+        << "Func " << f.name()
+        << " passed to argmin already has a definition";
+
+    Internal::FindFreeVars v(r, f.name());
+    e = v.mutate(common_subexpression_elimination(e));
 
     user_assert(v.rdom.defined()) << "Expression passed to argmin must reference a reduction domain";
 

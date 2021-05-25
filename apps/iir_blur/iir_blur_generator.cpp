@@ -57,25 +57,58 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha, bool skip_schedule
             blur.update(2)
                 .reorder(x, ry)
                 .vectorize(x);
-        } else {
-            // GPU schedule
+        } else if (target.has_feature(Target::CUDA)) {
+            // CUDA-specific GPU schedule (using gpu_lanes)
 
             // Really for an IIR on the GPU you should use a more
             // specialized DSL like RecFilter, but we can schedule it
             // in Halide adequately, we just can't extract any
-            // parallelism from the scan dimension.
+            // parallelism from the scan dimension. Most GPUs will be
+            // heavily under-utilized with this schedule and thus
+            // unable to hide the memory latencies to L2.
 
-            // We also have no way to store kernel intermediates on
-            // the GPU in global memory, and we can't fuse together
-            // multiple update stages into a single loop, so we
-            // currently have to launch a whole lotta
-            // kernels. store_with would ameliorate this to some
-            // degree, or making store_in get you to global memory on
-            // the GPU. All in all, this is a pretty mediocre schedule
-            // for an IIR blur.
+            const int warp_size = 32;
 
-            // 3.39ms on a 2060 RTX
+            // 2.06ms on a 2060 RTX
+            Var xi, yi;
+            transpose.compute_root()
+                .tile(x, y, xi, yi, warp_size, warp_size)
+                .gpu_blocks(y, c)
+                .gpu_lanes(xi);
 
+            blur.compute_at(transpose, y)
+                .store_in(MemoryType::Heap)  // Too large to fit into shared memory
+                .gpu_lanes(x);
+            blur.update(0)
+                .gpu_lanes(x);
+
+            // We can't hide load latencies by swapping in other warps
+            // because we don't have enough available parallelism for
+            // that, but if we unroll the scan loop a little then the
+            // ptx compiler can reorder the loads earlier than the
+            // fmas, and cover latency that way. Saves 1.7ms!
+            blur.update(1)
+                .unroll(ry, 8)
+                .gpu_lanes(x);
+            blur.update(2)
+                .unroll(ry, 8)
+                .gpu_lanes(x);
+
+            // Stage the transpose input through shared so that we do
+            // strided loads out of shared instead of global.  By
+            // default the stride would be the width of the
+            // allocation, which is the warp size. This can cause bank
+            // conflicts. We can improve matters by padding out the
+            // storage horizontally to make the stride coprime with
+            // the warp size, so that each load has a distinct
+            // remainder modulo the warp size. warp_size + 1 will
+            // do. This saves 0.05 ms
+            blur.in()
+                .align_storage(x, warp_size + 1)
+                .compute_at(transpose, x)
+                .gpu_lanes(x);
+        } else {
+            // Generic GPU schedule (for gpus without gpu_lanes() support)
             Var xi, yi;
             blur.compute_root();
             blur.update(0)
@@ -119,13 +152,6 @@ public:
 
         // Scheduling is done inside blur_cols_transpose.
         output = blur;
-
-        if (get_target().has_gpu_feature() && !auto_schedule) {
-            Var xi, yi;
-            output.compute_root()
-                .reorder(c, x, y)
-                .gpu_tile(x, y, xi, yi, 32, 32);
-        }
 
         // Estimates
         {

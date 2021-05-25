@@ -1,18 +1,16 @@
-#include <assert.h>
-#include <stdio.h>
 #include "Halide.h"
+#include "halide_test_dirs.h"
 
-#include "test/common/halide_test_dirs.h"
+#include <cstdio>
 
 using namespace Halide;
 
 int main(int argc, char **argv) {
     Func f("f");
 
-    Buffer<int32_t> result = f.realize(100, 5, 3);
+    Buffer<int32_t> result = f.realize({100, 5, 3});
 
     // We shouldn't reach here, because there should have been a compile error.
-    printf("There should have been an error\n");
-
+    printf("Success!\n");
     return 0;
 }

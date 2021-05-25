@@ -4,7 +4,9 @@
 // This file may be used by AOT tests, so it deliberately does not
 // include Halide.h
 
+#include <cassert>
 #include <string>
+
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -96,7 +98,7 @@ inline std::string get_test_tmp_dir() {
     return dir;
 }
 
-}  // namespace Halide
 }  // namespace Internal
+}  // namespace Halide
 
 #endif  // HALIDE_TEST_DIRS_H

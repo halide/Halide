@@ -1,0 +1,52 @@
+name: Halide Presubmit Checks
+on:
+  # We don't want 'edited' (that's basically just the description, title, etc)
+  # We don't want 'review_requested' (that's redundant to the ones below for our purposes)
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '**.h'
+      - '**.c'
+      - '**.cpp'
+
+jobs:
+  check_clang_format:
+    name: Check clang-format
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+      - uses: DoozyX/clang-format-lint-action@v0.11
+        with:
+          source: '.'
+          extensions: 'h,c,cpp'
+          clangFormatVersion: 11
+  check_clang_tidy:
+    name: Check clang-tidy
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install clang-tidy
+        run: |
+          sudo apt-get update
+          sudo apt-get install llvm-11 clang-11 liblld-11-dev libclang-11-dev clang-tidy-11 ninja-build
+      - name: Run clang-tidy
+        run: |
+          export CC=clang-11
+          export CXX=clang++-11
+          export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-11
+          ./run-clang-tidy.sh
+  check_cmake_file_lists:
+    name: Check CMake file lists
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run test sources check
+        run: |
+          shopt -s nullglob
+          (cd test/auto_schedule       && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
+          (cd test/correctness         && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
+          (cd test/error               && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
+          (cd test/generator           && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
+          (cd test/failing_with_issue  && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
+          (cd test/performance         && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])
+          (cd test/warning             && comm -23 <(ls *.{c,cpp} | sort) <(grep -P '^\s*#?\s*[A-Za-z0-9_.]+$' CMakeLists.txt | tr -d '# ' | sort) | tee missing_files && [ ! -s missing_files ])

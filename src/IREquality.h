@@ -5,7 +5,7 @@
  * Methods to test Exprs and Stmts for equality of value
  */
 
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {
@@ -94,11 +94,9 @@ if (m.contains(ExprWithCompareCache(query, &cache))) {...}
  */
 struct ExprWithCompareCache {
     Expr expr;
-    mutable IRCompareCache *cache;
+    mutable IRCompareCache *cache = nullptr;
 
-    ExprWithCompareCache()
-        : cache(nullptr) {
-    }
+    ExprWithCompareCache() = default;
     ExprWithCompareCache(const Expr &e, IRCompareCache *c)
         : expr(e), cache(c) {
     }

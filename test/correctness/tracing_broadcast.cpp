@@ -9,7 +9,8 @@ int my_trace(void *user_context, const halide_trace_event_t *e) {
             int val = ((const int *)(e->value))[i];
             if (val != 1234567890) {
                 printf("All values stored should have been 1234567890\n"
-                       "Instead they are: %d\n", val);
+                       "Instead they are: %d\n",
+                       val);
                 exit(-1);
             }
         }
@@ -25,10 +26,9 @@ int main(int argc, char **argv) {
 
     f.trace_stores();
     f.set_custom_trace(&my_trace);
-    f.realize(8, 8);
+    f.realize({8, 8});
 
     printf("Success!\n");
 
     return 0;
-
 }

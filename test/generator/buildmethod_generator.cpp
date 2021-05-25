@@ -8,7 +8,7 @@ namespace {
 // for those Generators.
 class BuildMethod : public Halide::Generator<BuildMethod> {
 public:
-    GeneratorParam<float> compiletime_factor{ "compiletime_factor", 1, 0, 100 };
+    GeneratorParam<float> compiletime_factor{"compiletime_factor", 1, 0, 100};
 
     Input<Buffer<float>> input{"input", 3};
     Input<float> runtime_factor{"runtime_factor", 1.0};

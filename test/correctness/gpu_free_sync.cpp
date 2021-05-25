@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     Func f;
     Var x, y, xi, yi;
     RDom r(0, 100);
-    f(x, y) = sum(sqrt(sqrt(sqrt(sqrt(x+y+r)))));
+    f(x, y) = sum(sqrt(sqrt(sqrt(sqrt(x + y + r)))));
 
     Target t = get_jit_target_from_environment();
 
@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
         // frees it (calling dev_free) possibly before the compute is
         // done.
         for (int i = 0; i < 10; i++) {
-            f.realize(1024, 1024, t);
+            f.realize({1024, 1024}, t);
         }
     } else {
         // Skip this test if gpu target not enabled (it's pretty slow on a cpu).

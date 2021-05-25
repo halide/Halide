@@ -13,9 +13,9 @@ int main(int argc, char **argv) {
     // Pure definition
     f1(x) = 0;
     // Update rule
-    f1(r) = f1(r-1) + f1(r-2);
+    f1(r) = f1(r - 1) + f1(r - 2);
 
-    Buffer<int> fib1 = f1.realize(102);
+    Buffer<int> fib1 = f1.realize({102});
 
     // That code needlessly set the entire buffer to zero before
     // computing fibonacci. We know for our use of fibonacci that
@@ -38,9 +38,9 @@ int main(int argc, char **argv) {
     // This actually turns into code:
     f2(0) = 0;
     f2(1) = 0;
-    f2(r) = f2(r-1) + f2(r-2);
+    f2(r) = f2(r - 1) + f2(r - 2);
 
-    Buffer<int> fib2 = f2.realize(102);
+    Buffer<int> fib2 = f2.realize({102});
 
     int err = evaluate_may_gpu<int>(maximum(fib1(r) - fib2(r)));
     if (err > 0) {
@@ -52,14 +52,14 @@ int main(int argc, char **argv) {
     RDom rx(0, 100);
     Func f3;
     f3(x) = Tuple(undef<float>(), sin(x));
-    Expr left = max(rx-1, 0);
-    Expr right = min(rx+1, 99);
+    Expr left = max(rx - 1, 0);
+    Expr right = min(rx + 1, 99);
 
     for (int i = 0; i < 10; i++) {
         f3(rx) = Tuple(f3(rx)[0] + f3(rx)[1] + f3(left)[1] + f3(right)[1], undef<float>());
         f3(rx) = Tuple(undef<float>(), f3(rx)[1] + f3(rx)[0] + f3(left)[0] + f3(right)[0]);
     }
-    f3.realize(100);
+    f3.realize({100});
 
     printf("Success!\n");
     return 0;

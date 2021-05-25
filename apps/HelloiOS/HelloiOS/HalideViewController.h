@@ -4,7 +4,6 @@
 #import "HalideView.h"
 #import <UIKit/UIKit.h>
 
-
 @interface HalideViewController : UIViewController
 
 @property HalideView *halide_view;

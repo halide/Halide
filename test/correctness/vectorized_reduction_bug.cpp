@@ -2,7 +2,6 @@
 #include <stdio.h>
 using namespace Halide;
 
-
 int main(int argc, char *argv[]) {
     {
         Func sum("sum"), foo("foo");
@@ -18,7 +17,7 @@ int main(int argc, char *argv[]) {
 
         foo.vectorize(c, 4);
 
-        Buffer<int32_t> output = foo.realize(2, 2, 4);
+        Buffer<int32_t> output = foo.realize({2, 2, 4});
         for (int y = 0; y < 2; y++) {
             for (int x = 0; x < 2; x++) {
                 for (int c = 0; c < 4; c++) {
@@ -52,11 +51,11 @@ int main(int argc, char *argv[]) {
         g.update(0).vectorize(x);
 
         f.compute_root();
-        Buffer<int32_t> im = f.realize(100, 100);
+        Buffer<int32_t> im = f.realize({100, 100});
 
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
-                int correct = (x != 0) ? 0 : 120*(x + y) + 120*119/2;
+                int correct = (x != 0) ? 0 : 120 * (x + y) + 120 * 119 / 2;
                 if (im(x, y) != correct) {
                     printf("im(%d, %d) = %d instead of %d\n",
                            x, y, im(x, y), correct);

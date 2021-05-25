@@ -6,8 +6,9 @@ using namespace Halide::Internal;
 class CheckLoopLevels : public IRVisitor {
 public:
     CheckLoopLevels(const std::string &inner_loop_level,
-                        const std::string &outer_loop_level) :
-        inner_loop_level(inner_loop_level), outer_loop_level(outer_loop_level) {}
+                    const std::string &outer_loop_level)
+        : inner_loop_level(inner_loop_level), outer_loop_level(outer_loop_level) {
+    }
 
 private:
     using IRVisitor::visit;
@@ -25,18 +26,18 @@ private:
     void visit(const Call *op) override {
         IRVisitor::visit(op);
         if (op->name == "sin_f32") {
-            _halide_user_assert(inside_for_loop == inner_loop_level);
+            _halide_user_assert(starts_with(inside_for_loop, inner_loop_level));
         } else if (op->name == "cos_f32") {
-            _halide_user_assert(inside_for_loop == outer_loop_level);
+            _halide_user_assert(starts_with(inside_for_loop, outer_loop_level));
         }
     }
 
     void visit(const Store *op) override {
         IRVisitor::visit(op);
         if (op->name.substr(0, 5) == "inner") {
-            _halide_user_assert(inside_for_loop == inner_loop_level);
+            _halide_user_assert(starts_with(inside_for_loop, inner_loop_level));
         } else if (op->name.substr(0, 5) == "outer") {
-            _halide_user_assert(inside_for_loop == outer_loop_level);
+            _halide_user_assert(starts_with(inside_for_loop, outer_loop_level));
         } else {
             _halide_user_assert(0);
         }
@@ -66,7 +67,7 @@ struct Test {
 
     void check(const std::string &inner_loop_level,
                const std::string &outer_loop_level) {
-        Buffer<float> result = outer.realize(1, 1, 1);
+        Buffer<float> result = outer.realize({1, 1, 1});
 
         Module m = outer.compile_to_module({outer.infer_arguments()});
         CheckLoopLevels c(inner_loop_level, outer_loop_level);

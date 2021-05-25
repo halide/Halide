@@ -1,11 +1,9 @@
 #ifndef HALIDE_INTROSPECTION_H
 #define HALIDE_INTROSPECTION_H
 
+#include <cstdint>
 #include <iostream>
-#include <stdint.h>
 #include <string>
-
-#include "Util.h"
 
 /** \file
  *
@@ -102,13 +100,12 @@ struct A {
     int an_int;
 
     class B {
-        int private_member;
+        int private_member = 17;
 
     public:
         float a_float;
         A *parent;
-        B()
-            : private_member(17) {
+        B() {
             a_float = private_member * 2.0f;
         }
     };

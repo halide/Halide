@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     int extra_value = 0;
     for (int i = 0; i < 3; ++i) {
         extras.push_back(Buffer<uint8_t>(kSize, kSize));
-        extras.back().fill((uint8_t) i);
+        extras.back().fill((uint8_t)i);
         extra_value += i;
     }
 
@@ -41,20 +41,22 @@ int main(int argc, char **argv) {
     extra_value += 5;
 
     const int extra_scalar = 7;
-    extra_value += extra_scalar;
+    const int8_t extra_dynamic_scalar = 13;
+    extra_value += extra_scalar + extra_dynamic_scalar;
 
     const int bias = 1;
     auto result = configure::generate(context, configure::Inputs{
-            input,
-            bias,
-            extras[0], extras[1], extras[2],
-            typed_extra,
-            func_extra,
-            extra_scalar});
+                                                   input,
+                                                   bias,
+                                                   extras[0], extras[1], extras[2],
+                                                   typed_extra,
+                                                   func_extra,
+                                                   extra_scalar,
+                                                   cast<int8_t>(extra_dynamic_scalar)});
 
-    Buffer<int32_t> output = result.output.realize(kSize, kSize, 3);
-    Buffer<float> extra_buffer_output = result.extra_buffer_output.realize(kSize, kSize, 3);
-    Buffer<double> extra_func_output = result.extra_func_output.realize(kSize, kSize);
+    Buffer<int32_t> output = result.output.realize({kSize, kSize, 3});
+    Buffer<float> extra_buffer_output = result.extra_buffer_output.realize({kSize, kSize, 3});
+    Buffer<double> extra_func_output = result.extra_func_output.realize({kSize, kSize});
 
     output.for_each_element([&](int x, int y, int c) {
         assert(output(x, y, c) == input(x, y, c) + bias + extra_value);

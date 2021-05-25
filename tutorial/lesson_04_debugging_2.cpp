@@ -3,12 +3,12 @@
 // This lesson demonstrates how to follow what Halide is doing at runtime.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_04*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_04 -std=c++11
-// LD_LIBRARY_PATH=../bin ./lesson_04
+// g++ lesson_04*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_04 -std=c++11
+// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_04
 
 // On os x:
-// g++ lesson_04*.cpp -g -I ../include -L ../bin -lHalide -o lesson_04 -std=c++11
-// DYLD_LIBRARY_PATH=../bin ./lesson_04
+// g++ lesson_04*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_04 -std=c++11
+// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_04
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 
         // Realize the function over an 8x8 region.
         printf("Evaluating gradient\n");
-        Buffer<int> output = gradient.realize(8, 8);
+        Buffer<int> output = gradient.realize({8, 8});
 
         // This will print out all the times gradient(x, y) gets
         // evaluated.
@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
         // on linux you can control it manually using the environment
         // variable HL_NUM_THREADS.
         printf("\nEvaluating parallel_gradient\n");
-        parallel_gradient.realize(8, 8);
+        parallel_gradient.realize({8, 8});
     }
 
     // Printing individual Exprs.
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
         g(x, y) = sin(x) + print(cos(y));
 
         printf("\nEvaluating sin(x) + cos(y), and just printing cos(y)\n");
-        g.realize(4, 4);
+        g.realize({4, 4});
     }
 
     // Printing additional context.
@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
         f(x, y) = sin(x) + print(cos(y), "<- this is cos(", y, ") when x =", x);
 
         printf("\nEvaluating sin(x) + cos(y), and printing cos(y) with more context\n");
-        f.realize(4, 4);
+        f.realize({4, 4});
 
         // It can be useful to split expressions like the one above
         // across multiple lines to make it easier to turn on and off
@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
         // e = print(e, "<- this is cos(", y, ") when x =", x);
         Func g;
         g(x, y) = sin(x) + e;
-        g.realize(4, 4);
+        g.realize({4, 4});
     }
 
     // Conditional printing
@@ -131,7 +131,7 @@ int main(int argc, char **argv) {
         e = print_when(x == 37 && y == 42, e, "<- this is cos(y) at x, y == (37, 42)");
         f(x, y) = sin(x) + e;
         printf("\nEvaluating sin(x) + cos(y), and printing cos(y) at a single pixel\n");
-        f.realize(640, 480);
+        f.realize({640, 480});
 
         // print_when can also be used to check for values you're not expecting:
         Func g;
@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
         e = print_when(e < 0, e, "cos(y) < 0 at y ==", y);
         g(x, y) = sin(x) + e;
         printf("\nEvaluating sin(x) + cos(y), and printing whenever cos(y) < 0\n");
-        g.realize(4, 4);
+        g.realize({4, 4});
     }
 
     // Printing expressions at compile-time.
@@ -152,10 +152,15 @@ int main(int argc, char **argv) {
         Var fizz("fizz"), buzz("buzz");
         Expr e = 1;
         for (int i = 2; i < 100; i++) {
-            if (i % 3 == 0 && i % 5 == 0) e += fizz*buzz;
-            else if (i % 3 == 0) e += fizz;
-            else if (i % 5 == 0) e += buzz;
-            else e += i;
+            if (i % 3 == 0 && i % 5 == 0) {
+                e += fizz * buzz;
+            } else if (i % 3 == 0) {
+                e += fizz;
+            } else if (i % 5 == 0) {
+                e += buzz;
+            } else {
+                e += i;
+            }
         }
         std::cout << "Printing a complex Expr: " << e << "\n";
     }

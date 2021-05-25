@@ -3,6 +3,7 @@
 #include <cmath>
 #include <iostream>
 #include <sstream>
+#include <utility>
 
 #include "CSE.h"
 #include "Debug.h"
@@ -20,7 +21,7 @@ namespace Halide {
 // terms, which is the degree plus one.
 namespace {
 
-Expr evaluate_polynomial(const Expr &x, float *coeff, int n) {
+Expr evaluate_polynomial(Expr x, float *coeff, int n) {
     internal_assert(n >= 2);
 
     Expr x2 = x * x;
@@ -113,39 +114,23 @@ bool is_const(const Expr &e, int64_t value) {
 }
 
 bool is_no_op(const Stmt &s) {
-    if (!s.defined()) return true;
+    if (!s.defined()) {
+        return true;
+    }
     const Evaluate *e = s.as<Evaluate>();
-    return e && is_const(e->value);
+    return e && is_pure(e->value);
 }
 
 namespace {
 
-class ExprIsPure : public IRVisitor {
+class ExprIsPure : public IRGraphVisitor {
     using IRVisitor::visit;
 
     void visit(const Call *op) override {
         if (!op->is_pure()) {
             result = false;
         } else {
-            IRVisitor::visit(op);
-        }
-    }
-
-    void visit(const Div *op) override {
-        if (!op->type.is_float() && (!is_const(op->b) || is_zero(op->b))) {
-            // Division by zero is a side-effect
-            result = false;
-        } else {
-            IRVisitor::visit(op);
-        }
-    }
-
-    void visit(const Mod *op) override {
-        if (!op->type.is_float() && (!is_const(op->b) || is_zero(op->b))) {
-            // Mod by zero is a side-effect
-            result = false;
-        } else {
-            IRVisitor::visit(op);
+            IRGraphVisitor::visit(op);
         }
     }
 
@@ -155,7 +140,7 @@ class ExprIsPure : public IRVisitor {
             // mutate.
             result = false;
         } else {
-            IRVisitor::visit(op);
+            IRGraphVisitor::visit(op);
         }
     }
 
@@ -208,18 +193,26 @@ const double *as_const_float(const Expr &e) {
 }
 
 bool is_const_power_of_two_integer(const Expr &e, int *bits) {
-    if (!(e.type().is_int() || e.type().is_uint())) return false;
+    if (!(e.type().is_int() || e.type().is_uint())) {
+        return false;
+    }
 
     const Broadcast *b = e.as<Broadcast>();
-    if (b) return is_const_power_of_two_integer(b->value, bits);
+    if (b) {
+        return is_const_power_of_two_integer(b->value, bits);
+    }
 
     const Cast *c = e.as<Cast>();
-    if (c) return is_const_power_of_two_integer(c->value, bits);
+    if (c) {
+        return is_const_power_of_two_integer(c->value, bits);
+    }
 
     uint64_t val = 0;
 
     if (const int64_t *i = as_const_int(e)) {
-        if (*i < 0) return false;
+        if (*i < 0) {
+            return false;
+        }
         val = (uint64_t)(*i);
     } else if (const uint64_t *u = as_const_uint(e)) {
         val = *u;
@@ -228,7 +221,9 @@ bool is_const_power_of_two_integer(const Expr &e, int *bits) {
     if (val && ((val & (val - 1)) == 0)) {
         *bits = 0;
         for (; val; val >>= 1) {
-            if (val == 1) return true;
+            if (val == 1) {
+                return true;
+            }
             (*bits)++;
         }
     }
@@ -237,11 +232,23 @@ bool is_const_power_of_two_integer(const Expr &e, int *bits) {
 }
 
 bool is_positive_const(const Expr &e) {
-    if (const IntImm *i = e.as<IntImm>()) return i->value > 0;
-    if (const UIntImm *u = e.as<UIntImm>()) return u->value > 0;
-    if (const FloatImm *f = e.as<FloatImm>()) return f->value > 0.0f;
+    if (const IntImm *i = e.as<IntImm>()) {
+        return i->value > 0;
+    }
+    if (const UIntImm *u = e.as<UIntImm>()) {
+        return u->value > 0;
+    }
+    if (const FloatImm *f = e.as<FloatImm>()) {
+        return f->value > 0.0f;
+    }
     if (const Cast *c = e.as<Cast>()) {
-        return is_positive_const(c->value);
+        Type to = c->type;
+        Type from = c->value.type();
+        if (!to.is_int_or_uint() || to.can_represent(from)) {
+            // Either the cast does not lose information, or it's a
+            // non-integral cast, so no overflow behavior to worry about.
+            return is_positive_const(c->value);
+        }
     }
     if (const Ramp *r = e.as<Ramp>()) {
         // slightly conservative
@@ -254,10 +261,24 @@ bool is_positive_const(const Expr &e) {
 }
 
 bool is_negative_const(const Expr &e) {
-    if (const IntImm *i = e.as<IntImm>()) return i->value < 0;
-    if (const FloatImm *f = e.as<FloatImm>()) return f->value < 0.0f;
+    if (const IntImm *i = e.as<IntImm>()) {
+        return i->value < 0;
+    }
+    if (const FloatImm *f = e.as<FloatImm>()) {
+        return f->value < 0.0f;
+    }
     if (const Cast *c = e.as<Cast>()) {
-        return is_negative_const(c->value);
+        Type to = c->type;
+        Type from = c->value.type();
+        if (to.is_uint()) {
+            // Early out.
+            return false;
+        }
+        if (!to.is_int_or_uint() || to.can_represent(from)) {
+            // Either the cast does not lose information, or it's a
+            // non-integral cast, so no overflow behavior to worry about.
+            return is_negative_const(c->value);
+        }
     }
     if (const Ramp *r = e.as<Ramp>()) {
         // slightly conservative
@@ -269,66 +290,56 @@ bool is_negative_const(const Expr &e) {
     return false;
 }
 
-bool is_negative_negatable_const(const Expr &e, Type T) {
-    if (const IntImm *i = e.as<IntImm>()) {
-        return (i->value < 0 && !T.is_min(i->value));
+bool is_undef(const Expr &e) {
+    if (const Call *c = e.as<Call>()) {
+        return c->is_intrinsic(Call::undef);
     }
-    if (const FloatImm *f = e.as<FloatImm>()) return f->value < 0.0f;
+    return false;
+}
+
+bool is_const_zero(const Expr &e) {
+    if (const IntImm *int_imm = e.as<IntImm>()) {
+        return int_imm->value == 0;
+    }
+    if (const UIntImm *uint_imm = e.as<UIntImm>()) {
+        return uint_imm->value == 0;
+    }
+    if (const FloatImm *float_imm = e.as<FloatImm>()) {
+        return float_imm->value == 0.0;
+    }
     if (const Cast *c = e.as<Cast>()) {
-        return is_negative_negatable_const(c->value, c->type);
-    }
-    if (const Ramp *r = e.as<Ramp>()) {
-        // slightly conservative
-        return is_negative_negatable_const(r->base) && is_negative_const(r->stride);
+        return is_const_zero(c->value);
     }
     if (const Broadcast *b = e.as<Broadcast>()) {
-        return is_negative_negatable_const(b->value);
+        return is_const_zero(b->value);
     }
-    return false;
-}
-
-bool is_negative_negatable_const(const Expr &e) {
-    return is_negative_negatable_const(e, e.type());
-}
-
-bool is_undef(const Expr &e) {
-    if (const Call *c = e.as<Call>()) return c->is_intrinsic(Call::undef);
-    return false;
-}
-
-bool is_zero(const Expr &e) {
-    if (const IntImm *int_imm = e.as<IntImm>()) return int_imm->value == 0;
-    if (const UIntImm *uint_imm = e.as<UIntImm>()) return uint_imm->value == 0;
-    if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 0.0;
-    if (const Cast *c = e.as<Cast>()) return is_zero(c->value);
-    if (const Broadcast *b = e.as<Broadcast>()) return is_zero(b->value);
     if (const Call *c = e.as<Call>()) {
         return (c->is_intrinsic(Call::bool_to_mask) || c->is_intrinsic(Call::cast_mask)) &&
-               is_zero(c->args[0]);
+               is_const_zero(c->args[0]);
     }
     return false;
 }
 
-bool is_one(const Expr &e) {
-    if (const IntImm *int_imm = e.as<IntImm>()) return int_imm->value == 1;
-    if (const UIntImm *uint_imm = e.as<UIntImm>()) return uint_imm->value == 1;
-    if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 1.0;
-    if (const Cast *c = e.as<Cast>()) return is_one(c->value);
-    if (const Broadcast *b = e.as<Broadcast>()) return is_one(b->value);
+bool is_const_one(const Expr &e) {
+    if (const IntImm *int_imm = e.as<IntImm>()) {
+        return int_imm->value == 1;
+    }
+    if (const UIntImm *uint_imm = e.as<UIntImm>()) {
+        return uint_imm->value == 1;
+    }
+    if (const FloatImm *float_imm = e.as<FloatImm>()) {
+        return float_imm->value == 1.0;
+    }
+    if (const Cast *c = e.as<Cast>()) {
+        return is_const_one(c->value);
+    }
+    if (const Broadcast *b = e.as<Broadcast>()) {
+        return is_const_one(b->value);
+    }
     if (const Call *c = e.as<Call>()) {
         return (c->is_intrinsic(Call::bool_to_mask) || c->is_intrinsic(Call::cast_mask)) &&
-               is_one(c->args[0]);
+               is_const_one(c->args[0]);
     }
-    return false;
-}
-
-bool is_two(const Expr &e) {
-    if (e.type().bits() < 2) return false;
-    if (const IntImm *int_imm = e.as<IntImm>()) return int_imm->value == 2;
-    if (const UIntImm *uint_imm = e.as<UIntImm>()) return uint_imm->value == 2;
-    if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 2.0;
-    if (const Cast *c = e.as<Cast>()) return is_two(c->value);
-    if (const Broadcast *b = e.as<Broadcast>()) return is_two(b->value);
     return false;
 }
 
@@ -384,14 +395,14 @@ Expr make_two(Type t) {
     return make_const(t, 2);
 }
 
-Expr make_indeterminate_expression(Type type) {
-    static std::atomic<int> counter;
-    return Call::make(type, Call::indeterminate_expression, {counter++}, Call::Intrinsic);
+Expr make_signed_integer_overflow(Type type) {
+    static std::atomic<int> counter{0};
+    return Call::make(type, Call::signed_integer_overflow, {counter++}, Call::Intrinsic);
 }
 
-Expr make_signed_integer_overflow(Type type) {
-    static std::atomic<int> counter;
-    return Call::make(type, Call::signed_integer_overflow, {counter++}, Call::Intrinsic);
+bool is_signed_integer_overflow(const Expr &expr) {
+    const Call *call = expr.as<Call>();
+    return call && call->is_intrinsic(Call::signed_integer_overflow);
 }
 
 Expr const_true(int w) {
@@ -410,7 +421,7 @@ Expr lossless_cast(Type t, Expr e) {
     }
 
     if (const Cast *c = e.as<Cast>()) {
-        if (t.can_represent(c->value.type())) {
+        if (c->type.can_represent(c->value.type())) {
             // We can recurse into widening casts.
             return lossless_cast(t, c->value);
         } else {
@@ -451,6 +462,138 @@ Expr lossless_cast(Type t, Expr e) {
         }
     }
 
+    if ((t.is_int() || t.is_uint()) && t.bits() >= 16) {
+        if (const Add *add = e.as<Add>()) {
+            // If we can losslessly narrow the args even more
+            // aggressively, we're good.
+            // E.g. lossless_cast(uint16, (uint32)(some_u8) + 37)
+            // = (uint16)(some_u8) + 37
+            Expr a = lossless_cast(t.narrow(), add->a);
+            Expr b = lossless_cast(t.narrow(), add->b);
+            if (a.defined() && b.defined()) {
+                return cast(t, a) + cast(t, b);
+            } else {
+                return Expr();
+            }
+        }
+
+        if (const Sub *sub = e.as<Sub>()) {
+            Expr a = lossless_cast(t.narrow(), sub->a);
+            Expr b = lossless_cast(t.narrow(), sub->b);
+            if (a.defined() && b.defined()) {
+                return cast(t, a) + cast(t, b);
+            } else {
+                return Expr();
+            }
+        }
+
+        if (const Mul *mul = e.as<Mul>()) {
+            Expr a = lossless_cast(t.narrow(), mul->a);
+            Expr b = lossless_cast(t.narrow(), mul->b);
+            if (a.defined() && b.defined()) {
+                return cast(t, a) * cast(t, b);
+            } else {
+                return Expr();
+            }
+        }
+
+        if (const VectorReduce *reduce = e.as<VectorReduce>()) {
+            const int factor = reduce->value.type().lanes() / reduce->type.lanes();
+            switch (reduce->op) {
+            case VectorReduce::Add:
+                // A horizontal add requires one extra bit per factor
+                // of two in the reduction factor. E.g. a reduction of
+                // 8 vector lanes down to 2 requires 2 extra bits in
+                // the output. We only deal with power-of-two types
+                // though, so just make sure the reduction factor
+                // isn't so large that it will more than double the
+                // number of bits required.
+                if (factor < (1 << (t.bits() / 2))) {
+                    Type narrower = reduce->value.type().with_bits(t.bits() / 2);
+                    Expr val = lossless_cast(narrower, reduce->value);
+                    if (val.defined()) {
+                        val = cast(narrower.with_bits(t.bits()), val);
+                        return VectorReduce::make(reduce->op, val, reduce->type.lanes());
+                    }
+                }
+                break;
+            case VectorReduce::Max:
+            case VectorReduce::Min: {
+                Expr val = lossless_cast(t, reduce->value);
+                if (val.defined()) {
+                    return VectorReduce::make(reduce->op, val, reduce->type.lanes());
+                }
+                break;
+            }
+            default:
+                break;
+            }
+        }
+    }
+
+    if (const Shuffle *shuf = e.as<Shuffle>()) {
+        std::vector<Expr> vecs;
+        for (const auto &vec : shuf->vectors) {
+            vecs.emplace_back(lossless_cast(t.with_lanes(vec.type().lanes()), vec));
+            if (!vecs.back().defined()) {
+                return Expr();
+            }
+        }
+        return Shuffle::make(vecs, shuf->indices);
+    }
+
+    return Expr();
+}
+
+Expr lossless_negate(const Expr &x) {
+    if (const Mul *m = x.as<Mul>()) {
+        Expr b = lossless_negate(m->b);
+        if (b.defined()) {
+            return Mul::make(m->a, b);
+        }
+        Expr a = lossless_negate(m->a);
+        if (a.defined()) {
+            return Mul::make(a, m->b);
+        }
+    } else if (const Call *m = Call::as_intrinsic(x, {Call::widening_mul})) {
+        Expr b = lossless_negate(m->args[1]);
+        if (b.defined()) {
+            return widening_mul(m->args[0], b);
+        }
+        Expr a = lossless_negate(m->args[0]);
+        if (a.defined()) {
+            return widening_mul(a, m->args[1]);
+        }
+    } else if (const IntImm *i = x.as<IntImm>()) {
+        if (!i->type.is_min(i->value)) {
+            return IntImm::make(i->type, -i->value);
+        }
+    } else if (const FloatImm *f = x.as<FloatImm>()) {
+        return FloatImm::make(f->type, -f->value);
+    } else if (const Cast *c = x.as<Cast>()) {
+        Expr value = lossless_negate(c->value);
+        if (value.defined()) {
+            // This works for constants, but not other things that
+            // could possibly be negated.
+            value = lossless_cast(c->type, value);
+            if (value.defined()) {
+                return value;
+            }
+        }
+    } else if (const Ramp *r = x.as<Ramp>()) {
+        Expr base = lossless_negate(r->base);
+        Expr stride = lossless_negate(r->stride);
+        // slightly conservative
+        if (base.defined() && stride.defined()) {
+            return Ramp::make(base, stride, r->lanes);
+        }
+    } else if (const Broadcast *b = x.as<Broadcast>()) {
+        Expr value = lossless_negate(b->value);
+        if (value.defined()) {
+            return Broadcast::make(value, b->lanes);
+        }
+    }
+
     return Expr();
 }
 
@@ -469,13 +612,7 @@ void check_representable(Type dst, int64_t x) {
     }
 }
 
-void match_types(Expr &a, Expr &b) {
-    if (a.type() == b.type()) return;
-
-    user_assert(!a.type().is_handle() && !b.type().is_handle())
-        << "Can't do arithmetic on opaque pointer types: "
-        << a << ", " << b << "\n";
-
+void match_lanes(Expr &a, Expr &b) {
     // Broadcast scalar to match vector
     if (a.type().is_scalar() && b.type().is_vector()) {
         a = Broadcast::make(std::move(a), b.type().lanes());
@@ -484,11 +621,25 @@ void match_types(Expr &a, Expr &b) {
     } else {
         internal_assert(a.type().lanes() == b.type().lanes()) << "Can't match types of differing widths";
     }
+}
+
+void match_types(Expr &a, Expr &b) {
+    if (a.type() == b.type()) {
+        return;
+    }
+
+    user_assert(!a.type().is_handle() && !b.type().is_handle())
+        << "Can't do arithmetic on opaque pointer types: "
+        << a << ", " << b << "\n";
+
+    match_lanes(a, b);
 
     Type ta = a.type(), tb = b.type();
 
     // If type broadcasting has made the types match no additional casts are needed
-    if (ta == tb) return;
+    if (ta == tb) {
+        return;
+    }
 
     if (!ta.is_float() && tb.is_float()) {
         // int(a) * float(b) -> float(b)
@@ -498,16 +649,18 @@ void match_types(Expr &a, Expr &b) {
         b = cast(ta, std::move(b));
     } else if (ta.is_float() && tb.is_float()) {
         // float(a) * float(b) -> float(max(a, b))
-        if (ta.bits() > tb.bits())
+        if (ta.bits() > tb.bits()) {
             b = cast(ta, std::move(b));
-        else
+        } else {
             a = cast(tb, std::move(a));
+        }
     } else if (ta.is_uint() && tb.is_uint()) {
         // uint(a) * uint(b) -> uint(max(a, b))
-        if (ta.bits() > tb.bits())
+        if (ta.bits() > tb.bits()) {
             b = cast(ta, std::move(b));
-        else
+        } else {
             a = cast(tb, std::move(a));
+        }
     } else if (!ta.is_float() && !tb.is_float()) {
         // int(a) * (u)int(b) -> int(max(a, b))
         int bits = std::max(ta.bits(), tb.bits());
@@ -524,21 +677,9 @@ void match_types(Expr &a, Expr &b) {
 void match_bits(Expr &x, Expr &y) {
     // The signedness doesn't match, so just match the bits.
     if (x.type().bits() < y.type().bits()) {
-        Type t;
-        if (x.type().is_int()) {
-            t = Int(y.type().bits(), y.type().lanes());
-        } else {
-            t = UInt(y.type().bits(), y.type().lanes());
-        }
-        x = cast(t, x);
+        x = cast(x.type().with_bits(y.type().bits()), x);
     } else if (y.type().bits() < x.type().bits()) {
-        Type t;
-        if (y.type().is_int()) {
-            t = Int(x.type().bits(), x.type().lanes());
-        } else {
-            t = UInt(x.type().bits(), x.type().lanes());
-        }
-        y = cast(t, y);
+        y = cast(y.type().with_bits(x.type().bits()), y);
     }
 }
 
@@ -563,13 +704,8 @@ void match_types_bitwise(Expr &x, Expr &y, const char *op_name) {
         internal_assert(x.type().lanes() == y.type().lanes()) << "Can't match types of differing widths";
     }
 
-    // Cast to the wider type of the two. Already guaranteed to leave
-    // signed/unsigned on number of lanes unchanged.
-    if (x.type().bits() < y.type().bits()) {
-        x = cast(y.type(), x);
-    } else if (y.type().bits() < x.type().bits()) {
-        y = cast(x.type(), y);
-    }
+    // Cast to the wider type of the two.
+    match_bits(x, y);
 }
 
 // Fast math ops based on those from Syrah (http://github.com/boulos/syrah). Thanks, Solomon!
@@ -604,7 +740,7 @@ void range_reduce_log(const Expr &input, Expr *reduced, Expr *exponent) {
     *reduced = reinterpret(type, blended);
 }
 
-Expr halide_log(Expr x_full) {
+Expr halide_log(const Expr &x_full) {
     Type type = x_full.type();
     internal_assert(type.element_of() == Float(32));
 
@@ -648,7 +784,7 @@ Expr halide_log(Expr x_full) {
     return result;
 }
 
-Expr halide_exp(Expr x_full) {
+Expr halide_exp(const Expr &x_full) {
     Type type = x_full.type();
     internal_assert(type.element_of() == Float(32));
 
@@ -695,7 +831,7 @@ Expr halide_exp(Expr x_full) {
     return result;
 }
 
-Expr halide_erf(Expr x_full) {
+Expr halide_erf(const Expr &x_full) {
     user_assert(x_full.type() == Float(32)) << "halide_erf only works for Float(32)";
 
     // Extract the sign and magnitude.
@@ -765,7 +901,7 @@ void split_into_ands(const Expr &cond, std::vector<Expr> &result) {
     if (const And *a = cond.as<And>()) {
         split_into_ands(a->a, result);
         split_into_ands(a->b, result);
-    } else if (!is_one(cond)) {
+    } else if (!is_const_one(cond)) {
         result.push_back(cond);
     }
 }
@@ -816,20 +952,20 @@ Expr BufferBuilder::build() const {
         if (i < mins.size()) {
             shape.push_back(mins[i]);
         } else {
-            shape.push_back(0);
+            shape.emplace_back(0);
         }
         if (i < extents.size()) {
             shape.push_back(extents[i]);
         } else {
-            shape.push_back(0);
+            shape.emplace_back(0);
         }
         if (i < strides.size()) {
             shape.push_back(strides[i]);
         } else {
-            shape.push_back(0);
+            shape.emplace_back(0);
         }
         // per-dimension flags, currently unused.
-        shape.push_back(0);
+        shape.emplace_back(0);
     }
     for (const Expr &e : shape) {
         internal_assert(e.type() == Int(32))
@@ -866,7 +1002,7 @@ Expr BufferBuilder::build() const {
     return e;
 }
 
-Expr strided_ramp_base(Expr e, int stride) {
+Expr strided_ramp_base(const Expr &e, int stride) {
     const Ramp *r = e.as<Ramp>();
     if (r == nullptr) {
         return Expr();
@@ -896,18 +1032,31 @@ struct RemoveLikelies : public IRMutator {
 
 }  // namespace
 
-Expr remove_likelies(Expr e) {
+Expr remove_likelies(const Expr &e) {
     return RemoveLikelies().mutate(e);
 }
 
-Stmt remove_likelies(Stmt s) {
+Stmt remove_likelies(const Stmt &s) {
     return RemoveLikelies().mutate(s);
+}
+
+Expr unwrap_tags(const Expr &e) {
+    if (const Call *tag = Call::as_tag(e)) {
+        return unwrap_tags(tag->args[0]);
+    }
+    return e;
+}
+
+Expr predicate(Expr e) {
+    Type t = e.type();
+    return Internal::Call::make(t, Internal::Call::predicate,
+                                {std::move(e)}, Internal::Call::PureIntrinsic);
 }
 
 Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args) {
     return Internal::Call::make(Int(32),
                                 "halide_error_requirement_failed",
-                                {stringify({condition}), combine_strings(args)},
+                                {stringify({std::move(condition)}), combine_strings(args)},
                                 Internal::Call::Extern);
 }
 
@@ -920,9 +1069,199 @@ Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values) 
                                 args, Internal::Call::PureIntrinsic);
 }
 
+Expr widening_add(Expr a, Expr b) {
+    user_assert(a.defined() && b.defined()) << "widening_add of undefined Expr\n";
+    match_types(a, b);
+    Type wide_type = a.type().widen();
+    return Call::make(wide_type, Call::widening_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr widening_mul(Expr a, Expr b) {
+    user_assert(a.defined() && b.defined()) << "widening_mul of undefined Expr\n";
+    // Widening multiplies can have different signs.
+    match_bits(a, b);
+    match_lanes(a, b);
+    Type wide_type = a.type().widen();
+    if (wide_type.is_uint() && b.type().is_int()) {
+        wide_type = wide_type.with_code(halide_type_int);
+    }
+    return Call::make(wide_type, Call::widening_mul, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr widening_sub(Expr a, Expr b) {
+    user_assert(a.defined() && b.defined()) << "widening_sub of undefined Expr\n";
+    match_types(a, b);
+    Type wide_type = a.type().widen();
+    if (wide_type.is_uint()) {
+        // always produce a signed result.
+        wide_type = wide_type.with_code(halide_type_int);
+    }
+    return Call::make(wide_type, Call::widening_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr widening_shift_left(Expr a, Expr b) {
+    user_assert(a.defined() && b.defined()) << "widening_shift_left of undefined Expr\n";
+    match_lanes(a, b);
+    match_bits(a, b);
+    Type wide_type = a.type().widen();
+    return Call::make(wide_type, Call::widening_shift_left, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr widening_shift_left(Expr a, int b) {
+    user_assert(a.defined()) << "widening_shift_left of undefined Expr\n";
+    Type bt = a.type().with_code(halide_type_uint);
+    if (b >= 0) {
+        check_representable(bt, b);
+        return widening_shift_left(std::move(a), make_const(bt, b));
+    } else {
+        check_representable(bt, -b);
+        return widening_shift_right(std::move(a), make_const(bt, -b));
+    }
+}
+
+Expr widening_shift_right(Expr a, Expr b) {
+    user_assert(a.defined() && b.defined()) << "widening_shift_right of undefined Expr\n";
+    match_lanes(a, b);
+    match_bits(a, b);
+    Type wide_type = a.type().widen();
+    return Call::make(wide_type, Call::widening_shift_right, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr widening_shift_right(Expr a, int b) {
+    user_assert(a.defined()) << "widening_shift_right of undefined Expr\n";
+    Type bt = a.type().with_code(halide_type_uint);
+    if (b >= 0) {
+        check_representable(bt, b);
+        return widening_shift_right(std::move(a), make_const(bt, b));
+    } else {
+        check_representable(bt, -b);
+        return widening_shift_left(std::move(a), make_const(bt, -b));
+    }
+}
+
+Expr rounding_shift_right(Expr a, Expr b) {
+    user_assert(a.defined() && b.defined()) << "rounding_shift_right of undefined Expr\n";
+    match_lanes(a, b);
+    match_bits(a, b);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::rounding_shift_right, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr rounding_shift_right(Expr a, int b) {
+    user_assert(a.defined()) << "rounding_shift_right of undefined Expr\n";
+    Type bt = a.type().with_code(halide_type_uint);
+    if (b >= 0) {
+        check_representable(bt, b);
+        return rounding_shift_right(std::move(a), make_const(bt, b));
+    } else {
+        check_representable(bt, -b);
+        return rounding_shift_left(std::move(a), make_const(bt, -b));
+    }
+}
+
+Expr rounding_shift_left(Expr a, Expr b) {
+    user_assert(a.defined() && b.defined()) << "rounding_shift_left of undefined Expr\n";
+    match_lanes(a, b);
+    match_bits(a, b);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::rounding_shift_left, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr rounding_shift_left(Expr a, int b) {
+    user_assert(a.defined()) << "rounding_shift_left of undefined Expr\n";
+    Type bt = a.type().with_code(halide_type_uint);
+    if (b >= 0) {
+        check_representable(bt, b);
+        return rounding_shift_left(std::move(a), make_const(bt, b));
+    } else {
+        check_representable(bt, -b);
+        return rounding_shift_right(std::move(a), make_const(bt, -b));
+    }
+}
+
+Expr saturating_add(Expr a, Expr b) {
+    user_assert(a.defined() && b.defined()) << "saturating_add of undefined Expr\n";
+    match_types(a, b);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::saturating_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr saturating_sub(Expr a, Expr b) {
+    user_assert(a.defined() && b.defined()) << "saturating_sub of undefined Expr\n";
+    match_types(a, b);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::saturating_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr halving_add(Expr a, Expr b) {
+    user_assert(a.defined() && b.defined()) << "halving_add of undefined Expr\n";
+    match_types(a, b);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::halving_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr rounding_halving_add(Expr a, Expr b) {
+    user_assert(a.defined() && b.defined()) << "rounding_halving_add of undefined Expr\n";
+    match_types(a, b);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::rounding_halving_add, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr halving_sub(Expr a, Expr b) {
+    user_assert(a.defined() && b.defined()) << "halving_sub of undefined Expr\n";
+    match_types(a, b);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::halving_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr rounding_halving_sub(Expr a, Expr b) {
+    user_assert(a.defined() && b.defined()) << "rounding_halving_sub of undefined Expr\n";
+    match_types(a, b);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::rounding_halving_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
+}
+
+Expr mul_shift_right(Expr a, Expr b, Expr q) {
+    user_assert(a.defined() && b.defined() && q.defined()) << "mul_shift_right of undefined Expr\n";
+    user_assert(q.type().is_uint()) << "mul_shift_right shift must be unsigned\n";
+    match_types(a, b);
+    match_lanes(a, q);
+    match_bits(a, q);
+    // q might have widened the bits or lanes of a.
+    match_types(a, b);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::mul_shift_right, {std::move(a), std::move(b), std::move(q)}, Call::PureIntrinsic);
+}
+
+Expr mul_shift_right(Expr a, Expr b, int q) {
+    user_assert(a.defined() && b.defined()) << "mul_shift_right of undefined Expr\n";
+    Type qt = a.type().with_code(halide_type_uint);
+    check_representable(qt, q);
+    return mul_shift_right(std::move(a), std::move(b), make_const(qt, q));
+}
+
+Expr rounding_mul_shift_right(Expr a, Expr b, Expr q) {
+    user_assert(a.defined() && b.defined() && q.defined()) << "rounding_mul_shift_right of undefined Expr\n";
+    user_assert(q.type().is_uint()) << "rounding_mul_shift_right shift must be unsigned\n";
+    match_types(a, b);
+    match_lanes(a, q);
+    match_bits(a, q);
+    // q might have widened the bits or lanes of a.
+    match_types(a, b);
+    Type result_type = a.type();
+    return Call::make(result_type, Call::rounding_mul_shift_right, {std::move(a), std::move(b), std::move(q)}, Call::PureIntrinsic);
+}
+
+Expr rounding_mul_shift_right(Expr a, Expr b, int q) {
+    user_assert(a.defined() && b.defined()) << "rounding_mul_shift_right of undefined Expr\n";
+    Type qt = a.type().with_code(halide_type_uint);
+    check_representable(qt, q);
+    return rounding_mul_shift_right(std::move(a), std::move(b), make_const(qt, q));
+}
+
 }  // namespace Internal
 
-Expr fast_log(Expr x) {
+Expr fast_log(const Expr &x) {
     user_assert(x.type() == Float(32)) << "fast_log only works for Float(32)";
 
     Expr reduced, exponent;
@@ -950,7 +1289,7 @@ namespace {
 
 // A vectorizable sine and cosine implementation. Based on syrah fast vector math
 // https://github.com/boulos/syrah/blob/master/src/include/syrah/FixedVectorMath.h#L55
-Expr fast_sin_cos(Expr x_full, bool is_sin) {
+Expr fast_sin_cos(const Expr &x_full, bool is_sin) {
     const float two_over_pi = 0.636619746685028076171875f;
     const float pi_over_two = 1.57079637050628662109375f;
     Expr scaled = x_full * two_over_pi;
@@ -989,15 +1328,15 @@ Expr fast_sin_cos(Expr x_full, bool is_sin) {
 
 }  // namespace
 
-Expr fast_sin(Expr x_full) {
+Expr fast_sin(const Expr &x_full) {
     return fast_sin_cos(x_full, true);
 }
 
-Expr fast_cos(Expr x_full) {
+Expr fast_cos(const Expr &x_full) {
     return fast_sin_cos(x_full, false);
 }
 
-Expr fast_exp(Expr x_full) {
+Expr fast_exp(const Expr &x_full) {
     user_assert(x_full.type() == Float(32)) << "fast_exp only works for Float(32)";
 
     Expr scaled = x_full / logf(2.0);
@@ -1145,7 +1484,33 @@ Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &
     return result;
 }
 
-Expr unsafe_promise_clamped(Expr value, Expr min, Expr max) {
+Expr mux(const Expr &id, const std::vector<Expr> &values) {
+    user_assert(!values.empty()) << "mux() requires a non-empty vector of values";
+    if (values.size() == 1) {
+        // Useful in generic code where the size of the values vector
+        // might be degenerate.
+        return values[0];
+    }
+
+    // Check if all the values have the same type.
+    Type t = values[0].type();
+    for (int i = 1; i < (int)values.size(); i++) {
+        user_assert(values[i].type() == t) << "mux() requires all the values to have the same type.";
+    }
+    std::vector<Expr> result{id};
+    result.insert(result.end(), values.begin(), values.end());
+    return Internal::Call::make(t, Internal::Call::mux, result, Internal::Call::Intrinsic);
+}
+
+Expr mux(const Expr &id, const Tuple &tup) {
+    return mux(id, tup.as_vector());
+}
+
+Expr mux(const Expr &id, const std::initializer_list<Expr> &values) {
+    return mux(id, std::vector<Expr>(values));
+}
+
+Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max) {
     user_assert(value.defined()) << "unsafe_promise_clamped with undefined value.\n";
     Expr n_min_val = min.defined() ? lossless_cast(value.type(), min) : value.type().min();
     Expr n_max_val = max.defined() ? lossless_cast(value.type(), max) : value.type().max();
@@ -1157,6 +1522,20 @@ Expr unsafe_promise_clamped(Expr value, Expr min, Expr max) {
                                 {value, n_min_val, n_max_val},
                                 Internal::Call::Intrinsic);
 }
+
+namespace Internal {
+Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max) {
+    internal_assert(value.defined()) << "promise_clamped with undefined value.\n";
+    Expr n_min_val = min.defined() ? lossless_cast(value.type(), min) : value.type().min();
+    Expr n_max_val = max.defined() ? lossless_cast(value.type(), max) : value.type().max();
+
+    // Min and max are allowed to be undefined with the meaning of no bound on that side.
+    return Internal::Call::make(value.type(),
+                                Internal::Call::promise_clamped,
+                                {value, n_min_val, n_max_val},
+                                Internal::Call::Intrinsic);
+}
+}  // namespace Internal
 
 Expr operator+(Expr a, Expr b) {
     user_assert(a.defined() && b.defined()) << "operator+ of undefined Expr\n";
@@ -1224,7 +1603,7 @@ Expr operator*(Expr a, Expr b) {
     return Internal::Mul::make(std::move(a), std::move(b));
 }
 
-Expr operator*(const Expr &a, int b) {
+Expr operator*(Expr a, int b) {
     user_assert(a.defined()) << "operator* of undefined Expr\n";
     Type t = a.type();
     Internal::check_representable(t, b);
@@ -1274,22 +1653,19 @@ Expr operator/(int a, Expr b) {
 
 Expr operator%(Expr a, Expr b) {
     user_assert(a.defined() && b.defined()) << "operator% of undefined Expr\n";
-    user_assert(!Internal::is_zero(b)) << "operator% with constant 0 modulus\n";
     Internal::match_types(a, b);
     return Internal::Mod::make(std::move(a), std::move(b));
 }
 
 Expr operator%(Expr a, int b) {
     user_assert(a.defined()) << "operator% of undefined Expr\n";
-    user_assert(b != 0) << "operator% with constant 0 modulus\n";
     Type t = a.type();
     Internal::check_representable(t, b);
     return Internal::Mod::make(std::move(a), Internal::make_const(t, b));
 }
 
-Expr operator%(int a, const Expr &b) {
+Expr operator%(int a, Expr b) {
     user_assert(b.defined()) << "operator% of undefined Expr\n";
-    user_assert(!Internal::is_zero(b)) << "operator% with constant 0 modulus\n";
     Type t = b.type();
     Internal::check_representable(t, a);
     return Internal::Mod::make(Internal::make_const(t, a), std::move(b));
@@ -1361,14 +1737,14 @@ Expr operator>=(Expr a, Expr b) {
     return Internal::GE::make(std::move(a), std::move(b));
 }
 
-Expr operator>=(Expr a, int b) {
+Expr operator>=(const Expr &a, int b) {
     user_assert(a.defined()) << "operator>= of undefined Expr\n";
     Type t = a.type();
     Internal::check_representable(t, b);
     return Internal::GE::make(a, Internal::make_const(t, b));
 }
 
-Expr operator>=(int a, Expr b) {
+Expr operator>=(int a, const Expr &b) {
     user_assert(b.defined()) << "operator>= of undefined Expr\n";
     Type t = b.type();
     Internal::check_representable(t, a);
@@ -1420,7 +1796,7 @@ Expr operator&&(Expr a, Expr b) {
     return Internal::And::make(std::move(a), std::move(b));
 }
 
-Expr operator&&(const Expr &a, bool b) {
+Expr operator&&(Expr a, bool b) {
     internal_assert(a.defined()) << "operator&& of undefined Expr\n";
     internal_assert(a.type().is_bool()) << "operator&& of Expr of type " << a.type() << "\n";
     if (b) {
@@ -1430,7 +1806,7 @@ Expr operator&&(const Expr &a, bool b) {
     }
 }
 
-Expr operator&&(bool a, const Expr &b) {
+Expr operator&&(bool a, Expr b) {
     return std::move(b) && a;
 }
 
@@ -1439,7 +1815,7 @@ Expr operator||(Expr a, Expr b) {
     return Internal::Or::make(std::move(a), std::move(b));
 }
 
-Expr operator||(const Expr &a, bool b) {
+Expr operator||(Expr a, bool b) {
     internal_assert(a.defined()) << "operator|| of undefined Expr\n";
     internal_assert(a.type().is_bool()) << "operator|| of Expr of type " << a.type() << "\n";
     if (b) {
@@ -1449,8 +1825,8 @@ Expr operator||(const Expr &a, bool b) {
     }
 }
 
-Expr operator||(bool a, const Expr &b) {
-    return b || a;
+Expr operator||(bool a, Expr b) {
+    return std::move(b) || a;
 }
 
 Expr operator!(Expr a) {
@@ -1537,7 +1913,7 @@ Expr cast(Type t, Expr a) {
     return Internal::Cast::make(t, std::move(a));
 }
 
-Expr clamp(Expr a, Expr min_val, Expr max_val) {
+Expr clamp(Expr a, const Expr &min_val, const Expr &max_val) {
     user_assert(a.defined() && min_val.defined() && max_val.defined())
         << "clamp of undefined Expr\n";
     Expr n_min_val = lossless_cast(a.type(), min_val);
@@ -1740,7 +2116,7 @@ Expr sqrt(Expr x) {
     }
 }
 
-Expr hypot(Expr x, Expr y) {
+Expr hypot(const Expr &x, const Expr &y) {
     return sqrt(x * x + y * y);
 }
 
@@ -1786,10 +2162,10 @@ Expr pow(Expr x, Expr y) {
     }
 }
 
-Expr erf(Expr x) {
+Expr erf(const Expr &x) {
     user_assert(x.defined()) << "erf of undefined Expr\n";
     user_assert(x.type() == Float(32)) << "erf only takes float arguments\n";
-    return Internal::halide_erf(std::move(x));
+    return Internal::halide_erf(x);
 }
 
 Expr fast_pow(Expr x, Expr y) {
@@ -1937,7 +2313,7 @@ Expr is_finite(Expr x) {
     }
 }
 
-Expr fract(Expr x) {
+Expr fract(const Expr &x) {
     user_assert(x.defined()) << "fract of undefined Expr\n";
     return x - trunc(x);
 }
@@ -2017,33 +2393,39 @@ Expr operator~(Expr x) {
 }
 
 Expr operator<<(Expr x, Expr y) {
-    if (y.type().is_vector() && !x.type().is_vector()) {
-        x = Internal::Broadcast::make(x, y.type().lanes());
-    }
+    match_lanes(x, y);
     match_bits(x, y);
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::shift_left, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }
 
 Expr operator<<(Expr x, int y) {
-    Type t = Int(x.type().bits(), x.type().lanes());
-    Internal::check_representable(t, y);
-    return std::move(x) << Internal::make_const(t, y);
+    Type t = x.type().with_code(halide_type_uint);
+    if (y >= 0) {
+        Internal::check_representable(t, y);
+        return std::move(x) << Internal::make_const(t, y);
+    } else {
+        Internal::check_representable(t, -y);
+        return std::move(x) >> Internal::make_const(t, -y);
+    }
 }
 
 Expr operator>>(Expr x, Expr y) {
-    if (y.type().is_vector() && !x.type().is_vector()) {
-        x = Internal::Broadcast::make(x, y.type().lanes());
-    }
+    match_lanes(x, y);
     match_bits(x, y);
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::shift_right, {std::move(x), std::move(y)}, Internal::Call::PureIntrinsic);
 }
 
 Expr operator>>(Expr x, int y) {
-    Type t = Int(x.type().bits(), x.type().lanes());
-    Internal::check_representable(t, y);
-    return std::move(x) >> Internal::make_const(t, y);
+    Type t = x.type().with_code(halide_type_uint);
+    if (y >= 0) {
+        Internal::check_representable(t, y);
+        return std::move(x) >> Internal::make_const(t, y);
+    } else {
+        Internal::check_representable(t, -y);
+        return std::move(x) << Internal::make_const(t, -y);
+    }
 }
 
 Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
@@ -2070,7 +2452,7 @@ Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
     user_assert((weight.type().is_uint() || weight.type().is_float()))
         << "A lerp weight must be an unsigned integer or a float, but "
         << "lerp weight " << weight << " has type " << weight.type() << ".\n";
-    user_assert((zero_val.type().is_float() || zero_val.type().lanes() <= 32))
+    user_assert((zero_val.type().is_float() || zero_val.type().bits() <= 32))
         << "Lerping between 64-bit integers is not supported\n";
     // Compilation error for constant weight that is out of range for integer use
     // as this seems like an easy to catch gotcha.
@@ -2127,7 +2509,7 @@ Expr div_round_to_zero(Expr x, Expr y) {
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::div_round_to_zero,
                                 {std::move(x), std::move(y)},
-                                Internal::Call::PureIntrinsic);
+                                Internal::Call::Intrinsic);
 }
 
 Expr mod_round_to_zero(Expr x, Expr y) {
@@ -2142,12 +2524,12 @@ Expr mod_round_to_zero(Expr x, Expr y) {
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::mod_round_to_zero,
                                 {std::move(x), std::move(y)},
-                                Internal::Call::PureIntrinsic);
+                                Internal::Call::Intrinsic);
 }
 
 Expr random_float(Expr seed) {
     // Random floats get even IDs
-    static std::atomic<int> counter;
+    static std::atomic<int> counter{0};
     int id = (counter++) * 2;
 
     std::vector<Expr> args;
@@ -2157,7 +2539,7 @@ Expr random_float(Expr seed) {
             << seed << " of type " << seed.type() << "\n";
         args.push_back(std::move(seed));
     }
-    args.push_back(id);
+    args.emplace_back(id);
 
     // This is (surprisingly) pure - it's a fixed psuedo-random
     // function of its inputs.
@@ -2167,7 +2549,7 @@ Expr random_float(Expr seed) {
 
 Expr random_uint(Expr seed) {
     // Random ints get odd IDs
-    static std::atomic<int> counter;
+    static std::atomic<int> counter{0};
     int id = (counter++) * 2 + 1;
 
     std::vector<Expr> args;
@@ -2177,7 +2559,7 @@ Expr random_uint(Expr seed) {
             << seed << " of type " << seed.type() << "\n";
         args.push_back(std::move(seed));
     }
-    args.push_back(id);
+    args.emplace_back(id);
 
     return Internal::Call::make(UInt(32), Internal::Call::random,
                                 args, Internal::Call::PureIntrinsic);
@@ -2211,14 +2593,31 @@ Expr undef(Type t) {
                                 Internal::Call::PureIntrinsic);
 }
 
-Range::Range(const Expr &min_in, const Expr &extent_in)
-    : min(lossless_cast(Int(32), min_in)), extent(lossless_cast(Int(32), extent_in)) {
-    if (min_in.defined() && !min.defined()) {
-        user_error << "Min cannot be losslessly cast to an int32: " << min_in;
-    }
-    if (extent_in.defined() && !extent.defined()) {
-        user_error << "Extent cannot be losslessly cast to an int32: " << extent_in;
-    }
+namespace Internal {
+Expr unreachable(Type t) {
+    return Internal::Call::make(t, Internal::Call::unreachable,
+                                std::vector<Expr>(),
+                                Internal::Call::Intrinsic);
+}
+}  // namespace Internal
+
+namespace {
+Expr make_scatter_gather(const std::vector<Expr> &args) {
+    // There's currently no difference in the IR between a gather and
+    // a scatter. They're distinct just to make code more readable.
+    return Halide::Internal::Call::make(args[0].type(),
+                                        Halide::Internal::Call::scatter_gather,
+                                        args,
+                                        Halide::Internal::Call::PureIntrinsic);
+}
+}  // namespace
+
+Expr scatter(const std::vector<Expr> &args) {
+    return make_scatter_gather(args);
+}
+
+Expr gather(const std::vector<Expr> &args) {
+    return make_scatter_gather(args);
 }
 
 }  // namespace Halide

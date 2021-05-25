@@ -5,12 +5,12 @@
 // parallelization, unrolling, and tiling.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_05*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_05 -std=c++11
-// LD_LIBRARY_PATH=../bin ./lesson_05
+// g++ lesson_05*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_05 -std=c++11
+// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_05
 
 // On os x:
-// g++ lesson_05*.cpp -g -I ../include -L ../bin -lHalide -o lesson_05 -std=c++11
-// DYLD_LIBRARY_PATH=../bin ./lesson_05
+// g++ lesson_05*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_05 -std=c++11
+// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_05
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
@@ -19,8 +19,8 @@
 // source tree.
 
 #include "Halide.h"
-#include <stdio.h>
 #include <algorithm>
+#include <stdio.h>
 using namespace Halide;
 
 int main(int argc, char **argv) {
@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
         // slowly. x is the column and y is the row, so this is a
         // row-major traversal.
         printf("Evaluating gradient row-major\n");
-        Buffer<int> output = gradient.realize(4, 4);
+        Buffer<int> output = gradient.realize({4, 4});
 
         // See figures/lesson_05_row_major.gif for a visualization of
         // what this did.
@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
         // traversal.
 
         printf("Evaluating gradient column-major\n");
-        Buffer<int> output = gradient.realize(4, 4);
+        Buffer<int> output = gradient.realize({4, 4});
 
         // See figures/lesson_05_col_major.gif for a visualization of
         // what this did.
@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
         // also added within the loops.
 
         printf("Evaluating gradient with x split into x_outer and x_inner \n");
-        Buffer<int> output = gradient.realize(4, 4);
+        Buffer<int> output = gradient.realize({4, 4});
 
         printf("Equivalent C:\n");
         for (int y = 0; y < 4; y++) {
@@ -168,10 +168,10 @@ int main(int argc, char **argv) {
         gradient.fuse(x, y, fused);
 
         printf("Evaluating gradient with x and y fused\n");
-        Buffer<int> output = gradient.realize(4, 4);
+        Buffer<int> output = gradient.realize({4, 4});
 
         printf("Equivalent C:\n");
-        for (int fused = 0; fused < 4*4; fused++) {
+        for (int fused = 0; fused < 4 * 4; fused++) {
             int y = fused / 4;
             int x = fused % 4;
             printf("Evaluating at x = %d, y = %d: %d\n", x, y, x + y);
@@ -208,7 +208,7 @@ int main(int argc, char **argv) {
         // gradient.tile(x, y, x_outer, y_outer, x_inner, y_inner, 4, 4);
 
         printf("Evaluating gradient in 4x4 tiles\n");
-        Buffer<int> output = gradient.realize(8, 8);
+        Buffer<int> output = gradient.realize({8, 8});
 
         // See figures/lesson_05_tiled.gif for a visualization of this
         // schedule.
@@ -267,7 +267,7 @@ int main(int argc, char **argv) {
         // This time we'll evaluate over an 8x4 box, so that we have
         // more than one vector of work per scanline.
         printf("Evaluating gradient with x_inner vectorized \n");
-        Buffer<int> output = gradient.realize(8, 4);
+        Buffer<int> output = gradient.realize({8, 4});
 
         // See figures/lesson_05_vectors.gif for a visualization.
 
@@ -320,7 +320,7 @@ int main(int argc, char **argv) {
         // gradient.unroll(x, 2);
 
         printf("Evaluating gradient unrolled by a factor of two\n");
-        Buffer<int> result = gradient.realize(4, 4);
+        Buffer<int> result = gradient.realize({4, 4});
 
         printf("Equivalent C:\n");
         for (int y = 0; y < 4; y++) {
@@ -362,7 +362,7 @@ int main(int argc, char **argv) {
         gradient.split(x, x_outer, x_inner, 3);
 
         printf("Evaluating gradient over a 7x2 box with x split by three \n");
-        Buffer<int> output = gradient.realize(7, 2);
+        Buffer<int> output = gradient.realize({7, 2});
 
         // See figures/lesson_05_split_7_by_3.gif for a visualization
         // of what happened. Note that some points get evaluated more
@@ -370,7 +370,7 @@ int main(int argc, char **argv) {
 
         printf("Equivalent C:\n");
         for (int y = 0; y < 2; y++) {
-            for (int x_outer = 0; x_outer < 3; x_outer++) { // Now runs from 0 to 2
+            for (int x_outer = 0; x_outer < 3; x_outer++) {  // Now runs from 0 to 2
                 for (int x_inner = 0; x_inner < 3; x_inner++) {
                     int x = x_outer * 3;
                     // Before we add x_inner, make sure we don't
@@ -447,9 +447,8 @@ int main(int argc, char **argv) {
         //     .fuse(x_outer, y_outer, tile_index)
         //     .parallel(tile_index);
 
-
         printf("Evaluating gradient tiles in parallel\n");
-        Buffer<int> output = gradient.realize(8, 8);
+        Buffer<int> output = gradient.realize({8, 8});
 
         // The tiles should occur in arbitrary order, but within each
         // tile the pixels will be traversed in row-major order. See
@@ -510,7 +509,7 @@ int main(int argc, char **argv) {
         // If you like you can turn on tracing, but it's going to
         // produce a lot of printfs. Instead we'll compute the answer
         // both in C and Halide and see if the answers match.
-        Buffer<int> result = gradient_fast.realize(350, 250);
+        Buffer<int> result = gradient_fast.realize({350, 250});
 
         // See figures/lesson_05_fast.mp4 for a visualization.
 
@@ -518,17 +517,17 @@ int main(int argc, char **argv) {
         for (int tile_index = 0; tile_index < 6 * 4; tile_index++) {
             int y_outer = tile_index / 4;
             int x_outer = tile_index % 4;
-            for (int y_inner_outer = 0; y_inner_outer < 64/2; y_inner_outer++) {
-                for (int x_inner_outer = 0; x_inner_outer < 64/4; x_inner_outer++) {
+            for (int y_inner_outer = 0; y_inner_outer < 64 / 2; y_inner_outer++) {
+                for (int x_inner_outer = 0; x_inner_outer < 64 / 4; x_inner_outer++) {
                     // We're vectorized across x
-                    int x = std::min(x_outer * 64, 350-64) + x_inner_outer*4;
+                    int x = std::min(x_outer * 64, 350 - 64) + x_inner_outer * 4;
                     int x_vec[4] = {x + 0,
                                     x + 1,
                                     x + 2,
                                     x + 3};
 
                     // And we unrolled across y
-                    int y_base = std::min(y_outer * 64, 250-64) + y_inner_outer*2;
+                    int y_base = std::min(y_outer * 64, 250 - 64) + y_inner_outer * 2;
                     {
                         // y_pairs = 0
                         int y = y_base + 0;
@@ -584,7 +583,6 @@ int main(int argc, char **argv) {
         // hard to debug, and hard to optimize further. This is why Halide
         // exists.
     }
-
 
     printf("Success!\n");
     return 0;

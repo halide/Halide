@@ -4,6 +4,8 @@
 
 extern "C" {
 
+extern void abort();
+
 WEAK void halide_default_error(void *user_context, const char *msg) {
     char buf[4096];
     char *dst = halide_string_to_string(buf, buf + 4094, "Error: ");
@@ -15,18 +17,21 @@ WEAK void halide_default_error(void *user_context, const char *msg) {
         dst[1] = 0;
         dst += 1;
     }
-    (void) halide_msan_annotate_memory_is_initialized(user_context, buf, dst - buf + 1);
+    (void)halide_msan_annotate_memory_is_initialized(user_context, buf, dst - buf + 1);
     halide_print(user_context, buf);
-    Halide::Runtime::Internal::halide_abort();
+    abort();
+}
 }
 
-}
-
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 WEAK halide_error_handler_t error_handler = halide_default_error;
 
-}}} // namespace Halide::Runtime::Internal
+}
+}  // namespace Runtime
+}  // namespace Halide
 
 extern "C" {
 
@@ -39,5 +44,4 @@ WEAK halide_error_handler_t halide_set_error_handler(halide_error_handler_t hand
     error_handler = handler;
     return result;
 }
-
 }

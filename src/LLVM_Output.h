@@ -5,12 +5,9 @@
  *
  */
 
+#include <memory>
 #include <string>
 #include <vector>
-
-#include "Module.h"
-#include "Target.h"
-#include "Util.h"
 
 namespace llvm {
 class Module;
@@ -22,6 +19,9 @@ class raw_ostream;
 }  // namespace llvm
 
 namespace Halide {
+
+class Module;
+struct Target;
 
 namespace Internal {
 typedef llvm::raw_pwrite_stream LLVMOStream;

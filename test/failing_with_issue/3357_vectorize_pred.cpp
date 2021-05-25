@@ -60,8 +60,8 @@ bool test(int vec_width) {
     g(r.x, r.y) = e;
     f.update(0).vectorize(r.x);
 
-    Buffer<A> outputg = g.realize(W, H);
-    Buffer<A> outputf = f.realize(W, H);
+    Buffer<A> outputg = g.realize({W, H});
+    Buffer<A> outputf = f.realize({W, H});
 
     double t_g = benchmark([&]() {
         g.realize(outputg);
@@ -75,9 +75,8 @@ bool test(int vec_width) {
             if (!equals(outputf(x, y), outputg(x, y))) {
                 std::cout << type_of<A>() << " x " << vec_width << " failed at "
                           << x << " " << y << ": "
-                          << outputf(x, y) << " vs " << outputg(x, y)
-                          << std::endl;
-                printf("Failure!\n");
+                          << outputf(x, y) << " vs " << outputg(x, y) << "\n"
+                          << "Failure!\n";
                 exit(1);
                 return false;
             }

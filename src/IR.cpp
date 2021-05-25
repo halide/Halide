@@ -1,7 +1,10 @@
 #include "IR.h"
+
 #include "IRMutator.h"
 #include "IRPrinter.h"
 #include "IRVisitor.h"
+#include <numeric>
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -249,26 +252,23 @@ Expr Load::make(Type type, const std::string &name, Expr index, Buffer<> image, 
 Expr Ramp::make(Expr base, Expr stride, int lanes) {
     internal_assert(base.defined()) << "Ramp of undefined\n";
     internal_assert(stride.defined()) << "Ramp of undefined\n";
-    internal_assert(base.type().is_scalar()) << "Ramp with vector base\n";
-    internal_assert(stride.type().is_scalar()) << "Ramp with vector stride\n";
     internal_assert(lanes > 1) << "Ramp of lanes <= 1\n";
     internal_assert(stride.type() == base.type()) << "Ramp of mismatched types\n";
 
     Ramp *node = new Ramp;
-    node->type = base.type().with_lanes(lanes);
+    node->type = base.type().with_lanes(lanes * base.type().lanes());
     node->base = std::move(base);
     node->stride = std::move(stride);
-    node->lanes = std::move(lanes);
+    node->lanes = lanes;
     return node;
 }
 
 Expr Broadcast::make(Expr value, int lanes) {
     internal_assert(value.defined()) << "Broadcast of undefined\n";
-    internal_assert(value.type().is_scalar()) << "Broadcast of vector\n";
     internal_assert(lanes != 1) << "Broadcast of lanes 1\n";
 
     Broadcast *node = new Broadcast;
-    node->type = value.type().with_lanes(lanes);
+    node->type = value.type().with_lanes(lanes * value.type().lanes());
     node->value = std::move(value);
     node->lanes = lanes;
     return node;
@@ -494,8 +494,8 @@ Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
     node->types = types;
     node->bounds = bounds;
     node->prefetch = prefetch;
-    node->condition = condition;
-    node->body = body;
+    node->condition = std::move(condition);
+    node->body = std::move(body);
     return node;
 }
 
@@ -565,7 +565,7 @@ Stmt Evaluate::make(Expr v) {
     return node;
 }
 
-Expr Call::make(Function func, const std::vector<Expr> &args, int idx) {
+Expr Call::make(const Function &func, const std::vector<Expr> &args, int idx) {
     internal_assert(idx >= 0 &&
                     idx < func.outputs())
         << "Value index out of range in call to halide function\n";
@@ -580,41 +580,46 @@ namespace {
 const char *const intrinsic_op_names[] = {
     "abs",
     "absd",
+    "add_image_checks_marker",
     "alloca",
     "bitwise_and",
     "bitwise_not",
     "bitwise_or",
     "bitwise_xor",
     "bool_to_mask",
+    "bundle",
     "call_cached_indirect_function",
     "cast_mask",
     "count_leading_zeros",
     "count_trailing_zeros",
+    "declare_box_touched",
     "debug_to_file",
     "div_round_to_zero",
     "dynamic_shuffle",
     "extract_mask_element",
-    "gather",
-    "glsl_texture_load",
-    "glsl_texture_store",
-    "glsl_varying",
     "gpu_thread_barrier",
+    "halving_add",
+    "halving_sub",
+    "hvx_gather",
+    "hvx_scatter",
+    "hvx_scatter_acc",
+    "hvx_scatter_release",
     "if_then_else",
     "if_then_else_mask",
     "image_load",
     "image_store",
-    "indeterminate_expression",
     "lerp",
     "likely",
     "likely_if_innermost",
     "make_struct",
     "memoize_expr",
     "mod_round_to_zero",
-    "mulhi_shr",
+    "mul_shift_right",
+    "mux",
     "popcount",
+    "predicate",
     "prefetch",
-    "quiet_div",
-    "quiet_mod",
+    "promise_clamped",
     "random",
     "register_destructor",
     "reinterpret",
@@ -622,9 +627,14 @@ const char *const intrinsic_op_names[] = {
     "require_mask",
     "return_second",
     "rewrite_buffer",
-    "scatter",
-    "scatter_acc",
-    "scatter_release",
+    "rounding_halving_add",
+    "rounding_halving_sub",
+    "rounding_mul_shift_right",
+    "rounding_shift_left",
+    "rounding_shift_right",
+    "saturating_add",
+    "saturating_sub",
+    "scatter_gather",
     "select_mask",
     "shift_left",
     "shift_right",
@@ -634,7 +644,13 @@ const char *const intrinsic_op_names[] = {
     "strict_float",
     "stringify",
     "undef",
+    "unreachable",
     "unsafe_promise_clamped",
+    "widening_add",
+    "widening_mul",
+    "widening_shift_left",
+    "widening_shift_right",
+    "widening_sub",
 };
 
 static_assert(sizeof(intrinsic_op_names) / sizeof(intrinsic_op_names[0]) == Call::IntrinsicOpCount,
@@ -648,9 +664,9 @@ const char *Call::get_intrinsic_name(IntrinsicOp op) {
 
 Expr Call::make(Type type, Call::IntrinsicOp op, const std::vector<Expr> &args, CallType call_type,
                 FunctionPtr func, int value_index,
-                Buffer<> image, Parameter param) {
+                const Buffer<> &image, Parameter param) {
     internal_assert(call_type == Call::Intrinsic || call_type == Call::PureIntrinsic);
-    return Call::make(type, intrinsic_op_names[op], args, call_type, func, value_index, image, param);
+    return Call::make(type, intrinsic_op_names[op], args, call_type, std::move(func), value_index, image, std::move(param));
 }
 
 Expr Call::make(Type type, const std::string &name, const std::vector<Expr> &args, CallType call_type,
@@ -706,7 +722,7 @@ Expr Shuffle::make(const std::vector<Expr> &vectors,
     internal_assert(!indices.empty()) << "Shufle with zero indices.\n";
     Type element_ty = vectors.front().type().element_of();
     int input_lanes = 0;
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         internal_assert(i.type().element_of() == element_ty) << "Shuffle of vectors of mismatched types.\n";
         input_lanes += i.type().lanes();
     }
@@ -730,7 +746,7 @@ Expr Shuffle::make_interleave(const std::vector<Expr> &vectors) {
 
     int lanes = vectors.front().type().lanes();
 
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         internal_assert(i.type().lanes() == lanes)
             << "Interleave of vectors with different sizes.\n";
     }
@@ -763,6 +779,16 @@ Expr Shuffle::make_concat(const std::vector<Expr> &vectors) {
     return make(vectors, indices);
 }
 
+Expr Shuffle::make_broadcast(Expr vector, int factor) {
+    std::vector<int> indices(factor * vector.type().lanes());
+    for (int ix = 0; ix < factor; ix++) {
+        std::iota(indices.begin() + ix * vector.type().lanes(),
+                  indices.begin() + (ix + 1) * vector.type().lanes(), 0);
+    }
+
+    return make({std::move(vector)}, indices);
+}
+
 Expr Shuffle::make_slice(Expr vector, int begin, int stride, int size) {
     if (begin == 0 && size == vector.type().lanes() && stride == 1) {
         return vector;
@@ -780,6 +806,40 @@ Expr Shuffle::make_extract_element(Expr vector, int i) {
     return make_slice(std::move(vector), i, 1, 1);
 }
 
+bool Shuffle::is_broadcast() const {
+    int lanes = indices.size();
+    int factor = broadcast_factor();
+    if (factor == 0 || factor >= lanes) {
+        return false;
+    }
+    int broadcasted_lanes = lanes / factor;
+
+    if (broadcasted_lanes < 2 || broadcasted_lanes >= lanes || lanes % broadcasted_lanes != 0) {
+        return false;
+    }
+    for (int i = 0; i < lanes; i++) {
+        if (indices[i % broadcasted_lanes] != indices[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+int Shuffle::broadcast_factor() const {
+    int lanes = indices.size();
+    int broadcasted_lanes = 0;
+    for (; broadcasted_lanes < lanes; broadcasted_lanes++) {
+        if (indices[broadcasted_lanes] != broadcasted_lanes) {
+            break;
+        }
+    }
+    if (broadcasted_lanes > 0) {
+        return lanes / broadcasted_lanes;
+    } else {
+        return 0;
+    }
+}
+
 bool Shuffle::is_interleave() const {
     int lanes = vectors.front().type().lanes();
 
@@ -788,7 +848,7 @@ bool Shuffle::is_interleave() const {
         return false;
     }
 
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         if (i.type().lanes() != lanes) {
             return false;
         }
@@ -821,6 +881,28 @@ Stmt Atomic::make(const std::string &producer_name,
     return node;
 }
 
+Expr VectorReduce::make(VectorReduce::Operator op,
+                        Expr vec,
+                        int lanes) {
+    if (vec.type().is_bool()) {
+        internal_assert(op == VectorReduce::And || op == VectorReduce::Or)
+            << "The only legal operators for VectorReduce on a Bool"
+            << "vector are VectorReduce::And and VectorReduce::Or\n";
+    }
+    internal_assert(!vec.type().is_handle()) << "VectorReduce of handle type";
+    // Check the output lanes is a factor of the input lanes. They can
+    // also both be zero if we're constructing a wildcard expression.
+    internal_assert((lanes == 0 && vec.type().lanes() == 0) ||
+                    (lanes != 0 && (vec.type().lanes() % lanes == 0)))
+        << "Vector reduce output lanes must be a divisor of the number of lanes in the argument "
+        << lanes << " " << vec.type().lanes() << "\n";
+    VectorReduce *node = new VectorReduce;
+    node->type = vec.type().with_lanes(lanes);
+    node->op = op;
+    node->value = std::move(vec);
+    return node;
+}
+
 namespace {
 
 // Helper function to determine if a sequence of indices is a
@@ -838,7 +920,7 @@ bool is_ramp(const std::vector<int> &indices, int stride = 1) {
 
 bool Shuffle::is_concat() const {
     size_t input_lanes = 0;
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         input_lanes += i.type().lanes();
     }
 
@@ -849,7 +931,7 @@ bool Shuffle::is_concat() const {
 
 bool Shuffle::is_slice() const {
     size_t input_lanes = 0;
-    for (Expr i : vectors) {
+    for (const Expr &i : vectors) {
         input_lanes += i.type().lanes();
     }
 
@@ -973,6 +1055,10 @@ void ExprNode<Call>::accept(IRVisitor *v) const {
 template<>
 void ExprNode<Shuffle>::accept(IRVisitor *v) const {
     v->visit((const Shuffle *)this);
+}
+template<>
+void ExprNode<VectorReduce>::accept(IRVisitor *v) const {
+    v->visit((const VectorReduce *)this);
 }
 template<>
 void ExprNode<Let>::accept(IRVisitor *v) const {
@@ -1154,6 +1240,10 @@ Expr ExprNode<Call>::mutate_expr(IRMutator *v) const {
 template<>
 Expr ExprNode<Shuffle>::mutate_expr(IRMutator *v) const {
     return v->visit((const Shuffle *)this);
+}
+template<>
+Expr ExprNode<VectorReduce>::mutate_expr(IRMutator *v) const {
+    return v->visit((const VectorReduce *)this);
 }
 template<>
 Expr ExprNode<Let>::mutate_expr(IRMutator *v) const {

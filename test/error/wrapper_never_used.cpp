@@ -15,7 +15,8 @@ int main() {
 
     // This should cause an error since f.in(g) was called but 'f' is
     // never used in 'g'.
-    h.realize(5, 5);
+    h.realize({5, 5});
 
+    printf("Success!\n");
     return 0;
 }

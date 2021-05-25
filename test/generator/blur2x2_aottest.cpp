@@ -1,8 +1,8 @@
+#include "HalideBuffer.h"
+#include "HalideRuntime.h"
+#include <assert.h>
 #include <math.h>
 #include <stdio.h>
-#include "HalideRuntime.h"
-#include "HalideBuffer.h"
-#include <assert.h>
 
 #include "blur2x2.h"
 

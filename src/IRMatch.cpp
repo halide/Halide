@@ -1,8 +1,10 @@
 #include <iostream>
 #include <map>
+#include <utility>
 
 #include "IREquality.h"
 #include "IRMatch.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
 
@@ -49,6 +51,8 @@ void expr_match_test() {
     std::cout << "expr_match test passed" << std::endl;
 }
 
+namespace {
+
 class IRMatch : public IRVisitor {
 public:
     bool result;
@@ -57,10 +61,10 @@ public:
     Expr expr;
 
     IRMatch(Expr e, vector<Expr> &m)
-        : result(true), matches(&m), var_matches(nullptr), expr(e) {
+        : result(true), matches(&m), var_matches(nullptr), expr(std::move(e)) {
     }
     IRMatch(Expr e, map<string, Expr> &m)
-        : result(true), matches(nullptr), var_matches(&m), expr(e) {
+        : result(true), matches(nullptr), var_matches(&m), expr(std::move(e)) {
     }
 
     using IRVisitor::visit;
@@ -281,12 +285,28 @@ public:
             result = false;
         }
     }
+
+    void visit(const VectorReduce *op) override {
+        const VectorReduce *e = expr.as<VectorReduce>();
+        if (result && e && op->op == e->op && types_match(op->type, e->type)) {
+            expr = e->value;
+            op->value.accept(this);
+        } else {
+            result = false;
+        }
+    }
 };
 
-bool expr_match(Expr pattern, Expr expr, vector<Expr> &matches) {
+}  // namespace
+
+bool expr_match(const Expr &pattern, const Expr &expr, vector<Expr> &matches) {
     matches.clear();
-    if (!pattern.defined() && !expr.defined()) return true;
-    if (!pattern.defined() || !expr.defined()) return false;
+    if (!pattern.defined() && !expr.defined()) {
+        return true;
+    }
+    if (!pattern.defined() || !expr.defined()) {
+        return false;
+    }
 
     IRMatch eq(expr, matches);
     pattern.accept(&eq);
@@ -298,12 +318,16 @@ bool expr_match(Expr pattern, Expr expr, vector<Expr> &matches) {
     }
 }
 
-bool expr_match(Expr pattern, Expr expr, map<string, Expr> &matches) {
+bool expr_match(const Expr &pattern, const Expr &expr, map<string, Expr> &matches) {
     // Explicitly don't clear matches. This allows usages to pre-match
     // some variables.
 
-    if (!pattern.defined() && !expr.defined()) return true;
-    if (!pattern.defined() || !expr.defined()) return false;
+    if (!pattern.defined() && !expr.defined()) {
+        return true;
+    }
+    if (!pattern.defined() || !expr.defined()) {
+        return false;
+    }
 
     IRMatch eq(expr, matches);
     pattern.accept(&eq);
@@ -313,6 +337,53 @@ bool expr_match(Expr pattern, Expr expr, map<string, Expr> &matches) {
         matches.clear();
         return false;
     }
+}
+
+namespace {
+
+class WithLanes : public IRMutator {
+    using IRMutator::visit;
+
+    int lanes;
+
+    Type with_lanes(Type t) const {
+        return t.with_lanes(lanes);
+    }
+
+    Expr visit(const Cast *op) override {
+        if (op->type.lanes() != lanes) {
+            return Cast::make(with_lanes(op->type), mutate(op->value));
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+    Expr visit(const Variable *op) override {
+        if (op->type.lanes() != lanes) {
+            return Variable::make(with_lanes(op->type), op->name);
+        } else {
+            return op;
+        }
+    }
+
+    Expr visit(const Broadcast *op) override {
+        if (op->type.lanes() != lanes) {
+            return Broadcast::make(op->value, lanes);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+public:
+    WithLanes(int lanes)
+        : lanes(lanes) {
+    }
+};
+
+}  // namespace
+
+Expr with_lanes(const Expr &x, int lanes) {
+    return WithLanes(lanes).mutate(x);
 }
 
 namespace IRMatcher {
@@ -335,9 +406,13 @@ bool equal_helper(int a, int b) {
 
 template<typename T>
 HALIDE_ALWAYS_INLINE bool equal_helper(const std::vector<T> &a, const std::vector<T> &b) {
-    if (a.size() != b.size()) return false;
+    if (a.size() != b.size()) {
+        return false;
+    }
     for (size_t i = 0; i < a.size(); i++) {
-        if (!equal_helper(a[i], b[i])) return false;
+        if (!equal_helper(a[i], b[i])) {
+            return false;
+        }
     }
     return true;
 }
@@ -353,7 +428,10 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
     case IRNodeType::StringImm:
         return ((const StringImm &)a).value == ((const StringImm &)b).value;
     case IRNodeType::Cast:
-        return equal_helper(((const Cast &)a).value, ((const Cast &)b).value);
+        // While we know a and b have matching type, we don't know
+        // that the types of the values match, so use equal rather
+        // than equal_helper.
+        return equal(((const Cast &)a).value, ((const Cast &)b).value);
     case IRNodeType::Variable:
         return ((const Variable &)a).name == ((const Variable &)b).name;
     case IRNodeType::Add:
@@ -412,6 +490,15 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
     case IRNodeType::Shuffle:
         return (equal_helper(((const Shuffle &)a).vectors, ((const Shuffle &)b).vectors) &&
                 equal_helper(((const Shuffle &)a).indices, ((const Shuffle &)b).indices));
+    case IRNodeType::VectorReduce:
+        // As with Cast above, we use equal instead of equal_helper
+        // here, because while we know a.type == b.type, we don't know
+        // if the types of the value fields also match. We could be
+        // comparing a reduction of an 8-vector down to a 4 vector to
+        // a reduction of a 16-vector down to a 4-vector.
+        return (((const VectorReduce &)a).op == ((const VectorReduce &)b).op &&
+                equal(((const VectorReduce &)a).value, ((const VectorReduce &)b).value));
+
     // Explicitly list all the Stmts instead of using a default
     // clause so that if new Exprs are added without being handled
     // here we get a compile-time error.

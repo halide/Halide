@@ -23,7 +23,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
     // Mutate the vectors
     vector<Expr> new_vectors;
     bool changed = false;
-    for (Expr vector : op->vectors) {
+    for (const Expr &vector : op->vectors) {
         ExprInfo v_bounds;
         Expr new_vector = mutate(vector, &v_bounds);
         if (!vector.same_as(new_vector)) {
@@ -49,12 +49,12 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
         vector<Expr> load_predicates;
         vector<Expr> load_indices;
         bool unpredicated = true;
-        for (Expr e : new_vectors) {
+        for (const Expr &e : new_vectors) {
             const Load *load = e.as<Load>();
             if (load && load->name == first_load->name) {
                 load_predicates.push_back(load->predicate);
                 load_indices.push_back(load->index);
-                unpredicated = unpredicated && is_one(load->predicate);
+                unpredicated = unpredicated && is_const_one(load->predicate);
             } else {
                 break;
             }
@@ -98,7 +98,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
         for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
             if (const Broadcast *b2 = new_vectors[i].as<Broadcast>()) {
                 Expr check = mutate(b1->value - b2->value, nullptr);
-                can_collapse &= is_zero(check);
+                can_collapse &= is_const_zero(check);
             } else {
                 can_collapse = false;
             }
@@ -130,7 +130,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                 const Broadcast *b = diff.as<Broadcast>();
                 if (b) {
                     Expr check = mutate(b->value * terms - r->stride, nullptr);
-                    can_collapse &= is_zero(check);
+                    can_collapse &= is_const_zero(check);
                 } else {
                     can_collapse = false;
                 }
@@ -155,7 +155,9 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                     }
 
                     // ... and that it is a slice in the right place...
-                    if (i_shuffle->slice_begin() != (int)i || i_shuffle->slice_stride() != terms) {
+                    // If the shuffle is a single element, we don't care what the stride is.
+                    if (i_shuffle->slice_begin() != (int)i ||
+                        (i_shuffle->indices.size() != 1 && i_shuffle->slice_stride() != terms)) {
                         can_collapse = false;
                         break;
                     }
@@ -176,7 +178,12 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                 }
 
                 if (can_collapse) {
-                    return Shuffle::make_concat(first_shuffle->vectors);
+                    // It's possible the slices didn't use all of the vector, in which case we need to slice it.
+                    Expr result = Shuffle::make_concat(first_shuffle->vectors);
+                    if (result.type().lanes() != op->type.lanes()) {
+                        result = Shuffle::make_slice(result, 0, 1, op->type.lanes());
+                    }
+                    return result;
                 }
             }
         }
@@ -194,7 +201,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                 const Broadcast *b = diff.as<Broadcast>();
                 if (b) {
                     Expr check = mutate(b->value - r->stride * new_vectors[i - 1].type().lanes(), nullptr);
-                    can_collapse &= is_zero(check);
+                    can_collapse &= is_const_zero(check);
                 } else {
                     can_collapse = false;
                 }
@@ -215,13 +222,62 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                 }
 
                 Expr check = mutate(new_vectors[i] - new_vectors[i - 1] - stride, nullptr);
-                if (!is_zero(check)) {
+                if (!is_const_zero(check)) {
                     can_collapse = false;
                 }
             }
 
             if (can_collapse) {
                 return Ramp::make(new_vectors[0], stride, op->indices.size());
+            }
+        }
+    }
+
+    // Pull a widening cast outside of a slice
+    if (new_vectors.size() == 1 &&
+        op->type.lanes() < new_vectors[0].type().lanes()) {
+        if (const Cast *cast = new_vectors[0].as<Cast>()) {
+            if (cast->type.bits() > cast->value.type().bits()) {
+                return mutate(Cast::make(cast->type.with_lanes(op->type.lanes()),
+                                         Shuffle::make({cast->value}, op->indices)),
+                              bounds);
+            }
+        }
+    }
+
+    if (op->is_slice() && (new_vectors.size() == 1)) {
+        if (const Shuffle *inner_shuffle = new_vectors[0].as<Shuffle>()) {
+            // Try to collapse a slice of slice.
+            if (inner_shuffle->is_slice() && (inner_shuffle->vectors.size() == 1)) {
+                // Indices of the slice are ramp, so nested slice is a1 * (a2 * x + b2) + b1 =
+                // = a1 * a2 * x + a1 * b2 + b1.
+                return Shuffle::make_slice(inner_shuffle->vectors[0],
+                                           op->slice_begin() * inner_shuffle->slice_stride() + inner_shuffle->slice_begin(),
+                                           op->slice_stride() * inner_shuffle->slice_stride(),
+                                           op->indices.size());
+            }
+            // Check if we really need to concat all vectors before slicing.
+            if (inner_shuffle->is_concat()) {
+                int slice_min = op->indices.front();
+                int slice_max = op->indices.back();
+                int concat_index = 0;
+                int new_slice_start = -1;
+                vector<Expr> new_concat_vectors;
+                for (const auto &v : inner_shuffle->vectors) {
+                    // Check if current concat vector overlaps with slice.
+                    if ((concat_index >= slice_min && concat_index <= slice_max) ||
+                        ((concat_index + v.type().lanes() - 1) >= slice_min && (concat_index + v.type().lanes() - 1) <= slice_max)) {
+                        if (new_slice_start < 0) {
+                            new_slice_start = concat_index;
+                        }
+                        new_concat_vectors.push_back(v);
+                    }
+
+                    concat_index += v.type().lanes();
+                }
+                if (new_concat_vectors.size() < inner_shuffle->vectors.size()) {
+                    return Shuffle::make_slice(Shuffle::make_concat(new_concat_vectors), op->slice_begin() - new_slice_start, op->slice_stride(), op->indices.size());
+                }
             }
         }
     }

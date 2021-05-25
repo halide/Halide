@@ -6,6 +6,9 @@
 #include <intrin.h>
 #endif
 
+#include <functional>
+#include <unordered_map>
+
 namespace Halide {
 namespace Internal {
 
@@ -71,6 +74,34 @@ int ctz64(uint64_t x) {
 #endif
 }
 
+// Rewrite name(broadcast(args)) to broadcast(name(args)).
+// Assumes that scalars are implicitly broadcast.
+Expr lift_elementwise_broadcasts(Type type, const std::string &name, std::vector<Expr> args, Call::CallType call_type) {
+    if (type.lanes() == 1) {
+        return Expr();
+    }
+    int lanes = 0;
+    for (Expr &i : args) {
+        if (const Broadcast *b = i.as<Broadcast>()) {
+            i = b->value;
+            if (lanes == 0) {
+                lanes = i.type().lanes();
+            } else if (lanes != i.type().lanes()) {
+                // This is a broadcast of another vector, and does not match another vector argument.
+                return Expr();
+            }
+        } else if (!i.type().is_scalar()) {
+            // This is not a scalar or broadcast scalar, we can't lift broadcasts.
+            return Expr();
+        }
+    }
+    if (lanes != type.lanes()) {
+        return Broadcast::make(Call::make(type.with_lanes(lanes), name, args, call_type), type.lanes() / lanes);
+    } else {
+        return Expr();
+    }
+}
+
 }  // namespace
 
 Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
@@ -79,18 +110,32 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         found_buffer_reference(op->name, op->args.size());
     }
 
-    if (op->is_intrinsic(Call::strict_float)) {
-        ScopedValue<bool> save_no_float_simplify(no_float_simplify, true);
-        Expr arg = mutate(op->args[0], nullptr);
-        if (arg.same_as(op->args[0])) {
-            return op;
+    if (op->is_intrinsic(Call::unreachable)) {
+        in_unreachable = true;
+        return op;
+    } else if (op->is_intrinsic(Call::strict_float)) {
+        if (Call::as_intrinsic(op->args[0], {Call::strict_float})) {
+            // Always simplify strict_float(strict_float(x)) -> strict_float(x).
+            Expr arg = mutate(op->args[0], nullptr);
+            return arg.same_as(op->args[0]) ? op->args[0] : arg;
         } else {
-            return strict_float(arg);
+            ScopedValue<bool> save_no_float_simplify(no_float_simplify, true);
+            Expr arg = mutate(op->args[0], nullptr);
+            if (arg.same_as(op->args[0])) {
+                return op;
+            } else {
+                return strict_float(arg);
+            }
         }
     } else if (op->is_intrinsic(Call::popcount) ||
                op->is_intrinsic(Call::count_leading_zeros) ||
                op->is_intrinsic(Call::count_trailing_zeros)) {
         Expr a = mutate(op->args[0], nullptr);
+
+        Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a}, op->call_type);
+        if (unbroadcast.defined()) {
+            return mutate(unbroadcast, bounds);
+        }
 
         uint64_t ua = 0;
         if (const_int(a, (int64_t *)(&ua)) || const_uint(a, &ua)) {
@@ -121,63 +166,85 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     } else if (op->is_intrinsic(Call::shift_left) ||
                op->is_intrinsic(Call::shift_right)) {
         Expr a = mutate(op->args[0], nullptr);
-        Expr b = mutate(op->args[1], nullptr);
+        // TODO: When simplifying b, it would be nice to specify the min/max useful bounds, so
+        // stronger simplifications could occur. For example, x >> min(-i8, 0) should be simplified
+        // to x >> -max(i8, 0) and then x << max(i8, 0). This isn't safe because -i8 can overflow.
+        ExprInfo b_info;
+        Expr b = mutate(op->args[1], &b_info);
 
-        if (is_zero(b)) {
+        if (is_const_zero(b)) {
             return a;
+        }
+
+        Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (unbroadcast.defined()) {
+            return mutate(unbroadcast, bounds);
         }
 
         const Type t = op->type;
 
+        // We might swap from a right to left shift or the reverse.
+        std::string result_op = op->name;
+
+        // If we know the sign of this shift, change it to an unsigned shift.
+        if (b_info.min_defined && b_info.min >= 0) {
+            b = mutate(cast(b.type().with_code(halide_type_uint), b), nullptr);
+        } else if (b_info.max_defined && b_info.max <= 0) {
+            result_op = Call::get_intrinsic_name(op->is_intrinsic(Call::shift_right) ? Call::shift_left : Call::shift_right);
+            b = mutate(cast(b.type().with_code(halide_type_uint), -b), nullptr);
+        }
+
+        // If the shift is by a constant, it should now be unsigned.
         uint64_t ub = 0;
-        int64_t sb = 0;
-        bool b_is_const_uint = const_uint(b, &ub);
-        bool b_is_const_int = const_int(b, &sb);
-        if (b_is_const_uint || b_is_const_int) {
-            if (b_is_const_int) {
-                ub = std::abs(sb);
-            }
-
-            // Determine which direction to shift.
-            const bool b_is_pos = b_is_const_uint || (b_is_const_int && sb >= 0);
-            const bool b_is_neg = b_is_const_int && sb < 0;
-            const bool shift_left = ((op->is_intrinsic(Call::shift_left) && b_is_pos) ||
-                                     (op->is_intrinsic(Call::shift_right) && b_is_neg));
-            const bool shift_right = ((op->is_intrinsic(Call::shift_right) && b_is_pos) ||
-                                      (op->is_intrinsic(Call::shift_left) && b_is_neg));
-
+        if (const_uint(b, &ub)) {
             // LLVM shl and shr instructions produce poison for
             // shifts >= typesize, so we will follow suit in our simplifier.
-            user_assert(ub < (uint64_t)t.bits()) << "bitshift by a constant amount >= the type size is not legal in Halide.";
+            if (ub >= (uint64_t)(t.bits())) {
+                clear_bounds_info(bounds);
+                return make_signed_integer_overflow(t);
+            }
             if (a.type().is_uint() || ub < ((uint64_t)t.bits() - 1)) {
                 b = make_const(t, ((int64_t)1LL) << ub);
-                if (shift_left) {
+                if (result_op == Call::get_intrinsic_name(Call::shift_left)) {
                     return mutate(Mul::make(a, b), bounds);
-                } else if (shift_right) {
+                } else {
                     return mutate(Div::make(a, b), bounds);
                 }
             } else {
-                // For signed types, (1 << ub) will overflow into the sign bit while
-                // (-32768 >> ub) propagates the sign bit, making decomposition
+                // For signed types, (1 << (t.bits() - 1)) will overflow into the sign bit while
+                // (-32768 >> (t.bits() - 1)) propagates the sign bit, making decomposition
                 // into mul or div problematic, so just special-case them here.
-                if (shift_left) {
+                if (result_op == Call::get_intrinsic_name(Call::shift_left)) {
                     return mutate(select((a & 1) != 0, make_const(t, ((int64_t)1LL) << ub), make_zero(t)), bounds);
-                } else if (shift_right) {
+                } else {
                     return mutate(select(a < 0, make_const(t, -1), make_zero(t)), bounds);
                 }
             }
         }
 
+        // Rewrite shifts with negated RHSes as shifts of the other direction.
+        if (const Sub *sub = b.as<Sub>()) {
+            if (is_const_zero(sub->a)) {
+                result_op = Call::get_intrinsic_name(op->is_intrinsic(Call::shift_right) ? Call::shift_left : Call::shift_right);
+                b = sub->b;
+                return mutate(Call::make(op->type, result_op, {a, b}, Call::PureIntrinsic), bounds);
+            }
+        }
+
         if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+            internal_assert(result_op == op->name);
             return op;
-        } else if (op->is_intrinsic(Call::shift_left)) {
-            return a << b;
         } else {
-            return a >> b;
+            return Call::make(op->type, result_op, {a, b}, Call::PureIntrinsic);
         }
     } else if (op->is_intrinsic(Call::bitwise_and)) {
         Expr a = mutate(op->args[0], nullptr);
         Expr b = mutate(op->args[1], nullptr);
+
+        Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (unbroadcast.defined()) {
+            return mutate(unbroadcast, bounds);
+        }
 
         int64_t ia, ib = 0;
         uint64_t ua, ub = 0;
@@ -196,6 +263,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         } else if (const_uint(b, &ub) &&
                    b.type().is_max(ub)) {
             return a;
+        } else if (const_int(b, &ib) &&
+                   ib == -1) {
+            return a;
         } else if (const_uint(b, &ub) &&
                    is_const_power_of_two_integer(make_const(a.type(), ub + 1), &bits)) {
             return Mod::make(a, make_const(a.type(), ub + 1));
@@ -207,6 +277,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     } else if (op->is_intrinsic(Call::bitwise_or)) {
         Expr a = mutate(op->args[0], nullptr);
         Expr b = mutate(op->args[1], nullptr);
+
+        Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (unbroadcast.defined()) {
+            return mutate(unbroadcast, bounds);
+        }
 
         int64_t ia, ib;
         uint64_t ua, ub;
@@ -224,6 +299,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     } else if (op->is_intrinsic(Call::bitwise_not)) {
         Expr a = mutate(op->args[0], nullptr);
 
+        Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a}, op->call_type);
+        if (unbroadcast.defined()) {
+            return mutate(unbroadcast, bounds);
+        }
+
         int64_t ia;
         uint64_t ua;
         if (const_int(a, &ia)) {
@@ -238,6 +318,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     } else if (op->is_intrinsic(Call::bitwise_xor)) {
         Expr a = mutate(op->args[0], nullptr);
         Expr b = mutate(op->args[1], nullptr);
+
+        Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (unbroadcast.defined()) {
+            return mutate(unbroadcast, bounds);
+        }
 
         int64_t ia, ib;
         uint64_t ua, ub;
@@ -276,6 +361,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         ExprInfo a_bounds;
         Expr a = mutate(op->args[0], &a_bounds);
 
+        Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a}, op->call_type);
+        if (unbroadcast.defined()) {
+            return mutate(unbroadcast, bounds);
+        }
+
         Type ta = a.type();
         int64_t ia = 0;
         double fa = 0;
@@ -307,6 +397,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         Expr a = mutate(op->args[0], &a_bounds);
         Expr b = mutate(op->args[1], &b_bounds);
 
+        Expr unbroadcast = lift_elementwise_broadcasts(op->type, op->name, {a, b}, op->call_type);
+        if (unbroadcast.defined()) {
+            return mutate(unbroadcast, bounds);
+        }
+
         Type ta = a.type();
         // absd() should enforce identical types for a and b when the node is created
         internal_assert(ta == b.type());
@@ -329,39 +424,6 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             return op;
         } else {
             return absd(a, b);
-        }
-    } else if (op->call_type == Call::PureExtern &&
-               (op->name == "is_nan_f16" || op->name == "is_nan_f32" || op->name == "is_nan_f64")) {
-        Expr arg = mutate(op->args[0], nullptr);
-        double f = 0.0;
-        if (const_float(arg, &f)) {
-            return make_bool(std::isnan(f));
-        } else if (arg.same_as(op->args[0])) {
-            return op;
-        } else {
-            return Call::make(op->type, op->name, {arg}, op->call_type);
-        }
-    } else if (op->call_type == Call::PureExtern &&
-               (op->name == "is_inf_f16" || op->name == "is_inf_f32" || op->name == "is_inf_f64")) {
-        Expr arg = mutate(op->args[0], nullptr);
-        double f = 0.0;
-        if (const_float(arg, &f)) {
-            return make_bool(std::isinf(f));
-        } else if (arg.same_as(op->args[0])) {
-            return op;
-        } else {
-            return Call::make(op->type, op->name, {arg}, op->call_type);
-        }
-    } else if (op->call_type == Call::PureExtern &&
-               (op->name == "is_finite_f16" || op->name == "is_finite_f32" || op->name == "is_finite_f64")) {
-        Expr arg = mutate(op->args[0], nullptr);
-        double f = 0.0;
-        if (const_float(arg, &f)) {
-            return make_bool(std::isfinite(f));
-        } else if (arg.same_as(op->args[0])) {
-            return op;
-        } else {
-            return Call::make(op->type, op->name, {arg}, op->call_type);
         }
     } else if (op->is_intrinsic(Call::stringify)) {
         // Eagerly concat constant arguments to a stringify.
@@ -388,7 +450,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                 if (last) {
                     new_args.back() = last->value + buf;
                 } else {
-                    new_args.push_back(string(buf));
+                    new_args.emplace_back(string(buf));
                 }
                 changed = true;
             } else if (last && float_imm) {
@@ -396,7 +458,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                 if (last) {
                     new_args.back() = last->value + buf;
                 } else {
-                    new_args.push_back(string(buf));
+                    new_args.emplace_back(string(buf));
                 }
                 changed = true;
             } else {
@@ -410,83 +472,6 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             return new_args[0];
         } else if (changed) {
             return Call::make(op->type, op->name, new_args, op->call_type);
-        } else {
-            return op;
-        }
-    } else if (op->call_type == Call::PureExtern &&
-               op->name == "sqrt_f32") {
-        Expr arg = mutate(op->args[0], nullptr);
-
-        if (const double *f = as_const_float(arg)) {
-            return make_const(arg.type(), std::sqrt(*f));
-        } else if (!arg.same_as(op->args[0])) {
-            return Call::make(op->type, op->name, {arg}, op->call_type);
-        } else {
-            return op;
-        }
-    } else if (op->call_type == Call::PureExtern &&
-               op->name == "log_f32") {
-        Expr arg = mutate(op->args[0], nullptr);
-
-        if (const double *f = as_const_float(arg)) {
-            return make_const(arg.type(), std::log(*f));
-        } else if (!arg.same_as(op->args[0])) {
-            return Call::make(op->type, op->name, {arg}, op->call_type);
-        } else {
-            return op;
-        }
-    } else if (op->call_type == Call::PureExtern &&
-               op->name == "exp_f32") {
-        Expr arg = mutate(op->args[0], nullptr);
-
-        if (const double *f = as_const_float(arg)) {
-            return make_const(arg.type(), std::exp(*f));
-        } else if (!arg.same_as(op->args[0])) {
-            return Call::make(op->type, op->name, {arg}, op->call_type);
-        } else {
-            return op;
-        }
-    } else if (op->call_type == Call::PureExtern &&
-               op->name == "pow_f32") {
-        Expr arg0 = mutate(op->args[0], nullptr);
-        Expr arg1 = mutate(op->args[1], nullptr);
-
-        const double *f0 = as_const_float(arg0);
-        const double *f1 = as_const_float(arg1);
-        if (f0 && f1) {
-            return make_const(arg0.type(), std::pow(*f0, *f1));
-        } else if (!arg0.same_as(op->args[0]) || !arg1.same_as(op->args[1])) {
-            return Call::make(op->type, op->name, {arg0, arg1}, op->call_type);
-        } else {
-            return op;
-        }
-    } else if (op->call_type == Call::PureExtern &&
-               (op->name == "floor_f32" || op->name == "ceil_f32" ||
-                op->name == "round_f32" || op->name == "trunc_f32")) {
-        internal_assert(op->args.size() == 1);
-        Expr arg = mutate(op->args[0], nullptr);
-
-        const Call *call = arg.as<Call>();
-        if (const double *f = as_const_float(arg)) {
-            if (op->name == "floor_f32") {
-                return make_const(arg.type(), std::floor(*f));
-            } else if (op->name == "ceil_f32") {
-                return make_const(arg.type(), std::ceil(*f));
-            } else if (op->name == "round_f32") {
-                return make_const(arg.type(), std::nearbyint(*f));
-            } else if (op->name == "trunc_f32") {
-                return make_const(arg.type(), (*f < 0 ? std::ceil(*f) : std::floor(*f)));
-            } else {
-                return op;
-            }
-        } else if (call && call->call_type == Call::PureExtern &&
-                   (call->name == "floor_f32" || call->name == "ceil_f32" ||
-                    call->name == "round_f32" || call->name == "trunc_f32")) {
-            // For any combination of these integer-valued functions, we can
-            // discard the outer function. For example, floor(ceil(x)) == ceil(x).
-            return call;
-        } else if (!arg.same_as(op->args[0])) {
-            return Call::make(op->type, op->name, {arg}, op->call_type);
         } else {
             return op;
         }
@@ -516,12 +501,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                 Expr extent_1 = args[j];
                 Expr stride_1 = args[j + 1];
 
-                if (is_one(mutate(extent_0 * stride_0 == stride_1, nullptr))) {
+                if (is_const_one(mutate(extent_0 * stride_0 == stride_1, nullptr))) {
                     Expr new_extent = mutate(extent_0 * extent_1, nullptr);
-                    Expr new_stride = stride_0;
                     args.erase(args.begin() + j, args.begin() + j + 2);
                     args[i] = new_extent;
-                    args[i + 1] = new_stride;
+                    args[i + 1] = stride_0;
                     i -= 2;
                     break;
                 }
@@ -547,7 +531,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             }
         }
 
-        if (is_zero(cond)) {
+        if (is_const_zero(cond)) {
             // (We could simplify this to avoid evaluating the provably-false
             // expression, but since this is a degenerate condition, don't bother.)
             user_warning << "This pipeline is guaranteed to fail a require() expression at runtime: \n"
@@ -561,7 +545,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             result = mutate(op->args[1], bounds);
         }
 
-        if (is_one(cond)) {
+        if (is_const_one(cond)) {
             return result;
         }
 
@@ -577,7 +561,285 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                                         {std::move(cond), std::move(result), std::move(message)},
                                         Internal::Call::PureIntrinsic);
         }
-    } else {
+    } else if (op->is_intrinsic(Call::promise_clamped) ||
+               op->is_intrinsic(Call::unsafe_promise_clamped)) {
+        // If the simplifier can infer that the clamp is unnecessary,
+        // we should be good to discard the promise.
+        internal_assert(op->args.size() == 3);
+        ExprInfo arg_info, lower_info, upper_info;
+        Expr arg = mutate(op->args[0], &arg_info);
+        Expr lower = mutate(op->args[1], &lower_info);
+        Expr upper = mutate(op->args[2], &upper_info);
+
+        const Broadcast *b_arg = arg.as<Broadcast>();
+        const Broadcast *b_lower = lower.as<Broadcast>();
+        const Broadcast *b_upper = upper.as<Broadcast>();
+
+        if (arg_info.min_defined &&
+            arg_info.max_defined &&
+            lower_info.max_defined &&
+            upper_info.min_defined &&
+            arg_info.min >= lower_info.max &&
+            arg_info.max <= upper_info.min) {
+            return arg;
+        } else if (b_arg && b_lower && b_upper) {
+            // Move broadcasts outwards
+            return Broadcast::make(Call::make(b_arg->value.type(), op->name,
+                                              {b_arg->value, b_lower->value, b_upper->value},
+                                              Call::Intrinsic),
+                                   b_arg->lanes);
+        } else if (arg.same_as(op->args[0]) &&
+                   lower.same_as(op->args[1]) &&
+                   upper.same_as(op->args[2])) {
+            return op;
+
+        } else {
+            return Call::make(op->type, op->name,
+                              {arg, lower, upper},
+                              Call::Intrinsic);
+        }
+    } else if (Call::as_tag(op)) {
+        // The bounds of the result are the bounds of the arg
+        internal_assert(op->args.size() == 1);
+        Expr arg = mutate(op->args[0], bounds);
+        if (arg.same_as(op->args[0])) {
+            return op;
+        } else {
+            return Call::make(op->type, op->name, {arg}, op->call_type);
+        }
+    } else if (op->is_intrinsic(Call::if_then_else)) {
+        // Note that this call promises to evaluate exactly one of the conditions,
+        // so this optimization should be safe.
+
+        internal_assert(op->args.size() == 3);
+        Expr cond_value = mutate(op->args[0], nullptr);
+
+        // Ignore tags for our purposes here
+        Expr cond = unwrap_tags(cond_value);
+        if (in_unreachable) {
+            return op;
+        }
+
+        if (is_const_one(cond)) {
+            return mutate(op->args[1], bounds);
+        } else if (is_const_zero(cond)) {
+            return mutate(op->args[2], bounds);
+        } else {
+            Expr true_value = mutate(op->args[1], nullptr);
+            bool true_unreachable = in_unreachable;
+            in_unreachable = false;
+            Expr false_value = mutate(op->args[2], nullptr);
+            bool false_unreachable = in_unreachable;
+
+            if (true_unreachable && false_unreachable) {
+                return false_value;
+            }
+            in_unreachable = false;
+            if (true_unreachable) {
+                return false_value;
+            } else if (false_unreachable) {
+                return true_value;
+            }
+
+            if (cond_value.same_as(op->args[0]) &&
+                true_value.same_as(op->args[1]) &&
+                false_value.same_as(op->args[2])) {
+                return op;
+            } else {
+                return Internal::Call::make(op->type,
+                                            Call::if_then_else,
+                                            {std::move(cond_value), std::move(true_value), std::move(false_value)},
+                                            op->call_type);
+            }
+        }
+    } else if (op->is_intrinsic(Call::mux)) {
+        internal_assert(op->args.size() >= 2);
+        int num_values = (int)op->args.size() - 1;
+        if (num_values == 1) {
+            // Mux of a single value
+            return mutate(op->args[1], bounds);
+        }
+        ExprInfo index_info;
+        Expr index = mutate(op->args[0], &index_info);
+
+        // Check if the mux has statically resolved
+        if (index_info.min_defined &&
+            index_info.max_defined &&
+            index_info.min == index_info.max) {
+            if (index_info.min >= 0 && index_info.min < num_values) {
+                // In-range, return the (simplified) corresponding value.
+                return mutate(op->args[index_info.min + 1], bounds);
+            } else {
+                // It's out-of-range, so return the last value.
+                return mutate(op->args.back(), bounds);
+            }
+        }
+
+        // The logic above could be extended to also truncate the
+        // range of values in the case where the mux index has a
+        // constant bound. This seems unlikely to ever come up though.
+
+        bool unchanged = index.same_as(op->args[0]);
+        vector<Expr> mutated_args(op->args.size());
+        mutated_args[0] = index;
+        for (size_t i = 1; i < op->args.size(); ++i) {
+            mutated_args[i] = mutate(op->args[i], nullptr);
+            unchanged &= mutated_args[i].same_as(op->args[i]);
+        }
+
+        if (unchanged) {
+            return op;
+        } else {
+            return Call::make(op->type, Call::mux, mutated_args, op->call_type);
+        }
+    } else if (op->call_type == Call::PureExtern) {
+        // TODO: This could probably be simplified into a single map-lookup
+        // with a bit more cleverness; not sure if the reduced lookup time
+        // would pay for itself (in comparison with the possible lost code clarity).
+
+        // Handle all the PureExtern cases of float -> bool
+        {
+            using FnType = bool (*)(double);
+            // Some GCC versions are unable to resolve std::isnan (etc) directly, so
+            // wrap them in lambdas.
+            const FnType is_finite = [](double a) -> bool { return std::isfinite(a); };
+            const FnType is_inf = [](double a) -> bool { return std::isinf(a); };
+            const FnType is_nan = [](double a) -> bool { return std::isnan(a); };
+            static const std::unordered_map<std::string, FnType>
+                pure_externs_f1b = {
+                    {"is_finite_f16", is_finite},
+                    {"is_finite_f32", is_finite},
+                    {"is_finite_f64", is_finite},
+                    {"is_inf_f16", is_inf},
+                    {"is_inf_f32", is_inf},
+                    {"is_inf_f64", is_inf},
+                    {"is_nan_f16", is_nan},
+                    {"is_nan_f32", is_nan},
+                    {"is_nan_f64", is_nan},
+                };
+            auto it = pure_externs_f1b.find(op->name);
+            if (it != pure_externs_f1b.end()) {
+                Expr arg = mutate(op->args[0], nullptr);
+                double f = 0.0;
+                if (const_float(arg, &f)) {
+                    auto fn = it->second;
+                    return make_bool(fn(f));
+                } else if (arg.same_as(op->args[0])) {
+                    return op;
+                } else {
+                    return Call::make(op->type, op->name, {arg}, op->call_type);
+                }
+            }
+            // else fall thru
+        }
+
+        // Handle all the PureExtern cases of float -> float
+        // TODO: should we handle the f16 and f64 cases here? (We never did before.)
+        // TODO: should we handle fast_inverse and/or fast_inverse_sqrt here?
+        {
+            using FnType = double (*)(double);
+            static const std::unordered_map<std::string, FnType>
+                pure_externs_f1 = {
+                    {"acos_f32", std::acos},
+                    {"acosh_f32", std::acosh},
+                    {"asin_f32", std::asin},
+                    {"asinh_f32", std::asinh},
+                    {"atan_f32", std::atan},
+                    {"atanh_f32", std::atanh},
+                    {"cos_f32", std::cos},
+                    {"cosh_f32", std::cosh},
+                    {"exp_f32", std::exp},
+                    {"log_f32", std::log},
+                    {"sin_f32", std::sin},
+                    {"sinh_f32", std::sinh},
+                    {"sqrt_f32", std::sqrt},
+                    {"tan_f32", std::tan},
+                    {"tanh_f32", std::tanh},
+                };
+            auto it = pure_externs_f1.find(op->name);
+            if (it != pure_externs_f1.end()) {
+                Expr arg = mutate(op->args[0], nullptr);
+                if (const double *f = as_const_float(arg)) {
+                    auto fn = it->second;
+                    return make_const(arg.type(), fn(*f));
+                } else if (arg.same_as(op->args[0])) {
+                    return op;
+                } else {
+                    return Call::make(op->type, op->name, {arg}, op->call_type);
+                }
+            }
+            // else fall thru
+        }
+
+        // Handle all the PureExtern cases of float -> integerized-float
+        {
+            using FnType = double (*)(double);
+            static const std::unordered_map<std::string, FnType>
+                pure_externs_truncation = {
+                    {"ceil_f32", std::ceil},
+                    {"floor_f32", std::floor},
+                    {"round_f32", std::nearbyint},
+                    {"trunc_f32", [](double a) -> double { return (a < 0 ? std::ceil(a) : std::floor(a)); }},
+                };
+            auto it = pure_externs_truncation.find(op->name);
+            if (it != pure_externs_truncation.end()) {
+                internal_assert(op->args.size() == 1);
+                Expr arg = mutate(op->args[0], nullptr);
+
+                const Call *call = arg.as<Call>();
+                if (const double *f = as_const_float(arg)) {
+                    auto fn = it->second;
+                    return make_const(arg.type(), fn(*f));
+                } else if (call && call->call_type == Call::PureExtern &&
+                           (it = pure_externs_truncation.find(call->name)) != pure_externs_truncation.end()) {
+                    // For any combination of these integer-valued functions, we can
+                    // discard the outer function. For example, floor(ceil(x)) == ceil(x).
+                    return call;
+                } else if (!arg.same_as(op->args[0])) {
+                    return Call::make(op->type, op->name, {arg}, op->call_type);
+                } else {
+                    return op;
+                }
+            }
+            // else fall thru
+        }
+
+        // Handle all the PureExtern cases of (float, float) -> integerized-float
+        {
+            using FnType = double (*)(double, double);
+            static const std::unordered_map<std::string, FnType>
+                pure_externs_f2 = {
+                    {"atan2_f32", std::atan2},
+                    {"pow_f32", std::pow},
+                };
+            auto it = pure_externs_f2.find(op->name);
+            if (it != pure_externs_f2.end()) {
+                Expr arg0 = mutate(op->args[0], nullptr);
+                Expr arg1 = mutate(op->args[1], nullptr);
+
+                const double *f0 = as_const_float(arg0);
+                const double *f1 = as_const_float(arg1);
+                if (f0 && f1) {
+                    auto fn = it->second;
+                    return make_const(arg0.type(), fn(*f0, *f1));
+                } else if (!arg0.same_as(op->args[0]) || !arg1.same_as(op->args[1])) {
+                    return Call::make(op->type, op->name, {arg0, arg1}, op->call_type);
+                } else {
+                    return op;
+                }
+            }
+            // else fall thru
+        }
+
+        // There are other PureExterns we don't bother with (e.g. fast_inverse_f32)...
+        // just fall thru and take the general case.
+        debug(2) << "Simplifier: unhandled PureExtern: " << op->name;
+    } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
+        clear_bounds_info(bounds);
+    }
+
+    // No else: we want to fall thru from the PureExtern clause.
+    {
         vector<Expr> new_args(op->args.size());
         bool changed = false;
 
@@ -585,7 +847,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         for (size_t i = 0; i < op->args.size(); i++) {
             const Expr &old_arg = op->args[i];
             Expr new_arg = mutate(old_arg, nullptr);
-            if (!new_arg.same_as(old_arg)) changed = true;
+            if (!new_arg.same_as(old_arg)) {
+                changed = true;
+            }
             new_args[i] = std::move(new_arg);
         }
 

@@ -42,17 +42,16 @@ public:
         RDom b(1, 255);
         cdf(b.x) = cdf(b.x - 1) + hist(b.x);
 
-        Func eq("equalize");
+        Func cdf_bin("cdf_bin");
+        cdf_bin(x, y) = u8(clamp(Y(x, y), 0, 255));
 
-        Expr cdf_bin = u8(clamp(Y(x, y), 0, 255));
-        eq(x, y) = clamp(cdf(cdf_bin) * (255.0f / (input.height() * input.width())), 0, 255);
+        Func eq("equalize");
+        eq(x, y) = clamp(cdf(cdf_bin(x, y)) * (255.0f / (input.height() * input.width())), 0, 255);
 
         Expr red = u8(clamp(eq(x, y) + (Cr(x, y) - 128) * 1.4f, 0, 255));
         Expr green = u8(clamp(eq(x, y) - 0.343f * (Cb(x, y) - 128) - 0.711f * (Cr(x, y) - 128), 0, 255));
         Expr blue = u8(clamp(eq(x, y) + 1.765f * (Cb(x, y) - 128), 0, 255));
-        output(x, y, c) = select(c == 0, red,
-                                 c == 1, green,
-                                 blue);
+        output(x, y, c) = mux(c, {red, green, blue});
 
         // Estimates (for autoscheduler; ignored otherwise)
         {
@@ -70,29 +69,44 @@ public:
 
             Var xi("xi"), yi("yi");
             if (get_target().has_gpu_feature()) {
-                // 0.42ms on a 2060 RTX
+                // 0.197ms on a 2060 RTX
                 Var yii;
                 RVar rxo, rxi;
 
-                // TODO: bound_extent above should not be necessary,
-                // but otherwise I get a shared memory
-                // blow-up. Something might be overconservative.
-                hist_rows.compute_root()
-                    .gpu_tile(x, y, xi, yi, 32, 8);
                 if (get_target().has_feature(Target::CUDA)) {
-                    hist_rows.update()
-                        .split(y, y, yi, 32)
-                        .split(rx, rxo, rxi, 16)
-                        .reorder(rxi, yi, rxo, y)
+                    // Each thread below will use atomic integer adds
+                    // to shared to compute the histogram of a single
+                    // row.
+                    hist_rows
+                        .in()
+                        .compute_root()
+                        .split(x, x, xi, 64)
+                        .vectorize(xi, 2)
+                        .unroll(x)
+                        .gpu_lanes(xi)
+                        .gpu_blocks(y);
+
+                    hist_rows
+                        .store_in(MemoryType::GPUShared)
+                        .compute_at(hist_rows.in(), y)
+                        .split(x, x, xi, 64)
+                        .vectorize(xi, 2)
+                        .unroll(x)
+                        .gpu_lanes(xi)
+                        .update()
+                        .split(rx, rxo, rxi, 32)
+                        .reorder(rxi, rxo, y)
                         .atomic()
-                        .gpu_blocks(rxo, y)
-                        .gpu_threads(yi);
+                        .gpu_lanes(rxi);
 
                     Y.clone_in(hist_rows)
                         .compute_at(hist_rows, rxo)
-                        .bound_extent(x, 16)
-                        .gpu_threads(x);
+                        .store_in(MemoryType::Register)
+                        .gpu_lanes(x);
                 } else {
+                    hist_rows.compute_root()
+                        .gpu_tile(x, y, xi, yi, 32, 8);
+
                     const int slice_width = 256;
                     // Get more parallelism by not just taking
                     // histograms of rows, but histograms of small
@@ -116,10 +130,11 @@ public:
                     // along the z dimension.
                     hist_rows.update().gpu_tile(x, y, xi, yi, 32, 8);
 
-                    if (!get_target().has_feature(Target::Metal)) {
+                    if (!get_target().has_feature(Target::Metal) &&
+                        !get_target().has_feature(Target::D3D12Compute)) {
                         // bound_extent doesn't currently work inside
-                        // metal kernels because we can't compile the
-                        // assertion. For metal we just inline the
+                        // metal & d3d12compute kernels because we can't compile the
+                        // assertion. For metal & d3d12compute we just inline the
                         // luma computation.
                         Y.clone_in(intm)
                             .compute_at(intm.in(), y)
@@ -140,7 +155,17 @@ public:
                     .reorder(c, x, y)
                     .bound(c, 0, 3)
                     .unroll(c)
-                    .gpu_tile(x, y, xi, yi, 32, 8);
+                    .gpu_tile(x, y, xi, yi, 128, 4)
+                    .vectorize(xi, 4);
+                Cb.compute_at(output, xi).vectorize(x);
+                Cr.compute_at(output, xi).vectorize(x);
+                eq.compute_at(output, xi).vectorize(x);
+                // Stage the LUT into shared memory
+                cdf.in()
+                    .compute_at(output, x)
+                    .split(x, x, xi, 64)
+                    .vectorize(xi, 2)
+                    .gpu_threads(xi, x);
             } else {
                 // Runtime is noisy. 0.8ms - 1.1ms on an Intel
                 // i9-9960X using 16 threads

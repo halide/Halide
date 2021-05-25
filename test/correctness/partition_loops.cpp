@@ -2,7 +2,6 @@
 #include <stdio.h>
 using namespace Halide;
 
-
 int main(int argc, char *argv[]) {
     Buffer<uint8_t> input(1024, 1024, 3);
 
@@ -32,12 +31,12 @@ int main(int argc, char *argv[]) {
 
     Func output("output");
     output(x, y, c) = cast<float>(f(x, y, c));
-    Buffer<float> im = output.realize(1024, 1024, 3);
+    Buffer<float> im = output.realize({1024, 1024, 3});
 
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
             for (int c = 0; c < input.channels(); c++) {
-                float correct = (input(std::min(2*x, input.width()-1), y, 2) < x + y) ? x + y : y + c;
+                float correct = (input(std::min(2 * x, input.width() - 1), y, 2) < x + y) ? x + y : y + c;
                 if (im(x, y, c) != correct) {
                     printf("im(%d, %d, %d) = %f instead of %f\n",
                            x, y, c, im(x, y, c), correct);

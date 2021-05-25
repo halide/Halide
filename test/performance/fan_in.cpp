@@ -5,8 +5,9 @@ using namespace Halide;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
-    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping test for WebAssembly as it does not support async() yet.\n");
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
         return 0;
     }
 
@@ -24,9 +25,9 @@ int main(int argc, char **argv) {
         // children are shared between multiple parents.
 
         for (int i = num_stages - 1; i >= 0; i--) {
-            int child_1 = i*2 + 1;
-            int child_2 = i*2 + 2;
-            int child_3 = i*2 + 3;
+            int child_1 = i * 2 + 1;
+            int child_2 = i * 2 + 2;
+            int child_3 = i * 2 + 3;
             // Initialize the stage.
             if (child_3 >= num_stages) {
                 stages[i](x) = cast<float>(x + i);
@@ -35,7 +36,7 @@ int main(int argc, char **argv) {
             }
             // Now do something expensive and inherently serial
             RDom r(1, 1024 - 1, 0, 64);
-            stages[i](r.x) = sin(stages[i](r.x-1));
+            stages[i](r.x) = sin(stages[i](r.x - 1));
 
             stages[i].compute_root();
             if (use_async) {
@@ -47,8 +48,8 @@ int main(int argc, char **argv) {
 
         Buffer<float> out(1024);
         double t = benchmark(3, 3, [&]() {
-                stages[0].realize(out);
-            });
+            stages[0].realize(out);
+        });
 
         times[use_async] = t;
 
@@ -60,5 +61,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
+    printf("Success!\n");
     return 0;
 }

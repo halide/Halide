@@ -1,0 +1,53 @@
+# TODO: some of the blocklisted bugprone checks can/should be re-enabled
+# one at a time (with careful code fixes made as necessary).
+
+---
+Checks: >
+    -*,
+    bugprone-*,
+    -bugprone-branch-clone,
+    -bugprone-exception-escape,
+    -bugprone-integer-division,
+    -bugprone-narrowing-conversions,
+    -bugprone-reserved-identifier,
+    -bugprone-signed-char-misuse,
+    misc-*,
+    -misc-no-recursion,
+    -misc-non-private-member-variables-in-classes,
+    -misc-unconventional-assign-operator,
+    -misc-unused-parameters,
+    modernize-deprecated-headers,
+    modernize-redundant-void-arg,
+    modernize-use-bool-literals,
+    modernize-use-default-member-init,
+    modernize-use-emplace,
+    modernize-use-equals-default,
+    modernize-use-equals-delete,
+    modernize-use-nullptr,
+    modernize-use-override,
+    performance-*,
+    -performance-inefficient-string-concatenation,
+    -performance-inefficient-vector-operation,
+    readability-avoid-const-params-in-decls,
+    readability-braces-around-statements,
+    readability-const-return-type,
+    readability-container-size-empty,
+    readability-misplaced-array-index,
+    readability-qualified-auto,
+    readability-redundant-access-specifiers,
+    readability-redundant-control-flow,
+    readability-redundant-function-ptr-dereference,
+    readability-redundant-preprocessor,
+    readability-redundant-smartptr-get,
+    readability-redundant-string-cstr,
+    readability-simplify-subscript-expr,
+    readability-static-accessed-through-instance,
+    readability-static-definition-in-anonymous-namespace,
+
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*'
+FormatStyle: 'file'
+CheckOptions:
+    - key:   modernize-use-default-member-init.UseAssignment
+      value: 1
+...

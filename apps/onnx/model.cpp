@@ -538,7 +538,7 @@ void print_lowered_statement(const HalideModel &pipeline) {
     std::ifstream is(tmp_file);
     std::string line;
     while (std::getline(is, line)) {
-        std::cout << line << std::endl;
+        std::cout << line << "\n";
     }
     std::remove(tmp_file.c_str());
 }

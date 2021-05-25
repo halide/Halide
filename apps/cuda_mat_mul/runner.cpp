@@ -1,6 +1,8 @@
 #include "HalideBuffer.h"
+#include "HalideRuntimeCuda.h"
 #include "halide_benchmark.h"
 #include "mat_mul.h"
+#include <cstdio>
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 
@@ -8,6 +10,19 @@ using Halide::Runtime::Buffer;
 using Halide::Tools::benchmark;
 
 int main(int argc, char **argv) {
+    // Our Generator is compiled using cuda_capability_50; if the system running this
+    // test doesn't have at least that, quietly skip the test.
+    const auto *interface = halide_cuda_device_interface();
+    assert(interface->compute_capability != nullptr);
+    int major, minor;
+    int err = interface->compute_capability(nullptr, &major, &minor);
+    assert(err == 0);
+    int ver = major * 10 + minor;
+    if (ver < 50) {
+        printf("[SKIP] This system supports only Cuda compute capability %d.%d, but compute capability 5.0+ is required.\n", major, minor);
+        return 0;
+    }
+
     int size = 1024;
     if (argc > 1) {
         size = atoi(argv[1]);
@@ -40,7 +55,7 @@ int main(int argc, char **argv) {
     // Benchmark it
     {
         Buffer<float> A(size, size), B(size, size), C(size, size);
-        double t = Halide::Tools::benchmark(3, 3, [&]() {
+        double t = Halide::Tools::benchmark(5, 5, [&]() {
             mat_mul(A, B, C);
             C.device_sync();
         });
@@ -48,6 +63,10 @@ int main(int argc, char **argv) {
     }
 
     // Benchmark cublas
+#ifdef _MSC_VER
+    // https://github.com/halide/Halide/issues/5053
+    printf("Skipping cublas on Windows; see https://github.com/halide/Halide/issues/5053\n");
+#else
     {
         float *A, *B, *C;
         cudaMalloc((void **)&A, size * size * 4);
@@ -56,7 +75,7 @@ int main(int argc, char **argv) {
         cublasHandle_t handle;
         cublasCreate(&handle);
         float alpha = 1.0f, beta = 1.0f;
-        double t = Halide::Tools::benchmark(3, 3, [&]() {
+        double t = Halide::Tools::benchmark(5, 5, [&]() {
             cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
                         size, size, size, &alpha, A, size, B, size, &beta, C, size);
             cudaDeviceSynchronize();
@@ -67,5 +86,8 @@ int main(int argc, char **argv) {
         cublasDestroy(handle);
         printf("cublas time: %f\n", t);
     }
+#endif
+
+    printf("Success!\n");
     return 0;
 }

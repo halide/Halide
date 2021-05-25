@@ -22,20 +22,20 @@ WEAK float halide_float16_bits_to_float(uint16_t bits) {
         // a normal number in binary32 so we need to convert
         // to a normalised form.
 
-       // Find index (right to left starting at zero)  of the most significant
-       // bit in significand.
-       uint32_t newSignificand = significandBits;
-       // Is it safe to use this built-in?
-       int leadingZeros =  __builtin_clz(significandBits);
-       int setMSB = 31 - leadingZeros;
-       // Zero the leading bit which isn't represented in the IEEE-754 2008 binary32 normalised format
-       newSignificand &= ~(1 << setMSB);
-       // Now move bits into the correct position
-       newSignificand <<= (23 - setMSB);
-       // Compute the new exponent for the normalised form
-       int newExponent = -24 + setMSB; // (-14 - (10 - setMSB))
-       uint32_t reEncodedExponent = newExponent + 127;
-       result.asUInt = signMask | (reEncodedExponent << 23) | newSignificand;
+        // Find index (right to left starting at zero)  of the most significant
+        // bit in significand.
+        uint32_t newSignificand = significandBits;
+        // Is it safe to use this built-in?
+        int leadingZeros = __builtin_clz(significandBits);
+        int setMSB = 31 - leadingZeros;
+        // Zero the leading bit which isn't represented in the IEEE-754 2008 binary32 normalised format
+        newSignificand &= ~(1 << setMSB);
+        // Now move bits into the correct position
+        newSignificand <<= (23 - setMSB);
+        // Compute the new exponent for the normalised form
+        int newExponent = -24 + setMSB;  // (-14 - (10 - setMSB))
+        uint32_t reEncodedExponent = newExponent + 127;
+        result.asUInt = signMask | (reEncodedExponent << 23) | newSignificand;
 
     } else {
         // Normalised number, NaN, zero or infinity.
@@ -67,7 +67,6 @@ WEAK double halide_float16_bits_to_double(uint16_t bits) {
     // Just use native support for converting between float
     // and double
     float valueAsFloat = halide_float16_bits_to_float(bits);
-    return (double) valueAsFloat;
+    return (double)valueAsFloat;
 }
-
 }

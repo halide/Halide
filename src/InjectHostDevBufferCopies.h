@@ -5,10 +5,15 @@
  * Defines the lowering passes that deal with host and device buffer flow.
  */
 
-#include "IR.h"
-#include "Target.h"
+#include <string>
+#include <vector>
+
+#include "Expr.h"
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
 
 /** A helper function to call an extern function, and assert that it

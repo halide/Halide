@@ -4,9 +4,11 @@
 /** \file
  * Defines the code-generator interface for producing GPU device code
  */
+#include <string>
+#include <vector>
 
 #include "DeviceArgument.h"
-#include "IR.h"
+#include "Expr.h"
 
 namespace Halide {
 namespace Internal {
@@ -58,13 +60,22 @@ struct CodeGen_GPU_Dev {
 
     /** Checks if expr is block uniform, i.e. does not depend on a thread
      * var. */
-    static bool is_block_uniform(Expr expr);
+    static bool is_block_uniform(const Expr &expr);
     /** Checks if the buffer is a candidate for constant storage. Most
      * GPUs (APIs) support a constant memory storage class that cannot be
      * written to and performs well for block uniform accesses. A buffer is a
      * candidate for constant storage if it is never written to, and loads are
      * uniform within the workgroup. */
-    static bool is_buffer_constant(Stmt kernel, const std::string &buffer);
+    static bool is_buffer_constant(const Stmt &kernel, const std::string &buffer);
+
+    /** An mask describing which type of memory fence to use for the gpu_thread_barrier()
+    * intrinsic.  Not all GPUs APIs support all types.
+    */
+    enum MemoryFenceType {
+        None = 0,    // No fence required (just a sync)
+        Device = 1,  // Device/global memory fence
+        Shared = 2   // Threadgroup/shared memory fence
+    };
 };
 
 }  // namespace Internal

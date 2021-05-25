@@ -22,12 +22,12 @@ int main(int argc, char **argv) {
     }
     Var x;
     Func f;
-    f(x) = input(x)*2;
+    f(x) = input(x) * 2;
 
     f.set_error_handler(&halide_error);
 
     // One easy way to read out of bounds
-    f.realize(23);
+    f.realize({23});
 
     if (!error_occurred) {
         printf("There should have been an out-of-bounds error\n");
@@ -39,12 +39,12 @@ int main(int argc, char **argv) {
     // bounds expansion when vectorizing. This used to be an
     // out-of-bounds error, but now isn't! Hooray!
     Func g, h;
-    g(x) = input(x)*2;
+    g(x) = input(x) * 2;
     h(x) = g(x);
     g.compute_root().vectorize(x, 4);
 
     h.set_error_handler(&halide_error);
-    h.realize(18);
+    h.realize({18});
 
     if (error_occurred) {
         printf("There should not have been an out-of-bounds error\n");
@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
     i(x) = small_input(x);
     i.vectorize(x, 4);
     i.set_error_handler(&halide_error);
-    i.realize(4);
+    i.realize({4});
     if (!error_occurred) {
         printf("There should have been an out-of-bounds error\n");
         return 1;

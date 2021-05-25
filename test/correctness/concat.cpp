@@ -34,10 +34,10 @@ int main(int argc, char **argv) {
     g.compute_root();
     h.compute_root();
 
-    Buffer<int> buf = h.realize(200);
+    Buffer<int> buf = h.realize({200});
 
     for (int i = 0; i < 200; i++) {
-        int correct = i < 100 ? i+1 : i+2;
+        int correct = i < 100 ? i + 1 : i + 2;
         if (buf(i) != correct) {
             printf("buf(%d) = %d instead of %d\n", i, buf(i), correct);
             return -1;

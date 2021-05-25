@@ -8,7 +8,10 @@ public:
 
     void generate() {
         Var x, y;
-        if (get_target().has_feature(Target::Debug)) {
+        // Note that 'NoBoundsQuery' is essentially a somewhat-arbitrary placeholder
+        // here; we really just want to use a feature flag that doesn't require
+        // a custom runtime (as does, e.g., Target::Debug).
+        if (get_target().has_feature(Target::NoBoundsQuery)) {
             output(x, y) = cast<uint32_t>((int32_t)0xdeadbeef);
         } else {
             output(x, y) = cast<uint32_t>((int32_t)0xf00dcafe);

@@ -3,6 +3,18 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("[SKIP] Autoschedulers do not support WebAssembly.\n");
+        return 0;
+    }
+
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <autoscheduler-lib>\n", argv[0]);
+        return 1;
+    }
+
+    load_plugin(argv[1]);
+
     int W = 1000;
     int H = 1000;
     Buffer<uint16_t> input(W, H);
@@ -19,10 +31,10 @@ int main(int argc, char **argv) {
     f(x, y) = input(x, y) * input(x, y);
 
     Func g("g");
-    g(x, y) = (f(x, y) + f(x + 1, y))/2;
+    g(x, y) = (f(x, y) + f(x + 1, y)) / 2;
 
     Func h("h");
-    h(x, y) = (f(x, y) + f(x, y+1))/2;
+    h(x, y) = (f(x, y) + f(x, y + 1)) / 2;
 
     // Provide estimates on the pipeline output
     g.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);

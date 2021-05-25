@@ -1,12 +1,12 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <memory>
+#include <stdio.h>
 
 using namespace Halide;
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping test for WebAssembly as it does not support async() yet.\n");
+        printf("[SKIP] WebAssembly JIT does not yet support async().\n");
         _halide_user_assert(0);
     }
 
@@ -25,8 +25,8 @@ int main(int argc, char **argv) {
     // choose values that will fail
     p1.set(1);
     p2.set(2);
-    result = g.realize(1);
+    result = g.realize({1});
 
+    printf("Success!\n");
     return 0;
-
 }

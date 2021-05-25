@@ -26,7 +26,6 @@
 #define HLPT_CHECK_CUDA(x) AT_ASSERTM(x.type().is_cuda(), #x " must be a CUDA tensor")
 #define HLPT_CHECK_DEVICE(x, dev) AT_ASSERTM(x.is_cuda() && x.get_device() == dev, #x " must be a CUDA tensor")
 
-
 namespace Halide {
 namespace PyTorch {
 
@@ -37,11 +36,10 @@ inline std::vector<int> get_dims(const at::Tensor tensor) {
     std::vector<int> dims(ndims, 0);
     // PyTorch dim order is reverse of Halide
     for (int dim = 0; dim < ndims; ++dim) {
-        dims[dim] = tensor.size(ndims-1-dim);
+        dims[dim] = tensor.size(ndims - 1 - dim);
     }
     return dims;
 }
-
 
 template<class scalar_t>
 inline void check_type(at::Tensor &tensor) {
@@ -60,10 +58,10 @@ inline void check_type(at::Tensor &tensor) {
 #if HL_PYTORCH_API_VERSION >= 13
 
 // PyTorch 1.3+
-#define HL_PT_DEFINE_TYPECHECK(ctype,ttype) \
-    template<> \
-    inline void check_type<ctype>(at::Tensor &tensor) { \
-      AT_ASSERTM(tensor.scalar_type() == at::ScalarType::ttype, "scalar type do not match"); \
+#define HL_PT_DEFINE_TYPECHECK(ctype, ttype)                                                   \
+    template<>                                                                                 \
+    inline void check_type<ctype>(at::Tensor & tensor) {                                       \
+        AT_ASSERTM(tensor.scalar_type() == at::ScalarType::ttype, "scalar type do not match"); \
     }
 
 AT_FORALL_SCALAR_TYPES_WITH_COMPLEX_AND_QINTS(HL_PT_DEFINE_TYPECHECK);
@@ -74,10 +72,10 @@ AT_FORALL_SCALAR_TYPES_WITH_COMPLEX_AND_QINTS(HL_PT_DEFINE_TYPECHECK);
 
 // PyTorch 1.2
 
-#define HL_PT_DEFINE_TYPECHECK(ctype,ttype,_3) \
-    template<> \
-    inline void check_type<ctype>(at::Tensor &tensor) { \
-      AT_ASSERTM(tensor.scalar_type() == at::ScalarType::ttype, "scalar type do not match"); \
+#define HL_PT_DEFINE_TYPECHECK(ctype, ttype, _3)                                               \
+    template<>                                                                                 \
+    inline void check_type<ctype>(at::Tensor & tensor) {                                       \
+        AT_ASSERTM(tensor.scalar_type() == at::ScalarType::ttype, "scalar type do not match"); \
     }
 
 AT_FORALL_SCALAR_TYPES_WITH_COMPLEX(HL_PT_DEFINE_TYPECHECK);
@@ -86,15 +84,14 @@ AT_FORALL_SCALAR_TYPES_WITH_COMPLEX(HL_PT_DEFINE_TYPECHECK);
 
 #endif  // HL_PYTORCH_API_VERSION check
 
-
 template<class scalar_t>
 inline Buffer<scalar_t> wrap(at::Tensor &tensor) {
     check_type<scalar_t>(tensor);
     std::vector<int> dims = get_dims(tensor);
 #if HL_PYTORCH_API_VERSION >= 13
-    scalar_t* pData  = tensor.data_ptr<scalar_t>();
+    scalar_t *pData = tensor.data_ptr<scalar_t>();
 #else
-    scalar_t* pData  = tensor.data<scalar_t>();
+    scalar_t *pData = tensor.data<scalar_t>();
 #endif
     Buffer<scalar_t> buffer;
 
@@ -102,9 +99,9 @@ inline Buffer<scalar_t> wrap(at::Tensor &tensor) {
     if (tensor.is_cuda()) {
 #ifdef HL_PT_CUDA
         buffer = Buffer<scalar_t>(dims);
-        const halide_device_interface_t* cuda_interface = halide_cuda_device_interface();
+        const halide_device_interface_t *cuda_interface = halide_cuda_device_interface();
         int err = buffer.device_wrap_native(cuda_interface, (uint64_t)pData);
-        AT_ASSERTM(err==0,  "halide_device_wrap failed");
+        AT_ASSERTM(err == 0, "halide_device_wrap failed");
         buffer.set_device_dirty();
 #else
         AT_ERROR("Trying to wrap a CUDA tensor, but HL_PT_CUDA was not defined: cuda is not available");
@@ -116,7 +113,7 @@ inline Buffer<scalar_t> wrap(at::Tensor &tensor) {
     return buffer;
 }
 
-} // namespace PyTorch
-} // namespace Halide
+}  // namespace PyTorch
+}  // namespace Halide
 
 #endif  // HL_PYTORCH_WRAPPER_H

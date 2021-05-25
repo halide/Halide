@@ -1,11 +1,12 @@
 include ../support/Makefile.inc
 
+.PHONY: build clean test
 
-all: $(BIN)/$(HL_TARGET)/process
+build: $(BIN)/$(HL_TARGET)/process
 
 $(GENERATOR_BIN)/nl_means.generator: nl_means_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(GENERATOR_LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 $(BIN)/%/nl_means.a: $(GENERATOR_BIN)/nl_means.generator
 	@mkdir -p $(@D)
@@ -17,7 +18,7 @@ $(BIN)/%/nl_means_auto_schedule.a: $(GENERATOR_BIN)/nl_means.generator
 
 $(BIN)/%/process: process.cpp $(BIN)/%/nl_means.a $(BIN)/%/nl_means_auto_schedule.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
+	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 
 $(BIN)/%/out.png: $(BIN)/%/process
 	@mkdir -p $(@D)

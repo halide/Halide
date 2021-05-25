@@ -6,13 +6,19 @@
  */
 
 #include <map>
+#include <string>
+#include <vector>
 
-#include "Bounds.h"
-#include "IR.h"
-#include "Target.h"
+#include "Expr.h"
+#include "Interval.h"
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
+
+class Function;
 
 /** Take a partially lowered statement that includes symbolic
  * representations of the bounds over which things should be realized,

@@ -5,7 +5,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     if (!get_jit_target_from_environment().has_gpu_feature()) {
-        printf("No gpu target enabled. Skipping test.\n");
+        printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
 
@@ -16,8 +16,8 @@ int main(int argc, char **argv) {
         Param<bool> use_gpu;
 
         f(x, y) = x + y;
-        g(x, y) = f(x-1, y+1) + f(x+1, y-1) + x;
-        h(x, y) = g(x+1, y-1) + g(x-1, y+1) + y;
+        g(x, y) = f(x - 1, y + 1) + f(x + 1, y - 1) + x;
+        h(x, y) = g(x + 1, y - 1) + g(x - 1, y + 1) + y;
 
         // Specialize is a little tricky for producer-consumer pairs: the
         // compute_at must be the same in either case, which means you
@@ -47,13 +47,13 @@ int main(int argc, char **argv) {
         f.compute_at(g, xi);
 
         use_gpu.set(get_jit_target_from_environment().has_gpu_feature());
-        Buffer<int> out1 = h.realize(1024, 1024);
+        Buffer<int> out1 = h.realize({1024, 1024});
         use_gpu.set(false);
-        Buffer<int> out2 = h.realize(1024, 1024);
+        Buffer<int> out2 = h.realize({1024, 1024});
 
         for (int y = 0; y < out1.height(); y++) {
             for (int x = 0; x < out1.width(); x++) {
-                int correct = 6*x + 5*y;
+                int correct = 6 * x + 5 * y;
                 if (out1(x, y) != correct) {
                     printf("out1(%d, %d) = %d instead of %d\n",
                            x, y, out1(x, y), correct);
@@ -67,7 +67,6 @@ int main(int argc, char **argv) {
             }
         }
     }
-
 
     {
         Func f("f"), g("g"), h("h");
@@ -86,11 +85,11 @@ int main(int argc, char **argv) {
         g.tile(x, y, xi, yi, 2, 2).gpu_blocks(x, y);
 
         p.set(true);
-        Buffer<int> out = g.realize(32, 32);
+        Buffer<int> out = g.realize({32, 32});
 
         for (int y = 0; y < out.height(); y++) {
             for (int x = 0; x < out.width(); x++) {
-                int correct = 2*x + y;
+                int correct = 2 * x + y;
                 if (out(x, y) != correct) {
                     printf("out(%d, %d) = %d instead of %d\n",
                            x, y, out(x, y), correct);
@@ -102,5 +101,4 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-
 }

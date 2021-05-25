@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
         kernel2.compute_root();
     }
 
-    Buffer<int32_t> result = kernel3.realize(256, target);
+    Buffer<int32_t> result = kernel3.realize({256}, target);
 
     for (int i = 0; i < 256; i++) {
         float a = floor((i + 0.5f) / 3.0f);
@@ -34,5 +34,6 @@ int main(int argc, char *argv[]) {
         assert(result(i) == c);
     }
 
-    std::cout << "Success!" << std::endl;
+    printf("Success!\n");
+    return 0;
 }

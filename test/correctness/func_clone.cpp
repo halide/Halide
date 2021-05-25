@@ -1,7 +1,7 @@
 #include "Halide.h"
-#include "test/common/check_call_graphs.h"
+#include "check_call_graphs.h"
 
-#include <stdio.h>
+#include <cstdio>
 #include <map>
 
 namespace {
@@ -76,7 +76,7 @@ int func_clone_test() {
         return -1;
     }
 
-    Buffer<int> im = g.realize(200, 200);
+    Buffer<int> im = g.realize({200, 200});
     auto func = [](int x, int y) { return x; };
     if (check_image(im, func)) {
         return -1;
@@ -115,7 +115,7 @@ int multiple_funcs_sharing_clone_test() {
         return -1;
     }
 
-    Realization r = p.realize(200, 200);
+    Realization r = p.realize({200, 200});
     Buffer<int> img1 = r[0];
     Buffer<int> img2 = r[1];
     Buffer<int> img3 = r[2];
@@ -145,7 +145,7 @@ int update_defined_after_clone_test() {
     // still call f's clone.
     RDom r(0, 100, 0, 100);
     r.where(r.x < r.y);
-    g(r.x, r.y) += 2*f(r.x, r.y);
+    g(r.x, r.y) += 2 * f(r.x, r.y);
 
     Param<bool> param;
 
@@ -174,9 +174,9 @@ int update_defined_after_clone_test() {
             return -1;
         }
 
-        Buffer<int> im = g.realize(200, 200);
+        Buffer<int> im = g.realize({200, 200});
         auto func = [](int x, int y) {
-            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3*(x + y) : (x + y);
+            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
         };
         if (check_image(im, func)) {
             return -1;
@@ -201,9 +201,9 @@ int update_defined_after_clone_test() {
             return -1;
         }
 
-        Buffer<int> im = g.realize(200, 200);
+        Buffer<int> im = g.realize({200, 200});
         auto func = [](int x, int y) {
-            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3*(x + y) : (x + y);
+            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
         };
         if (check_image(im, func)) {
             return -1;
@@ -254,7 +254,7 @@ int clone_depend_on_mutated_func_test() {
         return -1;
     }
 
-    Realization r = p.realize(25, 25);
+    Realization r = p.realize({25, 25});
     Buffer<int> img_d = r[0];
     Buffer<int> img_e = r[1];
     Buffer<int> img_f = r[2];
@@ -317,7 +317,7 @@ int clone_on_clone_test() {
         return -1;
     }
 
-    Realization r = p.realize(25, 25);
+    Realization r = p.realize({25, 25});
     Buffer<int> img_c = r[0];
     Buffer<int> img_d = r[1];
     Buffer<int> img_e = r[2];
@@ -331,14 +331,38 @@ int clone_on_clone_test() {
     if (check_image(img_d, func_d)) {
         return -1;
     }
-    auto func_e = [](int x, int y) { return 2*x + 2*y + 1; };
+    auto func_e = [](int x, int y) { return 2 * x + 2 * y + 1; };
     if (check_image(img_e, func_e)) {
         return -1;
     }
-    auto func_f = [](int x, int y) { return 2*x + 2*y + 2; };
+    auto func_f = [](int x, int y) { return 2 * x + 2 * y + 2; };
     if (check_image(img_f, func_f)) {
         return -1;
     }
+    return 0;
+}
+
+int clone_reduction_test() {
+    // Check that recursive references from a Func back to itself get
+    // rewritten too in a clone. This schedule would be illegal if
+    // they did not.
+
+    RDom r(0, 8);
+    Var x;
+    Func sum;
+    sum(x) += r * x;
+
+    Func f, g;
+
+    f(x) = sum(x);
+    g(x) = sum(x);
+
+    sum.clone_in(g).compute_at(g, x);
+    sum.compute_at(f, x);
+
+    Pipeline p({f, g});
+    p.realize({128});
+
     return 0;
 }
 
@@ -372,6 +396,11 @@ int main(int argc, char **argv) {
 
     printf("Running clone on clone test\n");
     if (clone_on_clone_test() != 0) {
+        return -1;
+    }
+
+    printf("Running clone reduction test\n");
+    if (clone_reduction_test() != 0) {
         return -1;
     }
 

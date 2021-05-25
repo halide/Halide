@@ -18,14 +18,14 @@ using namespace llvm;
 
 namespace {
 
-vector<llvm::Type *> llvm_types(const Closure &closure, llvm::StructType *buffer_t, LLVMContext &context) {
+vector<llvm::Type *> llvm_types(const Closure &closure, llvm::StructType *halide_buffer_t_type, LLVMContext &context) {
     vector<llvm::Type *> res;
     for (const auto &v : closure.vars) {
         res.push_back(llvm_type_of(&context, v.second));
     }
     for (const auto &b : closure.buffers) {
         res.push_back(llvm_type_of(&context, b.second.type)->getPointerTo());
-        res.push_back(buffer_t->getPointerTo());
+        res.push_back(halide_buffer_t_type->getPointerTo());
     }
     return res;
 }
@@ -33,10 +33,10 @@ vector<llvm::Type *> llvm_types(const Closure &closure, llvm::StructType *buffer
 }  // namespace
 
 StructType *build_closure_type(const Closure &closure,
-                               llvm::StructType *buffer_t,
+                               llvm::StructType *halide_buffer_t_type,
                                LLVMContext *context) {
     StructType *struct_t = StructType::create(*context, "closure_t");
-    struct_t->setBody(llvm_types(closure, buffer_t, *context), false);
+    struct_t->setBody(llvm_types(closure, halide_buffer_t_type, *context), false);
     return struct_t;
 }
 
@@ -44,7 +44,7 @@ void pack_closure(llvm::StructType *type,
                   Value *dst,
                   const Closure &closure,
                   const Scope<Value *> &src,
-                  llvm::StructType *buffer_t,
+                  llvm::StructType *halide_buffer_t_type,
                   IRBuilder<> *builder) {
     // type, type of dst should be a pointer to a struct of the type returned by build_type
     int idx = 0;
@@ -68,7 +68,7 @@ void pack_closure(llvm::StructType *type,
             builder->CreateStore(val, ptr);
         }
         {
-            llvm::PointerType *t = buffer_t->getPointerTo();
+            llvm::PointerType *t = halide_buffer_t_type->getPointerTo();
             Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
             Value *val = nullptr;
             if (src.contains(b.first + ".buffer")) {
@@ -91,20 +91,20 @@ void unpack_closure(const Closure &closure,
     int idx = 0;
     for (const auto &v : closure.vars) {
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-        LoadInst *load = builder->CreateLoad(ptr);
+        LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
         dst.push(v.first, load);
         load->setName(v.first);
     }
     for (const auto &b : closure.buffers) {
         {
             Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-            LoadInst *load = builder->CreateLoad(ptr);
+            LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
             dst.push(b.first, load);
             load->setName(b.first);
         }
         {
             Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-            LoadInst *load = builder->CreateLoad(ptr);
+            LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
             dst.push(b.first + ".buffer", load);
             load->setName(b.first + ".buffer");
         }
@@ -132,8 +132,50 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
         }
     } else {
         llvm::Type *element_type = llvm_type_of(c, t.element_of());
-        return VectorType::get(element_type, t.lanes());
+        return get_vector_type(element_type, t.lanes());
     }
+}
+
+#if LLVM_VERSION >= 120
+int get_vector_num_elements(llvm::Type *t) {
+    if (t->isVectorTy()) {
+        auto *vt = dyn_cast<llvm::FixedVectorType>(t);
+        internal_assert(vt) << "Called get_vector_num_elements on a scalable vector type\n";
+        return vt->getNumElements();
+    } else {
+        return 1;
+    }
+}
+#else
+int get_vector_num_elements(llvm::Type *t) {
+    if (t->isVectorTy()) {
+        return dyn_cast<llvm::VectorType>(t)->getNumElements();
+    } else {
+        return 1;
+    }
+}
+#endif
+
+llvm::Type *get_vector_element_type(llvm::Type *t) {
+    if (t->isVectorTy()) {
+        return dyn_cast<llvm::VectorType>(t)->getElementType();
+    } else {
+        return t;
+    }
+}
+
+#if LLVM_VERSION >= 120
+llvm::ElementCount element_count(int e) {
+    return llvm::ElementCount::getFixed(e);
+}
+#else
+llvm::ElementCount element_count(int e) {
+    return llvm::ElementCount(e, /*scalable*/ false);
+}
+#endif
+
+llvm::Type *get_vector_type(llvm::Type *t, int n) {
+    return VectorType::get(t, element_count(n));
 }
 
 // Returns true if the given function name is one of the Halide runtime
@@ -176,7 +218,6 @@ bool function_takes_user_context(const std::string &name) {
         "halide_memoization_cache_release",
         "halide_cuda_run",
         "halide_opencl_run",
-        "halide_opengl_run",
         "halide_openglcompute_run",
         "halide_metal_run",
         "halide_d3d12compute_run",
@@ -200,14 +241,10 @@ bool function_takes_user_context(const std::string &name) {
         "halide_vtcm_free",
         "halide_cuda_initialize_kernels",
         "halide_opencl_initialize_kernels",
-        "halide_opengl_initialize_kernels",
         "halide_openglcompute_initialize_kernels",
         "halide_metal_initialize_kernels",
         "halide_d3d12compute_initialize_kernels",
         "halide_get_gpu_device",
-        "halide_upgrade_buffer_t",
-        "halide_downgrade_buffer_t",
-        "halide_downgrade_buffer_t_device_fields",
         "_halide_buffer_crop",
         "_halide_buffer_retire_crop_after_extern_stage",
         "_halide_buffer_retire_crops_after_extern_stage",
@@ -228,8 +265,9 @@ bool can_allocation_fit_on_stack(int64_t size) {
     return (size <= 1024 * 16);
 }
 
-Expr lower_int_uint_div(Expr a, Expr b) {
+Expr lower_int_uint_div(const Expr &a, const Expr &b) {
     // Detect if it's a small int division
+    internal_assert(a.type() == b.type());
     const int64_t *const_int_divisor = as_const_int(b);
     const uint64_t *const_uint_divisor = as_const_uint(b);
 
@@ -240,14 +278,15 @@ Expr lower_int_uint_div(Expr a, Expr b) {
     int shift_amount;
     if (is_const_power_of_two_integer(b, &shift_amount) &&
         (t.is_int() || t.is_uint())) {
-        return a >> make_const(a.type(), shift_amount);
+        return a >> make_const(UInt(a.type().bits()), shift_amount);
     } else if (const_int_divisor &&
                t.is_int() &&
                (t.bits() == 8 || t.bits() == 16 || t.bits() == 32) &&
                *const_int_divisor > 1 &&
                ((t.bits() > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
 
-        int64_t multiplier, shift;
+        int64_t multiplier;
+        int shift;
         if (t.bits() == 32) {
             multiplier = IntegerDivision::table_s32[*const_int_divisor][2];
             shift = IntegerDivision::table_s32[*const_int_divisor][3];
@@ -263,7 +302,7 @@ Expr lower_int_uint_div(Expr a, Expr b) {
 
         // Make an all-ones mask if the numerator is negative
         Type num_as_uint_t = num.type().with_code(Type::UInt);
-        Expr sign = cast(num_as_uint_t, num >> make_const(t, t.bits() - 1));
+        Expr sign = cast(num_as_uint_t, num >> make_const(UInt(t.bits()), t.bits() - 1));
 
         // Flip the numerator bits if the mask is high.
         num = cast(num_as_uint_t, num);
@@ -272,8 +311,7 @@ Expr lower_int_uint_div(Expr a, Expr b) {
         // Multiply and keep the high half of the
         // result, and then apply the shift.
         Expr mult = make_const(num.type(), multiplier);
-        num = Call::make(num.type(), Call::mulhi_shr, {num, mult, make_const(UInt(num.type().bits()), shift)},
-                         Call::PureIntrinsic);
+        num = mul_shift_right(num, mult, shift + num.type().bits());
 
         // Maybe flip the bits back again.
         num = cast(a.type(), num ^ sign);
@@ -301,13 +339,11 @@ Expr lower_int_uint_div(Expr a, Expr b) {
 
         internal_assert(method != 0)
             << "method 0 division is for powers of two and should have been handled elsewhere\n";
-        Expr num = a;
+        const Expr &num = a;
 
         // Widen, multiply, narrow
         Expr mult = make_const(num.type(), multiplier);
-        Expr val = Call::make(num.type(), Call::mulhi_shr,
-                              {num, mult, make_const(UInt(num.type().bits()), method == 1 ? (int)shift : 0)},
-                              Call::PureIntrinsic);
+        Expr val = mul_shift_right(num, mult, (method == 1 ? shift : 0) + num.type().bits());
 
         if (method == 2) {
             // Average with original numerator.
@@ -315,7 +351,7 @@ Expr lower_int_uint_div(Expr a, Expr b) {
 
             // Do the final shift
             if (shift) {
-                val = val >> make_const(t, shift);
+                val = val >> make_const(UInt(t.bits()), shift);
             }
         }
 
@@ -325,7 +361,7 @@ Expr lower_int_uint_div(Expr a, Expr b) {
     }
 }
 
-Expr lower_int_uint_mod(Expr a, Expr b) {
+Expr lower_int_uint_mod(const Expr &a, const Expr &b) {
     // Detect if it's a small int modulus
     const int64_t *const_int_divisor = as_const_int(b);
     const uint64_t *const_uint_divisor = as_const_uint(b);
@@ -336,7 +372,7 @@ Expr lower_int_uint_mod(Expr a, Expr b) {
 
     int bits;
     if (is_const_power_of_two_integer(b, &bits)) {
-        return a & (b - 1);
+        return a & simplify(b - 1);
     } else if (const_int_divisor &&
                t.is_int() &&
                (t.bits() == 8 || t.bits() == 16 || t.bits() == 32) &&
@@ -357,69 +393,196 @@ Expr lower_int_uint_mod(Expr a, Expr b) {
     }
 }
 
+std::pair<Expr, Expr> unsigned_long_div_mod_round_to_zero(Expr &num, const Expr &den,
+                                                          const uint64_t *upper_bound) {
+    internal_assert(num.type() == den.type());
+    internal_assert(num.type().is_uint());
+    Type ty = num.type();
+    Expr q = make_zero(ty);
+    Expr leading_zeros = cast(ty, count_leading_zeros(den));
+    // Each iteration of the loop below checks for a bit in the result.
+    const int times = ty.bits();
+    int start = 1;
+    if (upper_bound) {
+        // Set start to times - (index of most significant bit in max_val)
+        // as for each iteration:
+        //     (1 << shift) <= upper_bound
+        start = times;
+        uint64_t max_val = *upper_bound;
+        while (max_val >>= 1) {
+            --start;
+        }
+        debug(1) << "Max value for long division: " << *upper_bound
+                 << ". Evaluate only first " << 1 + times - start << " bits.\n";
+    }
+    Expr r = num;
+    for (int i = start; i <= times; i++) {
+        // Check if the bit at 'shift' index should be set in the result.
+        int shift = times - i;
+        Expr shift_expr = make_const(ty, shift);
+        Expr new_r = r - (den << shift_expr);
+        // Don't drop any set bits from den after shift. The bit is set if
+        // den << shift is no more than remainder.
+        Expr bit_set = ((shift_expr <= leading_zeros) && r >= (den << shift_expr));
+        // Update the  and the quotient.
+        r = select(bit_set, new_r, r);
+        q = select(bit_set, make_const(ty, uint64_t(1) << shift) | q, q);
+    }
+    return {q, r};
+}
+
+std::pair<Expr, Expr> long_div_mod_round_to_zero(const Expr &num, const Expr &den,
+                                                 const uint64_t *max_abs) {
+    debug(1) << "Using long div: (num: " << num << "); (den: " << den << ")\n";
+    internal_assert(num.type() == den.type());
+    Expr abs_num = (num.type().is_int()) ? abs(num) : num;
+    Expr abs_den = (den.type().is_int()) ? abs(den) : den;
+    std::pair<Expr, Expr> qr = unsigned_long_div_mod_round_to_zero(abs_num, abs_den, max_abs);
+    Expr q = qr.first;
+    Expr r = qr.second;
+    // Correct the signs for quotient and remainder for signed integer division.
+    if (num.type().is_int()) {
+        Expr num_neg = num >> make_const(UInt(num.type().bits()), (num.type().bits() - 1));
+        Expr den_neg = den >> make_const(UInt(num.type().bits()), (num.type().bits() - 1));
+        q = cast(num.type(), q) * ((num_neg ^ den_neg) | 1);
+        r = cast(num.type(), r) * (num_neg | 1);
+    }
+    q = simplify(common_subexpression_elimination(q));
+    r = simplify(common_subexpression_elimination(r));
+    return {q, r};
+}
+
 Expr lower_euclidean_div(Expr a, Expr b) {
     internal_assert(a.type() == b.type());
-    // IROperator's div_round_to_zero will replace this with a / b for
-    // unsigned ops, so create the intrinsic directly.
-    Expr q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::PureIntrinsic);
-    if (a.type().is_int()) {
+
+    Expr q;
+
+    if (a.type().is_uint()) {
+        // IROperator's div_round_to_zero will replace this with a / b for
+        // unsigned ops, so create the intrinsic directly.
+        Expr b_is_const_zero = (b == 0);
+        if (!can_prove(!b_is_const_zero)) {
+            b = b | cast(a.type(), b_is_const_zero);
+        }
+        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::Intrinsic);
+        q = select(b_is_const_zero, 0, q);
+    } else {
+        internal_assert(a.type().is_int());
+
         // Signed integer division sucks. It should be defined such
         // that it satisifies (a/b)*b + a%b = a, where 0 <= a%b < |b|,
         // i.e. Euclidean division.
+        //
+        // We additionally define division by zero to be zero, and
+        // division of the most negative integer by -1 to be the most
+        // negative integer.
 
-        // We get rounding to work by examining the implied remainder
-        // and correcting the quotient.
+        // See div_imp in IROperator.h for the C code we're trying to match.
 
-        /* Here's the C code that we're trying to match:
-           int q = a / b;
-           int r = a - q * b;
-           int bs = b >> (t.bits() - 1);
-           int rs = r >> (t.bits() - 1);
-           return q - (rs & bs) + (rs & ~bs);
-        */
+        Expr zero = make_zero(a.type());
+        Expr minus_one = make_const(a.type(), -1);
 
-        Expr r = a - q * b;
-        Expr bs = b >> make_const(b.type(), (a.type().bits() - 1));
-        Expr rs = r >> make_const(r.type(), (a.type().bits() - 1));
-        q = q - (rs & bs) + (rs & ~bs);
-        return common_subexpression_elimination(q);
-    } else {
-        return q;
+        Expr a_neg = a >> make_const(UInt(a.type().bits()), (a.type().bits() - 1));
+        Expr b_neg = b >> make_const(UInt(b.type().bits()), (b.type().bits() - 1));
+        Expr b_zero = select(b == zero, minus_one, zero);
+
+        // Give the simplifier the chance to skip some of this nonsense
+        if (can_prove(b != zero)) {
+            b_zero = zero;
+        }
+        if (can_prove(a >= zero)) {
+            a_neg = zero;
+        } else if (can_prove(a < zero)) {
+            a_neg = minus_one;
+        }
+        if (can_prove(b >= zero)) {
+            b_neg = zero;
+        } else if (can_prove(b < zero)) {
+            b_neg = minus_one;
+        }
+
+        // If b is zero, set it to one instead to avoid faulting
+        b -= b_zero;
+        // If a is negative, add one to it to get the rounding to work out.
+        a -= a_neg;
+        // Do the C-style division
+        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::Intrinsic);
+        // If a is negative, either add or subtract one, depending on
+        // the sign of b, to fix the rounding. This can't overflow,
+        // because we move the result towards zero in either case (we
+        // add zero or one when q is negative, and subtract zero or
+        // one when it's positive).
+        q += a_neg & (~b_neg - b_neg);
+        // Set the result to zero when b is zero
+        q = q & ~b_zero;
     }
+
+    q = simplify(common_subexpression_elimination(q));
+
+    return q;
 }
 
 Expr lower_euclidean_mod(Expr a, Expr b) {
-    internal_assert(a.type() == b.type());
-    // IROperator's mod_round_to_zero will replace this with a % b for
-    // unsigned ops, so create the intrinsic directly.
-    Expr r = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::PureIntrinsic);
-    if (a.type().is_int()) {
-        // Match this non-overflowing C code
-        /*
-          T r = a % b;
-          T sign_mask = (r >> (sizeof(r)*8 - 1));
-          r = r + sign_mask & abs(b);
-        */
+    Expr q;
 
-        Expr sign_mask = r >> cast(r.type(), (a.type().bits() - 1));
-        r += sign_mask & cast(sign_mask.type(), abs(b));
-        return common_subexpression_elimination(r);
+    if (a.type().is_uint()) {
+        Expr b_is_const_zero = (b == 0);
+        if (!can_prove(!b_is_const_zero)) {
+            b = b | cast(a.type(), b_is_const_zero);
+        }
+        q = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::Intrinsic);
+        q = select(b_is_const_zero, make_zero(a.type()), q);
     } else {
-        return r;
+        internal_assert(a.type().is_int());
+
+        Expr zero = make_zero(a.type());
+        Expr minus_one = make_const(a.type(), -1);
+
+        Expr a_neg = a >> make_const(UInt(a.type().bits()), (a.type().bits() - 1));
+        Expr b_neg = b >> make_const(UInt(a.type().bits()), (a.type().bits() - 1));
+        Expr b_zero = select(b == zero, minus_one, zero);
+
+        // Give the simplifier the chance to skip some of this nonsense
+        if (can_prove(b != zero)) {
+            b_zero = zero;
+        }
+        if (can_prove(a >= zero)) {
+            a_neg = zero;
+        } else if (can_prove(a < zero)) {
+            a_neg = minus_one;
+        }
+        if (can_prove(b >= zero)) {
+            b_neg = zero;
+        } else if (can_prove(b < zero)) {
+            b_neg = minus_one;
+        }
+
+        // If a is negative, add one to get the rounding to work out
+        a -= a_neg;
+        // Do the mod, avoiding taking mod by zero
+        q = Call::make(a.type(), Call::mod_round_to_zero, {a, (b | b_zero)}, Call::Intrinsic);
+        // If a is negative, we either need to add b - 1 to the
+        // result, or -b - 1, depending on the sign of b.
+        q += (a_neg & ((b ^ b_neg) + ~b_neg));
+        // If b is zero, return zero by masking off the current result.
+        q = q & ~b_zero;
     }
+
+    q = simplify(common_subexpression_elimination(q));
+
+    return q;
 }
 
-Expr lower_signed_shift_left(Expr a, Expr b) {
-    assert(b.type().is_int());
+Expr lower_signed_shift_left(const Expr &a, const Expr &b) {
+    internal_assert(b.type().is_int());
     const int64_t *const_int_b = as_const_int(b);
     if (const_int_b) {
-        Type t = UInt(a.type().bits(), a.type().lanes());
         Expr val;
         const uint64_t b_unsigned = std::abs(*const_int_b);
         if (*const_int_b >= 0) {
-            val = a << make_const(t, b_unsigned);
+            val = a << make_const(UInt(a.type().bits()), b_unsigned);
         } else if (*const_int_b < 0) {
-            val = a >> make_const(t, b_unsigned);
+            val = a >> make_const(UInt(a.type().bits()), b_unsigned);
         }
         return common_subexpression_elimination(val);
     } else {
@@ -427,21 +590,20 @@ Expr lower_signed_shift_left(Expr a, Expr b) {
         // case for the most negative value because its result is unsigned.
         Expr b_unsigned = abs(b);
         Expr val = select(b >= 0, a << b_unsigned, a >> b_unsigned);
-        return simplify(common_subexpression_elimination(val));
+        return common_subexpression_elimination(val);
     }
 }
 
-Expr lower_signed_shift_right(Expr a, Expr b) {
-    assert(b.type().is_int());
+Expr lower_signed_shift_right(const Expr &a, const Expr &b) {
+    internal_assert(b.type().is_int());
     const int64_t *const_int_b = as_const_int(b);
     if (const_int_b) {
-        Type t = UInt(a.type().bits(), a.type().lanes());
         Expr val;
         const uint64_t b_unsigned = std::abs(*const_int_b);
         if (*const_int_b >= 0) {
-            val = a >> make_const(t, b_unsigned);
+            val = a >> make_const(UInt(a.type().bits()), b_unsigned);
         } else if (*const_int_b < 0) {
-            val = a << make_const(t, b_unsigned);
+            val = a << make_const(UInt(a.type().bits()), b_unsigned);
         }
         return common_subexpression_elimination(val);
     } else {
@@ -449,93 +611,19 @@ Expr lower_signed_shift_right(Expr a, Expr b) {
         // case for the most negative value because its result is unsigned.
         Expr b_unsigned = abs(b);
         Expr val = select(b >= 0, a >> b_unsigned, a << b_unsigned);
-        return simplify(common_subexpression_elimination(val));
+        return common_subexpression_elimination(val);
     }
 }
 
-namespace {
-
-// This mutator rewrites predicated loads and stores as unpredicated
-// loads/stores with explicit conditions, scalarizing if necessary.
-class UnpredicateLoadsStores : public IRMutator {
-    Expr visit(const Load *op) override {
-        if (is_one(op->predicate)) {
-            return IRMutator::visit(op);
-        }
-
-        Expr predicate = mutate(op->predicate);
-        Expr index = mutate(op->index);
-        Expr condition;
-
-        if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
-            Expr unpredicated_load = Load::make(op->type, op->name, index, op->image, op->param,
-                                                const_true(op->type.lanes()), op->alignment);
-            return Call::make(op->type, Call::if_then_else, {scalar_pred->value, unpredicated_load, make_zero(op->type)},
-                              Call::PureIntrinsic);
-        } else {
-            string index_name = "scalarized_load_index";
-            Expr index_var = Variable::make(index.type(), index_name);
-            string predicate_name = "scalarized_load_predicate";
-            Expr predicate_var = Variable::make(predicate.type(), predicate_name);
-
-            vector<Expr> lanes;
-            vector<int> ramp;
-            for (int i = 0; i < op->type.lanes(); i++) {
-                Expr idx_i = Shuffle::make({index_var}, {i});
-                Expr pred_i = Shuffle::make({predicate_var}, {i});
-                Expr unpredicated_load = Load::make(op->type.element_of(), op->name, idx_i, op->image, op->param,
-                                                    const_true(), ModulusRemainder());
-                lanes.push_back(Call::make(op->type.element_of(), Call::if_then_else, {pred_i, unpredicated_load, make_zero(unpredicated_load.type())}, Call::PureIntrinsic));
-                ramp.push_back(i);
-            }
-            Expr expr = Shuffle::make(lanes, ramp);
-            expr = Let::make(predicate_name, predicate, expr);
-            return Let::make(index_name, index, expr);
-        }
+Expr lower_mux(const Call *mux) {
+    internal_assert(mux->args.size() >= 2);
+    Expr equiv = mux->args.back();
+    Expr index = mux->args[0];
+    int num_vals = (int)mux->args.size() - 1;
+    for (int i = num_vals - 1; i >= 0; i--) {
+        equiv = select(index == make_const(index.type(), i), mux->args[i + 1], equiv);
     }
-
-    Stmt visit(const Store *op) override {
-        if (is_one(op->predicate)) {
-            return IRMutator::visit(op);
-        }
-
-        Expr predicate = mutate(op->predicate);
-        Expr value = mutate(op->value);
-        Expr index = mutate(op->index);
-
-        if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
-            Stmt unpredicated_store = Store::make(op->name, value, index, op->param, const_true(value.type().lanes()), op->alignment);
-            return IfThenElse::make(scalar_pred->value, unpredicated_store);
-        } else {
-            string value_name = "scalarized_store_value";
-            Expr value_var = Variable::make(value.type(), value_name);
-            string index_name = "scalarized_store_index";
-            Expr index_var = Variable::make(index.type(), index_name);
-            string predicate_name = "scalarized_store_predicate";
-            Expr predicate_var = Variable::make(predicate.type(), predicate_name);
-
-            vector<Stmt> lanes;
-            for (int i = 0; i < predicate.type().lanes(); i++) {
-                Expr pred_i = Shuffle::make({predicate_var}, {i});
-                Expr value_i = Shuffle::make({value_var}, {i});
-                Expr index_i = Shuffle::make({index_var}, {i});
-                Stmt lane = IfThenElse::make(pred_i, Store::make(op->name, value_i, index_i, op->param, const_true(), ModulusRemainder()));
-                lanes.push_back(lane);
-            }
-            Stmt stmt = Block::make(lanes);
-            stmt = LetStmt::make(predicate_name, predicate, stmt);
-            stmt = LetStmt::make(value_name, value, stmt);
-            return LetStmt::make(index_name, index, stmt);
-        }
-    }
-
-    using IRMutator::visit;
-};
-
-}  // namespace
-
-Stmt unpredicate_loads_stores(Stmt s) {
-    return UnpredicateLoadsStores().mutate(s);
+    return equiv;
 }
 
 bool get_md_bool(llvm::Metadata *value, bool &result) {
@@ -561,7 +649,7 @@ bool get_md_string(llvm::Metadata *value, std::string &result) {
     }
     llvm::MDString *c = llvm::dyn_cast<llvm::MDString>(value);
     if (c) {
-        result = c->getString();
+        result = c->getString().str();
         return true;
     }
     return false;
@@ -572,6 +660,8 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     get_md_bool(module.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi);
     get_md_string(module.getModuleFlag("halide_mcpu"), mcpu);
     get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
+    std::string mabi;
+    get_md_string(module.getModuleFlag("halide_mabi"), mabi);
     bool use_pic = true;
     get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
 
@@ -592,6 +682,7 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
     options.RelaxELFRelocations = false;
+    options.MCOptions.ABIName = mabi;
 }
 
 void clone_target_options(const llvm::Module &from, llvm::Module &to) {
@@ -625,7 +716,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 
     const llvm::Target *llvm_target = llvm::TargetRegistry::lookupTarget(module.getTargetTriple(), error_string);
     if (!llvm_target) {
-        std::cout << error_string << std::endl;
+        std::cout << error_string << "\n";
         llvm::TargetRegistry::printRegisteredTargetsForVersion(llvm::outs());
     }
     auto triple = llvm::Triple(module.getTargetTriple());
@@ -639,20 +730,19 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     bool use_pic = true;
     get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
 
+    bool use_large_code_model = false;
+    get_md_bool(module.getModuleFlag("halide_use_large_code_model"), use_large_code_model);
+
     auto *tm = llvm_target->createTargetMachine(module.getTargetTriple(),
                                                 mcpu, mattrs,
                                                 options,
                                                 use_pic ? llvm::Reloc::PIC_ : llvm::Reloc::Static,
-#ifdef HALIDE_USE_CODEMODEL_LARGE
-                                                llvm::CodeModel::Large,
-#else
-                                                llvm::CodeModel::Small,
-#endif
+                                                use_large_code_model ? llvm::CodeModel::Large : llvm::CodeModel::Small,
                                                 llvm::CodeGenOpt::Aggressive);
     return std::unique_ptr<llvm::TargetMachine>(tm);
 }
 
-void set_function_attributes_for_target(llvm::Function *fn, Target t) {
+void set_function_attributes_for_target(llvm::Function *fn, const Target &t) {
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us.
     fn->addFnAttr("reciprocal-estimates", "none");
@@ -661,14 +751,19 @@ void set_function_attributes_for_target(llvm::Function *fn, Target t) {
 void embed_bitcode(llvm::Module *M, const string &halide_command) {
     // Save llvm.compiler.used and remote it.
     SmallVector<Constant *, 2> used_array;
+#if LLVM_VERSION >= 130
+    SmallVector<GlobalValue *, 4> used_globals;
+#else
     SmallPtrSet<GlobalValue *, 4> used_globals;
+#endif
     llvm::Type *used_element_type = llvm::Type::getInt8Ty(M->getContext())->getPointerTo(0);
     GlobalVariable *used = collectUsedGlobalVariables(*M, used_globals, true);
     for (auto *GV : used_globals) {
         if (GV->getName() != "llvm.embedded.module" &&
-            GV->getName() != "llvm.cmdline")
+            GV->getName() != "llvm.cmdline") {
             used_array.push_back(
                 ConstantExpr::getPointerBitCastOrAddrSpaceCast(GV, used_element_type));
+        }
     }
     if (used) {
         used->eraseFromParent();

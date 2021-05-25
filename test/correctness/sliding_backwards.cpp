@@ -9,7 +9,6 @@ using namespace Halide;
 #define DLLEXPORT
 #endif
 
-
 int call_counter = 0;
 extern "C" DLLEXPORT int count(int arg) {
     call_counter++;
@@ -22,12 +21,12 @@ int main(int argc, char **argv) {
     Var x;
 
     g(x) = count(x);
-    f(x) = g(100-x) + g(100-x+1);
+    f(x) = g(100 - x) + g(100 - x + 1);
 
     g.compute_at(f, x);
     g.store_root();
 
-    f.realize(10);
+    f.realize({10});
 
     if (call_counter != 11) {
         printf("g was called %d times instead of %d\n", call_counter, 11);
@@ -36,5 +35,4 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-
 }

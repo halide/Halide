@@ -5,7 +5,7 @@
 
 using namespace Halide;
 
-template <typename T>
+template<typename T>
 void test() {
     Param<T> bound;
     ImageParam in(UInt(8), 1);
@@ -19,7 +19,7 @@ void test() {
     in.set(foo);
     bound.set(5);
 
-    auto result = f.realize(200);
+    auto result = f.realize({200});
 }
 
 int main(int argc, char **argv) {

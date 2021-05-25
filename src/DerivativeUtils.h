@@ -35,8 +35,8 @@ struct ReductionVariableInfo {
     ReductionDomain domain;
     std::string name;
 };
-std::map<std::string, ReductionVariableInfo> gather_rvariables(Expr expr);
-std::map<std::string, ReductionVariableInfo> gather_rvariables(Tuple tuple);
+std::map<std::string, ReductionVariableInfo> gather_rvariables(const Expr &expr);
+std::map<std::string, ReductionVariableInfo> gather_rvariables(const Tuple &tuple);
 /**
  * Add necessary let expressions to expr
  */
@@ -89,7 +89,7 @@ std::map<std::string, BufferInfo> find_buffer_param_calls(const Func &func);
 /**
  * Find all implicit variables in expr
  */
-std::set<std::string> find_implicit_variables(Expr expr);
+std::set<std::string> find_implicit_variables(const Expr &expr);
 /**
  * Substitute the variable. Also replace all occurrences in rdom.where() predicates.
  */
@@ -100,13 +100,13 @@ Expr substitute_rdom_predicate(
  * Return true if expr contains call to func_name
  */
 bool is_calling_function(
-    const std::string &func_name, Expr expr,
+    const std::string &func_name, const Expr &expr,
     const std::map<std::string, Expr> &let_var_mapping);
 /**
  * Return true if expr depends on any function or buffer
  */
 bool is_calling_function(
-    Expr expr,
+    const Expr &expr,
     const std::map<std::string, Expr> &let_var_mapping);
 
 /**
@@ -115,7 +115,7 @@ bool is_calling_function(
  */
 Expr substitute_call_arg_with_pure_arg(Func f,
                                        int variable_id,
-                                       Expr e);
+                                       const Expr &e);
 
 }  // namespace Internal
 }  // namespace Halide

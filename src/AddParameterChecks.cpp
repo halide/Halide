@@ -12,6 +12,8 @@ using std::pair;
 using std::string;
 using std::vector;
 
+namespace {
+
 // Find all the externally referenced scalar parameters
 class FindParameters : public IRGraphVisitor {
 public:
@@ -25,6 +27,8 @@ public:
         }
     }
 };
+
+}  // namespace
 
 // Insert checks to make sure that parameters are within their
 // declared range.
@@ -77,7 +81,7 @@ Stmt add_parameter_checks(const vector<Stmt> &preconditions, Stmt s, const Targe
                 constrained_value = min(constrained_value, param.max_value());
             }
 
-            lets.push_back({constrained_name, constrained_value});
+            lets.emplace_back(constrained_name, constrained_value);
         }
     }
 

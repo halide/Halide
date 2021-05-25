@@ -102,7 +102,8 @@ public:
         if (auto_schedule) {
             // Nothing.
         } else if (get_target().has_gpu_feature()) {
-            // gpu schedule
+            // GPU schedule.
+            // 3.19ms on an RTX 2060.
             remap.compute_root();
             Var xi, yi;
             output.compute_root().gpu_tile(x, y, xi, yi, 16, 8);
@@ -119,7 +120,16 @@ public:
                 outGPyramid[j].compute_root().gpu_tile(x, y, xi, yi, blockw, blockh);
             }
         } else {
-            // cpu schedule
+            // CPU schedule.
+
+            // 21.4ms on an Intel i9-9960X using 32 threads at 3.7
+            // GHz, using the target x86-64-avx2.
+
+            // This app is dominated by data-dependent loads from
+            // memory, so we're better off leaving the AVX-512 units
+            // off in exchange for a higher clock, and we benefit from
+            // hyperthreading.
+
             remap.compute_root();
             Var yo;
             output.reorder(c, x, y).split(y, yo, y, 64).parallel(yo).vectorize(x, 8);
@@ -138,7 +148,7 @@ public:
                 outGPyramid[j]
                     .store_at(output, yo)
                     .compute_at(output, y)
-                    .fold_storage(y, 8)
+                    .fold_storage(y, 4)
                     .vectorize(x, 8);
             }
             outGPyramid[0].compute_at(output, y).vectorize(x, 8);
@@ -227,8 +237,8 @@ private:
     Func upsample(Func f) {
         using Halide::_;
         Func upx, upy;
-        upx(x, y, _) = 0.25f * f((x / 2) - 1 + 2 * (x % 2), y, _) + 0.75f * f(x / 2, y, _);
-        upy(x, y, _) = 0.25f * upx(x, (y / 2) - 1 + 2 * (y % 2), _) + 0.75f * upx(x, y / 2, _);
+        upx(x, y, _) = lerp(f((x + 1) / 2, y, _), f((x - 1) / 2, y, _), ((x % 2) * 2 + 1) / 4.0f);
+        upy(x, y, _) = lerp(upx(x, (y + 1) / 2, _), upx(x, (y - 1) / 2, _), ((y % 2) * 2 + 1) / 4.0f);
         return upy;
     }
 };

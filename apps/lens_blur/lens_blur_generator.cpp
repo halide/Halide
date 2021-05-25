@@ -53,7 +53,7 @@ public:
         // confidence.
         Func cost_pyramid_push[8];
         cost_pyramid_push[0](x, y, z, c) =
-            select(c == 0, cost(x, y, z) * cost_confidence(x, y), cost_confidence(x, y));
+            mux(c, {cost(x, y, z) * cost_confidence(x, y), cost_confidence(x, y)});
 
         Expr w = left_im.dim(0).extent(), h = left_im.dim(1).extent();
         for (int i = 1; i < 8; i++) {
@@ -100,10 +100,10 @@ public:
         }
 
         Func input_with_alpha;
-        input_with_alpha(x, y, c) = select(c == 0, cast<float>(left(x, y, 0)),
-                                           c == 1, cast<float>(left(x, y, 1)),
-                                           c == 2, cast<float>(left(x, y, 2)),
-                                           255.0f);
+        input_with_alpha(x, y, c) = mux(c, {cast<float>(left(x, y, 0)),
+                                            cast<float>(left(x, y, 1)),
+                                            cast<float>(left(x, y, 2)),
+                                            255.0f});
 
         // Render a blurred image
         Func output;
@@ -155,15 +155,15 @@ public:
         // (This can be useful in conjunction with RunGen and benchmarks as well
         // as auto-schedule, so we do it in all cases.)
         // Provide estimates on the input image
-        left_im.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
-        right_im.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
+        left_im.set_estimates({{0, 192}, {0, 320}, {0, 3}});
+        right_im.set_estimates({{0, 192}, {0, 320}, {0, 3}});
         // Provide estimates on the parameters
         slices.set_estimate(32);
         focus_depth.set_estimate(13);
         blur_radius_scale.set_estimate(0.5f);
         aperture_samples.set_estimate(32);
         // Provide estimates on the pipeline output
-        final.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
+        final.set_estimates({{0, 192}, {0, 320}, {0, 3}});
 
         /* THE SCHEDULE */
         if (auto_schedule) {

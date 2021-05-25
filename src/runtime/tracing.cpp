@@ -5,10 +5,11 @@
 extern "C" {
 
 typedef int32_t (*trace_fn)(void *, const halide_trace_event_t *);
-
 }
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 // A spinlock that allows for shared and exclusive access. It's
 // equivalent to a reader-writer lock, but in my case the "readers"
@@ -16,7 +17,7 @@ namespace Halide { namespace Runtime { namespace Internal {
 // that's a bad name. We use the __sync primitives used elsewhere in
 // the runtime for atomic work. They are well supported by clang.
 class SharedExclusiveSpinLock {
-    volatile uint32_t lock;
+    volatile uint32_t lock = 0;
 
     // Covers a single bit indicating one owner has exclusive
     // access. The waiting bit can be set while the exclusive bit is
@@ -35,8 +36,8 @@ class SharedExclusiveSpinLock {
     const static uint32_t shared_mask = 0x3fffffff;
 
 public:
-    __attribute__((always_inline)) void acquire_shared() {
-        while (1) {
+    ALWAYS_INLINE void acquire_shared() {
+        while (true) {
             uint32_t x = lock & shared_mask;
             if (__sync_bool_compare_and_swap(&lock, x, x + 1)) {
                 return;
@@ -44,12 +45,12 @@ public:
         }
     }
 
-     __attribute__((always_inline)) void release_shared() {
+    ALWAYS_INLINE void release_shared() {
         __sync_fetch_and_sub(&lock, 1);
     }
 
-    __attribute__((always_inline)) void acquire_exclusive() {
-        while (1) {
+    ALWAYS_INLINE void acquire_exclusive() {
+        while (true) {
             // If multiple threads are trying to acquire exclusive
             // ownership, we may need to rerequest exclusive waiting
             // while we spin, as it gets unset whenever a thread
@@ -61,27 +62,27 @@ public:
         }
     }
 
-    __attribute__((always_inline)) void release_exclusive() {
+    ALWAYS_INLINE void release_exclusive() {
         __sync_fetch_and_and(&lock, ~exclusive_held_mask);
     }
 
-    __attribute__((always_inline)) void init() {
-    	lock = 0;
+    ALWAYS_INLINE void init() {
+        lock = 0;
     }
 
-    SharedExclusiveSpinLock() : lock(0) {}
+    SharedExclusiveSpinLock() = default;
 };
 
 const static int buffer_size = 1024 * 1024;
 
 class TraceBuffer {
     SharedExclusiveSpinLock lock;
-    uint32_t cursor, overage;
+    uint32_t cursor = 0, overage = 0;
     uint8_t buf[buffer_size];
 
     // Attempt to atomically acquire space in the buffer to write a
-    // packet. Returns NULL if the buffer was full.
-    __attribute__((always_inline)) halide_trace_packet_t *try_acquire_packet(void *user_context, uint32_t size) {
+    // packet. Returns nullptr if the buffer was full.
+    ALWAYS_INLINE halide_trace_packet_t *try_acquire_packet(void *user_context, uint32_t size) {
         lock.acquire_shared();
         halide_assert(user_context, size <= buffer_size);
         uint32_t my_cursor = __sync_fetch_and_add(&cursor, size);
@@ -92,17 +93,16 @@ class TraceBuffer {
             // remove the overage.
             __sync_fetch_and_add(&overage, size);
             lock.release_shared();
-            return NULL;
+            return nullptr;
         } else {
             return (halide_trace_packet_t *)(buf + my_cursor);
         }
     }
 
 public:
-
     // Wait for all writers to finish with their packets, stall any
     // new writers, and flush the buffer to the fd.
-    __attribute__((always_inline)) void flush(void *user_context, int fd) {
+    ALWAYS_INLINE void flush(void *user_context, int fd) {
         lock.acquire_exclusive();
         bool success = true;
         if (cursor) {
@@ -120,8 +120,8 @@ public:
     // if necessary. The region acquired is protected from other
     // threads writing or reading to it, so it must be released before
     // a flush can occur.
-    __attribute__((always_inline)) halide_trace_packet_t *acquire_packet(void *user_context, int fd, uint32_t size) {
-        halide_trace_packet_t *packet = NULL;
+    ALWAYS_INLINE halide_trace_packet_t *acquire_packet(void *user_context, int fd, uint32_t size) {
+        halide_trace_packet_t *packet = nullptr;
         while (!(packet = try_acquire_packet(user_context, size))) {
             // Couldn't acquire space to write a packet. Flush and try again.
             flush(user_context, fd);
@@ -130,28 +130,30 @@ public:
     }
 
     // Release a packet, allowing it to be written out with flush
-    __attribute__((always_inline)) void release_packet(halide_trace_packet_t *) {
+    ALWAYS_INLINE void release_packet(halide_trace_packet_t *) {
         // Need a memory barrier to guarantee all the writes are done.
         __sync_synchronize();
         lock.release_shared();
     }
 
-    __attribute__((always_inline)) void init() {
-    	cursor = 0;
-    	overage = 0;
-    	lock.init();
+    ALWAYS_INLINE void init() {
+        cursor = 0;
+        overage = 0;
+        lock.init();
     }
 
-    TraceBuffer() : cursor(0), overage(0) {}
+    TraceBuffer() = default;
 };
 
-WEAK TraceBuffer *halide_trace_buffer = NULL;
-WEAK int halide_trace_file = -1; // -1 indicates uninitialized
-WEAK int halide_trace_file_lock = 0;
+WEAK TraceBuffer *halide_trace_buffer = nullptr;
+WEAK int halide_trace_file = -1;  // -1 indicates uninitialized
+WEAK ScopedSpinLock::AtomicFlag halide_trace_file_lock = 0;
 WEAK bool halide_trace_file_initialized = false;
-WEAK void *halide_trace_file_internally_opened = NULL;
+WEAK void *halide_trace_file_internally_opened = nullptr;
 
-}}}
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 extern "C" {
 
@@ -176,7 +178,7 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
         halide_trace_packet_t *packet = halide_trace_buffer->acquire_packet(user_context, fd, total_size);
 
         if (total_size > 4096) {
-            print(NULL) << total_size << "\n";
+            print(nullptr) << total_size << "\n";
         }
 
         // Write a packet into it
@@ -211,7 +213,9 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
 
         // Round up bits to 8, 16, 32, or 64
         int print_bits = 8;
-        while (print_bits < e->type.bits) print_bits <<= 1;
+        while (print_bits < e->type.bits) {
+            print_bits <<= 1;
+        }
         halide_assert(user_context, print_bits <= 64 && "Tracing bad type");
 
         // Otherwise, use halide_print and a plain-text format
@@ -285,7 +289,7 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
                     if (print_bits == 32) {
                         ss << ((float *)(e->value))[i];
                     } else if (print_bits == 16) {
-                        ss.write_float16_from_bits( ((uint16_t *)(e->value))[i]);
+                        ss.write_float16_from_bits(((uint16_t *)(e->value))[i]);
                     } else {
                         ss << ((double *)(e->value))[i];
                     }
@@ -314,13 +318,17 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
     return my_id;
 }
 
-} // extern "C"
+}  // extern "C"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 
 WEAK trace_fn halide_custom_trace = halide_default_trace;
 
-}}} // namespace Halide::Runtime::Internal
+}
+}  // namespace Runtime
+}  // namespace Halide
 
 extern "C" {
 
@@ -365,7 +373,7 @@ WEAK int halide_shutdown_trace() {
         int ret = fclose(halide_trace_file_internally_opened);
         halide_trace_file = 0;
         halide_trace_file_initialized = false;
-        halide_trace_file_internally_opened = NULL;
+        halide_trace_file_internally_opened = nullptr;
         if (halide_trace_buffer) {
             free(halide_trace_buffer);
         }
@@ -376,10 +384,8 @@ WEAK int halide_shutdown_trace() {
 }
 
 namespace {
-__attribute__((destructor))
-WEAK void halide_trace_cleanup() {
+WEAK __attribute__((destructor)) void halide_trace_cleanup() {
     halide_shutdown_trace();
 }
-}
-
+}  // namespace
 }

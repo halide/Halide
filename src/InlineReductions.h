@@ -1,7 +1,9 @@
 #ifndef HALIDE_INLINE_REDUCTIONS_H
 #define HALIDE_INLINE_REDUCTIONS_H
 
-#include "IR.h"
+#include <string>
+
+#include "Expr.h"
 #include "RDom.h"
 #include "Tuple.h"
 
@@ -9,6 +11,8 @@
  * Defines some inline reductions: sum, product, minimum, maximum.
  */
 namespace Halide {
+
+class Func;
 
 /** An inline reduction. This is suitable for convolution-type
  * operations - the reduction will be computed in the innermost loop
@@ -34,6 +38,7 @@ namespace Halide {
  */
 //@{
 Expr sum(Expr, const std::string &s = "sum");
+Expr saturating_sum(Expr, const std::string &s = "saturating_sum");
 Expr product(Expr, const std::string &s = "product");
 Expr maximum(Expr, const std::string &s = "maximum");
 Expr minimum(Expr, const std::string &s = "minimum");
@@ -49,10 +54,11 @@ Expr minimum(Expr, const std::string &s = "minimum");
  \endcode
 */
 // @{
-Expr sum(RDom, Expr, const std::string &s = "sum");
-Expr product(RDom, Expr, const std::string &s = "product");
-Expr maximum(RDom, Expr, const std::string &s = "maximum");
-Expr minimum(RDom, Expr, const std::string &s = "minimum");
+Expr sum(const RDom &, Expr, const std::string &s = "sum");
+Expr saturating_sum(const RDom &r, Expr e, const std::string &s = "saturating_sum");
+Expr product(const RDom &, Expr, const std::string &s = "product");
+Expr maximum(const RDom &, Expr, const std::string &s = "maximum");
+Expr minimum(const RDom &, Expr, const std::string &s = "minimum");
 // @}
 
 /** Returns an Expr or Tuple representing the coordinates of the point
@@ -62,9 +68,31 @@ Expr minimum(RDom, Expr, const std::string &s = "minimum");
 // @{
 Tuple argmax(Expr, const std::string &s = "argmax");
 Tuple argmin(Expr, const std::string &s = "argmin");
-Tuple argmax(RDom, Expr, const std::string &s = "argmax");
-Tuple argmin(RDom, Expr, const std::string &s = "argmin");
+Tuple argmax(const RDom &, Expr, const std::string &s = "argmax");
+Tuple argmin(const RDom &, Expr, const std::string &s = "argmin");
 // @}
+
+/** Inline reductions create an anonymous helper Func to do the
+ * work. The variants below instead take a named Func object to use,
+ * so that it is no longer anonymous and can be scheduled
+ * (e.g. unrolled across the reduction domain). The Func passed must
+ * not have any existing definition. */
+//@{
+Expr sum(Expr, const Func &);
+Expr saturating_sum(Expr, const Func &);
+Expr product(Expr, const Func &);
+Expr maximum(Expr, const Func &);
+Expr minimum(Expr, const Func &);
+Expr sum(const RDom &, Expr, const Func &);
+Expr saturating_sum(const RDom &r, Expr e, const Func &);
+Expr product(const RDom &, Expr, const Func &);
+Expr maximum(const RDom &, Expr, const Func &);
+Expr minimum(const RDom &, Expr, const Func &);
+Tuple argmax(Expr, const Func &);
+Tuple argmin(Expr, const Func &);
+Tuple argmax(const RDom &, Expr, const Func &);
+Tuple argmin(const RDom &, Expr, const Func &);
+//@}
 
 }  // namespace Halide
 

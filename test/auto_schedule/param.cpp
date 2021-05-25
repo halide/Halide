@@ -114,13 +114,25 @@ void run_test_4() {
 }
 
 int main(int argc, char **argv) {
-    std::cout << "Test 1:" << std::endl;
+    if (get_jit_target_from_environment().arch == Target::WebAssembly) {
+        printf("[SKIP] Autoschedulers do not support WebAssembly.\n");
+        return 0;
+    }
+
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <autoscheduler-lib>\n", argv[0]);
+        return 1;
+    }
+
+    load_plugin(argv[1]);
+
+    std::cout << "Test 1:\n";
     run_test_1();
-    std::cout << "Test 2:" << std::endl;
+    std::cout << "Test 2:\n";
     run_test_2();
-    std::cout << "Test 3:" << std::endl;
+    std::cout << "Test 3:\n";
     run_test_3();
-    std::cout << "Test 4:" << std::endl;
+    std::cout << "Test 4:\n";
     run_test_4();
     printf("Success!\n");
     return 0;

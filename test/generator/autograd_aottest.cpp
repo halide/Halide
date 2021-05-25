@@ -26,9 +26,9 @@ int main(int argc, char **argv) {
     Buffer<float> c(kSize);
     Buffer<float> out(kSize);
 
-    a.for_each_element([&](int x) { a(x) = (float) x; });
-    b.for_each_element([&](int x) { b(x) = (float) x; });
-    c.for_each_element([&](int x) { c(x) = (float) x; });
+    a.for_each_element([&](int x) { a(x) = (float)x; });
+    b.for_each_element([&](int x) { b(x) = (float)x; });
+    c.for_each_element([&](int x) { c(x) = (float)x; });
 
     Buffer<uint8_t> lut(256);
     Buffer<uint8_t> lut_indices(kSize);
@@ -46,13 +46,13 @@ int main(int argc, char **argv) {
         assert(expected == actual);
     });
     out_lut.for_each_element([&](int x) {
-        uint8_t expected = (uint8_t) (x * 2) ^ 0xAA;
+        uint8_t expected = (uint8_t)(x * 2) ^ 0xAA;
         uint8_t actual = out_lut(x);
         assert(expected == actual);
     });
 
     Buffer<float> L(kSize);
-    L.for_each_element([&](int x) { L(x) = (float) (x - kSize / 2); });
+    L.for_each_element([&](int x) { L(x) = (float)(x - kSize / 2); });
 
     /*
         The gradient version should have the following args (in this order):
@@ -105,8 +105,7 @@ int main(int argc, char **argv) {
                            dummy_grad_loss_output_lut_wrt_input_b,
                            dummy_grad_loss_output_lut_wrt_input_c,
                            grad_loss_output_lut_wrt_lut,
-                           grad_loss_output_lut_wrt_lut_indices
-                           );
+                           grad_loss_output_lut_wrt_lut_indices);
     if (result != 0) {
         exit(-1);
     }

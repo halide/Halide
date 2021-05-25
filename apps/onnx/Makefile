@@ -1,11 +1,9 @@
 include ../support/Makefile.inc
 
-
 PROTOC := $(shell which protoc)
 
 ifdef PROTOC
 
-PROTOCFLAGS = --cpp_out=.
 CXXFLAGS += -DGOOGLE_PROTOBUF_NO_RTTI -Wno-sign-compare -Wno-unused-but-set-variable
 CXXFLAGS += -I$(dir $(PROTOC))../include
 LDFLAGS += -L$(dir $(PROTOC))../lib
@@ -14,17 +12,17 @@ LDFLAGS += -lprotobuf-lite
 # Copy onnx.proto to $(BIN)
 $(BIN)/%/onnx/onnx.proto:
 	@mkdir -p $(@D)
-	if [ -f $(ONNX_SRC_DIR)/onnx/onnx.proto ]; then \
+	@if [ -f $(ONNX_SRC_DIR)/onnx/onnx.proto ]; then \
 		cp $(ONNX_SRC_DIR)/onnx/onnx.proto $@ ; \
 	else \
-		curl https://raw.githubusercontent.com/onnx/onnx/v1.4.1/onnx/onnx.proto > $@; \
+		curl -s https://raw.githubusercontent.com/onnx/onnx/v1.4.1/onnx/onnx.proto > $@; \
 	fi
 
 # protoc generates two files
 $(BIN)/%/onnx/onnx.pb.cc: $(BIN)/%/onnx/onnx.proto
 	@sed -i -e 's/package onnx;/package onnx;option optimize_for = LITE_RUNTIME;/g' $<
 	@mkdir -p $(@D)
-	$(PROTOC) $(PROTOCFLAGS) $<
+	$(PROTOC) --cpp_out=$(@D) --proto_path=$(dir $<) $<
 
 $(BIN)/%/onnx/onnx_pb.h: $(BIN)/%/onnx/onnx.pb.cc
 	cp $(BIN)/$*/onnx/onnx.pb.h $@
@@ -44,11 +42,11 @@ clean:
 
 # Simple unit test
 $(BIN)/%/onnx_converter_test: onnx_converter_test.cc $(BIN)/%/oclib.a
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN)/$* $^ -o $@ $(LDFLAGS) $(LIB_HALIDE) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN)/$* $^ -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 $(GENERATOR_BIN)/onnx_converter.generator : onnx_converter_generator.cc $(GENERATOR_DEPS) $(GENERATOR_BIN)/oclib.a
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -I$(GENERATOR_BIN) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) -I$(GENERATOR_BIN) -g -fno-rtti $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # Convolution with autopad=SAME_UPPER isn't supported yet (Also deprecated). TODO Enable this.
 #$(BIN)/%/onnx_model_zoo/mnist/model.onnx:
@@ -62,7 +60,7 @@ $(GENERATOR_BIN)/onnx_converter.generator : onnx_converter_generator.cc $(GENERA
 
 $(BIN)/%/test_model.onnx: test_model_proto.txt $(BIN)/%/onnx/onnx.proto
 	@mkdir -p $(@D)
-	cat $< | protoc --encode=onnx.ModelProto $(BIN)/$*/onnx/onnx.proto > $@
+	cat $< | $(PROTOC) --encode=onnx.ModelProto --proto_path=$(BIN)/$*/onnx $(BIN)/$*/onnx/onnx.proto > $@
 
 $(BIN)/%/test_model.a: $(GENERATOR_BIN)/onnx_converter.generator $(BIN)/%/test_model.onnx
 	@mkdir -p $(@D)
@@ -72,7 +70,9 @@ $(BIN)/%/onnx_converter_generator_test: onnx_converter_generator_test.cc $(BIN)/
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -I$(BIN)/$* $^ -o $@ $(LDFLAGS)
 
-test: $(BIN)/$(HL_TARGET)/onnx_converter_test $(BIN)/$(HL_TARGET)/onnx_converter_generator_test
+build: $(BIN)/$(HL_TARGET)/onnx_converter_test $(BIN)/$(HL_TARGET)/onnx_converter_generator_test
+
+test: build
 	LD_LIBRARY_PATH=$(BIN) $(BIN)/$(HL_TARGET)/onnx_converter_test
 	LD_LIBRARY_PATH=$(BIN) $(BIN)/$(HL_TARGET)/onnx_converter_generator_test
 
@@ -88,7 +88,7 @@ PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS) -Wno-deprecated-register -Wno-depre
 
 # Python extension for HalideModel
 $(BIN)/%/$(PY_MODEL_EXT): model.cpp $(BIN)/%/oclib.a
-	$(CXX) $(PYCXXFLAGS) -Wall -shared -fPIC -I$(BIN)/$* $^ $(LIB_HALIDE) -o $@ $(LDFLAGS)
+	$(CXX) $(PYCXXFLAGS) -Wall -shared -fPIC -I$(BIN)/$* $^ $(LIBHALIDE_LDFLAGS) -o $@ $(LDFLAGS)
 
 
 model_test: $(BIN)/$(HL_TARGET)/$(PY_MODEL_EXT)
@@ -99,6 +99,8 @@ halide_as_onnx_backend_test: $(BIN)/$(HL_TARGET)/$(PY_MODEL_EXT)
 
 # No Protoc
 else
-test:
+build:
 	@echo "No protoc in $(PATH), you need to install protocol buffers"
+test: build
+
 endif

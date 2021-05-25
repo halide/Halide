@@ -14,9 +14,8 @@ int main(int argc, char **argv) {
     f.gpu_tile(x, xo, xi, 16).reorder(xo, xi);
 
     f.compile_jit(t);
-    Buffer<int> result = f.realize(16);
+    Buffer<int> result = f.realize({16});
 
-    printf("There should have been an error\n");
+    printf("Success!\n");
     return 0;
 }
-

@@ -3,7 +3,6 @@
 
 using namespace Halide;
 
-
 int main(int argc, char **argv) {
     Var x, y;
 
@@ -15,7 +14,7 @@ int main(int argc, char **argv) {
         f(x, y) = random_float();
         f.vectorize(x, 4);
         f.parallel(y);
-        Buffer<float> rand_image = f.realize(1024, 1024);
+        Buffer<float> rand_image = f.realize({1024, 1024});
 
         // Do some tests for randomness.
 
@@ -44,7 +43,7 @@ int main(int argc, char **argv) {
             return -1;
         }
 
-        if (fabs(variance - 1.0/12) > tol) {
+        if (fabs(variance - 1.0 / 12) > tol) {
             printf("Bad variance: %f\n", variance);
             return -1;
         }
@@ -54,7 +53,7 @@ int main(int argc, char **argv) {
             return -1;
         }
 
-        if (fabs(variance_dx - 1.0/6) > tol) {
+        if (fabs(variance_dx - 1.0 / 6) > tol) {
             printf("Bad variance_dx: %f\n", variance_dx);
             return -1;
         }
@@ -64,12 +63,11 @@ int main(int argc, char **argv) {
             return -1;
         }
 
-        if (fabs(variance_dy - 1.0/6) > tol) {
+        if (fabs(variance_dy - 1.0 / 6) > tol) {
             printf("Bad variance_dy: %f\n", variance_dy);
             return -1;
         }
     }
-
 
     // The same random seed should produce the same image, and
     // different random seeds should produce statistically independent
@@ -82,14 +80,14 @@ int main(int argc, char **argv) {
 
         seed.set(0);
 
-        Buffer<double> im1 = f.realize(1024, 1024);
-        Buffer<double> im2 = f.realize(1024, 1024);
+        Buffer<double> im1 = f.realize({1024, 1024});
+        Buffer<double> im2 = f.realize({1024, 1024});
 
         Func g;
         g(x, y) = f(x, y);
         seed.set(1);
 
-        Buffer<double> im3 = g.realize(1024, 1024);
+        Buffer<double> im3 = g.realize({1024, 1024});
 
         RDom r(im1);
         Expr v1 = im1(r.x, r.y);
@@ -101,13 +99,15 @@ int main(int argc, char **argv) {
 
         if (e1 != 0.0) {
             printf("The same random seed should produce the same image. "
-                   "Instead the mean absolute difference was: %f\n", e1);
+                   "Instead the mean absolute difference was: %f\n",
+                   e1);
             return -1;
         }
 
-        if (fabs(e2 - 1.0/3) > 0.01) {
+        if (fabs(e2 - 1.0 / 3) > 0.01) {
             printf("Different random seeds should produce different images. "
-                   "The mean absolute difference should be 1/3 but was %f\n", e2);
+                   "The mean absolute difference should be 1/3 but was %f\n",
+                   e2);
             return -1;
         }
     }
@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
     {
         Func f;
         f(x, y) = random_int();
-        Buffer<int> im = f.realize(1024, 1024);
+        Buffer<int> im = f.realize({1024, 1024});
 
         // Count the number of set bits;
         RDom r(im);
@@ -138,7 +138,6 @@ int main(int argc, char **argv) {
             printf("Set bits was %d instead of %d\n", set_bits, correct);
             return -1;
         }
-
     }
 
     // Check independence and dependence.
@@ -163,12 +162,12 @@ int main(int argc, char **argv) {
         double f_var = evaluate<double>(sum(f_val * f_val)) / (S * S - 1);
         double g_var = evaluate<double>(sum(g_val * g_val)) / (S * S - 1);
 
-        if (fabs(f_var - 1.0/3) > tol) {
+        if (fabs(f_var - 1.0 / 3) > tol) {
             printf("Variance of f was supposed to be 1/3: %f\n", f_var);
             return -1;
         }
 
-        if (fabs(g_var - 1.0/6) > tol) {
+        if (fabs(g_var - 1.0 / 6) > tol) {
             printf("Variance of g was supposed to be 1/6 %f\n", g_var);
             return -1;
         }
@@ -178,4 +177,3 @@ int main(int argc, char **argv) {
 
     return 0;
 }
-

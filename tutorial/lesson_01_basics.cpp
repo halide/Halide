@@ -3,12 +3,12 @@
 // This lesson demonstrates basic usage of Halide as a JIT compiler for imaging.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_01*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_01 -std=c++11
-// LD_LIBRARY_PATH=../bin ./lesson_01
+// g++ lesson_01*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_01 -std=c++11
+// LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_01
 
 // On os x:
-// g++ lesson_01*.cpp -g -I ../include -L ../bin -lHalide -o lesson_01 -std=c++11
-// DYLD_LIBRARY_PATH=../bin ./lesson_01
+// g++ lesson_01*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_01 -std=c++11
+// DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_01
 
 // If you have the entire Halide source tree, you can also build it by
 // running:
@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
     // resolution of the output image. Halide.h also provides a basic
     // templatized image type we can use. We'll make an 800 x 600
     // image.
-    Halide::Buffer<int32_t> output = gradient.realize(800, 600);
+    Halide::Buffer<int32_t> output = gradient.realize({800, 600});
 
     // Halide does type inference for you. Var objects represent
     // 32-bit integers, so the Expr object 'x + y' also represents a
@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
             if (output(i, j) != i + j) {
                 printf("Something went wrong!\n"
                        "Pixel %d, %d was supposed to be %d, but instead it's %d\n",
-                       i, j, i+j, output(i, j));
+                       i, j, i + j, output(i, j));
                 return -1;
             }
         }

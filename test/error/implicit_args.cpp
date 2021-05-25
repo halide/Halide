@@ -20,5 +20,6 @@ int main(int argc, char **argv) {
     f(x, _) = g(_) + 2;
     f(x, _) += h(_) + 3;
 
+    printf("Success!\n");
     return 0;
 }

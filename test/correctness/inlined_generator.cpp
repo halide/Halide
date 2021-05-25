@@ -14,15 +14,16 @@ class Example : public Generator<Example> {
 public:
     using Generator<Example>::Generator;
 
-    enum class SomeEnum { Foo, Bar };
+    enum class SomeEnum { Foo,
+                          Bar };
 
-    GeneratorParam<float> compiletime_factor{ "compiletime_factor", 1, 0, 100 };
-    GeneratorParam<bool> vectorize{ "vectorize", true };
+    GeneratorParam<float> compiletime_factor{"compiletime_factor", 1, 0, 100};
+    GeneratorParam<bool> vectorize{"vectorize", true};
 
-    Input<float> runtime_factor{ "runtime_factor", 1.0 };
-    Input<int> runtime_offset{ "runtime_offset", 0 };
+    Input<float> runtime_factor{"runtime_factor", 1.0};
+    Input<int> runtime_offset{"runtime_offset", 0};
 
-    Output<Func> output{ "output", Int(32), 3 };
+    Output<Func> output{"output", Int(32), 3};
 
     void generate() {
         Func f;
@@ -53,7 +54,7 @@ int main(int argc, char **argv) {
         // (Note that this uses the default values for all GeneratorParams.)
         auto gen = context.apply<Example>(kRuntimeFactor, kRuntimeOffset);  // gen's type is std::unique_ptr<Example>
 
-        Buffer<int32_t> img = gen->realize(kSize, kSize, 3);
+        Buffer<int32_t> img = gen->realize({kSize, kSize, 3});
         verify(img, gen->compiletime_factor, kRuntimeFactor, kRuntimeOffset);
     }
 
@@ -69,12 +70,10 @@ int main(int argc, char **argv) {
 
         gen->apply(kRuntimeFactor, kRuntimeOffset);
 
-
-        Buffer<int32_t> img = gen->realize(kSize, kSize, 3);
+        Buffer<int32_t> img = gen->realize({kSize, kSize, 3});
         verify(img, gen->compiletime_factor, kRuntimeFactor, kRuntimeOffset);
     }
 
     printf("Success!\n");
     return 0;
 }
-

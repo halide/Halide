@@ -15,12 +15,12 @@ int main(int argc, char **argv) {
     Func cum_sum;
     cum_sum(x) = 0;
     RDom r(0, 1000);
-    cum_sum(r+1) = f(r) + cum_sum(r);
+    cum_sum(r + 1) = f(r) + cum_sum(r);
     cum_sum.compute_root();
 
     // Write out the coordinates of all the ones. We'd use Tuples in the 2d case.
     Func ones;
-    ones(x) = -1; // Initialize to -1 as a sentinel.
+    ones(x) = -1;  // Initialize to -1 as a sentinel.
 
     // Figure out which bin each coordinate should go into. Need a
     // clamp so that Halide knows how much space to allocate for ones.
@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
     // for Halide to prove:
     ones.update().allow_race_conditions().parallel(r, 50);
 
-    Buffer<int> result = ones.realize(1001);
+    Buffer<int> result = ones.realize({1001});
     int next = 0;
     for (int i = 0; i < result.width(); i++) {
         if (result(i) != next) {
@@ -48,6 +48,6 @@ int main(int argc, char **argv) {
         if (next >= 1000) break;
     }
 
+    printf("Success!\n");
     return 0;
-
 }

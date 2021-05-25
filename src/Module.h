@@ -8,16 +8,20 @@
 
 #include <functional>
 #include <map>
-#include <set>
+#include <memory>
 #include <string>
 
 #include "Argument.h"
+#include "Expr.h"
 #include "ExternalCode.h"
-#include "IR.h"
+#include "Function.h"  // for NameMangling
 #include "ModulusRemainder.h"
-#include "Target.h"
 
 namespace Halide {
+
+template<typename T>
+class Buffer;
+struct Target;
 
 /** Enums specifying various kinds of outputs that can be produced from a Halide Pipeline. */
 enum class Output {
@@ -25,6 +29,7 @@ enum class Output {
     bitcode,
     c_header,
     c_source,
+    compiler_log,
     cpp_stub,
     featurization,
     llvm_assembly,
@@ -50,8 +55,23 @@ namespace Internal {
 
 struct OutputInfo {
     std::string name, extension;
+
+    // `is_multi` indicates how these outputs are generated
+    // when using the compile_to_multitarget_xxx() APIs (or via the
+    // Generator command-line mode):
+    //
+    // - If `is_multi` is true, then a separate file of this Output type is
+    //   generated for each target in the multitarget (e.g. object files,
+    //   assembly files, etc). Each of the files will have a suffix appended
+    //   that is based on the specific subtarget.
+    //
+    // - If `is_multi` is false, then only one file of this Output type
+    //   regardless of how many targets are in the multitarget. No additional
+    //   suffix will be appended to the filename.
+    //
+    bool is_multi{false};
 };
-std::map<Output, OutputInfo> get_output_info(const Target &target);
+std::map<Output, const OutputInfo> get_output_info(const Target &target);
 
 /** Definition of an argument to a LoweredFunc. This is similar to
  * Argument, except it enables passing extra information useful to
@@ -105,7 +125,8 @@ struct LoweredFunc {
 
 namespace Internal {
 struct ModuleContents;
-}
+class CompilerLogger;
+}  // namespace Internal
 
 struct AutoSchedulerResults;
 
@@ -133,7 +154,7 @@ public:
 
     /** The declarations contained in this module. */
     // @{
-    const std::vector<Buffer<>> &buffers() const;
+    const std::vector<Buffer<void>> &buffers() const;
     const std::vector<Internal::LoweredFunc> &functions() const;
     std::vector<Internal::LoweredFunc> &functions();
     const std::vector<Module> &submodules() const;
@@ -146,7 +167,7 @@ public:
 
     /** Add a declaration to this module. */
     // @{
-    void append(const Buffer<> &buffer);
+    void append(const Buffer<void> &buffer);
     void append(const Internal::LoweredFunc &function);
     void append(const Module &module);
     void append(const ExternalCode &external_code);
@@ -186,7 +207,7 @@ Module link_modules(const std::string &name, const std::vector<Module> &modules)
 /** Create an object file containing the Halide runtime for a given target. For
  * use with Target::NoRuntime. Standalone runtimes are only compatible with
  * pipelines compiled by the same build of Halide used to call this function. */
-void compile_standalone_runtime(const std::string &object_filename, Target t);
+void compile_standalone_runtime(const std::string &object_filename, const Target &t);
 
 /** Create an object and/or static library file containing the Halide runtime
  * for a given target. For use with Target::NoRuntime. Standalone runtimes are
@@ -194,14 +215,17 @@ void compile_standalone_runtime(const std::string &object_filename, Target t);
  * call this function. Return a map with just the actual outputs filled in
  * (typically, Output::object and/or Output::static_library).
  */
-std::map<Output, std::string> compile_standalone_runtime(const std::map<Output, std::string> &output_files, Target t);
+std::map<Output, std::string> compile_standalone_runtime(const std::map<Output, std::string> &output_files, const Target &t);
 
-typedef std::function<Module(const std::string &, const Target &)> ModuleProducer;
+using ModuleFactory = std::function<Module(const std::string &fn_name, const Target &target)>;
+using CompilerLoggerFactory = std::function<std::unique_ptr<Internal::CompilerLogger>(const std::string &fn_name, const Target &target)>;
 
 void compile_multitarget(const std::string &fn_name,
                          const std::map<Output, std::string> &output_files,
                          const std::vector<Target> &targets,
-                         ModuleProducer module_producer);
+                         const std::vector<std::string> &suffixes,
+                         const ModuleFactory &module_factory,
+                         const CompilerLoggerFactory &compiler_logger_factory = nullptr);
 
 }  // namespace Halide
 

@@ -22,13 +22,13 @@ int main(int argc, char **argv) {
         g(x, y) = input(x, y) + 1.0f;
 
         g.compute_root();
-        f(x, y) = g(cast<int>(x/p), y);
+        f(x, y) = g(cast<int>(x / p), y);
 
         f.set_error_handler(my_error_handler);
 
         error_occurred = false;
         p.set(2);
-        f.realize(100, 100);
+        f.realize({100, 100});
         if (error_occurred) {
             printf("Error incorrectly raised\n");
             return -1;
@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 
         p.set(0);
         error_occurred = false;
-        f.realize(100, 100);
+        f.realize({100, 100});
         if (!error_occurred) {
             printf("Error should have been raised\n");
             return -1;
@@ -53,12 +53,12 @@ int main(int argc, char **argv) {
         g(x, y) = input(x, y) + 1.0f;
 
         g.compute_root();
-        f(x, y) = g(cast<int>(x/p), y);
+        f(x, y) = g(cast<int>(x / p), y);
 
         f.set_error_handler(my_error_handler);
 
         error_occurred = false;
-        f.realize(100, 100);
+        f.realize({100, 100});
         if (error_occurred) {
             printf("Error incorrectly raised\n");
             return -1;
@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
 
         p.set(0);
         error_occurred = false;
-        f.realize(100, 100);
+        f.realize({100, 100});
         if (!error_occurred) {
             printf("Error should have been raised\n");
             return -1;

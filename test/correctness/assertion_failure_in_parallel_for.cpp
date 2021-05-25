@@ -1,10 +1,10 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <atomic>
+#include <stdio.h>
 
 using namespace Halide;
 
-std::atomic<bool> error_occurred(false);
+std::atomic<bool> error_occurred{false};
 
 void halide_error(void *ctx, const char *msg) {
     printf("Expected: %s\n", msg);
@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
     split.set(11);
 
     g.set_error_handler(&halide_error);
-    g.realize(40, 40);
+    g.realize({40, 40});
 
     if (!error_occurred) {
         printf("There was supposed to be an error\n");

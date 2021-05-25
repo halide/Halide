@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
     ImageParam in(UInt(8), 1);
     Buffer<uint8_t> mapping(9);
     int i = 0;
-    for (uint8_t v :  { 4, 2, 8, 5, 1, 7, 0, 3, 6 }) { // Random permutation of 0..7
+    for (uint8_t v : {4, 2, 8, 5, 1, 7, 0, 3, 6}) {  // Random permutation of 0..7
         mapping(i++) = v;
     }
 
@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
         }
         in.set(data);
 
-        Realization result = f.realize(16);
+        Realization result = f.realize({16});
         Buffer<uint8_t> popc_result = result[0];
         Buffer<uint8_t> clz_result = result[1];
         Buffer<uint8_t> ctz_result = result[2];

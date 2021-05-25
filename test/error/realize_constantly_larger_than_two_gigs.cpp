@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <memory>
+#include <stdio.h>
 
 int error_occurred = false;
 void halide_error(void *ctx, const char *msg) {
@@ -25,5 +25,7 @@ int main(int argc, char **argv) {
     Buffer<uint8_t> result = grand_total.realize();
 
     assert(error_occurred);
+
     printf("Success!\n");
+    return 0;
 }

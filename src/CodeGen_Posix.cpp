@@ -18,11 +18,11 @@ using std::vector;
 
 using namespace llvm;
 
-CodeGen_Posix::CodeGen_Posix(Target t)
+CodeGen_Posix::CodeGen_Posix(const Target &t)
     : CodeGen_LLVM(t) {
 }
 
-Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents, Expr condition) {
+Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents, const Expr &condition) {
     // Compute size from list of extents checking for overflow.
 
     Expr overflow = make_zero(UInt(64));
@@ -58,13 +58,13 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     Expr max_size = make_const(UInt(64), target.maximum_buffer_size());
     Expr size_check = (overflow == 0) && (total_size <= max_size);
 
-    if (!is_one(condition)) {
+    if (!is_const_one(condition)) {
         size_check = simplify(size_check || !condition);
     }
 
     // For constant-sized allocations this check should simplify away.
     size_check = common_subexpression_elimination(simplify(size_check));
-    if (!is_one(size_check)) {
+    if (!is_const_one(size_check)) {
         create_assertion(codegen(size_check || !condition),
                          Call::make(Int(32), "halide_error_buffer_allocation_too_large",
                                     {name, total_size, max_size}, Call::Extern));
@@ -75,15 +75,15 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
 }
 
 int CodeGen_Posix::allocation_padding(Type type) const {
-    // We potentially load one scalar value past the end of the
+    // We potentially load 3 scalar values past the end of the
     // buffer, so pad the allocation with an extra instance of the
     // scalar type.
-    return type.bytes();
+    return 3 * type.bytes();
 }
 
 CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type, MemoryType memory_type,
-                                                           const std::vector<Expr> &extents, Expr condition,
-                                                           Expr new_expr, std::string free_function) {
+                                                           const std::vector<Expr> &extents, const Expr &condition,
+                                                           const Expr &new_expr, std::string free_function) {
     Value *llvm_size = nullptr;
     int64_t stack_bytes = 0;
     int32_t constant_bytes = Allocate::constant_allocation_size(extents, name);
@@ -251,7 +251,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 
             debug(4) << "Creating call to halide_malloc for allocation " << name
                      << " of size " << type.bytes();
-            for (Expr e : extents) {
+            for (const Expr &e : extents) {
                 debug(4) << " x " << e;
             }
             debug(4) << "\n";
@@ -271,7 +271,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             Value *zero_size = builder->CreateIsNull(llvm_size);
             check = builder->CreateOr(check, zero_size);
         }
-        if (!is_one(condition)) {
+        if (!is_const_one(condition)) {
             // If the condition is false, it's OK for the new_expr to be null.
             Value *condition_is_false = builder->CreateIsNull(llvm_condition);
             check = builder->CreateOr(check, condition_is_false);

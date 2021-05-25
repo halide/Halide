@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <memory>
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -25,9 +25,7 @@ int main(int argc, char **argv) {
                    (p1 + p2) * kPrime2,
                    "The parameters should add to exactly", kPrime1, "but were", p1, p2);
     f.set_error_handler(&halide_error);
-    result = f.realize(1);
+    result = f.realize({1});
 
     return 0;
-
 }
-

@@ -1,11 +1,17 @@
 #include "Halide.h"
-#include <cstdio>
 #include "halide_benchmark.h"
+#include <cstdio>
 
 using namespace Halide;
 using namespace Halide::Tools;
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
+
     Func f;
     Var x, y;
     f(x, y) = x + y;
@@ -29,8 +35,8 @@ int main(int argc, char **argv) {
         p.compile_jit();
         // Start the thread pool without giving any hints as to the
         // number of tasks we'll be using.
-        p.realize(t, 1);
-        double min_time = benchmark([&]() { return p.realize(2, 1000000); });
+        p.realize({t, 1});
+        double min_time = benchmark([&]() { return p.realize({2, 1000000}); });
 
         printf("%d: %f ms\n", t, min_time * 1e3);
         if (t == 2) {

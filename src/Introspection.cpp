@@ -1,14 +1,23 @@
 #include "Introspection.h"
 
+#if defined(_MSC_VER)
+#undef WITH_INTROSPECTION
+#elif defined(__has_include)
+#if !__has_include(<execinfo.h>)
+#undef WITH_INTROSPECTION
+#endif
+#endif
+
 #ifdef WITH_INTROSPECTION
 
 #include "Debug.h"
 #include "Error.h"
 #include "LLVM_Headers.h"
+#include "Util.h"
 
+#include <cstdio>
 #include <iostream>
 #include <sstream>
-#include <stdio.h>
 #include <string>
 
 // defines backtrace, which gets the call stack as instruction pointers
@@ -48,34 +57,24 @@ inline T load_misaligned(const T *p) {
     return result;
 }
 
-#if LLVM_VERSION >= 100
 typedef uint64_t llvm_offset_t;
-#else
-typedef uint32_t llvm_offset_t;
-#endif
-
-}  // namespace
 
 class DebugSections {
 
     bool calibrated;
 
     struct FieldFormat {
-        uint64_t name, form;
-        FieldFormat()
-            : name(0), form(0) {
-        }
+        uint64_t name = 0, form = 0;
+        FieldFormat() = default;
         FieldFormat(uint64_t n, uint64_t f)
             : name(n), form(f) {
         }
     };
 
     struct EntryFormat {
-        uint64_t code, tag;
-        bool has_children;
-        EntryFormat()
-            : code(0), tag(0), has_children(false) {
-        }
+        uint64_t code = 0, tag = 0;
+        bool has_children = false;
+        EntryFormat() = default;
         vector<FieldFormat> fields;
     };
     vector<EntryFormat> entry_formats;
@@ -88,17 +87,12 @@ class DebugSections {
 
     struct GlobalVariable {
         std::string name;
-        TypeInfo *type;
-        uint64_t type_def_loc;
-        uint64_t def_loc, spec_loc;
-        uint64_t addr;
+        TypeInfo *type = nullptr;
+        uint64_t type_def_loc = 0;
+        uint64_t def_loc = 0, spec_loc = 0;
+        uint64_t addr = 0;
         GlobalVariable()
-            : name(""),
-              type(nullptr),
-              type_def_loc(0),
-              def_loc(0),
-              spec_loc(0),
-              addr(0) {
+            : name("") {
         }
         bool operator<(const GlobalVariable &other) const {
             return addr < other.addr;
@@ -123,30 +117,25 @@ class DebugSections {
 
     struct LocalVariable {
         std::string name;
-        TypeInfo *type;
-        int stack_offset;
-        uint64_t type_def_loc;
-        uint64_t def_loc, origin_loc;
+        TypeInfo *type = nullptr;
+        int stack_offset = 0;
+        uint64_t type_def_loc = 0;
+        uint64_t def_loc = 0, origin_loc = 0;
         // Some local vars are only alive for certain address ranges
         // (e.g. those inside a lexical block). If the ranges vector
         // is empty, the variables are alive for the entire containing
         // function.
         vector<LiveRange> live_ranges;
         LocalVariable()
-            : name(""),
-              type(nullptr),
-              stack_offset(0),
-              type_def_loc(0),
-              def_loc(0),
-              origin_loc(0) {
+            : name("") {
         }
     };
 
     struct FunctionInfo {
         std::string name;
-        uint64_t pc_begin, pc_end;
+        uint64_t pc_begin = 0, pc_end = 0;
         vector<LocalVariable> variables;
-        uint64_t def_loc, spec_loc;
+        uint64_t def_loc = 0, spec_loc = 0;
         // The stack variable offsets are w.r.t either:
         // gcc: the top of the stack frame (one below the return address to the caller)
         // clang with frame pointers: the bottom of the stack frame (one above the return address to this function)
@@ -156,7 +145,7 @@ class DebugSections {
                ClangFP,
                ClangNoFP } frame_base;
         FunctionInfo()
-            : name(""), pc_begin(0), pc_end(0), def_loc(0), spec_loc(0) {
+            : name("") {
         }
 
         bool operator<(const FunctionInfo &other) const {
@@ -178,8 +167,8 @@ class DebugSections {
 
     struct TypeInfo {
         std::string name;
-        uint64_t size;
-        uint64_t def_loc;
+        uint64_t size = 0;
+        uint64_t def_loc = 0;
         vector<LocalVariable> members;
 
         // TypeInfo can also be used to represent a pointer to
@@ -193,34 +182,33 @@ class DebugSections {
                Typedef,
                Const,
                Reference,
-               Array } type;
+               Array } type = Primitive;
 
-        TypeInfo()
-            : size(0), def_loc(0), type(Primitive) {
-        }
+        TypeInfo() = default;
     };
     vector<TypeInfo> types;
 
 public:
     bool working;
 
-    DebugSections(std::string binary)
+    DebugSections(const std::string &binary)
         : calibrated(false), working(false) {
+        std::string binary_path = binary;
 #ifdef __APPLE__
-        size_t last_slash = binary.rfind('/');
+        size_t last_slash = binary_path.rfind('/');
         if (last_slash == std::string::npos ||
-            last_slash >= binary.size() - 1) {
+            last_slash >= binary_path.size() - 1) {
             last_slash = 0;
         } else {
             last_slash++;
         }
-        std::string file_only = binary.substr(last_slash, binary.size() - last_slash);
-        binary += ".dSYM/Contents/Resources/DWARF/" + file_only;
+        std::string file_only = binary_path.substr(last_slash, binary_path.size() - last_slash);
+        binary_path += ".dSYM/Contents/Resources/DWARF/" + file_only;
 #endif
 
-        debug(5) << "Loading " << binary << "\n";
+        debug(5) << "Loading " << binary_path << "\n";
 
-        load_and_parse_object_file(binary);
+        load_and_parse_object_file(binary_path);
     }
 
     int count_trailing_zeros(int64_t x) {
@@ -398,7 +386,7 @@ public:
                     pos_bytes < array_size_bytes &&
                     pos_bytes % elem_type->size == 0) {
                     std::ostringstream oss;
-                    oss << v.name << '[' << (pos_bytes / elem_type->size) << ']';
+                    oss << v.name << "[" << (pos_bytes / elem_type->size) << "]";
                     debug(5) << "Successful match to array element\n";
                     return oss.str();
                 } else {
@@ -467,7 +455,9 @@ public:
             // addresses of their children-of-children might follow a
             // dangling pointer.
             if (parent.type->type == TypeInfo::Pointer ||
-                parent.type->type == TypeInfo::Reference) continue;
+                parent.type->type == TypeInfo::Reference) {
+                continue;
+            }
 
             for (size_t j = 0; j < parent.type->members.size(); j++) {
                 const LocalVariable &member_spec = parent.type->members[j];
@@ -548,7 +538,9 @@ public:
         for (size_t i = 0; i < obj.members.size(); i++) {
             TypeInfo *t = obj.members[i].type;
 
-            if (!t) continue;
+            if (!t) {
+                continue;
+            }
 
             debug(5) << "Comparing to member " << obj.members[i].name
                      << " at address " << std::hex << obj.members[i].addr << std::dec
@@ -576,7 +568,7 @@ public:
                     addr -= containing_elem * elem_type->size;
                     debug(5) << "Query belongs to this array. Adjusting query address backwards to "
                              << std::hex << addr << std::dec << "\n";
-                    name << obj.members[i].name << '[' << containing_elem << ']';
+                    name << obj.members[i].name << "[" << containing_elem << "]";
                 }
             } else if (t->type == TypeInfo::Struct ||
                        t->type == TypeInfo::Class ||
@@ -586,7 +578,7 @@ public:
                 uint64_t struct_end_addr = struct_start_addr + t->size;
                 debug(5) << "Struct runs from " << std::hex << struct_start_addr << " to " << struct_end_addr << "\n";
                 if (addr >= struct_start_addr && addr < struct_end_addr) {
-                    name << obj.members[i].name << '.';
+                    name << obj.members[i].name << ".";
                 }
             }
         }
@@ -693,7 +685,7 @@ public:
             debug(5) << "Var " << var.name << " is at offset " << var.stack_offset << "\n";
 
             // Reject it if we're not in its live ranges
-            if (var.live_ranges.size()) {
+            if (!var.live_ranges.empty()) {
                 bool in_live_range = false;
                 for (size_t i = 0; i < var.live_ranges.size(); i++) {
                     if (pc >= var.live_ranges[i].pc_begin &&
@@ -733,7 +725,7 @@ public:
                     pos_bytes < array_size_bytes &&
                     pos_bytes % elem_type->size == 0) {
                     std::ostringstream oss;
-                    oss << var.name << '[' << (pos_bytes / elem_type->size) << ']';
+                    oss << var.name << "[" << (pos_bytes / elem_type->size) << "]";
                     debug(5) << "Successful match to array element\n";
                     return oss.str();
                 } else {
@@ -750,7 +742,7 @@ public:
     std::string get_source_location() {
         debug(5) << "Finding source location\n";
 
-        if (!source_lines.size()) {
+        if (source_lines.empty()) {
             debug(5) << "Bailing out because we have no source lines\n";
             return "";
         }
@@ -765,6 +757,15 @@ public:
             uint64_t address = (uint64_t)trace[frame];
 
             debug(5) << "Considering address " << ((void *)address) << "\n";
+
+            // In some situations on OSX (most notable, compiling with different
+            // setting for -fomit-frame-pointer), we can get invalid addresses here that
+            // are small but nonnull (eg, 0x08). It's probably better to miss introspection
+            // options here than to crash during compilation.
+            if (address <= (uint64_t)0xff) {
+                debug(1) << "Bailing out because we found an obviously-bad address in the backtrace. (Did you set -fno-omit-frame-pointer everywhere?)\n";
+                return "";
+            }
 
             const uint8_t *inst_ptr = (const uint8_t *)address;
             if (inst_ptr[-5] == 0xe8) {
@@ -957,16 +958,10 @@ private:
 
         for (llvm::object::section_iterator iter = obj->section_begin();
              iter != obj->section_end(); ++iter) {
-#if LLVM_VERSION >= 100
             auto expected_name = iter->getName();
             internal_assert(expected_name);
             llvm::StringRef name = expected_name.get();
-#else
-            llvm::StringRef name;
-            iter->getName(name);
-#endif
             debug(2) << "Section: " << name.str() << "\n";
-#if LLVM_VERSION >= 90
             // ignore errors, just leave strings empty
             auto e = iter->getContents();
             if (e) {
@@ -982,19 +977,6 @@ private:
                     debug_ranges = *e;
                 }
             }
-#else
-            if (name == prefix + "debug_info") {
-                iter->getContents(debug_info);
-            } else if (name == prefix + "debug_abbrev") {
-                iter->getContents(debug_abbrev);
-            } else if (name == prefix + "debug_str") {
-                iter->getContents(debug_str);
-            } else if (name == prefix + "debug_line") {
-                iter->getContents(debug_line);
-            } else if (name == prefix + "debug_ranges") {
-                iter->getContents(debug_ranges);
-            }
-#endif
         }
 
         if (debug_info.empty() ||
@@ -1025,10 +1007,12 @@ private:
 
     void parse_debug_abbrev(const llvm::DataExtractor &e, llvm_offset_t off = 0) {
         entry_formats.clear();
-        while (1) {
+        while (true) {
             EntryFormat fmt;
             fmt.code = e.getULEB128(&off);
-            if (!fmt.code) break;
+            if (!fmt.code) {
+                break;
+            }
             fmt.tag = e.getULEB128(&off);
             fmt.has_children = (e.getU8(&off) != 0);
             // Get the attributes
@@ -1037,10 +1021,12 @@ private:
               " tag = %lu\n"
               " has_children = %u\n", fmt.code, fmt.tag, fmt.has_children);
             */
-            while (1) {
+            while (true) {
                 uint64_t name = e.getULEB128(&off);
                 uint64_t form = e.getULEB128(&off);
-                if (!name && !form) break;
+                if (!name && !form) {
+                    break;
+                }
                 //printf(" name = %lu, form = %lu\n", name, form);
 
                 FieldFormat f_fmt(name, form);
@@ -1063,7 +1049,7 @@ private:
         // offset of a variable.
         const int no_location = 0x80000000;
 
-        while (1) {
+        while (true) {
             uint64_t start_of_unit_header = off;
 
             // Parse compilation unit header
@@ -1145,23 +1131,23 @@ private:
 
                 // A null entry indicates we're popping the stack.
                 if (abbrev_code == 0) {
-                    if (func_stack.size() &&
+                    if (!func_stack.empty() &&
                         stack_depth == func_stack.back().second) {
                         const FunctionInfo &f = func_stack.back().first;
                         functions.push_back(f);
                         func_stack.pop_back();
                     }
-                    if (type_stack.size() &&
+                    if (!type_stack.empty() &&
                         stack_depth == type_stack.back().second) {
                         const TypeInfo &c = type_stack.back().first;
                         types.push_back(c);
                         type_stack.pop_back();
                     }
-                    if (namespace_stack.size() &&
+                    if (!namespace_stack.empty() &&
                         stack_depth == namespace_stack.back().second) {
                         namespace_stack.pop_back();
                     }
-                    if (live_range_stack.size() &&
+                    if (!live_range_stack.empty() &&
                         stack_depth == live_range_stack.back().second) {
                         live_range_stack.pop_back();
                     }
@@ -1169,9 +1155,9 @@ private:
                     continue;
                 }
 
-                assert(abbrev_code <= entry_formats.size());
+                internal_assert(abbrev_code <= entry_formats.size());
                 const EntryFormat &fmt = entry_formats[abbrev_code - 1];
-                assert(fmt.code == abbrev_code);
+                internal_assert(fmt.code == abbrev_code);
 
                 LocalVariable var;
                 GlobalVariable gvar;
@@ -1185,7 +1171,7 @@ private:
                 std::string namespace_name;
 
                 std::string containing_namespace;
-                if (type_stack.size()) {
+                if (!type_stack.empty()) {
                     containing_namespace = type_stack.back().first.name + "::";
                 } else {
                     for (size_t i = 0; i < namespace_stack.size(); i++) {
@@ -1225,7 +1211,7 @@ private:
                     }
                     case 2:  // There is no case 2
                     {
-                        assert(false && "What's form 2?");
+                        internal_error << "What's form 2?";
                         break;
                     }
                     case 3:  // block2 (2 byte length followed by payload)
@@ -1261,8 +1247,8 @@ private:
                     {
                         val = 0;
                         payload = (const uint8_t *)(debug_info.data() + off);
-                        while (e.getU8(&off))
-                            ;
+                        while (e.getU8(&off)) {
+                        }
                         break;
                     }
                     case 9:  // block (uleb128 length followed by payload)
@@ -1348,7 +1334,7 @@ private:
                     }
                     case 22:  // indirect
                     {
-                        assert(false && "Can't handle indirect form");
+                        internal_error << "Can't handle indirect form";
                         break;
                     }
                     case 23:  // sec_offset
@@ -1382,7 +1368,7 @@ private:
                         break;
                     }
                     default:
-                        assert(false && "Unknown form");
+                        internal_error << "Unknown form";
                         break;
                     }
 
@@ -1537,7 +1523,7 @@ private:
                     } else if (fmt.tag == tag_member) {
                         if (attr == attr_name) {
                             var.name = std::string((const char *)payload);
-                            if (type_stack.size()) {
+                            if (!type_stack.empty()) {
                                 gvar.name = type_stack.back().first.name + "::" + var.name;
                             } else {
                                 gvar.name = var.name;
@@ -1559,11 +1545,11 @@ private:
                     } else if (fmt.tag == tag_subrange_type) {
                         // Could be telling us the size of an array type
                         if (attr == attr_upper_bound &&
-                            type_stack.size() &&
+                            !type_stack.empty() &&
                             type_stack.back().first.type == TypeInfo::Array) {
                             type_stack.back().first.size = val + 1;
                         } else if (attr == attr_count &&
-                                   type_stack.size() &&
+                                   !type_stack.empty() &&
                                    type_stack.back().first.type == TypeInfo::Array) {
                             type_stack.back().first.size = val;
                         }
@@ -1572,7 +1558,7 @@ private:
                         if (attr == attr_low_pc) {
                             LiveRange r = {val, val};
                             live_ranges.push_back(r);
-                        } else if (attr == attr_high_pc && live_ranges.size()) {
+                        } else if (attr == attr_high_pc && !live_ranges.empty()) {
                             if (fmt.fields[i].form == 0x1) {
                                 // Literal address
                                 live_ranges.back().pc_end = val;
@@ -1604,8 +1590,8 @@ private:
                 }
 
                 if (fmt.tag == tag_variable) {
-                    if (func_stack.size() && !gvar.addr) {
-                        if (live_range_stack.size()) {
+                    if (!func_stack.empty() && !gvar.addr) {
+                        if (!live_range_stack.empty()) {
                             var.live_ranges = live_range_stack.back().first;
                         }
                         func_stack.back().first.variables.push_back(var);
@@ -1613,7 +1599,7 @@ private:
                         global_variables.push_back(gvar);
                     }
                 } else if (fmt.tag == tag_member &&
-                           type_stack.size()) {
+                           !type_stack.empty()) {
                     if (var.stack_offset == no_location) {
                         // A member with no stack offset location is probably the prototype for a static member
                         global_variables.push_back(gvar);
@@ -1623,7 +1609,7 @@ private:
 
                 } else if (fmt.tag == tag_function) {
                     if (fmt.has_children) {
-                        func_stack.push_back({func, stack_depth});
+                        func_stack.emplace_back(func, stack_depth);
                     } else {
                         functions.push_back(func);
                     }
@@ -1632,7 +1618,7 @@ private:
                            fmt.tag == tag_array_type ||
                            fmt.tag == tag_base_type) {
                     if (fmt.has_children) {
-                        type_stack.push_back({type_info, stack_depth});
+                        type_stack.emplace_back(type_info, stack_depth);
                     } else {
                         types.push_back(type_info);
                     }
@@ -1646,11 +1632,11 @@ private:
                     if (namespace_name.empty()) {
                         namespace_name = "_";
                     }
-                    namespace_stack.push_back({namespace_name, stack_depth});
+                    namespace_stack.emplace_back(namespace_name, stack_depth);
                 } else if ((fmt.tag == tag_inlined_subroutine ||
                             fmt.tag == tag_lexical_block) &&
-                           live_ranges.size() && fmt.has_children) {
-                    live_range_stack.push_back({live_ranges, stack_depth});
+                           !live_ranges.empty() && fmt.has_children) {
+                    live_range_stack.emplace_back(live_ranges, stack_depth);
                 }
             }
         }
@@ -1760,36 +1746,36 @@ private:
             TypeInfo *t = &types[i];
             while (t) {
                 if (t->type == TypeInfo::Pointer) {
-                    suffix.push_back("*");
-                    assert(t->members.size() == 1);
+                    suffix.emplace_back("*");
+                    internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
                 } else if (t->type == TypeInfo::Reference) {
-                    suffix.push_back("&");
-                    assert(t->members.size() == 1);
+                    suffix.emplace_back("&");
+                    internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
                 } else if (t->type == TypeInfo::Const) {
-                    suffix.push_back("const");
-                    assert(t->members.size() == 1);
+                    suffix.emplace_back("const");
+                    internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
                 } else if (t->type == TypeInfo::Array) {
                     // Do we know the size?
                     if (t->size != 0) {
                         std::ostringstream oss;
-                        oss << '[' << t->size << ']';
+                        oss << "[" << t->size << "]";
                         suffix.push_back(oss.str());
                     } else {
-                        suffix.push_back("[]");
+                        suffix.emplace_back("[]");
                     }
-                    assert(t->members.size() == 1);
+                    internal_assert(t->members.size() == 1);
                     t = t->members[0].type;
                 } else {
                     break;
                 }
             }
 
-            if (t && suffix.size()) {
+            if (t && !suffix.empty()) {
                 types[i].name = t->name;
-                while (suffix.size()) {
+                while (!suffix.empty()) {
                     types[i].name += " " + suffix.back();
                     suffix.pop_back();
                 }
@@ -1830,8 +1816,8 @@ private:
                         // Correct the stack offsets and names
                         for (size_t k = 0; k < members; k++) {
                             new_vars[j + k + 1].stack_offset += new_vars[j].stack_offset;
-                            if (new_vars[j + k + 1].name.size() &&
-                                new_vars[j].name.size()) {
+                            if (!new_vars[j + k + 1].name.empty() &&
+                                !new_vars[j].name.empty()) {
                                 new_vars[j + k + 1].name = new_vars[j].name + "." + new_vars[j + k + 1].name;
                             }
                         }
@@ -1840,7 +1826,7 @@ private:
             }
             functions[i].variables.swap(new_vars);
 
-            if (functions[i].variables.size()) {
+            if (!functions[i].variables.empty()) {
                 debug(5) << "Function " << functions[i].name << ":\n";
                 for (size_t j = 0; j < functions[i].variables.size(); j++) {
                     if (functions[i].variables[j].type) {
@@ -1931,7 +1917,7 @@ private:
         llvm_offset_t off = 0;
 
         // For every compilation unit
-        while (1) {
+        while (true) {
             // Parse the header
             uint32_t unit_length = e.getU32(&off);
 
@@ -1945,7 +1931,7 @@ private:
             debug(5) << "Parsing compilation unit from " << off << " to " << unit_end << "\n";
 
             uint16_t version = e.getU16(&off);
-            assert(version >= 2);
+            internal_assert(version >= 2);
 
             uint32_t header_length = e.getU32(&off);
             llvm_offset_t end_header_off = off + header_length;
@@ -1968,11 +1954,11 @@ private:
 
             vector<std::string> include_dirs;
             // The current directory is implicitly the first dir.
-            include_dirs.push_back(".");
+            include_dirs.emplace_back(".");
             while (off < end_header_off) {
                 const char *s = e.getCStr(&off);
                 if (s && s[0]) {
-                    include_dirs.push_back(s);
+                    include_dirs.emplace_back(s);
                 } else {
                     break;
                 }
@@ -1989,14 +1975,14 @@ private:
                     uint64_t length = e.getULEB128(&off);
                     (void)mod_time;
                     (void)length;
-                    assert(dir <= include_dirs.size());
+                    internal_assert(dir <= include_dirs.size());
                     source_files.push_back(include_dirs[dir] + "/" + name);
                 } else {
                     break;
                 }
             }
 
-            assert(off == end_header_off && "Failed parsing section .debug_line");
+            internal_assert(off == end_header_off) << "Failed parsing section .debug_line";
 
             // Now parse the table. It uses a state machine with the following fields:
             struct {
@@ -2064,7 +2050,7 @@ private:
                         uint64_t length = e.getULEB128(&off);
                         (void)mod_time;
                         (void)length;
-                        assert(dir_index < include_dirs.size());
+                        internal_assert(dir_index < include_dirs.size());
                         source_files.push_back(include_dirs[dir_index] + "/" + name);
                         break;
                     }
@@ -2208,8 +2194,8 @@ private:
         unsigned shift = 0;
         uint8_t byte = 0;
 
-        while (1) {
-            assert(shift < 57);
+        while (true) {
+            internal_assert(shift < 57);
             byte = *ptr++;
             result |= (uint64_t)(byte & 0x7f) << shift;
             shift += 7;
@@ -2232,8 +2218,8 @@ private:
         unsigned shift = 0;
         uint8_t byte = 0;
 
-        while (1) {
-            assert(shift < 57);
+        while (true) {
+            internal_assert(shift < 57);
             byte = *ptr++;
             result |= (uint64_t)(byte & 0x7f) << shift;
             shift += 7;
@@ -2244,9 +2230,9 @@ private:
     }
 };
 
-namespace {
 DebugSections *debug_sections = nullptr;
-}
+
+}  // namespace
 
 bool dump_stack_frame() {
     if (!debug_sections || !debug_sections->working) {
@@ -2257,8 +2243,10 @@ bool dump_stack_frame() {
 }
 
 std::string get_variable_name(const void *var, const std::string &expected_type) {
-    if (!debug_sections) return "";
-    if (!debug_sections->working) return "";
+    if (!debug_sections ||
+        !debug_sections->working) {
+        return "";
+    }
     std::string name = debug_sections->get_stack_variable_name(var, expected_type);
     if (name.empty()) {
         // Maybe it's a member of a heap object.
@@ -2273,27 +2261,39 @@ std::string get_variable_name(const void *var, const std::string &expected_type)
 }
 
 std::string get_source_location() {
-    if (!debug_sections) return "";
-    if (!debug_sections->working) return "";
+    if (!debug_sections ||
+        !debug_sections->working) {
+        return "";
+    }
     return debug_sections->get_source_location();
 }
 
 void register_heap_object(const void *obj, size_t size, const void *helper) {
-    if (!debug_sections) return;
-    if (!debug_sections->working) return;
-    if (!helper) return;
+    if (!debug_sections ||
+        !debug_sections->working ||
+        !helper) {
+        return;
+    }
     debug_sections->register_heap_object(obj, size, helper);
 }
 
 void deregister_heap_object(const void *obj, size_t size) {
-    if (!debug_sections) return;
-    if (!debug_sections->working) return;
+    if (!debug_sections ||
+        !debug_sections->working) {
+        return;
+    }
     debug_sections->deregister_heap_object(obj, size);
 }
 
 bool saves_frame_pointer(void *fn) {
     // On x86-64, if we save the frame pointer, the first two instructions should be pushing the stack pointer and the frame pointer:
     const uint8_t *ptr = (const uint8_t *)(fn);
+    // Skip over a valid-branch-target marker (endbr64), if there is
+    // one. These sometimes start functions to help detect control flow
+    // violations.
+    if (ptr[0] == 0xf3 && ptr[1] == 0x0f && ptr[2] == 0x1e && ptr[3] == 0xfa) {
+        ptr += 4;
+    }
     return ptr[0] == 0x55;  // push %rbp
 }
 

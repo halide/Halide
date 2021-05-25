@@ -29,12 +29,15 @@ class Counter : public IRVisitor {
 
 public:
     int store_count, sin_count;
-    Counter(string f) : func(f), store_count(0), sin_count(0) {}
+    Counter(string f)
+        : func(f), store_count(0), sin_count(0) {
+    }
 };
 
 // Check that the number of calls to sin is correct.
 class CheckSinCount : public IRMutator {
     int correct;
+
 public:
     using IRMutator::mutate;
 
@@ -48,13 +51,16 @@ public:
         return s;
     }
 
-    CheckSinCount(int c) : correct(c) {}
+    CheckSinCount(int c)
+        : correct(c) {
+    }
 };
 
 // Check that the number of stores to a given func is correct
 class CheckStoreCount : public IRMutator {
     string func;
     int correct;
+
 public:
     using IRMutator::mutate;
 
@@ -68,7 +74,9 @@ public:
         return s;
     }
 
-    CheckStoreCount(string f, int c) : func(f), correct(c) {}
+    CheckStoreCount(string f, int c)
+        : func(f), correct(c) {
+    }
 };
 
 void count_partitions(Func g, int correct) {
@@ -95,7 +103,7 @@ int main(int argc, char **argv) {
     // is if you use a boundary condition helper:
 
     {
-        Func g = BoundaryConditions::repeat_edge(f, 0, 100);
+        Func g = BoundaryConditions::repeat_edge(f, {{0, 100}});
         count_partitions(g, 3);
     }
 
@@ -121,7 +129,7 @@ int main(int argc, char **argv) {
         Func g;
         g(x, y) = x + y;
         g.compute_root();
-        Func h = BoundaryConditions::mirror_image(g, 0, 10, 0, 10);
+        Func h = BoundaryConditions::mirror_image(g, {{0, 10}, {0, 10}});
         count_partitions(h, 5);
     }
 
@@ -132,10 +140,10 @@ int main(int argc, char **argv) {
     // slice of the loop where *all* of the boundary conditions and
     // splitting logic simplify away.
     {
-        Func g = BoundaryConditions::mirror_interior(f, 0, 10);
+        Func g = BoundaryConditions::mirror_interior(f, {{0, 10}});
         Func h;
         Param<int> t1, t2;
-        h(x) = g(x-1) + g(x+1);
+        h(x) = g(x - 1) + g(x + 1);
         h.vectorize(x, 8);
         count_partitions(h, 3);
     }
@@ -173,7 +181,7 @@ int main(int argc, char **argv) {
     // condition manually using clamp.
     {
         Func g;
-        g(x) = f(clamp(x, 0, 10)); // treated as clamp(likely(x), 0, 10)
+        g(x) = f(clamp(x, 0, 10));  // treated as clamp(likely(x), 0, 10)
         g.vectorize(x, 8);
         count_partitions(g, 3);
     }
@@ -196,12 +204,12 @@ int main(int argc, char **argv) {
         Expr e[N];
         e[0] = y;
         for (int i = 1; i < N; i++) {
-            e[i] = e[i-1] * e[i-1] + y + r;
+            e[i] = e[i - 1] * e[i - 1] + y + r;
         }
         // Make a nasty condition that uses all of these.
         Expr nasty = cast<bool>(1);
         for (int i = 0; i < N; i++) {
-            nasty = nasty && (x*(i+1) < e[i]);
+            nasty = nasty && (x * (i + 1) < e[i]);
         }
 
         // Have an innermost loop over c to complicate things further.
@@ -224,10 +232,10 @@ int main(int argc, char **argv) {
         // If either of these realize calls iterates from 0 to limit,
         // and then from limit to 10, we'll have a nice segfault.
         limit.set(10000000);
-        Buffer<int> result = g.realize(10);
+        Buffer<int> result = g.realize({10});
 
         limit.set(-10000000);
-        result = g.realize(10);
+        result = g.realize({10});
     }
 
     // The performance of this behavior is tested in

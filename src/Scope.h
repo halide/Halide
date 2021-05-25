@@ -6,10 +6,10 @@
 #include <stack>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "Debug.h"
 #include "Error.h"
-#include "Util.h"
 
 /** \file
  * Defines the Scope class, which is used for keeping track of names in a scope while traversing IR
@@ -35,18 +35,17 @@ public:
             _empty = true;
             _top = T();
         } else {
-            _top = _rest.back();
+            _top = std::move(_rest.back());
             _rest.pop_back();
         }
     }
 
-    void push(const T &t) {
-        if (_empty) {
-            _empty = false;
-        } else {
-            _rest.push_back(_top);
+    void push(T t) {
+        if (!_empty) {
+            _rest.push_back(std::move(_top));
         }
-        _top = t;
+        _top = std::move(t);
+        _empty = false;
     }
 
     T top() const {
@@ -63,6 +62,10 @@ public:
 
     bool empty() const {
         return _empty;
+    }
+
+    size_t size() const {
+        return _empty ? 0 : (_rest.size() + 1);
     }
 };
 
@@ -92,17 +95,17 @@ class Scope {
 private:
     std::map<std::string, SmallStack<T>> table;
 
-    // Copying a scope object copies a large table full of strings and
-    // stacks. Bad idea.
-    Scope(const Scope<T> &);
-    Scope<T> &operator=(const Scope<T> &);
-
-    const Scope<T> *containing_scope;
+    const Scope<T> *containing_scope = nullptr;
 
 public:
-    Scope()
-        : containing_scope(nullptr) {
-    }
+    Scope() = default;
+    Scope(Scope &&that) noexcept = default;
+    Scope &operator=(Scope &&that) noexcept = default;
+
+    // Copying a scope object copies a large table full of strings and
+    // stacks. Bad idea.
+    Scope(const Scope<T> &) = delete;
+    Scope<T> &operator=(const Scope<T> &) = delete;
 
     /** Set the parent scope. If lookups fail in this scope, they
      * check the containing scope before returning an error. Caller is
@@ -115,8 +118,8 @@ public:
      * arguments, which would otherwise require a copy constructor
      * (with llvm in c++98 mode) */
     static const Scope<T> &empty_scope() {
-        static Scope<T> *_empty_scope = new Scope<T>();
-        return *_empty_scope;
+        static Scope<T> _empty_scope;
+        return _empty_scope;
     }
 
     /** Retrieve the value referred to by a name */
@@ -160,13 +163,23 @@ public:
         return true;
     }
 
+    /** How many nested definitions of a single name exist? */
+    size_t count(const std::string &name) const {
+        auto it = table.find(name);
+        if (it == table.end()) {
+            return 0;
+        } else {
+            return it->second.size();
+        }
+    }
+
     /** Add a new (name, value) pair to the current scope. Hide old
      * values that have this name until we pop this name.
      */
     template<typename T2 = T,
              typename = typename std::enable_if<!std::is_same<T2, void>::value>::type>
-    void push(const std::string &name, const T2 &value) {
-        table[name].push(value);
+    void push(const std::string &name, T2 &&value) {
+        table[name].push(std::forward<T2>(value));
     }
 
     template<typename T2 = T,
@@ -197,8 +210,7 @@ public:
             : iter(i) {
         }
 
-        const_iterator() {
-        }
+        const_iterator() = default;
 
         bool operator!=(const const_iterator &other) {
             return iter != other.iter;
@@ -263,9 +275,9 @@ struct ScopedBinding {
 
     ScopedBinding() = default;
 
-    ScopedBinding(Scope<T> &s, const std::string &n, const T &value)
+    ScopedBinding(Scope<T> &s, const std::string &n, T value)
         : scope(&s), name(n) {
-        scope->push(name, value);
+        scope->push(name, std::move(value));
     }
 
     ScopedBinding(bool condition, Scope<T> &s, const std::string &n, const T &value)

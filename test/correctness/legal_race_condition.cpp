@@ -1,6 +1,6 @@
 #include "Halide.h"
-#include <stdio.h>
 #include <algorithm>
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
         RDom r(0, 100);
 
         f(x) = 0;
-        f(r/2) = r/2;
+        f(r / 2) = r / 2;
 
         // If we parallelize over r, two threads store to each memory
         // location in parallel (r = 2*k and r = 2*k + 1 both store to
@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
         // race.  Halide's not smart enough to understand this.
         f.update().allow_race_conditions().parallel(r);
 
-        Buffer<int> out = f.realize(100);
+        Buffer<int> out = f.realize({100});
         for (int i = 0; i < 100; i++) {
             int correct = (i < 50) ? i : 0;
             if (out(i) != correct) {
@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
         Var x;
 
         RDom r(0, 256);
-        Expr permuted = (38*r*r + 193*r + 32) % 256;
+        Expr permuted = (38 * r * r + 193 * r + 32) % 256;
         // There's actually a one-to-one mapping from r to permuted,
         // because permuted is a specially-constructed permutation
         // polynomial. We don't expect Halide to understand this
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
         f(permuted) = r;
         f.update().allow_race_conditions().vectorize(r, 4).parallel(r);
 
-        Buffer<int> out = f.realize(256);
+        Buffer<int> out = f.realize({256});
 
         // Sort the output.
         std::sort(&out(0), &out(256));

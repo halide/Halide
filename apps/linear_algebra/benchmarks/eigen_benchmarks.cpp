@@ -10,21 +10,25 @@
 //    L3: gemm_notrans, gemm_trans_A, gemm_trans_B, gemm_trans_AB
 //
 
+#include "clock.h"
+#include "macros.h"
+#include <Eigen/Eigen>
 #include <iomanip>
 #include <iostream>
 #include <string>
-#include <Eigen/Eigen>
-#include "clock.h"
-#include "macros.h"
 
 template<class T>
 std::string type_name();
 
 template<>
-std::string type_name<float>() {return "s";}
+std::string type_name<float>() {
+    return "s";
+}
 
 template<>
-std::string type_name<double>() {return "d";}
+std::string type_name<double>() {
+    return "d";
+}
 
 struct BenchmarksBase {
     virtual void bench_copy(int N) = 0;
@@ -65,7 +69,9 @@ struct Benchmarks : BenchmarksBase {
         return A;
     }
 
-    Benchmarks(std::string n) : name(n) {}
+    Benchmarks(std::string n)
+        : name(n) {
+    }
 
     void run(std::string benchmark, int size) {
         if (benchmark == "copy") {
@@ -100,23 +106,23 @@ struct Benchmarks : BenchmarksBase {
     L1Benchmark(copy, type_name<T>(), y = x);
     L1Benchmark(scal, type_name<T>(), x = alpha * x);
     L1Benchmark(axpy, type_name<T>(), y = alpha * x + y);
-    L1Benchmark(dot,  type_name<T>(), result = x.dot(y));
+    L1Benchmark(dot, type_name<T>(), result = x.dot(y));
     L1Benchmark(asum, type_name<T>(), result = x.array().abs().sum());
 
     L2Benchmark(gemv_notrans, type_name<T>(), y = alpha * A * x + beta * y);
-    L2Benchmark(gemv_trans,   type_name<T>(), y = alpha * A.transpose() * x + beta * y);
-    L2Benchmark(ger,          type_name<T>(), A = alpha * x * y.transpose() + A);
+    L2Benchmark(gemv_trans, type_name<T>(), y = alpha * A.transpose() * x + beta * y);
+    L2Benchmark(ger, type_name<T>(), A = alpha * x * y.transpose() + A);
 
     L3Benchmark(gemm_notrans, type_name<T>(), C = alpha * A * B + beta * C);
     L3Benchmark(gemm_transA, type_name<T>(), C = alpha * A.transpose() * B + beta * C);
     L3Benchmark(gemm_transB, type_name<T>(), C = alpha * A * B.transpose() + beta * C);
     L3Benchmark(gemm_transAB, type_name<T>(), C = alpha * A.transpose() * B.transpose() + beta * C);
 
-  private:
+private:
     std::string name;
 };
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     if (argc != 3) {
         std::cout << "USAGE: eigen_benchmarks <subroutine> <size>\n";
         return 0;
@@ -124,11 +130,11 @@ int main(int argc, char* argv[]) {
 
     std::string subroutine = argv[1];
     char type = subroutine[0];
-    int  size = std::stoi(argv[2]);
+    int size = std::stoi(argv[2]);
 
     subroutine = subroutine.substr(1);
     if (type == 's') {
-        Benchmarks<float> ("Eigen").run(subroutine, size);
+        Benchmarks<float>("Eigen").run(subroutine, size);
     } else if (type == 'd') {
         Benchmarks<double>("Eigen").run(subroutine, size);
     }

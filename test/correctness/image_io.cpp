@@ -1,8 +1,8 @@
-#include <fstream>
-
 #include "Halide.h"
 #include "halide_image_io.h"
-#include "test/common/halide_test_dirs.h"
+#include "halide_test_dirs.h"
+
+#include <fstream>
 
 using namespace Halide;
 
@@ -147,11 +147,12 @@ Func make_noise(int depth) {
     } else {
         Func g = make_noise(depth - 1);
         Func g_up;
-        f(x, y, c) = (g(x/2, y/2, c) +
-                      g((x+1)/2, y/2, c) +
-                      g(x/2, (y+1)/2, c) +
-                      g((x+1)/2, (y+1)/2, c) +
-                      0.25f * random_float()) / 4.25f;
+        f(x, y, c) = (g(x / 2, y / 2, c) +
+                      g((x + 1) / 2, y / 2, c) +
+                      g(x / 2, (y + 1) / 2, c) +
+                      g((x + 1) / 2, (y + 1) / 2, c) +
+                      0.25f * random_float()) /
+                     4.25f;
     }
     f.compute_root();
     return f;
@@ -159,8 +160,8 @@ Func make_noise(int depth) {
 
 template<typename T>
 void do_test() {
-    const int width = 1600;
-    const int height = 1200;
+    const int width = 160;
+    const int height = 120;
 
     // Make some colored noise
     Func f;
@@ -168,12 +169,12 @@ void do_test() {
     const float one = std::numeric_limits<T>::max();
     f(x, y, c) = cast<T>(clamp(make_noise(10)(x, y, c), 0.0f, 1.0f) * one);
 
-    Buffer<T> color_buf = f.realize(width, height, 3);
+    Buffer<T> color_buf = f.realize({width, height, 3});
 
     // Inset it a bit to ensure that saving buffers with nonzero mins works
     const int inset = 4;
-    color_buf.crop(0, inset, width-inset*2);
-    color_buf.crop(1, inset, height-inset*2);
+    color_buf.crop(0, inset, width - inset * 2);
+    color_buf.crop(1, inset, height - inset * 2);
 
     test_convert_image_s2s<T>(color_buf);
     test_convert_image_s2d<T>(color_buf);
@@ -184,7 +185,7 @@ void do_test() {
     luma_buf.copy_from(color_buf);
     luma_buf.slice(2);
 
-    std::vector<std::string> formats = {"ppm","pgm","tmp","mat","tiff"};
+    std::vector<std::string> formats = {"ppm", "pgm", "tmp", "mat", "tiff"};
 #ifndef HALIDE_NO_JPEG
     formats.push_back("jpg");
 #endif
@@ -205,7 +206,7 @@ void do_test() {
             // Here we test matching strides
             Func f2;
             f2(x, y, c, w) = f(x, y, c);
-            Buffer<T> funky_buf = f2.realize(10, 10, 1, 3);
+            Buffer<T> funky_buf = f2.realize({10, 10, 1, 3});
             funky_buf.fill(42);
 
             std::cout << "Testing format: " << format << " for " << halide_type_of<T>() << "x4\n";
@@ -236,28 +237,28 @@ void test_mat_header() {
     Tools::save_image(buf, filename);
     std::ifstream fs(filename.c_str(), std::ifstream::binary);
     if (!fs) {
-        std::cout << "Cannot read " << filename << std::endl;
+        std::cout << "Cannot read " << filename << "\n";
         abort();
     }
     fs.seekg(0, fs.end);
-    // .mat file begins with a 128 bytes header and a 8 bytes 
+    // .mat file begins with a 128 bytes header and a 8 bytes
     // matrix tag, the second byte of the matrix describe
     // the size of the rest of the file
     uint32_t file_size = uint32_t((int)fs.tellg() - 128 - 8);
     fs.seekg(128 + 4, fs.beg);
     uint32_t stored_file_size = 0;
-    fs.read((char*)&stored_file_size, 4);
+    fs.read((char *)&stored_file_size, 4);
     fs.close();
     if (file_size != stored_file_size) {
-        std::cout << "Wrong file size written for " << filename << ". Expected " <<
-            file_size << ", got" << stored_file_size << std::endl;
+        std::cout << "Wrong file size written for " << filename << ". Expected " << file_size << ", got" << stored_file_size << "\n";
         abort();
-    } 
+    }
 }
 
 int main(int argc, char **argv) {
     do_test<uint8_t>();
     do_test<uint16_t>();
     test_mat_header();
+    printf("Success!\n");
     return 0;
 }

@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
         for (int z = 0; z < input.channels(); z++) {
             for (int y = 0; y < input.height(); y++) {
                 for (int x = 0; x < input.width(); x++) {
-                    input(x, y) = rand();
+                    input(x, y, z, c) = rand();
                 }
             }
         }
@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
         for (int z = 0; z < filter.channels(); z++) {
             for (int y = 0; y < filter.height(); y++) {
                 for (int x = 0; x < filter.width(); x++) {
-                    filter(x, y) = rand();
+                    filter(x, y, z, c) = rand();
                 }
             }
         }
@@ -43,14 +43,14 @@ int main(int argc, char **argv) {
 
     Buffer<float> output(CO, W, H, N);
 
-    // This is necessary to get the PTX compiler to do a good
-    // job. TODO: This should be a scheduling directive or a runtime
-    // function.
-    #ifdef _WIN32
+// This is necessary to get the PTX compiler to do a good
+// job. TODO: This should be a scheduling directive or a runtime
+// function.
+#ifdef _WIN32
     _putenv_s("HL_CUDA_JIT_MAX_REGISTERS", "256");
-    #else
+#else
     setenv("HL_CUDA_JIT_MAX_REGISTERS", "256", 1);
-    #endif
+#endif
 
     conv_layer(input, filter, bias, output);
 
@@ -70,5 +70,6 @@ int main(int argc, char **argv) {
     });
     printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
 
+    printf("Success!\n");
     return 0;
 }

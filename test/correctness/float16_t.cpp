@@ -1,29 +1,42 @@
 #include "Halide.h"
 
+#include <limits>
+
 using namespace Halide;
+
+bool check_infinity_case(bool use_first, float16_t value, const char *value_name,
+                         int increment, float16_t expected_first, float16_t expected_second,
+                         const char *first_name, const char *second_name) {
+    if (value != (use_first ? expected_first : expected_second)) {
+        printf("%s %d is %x, not %s.\n", value_name, increment, value.to_bits(),
+               (use_first ? first_name : second_name));
+        return false;
+    }
+    return true;
+}
 
 int main(int argc, char **argv) {
     Var x;
 
-    Buffer<float16_t> in1 = lambda(x, cast<float16_t>(-0.5f) + cast<float16_t>(x) / (128)).realize(128);
-    Buffer<bfloat16_t> in2 = lambda(x, cast<bfloat16_t>(-0.5f) + cast<bfloat16_t>(x) / (128)).realize(128);
+    Buffer<float16_t> in1 = lambda(x, cast<float16_t>(-0.5f) + cast<float16_t>(x) / (128)).realize({128});
+    Buffer<bfloat16_t> in2 = lambda(x, cast<bfloat16_t>(-0.5f) + cast<bfloat16_t>(x) / (128)).realize({128});
 
     // Check the Halide-side float 16 conversion math matches the C++-side math.
     in1.for_each_element([&](int i) {
-            float16_t correct = Halide::float16_t(-0.5f) + Halide::float16_t(i) / Halide::float16_t(128.0f);
-            if (in1(i) != correct) {
-                printf("in1(%d) = %f instead of %f\n", i, float(in2(i)), float(correct));
-                abort();
-            }
-        });
+        float16_t correct = Halide::float16_t(-0.5f) + Halide::float16_t(i) / Halide::float16_t(128.0f);
+        if (in1(i) != correct) {
+            printf("in1(%d) = %f instead of %f\n", i, float(in2(i)), float(correct));
+            abort();
+        }
+    });
 
     in2.for_each_element([&](int i) {
-            bfloat16_t correct = Halide::bfloat16_t(-0.5f) + Halide::bfloat16_t(i) / Halide::bfloat16_t(128.0f);
-            if (in2(i) != correct) {
-                printf("in2(%d) = %f instead of %f\n", i, float(in2(i)), float(correct));
-                abort();
-            }
-        });
+        bfloat16_t correct = Halide::bfloat16_t(-0.5f) + Halide::bfloat16_t(i) / Halide::bfloat16_t(128.0f);
+        if (in2(i) != correct) {
+            printf("in2(%d) = %f instead of %f\n", i, float(in2(i)), float(correct));
+            abort();
+        }
+    });
 
     // Check some basic math works on float16. More math is tested in
     // correctness_vector_math.
@@ -92,7 +105,7 @@ int main(int argc, char **argv) {
         for (uint16_t x = 0; x < 8; x++) {
             bfloat16_t a = bfloat16_t::make_from_bits(start.to_bits() + x);
             bfloat16_t b = bfloat16_t::make_from_bits(start.to_bits() + x + 1);
-            bfloat16_t ab = bfloat16_t(((float)a + (float)b)/2);
+            bfloat16_t ab = bfloat16_t(((float)a + (float)b) / 2);
 
             if (a > ab || ab > b) {
                 printf("Misordered: %x %x %x\n", a.to_bits(), ab.to_bits(), b.to_bits());
@@ -114,7 +127,7 @@ int main(int argc, char **argv) {
         for (uint16_t x = 0; x < 8; x++) {
             float16_t a = float16_t::make_from_bits(start.to_bits() + x);
             float16_t b = float16_t::make_from_bits(start.to_bits() + x + 1);
-            float16_t ab = float16_t(((float)a + (float)b)/2);
+            float16_t ab = float16_t(((float)a + (float)b) / 2);
 
             if (a > ab || ab > b) {
                 printf("Misordered: %x %x %x\n", a.to_bits(), ab.to_bits(), b.to_bits());
@@ -136,14 +149,14 @@ int main(int argc, char **argv) {
         Var x;
         noise(x) = (random_int() % 256) * 0.1f;
         noise.compute_root();
-        Func trunc_f32  = lambda(x, trunc(noise(x)));
-        Func round_f32  = lambda(x, round(noise(x)));
-        Func ceil_f32   = lambda(x, ceil(noise(x)));
-        Func floor_f32  = lambda(x, floor(noise(x)));
-        Func trunc_f16  = lambda(x, trunc(cast<float16_t>(noise(x))));
-        Func round_f16  = lambda(x, round(cast<float16_t>(noise(x))));
-        Func ceil_f16   = lambda(x, ceil(cast<float16_t>(noise(x))));
-        Func floor_f16  = lambda(x, floor(cast<float16_t>(noise(x))));
+        Func trunc_f32 = lambda(x, trunc(noise(x)));
+        Func round_f32 = lambda(x, round(noise(x)));
+        Func ceil_f32 = lambda(x, ceil(noise(x)));
+        Func floor_f32 = lambda(x, floor(noise(x)));
+        Func trunc_f16 = lambda(x, trunc(cast<float16_t>(noise(x))));
+        Func round_f16 = lambda(x, round(cast<float16_t>(noise(x))));
+        Func ceil_f16 = lambda(x, ceil(cast<float16_t>(noise(x))));
+        Func floor_f16 = lambda(x, floor(cast<float16_t>(noise(x))));
 
         std::vector<Func> funcs = {trunc_f32, round_f32, ceil_f32, floor_f32,
                                    trunc_f16, round_f16, ceil_f16, floor_f16};
@@ -155,7 +168,7 @@ int main(int argc, char **argv) {
         const char *names[] = {"trunc", "round", "ceil", "floor"};
 
         Pipeline p(funcs);
-        Realization r = p.realize(1024);
+        Realization r = p.realize({1024});
         for (int i = 0; i < 1024; i++) {
             for (int j = 0; j < 4; j++) {
                 float f32 = Buffer<float>(r[j])(i);
@@ -167,7 +180,6 @@ int main(int argc, char **argv) {
                 }
             }
         }
-
     }
 
     Target target = get_jit_target_from_environment();
@@ -189,7 +201,7 @@ int main(int argc, char **argv) {
         Buffer<float16_t> in(8, 8);
         in.fill(float16_t(0.25f));
         input.set(in);
-        Buffer<float16_t> buf = output.realize(8, 8);
+        Buffer<float16_t> buf = output.realize({8, 8});
         for (int y = 0; y < 8; y++) {
             for (int x = 0; x < 8; x++) {
                 float16_t correct = float16_t((x * y) / 2.0f);
@@ -215,7 +227,7 @@ int main(int argc, char **argv) {
     }
 
     // Enable to read assembly generated by the conversion routines
-    if ((false)) { // Intentional dead code. Extra parens to pacify clang-tidy.
+    if ((false)) {  // Intentional dead code. Extra parens to pacify clang-tidy.
         Func src, to_f16, from_f16;
 
         src(x) = cast<float>(x);
@@ -227,6 +239,83 @@ int main(int argc, char **argv) {
         from_f16.compute_root().vectorize(x, 8, TailStrategy::RoundUp);
 
         from_f16.compile_to_assembly("/dev/stdout", {}, Target("host-no_asserts-no_bounds_query-no_runtime-disable_llvm_loop_unroll-disable_llvm_loop_vectorize"));
+    }
+
+    // Check infinity handling for both float16_t and Halide codegen.
+    {
+        std::pair<int, bool> test_cases[] =
+            {{1, false}, {16, true}, {256, true}};
+
+        for (const auto &test_case : test_cases) {
+            float16_t max_pos_val = float16_t::make_from_bits(0x7bff);
+            float16_t min_neg_val = float16_t::make_from_bits(0xfbff);
+            float16_t increment(test_case.first);
+
+            float16_t max_plus_increment(max_pos_val + increment);
+            if (!check_infinity_case(test_case.second, max_plus_increment,
+                                     "float16_t maximum value plus", test_case.first,
+                                     float16_t::make_infinity(), max_pos_val,
+                                     "positive infinity", "maximum positive value")) {
+                return -1;
+            }
+
+            float16_t min_minus_increment(min_neg_val - increment);
+            if (!check_infinity_case(test_case.second, min_minus_increment,
+                                     "float16_t minimum value minus", test_case.first,
+                                     float16_t::make_negative_infinity(), min_neg_val,
+                                     "negative infinity", "maximum negative value")) {
+                return -1;
+            }
+
+            Param<float16_t> a("a"), b("b");
+            a.set(max_pos_val);
+            b.set(increment);
+            float16_t c = evaluate<float16_t>(a + b);
+            if (!check_infinity_case(test_case.second, c,
+                                     "Halide float16_t maximum value plus", test_case.first,
+                                     float16_t::make_infinity(), max_pos_val,
+                                     "positive infinity", "maximum positive value")) {
+                return -1;
+            }
+
+            a.set(min_neg_val);
+            c = evaluate<float16_t>(a - b);
+            if (!check_infinity_case(test_case.second, c,
+                                     "Halide float16_t minimum value minus", test_case.first,
+                                     float16_t::make_negative_infinity(), min_neg_val,
+                                     "negative infinity", "maximum negative value")) {
+                return -1;
+            }
+
+            float pos_inf = std::numeric_limits<float>::infinity();
+            float16_t fp16_pos_inf(pos_inf);
+            if (fp16_pos_inf != float16_t::make_infinity()) {
+                printf("Conversion of 32-bit positive infinity to 16-bit float is %x, not positive infinity.\n", fp16_pos_inf.to_bits());
+                return -1;
+            }
+
+            float neg_inf = -std::numeric_limits<float>::infinity();
+            float16_t fp16_neg_inf(neg_inf);
+            if (fp16_neg_inf != float16_t::make_negative_infinity()) {
+                printf("Conversion of 32-bit negative infinity to 16-bit float is %x, not negative infinity.\n", fp16_neg_inf.to_bits());
+                return -1;
+            }
+
+            Param<float> f_in("f_in");
+            f_in.set(pos_inf);
+            c = evaluate<float16_t>(cast(Float(16), f_in));
+            if (c != float16_t::make_infinity()) {
+                printf("Halide conversion of 32-bit positive infinity to 16-bit float is %x, not positive infinity.\n", c.to_bits());
+                return -1;
+            }
+
+            f_in.set(neg_inf);
+            c = evaluate<float16_t>(cast(Float(16), f_in));
+            if (c != float16_t::make_negative_infinity()) {
+                printf("Halide conversion of 32-bit negative infinity to 16-bit float is %x, not negative infinity.\n", c.to_bits());
+                return -1;
+            }
+        }
     }
 
     printf("Success!\n");

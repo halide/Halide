@@ -1,15 +1,15 @@
-#include <android/log.h>
-#include <jni.h>
-#include <iostream>
-#include <iomanip>
 #include "two_kernels_filter.h"
+#include <android/log.h>
+#include <iomanip>
+#include <iostream>
+#include <jni.h>
 #include <sstream>
 
 #include "HalideBuffer.h"
 #include "HalideRuntimeOpenGLCompute.h"
 
-#define  LOGI(...)  __android_log_print(ANDROID_LOG_INFO, "oglc_run", __VA_ARGS__)
-#define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR, "oglc_run", __VA_ARGS__)
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, "oglc_run", __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "oglc_run", __VA_ARGS__)
 
 template<typename T>
 void print(Halide::Runtime::Buffer<T> buf) {
@@ -30,7 +30,7 @@ void print(Halide::Runtime::Buffer<T> buf) {
     }
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
     LOGI("\nvvvv vvvv vvvv");
 
     int width = 128;
@@ -75,7 +75,7 @@ int main(int argc, char** argv) {
         }
     });
 
-    LOGI(count_mismatches == 0 ? "Test passed.\n": "Test failed.\n");
+    LOGI(count_mismatches == 0 ? "Test passed.\n" : "Test failed.\n");
 
     halide_device_release(NULL, halide_openglcompute_device_interface());
 

@@ -1,7 +1,12 @@
 #ifndef HALIDE_HALIDERUNTIMEOPENCL_H
 #define HALIDE_HALIDERUNTIMEOPENCL_H
 
+// Don't include HalideRuntime.h if the contents of it were already pasted into a generated header above this one
+#ifndef HALIDE_HALIDERUNTIME_H
+
 #include "HalideRuntime.h"
+
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -14,12 +19,13 @@ extern "C" {
 #define HALIDE_RUNTIME_OPENCL
 
 extern const struct halide_device_interface_t *halide_opencl_device_interface();
+extern const struct halide_device_interface_t *halide_opencl_image_device_interface();
 
 /** These are forward declared here to allow clients to override the
  *  Halide OpenCL runtime. Do not call them. */
 // @{
 extern int halide_opencl_initialize_kernels(void *user_context, void **state_ptr,
-                                               const char *src, int size);
+                                            const char *src, int size);
 extern int halide_opencl_run(void *user_context,
                              void *state_ptr,
                              const char *entry_name,
@@ -28,11 +34,8 @@ extern int halide_opencl_run(void *user_context,
                              int shared_mem_bytes,
                              size_t arg_sizes[],
                              void *args[],
-                             int8_t arg_is_buffer[],
-                             int num_attributes,
-                             float* vertex_buffer,
-                             int num_coords_dim0,
-                             int num_coords_dim1);
+                             int8_t arg_is_buffer[]);
+extern void halide_opencl_finalize_kernels(void *user_context, void *state_ptr);
 // @}
 
 /** Set the platform name for OpenCL to use (e.g. "Intel" or
@@ -85,6 +88,11 @@ extern const char *halide_opencl_get_build_options(void *user_context);
  * dirty bits are left unmodified. */
 extern int halide_opencl_wrap_cl_mem(void *user_context, struct halide_buffer_t *buf, uint64_t device_ptr);
 
+/** Same as halide_opencl_wrap_cl_mem but wraps a cl_mem created with
+ * clCreateImage
+ */
+extern int halide_opencl_image_wrap_cl_mem(void *user_context, struct halide_buffer_t *buf, uint64_t device_ptr);
+
 /** Disconnect a halide_buffer_t from the memory it was previously
  * wrapped around. Should only be called for a halide_buffer_t that
  * halide_opencl_wrap_device_ptr was previously called on. Frees any
@@ -105,7 +113,7 @@ extern uintptr_t halide_opencl_get_cl_mem(void *user_context, struct halide_buff
 extern uint64_t halide_opencl_get_crop_offset(void *user_context, halide_buffer_t *buf);
 
 #ifdef __cplusplus
-} // End extern "C"
+}  // End extern "C"
 #endif
 
-#endif // HALIDE_HALIDERUNTIMEOPENCL_H
+#endif  // HALIDE_HALIDERUNTIMEOPENCL_H

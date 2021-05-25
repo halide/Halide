@@ -11,8 +11,7 @@ using namespace Halide;
 
 // Make a custom strlen so that it always returns a 32-bit int,
 // instead of switching based on bit-width.
-extern "C" DLLEXPORT
-int my_strlen(const char *c) {
+extern "C" DLLEXPORT int my_strlen(const char *c) {
     int l = 0;
     while (*c) {
         c++;
@@ -25,7 +24,7 @@ HalideExtern_1(int, my_strlen, const char *);
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("Skipping test for WebAssembly as the wasm JIT cannot support Param<> for pointer types.\n");
+        printf("[SKIP] WebAssembly JIT does not support Param<> for pointer types.\n");
         return 0;
     }
 
@@ -57,7 +56,7 @@ int main(int argc, char **argv) {
         g.compute_root();
         h(x) = g(x);
 
-        Buffer<char *> im = h.realize(100);
+        Buffer<char *> im = h.realize({100});
 
         uint64_t handle = (uint64_t)(im(0));
         if (sizeof(char *) == 4) {

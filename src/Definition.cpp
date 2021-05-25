@@ -1,4 +1,6 @@
-#include <stdlib.h>
+#include <cstdlib>
+
+#include <utility>
 
 #include "Definition.h"
 #include "IR.h"
@@ -15,7 +17,7 @@ using std::vector;
 
 struct DefinitionContents {
     mutable RefCount ref_count;
-    bool is_init;
+    bool is_init = true;
     Expr predicate;
     std::vector<Expr> values, args;
     StageSchedule stage_schedule;
@@ -23,7 +25,7 @@ struct DefinitionContents {
     std::string source_location;
 
     DefinitionContents()
-        : is_init(true), predicate(const_true()) {
+        : predicate(const_true()) {
     }
 
     void accept(IRVisitor *visitor) const {
@@ -31,10 +33,10 @@ struct DefinitionContents {
             predicate.accept(visitor);
         }
 
-        for (Expr val : values) {
+        for (const Expr &val : values) {
             val.accept(visitor);
         }
-        for (Expr arg : args) {
+        for (const Expr &arg : args) {
             arg.accept(visitor);
         }
 
@@ -196,7 +198,7 @@ std::string Definition::source_location() const {
 
 const Specialization &Definition::add_specialization(Expr condition) {
     Specialization s;
-    s.condition = condition;
+    s.condition = std::move(condition);
     s.definition.contents = new DefinitionContents;
     s.definition.contents->is_init = contents->is_init;
     s.definition.contents->predicate = contents->predicate;

@@ -7,7 +7,7 @@ Var x;
 
 Func upsample(Func f) {
     Func u;
-    u(x) = f(x/2+1);
+    u(x) = f(x / 2 + 1);
     return u;
 }
 
@@ -26,8 +26,8 @@ int main(int argc, char **argv) {
     Func f2 = build();
     f2.bound(x, 0, 64).vectorize(x);
 
-    Buffer<int> o1 = f1.realize(64);
-    Buffer<int> o2 = f2.realize(64);
+    Buffer<int> o1 = f1.realize({64});
+    Buffer<int> o2 = f2.realize({64});
 
     for (int x = 0; x < o2.width(); x++) {
         if (o1(x) != o2(x)) {
