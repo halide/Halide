@@ -872,7 +872,10 @@ WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
             memcpy((void *)dst, (void *)src, c.chunk_size);
         }
         if (err != CUDA_SUCCESS) {
-            error(user_context) << "CUDA: " << copy_name << " failed: " << get_error_name(err);
+            error(user_context) << "CUDA: " << copy_name << " failed: " << get_error_name(err)
+                            << "    from " << (from_host ? "host" : "device")
+                            << " to " << (to_host ? "host" : "device") << ", "
+                            << (void *)src << " -> " << (void *)dst << ", " << c.chunk_size << " bytes\n";
             return (int)err;
         }
     } else {
