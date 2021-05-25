@@ -16,7 +16,6 @@ namespace {
 // DMA-BUF support
 void *dmabufAllocator = NULL;
 
-extern "C" {
 const char *dmabuf_heap = "qcom,system";
 
 typedef void *(*rem_dmabuf_create_fn)();
@@ -27,7 +26,6 @@ rem_dmabuf_alloc_fn dmabuf_alloc_fn = NULL;
 
 typedef void (*rem_dmabuf_deinit_fn)(void *);
 rem_dmabuf_deinit_fn dmabuf_deinit_fn = NULL;
-}
 
 // ION support
 
@@ -76,13 +74,12 @@ struct ion_handle_data {
 #define ION_IOC_FREE _IOWR('I', 1, ion_handle_data)
 #define ION_IOC_MAP _IOWR('I', 2, ion_fd_data)
 
-extern "C" {
 typedef int (*rem_ion_open_fn)();
 rem_ion_open_fn ion_open_fn = NULL;
 
 typedef int (*rem_ion_alloc_fd_fn)(int ion_fd, size_t len, size_t align, unsigned int heap_id_mask, unsigned int flags, int *map_fd);
 rem_ion_alloc_fd_fn ion_alloc_fd_fn = NULL;
-}
+
 // ION IOCTL approach
 // This function will first try older IOCTL approach provided we have not determined
 // that we should use the newer IOCTL. Once we have determined we should use the

@@ -94,19 +94,51 @@ int halide_hexagon_remote_load_library(const char *soname, int sonameLen,
 
 volatile int power_ref_count = 0;
 
+// HAP power_context
+//  - has to be non-NULL (for devices newer than SM8350)
+//  - only has to be unique within the process
+//  - the context is just an identifier
+//  - even though it is a void*, it is never stored into
+//  - for managing multiple clients, could just malloc(1)/free contexts
+//  - could even just use "(void*)1" (non-NULL), but that would not be
+//    guaranteed unique if multiple clients are used within the process
+//  - power context is created within HAP_power_set if it didn't exist
+//  - when done with a power context, call HAP_power_destroy(context)
+//
+// The reason for not allowing NULL power context:
+//   If there are multiple clients running in the same process (e.g.,
+//   camera and ML clients) and both of them using NULL context for
+//   voting purpose. Camera might vote using NULL and ML might remove
+//   vote using same NULL context. fastrpc wouldn't know to remove
+//   or retain vote as both clinets are using same NULL context.
+//
+// Calling HAP_power_destroy when done with a power context:
+//   It is ideal (but not necessary) to always call HAP_power_destroy
+//   in your process tear down process.  Once the process exits (normal
+//   or exception) fastrpc teardown will take of releasing all client
+//   contexts. It shouldn't leak once the DSP User PD exits completely.
+//
+// Is there a limit on the number of power contexts:
+//   Yes there is limit on number of client context that can be created.
+//   This limit is coming from MMPM to create voting client context.
+//   There is a limit of 192 power clients at a time by MMPM on the DSP.
+//   Old client contexts need to be destroyed (HAP_power_destroy) to
+//   create new client contexts.
+//
 static inline void *get_HAP_power_context() {
+    // Halide runtime only needs a single power context
     return (void *)(&power_ref_count);
 }
 
 int halide_hexagon_remote_power_hvx_on() {
     if (power_ref_count == 0) {
-        void *pwr_ctx = get_HAP_power_context();
+        void *power_context = get_HAP_power_context();
         HAP_power_request_t request;
         request.type = HAP_power_set_HVX;
         request.hvx.power_up = TRUE;
-        int result = HAP_power_set(pwr_ctx, &request);
+        int result = HAP_power_set(power_context, &request);
         if (0 != result) {
-            log_printf("HAP_power_set(%p, HAP_power_set_HVX) failed (%d)\n", pwr_ctx, result);
+            log_printf("HAP_power_set(%p, HAP_power_set_HVX) failed (%d)\n", power_context, result);
             return -1;
         }
     }
@@ -118,13 +150,13 @@ int halide_hexagon_remote_power_hvx_on() {
 int halide_hexagon_remote_power_hvx_off() {
     power_ref_count--;
     if (power_ref_count == 0) {
-        void *pwr_ctx = get_HAP_power_context();
+        void *power_context = get_HAP_power_context();
         HAP_power_request_t request;
         request.type = HAP_power_set_HVX;
         request.hvx.power_up = FALSE;
-        int result = HAP_power_set(pwr_ctx, &request);
+        int result = HAP_power_set(power_context, &request);
         if (0 != result) {
-            log_printf("HAP_power_set(%p, HAP_power_set_HVX) failed (%d)\n", pwr_ctx, result);
+            log_printf("HAP_power_set(%p, HAP_power_set_HVX) failed (%d)\n", power_context, result);
             return -1;
         }
     }
@@ -141,14 +173,14 @@ int halide_hexagon_remote_set_performance(
     int set_latency,
     int latency) {
 
-    void *pwr_ctx = get_HAP_power_context();
+    void *power_context = get_HAP_power_context();
     HAP_power_request_t request;
     memset(&request, 0, sizeof(HAP_power_request_t));
     request.type = HAP_power_set_apptype;
     request.apptype = HAP_POWER_COMPUTE_CLIENT_CLASS;
-    int retval = HAP_power_set(pwr_ctx, &request);
+    int retval = HAP_power_set(power_context, &request);
     if (0 != retval) {
-        log_printf("HAP_power_set(%p, HAP_power_set_apptype) failed (%d)\n", pwr_ctx, retval);
+        log_printf("HAP_power_set(%p, HAP_power_set_apptype) failed (%d)\n", power_context, retval);
         return -1;
     }
 
@@ -162,9 +194,9 @@ int halide_hexagon_remote_set_performance(
     request.mips_bw.busbwUsagePercentage = busbwUsagePercentage;
     request.mips_bw.set_latency = set_latency;
     request.mips_bw.latency = latency;
-    retval = HAP_power_set(pwr_ctx, &request);
+    retval = HAP_power_set(power_context, &request);
     if (0 != retval) {
-        log_printf("HAP_power_set(%p, HAP_power_set_mips_bw) failed (%d)\n", pwr_ctx, retval);
+        log_printf("HAP_power_set(%p, HAP_power_set_mips_bw) failed (%d)\n", power_context, retval);
         return -1;
     }
     return 0;
@@ -202,16 +234,16 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     int set_latency = 0;
     int latency = 0;
 
-    void *pwr_ctx = get_HAP_power_context();
+    void *power_context = get_HAP_power_context();
     HAP_power_response_t power_info;
     unsigned int max_mips = 0;
     uint64 max_bus_bw = 0;
     HAP_power_request_t request;
 
     power_info.type = HAP_power_get_max_mips;
-    int retval = HAP_power_get(pwr_ctx, &power_info);
+    int retval = HAP_power_get(power_context, &power_info);
     if (0 != retval) {
-        log_printf("HAP_power_get(%p, HAP_power_get_max_mips) failed (%d)\n", pwr_ctx, retval);
+        log_printf("HAP_power_get(%p, HAP_power_get_max_mips) failed (%d)\n", power_context, retval);
         return -1;
     }
     max_mips = power_info.max_mips;
@@ -223,9 +255,9 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     }
 
     power_info.type = HAP_power_get_max_bus_bw;
-    retval = HAP_power_get(pwr_ctx, &power_info);
+    retval = HAP_power_get(power_context, &power_info);
     if (0 != retval) {
-        log_printf("HAP_power_get(%p, HAP_power_get_max_bus_bw) failed (%d)\n", pwr_ctx, retval);
+        log_printf("HAP_power_get(%p, HAP_power_get_max_bus_bw) failed (%d)\n", power_context, retval);
         return -1;
     }
     max_bus_bw = power_info.max_bus_bw;
@@ -286,9 +318,9 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     memset(&request, 0, sizeof(HAP_power_request_t));
     request.type = HAP_power_set_apptype;
     request.apptype = HAP_POWER_COMPUTE_CLIENT_CLASS;
-    retval = HAP_power_set(pwr_ctx, &request);
+    retval = HAP_power_set(power_context, &request);
     if (0 != retval) {
-        log_printf("HAP_power_set(%p, HAP_power_set_apptype) failed (%d)\n", pwr_ctx, retval);
+        log_printf("HAP_power_set(%p, HAP_power_set_apptype) failed (%d)\n", power_context, retval);
         return -1;
     }
 
@@ -302,7 +334,7 @@ int halide_hexagon_remote_set_performance_mode(int mode) {
     request.dcvs_v2.dcvs_params.target_corner = halide_power_mode_to_voltage_corner(mode);
     request.dcvs_v2.set_latency = set_latency;
     request.dcvs_v2.latency = latency;
-    retval = HAP_power_set(pwr_ctx, &request);
+    retval = HAP_power_set(power_context, &request);
     if (0 == retval) {
         return 0;
     } else {
