@@ -339,13 +339,23 @@ Simplify::ScopedFact::~ScopedFact() {
 Expr simplify(const Expr &e, bool remove_dead_let_stmts,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
-    return Simplify(remove_dead_let_stmts, &bounds, &alignment).mutate(e, nullptr);
+    Simplify m(remove_dead_let_stmts, &bounds, &alignment);
+    Expr result = m.mutate(e, nullptr);
+    if (m.in_unreachable) {
+        return unreachable(e.type());
+    }
+    return result;
 }
 
 Stmt simplify(const Stmt &s, bool remove_dead_let_stmts,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
-    return Simplify(remove_dead_let_stmts, &bounds, &alignment).mutate(s);
+    Simplify m(remove_dead_let_stmts, &bounds, &alignment);
+    Stmt result = m.mutate(s);
+    if (m.in_unreachable) {
+        return Evaluate::make(unreachable());
+    }
+    return result;
 }
 
 class SimplifyExprs : public IRMutator {

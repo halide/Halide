@@ -1899,7 +1899,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         {Call::get_intrinsic_name(Call::saturating_sub), {"halide.hexagon.sat_sub", true}},
     };
 
-    if (is_native_interleave(op) || is_native_deinterleave(op)) {
+    if (is_native_interleave(op)) {
         internal_assert(
             op->type.lanes() % (native_vector_bits() * 2 / op->type.bits()) == 0);
     }
