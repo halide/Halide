@@ -2177,6 +2177,8 @@ struct IsConst {
     constexpr static bool canonical = true;
 
     A a;
+    bool check_v;
+    int64_t v;
 
     constexpr static bool foldable = true;
 
@@ -2186,19 +2188,33 @@ struct IsConst {
         ty.code = halide_type_uint;
         ty.bits = 64;
         ty.lanes = 1;
-        val.u.u64 = ::Halide::Internal::is_const(e) ? 1 : 0;
+        if (check_v) {
+            val.u.u64 = ::Halide::Internal::is_const(e, v) ? 1 : 0;
+        } else {
+            val.u.u64 = ::Halide::Internal::is_const(e) ? 1 : 0;
+        }
     }
 };
 
 template<typename A>
 HALIDE_ALWAYS_INLINE auto is_const(A &&a) noexcept -> IsConst<decltype(pattern_arg(a))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a)};
+    return {pattern_arg(a), false, 0};
+}
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto is_const(A &&a, int64_t value) noexcept -> IsConst<decltype(pattern_arg(a))> {
+    assert_is_lvalue_if_expr<A>();
+    return {pattern_arg(a), true, value};
 }
 
 template<typename A>
 std::ostream &operator<<(std::ostream &s, const IsConst<A> &op) {
-    s << "is_const(" << op.a << ")";
+    if (op.check_v) {
+        s << "is_const(" << op.a << ")";
+    } else {
+        s << "is_const(" << op.a << ", " << op.v << ")";
+    }
     return s;
 }
 

@@ -107,6 +107,9 @@ inline Expr make_const(Type t, float16_t val) {
 /** Construct a unique signed_integer_overflow Expr */
 Expr make_signed_integer_overflow(Type type);
 
+/** Check if an expression is a signed_integer_overflow */
+bool is_signed_integer_overflow(const Expr &expr);
+
 /** Check if a constant value can be correctly represented as the given type. */
 void check_representable(Type t, int64_t val);
 
@@ -1342,6 +1345,21 @@ template<typename T>
 inline Expr undef() {
     return undef(type_of<T>());
 }
+
+namespace Internal {
+
+/** Return an expression that should never be evaluated. Expressions
+ * that depend on unreachabale values are also unreachable, and
+ * statements that execute unreachable expressions are also considered
+ * unreachable. */
+Expr unreachable(Type t = Int(32));
+
+template<typename T>
+inline Expr unreachable() {
+    return unreachable(type_of<T>());
+}
+
+}  // namespace Internal
 
 /** Control the values used in the memoization cache key for memoize.
  * Normally parameters and other external dependencies are

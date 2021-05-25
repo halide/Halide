@@ -118,7 +118,7 @@ bool is_no_op(const Stmt &s) {
         return true;
     }
     const Evaluate *e = s.as<Evaluate>();
-    return e && is_const(e->value);
+    return e && is_pure(e->value);
 }
 
 namespace {
@@ -398,6 +398,11 @@ Expr make_two(Type t) {
 Expr make_signed_integer_overflow(Type type) {
     static std::atomic<int> counter{0};
     return Call::make(type, Call::signed_integer_overflow, {counter++}, Call::Intrinsic);
+}
+
+bool is_signed_integer_overflow(const Expr &expr) {
+    const Call *call = expr.as<Call>();
+    return call && call->is_intrinsic(Call::signed_integer_overflow);
 }
 
 Expr const_true(int w) {
@@ -2587,6 +2592,14 @@ Expr undef(Type t) {
                                 std::vector<Expr>(),
                                 Internal::Call::PureIntrinsic);
 }
+
+namespace Internal {
+Expr unreachable(Type t) {
+    return Internal::Call::make(t, Internal::Call::unreachable,
+                                std::vector<Expr>(),
+                                Internal::Call::Intrinsic);
+}
+}  // namespace Internal
 
 namespace {
 Expr make_scatter_gather(const std::vector<Expr> &args) {

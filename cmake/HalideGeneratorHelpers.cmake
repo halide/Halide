@@ -258,14 +258,31 @@ endfunction()
 ##
 
 function(_Halide_place_dll GEN)
-    get_property(is_imported TARGET ${GEN} PROPERTY IMPORTED)
-    get_property(has_post_build TARGET ${GEN} PROPERTY Halide_GENERATOR_HAS_POST_BUILD)
-    get_property(halide_type TARGET Halide::Halide PROPERTY TYPE)
-    if (WIN32 AND NOT is_imported AND NOT has_post_build AND halide_type STREQUAL "SHARED_LIBRARY")
-        add_custom_command(TARGET ${GEN} POST_BUILD
-                           COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Halide::Halide> $<TARGET_FILE_DIR:${GEN}>)
-        set_property(TARGET ${GEN} PROPERTY Halide_GENERATOR_HAS_POST_BUILD 1)
+    if (NOT WIN32)
+        return()
     endif ()
+
+    # Short circuit so that Halide::Halide isn't checked when importing a generator from another CMake project
+    get_property(is_imported TARGET ${GEN} PROPERTY IMPORTED)
+    if (is_imported)
+        return()
+    endif ()
+
+    get_property(has_post_build TARGET ${GEN} PROPERTY Halide_GENERATOR_HAS_POST_BUILD)
+    if (has_post_build)
+        return()
+    endif ()
+
+    # Here GEN is not IMPORTED, which means that it must be linked
+    # to Halide::Halide and therefore Halide::Halide must exist.
+    get_property(halide_type TARGET Halide::Halide PROPERTY TYPE)
+    if (NOT halide_type STREQUAL "SHARED_LIBRARY")
+        return()
+    endif ()
+
+    add_custom_command(TARGET ${GEN} POST_BUILD
+                       COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Halide::Halide> $<TARGET_FILE_DIR:${GEN}>)
+    set_property(TARGET ${GEN} PROPERTY Halide_GENERATOR_HAS_POST_BUILD 1)
 endfunction()
 
 ##

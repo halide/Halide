@@ -103,6 +103,13 @@ public:
         }
     };
 
+    HALIDE_ALWAYS_INLINE
+    void clear_bounds_info(ExprInfo *b) {
+        if (b) {
+            *b = ExprInfo{};
+        }
+    }
+
 #if (LOG_EXPR_MUTATORIONS || LOG_STMT_MUTATIONS)
     static int debug_indent;
 #endif
@@ -205,6 +212,9 @@ public:
     // transformations are not a good idea if the code is to be
     // vectorized.
     bool in_vector_loop = false;
+
+    // Tracks whether or not the current IR is unconditionally unreachable.
+    bool in_unreachable = false;
 
     // If we encounter a reference to a buffer (a Load, Store, Call,
     // or Provide), there's an implicit dependence on some associated
