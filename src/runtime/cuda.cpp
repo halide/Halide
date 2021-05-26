@@ -614,7 +614,7 @@ WEAK int halide_cuda_device_free(void *user_context, halide_buffer_t *buf) {
     halide_assert(user_context, validate_device_pointer(user_context, buf));
 
     CUresult err = CUDA_SUCCESS;
-    if (halide_can_reuse_device_allocations(user_context)) {
+    if (halide_can_reuse_device_allocations(user_context) && 0) {
         debug(user_context) << "    caching allocation for later use: " << (void *)(dev_ptr) << "\n";
 
         FreeListItem *item = (FreeListItem *)malloc(sizeof(FreeListItem));
@@ -857,11 +857,6 @@ WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
         if (!from_host && to_host) {
             debug(user_context) << "cuMemcpyDtoH(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
             copy_name = "cuMemcpyDtoH";
-            uint8_t *dd = (uint8_t *)dst;
-            for (uint64_t i = 0; i < c.chunk_size; i++) {
-                debug(user_context) << "writing to host at " << (void *)dd << "\n";
-                *dd++ = 0;
-            }
             uint64_t ddd = dst;
             uint64_t sss = src;
             for (uint64_t i = 0; i < c.chunk_size; i++) {
