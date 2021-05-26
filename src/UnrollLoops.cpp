@@ -5,6 +5,7 @@
 #include "IROperator.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include "SimplifyCorrelatedDifferences.h"
 
 using std::pair;
 using std::vector;
@@ -54,6 +55,7 @@ class UnrollLoops : public IRMutator {
             if (e == nullptr) {
                 // Still no luck. Try taking an upper bound and
                 // injecting an if statement around the body.
+                extent = simplify_correlated_differences(extent);
                 extent_upper = find_constant_bound(extent, Direction::Upper, Scope<Interval>());
                 if (extent_upper.defined()) {
                     e = extent_upper.as<IntImm>();
