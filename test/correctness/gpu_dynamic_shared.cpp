@@ -4,7 +4,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    Target t = get_jit_target_from_environment().with_feature(Target::Debug);
+    Target t = get_jit_target_from_environment();
     if (!t.has_gpu_feature()) {
         printf("[SKIP] No GPU target enabled.\n");
         return 0;
@@ -14,8 +14,6 @@ int main(int argc, char **argv) {
         printf("[SKIP] Skipping test for OpenGLCompute, as it does not support dynamically-sized shared memory\n");
         return 0;
     }
-
-    printf("Using target: %s\n", t.to_string().c_str());
 
     // Check dynamic allocations per-block and per-thread into both
     // shared and global
@@ -36,19 +34,8 @@ int main(int argc, char **argv) {
 
             f.store_in(memory_type);
 
-            // printf("Begin per_thread = %d, memory_type = %d\n", per_thread, (int)memory_type);
-            // fflush(stdout);
-            fprintf(stderr, "Begin per_thread = %d, memory_type = %d\n", per_thread, (int)memory_type);
-            fflush(stderr);
-
             // The amount of shared/heap memory required varies with x
-            Buffer<int> out = g.realize({100}, t);
-
-            // printf("End per_thread = %d, memory_type = %d\n", per_thread, (int)memory_type);
-            // fflush(stdout);
-            fprintf(stderr, "End per_thread = %d, memory_type = %d\n", per_thread, (int)memory_type);
-            fflush(stderr);
-
+            Buffer<int> out = g.realize({100});
             for (int x = 0; x < 100; x++) {
                 int correct = 3 * x;
                 if (out(x) != correct) {
