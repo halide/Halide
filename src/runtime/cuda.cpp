@@ -1076,7 +1076,7 @@ WEAK int halide_cuda_run(void *user_context,
 
     debug(user_context) << "Got context.\n";
 
-#ifdef DEBUG_RUNTIME
+#ifdef xDEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
@@ -1099,7 +1099,7 @@ WEAK int halide_cuda_run(void *user_context,
         debug(user_context) << "    halide_cuda_run " << (int)num_args
                             << " arg_sizes[num_args]=" << (int)arg_sizes[num_args]
                             << " is_buffer=" << (int)arg_is_buffer[num_args]
-                            << " [" << (*((void **)args[num_args])) << " ...] "
+                            << " [" << (arg_sizes[num_args] == 8 ? (*((int64_t *)args[num_args])) : (*((int32_t *)args[num_args]))) << " ...] "
                             << arg_is_buffer[num_args] << "\n";
         num_args++;
     }
@@ -1111,6 +1111,7 @@ WEAK int halide_cuda_run(void *user_context,
     for (size_t i = 0; i <= num_args; i++) {  // Get nullptr at end.
         if (arg_is_buffer[i]) {
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
+            halide_assert(user_context, i < num_args);
             dev_handles[i] = ((halide_buffer_t *)args[i])->device;
             translated_args[i] = &(dev_handles[i]);
             debug(user_context) << "    halide_cuda_run translated arg " << (int)i
@@ -1142,7 +1143,9 @@ WEAK int halide_cuda_run(void *user_context,
                          stream,
                          translated_args,
                          nullptr);
+    memset(dev_handles, 0xef, num_args * sizeof(uint64_t));
     free(dev_handles);
+    memset(translated_args, 0xed, (num_args + 1) * sizeof(void *));
     free(translated_args);
     if (err != CUDA_SUCCESS) {
         error(user_context) << "CUDA: cuLaunchKernel failed: "
@@ -1150,7 +1153,7 @@ WEAK int halide_cuda_run(void *user_context,
         return err;
     }
 
-#ifdef DEBUG_RUNTIME
+#ifdef xDEBUG_RUNTIME
     err = cuCtxSynchronize();
     if (err != CUDA_SUCCESS) {
         error(user_context) << "CUDA: cuCtxSynchronize failed: "
