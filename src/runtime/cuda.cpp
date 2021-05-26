@@ -857,6 +857,28 @@ WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
         if (!from_host && to_host) {
             debug(user_context) << "cuMemcpyDtoH(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
             copy_name = "cuMemcpyDtoH";
+            uint8_t *dd = (uint8_t *)dst;
+            for (uint64_t i = 0; i < c.chunk_size; i++) {
+                debug(user_context) << "writing to host at " << (void *)dd << "\n";
+                *dd++ = 0;
+            }
+            uint64_t ddd = dst;
+            uint64_t sss = src;
+            for (uint64_t i = 0; i < c.chunk_size; i++) {
+                debug(user_context) << "writing to host at " << (void *)dd << "\n";
+                debug(user_context) << "Calling cuMemcpyDtoH(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")...\n";
+                err = cuMemcpyDtoH((void *)ddd, (CUdeviceptr)sss, 1);
+                if (err != CUDA_SUCCESS) {
+                    error(user_context) << "CUDA: INCREMENTAL " << copy_name << " failed: " << get_error_name(err)
+                                        << "    from " << (from_host ? "host" : "device")
+                                        << " to " << (to_host ? "host" : "device") << ", "
+                                        << (void *)sss << " -> " << (void *)ddd << ", " << 1 << " bytes\n";
+                    return (int)err;
+                }
+                ddd++;
+                sss++;
+            }
+            debug(user_context) << "Calling cuMemcpyDtoH(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")...\n";
             err = cuMemcpyDtoH((void *)dst, (CUdeviceptr)src, c.chunk_size);
         } else if (from_host && !to_host) {
             debug(user_context) << "cuMemcpyHtoD(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
@@ -1143,11 +1165,8 @@ WEAK int halide_cuda_run(void *user_context,
                          stream,
                          translated_args,
                          nullptr);
-    memset(dev_handles, 0xef, num_args * sizeof(uint64_t));
-    // free(dev_handles);
-    memset(translated_args, 0xed, (num_args + 1) * sizeof(void *));
-    // free(translated_args);
-    debug(user_context) << " SKIP THE FREE!\n";
+    free(dev_handles);
+    free(translated_args);
     if (err != CUDA_SUCCESS) {
         error(user_context) << "CUDA: cuLaunchKernel failed: "
                             << get_error_name(err);
