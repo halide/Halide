@@ -883,7 +883,7 @@ WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
     } else {
         debug(user_context) << "CDMC: from " << (from_host ? "host" : "device")
                             << " to " << (to_host ? "host" : "device") << ", "
-                            << " dim " << d
+                            << " dim " << d << " "
                             << (void *)src << " -> " << (void *)dst << ", " << c.chunk_size << " bytes\n";
         ssize_t src_off = 0, dst_off = 0;
         for (int i = 0; i < (int)c.extent[d - 1]; i++) {
@@ -1144,9 +1144,10 @@ WEAK int halide_cuda_run(void *user_context,
                          translated_args,
                          nullptr);
     memset(dev_handles, 0xef, num_args * sizeof(uint64_t));
-    free(dev_handles);
+    // free(dev_handles);
     memset(translated_args, 0xed, (num_args + 1) * sizeof(void *));
-    free(translated_args);
+    // free(translated_args);
+    debug(user_context) << " SKIP THE FREE!\n";
     if (err != CUDA_SUCCESS) {
         error(user_context) << "CUDA: cuLaunchKernel failed: "
                             << get_error_name(err);
