@@ -103,6 +103,13 @@ public:
         }
     };
 
+    HALIDE_ALWAYS_INLINE
+    void clear_bounds_info(ExprInfo *b) {
+        if (b) {
+            *b = ExprInfo{};
+        }
+    }
+
 #if (LOG_EXPR_MUTATORIONS || LOG_STMT_MUTATIONS)
     static int debug_indent;
 #endif
