@@ -626,6 +626,7 @@ WEAK int halide_cuda_device_free(void *user_context, halide_buffer_t *buf) {
             // We don't want to use a buffer freed one stream on
             // another, as there are no synchronization guarantees and
             // everything is async.
+            debug(user_context) << "halide_cuda_get_stream() in halide_cuda_device_free\n";
             int result = halide_cuda_get_stream(user_context, ctx.context, &item->stream);
             if (result != 0) {
                 error(user_context) << "CUDA: In halide_cuda_device_free, halide_cuda_get_stream returned " << result << "\n";
@@ -752,6 +753,7 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
     if (halide_can_reuse_device_allocations(user_context)) {
         CUstream stream = nullptr;
         if (cuStreamSynchronize != nullptr) {
+            debug(user_context) << "halide_cuda_get_stream() in halide_cuda_device_malloc\n";
             int result = halide_cuda_get_stream(user_context, ctx.context, &stream);
             if (result != 0) {
                 error(user_context) << "CUDA: In halide_cuda_device_malloc, halide_cuda_get_stream returned " << result << "\n";
@@ -873,9 +875,9 @@ WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
         }
         if (err != CUDA_SUCCESS) {
             error(user_context) << "CUDA: " << copy_name << " failed: " << get_error_name(err)
-                            << "    from " << (from_host ? "host" : "device")
-                            << " to " << (to_host ? "host" : "device") << ", "
-                            << (void *)src << " -> " << (void *)dst << ", " << c.chunk_size << " bytes\n";
+                                << "    from " << (from_host ? "host" : "device")
+                                << " to " << (to_host ? "host" : "device") << ", "
+                                << (void *)src << " -> " << (void *)dst << ", " << c.chunk_size << " bytes\n";
             return (int)err;
         }
     } else {
@@ -1020,19 +1022,23 @@ WEAK int halide_cuda_device_sync(void *user_context, struct halide_buffer_t *) {
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
+    const char *nm = "null";
     CUresult err;
     if (cuStreamSynchronize != nullptr) {
         CUstream stream;
+        debug(user_context) << "halide_cuda_get_stream() in halide_cuda_device_sync\n";
         int result = halide_cuda_get_stream(user_context, ctx.context, &stream);
         if (result != 0) {
             error(user_context) << "CUDA: In halide_cuda_device_sync, halide_cuda_get_stream returned " << result << "\n";
         }
         err = cuStreamSynchronize(stream);
+        nm = "cuStreamSynchronize";
     } else {
         err = cuCtxSynchronize();
+        nm = "cuCtxSynchronize";
     }
     if (err != CUDA_SUCCESS) {
-        error(user_context) << "CUDA: cuCtxSynchronize failed: "
+        error(user_context) << "CUDA: " << nm << " failed: "
                             << get_error_name(err);
         return err;
     }
@@ -1091,7 +1097,8 @@ WEAK int halide_cuda_run(void *user_context,
     size_t num_args = 0;
     while (arg_sizes[num_args] != 0) {
         debug(user_context) << "    halide_cuda_run " << (int)num_args
-                            << " " << (int)arg_sizes[num_args]
+                            << " arg_sizes[num_args]=" << (int)arg_sizes[num_args]
+                            << " is_buffer=" << (int)arg_is_buffer[num_args]
                             << " [" << (*((void **)args[num_args])) << " ...] "
                             << arg_is_buffer[num_args] << "\n";
         num_args++;
@@ -1106,7 +1113,8 @@ WEAK int halide_cuda_run(void *user_context,
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
             dev_handles[i] = ((halide_buffer_t *)args[i])->device;
             translated_args[i] = &(dev_handles[i]);
-            debug(user_context) << "    halide_cuda_run translated arg" << (int)i
+            debug(user_context) << "    halide_cuda_run translated arg " << (int)i
+                                << " " << translated_args[i]
                                 << " [" << (*((void **)translated_args[i])) << " ...]\n";
         } else {
             translated_args[i] = args[i];
@@ -1117,6 +1125,7 @@ WEAK int halide_cuda_run(void *user_context,
     // We use whether this routine was defined in the cuda driver library
     // as a test for streams support in the cuda implementation.
     if (cuStreamSynchronize != nullptr) {
+        debug(user_context) << "halide_cuda_get_stream() in halide_cuda_run\n";
         int result = halide_cuda_get_stream(user_context, ctx.context, &stream);
         if (result != 0) {
             error(user_context) << "CUDA: In halide_cuda_run, halide_cuda_get_stream returned " << result << "\n";

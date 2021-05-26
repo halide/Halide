@@ -36,8 +36,19 @@ int main(int argc, char **argv) {
 
             f.store_in(memory_type);
 
+            printf("Begin per_thread = %d, memory_type = %d\n", per_thread, (int)memory_type);
+            fflush(stdout);
+            fprintf(stderr, "Begin per_thread = %d, memory_type = %d\n", per_thread, (int)memory_type);
+            fflush(stderr);
+
             // The amount of shared/heap memory required varies with x
             Buffer<int> out = g.realize({100}, t);
+
+            printf("End per_thread = %d, memory_type = %d\n", per_thread, (int)memory_type);
+            fflush(stdout);
+            fprintf(stderr, "End per_thread = %d, memory_type = %d\n", per_thread, (int)memory_type);
+            fflush(stderr);
+
             for (int x = 0; x < 100; x++) {
                 int correct = 3 * x;
                 if (out(x) != correct) {
