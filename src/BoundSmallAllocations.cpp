@@ -89,6 +89,9 @@ class BoundSmallAllocations : public IRMutator {
             bool found_non_constant_extent = false;
             for (Range &r : region) {
                 Expr bound = find_constant_bound(r.extent, Direction::Upper, scope);
+                // We can allow non-constant extents for now, as long as all
+                // remaining dimensions are 1 (so the stride is unused, which
+                // will be non-constant).
                 user_assert(!found_non_constant_extent || is_const_one(bound))
                     << "Was unable to infer constant upper bound on extent of realization "
                     << op->name << ". Use Func::bound_extent to specify it manually.";
