@@ -865,8 +865,7 @@ WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
             uint64_t ddd = dst;
             uint64_t sss = src;
             for (uint64_t i = 0; i < c.chunk_size; i++) {
-                debug(user_context) << "writing to host at " << (void *)dd << "\n";
-                debug(user_context) << "Calling cuMemcpyDtoH(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")...\n";
+                debug(user_context) << "Calling cuMemcpyDtoH(" << (void *)ddd << ", " << (void *)sss << ", " << 1 << ")...\n";
                 err = cuMemcpyDtoH((void *)ddd, (CUdeviceptr)sss, 1);
                 if (err != CUDA_SUCCESS) {
                     error(user_context) << "CUDA: INCREMENTAL " << copy_name << " failed: " << get_error_name(err)
