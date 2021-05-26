@@ -74,6 +74,7 @@ int main(int argc, char **argv) {
         TailStrategy::GuardWithIf,
         TailStrategy::Predicate,
         TailStrategy::ShiftInwards,
+        TailStrategy::None,
     };
 
     // Two stages. First stage computed at tiles of second.

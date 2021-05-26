@@ -156,6 +156,9 @@ std::ostream &operator<<(std::ostream &out, const TailStrategy &t) {
     case TailStrategy::RoundUp:
         out << "RoundUp";
         break;
+    case TailStrategy::None:
+        out << "None";
+        break;
     }
     return out;
 }

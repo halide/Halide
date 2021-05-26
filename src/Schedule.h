@@ -53,7 +53,7 @@ enum class TailStrategy {
      * if statement should be implemented with predicated operations.
      * Always legal. The if statement is treated like a boundary
      * condition, and factored out into a loop epilogue if possible.
-     * Pros: no redundant re-evaluation; does not constrain input our
+     * Pros: no redundant re-evaluation; does not constrain input or
      * output sizes. Cons: increases code size due to separate
      * tail-case handling. */
     Predicate,
@@ -75,6 +75,14 @@ enum class TailStrategy {
      * that the input/output extent be at least the split factor,
      * instead of a multiple of the split factor as with RoundUp. */
     ShiftInwards,
+
+    /** Guard the inner loop with an if statement that prevents
+     * evaluation beyond the original extent. Always legal.
+     * Pros: no redundant re-evaluation; does not constrain input
+     * or output sizes; small code size. Cons: the inner loop
+     * always has a non-constant extent; vectorization will
+     * scalarize in the tail case to handle the if statement. */
+    None,
 
     /** For pure definitions use ShiftInwards. For pure vars in
      * update definitions use RoundUp. For RVars in update

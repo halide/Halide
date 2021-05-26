@@ -6,13 +6,13 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Var x;
 
-    {
+    for (TailStrategy i : {TailStrategy::GuardWithIf, TailStrategy::None}) {
         // Check splitting an RVar in an update definition and then realizing it
         // over an extent that is not a multiple of the factor.
         Func f;
         f(x) = 0;
         f(x) += x;
-        f.update().unroll(x, 2, TailStrategy::GuardWithIf);
+        f.update().unroll(x, 2, i);
         Buffer<int> result = f.realize({3});
         for (int i = 0; i < result.width(); i++) {
             if (result(i) != i) {
@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    {
+    for (TailStrategy i : {TailStrategy::GuardWithIf, TailStrategy::None}) {
         // Check splitting an update definition and a reduction domain
         Func f;
 
@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
         RDom r(0, sum_size);
         f(0) += f(r);
 
-        f.update(0).vectorize(x, 8, TailStrategy::GuardWithIf);
+        f.update(0).vectorize(x, 8, i);
         f.update(1).unroll(r, 4);
 
         // Just make sure that you can realize over any size
@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    {
+    for (TailStrategy i : {TailStrategy::GuardWithIf, TailStrategy::None}) {
         // Test something compute_at the inside and outside of a dimension split this way
         Func f, g, h;
         g(x) = x - 3;
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
         f(x) = 0;
         f(x) += g(x) + h(x);
         Var xo, xi;
-        f.update().split(x, xo, xi, 7, TailStrategy::GuardWithIf);
+        f.update().split(x, xo, xi, 7, i);
         g.compute_at(f, xo);
         h.compute_at(f, xi);
         Buffer<int> result = f.realize({15});
