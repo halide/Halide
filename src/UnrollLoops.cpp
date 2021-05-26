@@ -4,8 +4,8 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
-#include "Substitute.h"
 #include "SimplifyCorrelatedDifferences.h"
+#include "Substitute.h"
 
 using std::pair;
 using std::vector;
