@@ -83,6 +83,12 @@ bool maybe_alias_tensors(TensorPtr input, TensorPtr output, SmallVector<int, max
         return false;
     }
 
+    // If either tensor is external, can't alias them.
+    // TODO: maybe we can, but it's not clear how to update storage_.host in that case?
+    if (input->is_external() || output->is_external()) {
+        return false;
+    }
+
     if (input->rank() != output->rank()) {
         // TODO: We should be able to alias reshapes.
         return false;
@@ -243,6 +249,7 @@ class PadForOps : public OpVisitor {
             padding_data(1, r - i - 1) = (required[i].extent() - input->extent(i) + 1) / 2;
         }
         TensorPtr padding = std::make_shared<Tensor>(input->name() + "_padding", padding_data);
+        padding->set_constant();
 
         // Add the new tensor, op, and update the input.
         OpPtr pad = make_op<PadOp>(input, padding, padded);
