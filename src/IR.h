@@ -337,8 +337,9 @@ struct Provide : public StmtNode<Provide> {
     std::string name;
     std::vector<Expr> values;
     std::vector<Expr> args;
+    Expr predicate;
 
-    static Stmt make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args);
+    static Stmt make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate);
 
     static const IRNodeType _node_type = IRNodeType::Provide;
 };
@@ -529,9 +530,6 @@ struct Call : public ExprNode<Call> {
         mul_shift_right,
         mux,
         popcount,
-        predicate,
-        predicate_loads,
-        predicate_stores,
         prefetch,
         promise_clamped,
         random,
@@ -663,7 +661,7 @@ struct Call : public ExprNode<Call> {
     }
 
     bool is_tag() const {
-        return is_intrinsic({Call::likely, Call::likely_if_innermost, Call::predicate, Call::predicate_loads, Call::predicate_stores, Call::strict_float});
+        return is_intrinsic({Call::likely, Call::likely_if_innermost, Call::strict_float});
     }
 
     /** Returns a pointer to a call node if the expression is a call to
@@ -680,7 +678,7 @@ struct Call : public ExprNode<Call> {
     }
 
     static const Call *as_tag(const Expr &e) {
-        return as_intrinsic(e, {Call::likely, Call::likely_if_innermost, Call::predicate, Call::predicate_loads, Call::predicate_stores, Call::strict_float});
+        return as_intrinsic(e, {Call::likely, Call::likely_if_innermost, Call::strict_float});
     }
 
     bool is_extern() const {

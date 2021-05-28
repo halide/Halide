@@ -49,33 +49,10 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const s
         } else if (is_const_one(split.factor)) {
             // The split factor trivially divides the old extent,
             // but we know nothing new about the outer dimension.
-        } else if (tail == TailStrategy::GuardWithIf ||
-                   tail == TailStrategy::Predicate ||
-                   tail == TailStrategy::PredicateLoads ||
-                   tail == TailStrategy::PredicateStores) {
+        } else if (tail == TailStrategy::GuardWithIf) {
             // It's an exact split but we failed to prove that the
             // extent divides the factor. Use predication to avoid
             // running off the end of the original loop.
-
-            auto substitution_type = ApplySplitResult::Substitution;
-            Expr cond = likely(old_var <= old_max);
-            switch (tail) {
-            case TailStrategy::GuardWithIf:
-                break;
-            case TailStrategy::Predicate:
-                cond = predicate(cond);
-                break;
-            case TailStrategy::PredicateLoads:
-                substitution_type = ApplySplitResult::ProvideValueSubstitution;
-                cond = predicate_loads(cond);
-                break;
-            case TailStrategy::PredicateStores:
-                substitution_type = ApplySplitResult::ProvideArgSubstitution;
-                cond = predicate_stores(cond);
-                break;
-            default:
-                break;
-            }
 
             // Bounds inference has trouble exploiting an if
             // condition. We'll directly tell it that the loop
@@ -87,12 +64,51 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const s
             Expr guarded = promise_clamped(old_var, old_var, old_max);
             string guarded_var_name = prefix + split.old_var + ".guarded";
             Expr guarded_var = Variable::make(Int(32), guarded_var_name);
-            result.emplace_back(prefix + split.old_var, guarded_var, substitution_type);
-            result.emplace_back(guarded_var_name, guarded, ApplySplitResult::LetStmt);
 
             // Inject the if condition *after* doing the substitution
             // for the guarded version.
-            result.emplace_back(cond);
+            result.emplace_back(prefix + split.old_var, guarded_var, ApplySplitResult::Substitution);
+            result.emplace_back(guarded_var_name, guarded, ApplySplitResult::LetStmt);
+            result.emplace_back(likely(old_var <= old_max));
+
+        } else if (tail == TailStrategy::PredicateLoads ||
+                   tail == TailStrategy::PredicateStores ||
+                   tail == TailStrategy::Predicate) {
+            // It's an exact split but we failed to prove that the
+            // extent divides the factor. Use predication to guard
+            // the calls and/or provides.
+
+            // Bounds inference has trouble exploiting an if
+            // condition. We'll directly tell it that the loop
+            // variable is bounded above by the original loop max by
+            // replacing the variable with a promise-clamped version
+            // of it. We don't also use the original loop min because
+            // it needlessly complicates the expressions and doesn't
+            // actually communicate anything new.
+            Expr guarded = promise_clamped(old_var, old_var, old_max);
+            string guarded_var_name = prefix + split.old_var + ".guarded";
+            Expr guarded_var = Variable::make(Int(32), guarded_var_name);
+
+            ApplySplitResult::Type type;
+            switch (tail) {
+            case TailStrategy::Predicate:
+                result.emplace_back(prefix + split.old_var, guarded_var, ApplySplitResult::Substitution);
+                type = ApplySplitResult::Predicate;
+                break;
+            case TailStrategy::PredicateLoads:
+                result.emplace_back(prefix + split.old_var, guarded_var, ApplySplitResult::SubstitutionInCalls);
+                type = ApplySplitResult::PredicateCalls;
+                break;
+            case TailStrategy::PredicateStores:
+                result.emplace_back(prefix + split.old_var, guarded_var, ApplySplitResult::SubstitutionInProvides);
+                type = ApplySplitResult::PredicateProvides;
+                break;
+            default:
+                break;
+            }
+
+            result.emplace_back(guarded_var_name, guarded, ApplySplitResult::LetStmt);
+            result.emplace_back(likely(old_var <= old_max), type);
 
         } else if (tail == TailStrategy::ShiftInwards) {
             // Adjust the base downwards to not compute off the

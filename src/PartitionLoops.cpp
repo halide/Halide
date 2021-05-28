@@ -360,7 +360,11 @@ class FindSimplifications : public IRVisitor {
 
     void visit(const Call *op) override {
         if (op->is_intrinsic(Call::if_then_else)) {
-            visit_select(op->args[0], op, op->args[1], op->args[2]);
+            if (op->args.size() == 3) {
+                visit_select(op->args[0], op, op->args[1], op->args[2]);
+            } else {
+                visit_select(op->args[0], op, op->args[1], make_zero(op->type));
+            }
         } else {
             IRVisitor::visit(op);
         }

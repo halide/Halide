@@ -611,7 +611,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // Note that this call promises to evaluate exactly one of the conditions,
         // so this optimization should be safe.
 
-        internal_assert(op->args.size() == 3);
+        internal_assert(op->args.size() == 2 || op->args.size() == 3);
         Expr cond_value = mutate(op->args[0], nullptr);
 
         // Ignore tags for our purposes here
@@ -623,16 +623,20 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         if (is_const_one(cond)) {
             return mutate(op->args[1], bounds);
         } else if (is_const_zero(cond)) {
-            return mutate(op->args[2], bounds);
+            if (op->args.size() == 3) {
+                return mutate(op->args[2], bounds);
+            } else {
+                return mutate(make_zero(op->type), bounds);
+            }
         } else {
             Expr true_value = mutate(op->args[1], nullptr);
             bool true_unreachable = in_unreachable;
             in_unreachable = false;
-            Expr false_value = mutate(op->args[2], nullptr);
+            Expr false_value = op->args.size() == 3 ? mutate(op->args[2], nullptr) : Expr();
             bool false_unreachable = in_unreachable;
 
             if (true_unreachable && false_unreachable) {
-                return false_value;
+                return true_value;
             }
             in_unreachable = false;
             if (true_unreachable) {
@@ -643,13 +647,14 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
 
             if (cond_value.same_as(op->args[0]) &&
                 true_value.same_as(op->args[1]) &&
-                false_value.same_as(op->args[2])) {
+                (op->args.size() == 2 || false_value.same_as(op->args[2]))) {
                 return op;
             } else {
-                return Internal::Call::make(op->type,
-                                            Call::if_then_else,
-                                            {std::move(cond_value), std::move(true_value), std::move(false_value)},
-                                            op->call_type);
+                vector<Expr> args = {std::move(cond_value), std::move(true_value)};
+                if (op->args.size() == 3) {
+                    args.push_back(std::move(false_value));
+                }
+                return Internal::Call::make(op->type, Call::if_then_else, args, op->call_type);
             }
         }
     } else if (op->is_intrinsic(Call::mux)) {

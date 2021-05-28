@@ -262,12 +262,12 @@ public:
                     if (!predicates.empty()) {
                         Expr cond_val = Call::make(val.type(),
                                                    Internal::Call::if_then_else,
-                                                   {likely(predicates[0]), val, make_zero(val.type())},
+                                                   {likely(predicates[0]), val},
                                                    Internal::Call::PureIntrinsic);
                         for (size_t i = 1; i < predicates.size(); ++i) {
                             cond_val = Call::make(cond_val.type(),
                                                   Internal::Call::if_then_else,
-                                                  {likely(predicates[i]), cond_val, make_zero(cond_val.type())},
+                                                  {likely(predicates[i]), cond_val},
                                                   Internal::Call::PureIntrinsic);
                         }
                         result[i].push_back(CondValue(const_true(), cond_val));

@@ -31,33 +31,41 @@ struct ApplySplitResult {
     Expr value;
 
     enum Type { Substitution = 0,
-                ProvideValueSubstitution,
-                ProvideArgSubstitution,
+                SubstitutionInCalls,
+                SubstitutionInProvides,
                 LetStmt,
+                PredicateCalls,
+                PredicateProvides,
                 Predicate };
     Type type;
 
     ApplySplitResult(const std::string &n, Expr val, Type t)
         : name(n), value(std::move(val)), type(t) {
     }
-    ApplySplitResult(Expr val)
-        : name(""), value(std::move(val)), type(Predicate) {
+    ApplySplitResult(Expr val, Type t = Predicate)
+        : name(""), value(std::move(val)), type(t) {
     }
 
     bool is_substitution() const {
         return (type == Substitution);
     }
-    bool is_provide_value_substitution() const {
-        return (type == ProvideValueSubstitution);
+    bool is_substitution_in_calls() const {
+        return (type == SubstitutionInCalls);
     }
-    bool is_provide_arg_substitution() const {
-        return (type == ProvideArgSubstitution);
+    bool is_substitution_in_provides() const {
+        return (type == SubstitutionInProvides);
     }
     bool is_let() const {
         return (type == LetStmt);
     }
     bool is_predicate() const {
         return (type == Predicate);
+    }
+    bool is_predicate_calls() const {
+        return (type == PredicateCalls);
+    }
+    bool is_predicate_provides() const {
+        return (type == PredicateProvides);
     }
 };
 

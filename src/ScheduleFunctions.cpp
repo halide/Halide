@@ -81,10 +81,53 @@ bool contains_impure_call(const Expr &expr) {
 
 // A mutator that performs a substitute operation only on either the values or the
 // arguments of Provide nodes.
-class SubstituteInProvides : public IRMutator {
+class SubstituteIn : public IRMutator {
     const string &name;
     const Expr &value;
-    bool substitute_arguments;
+    bool calls;
+    bool provides;
+
+    using IRMutator::visit;
+
+    Stmt visit(const Provide *p) override {
+        if (!provides) {
+            return IRMutator::visit(p);
+        }
+        vector<Expr> args;
+        bool changed = false;
+        for (const Expr &i : p->args) {
+            args.push_back(substitute(name, value, i));
+            changed = changed || !args.back().same_as(i);
+        }
+        if (changed) {
+            return Provide::make(p->name, p->values, args, p->predicate);
+        } else {
+            return p;
+        }
+    }
+
+    Expr visit(const Call *op) override {
+        Expr result = IRMutator::visit(op);
+        if (calls && op->call_type == Call::Halide) {
+            result = substitute(name, value, op);
+        }
+        return result;
+    }
+
+public:
+    SubstituteIn(const string &name, const Expr &value, bool calls, bool provides)
+        : name(name), value(value), calls(calls), provides(provides) {
+    }
+};
+
+Stmt substitute_in(const string &name, const Expr &value, bool calls, bool provides, const Stmt &s) {
+    return SubstituteIn(name, value, calls, provides).mutate(s);
+}
+
+class AddPredicates : public IRMutator {
+    const Expr &cond;
+    bool calls;
+    bool provides;
 
     using IRMutator::visit;
 
@@ -93,36 +136,39 @@ class SubstituteInProvides : public IRMutator {
         vector<Expr> args;
         bool changed = false;
         for (const Expr &i : p->args) {
-            if (substitute_arguments) {
-                args.push_back(substitute(name, value, i));
-                changed = changed || !args.back().same_as(i);
-            } else {
-                args.push_back(i);
-            }
+            args.push_back(mutate(i));
+            changed = changed || !args.back().same_as(i);
         }
         for (const Expr &i : p->values) {
-            if (!substitute_arguments) {
-                values.push_back(substitute(name, value, i));
-                changed = changed || !values.back().same_as(i);
-            } else {
-                values.push_back(i);
-            }
+            values.push_back(mutate(i));
+            changed = changed || !args.back().same_as(i);
         }
-        if (changed) {
-            return Provide::make(p->name, values, args);
+        Expr predicate = mutate(p->predicate);
+        if (provides) {
+            return Provide::make(p->name, values, args, predicate && cond);
+        } else if (changed || !predicate.same_as(p->predicate)) {
+            return Provide::make(p->name, values, args, predicate);
         } else {
             return p;
         }
     }
 
+    Expr visit(const Call *op) override {
+        Expr result = IRMutator::visit(op);
+        if (calls && op->call_type == Call::Halide) {
+            result = Call::make(op->type, Call::if_then_else, {cond, result}, Call::PureIntrinsic);
+        }
+        return result;
+    }
+
 public:
-    SubstituteInProvides(const string &name, const Expr &value, bool substitute_arguments)
-        : name(name), value(value), substitute_arguments(substitute_arguments) {
+    AddPredicates(const Expr &cond, bool calls, bool provides)
+        : cond(cond), calls(calls), provides(provides) {
     }
 };
 
-Stmt substitute_in_provides(const string &name, const Expr &value, bool substitute_arguments, const Stmt &s) {
-    return SubstituteInProvides(name, value, substitute_arguments).mutate(s);
+Stmt add_predicates(const Expr &cond, bool calls, bool provides, const Stmt &s) {
+    return AddPredicates(cond, calls, provides).mutate(s);
 }
 
 // Build a loop nest about a provide node using a schedule
@@ -171,10 +217,14 @@ Stmt build_loop_nest(
         for (const auto &res : splits_result) {
             if (res.is_substitution()) {
                 stmt = substitute(res.name, res.value, stmt);
-            } else if (res.is_provide_arg_substitution()) {
-                stmt = substitute_in_provides(res.name, res.value, true, stmt);
-            } else if (res.is_provide_value_substitution()) {
-                stmt = substitute_in_provides(res.name, res.value, false, stmt);
+            } else if (res.is_substitution_in_calls()) {
+                stmt = substitute_in(res.name, res.value, true, false, stmt);
+            } else if (res.is_substitution_in_provides()) {
+                stmt = substitute_in(res.name, res.value, false, true, stmt);
+            } else if (res.is_predicate_calls()) {
+                stmt = add_predicates(res.value, true, false, stmt);
+            } else if (res.is_predicate_provides()) {
+                stmt = add_predicates(res.value, false, true, stmt);
             } else if (res.is_let()) {
                 stmt = LetStmt::make(res.name, res.value, stmt);
             } else {
@@ -416,7 +466,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     }
 
     // Make the (multi-dimensional multi-valued) store node.
-    Stmt body = Provide::make(func.name(), values, site);
+    Stmt body = Provide::make(func.name(), values, site, const_true());
     if (def.schedule().atomic()) {  // Add atomic node.
         bool any_unordered_parallel = false;
         for (const auto &d : def.schedule().dims()) {

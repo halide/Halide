@@ -197,6 +197,10 @@ private:
                 builder.value_index = (int)i;
                 builder.value = {value_var};
                 Expr trace = builder.build();
+                if (!is_const_one(op->predicate)) {
+                    trace = Call::make(trace.type(), Call::if_then_else,
+                                       {op->predicate, trace}, Call::PureIntrinsic);
+                }
 
                 traces[i] = Let::make(value_var_name, values[i],
                                       Call::make(t, Call::return_second,
@@ -216,7 +220,7 @@ private:
                 }
             }
 
-            stmt = Provide::make(op->name, traces, args);
+            stmt = Provide::make(op->name, traces, args, op->predicate);
             for (const auto &p : lets) {
                 stmt = LetStmt::make(p.first, p.second, stmt);
             }
