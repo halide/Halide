@@ -6,13 +6,25 @@ include ../support/Makefile.inc
 # builds but easier to enable it for everything.
 CXXFLAGS += -Wno-unused-private-field -fno-exceptions -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -Wunused-variable -I$(MAKEFILE_DIR)
 
+BENCHMARK_OUT = benchmark
+ifeq (hexagon-32-qurt,$(findstring hexagon-32-qurt,$(HL_TARGET)))
+	# Building benchmark application as shared object instead of elf for
+	# hexagon target.
+	BENCHMARK_OUT := $(BENCHMARK_OUT).so
+	BENCHMARK_HEXAGON_FLAGS = -shared -fPIC -G0
+	HEXAGON_STUBS = $(BIN)/$(HL_TARGET)/stubs.o
+	TEST ?= test/misc/MUL.tflite
+	TEST_NAME = $(notdir $(TEST))
+endif
+
+
 ifneq (,$(findstring -O,$(OPTIMIZE)))
 	CXXFLAGS += -DNDEBUG
 endif
 
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 
-.PHONY: all build clean test delegate
+.PHONY: all build clean test delegate test-hexagon-sim test-hexagon-device
 all: build
 
 # .SECONDARY with no prerequisites causes all targets to be treated as secondary
@@ -20,11 +32,37 @@ all: build
 .SECONDARY:
 
 build: \
-	$(BIN)/$(HL_TARGET)/benchmark \
+	$(BIN)/$(HL_TARGET)/$(BENCHMARK_OUT) \
 	$(BIN)/$(HL_TARGET)/compare_vs_tflite
 
 test: compare_vs_tflite
 	$(BIN)/$(HL_TARGET)/compare_vs_tflite test/*/* --benchmark 0
+
+test-hexagon-sim: $(BIN)/$(HL_TARGET)/$(BENCHMARK_OUT)
+	@mkdir -p $@
+	echo "Benchmarking $(TEST)..."
+	echo "$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/debugger/lnx64/qurt_model.so" > $(BIN)/$(HL_TARGET)/osam.cfg
+	echo "$(DEFAULT_HEXAGON_TOOLS_ROOT)/Tools/lib/iss/qtimer.so --csr_base=0xFC900000 --irq_p=1 --freq=19200000 --cnttid=1" > $(BIN)/$(HL_TARGET)/q6ss.cfg
+	echo "$(DEFAULT_HEXAGON_TOOLS_ROOT)/Tools/lib/iss/l2vic.so 32 0xFC910000" >> $(BIN)/$(HL_TARGET)/q6ss.cfg
+	$(DEFAULT_HEXAGON_TOOLS_ROOT)/Tools/bin/hexagon-sim \
+		-mv65 \
+		--usefs=$(DEFAULT_HEXAGON_TOOLS_ROOT)/Tools/target/hexagon/lib/v65/G0/pic \
+		--simulated_returnval \
+		--cosim_file $(BIN)/$(HL_TARGET)/q6ss.cfg \
+		--l2tcm_base 0xd800 \
+		--rtos $(BIN)/$(HL_TARGET)/osam.cfg \
+		$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/sdksim_bin/runelf.pbn -- \
+		$(HEXAGON_SDK_ROOT)/libs/run_main_on_hexagon/ship/hexagon_toolv84_v65/run_main_on_hexagon_sim \
+		stack_size=0x400000 -- \
+		$(MAKEFILE_DIR)/$< --verbose $(TEST)
+
+test-hexagon-device: $(BIN)/$(HL_TARGET)/$(BENCHMARK_OUT)
+	echo "Benchmarking $(TEST)..."
+	adb push $< /vendor/bin/$(BENCHMARK_OUT)
+	adb push $(TEST) /vendor/bin/
+	adb push $(HEXAGON_SDK_ROOT)/libs/run_main_on_hexagon/ship/android_aarch64/run_main_on_hexagon /vendor/bin/run_main_on_hexagon
+	adb push $(HEXAGON_SDK_ROOT)/libs/run_main_on_hexagon/ship/hexagon_toolv84_v65/librun_main_on_hexagon_skel.so /vendor/lib/rfsa/adsp/
+	adb shell 'cd /vendor/bin; touch /vendor/lib/rfsa/adsp/run_main_on_hexagon.farf; ./run_main_on_hexagon 3 /vendor/bin/$(BENCHMARK_OUT) --verbose $(TEST_NAME)'
 
 clean:
 	rm -rf $(BIN)
@@ -263,6 +301,11 @@ $(BIN)/%/interval.o: interpreter/interval.cpp $(OPS_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -c $< -o $@
 
+# Only needed for hexagon target.
+$(BIN)/%/stubs.o: interpreter/stubs.cpp
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(OPS_CXXFLAGS) -c $< -o $@
+
 INTERPRETER_DEPS = \
 	$(BIN)/%/interpreter.o \
 	$(BIN)/%/interval.o \
@@ -271,7 +314,7 @@ INTERPRETER_DEPS = \
 	$(BIN)/%/model.o \
 	$(BIN)/%/transforms.o \
 	$(BIN)/%/ops.o \
-	$(OPS_HALIDE)
+	$(OPS_HALIDE) $(HEXAGON_STUBS)
 
 # ---------------------- tflite-parser
 
@@ -335,10 +378,10 @@ HANNK_INTERNAL_DELEGATE_DEPS = \
 
 # ---------------------- toplevel executables
 
-$(BIN)/%/benchmark: benchmark.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UTIL_DEPS)
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
+$(BIN)/%/$(BENCHMARK_OUT): benchmark.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UTIL_DEPS) util/file_util.h
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(BENCHMARK_HEXAGON_FLAGS) $(APP_CXXFLAGS) -Wl,--whole-archive $(filter %.cpp %.o %.a,$^) -Wl,--no-whole-archive -o $@ $(LDFLAGS-$*)
 
 
 # To build for Android, use `HL_TARGET=arm-64-android make compare_vs_tflite`
@@ -356,4 +399,3 @@ $(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp \
 .PHONY: compare_vs_tflite
 
 compare_vs_tflite: $(BIN)/$(HL_TARGET)/compare_vs_tflite
-

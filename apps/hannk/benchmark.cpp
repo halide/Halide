@@ -41,6 +41,7 @@ void run_benchmark(const std::string &filename, const InterpreterOptions &option
 
 }  // namespace hannk
 
+__attribute__((visibility ("default")))
 int main(int argc, char **argv) {
     hannk::InterpreterOptions options;
 
