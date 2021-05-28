@@ -918,7 +918,7 @@ MatrixMultiplyInfo is_matrix_multiply(const For *loop) {
 
     // Check if the k_var_name is present in the expressions for load_a and load_b
     bool load_a_ok = false;
-    for (Expr load_a_expr : matches_a) {
+    for (const Expr &load_a_expr : matches_a) {
         FindVarByName find_var_by_name{k_var_name};
         load_a_expr.accept(&find_var_by_name);
         if (find_var_by_name.found) {
@@ -928,7 +928,7 @@ MatrixMultiplyInfo is_matrix_multiply(const For *loop) {
     }
 
     bool load_b_ok = false;
-    for (Expr load_b_expr : matches_b) {
+    for (const Expr &load_b_expr : matches_b) {
         FindVarByName find_var_by_name{k_var_name};
         load_b_expr.accept(&find_var_by_name);
         if (find_var_by_name.found) {
