@@ -10,4 +10,4 @@ void halide_error(void *user_context, const char *msg) {
     halide_print(user_context, msg);
 }
 
-} // extern "C"
+}  // extern "C"
