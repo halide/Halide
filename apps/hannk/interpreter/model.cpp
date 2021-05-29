@@ -76,7 +76,6 @@ Tensor::Tensor(std::string name, HalideBuffer<void> buffer, QuantizationInfo qua
     : name_(std::move(name)),
       buffer_(std::move(buffer)),
       quantization_(std::move(quantization)) {
-    is_constant_ = buffer_.data() != nullptr;
 }
 
 Tensor::Tensor(std::string name, halide_type_t type, const Box &bounds, QuantizationInfo quantization)
@@ -85,11 +84,11 @@ Tensor::Tensor(std::string name, halide_type_t type, const Box &bounds, Quantiza
 
 Tensor::Tensor(const Tensor &copy)
     : name_(copy.name()), buffer_(make_buffer(copy.type(), copy.bounds())),
-      quantization_(copy.quantization_), is_constant_(copy.is_constant_),
+      quantization_(copy.quantization_), is_constant_(copy.is_constant_), is_external_(copy.is_external_),
       is_input_(copy.is_input_), is_output_(copy.is_output_), is_dynamic_(copy.is_dynamic_),
       storage_(copy.storage_) {
     if (copy.is_allocated()) {
-        assert(!is_dynamic_);
+        assert(!is_dynamic());
         allocate();
         // This should have used the same buffer as the copy's storage.
         assert(buffer_.data() == copy.buffer_.data());
@@ -125,6 +124,19 @@ bool Tensor::is_allocated() const {
     return buffer_.data() != nullptr;
 }
 
+void Tensor::set_external_host(void *host) {
+    // No: it's ok to set this to different values over time,
+    // so don't assert that host is currently null (or already equal to the new value)
+    // assert(!is_allocated());
+
+    assert(is_external());
+    assert(!buffer_.owns_host_memory());
+    // TODO: we don't allow aliasing of external tensors right now.
+    // If we do, we need to maintain and update storage_ appropriately.
+    assert(storage_ == nullptr);
+    buffer_.raw_buffer()->host = (uint8_t *)host;
+}
+
 namespace {
 
 // Copy a Halide buffer without the internal reference counting.
@@ -142,7 +154,7 @@ void Tensor::allocate() {
         return;
     }
 
-    if (is_dynamic()) {
+    if (is_dynamic() || is_external()) {
         return;
     }
 
@@ -165,6 +177,7 @@ void Tensor::allocate() {
 
 void Tensor::resize(const Box &new_shape) {
     assert(is_dynamic());
+    assert(!is_external());
 
     SmallVector<halide_dimension_t, max_rank> new_dims;
 
@@ -206,7 +219,7 @@ bool Tensor::is_alias() const {
 }
 
 void Tensor::set_alias_of(const TensorPtr &t, const SmallVector<int, max_rank> &storage_offset) {
-    assert(!is_dynamic());
+    assert(!is_dynamic() && !is_external());
 
     storage_ = t->storage();
     storage_offset_ = storage_offset;
@@ -249,6 +262,9 @@ void Tensor::dump(std::ostream &os) const {
     }
     if (is_constant()) {
         os << " constant";
+    }
+    if (is_external()) {
+        os << " external";
     }
     if (is_dynamic()) {
         os << " dynamic";

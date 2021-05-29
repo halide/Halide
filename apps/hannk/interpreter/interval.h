@@ -154,6 +154,18 @@ public:
     }
 };
 
+template<typename T, size_t Capacity>
+inline std::ostream &operator<<(std::ostream &s, const SmallVector<T, Capacity> &v) {
+    s << "{";
+    for (size_t i = 0; i < v.size(); ++i) {
+        if (i > 0) {
+            s << ", ";
+        }
+        s << v[i];
+    }
+    return s << "}";
+}
+
 // Compute a / b, rounding down.
 inline int floor_div(int a, int b) {
     assert(a >= 0 && b >= 0);
