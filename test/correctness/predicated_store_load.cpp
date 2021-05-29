@@ -185,7 +185,7 @@ int vectorized_dense_load_with_stride_minus_one_test(const Target &t) {
     if (t.has_feature(Target::HVX)) {
         f.hexagon();
     }
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(2, 4));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(3, 6));
 
     Buffer<int> im = f.realize({size, size});
     auto func = [&im_ref, &im](int x, int y, int z) {

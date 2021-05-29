@@ -407,6 +407,22 @@ class FindSimplifications : public IRVisitor {
         simplifications.insert(simplifications.end(), old.begin(), old.end());
     }
 
+    void visit(const Store *op) override {
+        IRVisitor::visit(op);
+        if (has_uncaptured_likely_tag(op->predicate)) {
+            const int lanes = op->predicate.type().lanes();
+            new_simplification(op->predicate, op->predicate, const_true(lanes), op->predicate);
+        }
+    }
+
+    void visit(const Load *op) override {
+        IRVisitor::visit(op);
+        if (has_uncaptured_likely_tag(op->predicate)) {
+            const int lanes = op->predicate.type().lanes();
+            new_simplification(op->predicate, op->predicate, const_true(lanes), op->predicate);
+        }
+    }
+
     template<typename LetOrLetStmt>
     void visit_let(const LetOrLetStmt *op) {
         ScopedBinding<> bind_varying(expr_uses_vars(op->value, depends_on_loop_var),
