@@ -10,6 +10,16 @@ namespace Runtime {
 namespace Internal {
 namespace Hexagon {
 
+#define FASTRPC_THREAD_PARAMS (1)
+#define CDSP_DOMAIN_ID 3
+
+// Used with FASTRPC_THREAD_PARAMS req ID
+struct remote_rpc_thread_params {
+    int domain;      // Remote subsystem domain ID, pass -1 to set params for all domains
+    int prio;        // user thread priority (1 to 255), pass -1 to use default
+    int stack_size;  // user thread stack size, pass -1 to use default
+};
+
 struct ion_device_handle {
     void *buffer;
     size_t size;
@@ -44,6 +54,7 @@ typedef int (*remote_thread_priority_fn)(int);
 typedef void (*host_malloc_init_fn)();
 typedef void *(*host_malloc_fn)(size_t);
 typedef void (*host_free_fn)(void *);
+typedef int (*set_remote_thread_params_fn)(uint32_t req, void *data, uint32_t datalen);
 
 WEAK remote_load_library_fn remote_load_library = nullptr;
 WEAK remote_get_symbol_fn remote_get_symbol = nullptr;
@@ -62,6 +73,7 @@ WEAK host_malloc_init_fn host_malloc_init = nullptr;
 WEAK host_malloc_init_fn host_malloc_deinit = nullptr;
 WEAK host_malloc_fn host_malloc = nullptr;
 WEAK host_free_fn host_free = nullptr;
+WEAK set_remote_thread_params_fn set_remote_thread_params = nullptr;
 
 // This checks if there are any log messages available on the remote
 // side. It should be called after every remote call.
@@ -184,6 +196,7 @@ WEAK int init_hexagon_runtime(void *user_context) {
     get_symbol(user_context, host_lib, "halide_hexagon_remote_set_performance", remote_set_performance, /* required */ false);
     get_symbol(user_context, host_lib, "halide_hexagon_remote_set_performance_mode", remote_set_performance_mode, /* required */ false);
     get_symbol(user_context, host_lib, "halide_hexagon_remote_set_thread_priority", remote_set_thread_priority, /* required */ false);
+    get_symbol(user_context, host_lib, "remote_session_control", set_remote_thread_params, /* required */ false);
 
     host_malloc_init();
 
@@ -247,9 +260,9 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
                         << ", state_ptr: " << state_ptr
                         << ", *state_ptr: " << *state_ptr
                         << ", code: " << code
-                        << ", code_size: " << (int)code_size << ")\n"
-                        << ", code: " << runtime
-                        << ", code_size: " << (int)runtime_size << ")\n";
+                        << ", code_size: " << (int)code_size
+                        << ", runtime: " << runtime
+                        << ", runtime_size: " << (int)runtime_size << ")\n";
     halide_assert(user_context, state_ptr != nullptr);
 
 #ifdef DEBUG_RUNTIME
@@ -926,6 +939,34 @@ WEAK int halide_hexagon_power_hvx_off(void *user_context) {
 
 WEAK void halide_hexagon_power_hvx_off_as_destructor(void *user_context, void * /* obj */) {
     halide_hexagon_power_hvx_off(user_context);
+}
+
+WEAK int halide_hexagon_set_remote_thread_params(void *user_context, int priority, int stack_size) {
+    int result = init_hexagon_runtime(user_context);
+    if (result != 0) {
+        return result;
+    }
+
+    debug(user_context) << "halide_hexagon_set_remote_thread_params\n";
+    if (!set_remote_thread_params) {
+        // This runtime doesn't support changing the thread params.
+        return -1;
+    }
+
+    struct remote_rpc_thread_params th;
+    th.domain = CDSP_DOMAIN_ID;
+    th.prio = priority;
+    th.stack_size = stack_size;
+    debug(user_context) << "    set_remote_thread_params("
+                        << "thread_priority: " << priority
+                        << ", thread_stack_size: " << stack_size << ") -> \n";
+    result = set_remote_thread_params(FASTRPC_THREAD_PARAMS, (void *)&th, sizeof(th));
+    debug(user_context) << "        " << result << "\n";
+    if (result != 0) {
+        error(user_context) << "set_remote_thread_params faiiled.\n";
+        return result;
+    }
+    return 0;
 }
 
 WEAK int halide_hexagon_set_performance_mode(void *user_context, halide_hexagon_power_mode_t mode) {

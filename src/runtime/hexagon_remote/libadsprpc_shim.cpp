@@ -65,6 +65,7 @@ typedef int (*remote_mmap_fn)(int, uint32_t, uint32_t, int, uint32_t *);
 typedef int (*remote_munmap_fn)(uint32_t, int);
 typedef void (*remote_register_buf_fn)(void *, int, int);
 typedef int (*remote_set_mode_fn)(uint32_t);
+typedef int (*remote_session_control_fn)(uint32_t, void *, uint32_t);
 
 remote_handle_open_fn handle_open_fn = get_libadsprpc_symbol<remote_handle_open_fn>("remote_handle_open");
 remote_handle64_open_fn handle64_open_fn = get_libadsprpc_symbol<remote_handle64_open_fn>("remote_handle64_open");
@@ -76,6 +77,7 @@ remote_mmap_fn mmap_fn = get_libadsprpc_symbol<remote_mmap_fn>("remote_mmap");
 remote_munmap_fn munmap_fn = get_libadsprpc_symbol<remote_munmap_fn>("remote_munmap");
 remote_register_buf_fn register_buf_fn = get_libadsprpc_symbol<remote_register_buf_fn>("remote_register_buf");
 remote_set_mode_fn set_mode_fn = get_libadsprpc_symbol<remote_set_mode_fn>("remote_set_mode");
+remote_session_control_fn session_control_fn = get_libadsprpc_symbol<remote_session_control_fn>("remote_session_control");
 
 }  // namespace
 
@@ -126,6 +128,10 @@ WEAK void remote_register_buf(void *buf, int size, int fd) {
 
 WEAK int remote_set_mode(uint32_t mode) {
     return set_mode_fn ? set_mode_fn(mode) : -1;
+}
+
+WEAK int remote_session_control(uint32_t req, void *data, uint32_t datalen) {
+    return session_control_fn ? session_control_fn(req, data, datalen) : -1;
 }
 
 }  // extern "C"
