@@ -89,7 +89,8 @@ public:
 
         // Saturate and narrow the output.
         Expr output = multiply_2x_high(multiplied(c, b), output_multiplier_);
-        output = i16_sat(rounding_shift_right(output, output_shift_));
+        // output = i16_sat(rounding_shift_right(output, output_shift_));
+        output = i16_sat(1);
         if (output_.type() == halide_type_of<uint8_t>()) {
             output = u8_sat(saturating_add(output, output_zero_));
             output = clamp(output, output_min_, output_max_);
