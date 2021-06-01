@@ -214,7 +214,7 @@ public:
         // In case there are no suitable tile sizes, just make a dummy split so the
         // rest of the schedule still works.
         output_
-            .split(c, co, c, accum_vector_size * min_tile_c, TailStrategy::Predicate)
+            .split(c, co, c, accum_vector_size * min_tile_c, TailStrategy::PredicateStores)
             .split(x, xo, x, 1)
             .reorder(c, x, co, xo, y, b)
             .vectorize(c);

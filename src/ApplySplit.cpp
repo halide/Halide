@@ -89,26 +89,27 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const s
             string guarded_var_name = prefix + split.old_var + ".guarded";
             Expr guarded_var = Variable::make(Int(32), guarded_var_name);
 
-            ApplySplitResult::Type type;
+            ApplySplitResult::Type predicate_type, substitution_type;
             switch (tail) {
             case TailStrategy::Predicate:
-                result.emplace_back(prefix + split.old_var, guarded_var, ApplySplitResult::Substitution);
-                type = ApplySplitResult::Predicate;
+                substitution_type = ApplySplitResult::Substitution;
+                predicate_type = ApplySplitResult::Predicate;
                 break;
             case TailStrategy::PredicateLoads:
-                result.emplace_back(prefix + split.old_var, guarded_var, ApplySplitResult::SubstitutionInCalls);
-                type = ApplySplitResult::PredicateCalls;
+                substitution_type = ApplySplitResult::SubstitutionInCalls;
+                predicate_type = ApplySplitResult::PredicateCalls;
                 break;
             case TailStrategy::PredicateStores:
-                result.emplace_back(prefix + split.old_var, guarded_var, ApplySplitResult::SubstitutionInProvides);
-                type = ApplySplitResult::PredicateProvides;
+                substitution_type = ApplySplitResult::SubstitutionInProvides;
+                predicate_type = ApplySplitResult::PredicateProvides;
                 break;
             default:
                 break;
             }
 
+            result.emplace_back(prefix + split.old_var, guarded_var, substitution_type);
             result.emplace_back(guarded_var_name, guarded, ApplySplitResult::LetStmt);
-            result.emplace_back(likely(old_var <= old_max), type);
+            result.emplace_back(likely(old_var <= old_max), predicate_type);
 
         } else if (tail == TailStrategy::ShiftInwards) {
             // Adjust the base downwards to not compute off the
