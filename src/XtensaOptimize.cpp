@@ -70,6 +70,28 @@ Type get_native_xtensa_vector(const Type &t) {
     return t.with_lanes(512 / t.bits());
 }
 
+std::string suffix_for_type(Type t) {
+    if (t.is_int() && (t.bits() == 8)) {
+        return "_i8";
+    } else if (t.is_uint() && (t.bits() == 8)) {
+        return "_u8";
+    } else if (t.is_int() && (t.bits() == 16)) {
+        return "_i16";
+    } else if (t.is_uint() && (t.bits() == 16)) {
+        return "_u16";
+    } else if (t.is_int() && (t.bits() == 32)) {
+        return "_i32";
+    } else if (t.is_uint() && (t.bits() == 32)) {
+        return "_u32";
+    } else if (t.is_float() && (t.bits() == 32)) {
+        return "_f32";
+    } else if (t.is_float() && (t.bits() == 16)) {
+        return "_f16";
+    }
+
+    return "";
+}
+
 struct Pattern {
     enum Flags {
         InterleaveResult = 1 << 0,  // After evaluating the pattern, interleave native vectors of the result.
@@ -142,6 +164,10 @@ Expr wild_i8x = Variable::make(Type(Type::Int, 8, 0), "*");
 Expr wild_i8x4 = Variable::make(Type(Type::Int, 8, 4), "*");
 Expr wild_i8x64 = Variable::make(Type(Type::Int, 8, 64), "*");
 Expr wild_i8x256 = Variable::make(Type(Type::Int, 8, 256), "*");
+Expr wild_u8x4 = Variable::make(Type(Type::UInt, 8, 4), "*");
+Expr wild_u8x64 = Variable::make(Type(Type::UInt, 8, 64), "*");
+Expr wild_u8x256 = Variable::make(Type(Type::UInt, 8, 256), "*");
+
 Expr wild_i16x = Variable::make(Type(Type::Int, 16, 0), "*");
 Expr wild_i24x = Variable::make(Type(Type::Int, 24, 0), "*");
 Expr wild_i24x64 = Variable::make(Type(Type::Int, 24, 64), "*");
@@ -685,6 +711,8 @@ private:
 
                 {"halide_xtensa_widen_zzzzz", i24(concat({wild_i8x64, wild_i8x64, wild_i8x64, wild_i8x64})) * i24(repeat_each_element(wild_i8x4, 64))},
                 {"halide_xtensa_widen_zzzzz", i24(wild_i8x256) * i24(repeat_each_element(wild_i8x4, 64))},
+                {"halide_xtensa_widen_zzzzz", i24(concat({wild_u8x64, wild_u8x64, wild_u8x64, wild_u8x64})) * i24(repeat_each_element(wild_u8x4, 64))},
+                {"halide_xtensa_widen_zzzzz", i24(wild_u8x256) * i24(repeat_each_element(wild_u8x4, 64))},
 
                 // Widening multiplication
                 // NOTE(vksnk): looked like a good idea, but seems to be slower. Need to double-check.
@@ -852,8 +880,9 @@ private:
     }
 
     Expr visit(const Shuffle *op) override {
-        if (op->is_slice() && (op->slice_stride() == 1) && (op->slice_begin() % 4 == 0) && op->type.is_int() && (op->type.bits() == 8) && (op->type.lanes() == 4)) {
-            return Call::make(op->type, "halide_xtensa_extract_i32",
+        if (op->is_slice() && (op->slice_stride() == 1) && (op->slice_begin() % 4 == 0) && op->type.is_int_or_uint() && (op->type.bits() == 8) && (op->type.lanes() == 4)) {
+
+            return Call::make(op->type, std::string("halide_xtensa_extract_") + (op->type.is_int() ? "i32" : "u32"),
                               {mutate(op->vectors[0]), op->slice_begin() / 4}, Call::PureExtern);
         } else if (op->type.is_int_or_uint() && (op->type.bits() == 8) && (op->type.lanes() == 64)) {
             if ((op->vectors.size() == 1) && (op->vectors[0].type().lanes() == 192)) {
@@ -952,6 +981,12 @@ private:
 
             {"halide_xtensa_widen_quad_mul_add_i24",
              call("halide_xtensa_yyyy", wild_i24x, {wild_i24x, call("halide_xtensa_qqqq", wild_i24x, {call("halide_xtensa_widen_zzzzz", wild_i24x, {wild_i8x256, wild_i8x4})})})},
+
+            {"halide_xtensa_widen_quad_mul_add_u24",
+             call("halide_xtensa_yyyy", wild_i24x, {wild_i24x, call("halide_xtensa_qqqq", wild_i24x, {call("halide_xtensa_widen_zzzzz", wild_i24x, {wild_u8x, wild_u8x, wild_u8x, wild_u8x, wild_u8x})})})},
+
+            {"halide_xtensa_widen_quad_mul_add_u24",
+             call("halide_xtensa_yyyy", wild_i24x, {wild_i24x, call("halide_xtensa_qqqq", wild_i24x, {call("halide_xtensa_widen_zzzzz", wild_i24x, {wild_u8x256, wild_u8x4})})})},
 
             {"halide_xtensa_widen_quad_mul_add_i24",
              call("halide_xtensa_widen_pair_mul_add_i24", wild_i24x, {call("halide_xtensa_widen_pair_mul_add_i24", wild_i24x, {wild_i24x, wild_i8x, wild_i8, wild_i8x, wild_i8}), wild_i8x, wild_i8, wild_i8x, wild_i8})},
