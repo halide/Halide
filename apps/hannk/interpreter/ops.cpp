@@ -4,6 +4,7 @@
 
 #include "halide/add_uint8_uint8.h"
 #include "halide/average_pool_uint8.h"
+#include "halide/constants.h"
 #include "halide/conv_uint8.h"
 #ifdef CONV_R16
 #include "halide/conv_r16_uint8.h"
@@ -302,9 +303,13 @@ void crop_to_union(HalideBuffer<T> &a, HalideBuffer<U> &b) {
     }
 }
 
-// A constant power of two.
-template<int N>
+// A type safe power of two.
 struct power_of_two {
+    int value;
+
+    explicit power_of_two(int value)
+        : value(value) {
+    }
 };
 
 // Represents a number as mantissa*2^exponent/2^(bits - 1), where bits = 8*sizeof(T)
@@ -336,9 +341,8 @@ public:
     }
 
     // Multiply this value by a constant power of 2.
-    template<int N>
-    IntFloat operator*=(power_of_two<N>) {
-        exponent_ += N;
+    IntFloat operator*=(power_of_two x) {
+        exponent_ += x.value;
         return *this;
     }
 
@@ -351,7 +355,13 @@ public:
     }
 
     T exponent() const {
-        return std::min<T>(std::max<T>(exponent_, -log2_one), log2_one);
+        if (exponent_ < -log2_one) {
+            return -log2_one;
+        } else if (exponent_ > log2_one) {
+            return log2_one;
+        } else {
+            return exponent_;
+        }
     }
 };
 
@@ -417,11 +427,9 @@ void add_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q
     const int in2_zero = in2q.uniform_zero();
     const int out_zero = outq.uniform_zero();
 
-    const int input_shift = 6;
-    const int output_shift = 16;
-    const float in1_scale = in1q.uniform_scale() * (1 << output_shift);
-    const float in2_scale = in2q.uniform_scale() * (1 << output_shift);
-    const float out_scale = outq.uniform_scale() * (1 << input_shift);
+    const float in1_scale = in1q.uniform_scale() * (1 << add_output_shift);
+    const float in2_scale = in2q.uniform_scale() * (1 << add_output_shift);
+    const float out_scale = outq.uniform_scale() * (1 << add_input_shift);
 
     const int in1_multiplier = std::lround(in1_scale / out_scale) * in1sign;
     const int in2_multiplier = std::lround(in2_scale / out_scale) * in2sign;
@@ -448,7 +456,7 @@ void mul_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q
     const float out_scale = outq.uniform_scale();
 
     IntFloat<int32_t> multiplier(in1_scale * in2_scale / out_scale);
-    multiplier *= power_of_two<-2 * 6>();
+    multiplier *= power_of_two(-2 * mul_input_shift);
     assert(multiplier.exponent() <= 0);
 
     const auto out_range = get_output_range(activation, outq);
@@ -711,10 +719,8 @@ BoundsMap Conv2DOp::map_bounds(int input_idx, int output_idx) const {
         // Pass minimal sized buffers to learn about the alignment requirements.
         HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
         HalideBuffer<int32_t> bias_buf(nullptr, 1);
-        HalideBuffer<void> filter_buf(filter_type(), 1, 1, 1, 1, 1, 1);
-        // TODO: How to initialize the above buffer without allocating?
-        filter_buf.deallocate();
-        HalideBuffer<uint8_t> output_buf;
+        HalideBuffer<void> filter_buf(filter_type(), nullptr, 1, 1, 1, 1, 1, 1);
+        HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
         conv_uint8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf);
 
         const int vector_reduction = filter_buf.dim(0).extent();
@@ -739,7 +745,6 @@ void conv_uint8(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t
                 const MultiplyParams &params, const std::array<int, 2> &stride,
                 const std::array<int, 2> &dilation, const Interval &output_range,
                 halide_buffer_t *output) {
-    assert(params.c.exponent() <= 0);
 #ifdef CONV_R16
     if (input->dim[0].extent >= 16) {
         // For large reductions, use the big reduction version.
@@ -806,7 +811,6 @@ void depthwise_conv_uint8(
     halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t *bias,
     int depth_multiplier, const MultiplyParams &params, const std::array<int, 2> &stride, const std::array<int, 2> &dilation,
     const Interval &output_range, halide_buffer_t *output) {
-    assert(params.c.exponent() <= 0);
     if (depth_multiplier >= output->dim[0].extent) {
         depthwise_conv_broadcast_uint8(
             input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
@@ -843,7 +847,7 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
             HalideBuffer<uint8_t> filter_buf(nullptr, 1, 1, 1);
             HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
             depthwise_conv_dm1_uint8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf);
-            result.align(0, input_buf.dim(0).extent());
+            result.align_input(0, input_buf.dim(0).extent());
         }
         return result;
     } else if (input_idx == 1) {
@@ -1415,25 +1419,22 @@ void SoftmaxOp::execute() {
         const auto &in_buf = in->buffer();
         const auto &out_buf = out->buffer();
 
-        // It's a easier to compute 2^(x*(B*log2(e))) than e^(x*B).
-        const float beta2 = beta_ * std::log2(std::exp(1.0f));
-
         // We don't need the input zero point because this op exploits the
         // identity exp(x_i)/sum(exp(x_i)) == exp(x_i + C)/sum(exp(x_i + C))
         const int output_zero = out->quantization().uniform_zero();
         assert(output_zero >= 0 && output_zero <= 255);
 
-        const float in_scale = in->quantization().uniform_scale();
-        // TODO: Debug why this extra factor of 2 is needed. There's something
-        // wrong with the fixed point tricks in the implementation.
-        const float output_scale = out->quantization().uniform_scale() * 2.0f;
-
-        IntFloat<int16_t> input_multiplier(in_scale * beta2);
-        input_multiplier *= power_of_two<-6>();
+        // It's a easier to compute 2^(x*(B*log2(e))) than e^(x*B).
+        const float beta2 = beta_ * std::log2(std::exp(1.0f));
+        IntFloat<int16_t> input_multiplier(beta2 * in->quantization().uniform_scale());
+        input_multiplier *= power_of_two(-softmax_input_shift);
         assert(input_multiplier.exponent() <= 0);
 
-        IntFloat<int16_t> output_multiplier(output_scale);
-        assert(output_multiplier.shift <= 0);
+        IntFloat<int16_t> output_multiplier(out->quantization().uniform_scale());
+        // TODO: Debug why this extra factor of 2 is needed. There's something
+        // wrong with the fixed point tricks in the implementation.
+        output_multiplier *= power_of_two(1);
+        assert(output_multiplier.exponent() <= 0);
 
         auto softmax_rank2 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
             softmax_uint8(in_buf, input_multiplier.mantissa(), -input_multiplier.exponent(),
@@ -1635,7 +1636,7 @@ void UnaryOp::execute() {
         std::array<int16_t, 64> program_buffer;
         if (op_ == Logistic) {
             IntFloat<int16_t> in_multiplier(in_scale);
-            in_multiplier *= power_of_two<-left_shift>();
+            in_multiplier *= power_of_two(-left_shift);
             assert(in_multiplier.exponent() <= 0);
 
             assert(out->quantization().uniform_scale() == 1.0f / 256.0f);
@@ -1655,7 +1656,7 @@ void UnaryOp::execute() {
             return;
         } else if (op_ == Tanh) {
             IntFloat<int16_t> in_multiplier(in_scale);
-            in_multiplier *= power_of_two<-left_shift>();
+            in_multiplier *= power_of_two(-left_shift);
             assert(in_multiplier.exponent() <= 0);
 
             assert(out->quantization().uniform_scale() == 1.0f / 128.0f);

@@ -6,6 +6,10 @@ define_property(TARGET PROPERTY Halide_RT_TARGETS
                 BRIEF_DOCS "On a Halide runtime target, lists the targets the runtime backs"
                 FULL_DOCS "On a Halide runtime target, lists the targets the runtime backs")
 
+define_property(TARGET PROPERTY Halide_GENERATOR_HAS_POST_BUILD
+                BRIEF_DOCS "On a Halide generator target, true if Halide.dll copy command has already been added."
+                FULL_DOCS "On a Halide generator target, true if Halide.dll copy command has already been added.")
+
 function(add_halide_library TARGET)
     ##
     # Set up argument parsing for extra outputs.
@@ -59,6 +63,8 @@ function(add_halide_library TARGET)
     if (NOT ARG_FROM)
         message(FATAL_ERROR "Missing FROM argument specifying a Halide generator target")
     endif ()
+
+    _Halide_place_dll(${ARG_FROM})
 
     if (ARG_C_BACKEND)
         if (ARG_USE_RUNTIME)
@@ -245,6 +251,38 @@ function(add_halide_library TARGET)
 
     target_include_directories("${TARGET}" INTERFACE "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>")
     target_link_libraries("${TARGET}" INTERFACE "${ARG_USE_RUNTIME}")
+endfunction()
+
+##
+# Function for ensuring that Halide.dll is visible to the generator
+##
+
+function(_Halide_place_dll GEN)
+    if (NOT WIN32)
+        return()
+    endif ()
+
+    # Short circuit so that Halide::Halide isn't checked when importing a generator from another CMake project
+    get_property(is_imported TARGET ${GEN} PROPERTY IMPORTED)
+    if (is_imported)
+        return()
+    endif ()
+
+    get_property(has_post_build TARGET ${GEN} PROPERTY Halide_GENERATOR_HAS_POST_BUILD)
+    if (has_post_build)
+        return()
+    endif ()
+
+    # Here GEN is not IMPORTED, which means that it must be linked
+    # to Halide::Halide and therefore Halide::Halide must exist.
+    get_property(halide_type TARGET Halide::Halide PROPERTY TYPE)
+    if (NOT halide_type STREQUAL "SHARED_LIBRARY")
+        return()
+    endif ()
+
+    add_custom_command(TARGET ${GEN} POST_BUILD
+                       COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Halide::Halide> $<TARGET_FILE_DIR:${GEN}>)
+    set_property(TARGET ${GEN} PROPERTY Halide_GENERATOR_HAS_POST_BUILD 1)
 endfunction()
 
 ##

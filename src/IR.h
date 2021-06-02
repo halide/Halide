@@ -556,6 +556,7 @@ struct Call : public ExprNode<Call> {
         strict_float,
         stringify,
         undef,
+        unreachable,
         unsafe_promise_clamped,
         widening_add,
         widening_mul,

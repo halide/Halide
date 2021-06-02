@@ -110,7 +110,10 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         found_buffer_reference(op->name, op->args.size());
     }
 
-    if (op->is_intrinsic(Call::strict_float)) {
+    if (op->is_intrinsic(Call::unreachable)) {
+        in_unreachable = true;
+        return op;
+    } else if (op->is_intrinsic(Call::strict_float)) {
         if (Call::as_intrinsic(op->args[0], {Call::strict_float})) {
             // Always simplify strict_float(strict_float(x)) -> strict_float(x).
             Expr arg = mutate(op->args[0], nullptr);
@@ -197,6 +200,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             // LLVM shl and shr instructions produce poison for
             // shifts >= typesize, so we will follow suit in our simplifier.
             if (ub >= (uint64_t)(t.bits())) {
+                clear_bounds_info(bounds);
                 return make_signed_integer_overflow(t);
             }
             if (a.type().is_uint() || ub < ((uint64_t)t.bits() - 1)) {
@@ -612,6 +616,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
 
         // Ignore tags for our purposes here
         Expr cond = unwrap_tags(cond_value);
+        if (in_unreachable) {
+            return op;
+        }
 
         if (is_const_one(cond)) {
             return mutate(op->args[1], bounds);
@@ -619,7 +626,21 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             return mutate(op->args[2], bounds);
         } else {
             Expr true_value = mutate(op->args[1], nullptr);
+            bool true_unreachable = in_unreachable;
+            in_unreachable = false;
             Expr false_value = mutate(op->args[2], nullptr);
+            bool false_unreachable = in_unreachable;
+
+            if (true_unreachable && false_unreachable) {
+                return false_value;
+            }
+            in_unreachable = false;
+            if (true_unreachable) {
+                return false_value;
+            } else if (false_unreachable) {
+                return true_value;
+            }
+
             if (cond_value.same_as(op->args[0]) &&
                 true_value.same_as(op->args[1]) &&
                 false_value.same_as(op->args[2])) {
@@ -813,6 +834,8 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // There are other PureExterns we don't bother with (e.g. fast_inverse_f32)...
         // just fall thru and take the general case.
         debug(2) << "Simplifier: unhandled PureExtern: " << op->name;
+    } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
+        clear_bounds_info(bounds);
     }
 
     // No else: we want to fall thru from the PureExtern clause.

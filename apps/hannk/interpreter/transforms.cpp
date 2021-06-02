@@ -64,6 +64,11 @@ void remove_dead_ops(OpGroup *root) {
 
 namespace {
 
+// Check if a tensor already has storage configured.
+bool has_storage(const TensorPtr &t) {
+    return t->is_alias() || t->is_allocated();
+}
+
 // We can alias two tensors if the input is not used after the output is written,
 // and we meet a number of other requirements.
 bool maybe_alias_tensors(TensorPtr input, TensorPtr output, SmallVector<int, max_rank> offset = {}) {
@@ -75,6 +80,12 @@ bool maybe_alias_tensors(TensorPtr input, TensorPtr output, SmallVector<int, max
 
     // If either tensor is dynamic, can't alias them.
     if (input->is_dynamic() || output->is_dynamic()) {
+        return false;
+    }
+
+    // If either tensor is external, can't alias them.
+    // TODO: maybe we can, but it's not clear how to update storage_.host in that case?
+    if (input->is_external() || output->is_external()) {
         return false;
     }
 
@@ -105,10 +116,10 @@ bool maybe_alias_tensors(TensorPtr input, TensorPtr output, SmallVector<int, max
     }
     bool input_subset_of_output = is_subset_of(input_bounds_with_offset, output->bounds());
     bool output_subset_of_input = is_subset_of(output_bounds_with_negative_offset, input->bounds());
-    if (input_subset_of_output && !input->is_alias()) {
+    if (input_subset_of_output && !has_storage(input)) {
         input->set_alias_of(output, offset);
         return true;
-    } else if (output_subset_of_input && !output->is_alias()) {
+    } else if (output_subset_of_input && !has_storage(output)) {
         for (int &i : offset) {
             i = -i;
         }
@@ -116,7 +127,7 @@ bool maybe_alias_tensors(TensorPtr input, TensorPtr output, SmallVector<int, max
         return true;
     }
 
-    return true;
+    return false;
 }
 
 // Try to alias outputs to inputs when it is safe.
@@ -238,6 +249,7 @@ class PadForOps : public OpVisitor {
             padding_data(1, r - i - 1) = (required[i].extent() - input->extent(i) + 1) / 2;
         }
         TensorPtr padding = std::make_shared<Tensor>(input->name() + "_padding", padding_data);
+        padding->set_constant();
 
         // Add the new tensor, op, and update the input.
         OpPtr pad = make_op<PadOp>(input, padding, padded);
