@@ -452,6 +452,12 @@ class PredicateLoadStore : public IRMutator {
         return IRMutator::visit(op);
     }
 
+    Expr visit(const VectorReduce *op) override {
+        // We can't predicate vector reductions.
+        valid = valid && is_const_one(vector_predicate);
+        return op;
+    }
+
 public:
     PredicateLoadStore(string v, const Expr &vpred)
         : var(std::move(v)), vector_predicate(vpred), lanes(vpred.type().lanes()), valid(true), vectorized(false) {
