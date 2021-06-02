@@ -123,6 +123,7 @@ if (CMAKE_HOST_SYSTEM_NAME MATCHES "Linux")
 
     add_test(NAME cross_compile_aarch64
              COMMAND
+             tree &&
              ${CMAKE_CTEST_COMMAND}
              --build-and-test "${CMAKE_CURRENT_LIST_DIR}/xc" "${CMAKE_CURRENT_BINARY_DIR}/xc-aarch64"
              --build-generator Ninja
