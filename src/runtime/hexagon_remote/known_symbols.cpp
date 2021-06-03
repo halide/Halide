@@ -162,7 +162,7 @@ void *get_known_symbol(const char *name) {
         {"floor", (char *)(static_cast<double (*)(double)>(&floor))},
         {"ceilf", (char *)(&ceilf)},
         {"ceil", (char *)(static_cast<double (*)(double)>(&ceil))},
-        {NULL, NULL} // Null terminator.
+        {NULL, NULL}  // Null terminator.
     };
 
     return lookup_symbol(name, known_syms);
