@@ -278,6 +278,10 @@
 #include "ObjectInstanceRegistry.h"
 #include "Target.h"
 
+#if !(__cplusplus >= 201703L || _MSVC_LANG >= 201703L)
+#error "Halide requires C++17 or later; please upgrade your compiler."
+#endif
+
 namespace Halide {
 
 template<typename T>
