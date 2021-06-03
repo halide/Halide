@@ -1,5 +1,6 @@
 #include "AllocationBoundsInference.h"
 #include "Bounds.h"
+#include "CSE.h"
 #include "ExternFuncArgument.h"
 #include "Function.h"
 #include "IRMutator.h"
@@ -17,6 +18,10 @@ using std::string;
 using std::vector;
 
 namespace {
+
+Expr cse_and_simplify(const Expr &x) {
+    return simplify(common_subexpression_elimination(x));
+}
 
 // Figure out the region touched of each buffer, and deposit them as
 // let statements outside of each realize node, or at the top level if
@@ -68,8 +73,8 @@ class AllocationInference : public IRMutator {
                            << f_args[i] << "\n";
             }
             Expr min, max, extent;
-            b[i].min = simplify(b[i].min);
-            b[i].max = simplify(b[i].max);
+            b[i].min = cse_and_simplify(b[i].min);
+            b[i].max = cse_and_simplify(b[i].max);
             if (bound.min.defined()) {
                 min = bound.min;
             } else {
@@ -77,10 +82,10 @@ class AllocationInference : public IRMutator {
             }
             if (bound.extent.defined()) {
                 extent = bound.extent;
-                max = simplify(min + extent - 1);
+                max = cse_and_simplify(min + extent - 1);
             } else {
                 max = b[i].max;
-                extent = simplify((max - min) + 1);
+                extent = cse_and_simplify((max - min) + 1);
             }
             if (bound.modulus.defined()) {
                 if (bound.remainder.defined()) {
@@ -91,11 +96,11 @@ class AllocationInference : public IRMutator {
                     max_plus_one -= bound.remainder;
                     max_plus_one = ((max_plus_one + bound.modulus - 1) / bound.modulus) * bound.modulus;
                     max_plus_one += bound.remainder;
-                    extent = simplify(max_plus_one - min);
+                    extent = cse_and_simplify(max_plus_one - min);
                     max = max_plus_one - 1;
                 } else {
-                    extent = simplify(((extent + bound.modulus - 1) / bound.modulus) * bound.modulus);
-                    max = simplify(min + extent - 1);
+                    extent = cse_and_simplify(((extent + bound.modulus - 1) / bound.modulus) * bound.modulus);
+                    max = cse_and_simplify(min + extent - 1);
                 }
             }
 
