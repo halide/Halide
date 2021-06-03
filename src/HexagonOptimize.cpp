@@ -2241,7 +2241,7 @@ class ScatterGatherGenerator : public IRMutator {
         dst_index = mutate(dst_index);
 
         return Call::make(ty, Call::hvx_gather, {std::move(dst_base), dst_index, src, size - 1, new_index},
-                          Call::Intrinsic);
+                          Call::PureIntrinsic);
     }
 
     // Checks if the Store node can be replaced with a scatter_accumulate.
@@ -2305,7 +2305,7 @@ class ScatterGatherGenerator : public IRMutator {
         Expr index = mutate(cast(ty.with_code(Type::Int), ty.bytes() * op->index));
         value = mutate(value);
         Stmt scatter = Evaluate::make(Call::make(ty, intrinsic,
-                                                 {buffer, size - 1, index, value}, Call::Intrinsic));
+                                                 {buffer, size - 1, index, value}, Call::PureIntrinsic));
         return scatter;
     }
 };
@@ -2396,7 +2396,7 @@ public:
         // Wrap the stmt with scatter-release if any hazard was detected.
         if (sync.find(&s) != sync.end()) {
             Stmt scatter_sync =
-                Evaluate::make(Call::make(Int(32), Call::hvx_scatter_release, {sync[&s]}, Call::Intrinsic));
+                Evaluate::make(Call::make(Int(32), Call::hvx_scatter_release, {sync[&s]}, Call::PureIntrinsic));
             return Block::make(scatter_sync, new_s);
         }
         return new_s;
