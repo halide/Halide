@@ -2212,15 +2212,27 @@ endif
 
 # This is a specialized 'install' for users who need Hexagon support libraries as well.
 install_qc: install $(HEXAGON_RUNTIME_LIBS)
-	mkdir -p $(PREFIX)/lib/arm-32-android $(PREFIX)/lib/arm-64-android $(PREFIX)/lib/host $(PREFIX)/lib/v65 $(PREFIX)/tools
+	mkdir -p $(PREFIX)/bin $(PREFIX)/tools $(PREFIX)/support
+	mkdir -p $(PREFIX)/lib/arm-32-android
+	mkdir -p $(PREFIX)/lib/arm-64-android
+	mkdir -p $(PREFIX)/lib/adsp/arm-32-android
+	mkdir -p $(PREFIX)/lib/adsp/arm-64-android
+	mkdir -p $(PREFIX)/lib/cdsp/arm-32-android
+	mkdir -p $(PREFIX)/lib/cdsp/arm-64-android
+	mkdir -p $(PREFIX)/lib/host
+	mkdir -p $(PREFIX)/lib/v65
 	cp $(HEXAGON_RUNTIME_LIBS_DIR)/arm-32-android/* $(PREFIX)/lib/arm-32-android
 	cp $(HEXAGON_RUNTIME_LIBS_DIR)/arm-64-android/* $(PREFIX)/lib/arm-64-android
+	cp $(HEXAGON_RUNTIME_LIBS_DIR)/cdsp/arm-32-android/* $(PREFIX)/lib/cdsp/arm-32-android
+	cp $(HEXAGON_RUNTIME_LIBS_DIR)/cdsp/arm-64-android/* $(PREFIX)/lib/cdsp/arm-64-android
+	cp $(HEXAGON_RUNTIME_LIBS_DIR)/adsp/arm-32-android/* $(PREFIX)/lib/adsp/arm-32-android
+	cp $(HEXAGON_RUNTIME_LIBS_DIR)/adsp/arm-64-android/* $(PREFIX)/lib/adsp/arm-64-android
 	cp $(HEXAGON_RUNTIME_LIBS_DIR)/host/* $(PREFIX)/lib/host
 	cp -r $(HEXAGON_RUNTIME_LIBS_DIR)/v65/* $(PREFIX)/lib/v65
 	ln -sf ../share/halide/tools/GenGen.cpp $(PREFIX)/tools/GenGen.cpp
 	ln -sf ../lib/v65/hexagon_sim_remote $(PREFIX)/bin/hexagon_sim_remote
 	ln -sf v65/libsim_qurt.a $(PREFIX)/lib/libsim_qurt.a
-	ln -sf v65/libsim_qurt_vtcm.a $(PREFIX)/lib/libsim_qurt_vtcm.a
+	ln -sf v65/libhalide_hexagon_remote_skel.so $(PREFIX)/lib/libhalide_hexagon_remote_skel.so
 
 # We need to capture the system libraries that we'll need to link
 # against, so that downstream consumers of our build rules don't
