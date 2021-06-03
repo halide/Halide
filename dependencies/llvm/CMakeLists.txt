@@ -45,11 +45,10 @@ cmake_dependent_option(Halide_BUNDLE_LLVM "When built as a static library, inclu
 # Promote LLVM/Clang executable targets
 ##
 
-set_target_properties(llvm-as clang PROPERTIES IMPORTED_GLOBAL TRUE)
-
-# clang-tools-extra is optional, but provides the clang-format target
-if (TARGET clang-format)
-    set_target_properties(clang-format PROPERTIES IMPORTED_GLOBAL TRUE)
+if (NOT CMAKE_CROSSCOMPILING)
+    set_target_properties(llvm-as clang PROPERTIES IMPORTED_GLOBAL TRUE)
+    add_executable(HalideHost::llvm-as ALIAS llvm-as)
+    add_executable(HalideHost::clang ALIAS clang)
 endif ()
 
 ##

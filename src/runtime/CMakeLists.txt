@@ -267,20 +267,20 @@ foreach (i IN LISTS RUNTIME_CPP)
                 target_compile_definitions(${basename} PRIVATE ${RUNTIME_DEFINES})
             else()
                 add_custom_command(OUTPUT "${LL}"
-                                   COMMAND clang ${clang_flags} -o "${ll_path}" "$<SHELL_PATH:${SOURCE}>"
-                                   DEPENDS "${SOURCE}"
+                                   COMMAND HalideHost::clang ${clang_flags} -o "${ll_path}" "$<SHELL_PATH:${SOURCE}>"
+                                   DEPENDS HalideHost::clang "${SOURCE}"
                                    ${dep_args}
                                    VERBATIM)
             endif()
 
             add_custom_command(OUTPUT "${BC}"
-                               COMMAND llvm-as "${LL}" -o "${BC}"
-                               DEPENDS "${LL}"
+                               COMMAND HalideHost::llvm-as "${LL}" -o "${BC}"
+                               DEPENDS HalideHost::llvm-as "${LL}"
                                VERBATIM)
 
             add_custom_command(OUTPUT "${INITMOD}"
-                               COMMAND binary2cpp ${SYMBOL} < "${BC}" > "${INITMOD}"
-                               DEPENDS "${BC}" binary2cpp
+                               COMMAND HalideHost::binary2cpp ${SYMBOL} < "${BC}" > "${INITMOD}"
+                               DEPENDS HalideHost::binary2cpp "${BC}"
                                VERBATIM)
 
             target_sources(Halide_initmod PRIVATE ${INITMOD})
@@ -295,12 +295,12 @@ foreach (i IN LISTS RUNTIME_LL)
     set(INITMOD "_initmod_${i}.cpp")
 
     add_custom_command(OUTPUT "${BC}"
-                       COMMAND llvm-as "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${LL}>" -o "${BC}"
-                       DEPENDS "${LL}"
+                       COMMAND HalideHost::llvm-as "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${LL}>" -o "${BC}"
+                       DEPENDS HalideHost::llvm-as "${LL}"
                        VERBATIM)
     add_custom_command(OUTPUT "${INITMOD}"
-                       COMMAND binary2cpp "halide_internal_initmod_${i}_ll" < "${BC}" > "${INITMOD}"
-                       DEPENDS "${BC}" binary2cpp
+                       COMMAND HalideHost::binary2cpp "halide_internal_initmod_${i}_ll" < "${BC}" > "${INITMOD}"
+                       DEPENDS HalideHost::binary2cpp "${BC}"
                        VERBATIM)
     target_sources(Halide_initmod PRIVATE ${INITMOD})
 endforeach ()
@@ -310,23 +310,24 @@ foreach (i IN LISTS RUNTIME_BC)
     set(RT_BC "${CMAKE_CURRENT_SOURCE_DIR}/nvidia_libdevice_bitcode/libdevice.${i}.10.bc")
 
     add_custom_command(OUTPUT "${INITMOD}"
-                       COMMAND binary2cpp "halide_internal_initmod_ptx_${i}_ll" < "$<SHELL_PATH:${RT_BC}>" > "${INITMOD}"
-                       DEPENDS binary2cpp "${RT_BC}"
+                       COMMAND HalideHost::binary2cpp "halide_internal_initmod_ptx_${i}_ll" < "$<SHELL_PATH:${RT_BC}>" > "${INITMOD}"
+                       DEPENDS HalideHost::binary2cpp "${RT_BC}"
                        VERBATIM)
     target_sources(Halide_initmod PRIVATE ${INITMOD})
 endforeach ()
 
 add_custom_command(OUTPUT "_initmod_inlined_c.cpp"
-                   COMMAND binary2cpp "halide_internal_initmod_inlined_c" < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/halide_buffer_t.cpp>" > "_initmod_inlined_c.cpp"
-                   DEPENDS "halide_buffer_t.cpp" binary2cpp
+                   COMMAND HalideHost::binary2cpp "halide_internal_initmod_inlined_c" < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/halide_buffer_t.cpp>" > "_initmod_inlined_c.cpp"
+                   DEPENDS HalideHost::binary2cpp "halide_buffer_t.cpp"
                    VERBATIM)
 target_sources(Halide_initmod PRIVATE "_initmod_inlined_c.cpp")
 
 foreach (i IN LISTS RUNTIME_HEADER_FILES)
     string(REPLACE "." "_" SYM_NAME "${i}")
+
     add_custom_command(OUTPUT "_initmod_${SYM_NAME}.cpp"
-                       COMMAND binary2cpp "halide_internal_runtime_header_${SYM_NAME}" < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${i}>" > "_initmod_${SYM_NAME}.cpp"
-                       DEPENDS "${i}" binary2cpp
+                       COMMAND HalideHost::binary2cpp "halide_internal_runtime_header_${SYM_NAME}" < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${i}>" > "_initmod_${SYM_NAME}.cpp"
+                       DEPENDS HalideHost::binary2cpp "${i}"
                        VERBATIM)
     target_sources(Halide_initmod PRIVATE "_initmod_${SYM_NAME}.cpp")
 
