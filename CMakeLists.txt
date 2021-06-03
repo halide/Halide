@@ -18,34 +18,22 @@ include(CMakeDependentOption)
 
 # Build Halide as a shared lib by default, but still honor command-line settings.
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
+# Preferred defaults for standard CMake settings
+set(CMAKE_CXX_STANDARD 17 CACHE STRING "Default minimum C++ standard")
+option(CMAKE_CXX_STANDARD_REQUIRED "Disable CMake standard-version-decay behavior" ON)
+option(CMAKE_CXX_EXTENSIONS "Compile with non-standard C++ extensions (e.g. gnu++17)" OFF)
+option(BUILD_SHARED_LIBS "Build shared libs by default" ON)
+
+# Warn if the user selected a low standard version
+if (CMAKE_CXX_STANDARD LESS 17)
+    message(WARNING "Halide requires C++17 and above.")
+endif ()
 
 # Warn if the user did not set a build type and is using a single-configuration generator.
-get_property(IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-if (NOT IS_MULTI_CONFIG AND NOT CMAKE_BUILD_TYPE)
+get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if (NOT is_multi_config AND NOT CMAKE_BUILD_TYPE)
     message(WARNING "Single-configuration generators require CMAKE_BUILD_TYPE to be set.")
 endif ()
-
-# Windows has file name length restrictions and lacks an RPATH mechanism.
-# We work around this by setting a path max and putting all exes / dlls in
-# the same output directory.
-if (CMAKE_SYSTEM_NAME MATCHES "Windows")
-    set(CMAKE_OBJECT_PATH_MAX 260)
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin")
-
-    message(STATUS "Windows: setting CMAKE_OBJECT_PATH_MAX to ${CMAKE_OBJECT_PATH_MAX}")
-endif ()
-
-# Export all symbols on Windows to match GCC/Clang behavior on Linux/macOS
-set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
-
-# Require standard C++17
-if(NOT CMAKE_CXX_STANDARD)
-    set(CMAKE_CXX_STANDARD 17)
-    set(CMAKE_CXX_STANDARD_REQUIRED ON)
-    set(CMAKE_CXX_EXTENSIONS OFF)
-elseif(CMAKE_CXX_STANDARD LESS 17)
-    message(FATAL_ERROR "Halide requires C++17 or newer")
-endif()
 
 # Build Halide with ccache if the package is present
 option(Halide_CCACHE_BUILD "Set to ON for a ccache enabled build" OFF)

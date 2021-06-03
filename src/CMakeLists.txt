@@ -385,6 +385,7 @@ target_export_script(Halide
 
 set_target_properties(Halide PROPERTIES
                       POSITION_INDEPENDENT_CODE ON
+                      WINDOWS_EXPORT_ALL_SYMBOLS ON
                       VERSION ${Halide_VERSION}
                       SOVERSION ${Halide_VERSION_MAJOR})
 

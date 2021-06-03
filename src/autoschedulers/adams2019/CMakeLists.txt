@@ -109,17 +109,15 @@ target_link_libraries(weightsdir_to_weightsfile PRIVATE Halide::Runtime)
 # =================================================================
 # Smaller tests
 
-if (BUILD_SHARED_LIBS)
-    add_executable(test_apps_autoscheduler test.cpp)
-    target_link_libraries(test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
+add_executable(test_apps_autoscheduler test.cpp)
+target_link_libraries(test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
 
-    add_test(NAME test_apps_autoscheduler
-             COMMAND test_apps_autoscheduler $<TARGET_FILE:Halide_Adams2019>)
+add_test(NAME test_apps_autoscheduler
+         COMMAND test_apps_autoscheduler $<TARGET_FILE:Halide_Adams2019>)
 
-    set_tests_properties(test_apps_autoscheduler PROPERTIES
-                         LABELS Adams2019
-                         ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Adams2019>:$ENV{LD_LIBRARY_PATH};HL_TARGET=${Halide_TARGET}")
-endif ()
+set_tests_properties(test_apps_autoscheduler PROPERTIES
+                     LABELS Adams2019
+                     ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Adams2019>:$ENV{LD_LIBRARY_PATH};HL_TARGET=${Halide_TARGET}")
 
 ##
 
