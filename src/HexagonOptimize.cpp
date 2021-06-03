@@ -2240,7 +2240,7 @@ class ScatterGatherGenerator : public IRMutator {
         Expr new_index = mutate(cast(ty.with_code(Type::Int), index));
         dst_index = mutate(dst_index);
 
-        return Call::make(ty, "gather", {std::move(dst_base), dst_index, src, size - 1, new_index},
+        return Call::make(ty, Call::hvx_gather, {std::move(dst_base), dst_index, src, size - 1, new_index},
                           Call::Intrinsic);
     }
 
