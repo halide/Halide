@@ -649,7 +649,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                 return Internal::Call::make(op->type,
                                             Call::if_then_else,
                                             {std::move(cond_value), std::move(true_value), std::move(false_value)},
-                                            Call::PureIntrinsic);
+                                            op->call_type);
             }
         }
     } else if (op->is_intrinsic(Call::mux)) {
