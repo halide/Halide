@@ -64,79 +64,64 @@ add_subdirectory(dependencies)
 # Add source directories
 ##
 
-add_subdirectory(src)
 add_subdirectory(tools)
+add_subdirectory(src)
 
 ##
 # Add tests, tutorials, etc. if we're not being imported into another CMake project.
 ##
 
-if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    option(WITH_TESTS "Build tests" ON)
-    if (WITH_TESTS)
-        message(STATUS "Building tests enabled")
-        add_subdirectory(test)
-    else ()
-        message(STATUS "Building tests disabled")
-    endif ()
+string(COMPARE EQUAL "${CMAKE_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}" is_top_level)
 
-    option(WITH_PYTHON_BINDINGS "Build Python bindings" ON)
-    if (WITH_PYTHON_BINDINGS)
-        if (Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS)
-            message(STATUS "Building Python bindings enabled")
-            add_subdirectory(python_bindings)
-        else ()
-            if (NOT Halide_ENABLE_RTTI)
-                message(WARNING "Building Python bindings disabled: must compile with RTTI")
-            endif ()
-            if (NOT Halide_ENABLE_EXCEPTIONS)
-                message(WARNING "Building Python bindings disabled: must compile with exceptions")
-            endif ()
-            set(WITH_PYTHON_BINDINGS OFF CACHE BOOL "Build Python bindings" FORCE)
-        endif ()
-    else ()
-        message(STATUS "Building Python bindings disabled")
-    endif ()
+option(WITH_TESTS "Build tests" "${is_top_level}")
+if (WITH_TESTS)
+    message(STATUS "Building tests enabled")
+    add_subdirectory(test)
+else ()
+    message(STATUS "Building tests disabled")
+endif ()
 
-    option(WITH_TUTORIALS "Build tutorials" ON)
-    if (WITH_TUTORIALS)
-        message(STATUS "Building tutorials enabled")
-        add_subdirectory(tutorial)
+option(WITH_PYTHON_BINDINGS "Build Python bindings" "${is_top_level}")
+if (WITH_PYTHON_BINDINGS)
+    if (Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS)
+        message(STATUS "Building Python bindings enabled")
+        add_subdirectory(python_bindings)
     else ()
-        message(STATUS "Building tutorials disabled")
+        message(WARNING "Building Python bindings disabled: "
+                "must compile with exceptions [${Halide_ENABLE_EXCEPTIONS}] AND RTTI [${Halide_ENABLE_RTTI}]")
     endif ()
+else ()
+    message(STATUS "Building Python bindings disabled")
+endif ()
 
-    option(WITH_DOCS "Build documentation" OFF)
-    if (WITH_DOCS)
-        message(STATUS "Building docs enabled")
-        add_subdirectory(doc)
-    else ()
-        message(STATUS "Building docs disabled")
-    endif ()
+option(WITH_TUTORIALS "Build tutorials" "${is_top_level}")
+if (WITH_TUTORIALS)
+    message(STATUS "Building tutorials enabled")
+    add_subdirectory(tutorial)
+else ()
+    message(STATUS "Building tutorials disabled")
+endif ()
 
-    option(WITH_UTILS "Build utils" ON)
-    if (WITH_UTILS)
-        message(STATUS "Building utils enabled")
-        add_subdirectory(util)
-    else ()
-        message(STATUS "Building utils disabled")
-    endif ()
+option(WITH_DOCS "Build documentation" OFF)
+if (WITH_DOCS)
+    message(STATUS "Building docs enabled")
+    add_subdirectory(doc)
+else ()
+    message(STATUS "Building docs disabled")
+endif ()
 
+option(WITH_UTILS "Build utils" "${is_top_level}")
+if (WITH_UTILS)
+    message(STATUS "Building utils enabled")
+    add_subdirectory(util)
+else ()
+    message(STATUS "Building utils disabled")
+endif ()
+
+option(WITH_PACKAGING "Include Halide packaging config" "${is_top_level}")
+if (WITH_PACKAGING)
+    message(STATUS "Halide packaging rules enabled")
     add_subdirectory(packaging)
-
-    add_custom_target(distrib
-                      COMMAND ${CMAKE_COMMAND} -E echo "\\'distrib\\' is not available under CMake. Use \\'package\\' instead.")
-
-    if (TARGET clang-format AND NOT WIN32)
-        add_custom_target(format COMMAND
-                          find
-                          "${Halide_SOURCE_DIR}/apps"
-                          "${Halide_SOURCE_DIR}/src"
-                          "${Halide_SOURCE_DIR}/tools"
-                          "${Halide_SOURCE_DIR}/test"
-                          "${Halide_SOURCE_DIR}/util"
-                          "${Halide_SOURCE_DIR}/python_bindings"
-                          -name *.cpp -o -name *.h -o -name *.c |
-                          xargs $<TARGET_FILE:clang-format> -i -style=file)
-    endif ()
+else ()
+    message(STATUS "Halide packaging rules disabled")
 endif ()
