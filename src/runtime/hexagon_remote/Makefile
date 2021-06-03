@@ -24,12 +24,11 @@
 #
 
 SDK_ROOT ?= ${HOME}/Qualcomm
-HEXAGON_SDK_ROOT ?= ${SDK_ROOT}/Hexagon_SDK/4.2.0.2
+HEXAGON_SDK_ROOT ?= ${SDK_ROOT}/Hexagon_SDK/4.3.0.0
 # Need SDK >= 4.2.0.2 for qaic "halide_hexagon_remote_skel_invoke_qaic_version"
-HEXAGON_TOOLS_VER ?= 8.4.09
+HEXAGON_TOOLS_VER ?= 8.4.11
 # Need Hexagon tools >= 8.4.05 for running simulator-offload test for hvx_v68
 # Need Hexagon tools >= 8.3.09 for running simulator-offload test for hvx_v66
-# See https://jira-quic.qualcomm.com/jira/browse/QTOOL-45506 for more details
 HEXAGON_TOOLS_ROOT ?= ${HEXAGON_SDK_ROOT}/tools/HEXAGON_Tools/$(HEXAGON_TOOLS_VER)
 
 ANDROID_NDK_ROOT ?= ${HEXAGON_SDK_ROOT}/tools/android-ndk-r19c
