@@ -99,7 +99,7 @@ Windows 7 and includes Ubuntu 18.04 LTS.
 
 Compiled AOT pipelines are expected to have much broader platform support. The
 binaries use the C ABI, and we expect any compliant C compiler to be able to use
-the generated headers correctly. The C++ bindings currently require C++11. If
+the generated headers correctly. The C++ bindings currently require C++17. If
 you discover a compatibility problem with a generated pipeline, please open an
 issue.
 
