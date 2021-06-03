@@ -3130,11 +3130,7 @@ public:
         user_assert(sizeof...(args) == pi.inputs().size())
             << "Expected exactly " << pi.inputs().size()
             << " inputs but got " << sizeof...(args) << "\n";
-        // Deliberately avoiding make_index_sequence and friends here so that we don't have to provide
-        // our own implementations for clients that are using C++11 (which didn't provide them).
-        std::vector<std::vector<StubInput>> inputs(sizeof...(args));
-        build_inputs(inputs, 0, args...);
-        set_inputs_vector(inputs);
+        set_inputs_vector(build_inputs(std::forward_as_tuple<const Args &...>(args...), std::make_index_sequence<sizeof...(Args)>{}));
     }
 
     Realization realize(std::vector<int32_t> sizes) {
@@ -3479,19 +3475,9 @@ private:
         return siv;
     }
 
-    inline void build_inputs(std::vector<std::vector<StubInput>> &inputs, int idx) {
-        internal_assert(idx == (int)inputs.size());
-    }
-
-    template<typename Last>
-    inline void build_inputs(std::vector<std::vector<StubInput>> &inputs, int idx, const Last &last) {
-        inputs[idx] = build_input(idx, last);
-    }
-
-    template<typename First, typename Second, typename... Rest>
-    inline void build_inputs(std::vector<std::vector<StubInput>> &inputs, int idx, const First &first, const Second &second, const Rest &...rest) {
-        build_inputs<First>(inputs, idx, first);
-        build_inputs<Second, Rest...>(inputs, idx + 1, second, rest...);
+    template<typename... Args, size_t... Indices>
+    std::vector<std::vector<StubInput>> build_inputs(const std::tuple<const Args &...> &t, std::index_sequence<Indices...>) {
+        return {build_input(Indices, std::get<Indices>(t))...};
     }
 
 public:
