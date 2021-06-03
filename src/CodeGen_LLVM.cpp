@@ -2373,7 +2373,7 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
         Expr pred_load = Call::make(load_expr.type(),
                                     Call::if_then_else,
                                     {op->predicate, load_expr, make_zero(load_expr.type())},
-                                    Internal::Call::Intrinsic);
+                                    Internal::Call::PureIntrinsic);
         value = codegen(pred_load);
     }
 }
@@ -2963,7 +2963,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             value = create_alloca_at_entry(halide_buffer_t_type, 1);
         } else {
             const int64_t *sz = as_const_int(op->args[0]);
-            internal_assert(sz);
+            internal_assert(sz != nullptr);
             if (op->type == type_of<struct halide_dimension_t *>()) {
                 value = create_alloca_at_entry(dimension_t_type, *sz / sizeof(halide_dimension_t));
             } else {

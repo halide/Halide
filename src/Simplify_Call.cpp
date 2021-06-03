@@ -649,7 +649,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                 return Internal::Call::make(op->type,
                                             Call::if_then_else,
                                             {std::move(cond_value), std::move(true_value), std::move(false_value)},
-                                            op->call_type);
+                                            Call::PureIntrinsic);
             }
         }
     } else if (op->is_intrinsic(Call::mux)) {
@@ -690,7 +690,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         if (unchanged) {
             return op;
         } else {
-            return Call::make(op->type, Call::mux, mutated_args, op->call_type);
+            return Call::make(op->type, Call::mux, mutated_args, Call::PureIntrinsic);
         }
     } else if (op->call_type == Call::PureExtern) {
         // TODO: This could probably be simplified into a single map-lookup
