@@ -3,6 +3,7 @@
 add_library(hannk_delegate STATIC
             hannk_delegate.cpp)
 target_link_libraries(hannk_delegate PRIVATE
+                      hannk_log_tflite
                       interpreter_lower
                       tensorflowlite_headers
                       Halide::Runtime)
@@ -14,8 +15,8 @@ target_include_directories(hannk_delegate PRIVATE
 add_library(hannk_delegate_registrar STATIC
             hannk_delegate_provider.cpp)
 target_link_libraries(hannk_delegate_registrar PRIVATE
-                      interpreter
                       error_util
+                      interpreter
                       hannk_delegate
                       hannk_log_tflite
                       tensorflowlite_headers
@@ -32,8 +33,8 @@ target_include_directories(hannk_delegate_registrar PRIVATE
 add_library(hannk_delegate_external MODULE
             hannk_delegate_adaptor.cpp)
 target_link_libraries(hannk_delegate_external PRIVATE
-                      interpreter
                       error_util
+                      interpreter
                       hannk_delegate
                       hannk_log_tflite
                       tensorflowlite_headers
