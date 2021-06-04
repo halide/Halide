@@ -61,7 +61,7 @@ target_compile_options(tensorflow-lite
 
 # TFLite 2.5 specifies set(CMAKE_CXX_STANDARD 11), which can cause link errors in gcc-7.x;
 # override CXX_STANDARD for it to ensure we compile everything the same way.
-set_property(TARGET tflite PROPERTY CXX_STANDARD 17)
+set_property(TARGET tensorflowlite_c PROPERTY CXX_STANDARD 17)
 
 # Make an interface library that is just to get the tflite headers,
 # without any implied linkage
