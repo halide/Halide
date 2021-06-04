@@ -3,6 +3,7 @@
 add_library(hannk_delegate STATIC
             hannk_delegate.cpp)
 target_link_libraries(hannk_delegate PRIVATE
+                      interpreter_lower
                       tensorflowlite_headers
                       Halide::Runtime)
 target_include_directories(hannk_delegate PRIVATE
