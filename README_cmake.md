@@ -558,7 +558,7 @@ immediately after setting the minimum version.
 
 The next three variables set the project-wide C++ standard. The first,
 [`CMAKE_CXX_STANDARD`][cmake_cxx_standard], simply sets the standard version.
-Halide requires at least c++17. The second,
+Halide requires at least C++17. The second,
 [`CMAKE_CXX_STANDARD_REQUIRED`][cmake_cxx_standard_required], tells CMake to
 fail if the compiler cannot provide the requested standard version. Lastly,
 [`CMAKE_CXX_EXTENSIONS`][cmake_cxx_extensions] tells CMake to disable
