@@ -557,8 +557,8 @@ private:
                                            llvm::Value *vpred = nullptr, bool slice_to_native = true);
     llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr, bool slice_to_native = true);
 
-    virtual void codegen_predicated_vector_load(const Load *op);
-    virtual void codegen_predicated_vector_store(const Store *op);
+    virtual void codegen_predicated_load(const Load *op);
+    virtual void codegen_predicated_store(const Store *op);
 
     void codegen_atomic_rmw(const Store *op);
 
