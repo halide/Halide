@@ -278,6 +278,10 @@
 #include "ObjectInstanceRegistry.h"
 #include "Target.h"
 
+#if !(__cplusplus >= 201703L || _MSVC_LANG >= 201703L)
+#error "Halide requires C++17 or later; please upgrade your compiler."
+#endif
+
 namespace Halide {
 
 template<typename T>
@@ -1364,7 +1368,7 @@ public:
 };
 
 // This is a union-like class that allows for convenient initialization of Stub Inputs
-// via C++11 initializer-list syntax; it is only used in situations where the
+// via initializer-list syntax; it is only used in situations where the
 // downstream consumer will be able to explicitly check that each value is
 // of the expected/required kind.
 class StubInput {
@@ -3130,7 +3134,7 @@ public:
         user_assert(sizeof...(args) == pi.inputs().size())
             << "Expected exactly " << pi.inputs().size()
             << " inputs but got " << sizeof...(args) << "\n";
-        set_inputs_vector(build_inputs(std::forward_as_tuple<const Args &...>(args...), make_index_sequence<sizeof...(Args)>{}));
+        set_inputs_vector(build_inputs(std::forward_as_tuple<const Args &...>(args...), std::make_index_sequence<sizeof...(Args)>{}));
     }
 
     Realization realize(std::vector<int32_t> sizes) {
@@ -3476,7 +3480,7 @@ private:
     }
 
     template<typename... Args, size_t... Indices>
-    std::vector<std::vector<StubInput>> build_inputs(const std::tuple<const Args &...> &t, index_sequence<Indices...>) {
+    std::vector<std::vector<StubInput>> build_inputs(const std::tuple<const Args &...> &t, std::index_sequence<Indices...>) {
         return {build_input(Indices, std::get<Indices>(t))...};
     }
 
