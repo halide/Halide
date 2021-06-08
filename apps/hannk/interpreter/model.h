@@ -92,9 +92,20 @@ class Tensor {
     std::string name_;
     HalideBuffer<void> buffer_;
     QuantizationInfo quantization_;
+    // If true, this Tensor should be considered constant and should not be mutated.
+    // (It may actually refer to read-only external memory, or it may simply be marked this may as
+    // the result of a transform.)
     bool is_constant_ = false;
+    // If true, this Tensor's storage is externally owned and must not be freed.
+    bool is_external_ = false;
+    // If true, the Tensor is one of the inputs to the Model.
     bool is_input_ = false;
+    // If true, the Tensor is one of the outputs to the Model.
     bool is_output_ = false;
+    // If true, this Tensor is 'dynamic' (i.e., it's an output whose size
+    // is calculated during evaluation, rather than ahead of time).  It is an error
+    // for a Tensor to be dynamic if it is also constant or external.
+    // Currently only used in conjunction with the TFLite delegate.
     bool is_dynamic_ = false;
 
     // Possibly shared storage for this tensor.
@@ -105,6 +116,8 @@ class Tensor {
     // A list of ops that use this tensor as an output or an input, respectively.
     std::list<Op *> producers_;
     std::list<Op *> consumers_;
+
+    std::shared_ptr<TensorStorage> storage();
 
 public:
     Tensor() = delete;
@@ -163,11 +176,23 @@ public:
         is_constant_ = constant;
     }
 
+    bool is_external() const {
+        return is_external_;
+    }
+
+    void set_external(bool external = true) {
+        assert(!(external && is_dynamic()));
+        is_external_ = external;
+    }
+
+    void set_external_host(void *host);
+
     bool is_dynamic() const {
         return is_dynamic_;
     }
 
     void set_dynamic(bool dynamic = true) {
+        assert(!(dynamic && (is_constant() || is_external())));
         is_dynamic_ = dynamic;
     }
 
@@ -205,8 +230,6 @@ public:
     void allocate();
 
     void resize(const Box &new_shape);
-
-    std::shared_ptr<TensorStorage> storage();
 
     bool is_alias() const;
     void set_alias_of(const TensorPtr &t, const SmallVector<int, max_rank> &offset = {});

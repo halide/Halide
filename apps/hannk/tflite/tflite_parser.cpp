@@ -126,7 +126,9 @@ public:
                 HalideBuffer<void> buffer(type, const_cast<void *>(data), shape);
                 assert(tflite_buffer->size() == buffer.size_in_bytes());
 
-                return make_op<Tensor>(t->name()->str(), std::move(buffer), std::move(quantization));
+                auto p = make_op<Tensor>(t->name()->str(), std::move(buffer), std::move(quantization));
+                p->set_constant();
+                return p;
             }
         }
 
@@ -277,6 +279,7 @@ public:
                 shape_data(i) = options->new_shape()->Get(i);
             }
             shape_tensor = std::make_shared<Tensor>(input->name() + "_shape", shape_data);
+            shape_tensor->set_constant();
         }
         return make_op<ReshapeOp>(input, shape_tensor, output);
     }

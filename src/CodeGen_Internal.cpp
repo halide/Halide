@@ -464,7 +464,7 @@ Expr lower_euclidean_div(Expr a, Expr b) {
         if (!can_prove(!b_is_const_zero)) {
             b = b | cast(a.type(), b_is_const_zero);
         }
-        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::Intrinsic);
+        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::PureIntrinsic);
         q = select(b_is_const_zero, 0, q);
     } else {
         internal_assert(a.type().is_int());
@@ -506,7 +506,7 @@ Expr lower_euclidean_div(Expr a, Expr b) {
         // If a is negative, add one to it to get the rounding to work out.
         a -= a_neg;
         // Do the C-style division
-        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::Intrinsic);
+        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::PureIntrinsic);
         // If a is negative, either add or subtract one, depending on
         // the sign of b, to fix the rounding. This can't overflow,
         // because we move the result towards zero in either case (we
@@ -530,7 +530,7 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
         if (!can_prove(!b_is_const_zero)) {
             b = b | cast(a.type(), b_is_const_zero);
         }
-        q = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::Intrinsic);
+        q = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::PureIntrinsic);
         q = select(b_is_const_zero, make_zero(a.type()), q);
     } else {
         internal_assert(a.type().is_int());
@@ -560,7 +560,7 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
         // If a is negative, add one to get the rounding to work out
         a -= a_neg;
         // Do the mod, avoiding taking mod by zero
-        q = Call::make(a.type(), Call::mod_round_to_zero, {a, (b | b_zero)}, Call::Intrinsic);
+        q = Call::make(a.type(), Call::mod_round_to_zero, {a, (b | b_zero)}, Call::PureIntrinsic);
         // If a is negative, we either need to add b - 1 to the
         // result, or -b - 1, depending on the sign of b.
         q += (a_neg & ((b ^ b_neg) + ~b_neg));

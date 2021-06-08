@@ -200,6 +200,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             // LLVM shl and shr instructions produce poison for
             // shifts >= typesize, so we will follow suit in our simplifier.
             if (ub >= (uint64_t)(t.bits())) {
+                clear_bounds_info(bounds);
                 return make_signed_integer_overflow(t);
             }
             if (a.type().is_uint() || ub < ((uint64_t)t.bits() - 1)) {
@@ -689,7 +690,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         if (unchanged) {
             return op;
         } else {
-            return Call::make(op->type, Call::mux, mutated_args, op->call_type);
+            return Call::make(op->type, Call::mux, mutated_args, Call::PureIntrinsic);
         }
     } else if (op->call_type == Call::PureExtern) {
         // TODO: This could probably be simplified into a single map-lookup
@@ -833,6 +834,8 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // There are other PureExterns we don't bother with (e.g. fast_inverse_f32)...
         // just fall thru and take the general case.
         debug(2) << "Simplifier: unhandled PureExtern: " << op->name;
+    } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
+        clear_bounds_info(bounds);
     }
 
     // No else: we want to fall thru from the PureExtern clause.

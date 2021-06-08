@@ -58,7 +58,7 @@ Expr stringify(const std::vector<Expr> &args) {
     }
 
     return Internal::Call::make(type_of<const char *>(), Internal::Call::stringify,
-                                args, Internal::Call::Intrinsic);
+                                args, Internal::Call::PureIntrinsic);
 }
 
 Expr combine_strings(const std::vector<Expr> &args) {
@@ -398,6 +398,11 @@ Expr make_two(Type t) {
 Expr make_signed_integer_overflow(Type type) {
     static std::atomic<int> counter{0};
     return Call::make(type, Call::signed_integer_overflow, {counter++}, Call::Intrinsic);
+}
+
+bool is_signed_integer_overflow(const Expr &expr) {
+    const Call *call = expr.as<Call>();
+    return call && call->is_intrinsic(Call::signed_integer_overflow);
 }
 
 Expr const_true(int w) {
@@ -1494,7 +1499,7 @@ Expr mux(const Expr &id, const std::vector<Expr> &values) {
     }
     std::vector<Expr> result{id};
     result.insert(result.end(), values.begin(), values.end());
-    return Internal::Call::make(t, Internal::Call::mux, result, Internal::Call::Intrinsic);
+    return Internal::Call::make(t, Internal::Call::mux, result, Internal::Call::PureIntrinsic);
 }
 
 Expr mux(const Expr &id, const Tuple &tup) {
@@ -2504,7 +2509,7 @@ Expr div_round_to_zero(Expr x, Expr y) {
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::div_round_to_zero,
                                 {std::move(x), std::move(y)},
-                                Internal::Call::Intrinsic);
+                                Internal::Call::PureIntrinsic);
 }
 
 Expr mod_round_to_zero(Expr x, Expr y) {
@@ -2519,7 +2524,7 @@ Expr mod_round_to_zero(Expr x, Expr y) {
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::mod_round_to_zero,
                                 {std::move(x), std::move(y)},
-                                Internal::Call::Intrinsic);
+                                Internal::Call::PureIntrinsic);
 }
 
 Expr random_float(Expr seed) {

@@ -87,6 +87,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                 // a known-wrong value. (Note that no_overflow_int() should
                 // only be true for signed integers.)
                 internal_assert(op->type.is_int());
+                clear_bounds_info(bounds);
                 return make_signed_integer_overflow(op->type);
             }
         }
@@ -118,7 +119,6 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
         if (rewrite(IRMatcher::Overflow() / x, a) ||
             rewrite(x / IRMatcher::Overflow(), b) ||
             rewrite(x / 1, x) ||
-            rewrite(c0 / c1, fold(c0 / c1)) ||
             (!op->type.is_float() && rewrite(x / 0, 0)) ||
             (!op->type.is_float() && denominator_non_zero && rewrite(x / x, 1)) ||
             rewrite(0 / x, 0) ||
@@ -131,7 +131,8 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
 
         // clang-format off
         if (EVAL_IN_LAMBDA
-            (rewrite(broadcast(x, c0) / broadcast(y, c0), broadcast(x / y, c0)) ||
+            (rewrite(c0 / c1, fold(c0 / c1)) ||
+             rewrite(broadcast(x, c0) / broadcast(y, c0), broadcast(x / y, c0)) ||
              rewrite(select(x, c0, c1) / c2, select(x, fold(c0/c2), fold(c1/c2))) ||
              (!op->type.is_float() &&
               rewrite(x / x, select(x == 0, 0, 1))) ||

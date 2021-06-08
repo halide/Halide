@@ -13,6 +13,8 @@ Expr Simplify::visit(const IntImm *op, ExprInfo *bounds) {
         bounds->min = bounds->max = op->value;
         bounds->alignment.remainder = op->value;
         bounds->alignment.modulus = 0;
+    } else {
+        clear_bounds_info(bounds);
     }
     return op;
 }
@@ -23,15 +25,19 @@ Expr Simplify::visit(const UIntImm *op, ExprInfo *bounds) {
         bounds->min = bounds->max = (int64_t)(op->value);
         bounds->alignment.remainder = op->value;
         bounds->alignment.modulus = 0;
+    } else {
+        clear_bounds_info(bounds);
     }
     return op;
 }
 
 Expr Simplify::visit(const FloatImm *op, ExprInfo *bounds) {
+    clear_bounds_info(bounds);
     return op;
 }
 
 Expr Simplify::visit(const StringImm *op, ExprInfo *bounds) {
+    clear_bounds_info(bounds);
     return op;
 }
 
