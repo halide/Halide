@@ -2102,10 +2102,10 @@ void check_unreachable() {
     check(IfThenElse::make(x != 0, Evaluate::make(unreachable()), not_no_op(y)),
           not_no_op(y));
 
-    check(y + Call::make(Int(32), Call::if_then_else, {x != 0, unreachable(), unreachable()}, Call::Intrinsic),
+    check(y + Call::make(Int(32), Call::if_then_else, {x != 0, unreachable(), unreachable()}, Call::PureIntrinsic),
           unreachable());
-    check(Call::make(Int(32), Call::if_then_else, {x != 0, y, unreachable()}, Call::Intrinsic), y);
-    check(Call::make(Int(32), Call::if_then_else, {x != 0, unreachable(), y}, Call::Intrinsic), y);
+    check(Call::make(Int(32), Call::if_then_else, {x != 0, y, unreachable()}, Call::PureIntrinsic), y);
+    check(Call::make(Int(32), Call::if_then_else, {x != 0, unreachable(), y}, Call::PureIntrinsic), y);
 
     check(Block::make(not_no_op(y), For::make("i", 0, 1, ForType::Serial, DeviceAPI::None, Evaluate::make(unreachable()))),
           Evaluate::make(unreachable()));
@@ -2130,11 +2130,11 @@ int main(int argc, char **argv) {
     Expr x = Var("x"), y = Var("y");
 
     // Check that constant args to a stringify get combined
-    check(Call::make(type_of<const char *>(), Call::stringify, {3, std::string(" "), 4}, Call::Intrinsic),
+    check(Call::make(type_of<const char *>(), Call::stringify, {3, std::string(" "), 4}, Call::PureIntrinsic),
           std::string("3 4"));
 
-    check(Call::make(type_of<const char *>(), Call::stringify, {3, x, 4, std::string(", "), 3.4f}, Call::Intrinsic),
-          Call::make(type_of<const char *>(), Call::stringify, {std::string("3"), x, std::string("4, 3.400000")}, Call::Intrinsic));
+    check(Call::make(type_of<const char *>(), Call::stringify, {3, x, 4, std::string(", "), 3.4f}, Call::PureIntrinsic),
+          Call::make(type_of<const char *>(), Call::stringify, {std::string("3"), x, std::string("4, 3.400000")}, Call::PureIntrinsic));
 
     {
         // Check that contiguous prefetch call get collapsed

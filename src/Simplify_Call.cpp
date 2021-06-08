@@ -695,7 +695,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         if (unchanged) {
             return op;
         } else {
-            return Call::make(op->type, Call::mux, mutated_args, op->call_type);
+            return Call::make(op->type, Call::mux, mutated_args, Call::PureIntrinsic);
         }
     } else if (op->call_type == Call::PureExtern) {
         // TODO: This could probably be simplified into a single map-lookup

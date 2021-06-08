@@ -461,7 +461,7 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
                 Internal::Call::make(type_of<const char *>(),
                                      Internal::Call::stringify,
                                      strings,
-                                     Internal::Call::Intrinsic);
+                                     Internal::Call::PureIntrinsic);
             s = Block::make(Evaluate::make(builder.build()), s);
         }
 
