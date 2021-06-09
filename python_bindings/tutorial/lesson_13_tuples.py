@@ -119,7 +119,7 @@ def main():
 
     # You can construct a Tuple by passing multiple Exprs to the
     # Tuple constructor as we did above. Perhaps more elegantly, you
-    # can also take advantage of C++11 initializer lists and just
+    # can also take advantage of initializer lists and just
     # enclose your Exprs in braces:
     multi_valued_2 = hl.Func("multi_valued_2")
     multi_valued_2[x, y] = (x + y, hl.sin(x * y))
