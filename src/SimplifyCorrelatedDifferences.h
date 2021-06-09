@@ -52,7 +52,13 @@ namespace Internal {
  */
 Stmt simplify_correlated_differences(const Stmt &);
 
-Expr simplify_correlated_differences(const Expr &expr);
+/** Refactor the expression to remove correlated differences
+ * or rewrite them in a form that is more amenable to bounds
+ * inference. Performs a subset of what `simplify_correlated_differences`
+ * does. Can increase Expr size (i.e. does not follow the simplifier's
+ * reduction order).
+ */
+Expr refactor_correlated_differences(const Expr &expr);
 
 }  // namespace Internal
 }  // namespace Halide

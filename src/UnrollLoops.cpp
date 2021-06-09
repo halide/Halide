@@ -55,8 +55,9 @@ class UnrollLoops : public IRMutator {
             if (e == nullptr) {
                 // Still no luck. Try taking an upper bound and
                 // injecting an if statement around the body.
-                extent = simplify_correlated_differences(extent);
-                extent_upper = find_constant_bound(extent, Direction::Upper, Scope<Interval>());
+                // Don't use the refactored form as a replacement for extent, it can be a larger expression.
+                Expr refactored_extent = refactor_correlated_differences(extent);
+                extent_upper = find_constant_bound(refactored_extent, Direction::Upper, Scope<Interval>());
                 if (extent_upper.defined()) {
                     e = extent_upper.as<IntImm>();
                     use_guard = true;
