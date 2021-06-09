@@ -2098,7 +2098,7 @@ int rvar_bounds_test() {
     total_sum.add_custom_lowering_pass(new CheckAllocationSize());
 
     Buffer<int16_t> in(32, 64);
-    in.fill([](int x, int y) { return 1; });
+    in.fill(1);
     input.set(in);
 
     Buffer<int16_t> result = total_sum.realize();
