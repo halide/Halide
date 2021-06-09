@@ -3,7 +3,7 @@
 
 // TODO(rootjalex): figure out includes.
 //                  should this be in the Halide namespace??
-#include <_types/_uint32_t.h>
+//#include <_types/_uint32_t.h> 
 #include <algorithm>    // std::sort
 #include <cstdint>      // uint32_t
 #include <iostream>     // std::cerr

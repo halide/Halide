@@ -5,7 +5,7 @@
 //                  should this be in the Halide namespace??
 #include "Halide.h"
 #include "MCTreeNode.h"
-#include <_types/_uint32_t.h>
+//#include <_types/_uint32_t.h>
 #include <cmath>        // std::sqrt
 #include <cstdint>      // uint32_t
 #include <iostream>     // std::cerr
