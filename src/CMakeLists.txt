@@ -370,7 +370,7 @@ add_library(Halide::Halide ALIAS Halide)
 target_link_libraries(Halide PRIVATE Halide::LLVM)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
 target_compile_definitions(Halide PRIVATE $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>)
-target_compile_features(Halide PUBLIC cxx_std_11)
+target_compile_features(Halide PUBLIC cxx_std_17)
 
 include(TargetExportScript)
 ## TODO: implement something similar for Windows/link.exe

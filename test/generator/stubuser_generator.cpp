@@ -42,7 +42,7 @@ public:
 
         // We'll explicitly fill in the struct fields by name, just to show
         // it as an option. (Alternately, we could fill it in by using
-        // C++11 aggregate-initialization syntax.)
+        // aggregate-initialization syntax.)
         StubTest::Inputs inputs;
         inputs.typed_buffer_input = constant_image;
         inputs.untyped_buffer_input = input;
