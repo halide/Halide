@@ -634,6 +634,15 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint16x64_t widening_load<uint16x64_t, 
 }
 
 template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x16_t widening_load<int32x16_t, int16_t>(const void *base, int32_t offset) {
+    int32x16_t r1;
+    const xb_vec2Nx8* __restrict ptr8 = (const xb_vec2Nx8*)((const int16_t*)base + offset);
+    valign align = IVP_LA_PP(ptr8);
+    IVP_LAN_2X16S_IP(r1, align, (const xb_vecN_2x16*)ptr8);
+    return r1;
+}
+
+template<>
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x32_t widening_load<int32x32_t, int16_t>(const void *base, int32_t offset) {
     int32x16_t r1, r2;
     const xb_vec2Nx8* __restrict ptr8 = (const xb_vec2Nx8*)((const int16_t*)base + offset);
@@ -641,6 +650,18 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x32_t widening_load<int32x32_t, in
     IVP_LAN_2X16S_IP(r1, align, (const xb_vecN_2x16*)ptr8);
     // Pointers is automatically incremented by previous call.
     IVP_LAN_2X16S_IP(r2, align, (const xb_vecN_2x16*)ptr8);
+
+    return int32x32_t(int32x32_t::from_native_vector, r1, r2);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x32_t widening_load<int32x32_t, uint16_t>(const void *base, int32_t offset) {
+    int32x16_t r1, r2;
+    const xb_vec2Nx8* __restrict ptr8 = (const xb_vec2Nx8*)((const uint16_t*)base + offset);
+    valign align = IVP_LA_PP(ptr8);
+    IVP_LAN_2X16U_IP(r1, align, (const xb_vecN_2x16U*)ptr8);
+    // Pointers is automatically incremented by previous call.
+    IVP_LAN_2X16U_IP(r2, align, (const xb_vecN_2x16U*)ptr8);
 
     return int32x32_t(int32x32_t::from_native_vector, r1, r2);
 }
@@ -1339,6 +1360,14 @@ HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_convert_u16_low_i32(const uint16x3
 }
 
 HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_convert_u16_high_i32(const uint16x32_t& src) {
+    return IVP_MOVN_2X32_FROMNX16(IVP_SELNX16UI(uint16x32_t(0), src, IVP_SELI_16B_INTERLEAVE_1_HI));
+}
+
+HALIDE_ALWAYS_INLINE uint32x16_t halide_xtensa_convert_u16_low_u32(const uint16x32_t& src) {
+    return IVP_MOVN_2X32_FROMNX16(IVP_SELNX16UI(uint16x32_t(0), src, IVP_SELI_16B_INTERLEAVE_1_LO));
+}
+
+HALIDE_ALWAYS_INLINE uint32x16_t halide_xtensa_convert_u16_high_u32(const uint16x32_t& src) {
     return IVP_MOVN_2X32_FROMNX16(IVP_SELNX16UI(uint16x32_t(0), src, IVP_SELI_16B_INTERLEAVE_1_HI));
 }
 
@@ -2413,14 +2442,14 @@ void CodeGen_Xtensa::visit(const For *op) {
     }
 
     // NOTE(vksnk): poor man's profiling below.
-    if (current_loop_level == 1) {
-        open_scope();
-        stream << get_indent() << "int cycles_start, cycles_stop, cyclesAV; (void)cycles_stop; (void)cyclesAV;\n";
-        stream << get_indent() << "cycles_start = GetCycleCount();\n";
-    }
-    if (current_loop_level == 1) {
-        stream << get_indent() << "cycles_start = GetCycleCount();\n";
-    }
+    // if (current_loop_level == 1) {
+    //     open_scope();
+    //     stream << get_indent() << "int cycles_start, cycles_stop, cyclesAV; (void)cycles_stop; (void)cyclesAV;\n";
+    //     stream << get_indent() << "cycles_start = GetCycleCount();\n";
+    // }
+    // if (current_loop_level == 1) {
+    //     stream << get_indent() << "cycles_start = GetCycleCount();\n";
+    // }
 
     stream << get_indent() << "for (int "
            << print_name(op->name)
@@ -2438,14 +2467,14 @@ void CodeGen_Xtensa::visit(const For *op) {
 
     close_scope("for " + print_name(op->name));
     // NOTE(vksnk): Second part of the poor man's profiling below.
-    if (current_loop_level == 1) {
-        stream << get_indent() << "cycles_stop = GetCycleCount();\n";
-        stream << get_indent() << "cyclesAV = cycles_stop - cycles_start;\n";
-        stream << get_indent() << "printf(\"" << op->name << ": %d\\n\", cyclesAV);\n";
-    }
-    if (current_loop_level == 1) {
-        close_scope("profiler" + print_name(op->name));
-    }
+    // if (current_loop_level == 1) {
+    //     stream << get_indent() << "cycles_stop = GetCycleCount();\n";
+    //     stream << get_indent() << "cyclesAV = cycles_stop - cycles_start;\n";
+    //     stream << get_indent() << "printf(\"" << op->name << ": %d\\n\", cyclesAV);\n";
+    // }
+    // if (current_loop_level == 1) {
+    //     close_scope("profiler" + print_name(op->name));
+    // }
     current_loop_level--;
 }
 
