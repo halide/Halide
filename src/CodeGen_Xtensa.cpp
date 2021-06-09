@@ -667,6 +667,18 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x32_t widening_load<int32x32_t, ui
 }
 
 template<>
+HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint32x32_t widening_load<uint32x32_t, uint16_t>(const void *base, int32_t offset) {
+    uint32x16_t r1, r2;
+    const xb_vec2Nx8* __restrict ptr8 = (const xb_vec2Nx8*)((const uint16_t*)base + offset);
+    valign align = IVP_LA_PP(ptr8);
+    IVP_LAN_2X16U_IP(r1, align, (const xb_vecN_2x16U*)ptr8);
+    // Pointers is automatically incremented by previous call.
+    IVP_LAN_2X16U_IP(r2, align, (const xb_vecN_2x16U*)ptr8);
+
+    return uint32x32_t(uint32x32_t::from_native_vector, r1, r2);
+}
+
+template<>
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x64_t widening_load<int32x64_t, uint16_t>(const void *base, int32_t offset) {
     int32x16_t r1, r2, r3, r4;
     const xb_vec2Nx8* __restrict ptr8 = (const xb_vec2Nx8*)((const uint16_t*)base + offset);
