@@ -15,11 +15,11 @@ namespace Autoscheduler {
 using Clock = std::chrono::high_resolution_clock;
 
 struct ScopedTimer {
-    std::chrono::time_point<Clock> start;
+    std::chrono::time_point<Clock> start = Clock::now();
     std::string msg;
 
     ScopedTimer(const std::string &msg)
-        : start{Clock::now()}, msg{msg} {
+        : msg{msg} {
         aslog(0) << "Start: " << msg << "\n";
     }
 
@@ -31,11 +31,9 @@ struct ScopedTimer {
 };
 
 struct Timer {
-    std::chrono::time_point<Clock> start;
+    std::chrono::time_point<Clock> start = Clock::now();
 
-    Timer()
-        : start{Clock::now()} {
-    }
+    Timer() = default;
 
     void restart() {
         start = Clock::now();

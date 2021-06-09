@@ -41,7 +41,7 @@ OPTIMIZE ?= -O3
 # Compiling with -fvisibility=hidden saves ~80k on optimized x64 builds.
 # It's critical to include -fno-omit-frame-pointer, otherwise introspection can
 # break in amusing ways.
-CCFLAGS=$(shell $(PYTHON)-config --cflags) $(PYBIND11_CFLAGS) -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) -std=c++11 $(FPIC) -fvisibility=hidden -fvisibility-inlines-hidden -fno-omit-frame-pointer $(OPTIMIZE) $(CXXFLAGS)
+CCFLAGS=$(shell $(PYTHON)-config --cflags) $(PYBIND11_CFLAGS) -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) -std=c++17 $(FPIC) -fvisibility=hidden -fvisibility-inlines-hidden -fno-omit-frame-pointer $(OPTIMIZE) $(CXXFLAGS)
 # Filter out a pointless warning present in some Python installs
 CCFLAGS := $(filter-out -Wstrict-prototypes,$(CCFLAGS))
 

@@ -27,12 +27,11 @@
 #include "Simplify.h"
 #include "Util.h"
 
-#if !(__cplusplus > 199711L || _MSC_VER >= 1800)
-
-// VS2013 isn't fully C++11 compatible, but it supports enough of what Halide
-// needs for now to be an acceptable minimum for Windows.
-#error "Halide requires C++11 or VS2013+; please upgrade your compiler."
-
+// MSVC won't set __cplusplus correctly unless certain compiler flags are set
+// (and CMake doesn't set those flags for you even if you specify C++17),
+// so we need to check against _MSVC_LANG as well, for completeness.
+#if !(__cplusplus >= 201703L || _MSVC_LANG >= 201703L)
+#error "Halide requires C++17 or later; please upgrade your compiler."
 #endif
 
 namespace Halide {
@@ -2373,7 +2372,7 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
         Expr pred_load = Call::make(load_expr.type(),
                                     Call::if_then_else,
                                     {op->predicate, load_expr, make_zero(load_expr.type())},
-                                    Internal::Call::Intrinsic);
+                                    Internal::Call::PureIntrinsic);
         value = codegen(pred_load);
     }
 }
@@ -2963,7 +2962,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             value = create_alloca_at_entry(halide_buffer_t_type, 1);
         } else {
             const int64_t *sz = as_const_int(op->args[0]);
-            internal_assert(sz);
+            internal_assert(sz != nullptr);
             if (op->type == type_of<struct halide_dimension_t *>()) {
                 value = create_alloca_at_entry(dimension_t_type, *sz / sizeof(halide_dimension_t));
             } else {

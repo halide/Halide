@@ -41,7 +41,7 @@ target_link_libraries(model_runner PRIVATE
                       interpreter
                       error_util
                       file_util
-                      hannk_delegate_registrar
+                      hannk_delegate
                       tflite_parser
                       Halide::Tools  # for halide_benchmark.h
                       Halide::Runtime
