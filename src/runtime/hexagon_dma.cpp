@@ -46,9 +46,9 @@ inline dma_device_handle *malloc_device_handle() {
     dev->frame_width = 0;
     dev->frame_height = 0;
     dev->frame_stride = 0;
-    dev->is_ubwc = 0;
+    dev->is_ubwc = false;
     dev->fmt = eDmaFmt_RawData;
-    dev->is_write = 0;
+    dev->is_write = false;
     return dev;
 }
 
@@ -470,7 +470,7 @@ WEAK int halide_hexagon_dma_prepare_for_copy_to_host(void *user_context, struct 
         << "Hexagon: halide_hexagon_dma_prepare_for_copy_to_host (user_context: " << user_context
         << ", buf: " << *buf << ", dma_engine: " << dma_engine << ")\n";
     t_eDmaFmt format = halide_hexagon_get_dma_format(user_context, fmt);
-    return dma_prepare_for_copy(user_context, buf, dma_engine, is_ubwc, format, 0);
+    return dma_prepare_for_copy(user_context, buf, dma_engine, is_ubwc, format, false);
 }
 
 WEAK int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, struct halide_buffer_t *buf,
@@ -479,7 +479,7 @@ WEAK int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, struc
         << "Hexagon: halide_hexagon_dma_prepare_for_copy_to_device (user_context: " << user_context
         << ", buf: " << *buf << ", dma_engine: " << dma_engine << ")\n";
     t_eDmaFmt format = halide_hexagon_get_dma_format(user_context, fmt);
-    return dma_prepare_for_copy(user_context, buf, dma_engine, is_ubwc, format, 1);
+    return dma_prepare_for_copy(user_context, buf, dma_engine, is_ubwc, format, true);
 }
 
 WEAK int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t *buf) {

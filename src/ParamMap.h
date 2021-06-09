@@ -80,7 +80,7 @@ public:
         pa.mapped_param = v;
         pa.buf_out_param = nullptr;
         mapping[p.parameter()] = pa;
-    };
+    }
 
     void set(const ImageParam &p, const Buffer<> &buf) {
         set(p, buf, nullptr);

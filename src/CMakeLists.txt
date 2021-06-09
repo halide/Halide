@@ -23,24 +23,18 @@ set(HEADER_FILES
     Buffer.h
     CanonicalizeGPUVars.h
     Closure.h
-    CodeGen_ARM.h
     CodeGen_C.h
     CodeGen_D3D12Compute_Dev.h
     CodeGen_GPU_Dev.h
-    CodeGen_GPU_Host.h
     CodeGen_Internal.h
     CodeGen_LLVM.h
     CodeGen_Metal_Dev.h
-    CodeGen_MIPS.h
     CodeGen_OpenCL_Dev.h
     CodeGen_OpenGLCompute_Dev.h
     CodeGen_Posix.h
-    CodeGen_PowerPC.h
     CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
-    CodeGen_RISCV.h
-    CodeGen_WebAssembly.h
-    CodeGen_X86.h
+    CodeGen_Targets.h
     CompilerLogger.h
     ConciseCasts.h
     CPlusPlusMangle.h
@@ -110,6 +104,7 @@ set(HEADER_FILES
     ModulusRemainder.h
     Monotonic.h
     ObjectInstanceRegistry.h
+    OffloadGPULoops.h
     OutputImageParam.h
     ParallelRVar.h
     Param.h
@@ -126,6 +121,7 @@ set(HEADER_FILES
     RDom.h
     Realization.h
     RealizationOrder.h
+    RebaseLoopsToZero.h
     Reduction.h
     RegionCosts.h
     RemoveDeadAllocations.h
@@ -190,7 +186,6 @@ set(SOURCE_FILES
     CodeGen_C.cpp
     CodeGen_D3D12Compute_Dev.cpp
     CodeGen_GPU_Dev.cpp
-    CodeGen_GPU_Host.cpp
     CodeGen_Hexagon.cpp
     CodeGen_Internal.cpp
     CodeGen_LLVM.cpp
@@ -266,6 +261,7 @@ set(SOURCE_FILES
     ModulusRemainder.cpp
     Monotonic.cpp
     ObjectInstanceRegistry.cpp
+    OffloadGPULoops.cpp
     OutputImageParam.cpp
     ParallelRVar.cpp
     Parameter.cpp
@@ -282,6 +278,7 @@ set(SOURCE_FILES
     RDom.cpp
     Realization.cpp
     RealizationOrder.cpp
+    RebaseLoopsToZero.cpp
     Reduction.cpp
     RegionCosts.cpp
     RemoveDeadAllocations.cpp
@@ -356,8 +353,7 @@ add_custom_command(OUTPUT "${Halide_BINARY_DIR}/include/Halide.h"
                    DEPENDS build_halide_h "${LICENSE_PATH}" ${HEADER_FILES}
                    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
                    VERBATIM)
-add_custom_target(HalideIncludes ALL
-                  DEPENDS "${Halide_BINARY_DIR}/include/Halide.h")
+add_custom_target(HalideIncludes ALL DEPENDS "${Halide_BINARY_DIR}/include/Halide.h")
 
 ##
 # Define the Halide library target.
@@ -372,24 +368,28 @@ add_library(Halide::Halide ALIAS Halide)
 
 target_link_libraries(Halide PRIVATE Halide::LLVM)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
-target_compile_definitions(Halide
-                           PRIVATE
-                           $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>
-                           $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:WITH_INTROSPECTION>)
+target_compile_definitions(Halide PRIVATE $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>)
+target_compile_features(Halide PUBLIC cxx_std_11)
 
 include(TargetExportScript)
 ## TODO: implement something similar for Windows/link.exe
 # https://github.com/halide/Halide/issues/4651
 target_export_script(Halide
                      APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
-                     GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.linux")
+                     GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.ldscript")
 
 set_target_properties(Halide PROPERTIES
                       POSITION_INDEPENDENT_CODE ON
                       VERSION ${Halide_VERSION}
                       SOVERSION ${Halide_VERSION_MAJOR})
 
+target_include_directories(Halide INTERFACE "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
 add_dependencies(Halide HalideIncludes)
+
+option(Halide_WITH_INTROSPECTION "Enable use of debugging symbols for default Func, Var, etc. names" ON)
+if (Halide_WITH_INTROSPECTION)
+    target_compile_definitions(Halide PRIVATE WITH_INTROSPECTION)
+endif ()
 
 if (TARGET wabt-obj)
     target_link_libraries(Halide PRIVATE wabt-obj)
@@ -397,49 +397,79 @@ if (TARGET wabt-obj)
 endif ()
 
 ##
-# Include paths for libHalide
-##
-
-set(Halide_INCLUDE_PATH "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
-target_include_directories(Halide INTERFACE ${Halide_INCLUDE_PATH})
-
-##
 # Set compiler options for libHalide
 ##
 
-target_compile_options(Halide
-                       PRIVATE
-                       $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall>
-                       $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-function>
-                       $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wcast-qual>
-                       $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wignored-qualifiers>
+target_compile_options(
+        Halide
+        PRIVATE
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall>
 
-                       $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Woverloaded-virtual>
-                       $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wsuggest-override>
-                       $<$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang>:-Winconsistent-missing-override>
-                       $<$<COMPILE_LANG_AND_ID:CXX,Clang,AppleClang>:-Winconsistent-missing-destructor-override>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wcast-qual>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wignored-qualifiers>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Woverloaded-virtual>
 
-                       $<$<CXX_COMPILER_ID:MSVC>:/W3>
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4018>  # disable "signed/unsigned mismatch"
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4503>  # disable "decorated name length exceeded, name was truncated"
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4267>  # disable "conversion from 'size_t' to 'int', possible loss of data"
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4800>  # forcing value to bool 'true' or 'false' (performance warning)
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4244>  # 4244: conversion, possible loss of data
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4267>  # 4267: conversion, possible loss of data
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4800>  # 4800: BOOL -> true or false
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4996>  # 4996: compiler encountered deprecated declaration
+        $<$<CXX_COMPILER_ID:GNU>:-Wsuggest-override>
 
-                       # Injected from recent LLVM:
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4141>  # 'inline' used more than once
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4146>  # unary minus applied to unsigned type
-                       $<$<CXX_COMPILER_ID:MSVC>:/wd4291>  # No matching operator delete found
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-destructor-override>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-override>
 
-                       # We could expose the /MP flag to all targets, but that might end up saturating the build
-                       # since multiple MSBuild projects might get built in parallel, each of which compiling their
-                       # source files in parallel; the Halide library itself is a "knot" point of the build graph,
-                       # so compiling its files in parallel should not oversubscribe the system
-                       $<$<CXX_COMPILER_ID:MSVC>:/MP>
-                       )
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-deprecated-declarations>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-double-promotion>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-conversion>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-equal>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-missing-field-initializers>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-old-style-cast>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-shadow>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-sign-conversion>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-switch-enum>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-undef>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-function>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-macros>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-parameter>
+
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-c++98-compat-pedantic>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-c++98-compat>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-cast-align>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-comma>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-covered-switch-default>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-documentation-unknown-command>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-documentation>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-exit-time-destructors>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-global-constructors>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-float-conversion>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-int-conversion>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-int-float-conversion>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-missing-prototypes>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-nonportable-system-include-path>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-reserved-id-macro>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-return-std-move-in-c++11>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-field-in-constructor>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-field>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shorten-64-to-32>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-undefined-func-template>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-member-function>
+        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-template>
+
+        $<$<CXX_COMPILER_ID:MSVC>:/W3>
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4018>  # 4018: disable "signed/unsigned mismatch"
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4141>  # 4141: 'inline' used more than once
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4146>  # 4146: unary minus applied to unsigned type
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4244>  # 4244: conversion, possible loss of data
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4267>  # 4267: conversion from 'size_t' to 'int', possible loss of data
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4291>  # 4291: No matching operator delete found
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4503>  # 4503: disable "decorated name length exceeded, name was truncated"
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4800>  # 4800: forcing value to bool 'true' or 'false' (performance warning)
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4996>  # 4996: compiler encountered deprecated declaration
+)
+
+if (CMAKE_GENERATOR MATCHES "Visual Studio")
+    # We could expose the /MP flag to all targets, but that might end up saturating the build
+    # since multiple MSBuild projects might get built in parallel, each of which compiling their
+    # source files in parallel; the Halide library itself is a "knot" point of the build graph,
+    # so compiling its files in parallel should not oversubscribe the system
+    target_compile_options(Halide PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/MP>)
+endif ()
 
 target_compile_definitions(Halide
                            PRIVATE

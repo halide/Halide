@@ -45,7 +45,7 @@ $(BIN)/.wrapper: $(OPS) $(CUDA_OPS) setup.py
 	      HALIDE_DISTRIB_PATH=$(HALIDE_DISTRIB_PATH) \
 	      BIN=$(BIN)/$(HL_TARGET) \
 	      PYTHONPATH=$(EXT_LIB):${PYTHONPATH} \
-	      $(PIP) install . -t $(EXT_LIB) -b $(BIN)
+	      $(PIP) install . -t $(EXT_LIB)
 	@touch $(BIN)/.wrapper
 
 

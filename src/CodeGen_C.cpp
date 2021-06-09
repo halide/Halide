@@ -323,8 +323,8 @@ CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const 
 
     if (is_header()) {
         // If it's a header, emit an include guard.
-        stream << "#ifndef HALIDE_" << print_name(guard) << "\n"
-               << "#define HALIDE_" << print_name(guard) << "\n"
+        stream << "#ifndef HALIDE_" << c_print_name(guard) << "\n"
+               << "#define HALIDE_" << c_print_name(guard) << "\n"
                << "#include <stdint.h>\n"
                << "\n"
                << "// Forward declarations of the types used in the interface\n"
@@ -515,6 +515,16 @@ public:
         return r;
     }
 
+    static Vec load_predicated(const void *base, const CppVector<int32_t, Lanes> &offset, const Mask &predicate) {
+        Vec r;
+        for (size_t i = 0; i < Lanes; i++) {
+            if (predicate[i]) {
+                r[i] = ((const ElementType*)base)[offset[i]];
+            }
+        }
+        return r;
+    }
+
     static void store(const Vec &v, void *base, int32_t offset) {
         memcpy(((ElementType*)base + offset), v.data(), sizeof(ElementType) * Lanes);
     }
@@ -522,6 +532,14 @@ public:
     static void store_scatter(const Vec &v, void *base, const CppVector<int32_t, Lanes> &offset) {
         for (size_t i = 0; i < Lanes; i++) {
             ((ElementType*)base)[offset[i]] = v[i];
+        }
+    }
+
+    static void store_predicated(const Vec &v, void *base, const CppVector<int32_t, Lanes> &offset, const Mask &predicate) {
+        for (size_t i = 0; i < Lanes; i++) {
+            if (predicate[i]) {
+                ((ElementType*)base)[offset[i]] = v[i];
+            }
         }
     }
 
@@ -1025,6 +1043,15 @@ public:
         return r;
     }
 
+    static Vec load_predicated(const void *base, const NativeVector<int32_t, Lanes> offset, const NativeVector<uint8_t, Lanes> predicate) {
+        Vec r;
+        for (size_t i = 0; i < Lanes; i++) {
+            if (predicate[i]) {
+                r[i] = ((const ElementType*)base)[offset[i]];
+            }
+        }
+        return r;
+    }
     static void store(const Vec v, void *base, int32_t offset) {
         // We only require Vec to be element-aligned, so we can't safely just write
         // directly from memory (might segfault). Use memcpy for safety.
@@ -1038,6 +1065,14 @@ public:
     static void store_scatter(const Vec v, void *base, const NativeVector<int32_t, Lanes> offset) {
         for (size_t i = 0; i < Lanes; i++) {
             ((ElementType*)base)[offset[i]] = v[i];
+        }
+    }
+
+    static void store_predicated(const Vec v, void *base, const NativeVector<int32_t, Lanes> offset, const NativeVector<uint8_t, Lanes> predicate) {
+        for (size_t i = 0; i < Lanes; i++) {
+            if (predicate[i]) {
+                ((ElementType*)base)[offset[i]] = v[i];
+            }
         }
     }
 
@@ -1216,8 +1251,8 @@ public:
         stream << std::flush;
 
         for (const auto &t : vector_types) {
-            string name = type_to_c_type(t, false, false);
-            string scalar_name = type_to_c_type(t.element_of(), false, false);
+            string name = print_type(t, DoNotAppendSpace);
+            string scalar_name = print_type(t.element_of(), DoNotAppendSpace);
             stream << "#if halide_cpp_use_native_vector(" << scalar_name << ", " << t.lanes() << ")\n";
             stream << "using " << name << " = NativeVector<" << scalar_name << ", " << t.lanes() << ">;\n";
             stream << "using " << name << "_ops = NativeVectorOps<" << scalar_name << ", " << t.lanes() << ">;\n";
@@ -1644,7 +1679,7 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     // Figure out the offset of the last pixel.
     size_t num_elems = 1;
     for (int d = 0; d < b.dimensions; d++) {
-        num_elems += b.dim[d].stride * (b.dim[d].extent - 1);
+        num_elems += b.dim[d].stride * (size_t)(b.dim[d].extent - 1);
     }
 
     // For now, we assume buffers that aren't scalar are constant,
@@ -1653,22 +1688,33 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     // used to store stateful module information in offloading runtimes.
     bool is_constant = buffer.dimensions() != 0;
 
-    // Emit the data
-    stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] HALIDE_ATTRIBUTE_ALIGN(32) = {\n";
-    stream << get_indent();
-    for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
-        if (i > 0) {
-            stream << ",";
-            if (i % 16 == 0) {
-                stream << "\n";
-                stream << get_indent();
-            } else {
-                stream << " ";
+    // If it is an GPU source kernel, we would like to see the actual output, not the
+    // uint8 representation. We use a string literal for this.
+    if (ends_with(name, "gpu_source_kernels")) {
+        stream << "static const char *" << name << "_string = R\"BUFCHARSOURCE(";
+        stream.write((char *)b.host, num_elems);
+        stream << ")BUFCHARSOURCE\";\n";
+
+        stream << "static const uint8_t *" << name << "_data HALIDE_ATTRIBUTE_ALIGN(32) = (const uint8_t *) "
+               << name << "_string;\n";
+    } else {
+        // Emit the data
+        stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] HALIDE_ATTRIBUTE_ALIGN(32) = {\n";
+        stream << get_indent();
+        for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
+            if (i > 0) {
+                stream << ",";
+                if (i % 16 == 0) {
+                    stream << "\n";
+                    stream << get_indent();
+                } else {
+                    stream << " ";
+                }
             }
+            stream << (int)(b.host[i]);
         }
-        stream << (int)(b.host[i]);
+        stream << "\n};\n";
     }
-    stream << "\n};\n";
 
     // Emit the shape (constant even for scalar buffers)
     stream << "static const halide_dimension_t " << name << "_buffer_shape[] = {";
@@ -1728,7 +1774,8 @@ string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
     auto cached = cache.find(rhs);
     if (cached == cache.end()) {
         id = unique_name('_');
-        stream << get_indent() << print_type(t, AppendSpace) << (output_kind == CPlusPlusImplementation ? "const " : "") << id << " = " << rhs << ";\n";
+        const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
+        stream << get_indent() << print_type(t, AppendSpace) << const_flag << id << " = " << rhs << ";\n";
         cache[rhs] = id;
     } else {
         id = cached->second;
@@ -2290,8 +2337,6 @@ string CodeGen_C::print_extern_call(const Call *op) {
 }
 
 void CodeGen_C::visit(const Load *op) {
-    user_assert(is_const_one(op->predicate)) << "Predicated load is not supported by C backend.\n";
-
     // TODO: We could replicate the logic in the llvm codegen which decides whether
     // the vector access can be aligned. Doing so would also require introducing
     // aligned type equivalents for all the vector types.
@@ -2302,7 +2347,7 @@ void CodeGen_C::visit(const Load *op) {
 
     // If we're loading a contiguous ramp into a vector, just load the vector
     Expr dense_ramp_base = strided_ramp_base(op->index, 1);
-    if (dense_ramp_base.defined()) {
+    if (dense_ramp_base.defined() && is_const_one(op->predicate)) {
         internal_assert(t.is_vector());
         string id_ramp_base = print_expr(dense_ramp_base);
         rhs << print_type(t) + "_ops::load(" << name << ", " << id_ramp_base << ")";
@@ -2310,13 +2355,21 @@ void CodeGen_C::visit(const Load *op) {
         // If index is a vector, gather vector elements.
         internal_assert(t.is_vector());
         string id_index = print_expr(op->index);
-        rhs << print_type(t) + "_ops::load_gather(" << name << ", " << id_index << ")";
+        if (is_const_one(op->predicate)) {
+            rhs << print_type(t) + "_ops::load_gather(" << name << ", " << id_index << ")";
+        } else {
+            string id_predicate = print_expr(op->predicate);
+            rhs << print_type(t) + "_ops::load_predicated(" << name << ", " << id_index << ", " << id_predicate << ")";
+        }
     } else {
+        user_assert(is_const_one(op->predicate)) << "Predicated scalar load is not supported by C backend.\n";
+
         string id_index = print_expr(op->index);
         bool type_cast_needed = !(allocations.contains(op->name) &&
                                   allocations.get(op->name).type.element_of() == t.element_of());
         if (type_cast_needed) {
-            rhs << "((const " << print_type(t.element_of()) << " *)" << name << ")";
+            const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
+            rhs << "((" << const_flag << print_type(t.element_of()) << " *)" << name << ")";
         } else {
             rhs << name;
         }
@@ -2326,8 +2379,6 @@ void CodeGen_C::visit(const Load *op) {
 }
 
 void CodeGen_C::visit(const Store *op) {
-    user_assert(is_const_one(op->predicate)) << "Predicated store is not supported by C backend.\n";
-
     Type t = op->value.type();
 
     if (inside_atomic_mutex_node) {
@@ -2354,7 +2405,7 @@ void CodeGen_C::visit(const Store *op) {
 
     // If we're writing a contiguous ramp, just store the vector.
     Expr dense_ramp_base = strided_ramp_base(op->index, 1);
-    if (dense_ramp_base.defined()) {
+    if (dense_ramp_base.defined() && is_const_one(op->predicate)) {
         internal_assert(op->value.type().is_vector());
         string id_ramp_base = print_expr(dense_ramp_base);
         stream << get_indent() << print_type(t) + "_ops::store(" << id_value << ", " << name << ", " << id_ramp_base << ");\n";
@@ -2362,8 +2413,15 @@ void CodeGen_C::visit(const Store *op) {
         // If index is a vector, scatter vector elements.
         internal_assert(t.is_vector());
         string id_index = print_expr(op->index);
-        stream << get_indent() << print_type(t) + "_ops::store_scatter(" << id_value << ", " << name << ", " << id_index << ");\n";
+        if (is_const_one(op->predicate)) {
+            stream << get_indent() << print_type(t) + "_ops::store_scatter(" << id_value << ", " << name << ", " << id_index << ");\n";
+        } else {
+            string id_predicate = print_expr(op->predicate);
+            stream << get_indent() << print_type(t) + "_ops::store_predicated(" << id_value << ", " << name << ", " << id_index << ", " << id_predicate << ");\n";
+        }
     } else {
+        user_assert(is_const_one(op->predicate)) << "Predicated scalar store is not supported by C backend.\n";
+
         bool type_cast_needed =
             t.is_handle() ||
             !allocations.contains(op->name) ||
@@ -2584,11 +2642,12 @@ void CodeGen_C::visit(const Allocate *op) {
         alloc.type = op->type;
         allocations.push(op->name, alloc);
         heap_allocations.push(op->name);
-        stream << op_type << "*" << op_name << " = (" << print_expr(op->new_expr) << ");\n";
+        string new_e = print_expr(op->new_expr);
+        stream << get_indent() << op_type << " *" << op_name << " = (" << op_type << "*)" << new_e << ";\n";
     } else {
         constant_size = op->constant_allocation_size();
         if (constant_size > 0) {
-            int64_t stack_bytes = constant_size * op->type.bytes();
+            int64_t stack_bytes = (int64_t)constant_size * op->type.bytes();
 
             if (stack_bytes > ((int64_t(1) << 31) - 1)) {
                 user_error << "Total size for allocation "
@@ -2598,6 +2657,7 @@ void CodeGen_C::visit(const Allocate *op) {
                 size_id = print_expr(make_const(size_id_type, constant_size));
 
                 if (op->memory_type == MemoryType::Stack ||
+                    op->memory_type == MemoryType::Register ||
                     (op->memory_type == MemoryType::Auto &&
                      can_allocation_fit_on_stack(stack_bytes))) {
                     on_stack = true;

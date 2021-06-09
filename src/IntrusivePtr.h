@@ -71,7 +71,7 @@ private:
         if (p) {
             ref_count(p).increment();
         }
-    };
+    }
 
     void decref(T *p) {
         if (p) {
