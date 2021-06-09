@@ -36,6 +36,8 @@ bool is_double_native_vector_type(const Type &t);
 
 Type get_native_xtensa_vector(const Type &t);
 
+std::string suffix_for_type(Type t);
+
 Stmt match_xtensa_patterns(Stmt);
 
 }  // namespace Internal

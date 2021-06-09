@@ -955,6 +955,18 @@ HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_quad_mul_add_u24(
   return r;
 }
 
+HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_quad_mul_add_by_scalar_u24(
+                                            const int24x64_t& acc,
+                                            const uint8x256_t& a,
+                                            const uint8_t& s
+                                            ) {
+  const xb_int32pr coef = s | (s << 8) | (s << 16) | (s << 24);
+
+  int24x64_t r = acc;
+  IVP_MULUUQA2N8XR8(r, a.native_vector[3], a.native_vector[2], a.native_vector[1], a.native_vector[0], coef);
+  return r;
+}
+
 HALIDE_ALWAYS_INLINE int24x128_t halide_xtensa_dual_widen_quad_mul_add_i24(
                                             const int24x128_t& acc,
                                             const int8x256_t& a,

@@ -711,6 +711,7 @@ private:
 
                 {"halide_xtensa_widen_zzzzz", i24(concat({wild_i8x64, wild_i8x64, wild_i8x64, wild_i8x64})) * i24(repeat_each_element(wild_i8x4, 64))},
                 {"halide_xtensa_widen_zzzzz", i24(wild_i8x256) * i24(repeat_each_element(wild_i8x4, 64))},
+                {"halide_xtensa_widen_zzzzz", i24(wild_u8x256) * bc(i24(wild_u8), 256)},
                 {"halide_xtensa_widen_zzzzz", i24(concat({wild_u8x64, wild_u8x64, wild_u8x64, wild_u8x64})) * i24(repeat_each_element(wild_u8x4, 64))},
                 {"halide_xtensa_widen_zzzzz", i24(wild_u8x256) * i24(repeat_each_element(wild_u8x4, 64))},
 
@@ -987,6 +988,9 @@ private:
 
             {"halide_xtensa_widen_quad_mul_add_u24",
              call("halide_xtensa_yyyy", wild_i24x, {wild_i24x, call("halide_xtensa_qqqq", wild_i24x, {call("halide_xtensa_widen_zzzzz", wild_i24x, {wild_u8x256, wild_u8x4})})})},
+
+            {"halide_xtensa_widen_quad_mul_add_by_scalar_u24",
+             call("halide_xtensa_yyyy", wild_i24x, {wild_i24x, call("halide_xtensa_qqqq", wild_i24x, {call("halide_xtensa_widen_zzzzz", wild_i24x, {wild_u8x256, wild_u8})})})},
 
             {"halide_xtensa_widen_quad_mul_add_i24",
              call("halide_xtensa_widen_pair_mul_add_i24", wild_i24x, {call("halide_xtensa_widen_pair_mul_add_i24", wild_i24x, {wild_i24x, wild_i8x, wild_i8, wild_i8x, wild_i8}), wild_i8x, wild_i8, wild_i8x, wild_i8})},
