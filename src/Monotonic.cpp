@@ -443,7 +443,12 @@ class DerivativeBounds : public IRVisitor {
             } else {
                 delta.accept(this);
                 ConstantInterval rdelta = result;
-                adjusted_delta = multiply(rcond, rdelta);
+                // If rdelta is constant, we can't trust it, because if it were truly
+                // constant, find_constant_bounds of the delta would have produced a
+                // bounded interval.
+                if (!is_constant(rdelta)) {
+                    adjusted_delta = multiply(rcond, rdelta);
+                }
             }
 
             result = add(unified, adjusted_delta);
@@ -680,6 +685,7 @@ void is_monotonic_test() {
 
     Expr x = Variable::make(Int(32), "x");
     Expr y = Variable::make(Int(32), "y");
+    Expr z = Variable::make(Int(32), "z");
 
     check_increasing(x);
     check_increasing(x + 4);
@@ -723,6 +729,8 @@ void is_monotonic_test() {
 
     check_unknown(select(x < 2, x, x - 5));
     check_unknown(select(x > 2, x - 5, x));
+
+    check_unknown(select(x > 0, y, z));
 
     check_constant(y);
 
