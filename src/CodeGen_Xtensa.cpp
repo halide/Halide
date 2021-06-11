@@ -2351,35 +2351,73 @@ void CodeGen_Xtensa::visit(const Call *op) {
         const uint64_t *bits = as_const_uint(op->args[1]);
         if (is_native_xtensa_vector<uint8_t>(op->type) && bits) {
             rhs << "IVP_SLLI2NX8U(" << a0 << ", " << std::to_string(*bits) << ")";
-        } else if (is_native_xtensa_vector<int8_t>(op->type) && bits) {
-            rhs << "IVP_SLLI2NX8(" << a0 << ", " << std::to_string(*bits) << ")";
+        } else if (is_native_xtensa_vector<uint16_t>(op->type) && bits) {
+            rhs << "IVP_SLLINX16U(" << a0 << ", " << std::to_string(*bits) << ")";
+        } else if (is_native_xtensa_vector<uint32_t>(op->type) && bits) {
+            rhs << "IVP_SLLIN_2X32U(" << a0 << ", " << std::to_string(*bits) << ")";
         } else {
             string a1 = print_expr(op->args[1]);
-            if (is_native_xtensa_vector<uint16_t>(op->type)) {
+            if (is_native_xtensa_vector<uint8_t>(op->type)) {
+                rhs << "IVP_SLL2NX8U(" << a0 << ", xb_vec2Nx8U_rtor_xb_vec2Nx8(" << a1 << "))";
+            } else if (is_native_xtensa_vector<int8_t>(op->type)) {
+                rhs << "IVP_SLA2NX8(" << a0 << ", " << a1 << ")";
+            } else if (is_native_xtensa_vector<uint16_t>(op->type)) {
                 rhs << "IVP_SLLNX16U(" << a0 << ", xb_vecNx16U_rtor_xb_vecNx16(" << a1 << "))";
             } else if (is_native_xtensa_vector<int16_t>(op->type)) {
                 rhs << "IVP_SLANX16(" << a0 << ", " << a1 << ")";
             } else if (is_native_xtensa_vector<uint32_t>(op->type)) {
-                rhs << "IVP_SLLN_2X32U(" << a0 << ",xb_vecN_2x32Uv_rtor_xb_vecN_2x32v( " << a1 << "))";
+                rhs << "IVP_SLLN_2X32U(" << a0 << ", xb_vecN_2x32Uv_rtor_xb_vecN_2x32v( " << a1 << "))";
             } else if (is_native_xtensa_vector<int32_t>(op->type)) {
                 rhs << "IVP_SLAN_2X32(" << a0 << ", " << a1 << ")";
             } else {
-                rhs << a0 << " << " << a1;
+                if (op->args[1].type().is_uint()) {
+                    string a0 = print_expr(op->args[0]);
+                    string a1 = print_expr(op->args[1]);
+                    rhs << a0 << " << " << a1;
+                } else {
+                    rhs << print_expr(lower_signed_shift_left(op->args[0], op->args[1]));
+                }
             }
         }
-
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
         string a0 = print_expr(op->args[0]);
-        string a1 = print_expr(op->args[1]);
-        if (is_native_xtensa_vector<uint16_t>(op->type)) {
-            rhs << "IVP_SRLNX16(" << a0 << ", " << a1 << ")";
-        } else if (is_native_xtensa_vector<int16_t>(op->type)) {
-            rhs << "IVP_SRANX16(" << a0 << ", " << a1 << ")";
-        } else if (is_native_xtensa_vector<int32_t>(op->type)) {
-            rhs << "IVP_SRAN_2X32(" << a0 << ", (int32x16_t)" << a1 << ")";
+        const uint64_t *bits = as_const_uint(op->args[1]);
+        if (is_native_xtensa_vector<uint8_t>(op->type) && bits) {
+            rhs << "IVP_SRLI2NX8U(" << a0 << ", " << std::to_string(*bits) << ")";
+        } else if (is_native_xtensa_vector<int8_t>(op->type) && bits) {
+            rhs << "IVP_SRAI2NX8U(" << a0 << ", " << std::to_string(*bits) << ")";
+        } else if (is_native_xtensa_vector<uint16_t>(op->type) && bits) {
+            rhs << "IVP_SRLINX16U(" << a0 << ", " << std::to_string(*bits) << ")";
+        } else if (is_native_xtensa_vector<int16_t>(op->type) && bits) {
+            rhs << "IVP_SRAINX16U(" << a0 << ", " << std::to_string(*bits) << ")";
+        } else if (is_native_xtensa_vector<uint32_t>(op->type) && bits) {
+            rhs << "IVP_SRLIN_2X32U(" << a0 << ", " << std::to_string(*bits) << ")";
+        } else if (is_native_xtensa_vector<int32_t>(op->type) && bits) {
+            rhs << "IVP_SRAIN_2X32U(" << a0 << ", " << std::to_string(*bits) << ")";
         } else {
-            rhs << a0 << " >> " << a1;
+            string a1 = print_expr(op->args[1]);
+            if (is_native_xtensa_vector<uint8_t>(op->type)) {
+                rhs << "IVP_SRL2NX8(" << a0 << ", " << a1 << ")";
+            } else if (is_native_xtensa_vector<int8_t>(op->type)) {
+                rhs << "IVP_SRA2NX8(" << a0 << ", " << a1 << ")";
+            } else if (is_native_xtensa_vector<uint16_t>(op->type)) {
+                rhs << "IVP_SRLNX16(" << a0 << ", " << a1 << ")";
+            } else if (is_native_xtensa_vector<int16_t>(op->type)) {
+                rhs << "IVP_SRANX16(" << a0 << ", " << a1 << ")";
+            } else if (is_native_xtensa_vector<uint32_t>(op->type)) {
+                rhs << "IVP_SRLN_2X32(" << a0 << ", " << a1 << ")";
+            } else if (is_native_xtensa_vector<int32_t>(op->type)) {
+                rhs << "IVP_SRAN_2X32(" << a0 << ", (int32x16_t)" << a1 << ")";
+            } else {
+                if (op->args[1].type().is_uint()) {
+                    string a0 = print_expr(op->args[0]);
+                    string a1 = print_expr(op->args[1]);
+                    rhs << a0 << " >> " << a1;
+                } else {
+                    rhs << print_expr(lower_signed_shift_right(op->args[0], op->args[1]));
+                }
+            }
         }
     } else if (op->is_intrinsic(Call::count_leading_zeros)) {
         internal_assert(op->args.size() == 1);
