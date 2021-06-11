@@ -1643,6 +1643,7 @@ private:
                                                  "halide_xtensa_slice_to_native",
                                                  {arg, ix, native_lanes, total_lanes},
                                                  Call::PureExtern);
+                    sliced_arg = Call::make(op->type, op->name, {sliced_arg}, op->call_type);
                     if (!partial_sum.defined()) {
                         partial_sum = sliced_arg;
                     } else {
@@ -1650,7 +1651,7 @@ private:
                     }
                 }
 
-                return Call::make(op->type, op->name, {partial_sum}, op->call_type);
+                return partial_sum;
             }
         }
 
@@ -1786,6 +1787,7 @@ private:
                                            "halide_xtensa_slice_to_native",
                                            {v, ix, native_lanes, total_lanes},
                                            Call::PureExtern);
+                sliced_v = VectorReduce::make(op->op, sliced_v, 1);
                 if (!partial_reduction.defined()) {
                     partial_reduction = sliced_v;
                 } else {
@@ -1793,7 +1795,7 @@ private:
                 }
             }
 
-            return VectorReduce::make(op->op, partial_reduction, 1);
+            return partial_reduction;
         }
 
         return IRMutator::visit(op);
