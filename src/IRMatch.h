@@ -2409,6 +2409,12 @@ HALIDE_ALWAYS_INLINE auto is_scalar(A &&a) noexcept -> IsScalar<decltype(pattern
 }
 
 template<typename A>
+std::ostream &operator<<(std::ostream &s, const IsScalar<A> &op) {
+    s << "is_scalar(" << op.a << ")";
+    return s;
+}
+
+template<typename A>
 struct IsMaxValue {
     struct pattern_tag {};
     A a;
@@ -2441,6 +2447,12 @@ template<typename A>
 HALIDE_ALWAYS_INLINE auto is_max_value(A &&a) noexcept -> IsMaxValue<decltype(pattern_arg(a))> {
     assert_is_lvalue_if_expr<A>();
     return {pattern_arg(a)};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const IsMaxValue<A> &op) {
+    s << "is_max_value(" << op.a << ")";
+    return s;
 }
 
 template<typename A>
@@ -2481,8 +2493,8 @@ HALIDE_ALWAYS_INLINE auto is_min_value(A &&a) noexcept -> IsMinValue<decltype(pa
 }
 
 template<typename A>
-std::ostream &operator<<(std::ostream &s, const IsScalar<A> &op) {
-    s << "is_scalar(" << op.a << ")";
+std::ostream &operator<<(std::ostream &s, const IsMinValue<A> &op) {
+    s << "is_min_value(" << op.a << ")";
     return s;
 }
 
@@ -2679,10 +2691,10 @@ struct Rewriter {
         fuzz_test_rule(before, after, true, wildcard_type, output_type);
 #endif
         if (before.template match<0>(unwrap(instance), state)) {
+            build_replacement(after);
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
 #endif
-            build_replacement(after);
             return true;
         } else {
 #if HALIDE_DEBUG_UNMATCHED_RULES
@@ -2749,10 +2761,10 @@ struct Rewriter {
 #endif
         if (before.template match<0>(unwrap(instance), state) &&
             evaluate_predicate(pred, state)) {
+            build_replacement(after);
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
 #endif
-            build_replacement(after);
             return true;
         } else {
 #if HALIDE_DEBUG_UNMATCHED_RULES
