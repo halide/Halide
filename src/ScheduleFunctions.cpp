@@ -212,17 +212,14 @@ Stmt build_loop_nest(
 
     // Find all the predicated inner variables. We can't split these.
     set<string> predicated_vars;
-    debug(0) << "Splits:\n";
     for (const Split &split : splits) {
         if (split.tail == TailStrategy::PredicateLoads || split.tail == TailStrategy::PredicateStores) {
             predicated_vars.insert(split.inner);
-            debug(0) << split.inner << "\n";
         }
     }
 
     // Define the function args in terms of the loop variables using the splits
     for (const Split &split : splits) {
-        debug(0) << "Split: " << split.old_var << "\n";
         user_assert(predicated_vars.count(split.old_var) == 0)
             << "Cannot split a loop variable resulting from a split using PredicateLoads or PredicateStores.";
 
