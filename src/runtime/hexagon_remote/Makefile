@@ -25,7 +25,8 @@
 
 SDK_ROOT ?= ${HOME}/Qualcomm
 HEXAGON_SDK_ROOT ?= ${SDK_ROOT}/Hexagon_SDK/4.3.0.0
-# Need SDK >= 4.2.0.2 for qaic "halide_hexagon_remote_skel_invoke_qaic_version"
+# Devices >sm8350 will only run skel shared objects that have been built with
+# SDK version 4.2.02 or newer.
 HEXAGON_TOOLS_VER ?= 8.4.11
 # Need Hexagon tools >= 8.4.05 for running simulator-offload test for hvx_v68
 # Need Hexagon tools >= 8.3.09 for running simulator-offload test for hvx_v66
