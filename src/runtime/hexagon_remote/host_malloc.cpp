@@ -194,7 +194,8 @@ void halide_hexagon_host_malloc_init() {
     use_libion = false;
     void *lib = NULL;
 
-    // Try to access libdmabufheap.so, if it succeeds use DMA-BUF
+    // Try to access libdmabufheap.so, if it succeeds try using DMA-BUF
+    // If there are any errors seen with DMA-BUF, fallback to libion.so
     lib = dlopen("libdmabufheap.so", RTLD_LAZY);
     if (lib) {
         use_libdmabuf = true;
@@ -203,15 +204,29 @@ void halide_hexagon_host_malloc_init() {
         dmabuf_alloc_fn = (rem_dmabuf_alloc_fn)dlsym(lib, "DmabufHeapAlloc");
         if (!dmabuf_create_fn || !dmabuf_deinit_fn || !dmabuf_alloc_fn) {
             __android_log_print(ANDROID_LOG_ERROR, "halide", "huge problem in libdmabufheap.so");
-            return;
+            use_libdmabuf = false;
         }
 
-        dmabufAllocator = dmabuf_create_fn();
-        if (!dmabufAllocator) {
-            __android_log_print(ANDROID_LOG_ERROR, "halide", "dmabuf init failed");
+        if (use_libdmabuf) {  // Still good, try creating an allocator
+            dmabufAllocator = dmabuf_create_fn();
+            if (!dmabufAllocator) {
+                __android_log_print(ANDROID_LOG_ERROR, "halide", "dmabuf init failed");
+                use_libdmabuf = false;
+            }
+        }
+
+        if (use_libdmabuf) {  // Still good, try a small test allocation
+            int buf_fd = dmabuf_alloc_fn(dmabufAllocator, dmabuf_heap, 0x1000, 0, 0);
+            if (buf_fd >= 0) {
+                close(buf_fd);  // Release successful test
+            } else {
+                use_libdmabuf = false;
+            }
+        }
+
+        if (use_libdmabuf) {  // DMA-BUF working
             return;
         }
-        return;
     }
 
     // Try to access libion.so, if it succeeds use new approach
