@@ -194,7 +194,7 @@ public:
     double get_exploitation_value(uint32_t num_visits);
 
     // Apply this State to the FunctionDag.
-    std::string apply_schedule();
+    std::string apply_schedule(std::string& python_schedule_source);
 
     void dump() const;
 };

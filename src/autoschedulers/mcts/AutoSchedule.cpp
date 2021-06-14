@@ -310,13 +310,14 @@ void generate_schedule(const std::vector<Function> &outputs,
     std::shared_ptr<MCTS::TreeNode<CPU_State, CPU_Action> > best_action = nullptr;
     double cost = 0.0f;
     std::string schedule_source;
+    std::string python_schedule_source;
 
     try {
         CPU_State optimal = (MCTS::use_beam()) ? 
                                                 solver.solve_beam(start_state, /* n_decisions*/ dag.nodes.size() * 2, seed)
                                                 : solver.solve(start_state, /* n_decisions*/ dag.nodes.size() * 2, seed);
         cost = optimal.calculate_cost();
-        schedule_source = optimal.apply_schedule();
+        schedule_source = optimal.apply_schedule(python_schedule_source);
         std::cerr << "is_terminal? " << optimal.is_terminal() << std::endl;
         std::cerr << "n states generated: " << MCTS::state_count << std::endl;
     } catch (const std::bad_alloc& e) {
@@ -350,6 +351,18 @@ void generate_schedule(const std::vector<Function> &outputs,
         internal_assert(!f.fail()) << "Failed to write " << schedule_file;
     }
 
+    string python_schedule_file = get_env_variable("HL_PYTHON_SCHEDULE_FILE");
+    if (!python_schedule_file.empty()) {
+        user_warning << "HL_PYTHON_SCHEDULE_FILE is deprecated; use the schedule output from Generator instead\n";
+        aslog(1) << "Writing schedule to " << python_schedule_file << "...\n";
+        std::ofstream f(python_schedule_file);
+        f << "# --- BEGIN machine-generated schedule\n"
+          << python_schedule_source
+          << "# --- END machine-generated schedule\n";
+        f.close();
+        internal_assert(!f.fail()) << "Failed to write " << python_schedule_file;
+    }
+
     // TODO(rootjalex): Figure out how to save featurization.
     /*
     // Save the featurization, so that we can use this schedule as
@@ -367,6 +380,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     if (auto_scheduler_results) {
         auto_scheduler_results->scheduler_name = "mcts";
         auto_scheduler_results->schedule_source = schedule_source;
+        auto_scheduler_results->python_schedule_source = python_schedule_source;
         {
             // TODO(rootjalex): Figure out how to save featurization.
             // std::ostringstream out;

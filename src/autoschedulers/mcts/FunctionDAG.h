@@ -437,6 +437,7 @@ struct FunctionDAG {
             // from its owner Func. Used for printing source code
             // equivalent to a computed schedule.
             string accessor;
+            string python_accessor; // Same as above for Python schedules
         };
 
         // Get the loop nest shape as a function of the region computed

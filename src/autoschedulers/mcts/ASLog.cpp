@@ -1,5 +1,8 @@
 #include "ASLog.h"
 
+#include <algorithm>
+#include <cctype>
+
 namespace Halide {
 namespace Internal {
 
@@ -48,6 +51,23 @@ int aslog::aslog_level() {
         return !lvl.empty() ? atoi(lvl.c_str()) : 0;
     })();
     return cached_aslog_level;
+}
+
+std::string conform_name(const std::string &name, const std::string &prefix) {
+    auto invalid_contents = [] (const char& c) {
+        return std::ispunct(c) || std::isspace(c);
+    };
+
+    auto invalid_prefix = [] (const char& c) {
+        return (c != '_') && !(std::isalpha(c));
+    };
+
+    std::string result(name);
+    std::replace_if(result.begin(), result.end(), invalid_contents, '_');
+    if(invalid_prefix(result.front())) { result = std::string(prefix) + result; }
+    if (result == "in" || result == "out")
+        result += "_"; // In case in and out are special symbols in the language
+    return result;
 }
 
 }  // namespace Internal

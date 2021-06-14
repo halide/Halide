@@ -1612,6 +1612,7 @@ void LoopNest::apply(LoopLevel here,
             if (c->stage->index == 0) {
                 auto &state = state_map.get(c->stage);
                 state->schedule_source << "\n    .compute_root()";
+                state->python_schedule_source << " \\\n    .compute_root()";
                 // TODO: Omitting logic for printing store_root() assumes everything store_root is also compute root
             }
         }
@@ -1636,6 +1637,7 @@ void LoopNest::apply(LoopLevel here,
                 fv.var = VarOrRVar(l.var, !l.pure);
                 fv.orig = fv.var;
                 fv.accessor = l.accessor;
+                fv.python_accessor = l.python_accessor;
                 const auto &p = parent_bounds->loops(stage->index, i);
                 fv.extent = p.extent();
                 fv.constant_extent = p.constant_extent();
@@ -1676,6 +1678,7 @@ void LoopNest::apply(LoopLevel here,
                 // or stack as it likes.
                 Func(node->func).store_in(MemoryType::Stack);
                 state.schedule_source << "\n    .store_in(MemoryType::Stack)";
+                state.python_schedule_source << " \\\n    .store_in(hl.MemoryType.Stack)";
             }
         }
 
@@ -1710,6 +1713,8 @@ void LoopNest::apply(LoopLevel here,
                     // Is the result of a split
                     state.schedule_source
                         << "\n    .vectorize(" << v.var.name() << ")";
+                    state.python_schedule_source
+                        << " \\\n    .vectorize(" << conform_name(v.var.name()) << ")";
                     s.vectorize(v.var);
                 }
             } else {
@@ -1784,11 +1789,19 @@ void LoopNest::apply(LoopLevel here,
                             << inner.name() << ", "
                             << factor << ", "
                             << "TailStrategy::" << tail_strategy << ")";
+                        state.python_schedule_source
+                            << " \\\n    .split("
+                            << conform_name(parent.var.name()) << ", "
+                            << conform_name(parent.var.name()) << ", "
+                            << inner.name() << ", "
+                            << factor << ", "
+                            << "hl.TailStrategy." << tail_strategy << ")";
                         v = parent;
                         parent.extent = size[parent.index];
                         v.constant_extent = (tail_strategy != TailStrategy::GuardWithIf);
                         v.var = inner;
                         v.accessor.clear();
+                        v.python_accessor.clear();
                         v.extent = factor;
                         v.parallel = false;
                         v.outermost = false;
@@ -1819,7 +1832,8 @@ void LoopNest::apply(LoopLevel here,
                         for (size_t i = 0; i < symbolic_loop.size(); i++) {
                             if (state.vars[i].pure && state.vars[i].exists && state.vars[i].extent > 1) {
                                 s.unroll(state.vars[i].var);
-                                state.schedule_source << "\n    .unroll(" << state.vars[i].var.name() << ")";
+                                state.schedule_source << "\n    .unroll(" << conform_name(state.vars[i].var.name()) << ")";
+                                state.python_schedule_source << " \\\n    .unroll(" << conform_name(state.vars[i].var.name()) << ")";
                             }
                         }
                     }
@@ -1868,6 +1882,7 @@ void LoopNest::apply(LoopLevel here,
             if (c->node != node && c->stage->index == 0) {
                 auto &state = *(state_map.get(c->stage));
                 state.schedule_source << "\n    .compute" << loop_level;
+                state.python_schedule_source << " \\\n    .compute" << loop_level;
             }
         }
         for (const auto *f : store_at) {
@@ -1881,6 +1896,7 @@ void LoopNest::apply(LoopLevel here,
             if (!computed_here) {
                 auto &state = *(state_map.get(&(f->stages[0])));
                 state.schedule_source << "\n    .store" << loop_level;
+                state.python_schedule_source << " \\\n    .store" << loop_level;
             }
         }
     }

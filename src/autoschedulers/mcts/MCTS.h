@@ -118,7 +118,7 @@ namespace MCTS {
                 const uint32_t n_exploration = ceil(percent_to_explore * root_node->get_n_branches()) + min_explore_iters;
                 const uint32_t n_iterations_total = n_exploitation + n_exploration;
 
-                // std::cerr << "Decision: " << d << " exploit: " << n_exploitation << " explore: " << n_exploration << " total: " << n_iterations_total << " out of " << root_node->get_n_branches() << "\n";
+                std::cerr << "Decision: " << d << " exploit: " << n_exploitation << " explore: " << n_exploration << " total: " << n_iterations_total << " out of " << root_node->get_n_branches() << "\n";
 
                 // uint32_t n_iterations_per_decision = ceil(percent_to_explore * root_node->get_n_branches()) + min_iterations;
                 internal_assert(n_iterations_total != 0) << "accidentally gave 0 iterations: " << root_node->get_n_branches() << "\n";
@@ -182,8 +182,8 @@ namespace MCTS {
             std::cerr << "Iterations:" << iterations << std::endl;
             std::cerr << "Valids:" << n_valid_nodes << std::endl;
             std::cerr << "Invalids:" << n_invalid_nodes << std::endl;
-            // std::cerr << "Explorations:" << n_explores << std::endl;
-            // std::cerr << "Exploitations:" << n_exploitations << std::endl;
+            //std::cerr << "Explorations:" << n_explores << std::endl;
+            //std::cerr << "Exploitations:" << n_exploitations << std::endl;
 
             auto beam_element_ordering = [](BeamElement &lhs, BeamElement &rhs) { return lhs.first->get_value() < rhs.first->get_value(); };
 
