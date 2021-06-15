@@ -3,35 +3,35 @@
 ##
 
 # weights
-#set(WF_CPP baseline.cpp)
-#configure_file(baseline.weights baseline.weights COPYONLY)
-#add_custom_command(OUTPUT ${WF_CPP}
-#                   COMMAND binary2cpp baseline_weights < baseline.weights > ${WF_CPP}
-#                   DEPENDS baseline.weights binary2cpp
-#                   VERBATIM)
+set(WF_CPP baseline.cpp)
+configure_file(baseline.weights baseline.weights COPYONLY)
+add_custom_command(OUTPUT ${WF_CPP}
+                   COMMAND binary2cpp baseline_weights < baseline.weights > ${WF_CPP}
+                   DEPENDS baseline.weights binary2cpp
+                   VERBATIM)
 
 # cost_model, train_cost_model
-#add_executable(mcts_cost_model.generator cost_model_generator.cpp)
-#target_link_libraries(mcts_cost_model.generator PRIVATE Halide::Generator)
+add_executable(mcts_cost_model.generator cost_model_generator.cpp)
+target_link_libraries(mcts_cost_model.generator PRIVATE Halide::Generator)
 
-#add_halide_library(cost_model FROM mcts_cost_model.generator
-#                   GENERATOR cost_model
-#		   HEADER_NAME cost_model
-#		   TARGETS cmake)
-#add_halide_library(train_cost_model FROM mcts_cost_model.generator
-#                   GENERATOR train_cost_model
-#		   HEADER_NAME train_cost_model
-#                   TARGETS cmake
-#                   USE_RUNTIME cost_model.runtime)
+add_halide_library(mcts_cost_model FROM mcts_cost_model.generator
+                   GENERATOR cost_model
+		   HEADER_NAME cost_model
+		   TARGETS cmake)
+add_halide_library(mcts_train_cost_model FROM mcts_cost_model.generator
+                   GENERATOR train_cost_model
+		   HEADER_NAME train_cost_model
+                   TARGETS cmake
+                   USE_RUNTIME mcts_cost_model.runtime)
 
 # retrain_cost_model
-#add_executable(mcts_retrain_cost_model
-#               ASLog.cpp
-#               DefaultCostModel.cpp
-#               Weights.cpp
-#               retrain_cost_model.cpp
-#               ${WF_CPP})
-#target_link_libraries(mcts_retrain_cost_model PRIVATE cost_model train_cost_model Halide::Halide Halide::Plugin)
+add_executable(mcts_retrain_cost_model
+               ASLog.cpp
+               DefaultCostModel.cpp
+               Weights.cpp
+               retrain_cost_model.cpp
+               ${WF_CPP})
+target_link_libraries(mcts_retrain_cost_model PRIVATE mcts_cost_model mcts_train_cost_model Halide::Halide Halide::Plugin)
 
 ##
 # Main autoscheduler library
@@ -48,7 +48,7 @@ add_autoscheduler(NAME mcts
                   Weights.cpp
                   ${WF_CPP})
 
-target_link_libraries(Halide_mcts PRIVATE ../resource/cost_model ../resource/train_cost_model)
+target_link_libraries(Halide_mcts PRIVATE mcts_cost_model mcts_train_cost_model)
 
 ##
 # Tests and demos
