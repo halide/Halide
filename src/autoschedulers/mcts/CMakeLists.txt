@@ -11,23 +11,27 @@ add_custom_command(OUTPUT ${WF_CPP}
                    VERBATIM)
 
 # cost_model, train_cost_model
-add_executable(cost_model.generator cost_model_generator.cpp)
-target_link_libraries(cost_model.generator PRIVATE Halide::Generator)
+add_executable(mcts_cost_model.generator cost_model_generator.cpp)
+target_link_libraries(mcts_cost_model.generator PRIVATE Halide::Generator)
 
-add_halide_library(cost_model FROM cost_model.generator
-                   TARGETS cmake)
-add_halide_library(train_cost_model FROM cost_model.generator
+add_halide_library(mcts_cost_model FROM mcts_cost_model.generator
+                   GENERATOR cost_model
+		   HEADER_NAME cost_model
+		   TARGETS cmake)
+add_halide_library(mcts_train_cost_model FROM mcts_cost_model.generator
+                   GENERATOR train_cost_model
+		   HEADER_NAME train_cost_model
                    TARGETS cmake
-                   USE_RUNTIME cost_model.runtime)
+                   USE_RUNTIME mcts_cost_model.runtime)
 
 # retrain_cost_model
-add_executable(retrain_cost_model
+add_executable(mcts_retrain_cost_model
                ASLog.cpp
                DefaultCostModel.cpp
                Weights.cpp
                retrain_cost_model.cpp
                ${WF_CPP})
-target_link_libraries(retrain_cost_model PRIVATE cost_model train_cost_model Halide::Halide Halide::Plugin)
+target_link_libraries(mcts_retrain_cost_model PRIVATE mcts_cost_model mcts_train_cost_model Halide::Halide Halide::Plugin)
 
 ##
 # Main autoscheduler library
@@ -44,7 +48,7 @@ add_autoscheduler(NAME mcts
                   Weights.cpp
                   ${WF_CPP})
 
-target_link_libraries(Halide_mcts PRIVATE cost_model train_cost_model)
+target_link_libraries(Halide_mcts PRIVATE mcts_cost_model mcts_train_cost_model)
 
 ##
 # Tests and demos
@@ -53,42 +57,46 @@ target_link_libraries(Halide_mcts PRIVATE cost_model train_cost_model)
 
 # =================================================================
 
-add_executable(demo.generator demo_generator.cpp)
-target_link_libraries(demo.generator PRIVATE Halide::Generator)
+add_executable(mcts_demo.generator demo_generator.cpp)
+target_link_libraries(mcts_demo.generator PRIVATE Halide::Generator)
 
-add_halide_library(demo FROM demo.generator
-                   TARGETS cmake
+add_halide_library(mcts_demo FROM mcts_demo.generator
+	           GENERATOR demo
+		   HEADER_NAME demo
+		   TARGETS cmake
                    AUTOSCHEDULER Halide::mcts
                    REGISTRATION DEMO_REGISTRATION_FILE)
 
-add_executable(demo_apps_autoscheduler ${DEMO_REGISTRATION_FILE})
-target_link_libraries(demo_apps_autoscheduler PRIVATE demo Halide::RunGenMain)
+add_executable(mcts_demo_apps_autoscheduler ${DEMO_REGISTRATION_FILE})
+target_link_libraries(mcts_demo_apps_autoscheduler PRIVATE mcts_demo Halide::RunGenMain)
 
-add_test(NAME demo_apps_autoscheduler
-         COMMAND demo_apps_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all)
+add_test(NAME mcts_demo_apps_autoscheduler
+         COMMAND mcts_demo_apps_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all)
 
-set_tests_properties(demo_apps_autoscheduler
+set_tests_properties(mcts_demo_apps_autoscheduler
                      PROPERTIES
                      LABELS mcts
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
 
 # =================================================================
 
-add_executable(included_schedule_file.generator included_schedule_file_generator.cpp)
-target_link_libraries(included_schedule_file.generator PRIVATE Halide::Generator)
+add_executable(mcts_included_schedule_file.generator included_schedule_file_generator.cpp)
+target_link_libraries(mcts_included_schedule_file.generator PRIVATE Halide::Generator)
 
-add_halide_library(included_schedule_file FROM included_schedule_file.generator
-                   TARGETS cmake
+add_halide_library(mcts_included_schedule_file FROM mcts_included_schedule_file.generator
+                   GENERATOR included_schedule_file
+		   HEADER_NAME included_schedule_file
+		   TARGETS cmake
                    AUTOSCHEDULER Halide::mcts
                    REGISTRATION included_schedule_reg)
 
-add_executable(demo_included_schedule_file ${included_schedule_reg})
-target_link_libraries(demo_included_schedule_file PRIVATE included_schedule_file Halide::RunGenMain)
+add_executable(mcts_demo_included_schedule_file ${included_schedule_reg})
+target_link_libraries(mcts_demo_included_schedule_file PRIVATE mcts_included_schedule_file Halide::RunGenMain)
 
-add_test(NAME demo_included_schedule_file
-         COMMAND demo_included_schedule_file --benchmarks=all --benchmark_min_time=1 --estimate_all)
+add_test(NAME mcts_demo_included_schedule_file
+         COMMAND mcts_demo_included_schedule_file --benchmarks=all --benchmark_min_time=1 --estimate_all)
 
-set_tests_properties(demo_included_schedule_file
+set_tests_properties(mcts_demo_included_schedule_file
                      PROPERTIES
                      LABELS mcts
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
@@ -97,46 +105,46 @@ set_tests_properties(demo_included_schedule_file
 # Auto-tuning support utilities.
 # TODO(#4053): implement auto-tuning support in CMake?
 
-add_executable(featurization_to_sample featurization_to_sample.cpp)
+add_executable(mcts_featurization_to_sample featurization_to_sample.cpp)
 
-add_executable(get_host_target get_host_target.cpp)
-target_link_libraries(get_host_target PRIVATE Halide::Halide)
+add_executable(mcts_get_host_target get_host_target.cpp)
+target_link_libraries(mcts_get_host_target PRIVATE Halide::Halide)
 
-add_executable(weightsdir_to_weightsfile weightsdir_to_weightsfile.cpp Weights.cpp)
-target_link_libraries(weightsdir_to_weightsfile PRIVATE Halide::Runtime)
+add_executable(mcts_weightsdir_to_weightsfile weightsdir_to_weightsfile.cpp Weights.cpp)
+target_link_libraries(mcts_weightsdir_to_weightsfile PRIVATE Halide::Runtime)
 
 # =================================================================
 # Smaller tests
 
 if (BUILD_SHARED_LIBS)
-    add_executable(test_apps_autoscheduler test.cpp)
-    target_link_libraries(test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
+    add_executable(mcts_test_apps_autoscheduler test.cpp)
+    target_link_libraries(mcts_test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
 
-    add_test(NAME test_apps_autoscheduler
-             COMMAND test_apps_autoscheduler $<TARGET_FILE:Halide_mcts>)
+    add_test(NAME mcts_test_apps_autoscheduler
+             COMMAND mcts_test_apps_autoscheduler $<TARGET_FILE:Halide_mcts>)
 
-    set_tests_properties(test_apps_autoscheduler PROPERTIES
+    set_tests_properties(mcts_test_apps_autoscheduler PROPERTIES
                          LABELS mcts
                          ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_mcts>:$ENV{LD_LIBRARY_PATH};HL_TARGET=${Halide_TARGET}")
 endif ()
 
 ##
 
-add_executable(test_perfect_hash_map test_perfect_hash_map.cpp)
+add_executable(mcts_test_perfect_hash_map test_perfect_hash_map.cpp)
 
-add_test(NAME test_perfect_hash_map COMMAND test_perfect_hash_map)
-set_tests_properties(test_perfect_hash_map
+add_test(NAME mcts_test_perfect_hash_map COMMAND mcts_test_perfect_hash_map)
+set_tests_properties(mcts_test_perfect_hash_map
                      PROPERTIES
                      LABELS mcts
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
 
 ##
 
-add_executable(test_function_dag test_function_dag.cpp FunctionDAG.cpp ASLog.cpp)
-target_link_libraries(test_function_dag PRIVATE Halide::Halide Halide::Tools Halide::Plugin)
+add_executable(mcts_test_function_dag test_function_dag.cpp FunctionDAG.cpp ASLog.cpp)
+target_link_libraries(mcts_test_function_dag PRIVATE Halide::Halide Halide::Tools Halide::Plugin)
 
-add_test(NAME test_function_dag COMMAND test_function_dag)
-set_tests_properties(test_function_dag
+add_test(NAME mcts_test_function_dag COMMAND mcts_test_function_dag)
+set_tests_properties(mcts_test_function_dag
                      PROPERTIES
                      LABELS mcts
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
