@@ -22,6 +22,7 @@ function(add_autoscheduler)
                           OUTPUT_NAME autoschedule_${name_lower})
 endfunction()
 
+add_subdirectory(resource)
 add_subdirectory(common)
 
 add_subdirectory(mcts)
