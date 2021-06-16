@@ -1,4 +1,5 @@
 #include "interpreter/transforms.h"
+#include "util/small_vector.h"
 
 namespace hannk {
 

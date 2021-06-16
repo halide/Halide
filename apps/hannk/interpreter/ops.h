@@ -4,6 +4,7 @@
 #include <array>
 
 #include "interpreter/model.h"
+#include "util/small_vector.h"
 
 namespace hannk {
 
