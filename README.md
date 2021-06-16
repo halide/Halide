@@ -371,7 +371,7 @@ an older XCode which does not default to libc++.
 # Halide for Hexagon HVX
 
 Halide supports offloading work to Qualcomm Hexagon DSP on Qualcomm Snapdragon
-835 devices or newer. The Hexagon DSP provides a set of 128 byte vector
+845/710 devices or newer. The Hexagon DSP provides a set of 128 byte vector
 instruction extensions - the Hexagon Vector eXtensions (HVX). HVX is well suited
 for image processing, and Halide for Hexagon HVX will generate the appropriate
 HVX vector instructions from a program authored in Halide.
@@ -391,8 +391,8 @@ To build and run an example app using the Hexagon target,
 
 1. Obtain and build trunk LLVM and Clang. (Earlier versions of LLVM may work but
    are not actively tested and thus not recommended.)
-2. Download and install the Hexagon SDK and Hexagon Tools. Hexagon SDK 3.4.1 or
-   later is needed. Hexagon Tools 8.2 or later is needed.
+2. Download and install the Hexagon SDK and Hexagon Tools. Hexagon SDK 4.3.0 or
+   later is needed. Hexagon Tools 8.4 or later is needed.
 3. Build and run an example for Hexagon HVX
 
 ### 1. Obtain and build trunk LLVM and Clang
@@ -404,11 +404,11 @@ branch.)
 
 Go to https://developer.qualcomm.com/software/hexagon-dsp-sdk/tools
 
-1. Select the Hexagon Series 600 Software and download the 3.4.1 version or
-   later for Linux.
+1. Select the Hexagon Series 600 Software and download & run QPM and install
+   the Hexagon SDK 4.3.0 version or later for Linux.
 2. untar the installer
 3. Run the extracted installer to install the Hexagon SDK and Hexagon Tools,
-   selecting Installation of Hexagon SDK into `/location/of/SDK/Hexagon_SDK/3.x`
+   selecting Installation of Hexagon SDK into `/location/of/SDK/Hexagon_SDK/4.x`
    and the Hexagon tools into `/location/of/SDK/Hexagon_Tools/8.x`
 4. Set an environment variable to point to the SDK installation location
    ```
@@ -424,7 +424,7 @@ To build and run the blur example in Halide/apps/blur on the simulator:
 
 ```
 cd apps/blur
-export HL_HEXAGON_SIM_REMOTE=../../src/runtime/hexagon_remote/bin/v62/hexagon_sim_remote
+export HL_HEXAGON_SIM_REMOTE=../../src/runtime/hexagon_remote/bin/v65/hexagon_sim_remote
 export HL_HEXAGON_TOOLS=$SDK_LOC/Hexagon_Tools/8.x/Tools/
 LD_LIBRARY_PATH=../../src/runtime/hexagon_remote/bin/host/:$HL_HEXAGON_TOOLS/lib/iss/:. HL_TARGET=host-hvx make test
 ```
@@ -433,12 +433,12 @@ LD_LIBRARY_PATH=../../src/runtime/hexagon_remote/bin/host/:$HL_HEXAGON_TOOLS/lib
 
 To build the example for Android, first ensure that you have Android NDK r19b or
 later installed, and the ANDROID_NDK_ROOT environment variable points to it.
-(Note that Qualcomm Hexagon SDK v3.5.2 includes Android NDK r19c, which is
+(Note that Qualcomm Hexagon SDK v4.3.0 includes Android NDK r19c, which is
 fine.)
 
 Now build and run the blur example using the script to run it on device:
 
 ```
-export HL_HEXAGON_TOOLS=$SDK_LOC/HEXAGON_Tools/8.0/Tools/
+export HL_HEXAGON_TOOLS=$SDK_LOC/HEXAGON_Tools/8.4.11/Tools/
 HL_TARGET=arm-64-android-hvx ./adb_run_on_device.sh
 ```
