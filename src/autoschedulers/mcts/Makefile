@@ -36,23 +36,28 @@ $(BIN)/baseline_weights.o: $(BIN)/baseline_weights.cpp
 	$(CXX) -c $< -o $@
 
 AUTOSCHED_COST_MODEL_LIBS=\
-$(BIN)/cost_model/cost_model.a \
-$(BIN)/cost_model/train_cost_model.a \
+$(BIN)/cost_model/mcts_cost_model.a \
+$(BIN)/cost_model/mcts_train_cost_model.a \
 
-$(BIN)/cost_model.generator: $(SRC)/cost_model_generator.cpp \
+$(BIN)/mcts_cost_model.generator: $(SRC)/cost_model_generator.cpp \
 				$(SRC)/cost_model_schedule.h \
 				$(SRC)/NetworkSize.h \
 				$(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) -o $@ $(USE_EXPORT_DYNAMIC) $(LIBHALIDE_LDFLAGS)
 
-$(BIN)/auto_schedule_runtime.a: $(BIN)/cost_model.generator
+$(BIN)/auto_schedule_runtime.a: $(BIN)/mcts_cost_model.generator
 	@mkdir -p $(@D)
 	$^ -r auto_schedule_runtime -o $(BIN) target=$(HL_TARGET)
 
-$(BIN)/cost_model/%.a: $(BIN)/cost_model.generator
+$(BIN)/cost_model/mcts_cost_model.a: $(BIN)/mcts_cost_model.generator
 	@mkdir -p $(@D)
-	$^ -g $* -o $(BIN)/cost_model -f $* target=$(HL_TARGET)-no_runtime auto_schedule=false -e stmt,static_library,h,assembly
+	$^ -g cost_model -o $(BIN)/cost_model -f mcts_cost_model target=$(HL_TARGET)-no_runtime auto_schedule=false -e stmt,static_library,h,assembly
+
+$(BIN)/cost_model/mcts_train_cost_model.a: $(BIN)/mcts_cost_model.generator
+	@mkdir -p $(@D)
+	$^ -g train_cost_model -o $(BIN)/cost_model -f mcts_train_cost_model target=$(HL_TARGET)-no_runtime auto_schedule=false -e stmt,static_library,h,assembly
+
 
 # It's important to use dynamic lookups for undefined symbols here: all of libHalide
 # is expected to be present (in the loading binary), so we explicitly make the symbols

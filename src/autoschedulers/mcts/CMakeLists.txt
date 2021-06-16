@@ -16,11 +16,9 @@ target_link_libraries(mcts_cost_model.generator PRIVATE Halide::Generator)
 
 add_halide_library(mcts_cost_model FROM mcts_cost_model.generator
                    GENERATOR cost_model
-		   HEADER_NAME cost_model
 		   TARGETS cmake)
 add_halide_library(mcts_train_cost_model FROM mcts_cost_model.generator
                    GENERATOR train_cost_model
-		   HEADER_NAME train_cost_model
                    TARGETS cmake
                    USE_RUNTIME mcts_cost_model.runtime)
 
@@ -62,7 +60,6 @@ target_link_libraries(mcts_demo.generator PRIVATE Halide::Generator)
 
 add_halide_library(mcts_demo FROM mcts_demo.generator
 	           GENERATOR demo
-		   HEADER_NAME demo
 		   TARGETS cmake
                    AUTOSCHEDULER Halide::mcts
                    REGISTRATION DEMO_REGISTRATION_FILE)
@@ -85,7 +82,6 @@ target_link_libraries(mcts_included_schedule_file.generator PRIVATE Halide::Gene
 
 add_halide_library(mcts_included_schedule_file FROM mcts_included_schedule_file.generator
                    GENERATOR included_schedule_file
-		   HEADER_NAME included_schedule_file
 		   TARGETS cmake
                    AUTOSCHEDULER Halide::mcts
                    REGISTRATION included_schedule_reg)
