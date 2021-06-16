@@ -1103,12 +1103,12 @@ public:
         // Note that even though the loops are fused, the boxes touched of A and B might be totally different,
         // because e.g. B could be double-resolution (as happens when fusing yuv computations), so this
         // is not just a matter of giving A's box B's name as an alias.
+        set<pair<string, int>> fused_group;
         map<string, Box> boxes_for_fused_group;
         map<string, Function> stage_name_to_func;
-        set<pair<string, int>> fused_with_f;
 
         if (producing >= 0) {
-            fused_with_f.insert(make_pair(f.name(), stage_index));
+            fused_group.insert(make_pair(f.name(), stage_index));
         }
 
         if (!no_pipelines && producing >= 0 && !f.has_extern_definition()) {
@@ -1120,22 +1120,22 @@ public:
                 if (!((pair.func_1 == stages[producing].name) && ((int)pair.stage_1 == stage_index)) && is_fused_with_others(fused_groups, fused_pairs_in_groups,
                                                                                                                              f, stage_index,
                                                                                                                              pair.func_1, pair.stage_1, var)) {
-                    fused_with_f.insert(make_pair(pair.func_1, pair.stage_1));
+                    fused_group.insert(make_pair(pair.func_1, pair.stage_1));
                 }
                 if (!((pair.func_2 == stages[producing].name) && ((int)pair.stage_2 == stage_index)) && is_fused_with_others(fused_groups, fused_pairs_in_groups,
                                                                                                                              f, stage_index,
                                                                                                                              pair.func_2, pair.stage_2, var)) {
-                    fused_with_f.insert(make_pair(pair.func_2, pair.stage_2));
+                    fused_group.insert(make_pair(pair.func_2, pair.stage_2));
                 }
             }
 
-            if (fused_with_f.size() == 1) {
+            if (fused_group.size() == 1) {
                 boxes_for_fused_group[stage_name] = box_provided(body, stages[producing].name, empty_scope, func_bounds);
                 stage_name_to_func[stage_name] = f;
                 internal_assert((int)boxes_for_fused_group[stage_name].size() == f.dimensions());
             } else {
                 auto boxes = boxes_provided(body, empty_scope, func_bounds);
-                for (const auto &fused : fused_with_f) {
+                for (const auto &fused : fused_group) {
                     string fused_stage_name = fused.first + ".s" + std::to_string(fused.second);
                     boxes_for_fused_group[fused_stage_name] = boxes[fused.first];
                     for (const auto &fn : funcs) {
@@ -1202,8 +1202,12 @@ public:
             // And the current bounds on its reduction variables, and
             // variables from extern for loops.
             if (producing >= 0) {
-                for (const auto &fused : fused_with_f) {
+                // Iterate over all fused stages to make sure that bounds for their reduction variables
+                // are included as well (see a detailed explanation of bounds for fused functions in the
+                // long comment above).
+                for (const auto &fused : fused_group) {
                     size_t si = 0;
+                    // Find a Stage structure corresponding to a current fused stage.
                     for (si = 0; si < stages.size(); si++) {
                         if ((fused.first == stages[si].name) && fused.second == (int)stages[si].stage) {
                             break;
