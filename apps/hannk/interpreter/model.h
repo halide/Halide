@@ -251,13 +251,6 @@ public:
     void dump(std::ostream &os) const;
 };
 
-// A mapping from old tensors to new tensors, when cloning an op.
-using TensorMap = std::map<const TensorPtr, TensorPtr>;
-
-// Apply a tensor map to a list of tensors. This is used to support
-// cloning ops referring to different tensors.
-const TensorPtr &apply(TensorMap &map, const TensorPtr &t);
-
 // A mapping from an output x to required input coordinates [min, max].
 // [min, max] = (x / inv_stride) * stride + bounds
 struct DimMap {
@@ -514,9 +507,6 @@ public:
     // Execute the op on a given crop.
     virtual void execute() = 0;
 
-    // Clone this op, replacing tensors using the mapping in tensor_map.
-    virtual OpPtr clone(TensorMap &tensor_map) const = 0;
-
     virtual void accept(OpVisitor *v) = 0;
 
     virtual void dump(std::ostream &os) const = 0;
@@ -590,7 +580,6 @@ public:
         return ops_[i].get();
     }
 
-    OpPtr clone(TensorMap &tensor_map) const;
     void accept(OpVisitor *v);
     void dump(std::ostream &os) const;
 };

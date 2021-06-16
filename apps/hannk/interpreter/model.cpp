@@ -7,21 +7,6 @@
 
 namespace hannk {
 
-const TensorPtr &apply(TensorMap &map, const TensorPtr &t) {
-    auto i = map.find(t);
-    if (i != map.end()) {
-        return i->second;
-    }
-
-    if (t->is_constant()) {
-        // Share constant tensors across users.
-        return t;
-    } else {
-        // Remember this cloned tensor for later applications of the mapping.
-        return map[t] = std::make_shared<Tensor>(*t);
-    }
-}
-
 namespace {
 
 HalideBuffer<void> make_buffer(halide_type_t type, const Box &bounds) {
@@ -363,24 +348,6 @@ void OpGroup::remove(const Op *op) {
             return;
         }
     }
-}
-
-OpPtr OpGroup::clone(TensorMap &tensor_map) const {
-    std::vector<TensorPtr> inputs;
-    for (int i = 0; i < input_count(); i++) {
-        inputs.push_back(apply(tensor_map, input(i)));
-    }
-    std::vector<TensorPtr> outputs;
-    for (int i = 0; i < output_count(); i++) {
-        outputs.push_back(apply(tensor_map, output(i)));
-    }
-
-    std::vector<OpPtr> ops;
-    for (int i = 0; i < op_count(); i++) {
-        ops.push_back(op(i)->clone(tensor_map));
-    }
-
-    return make_op<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
 }
 
 void OpGroup::accept(OpVisitor *v) {
