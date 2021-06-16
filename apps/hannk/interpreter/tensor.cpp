@@ -3,21 +3,6 @@
 
 namespace hannk {
 
-const TensorPtr &apply(TensorMap &map, const TensorPtr &t) {
-    auto i = map.find(t);
-    if (i != map.end()) {
-        return i->second;
-    }
-
-    if (t->is_constant()) {
-        // Share constant tensors across users.
-        return t;
-    } else {
-        // Remember this cloned tensor for later applications of the mapping.
-        return map[t] = std::make_shared<Tensor>(*t);
-    }
-}
-
 namespace {
 
 HalideBuffer<void> make_buffer(halide_type_t type, const Box &bounds) {

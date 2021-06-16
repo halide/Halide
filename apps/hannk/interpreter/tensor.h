@@ -1,15 +1,12 @@
 #ifndef HANNK_TENSOR_H
 #define HANNK_TENSOR_H
 
-#include <array>
 #include <iostream>
 #include <list>
-#include <map>
 #include <string>
 #include <vector>
 
 #include "HalideBuffer.h"
-#include "interpreter/interval.h"
 #include "util/buffer_util.h"
 #include "util/small_vector.h"
 
@@ -245,13 +242,6 @@ public:
 
     void dump(std::ostream &os) const;
 };
-
-// A mapping from old tensors to new tensors, when cloning an op.
-using TensorMap = std::map<const TensorPtr, TensorPtr>;
-
-// Apply a tensor map to a list of tensors. This is used to support
-// cloning ops referring to different tensors.
-const TensorPtr &apply(TensorMap &map, const TensorPtr &t);
 
 }  // namespace hannk
 
