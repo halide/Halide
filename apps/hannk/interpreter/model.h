@@ -281,9 +281,6 @@ public:
     // Execute the op on a given crop.
     virtual void execute() = 0;
 
-    // Clone this op, replacing tensors using the mapping in tensor_map.
-    virtual OpPtr clone(TensorMap &tensor_map) const = 0;
-
     virtual void accept(OpVisitor *v) = 0;
 
     virtual void dump(std::ostream &os) const = 0;
@@ -357,7 +354,6 @@ public:
         return ops_[i].get();
     }
 
-    OpPtr clone(TensorMap &tensor_map) const;
     void accept(OpVisitor *v);
     void dump(std::ostream &os) const;
 };

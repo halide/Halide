@@ -99,24 +99,6 @@ void OpGroup::remove(const Op *op) {
     }
 }
 
-OpPtr OpGroup::clone(TensorMap &tensor_map) const {
-    std::vector<TensorPtr> inputs;
-    for (int i = 0; i < input_count(); i++) {
-        inputs.push_back(apply(tensor_map, input(i)));
-    }
-    std::vector<TensorPtr> outputs;
-    for (int i = 0; i < output_count(); i++) {
-        outputs.push_back(apply(tensor_map, output(i)));
-    }
-
-    std::vector<OpPtr> ops;
-    for (int i = 0; i < op_count(); i++) {
-        ops.push_back(op(i)->clone(tensor_map));
-    }
-
-    return make_op<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
-}
-
 void OpGroup::accept(OpVisitor *v) {
     v->visit(this);
 }
