@@ -20,61 +20,61 @@ void *lookup_symbol(const char *name, const known_symbol *map) {
 extern "C" {
 
 // More symbols we need to support.
-extern int qurt_hvx_lock;
-extern int qurt_hvx_unlock;
-extern int __hexagon_muldf3;
-extern int __hexagon_divdf3;
-extern int __hexagon_adddf3;
-extern int __hexagon_divsf3;
-extern int __hexagon_udivdi3;
-extern int __hexagon_udivsi3;
-extern int __hexagon_umodsi3;
-extern int __hexagon_divsi3;
-extern int __hexagon_modsi3;
-extern int __hexagon_subdf3;
-extern int sqrtf;
-extern int sqrt;
-extern int expf;
-extern int exp;
-extern int logf;
-extern int log;
-extern int powf;
-extern int pow;
-extern int sinf;
-extern int sin;
-extern int cosf;
-extern int cos;
-extern int tanf;
-extern int tan;
-extern int asinf;
-extern int asin;
-extern int acosf;
-extern int acos;
-extern int atanf;
-extern int atan;
-extern int atan2f;
-extern int atan2;
-extern int sinhf;
-extern int sinh;
-extern int coshf;
-extern int cosh;
-extern int tanhf;
-extern int tanh;
-extern int asinhf;
-extern int asinh;
-extern int acoshf;
-extern int acosh;
-extern int atanhf;
-extern int atanh;
-extern int nearbyintf;
-extern int nearbyint;
-extern int truncf;
-extern int trunc;
-extern int floorf;
-extern int floor;
-extern int ceilf;
-extern int ceil;
-extern int write;
+extern int qurt_hvx_lock();
+extern int qurt_hvx_unlock();
+extern int __hexagon_muldf3();
+extern int __hexagon_divdf3();
+extern int __hexagon_adddf3();
+extern int __hexagon_divsf3();
+extern int __hexagon_udivdi3();
+extern int __hexagon_udivsi3();
+extern int __hexagon_umodsi3();
+extern int __hexagon_divsi3();
+extern int __hexagon_modsi3();
+extern int __hexagon_subdf3();
+extern float sqrtf(float);
+extern double sqrt(double);
+extern float expf(float);
+extern double exp(double);
+extern float logf(float);
+extern double log(double);
+extern float powf(float, float);
+extern double pow(double, double);
+extern float sinf(float);
+extern double sin(double);
+extern float cosf(float);
+extern double cos(double);
+extern float tanf(float);
+extern double tan(double);
+extern float asinf(float);
+extern double asin(double);
+extern float acosf(float);
+extern double acos(double);
+extern float atanf(float);
+extern double atan(double);
+extern float atan2f(float, float);
+extern double atan2(double, double);
+extern float sinhf(float);
+extern double sinh(double);
+extern float coshf(float);
+extern double cosh(double);
+extern float tanhf(float);
+extern double tanh(double);
+extern float asinhf(float);
+extern double asinh(double);
+extern float acoshf(float);
+extern double acosh(double);
+extern float atanhf(float);
+extern double atanh(double);
+extern float nearbyintf(float);
+extern double nearbyint(double);
+extern float truncf(float);
+extern double trunc(double);
+extern float floorf(float);
+extern double floor(double);
+extern float ceilf(float);
+extern double ceil(double);
+extern ssize_t write(int, const void *, size_t);
 
 }  // extern "C"
 
@@ -121,47 +121,47 @@ void *get_known_symbol(const char *name) {
         {"__hexagon_modsi3", (char *)(&__hexagon_modsi3)},
         {"__hexagon_sqrtf", (char *)(&sqrtf)},
         {"sqrtf", (char *)(&sqrtf)},
-        {"sqrt", (char *)(&sqrt)},
+        {"sqrt", (char *)(static_cast<double (*)(double)>(&sqrt))},
         {"sinf", (char *)(&sinf)},
         {"expf", (char *)(&expf)},
-        {"exp", (char *)(&exp)},
+        {"exp", (char *)(static_cast<double (*)(double)>(&exp))},
         {"logf", (char *)(&logf)},
-        {"log", (char *)(&log)},
+        {"log", (char *)(static_cast<double (*)(double)>(&log))},
         {"powf", (char *)(&powf)},
-        {"pow", (char *)(&pow)},
-        {"sin", (char *)(&sin)},
+        {"pow", (char *)(static_cast<double (*)(double, double)>(&pow))},
+        {"sin", (char *)(static_cast<double (*)(double)>(&sin))},
         {"cosf", (char *)(&cosf)},
-        {"cos", (char *)(&cos)},
+        {"cos", (char *)(static_cast<double (*)(double)>(&cos))},
         {"tanf", (char *)(&tanf)},
-        {"tan", (char *)(&tan)},
+        {"tan", (char *)(static_cast<double (*)(double)>(&tan))},
         {"asinf", (char *)(&asinf)},
-        {"asin", (char *)(&asin)},
+        {"asin", (char *)(static_cast<double (*)(double)>(&asin))},
         {"acosf", (char *)(&acosf)},
-        {"acos", (char *)(&acos)},
+        {"acos", (char *)(static_cast<double (*)(double)>(&acos))},
         {"atanf", (char *)(&atanf)},
-        {"atan", (char *)(&atan)},
+        {"atan", (char *)(static_cast<double (*)(double)>(&atan))},
         {"atan2f", (char *)(&atan2f)},
-        {"atan2", (char *)(&atan2)},
+        {"atan2", (char *)(static_cast<double (*)(double, double)>(&atan2))},
         {"sinhf", (char *)(&sinhf)},
-        {"sinh", (char *)(&sinh)},
+        {"sinh", (char *)(static_cast<double (*)(double)>(&sinh))},
         {"coshf", (char *)(&coshf)},
-        {"cosh", (char *)(&cosh)},
+        {"cosh", (char *)(static_cast<double (*)(double)>(&cosh))},
         {"tanhf", (char *)(&tanhf)},
-        {"tanh", (char *)(&tanh)},
+        {"tanh", (char *)(static_cast<double (*)(double)>(&tanh))},
         {"asinhf", (char *)(&asinhf)},
-        {"asinh", (char *)(&asinh)},
+        {"asinh", (char *)(static_cast<double (*)(double)>(&asinh))},
         {"acoshf", (char *)(&acoshf)},
-        {"acosh", (char *)(&acosh)},
+        {"acosh", (char *)(static_cast<double (*)(double)>(&acosh))},
         {"atanhf", (char *)(&atanhf)},
-        {"atanh", (char *)(&atanh)},
+        {"atanh", (char *)(static_cast<double (*)(double)>(&atanh))},
         {"nearbyintf", (char *)(&nearbyintf)},
-        {"nearbyint", (char *)(&nearbyint)},
+        {"nearbyint", (char *)(static_cast<double (*)(double)>(&nearbyint))},
         {"truncf", (char *)(&truncf)},
-        {"trunc", (char *)(&trunc)},
+        {"trunc", (char *)(static_cast<double (*)(double)>(&trunc))},
         {"floorf", (char *)(&floorf)},
-        {"floor", (char *)(&floor)},
+        {"floor", (char *)(static_cast<double (*)(double)>(&floor))},
         {"ceilf", (char *)(&ceilf)},
-        {"ceil", (char *)(&ceil)},
+        {"ceil", (char *)(static_cast<double (*)(double)>(&ceil))},
         {NULL, NULL}  // Null terminator.
     };
 
