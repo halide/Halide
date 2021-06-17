@@ -20,12 +20,8 @@ HalideBuffer<void> make_buffer(halide_type_t type, const Box &bounds) {
 
 }  // namespace
 
-TensorStorage::TensorStorage() {
-}
-
-TensorStorage::TensorStorage(HalideBuffer<void> buffer)
-    : buffer_(buffer) {
-    assert(!buffer_.data());
+TensorStorage::TensorStorage(halide_type_t type, int rank, const halide_dimension_t *dimensions)
+    : buffer_(type, nullptr, rank, dimensions) {
 }
 
 void TensorStorage::add_use(halide_type_t type, const Box &bounds) {
@@ -37,7 +33,7 @@ void TensorStorage::add_use(halide_type_t type, const Box &bounds) {
         assert(!buffer_.data());
 
         // Check that the storage is big enough for this buffer.
-        for (int i = 0; i < rank(); i++) {
+        for (int i = 0; i < buffer_.dimensions(); i++) {
             assert(bounds[i].min >= buffer_.dim(i).min());
             assert(bounds[i].max <= buffer_.dim(i).max());
         }
@@ -64,21 +60,6 @@ Tensor::Tensor(std::string name, halide_type_t type, const Box &bounds, Quantiza
     : Tensor(name, make_buffer(type, bounds), quantization) {
 }
 
-Tensor::Tensor(const Tensor &copy)
-    : name_(copy.name()), buffer_(make_buffer(copy.type(), copy.bounds())),
-      quantization_(copy.quantization_), is_constant_(copy.is_constant_), is_external_(copy.is_external_),
-      is_input_(copy.is_input_), is_output_(copy.is_output_), is_dynamic_(copy.is_dynamic_),
-      storage_(copy.storage_) {
-    if (copy.is_allocated()) {
-        assert(!is_dynamic());
-        allocate();
-        // This should have used the same buffer as the copy's storage.
-        assert(buffer_.data() == copy.buffer_.data());
-    } else {
-        assert(!buffer_.data());
-    }
-}
-
 void Tensor::add_consumer(Op *op) {
     consumers_.push_back(op);
 }
@@ -97,7 +78,7 @@ void Tensor::remove_producer(Op *op) {
 
 std::shared_ptr<TensorStorage> Tensor::storage() {
     if (!storage_) {
-        storage_ = std::make_shared<TensorStorage>(buffer_);
+        storage_ = std::make_shared<TensorStorage>(buffer_.type(), buffer_.dimensions(), buffer_.raw_buffer()->dim);
     }
     return storage_;
 }
