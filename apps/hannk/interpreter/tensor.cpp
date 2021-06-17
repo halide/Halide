@@ -33,7 +33,7 @@ void TensorStorage::add_use(halide_type_t type, const Box &bounds) {
         assert(!buffer_.data());
 
         // Check that the storage is big enough for this buffer.
-        for (int i = 0; i < rank(); i++) {
+        for (int i = 0; i < buffer_.dimensions(); i++) {
             assert(bounds[i].min >= buffer_.dim(i).min());
             assert(bounds[i].max <= buffer_.dim(i).max());
         }

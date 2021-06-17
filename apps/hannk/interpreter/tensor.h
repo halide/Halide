@@ -60,14 +60,6 @@ public:
     // The type and dimensionality must match the existing storage.
     void add_use(halide_type_t, const Box &bounds);
 
-    halide_type_t type() const {
-        return buffer_.type();
-    }
-
-    int rank() const {
-        return buffer_.dimensions();
-    }
-
     template<class T = void>
     const HalideBuffer<T> &buffer() {
         return buffer_.as<T>();
