@@ -127,6 +127,9 @@ struct BenchmarkConfig {
     // this. Controls accuracy. The closer to zero this gets the more
     // reliable the answer, but the longer it may take to run.
     double accuracy{0.03};
+
+    // Iterations per sample should be at the minimum 30 to get statistically significant results
+    uint64_t iters_per_sample{30};
 };
 
 struct BenchmarkResult {
@@ -167,7 +170,7 @@ inline BenchmarkResult benchmark(const std::function<void()> &op, const Benchmar
     double times[kMinSamples + 1] = {0};
 
     double total_time = 0;
-    uint64_t iters_per_sample = 1;
+    uint64_t iters_per_sample = config.iters_per_sample;
     for (;;) {
         result.samples = 0;
         result.iterations = 0;
