@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define SS_PROFILE
 #define INVALID_START (0ULL - 1ULL)
 
 // Mostly inspired by Cilk stats
