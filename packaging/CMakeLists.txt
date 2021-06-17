@@ -25,7 +25,7 @@ endforeach ()
 ##
 
 set(optional_targets "")
-foreach (target IN ITEMS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016)
+foreach (target IN ITEMS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016 Halide_mcts)
     if (TARGET ${target})
         list(APPEND optional_targets ${target})
     endif ()
@@ -77,7 +77,9 @@ else ()
     set(rbase $ORIGIN)
 endif ()
 
-set_target_properties(${exes} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
+if (NOT CMAKE_INSTALL_RPATH)
+    set_target_properties(${exes} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
+endif ()
 
 install(TARGETS ${exes}
         EXPORT Halide_Interfaces)

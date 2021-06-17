@@ -41,8 +41,8 @@ public:
                 // to prevent the footprint of the downsamplings to extend
                 // too far off the base image. Otherwise we look 512
                 // pixels off each edge.
-                Expr w = input.width() / (1 << l);
-                Expr h = input.height() / (1 << l);
+                Expr w = input.width() / (1 << (l - 1));
+                Expr h = input.height() / (1 << (l - 1));
                 prev = lambda(x, y, c, prev(clamp(x, 0, w), clamp(y, 0, h), c));
             }
 
@@ -177,13 +177,6 @@ public:
                     .unroll(c)
                     .vectorize(xi)
                     .parallel(yo);
-
-                downsampled[0]
-                    .store_at(normalize, yo)
-                    .compute_at(normalize, yi)
-                    .reorder(c, x, y)
-                    .unroll(c)
-                    .vectorize(x, vec);
 
                 for (int l = 1; l < levels; l++) {
                     interpolated[l]

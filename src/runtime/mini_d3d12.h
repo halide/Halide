@@ -374,25 +374,39 @@ struct _ENUM_FLAG_SIZED_INTEGER {
 
 #define DEFINE_ENUM_FLAG_OPERATORS(ENUMTYPE)                                                                                   \
     extern "C++" {                                                                                                             \
+    /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                           \
     inline ENUMTYPE operator|(ENUMTYPE a, ENUMTYPE b) {                                                                        \
+        /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                       \
         return ENUMTYPE(((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)a) | ((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)b));        \
     }                                                                                                                          \
+    /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                           \
     inline ENUMTYPE &operator|=(ENUMTYPE &a, ENUMTYPE b) {                                                                     \
+        /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                       \
         return (ENUMTYPE &)(((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type &)a) |= ((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)b)); \
     }                                                                                                                          \
+    /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                           \
     inline ENUMTYPE operator&(ENUMTYPE a, ENUMTYPE b) {                                                                        \
+        /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                       \
         return ENUMTYPE(((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)a) & ((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)b));        \
     }                                                                                                                          \
+    /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                           \
     inline ENUMTYPE &operator&=(ENUMTYPE &a, ENUMTYPE b) {                                                                     \
+        /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                       \
         return (ENUMTYPE &)(((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type &)a) &= ((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)b)); \
     }                                                                                                                          \
+    /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                           \
     inline ENUMTYPE operator~(ENUMTYPE a) {                                                                                    \
+        /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                       \
         return ENUMTYPE(~((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)a));                                                       \
     }                                                                                                                          \
+    /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                           \
     inline ENUMTYPE operator^(ENUMTYPE a, ENUMTYPE b) {                                                                        \
+        /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                       \
         return ENUMTYPE(((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)a) ^ ((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)b));        \
     }                                                                                                                          \
+    /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                           \
     inline ENUMTYPE &operator^=(ENUMTYPE &a, ENUMTYPE b) {                                                                     \
+        /* NOLINTNEXTLINE(bugprone-macro-parentheses) */                                                                       \
         return (ENUMTYPE &)(((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type &)a) ^= ((_ENUM_FLAG_SIZED_INTEGER<ENUMTYPE>::type)b)); \
     }                                                                                                                          \
     }
@@ -442,7 +456,7 @@ DECLARE_HANDLE(HINSTANCE);
 typedef HINSTANCE HMODULE; /* HMODULEs can be used in place of HINSTANCEs */
 
 /* winerror.h */
-#define _HRESULT_TYPEDEF_(_sc) ((HRESULT)_sc)
+#define _HRESULT_TYPEDEF_(_sc) ((HRESULT)(_sc))
 #define S_OK _HRESULT_TYPEDEF_(0x0L)
 #define E_UNEXPECTED _HRESULT_TYPEDEF_(0x8000FFFFL)
 #define DXGI_ERROR_NOT_FOUND _HRESULT_TYPEDEF_(0x887a0002)
@@ -755,9 +769,9 @@ public:
         /* [in] */ REFIID riid,
         /* [iid_is][out] */ _COM_Outptr_ void __RPC_FAR *__RPC_FAR *ppvObject) = 0;
 
-    virtual ULONG STDMETHODCALLTYPE AddRef(void) = 0;
+    virtual ULONG STDMETHODCALLTYPE AddRef() = 0;
 
-    virtual ULONG STDMETHODCALLTYPE Release(void) = 0;
+    virtual ULONG STDMETHODCALLTYPE Release() = 0;
 
     template<class Q>
     HRESULT
@@ -1200,9 +1214,9 @@ typedef struct _D3D_SHADER_MACRO *LPD3D_SHADER_MACRO;
 MIDL_INTERFACE("8BA5FB08-5195-40e2-AC58-0D989C3A0102")
 ID3D10Blob : public IUnknown {
 public:
-    virtual LPVOID STDMETHODCALLTYPE GetBufferPointer(void) = 0;
+    virtual LPVOID STDMETHODCALLTYPE GetBufferPointer() = 0;
 
-    virtual SIZE_T STDMETHODCALLTYPE GetBufferSize(void) = 0;
+    virtual SIZE_T STDMETHODCALLTYPE GetBufferSize() = 0;
 };
 
 #else /* C style interface */
@@ -2292,7 +2306,8 @@ typedef enum D3D12_SHADER_COMPONENT_MAPPING {
                                                                           (((Src2)&D3D12_SHADER_COMPONENT_MAPPING_MASK) << (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * 2)) | \
                                                                           (((Src3)&D3D12_SHADER_COMPONENT_MAPPING_MASK) << (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * 3)) | \
                                                                           D3D12_SHADER_COMPONENT_MAPPING_ALWAYS_SET_BIT_AVOIDING_ZEROMEM_MISTAKES))
-#define D3D12_DECODE_SHADER_4_COMPONENT_MAPPING(ComponentToExtract, Mapping) ((D3D12_SHADER_COMPONENT_MAPPING)(Mapping >> (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * ComponentToExtract) & D3D12_SHADER_COMPONENT_MAPPING_MASK))
+#define D3D12_DECODE_SHADER_4_COMPONENT_MAPPING(ComponentToExtract, Mapping) \
+    ((D3D12_SHADER_COMPONENT_MAPPING)((Mapping) >> (D3D12_SHADER_COMPONENT_MAPPING_SHIFT * (ComponentToExtract)) & D3D12_SHADER_COMPONENT_MAPPING_MASK))
 #define D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING D3D12_ENCODE_SHADER_4_COMPONENT_MAPPING(0, 1, 2, 3)
 
 typedef enum D3D12_BUFFER_SRV_FLAGS {
@@ -3102,9 +3117,9 @@ public:
         UINT Subresource,
         _In_opt_ const D3D12_RANGE *pWrittenRange) = 0;
 
-    virtual D3D12_RESOURCE_DESC STDMETHODCALLTYPE GetDesc(void) = 0;
+    virtual D3D12_RESOURCE_DESC STDMETHODCALLTYPE GetDesc() = 0;
 
-    virtual D3D12_GPU_VIRTUAL_ADDRESS STDMETHODCALLTYPE GetGPUVirtualAddress(void) = 0;
+    virtual D3D12_GPU_VIRTUAL_ADDRESS STDMETHODCALLTYPE GetGPUVirtualAddress() = 0;
 
     virtual HRESULT STDMETHODCALLTYPE WriteToSubresource(
         UINT DstSubresource,
@@ -3292,7 +3307,7 @@ EXTERN_C const IID IID_ID3D12CommandAllocator;
 MIDL_INTERFACE("6102dee4-af59-4b09-b999-b44d73f09b24")
 ID3D12CommandAllocator : public ID3D12Pageable {
 public:
-    virtual HRESULT STDMETHODCALLTYPE Reset(void) = 0;
+    virtual HRESULT STDMETHODCALLTYPE Reset() = 0;
 };
 
 #else /* C style interface */
@@ -3404,7 +3419,7 @@ EXTERN_C const IID IID_ID3D12CommandList;
 MIDL_INTERFACE("7116d91c-e7e4-47ce-b8c6-ec8168f437e5")
 ID3D12CommandList : public ID3D12DeviceChild {
 public:
-    virtual D3D12_COMMAND_LIST_TYPE STDMETHODCALLTYPE GetType(void) = 0;
+    virtual D3D12_COMMAND_LIST_TYPE STDMETHODCALLTYPE GetType() = 0;
 };
 
 #else /* C style interface */
@@ -3516,7 +3531,7 @@ EXTERN_C const IID IID_ID3D12GraphicsCommandList;
 MIDL_INTERFACE("5b160d0f-ac1b-4185-8ba8-b3ae42a5a455")
 ID3D12GraphicsCommandList : public ID3D12CommandList {
 public:
-    virtual HRESULT STDMETHODCALLTYPE Close(void) = 0;
+    virtual HRESULT STDMETHODCALLTYPE Close() = 0;
 
     virtual HRESULT STDMETHODCALLTYPE Reset(
         _In_ ID3D12CommandAllocator * pAllocator,
@@ -3754,7 +3769,7 @@ public:
         _In_reads_bytes_opt_(Size) const void *pData,
         UINT Size) = 0;
 
-    virtual void STDMETHODCALLTYPE EndEvent(void) = 0;
+    virtual void STDMETHODCALLTYPE EndEvent() = 0;
 
     virtual void STDMETHODCALLTYPE ExecuteIndirect(
         _In_ ID3D12CommandSignature * pCommandSignature,
@@ -4362,7 +4377,7 @@ public:
         _In_reads_bytes_opt_(Size) const void *pData,
         UINT Size) = 0;
 
-    virtual void STDMETHODCALLTYPE EndEvent(void) = 0;
+    virtual void STDMETHODCALLTYPE EndEvent() = 0;
 
     virtual HRESULT STDMETHODCALLTYPE Signal(
         ID3D12Fence * pFence,
@@ -4379,7 +4394,7 @@ public:
         _Out_ UINT64 * pGpuTimestamp,
         _Out_ UINT64 * pCpuTimestamp) = 0;
 
-    virtual D3D12_COMMAND_QUEUE_DESC STDMETHODCALLTYPE GetDesc(void) = 0;
+    virtual D3D12_COMMAND_QUEUE_DESC STDMETHODCALLTYPE GetDesc() = 0;
 };
 
 #else /* C style interface */
@@ -4601,7 +4616,7 @@ EXTERN_C const IID IID_ID3D12Device;
 MIDL_INTERFACE("189819f1-1db6-4b57-be54-1821339b85f7")
 ID3D12Device : public ID3D12Object {
 public:
-    virtual UINT STDMETHODCALLTYPE GetNodeCount(void) = 0;
+    virtual UINT STDMETHODCALLTYPE GetNodeCount() = 0;
 
     virtual HRESULT STDMETHODCALLTYPE CreateCommandQueue(
         _In_ const D3D12_COMMAND_QUEUE_DESC *pDesc,
@@ -4766,7 +4781,7 @@ public:
         REFIID riid,
         _COM_Outptr_ void **ppFence) = 0;
 
-    virtual HRESULT STDMETHODCALLTYPE GetDeviceRemovedReason(void) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetDeviceRemovedReason() = 0;
 
     virtual void STDMETHODCALLTYPE GetCopyableFootprints(
         _In_ const D3D12_RESOURCE_DESC *pResourceDesc,
@@ -4801,7 +4816,7 @@ public:
         _In_ UINT FirstSubresourceTilingToGet,
         _Out_writes_(*pNumSubresourceTilings) D3D12_SUBRESOURCE_TILING * pSubresourceTilingsForNonPackedMips) = 0;
 
-    virtual LUID STDMETHODCALLTYPE GetAdapterLuid(void) = 0;
+    virtual LUID STDMETHODCALLTYPE GetAdapterLuid() = 0;
 };
 
 #else /* C style interface */
@@ -5274,7 +5289,7 @@ EXTERN_C const IID IID_ID3D12Fence;
 MIDL_INTERFACE("0a753dcf-c4d8-4b91-adf6-be5a60d95a76")
 ID3D12Fence : public ID3D12Pageable {
 public:
-    virtual UINT64 STDMETHODCALLTYPE GetCompletedValue(void) = 0;
+    virtual UINT64 STDMETHODCALLTYPE GetCompletedValue() = 0;
 
     virtual HRESULT STDMETHODCALLTYPE SetEventOnCompletion(
         UINT64 Value,
@@ -5524,11 +5539,11 @@ EXTERN_C const IID IID_ID3D12DescriptorHeap;
 MIDL_INTERFACE("8efb471d-616c-4f49-90f7-127bb763fa51")
 ID3D12DescriptorHeap : public ID3D12Pageable {
 public:
-    virtual D3D12_DESCRIPTOR_HEAP_DESC STDMETHODCALLTYPE GetDesc(void) = 0;
+    virtual D3D12_DESCRIPTOR_HEAP_DESC STDMETHODCALLTYPE GetDesc() = 0;
 
-    virtual D3D12_CPU_DESCRIPTOR_HANDLE STDMETHODCALLTYPE GetCPUDescriptorHandleForHeapStart(void) = 0;
+    virtual D3D12_CPU_DESCRIPTOR_HANDLE STDMETHODCALLTYPE GetCPUDescriptorHandleForHeapStart() = 0;
 
-    virtual D3D12_GPU_DESCRIPTOR_HANDLE STDMETHODCALLTYPE GetGPUDescriptorHandleForHeapStart(void) = 0;
+    virtual D3D12_GPU_DESCRIPTOR_HANDLE STDMETHODCALLTYPE GetGPUDescriptorHandleForHeapStart() = 0;
 };
 
 #else /* C style interface */
@@ -5810,7 +5825,7 @@ EXTERN_C const IID IID_ID3D12Debug;
 MIDL_INTERFACE("344488b7-6846-474b-b989-f027448245e0")
 ID3D12Debug : public IUnknown {
 public:
-    virtual void STDMETHODCALLTYPE EnableDebugLayer(void) = 0;
+    virtual void STDMETHODCALLTYPE EnableDebugLayer() = 0;
 };
 
 #else /* C style interface */
@@ -6429,7 +6444,7 @@ public:
         /* [annotation][out] */
         _COM_Outptr_ IDXGIAdapter1 * *ppAdapter) = 0;
 
-    virtual BOOL STDMETHODCALLTYPE IsCurrent(void) = 0;
+    virtual BOOL STDMETHODCALLTYPE IsCurrent() = 0;
 };
 
 #else /* C style interface */

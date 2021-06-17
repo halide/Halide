@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     im.set(input);
 
     Buffer<uint16_t> output(input.width(), input.height());
-    Target mac_target("x86-64-osx-metal-debug");
+    Target mac_target{"host-metal-debug"};
     f.realize(output, mac_target);
     output.copy_to_host();
 

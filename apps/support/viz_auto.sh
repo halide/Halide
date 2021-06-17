@@ -4,6 +4,8 @@
 # $2 = HalideTraceViz executable
 # $3 = path to output mp4
 
+set -euo pipefail
+
 rm -rf "$3"
 
 # Use a named pipe for the $1 -> HTV pipe, just in case
