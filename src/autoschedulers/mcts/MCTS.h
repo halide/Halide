@@ -3,6 +3,7 @@
 
 // TODO(rootjalex): figure out includes.
 //                  should this be in the Halide namespace??
+#include "mcts_stats.h"
 #include "Halide.h"
 #include "MCTreeNode.h"
 //#include <_types/_uint32_t.h>
@@ -56,6 +57,9 @@ namespace MCTS {
         // Maximum depth to explore from a node.
         // (Should be size of DAG, probably).
         uint32_t num_simulations = 0;
+
+        // Statistics on profiling
+        statistics s;
 
     private:
         // If true, uses timer (not yet implemented), otherwise uses iteration count.
@@ -146,6 +150,9 @@ namespace MCTS {
         State solve_beam(const State &starter_state, uint32_t n_decisions, int seed = 1) {
             std::mt19937 rng((uint32_t)seed);
 
+            START_AND_STOP_INTERVAL(&s, INTERVAL_AUTOSCHEDULE, INTERVAL_PRE_AUTOSCHEDULE);
+            START_INTERVAL(&s, INTERVAL_PRE_BEAM);
+
             // TODO(rootjalex): replace with std::make_shared
             NodePtr root_node = NodePtr(new Node(starter_state, Action::Default(), /* parent */ nullptr, rng));
             State current_state = starter_state; // track the current best state.
@@ -169,16 +176,26 @@ namespace MCTS {
 
             auto clear_parent = [](BeamElement &elem) { elem.first->clear_parent(); };
 
+            START_AND_STOP_INTERVAL(&s, INTERVAL_MCTS, INTERVAL_PRE_BEAM);
             for (uint32_t d = 0; d < n_decisions; d++) {
 
+              if (d == 0) {
+                START_INTERVAL(&s, INTERVAL_MCTS_BEAM_ROLLOUT);
+              } else {
+                START_AND_STOP_INTERVAL(&s, INTERVAL_MCTS_BEAM_ROLLOUT, INTERVAL_MCTS_FILL_BEAM);
+              }
               const uint32_t search_depth = do_beam_rollouts(beam, beam_fill, percent_to_explore, percent_to_exploit,
                                                              min_explore_iters, min_exploit_iters, rollout_length);
 
+              START_AND_STOP_INTERVAL(&s, INTERVAL_MCTS_FILL_BEAM, INTERVAL_MCTS_BEAM_ROLLOUT);
               fill_beam(beam, beam_fill, beam_size, search_depth, true);
 
               std::for_each(beam.begin(), beam.begin() + beam_fill, clear_parent);
             }
 
+            STOP_INTERVAL(&s, INTERVAL_MCTS_FILL_BEAM);
+            STOP_INTERVAL(&s, INTERVAL_MCTS);
+            START_AND_STOP_INTERVAL(&s, INTERVAL_POST_AUTOSCHEDULE, INTERVAL_AUTOSCHEDULE);
             std::cerr << "Iterations:" << iterations << std::endl;
             std::cerr << "Valids:" << n_valid_nodes << std::endl;
             std::cerr << "Invalids:" << n_invalid_nodes << std::endl;
@@ -199,7 +216,9 @@ namespace MCTS {
         // Returns maximum depth explored
         uint32_t do_beam_rollouts(Beam &beam, uint32_t beam_size, double percent_explore, double percent_exploit,
                                   uint32_t min_explore, uint32_t min_exploit, uint32_t rollout_length) {
-        
+
+            START_INTERVAL(&s, INTERVAL_MCTS_PRE_DOROLLOUT);
+
             uint32_t max_depth_explored = 0;
             // TODO: this is easily parallelizable...
             for (uint32_t i = 0; i < beam_size; i++) {
@@ -209,6 +228,8 @@ namespace MCTS {
                                                           min_explore, min_exploit,
                                                           rollout_length));
             }
+
+            STOP_INTERVAL(&s, INTERVAL_MCTS_PRE_DOROLLOUT);
             return max_depth_explored;
         }
 
@@ -234,7 +255,14 @@ namespace MCTS {
                 const uint32_t n_exploration = ceil(percent_explore * n_branches) + min_explore;
                 const uint32_t n_iterations_total = std::min(n_exploitation + n_exploration, n_branches);
 
+                START_AND_STOP_INTERVAL(&s, INTERVAL_MCTS_ROLLOUT_ITERATIONS, INTERVAL_MCTS_PRE_DOROLLOUT);
                 for (uint32_t i = 0; i < n_iterations_total; i++) {
+
+                    if(i == 0) {
+                      START_INTERVAL(&s, INTERVAL_MCTS_SELECTION_AND_EXPANSION);
+                    } else {
+                      START_AND_STOP_INTERVAL(&s, INTERVAL_MCTS_SELECTION_AND_EXPANSION, INTERVAL_MCTS_BACKPROPOGATE);
+                    }
                     NodePtr rollout_node = nullptr;
                     if (i < n_exploitation) {
                         rollout_node = root_node->choose_specific_child(i % n_branches);
@@ -243,12 +271,14 @@ namespace MCTS {
                     }
                     internal_assert(rollout_node) << "do_rollouts selected a nullptr\n";
 
+                    START_AND_STOP_INTERVAL(&s, INTERVAL_MCTS_SIMULATION, INTERVAL_MCTS_SELECTION_AND_EXPANSION);
                     for (uint32_t j = 0; (j < rollout_length) && (!rollout_node->is_leaf()); j++) {
                         // Make weighted random rollouts
                         rollout_node = rollout_node->choose_weighted_random_child();
                         internal_assert(rollout_node) << "simulation returned nullptr\n";
                     }
 
+                    START_AND_STOP_INTERVAL(&s, INTERVAL_MCTS_BACKPROPOGATE, INTERVAL_MCTS_SIMULATION);
                     // Propagate visit count up the parent chain.
                     rollout_node->increment_visits();
 
@@ -273,7 +303,8 @@ namespace MCTS {
                         }
                     }
                 }
-
+                STOP_INTERVAL(&s, INTERVAL_MCTS_BACKPROPOGATE);
+                START_AND_STOP_INTERVAL(&s, INTERVAL_MCTS_PRE_DOROLLOUT, INTERVAL_MCTS_ROLLOUT_ITERATIONS);
                 return search_depth;
             }
         }

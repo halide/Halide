@@ -63,26 +63,28 @@ $(BIN)/cost_model/mcts_train_cost_model.a: $(BIN)/mcts_cost_model.generator
 # is expected to be present (in the loading binary), so we explicitly make the symbols
 # undefined rather than dependent on libHalide.so.
 $(BIN)/libautoschedule_mcts.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp \
-				$(SRC)/ASLog.cpp \
-				$(SRC)/CPU_State.h \
-				$(SRC)/CPU_State.cpp \
-				$(SRC)/MCTS.h \
-				$(SRC)/MCTreeNode.h \
-				$(SRC)/DefaultCostModel.h \
-				$(SRC)/DefaultCostModel.cpp \
-				$(SRC)/Weights.h \
-				$(SRC)/Weights.cpp \
-				$(SRC)/FunctionDAG.h \
-				$(SRC)/FunctionDAG.cpp \
-				$(SRC)/LoopNest.h \
-				$(SRC)/LoopNest.cpp \
-				$(SRC)/Featurization.h \
-				$(SRC)/CostModel.h \
-				$(SRC)/PerfectHashMap.h \
-				$(AUTOSCHED_WEIGHT_OBJECTS) \
-				$(AUTOSCHED_COST_MODEL_LIBS) \
-				$(GENERATOR_DEPS) \
-				$(BIN)/auto_schedule_runtime.a
+                               $(SRC)/ASLog.cpp \
+                               $(SRC)/CPU_State.h \
+                               $(SRC)/CPU_State.cpp \
+                               $(SRC)/mcts_stats.cpp \
+                               $(SRC)/mcts_stats.h \
+                               $(SRC)/MCTS.h \
+                               $(SRC)/MCTreeNode.h \
+                               $(SRC)/DefaultCostModel.h \
+                               $(SRC)/DefaultCostModel.cpp \
+                               $(SRC)/Weights.h \
+                               $(SRC)/Weights.cpp \
+                               $(SRC)/FunctionDAG.h \
+                               $(SRC)/FunctionDAG.cpp \
+                               $(SRC)/LoopNest.h \
+                               $(SRC)/LoopNest.cpp \
+                               $(SRC)/Featurization.h \
+                               $(SRC)/CostModel.h \
+                               $(SRC)/PerfectHashMap.h \
+                               $(AUTOSCHED_WEIGHT_OBJECTS) \
+                               $(AUTOSCHED_COST_MODEL_LIBS) \
+                               $(GENERATOR_DEPS) \
+                               $(BIN)/auto_schedule_runtime.a
 	@mkdir -p $(@D)
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB)
 

@@ -302,6 +302,10 @@ void generate_schedule(const std::vector<Function> &outputs,
     const uint32_t n_iterations = mcts_iterations_str.empty() ? dag.nodes.size() * 32 : std::stoul(mcts_iterations_str.c_str());
 
     auto solver = MCTS::Solver<CPU_State, CPU_Action>::MakeIterationSolver(n_iterations, n_simulations);
+#ifdef SS_PROFILE
+    __ss_init_stats(&solver.s);
+#endif
+    START_INTERVAL(&solver.s, INTERVAL_PRE_AUTOSCHEDULE);
 
     LoopNest *root = new LoopNest;
     CPU_State start_state(&dag, &params, cost_model.get(), root, /* n_decisions */ 0, memory_limit);
@@ -326,6 +330,7 @@ void generate_schedule(const std::vector<Function> &outputs,
         std::cerr << "Some other exception?" << std::endl;
     }
 
+    STOP_INTERVAL(&solver.s, INTERVAL_POST_AUTOSCHEDULE);
     std::chrono::duration<double> total_time = timer.elapsed();
     auto milli = std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count();
 
@@ -335,6 +340,9 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     // aslog(0) << "Source:" << schedule_source << "\n\n\n";
 
+#ifdef SS_PROFILE
+    dump_interesting_stats(stderr, &solver.s);
+#endif
     HALIDE_TOC;
 
     // TODO(rootjalex): dump cost info and stuff.
