@@ -253,7 +253,7 @@ class PadForOps : public OpVisitor {
         padding->set_constant();
 
         // Add the new tensor, op, and update the input.
-        OpPtr pad = make_op<PadOp>(input, padding, padded);
+        OpPtr pad = std::make_unique<PadOp>(input, padding, padded);
         new_ops.emplace_back(std::move(pad));
     }
 
@@ -277,7 +277,7 @@ class PadForOps : public OpVisitor {
             // Maybe more than one op uses this same filter...?
             filter->replace_all_consumers_with(tiled);
 
-            OpPtr tile = make_op<TileConvFilterOp>(filter, tiled);
+            OpPtr tile = std::make_unique<TileConvFilterOp>(filter, tiled);
             new_ops.emplace_back(std::move(tile));
         }
     }

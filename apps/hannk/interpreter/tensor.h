@@ -48,11 +48,13 @@ class TensorStorage {
     HalideBuffer<void> buffer_;
 
 public:
-    TensorStorage();
-    explicit TensorStorage(HalideBuffer<void> buffer);
+    TensorStorage(halide_type_t type, int rank, const halide_dimension_t *dimensions);
+
+    TensorStorage() = delete;
+    TensorStorage(const TensorStorage &) = delete;
     TensorStorage &operator=(const TensorStorage &) = delete;
-    TensorStorage(TensorStorage &&) = default;
-    TensorStorage &operator=(TensorStorage &&) = default;
+    TensorStorage(TensorStorage &&) = delete;
+    TensorStorage &operator=(TensorStorage &&) = delete;
 
     // Grow the bounds of the storage to accommodate a new user.
     // The type and dimensionality must match the existing storage.
@@ -115,10 +117,12 @@ public:
     Tensor() = delete;
     Tensor(std::string name, HalideBuffer<void> buffer, QuantizationInfo quantization = QuantizationInfo());
     Tensor(std::string name, halide_type_t type, const Box &bounds, QuantizationInfo quantization = QuantizationInfo());
-    Tensor(const Tensor &copy);
-    Tensor(Tensor &&) = default;
+
+    // Not movable, not copyable
+    Tensor(const Tensor &copy) = delete;
     Tensor &operator=(const Tensor &) = delete;
-    Tensor &operator=(Tensor &&) = default;
+    Tensor(Tensor &&) = delete;
+    Tensor &operator=(Tensor &&) = delete;
 
     halide_type_t type() const {
         return buffer_.type();

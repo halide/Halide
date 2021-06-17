@@ -345,7 +345,7 @@ public:
             }
             ops.push_back(std::move(op));
         }
-        model_ = make_op<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
+        model_ = std::make_unique<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
 
         return kTfLiteOk;
     }
@@ -546,7 +546,7 @@ private:
         auto output = GetTensorById(context, node->outputs->data[0]);
         const OptionsT *params = (const OptionsT *)(node->builtin_data);
         auto activation = ConvertTfLiteActivation(params->activation);
-        return make_op<BinaryOp>(input1, input2, output, type, activation);
+        return std::make_unique<BinaryOp>(input1, input2, output, type, activation);
     }
 
     OpPtr BuildAdd(TfLiteContext *context, TfLiteNode *node) {
@@ -568,7 +568,7 @@ private:
         if (swap_operands) {
             std::swap(input1, input2);
         }
-        return make_op<BinaryOp>(input1, input2, output, type);
+        return std::make_unique<BinaryOp>(input1, input2, output, type);
     }
 
     OpPtr BuildLess(TfLiteContext *context, TfLiteNode *node) {
@@ -609,7 +609,7 @@ private:
             params->filter_height,
         }};
         auto activation = ConvertTfLiteActivation(params->activation);
-        return make_op<Pool2DOp>(input, output, stride, filter_size, padding, reduce_op, activation);
+        return std::make_unique<Pool2DOp>(input, output, stride, filter_size, padding, reduce_op, activation);
     }
 
     OpPtr BuildAveragePool2d(TfLiteContext *context, TfLiteNode *node) {
@@ -637,7 +637,7 @@ private:
         // Now 'flip' the axis so that it refers to the right dimension in
         // the Tensor (since we reverse the dimension order)
         axis = (int)output->rank() - axis - 1;
-        return make_op<ConcatenationOp>(inputs, output, axis);
+        return std::make_unique<ConcatenationOp>(inputs, output, axis);
     }
 
     OpPtr BuildConv2d(TfLiteContext *context, TfLiteNode *node) {
@@ -656,8 +656,8 @@ private:
             params->dilation_height_factor,
         }};
         auto activation = ConvertTfLiteActivation(params->activation);
-        return make_op<Conv2DOp>(input, filter, bias, output, stride,
-                                 dilation_factor, padding, activation);
+        return std::make_unique<Conv2DOp>(input, filter, bias, output, stride,
+                                          dilation_factor, padding, activation);
     }
 
     OpPtr BuildDepthwiseConv2d(TfLiteContext *context, TfLiteNode *node) {
@@ -677,8 +677,8 @@ private:
         }};
         auto padding = ConvertTfLitePadding(params->padding);
         auto activation = ConvertTfLiteActivation(params->activation);
-        return make_op<DepthwiseConv2DOp>(input, filter, bias, output, depth_multiplier,
-                                          stride, dilation_factor, padding, activation);
+        return std::make_unique<DepthwiseConv2DOp>(input, filter, bias, output, depth_multiplier,
+                                                   stride, dilation_factor, padding, activation);
     }
 
     OpPtr BuildFullyConnected(TfLiteContext *context, TfLiteNode *node) {
@@ -688,7 +688,7 @@ private:
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteFullyConnectedParams *params = (const TfLiteFullyConnectedParams *)(node->builtin_data);
         auto activation = ConvertTfLiteActivation(params->activation);
-        return make_op<FullyConnectedOp>(input, filter, bias, output, activation);
+        return std::make_unique<FullyConnectedOp>(input, filter, bias, output, activation);
     }
 
     OpPtr BuildPad(TfLiteContext *context, TfLiteNode *node) {
@@ -697,7 +697,7 @@ private:
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto padding = GetTensorById(context, node->inputs->data[1]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return make_op<PadOp>(input, padding, output);
+        return std::make_unique<PadOp>(input, padding, output);
     }
 
     OpPtr BuildGather(TfLiteContext *context, TfLiteNode *node) {
@@ -710,7 +710,7 @@ private:
             axis += input->rank();
         }
         axis = input->rank() - 1 - axis;
-        return make_op<GatherOp>(input, indices, output, axis);
+        return std::make_unique<GatherOp>(input, indices, output, axis);
     }
 
     OpPtr BuildReshape(TfLiteContext *context, TfLiteNode *node) {
@@ -727,32 +727,32 @@ private:
                 shape_tensor->set_constant();
             }
         }
-        return make_op<ReshapeOp>(input, shape_tensor, output);
+        return std::make_unique<ReshapeOp>(input, shape_tensor, output);
     }
 
     OpPtr BuildShape(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return make_op<ShapeOp>(input, output);
+        return std::make_unique<ShapeOp>(input, output);
     }
 
     OpPtr BuildSoftmax(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteSoftmaxParams *params = (const TfLiteSoftmaxParams *)(node->builtin_data);
-        return make_op<SoftmaxOp>(input, output, params->beta);
+        return std::make_unique<SoftmaxOp>(input, output, params->beta);
     }
 
     OpPtr BuildL2Normalization(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return make_op<L2NormalizationOp>(input, output);
+        return std::make_unique<L2NormalizationOp>(input, output);
     }
 
     OpPtr BuildUnary(TfLiteContext *context, TfLiteNode *node, UnaryOp::Operator type) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return make_op<UnaryOp>(input, output, type);
+        return std::make_unique<UnaryOp>(input, output, type);
     }
 
     OpPtr BuildLogistic(TfLiteContext *context, TfLiteNode *node) {
@@ -783,14 +783,14 @@ private:
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto indices = GetTensorById(context, node->inputs->data[1]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return make_op<ReductionOp>(input, indices, output, ReductionOp::Mean);
+        return std::make_unique<ReductionOp>(input, indices, output, ReductionOp::Mean);
     }
 
     OpPtr BuildSpaceToDepth(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteSpaceToDepthParams *params = (const TfLiteSpaceToDepthParams *)(node->builtin_data);
-        return make_op<SpaceDepthOp>(input, output, params->block_size);
+        return std::make_unique<SpaceDepthOp>(input, output, params->block_size);
     }
 
     OpPtr BuildSplit(TfLiteContext *context, TfLiteNode *node, int axis_tensor_index, int input_tensor_index) {
@@ -813,7 +813,7 @@ private:
         // Now 'flip' the axis so that it refers to the right dimension in
         // the Tensor (since we reverse the dimension order)
         axis = (int)input->rank() - axis - 1;
-        return make_op<SplitOp>(input, outputs, axis);
+        return std::make_unique<SplitOp>(input, outputs, axis);
     }
 
     OpPtr BuildSplit(TfLiteContext *context, TfLiteNode *node) {
@@ -832,7 +832,7 @@ private:
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteDepthToSpaceParams *params = (const TfLiteDepthToSpaceParams *)(node->builtin_data);
-        return make_op<SpaceDepthOp>(input, output, -params->block_size);
+        return std::make_unique<SpaceDepthOp>(input, output, -params->block_size);
     }
 
     OpPtr BuildLstm(TfLiteContext *context, TfLiteNode *node) {
@@ -856,7 +856,7 @@ private:
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto dims = GetTensorById(context, node->inputs->data[1]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return make_op<TransposeOp>(input, dims, output);
+        return std::make_unique<TransposeOp>(input, dims, output);
     }
 
     const HannkDelegateOptions options_;
