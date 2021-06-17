@@ -84,10 +84,6 @@ class Tensor {
     bool is_constant_ = false;
     // If true, this Tensor's storage is externally owned and must not be freed.
     bool is_external_ = false;
-    // If true, the Tensor is one of the inputs to the Model.
-    bool is_input_ = false;
-    // If true, the Tensor is one of the outputs to the Model.
-    bool is_output_ = false;
     // If true, this Tensor is 'dynamic' (i.e., it's an output whose size
     // is calculated during evaluation, rather than ahead of time).  It is an error
     // for a Tensor to be dynamic if it is also constant or external.
@@ -182,22 +178,6 @@ public:
     void set_dynamic(bool dynamic = true) {
         assert(!(dynamic && (is_constant() || is_external())));
         is_dynamic_ = dynamic;
-    }
-
-    bool is_input() const {
-        return is_input_;
-    }
-
-    bool is_output() const {
-        return is_output_;
-    }
-
-    void set_input(bool is_input) {
-        is_input_ = is_input;
-    }
-
-    void set_output(bool is_output) {
-        is_output_ = is_output;
     }
 
     template<class T = void>

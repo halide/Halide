@@ -29,7 +29,7 @@ class RemoveDeadOps {
     const Op *const root_;
 
     bool is_root_output(const TensorPtr &t) const {
-        return t->is_output();
+        return root_->is_output(t);
     };
 
 public:
@@ -232,7 +232,7 @@ class InPlace : public OpVisitor {
     const Op *const root_;
 
     bool is_root_input_or_output(const TensorPtr &t) const {
-        return t->is_input() || t->is_output();
+        return root_->is_input(t) || root_->is_output(t);
     };
 
 public:

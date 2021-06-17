@@ -511,12 +511,10 @@ public:
 
         std::vector<TensorPtr> inputs;
         for (int i : *subgraph->inputs()) {
-            tensors_[i]->set_input(true);
             inputs.push_back(tensors_[i]);
         }
         std::vector<TensorPtr> outputs;
         for (int i : *subgraph->outputs()) {
-            tensors_[i]->set_output(true);
             outputs.push_back(tensors_[i]);
         }
 
