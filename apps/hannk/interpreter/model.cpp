@@ -58,6 +58,24 @@ void Op::set_output(TensorPtr t) {
     set_output(0, std::move(t));
 }
 
+bool Op::is_input(const TensorPtr &t) const {
+    for (auto &i : inputs_) {
+        if (i == t) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Op::is_output(const TensorPtr &t) const {
+    for (auto &o : outputs_) {
+        if (o == t) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void OpGroup::execute() {
     for (int i = 0; i < op_count(); i++) {
         op(i)->execute();

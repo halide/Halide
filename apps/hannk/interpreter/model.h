@@ -321,6 +321,9 @@ public:
     void set_input(TensorPtr t);
     void set_output(TensorPtr t);
 
+    bool is_input(const TensorPtr &t) const;
+    bool is_output(const TensorPtr &t) const;
+
     // Movable but not copyable.
     Op() = delete;
     Op(const Op &) = delete;
