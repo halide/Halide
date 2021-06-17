@@ -126,7 +126,7 @@ public:
                 HalideBuffer<void> buffer(type, const_cast<void *>(data), shape);
                 assert(tflite_buffer->size() == buffer.size_in_bytes());
 
-                auto p = std::make_unique<Tensor>(t->name()->str(), std::move(buffer), std::move(quantization));
+                auto p = std::make_shared<Tensor>(t->name()->str(), std::move(buffer), std::move(quantization));
                 p->set_constant();
                 return p;
             }
@@ -134,7 +134,7 @@ public:
 
         // Create an "unallocated" Buffer, which points to null.
         HalideBuffer<void> buffer(type, nullptr, shape);
-        return std::make_unique<Tensor>(t->name()->str(), std::move(buffer), std::move(quantization));
+        return std::make_shared<Tensor>(t->name()->str(), std::move(buffer), std::move(quantization));
     }
 
     OpPtr parse_binary(const tflite::Operator *op, BinaryOp::Operator type, bool swap_operands = false) {
@@ -144,12 +144,12 @@ public:
         if (swap_operands) {
             std::swap(a, b);
         }
-        return std::make_unique<BinaryOp>(a, b, output, type, ActivationFunction::None);
+        return make_op<BinaryOp>(a, b, output, type, ActivationFunction::None);
     }
 
 // We can't do this with templates...
 #define PARSE_BINARY_WITH_ACTIVATION(op, Op) \
-    std::make_unique<BinaryOp>(                       \
+    make_op<BinaryOp>(                       \
         tensors_[op->inputs()->Get(0)],      \
         tensors_[op->inputs()->Get(1)],      \
         tensors_[op->outputs()->Get(0)],     \
@@ -171,7 +171,7 @@ public:
             parse_activation_function(options->fused_activation_function());
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return std::make_unique<Pool2DOp>(
+        return make_op<Pool2DOp>(
             input, output, stride, filter_size, padding, reduce_op, activation);
     }
 
@@ -194,7 +194,7 @@ public:
         // Now 'flip' the axis so that it refers to the right dimension in
         // the Tensor (since we reverse the dimension order)
         axis = (int)output->rank() - axis - 1;
-        return std::make_unique<ConcatenationOp>(inputs, output, axis);
+        return make_op<ConcatenationOp>(inputs, output, axis);
     }
 
     OpPtr parse_conv2D(const tflite::Operator *op) {
@@ -215,7 +215,7 @@ public:
         TensorPtr filter = tensors_[op->inputs()->Get(1)];
         TensorPtr bias = tensors_[op->inputs()->Get(2)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return std::make_unique<Conv2DOp>(input, filter, bias, output, stride,
+        return make_op<Conv2DOp>(input, filter, bias, output, stride,
                                  dilation_factor, padding, activation);
     }
 
@@ -238,7 +238,7 @@ public:
         TensorPtr bias = tensors_[op->inputs()->Get(2)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
         int depth_multiplier = output->extent(0) / input->extent(0);
-        return std::make_unique<DepthwiseConv2DOp>(
+        return make_op<DepthwiseConv2DOp>(
             input, filter, bias, output, depth_multiplier,
             stride, dilation_factor, padding, activation);
     }
@@ -252,14 +252,14 @@ public:
         TensorPtr filter = tensors_[op->inputs()->Get(1)];
         TensorPtr bias = tensors_[op->inputs()->Get(2)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return std::make_unique<FullyConnectedOp>(input, filter, bias, output, activation);
+        return make_op<FullyConnectedOp>(input, filter, bias, output, activation);
     }
 
     OpPtr parse_pad(const tflite::Operator *op) {
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr padding = tensors_[op->inputs()->Get(1)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return std::make_unique<PadOp>(input, padding, output);
+        return make_op<PadOp>(input, padding, output);
     }
 
     OpPtr parse_reshape(const tflite::Operator *op) {
@@ -281,13 +281,13 @@ public:
             shape_tensor = std::make_shared<Tensor>(input->name() + "_shape", shape_data);
             shape_tensor->set_constant();
         }
-        return std::make_unique<ReshapeOp>(input, shape_tensor, output);
+        return make_op<ReshapeOp>(input, shape_tensor, output);
     }
 
     OpPtr parse_shape(const tflite::Operator *op) {
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return std::make_unique<ShapeOp>(input, output);
+        return make_op<ShapeOp>(input, output);
     }
 
     OpPtr parse_gather(const tflite::Operator *op) {
@@ -301,7 +301,7 @@ public:
             axis += input->rank();
         }
         axis = input->rank() - 1 - axis;
-        return std::make_unique<GatherOp>(input, indices, output, axis);
+        return make_op<GatherOp>(input, indices, output, axis);
     }
 
     OpPtr parse_space_to_depth(const tflite::Operator *op) {
@@ -310,7 +310,7 @@ public:
         int block_size = options->block_size();
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return std::make_unique<SpaceDepthOp>(input, output, block_size);
+        return make_op<SpaceDepthOp>(input, output, block_size);
     }
 
     OpPtr parse_depth_to_space(const tflite::Operator *op) {
@@ -319,7 +319,7 @@ public:
         int block_size = options->block_size();
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return std::make_unique<SpaceDepthOp>(input, output, -block_size);
+        return make_op<SpaceDepthOp>(input, output, -block_size);
     }
 
     OpPtr parse_split(const tflite::Operator *op, int axis_tensor_index, int input_tensor_index) {
@@ -341,7 +341,7 @@ public:
         // Now 'flip' the axis so that it refers to the right dimension in
         // the Tensor (since we reverse the dimension order)
         axis = (int)input->rank() - axis - 1;
-        return std::make_unique<SplitOp>(input, outputs, axis);
+        return make_op<SplitOp>(input, outputs, axis);
     }
 
     OpPtr parse_split(const tflite::Operator *op) {
@@ -358,26 +358,26 @@ public:
         float beta = options->beta();
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return std::make_unique<SoftmaxOp>(input, output, beta);
+        return make_op<SoftmaxOp>(input, output, beta);
     }
 
     OpPtr parse_l2_normalization(const tflite::Operator *op) {
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return std::make_unique<L2NormalizationOp>(input, output);
+        return make_op<L2NormalizationOp>(input, output);
     }
 
     OpPtr parse_reduction(const tflite::Operator *op, ReductionOp::Operator reduction_op) {
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr indices = tensors_[op->inputs()->Get(1)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return std::make_unique<ReductionOp>(input, indices, output, reduction_op);
+        return make_op<ReductionOp>(input, indices, output, reduction_op);
     }
 
     OpPtr parse_unary(const tflite::Operator *op, UnaryOp::Operator type) {
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return std::make_unique<UnaryOp>(input, output, type);
+        return make_op<UnaryOp>(input, output, type);
     }
 
     OpPtr parse_lstm(const tflite::Operator *op) {
@@ -408,7 +408,7 @@ public:
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr dims = tensors_[op->inputs()->Get(1)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return std::make_unique<TransposeOp>(input, dims, output);
+        return make_op<TransposeOp>(input, dims, output);
     }
 
     OpPtr parse_op(const tflite::Operator *op) {
@@ -522,7 +522,7 @@ public:
 
         std::swap(tensors_, old_tensors);
 
-        return std::make_unique<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
+        return make_op<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
     }
 
     std::unique_ptr<OpGroup> parse() {

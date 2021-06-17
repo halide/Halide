@@ -17,8 +17,8 @@ OpPtr lower_tflite_lstm(TensorPtr data_input, TensorPtr prev_activ_input, Tensor
     std::vector<OpPtr> ops;
 
     std::vector<TensorPtr> concat_inputs = {data_input, prev_activ_input};
-    ops.push_back(std::make_unique<ConcatenationOp>(concat_inputs, concat_temp, 0));
-    ops.push_back(std::make_unique<FullyConnectedOp>(concat_temp, weights_input, biases_input, activ_temp, activation));
+    ops.push_back(make_op<ConcatenationOp>(concat_inputs, concat_temp, 0));
+    ops.push_back(make_op<FullyConnectedOp>(concat_temp, weights_input, biases_input, activ_temp, activation));
 
     // Split activ_temp into the 4 ops we need.
     Box elementwise_bounds = activ_temp->bounds();
@@ -32,7 +32,7 @@ OpPtr lower_tflite_lstm(TensorPtr data_input, TensorPtr prev_activ_input, Tensor
     TensorPtr output_gate_buf =
         std::make_shared<Tensor>("output_gate", activ_temp->type(), elementwise_bounds, activ_temp->quantization());
     std::vector<TensorPtr> split_outputs = {input_gate_buf, input_modulation_gate_buf, forget_gate_buf, output_gate_buf};
-    ops.push_back(std::make_unique<SplitOp>(activ_temp, split_outputs, 0));
+    ops.push_back(make_op<SplitOp>(activ_temp, split_outputs, 0));
 
     // Implements the elementwise compute part of the 'LSTM' TFlite operation.
     // This is extremely specific to TFlite's implementation choices, which are
@@ -68,9 +68,9 @@ OpPtr lower_tflite_lstm(TensorPtr data_input, TensorPtr prev_activ_input, Tensor
     auto program_buf = p.assemble({activ, state});
     program_buf = program_buf.copy();
 
-    ops.push_back(std::make_unique<ElementwiseProgramOp>(elementwise_inputs, elementwise_outputs, program_buf));
+    ops.push_back(make_op<ElementwiseProgramOp>(elementwise_inputs, elementwise_outputs, program_buf));
 
-    return std::make_unique<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
+    return make_op<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
 }
 
 }  // namespace hannk
