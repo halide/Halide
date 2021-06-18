@@ -3,6 +3,10 @@
 #include <iostream>
 #include <random>
 
+#ifndef _WIN32
+#include <unistd.h>
+#endif
+
 #include "util/model_runner.h"
 
 #include "delegate/hannk_delegate.h"
@@ -146,6 +150,70 @@ static const char *const RunNames[ModelRunner::kNumRuns] = {
 };
 
 }  // namespace
+
+int FlagProcessor::handle_nonflag(const std::string &s) {
+    // just ignore it
+    return 0;
+}
+
+int FlagProcessor::handle_unknown_flag(const std::string &s) {
+    std::cerr << "Unknown flag '" << s << "'\n";
+    return -1;
+}
+
+int FlagProcessor::handle_missing_value(const std::string &s) {
+    std::cerr << "Missing value for flag '" << s << "'\n";
+    return -1;
+}
+
+int FlagProcessor::process(int argc, char **argv) const {
+    int r;
+    for (int i = 1; i < argc; i++) {
+        std::string flag = argv[i];
+        if (flag[0] != '-') {
+            r = nonflag_handler(flag);
+            if (r != 0) {
+                return r;
+            } else {
+                continue;
+            }
+        }
+        flag = flag.substr(1);
+        if (flag[0] == '-') {
+            flag = flag.substr(1);
+        }
+
+        std::string value;
+        auto eq = flag.find('=');
+        if (eq != std::string::npos) {
+            value = flag.substr(eq + 1);
+            flag = flag.substr(0, eq);
+        } else if (i + 1 < argc) {
+            value = argv[++i];
+        } else {
+            r = handle_missing_value(flag);
+            if (r != 0) {
+                return r;
+            } else {
+                continue;
+            }
+        }
+        auto it = flag_handlers.find(flag);
+        if (it == flag_handlers.end()) {
+            r = handle_unknown_flag(flag);
+            if (r != 0) {
+                return r;
+            } else {
+                continue;
+            }
+        }
+        r = it->second(value);
+        if (r != 0) {
+            return r;
+        }
+    }
+    return 0;
+}
 
 void SeedTracker::reset(int seed) {
     next_seed_ = seed;
@@ -413,6 +481,91 @@ bool ModelRunner::compare_results(const std::string &msg, const RunResult &a, co
     }
     return all_matched;
 };
+
+int ModelRunner::parse_flags(int argc, char **argv, std::vector<std::string> &files_to_process) {
+    int seed = time(nullptr);
+
+    FlagProcessor fp;
+
+    fp.nonflag_handler = [&files_to_process](const std::string &value) -> int {
+        // Assume it's a file.
+        files_to_process.push_back(value);
+        return 0;
+    };
+
+    fp.flag_handlers = FlagProcessor::FnMap{
+        {"benchmark", [this](const std::string &value) {
+             this->do_benchmark = std::stoi(value) != 0;
+             return 0;
+         }},
+        {"compare", [this](const std::string &value) {
+             this->do_compare_results = std::stoi(value) != 0;
+             return 0;
+         }},
+        {"enable", [this](const std::string &value) {
+             for (int i = 0; i < ModelRunner::kNumRuns; i++) {
+                 this->do_run[i] = false;
+             }
+             for (char c : value) {
+                 switch (c) {
+                 case 't':
+                     this->do_run[ModelRunner::kTfLite] = true;
+                     break;
+                 case 'h':
+                     this->do_run[ModelRunner::kHannk] = true;
+                     break;
+                 case 'x':
+                     this->do_run[ModelRunner::kExternalDelegate] = true;
+                     break;
+                 case 'i':
+                     this->do_run[ModelRunner::kInternalDelegate] = true;
+                     break;
+                 default:
+                     std::cerr << "Unknown option to --enable: " << c << "\n";
+                     return -1;
+                 }
+             }
+             return 0;
+         }},
+        {"external_delegate_path", [this](const std::string &value) {
+             this->external_delegate_path = value;
+             return 0;
+         }},
+        {"seed", [&seed](const std::string &value) {
+             seed = std::stoi(value);
+             return 0;
+         }},
+        {"threads", [this](const std::string &value) {
+             this->threads = std::stoi(value);
+             return 0;
+         }},
+        {"tolerance", [this](const std::string &value) {
+             this->tolerance = std::stof(value);
+             return 0;
+         }},
+        {"verbose", [this](const std::string &value) {
+             this->verbosity = std::stoi(value);
+             return 0;
+         }},
+    };
+
+    int r = fp.process(argc, argv);
+    if (r != 0) {
+        return r;
+    }
+
+    if (this->threads <= 0) {
+#ifdef _WIN32
+        char *num_cores = getenv("NUMBER_OF_PROCESSORS");
+        this->threads = num_cores ? atoi(num_cores) : 8;
+#else
+        this->threads = sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+    }
+
+    this->set_seed(seed);
+    return 0;
+}
 
 void ModelRunner::run(const std::string &filename) {
     std::cout << "Processing " << filename << " ...\n";

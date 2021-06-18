@@ -243,6 +243,10 @@ $(BIN)/%/model.o: interpreter/model.cpp
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -c $< -o $@
 
+$(BIN)/%/tensor.o: interpreter/tensor.cpp
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -c $< -o $@
+
 $(BIN)/%/ops.o: interpreter/ops.cpp $(OPS_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(OPS_CXXFLAGS) -c $< -o $@
@@ -269,6 +273,7 @@ INTERPRETER_DEPS = \
 	$(BIN)/%/lower.o \
 	$(BIN)/%/elementwise_program.o \
 	$(BIN)/%/model.o \
+	$(BIN)/%/tensor.o \
 	$(BIN)/%/transforms.o \
 	$(BIN)/%/ops.o \
 	$(OPS_HALIDE)

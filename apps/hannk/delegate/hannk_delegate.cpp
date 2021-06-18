@@ -296,7 +296,6 @@ public:
                 continue;
             }
             auto t = GetTensorById(context, tensor_id);
-            t->set_input(true);
             inputs.push_back(t);
             if (options_.verbosity >= 2) {
                 HLOG(INFO) << "Delegate " << (void *)this << (t->is_constant() ? " Const" : "") << " Input tensor: " << tensor_id << "\n";
@@ -314,7 +313,6 @@ public:
                 HLOG(INFO) << "Delegate " << (void *)this << " Output tensor: " << tensor_id << "\n";
             }
             auto t = GetTensorById(context, tensor_id);
-            t->set_output(true);
             outputs.push_back(t);
         }
 

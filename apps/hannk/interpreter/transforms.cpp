@@ -1,4 +1,5 @@
 #include "interpreter/transforms.h"
+#include "util/small_vector.h"
 
 namespace hannk {
 
@@ -24,42 +25,59 @@ T *cast_op(Op *x) {
     }
 }
 
+class RemoveDeadOps {
+    const Op *const root_;
+
+    bool is_root_output(const TensorPtr &t) const {
+        return root_->is_output(t);
+    };
+
+public:
+    explicit RemoveDeadOps(Op *root)
+        : root_(root) {
+    }
+
+    void remove_in_group(OpGroup *op_group) {
+        // Find ops with outputs that are unused.
+        // Go in reverse order so removing a dead op
+        // enables earlier ops to be seen as dead.
+        for (int i = op_group->op_count() - 1; i >= 0; --i) {
+            Op *op = op_group->op(i);
+            if (OpGroup *group = cast_op<OpGroup>(op)) {
+                remove_in_group(group);
+            }
+            bool dead = true;
+            for (int j = 0; dead && j < op->input_count(); j++) {
+                if (is_root_output(op->input(j))) {
+                    dead = false;
+                    break;
+                }
+            }
+            for (int j = 0; dead && j < op->output_count(); j++) {
+                // An op isn't dead if its output is an output
+                // of the graph.
+                if (is_root_output(op->output(j))) {
+                    dead = false;
+                    break;
+                }
+
+                if (!op->output(j)->consumers().empty()) {
+                    dead = false;
+                    break;
+                }
+            }
+
+            if (dead) {
+                op_group->remove(op);
+            }
+        }
+    }
+};
+
 }  // namespace
 
 void remove_dead_ops(OpGroup *root) {
-    // Find ops with outputs that are unused.
-    // Go in reverse order so removing a dead op
-    // enables earlier ops to be seen as dead.
-    for (int i = root->op_count() - 1; i >= 0; --i) {
-        Op *op = root->op(i);
-        if (OpGroup *group = cast_op<OpGroup>(op)) {
-            remove_dead_ops(group);
-        }
-        bool dead = true;
-        for (int j = 0; dead && j < op->input_count(); j++) {
-            if (op->input(j)->is_output()) {
-                dead = false;
-                break;
-            }
-        }
-        for (int j = 0; dead && j < op->output_count(); j++) {
-            // An op isn't dead if its output is an output
-            // of the graph.
-            if (op->output(j)->is_output()) {
-                dead = false;
-                break;
-            }
-
-            if (!op->output(j)->consumers().empty()) {
-                dead = false;
-                break;
-            }
-        }
-
-        if (dead) {
-            root->remove(op);
-        }
-    }
+    RemoveDeadOps(root).remove_in_group(root);
 }
 
 namespace {
@@ -69,77 +87,77 @@ bool has_storage(const TensorPtr &t) {
     return t->is_alias() || t->is_allocated();
 }
 
-// We can alias two tensors if the input is not used after the output is written,
-// and we meet a number of other requirements.
-bool maybe_alias_tensors(TensorPtr input, TensorPtr output, SmallVector<int, max_rank> offset = {}) {
-    // Hack around bug with scalar aliasing.
-    if (input->rank() == 0 || output->rank() == 0) {
-        return false;
-    }
-
-    // If the input is used anywhere else, we should not alias it.
-    // TODO: This is conservative, we could alias it if it is the *last* use.
-    if (input->consumers().size() != 1) {
-        return false;
-    }
-
-    // If either tensor is dynamic, can't alias them.
-    if (input->is_dynamic() || output->is_dynamic()) {
-        return false;
-    }
-
-    // If either tensor is external, can't alias them.
-    // TODO: maybe we can, but it's not clear how to update storage_.host in that case?
-    if (input->is_external() || output->is_external()) {
-        return false;
-    }
-
-    if (input->rank() != output->rank()) {
-        // TODO: We should be able to alias reshapes.
-        return false;
-    }
-
-    if (input->type().bytes() != output->type().bytes()) {
-        // We can't alias tensors with types of different size.
-        return false;
-    }
-
-    // We can't alias an input that is an input or output.
-    // TODO: We could, if we don't change the shape.
-    if (input->is_input() || input->is_output()) {
-        return false;
-    }
-
-    // We can't grow the bounds of the tensor we alias with.
-    // TODO: We could, if we allowed non-zero mins. We also
-    // could allow the max to grow, just not the min.
-    Box input_bounds_with_offset = input->bounds();
-    Box output_bounds_with_negative_offset = output->bounds();
-    for (int i = 0; i < (int)offset.size(); ++i) {
-        input_bounds_with_offset[i] += offset[i];
-        output_bounds_with_negative_offset[i] -= offset[i];
-    }
-    bool input_subset_of_output = is_subset_of(input_bounds_with_offset, output->bounds());
-    bool output_subset_of_input = is_subset_of(output_bounds_with_negative_offset, input->bounds());
-    if (input_subset_of_output && !has_storage(input)) {
-        input->set_alias_of(output, offset);
-        return true;
-    } else if (output_subset_of_input && !has_storage(output)) {
-        for (int &i : offset) {
-            i = -i;
-        }
-        output->set_alias_of(input, offset);
-        return true;
-    }
-
-    return false;
-}
-
 // Try to alias outputs to inputs when it is safe.
 class InPlace : public OpVisitor {
     using OpVisitor::visit;
 
-    void maybe_alias_elementwise(ElementwiseOp *op) {
+    // We can alias two tensors if the input is not used after the output is written,
+    // and we meet a number of other requirements.
+    bool maybe_alias_tensors(TensorPtr input, TensorPtr output, SmallVector<int, max_rank> offset = {}) const {
+        // Hack around bug with scalar aliasing.
+        if (input->rank() == 0 || output->rank() == 0) {
+            return false;
+        }
+
+        // If the input is used anywhere else, we should not alias it.
+        // TODO: This is conservative, we could alias it if it is the *last* use.
+        if (input->consumers().size() != 1) {
+            return false;
+        }
+
+        // If either tensor is dynamic, can't alias them.
+        if (input->is_dynamic() || output->is_dynamic()) {
+            return false;
+        }
+
+        // If either tensor is external, can't alias them.
+        // TODO: maybe we can, but it's not clear how to update storage_.host in that case?
+        if (input->is_external() || output->is_external()) {
+            return false;
+        }
+
+        if (input->rank() != output->rank()) {
+            // TODO: We should be able to alias reshapes.
+            return false;
+        }
+
+        if (input->type().bytes() != output->type().bytes()) {
+            // We can't alias tensors with types of different size.
+            return false;
+        }
+
+        // We can't alias an input that is an input or output of the root graph.
+        // TODO: We could, if we don't change the shape.
+        if (is_root_input_or_output(input)) {
+            return false;
+        }
+
+        // We can't grow the bounds of the tensor we alias with.
+        // TODO: We could, if we allowed non-zero mins. We also
+        // could allow the max to grow, just not the min.
+        Box input_bounds_with_offset = input->bounds();
+        Box output_bounds_with_negative_offset = output->bounds();
+        for (int i = 0; i < (int)offset.size(); ++i) {
+            input_bounds_with_offset[i] += offset[i];
+            output_bounds_with_negative_offset[i] -= offset[i];
+        }
+        bool input_subset_of_output = is_subset_of(input_bounds_with_offset, output->bounds());
+        bool output_subset_of_input = is_subset_of(output_bounds_with_negative_offset, input->bounds());
+        if (input_subset_of_output && !has_storage(input)) {
+            input->set_alias_of(output, offset);
+            return true;
+        } else if (output_subset_of_input && !has_storage(output)) {
+            for (int &i : offset) {
+                i = -i;
+            }
+            output->set_alias_of(input, offset);
+            return true;
+        }
+
+        return false;
+    }
+
+    void maybe_alias_elementwise(ElementwiseOp *op) const {
         for (int j = 0; j < op->output_count(); j++) {
             for (int i = 0; i < op->input_count(); i++) {
                 if (maybe_alias_tensors(op->input(i), op->output(j))) {
@@ -221,12 +239,23 @@ class InPlace : public OpVisitor {
         op->cond()->accept(this);
         op->body()->accept(this);
     }
+
+    const Op *const root_;
+
+    bool is_root_input_or_output(const TensorPtr &t) const {
+        return root_->is_input(t) || root_->is_output(t);
+    };
+
+public:
+    explicit InPlace(Op *root)
+        : root_(root) {
+    }
 };
 
 }  // namespace
 
 void in_place(Op *op) {
-    InPlace v;
+    InPlace v(op);
     op->accept(&v);
 }
 
