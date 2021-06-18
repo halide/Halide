@@ -428,30 +428,24 @@ class DerivativeBounds : public IRVisitor {
             ConstantInterval ra = result;
             op->false_value.accept(this);
             ConstantInterval rb = result;
-            ConstantInterval unified = unify(ra, rb);
+            result = unify(ra, rb);
 
-            // TODO: How to handle unsigned values?
-            Expr delta = simplify(op->true_value - op->false_value);
+            // If the condition is not constant, we hit a "bump" when the condition changes value.
+            if (!is_constant(rcond)) {
+                // TODO: How to handle unsigned values?
+                Expr delta = simplify(op->true_value - op->false_value);
 
-            Interval delta_bounds = find_constant_bounds(delta, bounds);
-            ConstantInterval adjusted_delta;
-            // TODO: Maybe we can do something with one-sided intervals?
-            if (delta_bounds.is_bounded()) {
-                ConstantInterval delta_low = multiply(rcond, delta_bounds.min);
-                ConstantInterval delta_high = multiply(rcond, delta_bounds.max);
-                adjusted_delta = ConstantInterval::make_union(delta_low, delta_high);
-            } else {
-                delta.accept(this);
-                ConstantInterval rdelta = result;
-                // If rdelta is constant, we can't trust it, because if it were truly
-                // constant, find_constant_bounds of the delta would have produced a
-                // bounded interval.
-                if (!is_constant(rdelta)) {
-                    adjusted_delta = multiply(rcond, rdelta);
+                Interval delta_bounds = find_constant_bounds(delta, bounds);
+                // TODO: Maybe we can do something with one-sided intervals?
+                if (delta_bounds.is_bounded()) {
+                    ConstantInterval delta_low = multiply(rcond, delta_bounds.min);
+                    ConstantInterval delta_high = multiply(rcond, delta_bounds.max);
+                    result = add(result, ConstantInterval::make_union(delta_low, delta_high));
+                } else {
+                    // The bump is unbounded.
+                    result = ConstantInterval::everything();
                 }
             }
-
-            result = add(unified, adjusted_delta);
         } else {
             result = ConstantInterval::everything();
         }
