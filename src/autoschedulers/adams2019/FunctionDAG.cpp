@@ -589,7 +589,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
     // these cannot be used. Thus we rewrite such Image calls to
     // Extern calls here to hide them from bounds inference.
 
-    class RemoveScalarLoads : public IRMutator {
+    class RemoveImageLoads : public IRMutator {
         Expr visit(const Call *op) override {
             if (op->call_type == Call::Image) {
                 vector<Expr> new_args(op->args.size());
@@ -605,7 +605,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                 return IRMutator::visit(op);
             }
         }
-    } remove_scalar_loads;
+    } remove_image_loads;
 
     // Compute a realization order
     vector<string> order = topological_order(outputs, env);
@@ -948,11 +948,11 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                             << edge.producer->func.name() << " -> " << edge.consumer->name << "\n";
 
                         // Eliminate any scalar image loads. They're
-                        // acceptible when doing bounds inference in
+                        // acceptable when doing bounds inference in
                         // Halide proper, but we can't make use of
                         // them at compile-time.
-                        in.min = remove_scalar_loads.mutate(in.min);
-                        in.max = remove_scalar_loads.mutate(in.max);
+                        in.min = remove_image_loads.mutate(in.min);
+                        in.max = remove_image_loads.mutate(in.max);
                         in.min = bounds_of_expr_in_scope(in.min, Scope<Interval>{}).min;
                         in.max = bounds_of_expr_in_scope(in.max, Scope<Interval>{}).max;
 
