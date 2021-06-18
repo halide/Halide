@@ -446,8 +446,8 @@ void FunctionDAG::Node::required_to_computed(const Span *required, Span *compute
     }
 }
 
-FunctionDAG::Edge::BoundInfo::BoundInfo(const Expr &e, const Node::Stage &consumer)
-    : expr(e) {
+FunctionDAG::Edge::BoundInfo::BoundInfo(const Expr &e, const Node::Stage &consumer, bool dependent)
+    : expr(e), depends_on_estimate(dependent) {
     // Do the analysis to detect if this is a simple case
     // that can be evaluated more cheaply. Currently this
     // acceleration recognises affine expressions. In the
@@ -524,6 +524,7 @@ void FunctionDAG::Edge::expand_footprint(const Span *consumer_loop, Span *produc
         // consumer.
         bool bounds_are_constant = true;
         auto eval_bound = [&](const BoundInfo &b) {
+            bounds_are_constant &= !b.depends_on_estimate;
             if (b.affine) {
                 // Common-case performance optimization
                 if (b.coeff == 0) {
@@ -535,6 +536,7 @@ void FunctionDAG::Edge::expand_footprint(const Span *consumer_loop, Span *produc
                     return src * b.coeff + b.constant;
                 }
             } else {
+                // std::cerr << "b.expr" << b.expr << std::endl;
                 Expr substituted = substitute(s, b.expr);
                 Expr e = simplify(substituted);
                 const int64_t *i = as_const_int(e);
@@ -547,6 +549,23 @@ void FunctionDAG::Edge::expand_footprint(const Span *consumer_loop, Span *produc
         int64_t b = eval_bound(bounds[i].second);
         producer_required[i].union_with(Span(a, b, bounds_are_constant));
     }
+}
+
+class DependsOnEstimate : public IRVisitor {
+public:
+    bool found_estimate = false;
+private:
+    using IRVisitor::visit;
+
+    void visit(const Variable *op) override {
+        found_estimate |= op->param.defined();
+    }
+};
+
+bool depends_on_estimate(const Expr &expr) {
+    DependsOnEstimate dependency_checker;
+    expr.accept(&dependency_checker);
+    return dependency_checker.found_estimate;
 }
 
 FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &params, const Target &target) {
@@ -672,6 +691,8 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                 for (int j = 0; j < consumer.dimensions(); j++) {
                     const auto &req = node.region_required[j];
                     auto &comp = node.region_computed[j];
+                    // TODO: is this the right thing to do?
+                    comp.depends_on_estimate = depends_on_estimate(comp.in.min) || depends_on_estimate(comp.in.max);
                     comp.in.min = simplify(apply_param_estimates.mutate(comp.in.min));
                     comp.in.max = simplify(apply_param_estimates.mutate(comp.in.max));
                     if (equal(comp.in.min, req.min) && equal(comp.in.max, req.max)) {
@@ -891,11 +912,6 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
 
             exprs = apply_param_estimates.mutate(exprs);
 
-            for (auto &p : func_value_bounds) {
-                p.second.min = apply_param_estimates.mutate(p.second.min);
-                p.second.max = apply_param_estimates.mutate(p.second.max);
-            }
-
             // For this stage scope we want symbolic bounds for the rvars
 
             // Now create the edges that lead to this func
@@ -920,8 +936,12 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                         internal_assert(in.is_bounded())
                             << "Unbounded producer->consumer relationship: "
                             << edge.producer->func.name() << " -> " << edge.consumer->name << "\n";
-                        Edge::BoundInfo min(simplify(in.min), *edge.consumer);
-                        Edge::BoundInfo max(simplify(in.max), *edge.consumer);
+                        bool min_dependent = depends_on_estimate(in.min);
+                        bool max_dependent = depends_on_estimate(in.max);
+                        Expr min_value = simplify(apply_param_estimates.mutate(in.min));
+                        Expr max_value = simplify(apply_param_estimates.mutate(in.max));
+                        Edge::BoundInfo min(min_value, *edge.consumer, min_dependent);
+                        Edge::BoundInfo max(max_value, *edge.consumer, max_dependent);
                         edge.bounds.emplace_back(std::move(min), std::move(max));
                         edge.all_bounds_affine &= edge.bounds.back().first.affine;
                         edge.all_bounds_affine &= edge.bounds.back().second.affine;
