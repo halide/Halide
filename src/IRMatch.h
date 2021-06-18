@@ -2177,6 +2177,8 @@ struct IsConst {
     constexpr static bool canonical = true;
 
     A a;
+    bool check_v;
+    int64_t v;
 
     constexpr static bool foldable = true;
 
@@ -2186,19 +2188,33 @@ struct IsConst {
         ty.code = halide_type_uint;
         ty.bits = 64;
         ty.lanes = 1;
-        val.u.u64 = ::Halide::Internal::is_const(e) ? 1 : 0;
+        if (check_v) {
+            val.u.u64 = ::Halide::Internal::is_const(e, v) ? 1 : 0;
+        } else {
+            val.u.u64 = ::Halide::Internal::is_const(e) ? 1 : 0;
+        }
     }
 };
 
 template<typename A>
 HALIDE_ALWAYS_INLINE auto is_const(A &&a) noexcept -> IsConst<decltype(pattern_arg(a))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a)};
+    return {pattern_arg(a), false, 0};
+}
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto is_const(A &&a, int64_t value) noexcept -> IsConst<decltype(pattern_arg(a))> {
+    assert_is_lvalue_if_expr<A>();
+    return {pattern_arg(a), true, value};
 }
 
 template<typename A>
 std::ostream &operator<<(std::ostream &s, const IsConst<A> &op) {
-    s << "is_const(" << op.a << ")";
+    if (op.check_v) {
+        s << "is_const(" << op.a << ")";
+    } else {
+        s << "is_const(" << op.a << ", " << op.v << ")";
+    }
     return s;
 }
 
@@ -2393,6 +2409,12 @@ HALIDE_ALWAYS_INLINE auto is_scalar(A &&a) noexcept -> IsScalar<decltype(pattern
 }
 
 template<typename A>
+std::ostream &operator<<(std::ostream &s, const IsScalar<A> &op) {
+    s << "is_scalar(" << op.a << ")";
+    return s;
+}
+
+template<typename A>
 struct IsMaxValue {
     struct pattern_tag {};
     A a;
@@ -2425,6 +2447,12 @@ template<typename A>
 HALIDE_ALWAYS_INLINE auto is_max_value(A &&a) noexcept -> IsMaxValue<decltype(pattern_arg(a))> {
     assert_is_lvalue_if_expr<A>();
     return {pattern_arg(a)};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const IsMaxValue<A> &op) {
+    s << "is_max_value(" << op.a << ")";
+    return s;
 }
 
 template<typename A>
@@ -2465,8 +2493,8 @@ HALIDE_ALWAYS_INLINE auto is_min_value(A &&a) noexcept -> IsMinValue<decltype(pa
 }
 
 template<typename A>
-std::ostream &operator<<(std::ostream &s, const IsScalar<A> &op) {
-    s << "is_scalar(" << op.a << ")";
+std::ostream &operator<<(std::ostream &s, const IsMinValue<A> &op) {
+    s << "is_min_value(" << op.a << ")";
     return s;
 }
 
@@ -2663,10 +2691,10 @@ struct Rewriter {
         fuzz_test_rule(before, after, true, wildcard_type, output_type);
 #endif
         if (before.template match<0>(unwrap(instance), state)) {
+            build_replacement(after);
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
 #endif
-            build_replacement(after);
             return true;
         } else {
 #if HALIDE_DEBUG_UNMATCHED_RULES
@@ -2733,10 +2761,10 @@ struct Rewriter {
 #endif
         if (before.template match<0>(unwrap(instance), state) &&
             evaluate_predicate(pred, state)) {
+            build_replacement(after);
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
 #endif
-            build_replacement(after);
             return true;
         } else {
 #if HALIDE_DEBUG_UNMATCHED_RULES

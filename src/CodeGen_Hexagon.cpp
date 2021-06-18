@@ -268,13 +268,8 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
                     << "The extreme lanes of a bool vector should be scalar bools\n";
                 condition = simplify(v.first || v.second);
             } else {
-                // Take an OR over all lanes. Consider replacing this
-                // with a VectorReduce node once those are available
-                // and codegen to something useful on hexagon.
-                condition = Shuffle::make({predicate}, {0});
-                for (int i = 1; i < op->type.lanes(); i++) {
-                    condition = condition || Shuffle::make({predicate}, {i});
-                }
+                // Take an OR over all lanes.
+                condition = VectorReduce::make(VectorReduce::Or, predicate, 1);
                 condition = simplify(condition);
             }
 
@@ -282,7 +277,7 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
                                    const_true(op->type.lanes()), op->alignment);
 
             return Call::make(op->type, Call::if_then_else,
-                              {condition, load, make_zero(op->type)}, Call::Intrinsic);
+                              {condition, load, make_zero(op->type)}, Call::PureIntrinsic);
         } else {
             // It's a predicated vector gather. Just scalarize. We'd
             // prefer to keep it in a loop, but that would require
@@ -292,7 +287,7 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
             Expr load = Load::make(op->type, op->name, index, op->image, op->param,
                                    const_true(op->type.lanes()), op->alignment);
             return Call::make(op->type, Call::if_then_else,
-                              {predicate, load, make_zero(op->type)}, Call::Intrinsic);
+                              {predicate, load, make_zero(op->type)}, Call::PureIntrinsic);
         }
     }
 
@@ -1240,7 +1235,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             // Let LLVM handle concat or slices.
             return CodeGen_Posix::shuffle_vectors(a, b, indices);
         }
-        return vlut(concat_vectors({a, b}), indices);
+        return vdelta(concat_vectors({a, b}), indices);
     }
 
     if (stride == 1) {
@@ -1529,6 +1524,7 @@ bool generate_vdelta(const std::vector<int> &indices, bool reverse,
     return true;
 }
 
+// Try generating vdelta/vrdelta before falling back to vlut.
 Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
     llvm::Type *lut_ty = lut->getType();
     int lut_elements = get_vector_num_elements(lut_ty);
@@ -1552,8 +1548,8 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
             }
         }
         Value *result = vdelta(i8_lut, i8_indices);
-        result = builder->CreateBitCast(result, lut_ty);
-        return result;
+        llvm::Type *result_ty = get_vector_type(get_vector_element_type(lut_ty), indices.size());
+        return builder->CreateBitCast(result, result_ty);
     }
 
     // We can only use vdelta to produce a single native vector at a
@@ -1635,8 +1631,6 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
 
     // TODO: If the above fails, we might be able to use a vdelta and
     // vrdelta instruction together to implement the shuffle.
-    internal_error << "Unsupported vdelta operation.\n";
-
     // TODO: If the vdelta results are sparsely used, it might be
     // better to use vlut.
     return vlut(lut, indices);
@@ -1905,7 +1899,7 @@ void CodeGen_Hexagon::visit(const Call *op) {
         {Call::get_intrinsic_name(Call::saturating_sub), {"halide.hexagon.sat_sub", true}},
     };
 
-    if (is_native_interleave(op) || is_native_deinterleave(op)) {
+    if (is_native_interleave(op)) {
         internal_assert(
             op->type.lanes() % (native_vector_bits() * 2 / op->type.bits()) == 0);
     }
@@ -2105,7 +2099,7 @@ void CodeGen_Hexagon::visit(const Select *op) {
         // Implement scalar conditions on vector values with if-then-else.
         value = codegen(Call::make(op->type, Call::if_then_else,
                                    {op->condition, op->true_value, op->false_value},
-                                   Call::Intrinsic));
+                                   Call::PureIntrinsic));
     } else {
         CodeGen_Posix::visit(op);
     }

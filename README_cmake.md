@@ -542,7 +542,7 @@ boilerplate.
 cmake_minimum_required(VERSION 3.16)
 project(HalideExample)
 
-set(CMAKE_CXX_STANDARD 11)  # or newer
+set(CMAKE_CXX_STANDARD 17)  # or newer
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
@@ -558,7 +558,7 @@ immediately after setting the minimum version.
 
 The next three variables set the project-wide C++ standard. The first,
 [`CMAKE_CXX_STANDARD`][cmake_cxx_standard], simply sets the standard version.
-Halide requires at least C++11. The second,
+Halide requires at least C++17. The second,
 [`CMAKE_CXX_STANDARD_REQUIRED`][cmake_cxx_standard_required], tells CMake to
 fail if the compiler cannot provide the requested standard version. Lastly,
 [`CMAKE_CXX_EXTENSIONS`][cmake_cxx_extensions] tells CMake to disable
@@ -805,6 +805,7 @@ add_halide_library(<target> FROM <generator-target>
                    [GRADIENT_DESCENT]
                    [C_BACKEND]
                    [REGISTRATION OUTVAR]
+                   [HEADER OUTVAR]
                    [<extra-output> OUTVAR])
 
 extra-output = ASSEMBLY | BITCODE | COMPILER_LOG | CPP_STUB
@@ -869,10 +870,16 @@ compiler on a generated source. Note that a `<target>.runtime` target is _not_
 created in this case, and the `USE_RUNTIME` option is ignored. Other options
 work as expected.
 
-If `REGISTRATION` is set, the path to the generated `.registration.cpp` file
-will be set in `OUTVAR`. This can be used to generate a runner for a Halide
-library that is useful for benchmarking and testing, as documented above. This
-is equivalent to setting `-e registration` at the generator command line.
+If `REGISTRATION` is set, the path (relative to `CMAKE_CURRENT_BINARY_DIR`)
+to the generated `.registration.cpp` file will be set in `OUTVAR`. This can be
+used to generate a runner for a Halide library that is useful for benchmarking
+and testing, as documented above. This is equivalent to setting
+`-e registration` at the generator command line.
+
+If `HEADER` is set, the path (relative to `CMAKE_CURRENT_BINARY_DIR`) to the
+generated `.h` header file will be set in `OUTVAR`. This can be used with
+`install(FILES)` to conveniently deploy the generated header along with your
+library.
 
 Lastly, each of the `extra-output` arguments directly correspond to an extra
 output (via `-e`) from the generator. The value `OUTVAR` names a variable into

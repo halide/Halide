@@ -297,16 +297,18 @@ Interval random_interval(Type T) {
 
     Type t = T.element_of();
     if ((t.is_uint() || (t.is_int() && t.bits() <= 16))) {
-        if (auto ptr = as_const_int(t.min())) {
+        Expr t_min = t.min();
+        Expr t_max = t.max();
+        if (auto ptr = as_const_int(t_min)) {
             min_value = *ptr;
-        } else if (auto ptr = as_const_uint(t.min())) {
+        } else if (auto ptr = as_const_uint(t_min)) {
             min_value = *ptr;
         } else {
             std::cerr << "random_interval failed to find min of: " << T << "\n";
         }
-        if (auto ptr = as_const_int(t.max())) {
+        if (auto ptr = as_const_int(t_max)) {
             max_value = *ptr;
-        } else if (auto ptr = as_const_uint(t.max())) {
+        } else if (auto ptr = as_const_uint(t_max)) {
             // can't represent all uint32_t in int type
             if (*ptr <= 128) {
                 max_value = *ptr;
@@ -365,14 +367,6 @@ int sample_interval(const Interval &interval) {
 
     int value = random_in_range(min_value, max_value);
     return value;
-}
-
-bool is_integer_overflow(const Expr &expr) {
-    if (const Call *call = expr.as<Call>()) {
-        return call->is_intrinsic(Call::signed_integer_overflow);
-    } else {
-        return false;
-    }
 }
 
 bool test_bounds(Expr test, const Interval &interval, Type T, const map<string, Expr> &vars) {
@@ -451,8 +445,8 @@ bool test_expression_bounds(Expr test, int trials, int samples_per_trial) {
             return true;  // any result is allowed
         }
 
-        if ((interval.has_upper_bound() && is_integer_overflow(interval.max)) ||
-            (interval.has_lower_bound() && is_integer_overflow(interval.min))) {
+        if ((interval.has_upper_bound() && is_signed_integer_overflow(interval.max)) ||
+            (interval.has_lower_bound() && is_signed_integer_overflow(interval.min))) {
             // Quit for now, assume other intervals will produce the same results.
             return true;
         }

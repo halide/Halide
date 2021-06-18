@@ -658,6 +658,16 @@ class Interleaver : public IRMutator {
             return Stmt();
         }
 
+        // Too many stores and lanes to represent in a single vector
+        // type.
+        int max_bits = sizeof(halide_type_t::lanes) * 8;
+        // mul_would_overflow is for signed types, but vector lanes
+        // are unsigned, so add a bit.
+        max_bits++;
+        if (mul_would_overflow(max_bits, stores.size(), lanes)) {
+            return Stmt();
+        }
+
         Type t = store->value.type();
         Expr base;
         std::vector<Expr> args(stores.size());

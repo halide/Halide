@@ -1161,10 +1161,10 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
         const std::string &n = gio->name();
         const std::string &gn = generator->generator_registered_name;
 
-        if (gio->kind() != IOKind::Scalar) {
-            owned_synthetic_params.push_back(GeneratorParam_Synthetic<Type>::make(generator, gn, n + ".type", *gio, SyntheticParamType::Type, gio->types_defined()));
-            filter_generator_params.push_back(owned_synthetic_params.back().get());
+        owned_synthetic_params.push_back(GeneratorParam_Synthetic<Type>::make(generator, gn, n + ".type", *gio, SyntheticParamType::Type, gio->types_defined()));
+        filter_generator_params.push_back(owned_synthetic_params.back().get());
 
+        if (gio->kind() != IOKind::Scalar) {
             owned_synthetic_params.push_back(GeneratorParam_Synthetic<int>::make(generator, gn, n + ".dim", *gio, SyntheticParamType::Dim, gio->dims_defined()));
             filter_generator_params.push_back(owned_synthetic_params.back().get());
         }
