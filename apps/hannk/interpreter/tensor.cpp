@@ -6,7 +6,6 @@ namespace hannk {
 namespace {
 
 HalideBuffer<void> make_buffer(halide_type_t type, const Box &bounds) {
-    // TODO: Avoid this dynamic allocation. Halide's API requires std::vector here.
     TensorDimensions dims(bounds.size());
     int stride = 1;
     for (int i = 0; i < (int)bounds.size(); i++) {
