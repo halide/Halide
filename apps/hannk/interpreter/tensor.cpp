@@ -20,36 +20,6 @@ HalideBuffer<void> make_buffer(halide_type_t type, const Box &bounds) {
 
 }  // namespace
 
-TensorStorage::TensorStorage(halide_type_t type, int rank, const halide_dimension_t *dimensions)
-    : buffer_(type, nullptr, rank, dimensions) {
-}
-
-void TensorStorage::add_use(halide_type_t type, const Box &bounds) {
-    if (buffer_.dimensions() == 0) {
-        buffer_ = make_buffer(type, bounds);
-    } else {
-        assert(buffer_.type() == type);
-        assert(buffer_.dimensions() == (int)bounds.size());
-        assert(!buffer_.data());
-
-        // Check that the storage is big enough for this buffer.
-        for (int i = 0; i < buffer_.dimensions(); i++) {
-            assert(bounds[i].min >= buffer_.dim(i).min());
-            assert(bounds[i].max <= buffer_.dim(i).max());
-        }
-    }
-}
-
-bool TensorStorage::is_allocated() const {
-    return buffer_.data() != nullptr;
-}
-
-void TensorStorage::allocate() {
-    if (!buffer_.data()) {
-        buffer_ = HalideBuffer<void>::make_with_shape_of(buffer_);
-    }
-}
-
 Tensor::Tensor(std::string name, HalideBuffer<void> buffer, QuantizationInfo quantization)
     : name_(std::move(name)),
       buffer_(std::move(buffer)),
@@ -76,13 +46,6 @@ void Tensor::remove_producer(Op *op) {
     producers_.remove(op);
 }
 
-std::shared_ptr<TensorStorage> Tensor::storage() {
-    if (!storage_) {
-        storage_ = std::make_shared<TensorStorage>(buffer_.type(), buffer_.dimensions(), buffer_.raw_buffer()->dim);
-    }
-    return storage_;
-}
-
 bool Tensor::is_allocated() const {
     return buffer_.data() != nullptr;
 }
@@ -94,9 +57,6 @@ void Tensor::set_external_host(void *host) {
 
     assert(is_external());
     assert(!buffer_.owns_host_memory());
-    // TODO: we don't allow aliasing of external tensors right now.
-    // If we do, we need to maintain and update storage_ appropriately.
-    assert(storage_ == nullptr);
     buffer_.raw_buffer()->host = (uint8_t *)host;
 }
 
@@ -112,6 +72,20 @@ HalideBuffer<T> drop_reference(const HalideBuffer<T> &buf) {
 
 }  // namespace
 
+void Tensor::set_external_buffer(HalideBuffer<void> external_buffer) {
+    HCHECK(!is_allocated());
+    HCHECK(!is_dynamic());
+    HCHECK(is_external());
+
+    // TODO: NDEBUG
+    for (int i = 0; i < buffer_.dimensions(); i++) {
+        HCHECK(external_buffer.dim(i).min() == buffer_.dim(i).min());
+        HCHECK(external_buffer.dim(i).max() == buffer_.dim(i).max());
+        HCHECK(external_buffer.dim(i).extent() >= buffer_.dim(i).extent());
+    }
+    buffer_ = std::move(external_buffer);
+}
+
 void Tensor::allocate() {
     if (buffer_.data()) {
         return;
@@ -121,21 +95,7 @@ void Tensor::allocate() {
         return;
     }
 
-    storage()->allocate();
-    HalideBuffer<void> buffer = drop_reference(storage()->buffer());
-    for (int i = 0; i < buffer.dimensions(); i++) {
-        Interval dim_i(buffer_.dim(i).min(), buffer_.dim(i).max());
-        if (i < (int)storage_offset_.size()) {
-            dim_i += storage_offset_[i];
-        }
-        assert(buffer.dim(i).min() <= dim_i.min);
-        assert(buffer.dim(i).max() >= dim_i.max);
-        buffer.crop(i, dim_i.min, dim_i.extent());
-        buffer.translate(i, -dim_i.min);
-        assert(buffer.dim(i).min() == buffer_.dim(i).min());
-        assert(buffer.dim(i).max() == buffer_.dim(i).max());
-    }
-    buffer_ = buffer;
+    buffer_.allocate();
 }
 
 void Tensor::resize(const Box &new_shape) {
@@ -172,26 +132,6 @@ void Tensor::resize(const Box &new_shape) {
         new_buffer.copy_from(buffer_);
     }
     buffer_ = std::move(new_buffer);
-    storage_ = nullptr;
-}
-
-bool Tensor::is_alias() const {
-    // TODO: This check could incorrectly return true, if the tensor has been
-    // allocated already via storage(), but isn't an alias.
-    return storage_ != nullptr;
-}
-
-void Tensor::set_alias_of(const TensorPtr &t, const SmallVector<int, max_rank> &storage_offset) {
-    assert(!is_dynamic() && !is_external());
-
-    storage_ = t->storage();
-    storage_offset_ = storage_offset;
-
-    Box offset_bounds = bounds();
-    for (int i = 0; i < (int)storage_offset_.size(); i++) {
-        offset_bounds[i] += storage_offset_[i];
-    }
-    storage_->add_use(type(), offset_bounds);
 }
 
 void Tensor::replace_all_consumers_with(const TensorPtr &other) {

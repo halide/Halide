@@ -18,12 +18,15 @@ struct InterpreterOptions {
 
 class Interpreter {
     std::unique_ptr<OpGroup> model_;
+    // TODO: temporary placeholder for aliased allocs; will
+    // be replaced with an intelligent arena with lifetime knowledge
+    std::vector<HalideBuffer<void>> external_buffers_;
 
     void init(InterpreterOptions options);
 
 public:
     explicit Interpreter(std::unique_ptr<OpGroup> m, InterpreterOptions options = InterpreterOptions());
-    ~Interpreter();
+    ~Interpreter() = default;
 
     // Return the Tensor in the current Model with the given name.
     // If none with that name, return null. Tensor is still owned by the Model.
