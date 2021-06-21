@@ -84,7 +84,8 @@ class Tensor {
     // (It may actually refer to read-only external memory, or it may simply be marked this may as
     // the result of a transform.)
     bool is_constant_ = false;
-    // If true, this Tensor's storage is externally owned and must not be freed.
+    // If true, this Tensor's buffer was externally created and must not be modified,
+    // (aside from allowing the buffer's dtor to run normally).
     bool is_external_ = false;
     // If true, this Tensor is 'dynamic' (i.e., it's an output whose size
     // is calculated during evaluation, rather than ahead of time).  It is an error
@@ -171,7 +172,11 @@ public:
         is_external_ = external;
     }
 
-    void set_external_host(void *host);
+    // Requires that set_external() has already been called.
+    // external_buffer must have the same dimensions, mins, and extents
+    // as the current buffer (but the strides need not match).
+    // external_buffer must *not* have a null host pointer.
+    void set_external_buffer(HalideBuffer<void> external_buffer);
 
     bool is_dynamic() const {
         return is_dynamic_;
