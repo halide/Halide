@@ -62,7 +62,7 @@ void Interpreter::init(InterpreterOptions options) {
         aliased_tensor_storage_.emplace_back(new char[size_in_bytes]);
         void* shared_host = aliased_tensor_storage_.back().get();
 
-        HLOG(INFO) << "Aliasing a group of " << g.tensors.size() << " tensors, shared size " << size_in_bytes << " bytes...\n";
+        // HLOG(INFO) << "Aliasing a group of " << g.tensors.size() << " tensors, shared size " << size_in_bytes << " bytes...\n";
 
         for (const auto &it : g.tensors) {
             const TensorPtr &tensor = it.first;
@@ -90,6 +90,7 @@ void Interpreter::init(InterpreterOptions options) {
     // TODO: Find a better schedule for executing the ops, including
     // better lifetime management for these allocations.
     AllocateAll allocate_all;
+
     model_->accept(&allocate_all);
 }
 
