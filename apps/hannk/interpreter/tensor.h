@@ -40,6 +40,8 @@ class Op;
 
 class Tensor;
 using TensorPtr = std::shared_ptr<Tensor>;
+using TensorOffset = SmallVector<int, max_rank>;
+using TensorDimensions = SmallVector<halide_dimension_t, max_rank>;
 
 // Storage for a tensor. This can be shared among several tensors aliasing
 // the same memory. All aliases use the strides of the buffer in this storage
@@ -93,7 +95,7 @@ class Tensor {
     // Possibly shared storage for this tensor.
     std::shared_ptr<TensorStorage> storage_;
     // The offset of this tensor into the storage buffer.
-    SmallVector<int, max_rank> storage_offset_;
+    TensorOffset storage_offset_;
 
     // A list of ops that use this tensor as an output or an input, respectively.
     std::list<Op *> producers_;
@@ -200,7 +202,7 @@ public:
     void resize(const Box &new_shape);
 
     bool is_alias() const;
-    void set_alias_of(const TensorPtr &t, const SmallVector<int, max_rank> &offset = {});
+    void set_alias_of(const TensorPtr &t, const TensorOffset &offset = {});
 
     void add_consumer(Op *op);
     void add_producer(Op *op);

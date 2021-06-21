@@ -7,7 +7,7 @@ namespace {
 
 HalideBuffer<void> make_buffer(halide_type_t type, const Box &bounds) {
     // TODO: Avoid this dynamic allocation. Halide's API requires std::vector here.
-    SmallVector<halide_dimension_t, max_rank> dims(bounds.size());
+    TensorDimensions dims(bounds.size());
     int stride = 1;
     for (int i = 0; i < (int)bounds.size(); i++) {
         dims[i].min = bounds[i].min;
@@ -142,7 +142,7 @@ void Tensor::resize(const Box &new_shape) {
     assert(is_dynamic());
     assert(!is_external());
 
-    SmallVector<halide_dimension_t, max_rank> new_dims;
+    TensorDimensions new_dims;
 
     const halide_dimension_t *old_dims = buffer_.raw_buffer()->dim;
 
