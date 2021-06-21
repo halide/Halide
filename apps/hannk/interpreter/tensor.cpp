@@ -6,8 +6,7 @@ namespace hannk {
 namespace {
 
 HalideBuffer<void> make_buffer(halide_type_t type, const Box &bounds) {
-    // TODO: Avoid this dynamic allocation. Halide's API requires std::vector here.
-    SmallVector<halide_dimension_t, max_rank> dims(bounds.size());
+    TensorDimensions dims(bounds.size());
     int stride = 1;
     for (int i = 0; i < (int)bounds.size(); i++) {
         dims[i].min = bounds[i].min;
@@ -87,17 +86,23 @@ bool Tensor::is_allocated() const {
     return buffer_.data() != nullptr;
 }
 
-void Tensor::set_external_host(void *host) {
+void Tensor::set_external_buffer(HalideBuffer<void> external_buffer) {
+    assert(!is_dynamic());
+    assert(is_external());
+
     // No: it's ok to set this to different values over time,
     // so don't assert that host is currently null (or already equal to the new value)
     // assert(!is_allocated());
 
-    assert(is_external());
-    assert(!buffer_.owns_host_memory());
     // TODO: we don't allow aliasing of external tensors right now.
     // If we do, we need to maintain and update storage_ appropriately.
     assert(storage_ == nullptr);
-    buffer_.raw_buffer()->host = (uint8_t *)host;
+
+    for (int i = 0; i < buffer_.dimensions(); i++) {
+        assert(external_buffer.dim(i).min() == buffer_.dim(i).min());
+        assert(external_buffer.dim(i).extent() == buffer_.dim(i).extent());
+    }
+    buffer_ = std::move(external_buffer);
 }
 
 namespace {
@@ -142,7 +147,7 @@ void Tensor::resize(const Box &new_shape) {
     assert(is_dynamic());
     assert(!is_external());
 
-    SmallVector<halide_dimension_t, max_rank> new_dims;
+    TensorDimensions new_dims;
 
     const halide_dimension_t *old_dims = buffer_.raw_buffer()->dim;
 
