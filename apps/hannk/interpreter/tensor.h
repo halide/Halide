@@ -43,39 +43,6 @@ using TensorPtr = std::shared_ptr<Tensor>;
 using TensorOffset = SmallVector<int, max_rank>;
 using TensorDimensions = SmallVector<halide_dimension_t, max_rank>;
 
-// Storage for a tensor. This can be shared among several tensors aliasing
-// the same memory. All aliases use the strides of the buffer in this storage
-// buffer.
-class TensorStorage {
-    HalideBuffer<void> buffer_;
-
-public:
-    TensorStorage(halide_type_t type, int rank, const halide_dimension_t *dimensions);
-
-    TensorStorage() = delete;
-    TensorStorage(const TensorStorage &) = delete;
-    TensorStorage &operator=(const TensorStorage &) = delete;
-    TensorStorage(TensorStorage &&) = delete;
-    TensorStorage &operator=(TensorStorage &&) = delete;
-
-    // Grow the bounds of the storage to accommodate a new user.
-    // The type and dimensionality must match the existing storage.
-    void add_use(halide_type_t, const Box &bounds);
-
-    template<class T = void>
-    const HalideBuffer<T> &buffer() {
-        return buffer_.as<T>();
-    }
-
-    template<class T = void>
-    const HalideBuffer<const T> &buffer() const {
-        return buffer_.as_const().as<const T>();
-    }
-
-    bool is_allocated() const;
-    void allocate();
-};
-
 class Tensor {
     std::string name_;
     HalideBuffer<void> buffer_;
@@ -93,16 +60,9 @@ class Tensor {
     // Currently only used in conjunction with the TFLite delegate.
     bool is_dynamic_ = false;
 
-    // Possibly shared storage for this tensor.
-    std::shared_ptr<TensorStorage> storage_;
-    // The offset of this tensor into the storage buffer.
-    TensorOffset storage_offset_;
-
     // A list of ops that use this tensor as an output or an input, respectively.
     std::list<Op *> producers_;
     std::list<Op *> consumers_;
-
-    std::shared_ptr<TensorStorage> storage();
 
 public:
     Tensor() = delete;
@@ -205,9 +165,6 @@ public:
     void allocate();
 
     void resize(const Box &new_shape);
-
-    bool is_alias() const;
-    void set_alias_of(const TensorPtr &t, const TensorOffset &offset = {});
 
     void add_consumer(Op *op);
     void add_producer(Op *op);
