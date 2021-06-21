@@ -18,6 +18,11 @@ struct InterpreterOptions {
 
 class Interpreter {
     std::unique_ptr<OpGroup> model_;
+    // TODO: this is a temporary placeholder for aliased Tensor allocs;
+    // it will soob be replaced with an intelligent arena allocator with
+    // knowledge about Tensor lifetimes
+    // std::vector<HalideBuffer<void>> aliased_tensor_buffers_;
+    std::vector<std::unique_ptr<char[]>> aliased_tensor_storage_;
 
     void init(InterpreterOptions options);
 
