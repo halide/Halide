@@ -1,6 +1,13 @@
 #ifndef HANNK_SMALL_VECTOR_H
 #define HANNK_SMALL_VECTOR_H
 
+#include <cassert>
+#include <cstdint>
+#include <cstring>
+#include <initializer_list>
+#include <iostream>
+#include <utility>
+
 // This class mimics std::vector, but never dynamically allocates memory.
 // It can only grow to Capacity elements.
 template<typename T, size_t Capacity>
