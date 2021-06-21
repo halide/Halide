@@ -1,3 +1,5 @@
+#include <set>
+
 #include "interpreter/transforms.h"
 #include "util/small_vector.h"
 
@@ -82,18 +84,82 @@ void remove_dead_ops(OpGroup *root) {
 
 namespace {
 
-// Check if a tensor already has storage configured.
-bool has_storage(const TensorPtr &t) {
-    return t->is_alias() || t->is_allocated();
-}
+struct AliasInfo {
+    TensorPtr from, to;
+    SmallVector<int, max_rank> offset;
+};
+
+struct TensorStorageInfo {
+    SmallVector<halide_dimension_t, max_rank> dimensions;
+    int type_size_in_bytes;
+};
+
+    // size_t size_in_elements(const SmallVector<halide_dimension_t, max_rank> &dimensions) const {
+    //     ptrdiff_t begin_offset = 0;
+    //     ptrdiff_t end_offset = 0;
+    //     for (int i = 0; i < dimensions; i++) {
+    //         const int stride = dim[i].stride;
+    //         if (stride < 0) {
+    //             begin_offset += stride * (ptrdiff_t)(dim[i].extent - 1);
+    //         }
+    //         if (stride > 0) {
+    //             end_offset += stride * (ptrdiff_t)(dim[i].extent - 1);
+    //         }
+    //     }
+    //     end_offset += 1;
+    //     return (size_t)(end_offset - begin_offset) * type_size_in_bytes;
+    // }
+
+struct TensorStorageAndOffset {
+    std::shared_ptr<TensorStorageInfo> storage;
+    SmallVector<int, max_rank> storage_offset;
+};
 
 // Try to alias outputs to inputs when it is safe.
 class InPlace : public OpVisitor {
     using OpVisitor::visit;
 
+    // Check if a tensor already has storage configured.
+    bool has_storage(const TensorPtr &t) const {
+        const bool is_aliased = tensor_storage_.count(t.get()) > 0;
+        HCHECK(!(t->is_allocated() && is_aliased));
+        return is_aliased || t->is_allocated();
+    }
+
+    void alias_tensors(const TensorPtr &from, const TensorPtr &to, const SmallVector<int, max_rank> &offset) {
+        TensorStorageAndOffset &tso = tensor_storage_[to.get()];
+        if (!tso.storage) {
+            // It didn't exist before, so create it;
+            // everything in this alias set will use this as a reference.
+            tso.storage = std::make_shared<TensorStorageInfo>();
+            tso.storage->type_size_in_bytes = to->type().bytes();
+            tso.storage->dimensions.resize(to->rank());
+            for (int i = 0; i < (int)tso.storage->dimensions.size(); i++) {
+                tso.storage->dimensions[i] = to->buffer().raw_buffer()->dim[i];
+            }
+            // leave storage_offset empty.
+        }
+
+        // Check that the storage is big enough for this buffer.
+        // TODO: assert, wrap in NDEBUG
+        Box offset_bounds = from->bounds();
+        for (int i = 0; i < (int)tso.storage->dimensions.size(); i++) {
+            if (i < (int)offset.size()) {
+                offset_bounds[i] += offset[i];
+            }
+            const auto &dim = tso.storage->dimensions[i];
+            HCHECK(offset_bounds[i].min >= dim.min);
+            HCHECK(offset_bounds[i].max <= dim.min + dim.extent);
+        }
+        HCHECK(from->type().bytes() == tso.storage->type_size_in_bytes);
+
+        HCHECK(tensor_storage_.find(from.get()) == tensor_storage_.end());
+        tensor_storage_[from.get()] = {tso.storage, offset};
+    }
+
     // We can alias two tensors if the input is not used after the output is written,
     // and we meet a number of other requirements.
-    bool maybe_alias_tensors(TensorPtr input, TensorPtr output, SmallVector<int, max_rank> offset = {}) const {
+    bool maybe_alias_tensors(const TensorPtr &input, const TensorPtr &output, SmallVector<int, max_rank> offset = {}) {
         // If the input is used anywhere else, we should not alias it.
         // TODO: This is conservative, we could alias it if it is the *last* use.
         if (input->consumers().size() != 1) {
@@ -136,23 +202,28 @@ class InPlace : public OpVisitor {
             input_bounds_with_offset[i] += offset[i];
             output_bounds_with_negative_offset[i] -= offset[i];
         }
+
         bool input_subset_of_output = is_subset_of(input_bounds_with_offset, output->bounds());
-        bool output_subset_of_input = is_subset_of(output_bounds_with_negative_offset, input->bounds());
         if (input_subset_of_output && !has_storage(input)) {
-            input->set_alias_of(output, offset);
+            alias_tensors(input, output, offset);
+            alias_info.push_back({input, output, offset});
             return true;
-        } else if (output_subset_of_input && !has_storage(output)) {
+        }
+
+        bool output_subset_of_input = is_subset_of(output_bounds_with_negative_offset, input->bounds());
+        if (output_subset_of_input && !has_storage(output)) {
             for (int &i : offset) {
                 i = -i;
             }
-            output->set_alias_of(input, offset);
+            alias_tensors(output, input, offset);
+            alias_info.push_back({output, input, offset});
             return true;
         }
 
         return false;
     }
 
-    void maybe_alias_elementwise(ElementwiseOp *op) const {
+    void maybe_alias_elementwise(ElementwiseOp *op) {
         for (int j = 0; j < op->output_count(); j++) {
             for (int i = 0; i < op->input_count(); i++) {
                 if (maybe_alias_tensors(op->input(i), op->output(j))) {
@@ -230,12 +301,15 @@ class InPlace : public OpVisitor {
     }
 
     const Op *const root_;
+    std::map<Tensor *, TensorStorageAndOffset> tensor_storage_;
 
     bool is_root_input_or_output(const TensorPtr &t) const {
         return root_->is_input(t) || root_->is_output(t);
     };
 
 public:
+    std::vector<AliasInfo> alias_info;
+
     explicit InPlace(Op *root)
         : root_(root) {
     }
@@ -246,6 +320,14 @@ public:
 void in_place(Op *op) {
     InPlace v(op);
     op->accept(&v);
+
+    for (const auto &info : v.alias_info) {
+        std::cout << "*** ALIAS FROM " << (void *)info.from.get() << " TO " << (void *)info.to.get() << "\n";
+        info.from->set_alias_of(info.to, info.offset);
+    }
+
+    //std::map<TensorStorage*,
+
 }
 
 namespace {
