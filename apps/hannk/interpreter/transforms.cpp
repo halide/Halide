@@ -126,7 +126,7 @@ class InPlace : public OpVisitor {
         return is_aliased || t->is_allocated();
     }
 
-    void alias_tensors(const TensorPtr &from, const TensorPtr &to, const SmallVector<int, max_rank> &offset) {
+    void alias_tensors(const TensorPtr &from, const TensorPtr &to, const SmallVector<int, max_rank> &storage_offset) {
         TensorStorageAndOffset &tso = tensor_storage_[to.get()];
         if (!tso.storage) {
             // It didn't exist before, so create it;
@@ -137,15 +137,15 @@ class InPlace : public OpVisitor {
             for (int i = 0; i < (int)tso.storage->dimensions.size(); i++) {
                 tso.storage->dimensions[i] = to->buffer().raw_buffer()->dim[i];
             }
-            // leave storage_offset empty.
+            tso.storage_offset.resize(to->rank());  // Make an all-zero offset of proper rank
         }
 
         // Check that the storage is big enough for this buffer.
         // TODO: assert, wrap in NDEBUG
         Box offset_bounds = from->bounds();
         for (int i = 0; i < (int)tso.storage->dimensions.size(); i++) {
-            if (i < (int)offset.size()) {
-                offset_bounds[i] += offset[i];
+            if (i < (int)storage_offset.size()) {
+                offset_bounds[i] += storage_offset[i];
             }
             const auto &dim = tso.storage->dimensions[i];
             HCHECK(offset_bounds[i].min >= dim.min);
@@ -154,7 +154,7 @@ class InPlace : public OpVisitor {
         HCHECK(from->type().bytes() == tso.storage->type_size_in_bytes);
 
         HCHECK(tensor_storage_.find(from.get()) == tensor_storage_.end());
-        tensor_storage_[from.get()] = {tso.storage, offset};
+        tensor_storage_[from.get()] = {tso.storage, storage_offset};
     }
 
     // We can alias two tensors if the input is not used after the output is written,
