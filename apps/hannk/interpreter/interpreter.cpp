@@ -60,7 +60,7 @@ void Interpreter::init(InterpreterOptions options) {
         // Allocate them all as uint types, for simplicity
         const size_t size_in_bytes = size_in_elements(g.dimensions) * g.element_size_in_bytes;
         aliased_tensor_storage_.emplace_back(new char[size_in_bytes]);
-        void* shared_host = aliased_tensor_storage_.back().get();
+        void *shared_host = aliased_tensor_storage_.back().get();
 
         // HLOG(INFO) << "Aliasing a group of " << g.tensors.size() << " tensors, shared size " << size_in_bytes << " bytes...\n";
 
