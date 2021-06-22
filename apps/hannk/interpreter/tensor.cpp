@@ -142,7 +142,7 @@ void Tensor::allocate() {
     buffer_ = buffer;
 }
 
-void Tensor::resize(const Box &new_shape) {
+void Tensor::resize_dynamic(const Box &new_shape) {
     assert(is_dynamic());
     assert(!is_external());
 
