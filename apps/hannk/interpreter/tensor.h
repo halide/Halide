@@ -199,7 +199,7 @@ public:
         return buffer_.data() != nullptr;
     }
     void allocate_from_heap();
-    void allocate_from_arena_pointer(void* host);
+    void allocate_from_arena_pointer(void *host);
 
     void resize_dynamic(const Box &new_shape);
 

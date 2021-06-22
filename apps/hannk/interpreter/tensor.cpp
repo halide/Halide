@@ -78,7 +78,7 @@ void Tensor::set_external_buffer(HalideBuffer<void> external_buffer) {
     buffer_ = std::move(external_buffer);
 }
 
-void Tensor::allocate_from_arena_pointer(void* host) {
+void Tensor::allocate_from_arena_pointer(void *host) {
     assert(!is_dynamic());
     assert(!is_external());
     assert(!is_allocated());
