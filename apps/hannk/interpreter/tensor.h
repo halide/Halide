@@ -221,8 +221,6 @@ public:
         return consumers_;
     }
 
-    void replace_all_consumers_with(const TensorPtr &other);
-
     void dump(std::ostream &os) const;
 };
 

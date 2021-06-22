@@ -1,5 +1,4 @@
 #include "interpreter/tensor.h"
-#include "interpreter/model.h"
 
 namespace hannk {
 
@@ -197,19 +196,6 @@ void Tensor::set_alias_of(const TensorPtr &t, const SmallVector<int, max_rank> &
         offset_bounds[i] += storage_offset_[i];
     }
     storage_->add_use(type(), offset_bounds);
-}
-
-void Tensor::replace_all_consumers_with(const TensorPtr &other) {
-    // We need to make a copy of the list of consumers so it doesn't get invalidated
-    // by set_input below.
-    auto consumers = consumers_;
-    for (Op *i : consumers) {
-        for (int j = 0; j < i->input_count(); j++) {
-            if (i->input(j).get() == this) {
-                i->set_input(j, other);
-            }
-        }
-    }
 }
 
 void Tensor::dump(std::ostream &os) const {
