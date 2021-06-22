@@ -25,17 +25,17 @@ namespace {
 
 // TODO: maybe move this to a separate file? Not sure if it's complex enough to be worthy or not.
 class TensorVisitor : public OpVisitor {
-    virtual void visit(const TensorPtr &t) = 0;
+    virtual void visit_tensor(const TensorPtr &t) = 0;
 
     void visit(OpGroup *g) override {
         for (int i = 0; i < g->op_count(); i++) {
             op_index_++;
             Op *op = g->op(i);
             for (int j = 0; j < op->input_count(); j++) {
-                visit(op->input(j));
+                visit_tensor(op->input(j));
             }
             for (int j = 0; j < op->output_count(); j++) {
-                visit(op->output(j));
+                visit_tensor(op->output(j));
             }
             op->accept(this);
         }
@@ -64,7 +64,7 @@ bool needs_arena_allocation(const TensorPtr &t) {
 }
 
 class FindAllocatableTensors : public TensorVisitor {
-    void visit(const TensorPtr &t) {
+    void visit_tensor(const TensorPtr &t) {
         if (!needs_arena_allocation(t)) {
             return;
         }
@@ -126,7 +126,6 @@ std::unique_ptr<char[]> allocate_tensors(OpGroup *root, const InterpreterOptions
     char *arena_base = arena.get();
     size_t block_index = 0;
     for (const auto &it : find_tensors.tensor_info) {
-        const auto &storage = it.first;
         const auto &info = it.second;
         char *new_host = arena_base + planner.get_block_offset(block_index);
         for (const auto &t : info.tensors) {
@@ -139,7 +138,7 @@ std::unique_ptr<char[]> allocate_tensors(OpGroup *root, const InterpreterOptions
 }
 
 class VerifyAllAllocated : public TensorVisitor {
-    void visit(const TensorPtr &t) override {
+    void visit_tensor(const TensorPtr &t) override {
         if (!needs_arena_allocation(t)) {
             return;
         }
