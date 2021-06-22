@@ -1116,7 +1116,7 @@ void PadOp::execute() {
             assert(before_padding >= 0 && after_padding >= 0);
             new_shape[d].max += before_padding + after_padding;
         }
-        out->resize(new_shape);
+        out->resize_dynamic(new_shape);
     }
 
     if (out->type().bytes() == 1) {
@@ -1358,7 +1358,7 @@ void ReshapeOp::execute() {
         for (int i : new_shape) {
             b.emplace_back(0, i - 1);
         }
-        out->resize(b);
+        out->resize_dynamic(b);
     }
 
     const auto &input_buf = in->buffer();

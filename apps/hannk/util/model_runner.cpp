@@ -387,7 +387,11 @@ ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer
         model->dump(std::cout);
     }
 
-    Interpreter interpreter(std::move(model));
+    InterpreterOptions options;
+    if (verbosity) {
+        options.verbose = true;
+    }
+    Interpreter interpreter(std::move(model), std::move(options));
 
     // Fill in the inputs with pseudorandom data (save the seeds for later).
     for (TensorPtr t : interpreter.inputs()) {

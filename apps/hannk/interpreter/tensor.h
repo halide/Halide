@@ -204,7 +204,7 @@ public:
     bool is_allocated() const;
     void allocate();
 
-    void resize(const Box &new_shape);
+    void resize_dynamic(const Box &new_shape);
 
     bool is_alias() const;
     void set_alias_of(const TensorPtr &t, const TensorOffset &offset = {});

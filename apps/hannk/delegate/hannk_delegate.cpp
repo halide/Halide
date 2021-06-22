@@ -385,7 +385,11 @@ public:
             set_external(tensor_id);
         }
 
-        interpreter_ = std::unique_ptr<Interpreter>(new Interpreter(std::move(model_)));
+        InterpreterOptions options;
+        if (options_.verbosity) {
+            options.verbose = true;
+        }
+        interpreter_ = std::unique_ptr<Interpreter>(new Interpreter(std::move(model_), std::move(options)));
 
         for (int tensor_id : TfLiteIntArrayView(node->outputs)) {
             if (tensor_id == kTfLiteOptionalTensor) {
