@@ -106,8 +106,8 @@ CXX-host-metal ?= $(CXX)
 CXX-host-hvx_128 ?= $(CXX)
 CXX-host-hvx_64 ?= $(CXX)
 CXX-host-hvx ?= $(CXX)
-CXX-hexagon-32-qurt-hvx_128 ?= hexagon-clang++
-CXX-hexagon-32-qurt-hvx_64 ?= $(CXX-hexagon-32-qurt-hvx_128)
+CXX-hexagon-32-qurt-hvx ?= hexagon-clang++
+CXX-hexagon-32-qurt-hvx_128 ?= $(CXX-hexagon-32-qurt-hvx)
 CXX-arm-64-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/aarch64-linux-android${ANDROID_API_VERSION}-clang++
 CXX-arm-32-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/armv7a-linux-androideabi${ANDROID_API_VERSION}-clang++
 CXX-arm-64-profile-android ?= $(CXX-arm-64-android)
@@ -120,8 +120,8 @@ CXXFLAGS-host-metal ?= $(CXXFLAGS)
 CXXFLAGS-host-hvx_128 ?= $(CXXFLAGS)
 CXXFLAGS-host-hvx_64 ?= $(CXXFLAGS)
 CXXFLAGS-arm-64-android ?= $(CXXFLAGS)
-CXXFLAGS-hexagon-32-qurt-hvx_128 ?= $(CXXFLAGS) -I$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/include/qurt -I$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/include/posix
-CXXFLAGS-hexagon-32-qurt-hvx_64 ?= $(CXXFLAGS-hexagon-32-qurt-hvx_128)
+CXXFLAGS-hexagon-32-qurt-hvx ?= $(CXXFLAGS) -I$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/include/qurt -I$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/include/posix
+CXXFLAGS-hexagon-32-qurt-hvx_128 ?= $(CXXFLAGS-hexagon-32-qurt-hvx)
 CXXFLAGS-arm-32-android ?= $(CXXFLAGS)
 
 LDFLAGS-host ?= $(LDFLAGS)
@@ -129,8 +129,9 @@ LDFLAGS-host-opencl ?= $(LDFLAGS)
 LDFLAGS-host-cuda ?= $(LDFLAGS)
 LDFLAGS-host-metal ?= $(LDFLAGS)
 LDFLAGS-host-hvx_128 ?= $(LDFLAGS)
-LDFLAGS-host-hvx_64 ?= $(LDFLAGS)
-LDFLAGS-hexagon-32-qurt-hvx_128 =
+LDFLAGS-host-hvx ?= $(LDFLAGS)
+LDFLAGS-hexagon-32-qurt-hvx =
+LDFLAGS-hexagon-32-qurt-hvx_128 = $(LDFLAGS-hexagon-32-qurt-hvx)
 # Use the statically-linked version of libc++ on Android by default, for simplicity
 # of deployment. (Despite the name, this applies to libc++, not libstdc++)
 LDFLAGS-arm-64-android ?= -llog -fPIE -pie -static-libstdc++
