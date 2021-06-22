@@ -1,5 +1,7 @@
 #include "interpreter/allocation_planner.h"
 
+#include <cassert>
+
 namespace hannk {
 
 namespace {
