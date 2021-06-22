@@ -103,7 +103,9 @@ std::unique_ptr<char[]> allocate_tensors(OpGroup *root, const InterpreterOptions
 
     // Feed this info to the allocation planner.
     // Let's assume that whatever alignment halide_malloc() needs is necessary here, too.
-    const size_t alignment = (size_t)halide_malloc_alignment();
+    // (Note that TFLite will complain if alignment is less than 64...)
+    constexpr int kTfLiteDefaultTensorAlignment = 64;
+    const size_t alignment = (size_t)std::max(halide_malloc_alignment(), kTfLiteDefaultTensorAlignment);
     AllocationPlanner planner(alignment);
     for (const auto &it : find_tensors.tensor_info) {
         const auto &info = it.second;
@@ -118,12 +120,16 @@ std::unique_ptr<char[]> allocate_tensors(OpGroup *root, const InterpreterOptions
         }
     }
 
-    // Allocate the chunk we need.
-    std::unique_ptr<char[]> arena(new char[planner.memory_needed()]);
+    // Allocate the chunk we need. Be sure to over-allocate for alignment.
+    std::unique_ptr<char[]> arena(new char[planner.memory_needed() + alignment]);
     assert(arena != nullptr);
 
     // Point all the tensors at the correct offsets.
     char *arena_base = arena.get();
+
+    // Make sure that the 'base' we start from is aligned.
+    arena_base = (char *)(((uintptr_t)arena_base + alignment - 1) & ~(alignment - 1));
+
     size_t block_index = 0;
     for (const auto &it : find_tensors.tensor_info) {
         const auto &info = it.second;
