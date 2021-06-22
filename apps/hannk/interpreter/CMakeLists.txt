@@ -10,6 +10,7 @@ target_include_directories(interpreter_lower PUBLIC $<BUILD_INTERFACE:${hannk_SO
 target_link_libraries(interpreter_lower PRIVATE Halide::Runtime)
 
 add_library(interpreter STATIC
+            allocation_planner.cpp
             interpreter.cpp
             interval.cpp
             model.cpp

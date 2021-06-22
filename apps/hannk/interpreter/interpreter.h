@@ -18,16 +18,13 @@ struct InterpreterOptions {
 
 class Interpreter {
     std::unique_ptr<OpGroup> model_;
+    std::unique_ptr<char[]> tensor_storage_arena_;
 
     void init(InterpreterOptions options);
 
 public:
     explicit Interpreter(std::unique_ptr<OpGroup> m, InterpreterOptions options = InterpreterOptions());
     ~Interpreter();
-
-    // Return the Tensor in the current Model with the given name.
-    // If none with that name, return null. Tensor is still owned by the Model.
-    TensorPtr get_tensor(const std::string &name);
 
     void execute();
 
