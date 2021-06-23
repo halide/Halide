@@ -631,7 +631,7 @@ ConstantInterval derivative_bounds(const Expr &e, const std::string &var, const 
         return ConstantInterval::everything();
     }
     DerivativeBounds m(var, scope);
-    e.accept(&m);
+    remove_likelies(remove_promises(e)).accept(&m);
     return m.result;
 }
 
@@ -725,6 +725,8 @@ void is_monotonic_test() {
     check_unknown(select(x > 2, x - 5, x));
 
     check_unknown(select(x > 0, y, z));
+
+    check_increasing(select(0 < x, promise_clamped(x - 1, x - 1, z) + 1, promise_clamped(x, x, z)));
 
     check_constant(y);
 
