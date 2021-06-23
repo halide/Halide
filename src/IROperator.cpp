@@ -2186,7 +2186,7 @@ Expr fast_inverse(Expr x) {
     } else if (t == Float(16)) {
         return Internal::Call::make(t, "fast_inverse_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
-        user_assert(0) << "fast_inverse only takes float arguments\n";
+        user_error << "fast_inverse only takes float16 or float32 arguments\n";
         return Expr();
     }
 }
@@ -2199,7 +2199,7 @@ Expr fast_inverse_sqrt(Expr x) {
     } else if (t == Float(16)) {
         return Internal::Call::make(t, "fast_inverse_sqrt_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
-        user_assert(0) << "fast_inverse_sqrt only takes float arguments\n";
+        user_error << "fast_inverse_sqrt only takes float16 or float32 arguments\n";
         return Expr();
     }
 }

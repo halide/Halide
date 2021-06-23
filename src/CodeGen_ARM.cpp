@@ -82,7 +82,7 @@ protected:
         return target.has_feature(Target::NoNEON);
     }
 
-    bool isFloat16AndHasFeature(const Type &t) const {
+    bool is_float16_and_has_feature(const Type &t) const {
         // NOTE : t.is_float() returns true even in case of BFloat16. We don't include it for now.
         return t.code() == Type::Float && t.bits() == 16 && target.has_feature(Target::ARMFp16);
     }
@@ -597,36 +597,36 @@ const ArmIntrinsic intrinsic_defs[] = {
 
 // These can be vectorized as fp16 SIMD instruction
 const std::set<string> float16_native_funcs = {
-    "sqrt_f16",
-    "floor_f16",
     "ceil_f16",
-    "round_f16",
-    "trunc_f16",
-    "is_nan_f16",
-    "is_inf_f16",
+    "floor_f16",
     "is_finite_f16",
+    "is_inf_f16",
+    "is_nan_f16",
+    "round_f16",
+    "sqrt_f16",
+    "trunc_f16",
 };
 
 // These end up with fp32 math function call.
 // However, data type conversion of fp16 <-> fp32 is performed natively rather than emulation.
 // SIMD instruction is not available, so scalar based instruction is generated.
 const std::map<string, string> float16_transcendental_remapping = {
-    {"sin_f16", "sin_f32"},
-    {"asin_f16", "asin_f32"},
-    {"cos_f16", "cos_f32"},
     {"acos_f16", "acos_f32"},
-    {"tan_f16", "tan_f32"},
+    {"acosh_f16", "acosh_f32"},
+    {"asin_f16", "asin_f32"},
+    {"asinh_f16", "asinh_f32"},
     {"atan_f16", "atan_f32"},
     {"atan2_f16", "atan2_f32"},
-    {"sinh_f16", "sinh_f32"},
-    {"asinh_f16", "asinh_f32"},
-    {"cosh_f16", "cosh_f32"},
-    {"acosh_f16", "acosh_f32"},
-    {"tanh_f16", "tanh_f32"},
     {"atanh_f16", "atanh_f32"},
+    {"cos_f16", "cos_f32"},
+    {"cosh_f16", "cosh_f32"},
     {"exp_f16", "exp_f32"},
     {"log_f16", "log_f32"},
     {"pow_f16", "pow_f32"},
+    {"sin_f16", "sin_f32"},
+    {"sinh_f16", "sinh_f32"},
+    {"tan_f16", "tan_f32"},
+    {"tanh_f16", "tanh_f32"},
 };
 // clang-format on
 
@@ -831,7 +831,7 @@ void CodeGen_ARM::visit(const Cast *op) {
 
     // LLVM fptoui generates fcvtzs if src is fp16 scalar else fcvtzu.
     // To avoid that, we use neon intrinsic explicitly.
-    if (isFloat16AndHasFeature(op->value.type())) {
+    if (is_float16_and_has_feature(op->value.type())) {
         if (op->type.is_int_or_uint() && op->type.bits() == 16) {
             value = call_overloaded_intrin(op->type, "fp_to_int", {op->value});
             if (value) {
@@ -861,7 +861,7 @@ void CodeGen_ARM::visit(const Sub *op) {
 
     // llvm will generate floating point negate instructions if we ask for (-0.0f)-x
     if (op->type.is_float() &&
-        (op->type.bits() >= 32 || isFloat16AndHasFeature(op->type)) &&
+        (op->type.bits() >= 32 || is_float16_and_has_feature(op->type)) &&
         is_const_zero(op->a)) {
         Constant *a;
         if (op->type.bits() == 16) {
@@ -950,7 +950,7 @@ void CodeGen_ARM::visit(const Store *op) {
         Type elt = t.element_of();
         int vec_bits = t.bits() * t.lanes();
         if (elt == Float(32) ||
-            isFloat16AndHasFeature(elt) ||
+            is_float16_and_has_feature(elt) ||
             elt == Int(8) || elt == Int(16) || elt == Int(32) ||
             elt == UInt(8) || elt == UInt(16) || elt == UInt(32)) {
             if (vec_bits % 128 == 0) {
@@ -1185,7 +1185,7 @@ void CodeGen_ARM::visit(const Call *op) {
             for (size_t i = 0; i < op->args.size(); i++) {
                 new_args[i] = cast(Float(32, op->args[i].type().lanes()), op->args[i]);
             }
-            auto &fp32_func_name = it->second;
+            const auto &fp32_func_name = it->second;
             Expr e = Call::make(Float(32, op->type.lanes()), fp32_func_name, new_args, op->call_type,
                                 op->func, op->value_index, op->image, op->param);
             value = codegen(cast(Float(16, e.type().lanes()), e));
@@ -1363,21 +1363,21 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
 }
 
 Type CodeGen_ARM::upgrade_type_for_arithmetic(const Type &t) const {
-    if (isFloat16AndHasFeature(t)) {
+    if (is_float16_and_has_feature(t)) {
         return t;
     }
     return CodeGen_Posix::upgrade_type_for_arithmetic(t);
 }
 
 Type CodeGen_ARM::upgrade_type_for_argument_passing(const Type &t) const {
-    if (isFloat16AndHasFeature(t)) {
+    if (is_float16_and_has_feature(t)) {
         return t;
     }
     return CodeGen_Posix::upgrade_type_for_argument_passing(t);
 }
 
 Type CodeGen_ARM::upgrade_type_for_storage(const Type &t) const {
-    if (isFloat16AndHasFeature(t)) {
+    if (is_float16_and_has_feature(t)) {
         return t;
     }
     return CodeGen_Posix::upgrade_type_for_storage(t);
