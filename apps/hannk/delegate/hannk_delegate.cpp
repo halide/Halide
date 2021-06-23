@@ -385,7 +385,11 @@ public:
             set_external(tensor_id);
         }
 
-        interpreter_ = std::unique_ptr<Interpreter>(new Interpreter(std::move(model_)));
+        InterpreterOptions options;
+        if (options_.verbosity) {
+            options.verbose = true;
+        }
+        interpreter_ = std::unique_ptr<Interpreter>(new Interpreter(std::move(model_), std::move(options)));
 
         for (int tensor_id : TfLiteIntArrayView(node->outputs)) {
             if (tensor_id == kTfLiteOptionalTensor) {
@@ -423,10 +427,13 @@ public:
                 assert(!t->is_dynamic());
                 TfLiteTensor &tensor = context->tensors[tensor_id];
                 // TODO: should this be upgraded to a runtime-check-and-return-error?
-                assert(t->buffer().size_in_bytes() == tensor.bytes);
+                const auto &old_buf = t->buffer();
+                assert(old_buf.size_in_bytes() == tensor.bytes);
                 // We must reset it every time, as the tensor's data pointer
                 // can vary between calls in some scenatrios.
-                t->set_external_host(tensor.data.data);
+                const auto *raw_buf = old_buf.raw_buffer();
+                HalideBuffer<void> buf(raw_buf->type, tensor.data.data, raw_buf->dimensions, raw_buf->dim);
+                t->set_external_buffer(std::move(buf));
             }
         };
 

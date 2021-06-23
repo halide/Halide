@@ -40,6 +40,8 @@ class Op;
 
 class Tensor;
 using TensorPtr = std::shared_ptr<Tensor>;
+using TensorOffset = SmallVector<int, max_rank>;
+using TensorDimensions = SmallVector<halide_dimension_t, max_rank>;
 
 // Storage for a tensor. This can be shared among several tensors aliasing
 // the same memory. All aliases use the strides of the buffer in this storage
@@ -82,7 +84,8 @@ class Tensor {
     // (It may actually refer to read-only external memory, or it may simply be marked this may as
     // the result of a transform.)
     bool is_constant_ = false;
-    // If true, this Tensor's storage is externally owned and must not be freed.
+    // If true, this Tensor's buffer was externally created and must not be modified,
+    // (aside from allowing the buffer's dtor to run normally).
     bool is_external_ = false;
     // If true, this Tensor is 'dynamic' (i.e., it's an output whose size
     // is calculated during evaluation, rather than ahead of time).  It is an error
@@ -93,7 +96,7 @@ class Tensor {
     // Possibly shared storage for this tensor.
     std::shared_ptr<TensorStorage> storage_;
     // The offset of this tensor into the storage buffer.
-    SmallVector<int, max_rank> storage_offset_;
+    TensorOffset storage_offset_;
 
     // A list of ops that use this tensor as an output or an input, respectively.
     std::list<Op *> producers_;
@@ -169,7 +172,11 @@ public:
         is_external_ = external;
     }
 
-    void set_external_host(void *host);
+    // Requires that set_external() has already been called.
+    // external_buffer must have the same dimensions, mins, and extents
+    // as the current buffer (but the strides need not match).
+    // external_buffer must *not* have a null host pointer.
+    void set_external_buffer(HalideBuffer<void> external_buffer);
 
     bool is_dynamic() const {
         return is_dynamic_;
@@ -197,10 +204,10 @@ public:
     bool is_allocated() const;
     void allocate();
 
-    void resize(const Box &new_shape);
+    void resize_dynamic(const Box &new_shape);
 
     bool is_alias() const;
-    void set_alias_of(const TensorPtr &t, const SmallVector<int, max_rank> &offset = {});
+    void set_alias_of(const TensorPtr &t, const TensorOffset &offset = {});
 
     void add_consumer(Op *op);
     void add_producer(Op *op);
@@ -213,8 +220,6 @@ public:
     const std::list<Op *> &consumers() const {
         return consumers_;
     }
-
-    void replace_all_consumers_with(const TensorPtr &other);
 
     void dump(std::ostream &os) const;
 };
