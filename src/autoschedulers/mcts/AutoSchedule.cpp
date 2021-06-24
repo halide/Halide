@@ -185,6 +185,18 @@ namespace MCTS {
         std::string beam_str = Halide::Internal::get_env_variable("HL_MCTS_DISABLE_BEAM");
         return beam_str != "1";
     }
+
+    void print_env_variables() {
+        // TODO: add to this if we add to the variables above
+        std::cerr << "export HL_RANDOM_DROPOUT=" << get_dropout_threshold() << ";  ";
+        std::cerr << "export HL_MCTS_EXPLORATION=" << get_exploration_percent() << ";  ";
+        std::cerr << "export HL_MCTS_EXPLOITATION=" << get_exploitation_percent() << ";  ";
+        std::cerr << "export HL_MCTS_EXPLORE_MIN=" << get_min_explore() << ";  ";
+        std::cerr << "export HL_MCTS_EXPLOIT_MIN=" << get_min_exploit() << ";  ";
+        std::cerr << "export HL_MCTS_ROLLOUT_LENGTH=" << get_rollout_length() << ";  ";
+        std::cerr << "export HL_MCTS_BEAM_SIZE=" << get_beam_size() << ";  ";
+        std::cerr << "export HL_MCTS_DISABLE_BEAM=" << !use_beam() << ";\n";
+    }
 }
 
 namespace Halide {
@@ -292,17 +304,14 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     aslog(0) << "Size: " << dag.nodes.size() << "\n";
 
-    // TODO(rootjalex): do this in parallel.
+    // TODO(rootjalex): should probably only print these if a verbose flag is set.
+    MCTS::print_env_variables();
+
+
     Timer timer;
+    auto solver = MCTS::Solver<CPU_State, CPU_Action>::MakeRandomizedSolver();
 
-    // TODO(rootjalex): figure out a formula for these.
-    string mcts_iterations_str = get_env_variable("HL_MCTS_ITERS");
-    string mcts_simulations_str = get_env_variable("HL_MCTS_N_SIMS");
-    const uint32_t n_simulations = mcts_simulations_str.empty() ? dag.nodes.size() * 2 : std::stoul(mcts_simulations_str.c_str());
-    const uint32_t n_iterations = mcts_iterations_str.empty() ? dag.nodes.size() * 32 : std::stoul(mcts_iterations_str.c_str());
-
-    auto solver = MCTS::Solver<CPU_State, CPU_Action>::MakeIterationSolver(n_iterations, n_simulations);
-
+    // TODO(rootjalex): do this in parallel.
     LoopNest *root = new LoopNest;
     CPU_State start_state(&dag, &params, cost_model.get(), root, /* n_decisions */ 0, memory_limit);
     aslog(0) << "Starting\n";

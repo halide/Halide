@@ -39,8 +39,6 @@ namespace MCTS {
         // The nodes of this search tree - Action is edge that leads to node.
         typedef TreeNode<State, Action> Node;
 
-        // TODO(rootjalex): allow for timer use.
-
     public:
         // Number of iterations taken so far.
         uint32_t iterations = 0;
@@ -52,10 +50,6 @@ namespace MCTS {
         // Multiplier for Upper Confidence Trees.
         // https://link.springer.com/chapter/10.1007%2F11871842_29
         double uct_k = std::sqrt(2);
-
-        // Maximum depth to explore from a node.
-        // (Should be size of DAG, probably).
-        uint32_t num_simulations = 0;
 
     private:
         // If true, uses timer (not yet implemented), otherwise uses iteration count.
@@ -70,27 +64,11 @@ namespace MCTS {
 
         typedef std::vector<BeamElement> Beam;
     public:
-        // TODO(rootjalex): implement this.
-        // static MakeTimerSolver(uint32_t )
-        static Solver<State, Action> MakeIterationSolver(uint32_t max_iterations, uint32_t num_simulations) {
+        static Solver<State, Action> MakeRandomizedSolver() {
             Solver<State, Action> solver;
-            solver.max_iterations = max_iterations;
-            solver.use_timer = false;
-            solver.num_simulations = num_simulations;
+            // Originally there was a lot of set-up here, but most of it has since been removed.
             return solver;
         }
-
-        /*
-        static Solver<State, Action> MakeTimerSolver(uint32_t max_milliseconds) {
-            Solver<State, Action> solver;
-            solver.max_milliseconds = max_milliseconds;
-            solver.use_timer = true;
-            return solver;
-        }
-        */
-
-        size_t n_valid_nodes = 0;
-        size_t n_invalid_nodes = 0;
 
         // Node corresponds to best action to take immediately from this state,
         // and includes enough information to iteratively apply it's decisions.
@@ -101,41 +79,37 @@ namespace MCTS {
             NodePtr root_node = NodePtr(new Node(starter_state, Action::Default(), /* parent */ nullptr, rng));
             State current_state = starter_state; // track the current best state.
 
-            const double percent_to_explore = get_exploration_percent();
-            const double percent_to_exploit = get_exploitation_percent();
+            const double max_percent_to_explore = get_exploration_percent();
+            const double max_percent_to_exploit = get_exploitation_percent();
             const uint32_t min_explore_iters = get_min_explore();
             const uint32_t min_exploit_iters = get_min_exploit();
             const uint32_t rollout_length = get_rollout_length();
 
-            // TODO: be smarter about decision allocation?
-            internal_assert(max_iterations >= n_decisions) << "Must have enough iterations for the number of decisions made\n";
-            // const uint32_t n_iterations_per_decision = max_iterations / n_decisions;
-
-            // uint32_t n_iterations_per_decision = max_iterations / 2;
+            // Both exploitation and exploration linearly decrease with each decision made, to allow more exploration/exploitation earlier on.
+            // TODO(rootjalex): allow a flag to turn off linear descent.
+            const double explore_slope = max_percent_to_explore / static_cast<double>(n_decisions);
+            double percent_to_explore = max_percent_to_explore;
+            const double exploit_slope = max_percent_to_exploit / static_cast<double>(n_decisions);
+            double percent_to_exploit = max_percent_to_exploit;
 
             for (uint32_t d = 0; d < n_decisions; d++) {
                 const uint32_t n_exploitation = ceil(percent_to_exploit * root_node->get_n_branches()) + min_exploit_iters;
                 const uint32_t n_exploration = ceil(percent_to_explore * root_node->get_n_branches()) + min_explore_iters;
                 const uint32_t n_iterations_total = n_exploitation + n_exploration;
 
-                // std::cerr << "Decision: " << d << " exploit: " << n_exploitation << " explore: " << n_exploration << " total: " << n_iterations_total << " out of " << root_node->get_n_branches() << "\n";
-
-                // uint32_t n_iterations_per_decision = ceil(percent_to_explore * root_node->get_n_branches()) + min_iterations;
                 internal_assert(n_iterations_total != 0) << "accidentally gave 0 iterations: " << root_node->get_n_branches() << "\n";
-                // std::cerr << "Decision: " << d << " has " << n_iterations_per_decision << " iterations available, for " << root_node->get_n_branches() << " branches\n";
-                std::tie(current_state, root_node) = make_decision(root_node, current_state, n_iterations_total, num_simulations, n_exploitation, rollout_length, n_decisions);
+                std::tie(current_state, root_node) = make_decision(root_node, current_state, n_iterations_total, n_exploitation, rollout_length, n_decisions);
                 // Clear the parent of the new root_node
-                // TODO: figure out what to do here? Need some sort of back-tracking probably.
                 internal_assert(root_node) << "make_decision could not find a decision to make\n";
                 root_node->clear_parent(); // delete parent pointer, it's now garbage.
-                // n_iterations_per_decision = n_iterations_per_decision / 2 + 1; // make it at least 1
-            }
 
-            std::cerr << "Iterations:" << iterations << std::endl;
-            std::cerr << "Valids:" << n_valid_nodes << std::endl;
-            std::cerr << "Invalids:" << n_invalid_nodes << std::endl;
-            // std::cerr << "Explorations:" << n_explores << std::endl;
-            // std::cerr << "Exploitations:" << n_exploitations << std::endl;
+                // Explore a bit less at each round
+                percent_to_explore -= explore_slope;
+                percent_to_exploit -= exploit_slope;
+                // force non-negative
+                percent_to_explore = abs(percent_to_explore);
+                percent_to_exploit = abs(percent_to_exploit);
+            }
 
             return current_state;
         }
@@ -150,17 +124,19 @@ namespace MCTS {
             NodePtr root_node = NodePtr(new Node(starter_state, Action::Default(), /* parent */ nullptr, rng));
             State current_state = starter_state; // track the current best state.
 
-            const double percent_to_explore = get_exploration_percent();
-            const double percent_to_exploit = get_exploitation_percent();
+            const double max_percent_to_explore = get_exploration_percent();
+            const double max_percent_to_exploit = get_exploitation_percent();
             const uint32_t min_explore_iters = get_min_explore();
             const uint32_t min_exploit_iters = get_min_exploit();
             const uint32_t rollout_length = get_rollout_length();
 
-            // TODO: be smarter about decision allocation?
-            internal_assert(max_iterations >= n_decisions) << "Must have enough iterations for the number of decisions made\n";
-            // const uint32_t n_iterations_per_decision = max_iterations / n_decisions;
+            // Both exploitation and exploration linearly decrease with each decision made, to allow more exploration/exploitation earlier on.
+            // TODO(rootjalex): allow a flag to turn off linear descent.
+            const double explore_slope = max_percent_to_explore / static_cast<double>(n_decisions);
+            double percent_to_explore = max_percent_to_explore;
+            const double exploit_slope = max_percent_to_exploit / static_cast<double>(n_decisions);
+            double percent_to_exploit = max_percent_to_exploit;
 
-            // uint32_t n_iterations_per_decision = max_iterations / 2;
             const uint32_t beam_size = get_beam_size();
 
             Beam beam(beam_size, {nullptr, current_state});
@@ -177,13 +153,14 @@ namespace MCTS {
               fill_beam(beam, beam_fill, beam_size, search_depth, true);
 
               std::for_each(beam.begin(), beam.begin() + beam_fill, clear_parent);
-            }
 
-            std::cerr << "Iterations:" << iterations << std::endl;
-            std::cerr << "Valids:" << n_valid_nodes << std::endl;
-            std::cerr << "Invalids:" << n_invalid_nodes << std::endl;
-            // std::cerr << "Explorations:" << n_explores << std::endl;
-            // std::cerr << "Exploitations:" << n_exploitations << std::endl;
+              // Explore a bit less at each round
+              percent_to_explore -= explore_slope;
+              percent_to_exploit -= exploit_slope;
+              // force non-negative
+              percent_to_explore = abs(percent_to_explore);
+              percent_to_exploit = abs(percent_to_exploit);
+            }
 
             auto beam_element_ordering = [](BeamElement &lhs, BeamElement &rhs) { return lhs.first->get_value() < rhs.first->get_value(); };
 
@@ -323,9 +300,8 @@ namespace MCTS {
         }
 
         std::pair<State, NodePtr> make_decision(const NodePtr root_node, const State &root_state,
-                                                const uint32_t n_iterations, const uint32_t n_simulations,
-                                                const uint32_t k_best, const uint32_t rollout_length,
-                                                const uint32_t n_decisions) {
+                                                const uint32_t n_iterations, const uint32_t k_best,
+                                                const uint32_t rollout_length, const uint32_t n_decisions) {
             internal_assert(!root_state.is_terminal()) << "make_decision was given an end state\n";
             // Only one decision to make, don't waste any time:
             const uint32_t n_branches = root_node->get_n_branches();
@@ -338,19 +314,7 @@ namespace MCTS {
             uint32_t search_depth = 0;
 
             for (uint32_t i = 0; i < n_iterations; i++) {
-                // TODO: decide expansion method??
-                // NodePtr rollout_node = root_node->choose_any_random_child();
-                // NodePtr rollout_node = root_node->choose_weighted_random_child();
-                // NodePtr rollout_node = (root_node->is_fully_expanded()) ? get_best_value_child(root_node) : root_node->choose_new_random_child();
-                // NodePtr rollout_node = nullptr;
-                // if (root_node->is_fully_expanded()) {
-                //     rollout_node = get_best_value_child(root_node);
-                //     n_exploitations++;
-                // } else {
-                //     rollout_node = root_node->choose_new_random_child();
-                //     n_explores++;
-                // }
-
+                // TODO: are there better expansion methods?
                 NodePtr rollout_node = nullptr;
                 if (i < k_best) {
                     rollout_node = root_node->choose_specific_child(i % n_branches);
@@ -423,25 +387,6 @@ namespace MCTS {
             return current_state;
         }
 
-        // After a call to solve(), this function can be used to fetch the best state.
-        // State get_optimal_state(const State &starter_state, NodePtr solved_action) {
-        //     NodePtr node = solved_action;
-        //     State current_state = starter_state;
-        //     while (node) {
-        //         // std::cerr << "Node value: " << node->get_value() << std::endl;
-        //         // std::cerr << "State cost: " << current_state.calculate_cost() << std::endl;
-        //         current_state = current_state.take_action(node->get_action());
-        //         // TODO(rootjalex): is this the best policy? Should we use UTC?
-        //         if (node->is_terminal() || node->get_num_children() == 0) {
-        //             break;
-        //         } else {
-        //             node = get_min_value_child(node);
-        //         }
-        //     }
-        //     internal_assert(node) << "get_optimal_state ended with a nullptr node\n";
-        //     return current_state;
-        // }
-
         // Find the best UTC score of the children that have already been generated.
         NodePtr get_best_value_child(NodePtr parent_node) const {
             // TODO(rootjalex): should we check if parent_node is fully expanded?
@@ -477,47 +422,18 @@ namespace MCTS {
 
                     uct_score = uct_exploitation + uct_k * uct_exploration;
 
-                    // std::cerr << "\tExploitation: " << uct_exploitation << std::endl;
-                    // std::cerr << "\tExploration: " << uct_exploration << std::endl;
                 }
 
-                // std::cerr << "\tScore of: " << uct_score << std::endl;
                 if (!best_node || uct_score > best_uct_score) {
                     best_uct_score = uct_score;
                     best_node = child_ptr;
                 }
             }
 
-            // std::cerr << "\tBest node has score of: " << best_uct_score << std::endl;
-            // std::cerr << "Num children: " << num_children << std::endl;
             internal_assert(best_node) << "get_best_value_child ended with a nullptr node\n" << "\tWith: " << num_children << " children.\n";
 
             return best_node;
         }
-
-        /*
-        // Find the most visited of the children that have already been generated.
-        NodePtr get_most_visited_child(NodePtr parent_node) const {
-            uint32_t most_visits = 0;
-            NodePtr popular_node = nullptr;
-
-            const int num_children = parent_node->get_num_children();
-
-            for (int i = 0; i < num_children; i++) {
-                NodePtr child_ptr = parent_node->get_child(i);
-                const uint32_t num_visits = child_ptr->get_num_visits();
-
-                // MUST be >= not just >, in the case that no child has been visited yet.
-                if (!popular_node || num_visits >= most_visits) {
-                    most_visits = num_visits;
-                    popular_node = child_ptr;
-                }
-            }
-
-            internal_assert(popular_node) << "get_most_visited_child ended with a nullptr node\n";
-            return popular_node;
-        }
-        */
 
         // Find the child with the minimum value.
         NodePtr get_min_value_child(NodePtr parent_node, uint32_t search_depth = 0, bool use_search_depth = false) const {
@@ -531,7 +447,6 @@ namespace MCTS {
                 const double child_value = child_ptr->get_value();
                 const uint32_t child_max_depth = child_ptr->get_state_depth();
 
-                // bool lower_depth = (child_max_depth >= search_depth) && (child_max_depth >= best_depth);
                 // Depth is correct
                 bool correct_depth = !use_search_depth || (child_max_depth == search_depth);
                 bool lower_cost = !best_node || (child_value < best_value);
@@ -541,7 +456,6 @@ namespace MCTS {
                     best_node = child_ptr;
                 }
 
-                // std::cerr << "\t\tChild with cost:" << child_value << std::endl;
             }
 
             if (!best_node) {
@@ -558,9 +472,6 @@ namespace MCTS {
             }
 
             internal_assert(best_node) << "get_min_value_child ended with a nullptr node\n";
-            // TODO(rootjalex): assert(best_node);
-
-            // std::cerr << "\t\tBest has cost:" << best_value << std::endl;
 
             return best_node;
         }
