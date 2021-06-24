@@ -64,7 +64,7 @@ extern "C" DLLEXPORT int make_data(halide_buffer_t *out) {
         for (int x = 0; x < out->dim[0].extent; x++) {
             int x_coord = x + out->dim[0].min;
             int y_coord = y + out->dim[1].min;
-            dst[x] = (x_coord + y_coord) % 64;
+            dst[x] = (x_coord + y_coord) % 61;
         }
     }
     return 0;
@@ -93,8 +93,8 @@ extern "C" DLLEXPORT int make_data_multi(halide_buffer_t *out1, halide_buffer_t 
         for (int x = 0; x < out1->dim[0].extent; x++) {
             int x_coord = x + out1->dim[0].min;
             int y_coord = y + out1->dim[1].min;
-            dst1[x] = (x_coord + y_coord) % 64;
-            dst2[x] = (x_coord + y_coord + 16) % 64;
+            dst1[x] = (x_coord + y_coord) % 61;
+            dst2[x] = (x_coord + y_coord + 15) % 61;
         }
     }
     return 0;
@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
         // Row stride should be 128B/32-element aligned.
         source.align_storage(x, 32);
         Func sink;
-        sink(x, y) = source(x, y) - (x + y) % 64;
+        sink(x, y) = source(x, y) - (x + y) % 61;
 
         sink.tile(x, y, xi, yi, 32, 32);
 
@@ -138,8 +138,8 @@ int main(int argc, char **argv) {
                             std::vector<ExternFuncArgument>(),
                             types, {x, y});
         Func sink_multi;
-        sink_multi(x, y) = multi(x, y)[0] - (x + y) % 64 +
-                           multi(x, y)[1] - (x + y + 16) % 64;
+        sink_multi(x, y) = multi(x, y)[0] - (x + y) % 61 +
+                           multi(x, y)[1] - (x + y + 15) % 61;
 
         sink_multi.tile(x, y, xi, yi, 32, 32);
 
