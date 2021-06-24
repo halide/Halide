@@ -243,6 +243,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite(min(x, y) - min(y, x), 0) ||
                rewrite(min(x, y) - min(z, w), y - w, can_prove(x - y == z - w, this)) ||
                rewrite(min(x, y) - min(w, z), y - w, can_prove(x - y == z - w, this)) ||
+               rewrite(min(x*c0, c1) - min(x, c2)*c0, min(c1 - min(x, c2)*c0, 0), c0 > 0 && c1 <= c2*c0) ||
 
                rewrite((x - max(z, (x + y))), (0 - max(z - x, y)), !is_const(x)) ||
                rewrite((x - max(z, (y + x))), (0 - max(z - x, y)), !is_const(x)) ||
