@@ -1,7 +1,7 @@
-name: Packaging
 # DISABLED, see https://github.com/halide/Halide/issues/6111
-# on: [ 'pull_request' ]
-# jobs:
+name: Packaging
+on: [ 'pull_request' ]
+jobs:
 #   package-ubuntu:
 #     name: Package for Ubuntu
 #     runs-on: ubuntu-20.04
