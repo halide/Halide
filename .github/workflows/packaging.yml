@@ -1,6 +1,5 @@
+name: Packaging
 # DISABLED, see https://github.com/halide/Halide/issues/6111
-#
-# name: Packaging
 # on: [ 'pull_request' ]
 # jobs:
 #   package-ubuntu:
