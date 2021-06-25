@@ -19,7 +19,6 @@ void AllocationPlanner::add_block(size_t size, int first_use, int last_use) {
     assert(next_free_offset_ == align_up(next_free_offset_, alignment_));
     block_offsets_.push_back(next_free_offset_);
     next_free_offset_ += align_up(size, alignment_);
-    assert(next_free_offset_ == align_up(next_free_offset_, alignment_));
 }
 
 size_t AllocationPlanner::block_count() const {
