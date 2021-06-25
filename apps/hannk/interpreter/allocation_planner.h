@@ -14,13 +14,12 @@ public:
     // All blocks allocated will be aligned to (at least) this amount.
     explicit AllocationPlanner(size_t alignment);
 
-    // Specify a block's size and lifetime. The order this is called implicitly
-    // assigns an index to the result, so the block information that's passed into the nth call of
-    // this method will be used as the block_index argument to get_block_offset().
-    void add_block(size_t size, int first_use, int last_use);
+    // Specify a block's size and lifetime. Return an index to the block, which will later
+    // be used to retrieve the final layour info via get_block_offset().
+    int add_block(size_t size, int first_use, int last_use);
 
     // How many blocks have been added to the planner.
-    size_t block_count() const;
+    int block_count() const;
 
     // Commit all the blocks added and compute a layout. It is an error to
     // call add_block() after this.
@@ -32,7 +31,7 @@ public:
 
     // Calculated layout offset for the nth block added to the planner.
     // It is an error to call this before commit().
-    size_t get_block_offset(size_t block_index) const;
+    size_t get_block_offset(int block_index) const;
 
     // Movable but not copyable.
     AllocationPlanner() = delete;

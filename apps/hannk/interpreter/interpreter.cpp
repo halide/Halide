@@ -53,6 +53,7 @@ struct TensorAllocationInfo {
     size_t size_needed = 0;
     int first_use = std::numeric_limits<int>::max();
     int last_use = std::numeric_limits<int>::min();
+    int block_index = -1;
     std::set<TensorPtr> tensors;
 };
 
@@ -77,6 +78,7 @@ class FindAllocatableTensors : public TensorVisitor {
         info.size_needed = storage->storage_size();
         info.first_use = std::min(info.first_use, op_index());
         info.last_use = std::max(info.last_use, op_index());
+        // leave block_index as -1
         info.tensors.insert(t);
     }
 
@@ -107,17 +109,20 @@ std::unique_ptr<char[]> allocate_tensors(OpGroup *root, const InterpreterOptions
     constexpr int kTfLiteDefaultTensorAlignment = 64;
     const size_t alignment = (size_t)std::max(halide_malloc_alignment(), kTfLiteDefaultTensorAlignment);
     AllocationPlanner planner(alignment);
-    for (const auto &it : find_tensors.tensor_info) {
-        const auto &info = it.second;
-        planner.add_block(info.size_needed, info.first_use, info.last_use);
+    for (auto &it : find_tensors.tensor_info) {
+        auto &info = it.second;
+        info.block_index = planner.add_block(info.size_needed, info.first_use, info.last_use);
+        assert(info.block_index >= 0);
     }
     planner.commit();
 
     if (options.verbose) {
         HLOG(INFO) << "Arena memory needed: " << planner.memory_needed();
-        for (size_t i = 0; i < planner.block_count(); i++) {
-            HLOG(INFO) << "    Block of size: " << planner.get_block_offset(i);
+        std::ostringstream oss;
+        for (int i = 0; i < planner.block_count(); i++) {
+            oss << ' ' << planner.get_block_offset(i);
         }
+        HLOG(INFO) << "    Offsets:" << oss.str();
     }
 
     // Allocate the chunk we need. Be sure to over-allocate for alignment.
@@ -130,14 +135,12 @@ std::unique_ptr<char[]> allocate_tensors(OpGroup *root, const InterpreterOptions
     // Make sure that the 'base' we start from is aligned.
     arena_base = (char *)(((uintptr_t)arena_base + alignment - 1) & ~(alignment - 1));
 
-    size_t block_index = 0;
     for (const auto &it : find_tensors.tensor_info) {
         const auto &info = it.second;
-        char *new_host = arena_base + planner.get_block_offset(block_index);
+        char *new_host = arena_base + planner.get_block_offset(info.block_index);
         for (const auto &t : info.tensors) {
             t->allocate_from_arena_pointer(new_host);
         }
-        block_index++;
     }
 
     return arena;
