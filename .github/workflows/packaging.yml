@@ -10,6 +10,9 @@ jobs:
       CMAKE_C_COMPILER_LAUNCHER: ccache
       LLVM_ROOT: /usr/lib/llvm-11
     steps:
+      - name: Nothing
+        run: |
+          echo "DISABLED, see https://github.com/halide/Halide/issues/6111"
   #     - name: Install dependencies
   #       run: |
   #         wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null \
