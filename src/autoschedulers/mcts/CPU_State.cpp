@@ -370,6 +370,8 @@ vector<CPU_Action> CPU_State::generate_parallel_realizations(const FunctionDAG::
                 // TODO(rootjalex): Once again, should we prune here? Or is it fine to delay?
                 actions.push_back(CPU_Action(CPU_ScheduleAction::Tile, new_root));
                 // actions.push_back(CPU_Action(CPU_ScheduleAction::Tile, new_root, tile_features));
+            } else {
+                delete new_root;
             }
         }
     }
