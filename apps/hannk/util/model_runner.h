@@ -3,6 +3,7 @@
 
 #include <chrono>
 #include <cstring>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <vector>
@@ -15,6 +16,31 @@ struct TfLiteInterpreterOptions;
 struct TfLiteModel;
 
 namespace hannk {
+
+struct FlagProcessor {
+    using Fn = std::function<int(const std::string &)>;
+    using FnMap = std::map<std::string, Fn>;
+
+    std::map<std::string, Fn> flag_handlers;
+    Fn nonflag_handler = handle_nonflag;
+    Fn unknown_flag_handler = handle_unknown_flag;
+    Fn missing_value_handler = handle_missing_value;
+
+    // Returns 0 for success, nonzero for fatal error.
+    int process(int argc, char **argv) const;
+
+    // default impls
+    static int handle_nonflag(const std::string &);
+    static int handle_unknown_flag(const std::string &);
+    static int handle_missing_value(const std::string &);
+
+    // Movable but not copyable.
+    FlagProcessor() = default;
+    FlagProcessor(const FlagProcessor &) = delete;
+    FlagProcessor &operator=(const FlagProcessor &) = delete;
+    FlagProcessor(FlagProcessor &&) = delete;
+    FlagProcessor &operator=(FlagProcessor &&) = delete;
+};
 
 struct SeedTracker {
     SeedTracker() = default;
@@ -75,10 +101,13 @@ struct ModelRunner {
     bool do_run[kNumRuns];  // no way to default-init everything to anything but zero, alas
     bool do_benchmark = true;
     bool do_compare_results = true;
+    bool keep_going = false;
     double tolerance;
     std::string external_delegate_path;
 
     ModelRunner();
+
+    int parse_flags(int argc, char **argv, std::vector<std::string> &files_to_process);
 
     void set_seed(int seed);
     void status();

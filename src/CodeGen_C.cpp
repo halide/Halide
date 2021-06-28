@@ -2037,14 +2037,22 @@ void CodeGen_C::visit(const Call *op) {
         rhs << print_reinterpret(op->type, op->args[0]);
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
-        string a0 = print_expr(op->args[0]);
-        string a1 = print_expr(op->args[1]);
-        rhs << a0 << " << " << a1;
+        if (op->args[1].type().is_uint()) {
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " << " << a1;
+        } else {
+            rhs << print_expr(lower_signed_shift_left(op->args[0], op->args[1]));
+        }
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
-        string a0 = print_expr(op->args[0]);
-        string a1 = print_expr(op->args[1]);
-        rhs << a0 << " >> " << a1;
+        if (op->args[1].type().is_uint()) {
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " >> " << a1;
+        } else {
+            rhs << print_expr(lower_signed_shift_right(op->args[0], op->args[1]));
+        }
     } else if (op->is_intrinsic(Call::count_leading_zeros) ||
                op->is_intrinsic(Call::count_trailing_zeros) ||
                op->is_intrinsic(Call::popcount)) {

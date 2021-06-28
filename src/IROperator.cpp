@@ -1030,6 +1030,21 @@ struct RemoveLikelies : public IRMutator {
     }
 };
 
+// TODO: There could just be one IRMutator that can remove
+// calls from a list. If we need more of these, it might be worth
+// doing that refactor.
+struct RemovePromises : public IRMutator {
+    using IRMutator::visit;
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::promise_clamped) ||
+            op->is_intrinsic(Call::unsafe_promise_clamped)) {
+            return mutate(op->args[0]);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+};
+
 }  // namespace
 
 Expr remove_likelies(const Expr &e) {
@@ -1038,6 +1053,14 @@ Expr remove_likelies(const Expr &e) {
 
 Stmt remove_likelies(const Stmt &s) {
     return RemoveLikelies().mutate(s);
+}
+
+Expr remove_promises(const Expr &e) {
+    return RemovePromises().mutate(e);
+}
+
+Stmt remove_promises(const Stmt &s) {
+    return RemovePromises().mutate(s);
 }
 
 Expr unwrap_tags(const Expr &e) {
