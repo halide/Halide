@@ -36,6 +36,7 @@ protected:
 
     void visit(const Mul *) override;
     void visit(const Div *) override;
+    void visit(const Mod *) override;
 
     void visit(const Allocate *) override;
     void visit(const For *) override;

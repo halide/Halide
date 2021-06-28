@@ -513,6 +513,16 @@ class MatchXtensaPatterns : public IRGraphMutator {
 private:
     using IRGraphMutator::visit;
 
+    static Expr halide_xtensa_widen_mul_u24(Expr v0, Expr v1) {
+        Expr call = Call::make(wild_i24x.type(), "halide_xtensa_widen_mul_u24", {std::move(v0), std::move(v1)}, Call::PureExtern);
+        return call;
+    }
+
+    static Expr halide_xtensa_widen_mul_by_diff_u24(Expr v0, Expr v1, Expr v2) {
+        Expr call = Call::make(wild_i24x.type(), "halide_xtensa_widen_mul_by_diff_u24", {std::move(v0), std::move(v1), std::move(v2)}, Call::PureExtern);
+        return call;
+    }
+
     static Expr halide_xtensa_widen_mul_i48(Expr v0, Expr v1) {
         Expr call = Call::make(wild_i48x.type(), "halide_xtensa_widen_mul_i48", {std::move(v0), std::move(v1)}, Call::PureExtern);
         return call;
@@ -589,6 +599,12 @@ private:
         return call;
     }
 
+    static Expr halide_xtensa_concat_from_native_i24(Expr v0, Expr v1) {
+        Expr call = Call::make(wild_i24x.type(), "halide_xtensa_concat_from_native",
+                               {std::move(v0), std::move(v1)}, Call::PureExtern);
+        return call;
+    }
+
     static Expr halide_xtensa_concat_from_native_i32(Expr v0, Expr v1) {
         Expr call = Call::make(wild_i32x.type(), "halide_xtensa_concat_from_native",
                                {std::move(v0), std::move(v1)}, Call::PureExtern);
@@ -641,11 +657,18 @@ private:
                 {"halide_xtensa_widen_pair_mul_i48", i48(wild_i16x) * i48(wild_i16x) + i48(wild_i16x) * i48(wild_i16x)},
                 {"halide_xtensa_widen_pair_mul_u48", i48(wild_u16x) * i48(wild_u16x) + i48(wild_u16x) * i48(wild_u16x)},
 
+                {"halide_xtensa_widen_pair_mul_i24", i24(wild_i8x) * i24(wild_i8x) + i24(wild_i8x) * i24(wild_i8x)},
+                {"halide_xtensa_widen_pair_mul_u24", i24(wild_u8x) * i24(wild_u8x) + i24(wild_u8x) * i24(wild_u8x)},
+
                 // Multiply-add to accumulator type.
                 {"halide_xtensa_widen_pair_mul_add_i48", i32(halide_xtensa_widen_mul_add_i48(wild_i48x, wild_i16x, wild_i16x)) + i32(halide_xtensa_widen_mul_i48(wild_i16x, wild_i16x)), Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_pair_mul_add_i48", halide_xtensa_widen_mul_add_i48(wild_i48x, wild_i16x, wild_i16x) + halide_xtensa_widen_mul_i48(wild_i16x, wild_i16x)},
+
                 {"halide_xtensa_widen_mul_add_i48", i32(wild_i48x) + i32(halide_xtensa_widen_mul_i48(wild_i16x, wild_i16x)), Pattern::AccumulatorOutput48},
                 {"halide_xtensa_widen_mul_add_i48", wild_i48x + halide_xtensa_widen_mul_i48(wild_i16x, wild_i16x)},
+
+                {"halide_xtensa_widen_mul_add_u24", wild_i24x + halide_xtensa_widen_mul_u24(wild_u8x, wild_u8x)},
+                {"halide_xtensa_widen_mul_add_by_diff_u24", wild_i24x + halide_xtensa_widen_mul_by_diff_u24(wild_u8x, wild_u8, wild_u8x)},
 
                 {"halide_xtensa_widen_mul_add_i24",
                  wild_i24x + call("halide_xtensa_widen_mul_i24", wild_i24x, {wild_i8x, wild_i8x})},
@@ -707,6 +730,14 @@ private:
             static const std::vector<Pattern> scalar_muls = {};
 
             static const std::vector<Pattern> muls = {
+                {"halide_xtensa_widen_mul_i24", i24(wild_i8x) * bc(i24(wild_i8))},
+                {"halide_xtensa_widen_mul_u24", i24(wild_u8x) * bc(i24(wild_u8))},
+
+                {"halide_xtensa_widen_mul_i24", i24(wild_i8x) * i24(wild_i8x)},
+                {"halide_xtensa_widen_mul_u24", i24(wild_u8x) * i24(wild_u8x)},
+
+                {"halide_xtensa_widen_mul_by_diff_u24", (i24(wild_u8x) - bc(i24(wild_u8))) * i24(wild_u8x)},
+
                 {"halide_xtensa_widen_mul_i48", i48(wild_i16x) * i48(wild_i16x)},
 
                 {"halide_xtensa_widen_zzzzz", i24(concat({wild_i8x64, wild_i8x64, wild_i8x64, wild_i8x64})) * i24(repeat_each_element(wild_i8x4, 64))},
@@ -797,6 +828,25 @@ private:
             }
         }
 
+        if (const Shuffle *concat = op->value.as<Shuffle>()) {
+            if (concat->is_concat()) {
+                std::vector<Expr> widened_loads;
+                for (const Expr &v : concat->vectors) {
+                    if (const Load *load = v.as<Load>()) {
+                        Expr dense_ramp_base = strided_ramp_base(load->index, 1);
+                        if (dense_ramp_base.defined() && is_const_one(load->predicate) && (op->type.is_int_or_uint()) && ((op->type.bits() == 16) || (op->type.bits() == 32)) && (load->type.is_int_or_uint()) && (2 * load->type.bits() == op->type.bits())) {
+                            // The third argument is just to pass the type of load.
+                            widened_loads.push_back(Call::make(op->type.with_lanes(v.type().lanes()), "halide_xtensa_widening_load", {load->name, dense_ramp_base, make_one(load->type.element_of())}, Call::PureExtern));
+                        }
+                    }
+                }
+
+                if (widened_loads.size() == concat->vectors.size()) {
+                    return Shuffle::make_concat(widened_loads);
+                }
+            }
+        }
+
         static const std::vector<Pattern> casts = {
             // Narrowing multiply with shift.
             // {"halide_xtensa_sat_mul_with_shift_i32", i32(wild_i64x * wild_i64x / wild_i64), Pattern::NarrowOp0 | Pattern::NarrowUnsignedOp1 | Pattern::ExactLog2Op2},
@@ -816,6 +866,11 @@ private:
             {"halide_xtensa_sat_narrow_with_shift_u8", u8_sat(rounding_shift_right(wild_i16x, wild_u16))},
             {"halide_xtensa_sat_narrow_with_shift_i16", i16_sat(rounding_shift_right(wild_i32x, wild_u32))},
             {"halide_xtensa_sat_narrow_with_shift_i32", i32_sat(rounding_shift_right(wild_i64x, wild_u64))},
+
+            {"halide_xtensa_sat_narrow_with_signed_shift_i8", i8_sat(rounding_shift_right(wild_i16x, wild_i16))},
+            {"halide_xtensa_sat_narrow_with_signed_shift_u8", u8_sat(rounding_shift_right(wild_i16x, wild_i16))},
+            {"halide_xtensa_sat_narrow_with_signed_shift_i16", i16_sat(rounding_shift_right(wild_i32x, wild_i32))},
+            {"halide_xtensa_sat_narrow_with_signed_shift_i32", i32_sat(rounding_shift_right(wild_i64x, wild_i64))},
 
             {"halide_xtensa_sat_left_shift_i16", i16_sat(widening_shift_left(wild_i16x, wild_i16x))},
             {"halide_xtensa_sat_left_shift_i16", i16_sat(widening_shift_left(wild_i16x, wild_u16x))},
@@ -848,8 +903,10 @@ private:
             {"halide_xtensa_sat_narrow_i24x_with_shift_u8", u8_sat(i16(wild_i24x) >> bc(wild_i16))},
             {"halide_xtensa_sat_narrow_i24x_with_shift_u8", u8_sat(i16(wild_i24x) / bc(wild_i16)), Pattern::ExactLog2Op1},
 
+            {"halide_xtensa_sat_narrow_i8", i8_sat(wild_i16x)},
             {"halide_xtensa_sat_narrow_u8", u8_sat(wild_i16x)},
             {"halide_xtensa_sat_narrow_i16", i16_sat(wild_i32x)},
+            {"halide_xtensa_sat_narrow_u16", u16_sat(wild_i32x)},
 
             // Concat and cast.
             {"halide_xtensa_convert_concat_i16_to_i8", i8(halide_xtensa_concat_from_native_i16(wild_i16x, wild_i16x))},
@@ -858,7 +915,6 @@ private:
             {"halide_xtensa_convert_concat_u16_to_u8", u8(halide_xtensa_concat_from_native_u16(wild_u16x, wild_u16x))},
             {"halide_xtensa_convert_concat_i32_to_i16", i16(halide_xtensa_concat_from_native_i32(wild_i32x, wild_i32x))},
             {"halide_xtensa_convert_concat_i32_to_u16", u16(halide_xtensa_concat_from_native_i32(wild_i32x, wild_i32x))},
-
             {"halide_xtensa_convert_concat_u32_to_i16", i16(halide_xtensa_concat_from_native_u32(wild_u32x, wild_u32x))},
             {"halide_xtensa_convert_concat_u32_to_u16", u16(halide_xtensa_concat_from_native_u32(wild_u32x, wild_u32x))},
 
@@ -977,6 +1033,14 @@ private:
 
             {"halide_xtensa_widen_add_u48", widening_add(wild_u16x, wild_u16x), Pattern::AccumulatorOutput48},
             {"halide_xtensa_widen_add_i48", widening_add(wild_i16x, wild_i16x), Pattern::AccumulatorOutput48},
+
+            {"halide_xtensa_widen_zzzzz", halide_xtensa_widen_mul_u24(wild_u8x256, wild_u8)},
+            {"halide_xtensa_widen_zzzzz", halide_xtensa_widen_mul_u24(concat({wild_u8x64, wild_u8x64, wild_u8x64, wild_u8x64}), repeat_each_element(wild_u8x4, 64))},
+            {"halide_xtensa_widen_zzzzz", halide_xtensa_widen_mul_u24(repeat_each_element(wild_u8x4, 64), wild_u8x256), Pattern::SwapOps01},
+
+            {"halide_xtensa_widen_pair_mul_add_u24",
+             call("halide_xtensa_yyyy", wild_i24x, {wild_i24x, halide_xtensa_concat_from_native_i24(halide_xtensa_widen_mul_u24(wild_u8x, wild_u8x), halide_xtensa_widen_mul_u24(wild_u8x, wild_u8x))})},
+
             {"halide_xtensa_widen_quad_mul_add_i24",
              call("halide_xtensa_yyyy", wild_i24x, {wild_i24x, call("halide_xtensa_qqqq", wild_i24x, {call("halide_xtensa_widen_zzzzz", wild_i24x, {wild_i8x, wild_i8x, wild_i8x, wild_i8x, wild_i8x})})})},
 
@@ -1431,18 +1495,34 @@ private:
     }
 
     // NOTE(vksnk): not very clear if it's a good idea to slice loads/stores.
-    //     Expr visit(const Load* op) {
-    //         Expr dense_ramp_base = strided_ramp_base(op->index, 1);
-    //         if (dense_ramp_base.defined()) {
-    //             Expr predicate = mutate(op->predicate);
-    //             Expr ramp_base = mutate(op->index.as<Ramp>()->base);
-    //             Expr index = Ramp::make(ramp_base, 1, op->index.type().lanes());
-    //             return Load::make(op->type, op->name, std::move(index),
-    //                               op->image, op->param, std::move(predicate),
-    //                               op->alignment);
+    // Expr visit(const Load* op) override {
+    //     debug(0) << "maybe slicing load" << op->index << "\n";
+    //     Expr dense_ramp_base = strided_ramp_base(op->index, 1);
+    //     if (dense_ramp_base.defined()) {
+    //         const int64_t *const_base_ptr = as_const_int(dense_ramp_base);
+    //         if (const_base_ptr && is_const_one(op->predicate)) {
+    //             int native_lanes = get_native_vector_lanes_num(op->type);
+    //             int split_to = op->type.lanes() / native_lanes;
+    //             // Expr predicate = mutate(op->predicate);
+    //             // Expr ramp_base = mutate(op->index.as<Ramp>()->base);
+    //             // Expr index = Ramp::make(ramp_base, 1, op->index.type().lanes());
+    //             int64_t const_base = *const_base_ptr;
+    //             std::vector<Expr> concat_args;
+    //             for (int ix = 0; ix < split_to; ix++) {
+    //                 concat_args.push_back(
+    //                     Load::make(op->type.with_lanes(native_lanes),  op->name,
+    //                             Ramp::make(Expr((int32_t)const_base + ix * native_lanes), Expr(1), native_lanes),
+    //                             op->image, op->param, make_one(op->predicate.type().with_lanes(native_lanes)),
+    //                             op->alignment + native_lanes));
+    //             }
+
+    //             return Call::make(op->type,
+    //                         "halide_xtensa_concat_from_native",
+    //                         concat_args, Call::PureExtern);
     //         }
-    //         return IRMutator::visit(op);
     //     }
+    //     return IRMutator::visit(op);
+    // }
 
     //     Stmt visit(const Store* op) {
     //         Expr dense_ramp_base = strided_ramp_base(op->index, 1);
@@ -1827,6 +1907,17 @@ private:
         if (op->name == "halide_xtensa_concat_from_native") {
             if (op->args.size() == 1) {
                 return mutate(op->args[0]);
+            }
+        }
+
+        if (op->name == "halide_xtensa_slice_from_padded") {
+            if (const Broadcast *broadcast = op->args[0].as<Broadcast>()) {
+                return Broadcast::make(broadcast->value, op->type.lanes());
+            }
+            if (const Cast *cast = op->args[0].as<Cast>()) {
+                if (const Broadcast *broadcast = cast->value.as<Broadcast>()) {
+                    return Broadcast::make(Cast::make(cast->type.with_lanes(broadcast->value.type().lanes()), broadcast->value), op->type.lanes());
+                }
             }
         }
 

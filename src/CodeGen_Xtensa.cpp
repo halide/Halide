@@ -572,7 +572,7 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x64_t load<int16x64_t, int16_t, 64
     IVP_L2UNX16_XP(r1, ptr, 0);
     ptr++;
     IVP_L2UNX16_XP(r2, ptr, 0);
-    return int16x64_t(int16x64_t::from_native_vector,r1,r2);
+    return int16x64_t(int16x64_t::from_native_vector, r1, r2);
 }
 */
 template<>
@@ -690,6 +690,17 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int32x64_t widening_load<int32x64_t, ui
     IVP_LAN_2X16U_IP(r4, align, (const xb_vecN_2x16U*)ptr8);
 
     return int32x64_t(int32x64_t::from_native_vector, r1, r2, r3, r4);
+}
+
+template <typename VectorType, typename BaseType, int Lanes>
+HALIDE_ALWAYS_INLINE void store_narrowing(const VectorType& a, void *base, int32_t offset) = delete;
+
+template<>
+HALIDE_ALWAYS_INLINE void store_narrowing<int16x32_t, uint8_t, 32>(const int16x32_t& a, void *base, int32_t offset) {
+	valign align;
+	xb_vecNx8U* __restrict ptr  = (xb_vecNx8U*)((uint8_t*)base + offset);
+	IVP_SANX8U_IP(a, align, ptr);
+	IVP_SAPOSNX8U_FP(align, ptr);
 }
 
 HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_interleave_i16(const int16x32_t& a, const int16x32_t& b) {
@@ -918,6 +929,12 @@ HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_mul_add_i48(const int48x32_t
   return r;
 }
 
+HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_mul_add_u24(const int24x64_t& a, const uint8x64_t& b, const uint8x64_t& c) {
+  int24x64_t r = a;
+  IVP_MULUUA2NX8(r, b, c);
+  return r;
+}
+
 HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_mul_add_i24(const int24x64_t& a, const int8x64_t& b, const int8x64_t& c) {
   int24x64_t r = a;
   IVP_MULA2NX8(r, b, c);
@@ -1010,6 +1027,30 @@ HALIDE_ALWAYS_INLINE int24x128_t halide_xtensa_dual_widen_quad_mul_add_i24(
   return r;
 }
 
+HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_pair_mul_i24(const int8x64_t& a, const int8x64_t& b,
+                                                                  const int8x64_t& c, const int8x64_t& d) {
+  return IVP_MULP2NX8(a, b, c, d);
+}
+
+HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_pair_mul_add_i24(const int24x64_t& a, const int8x64_t& b,
+                                                                  const int8x64_t& c, const int8x64_t& d, const int8x64_t& e) {
+  int24x64_t r = a;
+  IVP_MULPA2NX8(r, b, c, d, e);
+  return r;
+}
+
+HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_pair_mul_add_u24(const int24x64_t& a, const uint8x64_t& b,
+                                                                  const uint8x64_t& c, const uint8x64_t& d, const uint8x64_t& e) {
+  int24x64_t r = a;
+  IVP_MULUUPA2NX8(r, b, c, d, e);
+  return r;
+}
+
+HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_pair_mul_u24(const uint8x64_t& a, const uint8x64_t& b,
+                                                                  const uint8x64_t& c, const uint8x64_t& d) {
+  return IVP_MULUUP2NX8(a, b, c, d);
+}
+
 HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_pair_mul_i48(const int16x32_t& a, const int16x32_t& b,
                                                                   const int16x32_t& c, const int16x32_t& d) {
   return IVP_MULPNX16(a, b, c, d);
@@ -1025,6 +1066,13 @@ HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_pair_mul_add_i48(const int48
 HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_pair_mul_u48(const uint16x32_t& a, const uint16x32_t& b,
                                                                   const uint16x32_t& c, const uint16x32_t& d) {
   return IVP_MULUUPNX16(a, b, c, d);
+}
+
+HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_mul_add_by_diff_u24(const int24x64_t& a, const uint8x64_t& d1,
+                                                                  const uint8x64_t& d2, const uint8x64_t& c) {
+  int24x64_t r = a;
+  IVP_MULUUPDA2NX8(r, d1, c, d2, c);
+  return r;
 }
 
 HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_add_i48(const int16x32_t& a, const int16x32_t& b) {
@@ -1416,19 +1464,24 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_sat_narrow_with_shift_i16(const in
   return IVP_PACKVRNX48(wide, shift);
 }
 
+// TODO(vksnk): this is pretty inefficient.
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_sat_narrow_with_signed_shift_i16(const int32x32_t& a, int32_t shift) {
+  if (shift >= 0) {
+    return halide_xtensa_sat_narrow_with_shift_i16(a, (uint32_t)shift);
+  }
+
+  return halide_xtensa_sat_narrow_i16(
+            int32x32_t(int32x32_t::from_native_vector,
+                        IVP_SLAN_2X32(a.native_vector[0], -shift),
+                        IVP_SLAN_2X32(a.native_vector[1], -shift)));
+}
+
 HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_sat_narrow_with_shift_i32(const int64x16_t& a, uint32_t shift) {
   return IVP_PACKVRN_2X64W(a, shift);
 }
 
-/* Looks like there is no such instruction.
-HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_sat_narrow_with_shift_u16(const int32x32_t& a, uint32_t shift) {
-  xb_vecNx48 wide = IVP_CVT48SNX32(a.native_vector[1], a.native_vector[0]);
-  return IVP_PACKVRUNX48(wide, shift);
-}
-*/
 HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_convert_concat_i16_to_u8(const int16x32_t& a, const int16x32_t& b) {
-  xb_vec2Nx24 wide = IVP_CVT24S2NX16(b, a);
-  return xb_vec2Nx8_rtor_xb_vec2Nx8U(IVP_PACKL2NX24(wide));
+  return IVP_SEL2NX8UI(IVP_MOV2NX8_FROMNX16(b), IVP_MOV2NX8_FROMNX16(a), IVP_SELI_8B_EXTRACT_1_OF_2_OFF_0);
 }
 
 HALIDE_ALWAYS_INLINE int8x64_t halide_xtensa_convert_concat_u16_to_i8(const uint16x32_t& a, const uint16x32_t& b) {
@@ -1934,6 +1987,16 @@ void CodeGen_Xtensa::visit(const Div *op) {
     }
 }
 
+void CodeGen_Xtensa::visit(const Mod *op) {
+    string sa = print_expr(op->a);
+    string sb = print_expr(op->b);
+    if (is_native_xtensa_vector<int32_t>(op->type)) {
+        print_assignment(op->type, "(common_int32x16_t)" + sa + " % (common_int32x16_t)" + sb);
+    } else {
+        print_assignment(op->type, sa + " % " + sb);
+    }
+}
+
 void CodeGen_Xtensa::visit(const Max *op) {
     if (op->type.is_scalar()) {
         print_expr(Call::make(op->type, "::halide_cpp_max<" + print_type(op->type) + ">", {op->a, op->b}, Call::Extern));
@@ -2217,7 +2280,13 @@ void CodeGen_Xtensa::visit(const Load *op) {
         internal_assert(t.is_vector());
         std::string op_name;
         // TODO(vksnk): generalize this!
-        int native_lanes = (op->type.element_of().bytes() == 3) ? 64 : (64 / op->type.element_of().bytes());
+        int native_lanes = (64 / op->type.element_of().bytes());
+        if (op->type.element_of().bytes() == 3) {
+            native_lanes = 64;
+        }
+        if (op->type.element_of().bytes() == 6) {
+            native_lanes = 32;
+        }
         if ((op->alignment.modulus % native_lanes == 0) && (op->alignment.remainder % native_lanes == 0)) {
             op_name = "aligned_load";
         } else {
@@ -2277,7 +2346,36 @@ void CodeGen_Xtensa::visit(const Store *op) {
         stream << "#endif\n";
     }
 
-    string id_value = print_expr(op->value);
+    bool is_narrowing = false;
+    bool is_sat_narrowing = false;
+    Expr value = op->value;
+    if (const Cast *cast = value.as<Cast>()) {
+        if (cast->value.type().is_vector() && (cast->value.type().bits() == value.type().bits() * 2)) {
+            is_narrowing = true;
+            value = cast->value;
+        }
+    }
+    if (const Call *call = value.as<Call>()) {
+        // TODO: more checks for this one are needed.
+        if (call->name == "halide_xtensa_slice_from_padded") {
+            if (const Cast *cast = call->args[0].as<Cast>()) {
+                if (cast->value.type().is_vector() && (cast->value.type().bits() == value.type().bits() * 2)) {
+                    if (const Call *inner_call = cast->value.as<Call>()) {
+                        if (inner_call->name == "halide_xtensa_pad_to_native") {
+                            is_narrowing = true;
+                            value = inner_call->args[0];
+                        }
+                    }
+                }
+            }
+        }
+        if (call->name.find("halide_xtensa_sat_narrow_i") == 0) {
+            is_sat_narrowing = true;
+            value = call->args[0];
+        }
+    }
+
+    string id_value = print_expr(value);
     string name = print_name(op->name);
 
     // TODO: We could replicate the logic in the llvm codegen which decides whether
@@ -2296,9 +2394,20 @@ void CodeGen_Xtensa::visit(const Store *op) {
             internal_assert(op->value.type().is_vector());
             string id_ramp_base = print_expr(dense_ramp_base);
             string id_count = print_expr(count);
-            stream << get_indent() << "store_variable"
-                   << "<" << print_type(t) << ", "
-                   << print_type(t.element_of()) << ", " << t.lanes()
+            string op_name = "store_variable";
+            if (is_narrowing) {
+                op_name = op_name + "_narrowing";
+            }
+            if (is_sat_narrowing) {
+                op_name = op_name + "_narrowing_sat";
+            }
+            stream << get_indent() << op_name << "<";
+            if (is_narrowing) {
+                stream << print_type(value.type());
+            } else {
+                stream << print_type(t);
+            }
+            stream << ", " << print_type(t.element_of()) << ", " << t.lanes()
                    << ">(" << id_value << ", " << name << ", " << id_ramp_base << ", " << id_count << ");\n";
         } else {
             user_assert(is_const_one(op->predicate)) << "This predicated store is not supported by Xtensa backend.\n";
@@ -2307,16 +2416,35 @@ void CodeGen_Xtensa::visit(const Store *op) {
         internal_assert(op->value.type().is_vector());
         string op_name;
         // TODO(vksnk): generalize this!
-        int native_lanes = (op->value.type().element_of().bytes() == 3) ? 64 : (64 / op->value.type().element_of().bytes());
+        int native_lanes = (64 / op->value.type().element_of().bytes());
+        if (op->value.type().element_of().bytes() == 3) {
+            native_lanes = 64;
+        }
+        if (op->value.type().element_of().bytes() == 6) {
+            native_lanes = 32;
+        }
+
         if ((op->alignment.modulus % native_lanes == 0) && (op->alignment.remainder % native_lanes == 0)) {
             op_name = "aligned_store";
         } else {
             op_name = "store";
         }
 
+        if (is_narrowing) {
+            op_name = op_name + "_narrowing";
+        }
+        if (is_sat_narrowing) {
+            op_name = op_name + "_narrowing_sat";
+        }
+
         string id_ramp_base = print_expr(dense_ramp_base);
-        stream << get_indent() << op_name << "<" << print_type(t) << ", "
-               << print_type(t.element_of()) << ", " << t.lanes()
+        stream << get_indent() << op_name << "<";
+        if (is_narrowing) {
+            stream << print_type(value.type());
+        } else {
+            stream << print_type(t);
+        }
+        stream << ", " << print_type(t.element_of()) << ", " << t.lanes()
                << ">(" << id_value << ", " << name << ", " << id_ramp_base << ");\n";
     } else if (op->index.type().is_vector()) {
         // If index is a vector, scatter vector elements.
