@@ -517,6 +517,10 @@ protected:
     /** Emit atomic store instructions? */
     bool emit_atomic_stores;
 
+    /** Can we call this operation with float16 type?
+        This is used to avoid "emulated" equivalent code-gen in case target has FP16 feature **/
+    virtual bool supports_call_as_float16(const Call *op) const;
+
 private:
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
