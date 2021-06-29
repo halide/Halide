@@ -267,6 +267,10 @@ $(BIN)/%/interval.o: interpreter/interval.cpp $(OPS_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -c $< -o $@
 
+$(BIN)/%/allocation_planner.o: interpreter/allocation_planner.cpp $(OPS_HALIDE)
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -c $< -o $@
+
 INTERPRETER_DEPS = \
 	$(BIN)/%/interpreter.o \
 	$(BIN)/%/interval.o \
@@ -276,6 +280,7 @@ INTERPRETER_DEPS = \
 	$(BIN)/%/tensor.o \
 	$(BIN)/%/transforms.o \
 	$(BIN)/%/ops.o \
+	$(BIN)/%/allocation_planner.o \
 	$(OPS_HALIDE)
 
 # ---------------------- tflite-parser
