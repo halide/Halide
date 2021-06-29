@@ -1333,6 +1333,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_sve2,                   ///< Enable ARM Scalable Vector Extensions v2
     halide_target_feature_egl,                    ///< Force use of EGL support.
     halide_target_feature_arm_dot_prod,           ///< Enable ARMv8.2-a dotprod extension (i.e. udot and sdot instructions)
+    halide_target_feature_arm_fp16,               ///< Enable ARMv8.2-a half-precision floating point data processing
     halide_llvm_large_code_model,                 ///< Use the LLVM large code model to compile
     halide_target_feature_rvv,                    ///< Enable RISCV "V" Vector Extension
     halide_target_feature_armv81a,                ///< Enable ARMv8.1-a instructions
@@ -1459,7 +1460,7 @@ typedef struct halide_buffer_t {
         if (value) {
             flags |= flag;
         } else {
-            flags &= ~flag;
+            flags &= ~uint64_t(flag);
         }
     }
 

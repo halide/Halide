@@ -23,6 +23,11 @@ CMAKE_GENERATOR=Ninja
 fi
 echo Using build tool=${CMAKE_GENERATOR}
 
+if [ -z "${CMAKE_BUILD_TYPE}" ]; then
+CMAKE_BUILD_TYPE=Release
+fi
+echo Using CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+
 EXTRAS=
 # TODO: this doesn't work (yet); crosscompiling in CMake is painful.
 if [[ "${HL_TARGET}" =~ ^arm-64-android.* ]]; then
@@ -36,7 +41,7 @@ fi
 cmake \
   ${EXTRAS} \
   -G "${CMAKE_GENERATOR}" \
-  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
   -DHalide_DIR="${HALIDE_INSTALL_PATH}" \
   -DCMAKE_PREFIX_PATH="${HALIDE_INSTALL_PATH}" \
   -DHalide_TARGET=${HL_TARGET} \

@@ -613,7 +613,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     options.HonorSignDependentRoundingFPMathOption = false;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
+#if LLVM_VERSION >= 13
+    // nothing
+#else
     options.StackAlignmentOverride = 0;
+#endif
 
     std::unique_ptr<TargetMachine>
         target_machine(llvm_target->createTargetMachine(triple.str(),

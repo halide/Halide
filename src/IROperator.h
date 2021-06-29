@@ -310,6 +310,14 @@ Expr remove_likelies(const Expr &e);
  * all calls to likely() and likely_if_innermost() removed. */
 Stmt remove_likelies(const Stmt &s);
 
+/** Return an Expr that is identical to the input Expr, but with
+ * all calls to promise_clamped() and unsafe_promise_clamped() removed. */
+Expr remove_promises(const Expr &e);
+
+/** Return a Stmt that is identical to the input Stmt, but with
+ * all calls to promise_clamped() and unsafe_promise_clamped() removed. */
+Stmt remove_promises(const Stmt &s);
+
 /** If the expression is a tag helper call, remove it and return
  * the tagged expression. If not, returns the expression. */
 Expr unwrap_tags(const Expr &e);

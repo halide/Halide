@@ -58,7 +58,7 @@ Expr stringify(const std::vector<Expr> &args) {
     }
 
     return Internal::Call::make(type_of<const char *>(), Internal::Call::stringify,
-                                args, Internal::Call::Intrinsic);
+                                args, Internal::Call::PureIntrinsic);
 }
 
 Expr combine_strings(const std::vector<Expr> &args) {
@@ -1030,6 +1030,21 @@ struct RemoveLikelies : public IRMutator {
     }
 };
 
+// TODO: There could just be one IRMutator that can remove
+// calls from a list. If we need more of these, it might be worth
+// doing that refactor.
+struct RemovePromises : public IRMutator {
+    using IRMutator::visit;
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::promise_clamped) ||
+            op->is_intrinsic(Call::unsafe_promise_clamped)) {
+            return mutate(op->args[0]);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+};
+
 }  // namespace
 
 Expr remove_likelies(const Expr &e) {
@@ -1038,6 +1053,14 @@ Expr remove_likelies(const Expr &e) {
 
 Stmt remove_likelies(const Stmt &s) {
     return RemoveLikelies().mutate(s);
+}
+
+Expr remove_promises(const Expr &e) {
+    return RemovePromises().mutate(e);
+}
+
+Stmt remove_promises(const Stmt &s) {
+    return RemovePromises().mutate(s);
 }
 
 Expr unwrap_tags(const Expr &e) {
@@ -1499,7 +1522,7 @@ Expr mux(const Expr &id, const std::vector<Expr> &values) {
     }
     std::vector<Expr> result{id};
     result.insert(result.end(), values.begin(), values.end());
-    return Internal::Call::make(t, Internal::Call::mux, result, Internal::Call::Intrinsic);
+    return Internal::Call::make(t, Internal::Call::mux, result, Internal::Call::PureIntrinsic);
 }
 
 Expr mux(const Expr &id, const Tuple &tup) {
@@ -2179,15 +2202,29 @@ Expr fast_pow(Expr x, Expr y) {
 }
 
 Expr fast_inverse(Expr x) {
-    user_assert(x.type() == Float(32)) << "fast_inverse only takes float arguments\n";
+    user_assert(x.defined()) << "fast_inverse of undefined Expr\n";
     Type t = x.type();
-    return Internal::Call::make(t, "fast_inverse_f32", {std::move(x)}, Internal::Call::PureExtern);
+    if (t == Float(32)) {
+        return Internal::Call::make(t, "fast_inverse_f32", {std::move(x)}, Internal::Call::PureExtern);
+    } else if (t == Float(16)) {
+        return Internal::Call::make(t, "fast_inverse_f16", {std::move(x)}, Internal::Call::PureExtern);
+    } else {
+        user_error << "fast_inverse only takes float16 or float32 arguments\n";
+        return Expr();
+    }
 }
 
 Expr fast_inverse_sqrt(Expr x) {
-    user_assert(x.type() == Float(32)) << "fast_inverse_sqrt only takes float arguments\n";
+    user_assert(x.defined()) << "fast_inverse_sqrt of undefined Expr\n";
     Type t = x.type();
-    return Internal::Call::make(t, "fast_inverse_sqrt_f32", {std::move(x)}, Internal::Call::PureExtern);
+    if (t == Float(32)) {
+        return Internal::Call::make(t, "fast_inverse_sqrt_f32", {std::move(x)}, Internal::Call::PureExtern);
+    } else if (t == Float(16)) {
+        return Internal::Call::make(t, "fast_inverse_sqrt_f16", {std::move(x)}, Internal::Call::PureExtern);
+    } else {
+        user_error << "fast_inverse_sqrt only takes float16 or float32 arguments\n";
+        return Expr();
+    }
 }
 
 Expr floor(Expr x) {
@@ -2509,7 +2546,7 @@ Expr div_round_to_zero(Expr x, Expr y) {
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::div_round_to_zero,
                                 {std::move(x), std::move(y)},
-                                Internal::Call::Intrinsic);
+                                Internal::Call::PureIntrinsic);
 }
 
 Expr mod_round_to_zero(Expr x, Expr y) {
@@ -2524,7 +2561,7 @@ Expr mod_round_to_zero(Expr x, Expr y) {
     Type t = x.type();
     return Internal::Call::make(t, Internal::Call::mod_round_to_zero,
                                 {std::move(x), std::move(y)},
-                                Internal::Call::Intrinsic);
+                                Internal::Call::PureIntrinsic);
 }
 
 Expr random_float(Expr seed) {
