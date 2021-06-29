@@ -4,6 +4,7 @@
 #include <array>
 
 #include "interpreter/model.h"
+#include "util/small_vector.h"
 
 namespace hannk {
 
@@ -54,12 +55,6 @@ public:
         : ElementwiseOp({a, b}, {output}), op_(op), activation_(activation) {
     }
 
-    OpPtr clone(TensorMap &map) const {
-        return make_op<BinaryOp>(
-            apply(map, input(0)), apply(map, input(1)),
-            apply(map, output()), op_, activation_);
-    }
-
     void accept(OpVisitor *v);
 
     void execute();
@@ -83,15 +78,6 @@ public:
     }
     void set_no_op() {
         is_no_op_ = true;
-    }
-
-    OpPtr clone(TensorMap &map) const {
-        std::vector<TensorPtr> inputs;
-        for (int i = 0; i < input_count(); i++) {
-            inputs.push_back(apply(map, input(i)));
-        }
-        return make_op<ConcatenationOp>(
-            std::move(inputs), apply(map, output()), axis_);
     }
 
     void accept(OpVisitor *v);
@@ -120,12 +106,6 @@ public:
           dilation_(dilation),
           padding_(padding),
           activation_(activation) {
-    }
-
-    OpPtr clone(TensorMap &map) const {
-        return make_op<Conv2DOp>(
-            apply(map, input()), apply(map, filter()), apply(map, bias()),
-            apply(map, output()), stride_, dilation_, padding_, activation_);
     }
 
     void accept(OpVisitor *v);
@@ -175,13 +155,6 @@ public:
           activation_(activation) {
     }
 
-    OpPtr clone(TensorMap &map) const {
-        return make_op<DepthwiseConv2DOp>(
-            apply(map, input()), apply(map, filter()), apply(map, bias()),
-            apply(map, output()), depth_multiplier_, stride_, dilation_,
-            padding_, activation_);
-    }
-
     void accept(OpVisitor *v);
 
     const TensorPtr &filter() const {
@@ -218,18 +191,6 @@ public:
         : ElementwiseOp(std::move(inputs), std::move(outputs)), program_(program) {
     }
 
-    OpPtr clone(TensorMap &map) const {
-        std::vector<TensorPtr> inputs, outputs;
-        for (int i = 0; i < input_count(); i++) {
-            inputs.push_back(apply(map, input(i)));
-        }
-        for (int i = 0; i < output_count(); i++) {
-            inputs.push_back(apply(map, output(i)));
-        }
-        return make_op<ElementwiseProgramOp>(
-            std::move(inputs), std::move(outputs), program_);
-    }
-
     void accept(OpVisitor *v);
 
     void execute();
@@ -246,12 +207,6 @@ public:
     FullyConnectedOp(const TensorPtr &input, const TensorPtr &filter, const TensorPtr &bias, const TensorPtr &output,
                      ActivationFunction activation = ActivationFunction::None)
         : Op({input, filter, bias}, {output}), activation_(activation) {
-    }
-
-    OpPtr clone(TensorMap &map) const {
-        return make_op<FullyConnectedOp>(
-            apply(map, input()), apply(map, filter()), apply(map, bias()),
-            apply(map, output()), activation_);
     }
 
     void accept(OpVisitor *v);
@@ -286,10 +241,6 @@ public:
         : Op({input, indices}, {output}), axis_(axis) {
     }
 
-    OpPtr clone(TensorMap &map) const {
-        return make_op<GatherOp>(apply(map, input(0)), apply(map, input(1)), apply(map, output()), axis_);
-    }
-
     void accept(OpVisitor *v);
 
     BoundsMap map_bounds(int input_idx, int output_idx) const;
@@ -305,10 +256,6 @@ class L2NormalizationOp : public Op {
 public:
     L2NormalizationOp(const TensorPtr &input, const TensorPtr &output)
         : Op({input}, {output}) {
-    }
-
-    OpPtr clone(TensorMap &map) const {
-        return make_op<L2NormalizationOp>(apply(map, input()), apply(map, output()));
     }
 
     void accept(OpVisitor *v);
@@ -329,11 +276,6 @@ public:
         if (input->rank() == 0 || !padding->is_constant()) {
             output->set_dynamic();
         }
-    }
-
-    OpPtr clone(TensorMap &map) const {
-        return make_op<PadOp>(
-            apply(map, input(0)), apply(map, input(1)), apply(map, output()));
     }
 
     void accept(OpVisitor *v);
@@ -375,11 +317,6 @@ public:
           activation_(activation) {
     }
 
-    OpPtr clone(TensorMap &map) const {
-        return make_op<Pool2DOp>(
-            apply(map, input()), apply(map, output()), stride_, filter_size_, padding_, op_, activation_);
-    }
-
     Operator op() const {
         return op_;
     }
@@ -416,11 +353,6 @@ public:
         : Op({input, indices}, {output}), op_(op) {
     }
 
-    OpPtr clone(TensorMap &map) const {
-        return make_op<ReductionOp>(
-            apply(map, input()), apply(map, input(1)), apply(map, output()), op_);
-    }
-
     BoundsMap map_bounds(int input_idx, int output_idx) const;
 
     void accept(OpVisitor *v);
@@ -443,10 +375,6 @@ public:
         }
     }
 
-    OpPtr clone(TensorMap &map) const {
-        return make_op<ReshapeOp>(apply(map, input()), apply(map, input(1)), apply(map, output()));
-    }
-
     void accept(OpVisitor *v);
 
     BoundsMap map_bounds(int input_idx, int output_idx) const;
@@ -462,10 +390,6 @@ class ShapeOp : public Op {
 public:
     ShapeOp(const TensorPtr &input, const TensorPtr &output)
         : Op({input}, {output}) {
-    }
-
-    OpPtr clone(TensorMap &map) const {
-        return make_op<ShapeOp>(apply(map, input()), apply(map, output()));
     }
 
     void accept(OpVisitor *v);
@@ -487,10 +411,6 @@ public:
         : Op({input}, {output}), beta_(beta) {
     }
 
-    OpPtr clone(TensorMap &map) const {
-        return make_op<SoftmaxOp>(apply(map, input()), apply(map, output()), beta_);
-    }
-
     void accept(OpVisitor *v);
 
     BoundsMap map_bounds(int input_idx, int output_idx) const;
@@ -508,10 +428,6 @@ class SpaceDepthOp : public Op {
 public:
     SpaceDepthOp(const TensorPtr &input, const TensorPtr &output, int block_size)
         : Op({input}, {output}), block_size_(block_size) {
-    }
-
-    OpPtr clone(TensorMap &map) const {
-        return make_op<SpaceDepthOp>(apply(map, input()), apply(map, output()), block_size_);
     }
 
     void accept(OpVisitor *v);
@@ -533,15 +449,6 @@ class SplitOp : public Op {
 public:
     SplitOp(const TensorPtr &input, std::vector<TensorPtr> outputs, int axis)
         : Op({input}, std::move(outputs)), axis_(axis) {
-    }
-
-    OpPtr clone(TensorMap &map) const {
-        std::vector<TensorPtr> outputs;
-        for (int i = 0; i < output_count(); i++) {
-            outputs.push_back(apply(map, output(i)));
-        }
-        return make_op<SplitOp>(
-            apply(map, input()), std::move(outputs), axis_);
     }
 
     int axis() const {
@@ -568,10 +475,6 @@ public:
         : Op({input}, {output}) {
     }
 
-    OpPtr clone(TensorMap &map) const {
-        return make_op<TileConvFilterOp>(apply(map, input()), apply(map, output()));
-    }
-
     void accept(OpVisitor *v);
 
     BoundsMap map_bounds(int input_idx, int output_idx) const;
@@ -587,10 +490,6 @@ class TransposeOp : public Op {
 public:
     TransposeOp(const TensorPtr &input, const TensorPtr &dims, const TensorPtr &output)
         : Op({input, dims}, {output}) {
-    }
-
-    OpPtr clone(TensorMap &map) const {
-        return make_op<TransposeOp>(apply(map, input(0)), apply(map, input(1)), apply(map, output()));
     }
 
     void accept(OpVisitor *v);
@@ -624,11 +523,6 @@ private:
 public:
     UnaryOp(const TensorPtr &input, const TensorPtr &output, Operator op)
         : ElementwiseOp({input}, {output}), op_(op) {
-    }
-
-    OpPtr clone(TensorMap &map) const {
-        return make_op<UnaryOp>(
-            apply(map, input()), apply(map, output()), op_);
     }
 
     void accept(OpVisitor *v);

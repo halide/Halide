@@ -1041,7 +1041,6 @@ const Bound &LoopNest::get_bounds(const FunctionDAG::Node *f) const {
 
     // Compute the region required
     if (f->is_output && is_root()) {
-        internal_assert(f->outgoing_edges.empty()) << "Outputs that access other outputs not yet supported\n";
         // It's an output. Use the bounds estimate.
         for (int i = 0; i < f->dimensions; i++) {
             bound->region_required(i) = f->estimated_region_required[i];

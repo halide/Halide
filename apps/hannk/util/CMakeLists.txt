@@ -24,6 +24,10 @@ add_library(file_util INTERFACE)
 target_include_directories(file_util INTERFACE
                            $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 
+add_library(small_vector INTERFACE)
+target_include_directories(small_vector INTERFACE
+                           $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
+
 add_library(hannk_log_hdr INTERFACE)
 target_include_directories(hannk_log_hdr INTERFACE
                            $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)

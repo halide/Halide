@@ -101,6 +101,7 @@ struct ModelRunner {
     bool do_run[kNumRuns];  // no way to default-init everything to anything but zero, alas
     bool do_benchmark = true;
     bool do_compare_results = true;
+    bool keep_going = false;
     double tolerance;
     std::string external_delegate_path;
 
