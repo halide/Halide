@@ -475,9 +475,35 @@ Expr substitute_self_reference(Expr val, const string &func, const Function &sub
     return val;
 }
 
+class LowerIsVarBoundedForVar : public IRMutator {
+    const string &var_name;
+
+    using IRMutator::visit;
+
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::is_var_bounded)) {
+            const StringImm *name = op->args[0].as<StringImm>();
+            internal_assert(name);
+            if (name->value == var_name) {
+                Expr x = Variable::make(op->args[1].type(), name->value);
+                return op->args[1] <= x && x <= op->args[2];
+            }
+        }
+        return IRMutator::visit(op);
+    }
+
+public:
+    LowerIsVarBoundedForVar(const string &var_name)
+        : var_name(var_name) {
+    }
+};
+
 // Substitute the occurrence of 'name' in 'exprs' with 'value'.
 void substitute_var_in_exprs(const string &name, const Expr &value, vector<Expr> &exprs) {
     for (auto &expr : exprs) {
+        // TODO: Find a better way to handle is_var_bounded. rfactor replicates a
+        // lot of split logic, but can't handle non-substituted lets.
+        expr = LowerIsVarBoundedForVar(name).mutate(expr);
         expr = substitute(name, value, expr);
     }
 }

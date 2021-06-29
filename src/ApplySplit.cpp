@@ -96,7 +96,7 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const s
             // for the guarded version.
             result.emplace_back(prefix + split.old_var, guarded_var, substitution_type);
             result.emplace_back(guarded_var_name, guarded, ApplySplitResult::LetStmt);
-            result.emplace_back(is_var_bounded(old_var, old_var, old_max), predicate_type);
+            result.emplace_back(likely(is_var_bounded(old_var_name, old_var, old_max)), predicate_type);
 
         } else if (tail == TailStrategy::ShiftInwards) {
             // Adjust the base downwards to not compute off the

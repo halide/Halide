@@ -323,7 +323,7 @@ Stmt remove_promises(const Stmt &s);
 Expr unwrap_tags(const Expr &e);
 
 /** Check if a variable is bounded by the given min and max. */
-Expr is_var_bounded(const Expr &var, const Expr &min, const Expr &max);
+Expr is_var_bounded(const std::string &var, const Expr &min, const Expr &max);
 
 // Secondary args to print can be Exprs or const char *
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {

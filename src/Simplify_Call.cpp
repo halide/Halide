@@ -841,6 +841,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         debug(2) << "Simplifier: unhandled PureExtern: " << op->name;
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         clear_bounds_info(bounds);
+    } else if (op->is_intrinsic(Call::is_var_bounded)) {
+        const StringImm *name = op->args[0].as<StringImm>();
+        if (var_info.contains(name->value)) {
+            var_info.ref(name->value).old_uses++;
+        }
     }
 
     // No else: we want to fall thru from the PureExtern clause.

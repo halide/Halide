@@ -1070,9 +1070,8 @@ Expr unwrap_tags(const Expr &e) {
     return e;
 }
 
-Expr is_var_bounded(const Expr &x, const Expr &min, const Expr &max) {
-    user_assert(x.as<Variable>()) << "Variable argument of is_var_bounded must be a Variable.";
-    return Call::make(Bool(), Call::is_var_bounded, {x, min, max}, Call::PureIntrinsic);
+Expr is_var_bounded(const std::string &var, const Expr &min, const Expr &max) {
+    return Call::make(Bool(), Call::is_var_bounded, {Expr(var), min, max}, Call::PureIntrinsic);
 }
 
 Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args) {
