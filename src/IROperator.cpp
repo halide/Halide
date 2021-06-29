@@ -1070,6 +1070,11 @@ Expr unwrap_tags(const Expr &e) {
     return e;
 }
 
+Expr is_var_bounded(const Expr &x, const Expr &min, const Expr &max) {
+    user_assert(x.as<Variable>()) << "Variable argument of is_var_bounded must be a Variable.";
+    return Call::make(Bool(), Call::is_var_bounded, {x, min, max}, Call::PureIntrinsic);
+}
+
 Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args) {
     return Internal::Call::make(Int(32),
                                 "halide_error_requirement_failed",

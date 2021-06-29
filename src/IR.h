@@ -519,6 +519,7 @@ struct Call : public ExprNode<Call> {
         hvx_scatter_release,
         if_then_else,
         if_then_else_mask,
+        is_var_bounded,
         image_load,
         image_store,
         lerp,

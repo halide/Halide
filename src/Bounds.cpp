@@ -2495,7 +2495,11 @@ private:
                 auto vars = find_free_vars(op->condition);
                 for (const auto *v : vars) {
                     auto result = solve_expression(c, v->name);
-                    if (!result.fully_solved) {
+                    const Call *is_var_bounded = Call::as_intrinsic(result.result, {Call::is_var_bounded});
+                    if (is_var_bounded && !equal(is_var_bounded->args[0], v)) {
+                        is_var_bounded = nullptr;
+                    }
+                    if (!is_var_bounded && !result.fully_solved) {
                         continue;
                     }
                     Expr solved = result.result;
@@ -2552,7 +2556,12 @@ private:
                         likely_i.max = likely_if_innermost(i.max);
                     }
 
-                    Interval bi = bounds_of_expr_in_scope(rhs, scope, func_bounds);
+                    Interval bi;
+                    if (is_var_bounded) {
+                        bi = Interval(is_var_bounded->args[1], is_var_bounded->args[2]);
+                    } else {
+                        bi = bounds_of_expr_in_scope(rhs, scope, func_bounds);
+                    }
                     if (bi.has_upper_bound() && i.has_upper_bound()) {
                         if (lt) {
                             i.max = min(likely_i.max, bi.max - 1);
@@ -2574,6 +2583,7 @@ private:
                     p.i = i;
                     to_pop.emplace_back(std::move(p));
                 }
+
                 for (auto &p : to_pop) {
                     trim_scope_push(p.v->name, p.i, p.let_bounds);
                 }
