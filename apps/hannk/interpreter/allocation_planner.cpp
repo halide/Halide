@@ -1,9 +1,11 @@
 #include "interpreter/allocation_planner.h"
 
+#include <algorithm>
 #include <cassert>
 #include <iomanip>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <list>
 
 #ifndef HANNK_USE_TRIVIAL_ALLOCATION_PLANNER

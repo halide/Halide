@@ -1,9 +1,7 @@
 #ifndef HANNK_MEMORY_PLANNER_H
 #define HANNK_MEMORY_PLANNER_H
 
-#include <algorithm>
 #include <iostream>
-#include <limits>
 #include <vector>
 
 namespace hannk {
