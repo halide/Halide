@@ -13,8 +13,6 @@ ifeq (hexagon-32-qurt,$(findstring hexagon-32-qurt,$(HL_TARGET)))
 	BENCHMARK_OUT := $(BENCHMARK_OUT).so
 	BENCHMARK_HEXAGON_FLAGS = -shared -fPIC -G0
 	HEXAGON_STUBS = $(BIN)/$(HL_TARGET)/stubs.o
-	TEST ?= test/misc/MUL.tflite
-	TEST_NAME = $(notdir $(TEST))
 endif
 
 
@@ -36,15 +34,15 @@ build: \
 	$(BIN)/$(HL_TARGET)/compare_vs_tflite
 
 test: compare_vs_tflite
-	$(BIN)/$(HL_TARGET)/compare_vs_tflite test/*/* --benchmark 0
+	$(foreach test_model, $(shell ls -1 test/*/*), $(BIN)/$(HL_TARGET)/compare_vs_tflite $(test_model) --benchmark 0;)
 
 test-hexagon-sim: $(BIN)/$(HL_TARGET)/$(BENCHMARK_OUT)
 	@mkdir -p $@
-	echo "Benchmarking $(TEST)..."
+	echo "Benchmarking tests..."
 	echo "$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/debugger/lnx64/qurt_model.so" > $(BIN)/$(HL_TARGET)/osam.cfg
 	echo "$(DEFAULT_HEXAGON_TOOLS_ROOT)/Tools/lib/iss/qtimer.so --csr_base=0xFC900000 --irq_p=1 --freq=19200000 --cnttid=1" > $(BIN)/$(HL_TARGET)/q6ss.cfg
 	echo "$(DEFAULT_HEXAGON_TOOLS_ROOT)/Tools/lib/iss/l2vic.so 32 0xFC910000" >> $(BIN)/$(HL_TARGET)/q6ss.cfg
-	$(DEFAULT_HEXAGON_TOOLS_ROOT)/Tools/bin/hexagon-sim \
+	$(foreach test_model, $(shell ls -1 test/*/*), $(DEFAULT_HEXAGON_TOOLS_ROOT)/Tools/bin/hexagon-sim \
 		-mv65 \
 		--usefs=$(DEFAULT_HEXAGON_TOOLS_ROOT)/Tools/target/hexagon/lib/v65/G0/pic \
 		--simulated_returnval \
@@ -54,15 +52,16 @@ test-hexagon-sim: $(BIN)/$(HL_TARGET)/$(BENCHMARK_OUT)
 		$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/sdksim_bin/runelf.pbn -- \
 		$(HEXAGON_SDK_ROOT)/libs/run_main_on_hexagon/ship/hexagon_toolv84_v65/run_main_on_hexagon_sim \
 		stack_size=0x400000 -- \
-		$(MAKEFILE_DIR)/$< --verbose $(TEST)
+		$(MAKEFILE_DIR)/$< --verbose $(test_model);)
 
 test-hexagon-device: $(BIN)/$(HL_TARGET)/$(BENCHMARK_OUT)
-	echo "Benchmarking $(TEST)..."
+	echo "Benchmarking tests..."
 	adb push $< /vendor/bin/$(BENCHMARK_OUT)
-	adb push $(TEST) /vendor/bin/
+	adb shell mkdir -p /vendor/bin/hannk-test
+	adb push test/. /vendor/bin/hannk-test
 	adb push $(HEXAGON_SDK_ROOT)/libs/run_main_on_hexagon/ship/android_aarch64/run_main_on_hexagon /vendor/bin/run_main_on_hexagon
 	adb push $(HEXAGON_SDK_ROOT)/libs/run_main_on_hexagon/ship/hexagon_toolv84_v65/librun_main_on_hexagon_skel.so /vendor/lib/rfsa/adsp/
-	adb shell 'cd /vendor/bin; touch /vendor/lib/rfsa/adsp/run_main_on_hexagon.farf; ./run_main_on_hexagon 3 /vendor/bin/$(BENCHMARK_OUT) --verbose $(TEST_NAME)'
+	$(foreach test_model, $(shell ls -1 test/*/*), adb shell 'cd /vendor/bin; touch /vendor/lib/rfsa/adsp/run_main_on_hexagon.farf; ./run_main_on_hexagon 3 /vendor/bin/$(BENCHMARK_OUT) --verbose hannk-$(test_model)';)
 
 clean:
 	rm -rf $(BIN)
