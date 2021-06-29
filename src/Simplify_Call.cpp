@@ -842,6 +842,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         clear_bounds_info(bounds);
     } else if (op->is_intrinsic(Call::is_var_bounded)) {
+        internal_assert(op->args.size() == 3);
         const StringImm *name = op->args[0].as<StringImm>();
         if (var_info.contains(name->value)) {
             var_info.ref(name->value).old_uses++;

@@ -482,6 +482,7 @@ class LowerIsVarBoundedForVar : public IRMutator {
 
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::is_var_bounded)) {
+            internal_assert(op->args.size() == 3);
             const StringImm *name = op->args[0].as<StringImm>();
             internal_assert(name);
             if (name->value == var_name) {

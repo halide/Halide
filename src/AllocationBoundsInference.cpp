@@ -162,6 +162,7 @@ class StripDeclareBoxTouchedAndIsVarBounded : public IRMutator {
         if (op->is_intrinsic(Call::declare_box_touched)) {
             return 0;
         } else if (op->is_intrinsic(Call::is_var_bounded)) {
+            internal_assert(op->args.size() == 3);
             const StringImm *name = op->args[0].as<StringImm>();
             internal_assert(name);
             Expr x = Variable::make(op->args[1].type(), name->value);
