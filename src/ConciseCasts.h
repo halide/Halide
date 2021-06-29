@@ -35,8 +35,18 @@ inline Expr i64(Expr e) {
     return cast(t, std::move(e));
 }
 
+inline Expr i48(Expr e) {
+    Type t = Int(48, e.type().lanes());
+    return cast(t, std::move(e));
+}
+
 inline Expr i32(Expr e) {
     Type t = Int(32, e.type().lanes());
+    return cast(t, std::move(e));
+}
+
+inline Expr i24(Expr e) {
+    Type t = Int(24, e.type().lanes());
     return cast(t, std::move(e));
 }
 

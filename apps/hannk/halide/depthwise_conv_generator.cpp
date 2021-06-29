@@ -6,6 +6,9 @@ using namespace Halide::ConciseCasts;
 
 namespace hannk {
 
+// Less general, but performs much better on Xtensa.
+//#define XTENSA_GOES_FAST
+
 class DepthwiseConv : public Generator<DepthwiseConv> {
 public:
     // If positive, a constant inverse depth multiplier.
@@ -37,7 +40,12 @@ public:
     Input<int> dilation_y_{"dilation_y"};
 
     Input<int32_t> output_multiplier_{"output_multiplier"};
+#ifdef XTENSA_GOES_FAST
+    // TODO(vksnk): shifting by signed is quite slow on Xtensa.
+    Input<uint32_t> output_shift_{"output_shift"};
+#else
     Input<int32_t> output_shift_{"output_shift"};
+#endif
     Input<uint8_t> output_zero_{"output_zero"};
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
@@ -46,6 +54,8 @@ public:
 
     void generate() {
         // The algorithm.
+
+        const bool use_xtensa = get_target().has_feature(Target::Xtensa);
 
         // Some free variables, where x and y represent the spatial dimensions.
         Var x("x"), y("y"), c("c"), b("b");
@@ -64,25 +74,30 @@ public:
         Expr filter_width = filter_.dim(1).extent();
         Expr filter_height = filter_.dim(2).extent();
         RDom r(0, filter_width, 0, filter_height);
+        Expr filter_rdxy = filter_(c, r.x, r.y);
         Expr filter_zeroed_rdxy = filter_zeroed(c, r.x, r.y);
 
-        // We want to compute the reduction:
-        // convolved(c, x, y, b) = bias_(c)
-        // convolved(c, x, y, b) +=
-        //    i32(filter_zeroed_rdxy) *
-        //    (i32(input_rdxy) - i32(input_zero_))
-        //
-        // However, this requires subtracting the input zero at every output.
-        // We can factor the reduction like so:
-        //
-        // convolved(c, x, y, b) = bias_(c)
-        // convolved(c, x, y, b) +=
-        //    i32(filter_zeroed_rdxy) * i32(input_rdxyc) -
-        //    i32(filter_zeroed_rdxy) * i32(input_zero_)
-        //
-        // The latter reduction can be computed once per output channel.
         Func sum_filter("sum_filter");
-        sum_filter(c) += i32(filter_zeroed_rdxy);
+        if (use_xtensa) {
+            sum_filter(c) += i16(filter_rdxy);
+        } else {
+            // We want to compute the reduction:
+            // convolved(c, x, y, b) = bias_(c)
+            // convolved(c, x, y, b) +=
+            //    i32(filter_zeroed_rdxy) *
+            //    (i32(input_rdxy) - i32(input_zero_))
+            //
+            // However, this requires subtracting the input zero at every output.
+            // We can factor the reduction like so:
+            //
+            // convolved(c, x, y, b) = bias_(c)
+            // convolved(c, x, y, b) +=
+            //    i32(filter_zeroed_rdxy) * i32(input_rdxyc) -
+            //    i32(filter_zeroed_rdxy) * i32(input_zero_)
+            //
+            // The latter reduction can be computed once per output channel.
+            sum_filter(c) += i32(filter_zeroed_rdxy);
+        }
 
         Func offset_c("offset_c");
         offset_c(c) = bias_(c) - sum_filter(c) * i32(input_zero_);
@@ -90,14 +105,28 @@ public:
         Expr input_rdxy =
             resampled_input(c, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
         Func convolved("convolved");
-        convolved(c, x, y, b) = offset_c(c);
-        convolved(c, x, y, b) += i32(filter_zeroed_rdxy) * i32(input_rdxy);
+
+        if (use_xtensa) {
+            convolved(c, x, y, b) = i24(0);
+            // Do everything in 8-bit on Xtensa.
+            convolved(c, x, y, b) += i24(filter_rdxy) * i24(input_rdxy) - i24(input_rdxy) * i24(filter_zero_);
+        } else {
+            convolved(c, x, y, b) = offset_c(c);
+            convolved(c, x, y, b) += i32(filter_zeroed_rdxy) * i32(input_rdxy);
+        }
 
         // Saturate and narrow the output.
-        Expr output = multiply_2x_high(convolved(c, x, y, b), output_multiplier_);
+        Expr output;
+        if (use_xtensa) {
+            output = i32(convolved(c, x, y, b)) + offset_c(c) + i32(i16(filter_zero_) * i16(input_zero_));
+        } else {
+            output = convolved(c, x, y, b);
+        }
+        output = multiply_2x_high(output, output_multiplier_);
         output = i16_sat(rounding_shift_right(output, output_shift_));
-        output = u8_sat(saturating_add(output, output_zero_));
-        output_(c, x, y, b) = clamp(output, output_min_, output_max_);
+        output = saturating_add(output, output_zero_);
+        output = clamp(output, output_min_, output_max_);
+        output_(c, x, y, b) = u8(output);
 
         // Schedule.
         interpret_as_tensor(input_);
@@ -109,7 +138,7 @@ public:
         require_same_min_extent(0, filter_, output_);
 
         int vector_size = natural_vector_size<uint8_t>();
-        if (get_register_count(target) < 32) {
+        if (!use_xtensa && get_register_count(target) < 32) {
             vector_size = natural_vector_size<int16_t>();
         }
 
@@ -124,34 +153,46 @@ public:
             for (int d = 1; d < input_.dimensions(); d++) {
                 input_.dim(d).set_stride(align(input_.dim(d).stride(), input_alignment));
             }
-        }
 
-        // Tile the output, so we can try to re-use loads spatially when performing
-        // convolution. This also helps because we can schedule the input and not
-        // waste work for strides less than the tile size.
-        // We split co and reorder it outermost, so we can maximize locality of the
-        // filter. We even put it outside of the batch loop, so we can compute the
-        // boundary condition on the filter at co and reuse it across batches.
-        const int kTileW = 2;
-        const int kTileH = 2;
-        // When the output is small, the overhead from shift inwards can be large.
-        // Only tile when the input is at least this many tiles to avoid this.
-        const int kMinTiles = 4;
+            filter_.set_host_alignment(input_alignment);
+            for (int d = 1; d < filter_.dimensions(); d++) {
+                filter_.dim(d).set_stride(align(filter_.dim(d).stride(), input_alignment));
+            }
+        }
+#ifdef XTENSA_GOES_FAST
+        // TODO(vksnk): there is a specialization below for this case, but
+        // specializations generate ifs which seem to confuse compiler.
+        filter_.dim(1).set_bounds(0, 3).dim(2).set_bounds(0, 3);
+#endif
         Var xo("xo"), yo("yo"), co("co");
         Expr output_channels = output_.dim(0).extent();
-        Expr output_width = output_.dim(1).extent();
-        Expr output_height = output_.dim(2).extent();
-        Expr use_tiles =
-            (output_width >= kTileW * kMinTiles || output_width % kTileW == 0) &&
-            (output_height >= kTileH * kMinTiles || output_height % kTileH == 0);
-        output_.compute_root()
-            .specialize(output_channels >= vector_size && use_tiles)
-            .tile(x, y, xo, yo, x, y, kTileW, kTileH, TailStrategy::ShiftInwards)
-            .split(c, co, c, vector_size, TailStrategy::ShiftInwards)
-            .reorder(x, y, c, xo, yo, b, co)
-            .unroll(x)
-            .unroll(y)
-            .vectorize(c);
+        if (!use_xtensa) {
+            // Tile the output, so we can try to re-use loads spatially when performing
+            // convolution. This also helps because we can schedule the input and not
+            // waste work for strides less than the tile size.
+            // We split co and reorder it outermost, so we can maximize locality of the
+            // filter. We even put it outside of the batch loop, so we can compute the
+            // boundary condition on the filter at co and reuse it across batches.
+            const int kTileW = 2;
+            const int kTileH = 2;
+            // When the output is small, the overhead from shift inwards can be large.
+            // Only tile when the input is at least this many tiles to avoid this.
+            const int kMinTiles = 4;
+
+            Expr output_width = output_.dim(1).extent();
+            Expr output_height = output_.dim(2).extent();
+            Expr use_tiles =
+                (output_width >= kTileW * kMinTiles || output_width % kTileW == 0) &&
+                (output_height >= kTileH * kMinTiles || output_height % kTileH == 0);
+            output_.compute_root()
+                .specialize(output_channels >= vector_size && use_tiles)
+                .tile(x, y, xo, yo, x, y, kTileW, kTileH, TailStrategy::ShiftInwards)
+                .split(c, co, c, vector_size, TailStrategy::ShiftInwards)
+                .reorder(x, y, c, xo, yo, b, co)
+                .unroll(x)
+                .unroll(y)
+                .vectorize(c);
+        }
 
         // Enable 1x1 outputs to work.
         output_
@@ -159,6 +200,12 @@ public:
             .unroll(x)
             .unroll(y);
 
+#ifdef XTENSA_GOES_FAST
+        output_
+            .split(c, co, c, vector_size, TailStrategy::RoundUp)
+            .reorder(x, y, c, xo, yo, b, co)
+            .vectorize(c);
+#else
         // Vectorize c, using predication only for small numbers of channels.
         output_
             .specialize(output_channels >= vector_size)
@@ -169,7 +216,7 @@ public:
             .split(c, co, c, vector_size, TailStrategy::Predicate)
             .reorder(x, y, c, xo, yo, b, co)
             .vectorize(c);
-
+#endif
         convolved.compute_at(output_, xo)
             .store_in(MemoryType::Register)
             .bound_extent(c, vector_size)
@@ -197,11 +244,13 @@ public:
             resampled_input.specialize(depth_multiplier_ == 1);
         }
 
-        filter_zeroed.compute_at(output_, co)
-            .store_in(MemoryType::Stack)
-            .align_storage(c, natural_vector_size<int16_t>())
-            .vectorize(c, natural_vector_size<int16_t>(), TailStrategy::GuardWithIf)
-            .unroll(c, 2, TailStrategy::GuardWithIf);
+        if (!use_xtensa) {
+            filter_zeroed.compute_at(output_, co)
+                .store_in(MemoryType::Stack)
+                .align_storage(c, natural_vector_size<int16_t>())
+                .vectorize(c, natural_vector_size<int16_t>(), TailStrategy::GuardWithIf)
+                .unroll(c, 2, TailStrategy::GuardWithIf);
+        }
 
         offset_c.compute_at(output_, co)
             .store_in(MemoryType::Stack)
