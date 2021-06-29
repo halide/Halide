@@ -1461,7 +1461,7 @@ typedef struct halide_buffer_t {
         if (value) {
             flags |= flag;
         } else {
-            flags &= ~flag;
+            flags &= ~uint64_t(flag);
         }
     }
 
