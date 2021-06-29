@@ -1,6 +1,7 @@
 #ifndef HANNK_FILE_UTIL_H
 #define HANNK_FILE_UTIL_H
 
+#include <memory>
 #include <vector>
 
 #include "util/error_util.h"
