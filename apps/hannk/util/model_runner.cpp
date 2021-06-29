@@ -387,7 +387,11 @@ ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer
         model->dump(std::cout);
     }
 
-    Interpreter interpreter(std::move(model));
+    InterpreterOptions options;
+    if (verbosity) {
+        options.verbose = true;
+    }
+    Interpreter interpreter(std::move(model), std::move(options));
 
     // Fill in the inputs with pseudorandom data (save the seeds for later).
     for (TensorPtr t : interpreter.inputs()) {
@@ -531,6 +535,10 @@ int ModelRunner::parse_flags(int argc, char **argv, std::vector<std::string> &fi
              this->external_delegate_path = value;
              return 0;
          }},
+        {"keep_going", [this](const std::string &value) {
+             this->keep_going = std::stoi(value) != 0;
+             return 0;
+         }},
         {"seed", [&seed](const std::string &value) {
              seed = std::stoi(value);
              return 0;
@@ -654,7 +662,9 @@ void ModelRunner::run(const std::string &filename) {
 
         if (!all_matched) {
             std::cerr << "Some runs exceeded the error threshold!\n";
-            exit(1);
+            if (!keep_going) {
+                exit(1);
+            }
         }
     }
 }
