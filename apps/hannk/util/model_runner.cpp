@@ -249,13 +249,13 @@ int SeedTracker::seed_for_name(const std::string &name) {
     }
 }
 
-TfLiteModelRunner::TfLiteModelRunner(const std::vector<char> &buffer,
+TfLiteModelRunner::TfLiteModelRunner(const ReadOnlyFileView &file_view,
                                      int threads,
                                      SeedTracker &seed_tracker,
                                      std::ostream *verbose_output,
                                      TfLiteDelegate *delegate)
     : verbose_output_(verbose_output) {
-    tf_model_ = TfLiteModelCreate(buffer.data(), buffer.size());
+    tf_model_ = TfLiteModelCreate(file_view.data(), file_view.size());
     HCHECK(tf_model_);
 
     tf_options_ = TfLiteInterpreterOptionsCreate();
@@ -367,6 +367,7 @@ void ModelRunner::set_seed(int seed) {
 void ModelRunner::status() {
     std::cout << "Using random seed: " << seed_tracker_.next_seed() << "\n";
     std::cout << "Using threads: " << threads << "\n";
+    std::cout << "Using mmap: " << (use_mmap ? "true" : "false") << "\n";
 
     {
         std::string tf_ver = TfLiteVersion();
@@ -379,10 +380,10 @@ void ModelRunner::status() {
     }
 }
 
-ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer) {
+ModelRunner::RunResult ModelRunner::run_in_hannk(const ReadOnlyFileView &file_view) {
     RunResult result;
 
-    std::unique_ptr<OpGroup> model = parse_tflite_model_from_buffer(buffer.data());
+    std::unique_ptr<OpGroup> model = parse_tflite_model_from_buffer(file_view.data());
     if (verbosity) {
         model->dump(std::cout);
     }
@@ -433,10 +434,10 @@ ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer
     return result;
 }
 
-ModelRunner::RunResult ModelRunner::run_in_tflite(const std::vector<char> &buffer, TfLiteDelegate *delegate) {
+ModelRunner::RunResult ModelRunner::run_in_tflite(const ReadOnlyFileView &file_view, TfLiteDelegate *delegate) {
     RunResult result;
 
-    TfLiteModelRunner tfrunner(buffer, threads, seed_tracker_, &std::cout, delegate);
+    TfLiteModelRunner tfrunner(file_view, threads, seed_tracker_, &std::cout, delegate);
 
     // Execute once, to prime the pump
     tfrunner.run_once();
@@ -551,6 +552,10 @@ int ModelRunner::parse_flags(int argc, char **argv, std::vector<std::string> &fi
              this->tolerance = std::stof(value);
              return 0;
          }},
+        {"use_mmap", [this](const std::string &value) {
+             this->use_mmap = std::stoi(value) != 0;
+             return 0;
+         }},
         {"verbose", [this](const std::string &value) {
              this->verbosity = std::stoi(value);
              return 0;
@@ -578,7 +583,7 @@ int ModelRunner::parse_flags(int argc, char **argv, std::vector<std::string> &fi
 void ModelRunner::run(const std::string &filename) {
     std::cout << "Processing " << filename << " ...\n";
 
-    const std::vector<char> buffer = read_entire_file(filename);
+    ReadOnlyFileView file_view(filename, use_mmap);
 
     std::map<WhichRun, RunResult> results;
 
@@ -589,22 +594,22 @@ void ModelRunner::run(const std::string &filename) {
         }
     }
 
-    const auto exec_tflite = [this, &buffer]() {
-        return run_in_tflite(buffer);
+    const auto exec_tflite = [this, &file_view]() {
+        return run_in_tflite(file_view);
     };
-    const auto exec_hannk = [this, &buffer]() {
-        return run_in_hannk(buffer);
+    const auto exec_hannk = [this, &file_view]() {
+        return run_in_hannk(file_view);
     };
-    const auto exec_hannk_external_delegate = [this, &buffer]() {
+    const auto exec_hannk_external_delegate = [this, &file_view]() {
         DelegatePtr delegate_ptr;
         HCHECK(delegate_ptr.init(external_delegate_path, verbosity));
-        return run_in_tflite(buffer, delegate_ptr.get());
+        return run_in_tflite(file_view, delegate_ptr.get());
     };
-    const auto exec_hannk_internal_delegate = [this, &buffer]() {
+    const auto exec_hannk_internal_delegate = [this, &file_view]() {
         HannkDelegateOptions options;
         options.verbosity = verbosity;
         TfLiteDelegate *delegate = HannkDelegateCreate(&options);
-        auto result = run_in_tflite(buffer, delegate);
+        auto result = run_in_tflite(file_view, delegate);
         HannkDelegateDelete(delegate);
         return result;
     };

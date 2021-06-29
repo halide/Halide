@@ -15,13 +15,15 @@ target_link_libraries(hannk_log_tflite PRIVATE tensorflowlite_headers)
 target_include_directories(hannk_log_tflite PUBLIC
                            $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 
+add_library(file_util STATIC
+            file_util.cpp)
+target_include_directories(file_util PUBLIC
+                           $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
+target_link_libraries(file_util PRIVATE Halide::Runtime)
+
 # Sigh, header-only libraries shouldn't be special
 add_library(buffer_util INTERFACE)
 target_include_directories(buffer_util INTERFACE
-                           $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
-
-add_library(file_util INTERFACE)
-target_include_directories(file_util INTERFACE
                            $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 
 add_library(small_vector INTERFACE)

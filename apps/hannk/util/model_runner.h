@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "util/buffer_util.h"
+#include "util/file_util.h"
 
 struct TfLiteDelegate;
 struct TfLiteInterpreter;
@@ -67,7 +68,7 @@ class TfLiteModelRunner {
     std::ostream *verbose_output_ = nullptr;
 
 public:
-    TfLiteModelRunner(const std::vector<char> &buffer,
+    TfLiteModelRunner(const ReadOnlyFileView &file_view,
                       int threads,
                       SeedTracker &seed_tracker,
                       std::ostream *verbose_output,
@@ -102,6 +103,7 @@ struct ModelRunner {
     bool do_benchmark = true;
     bool do_compare_results = true;
     bool keep_going = false;
+    bool use_mmap = false;  // TODO: should this default to true?
     double tolerance;
     std::string external_delegate_path;
 
@@ -126,8 +128,8 @@ private:
         std::vector<HalideBuffer<const void>> outputs;
         std::chrono::duration<double> time{0};
     };
-    RunResult run_in_hannk(const std::vector<char> &buffer);
-    RunResult run_in_tflite(const std::vector<char> &buffer, TfLiteDelegate *delegate = nullptr);
+    RunResult run_in_hannk(const ReadOnlyFileView &file_view);
+    RunResult run_in_tflite(const ReadOnlyFileView &file_view, TfLiteDelegate *delegate = nullptr);
     bool compare_results(const std::string &msg, const RunResult &a, const RunResult &b);
 };
 
