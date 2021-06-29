@@ -1435,6 +1435,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
     vector<IntrusivePtr<const LoopNest>> result;
 
     // Some pruning to not waste time on terrible states
+    bool must_tile_to_vectorize = false;
     if (parent) {
         const auto &bounds_here = get_bounds(f);
         const auto &bounds_at_parent = parent->get_bounds(f);
@@ -1446,7 +1447,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         int64_t e = p.extent();
         int64_t ep = p_parent.extent();
         if (ep >= f->vector_size && e < f->vector_size) {
-            return result;
+            must_tile_to_vectorize = true;
         }
 
         // Don't descend into loops if the bounds required don't
@@ -1476,7 +1477,8 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
     }
 
     // Place the computation directly inside this loop (provided it's not a SIMD loop)
-    if (!innermost &&
+    if (!must_tile_to_vectorize &&
+        !innermost &&
         (!in_realization ||
          size.empty() ||
          vector_dim == -1 ||
