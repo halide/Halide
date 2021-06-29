@@ -1,13 +1,11 @@
 #include "interpreter/tensor.h"
-#include "interpreter/model.h"
 
 namespace hannk {
 
 namespace {
 
-HalideBuffer<void> make_buffer(halide_type_t type, const Box &bounds) {
-    // TODO: Avoid this dynamic allocation. Halide's API requires std::vector here.
-    SmallVector<halide_dimension_t, max_rank> dims(bounds.size());
+HalideBuffer<void> make_unallocated_buffer(halide_type_t type, const Box &bounds) {
+    TensorDimensions dims(bounds.size());
     int stride = 1;
     for (int i = 0; i < (int)bounds.size(); i++) {
         dims[i].min = bounds[i].min;
@@ -21,33 +19,11 @@ HalideBuffer<void> make_buffer(halide_type_t type, const Box &bounds) {
 }  // namespace
 
 TensorStorage::TensorStorage(halide_type_t type, int rank, const halide_dimension_t *dimensions)
-    : buffer_(type, nullptr, rank, dimensions) {
+    : buffer(type, nullptr, rank, dimensions) {
 }
 
-void TensorStorage::add_use(halide_type_t type, const Box &bounds) {
-    if (buffer_.dimensions() == 0) {
-        buffer_ = make_buffer(type, bounds);
-    } else {
-        assert(buffer_.type() == type);
-        assert(buffer_.dimensions() == (int)bounds.size());
-        assert(!buffer_.data());
-
-        // Check that the storage is big enough for this buffer.
-        for (int i = 0; i < buffer_.dimensions(); i++) {
-            assert(bounds[i].min >= buffer_.dim(i).min());
-            assert(bounds[i].max <= buffer_.dim(i).max());
-        }
-    }
-}
-
-bool TensorStorage::is_allocated() const {
-    return buffer_.data() != nullptr;
-}
-
-void TensorStorage::allocate() {
-    if (!buffer_.data()) {
-        buffer_ = HalideBuffer<void>::make_with_shape_of(buffer_);
-    }
+size_t TensorStorage::storage_size() const {
+    return buffer.size_in_bytes();
 }
 
 Tensor::Tensor(std::string name, HalideBuffer<void> buffer, QuantizationInfo quantization)
@@ -57,7 +33,7 @@ Tensor::Tensor(std::string name, HalideBuffer<void> buffer, QuantizationInfo qua
 }
 
 Tensor::Tensor(std::string name, halide_type_t type, const Box &bounds, QuantizationInfo quantization)
-    : Tensor(name, make_buffer(type, bounds), quantization) {
+    : Tensor(name, make_unallocated_buffer(type, bounds), quantization) {
 }
 
 void Tensor::add_consumer(Op *op) {
@@ -76,73 +52,95 @@ void Tensor::remove_producer(Op *op) {
     producers_.remove(op);
 }
 
-std::shared_ptr<TensorStorage> Tensor::storage() {
+TensorStoragePtr Tensor::storage() {
     if (!storage_) {
-        storage_ = std::make_shared<TensorStorage>(buffer_.type(), buffer_.dimensions(), buffer_.raw_buffer()->dim);
+        halide_buffer_t *raw_buf = buffer_.raw_buffer();
+        // TensorStorage always allocates as uint.
+        halide_type_t storage_type(halide_type_uint, raw_buf->type.bytes() * 8);
+        storage_ = std::make_shared<TensorStorage>(storage_type, raw_buf->dimensions, raw_buf->dim);
     }
     return storage_;
 }
 
-bool Tensor::is_allocated() const {
-    return buffer_.data() != nullptr;
-}
+void Tensor::set_external_buffer(HalideBuffer<void> external_buffer) {
+    assert(!is_dynamic());
+    assert(is_external());
+    assert(storage_ == nullptr);
 
-void Tensor::set_external_host(void *host) {
     // No: it's ok to set this to different values over time,
     // so don't assert that host is currently null (or already equal to the new value)
     // assert(!is_allocated());
 
-    assert(is_external());
-    assert(!buffer_.owns_host_memory());
-    // TODO: we don't allow aliasing of external tensors right now.
-    // If we do, we need to maintain and update storage_ appropriately.
-    assert(storage_ == nullptr);
-    buffer_.raw_buffer()->host = (uint8_t *)host;
+    for (int i = 0; i < buffer_.dimensions(); i++) {
+        assert(external_buffer.dim(i).min() == buffer_.dim(i).min());
+        assert(external_buffer.dim(i).extent() == buffer_.dim(i).extent());
+    }
+    buffer_ = std::move(external_buffer);
 }
 
-namespace {
+void Tensor::allocate_from_arena_pointer(void *host) {
+    assert(!is_dynamic());
+    assert(!is_external());
+    assert(!is_allocated());
 
-// Copy a Halide buffer without the internal reference counting.
-// This reduces overhead of buffer copies, and is unnecessary because
-// we do our own reference counting.
-template<typename T>
-HalideBuffer<T> drop_reference(const HalideBuffer<T> &buf) {
-    return HalideBuffer<T>(buf.type(), buf.data(), buf.dimensions(), buf.raw_buffer()->dim);
+    auto &storage_buffer = storage()->buffer;
+    halide_buffer_t *raw_storage_buffer = storage_buffer.raw_buffer();
+    assert(raw_storage_buffer->host == nullptr || raw_storage_buffer->host == host);
+    raw_storage_buffer->host = (uint8_t *)host;
+
+    finish_buffer_allocation();
 }
 
-}  // namespace
+void Tensor::allocate_from_heap() {
+    assert(!is_dynamic());
+    assert(!is_external());
+    assert(!is_allocated());
 
-void Tensor::allocate() {
-    if (buffer_.data()) {
-        return;
-    }
+    auto &storage_buffer = storage()->buffer;
+    assert(!storage_buffer.data());
+    storage_buffer.allocate();
 
-    if (is_dynamic() || is_external()) {
-        return;
-    }
+    finish_buffer_allocation();
+}
 
-    storage()->allocate();
-    HalideBuffer<void> buffer = drop_reference(storage()->buffer());
-    for (int i = 0; i < buffer.dimensions(); i++) {
+void Tensor::finish_buffer_allocation() {
+    auto &storage_buffer = storage()->buffer;
+    halide_buffer_t *raw_storage_buffer = storage_buffer.raw_buffer();
+    assert(raw_storage_buffer->host);
+
+    // Note that this may have a different type than storage_buffer,
+    // though the *size* of the types must match!
+    assert(raw_storage_buffer->type.bytes() == buffer_.type().bytes());
+    HalideBuffer<void> final_buffer(buffer_.type(), raw_storage_buffer->host,
+                                    raw_storage_buffer->dimensions, raw_storage_buffer->dim);
+
+    for (int i = 0; i < final_buffer.dimensions(); i++) {
         Interval dim_i(buffer_.dim(i).min(), buffer_.dim(i).max());
         if (i < (int)storage_offset_.size()) {
             dim_i += storage_offset_[i];
         }
-        assert(buffer.dim(i).min() <= dim_i.min);
-        assert(buffer.dim(i).max() >= dim_i.max);
-        buffer.crop(i, dim_i.min, dim_i.extent());
-        buffer.translate(i, -dim_i.min);
-        assert(buffer.dim(i).min() == buffer_.dim(i).min());
-        assert(buffer.dim(i).max() == buffer_.dim(i).max());
+        assert(final_buffer.dim(i).min() <= dim_i.min);
+        assert(final_buffer.dim(i).max() >= dim_i.max);
+
+        final_buffer.crop(i, dim_i.min, dim_i.extent());
+        final_buffer.translate(i, -dim_i.min);
+        assert(final_buffer.dim(i).min() == buffer_.dim(i).min());
+        assert(final_buffer.dim(i).max() == buffer_.dim(i).max());
     }
-    buffer_ = buffer;
+
+    buffer_ = std::move(final_buffer);
+
+    assert(is_allocated());
 }
 
-void Tensor::resize(const Box &new_shape) {
+void Tensor::resize_dynamic(const Box &new_shape) {
     assert(is_dynamic());
     assert(!is_external());
+    assert(storage_ == nullptr);
+    // No: we might need to resize a dynamic Tensor more than once.
+    // assert(!is_allocated());
 
-    SmallVector<halide_dimension_t, max_rank> new_dims;
+    TensorDimensions new_dims;
 
     const halide_dimension_t *old_dims = buffer_.raw_buffer()->dim;
 
@@ -175,36 +173,37 @@ void Tensor::resize(const Box &new_shape) {
     storage_ = nullptr;
 }
 
-bool Tensor::is_alias() const {
-    // TODO: This check could incorrectly return true, if the tensor has been
-    // allocated already via storage(), but isn't an alias.
-    return storage_ != nullptr;
-}
-
 void Tensor::set_alias_of(const TensorPtr &t, const SmallVector<int, max_rank> &storage_offset) {
-    assert(!is_dynamic() && !is_external());
+    assert(!is_dynamic());
+    assert(!is_external());
+    assert(!is_alias());
+    // No: 't' may (or may not) already have is_alias_ = true,
+    // but both will be considered an alias after this call.
+    // assert(!t->is_alias_);
 
     storage_ = t->storage();
     storage_offset_ = storage_offset;
 
+#ifndef NDEBUG
+    // Reality-check.
     Box offset_bounds = bounds();
     for (int i = 0; i < (int)storage_offset_.size(); i++) {
         offset_bounds[i] += storage_offset_[i];
     }
-    storage_->add_use(type(), offset_bounds);
-}
+    auto &shared_buffer = storage_->buffer;
+    assert(shared_buffer.type().bytes() == type().bytes());
+    assert(shared_buffer.dimensions() == (int)offset_bounds.size());
+    assert(!shared_buffer.data());
 
-void Tensor::replace_all_consumers_with(const TensorPtr &other) {
-    // We need to make a copy of the list of consumers so it doesn't get invalidated
-    // by set_input below.
-    auto consumers = consumers_;
-    for (Op *i : consumers) {
-        for (int j = 0; j < i->input_count(); j++) {
-            if (i->input(j).get() == this) {
-                i->set_input(j, other);
-            }
-        }
+    // Check that the storage is big enough for this buffer.
+    for (int i = 0; i < shared_buffer.dimensions(); i++) {
+        assert(offset_bounds[i].min >= shared_buffer.dim(i).min());
+        assert(offset_bounds[i].max <= shared_buffer.dim(i).max());
     }
+#endif
+
+    is_alias_ = true;
+    t->is_alias_ = true;
 }
 
 void Tensor::dump(std::ostream &os) const {
@@ -231,6 +230,9 @@ void Tensor::dump(std::ostream &os) const {
     }
     if (is_dynamic()) {
         os << " dynamic";
+    }
+    if (is_alias()) {
+        os << " alias";
     }
 
     os << " " << name() << std::endl;

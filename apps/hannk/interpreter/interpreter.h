@@ -18,6 +18,7 @@ struct InterpreterOptions {
 
 class Interpreter {
     std::shared_ptr<OpGroup> model_;
+    std::unique_ptr<char[]> tensor_storage_arena_;
 
     void init(InterpreterOptions options);
 

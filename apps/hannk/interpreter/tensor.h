@@ -40,15 +40,13 @@ class Op;
 
 class Tensor;
 using TensorPtr = std::shared_ptr<Tensor>;
+using TensorOffset = SmallVector<int, max_rank>;
+using TensorDimensions = SmallVector<halide_dimension_t, max_rank>;
 
-// Storage for a tensor. This can be shared among several tensors aliasing
-// the same memory. All aliases use the strides of the buffer in this storage
-// buffer.
 class TensorStorage {
-    HalideBuffer<void> buffer_;
+    friend class Tensor;
 
-public:
-    TensorStorage(halide_type_t type, int rank, const halide_dimension_t *dimensions);
+    HalideBuffer<void> buffer;
 
     TensorStorage() = delete;
     TensorStorage(const TensorStorage &) = delete;
@@ -56,23 +54,13 @@ public:
     TensorStorage(TensorStorage &&) = delete;
     TensorStorage &operator=(TensorStorage &&) = delete;
 
-    // Grow the bounds of the storage to accommodate a new user.
-    // The type and dimensionality must match the existing storage.
-    void add_use(halide_type_t, const Box &bounds);
+public:
+    // std::make_shared doesn't care about friendship, so just make this public.
+    TensorStorage(halide_type_t type, int rank, const halide_dimension_t *dimensions);
 
-    template<class T = void>
-    const HalideBuffer<T> &buffer() {
-        return buffer_.as<T>();
-    }
-
-    template<class T = void>
-    const HalideBuffer<const T> &buffer() const {
-        return buffer_.as_const().as<const T>();
-    }
-
-    bool is_allocated() const;
-    void allocate();
+    size_t storage_size() const;
 };
+using TensorStoragePtr = std::shared_ptr<TensorStorage>;
 
 class Tensor {
     std::string name_;
@@ -82,24 +70,29 @@ class Tensor {
     // (It may actually refer to read-only external memory, or it may simply be marked this may as
     // the result of a transform.)
     bool is_constant_ = false;
-    // If true, this Tensor's storage is externally owned and must not be freed.
+    // If true, this Tensor's buffer was externally created and must not be modified,
+    // (aside from allowing the buffer's dtor to run normally).
     bool is_external_ = false;
     // If true, this Tensor is 'dynamic' (i.e., it's an output whose size
     // is calculated during evaluation, rather than ahead of time).  It is an error
     // for a Tensor to be dynamic if it is also constant or external.
     // Currently only used in conjunction with the TFLite delegate.
     bool is_dynamic_ = false;
+    // If true, this Tensor shares its TensorStorage with at least one other Tensor.
+    bool is_alias_ = false;
 
     // Possibly shared storage for this tensor.
-    std::shared_ptr<TensorStorage> storage_;
+    TensorStoragePtr storage_;
     // The offset of this tensor into the storage buffer.
-    SmallVector<int, max_rank> storage_offset_;
+    // Only used if is_alias_ = true.
+    // If storage_offset_.size() < rank(), remaining offset entries are implicitly zero.
+    TensorOffset storage_offset_;
 
     // A list of ops that use this tensor as an output or an input, respectively.
     std::list<Op *> producers_;
     std::list<Op *> consumers_;
 
-    std::shared_ptr<TensorStorage> storage();
+    void finish_buffer_allocation();
 
 public:
     Tensor() = delete;
@@ -111,6 +104,10 @@ public:
     Tensor &operator=(const Tensor &) = delete;
     Tensor(Tensor &&) = delete;
     Tensor &operator=(Tensor &&) = delete;
+
+    // It's public, but since TensorStorage is a blind struct, this can only
+    // be used externally to group Tensors that share the same storage.
+    TensorStoragePtr storage();
 
     halide_type_t type() const {
         return buffer_.type();
@@ -169,7 +166,11 @@ public:
         is_external_ = external;
     }
 
-    void set_external_host(void *host);
+    // Requires that set_external() has already been called.
+    // external_buffer must have the same dimensions, mins, and extents
+    // as the current buffer (but the strides need not match).
+    // external_buffer must *not* have a null host pointer.
+    void set_external_buffer(HalideBuffer<void> external_buffer);
 
     bool is_dynamic() const {
         return is_dynamic_;
@@ -194,13 +195,18 @@ public:
         return buffer_.raw_buffer();
     }
 
-    bool is_allocated() const;
-    void allocate();
+    bool is_allocated() const {
+        return buffer_.data() != nullptr;
+    }
+    void allocate_from_heap();
+    void allocate_from_arena_pointer(void *host);
 
-    void resize(const Box &new_shape);
+    void resize_dynamic(const Box &new_shape);
 
-    bool is_alias() const;
-    void set_alias_of(const TensorPtr &t, const SmallVector<int, max_rank> &offset = {});
+    bool is_alias() const {
+        return is_alias_;
+    }
+    void set_alias_of(const TensorPtr &t, const TensorOffset &offset = {});
 
     void add_consumer(Op *op);
     void add_producer(Op *op);
@@ -213,8 +219,6 @@ public:
     const std::list<Op *> &consumers() const {
         return consumers_;
     }
-
-    void replace_all_consumers_with(const TensorPtr &other);
 
     void dump(std::ostream &os) const;
 };

@@ -1035,11 +1035,11 @@ public:
                     check(arm32 ? "vpadd.i16" : "addp", 8, sum_(in_u16(f * x + r)));
                     check(arm32 ? "vpadd.i32" : "addp", 4, sum_(in_i32(f * x + r)));
                     check(arm32 ? "vpadd.i32" : "addp", 4, sum_(in_u32(f * x + r)));
-                    check(arm32 ? "vpadd.f32" : "addp", 4, sum_(in_f32(f * x + r)));
+                    check(arm32 ? "vpadd.f32" : "faddp", 4, sum_(in_f32(f * x + r)));
                     // In 32-bit, we don't have a pairwise op for doubles,
                     // and expect to just get vadd instructions on d
                     // registers.
-                    check(arm32 ? "vadd.f64" : "addp", 4, sum_(in_f64(f * x + r)));
+                    check(arm32 ? "vadd.f64" : "faddp", 4, sum_(in_f64(f * x + r)));
 
                     if (f == 2) {
                         // VPADAL   I       -       Pairwise Add and Accumulate Long

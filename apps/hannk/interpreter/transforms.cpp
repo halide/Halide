@@ -93,7 +93,7 @@ class InPlace : public OpVisitor {
 
     // We can alias two tensors if the input is not used after the output is written,
     // and we meet a number of other requirements.
-    bool maybe_alias_tensors(TensorPtr input, TensorPtr output, SmallVector<int, max_rank> offset = {}) const {
+    bool maybe_alias_tensors(TensorPtr input, TensorPtr output, TensorOffset offset = {}) const {
         // Hack around bug with scalar aliasing.
         if (input->rank() == 0 || output->rank() == 0) {
             return false;
@@ -182,7 +182,7 @@ class InPlace : public OpVisitor {
 
     void visit(ConcatenationOp *op) {
         bool is_no_op = true;
-        SmallVector<int, max_rank> offset(op->axis() + 1);
+        TensorOffset offset(op->axis() + 1);
         for (int i = 0; i < op->input_count(); i++) {
             is_no_op = is_no_op && maybe_alias_tensors(op->input(i), op->output(), offset);
             is_no_op = is_no_op && op->input(i)->quantization() == op->output()->quantization();
@@ -196,7 +196,7 @@ class InPlace : public OpVisitor {
 
     void visit(SplitOp *op) {
         bool is_no_op = true;
-        SmallVector<int, max_rank> offset(op->axis() + 1);
+        TensorOffset offset(op->axis() + 1);
         for (int i = 0; i < op->output_count(); i++) {
             is_no_op = is_no_op && maybe_alias_tensors(op->input(), op->output(i), offset);
             is_no_op = is_no_op && op->output(i)->quantization() == op->input()->quantization();
@@ -216,7 +216,7 @@ class InPlace : public OpVisitor {
 
         auto padding = op->input(1)->buffer<const int32_t>();
 
-        SmallVector<int, max_rank> offset(padding.extent(1));
+        TensorOffset offset(padding.extent(1));
         for (int d = 0; d < padding.extent(1); d++) {
             offset[d] = padding(0, d);
         }
@@ -260,6 +260,19 @@ void in_place(Op *op) {
 }
 
 namespace {
+
+void replace_consumers(const TensorPtr &from, const TensorPtr &to) {
+    // We need to make a copy of the list of consumers so it doesn't get invalidated
+    // by set_input below.
+    auto consumers = from->consumers();
+    for (Op *i : consumers) {
+        for (int j = 0; j < i->input_count(); j++) {
+            if (i->input(j).get() == from.get()) {
+                i->set_input(j, to);
+            }
+        }
+    }
+}
 
 // Find ops that need padding and add an explicit pad op.
 class PadForOps : public OpVisitor {
@@ -314,7 +327,7 @@ class PadForOps : public OpVisitor {
             TensorPtr tiled =
                 std::make_shared<Tensor>(filter->name() + "_tiled", type, tiled_shape, quantization);
             // Maybe more than one op uses this same filter...?
-            filter->replace_all_consumers_with(tiled);
+            replace_consumers(filter, tiled);
 
             OpPtr tile = make_op<TileConvFilterOp>(filter, tiled);
             new_ops.emplace_back(std::move(tile));
@@ -402,8 +415,10 @@ void fold_constants(OpGroup *root) {
         }
         if (can_execute(op)) {
             // Allocate all the outputs.
+            // Since we aren't ready for arena allocation,
+            // we'll just do these as one-off heap allocs.
             for (int j = 0; j < op->output_count(); j++) {
-                op->output(j)->allocate();
+                op->output(j)->allocate_from_heap();
             }
 
             // Run the whole op.

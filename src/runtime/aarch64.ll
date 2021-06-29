@@ -54,6 +54,14 @@ declare <4 x float> @llvm.aarch64.neon.frecps.v4f32(<4 x float> %x, <4 x float> 
 declare <2 x float> @llvm.aarch64.neon.frecps.v2f32(<2 x float> %x, <2 x float> %y) nounwind readnone;
 declare <4 x float> @llvm.aarch64.neon.frsqrts.v4f32(<4 x float> %x, <4 x float> %y) nounwind readnone;
 declare <2 x float> @llvm.aarch64.neon.frsqrts.v2f32(<2 x float> %x, <2 x float> %y) nounwind readnone;
+declare <8 x half> @llvm.aarch64.neon.frecpe.v8f16(<8 x half> %x) nounwind readnone;
+declare <4 x half> @llvm.aarch64.neon.frecpe.v4f16(<4 x half> %x) nounwind readnone;
+declare <8 x half> @llvm.aarch64.neon.frsqrte.v8f16(<8 x half> %x) nounwind readnone;
+declare <4 x half> @llvm.aarch64.neon.frsqrte.v4f16(<4 x half> %x) nounwind readnone;
+declare <8 x half> @llvm.aarch64.neon.frecps.v8f16(<8 x half> %x, <8 x half> %y) nounwind readnone;
+declare <4 x half> @llvm.aarch64.neon.frecps.v4f16(<4 x half> %x, <4 x half> %y) nounwind readnone;
+declare <8 x half> @llvm.aarch64.neon.frsqrts.v8f16(<8 x half> %x, <8 x half> %y) nounwind readnone;
+declare <4 x half> @llvm.aarch64.neon.frsqrts.v4f16(<4 x half> %x, <4 x half> %y) nounwind readnone;
 
 define weak_odr float @fast_inverse_f32(float %x) nounwind alwaysinline {
        %vec = insertelement <2 x float> undef, float %x, i32 0
@@ -74,6 +82,27 @@ define weak_odr <4 x float> @fast_inverse_f32x4(<4 x float> %x) nounwind alwaysi
        %correction = tail call <4 x float> @llvm.aarch64.neon.frecps.v4f32(<4 x float> %approx, <4 x float> %x)
        %result = fmul <4 x float> %approx, %correction
        ret <4 x float> %result
+}
+
+define weak_odr half @fast_inverse_f16(half %x) nounwind alwaysinline {
+       %vec = insertelement <4 x half> undef, half %x, i32 0
+       %approx = tail call <4 x half> @fast_inverse_f16x4(<4 x half> %vec)
+       %result = extractelement <4 x half> %approx, i32 0
+       ret half %result
+}
+
+define weak_odr <4 x half> @fast_inverse_f16x4(<4 x half> %x) nounwind alwaysinline {
+       %approx = tail call <4 x half> @llvm.aarch64.neon.frecpe.v4f16(<4 x half> %x)
+       %correction = tail call <4 x half> @llvm.aarch64.neon.frecps.v4f16(<4 x half> %approx, <4 x half> %x)
+       %result = fmul <4 x half> %approx, %correction
+       ret <4 x half> %result
+}
+
+define weak_odr <8 x half> @fast_inverse_f16x8(<8 x half> %x) nounwind alwaysinline {
+       %approx = tail call <8 x half> @llvm.aarch64.neon.frecpe.v8f16(<8 x half> %x)
+       %correction = tail call <8 x half> @llvm.aarch64.neon.frecps.v8f16(<8 x half> %approx, <8 x half> %x)
+       %result = fmul <8 x half> %approx, %correction
+       ret <8 x half> %result
 }
 
 define weak_odr float @fast_inverse_sqrt_f32(float %x) nounwind alwaysinline {
@@ -97,4 +126,27 @@ define weak_odr <4 x float> @fast_inverse_sqrt_f32x4(<4 x float> %x) nounwind al
        %correction = tail call <4 x float> @llvm.aarch64.neon.frsqrts.v4f32(<4 x float> %approx2, <4 x float> %x)
        %result = fmul <4 x float> %approx, %correction
        ret <4 x float> %result
+}
+
+define weak_odr half @fast_inverse_sqrt_f16(half %x) nounwind alwaysinline {
+       %vec = insertelement <4 x half> undef, half %x, i32 0
+       %approx = tail call <4 x half> @fast_inverse_sqrt_f16x4(<4 x half> %vec)
+       %result = extractelement <4 x half> %approx, i32 0
+       ret half %result
+}
+
+define weak_odr <4 x half> @fast_inverse_sqrt_f16x4(<4 x half> %x) nounwind alwaysinline {
+       %approx = tail call <4 x half> @llvm.aarch64.neon.frsqrte.v4f16(<4 x half> %x)
+       %approx2 = fmul <4 x half> %approx, %approx
+       %correction = tail call <4 x half> @llvm.aarch64.neon.frsqrts.v4f16(<4 x half> %approx2, <4 x half> %x)
+       %result = fmul <4 x half> %approx, %correction
+       ret <4 x half> %result
+}
+
+define weak_odr <8 x half> @fast_inverse_sqrt_f16x8(<8 x half> %x) nounwind alwaysinline {
+       %approx = tail call <8 x half> @llvm.aarch64.neon.frsqrte.v8f16(<8 x half> %x)
+       %approx2 = fmul <8 x half> %approx, %approx
+       %correction = tail call <8 x half> @llvm.aarch64.neon.frsqrts.v8f16(<8 x half> %approx2, <8 x half> %x)
+       %result = fmul <8 x half> %approx, %correction
+       ret <8 x half> %result
 }
