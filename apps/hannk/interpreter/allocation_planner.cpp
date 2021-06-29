@@ -59,7 +59,7 @@ void AllocationPlanner::commit() {
         next_offset += align_up(r.size_needed, alignment_);
     }
 
-#else   // HANNK_USE_TRIVIAL_ALLOCATION_PLANNER
+#else  // HANNK_USE_TRIVIAL_ALLOCATION_PLANNER
 
     // Use a basic greedy algorithm to lay out the buffers;
     // the basic idea here is to start with the largest block,
