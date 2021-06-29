@@ -2496,8 +2496,10 @@ private:
                 for (const auto *v : vars) {
                     auto result = solve_expression(c, v->name);
                     const Call *is_var_bounded = Call::as_intrinsic(result.result, {Call::is_var_bounded});
-                    if (is_var_bounded && !equal(is_var_bounded->args[0], v)) {
+                    const StringImm *is_var_bounded_var = is_var_bounded ? is_var_bounded->args[0].as<StringImm>() : nullptr;
+                    if (is_var_bounded_var && is_var_bounded_var->value != v->name) {
                         is_var_bounded = nullptr;
+                        is_var_bounded_var = nullptr;
                     }
                     if (!is_var_bounded && !result.fully_solved) {
                         continue;
