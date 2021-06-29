@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "util/buffer_util.h"
+#include "util/status.h"
 
 struct TfLiteDelegate;
 struct TfLiteInterpreter;
@@ -111,7 +112,7 @@ struct ModelRunner {
 
     void set_seed(int seed);
     void status();
-    void run(const std::string &filename);
+    Status run(const std::string &filename);
 
     // Movable but not copyable.
     ModelRunner(const ModelRunner &) = delete;

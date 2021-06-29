@@ -18,7 +18,8 @@ void run_benchmark(const std::string &filename, const InterpreterOptions &option
         std::cout << filename;
     }
 
-    std::vector<char> buffer = read_entire_file(filename);
+    std::vector<char> buffer;
+    read_entire_file(filename, &buffer).check();
     std::unique_ptr<OpGroup> model = parse_tflite_model_from_buffer(buffer.data());
 
     if (options.verbose) {
