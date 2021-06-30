@@ -29,7 +29,7 @@ public:
 
         Func prod("prod");
         RDom r(0, size);
-        prod(x, y) += f32(A(r, y)) * f32(B(x, r));
+        prod(x, y) += f32(A(x, r)) * f32(B(r, y));
 
         Var xi, yi, xio, xii, yii, xo, yo, x_pair, xiio, ty;
         RVar rxo, rxi;
