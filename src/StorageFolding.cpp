@@ -717,7 +717,7 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                 // The max of the extent over all values of the loop variable must be a constant
                 Scope<Interval> scope;
                 scope.push(op->name, Interval(loop_min, loop_max));
-                std::cerr << "max_extent in SF\n";
+                // std::cerr << "max_extent in SF\n";
                 Expr max_extent = find_constant_bound(extent, Direction::Upper, scope);
                 scope.pop(op->name);
 

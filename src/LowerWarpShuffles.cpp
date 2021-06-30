@@ -409,7 +409,7 @@ class LowerWarpShuffles : public IRMutator {
                 // the number of lanes (rounded up).
                 Expr new_size = (alloc->extents[0] + op->extent - 1) / op->extent;
                 new_size = simplify(new_size, true, bounds);
-                std::cerr << "LWSA\n";
+                // std::cerr << "LWSA\n";
                 new_size = find_constant_bound(new_size, Direction::Upper, bounds);
                 const int64_t *sz = as_const_int(new_size);
                 user_assert(sz) << "Warp-level allocation with non-constant size: "
