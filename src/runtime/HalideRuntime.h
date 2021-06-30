@@ -40,20 +40,13 @@ extern "C" {
 #endif
 
 #ifndef HALIDE_MUST_USE_RESULT
-#ifdef __has_attribute
-#if __has_attribute(nodiscard)
-// C++17 or later
 #define HALIDE_MUST_USE_RESULT [[nodiscard]]
-#elif __has_attribute(warn_unused_result)
-// Clang/GCC
-#define HALIDE_MUST_USE_RESULT __attribute__((warn_unused_result))
-#else
-#define HALIDE_MUST_USE_RESULT
 #endif
-#else
-#define HALIDE_MUST_USE_RESULT
+
+#ifndef HALIDE_ATTRIBUTE_DEPRECATED
+#define HALIDE_ATTRIBUTE_DEPRECATED(x) [[deprecated(x)]]
 #endif
-#endif
+
 
 /** \file
  *
@@ -1572,18 +1565,6 @@ typedef struct halide_buffer_t {
 
 #ifdef __cplusplus
 extern "C" {
-#endif
-
-#ifndef HALIDE_ATTRIBUTE_DEPRECATED
-#ifdef HALIDE_ALLOW_DEPRECATED
-#define HALIDE_ATTRIBUTE_DEPRECATED(x)
-#else
-#ifdef _MSC_VER
-#define HALIDE_ATTRIBUTE_DEPRECATED(x) __declspec(deprecated(x))
-#else
-#define HALIDE_ATTRIBUTE_DEPRECATED(x) __attribute__((deprecated(x)))
-#endif
-#endif
 #endif
 
 /** halide_scalar_value_t is a simple union able to represent all the well-known
