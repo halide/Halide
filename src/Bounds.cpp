@@ -18,6 +18,7 @@
 #include "Param.h"
 #include "PurifyIndexMath.h"
 #include "Simplify.h"
+#include "SimplifyCorrelatedDifferences.h"
 #include "Solve.h"
 #include "Util.h"
 #include "Var.h"
@@ -65,11 +66,40 @@ Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scop
     return bound;
 }
 
+std::ostream &operator<<(std::ostream &stream, const Interval &i) {
+    stream << "[ " << i.min << "  ,  " << i.max << " ]";
+    return stream;
+}
+
 Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
     Expr expr = simplify(remove_likelies(e));
     Interval interval = bounds_of_expr_in_scope(expr, scope, FuncValueBounds(), true);
     interval.min = simplify(interval.min);
     interval.max = simplify(interval.max);
+
+    if (!is_const(expr)) {
+        // Expr expr = reorder_terms(simplify(remove_likelies(e)));
+        Expr expr = simplify(substitute_some_lets(remove_likelies(e)));
+        Interval interval_s = bounds_of_expr_in_scope(expr, scope, FuncValueBounds(), true);
+        interval_s.min = simplify(interval_s.min);
+        interval_s.max = simplify(interval_s.max);
+
+        if ((is_const(interval_s.min) && !is_const(interval.min)) || (is_const(interval_s.max) && !is_const(interval.max))) {
+            std::cerr << "\n\ncomparing methods\nfor: " << e << "\n\t-> " << expr << "\n\t" << interval << "\n\tvs\n\t" << interval_s << "\n";
+            interval = interval_s;
+            scope.print(std::cerr);
+            std::cerr << "\n\n";
+        } else if ((!is_const(interval_s.min) && is_const(interval.min)) || (!is_const(interval_s.max) && is_const(interval.max))) {
+            std::cerr << "\n\nfailing method\nfor: " << e << "\n\t-> " << expr << "\n\t" << interval << "\n\tvs\n\t" << interval_s << "\n";
+            scope.print(std::cerr);
+            std::cerr << "\n\n";
+        } else if ((is_const(interval_s.min) && is_const(interval.min) && can_prove(interval_s.min != interval.min)) ||
+                    (is_const(interval_s.max) && is_const(interval.max) && can_prove(interval_s.max != interval.max))) {
+            std::cerr << "\n\ndiffering methods\nfor: " << e << "\n\t-> " << expr << "\n\t" << interval << "\n\tvs\n\t" << interval_s << "\n";
+            scope.print(std::cerr);
+            std::cerr << "\n\n";
+        }
+    }
 
     // Note that we can get non-const but well-defined results (e.g. signed_integer_overflow);
     // for our purposes here, treat anything non-const as no-bound.

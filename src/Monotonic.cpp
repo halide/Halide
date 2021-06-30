@@ -435,6 +435,7 @@ class DerivativeBounds : public IRVisitor {
                 // TODO: How to handle unsigned values?
                 Expr delta = simplify(op->true_value - op->false_value);
 
+                std::cerr << "is_monotonic\n";
                 Interval delta_bounds = find_constant_bounds(delta, bounds);
                 // TODO: Maybe we can do something with one-sided intervals?
                 if (delta_bounds.is_bounded()) {

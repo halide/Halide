@@ -102,6 +102,8 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
              rewrite(max(intrin(Call::likely_if_innermost, x), x), b) ||
              rewrite(max(x, intrin(Call::likely_if_innermost, x)), a) ||
 
+             rewrite(max(min(x*c0, y + c1) - min(select(0 < x, y, min(x*c0, y + c1)), x*c0), 0), 0, c1 < 0) ||
+
              (no_overflow(op->type) &&
               (rewrite(max(ramp(x, y, lanes), broadcast(z, lanes)), a,
                        can_prove(x + y * (lanes - 1) >= z && x >= z, this)) ||

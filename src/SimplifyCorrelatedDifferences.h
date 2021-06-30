@@ -52,6 +52,14 @@ namespace Internal {
  */
 Stmt simplify_correlated_differences(const Stmt &);
 
+Expr refactor_correlated_differences(const Expr &expr);
+
+bool possibly_correlated(const Expr &expr);
+
+Expr substitute_some_lets(const Expr &expr, size_t count = 100);
+
+Expr reorder_terms(const Expr &expr);
+
 }  // namespace Internal
 }  // namespace Halide
 

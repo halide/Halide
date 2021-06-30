@@ -33,6 +33,7 @@ class BoundSmallAllocations : public IRMutator {
 
         do {
             result = op->body;
+            std::cerr << "visit_let in BSA\n";
             frames.emplace_back(op, scope);
         } while ((op = result.template as<T>()));
 
@@ -58,7 +59,9 @@ class BoundSmallAllocations : public IRMutator {
     DeviceAPI device_api = DeviceAPI::None;
 
     Stmt visit(const For *op) override {
+        std::cerr << "For min in BSA\n";
         Interval min_bounds = find_constant_bounds(op->min, scope);
+        std::cerr << "For max in BSA\n";
         Interval max_bounds = find_constant_bounds(op->min + op->extent - 1, scope);
         Interval b = Interval::make_union(min_bounds, max_bounds);
         b.min = simplify(b.min);

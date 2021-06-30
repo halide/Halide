@@ -247,6 +247,15 @@ public:
         table.swap(other.table);
         std::swap(containing_scope, other.containing_scope);
     }
+
+    void print(std::ostream &stream) const {
+        stream << "{\n";
+        typename Scope<T>::const_iterator iter;
+        for (iter = cbegin(); iter != cend(); ++iter) {
+            stream << "  " << iter.name() << " : " << iter.value() << "\n";
+        }
+        stream << "}";
+    }
 };
 
 template<typename T>
