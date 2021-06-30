@@ -404,8 +404,10 @@ void fold_constants(OpGroup *root) {
         }
         if (can_execute(op)) {
             // Allocate all the outputs.
+            // Since we aren't ready for arena allocation,
+            // we'll just do these as one-off heap allocs.
             for (int j = 0; j < op->output_count(); j++) {
-                op->output(j)->allocate();
+                op->output(j)->allocate_from_heap();
             }
 
             // Run the whole op.

@@ -57,6 +57,11 @@ class ExprUsesVars : public IRGraphVisitor {
 
     void visit(const Call *op) override {
         visit_name(op->name);
+        if (op->is_intrinsic(Call::is_var_bounded)) {
+            internal_assert(op->args.size() == 3);
+            const StringImm *name = op->args[0].as<StringImm>();
+            visit_name(name->value);
+        }
         IRGraphVisitor::visit(op);
     }
 

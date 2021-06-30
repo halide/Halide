@@ -1118,17 +1118,14 @@ private:
 
     void visit(const Call *op) override {
         TRACK_BOUNDS_INTERVAL;
-        // Using the strict_float feature flag wraps a strict_float()
-        // call around every Expr that is of type float, so it's easy
-        // to get nestings that are many levels deep; the bounds of this
-        // call are *always* exactly that of its first argument, so short
-        // circuit it here before checking for const_args. This is important
-        // because evaluating const_args for such a deeply nested case
+        // Tags are hints that don't affect the results of the expression,
+        // and can be very deeply nested in the case of strict_float. The
+        // bounds of this call are *always* exactly that of its first argument,
+        // so short circuit it here before checking for const_args. This is
+        // important because evaluating const_args for such a deeply nested case
         // essentially becomes O(n^2) doing work that is unnecessary, making
         // otherwise simple pipelines take several minutes to compile.
-        //
-        // TODO: are any other intrinsics worth including here as well?
-        if (op->is_intrinsic(Call::strict_float)) {
+        if (op->is_tag()) {
             internal_assert(op->args.size() == 1);
             op->args[0].accept(this);
             return;
@@ -1264,9 +1261,10 @@ private:
             internal_assert(op->args.size() == 2);
             op->args[1].accept(this);
         } else if (op->is_intrinsic(Call::if_then_else)) {
-            internal_assert(op->args.size() == 3);
+            internal_assert(op->args.size() == 2 || op->args.size() == 3);
             // Probably more conservative than necessary
-            Expr equivalent_select = Select::make(op->args[0], op->args[1], op->args[2]);
+            Expr false_value = op->args.size() == 2 ? op->args[1] : op->args[2];
+            Expr equivalent_select = Select::make(op->args[0], op->args[1], false_value);
             equivalent_select.accept(this);
         } else if (op->is_intrinsic(Call::require)) {
             internal_assert(op->args.size() == 3);
@@ -2070,12 +2068,17 @@ private:
 
         if (consider_calls) {
             if (op->is_intrinsic(Call::if_then_else)) {
-                internal_assert(op->args.size() == 3);
                 // We wrap 'then_case' and 'else_case' inside 'dummy' call since IfThenElse
                 // only takes Stmts as arguments.
                 Stmt then_case = Evaluate::make(op->args[1]);
-                Stmt else_case = Evaluate::make(op->args[2]);
-                Stmt equivalent_if = IfThenElse::make(op->args[0], then_case, else_case);
+                Stmt equivalent_if;
+                if (op->args.size() == 3) {
+                    Stmt else_case = Evaluate::make(op->args[2]);
+                    equivalent_if = IfThenElse::make(op->args[0], then_case, else_case);
+                } else {
+                    internal_assert(op->args.size() == 2);
+                    equivalent_if = IfThenElse::make(op->args[0], then_case);
+                }
                 equivalent_if.accept(this);
                 return;
             }
@@ -2522,7 +2525,13 @@ private:
                 auto vars = find_free_vars(op->condition);
                 for (const auto *v : vars) {
                     auto result = solve_expression(c, v->name);
-                    if (!result.fully_solved) {
+                    const Call *is_var_bounded = Call::as_intrinsic(result.result, {Call::is_var_bounded});
+                    const StringImm *is_var_bounded_var = is_var_bounded ? is_var_bounded->args[0].as<StringImm>() : nullptr;
+                    if (is_var_bounded_var && is_var_bounded_var->value != v->name) {
+                        is_var_bounded = nullptr;
+                        is_var_bounded_var = nullptr;
+                    }
+                    if (!is_var_bounded && !result.fully_solved) {
                         continue;
                     }
                     Expr solved = result.result;
@@ -2579,7 +2588,12 @@ private:
                         likely_i.max = likely_if_innermost(i.max);
                     }
 
-                    Interval bi = bounds_of_expr_in_scope(rhs, scope, func_bounds);
+                    Interval bi;
+                    if (is_var_bounded) {
+                        bi = Interval(is_var_bounded->args[1], is_var_bounded->args[2]);
+                    } else {
+                        bi = bounds_of_expr_in_scope(rhs, scope, func_bounds);
+                    }
                     if (bi.has_upper_bound() && i.has_upper_bound()) {
                         if (lt) {
                             i.max = min(likely_i.max, bi.max - 1);
@@ -2601,6 +2615,7 @@ private:
                     p.i = i;
                     to_pop.emplace_back(std::move(p));
                 }
+
                 for (auto &p : to_pop) {
                     trim_scope_push(p.v->name, p.i, p.let_bounds);
                 }
@@ -2689,11 +2704,18 @@ private:
     void visit(const Provide *op) override {
         if (consider_provides) {
             if (op->name == func || func.empty()) {
-                Box b(op->args.size());
-                for (size_t i = 0; i < op->args.size(); i++) {
-                    b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
+                if (!is_const_one(op->predicate)) {
+                    // Don't visit the RHS inside the if. This is handled below instead.
+                    ScopedValue<bool> save_consider_calls(consider_calls, false);
+                    Stmt equiv = IfThenElse::make(op->predicate, Provide::make(op->name, op->values, op->args, const_true()));
+                    equiv.accept(this);
+                } else {
+                    Box b(op->args.size());
+                    for (size_t i = 0; i < op->args.size(); i++) {
+                        b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
+                    }
+                    merge_boxes(boxes[op->name], b);
                 }
-                merge_boxes(boxes[op->name], b);
             }
         }
 
@@ -3120,7 +3142,7 @@ void boxes_touched_test() {
     Scope<Interval> scope;
     scope.push("y", Interval(Expr(0), Expr(10)));
 
-    Stmt stmt = Provide::make("f", {10}, {x, y, z, w});
+    Stmt stmt = Provide::make("f", {10}, {x, y, z, w}, const_true());
     stmt = IfThenElse::make(y > 4, stmt, Stmt());
     stmt = IfThenElse::make(z > 18, stmt, Stmt());
     stmt = LetStmt::make("w", z + 3, stmt);
@@ -3379,7 +3401,8 @@ void bounds_test() {
                           Provide::make("output",
                                         {Add::make(Call::make(in, input_site_1),
                                                    Call::make(in, input_site_2))},
-                                        output_site));
+                                        output_site,
+                                        const_true()));
 
     map<string, Box> r;
     r = boxes_required(loop);

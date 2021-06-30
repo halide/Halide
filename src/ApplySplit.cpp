@@ -50,10 +50,12 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const s
             // The split factor trivially divides the old extent,
             // but we know nothing new about the outer dimension.
         } else if (tail == TailStrategy::GuardWithIf ||
-                   tail == TailStrategy::Predicate) {
+                   tail == TailStrategy::Predicate ||
+                   tail == TailStrategy::PredicateLoads ||
+                   tail == TailStrategy::PredicateStores) {
             // It's an exact split but we failed to prove that the
-            // extent divides the factor. Use predication to avoid
-            // running off the end of the original loop.
+            // extent divides the factor. Use predication to guard
+            // the calls and/or provides.
 
             // Bounds inference has trouble exploiting an if
             // condition. We'll directly tell it that the loop
@@ -65,17 +67,36 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const s
             Expr guarded = promise_clamped(old_var, old_var, old_max);
             string guarded_var_name = prefix + split.old_var + ".guarded";
             Expr guarded_var = Variable::make(Int(32), guarded_var_name);
-            result.emplace_back(prefix + split.old_var, guarded_var, ApplySplitResult::Substitution);
-            result.emplace_back(guarded_var_name, guarded, ApplySplitResult::LetStmt);
+
+            ApplySplitResult::Type predicate_type, substitution_type;
+            switch (tail) {
+            case TailStrategy::GuardWithIf:
+                substitution_type = ApplySplitResult::Substitution;
+                predicate_type = ApplySplitResult::Predicate;
+                break;
+            case TailStrategy::Predicate:
+                // This is identical to GuardWithIf, but maybe it makes
+                // sense to keep it anyways?
+                substitution_type = ApplySplitResult::Substitution;
+                predicate_type = ApplySplitResult::Predicate;
+                break;
+            case TailStrategy::PredicateLoads:
+                substitution_type = ApplySplitResult::SubstitutionInCalls;
+                predicate_type = ApplySplitResult::PredicateCalls;
+                break;
+            case TailStrategy::PredicateStores:
+                substitution_type = ApplySplitResult::SubstitutionInProvides;
+                predicate_type = ApplySplitResult::PredicateProvides;
+                break;
+            default:
+                break;
+            }
 
             // Inject the if condition *after* doing the substitution
             // for the guarded version.
-            Expr cond = likely(old_var <= old_max);
-            if (tail == TailStrategy::Predicate) {
-                // Add the hint for predication.
-                cond = predicate(cond);
-            }
-            result.emplace_back(cond);
+            result.emplace_back(prefix + split.old_var, guarded_var, substitution_type);
+            result.emplace_back(guarded_var_name, guarded, ApplySplitResult::LetStmt);
+            result.emplace_back(likely(is_var_bounded(old_var_name, old_var, old_max)), predicate_type);
 
         } else if (tail == TailStrategy::ShiftInwards) {
             // Adjust the base downwards to not compute off the

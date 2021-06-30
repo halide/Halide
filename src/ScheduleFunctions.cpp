@@ -79,6 +79,98 @@ bool contains_impure_call(const Expr &expr) {
     return is_not_pure.result;
 }
 
+// A mutator that performs a substitute operation only on either the values or the
+// arguments of Provide nodes.
+class SubstituteIn : public IRMutator {
+    const string &name;
+    const Expr &value;
+    bool calls;
+    bool provides;
+
+    using IRMutator::visit;
+
+    Stmt visit(const Provide *p) override {
+        if (!provides) {
+            return IRMutator::visit(p);
+        }
+        vector<Expr> args;
+        bool changed = false;
+        for (const Expr &i : p->args) {
+            args.push_back(substitute(name, value, i));
+            changed = changed || !args.back().same_as(i);
+        }
+        if (changed) {
+            return Provide::make(p->name, p->values, args, p->predicate);
+        } else {
+            return p;
+        }
+    }
+
+    Expr visit(const Call *op) override {
+        Expr result = IRMutator::visit(op);
+        if (calls && op->call_type == Call::Halide) {
+            result = substitute(name, value, op);
+        }
+        return result;
+    }
+
+public:
+    SubstituteIn(const string &name, const Expr &value, bool calls, bool provides)
+        : name(name), value(value), calls(calls), provides(provides) {
+    }
+};
+
+Stmt substitute_in(const string &name, const Expr &value, bool calls, bool provides, const Stmt &s) {
+    return SubstituteIn(name, value, calls, provides).mutate(s);
+}
+
+class AddPredicates : public IRMutator {
+    const Expr &cond;
+    bool calls;
+    bool provides;
+
+    using IRMutator::visit;
+
+    Stmt visit(const Provide *p) override {
+        vector<Expr> values;
+        vector<Expr> args;
+        bool changed = false;
+        for (const Expr &i : p->args) {
+            args.push_back(mutate(i));
+            changed = changed || !args.back().same_as(i);
+        }
+        for (const Expr &i : p->values) {
+            values.push_back(mutate(i));
+            changed = changed || !args.back().same_as(i);
+        }
+        Expr predicate = mutate(p->predicate);
+        if (provides) {
+            return Provide::make(p->name, values, args, predicate && cond);
+        } else if (changed || !predicate.same_as(p->predicate)) {
+            return Provide::make(p->name, values, args, predicate);
+        } else {
+            return p;
+        }
+    }
+
+    Expr visit(const Call *op) override {
+        Expr result = IRMutator::visit(op);
+        if (calls && op->call_type == Call::Halide) {
+            result = Call::make(op->type, Call::if_then_else, {cond, result}, Call::PureIntrinsic);
+        }
+        return result;
+    }
+
+public:
+    AddPredicates(const Expr &cond, bool calls, bool provides)
+        : cond(cond), calls(calls), provides(provides) {
+    }
+};
+
+Stmt add_predicates(const Expr &cond, bool calls, bool provides, const Stmt &s) {
+    return AddPredicates(cond, calls, provides).mutate(s);
+}
+
 // Build a loop nest about a provide node using a schedule
 Stmt build_loop_nest(
     const Stmt &body,
@@ -118,13 +210,32 @@ Stmt build_loop_nest(
 
     vector<Split> splits = stage_s.splits();
 
+    // Find all the predicated inner variables. We can't split these.
+    set<string> predicated_vars;
+    for (const Split &split : splits) {
+        if (split.tail == TailStrategy::PredicateLoads || split.tail == TailStrategy::PredicateStores) {
+            predicated_vars.insert(split.inner);
+        }
+    }
+
     // Define the function args in terms of the loop variables using the splits
     for (const Split &split : splits) {
+        user_assert(predicated_vars.count(split.old_var) == 0)
+            << "Cannot split a loop variable resulting from a split using PredicateLoads or PredicateStores.";
+
         vector<ApplySplitResult> splits_result = apply_split(split, is_update, prefix, dim_extent_alignment);
 
         for (const auto &res : splits_result) {
             if (res.is_substitution()) {
                 stmt = substitute(res.name, res.value, stmt);
+            } else if (res.is_substitution_in_calls()) {
+                stmt = substitute_in(res.name, res.value, true, false, stmt);
+            } else if (res.is_substitution_in_provides()) {
+                stmt = substitute_in(res.name, res.value, false, true, stmt);
+            } else if (res.is_predicate_calls()) {
+                stmt = add_predicates(res.value, true, false, stmt);
+            } else if (res.is_predicate_provides()) {
+                stmt = add_predicates(res.value, false, true, stmt);
             } else if (res.is_let()) {
                 stmt = LetStmt::make(res.name, res.value, stmt);
             } else {
@@ -366,7 +477,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     }
 
     // Make the (multi-dimensional multi-valued) store node.
-    Stmt body = Provide::make(func.name(), values, site);
+    Stmt body = Provide::make(func.name(), values, site, const_true());
     if (def.schedule().atomic()) {  // Add atomic node.
         bool any_unordered_parallel = false;
         for (const auto &d : def.schedule().dims()) {

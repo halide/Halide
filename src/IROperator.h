@@ -322,11 +322,8 @@ Stmt remove_promises(const Stmt &s);
  * the tagged expression. If not, returns the expression. */
 Expr unwrap_tags(const Expr &e);
 
-/** Expressions tagged with this intrinsic are suggestions that
- * vectorization of loops with guard ifs should be implemented with
- * non-faulting predicated loads and stores, instead of scalarizing
- * an if statement. */
-Expr predicate(Expr e);
+/** Check if a variable is bounded by the given min and max. */
+Expr is_var_bounded(const std::string &var, const Expr &min, const Expr &max);
 
 // Secondary args to print can be Exprs or const char *
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {

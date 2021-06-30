@@ -150,17 +150,23 @@ public:
     }
 };
 
-// We can strip box_touched declarations here. We're done with
-// them. Reconsider this decision if we want to use
+// We can strip box_touched declarations here, and lower is_var_bounded.
+// We're done with them. Reconsider this decision if we want to use
 // box_touched on extern stages later in lowering. Storage
 // folding currently does box_touched too, but it handles extern
 // stages specially already.
-class StripDeclareBoxTouched : public IRMutator {
+class StripDeclareBoxTouchedAndIsVarBounded : public IRMutator {
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::declare_box_touched)) {
             return 0;
+        } else if (op->is_intrinsic(Call::is_var_bounded)) {
+            internal_assert(op->args.size() == 3);
+            const StringImm *name = op->args[0].as<StringImm>();
+            internal_assert(name);
+            Expr x = Variable::make(op->args[1].type(), name->value);
+            return op->args[1] <= x && x <= op->args[2];
         } else {
             return IRMutator::visit(op);
         }
@@ -173,7 +179,7 @@ Stmt allocation_bounds_inference(Stmt s,
                                  const map<string, Function> &env,
                                  const FuncValueBounds &fb) {
     s = AllocationInference(env, fb).mutate(s);
-    s = StripDeclareBoxTouched().mutate(s);
+    s = StripDeclareBoxTouchedAndIsVarBounded().mutate(s);
     return s;
 }
 
