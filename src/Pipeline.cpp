@@ -750,21 +750,6 @@ Realization Pipeline::realize(vector<int32_t> sizes, const Target &target,
     return r;
 }
 
-Realization Pipeline::realize(int x_size, int y_size, int z_size, int w_size, const Target &target,
-                              const ParamMap &param_map) {
-    return realize({x_size, y_size, z_size, w_size}, target, param_map);
-}
-
-Realization Pipeline::realize(int x_size, int y_size, int z_size, const Target &target,
-                              const ParamMap &param_map) {
-    return realize({x_size, y_size, z_size}, target, param_map);
-}
-
-Realization Pipeline::realize(int x_size, int y_size, const Target &target,
-                              const ParamMap &param_map) {
-    return realize({x_size, y_size}, target, param_map);
-}
-
 void Pipeline::add_requirement(const Expr &condition, std::vector<Expr> &error_args) {
     user_assert(defined()) << "Pipeline is undefined\n";
 
