@@ -58,7 +58,7 @@ Stmt simplify_correlated_differences(const Stmt &);
  * does. Can increase Expr size (i.e. does not follow the simplifier's
  * reduction order).
  */
-Expr refactor_correlated_differences(const Expr &expr);
+Expr bound_correlated_differences(const Expr &expr);
 
 }  // namespace Internal
 }  // namespace Halide

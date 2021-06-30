@@ -285,7 +285,7 @@ Stmt simplify_correlated_differences(const Stmt &stmt) {
     return SimplifyCorrelatedDifferences().mutate(stmt);
 }
 
-Expr refactor_correlated_differences(const Expr &expr) {
+Expr bound_correlated_differences(const Expr &expr) {
     return PartiallyCancelDifferences().mutate(expr);
 }
 
