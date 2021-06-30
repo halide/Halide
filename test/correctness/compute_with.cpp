@@ -10,6 +10,7 @@ using std::map;
 using std::string;
 
 using namespace Halide;
+using namespace Halide::Internal;
 
 struct Bound {
     int32_t min[3];
@@ -2024,6 +2025,91 @@ int store_at_different_levels_test() {
     return 0;
 }
 
+int rvar_bounds_test() {
+    ImageParam input(Int(16), 2, "input");
+    Var x{"x"}, y{"y"};
+    Func input_c{"input_c"};
+    Func add_1{"add_1"};
+    Func mul_2{"mul_2"};
+    Func sum_1{"sum_1"};
+    Func sum_2{"sum_2"};
+    Func total_sum{"total_sum"};
+    RDom r(input);
+
+    // algorithm
+    input_c(x, y) = input(x, y);
+
+    add_1(x, y) = input_c(x, y) + 1;
+
+    mul_2(x, y) = input_c(x, y) * 2;
+
+    sum_1() = cast<int16_t>(0);
+    sum_2() = cast<int16_t>(0);
+
+    sum_1() += add_1(r.x, r.y);
+    sum_2() += mul_2(r.x, r.y);
+
+    total_sum() = sum_1() + sum_2();
+
+    input.dim(0).set_bounds(0, 32);
+    input.dim(1).set_bounds(0, 64);
+
+    // CPU schedule.
+    int h_factor = 8;
+    int w_factor = 8;
+
+    RVar rxOuter("rxOuter"), rxInner("rxInner");
+    RVar ryOuter("ryOuter"), ryInner("ryInner");
+
+    RVar r_sum_x(sum_1.update(0).get_schedule().dims()[0].var);
+    RVar r_sum_y(sum_1.update(0).get_schedule().dims()[1].var);
+
+    sum_1.update(0).tile(r_sum_x, r_sum_y, rxOuter, ryOuter, rxInner, ryInner, w_factor, h_factor);
+
+    RVar r_sum_x_2(sum_2.update(0).get_schedule().dims()[0].var);
+    RVar r_sum_y_2(sum_2.update(0).get_schedule().dims()[1].var);
+
+    sum_2.update(0).tile(r_sum_x_2, r_sum_y_2, rxOuter, ryOuter, rxInner, ryInner, w_factor, h_factor);
+
+    add_1.compute_at(sum_2, rxOuter);
+    mul_2.compute_at(sum_2, rxOuter);
+
+    input_c.compute_at(sum_2, rxOuter);
+
+    sum_1.update(0).compute_with(sum_2.update(0), rxOuter);
+    sum_1.compute_root();
+    sum_2.compute_root();
+    total_sum.compute_root();
+
+    class CheckAllocationSize : public IRMutator {
+
+    protected:
+        using IRMutator::visit;
+
+        Stmt visit(const Allocate *op) override {
+            if ((op->name == "input_c") && (op->constant_allocation_size() != 64)) {
+                printf("Expected allocation size for input_c is 64, but is %d instead\n", op->constant_allocation_size());
+                exit(-1);
+            }
+            return IRMutator::visit(op);
+        }
+    };
+
+    total_sum.add_custom_lowering_pass(new CheckAllocationSize());
+
+    Buffer<int16_t> in(32, 64);
+    in.fill(1);
+    input.set(in);
+
+    Buffer<int16_t> result = total_sum.realize();
+
+    if (result() != 8192) {
+        return -1;
+    }
+
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -2162,6 +2248,11 @@ int main(int argc, char **argv) {
 
     printf("Running store_at different levels test\n");
     if (store_at_different_levels_test() != 0) {
+        return -1;
+    }
+
+    printf("Running rvar bounds test\n");
+    if (rvar_bounds_test() != 0) {
         return -1;
     }
 

@@ -36,7 +36,9 @@ jobs:
     steps:
       # Specifically use the CMake version that comes with Ubuntu.
       - name: Install dependencies
-        run: sudo apt install cmake ninja-build libc6-dev-arm64-cross gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-user
+        run: |
+          sudo apt update
+          sudo apt install cmake ninja-build libc6-dev-arm64-cross gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-user
       - name: Check out sources
         uses: actions/checkout@v2
       - name: Download Halide Ubuntu packages
