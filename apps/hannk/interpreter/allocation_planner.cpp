@@ -78,12 +78,15 @@ void AllocationPlanner::commit() {
         block_requirements_sorted.push_back(&r);
     }
 
-    // TODO: Should we use a stable sort here?
-    // Since Tensors are often enumerated in (very roughly) the order of use,
-    // it might make a slight difference to prefer keeping them that way?
     std::sort(block_requirements_sorted.begin(), block_requirements_sorted.end(),
               [](BlockRequirements *a, BlockRequirements *b) -> bool {
-                  return a->size_needed > b->size_needed;
+                  // Sort in decreasing (well, really non-increasing) order by size.
+                  if (a->size_needed != b->size_needed) {
+                      return a->size_needed > b->size_needed;
+                  }
+
+                  // If sizes are equal, sort by increasing time of first use.
+                  return a->first_use < b->first_use;
               });
 
     // This is a list that we keep sorted (by offset) as we go along.
@@ -103,7 +106,6 @@ void AllocationPlanner::commit() {
         BlockRequirements *req = block_requirements_sorted[i];
         size_t candidate_offset = 0;
 
-        // 'offsets' is kept sorted by ascending offset; let's walk thru until
         OffsetsIterator prior = NullIterator;
         for (;;) {
             // Find the first block after 'prior' that's active at the same time as 'req'.
@@ -117,7 +119,7 @@ void AllocationPlanner::commit() {
                 }
             }
 
-            // If there's a prior block, the candidate_offset begins just past prior's end
+            // If there's a prior block, the candidate_offset begins just past prior's end.
             if (prior != NullIterator) {
                 const size_t prior_end_offset = (*prior)->calculated_offset + (*prior)->size_needed;
                 if (prior_end_offset > candidate_offset) {
@@ -132,10 +134,15 @@ void AllocationPlanner::commit() {
 
             // There is a next block -- let's see if there's a gap between prior and next,
             // and if so, if it's large enough to use here.
-            if ((*next)->calculated_offset >= candidate_offset &&
-                ((*next)->calculated_offset - candidate_offset) >= req->size_needed) {
-                // Eh, good enough
-                break;
+            if ((*next)->calculated_offset >= candidate_offset) {
+                const size_t gap = (*next)->calculated_offset - candidate_offset;
+                if (gap >= req->size_needed) {
+                    // Note that we take a first-fit approach here, rather than a best-fit.
+                    // (Experimentation on our standard suite of models showed literally
+                    // *no* size difference in arena size needed for a best-fit algorithm,
+                    // and no meaningful performance difference.)
+                    break;
+                }
             }
 
             // Not enough space, keep trying
@@ -192,6 +199,18 @@ void AllocationPlanner::dump(std::ostream &o) {
 
     // Implementation based on similar code from TFMicro's greedy allocator.
 
+    const auto char_for = [](int block_id) -> char {
+        if (block_id < 10) {
+            return '0' + block_id;
+        } else if (block_id < 36) {
+            return 'a' + (block_id - 10);
+        } else if (block_id < 62) {
+            return 'A' + (block_id - 36);
+        } else {
+            return '*';
+        }
+    };
+
     o << "\nBlock Info:\n";
     size_t max_size = 0;
     int max_time = 0;
@@ -202,6 +221,7 @@ void AllocationPlanner::dump(std::ostream &o) {
           << " Size: " << it.size_needed
           << " FirstUse: " << it.first_use
           << " LastUse: " << it.last_use
+          << " MapChar: " << char_for(block_id)
           << "\n";
         max_size = std::max(max_size, it.calculated_offset + it.size_needed);
         max_time = std::max(max_time, it.last_use);
@@ -226,15 +246,7 @@ void AllocationPlanner::dump(std::ostream &o) {
             const int line_end = ((br.calculated_offset + br.size_needed) * kLineWidth) / max_size;
             for (int n = line_start; n < line_end; ++n) {
                 if (line[n] == '.') {
-                    if (i < 10) {
-                        line[n] = '0' + i;
-                    } else if (i < 36) {
-                        line[n] = 'a' + (i - 10);
-                    } else if (i < 62) {
-                        line[n] = 'A' + (i - 36);
-                    } else {
-                        line[n] = '*';
-                    }
+                    line[n] = char_for(i);
                 } else {
                     // The map is imprecise, so we have a collision that is too fine to represent
                     line[n] = '!';
