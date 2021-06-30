@@ -44,7 +44,7 @@ class UnrollLoops : public IRMutator {
                     extent = Let::make(it->first, it->second, extent);
                 }
                 extent = remove_likelies(extent);
-                extent = substitute_in_all_lets(extent);
+                // extent = substitute_in_all_lets(extent);
                 extent = simplify(extent);
                 e = extent.as<IntImm>();
             }

@@ -2,6 +2,8 @@
 #define HALIDE_SIMPLIFY_CORRELATED_DIFFERENCES
 
 #include "Expr.h"
+#include "Interval.h"
+#include "Scope.h"
 
 /** \file
  * Defines a simplification pass for handling differences of correlated expressions.
@@ -59,6 +61,8 @@ bool possibly_correlated(const Expr &expr);
 Expr substitute_some_lets(const Expr &expr, size_t count = 100);
 
 Expr reorder_terms(const Expr &expr);
+
+void print_relevant_scope(const Expr &expr, const Scope<Interval> &scope, std::ostream &stream);
 
 }  // namespace Internal
 }  // namespace Halide

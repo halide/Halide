@@ -110,6 +110,8 @@ private:
     static Expr neg_inf_noinline();
 };
 
+std::ostream &operator<<(std::ostream &stream, const Interval &i);
+
 /** A class to represent ranges of integers. Can be unbounded above or below, but
  * they cannot be empty. */
 struct ConstantInterval {

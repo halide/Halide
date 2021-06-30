@@ -1692,13 +1692,15 @@ void LoopNest::apply(LoopLevel here,
 
         // Pick a tail strategy for any splits of pure vars. RVars always use guardwithif
         auto pure_var_tail_strategy = TailStrategy::Auto;
-        std::vector<TailStrategy> all_strategies = {
+        static std::vector<TailStrategy> all_strategies = {
             TailStrategy::RoundUp,
             TailStrategy::GuardWithIf,
             TailStrategy::Predicate,
             TailStrategy::ShiftInwards,
+            TailStrategy::PredicateLoads,
+            TailStrategy::PredicateStores,
         };
-        std::vector<TailStrategy> pred_strategies = {
+        static std::vector<TailStrategy> pred_strategies = {
             TailStrategy::GuardWithIf,
             TailStrategy::Predicate,
         };

@@ -489,6 +489,25 @@ class SimplerNameMutator : public IRMutator {
         }
     }
 
+    Expr visit(const Let *op) override {
+        // Don't let these be replaced
+        Expr value = mutate(op->value);
+        Expr variable = Variable::make(op->value.type(), op->name);
+        bool exists = variables.find(op->name) != variables.end();
+        Expr prev;
+        if (exists) {
+            prev = variables.at(op->name);
+        }
+        variables[op->name] = variable;
+        Expr body = mutate(op->body);
+        if (exists) {
+            variables[op->name] = prev;
+        } else {
+            variables.erase(op->name);
+        }
+        return Let::make(op->name, value, body);
+    }
+
 public:
     std::map<std::string, Expr> variables;
 };
@@ -751,6 +770,18 @@ public:
     }
 };
 
+class FindVars : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Variable *op) override {
+        vars.insert(op->name);
+    }
+
+public:
+    std::set<std::string> vars;
+
+};
+
 }  // namespace
 
 Stmt simplify_correlated_differences(const Stmt &stmt) {
@@ -763,13 +794,14 @@ Expr refactor_correlated_differences(const Expr &expr) {
     // std::cerr << "refactor simpl: " << repl << "\n";
     // repl = substitute_in_all_lets(repl);
     // repl = simplify(repl);
+    std::cerr << "AJ LOOK HERE: " << SimplerNameMutator().mutate(repl) << "\n";
     repl = ReorderTerms().mutate(repl);
     // std::cerr << "refactor reordered: " << repl << "\n";
     repl = simplify(repl);
     // std::cerr << "refactor simpl: " << repl << "\n";
     repl = RefactorCorrelatedDifferences().mutate(repl);
     // std::cerr << "refactor after: " << repl << "\n";
-    return common_subexpression_elimination(repl);
+    return repl;
 }
 
 bool possibly_correlated(const Expr &expr) {
@@ -785,6 +817,19 @@ Expr substitute_some_lets(const Expr &expr, size_t count) {
 
 Expr reorder_terms(const Expr &expr) {
     return ReorderTerms().mutate(expr);
+}
+
+void print_relevant_scope(const Expr &expr, const Scope<Interval> &scope, std::ostream &stream) {
+        FindVars finder;
+        expr.accept(&finder);
+
+        stream << "{\n";
+        for (const auto &var : finder.vars) {
+            if (scope.contains(var)) {
+                stream << "  " << var << " : " << scope.get(var) << "\n";
+            }
+        }
+        stream << "}";
 }
 
 }  // namespace Internal
