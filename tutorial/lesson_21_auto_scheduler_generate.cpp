@@ -7,12 +7,12 @@
 
 // On linux or os x, you can compile and run it like so:
 
-// g++ lesson_21_auto_scheduler_generate.cpp <path/to/tools/halide_image_io.h>/GenGen.cpp -g -std=c++11 -fno-rtti -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_21_generate
+// g++ lesson_21_auto_scheduler_generate.cpp <path/to/tools/halide_image_io.h>/GenGen.cpp -g -std=c++17 -fno-rtti -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_21_generate
 // export LD_LIBRARY_PATH=<path/to/libHalide.so>   # For linux
 // export DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> # For OS X
 // ./lesson_21_generate -o . -g auto_schedule_gen -f auto_schedule_false -e static_library,h,schedule target=host auto_schedule=false
 // ./lesson_21_generate -o . -g auto_schedule_gen -f auto_schedule_true -e static_library,h,schedule -p <path/to/libautoschedule_mullapudi2016.so> -S Mullapudi2016 target=host auto_schedule=true machine_params=32,16777216,40
-// g++ lesson_21_auto_scheduler_run.cpp -std=c++11 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> auto_schedule_false.a auto_schedule_true.a -ldl -lpthread -o lesson_21_run
+// g++ lesson_21_auto_scheduler_run.cpp -std=c++17 -I <path/to/Halide.h> -I <path/to/tools/halide_image_io.h> auto_schedule_false.a auto_schedule_true.a -ldl -lpthread -o lesson_21_run
 // ./lesson_21_run
 
 // If you have the entire Halide source tree, you can also build it by
