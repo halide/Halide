@@ -39,10 +39,7 @@ test: compare_vs_tflite
 test-hexagon-sim: $(BIN)/$(HL_TARGET)/$(BENCHMARK_OUT)
 	@mkdir -p $@
 	echo "Benchmarking tests..."
-	echo "$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/debugger/lnx64/qurt_model.so" > $(BIN)/$(HL_TARGET)/osam.cfg
-	echo "$(DEFAULT_HEXAGON_TOOLS_ROOT)/Tools/lib/iss/qtimer.so --csr_base=0xFC900000 --irq_p=1 --freq=19200000 --cnttid=1" > $(BIN)/$(HL_TARGET)/q6ss.cfg
-	echo "$(DEFAULT_HEXAGON_TOOLS_ROOT)/Tools/lib/iss/l2vic.so 32 0xFC910000" >> $(BIN)/$(HL_TARGET)/q6ss.cfg
-	$(foreach test_model, $(shell ls -1 test/*/*), BIN=$(BIN) ./run_hexagon_sim.sh $(test_model);)
+	$(foreach test_model, $(shell ls -1 test/*/*), BIN=$(BIN) ./run_benchmark_on_hexagon_sim.sh $(test_model);)
 
 test-hexagon-device: $(BIN)/$(HL_TARGET)/$(BENCHMARK_OUT)
 	echo "Benchmarking tests..."
