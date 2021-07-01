@@ -1,4 +1,6 @@
-#include "stdio.h"
+// Implementations for required Halide runtime symbols for Hexagon.
+
+#include <stdio.h>
 
 extern "C" {
 
