@@ -243,5 +243,10 @@ ConstantInterval ConstantInterval::make_union(const ConstantInterval &a, const C
     return result;
 }
 
+std::ostream &operator<<(std::ostream &stream, const ConstantInterval &ci) {
+    stream << "[ " << ci.min << "  ,  " << ci.max << " ]";
+    return stream;
+}
+
 }  // namespace Internal
 }  // namespace Halide

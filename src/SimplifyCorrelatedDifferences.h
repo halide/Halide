@@ -64,6 +64,8 @@ Expr reorder_terms(const Expr &expr);
 
 void print_relevant_scope(const Expr &expr, const Scope<Interval> &scope, std::ostream &stream);
 
+Interval get_division_interval(const Expr &expr);
+
 }  // namespace Internal
 }  // namespace Halide
 

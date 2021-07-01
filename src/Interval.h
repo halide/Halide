@@ -169,6 +169,8 @@ struct ConstantInterval {
     bool operator==(const ConstantInterval &other) const;
 };
 
+std::ostream &operator<<(std::ostream &stream, const ConstantInterval &ci);
+
 }  // namespace Internal
 }  // namespace Halide
 

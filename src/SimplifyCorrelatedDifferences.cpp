@@ -3,10 +3,12 @@
 #include "CSE.h"
 #include "CompilerLogger.h"
 #include "Error.h"
+#include "Expr.h"
 #include "ExprUsesVar.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Monotonic.h"
 #include "RealizationOrder.h"
 #include "Scope.h"
@@ -512,8 +514,8 @@ public:
     std::map<std::string, Expr> variables;
 };
 
-class ReorderTerms : public IRMutator {
-    using IRMutator::visit;
+class ReorderTerms : public IRGraphMutator {
+    using IRGraphMutator::visit;
 
     // Directly taken from Simplify_Internal.h
     HALIDE_ALWAYS_INLINE
@@ -549,17 +551,22 @@ class ReorderTerms : public IRMutator {
             const Add *add = next.expr.as<Add>();
             const Sub *sub = next.expr.as<Sub>();
             if (add) {
+                std::cerr << next.expr << " : Add\n";
                 pending.push_back({add->a, next.coefficient});
                 pending.push_back({add->b, next.coefficient});
             } else if (sub) {
+                std::cerr << next.expr << " : Sub\n";
                 pending.push_back({sub->a, next.coefficient});
                 pending.push_back({sub->b, -next.coefficient});
             } else {
+                std::cerr << next.expr << " : Rec\n";
                 next.expr = mutate(next.expr);
                 if (next.expr.as<Add>() || next.expr.as<Sub>()) {
                     // After mutation it became an add or sub, throw it back on the pending queue.
+                    std::cerr << next.expr << " : Bac\n";
                     pending.push_back(next);
                 } else {
+                    std::cerr << next.expr << " : Term\n";
                     terms.push_back(next);
                 }
             }
@@ -570,6 +577,12 @@ class ReorderTerms : public IRMutator {
                          [&](const AffineTerm &a, const AffineTerm &b) {
                              return should_commute(a.expr, b.expr);
                          });
+
+        std::cerr << "Extracted summation:\n";
+        for (auto &term : terms) {
+            std::cerr << term.expr << " x " << term.coefficient << "\n";
+        }
+        std::cerr << "\n";
 
         return terms;
     }
@@ -782,6 +795,235 @@ public:
 
 };
 
+class PushDivisions : public IRMutator {
+    using IRMutator::visit;
+
+    Expr visit(const Div *op) override {
+        const IntImm *denominator = op->b.as<IntImm>();
+        internal_assert(denominator) << "Encountered division by non-const or non-int\n";
+        internal_assert(denominator->value > 0) << "Encountered division by non-positive constant\n";
+        // TODO: catch overflow issues
+        Expr ret;
+        if (denom > 0) {
+            // Already in a division.
+            denom *= denominator->value;
+            ret = mutate(op->a);
+            denom /= denominator->value;
+        } else {
+            // Not in a division
+            denom = denominator->value;
+            ret = mutate(op->a);
+            denom = -1;
+        }
+        if (lower) {
+            return ret;
+        } else {
+            return ret + 1;
+        }
+    }
+
+    Expr visit(const IntImm *op) override {
+        if (denom > 0) {
+            int64_t value = div_imp(op->value, denom);
+            return IntImm::make(op->type, value);
+        } else {
+            return op;
+        }
+    }
+
+    Expr visit(const UIntImm *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    Expr visit(const FloatImm *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    Expr visit(const StringImm *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    Expr visit(const Cast *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    Expr visit(const Variable *op) override {
+        if (denom > 0) {
+            return Expr(op) / IntImm::make(op->type, denom);
+        } else {
+            return op;
+        }
+    }
+
+    // Add's default mutate method is fine
+    Expr visit(const Sub *op) override {
+        Expr a = mutate(op->a);
+        lower = !lower;
+        Expr b = mutate(op->b);
+        lower = !lower;
+        return a - b;
+    }
+
+    Expr visit(const Mul *op) override {
+        if (denom > 0) {
+            return Expr(op) / IntImm::make(op->type, denom);
+        } else {
+            return op;
+        }
+        // TODO: can we push inside of multiplication?
+        // const IntImm *a_int = op->a.as<IntImm>();
+        // const IntImm *b_int = op->b.as<IntImm>();
+        // internal_assert(a_int || b_int) << "Multiplication by non-constant: " << Expr(op) << "\n";
+        // // Assume already simplified
+        // Expr ret;
+        // if (a_int) {
+        //     if (a_int->value < 0) {
+        //         lower = !lower;
+        //         ret = mutate(op->b);
+        //         lower = !lower;
+        //         ret *= op->a;
+        //     } else {
+        //         ret = mutate(op->b);
+        //         ret *= op->a;
+        //     }
+        // } else {
+        //     if (b_int->value < 0) {
+        //         lower = !lower;
+        //         ret = mutate(op->a);
+        //         lower = !lower;
+        //         ret *= op->b;
+        //     } else {
+        //         ret = mutate(op->a);
+        //         ret *= op->b;
+        //     }
+        // }
+        // return ret;
+    }
+
+    Expr visit(const Mod *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    // Min and Max pushing is fine
+
+    Expr visit(const EQ *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    Expr visit(const NE *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    Expr visit(const LT *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    Expr visit(const LE *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    Expr visit(const GT *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    Expr visit(const GE *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    Expr visit(const And *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    Expr visit(const Or *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    Expr visit(const Not *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    Expr visit(const Select *op) override {
+        Expr t  = mutate(op->true_value);
+        Expr f = mutate(op->false_value);
+        return Select::make(op->condition, t, f);
+    }
+
+    Expr visit(const Load *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    Expr visit(const Ramp *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    Expr visit(const Broadcast *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    Expr visit(const Call *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    // Let defualt is fine for now.
+
+    Expr visit(const Shuffle *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    Expr visit(const VectorReduce *op) override {
+        internal_error << "Not implemented yet\n";
+        return Expr();
+    }
+
+    int64_t denom = -1;
+    bool lower;
+public:
+    PushDivisions(bool _lower) : lower(_lower) {
+    }
+};
+
+class CheckAffineDivision : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Mul *op) override {
+        const IntImm *a_int = op->a.as<IntImm>();
+        const IntImm *b_int = op->b.as<IntImm>();
+        affine = affine && (a_int || b_int);
+    }
+
+    void visit(const Div *op) override {
+        const IntImm *denom = op->b.as<IntImm>();
+        if (denom) {
+            div_by_posconst_only = div_by_posconst_only && (denom->value > 0);
+        } else {
+            div_by_posconst_only = false;
+        }
+    }
+
+public:
+    bool affine = true;
+    bool div_by_posconst_only = true;
+};
+
 }  // namespace
 
 Stmt simplify_correlated_differences(const Stmt &stmt) {
@@ -830,6 +1072,29 @@ void print_relevant_scope(const Expr &expr, const Scope<Interval> &scope, std::o
             }
         }
         stream << "}";
+}
+
+bool is_affine_division(const Expr &expr) {
+    CheckAffineDivision check;
+    expr.accept(&check);
+    return check.affine && check.div_by_posconst_only;
+}
+
+Interval get_division_interval(const Expr &expr) {
+    internal_assert(is_affine_division(expr)) << "get_division_interval called on invalid Expr: " << expr << "\n";
+    Expr upper = PushDivisions(false).mutate(expr);
+    Expr lower = PushDivisions(true).mutate(expr);
+    Interval interval(lower, upper);
+    // TODO: should we be doing simplification here? Seems like we need a GraphMutator...
+    std::cerr << "Before reorder: " << interval << "\n";
+    interval.min = simplify(lower);
+    interval.max = simplify(upper);
+    std::cerr << "After reorder: " << interval << "\n";
+    return interval;
+}
+
+Expr infinity_aware_simplify(const Expr &expr) {
+    return expr;
 }
 
 }  // namespace Internal
