@@ -1637,8 +1637,36 @@ private:
 
 Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound) {
     //debug(3) << "computing bounds_of_expr_in_scope " << expr << "\n";
+    Expr simpl = simplify(super_simplify(expr));
     Bounds b(&scope, fb, const_bound);
+    simpl.accept(&b);
+    Interval simpl_interval = b.interval;
     expr.accept(&b);
+    Interval original_interval = b.interval;
+
+    {
+        // TODO: comaprison code
+        if (simpl_interval.has_upper_bound() && !original_interval.has_upper_bound()) {
+            // Log this
+        }
+        // Check lower bound
+        // Check the opposite cases, i.e. if the simplifier rules remove a bound
+        if (!simpl_interval.has_upper_bound() && original_interval.has_upper_bound()) {
+
+        }
+        // Use equal
+        bool both_ub = simpl_interval.has_upper_bound() && original_interval.has_upper_bound();
+
+
+        if (both_ub) {
+            if (!equal(simpl_interval.max, original_interval.max)) {
+                // Then log it
+            }
+        }
+        // Do the same for lower bound
+
+    }
+
     //debug(3) << "bounds_of_expr_in_scope " << expr << " = " << simplify(b.interval.min) << ", " << simplify(b.interval.max) << "\n";
     Type expected = expr.type().element_of();
     if (b.interval.has_lower_bound()) {
