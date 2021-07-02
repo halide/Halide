@@ -4282,6 +4282,8 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
 
     if (op->is_interleave()) {
         value = interleave_vectors(vecs);
+    } else if (op->is_concat()) {
+        value = concat_vectors(vecs);
     } else {
         // If the even-numbered indices equal the odd-numbered
         // indices, only generate one and then do a self-interleave.
@@ -4358,9 +4360,7 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
 
         // Do a concat and then a single shuffle
         value = concat_vectors(vecs);
-        if (op->is_concat()) {
-            // If this is just a concat, we're done.
-        } else if (op->is_slice() && op->slice_stride() == 1) {
+        if (op->is_slice() && op->slice_stride() == 1) {
             value = slice_vector(value, op->indices[0], op->indices.size());
         } else {
             value = shuffle_vectors(value, op->indices);
