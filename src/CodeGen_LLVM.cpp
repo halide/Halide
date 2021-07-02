@@ -3165,7 +3165,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         builder->setFastMathFlags(safe_flags);
         builder->setDefaultFPMathTag(strict_fp_math_md);
         value = codegen(op->args[0]);
-    } else if (is_float16_transcendental(op)) {
+    } else if (is_float16_transcendental(op) && !supports_call_as_float16(op)) {
         value = codegen(lower_float16_transcendental_to_float32_equivalent(op));
     } else if (op->is_intrinsic(Call::mux)) {
         value = codegen(lower_mux(op));
@@ -3201,7 +3201,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         Expr e = Internal::halide_exp(op->args[0]);
         e.accept(this);
     } else if (op->call_type == Call::PureExtern &&
-               (op->name == "is_nan_f32" || op->name == "is_nan_f64")) {
+               (op->name == "is_nan_f32" || op->name == "is_nan_f64" || op->name == "is_nan_f16")) {
         internal_assert(op->args.size() == 1);
         Value *a = codegen(op->args[0]);
 
@@ -3223,7 +3223,7 @@ void CodeGen_LLVM::visit(const Call *op) {
 
         value = builder->CreateFCmpUNO(a, a);
     } else if (op->call_type == Call::PureExtern &&
-               (op->name == "is_inf_f32" || op->name == "is_inf_f64")) {
+               (op->name == "is_inf_f32" || op->name == "is_inf_f64" || op->name == "is_inf_f16")) {
         internal_assert(op->args.size() == 1);
 
         IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
@@ -3238,7 +3238,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         Expr inf = e.type().max();
         codegen(abs(e) == inf);
     } else if (op->call_type == Call::PureExtern &&
-               (op->name == "is_finite_f32" || op->name == "is_finite_f64")) {
+               (op->name == "is_finite_f32" || op->name == "is_finite_f64" || op->name == "is_finite_f16")) {
         internal_assert(op->args.size() == 1);
         internal_assert(op->args[0].type().is_float());
 
@@ -4386,6 +4386,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
     const int output_lanes = op->type.lanes();
     const int native_lanes = native_vector_bits() / op->type.bits();
     const int factor = val.type().lanes() / output_lanes;
+    Type elt = op->type.element_of();
 
     Expr (*binop)(Expr, Expr) = nullptr;
     switch (op->op) {
@@ -4436,7 +4437,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
         return;
     }
 
-    if (op->type.element_of() == Float(16)) {
+    if (elt == Float(16) && upgrade_type_for_arithmetic(elt) != elt) {
         Expr equiv = cast(op->value.type().with_bits(32), op->value);
         equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
         if (init.defined()) {
@@ -5107,6 +5108,10 @@ bool CodeGen_LLVM::use_pic() const {
 
 std::string CodeGen_LLVM::mabi() const {
     return "";
+}
+
+bool CodeGen_LLVM::supports_call_as_float16(const Call *op) const {
+    return false;
 }
 
 }  // namespace Internal
