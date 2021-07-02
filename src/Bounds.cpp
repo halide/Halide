@@ -4,6 +4,7 @@
 #include "Bounds.h"
 #include "CSE.h"
 #include "ConciseCasts.h"
+#include "ConstantBounds.h"
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
@@ -72,62 +73,11 @@ std::ostream &operator<<(std::ostream &stream, const Interval &i) {
     return stream;
 }
 
-void simplify(Interval &interval) {
-    interval.min = simplify(interval.min);
-    interval.max = simplify(interval.max);
-}
-
 Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
     Expr expr = simplify(remove_likelies(e));
     Interval interval = bounds_of_expr_in_scope(expr, scope, FuncValueBounds(), true);
     interval.min = simplify(interval.min);
     interval.max = simplify(interval.max);
-
-    if (!is_const(expr) && possibly_correlated(expr)) {
-        std::cerr << "\nTerm:" << expr << "\n";
-        Expr full_simp = simplify(substitute_in_all_lets(expr));
-        Interval full_i= bounds_of_expr_in_scope(full_simp, scope, FuncValueBounds(), true);
-        simplify(full_i);
-        Expr part_simp = simplify(substitute_some_lets(expr));
-        Interval part_i= bounds_of_expr_in_scope(part_simp, scope, FuncValueBounds(), true);
-        simplify(part_i);
-        Expr refactor_simp = refactor_correlated_differences(expr);
-        Interval refactor_i= bounds_of_expr_in_scope(refactor_simp, scope, FuncValueBounds(), true);
-        simplify(refactor_i);
-        Expr refactor_sub = refactor_correlated_differences(simplify(substitute_some_lets(expr)));
-        Interval refactors_i= bounds_of_expr_in_scope(refactor_sub, scope, FuncValueBounds(), true);
-        simplify(refactors_i);
-
-        std::cerr << "\tOrig:\n\t" << interval << "\n";
-        std::cerr << "\tFull: " << full_simp << "\n\t" << full_i << "\n";
-        std::cerr << "\tPart: " << part_simp << "\n\t" << part_i << "\n";
-        std::cerr << "\tRefc: " << refactor_simp << "\n\t" << refactor_i << "\n";
-        std::cerr << "\tBoth:" << refactor_sub << "\n\t" << refactors_i << "\n";
-        std::cerr << "Relevant scope:\n";
-        print_relevant_scope(expr, scope, std::cerr);
-        std::cerr << "\n";
-        // Expr expr = reorder_terms(simplify(remove_likelies(e)));
-        // Expr expr = simplify(substitute_some_lets(remove_likelies(e)));
-        // Interval interval_s = bounds_of_expr_in_scope(expr, scope, FuncValueBounds(), true);
-        // interval_s.min = simplify(interval_s.min);
-        // interval_s.max = simplify(interval_s.max);
-
-        // if ((is_const(interval_s.min) && !is_const(interval.min)) || (is_const(interval_s.max) && !is_const(interval.max))) {
-        //     std::cerr << "\n\ncomparing methods\nfor: " << e << "\n\t-> " << expr << "\n\t" << interval << "\n\tvs\n\t" << interval_s << "\n";
-        //     // interval = interval_s;
-        //     scope.print(std::cerr);
-        //     std::cerr << "\n\n";
-        // } else if ((!is_const(interval_s.min) && is_const(interval.min)) || (!is_const(interval_s.max) && is_const(interval.max))) {
-        //     std::cerr << "\n\nfailing method\nfor: " << e << "\n\t-> " << expr << "\n\t" << interval << "\n\tvs\n\t" << interval_s << "\n";
-        //     scope.print(std::cerr);
-        //     std::cerr << "\n\n";
-        // } else if ((is_const(interval_s.min) && is_const(interval.min) && can_prove(interval_s.min != interval.min)) ||
-        //             (is_const(interval_s.max) && is_const(interval.max) && can_prove(interval_s.max != interval.max))) {
-        //     std::cerr << "\n\ndiffering methods\nfor: " << e << "\n\t-> " << expr << "\n\t" << interval << "\n\tvs\n\t" << interval_s << "\n";
-        //     scope.print(std::cerr);
-        //     std::cerr << "\n\n";
-        // }
-    }
 
     // Note that we can get non-const but well-defined results (e.g. signed_integer_overflow);
     // for our purposes here, treat anything non-const as no-bound.
@@ -136,6 +86,95 @@ Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
     }
     if (!is_const(interval.max)) {
         interval.max = Interval::pos_inf();
+    }
+
+    Interval v2 = find_constant_bounds_v2(expr, scope);
+
+    bool win_upper = v2.has_upper_bound() && !interval.has_upper_bound();
+    bool win_lower = v2.has_lower_bound() && !interval.has_lower_bound();
+
+    bool match_upper = v2.has_upper_bound() && interval.has_upper_bound();
+    bool match_lower = v2.has_lower_bound() && interval.has_lower_bound();
+
+    bool no_upper = !v2.has_upper_bound() && !interval.has_upper_bound();
+    bool no_lower = !v2.has_lower_bound() && !interval.has_lower_bound();
+
+    bool beat_upper = match_upper && can_prove(v2.max < interval.max);
+    bool beat_lower = match_lower && can_prove(v2.min > interval.min);
+
+    bool same_upper = no_upper || (match_upper && can_prove(v2.max == interval.max));
+    bool same_lower = no_lower || (match_lower && can_prove(v2.min == interval.min));
+
+    bool lost_upper = (!v2.has_upper_bound() && interval.has_upper_bound()) || (match_upper && can_prove(v2.max > interval.max));
+    bool lost_lower = (!v2.has_lower_bound() && interval.has_lower_bound()) || (match_lower && can_prove(v2.min < interval.min));
+
+    bool worth_logging = !is_const(expr) && possibly_correlated(expr);
+    auto logger = [&](std::string msg) {
+        if (worth_logging) {
+            std::cout << msg << "\n";
+        }
+    };
+    auto print_intervals = [&]() {
+        if (worth_logging) {
+            std::cout << "Expr: " << expr << "\n";
+            std::cout << "Original: " << interval << "\n";
+            std::cout << "Version2: " << v2 << "\n";
+            print_relevant_scope(expr, scope, std::cout);
+        }
+    };
+
+    if (win_upper && win_lower) {
+        // Clear win
+        logger("Clear win.");
+        print_intervals();
+        return v2;
+    } else if (same_upper && same_lower) {
+        // Gained nothing
+        logger("Gained nothing.");
+        print_intervals();
+        return interval;
+    } else if (lost_upper && lost_lower) {
+        // Clear loss
+        logger("Clear loss.");
+        print_intervals();
+        return interval;
+    } else if (beat_upper && beat_lower) {
+        // Tighter interval
+        logger("Tighter interval.");
+        print_intervals();
+        return v2;
+    } else {
+        // Try some combos
+        if (win_upper || win_lower) {
+            logger("One-sided win.");
+            print_intervals();
+        }
+        if (lost_upper || lost_lower) {
+            logger("One-sided loss.");
+            print_intervals();
+        }
+        if (beat_upper || beat_lower) {
+            logger("One-sided tighter.");
+            print_intervals();
+        }
+
+
+        if (win_upper) {
+            // One-sided win
+            interval.max = v2.max;
+        }
+        if (win_lower) {
+            // One sided win
+            interval.min = v2.min;
+        }
+        if (beat_upper) {
+            // One-sided win
+            interval.max = v2.max;
+        }
+        if (beat_lower) {
+            // One sided win
+            interval.min = v2.min;
+        }
     }
 
     return interval;

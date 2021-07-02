@@ -83,7 +83,9 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
              rewrite(x + (y + c0), (x + y) + c0) ||
              rewrite((c0 - x) + c1, fold(c0 + c1) - x) ||
              rewrite((c0 - x) + y, (y - x) + c0) ||
-
+            //  rewrite((max(x*c0, (((x*c1) + y)*c2) + z) + ((u - ((x*c1) + y))*c2)), (max(z, (0 - y)*c2) + (u*c2)), (c0 == (c1*c2))) ||
+             rewrite(max(x, y*c0 + z) + (u - y)*c0, max(x - y*c0, z) + u*c0) ||
+             
              rewrite((x - y) + y, x) ||
              rewrite(x + (y - x), y) ||
 
