@@ -55,6 +55,33 @@ int main(int argc, char **argv) {
         }
     }
 
+    for (TailStrategy tail_strategy : {TailStrategy::GuardWithIf, TailStrategy::Predicate}) {
+        const int w = 98, v = 8;
+
+        Buffer<int> b(w / 2);
+        for (int i = 0; i < w / 2; i++) {
+            b(i) = i;
+        }
+        Func f;
+        Var x;
+
+        f(x) = b(x / 2);
+
+        f.output_buffer().dim(0).set_min(0).set_extent(w);
+
+        f.vectorize(x, v, tail_strategy);
+
+        Buffer<int> result = f.realize({w});
+
+        for (int i = 0; i < w; i++) {
+            if (result(i) != i / 2) {
+                printf("result(%d) == %d instead of %d\n",
+                       i, result(i), i);
+                return -1;
+            }
+        }
+    }
+
     printf("Success!\n");
     return 0;
 }
