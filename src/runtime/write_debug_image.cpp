@@ -273,7 +273,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         size_t payload_bytes = buf->size_in_bytes();
         final_padding_bytes = 7 - ((payload_bytes - 1) & 7);
 
-        // level 5 .mat files have a size limit. (Padding itself should never cause the overfloaw.
+        // level 5 .mat files have a size limit. (Padding itself should never cause the overflow.
         // Code written this way for safety.)
         if (((uint64_t)payload_bytes + final_padding_bytes) >> 32) {
             halide_error(user_context, "Can't debug_to_file to a .mat file greater than 4GB\n");
