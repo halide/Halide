@@ -123,8 +123,7 @@ NewMatmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType o
         if (!expr_match(pattern1, op->value, matches)) {
             return {};
         }
-    } else  // AMXOpType::Bf16
-    {
+    } else { // AMXOpType::Bf16
         const auto pattern1 = wild_f32x + wild_f32x;
         if (!expr_match(pattern1, op->value, matches)) {
             return {};
