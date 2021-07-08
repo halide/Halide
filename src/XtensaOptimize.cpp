@@ -402,92 +402,87 @@ private:
     };
 
     Stmt visit(const Block *op) override {
-
-        // Merge two Quad Mul calls into one dual call
         vector<Stmt> new_stmts;
 
-        // Used to keep track of index of first statement
-        int first_index = -1;
-
-        // Find pairs of Quad Mul statements to merge in rolling window of 2
         vector<Stmt> stmts = block_to_vector(op);
+        bool all_stores_are_quad_muls = true;
+        // Check if all statements in the block are stores of quad-muls.
         for (int i = 0; i < (int)stmts.size(); ++i) {
-
-            // Case 1: Statement without Quad Mul
-
-            // Quad Mul is a call contained in store
+            // quad_mul is a call contained in store
             const Store *store1 = stmts[i].as<Store>();
             const Call *call1 = store1 ? store1->value.as<Call>() : nullptr;
             if (!call1 || call1->name != "halide_xtensa_widen_quad_mul_add_i24") {
-                // Last statement was a Quad Mul
-                if (first_index >= 0) {
-                    // Abandon search for merge and save unchanged as currently
-                    // only merging back to back calls
-                    new_stmts.push_back(stmts[first_index]);
-                    first_index = -1;
-                }
-                new_stmts.push_back(stmts[i]);
-                continue;
+                all_stores_are_quad_muls = false;
+                break;
             }
-
-            // Case 2: First Quad Mul
-
-            if (first_index < 0) {
-                // Save index and move on to look for the second
-                first_index = i;
-                continue;
-            }
-
-            // Case 3: Second Quad Mul
-
-            // Fetch the handles to first call from saved index
-            const Store *store0 = stmts[first_index].as<Store>();
-            const Call *call0 = store0->value.as<Call>();
-            internal_assert(call0->name == "halide_xtensa_widen_quad_mul_add_i24");
-
-            // Vector inputs from both Quad Mul calls must match
-            // (there are multiple arg format versions, but MatchXtensaPattern
-            //  should be consolidating to the 3 arg version with concat vectors)
-            if (call0->args.size() != 3 || !equal(call0->args[1], call1->args[1])) {
-                // Abandon merge of first Quad Mul and set current as the first
-                new_stmts.push_back(stmts[first_index]);
-                first_index = i;
-                continue;
-            }
-
-            // Quad Mul can be merged
-
-            // Update stores to take from dual call result
-            std::string dual_name = unique_name("_");
-            Expr dual_24x64 = Variable::make(Type(Type::Int, 24, call0->type.lanes() + call1->type.lanes()),
-                                             dual_name);
-            Expr slice0 = Shuffle::make_slice(dual_24x64, 0, 1, call0->type.lanes());
-            Expr slice1 = Shuffle::make_slice(dual_24x64, call0->type.lanes(), 1, call1->type.lanes());
-            Stmt new_store0 = Store::make(store0->name, slice0, store0->index,
-                                          store0->param, store0->predicate, store0->alignment);
-            Stmt new_store1 = Store::make(store1->name, slice1, store1->index,
-                                          store1->param, store1->predicate, store1->alignment);
-            Stmt stores = Block::make(new_store0, new_store1);
-
-            // Collect inputs for dual call
-            std::vector<Expr> dual_qm_args = {
-                concat({call0->args[0], call1->args[0]}),
-                call0->args[1],
-                // this will get converted to dual extract in recursive mutate
-                concat({call0->args[2], call1->args[2]})};
-
-            // Insert LetStmt with dual call with store scope
-            new_stmts.push_back(
-                LetStmt::make(
-                    dual_name,
-                    call("halide_xtensa_dual_widen_quad_mul_add_i24", dual_24x64, dual_qm_args),
-                    stores));
-
-            first_index = -1;
         }
 
-        if (first_index != -1) {
-            new_stmts.push_back(stmts[first_index]);
+        if (all_stores_are_quad_muls) {
+            // Try to find pairs of quad-muls which have matching second argument.
+            // Track which statements have been used so far.
+            vector<bool> used(stmts.size(), false);
+            for (int first = 0; first < (int)stmts.size(); first++) {
+                if (used[first]) {
+                    continue;
+                }
+
+                for (int second = first + 1; second < (int)stmts.size(); second++) {
+                    if (used[second]) {
+                        continue;
+                    }
+
+                    const Store *store1 = stmts[first].as<Store>();
+                    const Call *call1 = store1->value.as<Call>();
+
+                    const Store *store2 = stmts[second].as<Store>();
+                    const Call *call2 = store2->value.as<Call>();
+
+                    // Check if two quad-muls have the same operand.
+                    if ((call1->args.size() != 3) || (call2->args.size() != 3) || !equal(call1->args[1], call2->args[1])) {
+                        continue;
+                    }
+
+                    used[first] = true;
+                    used[second] = true;
+
+                    // Update stores to take from dual call result
+                    std::string dual_name = unique_name("_");
+                    Expr dual_24x64 = Variable::make(Type(Type::Int, 24, call1->type.lanes() + call2->type.lanes()),
+                                                     dual_name);
+                    Expr slice0 = Shuffle::make_slice(dual_24x64, 0, 1, call1->type.lanes());
+                    Expr slice1 = Shuffle::make_slice(dual_24x64, call1->type.lanes(), 1, call2->type.lanes());
+                    Stmt new_store0 = Store::make(store1->name, slice0, store1->index,
+                                                  store1->param, store1->predicate, store1->alignment);
+                    Stmt new_store1 = Store::make(store2->name, slice1, store2->index,
+                                                  store2->param, store2->predicate, store2->alignment);
+                    Stmt stores = Block::make(new_store0, new_store1);
+
+                    // Collect inputs for dual call
+                    std::vector<Expr> dual_qm_args = {
+                        concat({call1->args[0], call2->args[0]}),
+                        call1->args[1],
+                        // two of uint8x4_t multipliers.
+                        concat({call1->args[2], call2->args[2]})};
+
+                    // Insert LetStmt with dual call with store scope
+                    new_stmts.push_back(
+                        LetStmt::make(
+                            dual_name,
+                            call("halide_xtensa_dual_widen_quad_mul_add_i24", dual_24x64, dual_qm_args),
+                            stores));
+                }
+            }
+
+            // In the case we haven't used all statements (for example, couldn't find a pair)
+            // just add remaining quad muls to the list of statements.
+            for (int ix = 0; ix < (int)stmts.size(); ix++) {
+                if (!used[ix]) {
+                    new_stmts.push_back(stmts[ix]);
+                }
+            }
+        } else {
+            // Not all statements are stores of quad-muls, so just use the old ones.
+            new_stmts = stmts;
         }
 
         // Recursively mutate and check size to see if there is any merge
