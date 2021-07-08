@@ -115,7 +115,7 @@ CXXFLAGS-host-opencl ?= $(CXXFLAGS)
 CXXFLAGS-host-cuda ?= $(CXXFLAGS)
 CXXFLAGS-host-metal ?= $(CXXFLAGS)
 CXXFLAGS-arm-64-android ?= $(CXXFLAGS)
-CXXFLAGS-hexagon-32-qurt-hvx ?= $(CXXFLAGS) -I$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/include/qurt -I$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/include/posix
+CXXFLAGS-hexagon-32-qurt-hvx ?= -mv65 $(CXXFLAGS) -I$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/include/qurt -I$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/include/posix
 CXXFLAGS-arm-32-android ?= $(CXXFLAGS)
 
 LDFLAGS-host ?= $(LDFLAGS)
