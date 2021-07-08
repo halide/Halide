@@ -1,7 +1,9 @@
 #include "Interval.h"
+#include "ConstantBounds.h"
 #include "IREquality.h"
 #include "IRMatch.h"
 #include "IROperator.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -246,6 +248,105 @@ ConstantInterval ConstantInterval::make_union(const ConstantInterval &a, const C
 std::ostream &operator<<(std::ostream &stream, const ConstantInterval &ci) {
     stream << "[ " << ci.min << "  ,  " << ci.max << " ]";
     return stream;
+}
+
+bool weak_prove(const Expr &expr) {
+    // Much weaker version of can_prove, should work fine for constants.
+    return is_const_one(simplify(expr));
+}
+
+Interval compare_intervals(const Interval &i1, const Interval &i2, const Expr &expr, const Scope<Interval> &scope, const std::string prefix) {
+    bool win_upper = i1.has_upper_bound() && !i2.has_upper_bound();
+    bool win_lower = i1.has_lower_bound() && !i2.has_lower_bound();
+
+    bool match_upper = i1.has_upper_bound() && i2.has_upper_bound();
+    bool match_lower = i1.has_lower_bound() && i2.has_lower_bound();
+
+    bool no_upper = !i1.has_upper_bound() && !i2.has_upper_bound();
+    bool no_lower = !i1.has_lower_bound() && !i2.has_lower_bound();
+
+    bool beat_upper = match_upper && weak_prove(i1.max < i2.max);
+    bool beat_lower = match_lower && weak_prove(i1.min > i2.min);
+
+    bool same_upper = no_upper || (match_upper && weak_prove(i1.max == i2.max));
+    bool same_lower = no_lower || (match_lower && weak_prove(i1.min == i2.min));
+
+    bool lost_upper = (!i1.has_upper_bound() && i2.has_upper_bound()) || (match_upper && weak_prove(i1.max > i2.max));
+    bool lost_lower = (!i1.has_lower_bound() && i2.has_lower_bound()) || (match_lower && weak_prove(i1.min < i2.min));
+
+    bool worth_logging = !is_const(expr) && possibly_correlated(expr);
+    auto logger = [&](const std::string &msg) {
+        if (worth_logging) {
+            std::cout << prefix << " " << msg << "\n";
+        }
+    };
+    bool already_logged = false;
+    auto print_intervals = [&]() {
+        if (worth_logging && !already_logged) {
+            // std::cout << "Expr: " << expr << "\n";
+            std::cout << "Comparison: " << prefix << "\n";
+            std::cout << "i1: " << i1 << "\n";
+            std::cout << "i2: " << i2 << "\n";
+            print_relevant_scope(expr, scope, std::cout);
+            already_logged = true;
+        }
+    };
+
+    if (win_upper && win_lower) {
+        // Clear win
+        logger("Clear win.");
+        print_intervals();
+        return i1;
+    } else if (same_upper && same_lower) {
+        // Gained nothing
+        // logger("Gained nothing.");
+        // print_intervals();
+        return i2;
+    } else if (lost_upper && lost_lower) {
+        // Clear loss
+        logger("Clear loss.");
+        print_intervals();
+        return i2;
+    } else if (beat_upper && beat_lower) {
+        // Tighter interval
+        logger("Tighter interval.");
+        print_intervals();
+        return i1;
+    } else {
+        // Try some combos
+        if (win_upper || win_lower) {
+            logger("One-sided win.");
+            print_intervals();
+        }
+        if (lost_upper || lost_lower) {
+            logger("One-sided loss.");
+            print_intervals();
+        }
+        if (beat_upper || beat_lower) {
+            logger("One-sided tighter.");
+            print_intervals();
+        }
+
+        Interval interval = i2;
+
+        if (win_upper) {
+            // One-sided win
+            interval.max = i1.max;
+        }
+        if (win_lower) {
+            // One sided win
+            interval.min = i1.min;
+        }
+        if (beat_upper) {
+            // One-sided win
+            interval.max = i1.max;
+        }
+        if (beat_lower) {
+            // One sided win
+            interval.min = i1.min;
+        }
+        return interval;
+    }
 }
 
 }  // namespace Internal

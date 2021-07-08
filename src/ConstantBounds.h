@@ -24,6 +24,8 @@ void print_relevant_scope(const Expr &expr, const Scope<Interval> &scope, std::o
 
 Interval get_division_interval(const Expr &expr);
 
+Interval try_constant_bounds_methods(const Expr &expr, const Scope<Interval> &scope);
+
 }  // namespace Internal
 }  // namespace Halide
 

@@ -10,6 +10,7 @@
 #include "IROperator.h"
 #include "Scope.h"
 #include "Simplify.h"
+#include "Simplify_Internal.h"
 #include "Solve.h"
 #include "Substitute.h"
 
@@ -28,14 +29,14 @@ class RefactorCorrelatedDifferences : public IRMutator {
     IRMatcher::Wild<1> y;
     IRMatcher::Wild<2> z;
     IRMatcher::Wild<3> w;
-    // IRMatcher::Wild<4> u;
-    // IRMatcher::Wild<5> v;
+    IRMatcher::Wild<4> u;
+    IRMatcher::Wild<5> v;
     IRMatcher::WildConst<0> c0;
     IRMatcher::WildConst<1> c1;
     IRMatcher::WildConst<2> c2;
     IRMatcher::WildConst<3> c3;
     IRMatcher::WildConst<4> c4;
-    // IRMatcher::WildConst<5> c5;
+    IRMatcher::WildConst<5> c5;
 
     Expr visit(const Sub *op) override {
 
@@ -119,6 +120,9 @@ class RefactorCorrelatedDifferences : public IRMutator {
                 rewrite(min(x, y) - max(x, z), min(min(x, y) - max(x, z), 0)) ||
                 rewrite(max(x, y) - min(x, z), max(max(x, y) - min(x, z), 0)) ||
 
+                #include "rules/Simplify_Sub.inc"
+                ||
+
                 false) {
                 return rewrite.result;
             }
@@ -137,6 +141,9 @@ class RefactorCorrelatedDifferences : public IRMutator {
             if (
                 rewrite(max(x, quantized_sub), quantized_sub, c0 > 0) ||
                 rewrite(max(x, quantized_sub), x, c0 < 0) ||
+                
+                #include "rules/Simplify_Max.inc"
+                ||
 
                 false) {
                 return rewrite.result;
@@ -145,21 +152,40 @@ class RefactorCorrelatedDifferences : public IRMutator {
         return max(a, b);
     }
 
-    // Expr visit(const Mul *op) override {
-    //     Expr a = mutate(op->a), b = mutate(op->b);
+    Expr visit(const Min *op) override {
+        Expr a = mutate(op->a), b = mutate(op->b);
 
-    //     if (op->type == Int(32)) {
-    //         auto rewrite = IRMatcher::rewriter(IRMatcher::mul(a, b), op->type);
+        if (op->type == Int(32)) {
+            auto rewrite = IRMatcher::rewriter(IRMatcher::min(a, b), op->type);
 
-    //         if (
-    //             rewrite((x / c0) * c0, x - (x % c0), c0 != 0) ||
+            if (
 
-    //             false) {
-    //             return rewrite.result;
-    //         }
-    //     }
-    //     return a * b;
-    // }
+                #include "rules/Simplify_Min.inc"
+                ||
+
+                false) {
+                return rewrite.result;
+            }
+        }
+        return min(a, b);
+    }
+
+    Expr visit(const Mul *op) override {
+        Expr a = mutate(op->a), b = mutate(op->b);
+
+        if (op->type == Int(32)) {
+            auto rewrite = IRMatcher::rewriter(IRMatcher::mul(a, b), op->type);
+
+            if (
+                #include "rules/Simplify_Mul.inc"
+                ||
+
+                false) {
+                return rewrite.result;
+            }
+        }
+        return a * b;
+    }
 
     Expr visit(const Add *op) override {
         Expr a = mutate(op->a), b = mutate(op->b);
@@ -168,13 +194,34 @@ class RefactorCorrelatedDifferences : public IRMutator {
             auto rewrite = IRMatcher::rewriter(IRMatcher::add(a, b), op->type);
 
             if (
-                // rewrite(min(x, c0) + c1, min(x + c1, 0), c0 == -c1) ||
+                #include "rules/Simplify_Add.inc" 
+                ||
 
                 false) {
                 return rewrite.result;
             }
         }
         return a + b;
+    }
+
+    Expr visit(const Select *op) override {
+        Expr a = mutate(op->condition);
+        Expr b = mutate(op->true_value);
+        Expr c = mutate(op->false_value);
+
+        if (op->type == Int(32)) {
+            auto rewrite = IRMatcher::rewriter(IRMatcher::select(a, b, c), op->type);
+
+            if (
+
+                #include "rules/Simplify_Select.inc"
+                ||
+
+                false) {
+                return rewrite.result;
+            }
+        }
+        return select(a, b, c);
     }
 
 };
@@ -285,6 +332,14 @@ class ReorderTerms : public IRGraphMutator {
     vector<AffineTerm> extract_summation(const Expr &e) {
         vector<AffineTerm> pending, terms;
         pending.push_back({e, 1});
+
+        // In case this is not a sum
+        const Add *add = e.as<Add>();
+        const Sub *sub = e.as<Sub>();
+        if (!(add || sub)) {
+            return pending;
+        }
+
         while (!pending.empty()) {
             AffineTerm next = pending.back();
             pending.pop_back();
@@ -378,6 +433,7 @@ class ReorderTerms : public IRGraphMutator {
                 }
             }
         }
+
         return result;
     }
 
@@ -479,7 +535,7 @@ class ReorderTerms : public IRGraphMutator {
               return BinOp::make(a, b) + like_terms;
           }
         } else {
-            return IRMutator::visit(op);
+            return IRGraphMutator::visit(op);
         }
     }
 
@@ -540,7 +596,7 @@ class PushDivisions : public IRMutator {
 
     Expr visit(const Div *op) override {
         const IntImm *denominator = op->b.as<IntImm>();
-        internal_assert(denominator) << "Encountered division by non-const or non-int\n";
+        internal_assert(denominator) << "Encountered division by non-const or non-int\n" << Expr(op) << "\n";
         internal_assert(denominator->value > 0) << "Encountered division by non-positive constant\n";
         // TODO: catch overflow issues
         Expr ret;
@@ -745,18 +801,37 @@ class CheckAffineDivision : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const Mul *op) override {
+        op->a.accept(this);
+        op->b.accept(this);
         const IntImm *a_int = op->a.as<IntImm>();
         const IntImm *b_int = op->b.as<IntImm>();
         affine = affine && (a_int || b_int);
     }
 
     void visit(const Div *op) override {
+        op->a.accept(this);
+        // std::cerr << "Checking affine div on: " << Expr(op) << "\n";
         const IntImm *denom = op->b.as<IntImm>();
+        const Add *numer_add = op->a.as<Add>();
+        const Sub *numer_sub = op->a.as<Sub>();
+        const Select *numer_sel = op->a.as<Select>();
+        const Min *numer_min = op->a.as<Min>();
+        const Max *numer_max = op->a.as<Max>();
+        
         if (denom) {
             div_by_posconst_only = div_by_posconst_only && (denom->value > 0);
+
+            if (numer_add || numer_sub || numer_sel || numer_max || numer_min) {
+                has_pushable_div = true;
+            }
         } else {
             div_by_posconst_only = false;
         }
+    }
+
+    void visit(const Select *op) override {
+        op->true_value.accept(this);
+        op->false_value.accept(this);
     }
 
     void visit(const UIntImm *op) override {
@@ -801,28 +876,56 @@ class CheckAffineDivision : public IRVisitor {
     void visit(const VectorReduce *op) override {
         contains_invalid_instruction = true;
     }
+    
+    // Nix boolean constructors
+    void visit(const EQ *op) override {
+        contains_invalid_instruction = true;
+    }
+    void visit(const NE *op) override {
+        contains_invalid_instruction = true;
+    }
+    void visit(const LT *op) override {
+        contains_invalid_instruction = true;
+    }
+    void visit(const LE *op) override {
+        contains_invalid_instruction = true;
+    }
+    void visit(const GT *op) override {
+        contains_invalid_instruction = true;
+    }
+    void visit(const GE *op) override {
+        contains_invalid_instruction = true;
+    }
+    void visit(const And *op) override {
+        contains_invalid_instruction = true;
+    }
+    void visit(const Or *op) override {
+        contains_invalid_instruction = true;
+    }
 public:
     bool affine = true;
     bool div_by_posconst_only = true;
     bool contains_invalid_instruction = false;
+    bool has_pushable_div = false;
 };
 
 }  // namespace
 
 Expr refactor_correlated_differences(const Expr &expr) {
-    // std::cerr << "refactor before: " << expr << "\n";
-    Expr repl = simplify(expr);
-    // std::cerr << "refactor simpl: " << repl << "\n";
-    // repl = substitute_in_all_lets(repl);
-    // repl = simplify(repl);
-    std::cerr << "AJ LOOK HERE: " << SimplerNameMutator().mutate(repl) << "\n";
-    repl = ReorderTerms().mutate(repl);
-    // std::cerr << "refactor reordered: " << repl << "\n";
-    repl = simplify(repl);
-    // std::cerr << "refactor simpl: " << repl << "\n";
-    repl = RefactorCorrelatedDifferences().mutate(repl);
-    // std::cerr << "refactor after: " << repl << "\n";
-    return repl;
+    return RefactorCorrelatedDifferences().mutate(expr);
+    // // std::cerr << "refactor before: " << expr << "\n";
+    // Expr repl = simplify(expr);
+    // // std::cerr << "refactor simpl: " << repl << "\n";
+    // // repl = substitute_in_all_lets(repl);
+    // // repl = simplify(repl);
+    // // std::cerr << "AJ LOOK HERE: " << SimplerNameMutator().mutate(repl) << "\n";
+    // // repl = ReorderTerms().mutate(repl);
+    // // std::cerr << "refactor reordered: " << repl << "\n";
+    // // repl = simplify(repl);
+    // // std::cerr << "refactor simpl: " << repl << "\n";
+    // repl = RefactorCorrelatedDifferences().mutate(repl);
+    // // std::cerr << "refactor after: " << repl << "\n";
+    // return repl;
 }
 
 bool possibly_correlated(const Expr &expr) {
@@ -856,11 +959,12 @@ void print_relevant_scope(const Expr &expr, const Scope<Interval> &scope, std::o
 bool is_affine_division(const Expr &expr) {
     CheckAffineDivision check;
     expr.accept(&check);
-    return check.affine && check.div_by_posconst_only && !check.contains_invalid_instruction;
+    return check.has_pushable_div && check.affine && check.div_by_posconst_only && !check.contains_invalid_instruction;
 }
 
 Interval get_division_interval(const Expr &expr) {
     internal_assert(is_affine_division(expr)) << "get_division_interval called on invalid Expr: " << expr << "\n";
+    // std::cerr << "Affine div: " << expr << "\n";
     Expr upper = PushDivisions(false).mutate(expr);
     Expr lower = PushDivisions(true).mutate(expr);
     Interval interval(lower, upper);
@@ -959,6 +1063,94 @@ return default_cbounds(expr, scope);
         return default_cbounds(expr, scope);
     }
 }
+
+void make_const_interval(Interval &interval) {
+    // Note that we can get non-const but well-defined results (e.g. signed_integer_overflow);
+    // for our purposes here, treat anything non-const as no-bound.
+    if (!is_const(interval.min)) {
+        interval.min = Interval::neg_inf();
+    }
+    if (!is_const(interval.max)) {
+        interval.max = Interval::pos_inf();
+    }
+}
+
+Interval get_cbounds(const Expr &expr, const Scope<Interval> &scope) {
+    Interval interval = bounds_of_expr_in_scope(expr, scope, FuncValueBounds(), true);
+    simplify(interval);
+    make_const_interval(interval);
+    return interval;
+}
+
+Interval all_opt(const Expr &expr, const Scope<Interval> &scope) {
+    Expr e = simplify(substitute_some_lets(expr));
+    e = refactor_correlated_differences(e);
+    // TODO: don't reorder for some reason...
+    // e = simplify(reorder_terms(e));
+    e = simplify(e);
+
+    Interval interval;
+
+    if (is_affine_division(e)) {
+        Interval div_interval = get_division_interval(e);
+        interval.min = bounds_of_expr_in_scope(div_interval.min, scope, FuncValueBounds(), true).min;
+        interval.max = bounds_of_expr_in_scope(div_interval.max, scope, FuncValueBounds(), true).max;
+    } else {
+        interval = get_cbounds(e, scope);
+    }
+    simplify(interval);
+    make_const_interval(interval);
+    return interval;
+}
+
+Interval try_constant_bounds_methods(const Expr &expr, const Scope<Interval> &scope) {
+    Interval original = get_cbounds(expr, scope);
+
+    if (is_const(expr) || !possibly_correlated(expr) || expr.type().is_float()) {
+        return original;
+    }
+
+    std::cerr << "Expr: " << expr << "\n";
+
+    Expr subst = simplify(substitute_some_lets(expr));
+    std::cerr << "Subst: " << subst << "\n";
+    Expr synth = simplify(refactor_correlated_differences(expr));
+    std::cerr << "Synth: " << synth << "\n";
+    Expr reorder = simplify(reorder_terms(expr));
+    std::cerr << "Reorder: " << reorder << "\n";
+
+    Interval subst_i = get_cbounds(subst, scope);
+    Interval synth_i = get_cbounds(synth, scope);
+    Interval reorder_i = get_cbounds(reorder, scope);
+
+    std::cerr << "Subst: " << subst_i << "\n";
+    std::cerr << "Synth: " << synth_i << "\n";
+    std::cerr << "Reorder: " << reorder_i << "\n";
+
+    bool log_div = is_affine_division(expr);
+    Interval div_i;
+    if (log_div) {
+        Interval div_interval = get_division_interval(expr);
+        div_i.min = bounds_of_expr_in_scope(div_interval.min, scope, FuncValueBounds(), true).min;
+        div_i.max = bounds_of_expr_in_scope(div_interval.max, scope, FuncValueBounds(), true).max;
+        simplify(div_i);
+        make_const_interval(div_i);
+    }
+
+    Interval opt_i = all_opt(expr, scope);
+    compare_intervals(subst_i, original, expr, scope, "subst vs original");
+    compare_intervals(synth_i, original, expr, scope, "synth vs original");
+    compare_intervals(reorder_i, original, expr, scope, "reorder vs original");
+    if (log_div) {
+        compare_intervals(div_i, original, expr, scope, "div vs original");
+    }
+    Interval ret = compare_intervals(opt_i, original, expr, scope, "all vs original");
+
+    return ret;
+}
+
+
+
 
 }  // namespace Internal
 }  // namespace Halide

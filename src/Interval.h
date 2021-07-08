@@ -6,6 +6,7 @@
  */
 
 #include "Expr.h"
+#include "Scope.h"
 
 namespace Halide {
 namespace Internal {
@@ -111,6 +112,8 @@ private:
 };
 
 std::ostream &operator<<(std::ostream &stream, const Interval &i);
+
+Interval compare_intervals(const Interval &i1, const Interval &i2, const Expr &expr, const Scope<Interval> &scope, std::string prefix);
 
 /** A class to represent ranges of integers. Can be unbounded above or below, but
  * they cannot be empty. */
