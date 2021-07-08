@@ -370,6 +370,8 @@ vector<CPU_Action> CPU_State::generate_parallel_realizations(const FunctionDAG::
                 // TODO(rootjalex): Once again, should we prune here? Or is it fine to delay?
                 actions.push_back(CPU_Action(CPU_ScheduleAction::Tile, new_root));
                 // actions.push_back(CPU_Action(CPU_ScheduleAction::Tile, new_root, tile_features));
+            } else {
+              delete new_root;
             }
         }
     }
@@ -506,18 +508,18 @@ double CPU_State::get_exploitation_value(uint32_t num_visits) {
     if (!vars.empty()) {
         for (const auto &p : vars) {
             if (p.second.empty()) {
-                src << "Var " << p.first << "(\"" << p.first << "\");\n";
+                src << "Var " << conform_name(p.first) << "(\"" << p.first << "\");\n";
             } else {
-                src << "Var " << p.first << "(" << p.second << ");\n";
+                src << "Var " << conform_name(p.first) << "(" << p.second << ");\n";
             }
         }
     }
     if (!rvars.empty()) {
         for (const auto &p : rvars) {
             if (p.second.empty()) {
-                src << "RVar " << p.first << "(\"" << p.first << "\");\n";
+                src << "RVar " << conform_name(p.first) << "(\"" << p.first << "\");\n";
             } else {
-                src << "RVar " << p.first << "(" << p.second << ");\n";
+                src << "RVar " << conform_name(p.first) << "(" << p.second << ");\n";
             }
         }
     }
@@ -597,22 +599,22 @@ double CPU_State::get_exploitation_value(uint32_t num_visits) {
             for (size_t i = 1; i < parallel_vars.size(); i++) {
                 // Outermost, and next outermost. Preserve the inner
                 // name to not invalidate any compute_ats.
-                p.second->schedule_source << "\n    .fuse(" << parallel_vars[i].name()
-                                            << ", " << parallel_vars[i - 1].name()
-                                            << ", " << parallel_vars[i].name() << ")";
+                p.second->schedule_source << "\n    .fuse(" << conform_name(parallel_vars[i].name())
+                                          << ", " << conform_name(parallel_vars[i - 1].name())
+                                          << ", " << conform_name(parallel_vars[i].name()) << ")";
                 p.second->python_schedule_source << " \\\n    .fuse(" << conform_name(parallel_vars[i].name())
                                           << ", " << conform_name(parallel_vars[i - 1].name())
                                           << ", " << conform_name(parallel_vars[i].name()) << ")";
                 stage.fuse(parallel_vars[i], parallel_vars[i - 1], parallel_vars[i]);
             }
             if (!parallel_vars.empty()) {
-                p.second->schedule_source << "\n    .parallel(" << parallel_vars.back().name() << ")";
+                p.second->schedule_source << "\n    .parallel(" << conform_name(parallel_vars.back().name()) << ")";
                 p.second->python_schedule_source << " \\\n    .parallel(" << conform_name(parallel_vars.back().name()) << ")";
                 stage.parallel(parallel_vars.back());
             }
         } else {
             for (const auto &v : parallel_vars) {
-                p.second->schedule_source << "\n    .parallel(" << v.name() << ")";
+                p.second->schedule_source << "\n    .parallel(" << conform_name(v.name()) << ")";
                 p.second->python_schedule_source << " \\\n    .parallel(" << conform_name(v.name()) << ")";
                 stage.parallel(v);
             }
@@ -652,14 +654,17 @@ double CPU_State::get_exploitation_value(uint32_t num_visits) {
     // Sanitize the names of things to make them legal source code.
     schedule_source = src.str();
     python_schedule_source = python_src.str();
-    bool in_quotes = false;
-    for (auto &c : schedule_source) {
-        in_quotes ^= (c == '"');
-        if (!in_quotes && c == '$') {
-            c = '_';
+    auto sanitize = [](std::string& source) {
+        bool in_quotes = false;
+        for (auto &c : source) {
+            in_quotes ^= (c == '"');
+            if (!in_quotes && c == '$') {
+                c = '_';
+            }
         }
-    }
-
+    };
+    sanitize(schedule_source);
+    sanitize(python_schedule_source);
     return schedule_source;
 }
 

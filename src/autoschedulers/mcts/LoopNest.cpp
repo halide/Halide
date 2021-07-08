@@ -1364,6 +1364,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
     vector<IntrusivePtr<const LoopNest>> result;
 
     // Some pruning to not waste time on terrible states
+    bool must_tile_to_vectorize = false;
     if (parent) {
         const auto &bounds_here = get_bounds(f);
         const auto &bounds_at_parent = parent->get_bounds(f);
@@ -1375,7 +1376,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         int64_t e = p.extent();
         int64_t ep = p_parent.extent();
         if (ep >= f->vector_size && e < f->vector_size) {
-            return result;
+            must_tile_to_vectorize = true;
         }
 
         // Don't descend into loops if the bounds required don't
@@ -1405,7 +1406,8 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
     }
 
     // Place the computation directly inside this loop (provided it's not a SIMD loop)
-    if (!innermost &&
+    if (!must_tile_to_vectorize &&
+        !innermost &&
         (!in_realization ||
          size.empty() ||
          vector_dim == -1 ||
@@ -1712,7 +1714,7 @@ void LoopNest::apply(LoopLevel here,
                     internal_assert(v.innermost_pure_dim && v.exists) << v.var.name() << "\n";
                     // Is the result of a split
                     state.schedule_source
-                        << "\n    .vectorize(" << v.var.name() << ")";
+                        << "\n    .vectorize(" << conform_name(v.var.name()) << ")";
                     state.python_schedule_source
                         << " \\\n    .vectorize(" << conform_name(v.var.name()) << ")";
                     s.vectorize(v.var);
@@ -1765,9 +1767,9 @@ void LoopNest::apply(LoopLevel here,
                         parent.exists = false;
                         parent.extent = 1;
                     } else {
-                        VarOrRVar inner(Var(parent.var.name() + "i"));
+                        VarOrRVar inner(Var(conform_name(parent.var.name() + "i")));
                         if (parent.var.is_rvar) {
-                            inner = RVar(parent.var.name() + "i");
+                            inner = RVar(conform_name(parent.var.name() + "i", "r"));
                         }
 
                         auto tail_strategy = pure_var_tail_strategy;
@@ -1784,8 +1786,8 @@ void LoopNest::apply(LoopLevel here,
                         s.split(parent.var, parent.var, inner, (int)factor, tail_strategy);
                         state.schedule_source
                             << "\n    .split("
-                            << parent.var.name() << ", "
-                            << parent.var.name() << ", "
+                            << conform_name(parent.var.name()) << ", "
+                            << conform_name(parent.var.name()) << ", "
                             << inner.name() << ", "
                             << factor << ", "
                             << "TailStrategy::" << tail_strategy << ")";
@@ -1872,7 +1874,7 @@ void LoopNest::apply(LoopLevel here,
         if (here.is_root()) {
             loop_level = "_root()";
         } else {
-            loop_level = "_at(" + here.func() + ", " + here.var().name() + ")";
+            loop_level = "_at(" + conform_name(here.func()) + ", " + conform_name(here.var().name()) + ")";
         }
         for (const auto &c : children) {
             if (c->node != node) {
