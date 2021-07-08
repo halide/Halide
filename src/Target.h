@@ -127,6 +127,7 @@ struct Target {
         SVE2 = halide_target_feature_sve2,
         ARMDotProd = halide_target_feature_arm_dot_prod,
         Xtensa = halide_target_feature_xtensa,
+        ARMFp16 = halide_target_feature_arm_fp16,
         LLVMLargeCodeModel = halide_llvm_large_code_model,
         RVV = halide_target_feature_rvv,
         ARMv81a = halide_target_feature_armv81a,
