@@ -209,7 +209,7 @@ bool matmul_bf16(Halide::Target target) {
         .vectorize(rri)
         .vectorize(rxi)
         .vectorize(ryi);
-        
+
     Var ixi("ixi"), iyi("iyi");
     mm.compute_at(mm.in(), x)
         .tile(x, y, ixi, iyi, tile_x, tile_y)
@@ -222,7 +222,7 @@ bool matmul_bf16(Halide::Target target) {
         .tile(x, y, mmxi, mmyi, tile_x, tile_y)
         .vectorize(mmxi)
         .vectorize(mmyi);
-        
+
     Func result = mm.in();
     //result.print_loop_nest();
 
@@ -274,7 +274,7 @@ int main(int argc, char **argv) {
     matmul_us(target);
     matmul_su(target);
     matmul_uu(target);
-    
+
     matmul_bf16(target);
     return 0;
 }

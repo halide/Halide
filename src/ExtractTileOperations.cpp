@@ -249,7 +249,7 @@ Stmt convert_to_zero(const Store *op, int tile_x, int tile_y, const string &new_
                 const auto &store_type = op->value.type();
                 // will be f32 or i32
                 auto tile_zero_type = store_type.with_lanes(1024 / store_type.bytes());
-                auto val = Call::make(std::move(tile_zero_type), "tile_zero", {rows, colbytes}, Call::Intrinsic);
+                auto val = Call::make(tile_zero_type, "tile_zero", {rows, colbytes}, Call::Intrinsic);
                 auto store = Store::make(new_name, std::move(val), Ramp::make(0, 1, 256), Parameter(), const_true(256), ModulusRemainder());
                 return store;
             }
