@@ -26,6 +26,18 @@ enum class AMXOpType {
     Bf16,
 };
 
+/// returns the appropriate `Halide::Type` for the given operation type
+Type amx_op_type_result_type(AMXOpType op_ty) {
+    switch (op_ty) {
+    case AMXOpType::Int8:
+        return Int(32, 256);
+    case AMXOpType::Bf16:
+        return Float(32, 256);
+    default:
+        return Type();
+    }
+}
+
 const auto wild_i32 = Variable::make(Int(32), "*");
 const auto wild_i32x = Variable::make(Int(32, 0), "*");
 
@@ -123,7 +135,7 @@ NewMatmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType o
         if (!expr_match(pattern1, op->value, matches)) {
             return {};
         }
-    } else { // AMXOpType::Bf16
+    } else {  // AMXOpType::Bf16
         const auto pattern1 = wild_f32x + wild_f32x;
         if (!expr_match(pattern1, op->value, matches)) {
             return {};
@@ -212,17 +224,7 @@ NewMatmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType o
     const auto &rhs_load_type = rhs_load->type;
     auto rhs_type = rhs_load_type.with_lanes(1024 / element_width);
     auto rhs = Call::make(rhs_type, "tile_load", {1, tile_y * tile_r * element_width, rhs_var, rhs_tile.base * element_width, rhs_tile.stride[0] * tile_y * element_width}, Call::Intrinsic);
-
-    auto res_type = [&]() {
-        switch (op_type) {
-        case AMXOpType::Int8:
-            return Int(32, 256);
-        case AMXOpType::Bf16:
-            return Float(32, 256);
-        default:
-            return Type();
-        }
-    }();
+    auto res_type = amx_op_type_result_type(op_type);
 
     // {rows, colbytes, acc, out, lhs, rhs}
     auto out = Load::make(res_type, new_name, Ramp::make(0, 1, 256), {}, {}, const_true(256), {});
@@ -312,16 +314,7 @@ class ExtractTileOperations : public IRMutator {
                 body = mutate(body);
             }
 
-            auto alloc_type = [&]() {
-                switch (op_type) {
-                case AMXOpType::Int8:
-                    return Int(32, 256);
-                case AMXOpType::Bf16:
-                    return Float(32, 256);
-                default:
-                    return Type();
-                }
-            }();
+            auto alloc_type = amx_op_type_result_type(op_type);
 
             return Allocate::make(amx_name, alloc_type, MemoryType::AMXTile, {1}, const_true(), body);
         }
