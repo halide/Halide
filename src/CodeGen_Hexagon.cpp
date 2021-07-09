@@ -277,7 +277,7 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
                                    const_true(op->type.lanes()), op->alignment);
 
             return Call::make(op->type, Call::if_then_else,
-                              {condition, load, make_zero(op->type)}, Call::Intrinsic);
+                              {condition, load, make_zero(op->type)}, Call::PureIntrinsic);
         } else {
             // It's a predicated vector gather. Just scalarize. We'd
             // prefer to keep it in a loop, but that would require
@@ -287,7 +287,7 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
             Expr load = Load::make(op->type, op->name, index, op->image, op->param,
                                    const_true(op->type.lanes()), op->alignment);
             return Call::make(op->type, Call::if_then_else,
-                              {predicate, load, make_zero(op->type)}, Call::Intrinsic);
+                              {predicate, load, make_zero(op->type)}, Call::PureIntrinsic);
         }
     }
 
@@ -305,66 +305,12 @@ class SloppyUnpredicateLoadsAndStores : public IRMutator {
         if (const Broadcast *scalar_pred = predicate.as<Broadcast>()) {
             Stmt unpredicated_store = Store::make(op->name, value, index, op->param, const_true(lanes), op->alignment);
             return IfThenElse::make(scalar_pred->value, unpredicated_store);
+        }
+
+        if (predicate.same_as(op->predicate) && value.same_as(op->value) && index.same_as(op->index)) {
+            return op;
         } else {
-            string value_name = unique_name("scalarized_store_value");
-            string index_name = unique_name("scalarized_store_index");
-            string predicate_name = unique_name("scalarized_store_predicate");
-
-            const Ramp *index_ramp = index.as<Ramp>();
-
-            // Store entire vectors to the stack
-            vector<Stmt> stmts;
-            Expr predicate_mask = select(predicate, make_one(UInt(8, lanes)), make_zero(UInt(8, lanes)));
-            stmts.emplace_back(Store::make(predicate_name, predicate_mask, Ramp::make(0, 1, lanes),
-                                           Parameter(), const_true(lanes),
-                                           ModulusRemainder()));
-            stmts.emplace_back(Store::make(value_name, value, Ramp::make(0, 1, lanes),
-                                           Parameter(), const_true(lanes),
-                                           ModulusRemainder()));
-            if (!index_ramp) {
-                stmts.emplace_back(Store::make(index_name, index, Ramp::make(0, 1, lanes),
-                                               Parameter(), const_true(lanes),
-                                               ModulusRemainder()));
-            }
-
-            // Then load each element one by one in a loop and do a conditional scalar store
-            string lane_name = unique_name('t');
-            Expr lane_var = Variable::make(Int(32), lane_name);
-
-            Expr pred_i = Load::make(UInt(8), predicate_name, lane_var,
-                                     Buffer<>(), Parameter(), const_true(), ModulusRemainder());
-            Expr value_i = Load::make(value.type().element_of(), value_name, lane_var,
-                                      Buffer<>(), Parameter(), const_true(), ModulusRemainder());
-            Expr index_i;
-            if (index_ramp) {
-                index_i = index_ramp->base + lane_var * index_ramp->stride;
-            } else {
-                index_i = Load::make(Int(32), index_name, lane_var,
-                                     Buffer<>(), Parameter(), const_true(), ModulusRemainder());
-            }
-
-            Stmt store_lanes = Store::make(op->name, value_i, index_i,
-                                           op->param, const_true(),
-                                           ModulusRemainder());
-            store_lanes = IfThenElse::make(pred_i != 0, store_lanes);
-            store_lanes = For::make(lane_name, 0, lanes,
-                                    ForType::Serial, DeviceAPI::None, store_lanes);
-            stmts.emplace_back(std::move(store_lanes));
-
-            Stmt result = Block::make(stmts);
-
-            // Wrap with allocate nodes
-
-            result = Allocate::make(predicate_name, UInt(8), MemoryType::Stack,
-                                    {predicate.type().lanes()}, const_true(), result);
-            if (!index_ramp) {
-                result = Allocate::make(index_name, Int(32), MemoryType::Stack,
-                                        {index.type().lanes()}, const_true(), result);
-            }
-            result = Allocate::make(value_name, value.type().element_of(), MemoryType::Stack,
-                                    {value.type().lanes()}, const_true(), result);
-
-            return result;
+            return Store::make(op->name, value, index, op->param, predicate, op->alignment);
         }
     }
 };
@@ -2099,7 +2045,7 @@ void CodeGen_Hexagon::visit(const Select *op) {
         // Implement scalar conditions on vector values with if-then-else.
         value = codegen(Call::make(op->type, Call::if_then_else,
                                    {op->condition, op->true_value, op->false_value},
-                                   Call::Intrinsic));
+                                   Call::PureIntrinsic));
     } else {
         CodeGen_Posix::visit(op);
     }

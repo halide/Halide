@@ -18,6 +18,7 @@
 #include "Param.h"
 #include "PurifyIndexMath.h"
 #include "Simplify.h"
+#include "SimplifyCorrelatedDifferences.h"
 #include "Solve.h"
 #include "Util.h"
 #include "Var.h"
@@ -66,7 +67,8 @@ Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scop
 }
 
 Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
-    Interval interval = bounds_of_expr_in_scope(e, scope, FuncValueBounds(), true);
+    Expr expr = bound_correlated_differences(simplify(remove_likelies(e)));
+    Interval interval = bounds_of_expr_in_scope(expr, scope, FuncValueBounds(), true);
     interval.min = simplify(interval.min);
     interval.max = simplify(interval.max);
 

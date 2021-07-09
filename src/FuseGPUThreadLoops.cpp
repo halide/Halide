@@ -357,7 +357,7 @@ private:
                     // it's not exact.
                     debug(1)
                         << "Shared allocation for " << s.name
-                        << " has a size that is non-monontonic in the gpu block variable " << op->name
+                        << " has a size that is non-monotonic in the gpu block variable " << op->name
                         << ": " << s.size << "\n";
                     if (get_compiler_logger()) {
                         get_compiler_logger()->record_non_monotonic_loop_var(op->name, s.size);

@@ -10,6 +10,7 @@
 #include "tensorflow/lite/builtin_ops.h"
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/c_api.h"
+#include "tensorflow/lite/context_util.h"
 #include "util/error_util.h"
 
 // Use a List-Of-X approach here to ensure that places we handle ops are kept in sync
@@ -53,6 +54,8 @@
 namespace hannk {
 namespace {
 
+using tflite::TfLiteIntArrayView;
+
 constexpr char kDelegateName[] = "HannkDelegate";
 constexpr int kDelegateVersion = 1;
 
@@ -90,9 +93,11 @@ bool IsConstantTensor(const TfLiteTensor &tensor) {
     return tensor.allocation_type == kTfLiteMmapRo;
 }
 
+#ifndef NDEBUG
 bool IsDynamicTensor(const TfLiteTensor &tensor) {
     return tensor.allocation_type == kTfLiteDynamic;
 }
+#endif
 
 void SetTensorToDynamic(TfLiteContext *context, int tensor_id) {
     TfLiteTensor &tensor = context->tensors[tensor_id];
@@ -228,7 +233,9 @@ TensorPtr ConvertTfLiteTensor(const TfLiteTensor &tensor) {
         HalideBuffer<void> buffer(type, const_cast<void *>(read_only_data), shape);
         assert(tensor.bytes == buffer.size_in_bytes());
 
-        return std::make_shared<Tensor>(name, std::move(buffer), std::move(quantization));
+        auto p = std::make_shared<Tensor>(name, std::move(buffer), std::move(quantization));
+        p->set_constant();
+        return p;
     }
 
     // Create an "unallocated" Buffer, which points to null.
@@ -245,8 +252,7 @@ public:
     }
 
     // Init() will be called exactly once per instance.
-    TfLiteStatus Init(TfLiteContext *context,
-                      const TfLiteDelegateParams *params) {
+    TfLiteStatus Init(TfLiteContext *context, const TfLiteDelegateParams *params) {
         if (options_.verbosity >= 1) {
             HLOG(INFO) << "Delegate " << (void *)this << " Init\n";
         }
@@ -290,7 +296,6 @@ public:
                 continue;
             }
             auto t = GetTensorById(context, tensor_id);
-            t->set_input(true);
             inputs.push_back(t);
             if (options_.verbosity >= 2) {
                 HLOG(INFO) << "Delegate " << (void *)this << (t->is_constant() ? " Const" : "") << " Input tensor: " << tensor_id << "\n";
@@ -308,7 +313,6 @@ public:
                 HLOG(INFO) << "Delegate " << (void *)this << " Output tensor: " << tensor_id << "\n";
             }
             auto t = GetTensorById(context, tensor_id);
-            t->set_output(true);
             outputs.push_back(t);
         }
 
@@ -359,15 +363,41 @@ public:
             return kTfLiteDelegateError;
         }
 
-        interpreter_ = std::unique_ptr<Interpreter>(new Interpreter(std::move(model_)));
+        // All inputs and outputs that aren't dynamic are marked as 'external',
+        // so that we can share memory between TFLite and Hannk. (Note that the
+        // TFLite Tensors haven't been allocated yet; we must update the host
+        // pointers in Eval.)
+        const auto set_external = [this, context](int tensor_id) {
+            assert(tensor_id != kTfLiteOptionalTensor);
+            auto t = GetTensorById(context, tensor_id);
+            if (!t->is_dynamic()) {
+                t->set_external();
+            }
+        };
 
-        for (int i = 0; i < node->outputs->size; i++) {
-            const int tensor_id = node->outputs->data[i];
+        // Mark all inputs and outputs as 'external'; we'll rely on TFLite
+        // to allocate the memory for these, and our internal hannk Tensors
+        // will shadow that memory, to save both space & copying time.
+        for (int tensor_id : TfLiteIntArrayView(node->inputs)) {
+            set_external(tensor_id);
+        }
+        for (int tensor_id : TfLiteIntArrayView(node->outputs)) {
+            set_external(tensor_id);
+        }
+
+        InterpreterOptions options;
+        if (options_.verbosity) {
+            options.verbose = true;
+        }
+        interpreter_ = std::unique_ptr<Interpreter>(new Interpreter(std::move(model_), std::move(options)));
+
+        for (int tensor_id : TfLiteIntArrayView(node->outputs)) {
             if (tensor_id == kTfLiteOptionalTensor) {
                 continue;
             }
             auto t = GetTensorById(context, tensor_id);
             if (t && t->is_dynamic()) {
+                assert(!t->is_external());
                 if (options_.verbosity >= 2) {
                     HLOG(INFO) << "SetTensorToDynamic " << tensor_id;
                 }
@@ -390,42 +420,48 @@ public:
             return kTfLiteDelegateError;
         }
 
-        // Copy the non-constant Tensor inputs. TODO: avoid this by sharing pointers.
-        for (int i = 0; i < node->inputs->size; i++) {
-            const int tensor_id = node->inputs->data[i];
-            if (tensor_id == kTfLiteOptionalTensor) {
-                continue;
-            }
-            assert(tensor_id >= 0 && tensor_id < (int)context->tensors_size);
-            const TfLiteTensor &tensor = context->tensors[tensor_id];
+        const auto set_host = [this, context](int tensor_id) {
+            assert(tensor_id != kTfLiteOptionalTensor);
             auto t = GetTensorById(context, tensor_id);
-            assert(t->is_constant() == IsConstantTensor(tensor));
-            if (t->is_constant()) {
-                continue;
+            if (t->is_external()) {
+                assert(!t->is_dynamic());
+                TfLiteTensor &tensor = context->tensors[tensor_id];
+                // TODO: should this be upgraded to a runtime-check-and-return-error?
+                const auto &old_buf = t->buffer();
+                assert(old_buf.size_in_bytes() == tensor.bytes);
+                // We must reset it every time, as the tensor's data pointer
+                // can vary between calls in some scenatrios.
+                const auto *raw_buf = old_buf.raw_buffer();
+                HalideBuffer<void> buf(raw_buf->type, tensor.data.data, raw_buf->dimensions, raw_buf->dim);
+                t->set_external_buffer(std::move(buf));
             }
-            assert(t->is_input() && !t->is_constant() && t->is_allocated());
-            auto buf = t->buffer();
-            assert(buf.size_in_bytes() == tensor.bytes);
-            memcpy(buf.data(), tensor.data.data, tensor.bytes);
+        };
+
+        for (int tensor_id : TfLiteIntArrayView(node->inputs)) {
+            set_host(tensor_id);
+        }
+        for (int tensor_id : TfLiteIntArrayView(node->outputs)) {
+            set_host(tensor_id);
         }
 
         // TODO: execute needs to return an error code.
         interpreter_->execute();
 
-        // Copy the Tensor outputs. TODO: avoid this by sharing pointers.
-        for (int i = 0; i < node->outputs->size; i++) {
-            const int tensor_id = node->outputs->data[i];
-            if (tensor_id == kTfLiteOptionalTensor) {
-                continue;
-            }
-            assert(tensor_id >= 0 && tensor_id < (int)context->tensors_size);
-            TfLiteTensor &tensor = context->tensors[tensor_id];
-            assert(!IsConstantTensor(tensor));
+        // Dynamic tensors can't share their memory, because we didn't
+        // necessarily know the size until the pipeline was executed,
+        // so we need to resize the TFLite tensor and copy the data
+        // back over. This is regrettable, but dynamic tensors tend to
+        // to be uncommon.
+        for (int tensor_id : TfLiteIntArrayView(node->outputs)) {
+            assert(tensor_id != kTfLiteOptionalTensor);
             auto t = GetTensorById(context, tensor_id);
-            assert(t->is_output() && !t->is_constant() && t->is_allocated());
             if (t->is_dynamic()) {
-                HCHECK(IsDynamicTensor(tensor));
+                TfLiteTensor &tensor = context->tensors[tensor_id];
+                assert(IsDynamicTensor(tensor));
                 const Box b = t->bounds();
+                if (options_.verbosity >= 2) {
+                    HLOG(INFO) << "ResizeTensor " << tensor_id << " to " << b;
+                }
                 TfLiteIntArray *new_size = TfLiteIntArrayCreate((int)b.size());
                 for (size_t i = 0; i < b.size(); i++) {
                     new_size->data[b.size() - i - 1] = b[i].extent();
@@ -436,13 +472,13 @@ public:
                     TF_LITE_KERNEL_LOG(context, "ResizeTensor() failed:", status);
                     return status;
                 }
-            }
-            auto buf = t->buffer();
-            assert(tensor.data.data != nullptr);
-            assert(buf.data() != nullptr);
-            assert(buf.size_in_bytes() == tensor.bytes);
+                auto buf = t->buffer();
+                assert(tensor.data.data != nullptr);
+                assert(buf.data() != nullptr);
+                assert(buf.size_in_bytes() == tensor.bytes);
 
-            memcpy(tensor.data.data, buf.data(), tensor.bytes);
+                memcpy(tensor.data.data, buf.data(), tensor.bytes);
+            }
         }
 
         // Eval() could be called again with the same graph -- don't destroy the interpreter_ yet.
@@ -693,6 +729,7 @@ private:
             if (params) {
                 HalideBuffer<int32_t> shape_data(const_cast<int32_t *>(params->shape), params->num_dimensions);
                 shape_tensor = std::make_shared<Tensor>(input->name() + "_shape", shape_data);
+                shape_tensor->set_constant();
             }
         }
         return make_op<ReshapeOp>(input, shape_tensor, output);

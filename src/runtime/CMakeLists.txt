@@ -151,6 +151,7 @@ add_library(Halide_initmod OBJECT)
 # Note: this always uses Clang-from-LLVM for compilation, so none of these flags should need conditionalization.
 set(RUNTIME_CXX_FLAGS
     -O3
+    -std=c++17
     -ffreestanding
     -fno-blocks
     -fno-exceptions

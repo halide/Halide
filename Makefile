@@ -63,7 +63,7 @@ LLVM_GIT_LLD_INCLUDE_DIR = $(shell $(LLVM_CONFIG) --src-root | sed -e 's/\\/\//g
 LLVM_SYSTEM_LIBS=$(shell ${LLVM_CONFIG} --system-libs --link-static | sed -e 's/[\/&]/\\&/g' | sed 's/-llibxml2.tbd/-lxml2/')
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
-LLVM_CXX_FLAGS = -std=c++11  $(filter-out -O% -g -fomit-frame-pointer -pedantic -W% -W, $(shell $(LLVM_CONFIG) --cxxflags | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g;s/-D/ -D/g;s/-O/ -O/g')) -I$(LLVM_GIT_LLD_INCLUDE_DIR)
+LLVM_CXX_FLAGS = -std=c++17  $(filter-out -O% -g -fomit-frame-pointer -pedantic -W% -W, $(shell $(LLVM_CONFIG) --cxxflags | sed -e 's/\\/\//g' -e 's/\([a-zA-Z]\):/\/\1/g;s/-D/ -D/g;s/-O/ -O/;s/c++14/c++17/g')) -I$(LLVM_GIT_LLD_INCLUDE_DIR)
 OPTIMIZE ?= -O3
 OPTIMIZE_FOR_BUILD_TIME ?= -O0
 
@@ -252,7 +252,7 @@ LLVM_SHARED_LIBS = -Wl,-rpath=$(LLVM_LIBDIR) -L $(LLVM_LIBDIR) -lLLVM
 
 LLVM_LIBS_FOR_SHARED_LIBHALIDE=$(if $(WITH_LLVM_INSIDE_SHARED_LIBHALIDE),$(LLVM_STATIC_LIBS),$(LLVM_SHARED_LIBS))
 
-TUTORIAL_CXX_FLAGS ?= -std=c++11 -g -fno-omit-frame-pointer $(RTTI_CXX_FLAGS) -I $(ROOT_DIR)/tools $(SANITIZER_FLAGS) $(LLVM_CXX_FLAGS_LIBCPP)
+TUTORIAL_CXX_FLAGS ?= -std=c++17 -g -fno-omit-frame-pointer $(RTTI_CXX_FLAGS) -I $(ROOT_DIR)/tools $(SANITIZER_FLAGS) $(LLVM_CXX_FLAGS_LIBCPP)
 # The tutorials contain example code with warnings that we don't want
 # to be flagged as errors, so the test flags are the tutorial flags
 # plus our warning flags.
@@ -393,9 +393,9 @@ HEXAGON_RUNTIME_LIBS = \
   $(HEXAGON_RUNTIME_LIBS_DIR)/arm-32-android/libhalide_hexagon_host.so \
   $(HEXAGON_RUNTIME_LIBS_DIR)/arm-64-android/libhalide_hexagon_host.so \
   $(HEXAGON_RUNTIME_LIBS_DIR)/host/libhalide_hexagon_host.so \
-  $(HEXAGON_RUNTIME_LIBS_DIR)/v62/hexagon_sim_remote \
-  $(HEXAGON_RUNTIME_LIBS_DIR)/v62/libhalide_hexagon_remote_skel.so \
-  $(HEXAGON_RUNTIME_LIBS_DIR)/v62/signed_by_debug/libhalide_hexagon_remote_skel.so
+  $(HEXAGON_RUNTIME_LIBS_DIR)/v65/hexagon_sim_remote \
+  $(HEXAGON_RUNTIME_LIBS_DIR)/v65/libhalide_hexagon_remote_skel.so \
+  $(HEXAGON_RUNTIME_LIBS_DIR)/v65/signed_by_debug/libhalide_hexagon_remote_skel.so
 
 # Keep this list sorted in alphabetical order.
 SOURCE_FILES = \
@@ -944,8 +944,8 @@ $(INCLUDE_DIR)/Halide.h: $(SRC_DIR)/../LICENSE.txt $(HEADERS) $(BIN_DIR)/build_h
 	$(BIN_DIR)/build_halide_h $(SRC_DIR)/../LICENSE.txt $(HEADERS) > $(INCLUDE_DIR)/Halide.h
 	# Also generate a precompiled version in the same folder so that anything compiled with a compatible set of flags can use it
 	@mkdir -p $(INCLUDE_DIR)/Halide.h.gch
-	$(CXX) -std=c++11 $(TEST_CXX_FLAGS) -I$(ROOT_DIR) $(OPTIMIZE) -x c++-header $(INCLUDE_DIR)/Halide.h -o $(INCLUDE_DIR)/Halide.h.gch/Halide.default.gch
-	$(CXX) -std=c++11 $(TEST_CXX_FLAGS) -I$(ROOT_DIR) $(OPTIMIZE_FOR_BUILD_TIME) -x c++-header $(INCLUDE_DIR)/Halide.h -o $(INCLUDE_DIR)/Halide.h.gch/Halide.test.gch
+	$(CXX) -std=c++17 $(TEST_CXX_FLAGS) -I$(ROOT_DIR) $(OPTIMIZE) -x c++-header $(INCLUDE_DIR)/Halide.h -o $(INCLUDE_DIR)/Halide.h.gch/Halide.default.gch
+	$(CXX) -std=c++17 $(TEST_CXX_FLAGS) -I$(ROOT_DIR) $(OPTIMIZE_FOR_BUILD_TIME) -x c++-header $(INCLUDE_DIR)/Halide.h -o $(INCLUDE_DIR)/Halide.h.gch/Halide.test.gch
 
 $(INCLUDE_DIR)/HalideRuntime%: $(SRC_DIR)/runtime/HalideRuntime%
 	echo Copying $<
@@ -969,7 +969,7 @@ $(INCLUDE_DIR)/HalidePyTorchCudaHelpers.h: $(SRC_DIR)/runtime/HalidePyTorchCudaH
 
 $(BIN_DIR)/build_halide_h: $(ROOT_DIR)/tools/build_halide_h.cpp
 	@-mkdir -p $(@D)
-	$(CXX) -std=c++11 $< -o $@
+	$(CXX) -std=c++17 $< -o $@
 
 -include $(OBJECTS:.o=.d)
 -include $(INITIAL_MODULES:.o=.d)
@@ -994,7 +994,7 @@ RUNTIME_TRIPLE_WIN_GENERIC_64 = "le64-unknown-windows-unknown"
 
 # `-fno-threadsafe-statics` is very important here (note that it allows us to use a 'modern' C++
 # standard but still skip threadsafe guards for static initialization in our runtime code)
-RUNTIME_CXX_FLAGS = -std=c++11 -O3 -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -fno-threadsafe-statics
+RUNTIME_CXX_FLAGS = -std=c++17 -O3 -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -fno-threadsafe-statics
 
 $(BUILD_DIR)/initmod.windows_%_x86_32.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
@@ -1703,7 +1703,7 @@ $(FILTERS_DIR)/%.registration.o: $(FILTERS_DIR)/%.registration.cpp
 
 $(FILTERS_DIR)/%.rungen: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runtime.a $(FILTERS_DIR)/%.registration.o $(FILTERS_DIR)/%.a
 	@mkdir -p $(@D)
-	$(CXX) -std=c++11 -I$(FILTERS_DIR) \
+	$(CXX) -std=c++17 -I$(FILTERS_DIR) \
 		$(BUILD_DIR)/RunGenMain.o \
 		$(BIN_DIR)/$(TARGET)/runtime.a \
 		$(call alwayslink,$(FILTERS_DIR)/$*.registration.o) \
@@ -1759,7 +1759,7 @@ $(FILTERS_DIR)/multi_rungen: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/runt
 														 $(FILTERS_DIR)/cxx_mangling.registration.o $(FILTERS_DIR)/cxx_mangling.a \
 														 $(FILTERS_DIR)/pyramid.registration.o $(FILTERS_DIR)/pyramid.a
 	@mkdir -p $(@D)
-	$(CXX) -std=c++11 -I$(FILTERS_DIR) \
+	$(CXX) -std=c++17 -I$(FILTERS_DIR) \
 			$(BUILD_DIR)/RunGenMain.o \
 			$(BIN_DIR)/$(TARGET)/runtime.a \
 			$(call alwayslink,$(FILTERS_DIR)/blur2x2.registration.o) \
@@ -1780,7 +1780,7 @@ $(FILTERS_DIR)/multi_rungen2: $(BUILD_DIR)/RunGenMain.o $(BIN_DIR)/$(TARGET)/run
 														 $(FILTERS_DIR)/cxx_mangling.a \
 														 $(FILTERS_DIR)/pyramid.a
 	@mkdir -p $(@D)
-	$(CXX) -std=c++11 -I$(FILTERS_DIR) $^ $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
+	$(CXX) -std=c++17 -I$(FILTERS_DIR) $^ $(GEN_AOT_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 $(BIN_DIR)/tutorial_%: $(ROOT_DIR)/tutorial/%.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(INCLUDE_DIR)/HalideRuntime.h
 	@ if [[ $@ == *_run ]]; then \
@@ -2215,15 +2215,27 @@ endif
 
 # This is a specialized 'install' for users who need Hexagon support libraries as well.
 install_qc: install $(HEXAGON_RUNTIME_LIBS)
-	mkdir -p $(PREFIX)/lib/arm-32-android $(PREFIX)/lib/arm-64-android $(PREFIX)/lib/host $(PREFIX)/lib/v62 $(PREFIX)/tools
+	mkdir -p $(PREFIX)/bin $(PREFIX)/tools $(PREFIX)/support
+	mkdir -p $(PREFIX)/lib/arm-32-android
+	mkdir -p $(PREFIX)/lib/arm-64-android
+	mkdir -p $(PREFIX)/lib/adsp/arm-32-android
+	mkdir -p $(PREFIX)/lib/adsp/arm-64-android
+	mkdir -p $(PREFIX)/lib/cdsp/arm-32-android
+	mkdir -p $(PREFIX)/lib/cdsp/arm-64-android
+	mkdir -p $(PREFIX)/lib/host
+	mkdir -p $(PREFIX)/lib/v65
 	cp $(HEXAGON_RUNTIME_LIBS_DIR)/arm-32-android/* $(PREFIX)/lib/arm-32-android
 	cp $(HEXAGON_RUNTIME_LIBS_DIR)/arm-64-android/* $(PREFIX)/lib/arm-64-android
+	cp $(HEXAGON_RUNTIME_LIBS_DIR)/cdsp/arm-32-android/* $(PREFIX)/lib/cdsp/arm-32-android
+	cp $(HEXAGON_RUNTIME_LIBS_DIR)/cdsp/arm-64-android/* $(PREFIX)/lib/cdsp/arm-64-android
+	cp $(HEXAGON_RUNTIME_LIBS_DIR)/adsp/arm-32-android/* $(PREFIX)/lib/adsp/arm-32-android
+	cp $(HEXAGON_RUNTIME_LIBS_DIR)/adsp/arm-64-android/* $(PREFIX)/lib/adsp/arm-64-android
 	cp $(HEXAGON_RUNTIME_LIBS_DIR)/host/* $(PREFIX)/lib/host
-	cp -r $(HEXAGON_RUNTIME_LIBS_DIR)/v62/* $(PREFIX)/lib/v62
-	ln -sf $(PREFIX)/share/halide/tools/GenGen.cpp $(PREFIX)/tools/GenGen.cpp
-	ln -sf $(PREFIX)/lib/v62/hexagon_sim_remote $(PREFIX)/bin/hexagon_sim_remote
-	ln -sf $(PREFIX)/lib/v62/libsim_qurt.a $(PREFIX)/lib/libsim_qurt.a
-	ln -sf $(PREFIX)/lib/v62/libsim_qurt_vtcm.a $(PREFIX)/lib/libsim_qurt_vtcm.a
+	cp -r $(HEXAGON_RUNTIME_LIBS_DIR)/v65/* $(PREFIX)/lib/v65
+	ln -sf ../share/halide/tools/GenGen.cpp $(PREFIX)/tools/GenGen.cpp
+	ln -sf ../lib/v65/hexagon_sim_remote $(PREFIX)/bin/hexagon_sim_remote
+	ln -sf v65/libsim_qurt.a $(PREFIX)/lib/libsim_qurt.a
+	ln -sf v65/libhalide_hexagon_remote_skel.so $(PREFIX)/lib/libhalide_hexagon_remote_skel.so
 
 # We need to capture the system libraries that we'll need to link
 # against, so that downstream consumers of our build rules don't
@@ -2326,10 +2338,10 @@ $(DISTRIB_DIR)/halide.tgz: distrib
 	mv $(BUILD_DIR)/halide.tgz $(DISTRIB_DIR)/halide.tgz
 
 $(BIN_DIR)/HalideTraceViz: $(ROOT_DIR)/util/HalideTraceViz.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h $(ROOT_DIR)/tools/halide_trace_config.h
-	$(CXX) $(OPTIMIZE) -std=c++11 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -L$(BIN_DIR) -o $@
+	$(CXX) $(OPTIMIZE) -std=c++17 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -L$(BIN_DIR) -o $@
 
 $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/util/HalideTraceUtils.cpp $(INCLUDE_DIR)/HalideRuntime.h $(ROOT_DIR)/tools/halide_image_io.h
-	$(CXX) $(OPTIMIZE) -std=c++11 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -I$(ROOT_DIR)/src/runtime -L$(BIN_DIR) $(IMAGE_IO_CXX_FLAGS) $(IMAGE_IO_LIBS) -o $@
+	$(CXX) $(OPTIMIZE) -std=c++17 $(filter %.cpp,$^) -I$(INCLUDE_DIR) -I$(ROOT_DIR)/tools -I$(ROOT_DIR)/src/runtime -L$(BIN_DIR) $(IMAGE_IO_CXX_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
 # Note: you must have CLANG_FORMAT_LLVM_INSTALL_DIR set for this rule to work.
 # Let's default to the Ubuntu install location.
