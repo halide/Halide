@@ -4,6 +4,7 @@
 #include "Bounds.h"
 #include "CSE.h"
 #include "ConciseCasts.h"
+#include "ConstantBounds.h"
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
@@ -68,19 +69,7 @@ Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scop
 
 Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
     Expr expr = bound_correlated_differences(simplify(remove_likelies(e)));
-    Interval interval = bounds_of_expr_in_scope(expr, scope, FuncValueBounds(), true);
-    interval.min = simplify(interval.min);
-    interval.max = simplify(interval.max);
-
-    // Note that we can get non-const but well-defined results (e.g. signed_integer_overflow);
-    // for our purposes here, treat anything non-const as no-bound.
-    if (!is_const(interval.min)) {
-        interval.min = Interval::neg_inf();
-    }
-    if (!is_const(interval.max)) {
-        interval.max = Interval::pos_inf();
-    }
-
+    Interval interval = try_constant_bounds_methods(expr, scope);
     return interval;
 }
 
