@@ -2183,11 +2183,8 @@ public:
 
                 // Integer to double-precision floating point
                 if (Halide::Internal::get_llvm_version() >= 130) {
-                    // TODO: we can't directly generate these instructions at LLVM top of tree,
-                    // but LLVM isn't generating the f64x2.convert_low_i32x4_s/u instructions;
-                    // investigation needed.
-                    // check("f64x2.convert_low_i32x4_s", 2 * w, cast<double>(i32_1));
-                    // check("f64x2.convert_low_i32x4_u", 2 * w, cast<double>(u32_1));
+                    check("f64x2.convert_low_i32x4_s", 2 * w, cast<double>(i32_1));
+                    check("f64x2.convert_low_i32x4_u", 2 * w, cast<double>(u32_1));
                 }
 
                 // Single-precision floating point to integer with saturation
