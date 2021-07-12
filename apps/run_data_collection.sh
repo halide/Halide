@@ -2,6 +2,7 @@
 
 ROUND=constant_bounds
 APP_LIST="conv_layer interpolate iir_blur harris unsharp stencil_chain bgu camera_pipe max_filter nl_means lens_blur bilateral_grid local_laplacian"
+# APP_LIST="nl_means lens_blur bilateral_grid local_laplacian"
 
 OUTFILE=$1
 OUTFILE=$(pwd)/$1

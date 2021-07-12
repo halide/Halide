@@ -5,6 +5,7 @@
 #include "Error.h"
 #include "Expr.h"
 #include "ExprUsesVar.h"
+#include "IR.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -17,6 +18,18 @@
 namespace Halide {
 namespace Internal {
 namespace {
+
+bool get_use_push_division_from_environment() {
+    static std::string env_var_value = get_env_variable("HL_USE_PUSH_DIVISION");
+    static bool enable = env_var_value == "1";
+    static bool disable = env_var_value == "0";
+    if (enable == disable) {
+        // Nag people to set this one way or the other, to avoid
+        // running the wrong experiment by mistake.
+        user_warning << "HL_USE_PUSH_DIVISION unset\n";
+    }
+    return enable;
+}
 
 using std::string;
 using std::vector;
@@ -329,6 +342,21 @@ class ReorderTerms : public IRGraphMutator {
         int coefficient;
     };
 
+    bool is_mul_by_int_const(const Expr &expr, AffineTerm &term) {
+        const Mul *mul = expr.as<Mul>();
+        if (mul) {
+            // TODO: can we always expect the imm to be on the right?
+            const IntImm *b = mul->b.as<IntImm>();
+            if (b) {
+                // TODO: check for overflow...
+                term.coefficient = b->value;
+                term.expr = mul->a;
+                return true;
+            }
+        }
+        return false;
+    }
+
     vector<AffineTerm> extract_summation(const Expr &e) {
         vector<AffineTerm> pending, terms;
         pending.push_back({e, 1});
@@ -339,6 +367,8 @@ class ReorderTerms : public IRGraphMutator {
         if (!(add || sub)) {
             return pending;
         }
+
+        // std::cerr << "Extracting summation from: " << e << "\n";
 
         while (!pending.empty()) {
             AffineTerm next = pending.back();
@@ -354,15 +384,25 @@ class ReorderTerms : public IRGraphMutator {
                 pending.push_back({sub->a, next.coefficient});
                 pending.push_back({sub->b, -next.coefficient});
             } else {
-                // std::cerr << next.expr << " : Rec\n";
+                // std::cerr << "Next: " << next.expr << "\n";
+                // Expr old = next.expr;
                 next.expr = mutate(next.expr);
+                // std::cerr << "Became: " << old << " -> " << next.expr << "\n";
                 if (next.expr.as<Add>() || next.expr.as<Sub>()) {
                     // After mutation it became an add or sub, throw it back on the pending queue.
                     // std::cerr << next.expr << " : Bac\n";
                     pending.push_back(next);
                 } else {
                     // std::cerr << next.expr << " : Term\n";
-                    terms.push_back(next);
+                    AffineTerm term;
+                    if (is_mul_by_int_const(next.expr, term)) {
+                        internal_assert(term.expr.defined());
+                        // TODO: check for overflow...
+                        term.coefficient *= next.coefficient;
+                        pending.push_back(term);
+                    } else {
+                        terms.push_back(next);
+                    }
                 }
             }
         }
@@ -373,7 +413,7 @@ class ReorderTerms : public IRGraphMutator {
                              return should_commute(a.expr, b.expr);
                          });
 
-        // std::cerr << "Extracted summation:\n";
+        // std::cerr << "Extracted summation\n";
         // for (auto &term : terms) {
         //     std::cerr << term.expr << " x " << term.coefficient << "\n";
         // }
@@ -410,8 +450,10 @@ class ReorderTerms : public IRGraphMutator {
 
     Expr construct_summation(vector<AffineTerm> &terms) {
         Expr result;
+        // std::cerr << "Constructing summation\n";
         while (!terms.empty()) {
             AffineTerm next = terms.back();
+            internal_assert(next.expr.defined()) << "Expr with coefficient: " << next.coefficient << " is undefined for partial result: " << result << "\n";
             terms.pop_back();
             if (next.coefficient == 0) {
                 continue;
@@ -421,7 +463,7 @@ class ReorderTerms : public IRGraphMutator {
                 } else if (next.coefficient == -1) {
                     result = -next.expr;
                 } else {
-                    result += (next.coefficient * next.expr);
+                    result = (next.expr * next.coefficient);
                 }
             } else {
                 if (next.coefficient == 1) {
@@ -429,10 +471,12 @@ class ReorderTerms : public IRGraphMutator {
                 } else if (next.coefficient == -1) {
                     result -= next.expr;
                 } else {
-                    result += (next.coefficient * next.expr);
+                    result += (next.expr * next.coefficient);
                 }
             }
         }
+
+        // std::cerr << "Constructed summation: " << result << "\n";
 
         return result;
     }
@@ -444,18 +488,20 @@ class ReorderTerms : public IRGraphMutator {
     }
 
     Expr visit(const Add *op) override {
+        // internal_error << "I don't think we should see this?? " << Expr(op) << "\n";
         if (op->type == Int(32)) {
             return reassociate_summation(op);
         } else {
-            return IRMutator::visit(op);
+            return IRGraphMutator::visit(op);
         }
     }
 
     Expr visit(const Sub *op) override {
+        // internal_error << "I don't think we should see this?? " << Expr(op) << "\n";
         if (op->type == Int(32)) {
             return reassociate_summation(op);
         } else {
-            return IRMutator::visit(op);
+            return IRGraphMutator::visit(op);
         }
     }
 
@@ -476,7 +522,7 @@ class ReorderTerms : public IRGraphMutator {
 
         while (i < a.size() && j < b.size()) {
             // TODO: do we need matching coefficients? probably, but this feels weak...
-            if (a[i].coefficient == b[j].coefficient && graph_equal(a[i].expr, b[j].expr)) {
+            if (a[i].coefficient == b[j].coefficient && graph_equal(a[i].expr, b[j].expr) && !is_const_zero(a[i].expr)) {
                 gatherer.like_terms.push_back(a[i]);
                 i++;
                 j++;
@@ -521,19 +567,19 @@ class ReorderTerms : public IRGraphMutator {
     template<class BinOp>
     Expr visit_binary_op(const BinOp *op) {
         if (op->type == Int(32)) {
-          vector<AffineTerm> a_terms = extract_and_simplify(op->a);
-          vector<AffineTerm> b_terms = extract_and_simplify(op->b);
-          AffineTermsGather gathered = extract_like_terms(a_terms, b_terms);
-          if (gathered.like_terms.empty()) {
-              Expr a = construct_summation(a_terms);
-              Expr b = construct_summation(b_terms);
-              return BinOp::make(a, b);
-          } else {
-              Expr like_terms = construct_summation(gathered.like_terms);
-              Expr a = reconstruct_terms(gathered.a, op->type);
-              Expr b = reconstruct_terms(gathered.b, op->type);
-              return BinOp::make(a, b) + like_terms;
-          }
+            vector<AffineTerm> a_terms = extract_and_simplify(op->a);
+            vector<AffineTerm> b_terms = extract_and_simplify(op->b);
+            AffineTermsGather gathered = extract_like_terms(a_terms, b_terms);
+            if (gathered.like_terms.empty()) {
+                Expr a = construct_summation(a_terms);
+                Expr b = construct_summation(b_terms);
+                return BinOp::make(a, b);
+            } else {
+                Expr like_terms = construct_summation(gathered.like_terms);
+                Expr a = reconstruct_terms(gathered.a, op->type);
+                Expr b = reconstruct_terms(gathered.b, op->type);
+                return BinOp::make(a, b) + like_terms;
+            }
         } else {
             return IRGraphMutator::visit(op);
         }
@@ -548,7 +594,25 @@ class ReorderTerms : public IRGraphMutator {
     }
 
     // TODO: do Select in the same way
-
+    Expr visit(const Select *op) override {
+        if (op->type == Int(32)) {
+            vector<AffineTerm> a_terms = extract_and_simplify(op->true_value);
+            vector<AffineTerm> b_terms = extract_and_simplify(op->false_value);
+            AffineTermsGather gathered = extract_like_terms(a_terms, b_terms);
+            if (gathered.like_terms.empty()) {
+                Expr a = construct_summation(a_terms);
+                Expr b = construct_summation(b_terms);
+                return Select::make(op->condition, a, b);
+            } else {
+                Expr like_terms = construct_summation(gathered.like_terms);
+                Expr a = reconstruct_terms(gathered.a, op->type);
+                Expr b = reconstruct_terms(gathered.b, op->type);
+                return Select::make(op->condition, a, b) + like_terms;
+            }
+        } else {
+            return IRGraphMutator::visit(op);
+        }
+    }
 };
 
 class SubstituteSomeLets : public IRMutator {
@@ -970,8 +1034,11 @@ Interval get_division_interval(const Expr &expr) {
     Interval interval(lower, upper);
     // TODO: should we be doing simplification here? Seems like we need a GraphMutator...
     // std::cerr << "Before reorder: " << interval << "\n";
-    interval.min = reorder_terms(simplify(lower));
-    interval.max = reorder_terms(simplify(upper));
+    // TODO: make these reorder
+    interval.min = simplify(lower);
+    interval.max = simplify(upper);
+    // interval.min = reorder_terms(simplify(lower));
+    // interval.max = reorder_terms(simplify(upper));
     // std::cerr << "After reorder: " << interval << "\n";
     return interval;
 }
@@ -1103,7 +1170,19 @@ Interval all_opt(const Expr &expr, const Scope<Interval> &scope) {
     return interval;
 }
 
+Interval perform_push_division(const Expr &expr, const Scope<Interval> &scope) {
+    internal_assert(is_affine_division(expr)) << "Expr is not affine division\n" << expr << "\n";
+    Interval div_interval = get_division_interval(expr);
+    Expr min_val = bounds_of_expr_in_scope(div_interval.min, scope, FuncValueBounds(), true).min;
+    Expr max_val = bounds_of_expr_in_scope(div_interval.max, scope, FuncValueBounds(), true).max;
+    Interval interval(min_val, max_val);
+    simplify(interval);
+    make_const_interval(interval);
+    return interval;
+}
+
 Interval try_constant_bounds_methods(const Expr &expr, const Scope<Interval> &scope) {
+    /*
     Interval original = get_cbounds(expr, scope);
 
     if (is_const(expr) || !possibly_correlated(expr) || expr.type().is_float()) {
@@ -1111,21 +1190,22 @@ Interval try_constant_bounds_methods(const Expr &expr, const Scope<Interval> &sc
     }
 
     std::cerr << "Expr: " << expr << "\n";
+    std::cerr << "Renamed: " << SimplerNameMutator().mutate(expr) << "\n";
 
     Expr subst = simplify(substitute_some_lets(expr));
-    std::cerr << "Subst: " << subst << "\n";
+    // std::cerr << "Subst: " << subst << "\n";
     Expr synth = simplify(refactor_correlated_differences(expr));
-    std::cerr << "Synth: " << synth << "\n";
+    // std::cerr << "Synth: " << synth << "\n";
     Expr reorder = simplify(reorder_terms(expr));
-    std::cerr << "Reorder: " << reorder << "\n";
+    // std::cerr << "Reorder: " << reorder << "\n";
 
     Interval subst_i = get_cbounds(subst, scope);
     Interval synth_i = get_cbounds(synth, scope);
     Interval reorder_i = get_cbounds(reorder, scope);
 
-    std::cerr << "Subst: " << subst_i << "\n";
-    std::cerr << "Synth: " << synth_i << "\n";
-    std::cerr << "Reorder: " << reorder_i << "\n";
+    // std::cerr << "Subst: " << subst_i << "\n";
+    // std::cerr << "Synth: " << synth_i << "\n";
+    // std::cerr << "Reorder: " << reorder_i << "\n";
 
     bool log_div = is_affine_division(expr);
     Interval div_i;
@@ -1147,6 +1227,17 @@ Interval try_constant_bounds_methods(const Expr &expr, const Scope<Interval> &sc
     Interval ret = compare_intervals(opt_i, original, expr, scope, "all vs original");
 
     return ret;
+    */
+
+    Interval original = get_cbounds(expr, scope);
+    static bool use_push_div = get_use_push_division_from_environment();
+
+    if (use_push_div && is_affine_division(expr)) {
+        Interval div_interval = perform_push_division(expr, scope);
+        original.min = Interval::make_max(original.min, div_interval.min);
+        original.max = Interval::make_max(original.max, div_interval.max);
+    }
+    return original;
 }
 
 
