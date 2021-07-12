@@ -41,7 +41,10 @@ void run_benchmark(const std::string &filename, const InterpreterOptions &option
 
 }  // namespace hannk
 
-int main(int argc, char **argv) {
+// Change the visibility of the main function to support Hexagon where the
+// main function is run from a shared object (benchmark.so). This is different
+// from other targets where we compile the file into an executable.
+__attribute__((visibility("default"))) int main(int argc, char **argv) {
     bool use_mmap = false;
     hannk::InterpreterOptions options;
 
