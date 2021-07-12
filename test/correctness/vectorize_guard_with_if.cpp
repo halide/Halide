@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
         Func f;
         Var x;
 
-        f(x) = b(x / 2);
+        f(x) = b(x / 2) + x / 2;
 
         f.output_buffer().dim(0).set_min(0).set_extent(w);
 
@@ -74,12 +74,43 @@ int main(int argc, char **argv) {
         Buffer<int> result = f.realize({w});
 
         for (int i = 0; i < w; i++) {
-            if (result(i) != i / 2) {
+            if (result(i) != i / 2 + i / 2) {
                 printf("result(%d) == %d instead of %d\n",
                        i, result(i), i);
                 return -1;
             }
         }
+    }
+
+    {
+        Var x;
+        Func f, g;
+
+        ImageParam in(Int(32), 1);
+
+        Expr index = clamp(x * x - 2, 0, x);
+
+        f(x) = index + in(index);
+        g(x) = f(x);
+
+        f.compute_root().vectorize(x, 8, TailStrategy::PredicateLoads);
+        g.compute_root().vectorize(x, 8, TailStrategy::PredicateStores);
+
+        const int w = 100;
+        Buffer<int> buf(w);
+        buf.fill(0);
+        in.set(buf);
+        Buffer<int> result = g.realize({w});
+
+        for (int i = 0; i < w; i++) {
+            int correct = std::max(std::min(i * i - 2, i), 0);
+            if (result(i) != correct) {
+                printf("result(%d) == %d instead of %d\n",
+                       i, result(i), correct);
+                return -1;
+            }
+        }
+
     }
 
     printf("Success!\n");

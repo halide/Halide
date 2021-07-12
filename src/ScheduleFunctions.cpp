@@ -5,6 +5,7 @@
 
 #include "ApplySplit.h"
 #include "CodeGen_GPU_Dev.h"
+#include "CSE.h"
 #include "ExprUsesVar.h"
 #include "Func.h"
 #include "IREquality.h"
@@ -81,7 +82,7 @@ bool contains_impure_call(const Expr &expr) {
 
 // A mutator that performs a substitute operation only on either the values or the
 // arguments of Provide nodes.
-class SubstituteIn : public IRMutator {
+class SubstituteIn : public IRGraphMutator {
     const string &name;
     const Expr &value;
     bool calls;
@@ -96,7 +97,7 @@ class SubstituteIn : public IRMutator {
         vector<Expr> args;
         bool changed = false;
         for (const Expr &i : p->args) {
-            args.push_back(substitute(name, value, i));
+            args.push_back(graph_substitute(name, value, i));
             changed = changed || !args.back().same_as(i);
         }
         if (changed) {
@@ -109,7 +110,7 @@ class SubstituteIn : public IRMutator {
     Expr visit(const Call *op) override {
         Expr result = IRMutator::visit(op);
         if (calls && op->call_type == Call::Halide) {
-            result = substitute(name, value, op);
+            result = graph_substitute(name, value, op);
         }
         return result;
     }
@@ -124,7 +125,7 @@ Stmt substitute_in(const string &name, const Expr &value, bool calls, bool provi
     return SubstituteIn(name, value, calls, provides).mutate(s);
 }
 
-class AddPredicates : public IRMutator {
+class AddPredicates : public IRGraphMutator {
     const Expr &cond;
     bool calls;
     bool provides;
@@ -225,9 +226,13 @@ Stmt build_loop_nest(
 
         vector<ApplySplitResult> splits_result = apply_split(split, is_update, prefix, dim_extent_alignment);
 
+        // To ensure we substitute all indices used in call or provide,
+        // we need to substitute all lets in, so we correctly guard x in
+        // an example like let a = 2*x in a + f[a].
+        stmt = substitute_in_all_lets(stmt);
         for (const auto &res : splits_result) {
             if (res.is_substitution()) {
-                stmt = substitute(res.name, res.value, stmt);
+                stmt = graph_substitute(res.name, res.value, stmt);
             } else if (res.is_substitution_in_calls()) {
                 stmt = substitute_in(res.name, res.value, true, false, stmt);
             } else if (res.is_substitution_in_provides()) {
@@ -243,6 +248,7 @@ Stmt build_loop_nest(
                 stmt = IfThenElse::make(res.value, stmt, Stmt());
             }
         }
+        stmt = common_subexpression_elimination(stmt);
     }
 
     // Order the Ifs, Fors, and Lets for bounds inference
