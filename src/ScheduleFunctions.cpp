@@ -4,8 +4,8 @@
 #include <utility>
 
 #include "ApplySplit.h"
-#include "CodeGen_GPU_Dev.h"
 #include "CSE.h"
+#include "CodeGen_GPU_Dev.h"
 #include "ExprUsesVar.h"
 #include "Func.h"
 #include "IREquality.h"
