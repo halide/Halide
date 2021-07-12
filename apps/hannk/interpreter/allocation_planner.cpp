@@ -28,9 +28,6 @@ AllocationPlanner::AllocationPlanner(size_t alignment)
     : alignment_(alignment) {
 }
 
-namespace {
-}
-
 int AllocationPlanner::add_block(size_t size, int first_use, int last_use) {
     assert(!committed_);
     int block_id = (int)block_requirements_.size();
@@ -95,7 +92,6 @@ void AllocationPlanner::commit() {
     std::list<BlockRequirements *> offsets;
 
     using OffsetsIterator = std::list<BlockRequirements *>::iterator;
-    const OffsetsIterator NullIterator = offsets.end();
 
     // Put the first (largest) block at offset 0.
     block_requirements_sorted[0]->calculated_offset = 0;
@@ -106,11 +102,11 @@ void AllocationPlanner::commit() {
         BlockRequirements *req = block_requirements_sorted[i];
         size_t candidate_offset = 0;
 
-        OffsetsIterator prior = NullIterator;
+        OffsetsIterator prior = offsets.end();
         for (;;) {
             // Find the first block after 'prior' that's active at the same time as 'req'.
-            OffsetsIterator next = (prior != NullIterator) ? std::next(prior) : offsets.begin();
-            for (; next != NullIterator; ++next) {
+            OffsetsIterator next = (prior != offsets.end()) ? std::next(prior) : offsets.begin();
+            for (; next != offsets.end(); ++next) {
                 const bool has_time_overlap = !((*next)->first_use > req->last_use || req->first_use > (*next)->last_use);
                 if (has_time_overlap) {
                     // Can't safely insert between prior and next -- advance and try again until
@@ -120,14 +116,14 @@ void AllocationPlanner::commit() {
             }
 
             // If there's a prior block, the candidate_offset begins just past prior's end.
-            if (prior != NullIterator) {
+            if (prior != offsets.end()) {
                 const size_t prior_end_offset = (*prior)->calculated_offset + (*prior)->size_needed;
                 if (prior_end_offset > candidate_offset) {
                     candidate_offset = align_up(prior_end_offset, alignment_);
                 }
             }
 
-            if (next == NullIterator) {
+            if (next == offsets.end()) {
                 // There is no next block, so we're just going to append after the last one.
                 break;
             }
