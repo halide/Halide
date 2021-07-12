@@ -323,6 +323,9 @@ Stmt build_loop_nest(
         // Only push up LetStmts.
         internal_assert(nest[i].value.defined());
         internal_assert(nest[i].type == Container::Let);
+        if (!is_pure(nest[i].value)) {
+            continue;
+        }
 
         for (int j = i - 1; j >= 0; j--) {
             // Try to push it up by one.
