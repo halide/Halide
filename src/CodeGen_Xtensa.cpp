@@ -186,6 +186,7 @@ using uint1x64_t = vbool2N;
 using float32x16_t = xb_vecN_2xf32;
 using int8x4_t = int32_t;
 using int8x8_t = xb_int64pr;
+using uint8x8_t = xb_int64pr;
 using uint8x4_t = uint32_t;
 
 template <typename NativeVector, int N>
@@ -1020,10 +1021,18 @@ HALIDE_ALWAYS_INLINE int24x64_t halide_xtensa_widen_quad_mul_add_by_scalar_u24(
 HALIDE_ALWAYS_INLINE int24x128_t halide_xtensa_dual_widen_quad_mul_add_i24(
                                             const int24x128_t& acc,
                                             const int8x256_t& a,
-                                            const int8x8_t& s
-                                            ) {
+                                            const int8x8_t& s) {
   int24x128_t r(acc);
   IVP_DMULQA2N8XR8(r.native_vector[1], r.native_vector[0], a.native_vector[3], a.native_vector[2], a.native_vector[1], a.native_vector[0], s);
+  return r;
+}
+
+HALIDE_ALWAYS_INLINE int24x128_t halide_xtensa_dual_widen_quad_mul_add_u24(
+                                            const int24x128_t& acc,
+                                            const uint8x256_t& a,
+                                            const uint8x8_t& s) {
+  int24x128_t r(acc);
+  IVP_DMULUUQA2N8XR8(r.native_vector[1], r.native_vector[0], a.native_vector[3], a.native_vector[2], a.native_vector[1], a.native_vector[0], s);
   return r;
 }
 
@@ -1901,7 +1910,7 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         rhs << "IVP_DEXTRPRN_2X32("
             << "IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(" + args[0] + ")), "
             << "IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(" + args[1] + ")), "
-            << args[2] + ", " + args[3] + ");";
+            << args[2] + ", " + args[3] + ")";
         return rhs.str();
     }
 
@@ -2697,6 +2706,12 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
         }
     }
 
+    if (op->is_concat() && is_native_vector_type(op->vectors[0].type())) {
+        Expr call = Call::make(op->type, "halide_xtensa_concat_from_native", op->vectors, Call::PureExtern);
+        call.accept(this);
+        return;
+    }
+
     std::vector<string> vecs;
     for (Expr v : op->vectors) {
         vecs.push_back(print_expr(v));
@@ -2705,7 +2720,6 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
     Type src_type = op->vectors[0].type();
     if (op->vectors.size() > 1) {
         ostringstream rhs;
-        // if (vecs.size() == 2) {
         rhs << "concat<"
             << print_type(op->type) << ", "
             << print_type(op->vectors[0].type()) << ", "
@@ -2715,11 +2729,6 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
             << ">(" << with_commas(vecs) << ")";
         src = print_assignment(op->type, rhs.str());
         src_type = src_type.with_lanes(src_type.lanes() * op->vectors.size());
-        // }
-        // else {
-        //     string storage_name = unique_name('_');
-        //     stream << get_indent() << "const " << print_type(op->vectors[0].type()) << " " << storage_name << "[] = { " << with_commas(vecs) << " };\n";
-        // }
     }
     ostringstream rhs;
     if (op->type.is_scalar()) {
