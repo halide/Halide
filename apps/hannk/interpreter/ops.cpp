@@ -811,26 +811,27 @@ namespace {
 void depthwise_conv_uint8(
     halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t *bias,
     int depth_multiplier, const MultiplyParams &params, const std::array<int, 2> &stride, const std::array<int, 2> &dilation,
-    int stride_x, const Interval &output_range, halide_buffer_t *output) {
-    if (depth_multiplier >= output->dim[0].extent) {
-        depthwise_conv_broadcast_uint8(
-            input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
-            stride[0], stride[1], dilation[0], dilation[1], stride_x, params.c.mantissa(), -params.c.exponent(),
-            (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output);
-    } else if (depth_multiplier == 1 && stride_x != 0) {
+    int input_stride_x, const Interval &output_range, halide_buffer_t *output) {
+    if (input_stride_x != 0) {
+        assert(depth_multiplier == 1);
         depthwise_conv_shallow_dm1_uint8(
             input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
-            stride[0], stride[1], dilation[0], dilation[1], stride_x, params.c.mantissa(), -params.c.exponent(),
+            stride[0], stride[1], dilation[0], dilation[1], input_stride_x, params.c.mantissa(), -params.c.exponent(),
+            (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output);
+    } else if (depth_multiplier >= output->dim[0].extent) {
+        depthwise_conv_broadcast_uint8(
+            input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
+            stride[0], stride[1], dilation[0], dilation[1], input_stride_x, params.c.mantissa(), -params.c.exponent(),
             (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output);
     } else if (depth_multiplier == 1) {
         depthwise_conv_dm1_uint8(
             input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
-            stride[0], stride[1], dilation[0], dilation[1], stride_x, params.c.mantissa(), -params.c.exponent(),
+            stride[0], stride[1], dilation[0], dilation[1], input_stride_x, params.c.mantissa(), -params.c.exponent(),
             (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output);
     } else {
         ::hannk::depthwise_conv_uint8(
             input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
-            stride[0], stride[1], dilation[0], dilation[1], stride_x, params.c.mantissa(), -params.c.exponent(),
+            stride[0], stride[1], dilation[0], dilation[1], input_stride_x, params.c.mantissa(), -params.c.exponent(),
             (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output);
     }
 }
@@ -898,18 +899,18 @@ void DepthwiseConv2DOp::execute() {
         // If the number of channels is small and divides the channel alignment,
         // we can use the "shallow" version of depthwise conv, which fuses c and x,
         // and passes the stride of x into the pipeline manually.
-        int stride_x = 0;
+        int input_stride_x = 0;
         if (depth_multiplier_ == 1 &&
             can_fuse_cx(FuseType::InPlace, input_buf) &&
             can_fuse_cx(FuseType::InPlace, output_buf) &&
             get_depthwise_conv_channel_alignment() % input_buf.dim(0).extent() == 0) {
-            stride_x = input_buf.dim(1).stride();
+            input_stride_x = input_buf.dim(1).stride();
             fuse_cx(FuseType::InPlace, input_buf);
             fuse_cx(FuseType::InPlace, output_buf);
         }
 
         depthwise_conv_uint8(input_buf, filter_buf, bias_buf, depth_multiplier_, params,
-                             stride_, dilation_, stride_x, output_range, output_buf);
+                             stride_, dilation_, input_stride_x, output_range, output_buf);
     } else {
         HLOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }

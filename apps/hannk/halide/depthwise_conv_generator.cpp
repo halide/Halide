@@ -41,9 +41,9 @@ public:
     Input<int> dilation_x_{"dilation_x"};
     Input<int> dilation_y_{"dilation_y"};
 
-    // When c and x are fused, this is used to specify the stride of x within the
-    // fused c-x dimension.
-    Input<int> stride_rx_{"stride_rx"};
+    // When c and x are fused, this is used to specify the stride of x of the input
+    // within the fused c-x dimension.
+    Input<int> input_stride_x_{"input_stride_x"};
 
     Input<int32_t> output_multiplier_{"output_multiplier"};
     Input<int32_t> output_shift_{"output_shift"};
@@ -110,7 +110,7 @@ public:
         Expr ry = y * stride_y_ + r.y * dilation_y_;
         Expr input_rdxy;
         if (shallow_) {
-            input_rdxy = resampled_input(c + rx * stride_rx_, 0, ry, b);
+            input_rdxy = resampled_input(c + rx * input_stride_x_, 0, ry, b);
         } else {
             input_rdxy = resampled_input(c, rx, ry, b);
         }
