@@ -365,10 +365,10 @@ void ModelRunner::set_seed(int seed) {
 }
 
 void ModelRunner::status() {
-    std::cout << "Using random seed: " << seed_tracker_.next_seed() << "\n";
-    std::cout << "Using threads: " << threads << "\n";
+    if (verbosity > 0) {
+        std::cout << "Using random seed: " << seed_tracker_.next_seed() << "\n";
+        std::cout << "Using threads: " << threads << "\n";
 
-    {
         std::string tf_ver = TfLiteVersion();
         std::cout << "Using TFLite version: " << tf_ver << "\n";
         std::string expected = std::to_string(TFLITE_VERSION_MAJOR) + "." + std::to_string(TFLITE_VERSION_MINOR) + ".";
@@ -571,7 +571,7 @@ int ModelRunner::parse_flags(int argc, char **argv, std::vector<std::string> &fi
 }
 
 void ModelRunner::run(const std::string &filename) {
-    std::cout << "\nProcessing " << filename << " ...\n";
+    std::cout << "Processing " << filename << " ...\n";
 
     const std::vector<char> buffer = read_entire_file(filename);
 
@@ -611,28 +611,13 @@ void ModelRunner::run(const std::string &filename) {
     };
 
     for (WhichRun i : active_runs) {
-        std::cout << "Executing in " << RunNames[i] << " ...\n";
         results[i] = execs.at(i)();
     }
 
     // ----- Log benchmark times
     if (do_benchmark) {
-
         for (WhichRun i : active_runs) {
-            std::cout << RunNames[i] << " Time: " << std::chrono::duration_cast<std::chrono::microseconds>(results[i].time).count() << " us"
-                      << "\n";
-        }
-
-        for (WhichRun i : active_runs) {
-            if (i == kTfLite) {
-                continue;
-            }
-            double ratio = (results[i].time / results[kTfLite].time);
-            std::cout << RunNames[i] << " = " << ratio * 100.0 << "% of " << RunNames[kTfLite];
-            if (ratio > 1.0) {
-                std::cout << "  *** " << RunNames[i] << " IS SLOWER";
-            }
-            std::cout << "\n";
+            std::cout << RunNames[i] << " Time: " << std::chrono::duration_cast<std::chrono::microseconds>(results[i].time).count() << " us\n";
         }
     }
 
@@ -648,13 +633,8 @@ void ModelRunner::run(const std::string &filename) {
             }
         }
 
-        if (all_matched) {
-            std::cout << "All comparisons matched!\n";
-        } else {
-            std::cerr << "Some runs exceeded the error threshold!\n";
-            if (!keep_going) {
-                exit(1);
-            }
+        if (!all_matched && !keep_going) {
+            exit(1);
         }
     }
 }
