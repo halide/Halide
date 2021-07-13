@@ -72,19 +72,21 @@ public:
 
         Func filter_bounded("filter_bounded");
         Func bias_bounded("bias_bounded");
+        Expr filter_c = c;
         if (shallow_) {
             // When the filter is shallow, we need a boundary condition on the
             // filter and bias.
             Expr filter_depth = filter_.dim(0).extent();
             filter_bounded(c, x, y) = filter_(c % filter_depth, x, y);
             bias_bounded(c) = bias_(c % filter_depth);
+
+            // For shallow depthwise, we repeat the filter at multiples of the vector size.
+            filter_c = c % vector_size;
         } else {
             filter_bounded(c, x, y) = filter_(c, x, y);
             bias_bounded(c) = bias_(c);
         }
 
-        // For shallow depthwise, we repeat the filter at multiples of the vector size.
-        Expr filter_c = shallow_ ? c % vector_size : c;
 
         Func filter_zeroed("filter_zeroed");
         filter_zeroed(c, x, y) = i16(filter_bounded(c, x, y)) - i16(filter_zero_);
