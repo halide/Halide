@@ -32,7 +32,7 @@ Qualcomm Snapdragon 855 A76 core (Pixel 4):
 | inception_v2_224_quant | 49.8 | 33.5 | 1.49 |
 | inception_v3_quant | 97 | 87.6 | 1.11 |
 | inception_v4_299_quant | 198 | 183.4 | 1.09 |
-| mobilenet_v1_0.25_128_quant	| 0.97 | 0.72 | 1.34 |
+| mobilenet_v1_0.25_128_quant	| 0.97 | 0.63 | 1.54 |
 | mobilenet_v1_1.0_128_quant |4.64 | 4.44 | 1.05 |
 | mobilenet_v1_1.0_224_quant | 12.9 | 11.6 | 1.11 |
 | mobilenet_v2_1.0_224_quant | 11.8 | 9.72 | 1.21 |
