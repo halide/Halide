@@ -142,7 +142,10 @@ public:
         interpret_as_tensor(bias_);
         interpret_as_tensor(output_);
         require_same_min_extent(3, input_, output_);
-        if (!shallow_) {
+        if (shallow_) {
+            // Shallow inputs should have fused c and x, and left x as a dummy dim.
+            output_.dim(1).set_min(0).set_extent(1);
+        } else {
             require_same_min_extent(0, output_, bias_);
             require_same_min_extent(0, output_, filter_);
         }
