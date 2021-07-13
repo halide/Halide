@@ -164,13 +164,7 @@ define weak_odr <8 x i16> @saturating_narrow_i32x8_to_u16x8(<8 x i32> %x) nounwi
 ;   }
 
 ; single to double-precision floating point
-
-declare <2 x double> @llvm.wasm.promote.low(<4 x float>)
-
 define weak_odr <4 x double> @float_to_double(<4 x float> %x) nounwind alwaysinline {
-  %1 = shufflevector <4 x float> %x, <4 x float> undef, <4 x i32> <i32 2, i32 3, i32 undef, i32 undef>
-  %2 = tail call <2 x double> @llvm.wasm.promote.low(<4 x float> %x)
-  %3 = tail call <2 x double> @llvm.wasm.promote.low(<4 x float> %1)
-  %4 = shufflevector <2 x double> %2, <2 x double> %3, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
-  ret <4 x double> %4
+  %1 = fpext <4 x float> %x to <4 x double>
+  ret <4 x double> %1
 }

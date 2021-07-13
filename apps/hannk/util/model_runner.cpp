@@ -191,7 +191,7 @@ int FlagProcessor::process(int argc, char **argv) const {
         } else if (i + 1 < argc) {
             value = argv[++i];
         } else {
-            r = handle_missing_value(flag);
+            r = missing_value_handler(flag);
             if (r != 0) {
                 return r;
             } else {
@@ -200,7 +200,7 @@ int FlagProcessor::process(int argc, char **argv) const {
         }
         auto it = flag_handlers.find(flag);
         if (it == flag_handlers.end()) {
-            r = handle_unknown_flag(flag);
+            r = unknown_flag_handler(flag);
             if (r != 0) {
                 return r;
             } else {
@@ -388,9 +388,7 @@ ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer
     }
 
     InterpreterOptions options;
-    if (verbosity) {
-        options.verbose = true;
-    }
+    options.verbosity = verbosity;
     Interpreter interpreter(std::move(model), std::move(options));
 
     // Fill in the inputs with pseudorandom data (save the seeds for later).

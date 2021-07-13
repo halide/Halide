@@ -386,9 +386,7 @@ public:
         }
 
         InterpreterOptions options;
-        if (options_.verbosity) {
-            options.verbose = true;
-        }
+        options.verbosity = options_.verbosity;
         interpreter_ = std::unique_ptr<Interpreter>(new Interpreter(std::move(model_), std::move(options)));
 
         for (int tensor_id : TfLiteIntArrayView(node->outputs)) {
