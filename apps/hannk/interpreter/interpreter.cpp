@@ -93,7 +93,7 @@ std::unique_ptr<char[]> allocate_tensors(OpGroup *root, const InterpreterOptions
     FindAllocatableTensors find_tensors;
     root->accept(&find_tensors);
 
-    if (options.verbose) {
+    if (options.verbosity >= 1) {
         for (const auto &it : find_tensors.tensor_info) {
             const auto &info = it.second;
             HLOG(INFO) << "TensorStorage of size " << info.size_needed << " life [" << info.first_use << " ... " << info.last_use << "]";
@@ -116,13 +116,18 @@ std::unique_ptr<char[]> allocate_tensors(OpGroup *root, const InterpreterOptions
     }
     planner.commit();
 
-    if (options.verbose) {
-        HLOG(INFO) << "Arena memory needed: " << planner.memory_needed();
+    if (options.verbosity >= 1) {
         std::ostringstream oss;
+        oss << "Arena memory needed: " << planner.memory_needed() << '\n';
+        oss << "    Offsets:";
         for (int i = 0; i < planner.block_count(); i++) {
             oss << ' ' << planner.get_block_offset(i);
         }
-        HLOG(INFO) << "    Offsets:" << oss.str();
+        if (options.verbosity >= 2) {
+            oss << "\nUsage Map:\n";
+            planner.dump(oss);
+        }
+        HLOG(INFO) << oss.str();
     }
 
     // Allocate the chunk we need. Be sure to over-allocate for alignment.
