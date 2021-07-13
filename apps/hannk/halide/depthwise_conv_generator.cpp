@@ -166,8 +166,9 @@ public:
         // We split co and reorder it outermost, so we can maximize locality of the
         // filter. We even put it outside of the batch loop, so we can compute the
         // boundary condition on the filter at co and reuse it across batches.
-        const int kTileW = 2;
-        const int kTileH = 2;
+        const int kAccumulators = 4;
+        const int kTileW = shallow_ ? 1 : 2;
+        const int kTileH = kAccumulators / kTileW;
         // When the output is small, the overhead from shift inwards can be large.
         // Only tile when the input is at least this many tiles to avoid this.
         const int kMinTiles = 4;
