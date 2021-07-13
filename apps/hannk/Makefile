@@ -160,6 +160,10 @@ $(BIN)/%/halide/depthwise_conv_dm1_uint8.a: $(GENERATOR_BIN)/depthwise_conv.gene
 	@mkdir -p $(@D)
 	$< -g DepthwiseConv inv_depth_multiplier=1 -f hannk::depthwise_conv_dm1_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
+$(BIN)/%/halide/depthwise_conv_shallow_dm1_uint8.a: $(GENERATOR_BIN)/depthwise_conv.generator
+	@mkdir -p $(@D)
+	$< -g DepthwiseConv inv_depth_multiplier=1 shallow=true -f hannk::depthwise_conv_shallow_dm1_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
 $(BIN)/%/halide/elementwise_5xuint8_1xuint8.a: $(GENERATOR_BIN)/elementwise.generator
 	@mkdir -p $(@D)
 	$< -g Elementwise inputs.size=5 inputs.type=uint8 output1_type=uint8 -f hannk::elementwise_5xuint8_1xuint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-no_bounds_query-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
@@ -216,6 +220,7 @@ OPS_HALIDE = \
 	$(BIN)/%/halide/depthwise_conv_uint8.a \
 	$(BIN)/%/halide/depthwise_conv_broadcast_uint8.a \
 	$(BIN)/%/halide/depthwise_conv_dm1_uint8.a \
+	$(BIN)/%/halide/depthwise_conv_shallow_dm1_uint8.a \
 	$(BIN)/%/halide/elementwise_5xuint8_1xuint8.a \
 	$(BIN)/%/halide/elementwise_5xint16_1xuint8int16.a \
 	$(BIN)/%/halide/fill_uint8.a \
@@ -377,7 +382,7 @@ HANNK_INTERNAL_DELEGATE_DEPS = \
 
 $(BIN)/%/$(BENCHMARK_OUT): benchmark.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UTIL_DEPS) util/file_util.h
 	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(BENCHMARK_HEXAGON_FLAGS) $(APP_CXXFLAGS) -Wl,--whole-archive $(filter %.cpp %.o %.a,$^) -Wl,--no-whole-archive -o $@ $(LDFLAGS-$*)
+	$(CXX-$*) $(CXXFLAGS-$*) $(BENCHMARK_HEXAGON_FLAGS) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
 
 # To build for Android, use `HL_TARGET=arm-64-android make compare_vs_tflite`

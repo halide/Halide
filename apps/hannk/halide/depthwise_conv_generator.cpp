@@ -11,6 +11,11 @@ public:
     // If positive, a constant inverse depth multiplier.
     GeneratorParam<int> inv_depth_multiplier_{"inv_depth_multiplier", -1};
 
+    // When true, we assume the vector size is divided evenly by the number
+    // of channels, and we use the input_stride_x parameter as the stride of
+    // x of the input, instead of the x dimension of the buffer.
+    GeneratorParam<bool> shallow_{"shallow", false};
+
     // Unsigned 8-bit input tensor, indexed by ci, x, y, b.
     Input<Buffer<uint8_t>> input_{"input", 4};
     Input<uint8_t> input_zero_{"input_zero"};
@@ -36,6 +41,10 @@ public:
     Input<int> dilation_x_{"dilation_x"};
     Input<int> dilation_y_{"dilation_y"};
 
+    // When c and x are fused, this is used to specify the stride of x of the input
+    // within the fused c-x dimension.
+    Input<int> input_stride_x_{"input_stride_x"};
+
     Input<int32_t> output_multiplier_{"output_multiplier"};
     Input<int32_t> output_shift_{"output_shift"};
     Input<uint8_t> output_zero_{"output_zero"};
@@ -47,6 +56,12 @@ public:
     void generate() {
         // The algorithm.
 
+        // For the shallow case, we need to know the vector size in the algorithm.
+        int vector_size = natural_vector_size<uint8_t>();
+        if (get_register_count(target) < 32) {
+            vector_size = natural_vector_size<int16_t>();
+        }
+
         // Some free variables, where x and y represent the spatial dimensions.
         Var x("x"), y("y"), c("c"), b("b");
 
@@ -55,8 +70,25 @@ public:
         Expr c_resampled = inv_depth_multiplier_ >= 0 ? c * inv_depth_multiplier_ : c / depth_multiplier_;
         resampled_input(c, x, y, b) = input_(c_resampled, x, y, b);
 
+        Func filter_bounded("filter_bounded");
+        Func bias_bounded("bias_bounded");
+        Expr filter_c = c;
+        if (shallow_) {
+            // When the filter is shallow, we need a boundary condition on the
+            // filter and bias.
+            Expr filter_depth = filter_.dim(0).extent();
+            filter_bounded(c, x, y) = filter_(c % filter_depth, x, y);
+            bias_bounded(c) = bias_(c % filter_depth);
+
+            // For shallow depthwise, we repeat the filter at multiples of the vector size.
+            filter_c = c % vector_size;
+        } else {
+            filter_bounded(c, x, y) = filter_(c, x, y);
+            bias_bounded(c) = bias_(c);
+        }
+
         Func filter_zeroed("filter_zeroed");
-        filter_zeroed(c, x, y) = i16(filter_(c, x, y)) - i16(filter_zero_);
+        filter_zeroed(c, x, y) = i16(filter_bounded(c, x, y)) - i16(filter_zero_);
 
         // Do the convolution in 32-bit.
         filter_.dim(1).set_min(0);
@@ -64,10 +96,10 @@ public:
         Expr filter_width = filter_.dim(1).extent();
         Expr filter_height = filter_.dim(2).extent();
         RDom r(0, filter_width, 0, filter_height);
-        Expr filter_zeroed_rdxy = filter_zeroed(c, r.x, r.y);
+        Expr filter_zeroed_rdxy = filter_zeroed(filter_c, r.x, r.y);
 
         // We want to compute the reduction:
-        // convolved(c, x, y, b) = bias_(c)
+        // convolved(c, x, y, b) = bias(c)
         // convolved(c, x, y, b) +=
         //    i32(filter_zeroed_rdxy) *
         //    (i32(input_rdxy) - i32(input_zero_))
@@ -75,7 +107,7 @@ public:
         // However, this requires subtracting the input zero at every output.
         // We can factor the reduction like so:
         //
-        // convolved(c, x, y, b) = bias_(c)
+        // convolved(c, x, y, b) = bias(c)
         // convolved(c, x, y, b) +=
         //    i32(filter_zeroed_rdxy) * i32(input_rdxyc) -
         //    i32(filter_zeroed_rdxy) * i32(input_zero_)
@@ -85,12 +117,18 @@ public:
         sum_filter(c) += i32(filter_zeroed_rdxy);
 
         Func offset_c("offset_c");
-        offset_c(c) = bias_(c) - sum_filter(c) * i32(input_zero_);
+        offset_c(c) = bias_bounded(c) - sum_filter(c) * i32(input_zero_);
 
-        Expr input_rdxy =
-            resampled_input(c, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
+        Expr rx = x * stride_x_ + r.x * dilation_x_;
+        Expr ry = y * stride_y_ + r.y * dilation_y_;
+        Expr input_rdxy;
+        if (shallow_) {
+            input_rdxy = resampled_input(c + rx * input_stride_x_, 0, ry, b);
+        } else {
+            input_rdxy = resampled_input(c, rx, ry, b);
+        }
         Func convolved("convolved");
-        convolved(c, x, y, b) = offset_c(c);
+        convolved(c, x, y, b) = offset_c(filter_c);
         convolved(c, x, y, b) += i32(filter_zeroed_rdxy) * i32(input_rdxy);
 
         // Saturate and narrow the output.
@@ -105,12 +143,12 @@ public:
         interpret_as_tensor(bias_);
         interpret_as_tensor(output_);
         require_same_min_extent(3, input_, output_);
-        require_same_min_extent(0, bias_, output_);
-        require_same_min_extent(0, filter_, output_);
-
-        int vector_size = natural_vector_size<uint8_t>();
-        if (get_register_count(target) < 32) {
-            vector_size = natural_vector_size<int16_t>();
+        if (shallow_) {
+            // Shallow inputs should have fused c and x, and left x as a dummy dim.
+            output_.dim(1).set_min(0).set_extent(1);
+        } else {
+            require_same_min_extent(0, output_, bias_);
+            require_same_min_extent(0, output_, filter_);
         }
 
         if (inv_depth_multiplier_ == 0) {
@@ -132,8 +170,9 @@ public:
         // We split co and reorder it outermost, so we can maximize locality of the
         // filter. We even put it outside of the batch loop, so we can compute the
         // boundary condition on the filter at co and reuse it across batches.
-        const int kTileW = 2;
-        const int kTileH = 2;
+        const int kAccumulators = 4;
+        const int kTileW = shallow_ ? 1 : 2;
+        const int kTileH = kAccumulators / kTileW;
         // When the output is small, the overhead from shift inwards can be large.
         // Only tile when the input is at least this many tiles to avoid this.
         const int kMinTiles = 4;
@@ -188,21 +227,22 @@ public:
             resampled_input.specialize(depth_multiplier_ == 1);
         }
 
+        LoopLevel filter_compute_at = shallow_ ? LoopLevel::root() : LoopLevel(output_, co);
+
         // This doesn't read from any of the inputs directly, so we can vectorize
         // rounding up.
-        offset_c.compute_at(output_, co)
+        offset_c.compute_at(filter_compute_at)
             .store_in(MemoryType::Stack)
             .vectorize(c, vector_size, TailStrategy::RoundUp);
 
-        filter_zeroed.compute_at(output_, co)
+        filter_zeroed.compute_at(filter_compute_at)
             .store_in(MemoryType::Stack)
             .align_storage(c, vector_size)
             .vectorize(c, vector_size, TailStrategy::PredicateLoads);
 
-        bias_.in()
-            .compute_at(output_, co)
+        bias_bounded.compute_at(filter_compute_at)
             .store_in(MemoryType::Stack)
-            .vectorize(_0, vector_size, TailStrategy::PredicateLoads);
+            .vectorize(c, vector_size, TailStrategy::PredicateLoads);
     }
 };
 
