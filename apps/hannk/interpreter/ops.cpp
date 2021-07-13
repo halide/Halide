@@ -859,7 +859,7 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
             .elementwise(3, 3);
         if (depth_multiplier_ == 1) {
             const int alignment = get_depthwise_conv_channel_alignment();
-            if (alignment % input()->extent(0) == 0) {
+            if (alignment % input()->extent(0) == 0 && stride_[0] == 1) {
                 // We can use the shallow version of depthwise here.
             } else {
                 result.align_input(0, alignment);
@@ -897,10 +897,12 @@ void DepthwiseConv2DOp::execute() {
         const auto output_range = get_output_range(activation_, out->quantization());
 
         // If the number of channels is small and divides the channel alignment,
-        // we can use the "shallow" version of depthwise conv, which fuses c and x,
-        // and passes the stride of x into the pipeline manually.
+        // and the stride of the filter in x is 1, we can use the "shallow"
+        // version of depthwise conv, which fuses c and x, and passes the stride
+        // of x into the pipeline manually.
         int input_stride_x = 0;
         if (depth_multiplier_ == 1 &&
+            stride_[0] == 1 &&
             can_fuse_cx(FuseType::InPlace, input_buf) &&
             can_fuse_cx(FuseType::InPlace, output_buf) &&
             get_depthwise_conv_channel_alignment() % input_buf.dim(0).extent() == 0) {
