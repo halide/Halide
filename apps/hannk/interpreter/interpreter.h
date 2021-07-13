@@ -9,8 +9,8 @@
 namespace hannk {
 
 struct InterpreterOptions {
-    // Whether to dump information during scheduling.
-    bool verbose = false;
+    // Verbosity level. 0 = None.
+    int verbosity = 0;
 
     // Whether to enable tracing.
     bool trace = false;
