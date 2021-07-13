@@ -181,6 +181,7 @@ void IRVisitor::visit(const Store *op) {
 }
 
 void IRVisitor::visit(const Provide *op) {
+    op->predicate.accept(this);
     for (size_t i = 0; i < op->values.size(); i++) {
         op->values[i].accept(this);
     }

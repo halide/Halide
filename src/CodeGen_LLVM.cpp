@@ -1893,7 +1893,7 @@ void CodeGen_LLVM::visit(const Load *op) {
 
     // Predicated load
     if (!is_const_one(op->predicate)) {
-        codegen_predicated_vector_load(op);
+        codegen_predicated_load(op);
         return;
     }
 
@@ -2175,7 +2175,7 @@ void CodeGen_LLVM::scalarize(const Expr &e) {
     value = result;
 }
 
-void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
+void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
     const Ramp *ramp = op->index.as<Ramp>();
     if (ramp && is_const_one(ramp->stride) && !emit_atomic_stores) {  // Dense vector store
         debug(4) << "Predicated dense vector store\n\t" << Stmt(op) << "\n";
@@ -2232,14 +2232,19 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
         Value *vindex = codegen(op->index);
         for (int i = 0; i < op->index.type().lanes(); i++) {
             Constant *lane = ConstantInt::get(i32_t, i);
-            Value *p = builder->CreateExtractElement(vpred, lane);
+            Value *p = vpred;
+            Value *v = vval;
+            Value *idx = vindex;
+            if (op->index.type().lanes() > 1) {
+                p = builder->CreateExtractElement(p, lane);
+                v = builder->CreateExtractElement(v, lane);
+                idx = builder->CreateExtractElement(idx, lane);
+            }
+            internal_assert(p && v && idx);
+
             if (p->getType() != i1_t) {
                 p = builder->CreateIsNotNull(p);
             }
-
-            Value *v = builder->CreateExtractElement(vval, lane);
-            Value *idx = builder->CreateExtractElement(vindex, lane);
-            internal_assert(p && v && idx);
 
             BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
             BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
@@ -2339,7 +2344,7 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred, b
                                      load->alignment, vpred, slice_to_native);
 }
 
-void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
+void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
     const Ramp *ramp = op->index.as<Ramp>();
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
 
@@ -2375,7 +2380,7 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
         debug(4) << "Scalarize predicated vector load\n\t" << load_expr << "\n";
         Expr pred_load = Call::make(load_expr.type(),
                                     Call::if_then_else,
-                                    {op->predicate, load_expr, make_zero(load_expr.type())},
+                                    {op->predicate, load_expr},
                                     Internal::Call::PureIntrinsic);
         value = codegen(pred_load);
     }
@@ -2739,7 +2744,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             scalarize(op);
         } else {
 
-            internal_assert(op->args.size() == 3);
+            internal_assert(op->args.size() == 2 || op->args.size() == 3);
 
             BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
             BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
@@ -2755,7 +2760,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             BasicBlock *true_pred = builder->GetInsertBlock();
 
             builder->SetInsertPoint(false_bb);
-            Value *false_value = codegen(op->args[2]);
+            Value *false_value = codegen(op->args.size() == 3 ? op->args[2] : make_zero(op->type));
             builder->CreateBr(after_bb);
             BasicBlock *false_pred = builder->GetInsertBlock();
 
@@ -4013,7 +4018,7 @@ void CodeGen_LLVM::visit(const Store *op) {
 
     // Predicated store.
     if (!is_const_one(op->predicate)) {
-        codegen_predicated_vector_store(op);
+        codegen_predicated_store(op);
         return;
     }
 

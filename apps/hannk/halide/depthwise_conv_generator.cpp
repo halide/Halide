@@ -138,36 +138,27 @@ public:
         // Only tile when the input is at least this many tiles to avoid this.
         const int kMinTiles = 4;
         Var xo("xo"), yo("yo"), co("co");
-        Expr output_channels = output_.dim(0).extent();
         Expr output_width = output_.dim(1).extent();
         Expr output_height = output_.dim(2).extent();
         Expr use_tiles =
             (output_width >= kTileW * kMinTiles || output_width % kTileW == 0) &&
             (output_height >= kTileH * kMinTiles || output_height % kTileH == 0);
         output_.compute_root()
-            .specialize(output_channels >= vector_size && use_tiles)
+            .specialize(use_tiles)
             .tile(x, y, xo, yo, x, y, kTileW, kTileH, TailStrategy::ShiftInwards)
-            .split(c, co, c, vector_size, TailStrategy::ShiftInwards)
+            .split(c, co, c, vector_size, TailStrategy::PredicateStores)
             .reorder(x, y, c, xo, yo, b, co)
             .unroll(x)
             .unroll(y)
             .vectorize(c);
 
-        // Enable 1x1 outputs to work.
+        // In the general case, use dummy 1x1 tiles.
         output_
-            .tile(x, y, xo, yo, x, y, 1, 1, TailStrategy::RoundUp)
+            .tile(x, y, xo, yo, x, y, 1, 1)
+            .split(c, co, c, vector_size, TailStrategy::PredicateStores)
+            .reorder(x, y, c, xo, yo, b, co)
             .unroll(x)
-            .unroll(y);
-
-        // Vectorize c, using predication only for small numbers of channels.
-        output_
-            .specialize(output_channels >= vector_size)
-            .split(c, co, c, vector_size, TailStrategy::ShiftInwards)
-            .reorder(x, y, c, xo, yo, b, co)
-            .vectorize(c);
-        output_
-            .split(c, co, c, vector_size, TailStrategy::Predicate)
-            .reorder(x, y, c, xo, yo, b, co)
+            .unroll(y)
             .vectorize(c);
 
         convolved.compute_at(output_, xo)
@@ -197,16 +188,21 @@ public:
             resampled_input.specialize(depth_multiplier_ == 1);
         }
 
-        filter_zeroed.compute_at(output_, co)
-            .store_in(MemoryType::Stack)
-            .align_storage(c, natural_vector_size<int16_t>())
-            .vectorize(c, natural_vector_size<int16_t>(), TailStrategy::GuardWithIf)
-            .unroll(c, 2, TailStrategy::GuardWithIf);
-
+        // This doesn't read from any of the inputs directly, so we can vectorize
+        // rounding up.
         offset_c.compute_at(output_, co)
             .store_in(MemoryType::Stack)
-            .align_storage(c, natural_vector_size<int32_t>())
-            .vectorize(c, vector_size, TailStrategy::GuardWithIf);
+            .vectorize(c, vector_size, TailStrategy::RoundUp);
+
+        filter_zeroed.compute_at(output_, co)
+            .store_in(MemoryType::Stack)
+            .align_storage(c, vector_size)
+            .vectorize(c, vector_size, TailStrategy::PredicateLoads);
+
+        bias_.in()
+            .compute_at(output_, co)
+            .store_in(MemoryType::Stack)
+            .vectorize(_0, vector_size, TailStrategy::PredicateLoads);
     }
 };
 

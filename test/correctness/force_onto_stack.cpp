@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    for (TailStrategy tail_strategy : {TailStrategy::GuardWithIf, TailStrategy::Predicate}) {
+    for (TailStrategy tail_strategy : {TailStrategy::GuardWithIf, TailStrategy::Predicate, TailStrategy::PredicateLoads}) {
         // Another way in which a larger static allocation is
         // preferable to a smaller dynamic one is when you compute
         // something at a split guarded by an if. In the very last
