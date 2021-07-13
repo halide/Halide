@@ -12,8 +12,8 @@ public:
     GeneratorParam<int> inv_depth_multiplier_{"inv_depth_multiplier", -1};
 
     // When true, we assume the vector size is divided evenly by the number
-    // of channels, and we use the stride_rx parameter as the stride of x of
-    // the input, instead of the x dimension of the buffer.
+    // of channels, and we use the input_stride_x parameter as the stride of
+    // x of the input, instead of the x dimension of the buffer.
     GeneratorParam<bool> shallow_{"shallow", false};
 
     // Unsigned 8-bit input tensor, indexed by ci, x, y, b.
