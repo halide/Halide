@@ -70,12 +70,24 @@ public:
         Expr c_resampled = inv_depth_multiplier_ >= 0 ? c * inv_depth_multiplier_ : c / depth_multiplier_;
         resampled_input(c, x, y, b) = input_(c_resampled, x, y, b);
 
+        Func filter_bounded("filter_bounded");
+        Func bias_bounded("bias_bounded");
+        if (shallow_) {
+            // When the filter is shallow, we need a boundary condition on the
+            // filter and bias.
+            Expr filter_depth = filter_.dim(0).extent();
+            filter_bounded(c, x, y) = filter_(c % filter_depth, x, y);
+            bias_bounded(c) = bias_(c % filter_depth);
+        } else {
+            filter_bounded(c, x, y) = filter_(c, x, y);
+            bias_bounded(c) = bias_(c);
+        }
+
         // For shallow depthwise, we repeat the filter at multiples of the vector size.
         Expr filter_c = shallow_ ? c % vector_size : c;
 
         Func filter_zeroed("filter_zeroed");
-        Expr filter_depth = filter_.dim(0).extent();
-        filter_zeroed(c, x, y) = i16(filter_(c % filter_depth, x, y)) - i16(filter_zero_);
+        filter_zeroed(c, x, y) = i16(filter_bounded(c, x, y)) - i16(filter_zero_);
 
         // Do the convolution in 32-bit.
         filter_.dim(1).set_min(0);
@@ -86,7 +98,7 @@ public:
         Expr filter_zeroed_rdxy = filter_zeroed(filter_c, r.x, r.y);
 
         // We want to compute the reduction:
-        // convolved(c, x, y, b) = bias_(c)
+        // convolved(c, x, y, b) = bias(c)
         // convolved(c, x, y, b) +=
         //    i32(filter_zeroed_rdxy) *
         //    (i32(input_rdxy) - i32(input_zero_))
@@ -94,7 +106,7 @@ public:
         // However, this requires subtracting the input zero at every output.
         // We can factor the reduction like so:
         //
-        // convolved(c, x, y, b) = bias_(c)
+        // convolved(c, x, y, b) = bias(c)
         // convolved(c, x, y, b) +=
         //    i32(filter_zeroed_rdxy) * i32(input_rdxyc) -
         //    i32(filter_zeroed_rdxy) * i32(input_zero_)
@@ -104,7 +116,7 @@ public:
         sum_filter(c) += i32(filter_zeroed_rdxy);
 
         Func offset_c("offset_c");
-        offset_c(c) = bias_(c % filter_depth) - sum_filter(c) * i32(input_zero_);
+        offset_c(c) = bias_bounded(c) - sum_filter(c) * i32(input_zero_);
 
         Expr rx = x * stride_x_ + r.x * dilation_x_;
         Expr ry = y * stride_y_ + r.y * dilation_y_;
@@ -131,8 +143,8 @@ public:
         interpret_as_tensor(output_);
         require_same_min_extent(3, input_, output_);
         if (!shallow_) {
-            require_same_min_extent(0, bias_, output_);
-            require_same_min_extent(0, filter_, output_);
+            require_same_min_extent(0, output_, bias_);
+            require_same_min_extent(0, output_, filter_);
         }
 
         if (inv_depth_multiplier_ == 0) {
@@ -223,10 +235,9 @@ public:
             .align_storage(c, vector_size)
             .vectorize(c, vector_size, TailStrategy::PredicateLoads);
 
-        bias_.in()
-            .compute_at(filter_compute_at)
+        bias_bounded.compute_at(filter_compute_at)
             .store_in(MemoryType::Stack)
-            .vectorize(_0, vector_size, TailStrategy::PredicateLoads);
+            .vectorize(c, vector_size, TailStrategy::PredicateLoads);
     }
 };
 
