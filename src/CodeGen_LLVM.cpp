@@ -27,12 +27,11 @@
 #include "Simplify.h"
 #include "Util.h"
 
-#if !(__cplusplus > 199711L || _MSC_VER >= 1800)
-
-// VS2013 isn't fully C++11 compatible, but it supports enough of what Halide
-// needs for now to be an acceptable minimum for Windows.
-#error "Halide requires C++11 or VS2013+; please upgrade your compiler."
-
+// MSVC won't set __cplusplus correctly unless certain compiler flags are set
+// (and CMake doesn't set those flags for you even if you specify C++17),
+// so we need to check against _MSVC_LANG as well, for completeness.
+#if !(__cplusplus >= 201703L || _MSVC_LANG >= 201703L)
+#error "Halide requires C++17 or later; please upgrade your compiler."
 #endif
 
 namespace Halide {
@@ -1894,7 +1893,7 @@ void CodeGen_LLVM::visit(const Load *op) {
 
     // Predicated load
     if (!is_const_one(op->predicate)) {
-        codegen_predicated_vector_load(op);
+        codegen_predicated_load(op);
         return;
     }
 
@@ -2176,7 +2175,7 @@ void CodeGen_LLVM::scalarize(const Expr &e) {
     value = result;
 }
 
-void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
+void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
     const Ramp *ramp = op->index.as<Ramp>();
     if (ramp && is_const_one(ramp->stride) && !emit_atomic_stores) {  // Dense vector store
         debug(4) << "Predicated dense vector store\n\t" << Stmt(op) << "\n";
@@ -2233,14 +2232,19 @@ void CodeGen_LLVM::codegen_predicated_vector_store(const Store *op) {
         Value *vindex = codegen(op->index);
         for (int i = 0; i < op->index.type().lanes(); i++) {
             Constant *lane = ConstantInt::get(i32_t, i);
-            Value *p = builder->CreateExtractElement(vpred, lane);
+            Value *p = vpred;
+            Value *v = vval;
+            Value *idx = vindex;
+            if (op->index.type().lanes() > 1) {
+                p = builder->CreateExtractElement(p, lane);
+                v = builder->CreateExtractElement(v, lane);
+                idx = builder->CreateExtractElement(idx, lane);
+            }
+            internal_assert(p && v && idx);
+
             if (p->getType() != i1_t) {
                 p = builder->CreateIsNotNull(p);
             }
-
-            Value *v = builder->CreateExtractElement(vval, lane);
-            Value *idx = builder->CreateExtractElement(vindex, lane);
-            internal_assert(p && v && idx);
 
             BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
             BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
@@ -2317,7 +2321,11 @@ llvm::Value *CodeGen_LLVM::codegen_dense_vector_load(const Type &type, const std
         Instruction *load_inst;
         if (vpred != nullptr) {
             Value *slice_mask = slice_vector(vpred, i, slice_lanes);
+#if LLVM_VERSION >= 130
+            load_inst = builder->CreateMaskedLoad(slice_type, vec_ptr, llvm::Align(align_bytes), slice_mask);
+#else
             load_inst = builder->CreateMaskedLoad(vec_ptr, llvm::Align(align_bytes), slice_mask);
+#endif
         } else {
             load_inst = builder->CreateAlignedLoad(vec_ptr->getType()->getPointerElementType(), vec_ptr, llvm::Align(align_bytes));
         }
@@ -2336,7 +2344,7 @@ Value *CodeGen_LLVM::codegen_dense_vector_load(const Load *load, Value *vpred, b
                                      load->alignment, vpred, slice_to_native);
 }
 
-void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
+void CodeGen_LLVM::codegen_predicated_load(const Load *op) {
     const Ramp *ramp = op->index.as<Ramp>();
     const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
 
@@ -2372,8 +2380,8 @@ void CodeGen_LLVM::codegen_predicated_vector_load(const Load *op) {
         debug(4) << "Scalarize predicated vector load\n\t" << load_expr << "\n";
         Expr pred_load = Call::make(load_expr.type(),
                                     Call::if_then_else,
-                                    {op->predicate, load_expr, make_zero(load_expr.type())},
-                                    Internal::Call::Intrinsic);
+                                    {op->predicate, load_expr},
+                                    Internal::Call::PureIntrinsic);
         value = codegen(pred_load);
     }
 }
@@ -2736,7 +2744,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             scalarize(op);
         } else {
 
-            internal_assert(op->args.size() == 3);
+            internal_assert(op->args.size() == 2 || op->args.size() == 3);
 
             BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
             BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
@@ -2752,7 +2760,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             BasicBlock *true_pred = builder->GetInsertBlock();
 
             builder->SetInsertPoint(false_bb);
-            Value *false_value = codegen(op->args[2]);
+            Value *false_value = codegen(op->args.size() == 3 ? op->args[2] : make_zero(op->type));
             builder->CreateBr(after_bb);
             BasicBlock *false_pred = builder->GetInsertBlock();
 
@@ -2963,7 +2971,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             value = create_alloca_at_entry(halide_buffer_t_type, 1);
         } else {
             const int64_t *sz = as_const_int(op->args[0]);
-            internal_assert(sz);
+            internal_assert(sz != nullptr);
             if (op->type == type_of<struct halide_dimension_t *>()) {
                 value = create_alloca_at_entry(dimension_t_type, *sz / sizeof(halide_dimension_t));
             } else {
@@ -3161,7 +3169,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         builder->setFastMathFlags(safe_flags);
         builder->setDefaultFPMathTag(strict_fp_math_md);
         value = codegen(op->args[0]);
-    } else if (is_float16_transcendental(op)) {
+    } else if (is_float16_transcendental(op) && !supports_call_as_float16(op)) {
         value = codegen(lower_float16_transcendental_to_float32_equivalent(op));
     } else if (op->is_intrinsic(Call::mux)) {
         value = codegen(lower_mux(op));
@@ -3197,7 +3205,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         Expr e = Internal::halide_exp(op->args[0]);
         e.accept(this);
     } else if (op->call_type == Call::PureExtern &&
-               (op->name == "is_nan_f32" || op->name == "is_nan_f64")) {
+               (op->name == "is_nan_f32" || op->name == "is_nan_f64" || op->name == "is_nan_f16")) {
         internal_assert(op->args.size() == 1);
         Value *a = codegen(op->args[0]);
 
@@ -3219,7 +3227,7 @@ void CodeGen_LLVM::visit(const Call *op) {
 
         value = builder->CreateFCmpUNO(a, a);
     } else if (op->call_type == Call::PureExtern &&
-               (op->name == "is_inf_f32" || op->name == "is_inf_f64")) {
+               (op->name == "is_inf_f32" || op->name == "is_inf_f64" || op->name == "is_inf_f16")) {
         internal_assert(op->args.size() == 1);
 
         IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
@@ -3234,7 +3242,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         Expr inf = e.type().max();
         codegen(abs(e) == inf);
     } else if (op->call_type == Call::PureExtern &&
-               (op->name == "is_finite_f32" || op->name == "is_finite_f64")) {
+               (op->name == "is_finite_f32" || op->name == "is_finite_f64" || op->name == "is_finite_f16")) {
         internal_assert(op->args.size() == 1);
         internal_assert(op->args[0].type().is_float());
 
@@ -4010,7 +4018,7 @@ void CodeGen_LLVM::visit(const Store *op) {
 
     // Predicated store.
     if (!is_const_one(op->predicate)) {
-        codegen_predicated_vector_store(op);
+        codegen_predicated_store(op);
         return;
     }
 
@@ -4283,6 +4291,8 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
 
     if (op->is_interleave()) {
         value = interleave_vectors(vecs);
+    } else if (op->is_concat()) {
+        value = concat_vectors(vecs);
     } else {
         // If the even-numbered indices equal the odd-numbered
         // indices, only generate one and then do a self-interleave.
@@ -4359,9 +4369,7 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
 
         // Do a concat and then a single shuffle
         value = concat_vectors(vecs);
-        if (op->is_concat()) {
-            // If this is just a concat, we're done.
-        } else if (op->is_slice() && op->slice_stride() == 1) {
+        if (op->is_slice() && op->slice_stride() == 1) {
             value = slice_vector(value, op->indices[0], op->indices.size());
         } else {
             value = shuffle_vectors(value, op->indices);
@@ -4382,6 +4390,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
     const int output_lanes = op->type.lanes();
     const int native_lanes = native_vector_bits() / op->type.bits();
     const int factor = val.type().lanes() / output_lanes;
+    Type elt = op->type.element_of();
 
     Expr (*binop)(Expr, Expr) = nullptr;
     switch (op->op) {
@@ -4432,7 +4441,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
         return;
     }
 
-    if (op->type.element_of() == Float(16)) {
+    if (elt == Float(16) && upgrade_type_for_arithmetic(elt) != elt) {
         Expr equiv = cast(op->value.type().with_bits(32), op->value);
         equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
         if (init.defined()) {
@@ -5103,6 +5112,10 @@ bool CodeGen_LLVM::use_pic() const {
 
 std::string CodeGen_LLVM::mabi() const {
     return "";
+}
+
+bool CodeGen_LLVM::supports_call_as_float16(const Call *op) const {
+    return false;
 }
 
 }  // namespace Internal

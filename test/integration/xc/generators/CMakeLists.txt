@@ -21,4 +21,4 @@ target_link_libraries(add_gen PRIVATE Halide::Generator)
 
 export(TARGETS add_gen
        NAMESPACE xc::
-       FILE "${CMAKE_CURRENT_BINARY_DIR}/lib/cmake/xc-generators/xc-generators-config.cmake")
+       FILE "${CMAKE_BINARY_DIR}/share/xc-generators/xc-generators-config.cmake")

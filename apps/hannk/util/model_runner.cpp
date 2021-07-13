@@ -3,6 +3,10 @@
 #include <iostream>
 #include <random>
 
+#ifndef _WIN32
+#include <unistd.h>
+#endif
+
 #include "util/model_runner.h"
 
 #include "delegate/hannk_delegate.h"
@@ -146,6 +150,70 @@ static const char *const RunNames[ModelRunner::kNumRuns] = {
 };
 
 }  // namespace
+
+int FlagProcessor::handle_nonflag(const std::string &s) {
+    // just ignore it
+    return 0;
+}
+
+int FlagProcessor::handle_unknown_flag(const std::string &s) {
+    std::cerr << "Unknown flag '" << s << "'\n";
+    return -1;
+}
+
+int FlagProcessor::handle_missing_value(const std::string &s) {
+    std::cerr << "Missing value for flag '" << s << "'\n";
+    return -1;
+}
+
+int FlagProcessor::process(int argc, char **argv) const {
+    int r;
+    for (int i = 1; i < argc; i++) {
+        std::string flag = argv[i];
+        if (flag[0] != '-') {
+            r = nonflag_handler(flag);
+            if (r != 0) {
+                return r;
+            } else {
+                continue;
+            }
+        }
+        flag = flag.substr(1);
+        if (flag[0] == '-') {
+            flag = flag.substr(1);
+        }
+
+        std::string value;
+        auto eq = flag.find('=');
+        if (eq != std::string::npos) {
+            value = flag.substr(eq + 1);
+            flag = flag.substr(0, eq);
+        } else if (i + 1 < argc) {
+            value = argv[++i];
+        } else {
+            r = missing_value_handler(flag);
+            if (r != 0) {
+                return r;
+            } else {
+                continue;
+            }
+        }
+        auto it = flag_handlers.find(flag);
+        if (it == flag_handlers.end()) {
+            r = unknown_flag_handler(flag);
+            if (r != 0) {
+                return r;
+            } else {
+                continue;
+            }
+        }
+        r = it->second(value);
+        if (r != 0) {
+            return r;
+        }
+    }
+    return 0;
+}
 
 void SeedTracker::reset(int seed) {
     next_seed_ = seed;
@@ -319,7 +387,9 @@ ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer
         model->dump(std::cout);
     }
 
-    Interpreter interpreter(std::move(model));
+    InterpreterOptions options;
+    options.verbosity = verbosity;
+    Interpreter interpreter(std::move(model), std::move(options));
 
     // Fill in the inputs with pseudorandom data (save the seeds for later).
     for (TensorPtr t : interpreter.inputs()) {
@@ -364,7 +434,7 @@ ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer
 ModelRunner::RunResult ModelRunner::run_in_tflite(const std::vector<char> &buffer, TfLiteDelegate *delegate) {
     RunResult result;
 
-    TfLiteModelRunner tfrunner(buffer, threads, seed_tracker_, &std::cout, delegate);
+    TfLiteModelRunner tfrunner(buffer, threads, seed_tracker_, verbosity >= 1 ? &std::cout : nullptr, delegate);
 
     // Execute once, to prime the pump
     tfrunner.run_once();
@@ -382,7 +452,7 @@ ModelRunner::RunResult ModelRunner::run_in_tflite(const std::vector<char> &buffe
     return result;
 }
 
-bool ModelRunner::compare_results(const std::string &msg, const RunResult &a, const RunResult &b) {
+bool ModelRunner::compare_results(const std::string &name_a, const std::string &name_b, const RunResult &a, const RunResult &b) {
     bool all_matched = true;
     HCHECK(a.outputs.size() == b.outputs.size());
     for (size_t i = 0; i < a.outputs.size(); ++i) {
@@ -398,14 +468,11 @@ bool ModelRunner::compare_results(const std::string &msg, const RunResult &a, co
         CompareBuffersOptions options;
         options.close_thresh = std::ceil((1ull << tflite_buf.type().bits) * tolerance);
         options.max_diffs_to_log = 8;
-        std::cout << msg;
         CompareBuffersResult r = dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf, options);
         if (r.ok) {
             if (verbosity >= 2) {
-                std::cout << "MATCHING output " << i << " is:\n";
+                std::cout << "Comparing " << name_a << " vs " << name_b << ": MATCHING output " << i << " is:\n";
                 dynamic_type_dispatch<DumpBuffer>(halide_buf.type(), halide_buf);
-            } else {
-                std::cout << "OK!\n";
             }
         } else {
             all_matched = false;
@@ -414,8 +481,97 @@ bool ModelRunner::compare_results(const std::string &msg, const RunResult &a, co
     return all_matched;
 };
 
+int ModelRunner::parse_flags(int argc, char **argv, std::vector<std::string> &files_to_process) {
+    int seed = time(nullptr);
+
+    FlagProcessor fp;
+
+    fp.nonflag_handler = [&files_to_process](const std::string &value) -> int {
+        // Assume it's a file.
+        files_to_process.push_back(value);
+        return 0;
+    };
+
+    fp.flag_handlers = FlagProcessor::FnMap{
+        {"benchmark", [this](const std::string &value) {
+             this->do_benchmark = std::stoi(value) != 0;
+             return 0;
+         }},
+        {"compare", [this](const std::string &value) {
+             this->do_compare_results = std::stoi(value) != 0;
+             return 0;
+         }},
+        {"enable", [this](const std::string &value) {
+             for (int i = 0; i < ModelRunner::kNumRuns; i++) {
+                 this->do_run[i] = false;
+             }
+             for (char c : value) {
+                 switch (c) {
+                 case 't':
+                     this->do_run[ModelRunner::kTfLite] = true;
+                     break;
+                 case 'h':
+                     this->do_run[ModelRunner::kHannk] = true;
+                     break;
+                 case 'x':
+                     this->do_run[ModelRunner::kExternalDelegate] = true;
+                     break;
+                 case 'i':
+                     this->do_run[ModelRunner::kInternalDelegate] = true;
+                     break;
+                 default:
+                     std::cerr << "Unknown option to --enable: " << c << "\n";
+                     return -1;
+                 }
+             }
+             return 0;
+         }},
+        {"external_delegate_path", [this](const std::string &value) {
+             this->external_delegate_path = value;
+             return 0;
+         }},
+        {"keep_going", [this](const std::string &value) {
+             this->keep_going = std::stoi(value) != 0;
+             return 0;
+         }},
+        {"seed", [&seed](const std::string &value) {
+             seed = std::stoi(value);
+             return 0;
+         }},
+        {"threads", [this](const std::string &value) {
+             this->threads = std::stoi(value);
+             return 0;
+         }},
+        {"tolerance", [this](const std::string &value) {
+             this->tolerance = std::stof(value);
+             return 0;
+         }},
+        {"verbose", [this](const std::string &value) {
+             this->verbosity = std::stoi(value);
+             return 0;
+         }},
+    };
+
+    int r = fp.process(argc, argv);
+    if (r != 0) {
+        return r;
+    }
+
+    if (this->threads <= 0) {
+#ifdef _WIN32
+        char *num_cores = getenv("NUMBER_OF_PROCESSORS");
+        this->threads = num_cores ? atoi(num_cores) : 8;
+#else
+        this->threads = sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+    }
+
+    this->set_seed(seed);
+    return 0;
+}
+
 void ModelRunner::run(const std::string &filename) {
-    std::cout << "Processing " << filename << " ...\n";
+    std::cout << "\nProcessing " << filename << " ...\n";
 
     const std::vector<char> buffer = read_entire_file(filename);
 
@@ -454,7 +610,6 @@ void ModelRunner::run(const std::string &filename) {
         {kInternalDelegate, exec_hannk_internal_delegate},
     };
 
-    std::cout << '\n';
     for (WhichRun i : active_runs) {
         std::cout << "Executing in " << RunNames[i] << " ...\n";
         results[i] = execs.at(i)();
@@ -463,13 +618,11 @@ void ModelRunner::run(const std::string &filename) {
     // ----- Log benchmark times
     if (do_benchmark) {
 
-        std::cout << '\n';
         for (WhichRun i : active_runs) {
             std::cout << RunNames[i] << " Time: " << std::chrono::duration_cast<std::chrono::microseconds>(results[i].time).count() << " us"
                       << "\n";
         }
 
-        std::cout << '\n';
         for (WhichRun i : active_runs) {
             if (i == kTfLite) {
                 continue;
@@ -485,23 +638,23 @@ void ModelRunner::run(const std::string &filename) {
 
     // ----- Now compare the outputs
     if (do_compare_results && do_run[kTfLite]) {
-        std::cout << '\n';
-
         bool all_matched = true;
         for (WhichRun i : active_runs) {
             if (i == kTfLite) {
                 continue;
             }
-            std::ostringstream msg;
-            msg << "Comparing " << RunNames[kTfLite] << " vs " << RunNames[i] << ":";
-            if (!compare_results(msg.str(), results[kTfLite], results[i])) {
+            if (!compare_results(RunNames[kTfLite], RunNames[i], results[kTfLite], results[i])) {
                 all_matched = false;
             }
         }
 
-        if (!all_matched) {
+        if (all_matched) {
+            std::cout << "All comparisons matched!\n";
+        } else {
             std::cerr << "Some runs exceeded the error threshold!\n";
-            exit(1);
+            if (!keep_going) {
+                exit(1);
+            }
         }
     }
 }

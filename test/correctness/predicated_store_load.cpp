@@ -70,23 +70,43 @@ public:
 
 int predicated_tail_test(const Target &t) {
     int size = 73;
-    Var x("x"), y("y");
-    Func f("f"), g("g"), ref("ref");
+    for (auto i : {TailStrategy::Predicate, TailStrategy::PredicateLoads, TailStrategy::PredicateStores}) {
+        Var x("x"), y("y");
+        Func f("f"), g("g");
 
-    f(x, y) = x;
+        ImageParam p(Int(32), 2);
 
-    f.vectorize(x, 32, TailStrategy::Predicate);
-    if (t.has_feature(Target::HVX)) {
-        f.hexagon();
-    }
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 0));
+        f(x, y) = p(x, y);
 
-    Buffer<int> im = f.realize({size, size});
-    auto func = [](int x, int y) {
-        return x;
-    };
-    if (check_image(im, func)) {
-        return -1;
+        // We need a wrapper to avoid getting the bounds inflated by the rounding-up cases by realize.
+        g(x, y) = f(x, y);
+        f.compute_root();
+
+        const int vector_size = 32;
+        f.vectorize(x, vector_size, i);
+        if (t.has_feature(Target::HVX)) {
+            f.hexagon();
+        }
+        int predicated_loads = i != TailStrategy::PredicateStores ? 1 : 0;
+        int predicated_stores = i != TailStrategy::PredicateLoads ? 1 : 0;
+        g.add_custom_lowering_pass(new CheckPredicatedStoreLoad(predicated_stores, predicated_loads));
+
+        int buffer_size = size;
+        if (i == TailStrategy::PredicateStores) {
+            buffer_size = ((buffer_size + vector_size - 1) / vector_size) * vector_size;
+        }
+
+        Buffer<int> input(buffer_size, size);
+        input.fill([](int x, int y) { return x; });
+        p.set(input);
+
+        Buffer<int> im = g.realize({size, size});
+        auto func = [](int x, int y) {
+            return x;
+        };
+        if (check_image(im, func)) {
+            return -1;
+        }
     }
     return 0;
 }
@@ -165,7 +185,7 @@ int vectorized_dense_load_with_stride_minus_one_test(const Target &t) {
     if (t.has_feature(Target::HVX)) {
         f.hexagon();
     }
-    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(2, 4));
+    f.add_custom_lowering_pass(new CheckPredicatedStoreLoad(3, 6));
 
     Buffer<int> im = f.realize({size, size});
     auto func = [&im_ref, &im](int x, int y, int z) {
@@ -437,8 +457,7 @@ int vectorized_predicated_load_lut_test(const Target &t) {
     // Ignore the race condition so we can have predicated vectorized
     // LUT loads on both LHS and RHS of the predicated vectorized store
     dst.update().allow_race_conditions().vectorize(r, vector_size);
-    // TODO: This stopped predicating at some point.
-    dst.add_custom_lowering_pass(new CheckPredicatedStoreLoad(0, 0));
+    dst.add_custom_lowering_pass(new CheckPredicatedStoreLoad(1, 2));
 
     dst.realize({dst_len});
 
@@ -460,58 +479,54 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    // TODO: Re-enable this for x86, and enable for other targets?
-    // See: https://github.com/halide/Halide/issues/3534
-    if (t.has_feature(Target::HVX)) {
-        printf("Running vectorized dense load with stride minus one test\n");
-        if (vectorized_dense_load_with_stride_minus_one_test(t) != 0) {
-            return -1;
-        }
+    printf("Running vectorized dense load with stride minus one test\n");
+    if (vectorized_dense_load_with_stride_minus_one_test(t) != 0) {
+        return -1;
+    }
 
-        printf("Running multiple vectorized predicate test\n");
-        if (multiple_vectorized_predicate_test(t) != 0) {
-            return -1;
-        }
+    printf("Running multiple vectorized predicate test\n");
+    if (multiple_vectorized_predicate_test(t) != 0) {
+        return -1;
+    }
 
-        printf("Running vectorized predicated store scalarized predicated load test\n");
-        if (vectorized_predicated_store_scalarized_predicated_load_test(t) != 0) {
-            return -1;
-        }
+    printf("Running vectorized predicated store scalarized predicated load test\n");
+    if (vectorized_predicated_store_scalarized_predicated_load_test(t) != 0) {
+        return -1;
+    }
 
-        printf("Running scalar load test\n");
-        if (scalar_load_test(t) != 0) {
-            return -1;
-        }
+    printf("Running scalar load test\n");
+    if (scalar_load_test(t) != 0) {
+        return -1;
+    }
 
-        printf("Running scalar store test\n");
-        if (scalar_store_test(t) != 0) {
-            return -1;
-        }
+    printf("Running scalar store test\n");
+    if (scalar_store_test(t) != 0) {
+        return -1;
+    }
 
-        printf("Running not dependent on vectorized var test\n");
-        if (not_dependent_on_vectorized_var_test(t) != 0) {
-            return -1;
-        }
+    printf("Running not dependent on vectorized var test\n");
+    if (not_dependent_on_vectorized_var_test(t) != 0) {
+        return -1;
+    }
 
-        printf("Running no-op store test\n");
-        if (no_op_store_test(t) != 0) {
-            return -1;
-        }
+    printf("Running no-op store test\n");
+    if (no_op_store_test(t) != 0) {
+        return -1;
+    }
 
-        printf("Running vectorized predicated with pure call test\n");
-        if (vectorized_predicated_predicate_with_pure_call_test(t) != 0) {
-            return -1;
-        }
+    printf("Running vectorized predicated with pure call test\n");
+    if (vectorized_predicated_predicate_with_pure_call_test(t) != 0) {
+        return -1;
+    }
 
-        printf("Running vectorized predicated load with constant index test\n");
-        if (vectorized_predicated_load_const_index_test(t) != 0) {
-            return -1;
-        }
+    printf("Running vectorized predicated load with constant index test\n");
+    if (vectorized_predicated_load_const_index_test(t) != 0) {
+        return -1;
+    }
 
-        printf("Running vectorized predicated load lut test\n");
-        if (vectorized_predicated_load_lut_test(t) != 0) {
-            return -1;
-        }
+    printf("Running vectorized predicated load lut test\n");
+    if (vectorized_predicated_load_lut_test(t) != 0) {
+        return -1;
     }
 
     printf("Success!\n");
