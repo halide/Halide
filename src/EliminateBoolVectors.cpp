@@ -194,11 +194,11 @@ private:
 
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::if_then_else)) {
-            internal_assert(op->args.size() == 3);
+            internal_assert(op->args.size() == 2 || op->args.size() == 3);
             if (op->args[0].type().is_vector()) {
                 Expr cond = mutate(op->args[0]);
                 Expr true_value = mutate(op->args[1]);
-                Expr false_value = mutate(op->args[2]);
+                Expr false_value = mutate(op->args.size() == 3 ? op->args[2] : make_zero(op->type));
                 Type cond_ty = cond.type();
 
                 // If the condition is a vector, it should be a vector of ints.

@@ -175,7 +175,7 @@ class RollFunc : public IRMutator {
             // The subtractions above simplify more easily if the loop is rebased to 0.
             loops_to_rebase.insert(v->name);
         }
-        return Provide::make(func.name(), values, args);
+        return Provide::make(func.name(), values, args, op->predicate);
     }
 
     Expr visit(const Call *op) override {
