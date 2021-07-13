@@ -87,7 +87,6 @@ public:
             bias_bounded(c) = bias_(c);
         }
 
-
         Func filter_zeroed("filter_zeroed");
         filter_zeroed(c, x, y) = i16(filter_bounded(c, x, y)) - i16(filter_zero_);
 
