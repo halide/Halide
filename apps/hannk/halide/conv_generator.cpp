@@ -187,21 +187,19 @@ public:
         // Some guidelines for picking tile sizes are:
         // - The number of channels must be divided by the tile size, and is almost
         //   always a power of 2, so the tiling in c should be a power of 2.
+        // - The bigger the tile is, the better.
+        // - For two tiles of equal area, the one with bigger x is probably better,
+        //   because fewer loads for the filter will be reused across more values of x.
         const int accumulators = get_accumulator_count(target);
-        const int max_tile_c = 8;
+        const int max_tile_c = 4;
         std::vector<std::pair<int, int>> tile_sizes = {
-            // 24 registers
             {4, 6},
-            {8, 3},
-            // 20 registers
             {4, 5},
-            // 16 registers
             {4, 4},
-            {8, 2},
-            // 8 registers
+            {2, 8},
             {2, 4},
             {4, 2},
-            {8, 1},
+            {4, 1},
         };
 
         // We need to tile the output, but we can't use GuardWithIf because we need
@@ -211,7 +209,7 @@ public:
         Var xo("xo");
         Expr output_channels = output_.dim(0).extent();
         Expr output_width = output_.dim(1).extent();
-        const int min_tile_x = 4;
+        const int min_tile_x = 2;
         for (auto i : tile_sizes) {
             const int tile_c = i.first;
             const int tile_x = i.second;
