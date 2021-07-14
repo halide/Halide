@@ -144,7 +144,7 @@ class FoldStorageOfFunction : public IRMutator {
         if (op->name == func) {
             vector<Expr> args = op->args;
             args[dim] = is_const_one(factor) ? 0 : (args[dim] % factor);
-            stmt = Provide::make(op->name, op->values, args);
+            stmt = Provide::make(op->name, op->values, args, op->predicate);
         }
         return stmt;
     }

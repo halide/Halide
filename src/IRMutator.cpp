@@ -250,11 +250,12 @@ Stmt IRMutator::visit(const Provide *op) {
         }
         new_values[i] = new_value;
     }
+    Expr new_predicate = mutate(op->predicate);
 
-    if (!changed) {
+    if (!changed && new_predicate.same_as(op->predicate)) {
         return op;
     }
-    return Provide::make(op->name, new_values, new_args);
+    return Provide::make(op->name, new_values, new_args, new_predicate);
 }
 
 Stmt IRMutator::visit(const Allocate *op) {
