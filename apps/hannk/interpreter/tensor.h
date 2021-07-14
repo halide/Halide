@@ -80,11 +80,15 @@ class Tensor {
     bool is_dynamic_ = false;
     // If true, this Tensor shares its TensorStorage with at least one other Tensor.
     bool is_alias_ = false;
+    // If true, this Tensor is aliased to another via reshape (rather than cropping),
+    // and may have a different rank from the underlying storage.
+    // Only used if is_alias_ = true.
+    bool is_reshape_alias_ = false;
 
     // Possibly shared storage for this tensor.
     TensorStoragePtr storage_;
     // The offset of this tensor into the storage buffer.
-    // Only used if is_alias_ = true.
+    // Only used if is_alias_ = true and is_reshape_alias_ = false.
     // If storage_offset_.size() < rank(), remaining offset entries are implicitly zero.
     TensorOffset storage_offset_;
 
@@ -206,7 +210,7 @@ public:
     bool is_alias() const {
         return is_alias_;
     }
-    void set_alias_of(const TensorPtr &t, const TensorOffset &offset = {});
+    void set_alias_of(const TensorPtr &t, const TensorOffset &offset = {}, bool is_reshape = false);
 
     bool is_dense() const;
 

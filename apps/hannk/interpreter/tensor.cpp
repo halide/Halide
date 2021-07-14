@@ -5,15 +5,7 @@ namespace hannk {
 namespace {
 
 bool is_dense(const HalideBuffer<const void> &buffer) {
-    int expected_stride = 1;
-    for (int i = 0; i < buffer.dimensions(); i++) {
-        const auto &d = buffer.dim(i);
-        if (expected_stride != d.stride()) {
-            return false;
-        }
-        expected_stride *= d.extent();
-    }
-    return true;
+    return buffer.size_in_bytes() == buffer.number_of_elements() * buffer.type().bytes();
 }
 
 HalideBuffer<void> make_unallocated_buffer(halide_type_t type, const Box &bounds) {
@@ -125,11 +117,16 @@ void Tensor::finish_buffer_allocation() {
     halide_buffer_t *raw_storage_buffer = storage_buffer.raw_buffer();
     assert(raw_storage_buffer->host);
 
-    // Note that this may have a different type than storage_buffer,
-    // though the *size* of the types must match!
-    assert(raw_storage_buffer->type.bytes() == buffer_.type().bytes());
-
-    if (raw_storage_buffer->dimensions == buffer_.dimensions()) {
+    if (is_reshape_alias_) {
+        assert(raw_storage_buffer->number_of_elements() == buffer_.number_of_elements());
+        assert(raw_storage_buffer->type == buffer_.type());
+        assert(storage_offset_.empty());
+        buffer_ = HalideBuffer<void>(buffer_.type(), raw_storage_buffer->host,
+                                     buffer_.raw_buffer()->dimensions, buffer_.raw_buffer()->dim);
+    } else {
+        // Note that this may have a different type than storage_buffer,
+        // though the *size* of the types must match!
+        assert(raw_storage_buffer->type.bytes() == buffer_.type().bytes());
         HalideBuffer<void> final_buffer(buffer_.type(), raw_storage_buffer->host,
                                         raw_storage_buffer->dimensions, raw_storage_buffer->dim);
 
@@ -149,14 +146,6 @@ void Tensor::finish_buffer_allocation() {
         }
 
         buffer_ = std::move(final_buffer);
-    } else {
-        // A rank mismatch can legally happen if we alias the inputs and outputs
-        // of a Reshape op. In that case, all we really care about is that
-        // the storage has enough size for this buffer.
-        assert(raw_storage_buffer->number_of_elements() >= buffer_.number_of_elements());
-        assert(storage_offset_.empty());
-        buffer_ = HalideBuffer<void>(buffer_.type(), raw_storage_buffer->host,
-                                     buffer_.raw_buffer()->dimensions, buffer_.raw_buffer()->dim);
     }
 
     assert(is_allocated());
@@ -202,7 +191,7 @@ void Tensor::resize_dynamic(const Box &new_shape) {
     storage_ = nullptr;
 }
 
-void Tensor::set_alias_of(const TensorPtr &t, const SmallVector<int, max_rank> &storage_offset) {
+void Tensor::set_alias_of(const TensorPtr &t, const SmallVector<int, max_rank> &storage_offset, bool is_reshape) {
     assert(!is_dynamic());
     assert(!is_external());
     assert(!is_alias());
@@ -214,28 +203,36 @@ void Tensor::set_alias_of(const TensorPtr &t, const SmallVector<int, max_rank> &
     storage_ = t->storage();
     storage_offset_ = storage_offset;
 
-#ifndef NDEBUG
-    // Reality-check.
-    Box offset_bounds = bounds();
-    for (int i = 0; i < (int)storage_offset_.size(); i++) {
-        offset_bounds[i] += storage_offset_[i];
-    }
-    auto &shared_buffer = storage_->buffer;
-    assert(shared_buffer.type().bytes() == type().bytes());
-    assert(!shared_buffer.data());
+    if (is_reshape) {
+        is_reshape_alias_ = true;
 
-    // Check that the storage is big enough for this buffer.
-    if (this->rank() == t->rank()) {
+        // No: assume that t->storage() matches the rank+dimensions expected by t
+        // (or, if not, that t->is_reshape_alias_ is already set to true).
+        //
+        // t->is_reshape_alias_ = true;
+    }
+
+#ifndef NDEBUG
+    if (is_reshape) {
+        assert(storage_offset_.empty());
+        assert(this->buffer().type() == t->buffer().type());
+        assert(this->buffer().number_of_elements() == t->buffer().number_of_elements());
+    } else {
+        // Reality-check.
+        Box offset_bounds = bounds();
+        for (int i = 0; i < (int)storage_offset_.size(); i++) {
+            offset_bounds[i] += storage_offset_[i];
+        }
+        auto &shared_buffer = storage_->buffer;
+        assert(shared_buffer.type().bytes() == type().bytes());
         assert(shared_buffer.dimensions() == (int)offset_bounds.size());
+        assert(!shared_buffer.data());
+
+        // Check that the storage is big enough for this buffer.
         for (int i = 0; i < shared_buffer.dimensions(); i++) {
             assert(offset_bounds[i].min >= shared_buffer.dim(i).min());
             assert(offset_bounds[i].max <= shared_buffer.dim(i).max());
         }
-    } else {
-        // A rank mismatch can legally happen if we alias the inputs and outputs
-        // of a Reshape op. In that case, all we really care about is that
-        // the storage has enough size for this buffer.
-        assert(shared_buffer.size_in_bytes() >= buffer_.size_in_bytes());
     }
 #endif
 
@@ -258,6 +255,8 @@ void Tensor::dump(std::ostream &os) const {
 
     if (is_allocated()) {
         os << " allocated";
+    } else {
+        os << " unallocated";
     }
     if (is_constant()) {
         os << " constant";
@@ -270,9 +269,24 @@ void Tensor::dump(std::ostream &os) const {
     }
     if (is_alias()) {
         os << " alias";
+        os << " storage_offset{";
+        for (size_t i = 0; i < storage_offset_.size(); i++) {
+            if (i > 0) {
+                os << ", ";
+            }
+            os << storage_offset_[i];
+        }
+        os << "}";
+    }
+    if (is_dense()) {
+        os << " dense";
+    } else {
+        os << " sparse";
     }
 
-    os << " " << name() << std::endl;
+    os << " storage:@" << (void*)storage_.get();
+
+    os << " " << name() << " this:@" << (void*)this << std::endl;
 }
 
 }  // namespace hannk

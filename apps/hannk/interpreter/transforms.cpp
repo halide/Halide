@@ -232,7 +232,7 @@ class InPlace : public OpVisitor {
         const TensorPtr &output = op->output();
 
         // Reshape is unusual in that it's OK to alias Reshapes with mismatched rank
-        // (indeed, this is basically always the case), so we handle everything here
+        // (indeed, this is almost always the case), so we handle everything here
         // instead of calling maybe_alias_tensors().
         if (!is_alias_possible(input, output)) {
             return;
@@ -243,10 +243,11 @@ class InPlace : public OpVisitor {
             return;
         }
 
+        constexpr bool is_reshape = true;
         if (!has_storage(input)) {
-            input->set_alias_of(output);
+            input->set_alias_of(output, {}, is_reshape);
         } else if (!has_storage(output)) {
-            output->set_alias_of(input);
+            output->set_alias_of(input, {}, is_reshape);
         }
     }
 
