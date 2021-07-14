@@ -21,7 +21,7 @@ class Op;
 using OpPtr = std::shared_ptr<Op>;
 
 template<class T, class... Args>
-OpPtr make_op(Args &&...args) {
+std::shared_ptr<T> make_op(Args &&...args) {
     return std::make_shared<T>(std::forward<Args>(args)...);
 }
 
