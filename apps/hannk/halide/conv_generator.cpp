@@ -181,16 +181,28 @@ public:
 
         // Figure out how big the tiles we should optimize for should be by getting
         // the total number of accumulators best for this target and figuring out
-        // tile sizes.
+        // tile sizes. This is really tricky to do. The strategy here is to define
+        // a list of good tile sizes (in order of preference), and then prune the
+        // ones that use too many registers for the current target.
+        // Some guidelines for picking tile sizes are:
+        // - The number of channels must be divided by the tile size, and is almost
+        //   always a power of 2, so the tiling in c should be a power of 2.
         const int accumulators = get_accumulator_count(target);
-        std::vector<std::pair<int, int>> tile_sizes;
-        const int min_tile_c = 1;
-        const int max_tile_c = 4;
-        for (int tile_c = max_tile_c; tile_c >= min_tile_c; tile_c /= 2) {
-            int tile_x = std::min(8, accumulators / tile_c);
-            tile_sizes.emplace_back(tile_c, tile_x);
-        }
-        tile_sizes.emplace_back(max_tile_c, 1);
+        const int max_tile_c = 8;
+        std::vector<std::pair<int, int>> tile_sizes = {
+            // 24 registers
+            {4, 6},
+            {8, 3},
+            // 20 registers
+            {4, 5},
+            // 16 registers
+            {4, 4},
+            {8, 2},
+            // 8 registers
+            {2, 4},
+            {4, 2},
+            {8, 1},
+        };
 
         // We need to tile the output, but we can't use GuardWithIf because we need
         // things computed at the tile to have constant size. We can't assume the
@@ -199,11 +211,17 @@ public:
         Var xo("xo");
         Expr output_channels = output_.dim(0).extent();
         Expr output_width = output_.dim(1).extent();
+        const int min_tile_x = 4;
         for (auto i : tile_sizes) {
             const int tile_c = i.first;
             const int tile_x = i.second;
+            if (tile_c * tile_x > accumulators) {
+                // This tile size uses too many registers, skip it.
+                continue;
+            }
             output_
-                .specialize(output_channels % (tile_c * accum_vector_size) == 0 && output_width >= tile_x)
+                .specialize(output_channels % (tile_c * accum_vector_size) == 0 &&
+                            (output_width % tile_x == 0 || output_width >= tile_x * min_tile_x))
                 .split(c, co, c, tile_c * accum_vector_size, TailStrategy::RoundUp)
                 .split(x, xo, x, tile_x, TailStrategy::ShiftInwards)
                 .reorder(x, c, co, xo, y, b)
@@ -214,7 +232,7 @@ public:
         // In case there are no suitable tile sizes, just make a dummy split so the
         // rest of the schedule still works.
         output_
-            .split(c, co, c, accum_vector_size * min_tile_c, TailStrategy::PredicateStores)
+            .split(c, co, c, accum_vector_size, TailStrategy::PredicateStores)
             .split(x, xo, x, 1)
             .reorder(c, x, co, xo, y, b)
             .vectorize(c);
@@ -224,7 +242,7 @@ public:
         convolved.compute_at(output_, co)
             .store_in(MemoryType::Stack)
             .reorder(x, c)
-            .vectorize(c, accum_vector_size * min_tile_c, TailStrategy::RoundUp)
+            .vectorize(c, accum_vector_size, TailStrategy::RoundUp)
             .unroll(c, max_tile_c, TailStrategy::GuardWithIf)
             .unroll(x);
 
