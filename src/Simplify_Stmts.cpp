@@ -13,6 +13,9 @@ using std::vector;
 
 Stmt Simplify::visit(const IfThenElse *op) {
     Expr condition = mutate(op->condition, nullptr);
+    if (in_unreachable) {
+        return op;
+    }
 
     // Remove tags
     Expr unwrapped_condition = unwrap_tags(condition);
@@ -40,6 +43,9 @@ Stmt Simplify::visit(const IfThenElse *op) {
             then_case = mutate(learned_then_case);
         }
     }
+    bool then_unreachable = in_unreachable;
+    in_unreachable = false;
+
     {
         auto f = scoped_falsehood(unwrapped_condition);
         else_case = mutate(op->else_case);
@@ -48,14 +54,30 @@ Stmt Simplify::visit(const IfThenElse *op) {
             else_case = mutate(learned_else_case);
         }
     }
+    bool else_unreachable = in_unreachable;
 
-    // If both sides are no-ops, bail out.
-    if (is_no_op(then_case) && is_no_op(else_case)) {
+    if (then_unreachable && else_unreachable) {
         return then_case;
     }
+    in_unreachable = false;
+    if (else_unreachable) {
+        return then_case;
+    } else if (then_unreachable) {
+        return else_case;
+    }
 
-    // Pull out common nodes
-    if (equal(then_case, else_case)) {
+    if (is_no_op(else_case)) {
+        // If both sides are no-ops, bail out.
+        if (is_pure(condition) && is_no_op(then_case)) {
+            return then_case;
+        }
+        // Replace no-ops with empty stmts.
+        else_case = Stmt();
+    }
+
+    // Pull out common nodes, but only when the "late in lowering" flag is set. This
+    // avoids simplifying specializations before they have a chance to specialize.
+    if (remove_dead_code && equal(then_case, else_case)) {
         return then_case;
     }
     const Acquire *then_acquire = then_case.as<Acquire>();
@@ -65,6 +87,8 @@ Stmt Simplify::visit(const IfThenElse *op) {
     const Block *then_block = then_case.as<Block>();
     const Block *else_block = else_case.as<Block>();
     const For *then_for = then_case.as<For>();
+    const IfThenElse *then_if = then_case.as<IfThenElse>();
+    const IfThenElse *else_if = else_case.as<IfThenElse>();
     if (then_acquire &&
         else_acquire &&
         equal(then_acquire->semaphore, else_acquire->semaphore) &&
@@ -120,6 +144,18 @@ Stmt Simplify::visit(const IfThenElse *op) {
                equal(unwrapped_condition, 0 < then_for->extent)) {
         // This guard is redundant
         return then_case;
+    } else if (then_if &&
+               else_if &&
+               !then_if->else_case.defined() &&
+               !else_if->else_case.defined() &&
+               is_pure(condition) &&
+               is_pure(then_if->condition) &&
+               is_pure(else_if->condition) &&
+               equal(then_if->condition, else_if->condition)) {
+        // Rewrite if(a) { if(b) X } else { if(b) Y }
+        // to if(b) { if(a) X else Y }
+        return mutate(IfThenElse::make(then_if->condition,
+                                       IfThenElse::make(condition, then_if->then_case, else_if->then_case)));
     } else if (condition.same_as(op->condition) &&
                then_case.same_as(op->then_case) &&
                else_case.same_as(op->else_case)) {
@@ -165,7 +201,13 @@ Stmt Simplify::visit(const AssertStmt *op) {
 Stmt Simplify::visit(const For *op) {
     ExprInfo min_bounds, extent_bounds;
     Expr new_min = mutate(op->min, &min_bounds);
+    if (in_unreachable) {
+        return Evaluate::make(new_min);
+    }
     Expr new_extent = mutate(op->extent, &extent_bounds);
+    if (in_unreachable) {
+        return Evaluate::make(new_extent);
+    }
 
     ScopedValue<bool> old_in_vector_loop(in_vector_loop,
                                          (in_vector_loop ||
@@ -186,6 +228,14 @@ Stmt Simplify::visit(const For *op) {
         ScopedFact fact = scoped_truth(0 < new_extent);
         new_body = mutate(op->body);
     }
+    if (in_unreachable) {
+        if (extent_bounds.min_defined && extent_bounds.min >= 1) {
+            // If we know the loop executes once, the code that runs this loop is unreachable.
+            return new_body;
+        }
+        in_unreachable = false;
+        return Evaluate::make(0);
+    }
 
     if (bounds_tracked) {
         bounds_and_alignment_info.pop(op->name);
@@ -203,9 +253,13 @@ Stmt Simplify::visit(const For *op) {
     } else if (extent_bounds.max_defined &&
                extent_bounds.max <= 0) {
         return Evaluate::make(0);
-    } else if (is_const_one(new_extent) &&
+    } else if (extent_bounds.max_defined &&
+               extent_bounds.max <= 1 &&
                op->device_api == DeviceAPI::None) {
         Stmt s = LetStmt::make(op->name, new_min, new_body);
+        if (extent_bounds.min < 1) {
+            s = IfThenElse::make(0 < new_extent, s);
+        }
         return mutate(s);
     } else if (!stmt_uses_var(new_body, op->name) && !is_const_zero(op->min)) {
         return For::make(op->name, make_zero(Int(32)), new_extent, op->for_type, op->device_api, new_body);
@@ -244,10 +298,12 @@ Stmt Simplify::visit(const Provide *op) {
         new_values[i] = new_value;
     }
 
-    if (!changed) {
+    Expr new_predicate = mutate(op->predicate, nullptr);
+
+    if (!changed && new_predicate.same_as(op->predicate)) {
         return op;
     } else {
-        return Provide::make(op->name, new_values, new_args);
+        return Provide::make(op->name, new_values, new_args, new_predicate);
     }
 }
 
@@ -259,6 +315,26 @@ Stmt Simplify::visit(const Store *op) {
 
     ExprInfo index_info;
     Expr index = mutate(op->index, &index_info);
+
+    // If the store is fully out of bounds, drop it.
+    // This should only occur inside branches that make the store unreachable,
+    // but perhaps the branch was hard to prove constant true or false. This
+    // provides an alternative mechanism to simplify these unreachable stores.
+    string alloc_extent_name = op->name + ".total_extent_bytes";
+    if (bounds_and_alignment_info.contains(alloc_extent_name)) {
+        if (index_info.max_defined && index_info.max < 0) {
+            in_unreachable = true;
+            return Evaluate::make(unreachable());
+        }
+        const ExprInfo &alloc_info = bounds_and_alignment_info.get(alloc_extent_name);
+        if (alloc_info.max_defined && index_info.min_defined) {
+            int index_min_bytes = index_info.min * op->value.type().bytes();
+            if (index_min_bytes > alloc_info.max) {
+                in_unreachable = true;
+                return Evaluate::make(unreachable());
+            }
+        }
+    }
 
     ExprInfo base_info;
     if (const Ramp *r = index.as<Ramp>()) {
@@ -290,10 +366,37 @@ Stmt Simplify::visit(const Store *op) {
 Stmt Simplify::visit(const Allocate *op) {
     std::vector<Expr> new_extents;
     bool all_extents_unmodified = true;
+    ExprInfo total_extent_info;
+    total_extent_info.min_defined = true;
+    total_extent_info.max_defined = true;
+    total_extent_info.min = 1;
+    total_extent_info.max = 1;
     for (size_t i = 0; i < op->extents.size(); i++) {
-        new_extents.push_back(mutate(op->extents[i], nullptr));
+        ExprInfo extent_info;
+        new_extents.push_back(mutate(op->extents[i], &extent_info));
         all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
+        if (extent_info.min_defined) {
+            total_extent_info.min *= extent_info.min;
+        } else {
+            total_extent_info.min_defined = false;
+        }
+        if (extent_info.max_defined) {
+            total_extent_info.max *= extent_info.max;
+        } else {
+            total_extent_info.max_defined = false;
+        }
     }
+    if (total_extent_info.min_defined) {
+        total_extent_info.min *= op->type.bytes();
+        total_extent_info.min -= 1;
+    }
+    if (total_extent_info.max_defined) {
+        total_extent_info.max *= op->type.bytes();
+        total_extent_info.max -= 1;
+    }
+
+    ScopedBinding<ExprInfo> b(bounds_and_alignment_info, op->name + ".total_extent_bytes", total_extent_info);
+
     Stmt body = mutate(op->body);
     Expr condition = mutate(op->condition, nullptr);
     Expr new_expr;

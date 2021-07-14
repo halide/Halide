@@ -31,6 +31,8 @@ public:
 
         extra_scalar_input = add_input<int>("extra_scalar_input");
 
+        extra_dynamic_scalar_input = add_input<Expr>("extra_dynamic_scalar_input", Int(8));
+
         extra_buffer_output = add_output<Buffer<>>("extra_buffer_output", Float(32), 3);
 
         extra_func_output = add_output<Func>("extra_func_output", Float(64), 2);
@@ -71,6 +73,8 @@ public:
         // Attempting to call add_input() outside of the configure method will fail.
         // auto *this_will_fail = add_input<Buffer<>>("untyped_uint8", UInt(8), 2);
 
+        assert((*extra_dynamic_scalar_input).type() == Int(8));
+
         Var x, y, c;
 
         Expr extra_sum = cast<int>(0);
@@ -79,7 +83,7 @@ public:
         }
         extra_sum += cast<int>((*typed_extra_buffer_input)(x, y));
         extra_sum += cast<int>((*extra_func_input)(x, y, c));
-        extra_sum += *extra_scalar_input;
+        extra_sum += *extra_scalar_input + *extra_dynamic_scalar_input;
 
         output(x, y, c) = input(x, y, c) + bias + extra_sum;
 
@@ -94,6 +98,7 @@ private:
     Input<Buffer<int16_t>> *typed_extra_buffer_input;
     Input<Func> *extra_func_input;
     Input<int> *extra_scalar_input;
+    Input<Expr> *extra_dynamic_scalar_input;
 
     Output<Buffer<>> *extra_buffer_output;
     Output<Func> *extra_func_output;

@@ -283,6 +283,15 @@ public:
             check("phminposuw", 1, maximum(in_u8(RDom(0, 16) + 16 * x)));
             check("phminposuw", 1, minimum(in_i8(RDom(0, 16) + 16 * x)));
             check("phminposuw", 1, maximum(in_i8(RDom(0, 16) + 16 * x)));
+
+            for (int w = 2; w <= 8; w++) {
+                const char *check_pmaddubsw =
+                    (use_avx2 && w >= 4) ? "vpmaddubsw" : "pmaddubsw";
+
+                RDom r2(0, 2);
+                check(check_pmaddubsw, 4 * w, saturating_sum(i16(in_u8(2 * x + r2)) * in_i8(2 * x + r2 + 32)));
+                check(check_pmaddubsw, 4 * w, saturating_sum(i16(in_i8(2 * x + r2)) * in_u8(2 * x + r2 + 32)));
+            }
         }
 
         // SSE 4.1
@@ -295,8 +304,8 @@ public:
             check(check_pmaddwd, 2 * w, i32(i16_1) * 3 - i32(i16_2) * 4);
 
             // And also for dot-products
-            RDom r(0, 4);
-            check(check_pmaddwd, 2 * w, sum(i32(in_i16(x * 4 + r)) * in_i16(x * 4 + r + 32)));
+            RDom r4(0, 4);
+            check(check_pmaddwd, 2 * w, sum(i32(in_i16(x * 4 + r4)) * in_i16(x * 4 + r4 + 32)));
         }
 
         // llvm doesn't distinguish between signed and unsigned multiplies
@@ -1026,11 +1035,11 @@ public:
                     check(arm32 ? "vpadd.i16" : "addp", 8, sum_(in_u16(f * x + r)));
                     check(arm32 ? "vpadd.i32" : "addp", 4, sum_(in_i32(f * x + r)));
                     check(arm32 ? "vpadd.i32" : "addp", 4, sum_(in_u32(f * x + r)));
-                    check(arm32 ? "vpadd.f32" : "addp", 4, sum_(in_f32(f * x + r)));
+                    check(arm32 ? "vpadd.f32" : "faddp", 4, sum_(in_f32(f * x + r)));
                     // In 32-bit, we don't have a pairwise op for doubles,
                     // and expect to just get vadd instructions on d
                     // registers.
-                    check(arm32 ? "vadd.f64" : "addp", 4, sum_(in_f64(f * x + r)));
+                    check(arm32 ? "vadd.f64" : "faddp", 4, sum_(in_f64(f * x + r)));
 
                     if (f == 2) {
                         // VPADAL   I       -       Pairwise Add and Accumulate Long
@@ -1110,6 +1119,14 @@ public:
                         for (int v : {2, 4}) {
                             check("udot", v, sum(u32(in_u8(f * x + r)) * in_u8(f * x + r + 32)));
                             check("sdot", v, sum(i32(in_i8(f * x + r)) * in_i8(f * x + r + 32)));
+                            if (f == 4) {
+                                // This doesn't generate for higher reduction factors because the
+                                // intermediate is 16-bit instead of 32-bit. It seems like it would
+                                // be slower to fix this (because the intermediate sum would be
+                                // 32-bit instead of 16-bit).
+                                check("udot", v, sum(u32(in_u8(f * x + r))));
+                                check("sdot", v, sum(i32(in_i8(f * x + r))));
+                            }
                         }
                     }
                 }
@@ -1887,8 +1904,9 @@ public:
                 check("i8x16.abs", 16 * w, abs(i8_1));
                 check("i16x8.abs", 8 * w, abs(i16_1));
                 check("i32x4.abs", 4 * w, abs(i32_1));
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i64x2.abs", 2 * w, abs(i64_1));
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    check("i64x2.abs", 2 * w, abs(i64_1));
+                }
 
                 // Left shift by constant scalar
                 check("i8x16.shl", 16 * w, i8_1 << i8(7));

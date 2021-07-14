@@ -104,6 +104,7 @@ tests(GROUPS correctness
       float16_t_comparison.cpp
       float16_t_constants.cpp
       float16_t_image_type.cpp
+      float16_t_neon_op_check.cpp
       for_each_element.cpp
       force_onto_stack.cpp
       func_clone.cpp
@@ -235,6 +236,7 @@ tests(GROUPS correctness
       parallel_gpu_nested.cpp
       parallel_nested.cpp
       parallel_nested_1.cpp
+      parallel_scatter.cpp
       parallel_reductions.cpp
       parallel_rvar.cpp
       param.cpp

@@ -111,6 +111,9 @@ inline Expr make_const(Type t, float16_t val) {
 /** Construct a unique signed_integer_overflow Expr */
 Expr make_signed_integer_overflow(Type type);
 
+/** Check if an expression is a signed_integer_overflow */
+bool is_signed_integer_overflow(const Expr &expr);
+
 /** Check if a constant value can be correctly represented as the given type. */
 void check_representable(Type t, int64_t val);
 
@@ -311,15 +314,17 @@ Expr remove_likelies(const Expr &e);
  * all calls to likely() and likely_if_innermost() removed. */
 Stmt remove_likelies(const Stmt &s);
 
+/** Return an Expr that is identical to the input Expr, but with
+ * all calls to promise_clamped() and unsafe_promise_clamped() removed. */
+Expr remove_promises(const Expr &e);
+
+/** Return a Stmt that is identical to the input Stmt, but with
+ * all calls to promise_clamped() and unsafe_promise_clamped() removed. */
+Stmt remove_promises(const Stmt &s);
+
 /** If the expression is a tag helper call, remove it and return
  * the tagged expression. If not, returns the expression. */
 Expr unwrap_tags(const Expr &e);
-
-/** Expressions tagged with this intrinsic are suggestions that
- * vectorization of loops with guard ifs should be implemented with
- * non-faulting predicated loads and stores, instead of scalarizing
- * an if statement. */
-Expr predicate(Expr e);
 
 // Secondary args to print can be Exprs or const char *
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {
@@ -1346,6 +1351,21 @@ template<typename T>
 inline Expr undef() {
     return undef(type_of<T>());
 }
+
+namespace Internal {
+
+/** Return an expression that should never be evaluated. Expressions
+ * that depend on unreachabale values are also unreachable, and
+ * statements that execute unreachable expressions are also considered
+ * unreachable. */
+Expr unreachable(Type t = Int(32));
+
+template<typename T>
+inline Expr unreachable() {
+    return unreachable(type_of<T>());
+}
+
+}  // namespace Internal
 
 /** Control the values used in the memoization cache key for memoize.
  * Normally parameters and other external dependencies are

@@ -59,7 +59,7 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
             (rewrite(max(x, x), x) ||
              rewrite(max(c0, c1), fold(max(c0, c1))) ||
              rewrite(max(IRMatcher::Overflow(), x), a) ||
-             rewrite(max(x,IRMatcher::Overflow()), b) ||
+             rewrite(max(x, IRMatcher::Overflow()), b) ||
              // Cases where one side dominates:
              rewrite(max(x, c0), b, is_max_value(c0)) ||
              rewrite(max(x, c0), x, is_min_value(c0)) ||
@@ -278,6 +278,14 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
                rewrite(max(x / c0, y / c0 + c1), min(x, y + fold(c1 * c0)) / c0, c0 < 0 && !overflows(c1 * c0)) ||
 
                rewrite(max(((x + c0) / c1) * c1, x + c2), ((x + c0) / c1) * c1, c1 > 0 && c0 + 1 >= c1 + c2) ||
+
+               rewrite(max((x + c0)/c1, ((x + c2)/c3)*c4), (x + c0)/c1, c2 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(max((x + c0)/c1, ((x + c2)/c3)*c4), ((x + c2)/c3)*c4, c0 + c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(max(x/c1, ((x + c2)/c3)*c4), x/c1, c2 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(max(x/c1, ((x + c2)/c3)*c4), ((x + c2)/c3)*c4, c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(max((x + c0)/c1, (x/c3)*c4), (x + c0)/c1, 0 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(max((x + c0)/c1, (x/c3)*c4), (x/c3)*c4, c0 + c3 - c1 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(max(x/c1, (x/c3)*c4), x/c1, c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
 
                rewrite(max(c0 - x, c1), c0 - min(x, fold(c0 - c1))))))) {
 

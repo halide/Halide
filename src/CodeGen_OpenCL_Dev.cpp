@@ -340,8 +340,16 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         // if the RHS is uint, quietly cast it back to int if the LHS is int
         if (op->args[0].type().is_int() && op->args[1].type().is_uint()) {
             Type t = op->args[0].type().with_code(halide_type_int);
-            Expr e = Call::make(op->type, op->name, {op->args[0], cast(t, op->args[1])}, op->call_type);
-            e.accept(this);
+            Expr shift = cast(t, op->args[1]);
+            // Emit code here, because CodeGen_C visitor will attempt to lower signed shift
+            // back to unsigned.
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(shift);
+            if (op->is_intrinsic(Call::shift_left)) {
+                print_assignment(op->type, a0 + " << " + a1);
+            } else {
+                print_assignment(op->type, a0 + " >> " + a1);
+            }
         } else {
             CodeGen_C::visit(op);
         }

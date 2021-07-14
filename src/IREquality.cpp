@@ -512,6 +512,7 @@ void IRComparer::visit(const Allocate *op) {
     const Allocate *s = stmt.as<Allocate>();
 
     compare_names(s->name, op->name);
+    compare_types(s->type, op->type);
     compare_expr_vector(s->extents, op->extents);
     compare_stmt(s->body, op->body);
     compare_expr(s->condition, op->condition);

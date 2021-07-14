@@ -371,7 +371,8 @@ Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter para
     return node;
 }
 
-Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args) {
+Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate) {
+    internal_assert(predicate.defined()) << "Provide with undefined predicate\n";
     internal_assert(!values.empty()) << "Provide of no values\n";
     for (size_t i = 0; i < values.size(); i++) {
         internal_assert(values[i].defined()) << "Provide of undefined value\n";
@@ -384,6 +385,7 @@ Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, con
     node->name = name;
     node->values = values;
     node->args = args;
+    node->predicate = predicate;
     return node;
 }
 
@@ -617,7 +619,6 @@ const char *const intrinsic_op_names[] = {
     "mul_shift_right",
     "mux",
     "popcount",
-    "predicate",
     "prefetch",
     "promise_clamped",
     "random",
@@ -644,6 +645,7 @@ const char *const intrinsic_op_names[] = {
     "strict_float",
     "stringify",
     "undef",
+    "unreachable",
     "unsafe_promise_clamped",
     "widening_add",
     "widening_mul",

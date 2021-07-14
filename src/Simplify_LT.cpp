@@ -298,28 +298,36 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               rewrite(ramp(z + x, y, lanes) < broadcast(x + w, lanes), ramp(z, y, lanes) < broadcast(w, lanes)) ||
               rewrite(ramp(x + z, y, lanes) < broadcast(w + x, lanes), ramp(z, y, lanes) < broadcast(w, lanes)) ||
               rewrite(ramp(z + x, y, lanes) < broadcast(w + x, lanes), ramp(z, y, lanes) < broadcast(w, lanes)) ||
+              rewrite(ramp(x - z, y, lanes) < broadcast(x - w, lanes), ramp(0 - z, y, lanes) < broadcast(0 - w, lanes), !is_const(x, 0)) ||
+              rewrite(ramp(z - x, y, lanes) < broadcast(w - x, lanes), ramp(z, y, lanes) < broadcast(w, lanes)) ||
 
               // z = 0
               rewrite(ramp(x, y, lanes) < broadcast(x + w, lanes), ramp(0, y, lanes) < broadcast(w, lanes)) ||
               rewrite(ramp(x, y, lanes) < broadcast(w + x, lanes), ramp(0, y, lanes) < broadcast(w, lanes)) ||
+              rewrite(ramp(x, y, lanes) < broadcast(x - w, lanes), ramp(0, y, lanes) < broadcast(0 - w, lanes), !is_const(x, 0)) ||
 
               // w = 0
               rewrite(ramp(x + z, y, lanes) < broadcast(x, lanes), ramp(z, y, lanes) < 0) ||
               rewrite(ramp(z + x, y, lanes) < broadcast(x, lanes), ramp(z, y, lanes) < 0) ||
+              rewrite(ramp(x - z, y, lanes) < broadcast(x, lanes), ramp(0 - z, y, lanes) < 0, !is_const(x, 0)) ||
 
               // With the args flipped
               rewrite(broadcast(x + w, lanes) < ramp(x + z, y, lanes), broadcast(w, lanes) < ramp(z, y, lanes)) ||
               rewrite(broadcast(x + w, lanes) < ramp(z + x, y, lanes), broadcast(w, lanes) < ramp(z, y, lanes)) ||
               rewrite(broadcast(w + x, lanes) < ramp(x + z, y, lanes), broadcast(w, lanes) < ramp(z, y, lanes)) ||
               rewrite(broadcast(w + x, lanes) < ramp(z + x, y, lanes), broadcast(w, lanes) < ramp(z, y, lanes)) ||
+              rewrite(broadcast(x - w, lanes) < ramp(x - z, y, lanes), broadcast(0 - w, lanes) < ramp(0 - z, y, lanes), !is_const(x, 0)) ||
+              rewrite(broadcast(w - x, lanes) < ramp(z - x, y, lanes), broadcast(w, lanes) < ramp(z, y, lanes)) ||
 
               // z = 0
               rewrite(broadcast(x + w, lanes) < ramp(x, y, lanes), broadcast(w, lanes) < ramp(0, y, lanes)) ||
               rewrite(broadcast(w + x, lanes) < ramp(x, y, lanes), broadcast(w, lanes) < ramp(0, y, lanes)) ||
+              rewrite(broadcast(x - w, lanes) < ramp(x, y, lanes), broadcast(0 - w, lanes) < ramp(0, y, lanes), !is_const(x, 0)) ||
 
               // w = 0
               rewrite(broadcast(x, lanes) < ramp(x + z, y, lanes), 0 < ramp(z, y, lanes)) ||
               rewrite(broadcast(x, lanes) < ramp(z + x, y, lanes), 0 < ramp(z, y, lanes)) ||
+              rewrite(broadcast(x, lanes) < ramp(x - z, y, lanes), 0 < ramp(0 - z, y, lanes), !is_const(x, 0)) ||
 
               false)) ||
             (no_overflow_int(ty) && EVAL_IN_LAMBDA
@@ -441,6 +449,36 @@ Expr Simplify::visit(const LT *op, ExprInfo *bounds) {
               rewrite(min((x + c2)/c0, y) < x/c0, true, c0 > 0 && c2 + c0 <= 0) ||
               rewrite(max(y, (x + c2)/c0) < x/c0, false, c0 > 0 && c2 >= 0) ||
               rewrite(min(y, (x + c2)/c0) < x/c0, true, c0 > 0 && c2 + c0 <= 0) ||
+
+              rewrite(((max(x, (y*c0) + c1) + c2)/c0) < y, ((x + c2)/c0) < y, c0 > 0 && (c1 + c2) < 0) ||
+              rewrite(((max(x, (y*c0) + c1) + c2)/c0) < y, false, c0 > 0 && (c1 + c2) >= 0) ||
+              rewrite(((max(x, y*c0) + c1)/c0) < y, ((x + c1)/c0) < y, c0 > 0 && c1 < 0) ||
+              rewrite(((max(x, y*c0) + c1)/c0) < y, false, c0 > 0 && c1 >= 0) ||
+              rewrite(((max((x*c0) + c1, y) + c2)/c0) < x, ((y + c2)/c0) < x, c0 > 0 && (c1 + c2) < 0) ||
+              rewrite(((max((x*c0) + c1, y) + c2)/c0) < x, false, c0 > 0 && (c1 + c2) >= 0) ||
+              rewrite(((max(x*c0, y) + c1)/c0) < x, ((y + c1)/c0) < x, c0 > 0 && c1 < 0) ||
+              rewrite(((max(x*c0, y) + c1)/c0) < x, false, c0 > 0 && c1 >= 0) ||
+              rewrite((max(x, (y*c0) + c1)/c0) < y, (x/c0) < y, c0 > 0 && c1 < 0) ||
+              rewrite((max(x, (y*c0) + c1)/c0) < y, false, c0 > 0 && c1 >= 0) ||
+              rewrite((max(x, y*c0)/c0) < y, false, c0 > 0) ||
+              rewrite((max((x*c0) + c1, y)/c0) < x, (y/c0) < x, c0 > 0 && c1 < 0) ||
+              rewrite((max((x*c0) + c1, y)/c0) < x, false, c0 > 0 && c1 >= 0) ||
+              rewrite((max(x*c0, y)/c0) < x, false, c0 > 0) ||
+
+              rewrite(((min(x, (y*c0) + c1) + c2)/c0) < y, true, c0 > 0 && (c1 + c2) < 0) ||
+              rewrite(((min(x, (y*c0) + c1) + c2)/c0) < y, ((x + c2)/c0) < y, c0 > 0 && (c1 + c2) >= 0) ||
+              rewrite(((min(x, y*c0) + c1)/c0) < y, true, c0 > 0 && c1 < 0) ||
+              rewrite(((min(x, y*c0) + c1)/c0) < y, ((x + c1)/c0) < y, c0 > 0 && c1 >= 0) ||
+              rewrite(((min((x*c0) + c1, y) + c2)/c0) < x, true, c0 > 0 && (c1 + c2) < 0) ||
+              rewrite(((min((x*c0) + c1, y) + c2)/c0) < x, ((y + c2)/c0) < x, c0 > 0 && (c1 + c2) >= 0) ||
+              rewrite(((min(x*c0, y) + c1)/c0) < x, true, c0 > 0 && c1 < 0) ||
+              rewrite(((min(x*c0, y) + c1)/c0) < x, ((y + c1)/c0) < x, c0 > 0 && c1 >= 0) ||
+              rewrite((min(x, (y*c0) + c1)/c0) < y, true, c0 > 0 && c1 < 0) ||
+              rewrite((min(x, (y*c0) + c1)/c0) < y, (x/c0) < y, c0 > 0 && c1 >= 0) ||
+              rewrite((min(x, y*c0)/c0) < y, (x/c0) < y, c0 > 0) ||
+              rewrite((min((x*c0) + c1, y)/c0) < x, true, c0 > 0 && c1 < 0) ||
+              rewrite((min((x*c0) + c1, y)/c0) < x, (y/c0) < x, c0 > 0 && c1 >= 0) ||
+              rewrite((min(x*c0, y)/c0) < x, (y/c0) < x, c0 > 0) ||
 
               // Comparison of two mins/maxes that don't cancel when subtracted
               rewrite(min(x, c0) < min(x, c1), false, c0 >= c1) ||
