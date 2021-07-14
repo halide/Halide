@@ -18,6 +18,7 @@
 #include "Param.h"
 #include "PurifyIndexMath.h"
 #include "Simplify.h"
+#include "SimplifyCorrelatedDifferences.h"
 #include "Solve.h"
 #include "Util.h"
 #include "Var.h"
@@ -66,7 +67,7 @@ Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scop
 }
 
 Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
-    Expr expr = simplify(remove_likelies(e));
+    Expr expr = bound_correlated_differences(simplify(remove_likelies(e)));
     Interval interval = bounds_of_expr_in_scope(expr, scope, FuncValueBounds(), true);
     interval.min = simplify(interval.min);
     interval.max = simplify(interval.max);
@@ -1088,17 +1089,14 @@ private:
 
     void visit(const Call *op) override {
         TRACK_BOUNDS_INTERVAL;
-        // Using the strict_float feature flag wraps a strict_float()
-        // call around every Expr that is of type float, so it's easy
-        // to get nestings that are many levels deep; the bounds of this
-        // call are *always* exactly that of its first argument, so short
-        // circuit it here before checking for const_args. This is important
-        // because evaluating const_args for such a deeply nested case
+        // Tags are hints that don't affect the results of the expression,
+        // and can be very deeply nested in the case of strict_float. The
+        // bounds of this call are *always* exactly that of its first argument,
+        // so short circuit it here before checking for const_args. This is
+        // important because evaluating const_args for such a deeply nested case
         // essentially becomes O(n^2) doing work that is unnecessary, making
         // otherwise simple pipelines take several minutes to compile.
-        //
-        // TODO: are any other intrinsics worth including here as well?
-        if (op->is_intrinsic(Call::strict_float)) {
+        if (op->is_tag()) {
             internal_assert(op->args.size() == 1);
             op->args[0].accept(this);
             return;
@@ -1234,9 +1232,10 @@ private:
             internal_assert(op->args.size() == 2);
             op->args[1].accept(this);
         } else if (op->is_intrinsic(Call::if_then_else)) {
-            internal_assert(op->args.size() == 3);
+            internal_assert(op->args.size() == 2 || op->args.size() == 3);
             // Probably more conservative than necessary
-            Expr equivalent_select = Select::make(op->args[0], op->args[1], op->args[2]);
+            Expr false_value = op->args.size() == 2 ? op->args[1] : op->args[2];
+            Expr equivalent_select = Select::make(op->args[0], op->args[1], false_value);
             equivalent_select.accept(this);
         } else if (op->is_intrinsic(Call::require)) {
             internal_assert(op->args.size() == 3);
@@ -2040,12 +2039,17 @@ private:
 
         if (consider_calls) {
             if (op->is_intrinsic(Call::if_then_else)) {
-                internal_assert(op->args.size() == 3);
                 // We wrap 'then_case' and 'else_case' inside 'dummy' call since IfThenElse
                 // only takes Stmts as arguments.
                 Stmt then_case = Evaluate::make(op->args[1]);
-                Stmt else_case = Evaluate::make(op->args[2]);
-                Stmt equivalent_if = IfThenElse::make(op->args[0], then_case, else_case);
+                Stmt equivalent_if;
+                if (op->args.size() == 3) {
+                    Stmt else_case = Evaluate::make(op->args[2]);
+                    equivalent_if = IfThenElse::make(op->args[0], then_case, else_case);
+                } else {
+                    internal_assert(op->args.size() == 2);
+                    equivalent_if = IfThenElse::make(op->args[0], then_case);
+                }
                 equivalent_if.accept(this);
                 return;
             }
@@ -2659,11 +2663,18 @@ private:
     void visit(const Provide *op) override {
         if (consider_provides) {
             if (op->name == func || func.empty()) {
-                Box b(op->args.size());
-                for (size_t i = 0; i < op->args.size(); i++) {
-                    b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
+                if (!is_const_one(op->predicate)) {
+                    // Don't visit the RHS inside the if. This is handled below instead.
+                    ScopedValue<bool> save_consider_calls(consider_calls, false);
+                    Stmt equiv = IfThenElse::make(op->predicate, Provide::make(op->name, op->values, op->args, const_true()));
+                    equiv.accept(this);
+                } else {
+                    Box b(op->args.size());
+                    for (size_t i = 0; i < op->args.size(); i++) {
+                        b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
+                    }
+                    merge_boxes(boxes[op->name], b);
                 }
-                merge_boxes(boxes[op->name], b);
             }
         }
 
@@ -3090,7 +3101,7 @@ void boxes_touched_test() {
     Scope<Interval> scope;
     scope.push("y", Interval(Expr(0), Expr(10)));
 
-    Stmt stmt = Provide::make("f", {10}, {x, y, z, w});
+    Stmt stmt = Provide::make("f", {10}, {x, y, z, w}, const_true());
     stmt = IfThenElse::make(y > 4, stmt, Stmt());
     stmt = IfThenElse::make(z > 18, stmt, Stmt());
     stmt = LetStmt::make("w", z + 3, stmt);
@@ -3349,7 +3360,8 @@ void bounds_test() {
                           Provide::make("output",
                                         {Add::make(Call::make(in, input_site_1),
                                                    Call::make(in, input_site_2))},
-                                        output_site));
+                                        output_site,
+                                        const_true()));
 
     map<string, Box> r;
     r = boxes_required(loop);

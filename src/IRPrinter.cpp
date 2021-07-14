@@ -150,6 +150,12 @@ std::ostream &operator<<(std::ostream &out, const TailStrategy &t) {
     case TailStrategy::Predicate:
         out << "Predicate";
         break;
+    case TailStrategy::PredicateLoads:
+        out << "PredicateLoads";
+        break;
+    case TailStrategy::PredicateStores:
+        out << "PredicateStores";
+        break;
     case TailStrategy::ShiftInwards:
         out << "ShiftInwards";
         break;
@@ -805,7 +811,16 @@ void IRPrinter::visit(const Store *op) {
 }
 
 void IRPrinter::visit(const Provide *op) {
-    stream << get_indent() << op->name << "(";
+    stream << get_indent();
+    const bool has_pred = !is_const_one(op->predicate);
+    if (has_pred) {
+        stream << "predicate (";
+        print_no_parens(op->predicate);
+        stream << ")\n";
+        indent++;
+        stream << get_indent();
+    }
+    stream << op->name << "(";
     print_list(op->args);
     stream << ") = ";
     if (op->values.size() > 1) {
@@ -817,6 +832,9 @@ void IRPrinter::visit(const Provide *op) {
     }
 
     stream << "\n";
+    if (has_pred) {
+        indent--;
+    }
 }
 
 void IRPrinter::visit(const Allocate *op) {

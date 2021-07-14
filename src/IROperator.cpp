@@ -1070,12 +1070,6 @@ Expr unwrap_tags(const Expr &e) {
     return e;
 }
 
-Expr predicate(Expr e) {
-    Type t = e.type();
-    return Internal::Call::make(t, Internal::Call::predicate,
-                                {std::move(e)}, Internal::Call::PureIntrinsic);
-}
-
 Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args) {
     return Internal::Call::make(Int(32),
                                 "halide_error_requirement_failed",
@@ -2202,15 +2196,29 @@ Expr fast_pow(Expr x, Expr y) {
 }
 
 Expr fast_inverse(Expr x) {
-    user_assert(x.type() == Float(32)) << "fast_inverse only takes float arguments\n";
+    user_assert(x.defined()) << "fast_inverse of undefined Expr\n";
     Type t = x.type();
-    return Internal::Call::make(t, "fast_inverse_f32", {std::move(x)}, Internal::Call::PureExtern);
+    if (t == Float(32)) {
+        return Internal::Call::make(t, "fast_inverse_f32", {std::move(x)}, Internal::Call::PureExtern);
+    } else if (t == Float(16)) {
+        return Internal::Call::make(t, "fast_inverse_f16", {std::move(x)}, Internal::Call::PureExtern);
+    } else {
+        user_error << "fast_inverse only takes float16 or float32 arguments\n";
+        return Expr();
+    }
 }
 
 Expr fast_inverse_sqrt(Expr x) {
-    user_assert(x.type() == Float(32)) << "fast_inverse_sqrt only takes float arguments\n";
+    user_assert(x.defined()) << "fast_inverse_sqrt of undefined Expr\n";
     Type t = x.type();
-    return Internal::Call::make(t, "fast_inverse_sqrt_f32", {std::move(x)}, Internal::Call::PureExtern);
+    if (t == Float(32)) {
+        return Internal::Call::make(t, "fast_inverse_sqrt_f32", {std::move(x)}, Internal::Call::PureExtern);
+    } else if (t == Float(16)) {
+        return Internal::Call::make(t, "fast_inverse_sqrt_f16", {std::move(x)}, Internal::Call::PureExtern);
+    } else {
+        user_error << "fast_inverse_sqrt only takes float16 or float32 arguments\n";
+        return Expr();
+    }
 }
 
 Expr floor(Expr x) {

@@ -14,6 +14,11 @@ public:
     // If positive, a constant inverse depth multiplier.
     GeneratorParam<int> inv_depth_multiplier_{"inv_depth_multiplier", -1};
 
+    // When true, we assume the vector size is divided evenly by the number
+    // of channels, and we use the input_stride_x parameter as the stride of
+    // x of the input, instead of the x dimension of the buffer.
+    GeneratorParam<bool> shallow_{"shallow", false};
+
     // Unsigned 8-bit input tensor, indexed by ci, x, y, b.
     Input<Buffer<uint8_t>> input_{"input", 4};
     Input<uint8_t> input_zero_{"input_zero"};
@@ -39,6 +44,10 @@ public:
     Input<int> dilation_x_{"dilation_x"};
     Input<int> dilation_y_{"dilation_y"};
 
+    // When c and x are fused, this is used to specify the stride of x of the input
+    // within the fused c-x dimension.
+    Input<int> input_stride_x_{"input_stride_x"};
+
     Input<int32_t> output_multiplier_{"output_multiplier"};
 #ifdef XTENSA_GOES_FAST
     // TODO(vksnk): shifting by signed is quite slow on Xtensa.
@@ -56,6 +65,11 @@ public:
         // The algorithm.
 
         const bool use_xtensa = get_target().has_feature(Target::Xtensa);
+        // For the shallow case, we need to know the vector size in the algorithm.
+        int vector_size = natural_vector_size<uint8_t>();
+        if (!use_xtensa && get_register_count(target) < 32) {
+            vector_size = natural_vector_size<int16_t>();
+        }
 
         // Some free variables, where x and y represent the spatial dimensions.
         Var x("x"), y("y"), c("c"), b("b");
@@ -65,8 +79,25 @@ public:
         Expr c_resampled = inv_depth_multiplier_ >= 0 ? c * inv_depth_multiplier_ : c / depth_multiplier_;
         resampled_input(c, x, y, b) = input_(c_resampled, x, y, b);
 
+        Func filter_bounded("filter_bounded");
+        Func bias_bounded("bias_bounded");
+        Expr filter_c = c;
+        if (shallow_) {
+            // When the filter is shallow, we need a boundary condition on the
+            // filter and bias.
+            Expr filter_depth = filter_.dim(0).extent();
+            filter_bounded(c, x, y) = filter_(c % filter_depth, x, y);
+            bias_bounded(c) = bias_(c % filter_depth);
+
+            // For shallow depthwise, we repeat the filter at multiples of the vector size.
+            filter_c = c % vector_size;
+        } else {
+            filter_bounded(c, x, y) = filter_(c, x, y);
+            bias_bounded(c) = bias_(c);
+        }
+
         Func filter_zeroed("filter_zeroed");
-        filter_zeroed(c, x, y) = i16(filter_(c, x, y)) - i16(filter_zero_);
+        filter_zeroed(c, x, y) = i16(filter_bounded(c, x, y)) - i16(filter_zero_);
 
         // Do the convolution in 32-bit.
         filter_.dim(1).set_min(0);
@@ -74,9 +105,24 @@ public:
         Expr filter_width = filter_.dim(1).extent();
         Expr filter_height = filter_.dim(2).extent();
         RDom r(0, filter_width, 0, filter_height);
-        Expr filter_rdxy = filter_(c, r.x, r.y);
-        Expr filter_zeroed_rdxy = filter_zeroed(c, r.x, r.y);
+        Expr filter_rdxy = filter_bounded(filter_c, r.x, r.y);
+        Expr filter_zeroed_rdxy = filter_zeroed(filter_c, r.x, r.y);
 
+        // We want to compute the reduction:
+        // convolved(c, x, y, b) = bias(c)
+        // convolved(c, x, y, b) +=
+        //    i32(filter_zeroed_rdxy) *
+        //    (i32(input_rdxy) - i32(input_zero_))
+        //
+        // However, this requires subtracting the input zero at every output.
+        // We can factor the reduction like so:
+        //
+        // convolved(c, x, y, b) = bias(c)
+        // convolved(c, x, y, b) +=
+        //    i32(filter_zeroed_rdxy) * i32(input_rdxyc) -
+        //    i32(filter_zeroed_rdxy) * i32(input_zero_)
+        //
+        // The latter reduction can be computed once per output channel.
         Func sum_filter("sum_filter");
         if (use_xtensa) {
             sum_filter(c) += i16(filter_rdxy);
@@ -100,10 +146,16 @@ public:
         }
 
         Func offset_c("offset_c");
-        offset_c(c) = bias_(c) - sum_filter(c) * i32(input_zero_);
+        offset_c(c) = bias_bounded(c) - sum_filter(c) * i32(input_zero_);
 
-        Expr input_rdxy =
-            resampled_input(c, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
+        Expr rx = x * stride_x_ + r.x * dilation_x_;
+        Expr ry = y * stride_y_ + r.y * dilation_y_;
+        Expr input_rdxy;
+        if (shallow_) {
+            input_rdxy = resampled_input(c + rx * input_stride_x_, 0, ry, b);
+        } else {
+            input_rdxy = resampled_input(c, rx, ry, b);
+        }
         Func convolved("convolved");
 
         if (use_xtensa) {
@@ -111,7 +163,7 @@ public:
             // Do everything in 8-bit on Xtensa.
             convolved(c, x, y, b) += i24(filter_rdxy) * i24(input_rdxy) - i24(input_rdxy) * i24(filter_zero_);
         } else {
-            convolved(c, x, y, b) = offset_c(c);
+            convolved(c, x, y, b) = offset_c(filter_c);
             convolved(c, x, y, b) += i32(filter_zeroed_rdxy) * i32(input_rdxy);
         }
 
@@ -134,12 +186,12 @@ public:
         interpret_as_tensor(bias_);
         interpret_as_tensor(output_);
         require_same_min_extent(3, input_, output_);
-        require_same_min_extent(0, bias_, output_);
-        require_same_min_extent(0, filter_, output_);
-
-        int vector_size = natural_vector_size<uint8_t>();
-        if (!use_xtensa && get_register_count(target) < 32) {
-            vector_size = natural_vector_size<int16_t>();
+        if (shallow_) {
+            // Shallow inputs should have fused c and x, and left x as a dummy dim.
+            output_.dim(1).set_min(0).set_extent(1);
+        } else {
+            require_same_min_extent(0, output_, bias_);
+            require_same_min_extent(0, output_, filter_);
         }
 
         if (inv_depth_multiplier_ == 0) {
@@ -164,8 +216,9 @@ public:
         // specializations generate ifs which seem to confuse compiler.
         filter_.dim(1).set_bounds(0, 3).dim(2).set_bounds(0, 3);
 #endif
+
         Var xo("xo"), yo("yo"), co("co");
-        Expr output_channels = output_.dim(0).extent();
+
         if (!use_xtensa) {
             // Tile the output, so we can try to re-use loads spatially when performing
             // convolution. This also helps because we can schedule the input and not
@@ -173,48 +226,44 @@ public:
             // We split co and reorder it outermost, so we can maximize locality of the
             // filter. We even put it outside of the batch loop, so we can compute the
             // boundary condition on the filter at co and reuse it across batches.
-            const int kTileW = 2;
-            const int kTileH = 2;
+            const int kAccumulators = 4;
+            const int kTileW = shallow_ ? 1 : 2;
+            const int kTileH = kAccumulators / kTileW;
             // When the output is small, the overhead from shift inwards can be large.
             // Only tile when the input is at least this many tiles to avoid this.
             const int kMinTiles = 4;
-
+            Var xo("xo"), yo("yo"), co("co");
             Expr output_width = output_.dim(1).extent();
             Expr output_height = output_.dim(2).extent();
             Expr use_tiles =
                 (output_width >= kTileW * kMinTiles || output_width % kTileW == 0) &&
                 (output_height >= kTileH * kMinTiles || output_height % kTileH == 0);
             output_.compute_root()
-                .specialize(output_channels >= vector_size && use_tiles)
+                .specialize(use_tiles)
                 .tile(x, y, xo, yo, x, y, kTileW, kTileH, TailStrategy::ShiftInwards)
-                .split(c, co, c, vector_size, TailStrategy::ShiftInwards)
+                .split(c, co, c, vector_size, TailStrategy::PredicateStores)
                 .reorder(x, y, c, xo, yo, b, co)
                 .unroll(x)
                 .unroll(y)
                 .vectorize(c);
         }
 
-        // Enable 1x1 outputs to work.
-        output_
-            .tile(x, y, xo, yo, x, y, 1, 1, TailStrategy::RoundUp)
-            .unroll(x)
-            .unroll(y);
-
+        // In the general case, use dummy 1x1 tiles.
 #ifdef XTENSA_GOES_FAST
         output_
-            .split(c, co, c, vector_size, TailStrategy::RoundUp)
+            .tile(x, y, xo, yo, x, y, 1, 1)
+            .split(c, co, c, vector_size, TailStrategy::PredicateStores)
             .reorder(x, y, c, xo, yo, b, co)
-            .vectorize(c);
+            .vectorize(c)
+            .unroll(x)
+            .unroll(y);
 #else
-        // Vectorize c, using predication only for small numbers of channels.
         output_
-            .specialize(output_channels >= vector_size)
-            .split(c, co, c, vector_size, TailStrategy::ShiftInwards)
+            .tile(x, y, xo, yo, x, y, 1, 1)
+            .split(c, co, c, vector_size, TailStrategy::PredicateStores)
             .reorder(x, y, c, xo, yo, b, co)
-            .vectorize(c);
-        output_
-            .split(c, co, c, vector_size, TailStrategy::Predicate)
-            .reorder(x, y, c, xo, yo, b, co)
+            .unroll(x)
+            .unroll(y)
             .vectorize(c);
 #endif
         convolved.compute_at(output_, xo)
@@ -244,18 +293,25 @@ public:
             resampled_input.specialize(depth_multiplier_ == 1);
         }
 
+        LoopLevel filter_compute_at = shallow_ ? LoopLevel::root() : LoopLevel(output_, co);
+
         if (!use_xtensa) {
-            filter_zeroed.compute_at(output_, co)
+            filter_zeroed.compute_at(filter_compute_at)
                 .store_in(MemoryType::Stack)
-                .align_storage(c, natural_vector_size<int16_t>())
-                .vectorize(c, natural_vector_size<int16_t>(), TailStrategy::GuardWithIf)
-                .unroll(c, 2, TailStrategy::GuardWithIf);
+                .align_storage(c, vector_size)
+                .vectorize(c, vector_size, TailStrategy::PredicateLoads);
         }
 
-        offset_c.compute_at(output_, co)
+        // This doesn't read from any of the inputs directly, so we can vectorize
+        // rounding up.
+        offset_c.compute_at(filter_compute_at)
             .store_in(MemoryType::Stack)
-            .align_storage(c, natural_vector_size<int32_t>())
-            .vectorize(c, vector_size, TailStrategy::GuardWithIf);
+            .vectorize(c, vector_size, TailStrategy::RoundUp);
+
+
+        bias_bounded.compute_at(filter_compute_at)
+            .store_in(MemoryType::Stack)
+            .vectorize(c, vector_size, TailStrategy::PredicateLoads);
     }
 };
 

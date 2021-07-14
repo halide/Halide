@@ -1108,7 +1108,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
     if (exact) {
         user_assert(tail == TailStrategy::GuardWithIf || tail == TailStrategy::Predicate)
             << "When splitting Var " << old_name
-            << " the tail strategy must be GuardWithIf, Predicate or Auto. "
+            << " the tail strategy must be GuardWithIf, Predicate, or Auto. "
             << "Anything else may change the meaning of the algorithm\n";
     }
 
@@ -3095,21 +3095,6 @@ Realization Func::realize(std::vector<int32_t> sizes, const Target &target,
                           const ParamMap &param_map) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
     return pipeline().realize(std::move(sizes), target, param_map);
-}
-
-Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target,
-                          const ParamMap &param_map) {
-    return realize({x_size, y_size, z_size, w_size}, target, param_map);
-}
-
-Realization Func::realize(int x_size, int y_size, int z_size, const Target &target,
-                          const ParamMap &param_map) {
-    return realize({x_size, y_size, z_size}, target, param_map);
-}
-
-Realization Func::realize(int x_size, int y_size, const Target &target,
-                          const ParamMap &param_map) {
-    return realize({x_size, y_size}, target, param_map);
 }
 
 void Func::infer_input_bounds(const std::vector<int32_t> &sizes,

@@ -77,6 +77,13 @@ _add_hannk_halide_library(
         GENERATOR_DEPS)
 
 _add_hannk_halide_library(
+        TARGET depthwise_conv_shallow_dm1_uint8
+        SRCS depthwise_conv_generator.cpp
+        GENERATOR_NAME DepthwiseConv
+        GENERATOR_ARGS inv_depth_multiplier=1 shallow=true
+        GENERATOR_DEPS)
+
+_add_hannk_halide_library(
         TARGET fill_uint8
         SRCS fill_generator.cpp
         FEATURES no_bounds_query no_asserts
