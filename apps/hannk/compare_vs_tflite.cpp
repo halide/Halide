@@ -25,9 +25,6 @@ int main(int argc, char **argv) {
         runner.run(f);
         halide_profiler_report(nullptr);
         halide_profiler_reset();
-        std::cout << "\n";
     }
-
-    std::cout << "Done!\n";
     return 0;
 }
