@@ -1400,9 +1400,10 @@ void ReshapeOp::execute() {
         assert(new_shape.at(d) == output_buf.dim(d).extent());
     }
 
-    // NOTE: HCHECK, not assert, to ensure a runtime failure to match TFLite
-    // TODO: return error code
-    HCHECK(input_buf.number_of_elements() == output_buf.number_of_elements());
+    // TODO: we must verify these match (and fail at runtime if not).
+    // That said, we should be able to predict this at parse time
+    // (for non-dynamic tensors) and skip the runtime check most of the time.
+    assert(input_buf.number_of_elements() == output_buf.number_of_elements());
 
     assert(in->is_dense());
     assert(out->is_dense());
