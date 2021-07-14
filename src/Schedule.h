@@ -104,9 +104,8 @@ enum class TailStrategy {
      * evaluation beyond the original extent. Always legal.
      * Pros: no redundant re-evaluation; does not constrain input
      * or output sizes; small code size. Cons: the inner loop
-     * has a non-constant extent; vectorization will scalarize to
-     * handle the if statement. */
-    None,
+     * has a non-constant extent. */
+    Truncate,
 
     /** For pure definitions use ShiftInwards. For pure vars in
      * update definitions use RoundUp. For RVars in update

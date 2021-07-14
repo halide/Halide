@@ -22,7 +22,7 @@ HalideExtern_2(int, call_counter, int, int);
 int main(int argc, char **argv) {
     Var x, y;
 
-    for (TailStrategy i : {TailStrategy::GuardWithIf, TailStrategy::None}) {
+    for (TailStrategy i : {TailStrategy::GuardWithIf, TailStrategy::Truncate}) {
         // A test case that requires sliding window to be able to slide
         // over a guardwithif split + promise_clamped.
 

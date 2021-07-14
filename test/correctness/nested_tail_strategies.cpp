@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
         TailStrategy::PredicateLoads,
         TailStrategy::PredicateStores,
         TailStrategy::ShiftInwards,
-        TailStrategy::None,
+        TailStrategy::Truncate,
     };
 
     // Two stages. First stage computed at tiles of second.

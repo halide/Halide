@@ -58,7 +58,7 @@ void define_enums(py::module &m) {
         .value("RoundUp", TailStrategy::RoundUp)
         .value("GuardWithIf", TailStrategy::GuardWithIf)
         .value("ShiftInwards", TailStrategy::ShiftInwards)
-        .value("None", TailStrategy::None)
+        .value("Truncate", TailStrategy::Truncate)
         .value("Auto", TailStrategy::Auto);
 
     py::enum_<Target::OS>(m, "TargetOS")

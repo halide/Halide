@@ -6,7 +6,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Var x;
 
-    for (TailStrategy i : {TailStrategy::GuardWithIf, TailStrategy::None}) {
+    for (TailStrategy i : {TailStrategy::GuardWithIf, TailStrategy::Truncate}) {
         // Check splitting an RVar in an update definition and then realizing it
         // over an extent that is not a multiple of the factor.
         Func f;
@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    for (TailStrategy i : {TailStrategy::GuardWithIf, TailStrategy::None}) {
+    for (TailStrategy i : {TailStrategy::GuardWithIf, TailStrategy::Truncate}) {
         // Check splitting an update definition and a reduction domain
         Func f;
 
@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    for (TailStrategy i : {TailStrategy::GuardWithIf, TailStrategy::None}) {
+    for (TailStrategy i : {TailStrategy::GuardWithIf, TailStrategy::Truncate}) {
         // Test something compute_at the inside and outside of a dimension split this way
         Func f, g, h;
         g(x) = x - 3;

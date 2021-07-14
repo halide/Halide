@@ -132,7 +132,7 @@ public:
 
             remap.compute_root();
             Var yo;
-            output.reorder(c, x, y).split(y, yo, y, 64).parallel(yo).vectorize(x, 8);
+            output.reorder(c, x, y).split(y, yo, y, 64, TailStrategy::GuardWithIf).parallel(yo).vectorize(x, 8);
             gray.compute_root().parallel(y, 32).vectorize(x, 8);
             for (int j = 1; j < 5; j++) {
                 inGPyramid[j]

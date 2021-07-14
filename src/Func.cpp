@@ -1108,9 +1108,9 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
     if (exact) {
         user_assert(tail == TailStrategy::GuardWithIf ||
                     tail == TailStrategy::Predicate ||
-                    tail == TailStrategy::None)
+                    tail == TailStrategy::Truncate)
             << "When splitting Var " << old_name
-            << " the tail strategy must be GuardWithIf, Predicate, None, or Auto. "
+            << " the tail strategy must be GuardWithIf, Predicate, Truncate, or Auto. "
             << "Anything else may change the meaning of the algorithm\n";
     }
 

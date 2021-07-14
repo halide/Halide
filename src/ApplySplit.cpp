@@ -50,7 +50,7 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const s
             // The split factor trivially divides the old extent,
             // but we know nothing new about the outer dimension.
         } else if (tail == TailStrategy::GuardWithIf ||
-                   tail == TailStrategy::None ||
+                   tail == TailStrategy::Truncate ||
                    tail == TailStrategy::Predicate ||
                    tail == TailStrategy::PredicateLoads ||
                    tail == TailStrategy::PredicateStores) {
@@ -72,6 +72,7 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const s
             ApplySplitResult::Type predicate_type, substitution_type;
             switch (tail) {
             case TailStrategy::GuardWithIf:
+            case TailStrategy::Truncate:
                 substitution_type = ApplySplitResult::Substitution;
                 predicate_type = ApplySplitResult::Predicate;
                 break;
@@ -99,7 +100,7 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const s
             result.emplace_back(guarded_var_name, guarded, ApplySplitResult::LetStmt);
 
             Expr cond = old_var <= old_max;
-            if (tail != TailStrategy::None) {
+            if (tail != TailStrategy::Truncate) {
                 cond = likely(cond);
             }
             result.emplace_back(cond, predicate_type);
