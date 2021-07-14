@@ -1400,12 +1400,16 @@ void ReshapeOp::execute() {
         assert(new_shape.at(d) == output_buf.dim(d).extent());
     }
 
-    assert(input_buf.number_of_elements() == output_buf.number_of_elements());
+    // NOTE: HCHECK, not assert, to ensure a runtime failure to match TFLite
+    // TODO: return error code
+    HCHECK(input_buf.number_of_elements() == output_buf.number_of_elements());
+
+    assert(in->is_dense());
+    assert(out->is_dense());
     if (is_alias(input_buf.raw_buffer(), output_buf.raw_buffer())) {
         assert(input_buf.begin() == output_buf.begin());
         assert(input_buf.end() == output_buf.end());
     } else {
-        // TODO: This should also check the strides are dense.
         size_t output_size = output_buf.number_of_elements() * out->type().bytes();
         memcpy(output_buf.data(), input_buf.data(), output_size);
     }

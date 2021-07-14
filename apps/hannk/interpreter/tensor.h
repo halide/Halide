@@ -208,6 +208,8 @@ public:
     }
     void set_alias_of(const TensorPtr &t, const TensorOffset &offset = {});
 
+    bool is_dense() const;
+
     void add_consumer(Op *op);
     void add_producer(Op *op);
     void remove_consumer(Op *op);
