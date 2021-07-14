@@ -616,12 +616,12 @@ public:
         // These should also work with 16 bit results. However, it is
         // only profitable to do so if the interleave simplifies away.
         Expr u8_4x4[] = {
-            in_u8(4*x + 0),
-            in_u8(4*x + 1),
-            in_u8(4*x + 2),
-            in_u8(4*x + 3),
+            in_u8(4 * x + 0),
+            in_u8(4 * x + 1),
+            in_u8(4 * x + 2),
+            in_u8(4 * x + 3),
         };
-        check("vrmpy(v*.ub,r*.b)", hvx_width/2, i16(u8_4x4[0])*127 + i16(u8_4x4[1])*126 + i16(u8_4x4[2])*-125 + i16(u8_4x4[3])*124);
+        check("vrmpy(v*.ub,r*.b)", hvx_width / 2, i16(u8_4x4[0]) * 127 + i16(u8_4x4[1]) * 126 + i16(u8_4x4[2]) * -125 + i16(u8_4x4[3]) * 124);
 
         // Make sure it doesn't generate if the operands don't interleave.
         check("vmpa(v*.ub,r*.b)", hvx_width, i16(u8_1) * 127 + i16(u8_2) * -126 + i16(u8_3) * 125 + i16(u8_4) * 124);
