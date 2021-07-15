@@ -797,6 +797,14 @@ void Conv2DOp::execute() {
                 fuse_xy(FuseType::Pad, input_buf);
                 fuse_xy(FuseType::Pad, output_buf);
             }
+
+            if (output_buf.dim(1).extent() < output_buf.dim(2).extent()) {
+                // Some networks have shapes with very small x and large y that we can't fuse.
+                // This case is bad for us because we tile the x dimension. It would be better
+                // if we tiled y instead. We can do this by just swapping the x and y dimensions.
+                input_buf.transpose(1, 2);
+                output_buf.transpose(1, 2);
+            }
         }
 
         conv_uint8(input_buf, filter_buf, bias_buf, params, stride_, dilation_, output_range, output_buf);
