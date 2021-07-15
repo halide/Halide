@@ -434,10 +434,35 @@ public:
             Expr r1 = true_runtime(n) * scale;
 
             // Invert them to get relative throughput, and compute L2 loss.
-            Expr delta = pow(1.0f / max(p1, 1e-10f) - 1.0f / r1, 2);
+            // Expr delta = pow(1.0f / max(p1, 1e-10f) - 1.0f / r1, 2);
+            // Instead of the term above, we will divide the delta by the 1/r1,
+            // emphasizing that getting smaller runtime predictions wrong would
+            // contribute more to the error term than getting larger predictions wrong.
+            // We will experiment with adding powers and coefficients to r1.
+            //Expr delta = pow(1.0f / max(p1, 1e-10f) - 1.0f / r1, 2) / (r1*r1*r1*r1);
+            //Expr delta = pow(p1 - r1, 2) / (r1*r1*r1*r1);
+            // Expr delta = pow(p1 - r1, 2);
+            //Expr delta = log(cosh(p1 - r1));
+            //Expr delta = pow( log(p1 + 1) - log(r1 + 1), 2) / (r1*r1*r1*r1);
+            //Expr delta = r1*r1 - 0.0001f*p1*p1; // after 20th batch things went downhill; try 128 samples per batch
+            //Expr delta = r1*r1 - 0.00001f*p1*p1 + log(cosh(p1 - r1)); // NOT BAD AT ALL!
+            //Expr delta = r1*r1 - 0.00001f*p1*p1 + 2.0f*(r1*log(r1) - r1*log(max(p1, 1e-10f))); // Last term is Kullback-Leibler divergence
+            //Expr delta = r1*r1 + 0.001f*p1*p1; // try coefficients in front of p1*p1; also try 1/(r1*r1) ...
+            // Expr delta = r1*r1 + p1*p1; // try coefficients in front of p1*p1; also try 1/(r1*r1) ...
+            //Expr delta = (r1*r1 + 0.000001f*p1*p1)*(r1*log(r1) - r1*log(max(p1, 1e-10f))); // try coefficients in front of p1*p1; also try 1/(r1*r1) ...
+            //Expr delta = r1*r1 - 0.000001f*p1*p1 + log(cosh(p1 - r1)); // 
+            //Expr delta = exp(-0.22f*(r1-p1)) + 0.22f*(r1-p1) - 1.0f;
+            //Expr delta = exp(0.22f*(r1-p1)) - 0.22f*(r1-p1) - 1.0f;
+            //Expr delta = 0.6f*pow(r1-p1, 2)/(1.0f + exp(9.0f*(r1-p1))) + 0.4f; // DOES NOT WORK
+            //Expr delta = exp(-0.22f*(1.0f/r1 - 1.0f/max(p1, 1e-10f))) + 0.22f*(1.0f/r1 - 1.0f/max(p1, 1e-10f)) - 1.0f;
+            // Expr delta = 17.0f*(exp(-0.22f*(0.5f*r1-p1)) + 0.22f*(0.5f*r1-p1) - 1.0f); // Batch 20 is very interesting with 6 points below 1.6 at 16 sample run
+            //Expr delta = 17.0f*(exp(-0.22f*(0.3f*r1-p1)) + 0.22f*(0.3f*r1-p1) - 1.0f) + r1*r1; // Interesting!
+            Expr delta = 17.0f*(exp(-0.22f*(0.25f*r1-p1)) + 0.22f*(0.25f*r1-p1) - 1.0f) + r1*r1; // 
 
             // Add the regulization with a small weight.
             err(n) = delta + 1e-5f * regularize;
+            //err(n) = delta + 0.0f * regularize;
+            //err(n) = delta;
 
             // Sum the errors over the batch.
             Expr loss = sum(err(r_batch));

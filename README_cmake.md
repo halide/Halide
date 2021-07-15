@@ -11,11 +11,24 @@ The following sections cover each in detail.
 
 ## Table of Contents
 
+- [Halide and CMake](#halide-and-cmake)
+  - [Table of Contents](#table-of-contents)
 - [Getting started](#getting-started)
   - [Installing CMake](#installing-cmake)
+    - [Cross-platform](#cross-platform)
+    - [Windows](#windows)
+    - [macOS](#macos)
+    - [Ubuntu Linux](#ubuntu-linux)
   - [Installing dependencies](#installing-dependencies)
+    - [Windows](#windows-1)
+    - [macOS](#macos-1)
+    - [Ubuntu](#ubuntu)
 - [Building Halide with CMake](#building-halide-with-cmake)
   - [Basic build](#basic-build)
+    - [Windows](#windows-2)
+    - [macOS and Linux](#macos-and-linux)
+    - [CMake Presets](#cmake-presets)
+  - [Installing](#installing)
   - [Build options](#build-options)
     - [Find module options](#find-module-options)
 - [Using Halide from your CMake build](#using-halide-from-your-cmake-build)
@@ -30,6 +43,11 @@ The following sections cover each in detail.
     - [Imported targets](#imported-targets)
     - [Functions](#functions)
       - [`add_halide_library`](#add_halide_library)
+  - [Cross compiling](#cross-compiling)
+    - [Use a super-build](#use-a-super-build)
+    - [Use `ExternalProject` directly](#use-externalproject-directly)
+    - [Use an emulator or run on device](#use-an-emulator-or-run-on-device)
+    - [Bypass CMake](#bypass-cmake)
 - [Contributing CMake code to Halide](#contributing-cmake-code-to-halide)
   - [General guidelines and best practices](#general-guidelines-and-best-practices)
     - [Prohibited commands list](#prohibited-commands-list)
@@ -809,7 +827,7 @@ add_halide_library(<target> FROM <generator-target>
 
 extra-output = ASSEMBLY | BITCODE | COMPILER_LOG | CPP_STUB
              | FEATURIZATION | LLVM_ASSEMBLY | PYTHON_EXTENSION
-             | PYTORCH_WRAPPER | SCHEDULE | STMT | STMT_HTML
+             | PYTORCH_WRAPPER | SCHEDULE | PYTHON_SCHEDULE | STMT | STMT_HTML
 ```
 
 This function creates a called `<target>` corresponding to running the
