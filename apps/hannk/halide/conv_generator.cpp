@@ -177,21 +177,19 @@ public:
             input_.dim(d).set_stride(align(input_.dim(d).stride(), input_alignment));
         }
 
-        output_.compute_root();
-
-        // Figure out how big the tiles we should optimize for should be by getting
-        // the total number of accumulators best for this target and figuring out
-        // tile sizes. This is really tricky to do. The strategy here is to define
-        // a list of good tile sizes (in order of preference), and then prune the
-        // ones that use too many registers for the current target.
-        // Some guidelines for picking tile sizes are:
+        // We want to tile the c and x dimensions, so we can reuse loads of the input
+        // and filter as many times as possible. The choice of tile size is guided
+        // by the following criteria:
         // - The number of channels must be divided by the tile size, and is almost
         //   always a power of 2, so the tiling in c should be a power of 2.
-        // - The bigger the tile is, the better.
+        // - The bigger the tile is, the better, as long as the accumulators can all
+        //   stay in registers.
         // - For two tiles of equal area, the one with bigger x is probably better,
         //   because fewer loads for the filter will be reused across more values of x.
+        // - We use ShiftInwards for x, and if the overlap is large and the x dimension
+        //   is small, the overhead may be significant.
         const int accumulators = get_accumulator_count(target);
-        const int max_tile_c = 4;
+        const int min_tiles = 2;
         std::vector<std::pair<int, int>> tile_sizes = {
             {4, 6},
             {4, 5},
@@ -202,14 +200,10 @@ public:
             {4, 1},
         };
 
-        // We need to tile the output, but we can't use GuardWithIf because we need
-        // things computed at the tile to have constant size. We can't assume the
-        // output is bigger than a minimum size. So, we specialize for decreasing
-        // tile sizes, and have a degenerate tile case to handle the rest.
         Var xo("xo");
         Expr output_channels = output_.dim(0).extent();
         Expr output_width = output_.dim(1).extent();
-        const int min_tile_x = 2;
+        int max_tile_c = 1;
         for (auto i : tile_sizes) {
             const int tile_c = i.first;
             const int tile_x = i.second;
@@ -217,9 +211,11 @@ public:
                 // This tile size uses too many registers, skip it.
                 continue;
             }
+            max_tile_c = std::max(max_tile_c, tile_c);
+
             output_
                 .specialize(output_channels % (tile_c * accum_vector_size) == 0 &&
-                            (output_width % tile_x == 0 || output_width >= tile_x * min_tile_x))
+                            (output_width % tile_x == 0 || output_width >= tile_x * min_tiles))
                 .split(c, co, c, tile_c * accum_vector_size, TailStrategy::RoundUp)
                 .split(x, xo, x, tile_x, TailStrategy::ShiftInwards)
                 .reorder(x, c, co, xo, y, b)
@@ -235,8 +231,6 @@ public:
             .reorder(c, x, co, xo, y, b)
             .vectorize(c);
 
-        // These GuardWithIf splits simplify for the constant-tile specializations,
-        // but probably generate poor code for the general case.
         convolved.compute_at(output_, co)
             .store_in(MemoryType::Stack)
             .reorder(x, c)
