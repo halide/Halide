@@ -137,12 +137,6 @@ void fuse(int d0, int d1, FuseType type, halide_buffer_t *a, Bufs *...rest) {
     fuse(d0, d1, type, rest...);
 }
 
-void swap_dims(int d0, int d1, halide_buffer_t *buf) {
-    std::swap(buf->dim[d0].min, buf->dim[d1].min);
-    std::swap(buf->dim[d0].extent, buf->dim[d1].extent);
-    std::swap(buf->dim[d0].stride, buf->dim[d1].stride);
-}
-
 // Embed extent 1 dimensions until buf has the given rank.
 template<typename T>
 void pad_to_rank(int rank, HalideBuffer<T> &buf) {
@@ -808,8 +802,8 @@ void Conv2DOp::execute() {
                 // Some networks have shapes with very small x and large y that we can't fuse.
                 // This case is bad for us because we tile the x dimension. It would be better
                 // if we tiled y instead. We can do this by just swapping the x and y dimensions.
-                swap_dims(1, 2, input_buf);
-                swap_dims(1, 2, output_buf);
+                input_buf.transpose(1, 2);
+                output_buf.transpose(1, 2);
             }
         }
 
