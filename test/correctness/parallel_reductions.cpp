@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
         sum_cols.update();
         out.output_buffer().dim(0).set_bounds(0, 256);
 
-        Buffer<int> result = out.realize(256);
+        Buffer<int> result = out.realize({256});
 
         for (int i = 0; i < 256; i++) {
             if (result(i) != correct(i)) {

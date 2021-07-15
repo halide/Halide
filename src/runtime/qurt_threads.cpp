@@ -32,7 +32,7 @@ int halide_host_cpu_count() {
     return 4;
 }
 
-#define STACK_SIZE 256 * 1024
+#define STACK_SIZE (256 * 1024)
 
 WEAK uint16_t halide_qurt_default_thread_priority = 100;
 
@@ -84,14 +84,14 @@ namespace Synchronization {
 struct thread_parker {
     qurt_mutex_t mutex;
     qurt_cond_t condvar;
-    bool should_park;
+    bool should_park = false;
 
-#if __cplusplus >= 201103L
     thread_parker(const thread_parker &) = delete;
-#endif
+    thread_parker &operator=(const thread_parker &) = delete;
+    thread_parker(thread_parker &&) = delete;
+    thread_parker &operator=(thread_parker &&) = delete;
 
-    ALWAYS_INLINE thread_parker()
-        : should_park(false) {
+    ALWAYS_INLINE thread_parker() {
         qurt_mutex_init(&mutex);
         qurt_cond_init(&condvar);
         should_park = false;

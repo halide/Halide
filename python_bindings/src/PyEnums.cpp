@@ -15,7 +15,6 @@ void define_enums(py::module &m) {
         .value("Default_GPU", DeviceAPI::Default_GPU)
         .value("CUDA", DeviceAPI::CUDA)
         .value("OpenCL", DeviceAPI::OpenCL)
-        .value("GLSL", DeviceAPI::GLSL)
         .value("OpenGLCompute", DeviceAPI::OpenGLCompute)
         .value("Metal", DeviceAPI::Metal)
         .value("Hexagon", DeviceAPI::Hexagon);
@@ -36,7 +35,10 @@ void define_enums(py::module &m) {
         .value("Heap", MemoryType::Heap)
         .value("Stack", MemoryType::Stack)
         .value("Register", MemoryType::Register)
-        .value("GPUShared", MemoryType::GPUShared);
+        .value("GPUShared", MemoryType::GPUShared)
+        .value("GPUTexture", MemoryType::GPUTexture)
+        .value("LockedCache", MemoryType::LockedCache)
+        .value("VTCM", MemoryType::VTCM);
 
     py::enum_<NameMangling>(m, "NameMangling")
         .value("Default", NameMangling::Default)
@@ -76,6 +78,7 @@ void define_enums(py::module &m) {
         .value("MIPS", Target::Arch::MIPS)
         .value("Hexagon", Target::Arch::Hexagon)
         .value("POWERPC", Target::Arch::POWERPC)
+        .value("RISCV", Target::Arch::RISCV)
         .value("WebAssembly", Target::Arch::WebAssembly);
 
     py::enum_<Target::Feature>(m, "TargetFeature")
@@ -103,7 +106,6 @@ void define_enums(py::module &m) {
         .value("CLDoubles", Target::Feature::CLDoubles)
         .value("CLHalf", Target::Feature::CLHalf)
         .value("CLAtomics64", Target::Feature::CLAtomics64)
-        .value("OpenGL", Target::Feature::OpenGL)
         .value("OpenGLCompute", Target::Feature::OpenGLCompute)
         .value("EGL", Target::Feature::EGL)
         .value("UserContext", Target::Feature::UserContext)
@@ -113,7 +115,7 @@ void define_enums(py::module &m) {
         .value("Metal", Target::Feature::Metal)
         .value("CPlusPlusMangling", Target::Feature::CPlusPlusMangling)
         .value("LargeBuffers", Target::Feature::LargeBuffers)
-        .value("HVX_64", Target::Feature::HVX_64)
+        .value("HVX", Target::Feature::HVX)
         .value("HVX_128", Target::Feature::HVX_128)
         .value("HVX_v62", Target::Feature::HVX_v62)
         .value("HVX_v65", Target::Feature::HVX_v65)
@@ -126,6 +128,7 @@ void define_enums(py::module &m) {
         .value("AVX512_KNL", Target::Feature::AVX512_KNL)
         .value("AVX512_Skylake", Target::Feature::AVX512_Skylake)
         .value("AVX512_Cannonlake", Target::Feature::AVX512_Cannonlake)
+        .value("AVX512_SapphireRapids", Target::Feature::AVX512_SapphireRapids)
         .value("TraceLoads", Target::Feature::TraceLoads)
         .value("TraceStores", Target::Feature::TraceStores)
         .value("TraceRealizations", Target::Feature::TraceRealizations)
@@ -141,9 +144,15 @@ void define_enums(py::module &m) {
         .value("WasmSimd128", Target::Feature::WasmSimd128)
         .value("WasmSignExt", Target::Feature::WasmSignExt)
         .value("WasmSatFloatToInt", Target::Feature::WasmSatFloatToInt)
+        .value("WasmThreads", Target::Feature::WasmThreads)
+        .value("WasmBulkMemory", Target::Feature::WasmBulkMemory)
         .value("SVE", Target::Feature::SVE)
         .value("SVE2", Target::Feature::SVE2)
         .value("ARMDotProd", Target::Feature::ARMDotProd)
+        .value("ARMFp16", Target::Feature::ARMFp16)
+        .value("LLVMLargeCodeModel", Target::Feature::LLVMLargeCodeModel)
+        .value("RVV", Target::Feature::RVV)
+        .value("ARMv81a", Target::Feature::ARMv81a)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
 
     // Schedule.
     Target target = get_jit_target_from_environment();
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (target.has_feature(Target::HVX)) {
         // Vectorize by one vector width.
         // Since the operations are widening ops,
         // the operands are effectively half-vector width.
@@ -38,9 +38,9 @@ int main(int argc, char **argv) {
     }
 
     // Run the pipeline and verify the results are correct.
-    Buffer<int16_t> out_p = product.realize(W, target);
-    Buffer<int16_t> out_s = sum.realize(W, target);
-    Buffer<int16_t> out_d = diff.realize(W, target);
+    Buffer<int16_t> out_p = product.realize({W}, target);
+    Buffer<int16_t> out_s = sum.realize({W}, target);
+    Buffer<int16_t> out_d = diff.realize({W}, target);
 
     for (int x = 1; x < W - 1; x++) {
         int16_t correct_p = input(x) * 2;

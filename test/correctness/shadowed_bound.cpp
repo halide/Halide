@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     g.compute_root().tile(x, y, xi, yi, 32, 32);
     f.compute_at(g, x).bound(c, 0, 4).unroll(c);
 
-    g.realize(1024, 1024, 4);
+    g.realize({1024, 1024, 4});
 
     // f's loop over channels has two bounds. The first outer one
     // comes from its relationship with g - it needs to satisfy

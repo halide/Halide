@@ -5,12 +5,6 @@ namespace Internal {
 
 using std::vector;
 
-IRMutator::IRMutator() {
-}
-
-IRMutator::~IRMutator() {
-}
-
 Expr IRMutator::mutate(const Expr &e) {
     return e.defined() ? e.get()->mutate_expr(this) : Expr();
 }
@@ -159,7 +153,9 @@ Expr IRMutator::visit(const Call *op) {
     for (size_t i = 0; i < op->args.size(); i++) {
         const Expr &old_arg = op->args[i];
         Expr new_arg = mutate(old_arg);
-        if (!new_arg.same_as(old_arg)) changed = true;
+        if (!new_arg.same_as(old_arg)) {
+            changed = true;
+        }
         new_args[i] = std::move(new_arg);
     }
 
@@ -240,21 +236,26 @@ Stmt IRMutator::visit(const Provide *op) {
     for (size_t i = 0; i < op->args.size(); i++) {
         const Expr &old_arg = op->args[i];
         Expr new_arg = mutate(old_arg);
-        if (!new_arg.same_as(old_arg)) changed = true;
+        if (!new_arg.same_as(old_arg)) {
+            changed = true;
+        }
         new_args[i] = new_arg;
     }
 
     for (size_t i = 0; i < op->values.size(); i++) {
         const Expr &old_value = op->values[i];
         Expr new_value = mutate(old_value);
-        if (!new_value.same_as(old_value)) changed = true;
+        if (!new_value.same_as(old_value)) {
+            changed = true;
+        }
         new_values[i] = new_value;
     }
+    Expr new_predicate = mutate(op->predicate);
 
-    if (!changed) {
+    if (!changed && new_predicate.same_as(op->predicate)) {
         return op;
     }
-    return Provide::make(op->name, new_values, new_args);
+    return Provide::make(op->name, new_values, new_args, new_predicate);
 }
 
 Stmt IRMutator::visit(const Allocate *op) {
@@ -359,7 +360,9 @@ Expr IRMutator::visit(const Shuffle *op) {
     for (size_t i = 0; i < op->vectors.size(); i++) {
         Expr old_vector = op->vectors[i];
         Expr new_vector = mutate(old_vector);
-        if (!new_vector.same_as(old_vector)) changed = true;
+        if (!new_vector.same_as(old_vector)) {
+            changed = true;
+        }
         new_vectors[i] = new_vector;
     }
 

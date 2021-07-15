@@ -1,6 +1,8 @@
 #ifndef _HALIDE_HEXAGON_REMOTE_H
 #define _HALIDE_HEXAGON_REMOTE_H
-#include "AEEStdDef.h"
+#include <AEEStdDef.h>
+#include <remote.h>
+
 #ifndef __QAIC_HEADER
 #define __QAIC_HEADER(ff) ff
 #endif //__QAIC_HEADER

@@ -4,7 +4,7 @@ project(bgu)
 enable_testing()
 
 # Set up language settings
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
@@ -35,7 +35,7 @@ if (EXISTS ${IMAGE})
     configure_file(${IMAGE} rgb.png COPYONLY)
     add_test(NAME bgu_filter COMMAND bgu_filter rgb.png out.png)
     set_tests_properties(bgu_filter PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS bgu
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()

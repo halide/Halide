@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
     f1.store_at(out, x).compute_at(g, y);
     f2.store_at(out, x).compute_at(g, x);
 
-    out.realize(10, 10);
+    out.realize({10, 10});
 
     // We just want this to not segfault.
 

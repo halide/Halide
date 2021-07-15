@@ -10,7 +10,7 @@ def test_tuple_select():
     f = hl.Func('f')
     f[x, y] = hl.tuple_select(x + y < 30, (x, y), (x-1, y-2))
 
-    a, b = f.realize(200, 200)
+    a, b = f.realize([200, 200])
     for xx in range(a.height()):
         for yy in range(a.width()):
             correct_a = xx if xx + yy < 30 else xx-1
@@ -22,7 +22,7 @@ def test_tuple_select():
     f = hl.Func('f')
     f[x, y] = hl.tuple_select((x < 30, y < 30), (x, y), (x-1, y-2))
 
-    a, b = f.realize(200, 200)
+    a, b = f.realize([200, 200])
     for xx in range(a.height()):
         for yy in range(a.width()):
             correct_a = xx if xx < 30 else xx-1
@@ -36,7 +36,7 @@ def test_tuple_select():
                               x + y < 100, (x-1, y-2),
                                            (x-100, y-200))
 
-    a, b = f.realize(200, 200)
+    a, b = f.realize([200, 200])
     for xx in range(a.height()):
         for yy in range(a.width()):
             correct_a = xx if xx + yy < 30 else xx-1 if xx + yy < 100 else xx - 100
@@ -50,7 +50,7 @@ def test_tuple_select():
                               (x < 100, y < 100), (x-1, y-2),
                                                   (x-100, y-200))
 
-    a, b = f.realize(200, 200)
+    a, b = f.realize([200, 200])
     for xx in range(a.height()):
         for yy in range(a.width()):
             correct_a = xx if xx < 30 else xx-1 if xx < 100 else xx - 100

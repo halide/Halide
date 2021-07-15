@@ -93,11 +93,7 @@ struct ErrorReport {
      * this by only actually throwing if there isn't an exception in
      * flight already.
      */
-#if __cplusplus >= 201100 || _MSC_VER >= 1900
     ~ErrorReport() noexcept(false);
-#else
-    ~ErrorReport();
-#endif
 };
 
 // This uses operator precedence as a trick to avoid argument evaluation if
@@ -128,6 +124,7 @@ public:
  * when the assertion is true.
  */
 #define _halide_internal_assertion(condition, flags) \
+    /* NOLINTNEXTLINE(bugprone-macro-parentheses) */ \
     (condition) ? (void)0 : ::Halide::Internal::Voidifier() & ::Halide::Internal::ErrorReport(__FILE__, __LINE__, #condition, flags).ref()
 
 #define internal_error Halide::Internal::ErrorReport(__FILE__, __LINE__, nullptr, 0)

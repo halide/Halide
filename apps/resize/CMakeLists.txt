@@ -4,7 +4,7 @@ project(resize)
 enable_testing()
 
 # Set up language settings
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
@@ -72,7 +72,7 @@ if (EXISTS ${IMAGE})
 
     set_tests_properties(resize_initial_downsample PROPERTIES
                          FIXTURES_SETUP rgb_small
-                         LABELS internal_app_tests
+                         LABELS resize
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 
 
@@ -92,7 +92,7 @@ if (EXISTS ${IMAGE})
                  COMMAND resize ${INPUT} out_${VARIANT}.png -i ${INTERP} -t ${TYPE} -f ${F})
         set_tests_properties(resize_${VARIANT}
                              PROPERTIES FIXTURES_REQUIRED rgb_small
-                             LABELS internal_app_tests
+                             LABELS resize
                              PASS_REGULAR_EXPRESSION "Success!"
                              SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
     endforeach ()

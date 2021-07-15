@@ -4,12 +4,12 @@ project(linear_algebra)
 enable_testing()
 
 # Set up language settings
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
 # Find Halide
-find_package(Halide REQUIRED COMPONENTS Halide)
+find_package(Halide REQUIRED)
 
 # Find BLAS-es
 set(DEFAULT_BLAS "")

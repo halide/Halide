@@ -25,9 +25,7 @@ class StripIdentities : public IRMutator {
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::return_second) ||
-            op->is_intrinsic(Call::likely) ||
-            op->is_intrinsic(Call::likely_if_innermost)) {
+        if (Call::as_tag(op) || op->is_intrinsic(Call::return_second)) {
             return mutate(op->args.back());
         } else {
             return IRMutator::visit(op);
@@ -67,22 +65,30 @@ class IsNoOp : public IRVisitor {
     using IRVisitor::visit;
 
     Expr make_and(Expr a, Expr b) {
-        if (is_zero(a) || is_one(b)) return a;
-        if (is_zero(b) || is_one(a)) return b;
+        if (is_const_zero(a) || is_const_one(b)) {
+            return a;
+        }
+        if (is_const_zero(b) || is_const_one(a)) {
+            return b;
+        }
         return a && b;
     }
 
     Expr make_or(Expr a, Expr b) {
-        if (is_zero(a) || is_one(b)) return b;
-        if (is_zero(b) || is_one(a)) return a;
+        if (is_const_zero(a) || is_const_one(b)) {
+            return b;
+        }
+        if (is_const_zero(b) || is_const_one(a)) {
+            return a;
+        }
         return a || b;
     }
 
     void visit(const Store *op) override {
-        if (op->value.type().is_handle() || is_zero(op->predicate)) {
+        if (op->value.type().is_handle() || is_const_zero(op->predicate)) {
             condition = const_false();
         } else {
-            if (is_zero(condition)) {
+            if (is_const_zero(condition)) {
                 return;
             }
             // If the value being stored is the same as the value loaded,
@@ -112,7 +118,7 @@ class IsNoOp : public IRVisitor {
     }
 
     void visit(const For *op) override {
-        if (is_zero(condition)) {
+        if (is_const_zero(condition)) {
             return;
         }
         Expr old_condition = condition;
@@ -128,7 +134,7 @@ class IsNoOp : public IRVisitor {
     }
 
     void visit(const IfThenElse *op) override {
-        if (is_zero(condition)) {
+        if (is_const_zero(condition)) {
             return;
         }
         Expr total_condition = condition;
@@ -153,6 +159,10 @@ class IsNoOp : public IRVisitor {
             return;
         }
         IRVisitor::visit(op);
+    }
+
+    void visit(const Acquire *op) override {
+        condition = const_false();
     }
 
     template<typename LetOrLetStmt>
@@ -229,7 +239,7 @@ class SimplifyUsingBounds : public IRMutator {
             test = simplify(test);
             debug(3) << " -> " << test << "\n";
         }
-        return is_one(test);
+        return is_const_one(test);
     }
 
     Expr visit(const Min *op) override {
@@ -361,12 +371,18 @@ class TrimNoOps : public IRMutator {
 
         debug(3) << "Simplified condition is " << is_no_op.condition << "\n";
 
-        if (is_one(is_no_op.condition)) {
+        if (is_const_one(is_no_op.condition)) {
             // This loop is definitely useless
+            debug(3) << "Removed empty loop.\n"
+                     << "Old: " << Stmt(op) << "\n";
             return Evaluate::make(0);
-        } else if (is_zero(is_no_op.condition)) {
+        } else if (is_const_zero(is_no_op.condition)) {
             // This loop is definitely needed
-            return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            if (body.same_as(op->body)) {
+                return op;
+            } else {
+                return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            }
         }
 
         // The condition is something interesting. Try to see if we
@@ -383,6 +399,8 @@ class TrimNoOps : public IRMutator {
 
         if (i.is_empty()) {
             // Empty loop
+            debug(3) << "Removed empty loop.\n"
+                     << "Old: " << Stmt(op) << "\n";
             return Evaluate::make(0);
         }
 

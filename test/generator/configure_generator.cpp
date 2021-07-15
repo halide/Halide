@@ -6,10 +6,10 @@ class Configure : public Halide::Generator<Configure> {
 public:
     GeneratorParam<int> num_extra_buffer_inputs{"num_extra_buffer_inputs", 3};
 
-    Input<Buffer<int>> input{"input", 3};
+    Input<Buffer<>> input{"input"};
     Input<int> bias{"bias"};
 
-    Output<Buffer<int>> output{"output", 3};
+    Output<Buffer<>> output{"output"};
 
     void configure() {
         configure_calls++;
@@ -31,9 +31,25 @@ public:
 
         extra_scalar_input = add_input<int>("extra_scalar_input");
 
+        extra_dynamic_scalar_input = add_input<Expr>("extra_dynamic_scalar_input", Int(8));
+
         extra_buffer_output = add_output<Buffer<>>("extra_buffer_output", Float(32), 3);
 
         extra_func_output = add_output<Func>("extra_func_output", Float(64), 2);
+
+        // This is ok: you can't *examine* an Input or Output here, but you can call
+        // set_type() iff the type is unspecified. (This allows you to base the type on,
+        // e.g., the value in get_target(), or the value of any GeneratorParam.)
+        input.set_type(Int(32));
+        output.set_type(Int(32));
+
+        // Ditto for set_dimensions.
+        input.set_dimensions(3);
+        output.set_dimensions(3);
+
+        // Will fail: it is not legal to call set_type on an Input or Output that
+        // already has a type specified.
+        // bias.set_type(Int(32));
 
         // Will fail: it is not legal to examine Inputs in the configure() method
         // assert(input.dimensions() == 3);
@@ -50,8 +66,14 @@ public:
     void generate() {
         assert(configure_calls == 1);
 
+        // Will fail: it is not legal to call set_type(), etc from anywhere but configure().
+        // input.set_type(Int(32));
+        // input.set_dimensions(3);
+
         // Attempting to call add_input() outside of the configure method will fail.
         // auto *this_will_fail = add_input<Buffer<>>("untyped_uint8", UInt(8), 2);
+
+        assert((*extra_dynamic_scalar_input).type() == Int(8));
 
         Var x, y, c;
 
@@ -61,7 +83,7 @@ public:
         }
         extra_sum += cast<int>((*typed_extra_buffer_input)(x, y));
         extra_sum += cast<int>((*extra_func_input)(x, y, c));
-        extra_sum += *extra_scalar_input;
+        extra_sum += *extra_scalar_input + *extra_dynamic_scalar_input;
 
         output(x, y, c) = input(x, y, c) + bias + extra_sum;
 
@@ -76,6 +98,7 @@ private:
     Input<Buffer<int16_t>> *typed_extra_buffer_input;
     Input<Func> *extra_func_input;
     Input<int> *extra_scalar_input;
+    Input<Expr> *extra_dynamic_scalar_input;
 
     Output<Buffer<>> *extra_buffer_output;
     Output<Func> *extra_func_output;

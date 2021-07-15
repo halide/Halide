@@ -2,7 +2,7 @@
 #define HALIDE_CPU_FEATURES_H
 
 #include "HalideRuntime.h"
-#include "cpu_features.h"
+#include "runtime_internal.h"
 
 namespace Halide {
 namespace Runtime {
@@ -32,8 +32,6 @@ struct CpuFeatures {
 
     ALWAYS_INLINE
     CpuFeatures() {
-        // Can't use in-class initing of these without C++11 enabled,
-        // which isn't the case for all runtime builds
         for (int i = 0; i < kWordCount; ++i) {
             known[i] = 0;
             available[i] = 0;

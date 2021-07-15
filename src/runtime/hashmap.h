@@ -66,9 +66,9 @@ inline bool CacheEntry::init(void *user_context,
                              uint32_t key_hash,
                              const uint8_t *cache_value, size_t cache_value_size,
                              copy_value_func copy_value) {
-    next = NULL;
-    more_recent = NULL;
-    less_recent = NULL;
+    next = nullptr;
+    more_recent = nullptr;
+    less_recent = nullptr;
     key_size = cache_key_size;
     hash = key_hash;
     in_use_count = 0;
@@ -149,17 +149,17 @@ struct HashMap {
 
 inline bool HashMap::init(void *user_context, copy_value_func _copy_value, destroy_value_func _destroy_value) {
     memset(&memoization_lock, 0, sizeof(halide_mutex));
-    halide_assert(NULL, !inited);
-    most_recently_used = NULL;
-    least_recently_used = NULL;
+    halide_assert(nullptr, !inited);
+    most_recently_used = nullptr;
+    least_recently_used = nullptr;
     kDefaultCacheSize = 1 << 20;
     max_cache_size = kDefaultCacheSize;
     current_cache_size = 0;
     for (size_t i = 0; i < kHashTableSize; ++i) {
-        cache_entries[i] = NULL;
+        cache_entries[i] = nullptr;
     }
-    halide_assert(NULL, _copy_value);
-    halide_assert(NULL, _destroy_value);
+    halide_assert(nullptr, _copy_value);
+    halide_assert(nullptr, _destroy_value);
     this->copy_value = _copy_value;
     this->destroy_value = _destroy_value;
     inited = true;
@@ -173,7 +173,7 @@ inline void HashMap::prune() {
 #endif
     CacheEntry *prune_candidate = least_recently_used;
     while (current_cache_size > max_cache_size &&
-           prune_candidate != NULL) {
+           prune_candidate != nullptr) {
         CacheEntry *more_recent = prune_candidate->more_recent;
 
         if (prune_candidate->in_use_count == 0) {
@@ -185,10 +185,10 @@ inline void HashMap::prune() {
             if (prev_hash_entry == prune_candidate) {
                 cache_entries[index] = prune_candidate->next;
             } else {
-                while (prev_hash_entry != NULL && prev_hash_entry->next != prune_candidate) {
+                while (prev_hash_entry != nullptr && prev_hash_entry->next != prune_candidate) {
                     prev_hash_entry = prev_hash_entry->next;
                 }
-                halide_assert(NULL, prev_hash_entry != NULL);
+                halide_assert(nullptr, prev_hash_entry != nullptr);
                 prev_hash_entry->next = prune_candidate->next;
             }
 
@@ -196,7 +196,7 @@ inline void HashMap::prune() {
             if (least_recently_used == prune_candidate) {
                 least_recently_used = more_recent;
             }
-            if (more_recent != NULL) {
+            if (more_recent != nullptr) {
                 more_recent->less_recent = prune_candidate->less_recent;
             }
 
@@ -204,7 +204,7 @@ inline void HashMap::prune() {
             if (most_recently_used == prune_candidate) {
                 most_recently_used = prune_candidate->less_recent;
             }
-            if (prune_candidate->less_recent != NULL) {
+            if (prune_candidate->less_recent != nullptr) {
                 prune_candidate->less_recent = more_recent;
             }
 
@@ -256,31 +256,31 @@ inline int HashMap::lookup(void *user_context,
 #endif
 
     CacheEntry *entry = cache_entries[index];
-    while (entry != NULL) {
+    while (entry != nullptr) {
         if (entry->hash == h && entry->key_size == (size_t)size &&
             keys_equal(entry->key, cache_key, size)) {
 
             if (entry != most_recently_used) {
-                halide_assert(user_context, entry->more_recent != NULL);
-                if (entry->less_recent != NULL) {
+                halide_assert(user_context, entry->more_recent != nullptr);
+                if (entry->less_recent != nullptr) {
                     entry->less_recent->more_recent = entry->more_recent;
                 } else {
                     halide_assert(user_context, least_recently_used == entry);
                     least_recently_used = entry->more_recent;
                 }
-                halide_assert(user_context, entry->more_recent != NULL);
+                halide_assert(user_context, entry->more_recent != nullptr);
                 entry->more_recent->less_recent = entry->less_recent;
 
-                entry->more_recent = NULL;
+                entry->more_recent = nullptr;
                 entry->less_recent = most_recently_used;
-                if (most_recently_used != NULL) {
+                if (most_recently_used != nullptr) {
                     most_recently_used->more_recent = entry;
                 }
                 most_recently_used = entry;
             }
 
-            halide_assert(user_context, (cache_value_size == entry->value_size))
-                copy_value(cache_value, entry->value, entry->value_size);
+            halide_assert(user_context, (cache_value_size == entry->value_size));
+            copy_value(cache_value, entry->value, entry->value_size);
 
             entry->in_use_count += 1;
 
@@ -321,7 +321,7 @@ inline int HashMap::store(void *user_context,
 
     // key is already present in the hashmap: overwrite value
     for (CacheEntry *entry = cache_entries[index];
-         entry != NULL;
+         entry != nullptr;
          entry = entry->next) {
         if (entry->hash == h && entry->key_size == (size_t)size &&
             keys_equal(entry->key, cache_key, size)) {
@@ -343,11 +343,11 @@ inline int HashMap::store(void *user_context,
 
     new_entry->next = cache_entries[index];
     new_entry->less_recent = most_recently_used;
-    if (most_recently_used != NULL) {
+    if (most_recently_used != nullptr) {
         most_recently_used->more_recent = new_entry;
     }
     most_recently_used = new_entry;
-    if (least_recently_used == NULL) {
+    if (least_recently_used == nullptr) {
         least_recently_used = new_entry;
     }
     cache_entries[index] = new_entry;
@@ -370,11 +370,11 @@ inline void HashMap::release(void *user_context, void *host) {
 }
 
 inline void HashMap::cleanup() {
-    debug(NULL) << "halide_memoization_cache_cleanup\n";
+    debug(nullptr) << "halide_memoization_cache_cleanup\n";
     for (size_t i = 0; i < kHashTableSize; i++) {
         CacheEntry *entry = cache_entries[i];
-        cache_entries[i] = NULL;
-        while (entry != NULL) {
+        cache_entries[i] = nullptr;
+        while (entry != nullptr) {
             CacheEntry *next = entry->next;
             entry->destroy(this->user_context, destroy_value);
             hashmap_free(this->user_context, entry);
@@ -382,8 +382,8 @@ inline void HashMap::cleanup() {
         }
     }
     current_cache_size = 0;
-    most_recently_used = NULL;
-    least_recently_used = NULL;
+    most_recently_used = nullptr;
+    least_recently_used = nullptr;
 }
 
 // THashMap: a convenience class for using HashMap with actual types
@@ -396,14 +396,14 @@ struct THashMap : public HashMap {
     // member functions below...
 
     static void copy_value_func(uint8_t *dst, const uint8_t *src, size_t size) {
-        halide_assert(NULL, sizeof(ValueType) == size);
+        halide_assert(nullptr, sizeof(ValueType) == size);
         ValueType *D = reinterpret_cast<ValueType *>(dst);
         const ValueType *S = reinterpret_cast<const ValueType *>(src);
         *D = *S;
     }
 
     static void destroy_value_func(uint8_t *value, size_t size) {
-        halide_assert(NULL, sizeof(ValueType) == size);
+        halide_assert(nullptr, sizeof(ValueType) == size);
         ValueType *V = reinterpret_cast<ValueType *>(value);
         V->~ValueType();
     }

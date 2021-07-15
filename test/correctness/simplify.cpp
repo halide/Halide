@@ -5,10 +5,16 @@ using namespace Halide::Internal;
 
 #define internal_assert _halide_user_assert
 
+// Helper to wrap an expression in a statement using the expression
+// that won't be simplified away.
+Stmt not_no_op(Expr x) {
+    x = Call::make(x.type(), "not_no_op", {x}, Call::Extern);
+    return Evaluate::make(x);
+}
+
 void check_is_sio(const Expr &e) {
     Expr simpler = simplify(e);
-    const Call *call = simpler.as<Call>();
-    if (!(call && call->is_intrinsic(Call::signed_integer_overflow))) {
+    if (!Call::as_intrinsic(simpler, {Call::signed_integer_overflow})) {
         std::cerr
             << "\nSimplification failure:\n"
             << "Input: " << e << "\n"
@@ -18,8 +24,8 @@ void check_is_sio(const Expr &e) {
     }
 }
 
-void check(const Expr &a, const Expr &b) {
-    Expr simpler = simplify(a);
+void check(const Expr &a, const Expr &b, const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>()) {
+    Expr simpler = simplify(a, true, Scope<Interval>(), alignment);
     if (!equal(simpler, b)) {
         std::cerr
             << "\nSimplification failure:\n"
@@ -113,14 +119,14 @@ void check_casts() {
     // Specific checks for 32 bit unsigned expressions - ensure simplifications are actually unsigned.
     // 4000000000 (4 billion) is less than 2^32 but more than 2^31.  As an int, it is negative.
     check(cast(UInt(32), (int)4000000000UL) + cast(UInt(32), 5), make_const(UInt(32), (int)4000000005UL));
-    check(cast(UInt(32), (int)4000000000UL) - cast(UInt(32), 5), make_const(UInt(32), (int)3999999995UL));
+    check(make_const(UInt(32, 4), (int)4000000000UL) - make_const(UInt(32, 4), 5), make_const(UInt(32, 4), (int)3999999995UL));
     check(cast(UInt(32), (int)4000000000UL) / cast(UInt(32), 5), make_const(UInt(32), 800000000));
     check(cast(UInt(32), 800000000) * cast(UInt(32), 5), make_const(UInt(32), (int)4000000000UL));
-    check(cast(UInt(32), (int)4000000023UL) % cast(UInt(32), 100), make_const(UInt(32), 23));
+    check(make_const(UInt(32, 2), (int)4000000023UL) % make_const(UInt(32, 2), 100), make_const(UInt(32, 2), 23));
     check(min(cast(UInt(32), (int)4000000023UL), cast(UInt(32), 1000)), make_const(UInt(32), (int)1000));
     check(max(cast(UInt(32), (int)4000000023UL), cast(UInt(32), 1000)), make_const(UInt(32), (int)4000000023UL));
     check(cast(UInt(32), (int)4000000023UL) < cast(UInt(32), 1000), const_false());
-    check(cast(UInt(32), (int)4000000023UL) == cast(UInt(32), 1000), const_false());
+    check(make_const(UInt(32, 3), (int)4000000023UL) == make_const(UInt(32, 3), 1000), const_false(3));
 
     check(cast(Float(64), 0.5f), Expr(0.5));
     check((x - cast(Float(64), 0.5f)) * (x - cast(Float(64), 0.5f)),
@@ -156,6 +162,12 @@ void check_casts() {
     }
     check(Shuffle::make({cast(UInt(64, 8), some_vector)}, indices),
           Shuffle::make({cast(UInt(64, 8), some_vector)}, indices));
+
+    // Interleaving simplifications can result in slices.
+    Expr var_vector = Variable::make(Int(32, 12), "v");
+    Expr even = Shuffle::make_slice(var_vector, 0, 2, 4);
+    Expr odd = Shuffle::make_slice(var_vector, 1, 2, 4);
+    check(Shuffle::make_interleave({even, odd}), Shuffle::make_slice(var_vector, 0, 1, 8));
 }
 
 void check_algebra() {
@@ -300,6 +312,64 @@ void check_algebra() {
     check((7 - y) / 7, (-y) / 7 + 1);
     check((y - 7) / 7, y / 7 + (-1));
 
+    Scope<ModulusRemainder> alignment;
+    alignment.push("x", ModulusRemainder(2, 0));
+    check((x + 0) / 2, x / 2, alignment);
+    check((x + 1) / 2, x / 2, alignment);
+    check((x + 2) / 2, x / 2 + 1, alignment);
+    check((x + 3) / 2, x / 2 + 1, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(2, 1));
+    check((x + 0) / 2, x / 2, alignment);
+    check((x + 1) / 2, x / 2 + 1, alignment);
+    check((x + 2) / 2, x / 2 + 1, alignment);
+    check((x + 3) / 2, x / 2 + 2, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(3, 0));
+    check((x + 0) / 3, x / 3, alignment);
+    check((x + 1) / 3, x / 3, alignment);
+    check((x + 2) / 3, x / 3, alignment);
+    check((x + 3) / 3, x / 3 + 1, alignment);
+    check((x + 4) / 3, x / 3 + 1, alignment);
+    check((x + 5) / 3, x / 3 + 1, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(3, 1));
+    check((x + 0) / 3, x / 3, alignment);
+    check((x + 1) / 3, x / 3, alignment);
+    check((x + 2) / 3, x / 3 + 1, alignment);
+    check((x + 3) / 3, x / 3 + 1, alignment);
+    check((x + 4) / 3, x / 3 + 1, alignment);
+    check((x + 5) / 3, x / 3 + 2, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(3, 2));
+    check((x + 0) / 3, x / 3, alignment);
+    check((x + 1) / 3, x / 3 + 1, alignment);
+    check((x + 2) / 3, x / 3 + 1, alignment);
+    check((x + 3) / 3, x / 3 + 1, alignment);
+    check((x + 4) / 3, x / 3 + 2, alignment);
+    check((x + 5) / 3, x / 3 + 2, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(4, 0));
+    check((x + 0) / 2, x / 2, alignment);
+    check((x + 1) / 2, x / 2, alignment);
+    check((x + 2) / 2, x / 2 + 1, alignment);
+    check((x + 3) / 2, x / 2 + 1, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(4, 1));
+    check((x + 0) / 2, x / 2, alignment);
+    check((x + 1) / 2, x / 2 + 1, alignment);
+    check((x + 2) / 2, x / 2 + 1, alignment);
+    check((x + 3) / 2, x / 2 + 2, alignment);
+    alignment.pop("x");
+    alignment.push("x", ModulusRemainder(2, 0));
+    check((x + 0) / 3, x / 3, alignment);
+    check((x + 1) / 3, (x + 1) / 3, alignment);
+    check((x + 2) / 3, (x + 2) / 3, alignment);
+    check((x + 3) / 3, x / 3 + 1, alignment);
+    check((x + 4) / 3, (x + 4) / 3, alignment);
+    check((x + 5) / 3, (x + 5) / 3, alignment);
+    alignment.pop("x");
+
     check(((7 + y) + z) / 7, (y + z) / 7 + 1);
     check(((y + 7) + z) / 7, (y + z) / 7 + 1);
     check((y + (7 + z)) / 7, (y + z) / 7 + 1);
@@ -427,7 +497,7 @@ void check_algebra() {
     check(5 % x < 6, const_true());
     check(5 % x < 5, 5 % x < 5);
     check(5 % x >= 0, const_true());
-    check(5 % x > 0, 0 < 5 % x);
+    check(5 % x > 0, 5 % x != 0);
 
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
     check(((x * (int32_t)0x80000000) + (z * (int32_t)0x80000000 + y)),
@@ -497,6 +567,10 @@ void check_vectors() {
 
     check(ramp(0, 1, 4) == broadcast(2, 4),
           ramp(-2, 1, 4) == broadcast(0, 4));
+
+    check(ramp(broadcast(0, 6), broadcast(6, 6), 4) + broadcast(ramp(0, 1, 3), 8) +
+              broadcast(ramp(broadcast(0, 3), broadcast(3, 3), 2), 4),
+          ramp(0, 1, 24));
 
     // Any linear combination of simple ramps and broadcasts should
     // reduce to a single ramp or broadcast.
@@ -645,6 +719,57 @@ void check_vectors() {
         Stmt stmt = Store::make("f", value, index, Parameter(), pred, ModulusRemainder());
         check(stmt, Evaluate::make(0));
     }
+
+    auto make_allocation = [](const char *name, Type t, Stmt body) {
+        return Allocate::make(name, t.element_of(), MemoryType::Stack, {t.lanes()}, const_true(), body);
+    };
+
+    {
+        // A store completely out of bounds.
+        Expr index = ramp(-8, 1, 8);
+        Expr value = Broadcast::make(0, 8);
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(8, 0));
+        stmt = make_allocation("f", value.type(), stmt);
+        check(stmt, Evaluate::make(unreachable()));
+    }
+
+    {
+        // A store with one lane in bounds at the min.
+        Expr index = ramp(-7, 1, 8);
+        Expr value = Broadcast::make(0, 8);
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(0, -7));
+        stmt = make_allocation("f", value.type(), stmt);
+        check(stmt, stmt);
+    }
+
+    {
+        // A store with one lane in bounds at the max.
+        Expr index = ramp(7, 1, 8);
+        Expr value = Broadcast::make(0, 8);
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(0, 7));
+        stmt = make_allocation("f", value.type(), stmt);
+        check(stmt, stmt);
+    }
+
+    {
+        // A store completely out of bounds.
+        Expr index = ramp(8, 1, 8);
+        Expr value = Broadcast::make(0, 8);
+        Stmt stmt = Store::make("f", value, index, Parameter(), const_true(8), ModulusRemainder(8, 0));
+        stmt = make_allocation("f", value.type(), stmt);
+        check(stmt, Evaluate::make(unreachable()));
+    }
+
+    Expr bool_vector = Variable::make(Bool(4), "bool_vector");
+    Expr int_vector = Variable::make(Int(32, 4), "int_vector");
+    check(VectorReduce::make(VectorReduce::And, Broadcast::make(bool_vector, 4), 1),
+          VectorReduce::make(VectorReduce::And, bool_vector, 1));
+    check(VectorReduce::make(VectorReduce::Or, Broadcast::make(bool_vector, 4), 2),
+          VectorReduce::make(VectorReduce::Or, bool_vector, 2));
+    check(VectorReduce::make(VectorReduce::Min, Broadcast::make(int_vector, 4), 4),
+          int_vector);
+    check(VectorReduce::make(VectorReduce::Max, Broadcast::make(int_vector, 4), 8),
+          VectorReduce::make(VectorReduce::Max, Broadcast::make(int_vector, 4), 8));
 }
 
 void check_bounds() {
@@ -1186,6 +1311,7 @@ void check_boolean() {
     check(x * 0 < y * 0, f);
     check(x < x + y, 0 < y);
     check(x + y < x, y < 0);
+    check(1 < -x, x < -1);
 
     check(select(x < 3, 2, 2), 2);
     check(select(x < (x + 1), 9, 2), 9);
@@ -1210,6 +1336,9 @@ void check_boolean() {
     check(min(select((x == 1), -1, x), x), select((x == 1), -1, x));
     check(min(select((x == -17), -1, x), x), x);
 
+    check(min(select(x == 0, max(y, w), z), w), select(x == 0, w, min(w, z)));
+    check(max(select(x == 0, y, min(z, w)), w), select(x == 0, max(w, y), w));
+
     check((1 - xf) * 6 < 3, 0.5f < xf);
 
     check(!f, t);
@@ -1223,6 +1352,12 @@ void check_boolean() {
     check(!(!(x == 0)), x == 0);
     check(!Expr(broadcast(x > y, 4)),
           broadcast(x <= y, 4));
+    check(x % 2 < 1, x % 2 == 0);
+    check(x % 3 <= 0, x % 3 == 0);
+    check(x % 4 > 0, x % 4 != 0);
+    check(x % 5 >= 1, x % 5 != 0);
+    check(x % 6 < 5, x % 6 != 5);
+    check(5 < x % 7, x % 7 == 6);
 
     check(b1 || !b1, t);
     check(!b1 || b1, t);
@@ -1373,7 +1508,7 @@ void check_boolean() {
     check((x / 8) * 8 < x - 8, f);
     check((x / 8) * 8 < x - 9, f);
     check((x / 8) * 8 < x - 7, f);
-    check((x / 8) * 8 < x - 6, 6 < x % 8);
+    check((x / 8) * 8 < x - 6, x % 8 == 7);
     check(ramp(x * 4, 1, 4) < broadcast(y * 4, 4), broadcast(x < y, 4));
     check(ramp(x * 8, 1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
     check(ramp(x * 8 + 1, 1, 4) < broadcast(y * 8, 4), broadcast(x < y, 4));
@@ -1398,77 +1533,77 @@ void check_boolean() {
 
     // Check anded conditions apply to the then case only
     check(IfThenElse::make(x == 4 && y == 5,
-                           Evaluate::make(z + x + y),
-                           Evaluate::make(z + x - y)),
+                           not_no_op(z + x + y),
+                           not_no_op(z + x - y)),
           IfThenElse::make(x == 4 && y == 5,
-                           Evaluate::make(z + 9),
-                           Evaluate::make(x + z - y)));
+                           not_no_op(z + 9),
+                           not_no_op(x + z - y)));
 
     // Check ored conditions apply to the else case only
     check(IfThenElse::make(b1 || b2,
-                           Evaluate::make(select(b1, x + 3, y + 4) + select(b2, x + 5, y + 7)),
-                           Evaluate::make(select(b1, x + 3, y + 8) - select(b2, x + 5, y + 7))),
+                           not_no_op(select(b1, x + 3, y + 4) + select(b2, x + 5, y + 7)),
+                           not_no_op(select(b1, x + 3, y + 8) - select(b2, x + 5, y + 7))),
           IfThenElse::make(b1 || b2,
-                           Evaluate::make(select(b1, x + 3, y + 4) + select(b2, x + 5, y + 7)),
-                           Evaluate::make(1)));
+                           not_no_op(select(b1, x + 3, y + 4) + select(b2, x + 5, y + 7)),
+                           not_no_op(1)));
 
     // Check single conditions apply to both cases of an ifthenelse
     check(IfThenElse::make(b1,
-                           Evaluate::make(select(b1, x, y)),
-                           Evaluate::make(select(b1, z, w))),
+                           not_no_op(select(b1, x, y)),
+                           not_no_op(select(b1, z, w))),
           IfThenElse::make(b1,
-                           Evaluate::make(x),
-                           Evaluate::make(w)));
+                           not_no_op(x),
+                           not_no_op(w)));
 
     check(IfThenElse::make(x < y,
-                           IfThenElse::make(x < y, Evaluate::make(y), Evaluate::make(x)),
-                           Evaluate::make(x)),
+                           IfThenElse::make(x < y, not_no_op(y), not_no_op(x)),
+                           not_no_op(x)),
           IfThenElse::make(x < y,
-                           Evaluate::make(y),
-                           Evaluate::make(x)));
+                           not_no_op(y),
+                           not_no_op(x)));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                      IfThenElse::make(x < y, Evaluate::make(x + 3), Evaluate::make(x + 4))),
+    check(Block::make(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 2)),
+                      IfThenElse::make(x < y, not_no_op(x + 3), not_no_op(x + 4))),
           IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 3)),
-                           Block::make(Evaluate::make(x + 2), Evaluate::make(x + 4))));
+                           Block::make(not_no_op(x + 1), not_no_op(x + 3)),
+                           Block::make(not_no_op(x + 2), not_no_op(x + 4))));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1)),
-                      IfThenElse::make(x < y, Evaluate::make(x + 2))),
-          IfThenElse::make(x < y, Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2))));
+    check(Block::make(IfThenElse::make(x < y, not_no_op(x + 1)),
+                      IfThenElse::make(x < y, not_no_op(x + 2))),
+          IfThenElse::make(x < y, Block::make(not_no_op(x + 1), not_no_op(x + 2))));
 
-    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                       IfThenElse::make(x < y, Evaluate::make(x + 3), Evaluate::make(x + 4)),
-                       Evaluate::make(x + 5)}),
+    check(Block::make({IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 2)),
+                       IfThenElse::make(x < y, not_no_op(x + 3), not_no_op(x + 4)),
+                       not_no_op(x + 5)}),
           Block::make(IfThenElse::make(x < y,
-                                       Block::make(Evaluate::make(x + 1), Evaluate::make(x + 3)),
-                                       Block::make(Evaluate::make(x + 2), Evaluate::make(x + 4))),
-                      Evaluate::make(x + 5)));
+                                       Block::make(not_no_op(x + 1), not_no_op(x + 3)),
+                                       Block::make(not_no_op(x + 2), not_no_op(x + 4))),
+                      not_no_op(x + 5)));
 
-    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x + 1)),
-                       IfThenElse::make(x < y, Evaluate::make(x + 2)),
-                       IfThenElse::make(x < y, Evaluate::make(x + 3)),
-                       Evaluate::make(x + 4)}),
-          Block::make(IfThenElse::make(x < y, Block::make({Evaluate::make(x + 1), Evaluate::make(x + 2), Evaluate::make(x + 3)})),
-                      Evaluate::make(x + 4)));
+    check(Block::make({IfThenElse::make(x < y, not_no_op(x + 1)),
+                       IfThenElse::make(x < y, not_no_op(x + 2)),
+                       IfThenElse::make(x < y, not_no_op(x + 3)),
+                       not_no_op(x + 4)}),
+          Block::make(IfThenElse::make(x < y, Block::make({not_no_op(x + 1), not_no_op(x + 2), not_no_op(x + 3)})),
+                      not_no_op(x + 4)));
 
-    check(Block::make({IfThenElse::make(x < y, Evaluate::make(x + 1)),
-                       IfThenElse::make(x < y, Evaluate::make(x + 2)),
-                       Evaluate::make(x + 3)}),
-          Block::make(IfThenElse::make(x < y, Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2))),
-                      Evaluate::make(x + 3)));
+    check(Block::make({IfThenElse::make(x < y, not_no_op(x + 1)),
+                       IfThenElse::make(x < y, not_no_op(x + 2)),
+                       not_no_op(x + 3)}),
+          Block::make(IfThenElse::make(x < y, Block::make(not_no_op(x + 1), not_no_op(x + 2))),
+                      not_no_op(x + 3)));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                      IfThenElse::make(x < y, Evaluate::make(x + 3))),
+    check(Block::make(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 2)),
+                      IfThenElse::make(x < y, not_no_op(x + 3))),
           IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 3)),
-                           Evaluate::make(x + 2)));
+                           Block::make(not_no_op(x + 1), not_no_op(x + 3)),
+                           not_no_op(x + 2)));
 
-    check(Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1)),
-                      IfThenElse::make(x < y, Evaluate::make(x + 2), Evaluate::make(x + 3))),
+    check(Block::make(IfThenElse::make(x < y, not_no_op(x + 1)),
+                      IfThenElse::make(x < y, not_no_op(x + 2), not_no_op(x + 3))),
           IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                           Evaluate::make(x + 3)));
+                           Block::make(not_no_op(x + 1), not_no_op(x + 2)),
+                           not_no_op(x + 3)));
 
     // The construct
     //     if (var == expr) then a else b;
@@ -1479,44 +1614,50 @@ void check_boolean() {
           IfThenElse::make(b1 == b2, then_clause, else_clause));
 
     // Check common statements are pulled out of ifs.
-    check(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 1)),
-          Evaluate::make(x + 1));
+    check(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 1)),
+          not_no_op(x + 1));
 
     check(IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 3))),
-          Block::make(Evaluate::make(x + 1),
-                      IfThenElse::make(x < y, Evaluate::make(x + 2), Evaluate::make(x + 3))));
+                           Block::make(not_no_op(x + 1), not_no_op(x + 2)),
+                           Block::make(not_no_op(x + 1), not_no_op(x + 3))),
+          Block::make(not_no_op(x + 1),
+                      IfThenElse::make(x < y, not_no_op(x + 2), not_no_op(x + 3))));
 
     check(IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                           Block::make(Evaluate::make(x + 3), Evaluate::make(x + 2))),
-          Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1), Evaluate::make(x + 3)),
-                      Evaluate::make(x + 2)));
+                           Block::make(not_no_op(x + 1), not_no_op(x + 2)),
+                           Block::make(not_no_op(x + 3), not_no_op(x + 2))),
+          Block::make(IfThenElse::make(x < y, not_no_op(x + 1), not_no_op(x + 3)),
+                      not_no_op(x + 2)));
 
     check(IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                           Evaluate::make(x + 2)),
-          Block::make(IfThenElse::make(x < y, Evaluate::make(x + 1)),
-                      Evaluate::make(x + 2)));
+                           Block::make(not_no_op(x + 1), not_no_op(x + 2)),
+                           not_no_op(x + 2)),
+          Block::make(IfThenElse::make(x < y, not_no_op(x + 1)),
+                      not_no_op(x + 2)));
 
     check(IfThenElse::make(x < y,
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2)),
-                           Evaluate::make(x + 1)),
-          Block::make(Evaluate::make(x + 1),
-                      IfThenElse::make(x < y, Evaluate::make(x + 2))));
+                           Block::make(not_no_op(x + 1), not_no_op(x + 2)),
+                           not_no_op(x + 1)),
+          Block::make(not_no_op(x + 1),
+                      IfThenElse::make(x < y, not_no_op(x + 2))));
 
     check(IfThenElse::make(x < y,
-                           Evaluate::make(x + 1),
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2))),
-          Block::make(Evaluate::make(x + 1),
-                      IfThenElse::make(x < y, Evaluate::make(0), Evaluate::make(x + 2))));
+                           not_no_op(x + 1),
+                           Block::make(not_no_op(x + 1), not_no_op(x + 2))),
+          Block::make(not_no_op(x + 1),
+                      IfThenElse::make(x < y, Evaluate::make(0), not_no_op(x + 2))));
 
     check(IfThenElse::make(x < y,
-                           Evaluate::make(x + 2),
-                           Block::make(Evaluate::make(x + 1), Evaluate::make(x + 2))),
-          Block::make(IfThenElse::make(x < y, Evaluate::make(0), Evaluate::make(x + 1)),
-                      Evaluate::make(x + 2)));
+                           not_no_op(x + 2),
+                           Block::make(not_no_op(x + 1), not_no_op(x + 2))),
+          Block::make(IfThenElse::make(x < y, Evaluate::make(0), not_no_op(x + 1)),
+                      not_no_op(x + 2)));
+
+    check(IfThenElse::make(x < y,
+                           IfThenElse::make(z < 4, not_no_op(x + 2)),
+                           IfThenElse::make(z < 4, not_no_op(x + 3))),
+          IfThenElse::make(z < 4,
+                           IfThenElse::make(x < y, not_no_op(x + 2), not_no_op(x + 3))));
 
     // A for loop is also an if statement that the extent is greater than zero
     Stmt body = AssertStmt::make(y == z, y);
@@ -1526,33 +1667,30 @@ void check_boolean() {
     // A for loop where the extent is exactly one is just the body
     check(IfThenElse::make(x == 1, loop), IfThenElse::make(x == 1, body));
 
-    // A for loop where the extent is at most one can just be an if statement
-    check(IfThenElse::make(y % 2 == x, loop), IfThenElse::make(y % 2 == x, IfThenElse::make(0 < x, body)));
+    // Check we can learn from conditions on variables
+    check(IfThenElse::make(x < 5, not_no_op(min(x, 17))),
+          IfThenElse::make(x < 5, not_no_op(x)));
 
-    // Check we can learn from bounds on variables
-    check(IfThenElse::make(x < 5, Evaluate::make(min(x, 17))),
-          IfThenElse::make(x < 5, Evaluate::make(x)));
+    check(IfThenElse::make(x < min(y, 5), not_no_op(min(x, 17))),
+          IfThenElse::make(x < min(y, 5), not_no_op(x)));
 
-    check(IfThenElse::make(x < min(y, 5), Evaluate::make(min(x, 17))),
-          IfThenElse::make(x < min(y, 5), Evaluate::make(x)));
+    check(IfThenElse::make(5 < x, not_no_op(max(x, 2))),
+          IfThenElse::make(5 < x, not_no_op(x)));
 
-    check(IfThenElse::make(5 < x, Evaluate::make(max(x, 2))),
-          IfThenElse::make(5 < x, Evaluate::make(x)));
+    check(IfThenElse::make(max(y, 5) < x, not_no_op(max(x, 2))),
+          IfThenElse::make(max(y, 5) < x, not_no_op(x)));
 
-    check(IfThenElse::make(max(y, 5) < x, Evaluate::make(max(x, 2))),
-          IfThenElse::make(max(y, 5) < x, Evaluate::make(x)));
+    check(IfThenElse::make(x <= 5, not_no_op(min(x, 17))),
+          IfThenElse::make(x <= 5, not_no_op(x)));
 
-    check(IfThenElse::make(x <= 5, Evaluate::make(min(x, 17))),
-          IfThenElse::make(x <= 5, Evaluate::make(x)));
+    check(IfThenElse::make(x <= min(y, 5), not_no_op(min(x, 17))),
+          IfThenElse::make(x <= min(y, 5), not_no_op(x)));
 
-    check(IfThenElse::make(x <= min(y, 5), Evaluate::make(min(x, 17))),
-          IfThenElse::make(x <= min(y, 5), Evaluate::make(x)));
+    check(IfThenElse::make(5 <= x, not_no_op(max(x, 2))),
+          IfThenElse::make(5 <= x, not_no_op(x)));
 
-    check(IfThenElse::make(5 <= x, Evaluate::make(max(x, 2))),
-          IfThenElse::make(5 <= x, Evaluate::make(x)));
-
-    check(IfThenElse::make(max(y, 5) <= x, Evaluate::make(max(x, 2))),
-          IfThenElse::make(max(y, 5) <= x, Evaluate::make(x)));
+    check(IfThenElse::make(max(y, 5) <= x, not_no_op(max(x, 2))),
+          IfThenElse::make(max(y, 5) <= x, not_no_op(x)));
 
     // Concretely, this lets us skip some redundant assertions
     check(Block::make(AssertStmt::make(max(y, 3) < x, x),
@@ -1564,10 +1702,11 @@ void check_boolean() {
     check(IfThenElse::make(0 < x,
                            IfThenElse::make(x < y,
                                             IfThenElse::make(y < z,
-                                                             Evaluate::make(z == 2)))),
+                                                             AssertStmt::make(z != 2, x)))),
           // z can't possibly be two, because x is at least one, so y
           // is at least two, so z must be at least three.
-          Evaluate::make(const_false()));
+          Evaluate::make(0));
+
     // Simplifications of selects
     check(select(x == 3, 5, 7) + 7, select(x == 3, 12, 14));
     check(select(x == 3, 5, 7) - 7, select(x == 3, -2, 0));
@@ -1678,6 +1817,8 @@ void check_math() {
     check(Halide::trunc(-1.6f), -1.0f);
     check(Halide::floor(round(x)), round(x));
     check(Halide::ceil(ceil(x)), ceil(x));
+
+    check(strict_float(strict_float(x)), strict_float(x));
 }
 
 void check_overflow() {
@@ -1788,18 +1929,30 @@ template<typename T>
 void check_clz(uint64_t value, uint64_t result) {
     Expr x = Variable::make(halide_type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), count_leading_zeros(x)), cast<T>(Expr(result)));
+
+    Type vt = halide_type_of<T>().with_lanes(4);
+    Expr xv = Variable::make(vt, "x");
+    check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), count_leading_zeros(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
 
 template<typename T>
 void check_ctz(uint64_t value, uint64_t result) {
     Expr x = Variable::make(halide_type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), count_trailing_zeros(x)), cast<T>(Expr(result)));
+
+    Type vt = halide_type_of<T>().with_lanes(4);
+    Expr xv = Variable::make(vt, "x");
+    check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), count_trailing_zeros(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
 
 template<typename T>
 void check_popcount(uint64_t value, uint64_t result) {
     Expr x = Variable::make(halide_type_of<T>(), "x");
     check(Let::make("x", cast<T>(Expr(value)), popcount(x)), cast<T>(Expr(result)));
+
+    Type vt = halide_type_of<T>().with_lanes(4);
+    Expr xv = Variable::make(vt, "x");
+    check(Let::make("x", cast(vt, broadcast(Expr(value), 4)), popcount(xv)), cast(vt, broadcast(Expr(result), 4)));
 }
 
 void check_bitwise() {
@@ -1825,6 +1978,13 @@ void check_bitwise() {
     // Check constant-folding of bitwise ops (and indirectly, reinterpret)
     check(Let::make(x.as<Variable>()->name, 5, (((~x) & 3) | 16) ^ 33), ((~5 & 3) | 16) ^ 33);
     check(Let::make(x.as<Variable>()->name, 5, (((~cast<uint8_t>(x)) & 3) | 16) ^ 33), make_const(UInt(8), ((~5 & 3) | 16) ^ 33));
+
+    // Check bitwise ops of constant broadcasts.
+    Expr v = Broadcast::make(12, 4);
+    check(v >> 2, Broadcast::make(3, 4));
+    check(Broadcast::make(32768, 4) >> 1, Broadcast::make(16384, 4));
+    check((Broadcast::make(1, 4) << 15) >> 1, Broadcast::make(16384, 4));
+    check(Ramp::make(0, 1, 4) << Broadcast::make(4, 4), Ramp::make(0, 16, 4));
 
     check_clz<int8_t>(10, 4);
     check_clz<int16_t>(10, 12);
@@ -1925,6 +2085,34 @@ void check_invariant() {
     }
 }
 
+void check_unreachable() {
+    Var x("x"), y("y");
+
+    check(x + unreachable(), unreachable());
+
+    check(Block::make(not_no_op(x), Evaluate::make(unreachable())),
+          Evaluate::make(unreachable()));
+    check(Block::make(Evaluate::make(unreachable()), not_no_op(x)),
+          Evaluate::make(unreachable()));
+
+    check(Block::make(not_no_op(y), IfThenElse::make(x != 0, Evaluate::make(unreachable()), Evaluate::make(unreachable()))),
+          Evaluate::make(unreachable()));
+    check(IfThenElse::make(x != 0, not_no_op(y), Evaluate::make(unreachable())),
+          not_no_op(y));
+    check(IfThenElse::make(x != 0, Evaluate::make(unreachable()), not_no_op(y)),
+          not_no_op(y));
+
+    check(y + Call::make(Int(32), Call::if_then_else, {x != 0, unreachable(), unreachable()}, Call::PureIntrinsic),
+          unreachable());
+    check(Call::make(Int(32), Call::if_then_else, {x != 0, y, unreachable()}, Call::PureIntrinsic), y);
+    check(Call::make(Int(32), Call::if_then_else, {x != 0, unreachable(), y}, Call::PureIntrinsic), y);
+
+    check(Block::make(not_no_op(y), For::make("i", 0, 1, ForType::Serial, DeviceAPI::None, Evaluate::make(unreachable()))),
+          Evaluate::make(unreachable()));
+    check(For::make("i", 0, x, ForType::Serial, DeviceAPI::None, Evaluate::make(unreachable())),
+          Evaluate::make(0));
+}
+
 int main(int argc, char **argv) {
     check_invariant();
     check_casts();
@@ -1936,16 +2124,17 @@ int main(int argc, char **argv) {
     check_overflow();
     check_bitwise();
     check_lets();
+    check_unreachable();
 
     // Miscellaneous cases that don't fit into one of the categories above.
     Expr x = Var("x"), y = Var("y");
 
     // Check that constant args to a stringify get combined
-    check(Call::make(type_of<const char *>(), Call::stringify, {3, std::string(" "), 4}, Call::Intrinsic),
+    check(Call::make(type_of<const char *>(), Call::stringify, {3, std::string(" "), 4}, Call::PureIntrinsic),
           std::string("3 4"));
 
-    check(Call::make(type_of<const char *>(), Call::stringify, {3, x, 4, std::string(", "), 3.4f}, Call::Intrinsic),
-          Call::make(type_of<const char *>(), Call::stringify, {std::string("3"), x, std::string("4, 3.400000")}, Call::Intrinsic));
+    check(Call::make(type_of<const char *>(), Call::stringify, {3, x, 4, std::string(", "), 3.4f}, Call::PureIntrinsic),
+          Call::make(type_of<const char *>(), Call::stringify, {std::string("3"), x, std::string("4, 3.400000")}, Call::PureIntrinsic));
 
     {
         // Check that contiguous prefetch call get collapsed
@@ -2073,6 +2262,14 @@ int main(int argc, char **argv) {
     }
 
     {
+        Expr m = Int(32).max();
+        Expr e = m + m;
+        Expr l = Let::make("x", e, x + 1);
+        Expr sl = substitute_in_all_lets(simplify(l));
+        check_is_sio(sl);
+    }
+
+    {
         using ConciseCasts::i16;
 
         const Expr a = Expr(std::numeric_limits<int16_t>::lowest());
@@ -2128,6 +2325,26 @@ int main(int argc, char **argv) {
         check(b >> 63, u64(1));
         check(a << 63, u64(0));
         check(b << 63, Expr((uint64_t)0x8000000000000000ULL));
+    }
+
+    {
+        Expr vec_x = Variable::make(Int(32, 32), "x");
+        Expr vec_y = Variable::make(Int(32, 32), "y");
+        Expr vec_z = Variable::make(Int(32, 32), "z");
+        check(slice(slice(vec_x, 2, 3, 8), 3, 2, 3), slice(vec_x, 11, 6, 3));
+        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 0, 2, 32), slice(concat_vectors({vec_x, vec_y}), 0, 2, 32));
+        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 1, 2, 32), slice(concat_vectors({vec_x, vec_y}), 1, 2, 32));
+        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 2, 2, 32), slice(concat_vectors({vec_x, vec_y, vec_z}), 2, 2, 32));
+        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 2, 2, 31), slice(concat_vectors({vec_x, vec_y}), 2, 2, 31));
+        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 0, 2, 16), slice(concat_vectors({vec_x}), 0, 2, 16));
+        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 32, 2, 22), slice(concat_vectors({vec_y, vec_z}), 0, 2, 22));
+        check(slice(concat_vectors({vec_x, vec_y, vec_z}), 33, 2, 16), slice(concat_vectors({vec_y}), 1, 2, 16));
+    }
+
+    {
+        Stmt body = AssertStmt::make(x > 0, y);
+        check(For::make("t", 0, x, ForType::Serial, DeviceAPI::None, body),
+              Evaluate::make(0));
     }
 
     // Check a bounds-related fuzz tester failure found in issue https://github.com/halide/Halide/issues/3764

@@ -2,6 +2,7 @@
 #include "HalideRuntimeCuda.h"
 #include "halide_benchmark.h"
 #include "mat_mul.h"
+#include <cstdio>
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 
@@ -54,7 +55,7 @@ int main(int argc, char **argv) {
     // Benchmark it
     {
         Buffer<float> A(size, size), B(size, size), C(size, size);
-        double t = Halide::Tools::benchmark(3, 3, [&]() {
+        double t = Halide::Tools::benchmark(5, 5, [&]() {
             mat_mul(A, B, C);
             C.device_sync();
         });
@@ -74,7 +75,7 @@ int main(int argc, char **argv) {
         cublasHandle_t handle;
         cublasCreate(&handle);
         float alpha = 1.0f, beta = 1.0f;
-        double t = Halide::Tools::benchmark(3, 3, [&]() {
+        double t = Halide::Tools::benchmark(5, 5, [&]() {
             cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
                         size, size, size, &alpha, A, size, B, size, &beta, C, size);
             cudaDeviceSynchronize();

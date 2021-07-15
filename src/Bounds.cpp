@@ -18,6 +18,7 @@
 #include "Param.h"
 #include "PurifyIndexMath.h"
 #include "Simplify.h"
+#include "SimplifyCorrelatedDifferences.h"
 #include "Solve.h"
 #include "Util.h"
 #include "Var.h"
@@ -66,20 +67,25 @@ Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scop
 }
 
 Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
-    Interval interval = bounds_of_expr_in_scope(e, scope, FuncValueBounds(), true);
+    Expr expr = bound_correlated_differences(simplify(remove_likelies(e)));
+    Interval interval = bounds_of_expr_in_scope(expr, scope, FuncValueBounds(), true);
     interval.min = simplify(interval.min);
     interval.max = simplify(interval.max);
 
     // Note that we can get non-const but well-defined results (e.g. signed_integer_overflow);
     // for our purposes here, treat anything non-const as no-bound.
-    if (!is_const(interval.min)) interval.min = Interval::neg_inf();
-    if (!is_const(interval.max)) interval.max = Interval::pos_inf();
+    if (!is_const(interval.min)) {
+        interval.min = Interval::neg_inf();
+    }
+    if (!is_const(interval.max)) {
+        interval.max = Interval::pos_inf();
+    }
 
     return interval;
 }
 
 bool Box::maybe_unused() const {
-    return used.defined() && !is_one(used);
+    return used.defined() && !is_const_one(used);
 }
 
 std::ostream &operator<<(std::ostream &stream, const Box &b) {
@@ -91,8 +97,13 @@ std::ostream &operator<<(std::ostream &stream, const Box &b) {
         stream << "[" << b[dim].min << ", " << b[dim].max << "]";
     }
     stream << "}";
+    if (b.used.defined()) {
+        stream << " if " << b.used;
+    }
     return stream;
 }
+
+namespace {
 
 class Bounds : public IRVisitor {
 public:
@@ -107,6 +118,16 @@ public:
     Bounds(const Scope<Interval> *s, const FuncValueBounds &fb, bool const_bound)
         : func_bounds(fb), const_bound(const_bound) {
         scope.set_containing_scope(s);
+
+        // Find any points that are single_points but fail is_single_point due to
+        // pointer equality checks and replace with single_points.
+        for (auto item = s->cbegin(); item != s->cend(); ++item) {
+            const Interval &item_interval = item.value();
+            if (!item_interval.is_single_point() &&
+                equal(item_interval.min, item_interval.max)) {
+                scope.push(item.name(), Interval::single_point(item_interval.min));
+            }
+        }
     }
 
 private:
@@ -282,18 +303,18 @@ private:
                 // constants, they might fit regardless of types.
                 a.min = simplify(a.min);
                 a.max = simplify(a.max);
-                auto *umin = as_const_uint(a.min);
-                auto *umax = as_const_uint(a.max);
+                const auto *umin = as_const_uint(a.min);
+                const auto *umax = as_const_uint(a.max);
                 if (umin && umax && to.can_represent(*umin) && to.can_represent(*umax)) {
                     could_overflow = false;
                 } else {
-                    auto *imin = as_const_int(a.min);
-                    auto *imax = as_const_int(a.max);
+                    const auto *imin = as_const_int(a.min);
+                    const auto *imax = as_const_int(a.max);
                     if (imin && imax && to.can_represent(*imin) && to.can_represent(*imax)) {
                         could_overflow = false;
                     } else {
-                        auto *fmin = as_const_float(a.min);
-                        auto *fmax = as_const_float(a.max);
+                        const auto *fmin = as_const_float(a.min);
+                        const auto *fmax = as_const_float(a.max);
                         if (fmin && fmax && to.can_represent(*fmin) && to.can_represent(*fmax)) {
                             could_overflow = false;
                         }
@@ -306,11 +327,19 @@ private:
             // Start with the bounds of the narrow type.
             bounds_of_type(from);
             // If we have a better min or max for the arg use that.
-            if (a.has_lower_bound()) interval.min = a.min;
-            if (a.has_upper_bound()) interval.max = a.max;
+            if (a.has_lower_bound()) {
+                interval.min = a.min;
+            }
+            if (a.has_upper_bound()) {
+                interval.max = a.max;
+            }
             // Then cast those bounds to the wider type.
-            if (interval.has_lower_bound()) interval.min = Cast::make(to, interval.min);
-            if (interval.has_upper_bound()) interval.max = Cast::make(to, interval.max);
+            if (interval.has_lower_bound()) {
+                interval.min = Cast::make(to, interval.min);
+            }
+            if (interval.has_upper_bound()) {
+                interval.max = Cast::make(to, interval.max);
+            }
         } else {
             // This might overflow, so use the bounds of the destination type.
             bounds_of_type(to);
@@ -367,7 +396,7 @@ private:
         } else if (a.is_single_point() && b.is_single_point()) {
             interval = Interval::single_point(a.min + b.min);
         } else {
-            interval = Interval::everything();
+            bounds_of_type(op->type);
             if (a.has_lower_bound() && b.has_lower_bound()) {
                 interval.min = a.min + b.min;
             }
@@ -376,20 +405,20 @@ private:
             }
 
             // Assume no overflow for float, int32, and int64
-            if (!op->type.is_float() && (!op->type.is_int() || op->type.bits() < 32)) {
-                if (interval.has_upper_bound()) {
-                    Expr no_overflow = (cast<int>(a.max) + cast<int>(b.max) == cast<int>(interval.max));
-                    if (!can_prove(no_overflow)) {
-                        bounds_of_type(op->type);
-                        return;
-                    }
+            if (op->type.can_overflow()) {
+                if (!interval.is_bounded()) {
+                    // Possibly infinite things that wrap can be anything.
+                    bounds_of_type(op->type);
+                    return;
                 }
-                if (interval.has_lower_bound()) {
-                    Expr no_overflow = (cast<int>(a.min) + cast<int>(b.min) == cast<int>(interval.min));
-                    if (!can_prove(no_overflow)) {
-                        bounds_of_type(op->type);
-                        return;
-                    }
+
+                // TODO(5682): Can't catch overflow of UInt(64) currently.
+                Type t = op->type.is_uint() ? UInt(64) : Int(32);
+                Expr no_overflow_max = (cast(t, a.max) + cast(t, b.max) == cast(t, interval.max));
+                Expr no_overflow_min = (cast(t, a.min) + cast(t, b.min) == cast(t, interval.min));
+                if (!can_prove(no_overflow_max && no_overflow_min)) {
+                    bounds_of_type(op->type);
+                    return;
                 }
             }
         }
@@ -407,7 +436,7 @@ private:
         } else if (a.is_single_point() && b.is_single_point()) {
             interval = Interval::single_point(a.min - b.min);
         } else {
-            interval = Interval::everything();
+            bounds_of_type(op->type);
             if (a.has_lower_bound() && b.has_upper_bound()) {
                 interval.min = a.min - b.max;
             }
@@ -416,20 +445,19 @@ private:
             }
 
             // Assume no overflow for float, int32, and int64
-            if (!op->type.is_float() && (!op->type.is_int() || op->type.bits() < 32)) {
-                if (interval.has_upper_bound()) {
-                    Expr no_overflow = (cast<int>(a.max) - cast<int>(b.min) == cast<int>(interval.max));
-                    if (!can_prove(no_overflow)) {
-                        bounds_of_type(op->type);
-                        return;
-                    }
+            if (op->type.can_overflow()) {
+                if (!interval.is_bounded()) {
+                    // Possibly infinite things that wrap can be anything.
+                    bounds_of_type(op->type);
+                    return;
                 }
-                if (interval.has_lower_bound()) {
-                    Expr no_overflow = (cast<int>(a.min) - cast<int>(b.max) == cast<int>(interval.min));
-                    if (!can_prove(no_overflow)) {
-                        bounds_of_type(op->type);
-                        return;
-                    }
+
+                Expr no_overflow_max = (cast<int>(a.max) - cast<int>(b.min) == cast<int>(interval.max));
+                Expr no_overflow_min = (cast<int>(a.min) - cast<int>(b.max) == cast<int>(interval.min));
+
+                if (!can_prove(no_overflow_max && no_overflow_min)) {
+                    bounds_of_type(op->type);
+                    return;
                 }
             }
 
@@ -464,7 +492,7 @@ private:
         } else if (b.is_single_point()) {
             Expr e1 = a.has_lower_bound() ? a.min * b.min : a.min;
             Expr e2 = a.has_upper_bound() ? a.max * b.min : a.max;
-            if (is_zero(b.min)) {
+            if (is_const_zero(b.min)) {
                 interval = b;
             } else if (is_positive_const(b.min) || op->type.is_uint()) {
                 interval = Interval(e1, e2);
@@ -481,7 +509,7 @@ private:
                 Expr cmp = b.min >= make_zero(b.min.type().element_of());
                 interval = Interval(select(cmp, e1, e2), select(cmp, e2, e1));
             } else {
-                interval = Interval::everything();
+                bounds_of_type(op->type);
             }
         } else if (a.is_bounded() && b.is_bounded()) {
             interval = Interval::nothing();
@@ -490,15 +518,16 @@ private:
             interval.include(a.max * b.min);
             interval.include(a.max * b.max);
         } else {
-            interval = Interval::everything();
+            bounds_of_type(op->type);
         }
 
         // Assume no overflow for float, int32, and int64
-        if (!op->type.is_float() && (!op->type.is_int() || op->type.bits() < 32)) {
+        if (op->type.can_overflow()) {
             if (a.is_bounded() && b.is_bounded()) {
                 // Try to prove it can't overflow. (Be sure to use uint32 for unsigned
                 // types so that the case of 65535*65535 won't misleadingly fail.)
-                Type t = op->type.is_uint() ? UInt(32) : Int(32);
+                // TODO(5682): Can't catch overflow of UInt(64) currently.
+                Type t = op->type.is_uint() ? UInt(64) : Int(32);
                 Expr test1 = (cast(t, a.min) * cast(t, b.min) == cast(t, a.min * b.min));
                 Expr test2 = (cast(t, a.min) * cast(t, b.max) == cast(t, a.min * b.max));
                 Expr test3 = (cast(t, a.max) * cast(t, b.min) == cast(t, a.max * b.min));
@@ -510,6 +539,16 @@ private:
                 bounds_of_type(op->type);
             }
         }
+    }
+
+    bool div_cannot_overflow(const Interval &a, const Interval &b, Type t) {
+        // No overflow if: not an allowed overflow int type, or `a` cannot be t.min() or
+        // `b` cannot be -1, because t.min() / -1 overflows for int16 and int8.
+        Expr neg_one = make_const(t, -1);
+        return !t.can_overflow_int() ||
+               (a.has_lower_bound() && can_prove(a.min != t.min())) ||
+               (b.has_upper_bound() && can_prove(b.max < neg_one)) ||
+               (b.has_lower_bound() && can_prove(b.min > neg_one));
     }
 
     void visit(const Div *op) override {
@@ -540,33 +579,45 @@ private:
                     interval.min = -cast(a.min.type(), abs(a.min));
                     interval.max = cast(a.min.type(), abs(a.max));
                 } else {
+                    // div by 0 is 0 and the magnitude cannot increase by integer division
                     interval.min = min(-a.max, a.min);
-                    interval.max = max(-a.max, a.min);
+                    interval.max = max(-a.min, a.max);
                 }
             } else {
-                interval = Interval::everything();
+                bounds_of_type(op->type);
             }
         } else if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
         } else if (can_prove(b.min == b.max)) {
             Expr e1 = a.has_lower_bound() ? a.min / b.min : a.min;
             Expr e2 = a.has_upper_bound() ? a.max / b.max : a.max;
-            if (is_positive_const(b.min) || op->type.is_uint()) {
-                interval = Interval(e1, e2);
-            } else if (is_negative_const(b.min)) {
-                if (e1.same_as(Interval::neg_inf())) {
-                    e1 = Interval::pos_inf();
+
+            Type t = op->type.element_of();
+
+            if (div_cannot_overflow(a, b, t)) {
+                // TODO: handle real numbers with can_prove(b.min > 0) and can_prove(b.min < 0) as well - treating floating point as
+                // reals can be error prone when dealing with division near 0, so for now we only consider integers in the can_prove() path
+                if (op->type.is_uint() || is_positive_const(b.min) || (op->type.is_int() && can_prove(b.min >= 0))) {
+                    interval = Interval(e1, e2);
+                } else if (is_negative_const(b.min) || (op->type.is_int() && can_prove(b.min <= 0))) {
+                    if (e1.same_as(Interval::neg_inf())) {
+                        e1 = Interval::pos_inf();
+                    }
+                    if (e2.same_as(Interval::pos_inf())) {
+                        e2 = Interval::neg_inf();
+                    }
+                    interval = Interval(e2, e1);
+                } else if (a.is_bounded()) {
+                    // Sign of b is unknown.
+                    Expr cmp = b.min > make_zero(b.min.type().element_of());
+                    interval = Interval(select(cmp, e1, e2), select(cmp, e2, e1));
+                } else {
+                    bounds_of_type(op->type);
                 }
-                if (e2.same_as(Interval::pos_inf())) {
-                    e2 = Interval::neg_inf();
-                }
-                interval = Interval(e2, e1);
-            } else if (a.is_bounded()) {
-                // Sign of b is unknown.
-                Expr cmp = b.min > make_zero(b.min.type().element_of());
-                interval = Interval(select(cmp, e1, e2), select(cmp, e2, e1));
             } else {
-                interval = Interval::everything();
+                // Overflow is possible because a can be min value of type t and
+                // b can be -1.
+                bounds_of_type(op->type);
             }
         } else if (a.is_bounded()) {
             // if we can't statically prove that the divisor can't span zero, then we're unbounded
@@ -594,16 +645,24 @@ private:
                     bounds_of_type(op->type);
                 }
             } else {
-                // Divisor is either strictly positive or strictly
-                // negative, so we can just take the extrema.
-                interval = Interval::nothing();
-                interval.include(a.min / b.min);
-                interval.include(a.max / b.min);
-                interval.include(a.min / b.max);
-                interval.include(a.max / b.max);
+                Type t = op->type.element_of();
+
+                if (div_cannot_overflow(a, b, t)) {
+                    // Divisor is either strictly positive or strictly
+                    // negative, so we can just take the extrema.
+                    interval = Interval::nothing();
+                    interval.include(a.min / b.min);
+                    interval.include(a.max / b.min);
+                    interval.include(a.min / b.max);
+                    interval.include(a.max / b.max);
+                } else {
+                    // Overflow is possible because a can be min value of type t and
+                    // b can be -1.
+                    bounds_of_type(op->type);
+                }
             }
         } else {
-            interval = Interval::everything();
+            bounds_of_type(op->type);
         }
     }
 
@@ -633,9 +692,12 @@ private:
             }
         } else {
             // b is bounded
-            if (b.max.type().is_uint() || (b.max.type().is_int() && is_positive_const(b.min))) {
-                // If the RHS is a positive integer, the result is in [0, max_b-1]
-                interval.max = Max::make(interval.min, b.max - make_one(t));
+            if (b.max.type().is_int_or_uint() && is_positive_const(b.min)) {
+                // If the RHS is >= 1, the result is in [0, max_b-1]
+                interval.max = b.max - make_one(t);
+            } else if (b.max.type().is_uint()) {
+                // if b.max = 0 then result is [0, 0], else [0, b.max - 1]
+                interval.max = select(b.max == make_zero(t), make_zero(t), b.max - make_one(t));
             } else if (b.max.type().is_int()) {
                 // x % [4,10] -> [0,9]
                 // x % [-8,-3] -> [0,7]
@@ -683,21 +745,24 @@ private:
         }
     }
 
+    // only used for LT and LE - GT and GE normalize to LT and LTE
     template<typename Cmp>
     void visit_compare(const Expr &a_expr, const Expr &b_expr) {
         a_expr.accept(this);
-        if (!interval.is_bounded()) {
+        if (!interval.has_upper_bound() && !interval.has_lower_bound()) {
             bounds_of_type(Bool());
             return;
         }
         Interval a = interval;
 
         b_expr.accept(this);
-        if (!interval.is_bounded()) {
+        if (!interval.has_upper_bound() && !interval.has_lower_bound()) {
             bounds_of_type(Bool());
             return;
         }
         Interval b = interval;
+
+        bounds_of_type(Bool());
 
         // The returned interval should have the property that min <=
         // val <= max. For integers it's clear what this means. For
@@ -706,8 +771,19 @@ private:
         // min implies val implies max.  So min should be a sufficient
         // condition, and max should be a necessary condition.
 
-        interval.min = Cmp::make(a.max, b.min);
-        interval.max = Cmp::make(a.min, b.max);
+        // a.max <(=) b.min implies a <(=) b, so a <(=) b is at least
+        // as true as a.max <(=) b.min. This does not depend on a's
+        // lower bound or b's upper bound.
+        if (a.has_upper_bound() && b.has_lower_bound()) {
+            interval.min = Cmp::make(a.max, b.min);
+        }
+
+        // a <(=) b implies a.min <(=) b.max, so a <(=) b is at most
+        // as true as a.min <(=) b.max. This does not depend on a's
+        // upper bound or b's lower bound.
+        if (a.has_lower_bound() && b.has_upper_bound()) {
+            interval.max = Cmp::make(a.min, b.max);
+        }
     }
 
     void visit(const LT *op) override {
@@ -750,6 +826,12 @@ private:
             // ranges overlap.
             if (a.is_bounded() && b.is_bounded()) {
                 interval.max = a.min <= b.max && b.min <= a.max;
+            } else if (a.has_upper_bound() && b.has_lower_bound()) {
+                // a.min <= b.max is implied if a.min = -inf or b.max = +inf.
+                interval.max = b.min <= a.max;
+            } else if (a.has_lower_bound() && b.has_upper_bound()) {
+                // b.min <= a.max is implied if a.max = +inf or b.min = -inf.
+                interval.max = a.min <= b.max;
             }
         }
     }
@@ -774,15 +856,33 @@ private:
             // a and b do not overlap, then they must be not equal.
             if (a.is_bounded() && b.is_bounded()) {
                 interval.min = a.min > b.max || b.min > a.max;
+            } else if (a.has_upper_bound() && b.has_lower_bound()) {
+                // a.min > b.max is false if a.min = -inf or b.max = +inf.
+                // a does not need a lower bound nor does b need
+                // an upper bound for this condition.
+                interval.min = b.min > a.max;
+            } else if (a.has_lower_bound() && b.has_upper_bound()) {
+                // b.min > a.max is false if a.max = +inf or b.min = -inf.
+                // a does not need an upper bound nor does b need
+                // a lower bound for this condition.
+                interval.min = a.min > b.max;
             }
         }
     }
 
     Expr make_and(Expr a, Expr b) {
-        if (is_one(a)) return b;
-        if (is_one(b)) return a;
-        if (is_zero(a)) return a;
-        if (is_zero(b)) return b;
+        if (is_const_one(a)) {
+            return b;
+        }
+        if (is_const_one(b)) {
+            return a;
+        }
+        if (is_const_zero(a)) {
+            return a;
+        }
+        if (is_const_zero(b)) {
+            return b;
+        }
         return a && b;
     }
 
@@ -806,10 +906,18 @@ private:
     }
 
     Expr make_or(Expr a, Expr b) {
-        if (is_one(a)) return a;
-        if (is_one(b)) return b;
-        if (is_zero(a)) return b;
-        if (is_zero(b)) return a;
+        if (is_const_one(a)) {
+            return a;
+        }
+        if (is_const_one(b)) {
+            return b;
+        }
+        if (is_const_zero(a)) {
+            return b;
+        }
+        if (is_const_zero(b)) {
+            return a;
+        }
         return a || b;
     }
 
@@ -833,8 +941,12 @@ private:
     }
 
     Expr make_not(const Expr &e) {
-        if (is_one(e)) return make_zero(e.type());
-        if (is_zero(e)) return make_one(e.type());
+        if (is_const_one(e)) {
+            return make_zero(e.type());
+        }
+        if (is_const_zero(e)) {
+            return make_one(e.type());
+        }
         return !e;
     }
 
@@ -865,10 +977,10 @@ private:
         Interval cond = interval;
 
         if (cond.is_single_point()) {
-            if (is_one(cond.min)) {
+            if (is_const_one(cond.min)) {
                 interval = a;
                 return;
-            } else if (is_zero(cond.min)) {
+            } else if (is_const_zero(cond.min)) {
                 interval = b;
                 return;
             }
@@ -882,15 +994,15 @@ private:
             interval.min = a.min;
         } else if (cond.is_single_point()) {
             interval.min = select(cond.min, a.min, b.min);
-        } else if (is_zero(cond.min) && is_one(cond.max)) {
+        } else if (is_const_zero(cond.min) && is_const_one(cond.max)) {
             interval.min = Interval::make_min(a.min, b.min);
-        } else if (is_one(cond.max)) {
+        } else if (is_const_one(cond.max)) {
             // cond.min is non-trivial
             string var_name = unique_name('t');
             Expr var = Variable::make(t, var_name);
             interval.min = Interval::make_min(select(cond.min, var, b.min), var);
             interval.min = Let::make(var_name, a.min, interval.min);
-        } else if (is_zero(cond.min)) {
+        } else if (is_const_zero(cond.min)) {
             // cond.max is non-trivial
             string var_name = unique_name('t');
             Expr var = Variable::make(t, var_name);
@@ -912,15 +1024,15 @@ private:
             interval.max = a.max;
         } else if (cond.is_single_point()) {
             interval.max = select(cond.min, a.max, b.max);
-        } else if (is_zero(cond.min) && is_one(cond.max)) {
+        } else if (is_const_zero(cond.min) && is_const_one(cond.max)) {
             interval.max = Interval::make_max(a.max, b.max);
-        } else if (is_one(cond.max)) {
+        } else if (is_const_one(cond.max)) {
             // cond.min is non-trivial
             string var_name = unique_name('t');
             Expr var = Variable::make(t, var_name);
             interval.max = Interval::make_max(select(cond.min, var, b.max), var);
             interval.max = Let::make(var_name, a.max, interval.max);
-        } else if (is_zero(cond.min)) {
+        } else if (is_const_zero(cond.min)) {
             // cond.max is non-trivial
             string var_name = unique_name('t');
             Expr var = Variable::make(t, var_name);
@@ -940,7 +1052,7 @@ private:
     void visit(const Load *op) override {
         TRACK_BOUNDS_INTERVAL;
         op->index.accept(this);
-        if (!const_bound && interval.is_single_point() && is_one(op->predicate)) {
+        if (!const_bound && interval.is_single_point() && is_const_one(op->predicate)) {
             // If the index is const and it is not a predicated load,
             // we can return the load of that index
             Expr load_min =
@@ -957,9 +1069,16 @@ private:
         TRACK_BOUNDS_INTERVAL;
         // Treat the ramp lane as a free variable
         string var_name = unique_name('t');
-        Expr var = Variable::make(op->base.type(), var_name);
+        Expr var = Variable::make(op->base.type().element_of(), var_name);
         Expr lane = op->base + var * op->stride;
-        ScopedBinding<Interval> p(scope, var_name, Interval(make_const(var.type(), 0), make_const(var.type(), op->lanes - 1)));
+        Expr min_value = make_const(var.type(), 0);
+        Expr max_value = make_const(var.type(), op->lanes - 1);
+        if (!var.type().can_represent((int64_t)(op->lanes - 1))) {
+            // max_value will overflow.
+            min_value = var.type().min();
+            max_value = var.type().max();
+        }
+        ScopedBinding<Interval> p(scope, var_name, Interval(min_value, max_value));
         lane.accept(this);
     }
 
@@ -970,17 +1089,14 @@ private:
 
     void visit(const Call *op) override {
         TRACK_BOUNDS_INTERVAL;
-        // Using the strict_float feature flag wraps a strict_float()
-        // call around every Expr that is of type float, so it's easy
-        // to get nestings that are many levels deep; the bounds of this
-        // call are *always* exactly that of its first argument, so short
-        // circuit it here before checking for const_args. This is important
-        // because evaluating const_args for such a deeply nested case
+        // Tags are hints that don't affect the results of the expression,
+        // and can be very deeply nested in the case of strict_float. The
+        // bounds of this call are *always* exactly that of its first argument,
+        // so short circuit it here before checking for const_args. This is
+        // important because evaluating const_args for such a deeply nested case
         // essentially becomes O(n^2) doing work that is unnecessary, making
         // otherwise simple pipelines take several minutes to compile.
-        //
-        // TODO: are any other intrinsics worth including here as well?
-        if (op->is_intrinsic(Call::strict_float)) {
+        if (op->is_tag()) {
             internal_assert(op->args.size() == 1);
             op->args[0].accept(this);
             return;
@@ -1110,17 +1226,16 @@ private:
 
             interval.min = Interval::make_max(interval.min, lower.min);
             interval.max = Interval::make_min(interval.max, upper.max);
-        } else if (op->is_intrinsic(Call::likely) ||
-                   op->is_intrinsic(Call::likely_if_innermost)) {
-            internal_assert(op->args.size() == 1);
+        } else if (Call::as_tag(op)) {
             op->args[0].accept(this);
         } else if (op->is_intrinsic(Call::return_second)) {
             internal_assert(op->args.size() == 2);
             op->args[1].accept(this);
         } else if (op->is_intrinsic(Call::if_then_else)) {
-            internal_assert(op->args.size() == 3);
+            internal_assert(op->args.size() == 2 || op->args.size() == 3);
             // Probably more conservative than necessary
-            Expr equivalent_select = Select::make(op->args[0], op->args[1], op->args[2]);
+            Expr false_value = op->args.size() == 2 ? op->args[1] : op->args[2];
+            Expr equivalent_select = Select::make(op->args[0], op->args[1], false_value);
             equivalent_select.accept(this);
         } else if (op->is_intrinsic(Call::require)) {
             internal_assert(op->args.size() == 3);
@@ -1138,7 +1253,7 @@ private:
             if (a_interval.is_single_point(a) && b_interval.is_single_point(b)) {
                 interval = Interval::single_point(op);
             } else if (a_interval.is_single_point() && b_interval.is_single_point()) {
-                interval = Interval::single_point(Call::make(op->type, op->name, {a_interval.min, b_interval.min}, op->call_type));
+                interval = Interval::single_point(Call::make(t, op->name, {a_interval.min, b_interval.min}, op->call_type));
             } else {
                 bounds_of_type(t);
                 // For some of these intrinsics applied to integer
@@ -1155,10 +1270,37 @@ private:
                             } else if (a_interval.has_lower_bound() &&
                                        b_interval.has_lower_bound() &&
                                        !b_interval.min.type().is_uint() &&
+                                       (a_interval.min.type().is_uint() ||
+                                        can_prove(a_interval.min >= 0)) &&
                                        can_prove(b_interval.min < 0 &&
                                                  b_interval.min > -t.bits())) {
                                 interval.min = a_interval.min >> abs(b_interval.min);
+                            } else if (a_interval.has_lower_bound() &&
+                                       a_interval.min.type().is_int() &&
+                                       can_prove(a_interval.min < 0) &&
+                                       b_interval.has_upper_bound()) {
+                                // If a can be negative, then we split a_interval into
+                                // two ranges, [a.min, 0) and [0, a.max]. Note that the
+                                // second range may not exist, if a's range is fully
+                                // negative, but that doesn't matter - a positive value
+                                // cannot be shifted to produce a negative, so the min
+                                // of the operation is produced in the negative range.
+                                if (!b_interval.max.type().is_uint() &&
+                                    can_prove(b_interval.max <= 0)) {
+                                    // If b is strictly non-positive, then the magnitude can only decrease.
+                                    interval.min = a_interval.min;
+                                } else {
+                                    // If b could be positive, then the magnitude might increase.
+                                    interval.min = min(a_interval.min, a_interval.min << b_interval.max);
+                                }
+                            } else if (a_interval.has_lower_bound() &&
+                                       (a_interval.min.type().is_uint() ||
+                                        can_prove(a_interval.min >= 0))) {
+                                // A positive value shifted cannot change sign.
+                                interval.min = make_zero(t);
                             }
+                            // TODO: Are there any other cases we can handle for interval.min?
+
                             if (a_interval.has_upper_bound() &&
                                 b_interval.has_upper_bound() &&
                                 can_prove(b_interval.max >= 0 &&
@@ -1191,7 +1333,8 @@ private:
                                 !b_interval.max.type().is_uint() &&
                                 can_prove(b_interval.max < 0 && b_interval.max > -t.bits());
                             if (a_interval.has_lower_bound()) {
-                                if (can_prove(a_interval.min >= 0) && b_max_ok_positive) {
+                                if (b_max_ok_positive && (a_interval.min.type().is_uint() ||
+                                                          can_prove(a_interval.min >= 0))) {
                                     interval.min = a_interval.min >> b_interval.max;
                                 } else if (can_prove(a_interval.min < 0) && b_max_ok_negative) {
                                     interval.min = a_interval.min << abs(b_interval.max);
@@ -1317,6 +1460,22 @@ private:
         } else if (op->is_intrinsic(Call::memoize_expr)) {
             internal_assert(!op->args.empty());
             op->args[0].accept(this);
+        } else if (op->is_intrinsic(Call::scatter_gather)) {
+            // Take the union of the args
+            Interval result = Interval::nothing();
+            for (const Expr &e : op->args) {
+                e.accept(this);
+                result.include(interval);
+            }
+            interval = result;
+        } else if (op->is_intrinsic(Call::mux)) {
+            // Take the union of all args but the first
+            Interval result = Interval::nothing();
+            for (size_t i = 1; i < op->args.size(); i++) {
+                op->args[i].accept(this);
+                result.include(interval);
+            }
+            interval = result;
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
         } else {
@@ -1396,7 +1555,7 @@ private:
     void visit(const Shuffle *op) override {
         TRACK_BOUNDS_INTERVAL;
         Interval result = Interval::nothing();
-        for (Expr i : op->vectors) {
+        for (const Expr &i : op->vectors) {
             i.accept(this);
             result.include(interval);
         }
@@ -1416,6 +1575,7 @@ private:
                 interval.min *= factor;
             }
             break;
+        case VectorReduce::SaturatingAdd:
         case VectorReduce::Mul:
             // Technically there are some things we could say
             // here. E.g. if all the lanes are positive then we're
@@ -1423,16 +1583,13 @@ private:
             // power. However it's extremely unlikely that a mul
             // reduce will ever make it into a bounds expression, so
             // for now we bail.
-            interval = Interval::everything();
+            bounds_of_type(op->value.type());
             break;
         case VectorReduce::Min:
         case VectorReduce::Max:
-            // The bounds of a single lane are sufficient
-            break;
         case VectorReduce::And:
         case VectorReduce::Or:
-            // Don't try for now
-            interval = Interval::everything();
+            // The bounds of a single lane are sufficient
             break;
         }
     }
@@ -1473,6 +1630,8 @@ private:
         internal_error << "Bounds of statement\n";
     }
 };
+
+}  // namespace
 
 Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound) {
     //debug(3) << "computing bounds_of_expr_in_scope " << expr << "\n";
@@ -1578,7 +1737,7 @@ void merge_boxes(Box &a, const Box &b) {
     if (a_maybe_unused && b_maybe_unused) {
         if (!equal(a.used, b.used)) {
             a.used = simplify(a.used || b.used);
-            if (is_one(a.used)) {
+            if (is_const_one(a.used)) {
                 a.used = Expr();
             }
         }
@@ -1678,6 +1837,8 @@ bool box_contains(const Box &outer, const Box &inner) {
     }
     return can_prove(condition);
 }
+
+namespace {
 
 class FindInnermostVar : public IRVisitor {
 public:
@@ -1878,12 +2039,17 @@ private:
 
         if (consider_calls) {
             if (op->is_intrinsic(Call::if_then_else)) {
-                internal_assert(op->args.size() == 3);
                 // We wrap 'then_case' and 'else_case' inside 'dummy' call since IfThenElse
                 // only takes Stmts as arguments.
                 Stmt then_case = Evaluate::make(op->args[1]);
-                Stmt else_case = Evaluate::make(op->args[2]);
-                Stmt equivalent_if = IfThenElse::make(op->args[0], then_case, else_case);
+                Stmt equivalent_if;
+                if (op->args.size() == 3) {
+                    Stmt else_case = Evaluate::make(op->args[2]);
+                    equivalent_if = IfThenElse::make(op->args[0], then_case, else_case);
+                } else {
+                    internal_assert(op->args.size() == 2);
+                    equivalent_if = IfThenElse::make(op->args[0], then_case);
+                }
                 equivalent_if.accept(this);
                 return;
             }
@@ -1892,7 +2058,7 @@ private:
 
             if (op->call_type == Call::Halide ||
                 op->call_type == Call::Image) {
-                for (Expr e : op->args) {
+                for (const Expr &e : op->args) {
                     e.accept(this);
                 }
                 if (op->name == func || func.empty()) {
@@ -1947,10 +2113,8 @@ private:
         }
 
     public:
-        int count;
-        CountVars()
-            : count(0) {
-        }
+        int count = 0;
+        CountVars() = default;
     };
 
     // We get better simplification if we directly substitute mins
@@ -2311,10 +2475,8 @@ private:
             for (const auto &pair : cases) {
                 Expr c = pair.first;
                 Stmt body = pair.second;
-                const Call *call = c.as<Call>();
-                if (call && (call->is_intrinsic(Call::likely) ||
-                             call->is_intrinsic(Call::likely_if_innermost) ||
-                             call->is_intrinsic(Call::strict_float))) {
+                const Call *call = Call::as_tag(c);
+                if (call) {
                     c = call->args[0];
                 }
 
@@ -2332,9 +2494,11 @@ private:
                 };
                 vector<RestrictedVar> to_pop;
                 auto vars = find_free_vars(op->condition);
-                for (auto v : vars) {
+                for (const auto *v : vars) {
                     auto result = solve_expression(c, v->name);
-                    if (!result.fully_solved) continue;
+                    if (!result.fully_solved) {
+                        continue;
+                    }
                     Expr solved = result.result;
 
                     // Trim the scope down to represent the fact that the
@@ -2499,11 +2663,18 @@ private:
     void visit(const Provide *op) override {
         if (consider_provides) {
             if (op->name == func || func.empty()) {
-                Box b(op->args.size());
-                for (size_t i = 0; i < op->args.size(); i++) {
-                    b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
+                if (!is_const_one(op->predicate)) {
+                    // Don't visit the RHS inside the if. This is handled below instead.
+                    ScopedValue<bool> save_consider_calls(consider_calls, false);
+                    Stmt equiv = IfThenElse::make(op->predicate, Provide::make(op->name, op->values, op->args, const_true()));
+                    equiv.accept(this);
+                } else {
+                    Box b(op->args.size());
+                    for (size_t i = 0; i < op->args.size(); i++) {
+                        b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
+                    }
+                    merge_boxes(boxes[op->name], b);
                 }
-                merge_boxes(boxes[op->name], b);
             }
         }
 
@@ -2526,6 +2697,8 @@ private:
         }
     }
 };
+
+}  // namespace
 
 map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool consider_provides,
                                const string &fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
@@ -2928,7 +3101,7 @@ void boxes_touched_test() {
     Scope<Interval> scope;
     scope.push("y", Interval(Expr(0), Expr(10)));
 
-    Stmt stmt = Provide::make("f", {10}, {x, y, z, w});
+    Stmt stmt = Provide::make("f", {10}, {x, y, z, w}, const_true());
     stmt = IfThenElse::make(y > 4, stmt, Stmt());
     stmt = IfThenElse::make(z > 18, stmt, Stmt());
     stmt = LetStmt::make("w", z + 3, stmt);
@@ -2986,10 +3159,10 @@ void bounds_test() {
     check(scope, clamp(1000 / (x - 2), x - 10, x + 10), -10, 20);
     check(scope, cast<uint16_t>(x / 2), u16(0), u16(5));
     check(scope, cast<uint16_t>((x + 10) / 2), u16(5), u16(10));
-    check(scope, x < 20, make_bool(1), make_bool(1));
-    check(scope, x < 5, make_bool(0), make_bool(1));
-    check(scope, Broadcast::make(x >= 11, 3), make_bool(0), make_bool(0));
-    check(scope, Ramp::make(x + 5, 1, 5) > Broadcast::make(2, 5), make_bool(1), make_bool(1));
+    check(scope, x < 20, make_bool(true), make_bool(true));
+    check(scope, x < 5, make_bool(false), make_bool(true));
+    check(scope, Broadcast::make(x >= 11, 3), make_bool(false), make_bool(false));
+    check(scope, Ramp::make(x + 5, 1, 5) > Broadcast::make(2, 5), make_bool(true), make_bool(true));
 
     check(scope, print(x, y), 0, 10);
     check(scope, print_when(x > y, x, y), 0, 10);
@@ -3056,6 +3229,66 @@ void bounds_test() {
     check(scope, x & 123, 0, 10);           // Doesn't have to be a precise bitmask
     check(scope, (x - 1) & 4095, 0, 4095);  // LHS could be -1
 
+    // Regression tests on shifts (produced by z3).
+    {
+        ScopedBinding<Interval> xb(scope, "x", Interval(-123, Interval::pos_inf()));
+        ScopedBinding<Interval> yb(scope, "y", Interval(-6, 0));
+        // -123 << 0 = -123
+        check(scope, x << y, -123, Interval::pos_inf());
+    }
+    {
+        ScopedBinding<Interval> xb(scope, "x", Interval(-123, Interval::pos_inf()));
+        ScopedBinding<Interval> yb(scope, "y", Interval(-6, Interval::pos_inf()));
+        // A negative value can increase in magnitude if the rhs is positive.
+        check(scope, x << y, Interval::neg_inf(), Interval::pos_inf());
+    }
+    {
+        ScopedBinding<Interval> xb(scope, "x", Interval(-123, Interval::pos_inf()));
+        Var c("c");
+        ScopedBinding<Interval> yb(scope, "y", Interval(-6, c));
+        // Can't prove anything about the upper bound of y.
+        check(scope, x << y, min((-123) << c, -123), Interval::pos_inf());
+    }
+    {
+        ScopedBinding<Interval> xb(scope, "x", Interval(-123, Interval::pos_inf()));
+        ScopedBinding<Interval> yb(scope, "y", Interval(-6, 4));
+        // -123 << 4 = -1968
+        check(scope, x << y, -1968, Interval::pos_inf());
+    }
+    {
+        ScopedBinding<Interval> xb(scope, "x", Interval(24, Interval::pos_inf()));
+        ScopedBinding<Interval> yb(scope, "y", Interval(Interval::neg_inf(), -1));
+        // Cannot change sign, only can decrease magnitude.
+        check(scope, x << y, 0, Interval::pos_inf());
+    }
+    // Overflow testing (for types with defined overflow).
+    {
+        Type uint32 = UInt(32);
+        Expr a = Variable::make(uint32, "a");
+        Expr b = Variable::make(uint32, "b");
+        ScopedBinding<Interval> ab(scope, "a", Interval(UIntImm::make(uint32, 0), simplify(uint32.max() / 4 + 2)));
+        ScopedBinding<Interval> bb(scope, "b", Interval(UIntImm::make(uint32, 0), uint32.max()));
+        // Overflow should be detected
+        check(scope, a + b, Interval::neg_inf(), Interval::pos_inf());
+        check(scope, a * b, Interval::neg_inf(), Interval::pos_inf());
+    }
+    {
+        Type int16 = Int(16);
+        Expr a = Variable::make(int16, "a");
+        Expr b = Variable::make(int16, "b");
+        ScopedBinding<Interval> ab(scope, "a", Interval(int16.min(), int16.max()));
+        ScopedBinding<Interval> bb(scope, "b", Interval(IntImm::make(int16, -4), IntImm::make(int16, -1)));
+        check(scope, a * -1, int16.min(), int16.max());
+        // int16.min() / -1 should be caught as overflow.
+        check(scope, a / -1, int16.min(), int16.max());
+        check(scope, a / b, int16.min(), int16.max());
+    }
+    {
+        Expr zero = UIntImm::make(UInt(1), 0);
+        Expr one = UIntImm::make(UInt(1), 1);
+        check(scope, Ramp::make(zero, one, 3), zero, one);
+    }
+
     // If we clamp something unbounded as one type, the bounds should
     // propagate through casts whenever the cast can be proved to not
     // overflow.
@@ -3113,7 +3346,7 @@ void bounds_test() {
         check(scope, select(x == y * 2, y, y - 10),
               7, Interval::pos_inf());
         check(scope, select(x == y * 2, y - 10, y),
-              7, Interval::pos_inf());
+              select(x < 34, 17, 7), Interval::pos_inf());
     }
 
     vector<Expr> input_site_1 = {2 * x};
@@ -3127,7 +3360,8 @@ void bounds_test() {
                           Provide::make("output",
                                         {Add::make(Call::make(in, input_site_1),
                                                    Call::make(in, input_site_2))},
-                                        output_site));
+                                        output_site,
+                                        const_true()));
 
     map<string, Box> r;
     r = boxes_required(loop);

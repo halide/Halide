@@ -148,7 +148,7 @@ public:
                 outGPyramid[j]
                     .store_at(output, yo)
                     .compute_at(output, y)
-                    .fold_storage(y, 8)
+                    .fold_storage(y, 4)
                     .vectorize(x, 8);
             }
             outGPyramid[0].compute_at(output, y).vectorize(x, 8);
@@ -237,8 +237,8 @@ private:
     Func upsample(Func f) {
         using Halide::_;
         Func upx, upy;
-        upx(x, y, _) = 0.25f * f((x / 2) - 1 + 2 * (x % 2), y, _) + 0.75f * f(x / 2, y, _);
-        upy(x, y, _) = 0.25f * upx(x, (y / 2) - 1 + 2 * (y % 2), _) + 0.75f * upx(x, y / 2, _);
+        upx(x, y, _) = lerp(f((x + 1) / 2, y, _), f((x - 1) / 2, y, _), ((x % 2) * 2 + 1) / 4.0f);
+        upy(x, y, _) = lerp(upx(x, (y + 1) / 2, _), upx(x, (y - 1) / 2, _), ((y % 2) * 2 + 1) / 4.0f);
         return upy;
     }
 };

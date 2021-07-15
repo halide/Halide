@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
         f.gpu_tile(x, y, xi, yi, 8, 8);
     }
 
-    f.realize(1024, 1024, 3);
+    f.realize({1024, 1024, 3});
 
     printf("Success!\n");
     return 0;

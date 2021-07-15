@@ -6,6 +6,8 @@
 #include "RealizationOrder.h"
 #include "runtime/HalideRuntime.h"
 
+#include <set>
+
 namespace Halide {
 namespace Internal {
 
@@ -14,6 +16,8 @@ using std::pair;
 using std::set;
 using std::string;
 using std::vector;
+
+namespace {
 
 struct TraceEventBuilder {
     string func;
@@ -166,7 +170,9 @@ private:
         internal_assert(op);
 
         map<string, Function>::const_iterator iter = env.find(op->name);
-        if (iter == env.end()) return stmt;
+        if (iter == env.end()) {
+            return stmt;
+        }
         Function f = iter->second;
         internal_assert(!f.can_be_inlined() || !f.schedule().compute_level().is_inlined());
 
@@ -191,6 +197,10 @@ private:
                 builder.value_index = (int)i;
                 builder.value = {value_var};
                 Expr trace = builder.build();
+                if (!is_const_one(op->predicate)) {
+                    trace = Call::make(trace.type(), Call::if_then_else,
+                                       {op->predicate, trace}, Call::PureIntrinsic);
+                }
 
                 traces[i] = Let::make(value_var_name, values[i],
                                       Call::make(t, Call::return_second,
@@ -210,7 +220,7 @@ private:
                 }
             }
 
-            stmt = Provide::make(op->name, traces, args);
+            stmt = Provide::make(op->name, traces, args, op->predicate);
             for (const auto &p : lets) {
                 stmt = LetStmt::make(p.first, p.second, stmt);
             }
@@ -224,7 +234,9 @@ private:
         internal_assert(op);
 
         map<string, Function>::const_iterator iter = env.find(op->name);
-        if (iter == env.end()) return stmt;
+        if (iter == env.end()) {
+            return stmt;
+        }
         Function f = iter->second;
         if (f.is_tracing_realizations() || trace_all_realizations) {
             add_trace_tags(op->name, f.get_trace_tags());
@@ -268,7 +280,9 @@ private:
         op = stmt.as<ProducerConsumer>();
         internal_assert(op);
         map<string, Function>::const_iterator iter = env.find(op->name);
-        if (iter == env.end()) return stmt;
+        if (iter == env.end()) {
+            return stmt;
+        }
         Function f = iter->second;
         if (f.is_tracing_realizations() || trace_all_realizations) {
             // Throw a tracing call around each pipeline event
@@ -306,7 +320,7 @@ class RemoveRealizeOverOutput : public IRMutator {
     const vector<Function> &outputs;
 
     Stmt visit(const Realize *op) override {
-        for (Function f : outputs) {
+        for (const Function &f : outputs) {
             if (op->name == f.name()) {
                 return mutate(op->body);
             }
@@ -320,6 +334,8 @@ public:
     }
 };
 
+}  // namespace
+
 Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
                     const map<string, Function> &env, const vector<Function> &outputs,
                     const Target &t) {
@@ -327,7 +343,7 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
     InjectTracing tracing(env, t);
 
     // Add a dummy realize block for the output buffers
-    for (Function output : outputs) {
+    for (const Function &output : outputs) {
         Region output_region;
         Parameter output_buf = output.output_buffers()[0];
         internal_assert(output_buf.is_buffer());
@@ -445,7 +461,7 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
                 Internal::Call::make(type_of<const char *>(),
                                      Internal::Call::stringify,
                                      strings,
-                                     Internal::Call::Intrinsic);
+                                     Internal::Call::PureIntrinsic);
             s = Block::make(Evaluate::make(builder.build()), s);
         }
 

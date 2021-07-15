@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
         .store_at(dst, yo)
         .fold_storage(y, 4);
 
-    Buffer<int> out = dst.realize(100, 100);
+    Buffer<int> out = dst.realize({100, 100});
 
     // The number of calls to 'expensive' should be the size of the
     // output, plus some margin from the stencil, plus a little

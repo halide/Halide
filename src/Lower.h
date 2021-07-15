@@ -13,9 +13,11 @@
 #include "Argument.h"
 #include "Expr.h"
 #include "Module.h"
-#include "Target.h"
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
 
 class Function;
@@ -31,7 +33,7 @@ Module lower(const std::vector<Function> &output_funcs,
              const std::string &pipeline_name,
              const Target &t,
              const std::vector<Argument> &args,
-             const LinkageType linkage_type,
+             LinkageType linkage_type,
              const std::vector<Stmt> &requirements = std::vector<Stmt>(),
              bool trace_pipeline = false,
              const std::vector<IRMutator *> &custom_passes = std::vector<IRMutator *>());

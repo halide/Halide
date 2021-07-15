@@ -1,4 +1,5 @@
 #include <android/log.h>
+#include <dlfcn.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <stdlib.h>
@@ -6,12 +7,33 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+bool use_libdmabuf = false;
+bool use_newer_ioctl = false;
+bool use_libion = false;
+
 namespace {
+
+// DMA-BUF support
+void *dmabufAllocator = NULL;
+
+const char *dmabuf_heap = "qcom,system";
+
+typedef void *(*rem_dmabuf_create_fn)();
+rem_dmabuf_create_fn dmabuf_create_fn = NULL;
+
+typedef int (*rem_dmabuf_alloc_fn)(void *, const char *, size_t, unsigned int, size_t);
+rem_dmabuf_alloc_fn dmabuf_alloc_fn = NULL;
+
+typedef void (*rem_dmabuf_deinit_fn)(void *);
+rem_dmabuf_deinit_fn dmabuf_deinit_fn = NULL;
+
+// ION support
 
 // Allocations that are intended to be shared with Hexagon can be
 // shared without copying if they are contiguous in physical
 // memory. Android's ION allocator gives us a mechanism with which we
 // can allocate contiguous physical memory.
+
 enum ion_heap_id {
     system_heap_id = 25,
 };
@@ -52,13 +74,27 @@ struct ion_handle_data {
 #define ION_IOC_FREE _IOWR('I', 1, ion_handle_data)
 #define ION_IOC_MAP _IOWR('I', 2, ion_fd_data)
 
-bool use_newer_ioctl = false;
+typedef int (*rem_ion_open_fn)();
+rem_ion_open_fn ion_open_fn = NULL;
+
+typedef int (*rem_ion_alloc_fd_fn)(int ion_fd, size_t len, size_t align, unsigned int heap_id_mask, unsigned int flags, int *map_fd);
+rem_ion_alloc_fd_fn ion_alloc_fd_fn = NULL;
 
 // ION IOCTL approach
 // This function will first try older IOCTL approach provided we have not determined
 // that we should use the newer IOCTL. Once we have determined we should use the
 // newer IOCTL method , we cease calling the older IOCTL.
+
 ion_user_handle_t ion_alloc(int ion_fd, size_t len, size_t align, unsigned int heap_id_mask, unsigned int flags) {
+
+    if (use_libion) {
+        int map_fd = 0;
+        if (ion_alloc_fd_fn(ion_fd, len, 0, heap_id_mask, flags, &map_fd)) {
+            __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_alloc_fd failed");
+            return -1;
+        }
+        return map_fd;
+    }
 
     if (!use_newer_ioctl) {
         ion_allocation_data alloc = {
@@ -88,6 +124,11 @@ ion_user_handle_t ion_alloc(int ion_fd, size_t len, size_t align, unsigned int h
 }
 
 int ion_map(int ion_fd, ion_user_handle_t handle) {
+    if (use_libion) {
+        return 0;
+    }
+
+    // old ioctl approach
     ion_fd_data data = {
         handle,
         0};
@@ -98,8 +139,14 @@ int ion_map(int ion_fd, ion_user_handle_t handle) {
 }
 
 int ion_free(int ion_fd, ion_user_handle_t ion_handle) {
-    if (ioctl(ion_fd, ION_IOC_FREE, &ion_handle) < 0) {
-        return -1;
+    if (!use_libion) {
+        // We need to use this approach only if we are not using
+        // libion. If we are using libion (use_libion == true),
+        // then simply closing the fd (buf_fd) is enough. See
+        // uses of ion_free below.
+        if (ioctl(ion_fd, ION_IOC_FREE, &ion_handle) < 0) {
+            return -1;
+        }
     }
     return 0;
 }
@@ -134,19 +181,90 @@ extern "C" {
 __attribute__((weak)) void remote_register_buf(void *buf, int size, int fd);
 
 void halide_hexagon_host_malloc_init() {
-    if (ion_fd != -1) return;
+    if (ion_fd != -1) {
+        return;
+    }
+    if (dmabufAllocator != NULL) {
+        return;
+    }
+
     pthread_mutex_init(&allocations_mutex, NULL);
+    use_libdmabuf = false;
     use_newer_ioctl = false;
-    ion_fd = open("/dev/ion", O_RDONLY, 0);
-    if (ion_fd < 0) {
-        __android_log_print(ANDROID_LOG_ERROR, "halide", "open('/dev/ion') failed");
+    use_libion = false;
+    void *lib = NULL;
+
+    // Try to access libdmabufheap.so, if it succeeds try using DMA-BUF
+    // If there are any errors seen with DMA-BUF, fallback to libion.so
+    lib = dlopen("libdmabufheap.so", RTLD_LAZY);
+    if (lib) {
+        use_libdmabuf = true;
+        dmabuf_create_fn = (rem_dmabuf_create_fn)dlsym(lib, "CreateDmabufHeapBufferAllocator");
+        dmabuf_deinit_fn = (rem_dmabuf_deinit_fn)dlsym(lib, "FreeDmabufHeapBufferAllocator");
+        dmabuf_alloc_fn = (rem_dmabuf_alloc_fn)dlsym(lib, "DmabufHeapAlloc");
+        if (!dmabuf_create_fn || !dmabuf_deinit_fn || !dmabuf_alloc_fn) {
+            __android_log_print(ANDROID_LOG_ERROR, "halide", "huge problem in libdmabufheap.so");
+            use_libdmabuf = false;
+        }
+
+        if (use_libdmabuf) {  // Still good, try creating an allocator
+            dmabufAllocator = dmabuf_create_fn();
+            if (!dmabufAllocator) {
+                __android_log_print(ANDROID_LOG_ERROR, "halide", "dmabuf init failed");
+                use_libdmabuf = false;
+            }
+        }
+
+        if (use_libdmabuf) {  // Still good, try a small test allocation
+            int buf_fd = dmabuf_alloc_fn(dmabufAllocator, dmabuf_heap, 0x1000, 0, 0);
+            if (buf_fd >= 0) {
+                close(buf_fd);  // Release successful test
+            } else {
+                use_libdmabuf = false;
+            }
+        }
+
+        if (use_libdmabuf) {  // DMA-BUF working
+            return;
+        }
+    }
+
+    // Try to access libion.so, if it succeeds use new approach
+    lib = dlopen("libion.so", RTLD_LAZY);
+    if (lib) {
+        use_libion = true;
+        ion_open_fn = (rem_ion_open_fn)dlsym(lib, "ion_open");
+        ion_alloc_fd_fn = (rem_ion_alloc_fd_fn)dlsym(lib, "ion_alloc_fd");
+        if (!ion_open_fn || !ion_alloc_fd_fn) {
+            __android_log_print(ANDROID_LOG_ERROR, "halide", "huge problem in libion.so");
+            return;
+        }
+        ion_fd = ion_open_fn();
+        if (ion_fd < 0) {
+            __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_open failed");
+        }
+    } else {
+        ion_fd = open("/dev/ion", O_RDONLY, 0);
+        if (ion_fd < 0) {
+            __android_log_print(ANDROID_LOG_ERROR, "halide", "open('/dev/ion') failed");
+        }
     }
 }
 
 void halide_hexagon_host_malloc_deinit() {
-    if (ion_fd == -1) return;
-    close(ion_fd);
-    ion_fd = -1;
+    if (use_libdmabuf) {
+        if (dmabufAllocator == NULL) {
+            return;
+        }
+        dmabuf_deinit_fn(dmabufAllocator);
+        dmabufAllocator = NULL;
+    } else {
+        if (ion_fd == -1) {
+            return;
+        }
+        close(ion_fd);
+        ion_fd = -1;
+    }
     pthread_mutex_destroy(&allocations_mutex);
 }
 
@@ -173,21 +291,38 @@ void *halide_hexagon_host_malloc(size_t size) {
 
     int buf_fd = 0;
     ion_user_handle_t handle = 0;
-    handle = ion_alloc(ion_fd, size, alignment, 1 << heap_id, ion_flags);
-    if (handle < 0) {
-        __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_alloc(%d, %lld, %lld, %d, %d) failed",
-                            ion_fd, (long long)size, (long long)alignment, 1 << heap_id, ion_flags);
-        return NULL;
-    }
-    // Map the ion handle to a file buffer.
-    if (use_newer_ioctl) {
-        buf_fd = handle;
-    } else {
-        buf_fd = ion_map(ion_fd, handle);
+
+    if (use_libdmabuf) {
+        buf_fd = dmabuf_alloc_fn(dmabufAllocator, dmabuf_heap, size, 0, 0);
         if (buf_fd < 0) {
-            __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_map(%d, %d) failed", ion_fd, handle);
-            ion_free(ion_fd, handle);
+            __android_log_print(ANDROID_LOG_ERROR, "halide", "DmabufHeapAlloc(%p, \"%s\", %zd, %d, %d) failed",
+                                dmabufAllocator, dmabuf_heap, size, 0, 0);
             return NULL;
+        }
+    } else if (use_libion) {
+        buf_fd = ion_alloc(ion_fd, size, alignment, 1 << heap_id, ion_flags);
+        if (buf_fd < 0) {
+            __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_alloc(%d, %zd, %zd, %d, %d) failed",
+                                ion_fd, size, alignment, 1 << heap_id, ion_flags);
+            return NULL;
+        }
+    } else {  // !use_libion
+        handle = ion_alloc(ion_fd, size, alignment, 1 << heap_id, ion_flags);
+        if (handle < 0) {
+            __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_alloc(%d, %zd, %zd, %d, %d) failed",
+                                ion_fd, size, alignment, 1 << heap_id, ion_flags);
+            return NULL;
+        }
+        // Map the ion handle to a file buffer.
+        if (use_newer_ioctl) {
+            buf_fd = handle;
+        } else {
+            buf_fd = ion_map(ion_fd, handle);
+            if (buf_fd < 0) {
+                __android_log_print(ANDROID_LOG_ERROR, "halide", "ion_map(%d, %d) failed", ion_fd, handle);
+                ion_free(ion_fd, handle);
+                return NULL;
+            }
         }
     }
 
@@ -267,9 +402,12 @@ void halide_hexagon_host_free(void *ptr) {
     // Unmap the memory
     munmap(rec->buf, rec->size);
 
-    // free the ION allocation
+    // free the ION or DMA-BUF allocation
     close(rec->buf_fd);
-    if (!use_newer_ioctl) {
+    if (!use_libdmabuf && !use_libion && !use_newer_ioctl) {
+        // We free rec->handle only if we are not using libion and are
+        // also using the older ioctl. See ion_alloc above for more
+        // information.
         if (ion_free(ion_fd, rec->handle) < 0) {
             __android_log_print(ANDROID_LOG_WARN, "halide", "ion_free(%d, %d) failed", ion_fd, rec->handle);
         }

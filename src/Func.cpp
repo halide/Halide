@@ -1,6 +1,6 @@
 #include <algorithm>
+#include <cstring>
 #include <iostream>
-#include <string.h>
 #include <utility>
 
 #ifdef _MSC_VER
@@ -204,7 +204,9 @@ const std::string &Func::extern_function_name() const {
 }
 
 int Func::dimensions() const {
-    if (!defined()) return 0;
+    if (!defined()) {
+        return 0;
+    }
     return func.dimensions();
 }
 
@@ -254,8 +256,9 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
     std::vector<Expr>::iterator iter = args.begin();
     while (iter != args.end()) {
         const Variable *var = iter->as<Variable>();
-        if (var && var->name == Var(_).name())
+        if (var && var->name == Var(_).name()) {
             break;
+        }
         iter++;
     }
     if (iter != args.end()) {
@@ -283,7 +286,9 @@ bool var_name_match(const string &candidate, const string &var) {
     internal_assert(var.find('.') == string::npos)
         << "var_name_match expects unqualified names for the second argument. "
         << "Name passed: " << var << "\n";
-    if (candidate == var) return true;
+    if (candidate == var) {
+        return true;
+    }
     return Internal::ends_with(candidate, "." + var);
 }
 }  // namespace
@@ -292,6 +297,53 @@ std::string Stage::name() const {
     std::string stage_name = (stage_index == 0) ? function.name() : function.name() + ".update(" + std::to_string(stage_index - 1) + ")";
     return stage_name;
 }
+
+namespace {
+bool is_const_assignment(const string &func_name, const vector<Expr> &args, const vector<Expr> &values) {
+    // Check if an update definition is a non-recursive and just
+    // scatters a value that doesn't depend on the reduction
+    // domain. Such definitions can be treated the same as
+    // associative/commutative ones. I.e. we can safely split/reorder:
+    // f(g(r)) = 4;
+
+    // More generally, any value that does not recursively load the
+    // func or use the rvar on the RHS is also fine, because there can
+    // never be races between two distinct values of the pure var by
+    // construction (because the pure var must appear as one of the
+    // args) e.g: f(g(r, x), x) = h(x);
+    class Checker : public IRVisitor {
+        using IRVisitor::visit;
+
+        void visit(const Variable *op) override {
+            has_rvar |= op->reduction_domain.defined();
+        }
+
+        void visit(const Call *op) override {
+            has_self_reference |= (op->call_type == Call::Halide && op->name == func_name);
+            IRVisitor::visit(op);
+        }
+
+        const string &func_name;
+
+    public:
+        Checker(const string &func_name)
+            : func_name(func_name) {
+        }
+
+        bool has_self_reference = false;
+        bool has_rvar = false;
+    } lhs_checker(func_name), rhs_checker(func_name);
+    for (const Expr &v : args) {
+        v.accept(&lhs_checker);
+    }
+    for (const Expr &v : values) {
+        v.accept(&rhs_checker);
+    }
+    return !(lhs_checker.has_self_reference ||
+             rhs_checker.has_self_reference ||
+             rhs_checker.has_rvar);
+}
+}  // namespace
 
 void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
     bool found = false;
@@ -313,14 +365,16 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                         vector<Expr> &args = definition.args();
                         vector<Expr> &values = definition.values();
 
-                        // Check whether the operator is associative and determine the operator and
-                        // its identity for each value in the definition if it is a Tuple
-                        const auto &prover_result = prove_associativity(func_name, args, values);
+                        if (!is_const_assignment(func_name, args, values)) {
+                            // Check whether the operator is associative and determine the operator and
+                            // its identity for each value in the definition if it is a Tuple
+                            const auto &prover_result = prove_associativity(func_name, args, values);
 
-                        user_assert(prover_result.associative())
-                            << "Failed to call atomic() on " << name()
-                            << " since it can't prove associativity of the operator.\n";
-                        internal_assert(prover_result.size() == values.size());
+                            user_assert(prover_result.associative())
+                                << "Failed to call atomic() on " << name()
+                                << " since it can't prove associativity of the operator.\n";
+                            internal_assert(prover_result.size() == values.size());
+                        }
                     }
                 }
                 user_assert(definition.schedule().allow_race_conditions() ||
@@ -341,11 +395,6 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                     << " the output, or you can prove that there are actually"
                     << " no race conditions, and that Halide is being too cautious.\n";
             }
-        } else if (t == ForType::Vectorized) {
-            user_assert(dims[i].for_type != ForType::Vectorized)
-                << "In schedule for " << name()
-                << ", can't vectorize across " << var.name()
-                << " because Func is already vectorized across " << dims[i].var << "\n";
         }
     }
 
@@ -1057,9 +1106,9 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
     }
 
     if (exact) {
-        user_assert(tail == TailStrategy::GuardWithIf)
+        user_assert(tail == TailStrategy::GuardWithIf || tail == TailStrategy::Predicate)
             << "When splitting Var " << old_name
-            << " the tail strategy must be GuardWithIf or Auto. "
+            << " the tail strategy must be GuardWithIf, Predicate, or Auto. "
             << "Anything else may change the meaning of the algorithm\n";
     }
 
@@ -1520,8 +1569,9 @@ Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
                    const std::vector<VarOrRVar> &inners,
                    const std::vector<Expr> &factors,
                    const std::vector<TailStrategy> &tails) {
-    if (previous.size() != outers.size() || previous.size() != inners.size() || previous.size() != factors.size() || previous.size() != tails.size())
+    if (previous.size() != outers.size() || previous.size() != inners.size() || previous.size() != factors.size() || previous.size() != tails.size()) {
         user_error << "Vectors passed to Stage::tile must all be the same length.\n";
+    }
     for (unsigned int i = 0; i < previous.size(); i++) {
         split(previous[i], outers[i], inners[i], factors[i], tails[i]);
     }
@@ -1585,16 +1635,16 @@ Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
     // It is illegal to reorder RVars if the stage is not associative
     // or not commutative. Look for RVar reorderings and try to do the
     // necessary proof if any are found.
-    bool associativity_proven = false;
-    for (size_t i = 0; !associativity_proven && i < idx.size(); i++) {
+    bool safe_to_reorder = is_const_assignment(func_name, args, values);
+    for (size_t i = 0; !safe_to_reorder && i < idx.size(); i++) {
         if (!dims[idx[i]].is_pure()) {
-            for (size_t j = i + 1; !associativity_proven && j < idx.size(); j++) {
+            for (size_t j = i + 1; !safe_to_reorder && j < idx.size(); j++) {
                 if (!dims[idx[j]].is_pure() && (idx[i] > idx[j])) {
                     // Generate an error if the operator is not both associative and commutative.
                     const auto &prover_result = prove_associativity(func_name, args, values);
-                    associativity_proven = prover_result.associative() &&
-                                           prover_result.commutative();
-                    if (!associativity_proven) {
+                    safe_to_reorder = prover_result.associative() &&
+                                      prover_result.commutative();
+                    if (!safe_to_reorder) {
                         user_error
                             << "In schedule for " << name()
                             << ", can't reorder RVars " << vars[i].name()
@@ -2065,9 +2115,43 @@ Func &Func::atomic(bool override_associativity_test) {
     return *this;
 }
 
-Func &Func::memoize() {
+Func &Func::memoize(const EvictionKey &eviction_key) {
     invalidate_cache();
     func.schedule().memoized() = true;
+    if (eviction_key.key.defined()) {
+        Expr new_eviction_key;
+        const Type &t(eviction_key.key.type());
+        if (!t.is_scalar()) {
+            user_error << "Can't use a vector as a memoization eviction key. Expression is: "
+                       << eviction_key.key << "\n";
+        }
+        if (t.is_float()) {
+            user_error << "Can't use floating-point types as a memoization eviction key. Expression is: "
+                       << eviction_key.key << "\n";
+        } else if (t.is_handle()) {
+            // Wrap this in a memoize_tag so it does not get used in
+            // the cache key. Would be nice to have void version of
+            // memoize_tag that adds no bits to the key, but that is a
+            // small optimization.
+            new_eviction_key = memoize_tag(reinterpret(UInt(64), eviction_key.key), 0);
+        } else {
+            // Ditto above re: memoize_tag
+            new_eviction_key = memoize_tag(reinterpret(UInt(64), cast(t.with_bits(64),
+                                                                      eviction_key.key)),
+                                           0);
+        }
+
+        if (func.schedule().memoize_eviction_key().defined() &&
+            !graph_equal(func.schedule().memoize_eviction_key(), eviction_key.key)) {
+            user_error << "Can't redefine memoize eviction key. First definition is: "
+                       << func.schedule().memoize_eviction_key()
+                       << " new definition is: " << new_eviction_key << "\n";
+        }
+
+        func.schedule().memoize_eviction_key() = new_eviction_key;
+    } else {
+        func.schedule().memoize_eviction_key() = eviction_key.key;  // not defined.
+    }
     return *this;
 }
 
@@ -2157,8 +2241,12 @@ Func &Func::bound(const Var &var, Expr min, Expr extent) {
     func.schedule().bounds().push_back(b);
 
     // Propagate constant bounds into estimates as well.
-    if (!is_const(min)) min = Expr();
-    if (!is_const(extent)) extent = Expr();
+    if (!is_const(min)) {
+        min = Expr();
+    }
+    if (!is_const(extent)) {
+        extent = Expr();
+    }
     set_estimate(var, min, extent);
 
     return *this;
@@ -2225,7 +2313,6 @@ Func &Func::align_bounds(const Var &var, Expr modulus, Expr remainder) {
 
     // Reduce the remainder
     remainder = remainder % modulus;
-
     invalidate_cache();
 
     bool found = func.is_pure_arg(var.name());
@@ -2236,6 +2323,26 @@ Func &Func::align_bounds(const Var &var, Expr modulus, Expr remainder) {
         << " is not one of the pure variables of " << name() << ".\n";
 
     Bound b = {var.name(), Expr(), Expr(), modulus, remainder};
+    func.schedule().bounds().push_back(b);
+    return *this;
+}
+
+Func &Func::align_extent(const Var &var, Expr modulus) {
+    user_assert(modulus.defined()) << "modulus is undefined\n";
+    user_assert(Int(32).can_represent(modulus.type())) << "Can't represent modulus as int32\n";
+
+    modulus = cast<int32_t>(modulus);
+
+    invalidate_cache();
+
+    bool found = func.is_pure_arg(var.name());
+    user_assert(found)
+        << "Can't align extent of variable " << var.name()
+        << " of function " << name()
+        << " because " << var.name()
+        << " is not one of the pure variables of " << name() << ".\n";
+
+    Bound b = {var.name(), Expr(), Expr(), modulus, Expr()};
     func.schedule().bounds().push_back(b);
     return *this;
 }
@@ -2415,35 +2522,6 @@ Func &Func::gpu_tile(const VarOrRVar &x, const VarOrRVar &y, const VarOrRVar &z,
     return *this;
 }
 
-Func &Func::shader(const Var &x, const Var &y, const Var &c, DeviceAPI device_api) {
-    invalidate_cache();
-
-    reorder(c, x, y);
-    // GLSL outputs must be stored interleaved
-    reorder_storage(c, x, y);
-
-    // TODO: Set appropriate constraints if this is the output buffer?
-
-    Stage(func, func.definition(), 0).gpu_blocks(x, y, device_api);
-
-    bool constant_bounds = false;
-    FuncSchedule &sched = func.schedule();
-    for (size_t i = 0; i < sched.bounds().size(); i++) {
-        if (c.name() == sched.bounds()[i].var) {
-            constant_bounds = is_const(sched.bounds()[i].min) &&
-                              is_const(sched.bounds()[i].extent);
-            break;
-        }
-    }
-    user_assert(constant_bounds)
-        << "The color channel for image loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
-    return *this;
-}
-
-Func &Func::glsl(const Var &x, const Var &y, const Var &c) {
-    return shader(x, y, c, DeviceAPI::GLSL).vectorize(c);
-}
-
 Func &Func::hexagon(const VarOrRVar &x) {
     invalidate_cache();
     Stage(func, func.definition(), 0).hexagon(x);
@@ -2478,7 +2556,9 @@ Func &Func::reorder_storage(const Var &x, const Var &y) {
             found_y = true;
             y_loc = i;
         } else if (var_name_match(dims[i].var, x.name())) {
-            if (found_y) std::swap(dims[i], dims[y_loc]);
+            if (found_y) {
+                std::swap(dims[i], dims[y_loc]);
+            }
             return *this;
         }
     }
@@ -2669,7 +2749,9 @@ public:
     void visit(const Variable *v) override {
         int index = Var::implicit_index(v->name);
         if (index != -1) {
-            if (index >= count) count = index + 1;
+            if (index >= count) {
+                count = index + 1;
+            }
         }
     }
 };
@@ -2796,7 +2878,9 @@ Stage FuncRef::operator=(const FuncRef &e) {
 Func define_base_case(const Internal::Function &func, const vector<Expr> &a, const Tuple &e) {
     Func f(func);
 
-    if (func.has_pure_definition()) return f;
+    if (func.has_pure_definition()) {
+        return f;
+    }
     vector<Var> pure_args(a.size());
 
     // Reuse names of existing pure args
@@ -3005,42 +3089,6 @@ Realization Func::realize(std::vector<int32_t> sizes, const Target &target,
                           const ParamMap &param_map) {
     user_assert(defined()) << "Can't realize undefined Func.\n";
     return pipeline().realize(std::move(sizes), target, param_map);
-}
-
-Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target,
-                          const ParamMap &param_map) {
-    return realize({x_size, y_size, z_size, w_size}, target, param_map);
-}
-
-Realization Func::realize(int x_size, int y_size, int z_size, const Target &target,
-                          const ParamMap &param_map) {
-    return realize({x_size, y_size, z_size}, target, param_map);
-}
-
-Realization Func::realize(int x_size, int y_size, const Target &target,
-                          const ParamMap &param_map) {
-    return realize({x_size, y_size}, target, param_map);
-}
-
-Realization Func::realize(int x_size, const Target &target,
-                          const ParamMap &param_map) {
-    return realize(std::vector<int>{x_size}, target, param_map);
-}
-
-Realization Func::realize(const Target &target,
-                          const ParamMap &param_map) {
-    return realize(std::vector<int>{}, target, param_map);
-}
-
-void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
-                              const Target &target,
-                              const ParamMap &param_map) {
-    vector<int32_t> sizes;
-    if (x_size) sizes.push_back(x_size);
-    if (y_size) sizes.push_back(y_size);
-    if (z_size) sizes.push_back(z_size);
-    if (w_size) sizes.push_back(w_size);
-    infer_input_bounds(sizes, target, param_map);
 }
 
 void Func::infer_input_bounds(const std::vector<int32_t> &sizes,

@@ -1957,7 +1957,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     float load_slope = arch_params.balance / arch_params.last_level_cache_size;
     for (const auto &f_load : group_load_costs) {
         internal_assert(g.inlined.find(f_load.first) == g.inlined.end())
-            << "Intermediates of inlined pure fuction \"" << f_load.first
+            << "Intermediates of inlined pure function \"" << f_load.first
             << "\" should not have been in the group_load_costs\n";
 
         const auto &alloc_reg = get_element(alloc_regions, f_load.first);
@@ -3167,7 +3167,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
                           const MachineParams &arch_params) {
     // Make an environment map which is used throughout the auto scheduling process.
     map<string, Function> env;
-    for (Function f : outputs) {
+    for (const Function &f : outputs) {
         map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
@@ -3219,7 +3219,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         // all the function calls within the pipeline. Thus, we might as well
         // recompute the 'env' from scratch.
         env.clear();
-        for (Function f : outputs) {
+        for (const Function &f : outputs) {
             map<string, Function> more_funcs = find_transitive_calls(f);
             env.insert(more_funcs.begin(), more_funcs.end());
         }
@@ -3245,7 +3245,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         // We need to recompute 'env' for the same reason as with
         // inline_all_trivial_functions
         env.clear();
-        for (Function f : outputs) {
+        for (const Function &f : outputs) {
             map<string, Function> more_funcs = find_transitive_calls(f);
             env.insert(more_funcs.begin(), more_funcs.end());
         }
@@ -3285,7 +3285,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
         internal_assert(inline_unbounded(outputs, order, env, unbounded));
 
         env.clear();
-        for (Function f : outputs) {
+        for (const Function &f : outputs) {
             map<string, Function> more_funcs = find_transitive_calls(f);
             env.insert(more_funcs.begin(), more_funcs.end());
         }
@@ -3380,7 +3380,7 @@ struct Mullapudi2016 {
             << "The Mullapudi2016 autoscheduler is not supported for the target: " << target.to_string();
         results.scheduler_name = "Mullapudi2016";
         std::vector<Function> pipeline_outputs;
-        for (Func f : pipeline.outputs()) {
+        for (const Func &f : pipeline.outputs()) {
             pipeline_outputs.push_back(f.function());
         }
         results.schedule_source = generate_schedules(pipeline_outputs, target, arch_params);

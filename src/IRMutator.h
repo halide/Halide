@@ -5,7 +5,9 @@
  * Defines a base class for passes over the IR that modify it
  */
 
-#include "IRVisitor.h"
+#include <map>
+
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {
@@ -23,8 +25,8 @@ namespace Internal {
  */
 class IRMutator {
 public:
-    IRMutator();
-    virtual ~IRMutator();
+    IRMutator() = default;
+    virtual ~IRMutator() = default;
 
     /** This is the main interface for using a mutator. Also call
      * these in your subclass to mutate sub-expressions and
@@ -104,7 +106,7 @@ public:
 
 /** A helper function for mutator-like things to mutate regions */
 template<typename Mutator, typename... Args>
-std::pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds, Args &&... args) {
+std::pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds, Args &&...args) {
     Region new_bounds(bounds.size());
     bool bounds_changed = false;
 

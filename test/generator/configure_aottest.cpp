@@ -35,7 +35,8 @@ int main(int argc, char **argv) {
     extra_value += 5;
 
     const int extra_scalar = 7;
-    extra_value += extra_scalar;
+    const int8_t extra_dynamic_scalar = 13;
+    extra_value += extra_scalar + extra_dynamic_scalar;
 
     Buffer<int> output(kSize, kSize, 3);
     Buffer<float> extra_buffer_output(kSize, kSize, 3);
@@ -44,7 +45,7 @@ int main(int argc, char **argv) {
     const int bias = 1;
     int result = configure(input, bias,
                            // extra inputs are in the order they were added, after all predeclared inputs
-                           extras[0], extras[1], extras[2], typed_extra, func_extra, extra_scalar,
+                           extras[0], extras[1], extras[2], typed_extra, func_extra, extra_scalar, extra_dynamic_scalar,
                            output,
                            // extra outputs are in the order they were added, after all predeclared outputs
                            extra_buffer_output, extra_func_output);

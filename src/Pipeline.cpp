@@ -113,10 +113,10 @@ struct PipelineContents {
 
     std::vector<Stmt> requirements;
 
-    bool trace_pipeline;
+    bool trace_pipeline = false;
 
     PipelineContents()
-        : module("", Target()), trace_pipeline(false) {
+        : module("", Target()) {
         user_context_arg.arg = Argument("__user_context", Argument::InputScalar, type_of<const void *>(), 0, ArgumentEstimates{});
         user_context_arg.param = Parameter(Handle(), false, 0, "__user_context");
     }
@@ -164,7 +164,7 @@ Pipeline::Pipeline(const Func &output)
 
 Pipeline::Pipeline(const vector<Func> &outputs)
     : contents(new PipelineContents) {
-    for (Func f : outputs) {
+    for (const Func &f : outputs) {
         f.function().freeze();
         contents->outputs.push_back(f.function());
     }
@@ -242,7 +242,7 @@ void Pipeline::set_default_autoscheduler_name(const std::string &autoscheduler_n
 Func Pipeline::get_func(size_t index) {
     // Compute an environment
     std::map<string, Function> env;
-    for (Function f : contents->outputs) {
+    for (const Function &f : contents->outputs) {
         std::map<string, Function> more_funcs = find_transitive_calls(f);
         env.insert(more_funcs.begin(), more_funcs.end());
     }
@@ -426,7 +426,7 @@ class FindExterns : public IRGraphVisitor {
                 if (function_takes_user_context(op->name)) {
                     arg_types.push_back(type_of<void *>());
                 }
-                for (Expr e : op->args) {
+                for (const Expr &e : op->args) {
                     arg_types.push_back(e.type().element_of());
                 }
                 bool is_void_return = op->type.bits() == 0 || op->name == "halide_print";
@@ -457,7 +457,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
                                    const LinkageType linkage_type) {
     user_assert(defined()) << "Can't compile undefined Pipeline.\n";
 
-    for (Function f : contents->outputs) {
+    for (const Function &f : contents->outputs) {
         user_assert(f.has_pure_definition() || f.has_extern_definition())
             << "Can't compile Pipeline with undefined output Func: " << f.name() << ".\n";
     }
@@ -476,7 +476,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
     // explicitly).
     const bool requires_user_context = target.has_feature(Target::UserContext);
     bool has_user_context = false;
-    for (Argument arg : lowering_args) {
+    for (const Argument &arg : lowering_args) {
         if (arg.name == contents->user_context_arg.arg.name) {
             has_user_context = true;
         }
@@ -511,7 +511,7 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         debug(2) << "Reusing old module\n";
     } else {
         vector<IRMutator *> custom_passes;
-        for (CustomLoweringPass p : contents->custom_lowering_passes) {
+        for (const CustomLoweringPass &p : contents->custom_lowering_passes) {
             custom_passes.push_back(p.pass);
         }
 
@@ -691,7 +691,9 @@ void Pipeline::add_custom_lowering_pass(IRMutator *pass, std::function<void()> d
 }
 
 void Pipeline::clear_custom_lowering_passes() {
-    if (!defined()) return;
+    if (!defined()) {
+        return;
+    }
     contents->clear_custom_lowering_passes();
 }
 
@@ -746,34 +748,6 @@ Realization Pipeline::realize(vector<int32_t> sizes, const Target &target,
         r[i].copy_to_host();
     }
     return r;
-}
-
-Realization Pipeline::realize(int x_size, int y_size, int z_size, int w_size, const Target &target,
-                              const ParamMap &param_map) {
-    return realize({x_size, y_size, z_size, w_size}, target, param_map);
-}
-
-Realization Pipeline::realize(int x_size, int y_size, int z_size, const Target &target,
-                              const ParamMap &param_map) {
-    return realize({x_size, y_size, z_size}, target, param_map);
-}
-
-Realization Pipeline::realize(int x_size, int y_size, const Target &target,
-                              const ParamMap &param_map) {
-    return realize({x_size, y_size}, target, param_map);
-}
-
-Realization Pipeline::realize(int x_size, const Target &target,
-                              const ParamMap &param_map) {
-    // Use an explicit vector here, since {x_size} can be interpreted
-    // as a scalar initializer
-    vector<int32_t> v = {x_size};
-    return realize(v, target, param_map);
-}
-
-Realization Pipeline::realize(const Target &target,
-                              const ParamMap &param_map) {
-    return realize(vector<int32_t>(), target, param_map);
 }
 
 void Pipeline::add_requirement(const Expr &condition, std::vector<Expr> &error_args) {
@@ -929,9 +903,11 @@ private:
     using ConstVoidPtr = const void *;
     ConstVoidPtr fixed_store[kStoreSize];
 
-    JITCallArgs(const JITCallArgs &) = delete;
-    JITCallArgs(JITCallArgs &&) = delete;
-    void operator=(const JITCallArgs &) = delete;
+public:
+    JITCallArgs(const JITCallArgs &other) = delete;
+    JITCallArgs &operator=(const JITCallArgs &other) = delete;
+    JITCallArgs(JITCallArgs &&other) = delete;
+    JITCallArgs &operator=(JITCallArgs &&other) = delete;
 };
 
 // Make a vector of void *'s to pass to the jit call using the
@@ -941,6 +917,14 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
                                           const ParamMap &param_map, void *user_context,
                                           bool is_bounds_inference, JITCallArgs &args_result) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
+
+    size_t total_outputs = 0;
+    for (const Func &out : this->outputs()) {
+        total_outputs += out.outputs();
+    }
+    user_assert(outputs.size() == total_outputs)
+        << "Realization requires " << outputs.size() << " output(s) but pipeline produces "
+        << total_outputs << " result(s).\n";
 
     JITModule &compiled_module = contents->jit_module;
     internal_assert(compiled_module.argv_function() ||
@@ -1278,17 +1262,6 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const Target &target, 
             p.set_buffer(Buffer<>(std::move(tracked_buffers[i].query)));
         }
     }
-}
-
-void Pipeline::infer_input_bounds(int x_size, int y_size, int z_size, int w_size,
-                                  const Target &target,
-                                  const ParamMap &param_map) {
-    vector<int32_t> sizes;
-    if (x_size) sizes.push_back(x_size);
-    if (y_size) sizes.push_back(y_size);
-    if (z_size) sizes.push_back(z_size);
-    if (w_size) sizes.push_back(w_size);
-    infer_input_bounds(sizes, target, param_map);
 }
 
 void Pipeline::infer_input_bounds(const std::vector<int32_t> &sizes,

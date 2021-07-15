@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
         consumer.compute_root();
         producer.compute_root().async();
 
-        Buffer<int> out = consumer.realize(16, 16);
+        Buffer<int> out = consumer.realize({16, 16});
 
         out.for_each_element([&](int x, int y) {
             int correct = 2 * (x + y);
@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
         consumer.compute_root();
         producer.store_root().fold_storage(x, 8).compute_at(consumer, x).async();
 
-        Buffer<int> out = consumer.realize(16);
+        Buffer<int> out = consumer.realize({16});
 
         out.for_each_element([&](int x) {
             int correct = 2 * x - 1;
@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
         consumer.compute_root();
         producer.store_root().fold_storage(x, 8, false).compute_at(consumer, x).async();
 
-        Buffer<int> out = consumer.realize(16);
+        Buffer<int> out = consumer.realize({16});
 
         out.for_each_element([&](int x) {
             int correct = -2 * x + 1;
@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
         // Producer can run 5 scanlines ahead
         producer.store_root().fold_storage(y, 8).compute_at(consumer, y).async();
 
-        Buffer<int> out = consumer.realize(16, 16);
+        Buffer<int> out = consumer.realize({16, 16});
 
         out.for_each_element([&](int x, int y) {
             int correct = 2 * (x + y);
@@ -124,7 +124,7 @@ int main(int argc, char **argv) {
         // Producer can still run 5 scanlines ahead
         producer.store_root().fold_storage(y, 8).compute_at(consumer, x).async();
 
-        Buffer<int> out = consumer.realize(16, 16);
+        Buffer<int> out = consumer.realize({16, 16});
 
         out.for_each_element([&](int x, int y) {
             int correct = 2 * (x + y);
@@ -159,7 +159,7 @@ int main(int argc, char **argv) {
         // between the two scanlines, so we're a little conservative.
         producer.store_root().fold_storage(x, 8).fold_storage(y, 2).compute_at(consumer, x).async();
 
-        Buffer<int> out = consumer.realize(16, 16);
+        Buffer<int> out = consumer.realize({16, 16});
 
         out.for_each_element([&](int x, int y) {
             int correct = 2 * (x + y);
@@ -187,7 +187,7 @@ int main(int argc, char **argv) {
         producer_1.compute_root().async();
         producer_2.compute_root().async();
 
-        Buffer<int> out = consumer.realize(16, 16);
+        Buffer<int> out = consumer.realize({16, 16});
         out.for_each_element([&](int x, int y) {
             int correct = 2 * (x + y);
             if (out(x, y) != correct) {
@@ -214,7 +214,7 @@ int main(int argc, char **argv) {
         producer_2.compute_at(consumer, y).async();
         consumer.parallel(y);
 
-        Buffer<int> out = consumer.realize(16, 16);
+        Buffer<int> out = consumer.realize({16, 16});
         out.for_each_element([&](int x, int y) {
             int correct = 2 * (x + y);
             if (out(x, y) != correct) {
@@ -243,7 +243,7 @@ int main(int argc, char **argv) {
         producer_2.compute_at(consumer, x).store_at(consumer, y).async();
         consumer.parallel(y);
 
-        Buffer<int> out = consumer.realize(16, 16);
+        Buffer<int> out = consumer.realize({16, 16});
         out.for_each_element([&](int x, int y) {
             int correct = 2 * (x + y);
             if (out(x, y) != correct) {
@@ -267,7 +267,7 @@ int main(int argc, char **argv) {
         f1.compute_at(f2, y).async();
         f0.compute_at(f1, x).async();
 
-        Buffer<int> out = f2.realize(16, 16);
+        Buffer<int> out = f2.realize({16, 16});
         out.for_each_element([&](int x, int y) {
             int correct = 4 * (x + y);
             if (out(x, y) != correct) {
@@ -298,7 +298,7 @@ int main(int argc, char **argv) {
         consumer_1.store_root().compute_at(consumer_2, y).async();
         producer_1.store_at(consumer_2, y).compute_at(consumer_1, x).async();
 
-        Buffer<int> out = consumer_2.realize(16, 16);
+        Buffer<int> out = consumer_2.realize({16, 16});
         out.for_each_element([&](int x, int y) {
             int correct = 8 * (x + y);
             if (out(x, y) != correct) {
@@ -320,7 +320,7 @@ int main(int argc, char **argv) {
         consumer.compute_root();
         producer.store_root().fold_storage(y, 8).compute_at(consumer, y).async();
 
-        Buffer<int> out = consumer.realize(128, 128);
+        Buffer<int> out = consumer.realize({128, 128});
 
         out.for_each_element([&](int x, int y) {
             int correct = (x - 1 + std::min(y - 1, 15)) + (x + 1 + std::min(y + 1, 17));
@@ -345,7 +345,7 @@ int main(int argc, char **argv) {
         consumer.compute_root();
         producer.store_root().fold_storage(y, 8, false).compute_at(consumer, y).async();
 
-        Buffer<int> out = consumer.realize(128, 128);
+        Buffer<int> out = consumer.realize({128, 128});
 
         out.for_each_element([&](int x, int y) {
             int correct = (x - 1 - std::min(y - 1, 15)) + (x + 1 - std::min(y + 1, 17));
@@ -368,7 +368,7 @@ int main(int argc, char **argv) {
         consumer.compute_root();
         producer.store_root().fold_storage(y, 8).compute_at(consumer, y).async();
 
-        Buffer<int> out = consumer.realize(16, 64);
+        Buffer<int> out = consumer.realize({16, 64});
 
         out.for_each_element([&](int x, int y) {
             int correct = 4 * x + 8 * y + 2;
@@ -400,7 +400,7 @@ int main(int argc, char **argv) {
         consumer.compute_root().align_bounds(y, 2).unroll(y, 2);
         producer.store_root().fold_storage(y, 8).compute_at(consumer, y).async();
 
-        Buffer<int> out = consumer.realize(256, 256);
+        Buffer<int> out = consumer.realize({256, 256});
 
         out.for_each_element([&](int x, int y) {
             // Write it out as a 2x upsample followed by a [1 2 3
@@ -434,7 +434,7 @@ int main(int argc, char **argv) {
         consumer.compute_root();
         producer_friend.compute_at(producer, Var::outermost());
 
-        Buffer<int> out = consumer.realize(256, 256);
+        Buffer<int> out = consumer.realize({256, 256});
 
         out.for_each_element([&](int x, int y) {
             int correct = 2 * (x + y);

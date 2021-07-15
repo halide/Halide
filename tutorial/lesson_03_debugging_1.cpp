@@ -3,11 +3,11 @@
 // This lesson demonstrates how to inspect what the Halide compiler is producing.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_03*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_03 -std=c++11
+// g++ lesson_03*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_03 -std=c++17
 // LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_03
 
 // On os x:
-// g++ lesson_03*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_03 -std=c++11
+// g++ lesson_03*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_03 -std=c++17
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_03
 
 // If you have the entire Halide source tree, you can also build it by
@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
 
     // Realize the function to produce an output image. We'll keep it
     // very small for this lesson.
-    Buffer<int> output = gradient.realize(8, 8);
+    Buffer<int> output = gradient.realize({8, 8});
 
     // That line compiled and ran the pipeline. Try running this
     // lesson with the environment variable HL_DEBUG_CODEGEN set to
