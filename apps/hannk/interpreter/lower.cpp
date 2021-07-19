@@ -140,7 +140,10 @@ TensorAndOp reshape_tensor(TensorPtr t, bool is_output = false) {
         Box reshaped_bounds = {{0, c_extent - 1}, {0, 0}, {0, 0}, {0, b_extent - 1}};
         t_reshaped = std::make_shared<Tensor>(name, t->type(), std::move(reshaped_bounds), t->quantization());
     }
-    t_reshaped->set_constant(t->is_constant());
+
+    // Don't do this here: Constant folding should do this for us.
+    // TODO: verify this is correct.
+    // t_reshaped->set_constant(t->is_constant());
 
     assert(t->buffer().number_of_elements() == t_reshaped->buffer().number_of_elements());
     assert(t->buffer().size_in_bytes() == t_reshaped->buffer().size_in_bytes());

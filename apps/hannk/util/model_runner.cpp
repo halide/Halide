@@ -571,7 +571,7 @@ int ModelRunner::parse_flags(int argc, char **argv, std::vector<std::string> &fi
 }
 
 void ModelRunner::run(const std::string &filename) {
-    std::cout << "\nProcessing " << filename << " ...\n";
+    std::cout << "Processing " << filename << " ...\n";
 
     const std::vector<char> buffer = read_entire_file(filename);
 
