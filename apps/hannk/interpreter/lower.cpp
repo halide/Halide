@@ -23,14 +23,15 @@ OpPtr lower_tflite_lstm(TensorPtr data_input, TensorPtr prev_activ_input, Tensor
     // Split activ_temp into the 4 ops we need.
     Box elementwise_bounds = activ_temp->bounds();
     elementwise_bounds[0].set_extent(elementwise_bounds[0].extent() / 4);
+    // Tensor names don't have to be unique, but basing these on activ_temp's name makes debugging a little easier.
     TensorPtr input_gate_buf =
-        std::make_shared<Tensor>("input_gate", activ_temp->type(), elementwise_bounds, activ_temp->quantization());
+        std::make_shared<Tensor>(activ_temp->name() + ".input_gate", activ_temp->type(), elementwise_bounds, activ_temp->quantization());
     TensorPtr input_modulation_gate_buf =
-        std::make_shared<Tensor>("input_modulation_gate", activ_temp->type(), elementwise_bounds, activ_temp->quantization());
+        std::make_shared<Tensor>(activ_temp->name() + ".input_modulation_gate", activ_temp->type(), elementwise_bounds, activ_temp->quantization());
     TensorPtr forget_gate_buf =
-        std::make_shared<Tensor>("forget_gate", activ_temp->type(), elementwise_bounds, activ_temp->quantization());
+        std::make_shared<Tensor>(activ_temp->name() + ".forget_gate", activ_temp->type(), elementwise_bounds, activ_temp->quantization());
     TensorPtr output_gate_buf =
-        std::make_shared<Tensor>("output_gate", activ_temp->type(), elementwise_bounds, activ_temp->quantization());
+        std::make_shared<Tensor>(activ_temp->name() + ".output_gate", activ_temp->type(), elementwise_bounds, activ_temp->quantization());
     std::vector<TensorPtr> split_outputs = {input_gate_buf, input_modulation_gate_buf, forget_gate_buf, output_gate_buf};
     ops.push_back(make_op<SplitOp>(activ_temp, split_outputs, 0));
 

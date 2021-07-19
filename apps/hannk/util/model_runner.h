@@ -130,7 +130,7 @@ private:
     };
     RunResult run_in_hannk(const ReadOnlyFileView &file_view);
     RunResult run_in_tflite(const ReadOnlyFileView &file_view, TfLiteDelegate *delegate = nullptr);
-    bool compare_results(const std::string &msg, const RunResult &a, const RunResult &b);
+    bool compare_results(const std::string &name_a, const std::string &name_b, const RunResult &a, const RunResult &b);
 };
 
 }  // namespace hannk
