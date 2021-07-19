@@ -124,7 +124,7 @@ ErrorReport::~ErrorReport()
         return;
     }
 
-#if 0
+#ifdef HALIDE_WITH_EXCEPTIONS
     if (std::uncaught_exceptions() > 0) {
         // This should never happen - evaluating one of the arguments
         // to the error message would have to throw an
@@ -140,8 +140,7 @@ ErrorReport::~ErrorReport()
     }
 #else
     std::cerr << msg.str()<<std::flush;
-    //abort();
-            exit(33);
+    abort();
 #endif
 }
 }  // namespace Internal
