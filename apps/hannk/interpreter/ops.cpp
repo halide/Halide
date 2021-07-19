@@ -797,6 +797,14 @@ void Conv2DOp::execute() {
                 fuse_xy(FuseType::Pad, input_buf);
                 fuse_xy(FuseType::Pad, output_buf);
             }
+
+            if (output_buf.dim(1).extent() < output_buf.dim(2).extent()) {
+                // Some networks have shapes with very small x and large y that we can't fuse.
+                // This case is bad for us because we tile the x dimension. It would be better
+                // if we tiled y instead. We can do this by just swapping the x and y dimensions.
+                input_buf.transpose(1, 2);
+                output_buf.transpose(1, 2);
+            }
         }
 
         conv_uint8(input_buf, filter_buf, bias_buf, params, stride_, dilation_, output_range, output_buf);
@@ -1400,12 +1408,17 @@ void ReshapeOp::execute() {
         assert(new_shape.at(d) == output_buf.dim(d).extent());
     }
 
+    // TODO: we must verify these match (and fail at runtime if not).
+    // That said, we should be able to predict this at parse time
+    // (for non-dynamic tensors) and skip the runtime check most of the time.
     assert(input_buf.number_of_elements() == output_buf.number_of_elements());
+
+    assert(in->is_dense());
+    assert(out->is_dense());
     if (is_alias(input_buf.raw_buffer(), output_buf.raw_buffer())) {
         assert(input_buf.begin() == output_buf.begin());
         assert(input_buf.end() == output_buf.end());
     } else {
-        // TODO: This should also check the strides are dense.
         size_t output_size = output_buf.number_of_elements() * out->type().bytes();
         memcpy(output_buf.data(), input_buf.data(), output_size);
     }

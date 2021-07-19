@@ -365,10 +365,10 @@ void ModelRunner::set_seed(int seed) {
 }
 
 void ModelRunner::status() {
-    std::cout << "Using random seed: " << seed_tracker_.next_seed() << "\n";
-    std::cout << "Using threads: " << threads << "\n";
+    if (verbosity > 0) {
+        std::cout << "Using random seed: " << seed_tracker_.next_seed() << "\n";
+        std::cout << "Using threads: " << threads << "\n";
 
-    {
         std::string tf_ver = TfLiteVersion();
         std::cout << "Using TFLite version: " << tf_ver << "\n";
         std::string expected = std::to_string(TFLITE_VERSION_MAJOR) + "." + std::to_string(TFLITE_VERSION_MINOR) + ".";
@@ -615,28 +615,13 @@ Status ModelRunner::run(const std::string &filename) {
     };
 
     for (WhichRun i : active_runs) {
-        std::cout << "Executing in " << RunNames[i] << " ...\n";
         results[i] = execs.at(i)();
     }
 
     // ----- Log benchmark times
     if (do_benchmark) {
-
         for (WhichRun i : active_runs) {
-            std::cout << RunNames[i] << " Time: " << std::chrono::duration_cast<std::chrono::microseconds>(results[i].time).count() << " us"
-                      << "\n";
-        }
-
-        for (WhichRun i : active_runs) {
-            if (i == kTfLite) {
-                continue;
-            }
-            double ratio = (results[i].time / results[kTfLite].time);
-            std::cout << RunNames[i] << " = " << ratio * 100.0 << "% of " << RunNames[kTfLite];
-            if (ratio > 1.0) {
-                std::cout << "  *** " << RunNames[i] << " IS SLOWER";
-            }
-            std::cout << "\n";
+            std::cout << RunNames[i] << " Time: " << std::chrono::duration_cast<std::chrono::microseconds>(results[i].time).count() << " us\n";
         }
     }
 

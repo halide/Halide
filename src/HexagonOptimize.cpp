@@ -575,7 +575,7 @@ private:
                     Expr b0123 = Shuffle::make_interleave({mpys[0].second, mpys[1].second, mpys[2].second, mpys[3].second});
                     b0123 = simplify(b0123);
                     b0123 = reinterpret(Type(b0123.type().code(), 32, 1), b0123);
-                    Expr new_expr = halide_hexagon_add_4mpy(op->type, suffix, a0123, b0123);
+                    Expr new_expr = halide_hexagon_add_4mpy(op->type.with_bits(32), suffix, a0123, b0123);
                     if (op->type.bits() == 16) {
                         // It's actually safe to use this op on 16 bit
                         // results, we just need to narrow the
