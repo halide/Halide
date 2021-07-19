@@ -156,7 +156,7 @@ llvm::Value *CreateInBoundsGEP(IRBuilderBase *builder, Value *ptr, ArrayRef<Valu
 #if LLVM_VERSION >= 130
     return builder->CreateInBoundsGEP(ptr->getType()->getScalarType()->getPointerElementType(), ptr, index_list);
 #else
-    return builder->CreateInBoundsGEP(ptr, index);
+    return builder->CreateInBoundsGEP(ptr, index_list);
 #endif
 }
 
