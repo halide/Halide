@@ -691,7 +691,7 @@ private:
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteFullyConnectedParams *params = (const TfLiteFullyConnectedParams *)(node->builtin_data);
         auto activation = ConvertTfLiteActivation(params->activation);
-        return make_op<FullyConnectedOp>(input, filter, bias, output, activation);
+        return lower_tflite_fullyconnected(input, filter, bias, output, activation);
     }
 
     OpPtr BuildPad(TfLiteContext *context, TfLiteNode *node) {
