@@ -113,7 +113,8 @@ ErrorReport::~ErrorReport()
             custom_error_reporter->error(msg.str().c_str());
             // error() should not have returned to us, but just in case
             // it does, make sure we don't continue.
-            abort();
+            //abort();
+            exit(33);
         }
     }
 
@@ -123,7 +124,7 @@ ErrorReport::~ErrorReport()
         return;
     }
 
-#ifdef HALIDE_WITH_EXCEPTIONS
+#if 0
     if (std::uncaught_exceptions() > 0) {
         // This should never happen - evaluating one of the arguments
         // to the error message would have to throw an
@@ -138,8 +139,9 @@ ErrorReport::~ErrorReport()
         throw InternalError(msg.str());
     }
 #else
-    std::cerr << msg.str();
-    abort();
+    std::cerr << msg.str()<<std::flush;
+    //abort();
+            exit(33);
 #endif
 }
 }  // namespace Internal
