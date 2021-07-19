@@ -621,7 +621,7 @@ void ModelRunner::run(const std::string &filename) {
             std::cout << RunNames[i] << " Time: " << t << " us";
             if (i != kTfLite) {
                 const auto t_ref = std::chrono::duration_cast<std::chrono::microseconds>(results[kTfLite].time).count();
-                std::cout << " (Speedup: " << std::fixed << std::setprecision(2) << (double) t_ref / (double) t << ")";
+                std::cout << " (Speedup: " << std::fixed << std::setprecision(2) << (double)t_ref / (double)t << ")";
             }
             std::cout << "\n";
         }
