@@ -7,6 +7,9 @@ using namespace Halide::ConciseCasts;
 
 namespace hannk {
 
+// Less general, but performs much better on Xtensa.
+// #define XTENSA_GOES_FAST
+
 Var x("x"), y("y"), c("c"), b("b");
 Var ci("ci"), co("co");
 
@@ -16,12 +19,14 @@ Var ci("ci"), co("co");
 // without widening 8-bit multiplication, it's faster to just subtract the
 // offsets and use 16-bit multiplications.
 bool use_8bit_multiply(const Target &target) {
-    return target.arch != Target::X86 || target.has_feature(Target::AVX512_SapphireRapids);
+    return target.arch != Target::X86 || target.has_feature(Target::AVX512_SapphireRapids) || target.has_feature(Target::Xtensa);
 }
 
 // How many registers to use as accumulators, as a function of the target.
 int get_accumulator_count(const Target &target) {
-    if (target.has_feature(Target::HVX)) {
+    if (target.has_feature(Target::Xtensa)) {
+        return 4;
+    } else if (target.has_feature(Target::HVX)) {
         // Hexagon has dot products between vector and scalar registers, so
         // we don't need to use any vector registers for the input, so we
         // can use a lot of registers as accumulators without spilling to
@@ -65,7 +70,11 @@ public:
     Input<int> dilation_y_{"dilation_y"};
 
     Input<int32_t> output_multiplier_{"output_multiplier"};
+#ifdef XTENSA_GOES_FAST
+    Input<uint32_t> output_shift_{"output_shift"};
+#else
     Input<int32_t> output_shift_{"output_shift"};
+#endif
     Input<uint8_t> output_zero_{"output_zero"};
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
@@ -89,10 +98,11 @@ public:
         }
         input(c, x, y, b) = input_cxyb;
 
+        bool use_xtensa = get_target().has_feature(Target::Xtensa);
         // Align the reduction loop of filter.
         const int vector_reduction = get_vector_reduction_factor(target, UInt(8));
         const int unroll_reduction = std::max<int>(vector_reduction, unroll_reduction_);
-        const int accum_vector_size = natural_vector_size<int32_t>();
+        const int accum_vector_size = use_xtensa ? natural_vector_size<uint8_t>() : natural_vector_size<int32_t>();
 
         // Set up the reduction loop and inputs.
         Expr filter_depth = filter_.dim(0).extent() * filter_.dim(2).extent();
@@ -103,9 +113,14 @@ public:
         RDom r(0, filter_width, 0, filter_height, 0, filter_depth);
         Expr filter_rdxyc =
             filter_(r.z % vector_reduction, c % accum_vector_size, r.z / vector_reduction, c / accum_vector_size, r.x, r.y);
+#ifdef XTENSA_GOES_FAST
+        Expr input_rdxyc =
+            input(r.z, x + r.x, y * stride_y_ + r.y, b);
+#else
         Expr input_rdxyc =
             input(r.z, x * stride_x_ + r.x * dilation_x_, y * stride_y_ + r.y * dilation_y_, b);
-
+#endif
+        Func sum_filter("sum_filter");
         Func offset_c("offset_c");
         Func sum_input("sum_input");
         Func convolved("convolved");
@@ -131,28 +146,56 @@ public:
             Expr r_size = filter_width * filter_height * filter_depth;
             // We need the negative of this reduction, so compute the sum first, and then
             // subtract it after.
-            offset_c(c) += i32(u16(filter_rdxyc) * u16(input_zero_));
+            if (use_xtensa) {
+                sum_filter(c) = cast(Int(24), 0);
+                sum_filter(c) += cast(Int(24), filter_rdxyc) * cast(Int(24), input_zero_);
+            } else {
+                sum_filter(c) = i32(0);
+                sum_filter(c) += i32(u16(filter_rdxyc) * u16(input_zero_));
+            }
+
             offset_c(c) =
-                bias_(c) + i32(u16(filter_zero_) * u16(input_zero_)) * r_size - offset_c(c);
+                bias_(c) + i32(u16(filter_zero_) * u16(input_zero_)) * r_size - i32(sum_filter(c));
 
             // The sum of the input is used to compute the filter_zero * input term.
             // TODO: This is separable, but a bit messy to optimize this way.
             sum_input(x, y, b) += i32(input_rdxyc);
 
             // Finally, the terms that depend on all of c, x, y, b.
-            convolved(c, x, y, b) = offset_c(c) - i32(filter_zero_) * sum_input(x, y, b);
+            if (use_xtensa) {
+                convolved(c, x, y, b) = cast(Int(24), 0);
+            } else {
+                convolved(c, x, y, b) = offset_c(c) - i32(filter_zero_) * sum_input(x, y, b);
+            }
         } else {
             // Without 8-bit widening multiplies, we already subtracted the offsets,
             // and just have a single reduction of 16-bit multiplies to compute.
             convolved(c, x, y, b) = bias_(c);
         }
-        convolved(c, x, y, b) += i32(input_rdxyc) * i32(filter_rdxyc);
+
+        if (use_xtensa && use_8bit_multiply(target)) {
+            convolved(c, x, y, b) += cast(Int(24), input_rdxyc) * cast(Int(24), filter_rdxyc);
+        } else {
+            convolved(c, x, y, b) += i32(input_rdxyc) * i32(filter_rdxyc);
+        }
 
         // Saturate and narrow the output.
-        Expr output = multiply_2x_high(convolved(c, x, y, b), output_multiplier_);
+        Expr output;
+        if (use_xtensa) {
+            output = i32(convolved(c, x, y, b)) + offset_c(c) - i32(filter_zero_) * sum_input(x, y, b);
+        } else {
+            output = convolved(c, x, y, b);
+        }
+        output = multiply_2x_high(output, output_multiplier_);
         output = i16_sat(rounding_shift_right(output, output_shift_));
-        output = u8_sat(saturating_add(output, output_zero_));
-        output_(c, x, y, b) = clamp(output, output_min_, output_max_);
+        if (use_xtensa) {
+            output = saturating_add(output, output_zero_);
+            output = clamp(output, output_min_, output_max_);
+            output_(c, x, y, b) = u8(output);
+        } else {
+            output = u8_sat(saturating_add(output, output_zero_));
+            output_(c, x, y, b) = clamp(output, output_min_, output_max_);
+        }
 
         // Schedule
         interpret_as_tensor(input_);
@@ -176,7 +219,9 @@ public:
         for (int d = 1; d < input_.dimensions(); d++) {
             input_.dim(d).set_stride(align(input_.dim(d).stride(), input_alignment));
         }
-
+#ifdef XTENSA_GOES_FAST
+        filter_.dim(4).set_bounds(0, 1).dim(5).set_bounds(0, 1);
+#endif
         output_.compute_root();
 
         // Figure out how big the tiles we should optimize for should be by getting
@@ -185,12 +230,14 @@ public:
         const int accumulators = get_accumulator_count(target);
         std::vector<std::pair<int, int>> tile_sizes;
         const int min_tile_c = 1;
-        const int max_tile_c = 4;
+        const int max_tile_c = use_xtensa ? 1 : 4;
         for (int tile_c = max_tile_c; tile_c >= min_tile_c; tile_c /= 2) {
             int tile_x = std::min(8, accumulators / tile_c);
             tile_sizes.emplace_back(tile_c, tile_x);
         }
-        tile_sizes.emplace_back(max_tile_c, 1);
+        if (max_tile_c > 1) {
+            tile_sizes.emplace_back(max_tile_c, 1);
+        }
 
         // We need to tile the output, but we can't use GuardWithIf because we need
         // things computed at the tile to have constant size. We can't assume the
@@ -235,14 +282,24 @@ public:
 
         RVar rco, rci;
         convolved.update()
-            .split(r.z, rco, rci, unroll_reduction)
-            .reorder(rci, c, x, rco, r.x, r.y)
+            .split(r.z, rco, rci, unroll_reduction);
+
+        if (use_xtensa) {
+            convolved.update()
+                .reorder(c, x, rci, rco, r.x, r.y);
+        } else {
+            convolved.update()
+                .reorder(rci, c, x, rco, r.x, r.y);
+        }
+
+        convolved.update()
             .vectorize(c, accum_vector_size, TailStrategy::RoundUp)
             .unroll(c, max_tile_c, TailStrategy::GuardWithIf)
             .atomic()
-            .vectorize(rci, vector_reduction)
+            .vectorize(rci, use_xtensa ? 4 : vector_reduction)
             .unroll(rci)
             .unroll(x);
+
         if (unroll_reduction == vector_reduction) {
             // TODO: We used to not need this, but currently, it is a massive
             // savings (e.g. first conv layer of mobilenet drops from 760us to
@@ -269,7 +326,7 @@ public:
                 input.specialize(input_channels >= i)
                     .vectorize(c, i, TailStrategy::GuardWithIf);
             }
-        } else if (unroll_reduction >= natural_vector_size<uint8_t>()) {
+        } else if (unroll_reduction >= natural_vector_size<uint8_t>() && !use_xtensa) {
             // If we're unrolling a full vector's worth of reduction from the
             // input, explicitly load a vector of it first. This enables targeting
             // broadcasting dot products, like ARM's udot.
@@ -284,29 +341,53 @@ public:
             // TODO: This gets recomputed often when the op is split up into small
             // pieces.
             offset_c.compute_root()
+                .split(c, co, c, accum_vector_size, TailStrategy::RoundUp)
+                .vectorize(c);
+
+            sum_filter.compute_at(offset_c, co)
                 .vectorize(c, accum_vector_size, TailStrategy::RoundUp);
-            offset_c.update(0)
+
+            sum_filter.update(0)
                 .specialize(input_zero_ != 0)
                 .split(r.z, rco, rci, unroll_reduction)
-                .split(c, co, c, accum_vector_size, TailStrategy::RoundUp)
-                .reorder(rci, c, rco, r.x, r.y, co)
+                .split(c, co, c, accum_vector_size, TailStrategy::RoundUp);
+
+            if (use_xtensa) {
+                sum_filter.update(0)
+                    .specialize(input_zero_ != 0)
+                    .reorder(c, rci, r.x, r.y, rco, co);
+            } else {
+                sum_filter.update(0)
+                    .specialize(input_zero_ != 0)
+                    .reorder(rci, c, rco, r.x, r.y, co);
+            }
+            sum_filter.update(0)
+                .specialize(input_zero_ != 0)
+                .vectorize(c)
                 .atomic()
-                .vectorize(rci, vector_reduction)
-                .unroll(rci)
-                .vectorize(c);
-            offset_c.update(1)
-                .vectorize(c, accum_vector_size, TailStrategy::RoundUp);
+                .vectorize(rci, use_xtensa ? 4 : vector_reduction)
+                .unroll(rci);
 
             // Compute the sum of the input outside the loops over channels.
             sum_input.compute_at(output_, xo)
-                .vectorize(x)
                 .update()
                 .split(r.z, rco, rci, unroll_reduction)
                 .reorder(rci, x, rco, r.x, r.y)
                 .atomic()
-                .vectorize(rci)
-                .vectorize(x)
-                .specialize(stride_x_ == 1 && filter_depth == unroll_reduction && is_interleaved(input_, unroll_reduction));
+                .vectorize(rci);
+
+            if (use_xtensa) {
+                sum_input
+                    .unroll(x)
+                    .update()
+                    .unroll(x);
+            } else {
+                sum_input
+                    .vectorize(x)
+                    .update()
+                    .vectorize(x);
+            }
+            sum_input.specialize(stride_x_ == 1 && filter_depth == unroll_reduction && is_interleaved(input_, unroll_reduction));
         }
 
         // TODO: Pad this outside and let it constant fold.
