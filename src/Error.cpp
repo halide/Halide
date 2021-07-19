@@ -113,8 +113,7 @@ ErrorReport::~ErrorReport()
             custom_error_reporter->error(msg.str().c_str());
             // error() should not have returned to us, but just in case
             // it does, make sure we don't continue.
-            //abort();
-            exit(33);
+            abort();
         }
     }
 
@@ -139,7 +138,7 @@ ErrorReport::~ErrorReport()
         throw InternalError(msg.str());
     }
 #else
-    std::cerr << msg.str()<<std::flush;
+    std::cerr << msg.str();
     abort();
 #endif
 }
