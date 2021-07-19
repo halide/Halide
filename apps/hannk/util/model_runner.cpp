@@ -571,7 +571,7 @@ int ModelRunner::parse_flags(int argc, char **argv, std::vector<std::string> &fi
 }
 
 void ModelRunner::run(const std::string &filename) {
-    std::cout << "Processing " << filename << " ...\n";
+    std::cout << "\nProcessing " << filename << " ...\n";
 
     const std::vector<char> buffer = read_entire_file(filename);
 
@@ -617,7 +617,13 @@ void ModelRunner::run(const std::string &filename) {
     // ----- Log benchmark times
     if (do_benchmark) {
         for (WhichRun i : active_runs) {
-            std::cout << RunNames[i] << " Time: " << std::chrono::duration_cast<std::chrono::microseconds>(results[i].time).count() << " us\n";
+            const auto t = std::chrono::duration_cast<std::chrono::microseconds>(results[i].time).count();
+            std::cout << RunNames[i] << " Time: " << t << " us";
+            if (i != kTfLite) {
+                const auto t_ref = std::chrono::duration_cast<std::chrono::microseconds>(results[kTfLite].time).count();
+                std::cout << " (Speedup: " << std::fixed << std::setprecision(2) << (double) t_ref / (double) t << ")";
+            }
+            std::cout << "\n";
         }
     }
 
