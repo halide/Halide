@@ -88,6 +88,30 @@ TensorPtr make_shape_tensor(const TensorPtr &t) {
     return shape_tensor;
 }
 
+// TODO: This is similar to what happens in transforms.cpp for pad_for_ops. I think
+// we should handle all tiling here in lower.cpp and remove this from pad_for_ops.
+OpPtr make_tile_conv_filter_op(OpPtr &op) {
+    ConvOp *conv = reinterpret_cast<ConvOp *>(op.get());
+    // This op has not yet had its filter tiled, do it now.
+    BoundsMap bounds = conv->map_bounds(1, 0);
+    Box tiled_shape = bounds.evaluate(conv->output()->bounds());
+
+    TensorPtr filter = conv->filter();
+    QuantizationInfo quantization = filter->quantization();
+    halide_type_t type = conv->filter_type();
+    if (type.bits > filter->type().bits) {
+        // We're widening the filter. Subtract the offset.
+        std::fill(quantization.zero.begin(), quantization.zero.end(), 0);
+    }
+    TensorPtr tiled =
+        std::make_shared<Tensor>(filter->name() + ".tiled", type, tiled_shape, quantization);
+
+    // Replace the filter with the tiled filter.
+    conv->set_input(1, tiled);
+
+    return make_op<TileConvFilterOp>(filter, tiled);
+}
+
 }  // namespace
 
 // Implement FullyConnected op using Hannk's Conv op.
@@ -121,12 +145,15 @@ OpPtr lower_tflite_fullyconnected(const TensorPtr &input, const TensorPtr &filte
         OpPtr conv_op = make_op<ConvOp>(input_reshaped, filter, bias, output,
                                         stride, dilation_factor, Padding::Same, activation);
 
+        OpPtr tile_filter_op = make_tile_conv_filter_op(conv_op);
+
         std::vector<TensorPtr> inputs = {input, filter, bias};
         std::vector<TensorPtr> outputs = {output};
         // std::initializer_list doesn't work well with move-only types, alas
-        std::vector<OpPtr> ops(2);
+        std::vector<OpPtr> ops(3);
         ops[0] = std::move(reshape_input_op);
-        ops[1] = std::move(conv_op);
+        ops[1] = std::move(tile_filter_op);
+        ops[2] = std::move(conv_op);
         return make_op<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
     }
 }
