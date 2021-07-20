@@ -477,7 +477,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
              << body << "\n\n";
 
     debug(1) << "Aligning loads for HVX....\n";
-    body = align_loads(body, target.natural_vector_size(Int(8)));
+    body = align_loads(body, target.natural_vector_size(Int(8)), 8);
     body = common_subexpression_elimination(body);
     // Don't simplify here, otherwise it will re-collapse the loads we
     // want to carry across loop iterations.

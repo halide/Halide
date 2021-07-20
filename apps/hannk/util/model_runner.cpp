@@ -245,7 +245,7 @@ int SeedTracker::seed_for_name(const std::string &name) {
         vsnprintf(buffer, sizeof(buffer), format, args_copy);
         va_end(args_copy);
 
-        *self->verbose_output_ << format;
+        *self->verbose_output_ << buffer;
     }
 }
 

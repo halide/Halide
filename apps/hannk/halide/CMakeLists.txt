@@ -41,10 +41,18 @@ _add_hannk_halide_library(
         GENERATOR_DEPS)
 
 _add_hannk_halide_library(
-        TARGET conv_uint8
+        TARGET conv_u8_u8_u8
         SRCS conv_generator.cpp
         GENERATOR_NAME Conv
-        GENERATOR_ARGS
+        GENERATOR_ARGS output.type=uint8
+        GENERATOR_DEPS)
+
+
+_add_hannk_halide_library(
+        TARGET conv_u8_u8_i16
+        SRCS conv_generator.cpp
+        GENERATOR_NAME Conv
+        GENERATOR_ARGS output.type=int16
         GENERATOR_DEPS)
 
 _add_hannk_halide_library(
@@ -89,20 +97,6 @@ _add_hannk_halide_library(
         FEATURES no_bounds_query no_asserts
         GENERATOR_NAME Fill
         GENERATOR_ARGS
-        GENERATOR_DEPS)
-
-_add_hannk_halide_library(
-        TARGET fully_connected_uint8_uint8
-        SRCS fully_connected_generator.cpp
-        GENERATOR_NAME FullyConnected
-        GENERATOR_ARGS output.type=uint8
-        GENERATOR_DEPS)
-
-_add_hannk_halide_library(
-        TARGET fully_connected_uint8_int16
-        SRCS fully_connected_generator.cpp
-        GENERATOR_NAME FullyConnected
-        GENERATOR_ARGS output.type=int16
         GENERATOR_DEPS)
 
 _add_hannk_halide_library(
