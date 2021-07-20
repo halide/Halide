@@ -373,6 +373,14 @@ HALIDE_ALWAYS_INLINE void store_variable(const VectorType& a, void *base, int32_
     memcpy(((BaseType*)base + offset), &a, sizeof(BaseType) * count);
 }
 
+template <>
+HALIDE_ALWAYS_INLINE void store_variable<uint8x64_t, uint8_t, 64>(const uint8x64_t& a, void *base, int32_t offset, int32_t count) {
+	valign align;
+	xb_vec2Nx8U* __restrict ptr  = (xb_vec2Nx8U*)((uint8_t*)base + offset);
+	IVP_SAV2NX8U_XP(a, align, ptr, count);
+	IVP_SAPOS2NX8U_FP(align, ptr);
+}
+
 template <typename VectorType, typename OffsetType, typename BaseType, int Lanes>
 HALIDE_ALWAYS_INLINE VectorType gather_load(const void *base, const OffsetType& offset) {
     BaseType __attribute__((aligned(64))) tmp[Lanes];
@@ -1213,6 +1221,10 @@ HALIDE_ALWAYS_INLINE uint1x32_t halide_xtensa_i16_neq_zero(const int16x32_t& a) 
   return IVP_NEQNX16(a, int16x32_t(0));
 }
 
+HALIDE_ALWAYS_INLINE int32_t halide_xtensa_full_reduce_add_u8_to_i32(const uint8x64_t& a) {
+    return xb_int16U_rtor_uint16(IVP_RADDU2NX8(a));
+}
+
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_lerp_i16(const int16x32_t& a, const int16x32_t& b, uint16_t w) {
   // TODO(vksnk): Halide lerp actually uses full range, but it's not clear from the documentation
   // if we can pass unsigned type to IVP_MULPN16XR16, so just to be extra careful reduce it to 14-bit
@@ -1443,14 +1455,6 @@ HALIDE_ALWAYS_INLINE uint32x16_t halide_xtensa_convert_u16_high_u32(const uint16
 HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_convert_i32_u16(const int32x16_t& src0, const int32x16_t& src1) {
   xb_vecNx48 wide = IVP_CVT48SNX32(src1, src0);
   return xb_vecNx16_rtor_xb_vecNx16U(IVP_PACKLNX48(wide));
-}
-
-HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_convert_i48_low_i32(const int48x32_t& src, int native_lanes, int total_lines) {
-    return IVP_CVT32SNX48L(src);
-}
-
-HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_convert_i48_high_i32(const int48x32_t& src, int native_lanes, int total_lines) {
-    return IVP_CVT32SNX48H(src);
 }
 
 HALIDE_ALWAYS_INLINE int8x64_t halide_xtensa_convert_concat_i16_to_i8(const int16x32_t& a, const int16x32_t& b) {

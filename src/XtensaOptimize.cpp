@@ -385,8 +385,8 @@ private:
         if (op->is_concat() && op->vectors.size() == 2) {
             const Call *call0 = op->vectors[0].as<Call>();
             const Call *call1 = op->vectors[1].as<Call>();
-            if (call0 && call0->name == "halide_xtensa_extract_i32" &&
-                call1 && call1->name == "halide_xtensa_extract_i32") {
+            if (call0 && call0->name == "halide_xtensa_extract_u32" &&
+                call1 && call1->name == "halide_xtensa_extract_u32") {
                 vector<Expr> dual_args = {
                     call1->args[0],  // vector1
                     call0->args[0],  // vector0
@@ -405,29 +405,25 @@ private:
         vector<Stmt> new_stmts;
 
         vector<Stmt> stmts = block_to_vector(op);
-        bool all_stores_are_quad_muls = true;
+        int quad_mul_expr_count = 0;
         // Check if all statements in the block are stores of quad-muls.
         for (int i = 0; i < (int)stmts.size(); ++i) {
             // quad_mul is a call contained in store
             const Store *store1 = stmts[i].as<Store>();
             const Call *call1 = store1 ? store1->value.as<Call>() : nullptr;
-            if (!call1 || call1->name != "halide_xtensa_widen_quad_mul_add_i24") {
-                all_stores_are_quad_muls = false;
+            if (!call1 || call1->name != "halide_xtensa_widen_quad_mul_add_u24") {
                 break;
             }
+            quad_mul_expr_count++;
         }
 
-        if (all_stores_are_quad_muls) {
+        if (quad_mul_expr_count > 1) {
             // Try to find pairs of quad-muls which have matching second argument.
             // Track which statements have been used so far.
             vector<bool> used(stmts.size(), false);
-            for (int first = 0; first < (int)stmts.size(); first++) {
-                if (used[first]) {
-                    continue;
-                }
-
-                for (int second = first + 1; second < (int)stmts.size(); second++) {
-                    if (used[second]) {
+            for (int first = 0; first < quad_mul_expr_count; first++) {
+                for (int second = first + 1; second < quad_mul_expr_count; second++) {
+                    if (used[first] || used[second]) {
                         continue;
                     }
 
@@ -468,7 +464,7 @@ private:
                     new_stmts.push_back(
                         LetStmt::make(
                             dual_name,
-                            call("halide_xtensa_dual_widen_quad_mul_add_i24", dual_24x64, dual_qm_args),
+                            call("halide_xtensa_dual_widen_quad_mul_add_u24", dual_24x64, dual_qm_args),
                             stores));
                 }
             }
@@ -1133,6 +1129,9 @@ private:
         // Full reduction.
         if (op->type.is_scalar()) {
             static const std::vector<Pattern> reduces = {
+                // TODO(vksnk): should be a better way to do the cast in the end.
+                {"halide_xtensa_full_reduce_add_u8_to_i32", vector_reduce(VectorReduce::Add, i32(wild_u8x))},
+
                 {"halide_xtensa_full_reduce_add_i8", vector_reduce(VectorReduce::Add, wild_i16x), Pattern::NarrowOps},
                 {"halide_xtensa_full_reduce_add_i16", vector_reduce(VectorReduce::Add, wild_i32x), Pattern::NarrowOps},
                 {"halide_xtensa_full_reduce_add_i32", vector_reduce(VectorReduce::Add, wild_i32x)},
@@ -2050,7 +2049,7 @@ public:
 
 Stmt match_xtensa_patterns(Stmt s) {
     s = OptimizeShuffles(64).mutate(s);
-    s = align_loads(s, 64);
+    s = align_loads(s, 64, 1);
     // NOTE(vksnk): CSE seemed to break loop carry
     // s = common_subexpression_elimination(s);
 
