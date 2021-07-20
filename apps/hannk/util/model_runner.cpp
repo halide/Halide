@@ -570,10 +570,14 @@ int ModelRunner::parse_flags(int argc, char **argv, std::vector<std::string> &fi
     return 0;
 }
 
-void ModelRunner::run(const std::string &filename) {
+Status ModelRunner::run(const std::string &filename) {
     std::cout << "Processing " << filename << " ...\n";
 
-    const std::vector<char> buffer = read_entire_file(filename);
+    std::vector<char> buffer;
+    auto status = read_entire_file(filename, &buffer);
+    if (!status.ok()) {
+        return status;
+    }
 
     std::map<WhichRun, RunResult> results;
 
@@ -633,10 +637,17 @@ void ModelRunner::run(const std::string &filename) {
             }
         }
 
-        if (!all_matched && !keep_going) {
-            exit(1);
+        if (all_matched) {
+            std::cout << "All comparisons matched!\n";
+        } else {
+            std::cerr << "Some runs exceeded the error threshold!\n";
+            if (!keep_going) {
+                return Status::Error;
+            }
         }
     }
+
+    return Status::OK;
 }
 
 }  // namespace hannk

@@ -5,24 +5,26 @@
 #include <memory>
 #include <vector>
 
-#include "util/error_util.h"
+#include "util/status.h"
 
 namespace hannk {
 
-inline std::vector<char> read_entire_file(const std::string &filename) {
+inline Status read_entire_file(const std::string &filename, std::vector<char> *result) {
     std::ifstream f(filename, std::ios::in | std::ios::binary);
-    HCHECK(f.is_open()) << "Unable to open file: " << filename;
-
-    std::vector<char> result;
+    if (!f.is_open()) {
+        return Status::Error;
+    }
 
     f.seekg(0, std::ifstream::end);
     size_t size = f.tellg();
-    result.resize(size);
+    result->resize(size);
     f.seekg(0, std::ifstream::beg);
-    f.read(result.data(), result.size());
-    HCHECK(f.good()) << "Unable to read file: " << filename;
+    f.read(result->data(), result->size());
+    if (!f.good()) {
+        return Status::Error;
+    }
     f.close();
-    return result;
+    return Status::OK;
 }
 
 }  // namespace hannk
