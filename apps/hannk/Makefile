@@ -136,13 +136,21 @@ $(BIN)/%/halide/average_pool_uint8.a: $(GENERATOR_BIN)/pool.generator
 	@mkdir -p $(@D)
 	$< -g AveragePool -f hannk::average_pool_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/halide/conv_uint8.a: $(GENERATOR_BIN)/conv.generator
+$(BIN)/%/halide/conv_u8_u8_u8.a: $(GENERATOR_BIN)/conv.generator
 	@mkdir -p $(@D)
-	$< -g Conv -f hannk::conv_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+	$< -g Conv output.type=uint8 -f hannk::conv_u8_u8_u8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/halide/conv_r16_uint8.a: $(GENERATOR_BIN)/conv.generator
+$(BIN)/%/halide/conv_u8_u8_i16.a: $(GENERATOR_BIN)/conv.generator
 	@mkdir -p $(@D)
-	$< -g Conv unroll_reduction=16 -f hannk::conv_r16_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+	$< -g Conv output.type=int16 -f hannk::conv_u8_u8_i16 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
+$(BIN)/%/halide/conv_r16_u8_u8_u8.a: $(GENERATOR_BIN)/conv.generator
+	@mkdir -p $(@D)
+	$< -g Conv unroll_reduction=16 output.type=uint8  -f hannk::conv_r16_u8_u8_u8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
+$(BIN)/%/halide/conv_r16_u8_u8_i16.a: $(GENERATOR_BIN)/conv.generator
+	@mkdir -p $(@D)
+	$< -g Conv unroll_reduction=16 output.type=int16  -f hannk::conv_r16_u8_u8_i16 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
 $(BIN)/%/halide/copy_uint8_uint8.a: $(GENERATOR_BIN)/copy.generator
 	@mkdir -p $(@D)
@@ -176,14 +184,6 @@ $(BIN)/%/halide/fill_uint8.a: $(GENERATOR_BIN)/fill.generator
 	@mkdir -p $(@D)
 	$< -g Fill -f hannk::fill_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-no_asserts-no_bounds_query-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/halide/fully_connected_uint8_uint8.a: $(GENERATOR_BIN)/fully_connected.generator
-	@mkdir -p $(@D)
-	$< -g FullyConnected output.type=uint8 -f hannk::fully_connected_uint8_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
-
-$(BIN)/%/halide/fully_connected_uint8_int16.a: $(GENERATOR_BIN)/fully_connected.generator
-	@mkdir -p $(@D)
-	$< -g FullyConnected output.type=int16 -f hannk::fully_connected_uint8_int16 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
-
 $(BIN)/%/halide/l2_normalization_uint8.a: $(GENERATOR_BIN)/normalizations.generator
 	@mkdir -p $(@D)
 	$< -g L2Normalization -f hannk::l2_normalization_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-no_bounds_query-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
@@ -215,7 +215,8 @@ $(BIN)/%/halide/runtime.a: $(GENERATOR_BIN)/fill.generator
 OPS_HALIDE = \
 	$(BIN)/%/halide/add_uint8_uint8.a \
 	$(BIN)/%/halide/average_pool_uint8.a \
-	$(BIN)/%/halide/conv_uint8.a \
+	$(BIN)/%/halide/conv_u8_u8_u8.a \
+	$(BIN)/%/halide/conv_u8_u8_i16.a \
 	$(BIN)/%/halide/copy_uint8_uint8.a \
 	$(BIN)/%/halide/depthwise_conv_uint8.a \
 	$(BIN)/%/halide/depthwise_conv_broadcast_uint8.a \
@@ -224,8 +225,6 @@ OPS_HALIDE = \
 	$(BIN)/%/halide/elementwise_5xuint8_1xuint8.a \
 	$(BIN)/%/halide/elementwise_5xint16_1xuint8int16.a \
 	$(BIN)/%/halide/fill_uint8.a \
-	$(BIN)/%/halide/fully_connected_uint8_uint8.a \
-	$(BIN)/%/halide/fully_connected_uint8_int16.a \
 	$(BIN)/%/halide/l2_normalization_uint8.a \
 	$(BIN)/%/halide/max_pool_uint8.a \
 	$(BIN)/%/halide/mean_uint8.a \
@@ -237,7 +236,8 @@ OPS_HALIDE = \
 OPS_CXXFLAGS = -I$(BIN)/$*
 
 ifneq (,$(findstring arm_dot_prod,$(HL_TARGET)))
-OPS_HALIDE += $(BIN)/%/halide/conv_r16_uint8.a
+OPS_HALIDE += $(BIN)/%/halide/conv_r16_u8_u8_u8.a
+OPS_HALIDE += $(BIN)/%/halide/conv_r16_u8_u8_i16.a
 OPS_CXXFLAGS += -DCONV_R16
 endif
 
