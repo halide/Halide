@@ -79,7 +79,7 @@ public:
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
-    Output<Buffer<uint8_t>> output_{"output", 4};
+    Output<Buffer<>> output_{"output", 4};
 
     void configure() {
         if (use_8bit_multiply(target)) {
@@ -188,14 +188,17 @@ public:
         }
         output = multiply_2x_high(output, output_multiplier_);
         output = i16_sat(rounding_shift_right(output, output_shift_));
-        if (use_xtensa) {
-            output = saturating_add(output, output_zero_);
-            output = clamp(output, output_min_, output_max_);
-            output_(c, x, y, b) = u8(output);
-        } else {
-            output = u8_sat(saturating_add(output, output_zero_));
-            output_(c, x, y, b) = clamp(output, output_min_, output_max_);
+        if (output_.type() == halide_type_of<uint8_t>()) {
+            if (use_xtensa) {
+                output = saturating_add(output, output_zero_);
+                output = clamp(output, output_min_, output_max_);
+                output = u8(output);
+            } else {
+                output = u8_sat(saturating_add(output, output_zero_));
+                output = clamp(output, output_min_, output_max_);
+            }
         }
+        output_(c, x, y, b) = output;
 
         // Schedule
         interpret_as_tensor(input_);

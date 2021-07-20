@@ -91,15 +91,7 @@ bool has_storage(const TensorPtr &t) {
 class InPlace : public OpVisitor {
     using OpVisitor::visit;
 
-    // We can alias two tensors if the input is not used after the output is written,
-    // and we meet a number of other requirements.
-    bool maybe_alias_tensors(TensorPtr input, TensorPtr output, TensorOffset offset = {}) const {
-        // If the input is used anywhere else, we should not alias it.
-        // TODO: This is conservative, we could alias it if it is the *last* use.
-        if (input->consumers().size() != 1) {
-            return false;
-        }
-
+    bool is_alias_possible(TensorPtr input, TensorPtr output) const {
         // If either tensor is dynamic, can't alias them.
         if (input->is_dynamic() || output->is_dynamic()) {
             return false;
@@ -111,11 +103,6 @@ class InPlace : public OpVisitor {
             return false;
         }
 
-        if (input->rank() != output->rank()) {
-            // TODO: We should be able to alias reshapes.
-            return false;
-        }
-
         if (input->type().bytes() != output->type().bytes()) {
             // We can't alias tensors with types of different size.
             return false;
@@ -124,6 +111,27 @@ class InPlace : public OpVisitor {
         // We can't alias an input that is an input or output of the root graph.
         // TODO: We could, if we don't change the shape.
         if (is_root_input_or_output(input)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    // We can alias two tensors if the input is not used after the output is written,
+    // and we meet a number of other requirements.
+    bool maybe_alias_tensors(TensorPtr input, TensorPtr output, TensorOffset offset = {}) const {
+        if (!is_alias_possible(input, output)) {
+            return false;
+        }
+
+        // If the input is used anywhere else, we should not alias it.
+        // TODO: This is conservative, we could alias it if it is the *last* use.
+        if (input->consumers().size() != 1) {
+            return false;
+        }
+
+        // rank has to match for most aliasing (note that Reshape is an exception to this)
+        if (input->rank() != output->rank()) {
             return false;
         }
 
@@ -220,7 +228,27 @@ class InPlace : public OpVisitor {
     }
 
     void visit(ReshapeOp *op) {
-        maybe_alias_tensors(op->input(), op->output());
+        const TensorPtr &input = op->input();
+        const TensorPtr &output = op->output();
+
+        // Reshape is unusual in that it's OK to alias Reshapes with mismatched rank
+        // (indeed, this is almost always the case), so we handle everything here
+        // instead of calling maybe_alias_tensors().
+        if (!is_alias_possible(input, output)) {
+            return;
+        }
+
+        if (!input->is_dense() || !output->is_dense()) {
+            // Can't alias a Reshape unless both Tensors have dense strides.
+            return;
+        }
+
+        constexpr bool is_reshape = true;
+        if (!has_storage(input)) {
+            input->set_alias_of(output, {}, is_reshape);
+        } else if (!has_storage(output)) {
+            output->set_alias_of(input, {}, is_reshape);
+        }
     }
 
     void visit(OpGroup *op) {
@@ -298,12 +326,13 @@ class PadForOps : public OpVisitor {
         new_ops.emplace_back(std::move(pad));
     }
 
-    void visit(Conv2DOp *op) {
+    void visit(ConvOp *op) {
         pad_for_op(op, 0, 0);
 
         // We also need to tile the filter.
         TensorPtr filter = op->filter();
-        if (op->filter()->rank() == 4) {
+        if (op->filter()->rank() == op->input()->rank()) {
+            // This op has not yet had its filter tiled, do it now.
             BoundsMap bounds = op->map_bounds(1, 0);
             Box tiled_shape = bounds.evaluate(op->output()->bounds());
 
@@ -314,7 +343,7 @@ class PadForOps : public OpVisitor {
                 std::fill(quantization.zero.begin(), quantization.zero.end(), 0);
             }
             TensorPtr tiled =
-                std::make_shared<Tensor>(filter->name() + "_tiled", type, tiled_shape, quantization);
+                std::make_shared<Tensor>(filter->name() + ".tiled", type, tiled_shape, quantization);
             // Maybe more than one op uses this same filter...?
             replace_consumers(filter, tiled);
 
@@ -407,7 +436,11 @@ void fold_constants(OpGroup *root) {
             // Since we aren't ready for arena allocation,
             // we'll just do these as one-off heap allocs.
             for (int j = 0; j < op->output_count(); j++) {
-                op->output(j)->allocate_from_heap();
+                // Note that an output could be 'allocated' here if it
+                // is the result of a ReshapeOp that aliases constant data.
+                if (!op->output(j)->is_allocated()) {
+                    op->output(j)->allocate_from_heap();
+                }
             }
 
             // Run the whole op.

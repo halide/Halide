@@ -10,7 +10,7 @@ All of the [TensorFlow hosted models](https://www.tensorflow.org/lite/guide/host
 are working and producing good performance.
 
 ### Benchmarks
-The comparison data below was produced with TensorFlow v.2.4.0 (the latest release as of this writing):
+The comparison data below was produced with TensorFlow v.2.5.0 (the latest release as of this writing):
 
 x86 OSX laptop w/ AVX2:
 
