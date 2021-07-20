@@ -1377,7 +1377,10 @@ class NodeSupport {
         if (!IsVersionOK(1, 1)) {
             return false;
         }
-        if (!InputsHaveCorrectTypes({U8, U8, I32_OR_NONE})) {
+        if (!(InputsHaveCorrectTypes({U8, U8, I32_OR_NONE}) && OutputsHaveCorrectTypes({U8})) &&
+            // Not sure if this combination is actually expected, but models in the wild
+            // require it, so we'll support it
+            !(InputsHaveCorrectTypes({U8, U8, I32_OR_NONE}) && OutputsHaveCorrectTypes({I16}))) {
             return false;
         }
         const TfLiteFullyConnectedParams *params = (const TfLiteFullyConnectedParams *)(node_->builtin_data);

@@ -5,9 +5,11 @@
 #include "halide/add_uint8_uint8.h"
 #include "halide/average_pool_uint8.h"
 #include "halide/constants.h"
-#include "halide/conv_uint8.h"
+#include "halide/conv_u8_u8_i16.h"
+#include "halide/conv_u8_u8_u8.h"
 #ifdef CONV_R16
-#include "halide/conv_r16_uint8.h"
+#include "halide/conv_r16_u8_u8_i16.h"
+#include "halide/conv_r16_u8_u8_u8.h"
 #endif
 #include "halide/copy_uint8_uint8.h"
 #include "halide/depthwise_conv_broadcast_uint8.h"
@@ -17,8 +19,6 @@
 #include "halide/elementwise_5xint16_1xuint8int16.h"
 #include "halide/elementwise_5xuint8_1xuint8.h"
 #include "halide/fill_uint8.h"
-#include "halide/fully_connected_uint8_int16.h"
-#include "halide/fully_connected_uint8_uint8.h"
 #include "halide/l2_normalization_uint8.h"
 #include "halide/max_pool_uint8.h"
 #include "halide/mean_uint8.h"
@@ -696,7 +696,11 @@ void ConcatenationOp::execute() {
 halide_type_t ConvOp::filter_type() const {
     if (input()->type() == halide_type_of<uint8_t>() &&
         output()->type() == halide_type_of<uint8_t>()) {
-        const halide_filter_metadata_t *metadata = conv_uint8_metadata();
+        const halide_filter_metadata_t *metadata = conv_u8_u8_u8_metadata();
+        return metadata->arguments[2].type;
+    } else if (input()->type() == halide_type_of<uint8_t>() &&
+               output()->type() == halide_type_of<int16_t>()) {
+        const halide_filter_metadata_t *metadata = conv_u8_u8_i16_metadata();
         return metadata->arguments[2].type;
     } else {
         HLOG(FATAL) << "Unsupported type " << output()->type() << "\n";
@@ -725,7 +729,7 @@ BoundsMap ConvOp::map_bounds(int input_idx, int output_idx) const {
         HalideBuffer<int32_t> bias_buf(nullptr, 1);
         HalideBuffer<void> filter_buf(filter_type(), nullptr, 1, 1, 1, 1, 1, 1);
         HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
-        conv_uint8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf);
+        conv_u8_u8_u8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf);
 
         const int vector_reduction = filter_buf.dim(0).extent();
         const int vector_tile = filter_buf.dim(1).extent();
@@ -748,27 +752,28 @@ BoundsMap ConvOp::map_bounds(int input_idx, int output_idx) const {
 
 namespace {
 
-void conv_uint8(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t *bias,
-                const MultiplyParams &params, const std::array<int, 2> &stride,
-                const std::array<int, 2> &dilation, const Interval &output_range,
-                halide_buffer_t *output) {
+void call_conv2d(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t *bias,
+                 const MultiplyParams &params, const std::array<int, 2> &stride,
+                 const std::array<int, 2> &dilation, const Interval &output_range,
+                 halide_buffer_t *output) {
+    using Conv2DFn = decltype(&::hannk::conv_u8_u8_u8);
+
+    Conv2DFn fn;
 #ifdef CONV_R16
     if (input->dim[0].extent >= 16) {
         // For large reductions, use the big reduction version.
         // TODO: We really ought to be able to do this with GuardWithIf
         // and/or specialize.
-        conv_r16_uint8(input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias,
-                       stride[0], stride[1], dilation[0], dilation[1], params.c.mantissa(),
-                       -params.c.exponent(), (uint8_t)params.c_zero, output_range.min, output_range.max,
-                       output);
+        fn = output->type == halide_type_of<int16_t>() ? hannk::conv_r16_u8_u8_i16 : hannk::conv_r16_u8_u8_u8;
     } else
 #endif
     {
-        ::hannk::conv_uint8(input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias,
-                            stride[0], stride[1], dilation[0], dilation[1], params.c.mantissa(),
-                            -params.c.exponent(), (uint8_t)params.c_zero, output_range.min, output_range.max,
-                            output);
+        fn = output->type == halide_type_of<int16_t>() ? hannk::conv_u8_u8_i16 : hannk::conv_u8_u8_u8;
     }
+    fn(input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias,
+       stride[0], stride[1], dilation[0], dilation[1], params.c.mantissa(),
+       -params.c.exponent(), (uint8_t)params.c_zero, output_range.min, output_range.max,
+       output);
 }
 
 }  // namespace
@@ -779,7 +784,7 @@ void ConvOp::execute() {
     const TensorPtr &out = output();
 
     if (in->type() == halide_type_of<uint8_t>() &&
-        out->type() == halide_type_of<uint8_t>()) {
+        (out->type() == halide_type_of<uint8_t>() || out->type() == halide_type_of<int16_t>())) {
         auto input_buf = in->buffer();
         auto filter_buf = filt->buffer();
         auto bias_buf = bias()->buffer();
@@ -820,7 +825,7 @@ void ConvOp::execute() {
             }
         }
 
-        conv_uint8(input_buf, filter_buf, bias_buf, params, stride_, dilation_, output_range, output_buf);
+        call_conv2d(input_buf, filter_buf, bias_buf, params, stride_, dilation_, output_range, output_buf);
     } else {
         HLOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
@@ -1012,59 +1017,6 @@ void ElementwiseProgramOp::execute() {
         return;
     }
     HLOG(FATAL) << "Unsupported elementwise program\n";
-}
-
-BoundsMap FullyConnectedOp::map_bounds(int input_idx, int output_idx) const {
-    assert(output_idx == 0);
-    if (input_idx == 0) {
-        return BoundsMap(2, 2).constant(0, input()->extent(0)).elementwise(1, 1);
-    } else if (input_idx == 1) {
-        return BoundsMap(2, 2).constant(0, filter()->extent(0)).elementwise(1, 0);
-    } else if (input_idx == 2) {
-        return BoundsMap(1, 2).elementwise(0, 0);
-    } else {
-        return BoundsMap(0, 2);
-    }
-}
-
-void FullyConnectedOp::execute() {
-    const TensorPtr &in = input();
-    const TensorPtr &filt = filter();
-    const TensorPtr &out = output();
-
-    if (in->type() == halide_type_of<uint8_t>() &&
-        filt->type() == halide_type_of<uint8_t>()) {
-        auto input_buf = in->buffer();
-        auto filter_buf = filt->buffer();
-        auto bias_buf = bias()->buffer();
-        auto output_buf = out->buffer();
-        // TODO: This should be handled explicitly with a reshape.
-        // It's annoying tflite doesn't require this. This means
-        // that we can't arbitrarily insert padding of the strides
-        // for tensors consumed by this op.
-        while (input_buf.dimensions() > 2) {
-            fuse_cx(FuseType::Delete, input_buf);
-        }
-
-        MultiplyParams params =
-            get_quantized_multiply_params(in->quantization(), filt->quantization(), out->quantization());
-
-        if (out->type() == halide_type_of<uint8_t>()) {
-            const auto output_range = get_output_range(activation_, out->quantization());
-
-            fully_connected_uint8_uint8(
-                input_buf, (uint8_t)params.a_zero, filter_buf, (uint8_t)params.b_zero, bias_buf,
-                (uint8_t)params.c_zero, params.c.mantissa(), -params.c.exponent(), (uint8_t)output_range.min,
-                (uint8_t)output_range.max, output_buf);
-            return;
-        } else if (out->type() == halide_type_of<int16_t>()) {
-            fully_connected_uint8_int16(
-                input_buf, (uint8_t)params.a_zero, filter_buf, (uint8_t)params.b_zero, bias_buf,
-                0, params.c.mantissa(), -params.c.exponent(), 0, 0, output_buf);
-            return;
-        }
-    }
-    HLOG(FATAL) << "Unsupported type " << out->type() << "\n";
 }
 
 BoundsMap GatherOp::map_bounds(int input_idx, int output_idx) const {
@@ -1769,10 +1721,6 @@ void DepthwiseConv2DOp::accept(OpVisitor *v) {
 }
 
 void ElementwiseProgramOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void FullyConnectedOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 
