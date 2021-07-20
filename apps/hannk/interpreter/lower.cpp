@@ -88,101 +88,52 @@ TensorPtr make_shape_tensor(const TensorPtr &t) {
     return shape_tensor;
 }
 
-struct TensorAndOp {
-    TensorPtr tensor;
-    OpPtr op;
-};
-
-TensorAndOp reshape_tensor(TensorPtr t, bool is_output = false) {
-    assert(t->is_dense());
-    assert(t->rank() == 2 || t->rank() == 4);
-
-    TensorPtr t_reshaped;
-    std::string name = t->name() + ".reshaped";
-    if (t->is_constant() && !t->is_external() && !t->is_dynamic() && !t->is_alias()) {
-        // We don't need to use the normal aliasing approach here: the source
-        // is a constant-external Tensor, so we can just make a new Tensor that uses the same buffer,
-        // and thus the same underlying data, but with extra dimensions inserted.
-        HalideBuffer<void> nb = t->buffer();
-        if (t->rank() == 2) {
-            nb.add_dimension();
-            nb.add_dimension();
-            nb.transpose(1, 3);
-        }
-
-        // Reshape (c, x, y, b) to (cxy, 1, 1, b)
-        auto *dim = nb.raw_buffer()->dim;
-        dim[0].extent *= dim[1].extent * dim[2].extent;
-        dim[1].extent = 1;
-        dim[2].extent = 1;
-
-        // Canonicalize the strides as dense.
-        int stride = 1;
-        for (int i = 0; i < 4; i++) {
-            dim[i].stride = stride;
-            stride *= dim[i].extent;
-        }
-
-        t_reshaped = std::make_shared<Tensor>(name, std::move(nb), t->quantization());
-    } else {
-        Box bounds = t->bounds();
-#ifndef NDEBUG
-        for (const auto &i : bounds) {
-            assert(i.min == 0);
-        }
-#endif
-        int c_extent = bounds.front().extent();
-        int b_extent = bounds.back().extent();
-        if (bounds.size() == 4) {
-            // Reshape (c, x, y, b) to (cxy, 1, 1, b)
-            c_extent = bounds[0].extent() * bounds[1].extent() * bounds[2].extent();
-        }
-        Box reshaped_bounds = {{0, c_extent - 1}, {0, 0}, {0, 0}, {0, b_extent - 1}};
-        t_reshaped = std::make_shared<Tensor>(name, t->type(), std::move(reshaped_bounds), t->quantization());
-    }
-
-    // Don't do this here: Constant folding should do this for us.
-    // TODO: verify this is correct.
-    // t_reshaped->set_constant(t->is_constant());
-
-    assert(t->buffer().number_of_elements() == t_reshaped->buffer().number_of_elements());
-    assert(t->buffer().size_in_bytes() == t_reshaped->buffer().size_in_bytes());
-
-    OpPtr op = is_output ?
-                   make_op<ReshapeOp>(t_reshaped, make_shape_tensor(t), t) :
-                   make_op<ReshapeOp>(t, make_shape_tensor(t_reshaped), t_reshaped);
-
-    return {t_reshaped, std::move(op)};
-};
-
 }  // namespace
 
 // Implement FullyConnected op using Hannk's Conv op.
 OpPtr lower_tflite_fullyconnected(const TensorPtr &input, const TensorPtr &filter, const TensorPtr &bias,
                                   const TensorPtr &output, ActivationFunction activation) {
     if (output->type() == halide_type_of<int16_t>()) {
-        // TODO: Conv2d doesn't support int16 output yet
+        // TODO: Conv doesn't support int16 output yet
         return make_op<FullyConnectedOp>(input, filter, bias, output, activation);
     }
 
-    auto input_reshaped = reshape_tensor(input);
-    auto filter_reshaped = reshape_tensor(filter);
-    auto output_reshaped = reshape_tensor(output, /*is_output*/ true);
-
     const std::array<int, 2> stride = {{1, 1}};
     const std::array<int, 2> dilation_factor = {{1, 1}};
-    OpPtr conv_op = make_op<Conv2DOp>(input_reshaped.tensor, filter_reshaped.tensor, bias, output_reshaped.tensor,
-                                      stride, dilation_factor, Padding::Same, activation);
 
-    std::vector<TensorPtr> inputs = {input, filter, bias};
-    std::vector<TensorPtr> outputs = {output};
-    // std::initializer_list doesn't work well with move-only types, alas
-    std::vector<OpPtr> ops(4);
-    ops[0] = std::move(input_reshaped.op);
-    ops[1] = std::move(filter_reshaped.op);
-    ops[2] = std::move(conv_op);
-    ops[3] = std::move(output_reshaped.op);
-    return make_op<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
+    if (input->rank() == 2) {
+        return make_op<ConvOp>(input, filter, bias, output,
+                               stride, dilation_factor, Padding::Same, activation);
+    } else {
+        // Sometimes, fully connected op inputs contain extra dimensions, with the expectation that they
+        // are reshaped into a flat buffer.
+        Box bounds = input->bounds();
+#ifndef NDEBUG
+        for (const auto &i : bounds) {
+            assert(i.min == 0);
+        }
+#endif
+        int c_extent = 1;
+        int b_extent = bounds.back().extent();
+        for (size_t i = 0; i + 1 < bounds.size(); i++) {
+            c_extent *= bounds[i].extent();
+        }
+        Box reshaped_bounds = {{0, c_extent - 1}, {0, b_extent - 1}};
+        TensorPtr input_reshaped =
+            std::make_shared<Tensor>(input->name() + ".reshaped", input->type(), std::move(reshaped_bounds), input->quantization());
+        OpPtr reshape_input_op = make_op<ReshapeOp>(input, make_shape_tensor(input_reshaped), input_reshaped);
+
+        OpPtr conv_op = make_op<ConvOp>(input_reshaped, filter, bias, output,
+                                        stride, dilation_factor, Padding::Same, activation);
+
+        std::vector<TensorPtr> inputs = {input, filter, bias};
+        std::vector<TensorPtr> outputs = {output};
+        // std::initializer_list doesn't work well with move-only types, alas
+        std::vector<OpPtr> ops(2);
+        ops[0] = std::move(reshape_input_op);
+        ops[1] = std::move(conv_op);
+        return make_op<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
+    }
 }
 
 }  // namespace hannk

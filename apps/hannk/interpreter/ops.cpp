@@ -693,7 +693,7 @@ void ConcatenationOp::execute() {
     }
 }
 
-halide_type_t Conv2DOp::filter_type() const {
+halide_type_t ConvOp::filter_type() const {
     if (input()->type() == halide_type_of<uint8_t>() &&
         output()->type() == halide_type_of<uint8_t>()) {
         const halide_filter_metadata_t *metadata = conv_uint8_metadata();
@@ -704,18 +704,21 @@ halide_type_t Conv2DOp::filter_type() const {
     }
 }
 
-BoundsMap Conv2DOp::map_bounds(int input_idx, int output_idx) const {
+BoundsMap ConvOp::map_bounds(int input_idx, int output_idx) const {
 #ifdef CONV_R16
     const int unroll_reduction = filter()->extent(0) >= 16 ? 16 : 4;
 #else
     const int unroll_reduction = 4;
 #endif
     if (input_idx == 0) {
-        return BoundsMap(4, output()->rank())
+        BoundsMap result(input()->rank(), output()->rank());
+        result
             .constant(0, align_up(input()->extent(0), unroll_reduction))
-            .downsample(1, 1, stride_[0], Interval(0, dilation_[0] * (filter()->extent(1) - 1)))
-            .downsample(2, 2, stride_[1], Interval(0, dilation_[1] * (filter()->extent(2) - 1)))
-            .elementwise(3, 3);
+            .elementwise(input()->rank() - 1, input()->rank() - 1);
+        for (int i = 1; i < input()->rank() - 1; i++) {
+            result.downsample(i, i, stride_[i - 1], Interval(0, dilation_[i - 1] * (filter()->extent(i) - 1)));
+        }
+        return result;
     } else if (input_idx == 1) {
         // Pass minimal sized buffers to learn about the alignment requirements.
         HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
@@ -727,16 +730,19 @@ BoundsMap Conv2DOp::map_bounds(int input_idx, int output_idx) const {
         const int vector_reduction = filter_buf.dim(0).extent();
         const int vector_tile = filter_buf.dim(1).extent();
         const int channel_alignment = unroll_reduction / vector_reduction;
-        return BoundsMap(6, 4)
+        BoundsMap result(input()->rank() + 2, output()->rank());
+        result
             .constant(0, vector_reduction)
             .constant(1, vector_tile)
             .constant(2, align_up(ceil_div(filter()->extent(0), vector_reduction), channel_alignment))
-            .upsample(3, 0, vector_tile)
-            .constant(4, filter()->bounds(1))
-            .constant(5, filter()->bounds(2));
+            .upsample(3, 0, vector_tile);
+        for (int i = 1; i < output()->rank() - 1; i++) {
+            result.constant(i + 3, filter()->bounds(i));
+        }
+        return result;
     } else {
         assert(input_idx == 2);
-        return BoundsMap(1, 4).elementwise(0, 0);
+        return BoundsMap(1, output()->rank()).elementwise(0, 0);
     }
 }
 
@@ -767,7 +773,7 @@ void conv_uint8(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t
 
 }  // namespace
 
-void Conv2DOp::execute() {
+void ConvOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &filt = filter();
     const TensorPtr &out = output();
@@ -783,6 +789,13 @@ void Conv2DOp::execute() {
             get_quantized_multiply_params(in->quantization(), filt->quantization(), out->quantization());
 
         const auto output_range = get_output_range(activation_, out->quantization());
+
+        // Pad with dummy dimensions up to 2D.
+        while (input_buf.dimensions() < 4) {
+            input_buf.embed(input_buf.dimensions() - 1, 1);
+            output_buf.embed(output_buf.dimensions() - 1, 1);
+            filter_buf.add_dimension();
+        }
 
         assert(filter_buf.dimensions() == 6);
         const int filter_width = filter_buf.dim(4).extent();
@@ -1605,6 +1618,11 @@ void TileConvFilterOp::execute() {
         int input_zero = in->quantization().uniform_zero();
         int output_zero = out->quantization().uniform_zero();
 
+        while (input_buf.dimensions() < 4) {
+            input_buf.embed(input_buf.dimensions() - 1, 0);
+            output_buf.add_dimension();
+        }
+
         tile_conv_filter_uint8(input_buf, input_zero, output_zero, output_buf);
     } else {
         HLOG(FATAL) << "Unsupported type " << in->type() << "\n";
@@ -1742,7 +1760,7 @@ void ConcatenationOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 
-void Conv2DOp::accept(OpVisitor *v) {
+void ConvOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 

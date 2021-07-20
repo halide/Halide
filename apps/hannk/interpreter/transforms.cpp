@@ -326,12 +326,13 @@ class PadForOps : public OpVisitor {
         new_ops.emplace_back(std::move(pad));
     }
 
-    void visit(Conv2DOp *op) {
+    void visit(ConvOp *op) {
         pad_for_op(op, 0, 0);
 
         // We also need to tile the filter.
         TensorPtr filter = op->filter();
-        if (op->filter()->rank() == 4) {
+        if (op->filter()->rank() == op->input()->rank()) {
+            // This op has not yet had its filter tiled, do it now.
             BoundsMap bounds = op->map_bounds(1, 0);
             Box tiled_shape = bounds.evaluate(op->output()->bounds());
 

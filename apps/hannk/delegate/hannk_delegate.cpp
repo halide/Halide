@@ -659,7 +659,7 @@ private:
             params->dilation_height_factor,
         }};
         auto activation = ConvertTfLiteActivation(params->activation);
-        return make_op<Conv2DOp>(input, filter, bias, output, stride,
+        return make_op<ConvOp>(input, filter, bias, output, stride,
                                  dilation_factor, padding, activation);
     }
 

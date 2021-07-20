@@ -215,8 +215,8 @@ public:
         TensorPtr filter = tensors_[op->inputs()->Get(1)];
         TensorPtr bias = tensors_[op->inputs()->Get(2)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return make_op<Conv2DOp>(input, filter, bias, output, stride,
-                                 dilation_factor, padding, activation);
+        return make_op<ConvOp>(input, filter, bias, output, stride,
+                               dilation_factor, padding, activation);
     }
 
     OpPtr parse_depthwise_conv2D(const tflite::Operator *op) {
