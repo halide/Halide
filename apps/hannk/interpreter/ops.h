@@ -91,16 +91,16 @@ public:
     }
 };
 
-class Conv2DOp : public Op {
+class ConvOp : public Op {
     std::array<int, 2> stride_;
     std::array<int, 2> dilation_;
     Padding padding_;
     ActivationFunction activation_;
 
 public:
-    Conv2DOp(const TensorPtr &input, const TensorPtr &filter, const TensorPtr &bias, const TensorPtr &output,
-             std::array<int, 2> stride, std::array<int, 2> dilation, Padding padding,
-             ActivationFunction activation)
+    ConvOp(const TensorPtr &input, const TensorPtr &filter, const TensorPtr &bias, const TensorPtr &output,
+           std::array<int, 2> stride, std::array<int, 2> dilation, Padding padding,
+           ActivationFunction activation)
         : Op({input, filter, bias}, {output}),
           stride_(stride),
           dilation_(dilation),
@@ -132,7 +132,7 @@ public:
     void execute();
 
     void dump(std::ostream &os) const {
-        os << "  Conv2D " << output()->name() << std::endl;
+        os << "  Conv " << output()->name() << std::endl;
     }
 };
 
@@ -532,7 +532,7 @@ public:
     }
     virtual void visit(ConcatenationOp *op) {
     }
-    virtual void visit(Conv2DOp *op) {
+    virtual void visit(ConvOp *op) {
     }
     virtual void visit(DepthwiseConv2DOp *op) {
     }
