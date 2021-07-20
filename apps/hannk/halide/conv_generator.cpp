@@ -149,11 +149,12 @@ public:
         convolved(c, x, y, b) += i32(input_rdxyc) * i32(filter_rdxyc);
 
         // Saturate and narrow the output.
-        Expr output = multiply_2x_high(convolved(c, x, y, b), output_multiplier_);
-        output = i16_sat(rounding_shift_right(output, output_shift_));
+        Expr output;
         if (output_.type() == halide_type_of<uint8_t>()) {
-            output = u8_sat(saturating_add(output, output_zero_));
-            output = clamp(output, output_min_, output_max_);
+            output = quantize_and_relu_u8(convolved(c, x, y, b), output_multiplier_, output_shift_, output_zero_,
+                                          output_min_, output_max_, target);
+        } else {
+            output = quantize_i16(convolved(c, x, y, b), output_multiplier_, output_shift_, target);
         }
         output_(c, x, y, b) = output;
 
