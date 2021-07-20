@@ -660,7 +660,7 @@ private:
         }};
         auto activation = ConvertTfLiteActivation(params->activation);
         return make_op<ConvOp>(input, filter, bias, output, stride,
-                                 dilation_factor, padding, activation);
+                               dilation_factor, padding, activation);
     }
 
     OpPtr BuildDepthwiseConv2d(TfLiteContext *context, TfLiteNode *node) {

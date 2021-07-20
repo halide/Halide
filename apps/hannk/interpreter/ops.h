@@ -99,8 +99,8 @@ class ConvOp : public Op {
 
 public:
     ConvOp(const TensorPtr &input, const TensorPtr &filter, const TensorPtr &bias, const TensorPtr &output,
-             std::array<int, 2> stride, std::array<int, 2> dilation, Padding padding,
-             ActivationFunction activation)
+           std::array<int, 2> stride, std::array<int, 2> dilation, Padding padding,
+           ActivationFunction activation)
         : Op({input, filter, bias}, {output}),
           stride_(stride),
           dilation_(dilation),
