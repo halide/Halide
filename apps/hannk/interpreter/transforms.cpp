@@ -368,6 +368,12 @@ class PadForOps : public OpVisitor {
         }
     }
 
+    // TODO: We shouldn't need this.
+    void visit(WhileOp *op) {
+        op->cond()->accept(this);
+        op->body()->accept(this);
+    }
+
 public:
     std::vector<OpPtr> new_ops;
 };
@@ -397,6 +403,12 @@ class FusePadOps : public OpVisitor {
         for (int i = 0; i < op->op_count(); i++) {
             op->op(i)->accept(this);
         }
+    }
+
+    // TODO: We shouldn't need this.
+    void visit(WhileOp *op) {
+        op->cond()->accept(this);
+        op->body()->accept(this);
     }
 };
 
