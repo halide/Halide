@@ -234,7 +234,7 @@ Expr quantize_and_relu_u8(const Expr &x, const Expr &multiplier, const Expr &shi
                           const Expr &min, const Expr &max, const Target &target) {
     Expr result = quantize_i16(x, multiplier, shift, target);
     if (target.arch == Target::ARM || target.arch == Target::Hexagon || target.arch == Target::X86) {
-        // AThese targets have saturating narrow instructions, so it's best to clamp
+        // These targets have saturating narrow instructions, so it's best to clamp
         // after narrowing for more vector throughput.
         result = u8_sat(saturating_add(result, zero));
         return clamp(result, min, max);
