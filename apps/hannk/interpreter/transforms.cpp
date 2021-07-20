@@ -92,12 +92,6 @@ class InPlace : public OpVisitor {
     using OpVisitor::visit;
 
     bool is_alias_possible(TensorPtr input, TensorPtr output) const {
-        // If the input is used anywhere else, we should not alias it.
-        // TODO: This is conservative, we could alias it if it is the *last* use.
-        if (input->consumers().size() != 1) {
-            return false;
-        }
-
         // If either tensor is dynamic, can't alias them.
         if (input->is_dynamic() || output->is_dynamic()) {
             return false;
@@ -127,6 +121,12 @@ class InPlace : public OpVisitor {
     // and we meet a number of other requirements.
     bool maybe_alias_tensors(TensorPtr input, TensorPtr output, TensorOffset offset = {}) const {
         if (!is_alias_possible(input, output)) {
+            return false;
+        }
+
+        // If the input is used anywhere else, we should not alias it.
+        // TODO: This is conservative, we could alias it if it is the *last* use.
+        if (input->consumers().size() != 1) {
             return false;
         }
 
@@ -342,7 +342,7 @@ class PadForOps : public OpVisitor {
                 std::fill(quantization.zero.begin(), quantization.zero.end(), 0);
             }
             TensorPtr tiled =
-                std::make_shared<Tensor>(filter->name() + "_tiled", type, tiled_shape, quantization);
+                std::make_shared<Tensor>(filter->name() + ".tiled", type, tiled_shape, quantization);
             // Maybe more than one op uses this same filter...?
             replace_consumers(filter, tiled);
 
@@ -435,7 +435,11 @@ void fold_constants(OpGroup *root) {
             // Since we aren't ready for arena allocation,
             // we'll just do these as one-off heap allocs.
             for (int j = 0; j < op->output_count(); j++) {
-                op->output(j)->allocate_from_heap();
+                // Note that an output could be 'allocated' here if it
+                // is the result of a ReshapeOp that aliases constant data.
+                if (!op->output(j)->is_allocated()) {
+                    op->output(j)->allocate_from_heap();
+                }
             }
 
             // Run the whole op.
