@@ -131,11 +131,9 @@ public:
         convolved(c, x, y, b) = offset_c(filter_c);
         convolved(c, x, y, b) += i32(filter_zeroed_rdxy) * i32(input_rdxy);
 
-        // Saturate and narrow the output.
-        Expr output = multiply_2x_high(convolved(c, x, y, b), output_multiplier_);
-        output = i16_sat(rounding_shift_right(output, output_shift_));
-        output = u8_sat(saturating_add(output, output_zero_));
-        output_(c, x, y, b) = clamp(output, output_min_, output_max_);
+        output_(c, x, y, b) =
+            quantize_and_relu_u8(convolved(c, x, y, b), output_multiplier_, output_shift_,
+                                 output_zero_, output_min_, output_max_, target);
 
         // Schedule.
         interpret_as_tensor(input_);
