@@ -160,11 +160,6 @@ TensorAndOp reshape_tensor(TensorPtr t, bool is_output = false) {
 // Implement FullyConnected op using Hannk's Conv op.
 OpPtr lower_tflite_fullyconnected(const TensorPtr &input, const TensorPtr &filter, const TensorPtr &bias,
                                   const TensorPtr &output, ActivationFunction activation) {
-    if (output->type() == halide_type_of<int16_t>()) {
-        // TODO: Conv2d doesn't support int16 output yet
-        return make_op<FullyConnectedOp>(input, filter, bias, output, activation);
-    }
-
     auto input_reshaped = reshape_tensor(input);
     auto filter_reshaped = reshape_tensor(filter);
     auto output_reshaped = reshape_tensor(output, /*is_output*/ true);
