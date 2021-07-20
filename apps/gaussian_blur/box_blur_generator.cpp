@@ -273,12 +273,13 @@ public:
 
         Func blur_y_direct{"blur_y_direct"};
         RDom rb(0, cast<int>(diameter));
-        blur_y_direct(x, y) = undef<uint32_t>();
-        blur_y_direct(x, 0) = sum(cast<uint32_t>(input(x, rb)));
+        blur_y_direct(x, y) = cast<uint32_t>(0);
+        blur_y_direct(x, 0) += cast<uint32_t>(input(x, rb));
         blur_y_direct(x, r_scan) =
             (blur_y_direct(x, r_scan - 1) +
              cast<uint32_t>(cast<int32_t>((cast<int16_t>(input(x, r_scan + diameter - 1)) -
                                            input(x, r_scan - 1)))));
+
         Func blur_y_direct_transpose{"blur_y_direct_transpose"};
         blur_y_direct_transpose(x, y) = blur_y_direct(y, x);
 
@@ -334,32 +335,33 @@ public:
             .vectorize(x);
         blur_y
             .update(1)
-            .split(r, ry, ryi, N * 2)
+            .split(r, ry, ryi, N)
             .reorder(x, ryi, ry)
             .vectorize(x);
         blur_y
             .update(2)
-            .split(r_init, ry, ryi, N * 1)
+            .split(r_init, ry, ryi, N)
             .reorder(x, ryi, ry)
-            .vectorize(x);
+            .vectorize(x)
+            .unroll(ryi);
+
         delta
             .compute_at(blur_y, ry)
-            .bound_extent(x, N * 2)
-            .vectorize(x)
+            .vectorize(x, N)
             .unroll(y);
         delta
             .update()
-            .vectorize(x)
+            .vectorize(x, N)
             .unroll(r_scan);
+
         transpose
             .compute_at(blur_y, ry)
-            .bound_extent(y, N * 2)
+            .bound_extent(y, N)
             .vectorize(y)
             .unroll(x);
 
         blur_y_direct
             .compute_at(blur_y, ry)
-            .bound_extent(x, N * 1)
             .vectorize(x)
             .unroll(y);
         blur_y_direct
@@ -371,7 +373,7 @@ public:
             .vectorize(x);
         blur_y_direct_transpose
             .compute_at(blur_y, ry)
-            .bound_extent(y, N * 1)
+            .bound_extent(y, N)
             .vectorize(y)
             .unroll(x);
 
@@ -381,7 +383,7 @@ public:
         output
             .compute_root()
             .bound(y, 0, N)
-            .split(x, x, xi, N * 1)
+            .split(x, x, xi, N)
             .reorder(xi, y, x)
             .vectorize(xi)
             .unroll(y);
@@ -398,3 +400,66 @@ public:
 };
 
 HALIDE_REGISTER_GENERATOR(BoxBlurIncremental, box_blur_incremental)
+
+class BoxBlurPyramid : public Generator<BoxBlurPyramid> {
+public:
+    Input<Buffer<uint8_t>> input{"input", 2};
+    Input<int> radius{"radius"};
+    Output<Buffer<uint8_t>> output{"output", 2};
+
+    void generate() {
+        Var x, y;
+
+        const int levels = 2;
+
+        Func in32;
+        in32(x, y) = cast<uint32_t>(input(x, y));
+
+        Expr d = radius * 2 + 1;
+
+        Func in = in32;
+        std::vector<Func> down, up;
+        for (int i = 0; i < levels; i++) {
+            Func dx("dx_" + std::to_string(i)), dy("dy_" + std::to_string(i));
+            dy(x, y) = in(x, 2 * y) + in(x, 2 * y + 1);
+            down.push_back(dy);
+            dx(x, y) = dy(2 * x, y) + dy(2 * x + 1, y);
+            down.push_back(dx);
+            in = dx;
+            dx.compute_root();
+            dy.compute_root();
+            d = d / 2;
+        }
+
+        // TODO: Do an explicit blur at the lowest resolution
+
+        up.resize(down.size());
+        for (int i = levels - 1; i >= 0; i--) {
+            Func ux("ux_" + std::to_string(i)), uy("uy_" + std::to_string(i));
+            ux(x, y) = in(x / 2, y);  // + down[2 * i + 1](x - 1 + 2 * (x % 2), y);
+            up[2 * i + 1] = ux;
+            uy(x, y) = ux(x, y / 2);  // + down[2 * i](x, y - 1 + 2 * (y % 2));
+            up[2 * i] = uy;
+            in = uy;
+
+            ux.compute_root();
+            uy.compute_root();
+        }
+
+        up[0].compute_at(output, x).vectorize(x);
+        up[1].compute_at(output, x).vectorize(x);
+
+        down[0].compute_inline();
+        down[1].compute_inline();
+        down[2].compute_root().vectorize(x, 8).parallel(y, 8);
+
+        output(x, y) = cast<uint8_t>(in(x, y));  // TODO normalize
+
+        output.vectorize(x, 8).parallel(y, 8);
+
+        output.dim(0).set_min(0);
+        output.dim(1).set_min(0);
+    }
+};
+
+HALIDE_REGISTER_GENERATOR(BoxBlurPyramid, box_blur_pyramid)

@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
+#include <iostream>
 
 #include "HalideBuffer.h"
 #include "HalideRuntime.h"
@@ -10,6 +11,8 @@
 #include "box_blur_log.h"
 #include "gaussian_blur.h"
 #include "gaussian_blur_direct.h"
+
+#include "box_blur_pyramid.h"
 
 #include "halide_benchmark.h"
 #include "halide_image_io.h"
@@ -23,9 +26,14 @@ int main(int argc, char **argv) {
     }
 
     Halide::Runtime::Buffer<uint8_t> input = load_and_convert_image(argv[1]);
+    /*
+    input.crop(0, 0, 1296 - 2*195);
+    input.crop(1, 0, 1286);
+    */
+
     Halide::Runtime::Buffer<uint8_t> output(input.width(), input.height());
 
-    int max_radius = 1024;
+    int max_radius = 2048;
     Halide::Runtime::Buffer<uint8_t> padded(input.width() + max_radius * 2,
                                             input.height() + max_radius * 2);
     padded.fill(0);
@@ -41,15 +49,17 @@ int main(int argc, char **argv) {
         printf("Gaussian blur (direct) (%d): %gms\n", r, best_manual * 1e3);
     }
 
-    for (int r = 1; r < 1024; r*=2) {
+    for (int r = 1; r <= 1024; r *= 2) {
         double best_manual = benchmark([&]() {
             gaussian_blur(input, r, output);
             output.device_sync();
         });
         printf("Gaussian blur (recursive) (%d): %gms\n", r, best_manual * 1e3);
+        convert_and_save_image(output, "out_" + std::to_string(r) + ".png");
     }
     */
 
+    /*
     for (int r = 1; r <= 512; r *= 2) {
         // Assume a padded input
         Halide::Runtime::Buffer<uint8_t> scratch(nullptr, 0, 0);
@@ -62,15 +72,25 @@ int main(int argc, char **argv) {
             output.device_sync();
         });
         printf("Box blur (recursive) (%d): %gms\n", r, best_manual * 1e3);
-
-        convert_and_save_image(output, "out_" + std::to_string(r) + ".png");
     }
+    */
+    /*
+    for (int r = 1; r <= 1024; r *= 2) {
+        // Assume a padded input
+        double best_manual = benchmark(10, 10, [&]() {
+            box_blur_pyramid(padded, r, output);
+            output.device_sync();
+        });
+        printf("Box blur (pyramid) (%d): %gms\n", r, best_manual * 1e3);
+    }
+    */
+    // return 0;
 
-    for (int r = 1; r <= 512; r *= 2) {
+    for (int r = 1; r <= 1024; r *= 2) {
         const int N = 8;
 
-        double best_manual = benchmark(100, 20, [&]() {
-            int slices = 16;
+        double best_manual = benchmark(10, 10, [&]() {
+            int slices = 8;  // set this to num_cores
             int slice_size = (output.height() + slices - 1) / slices;
             slice_size = (slice_size + N - 1) / N * N;
 
@@ -93,10 +113,9 @@ int main(int argc, char **argv) {
                 int y_end = y_start + t->slice_size;
                 bool valid = false;
                 for (int y = y_start; y < y_end; y += N) {
-                    // FIXME: Shouldn't need a +N on the width of the padded slice
                     Halide::Runtime::Buffer<uint8_t> in_slice =
                         t->padded
-                            .cropped(0, -r, w + 2 * r + 2 * N)
+                            .cropped(0, -r, w + 2 * r)
                             .cropped(1, y - r - 1, N + 2 * r + 1);
                     Halide::Runtime::Buffer<uint8_t> out_slice =
                         t->output.cropped(1, y, N);

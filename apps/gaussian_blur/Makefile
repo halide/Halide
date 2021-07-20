@@ -28,6 +28,10 @@ $(BIN)/%/box_blur_log.a: $(GENERATOR_BIN)/box_blur.generator
 	@mkdir -p $(@D)
 	$< -g box_blur_log -f box_blur_log -e $(GENERATOR_OUTPUTS) -o $(BIN)/$* target=$*-no_runtime
 
+$(BIN)/%/box_blur_pyramid.a: $(GENERATOR_BIN)/box_blur.generator
+	@mkdir -p $(@D)
+	$< -g box_blur_pyramid -f box_blur_pyramid -e $(GENERATOR_OUTPUTS) -o $(BIN)/$* target=$*-no_runtime
+
 $(BIN)/%/box_blur_incremental.a: $(GENERATOR_BIN)/box_blur.generator
 	@mkdir -p $(@D)
 	$< -g box_blur_incremental -f box_blur_incremental -e $(GENERATOR_OUTPUTS) -o $(BIN)/$* target=$*-no_runtime 
@@ -41,6 +45,7 @@ LIBS= \
 	$(BIN)/%/gaussian_blur_direct.a \
 	$(BIN)/%/box_blur.a \
 	$(BIN)/%/box_blur_log.a \
+	$(BIN)/%/box_blur_pyramid.a \
 	$(BIN)/%/box_blur_incremental.a \
 	$(BIN)/%/runtime.a
 
@@ -51,7 +56,7 @@ $(BIN)/%/filter: filter.cpp $(LIBS)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* -Wall -O3 $^ -o $@ $(LDFLAGS) $(IMAGE_IO_FLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 
 $(BIN)/%/out.png: $(BIN)/%/filter
-	$< ../images/gray.png $(BIN)/$*/out.png
+	$< gray_big.png $(BIN)/$*/out.png
 
 clean:
 	rm -rf $(BIN)
