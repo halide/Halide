@@ -252,7 +252,7 @@ public:
         TensorPtr filter = tensors_[op->inputs()->Get(1)];
         TensorPtr bias = tensors_[op->inputs()->Get(2)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return make_op<FullyConnectedOp>(input, filter, bias, output, activation);
+        return lower_tflite_fullyconnected(input, filter, bias, output, activation);
     }
 
     OpPtr parse_pad(const tflite::Operator *op) {

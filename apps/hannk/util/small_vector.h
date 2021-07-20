@@ -148,6 +148,15 @@ public:
     const T &operator[](size_t i) const {
         return data()[i];
     }
+
+    const T &front() const {
+        return at(0);
+    }
+
+    const T &back() const {
+        assert(size_ > 0);
+        return at(size_ - 1);
+    }
 };
 
 template<typename T, size_t Capacity>

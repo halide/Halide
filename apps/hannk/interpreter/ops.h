@@ -200,39 +200,6 @@ public:
     }
 };
 
-class FullyConnectedOp : public Op {
-    ActivationFunction activation_;
-
-public:
-    FullyConnectedOp(const TensorPtr &input, const TensorPtr &filter, const TensorPtr &bias, const TensorPtr &output,
-                     ActivationFunction activation = ActivationFunction::None)
-        : Op({input, filter, bias}, {output}), activation_(activation) {
-    }
-
-    void accept(OpVisitor *v);
-
-    const TensorPtr &filter() const {
-        return Op::input(1);
-    }
-    const TensorPtr &bias() const {
-        return Op::input(2);
-    }
-    const TensorPtr &filter() {
-        return Op::input(1);
-    }
-    const TensorPtr &bias() {
-        return Op::input(2);
-    }
-
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
-
-    void execute();
-
-    void dump(std::ostream &os) const {
-        os << "  FullyConnected " << output()->name() << std::endl;
-    }
-};
-
 class GatherOp : public Op {
     int axis_;
 
@@ -570,8 +537,6 @@ public:
     virtual void visit(DepthwiseConv2DOp *op) {
     }
     virtual void visit(ElementwiseProgramOp *op) {
-    }
-    virtual void visit(FullyConnectedOp *op) {
     }
     virtual void visit(GatherOp *op) {
     }
