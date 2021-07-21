@@ -8,7 +8,10 @@ namespace hannk {
 
 class DepthwiseConv : public Generator<DepthwiseConv> {
 public:
-    // This is used to compute ci = co * inv_depth_multiplier
+    // This is used to compute ci = co * inv_depth_multiplier. There are
+    // only 2 values that make sense here:
+    // - inv_depth_multiplier = 1 => depth_multiplier = 1
+    // - inv_depth_multiplier = 0 => broadcasting 1 channel of input
     GeneratorParam<int> inv_depth_multiplier_{"inv_depth_multiplier", 1};
 
     // When true, we assume the vector size is divided evenly by the number
