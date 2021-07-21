@@ -1392,7 +1392,14 @@ string CodeGen_ARM::mcpu() const {
         }
     } else {
         if (target.os == Target::IOS) {
-            return "cyclone";
+            if (target.has_feature(Target::ARMv83a)) {
+                // TODO: we can assume at least Apple A12 (Vortex/Tempest),
+                // but LLVM doesn't seem to have specialzations for those yet.
+                // Continue using 'cyclone' for now.
+                return "cyclone";
+            } else {
+                return "cyclone";  // aka Apple A7
+            }
         } else if (target.os == Target::OSX) {
             return "apple-a12";
         } else {
@@ -1428,6 +1435,11 @@ string CodeGen_ARM::mattrs() const {
             separator = ",";
         }
 
+        if (target.has_feature(Target::ARMv83a)) {
+            arch_flags += separator + "+v8.3a";
+            separator = ",";
+        }
+
         if (target.has_feature(Target::ARMDotProd)) {
             arch_flags += separator + "+dotprod";
             separator = ",";
@@ -1443,6 +1455,7 @@ string CodeGen_ARM::mattrs() const {
         } else {
             return arch_flags;
         }
+        return arch_flags;
     }
 }
 

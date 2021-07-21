@@ -130,6 +130,7 @@ struct Target {
         LLVMLargeCodeModel = halide_llvm_large_code_model,
         RVV = halide_target_feature_rvv,
         ARMv81a = halide_target_feature_armv81a,
+        ARMv83a = halide_target_feature_armv83a,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;
