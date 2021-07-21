@@ -223,6 +223,7 @@ public:
                 .vectorize(c, vector_size, TailStrategy::GuardWithIf);
 
             resampled_input.specialize(depth_multiplier_ == 1);
+            resampled_input.specialize(depth_multiplier_ == 8);
             if (get_target().arch == Target::Hexagon) {
                 resampled_input.specialize_fail("This codepath is really slow to build (and probably run).");
             }
