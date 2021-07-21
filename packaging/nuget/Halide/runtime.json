@@ -1,0 +1,14 @@
+{
+  "runtimes": {
+    "win-x64": {
+      "Halide": {
+        "Halide.runtime.win-x64": "@CPACK_PACKAGE_VERSION@"
+      }
+    },
+    "win-x86": {
+      "Halide": {
+        "Halide.runtime.win-x86": "@CPACK_PACKAGE_VERSION@"
+      }
+    }
+  }
+}

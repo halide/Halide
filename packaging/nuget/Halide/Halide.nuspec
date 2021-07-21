@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata minClientVersion="2.12">
+    <id>Halide</id>
+    <version>@CPACK_PACKAGE_VERSION@</version>
+    <authors>@CPACK_NUGET_PACKAGE_AUTHORS@</authors>
+    <owners>@CPACK_NUGET_PACKAGE_OWNERS@</owners>
+    <requireLicenseAcceptance>true</requireLicenseAcceptance>
+    <license type="expression">@CPACK_NUGET_PACKAGE_LICENSE_EXPRESSION@</license>
+    <projectUrl>@CPACK_PACKAGE_HOMEPAGE_URL@</projectUrl>
+    <description>@CPACK_PACKAGE_DESCRIPTION_SUMMARY@</description>
+    <copyright>@CPACK_NUGET_PACKAGE_COPYRIGHT@</copyright>
+    <repository type="git" url="https://github.com/halide/Halide" branch="v@CPACK_PACKAGE_VERSION@" />
+  </metadata>
+  <files>
+    <file src="runtime.json" target="runtime.json" />
+  </files>
+</package>
