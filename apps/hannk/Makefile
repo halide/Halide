@@ -156,21 +156,17 @@ $(BIN)/%/halide/copy_uint8_uint8.a: $(GENERATOR_BIN)/copy.generator
 	@mkdir -p $(@D)
 	$< -g Copy input.type=uint8 output.type=uint8 -f hannk::copy_uint8_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-no_bounds_query-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/halide/depthwise_conv_uint8.a: $(GENERATOR_BIN)/depthwise_conv.generator
-	@mkdir -p $(@D)
-	$< -g DepthwiseConv -f hannk::depthwise_conv_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
-
 $(BIN)/%/halide/depthwise_conv_broadcast_uint8.a: $(GENERATOR_BIN)/depthwise_conv.generator
 	@mkdir -p $(@D)
 	$< -g DepthwiseConv inv_depth_multiplier=0 -f hannk::depthwise_conv_broadcast_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/halide/depthwise_conv_dm1_uint8.a: $(GENERATOR_BIN)/depthwise_conv.generator
+$(BIN)/%/halide/depthwise_conv_uint8.a: $(GENERATOR_BIN)/depthwise_conv.generator
 	@mkdir -p $(@D)
-	$< -g DepthwiseConv inv_depth_multiplier=1 -f hannk::depthwise_conv_dm1_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+	$< -g DepthwiseConv inv_depth_multiplier=1 -f hannk::depthwise_conv_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/halide/depthwise_conv_shallow_dm1_uint8.a: $(GENERATOR_BIN)/depthwise_conv.generator
+$(BIN)/%/halide/depthwise_conv_shallow_uint8.a: $(GENERATOR_BIN)/depthwise_conv.generator
 	@mkdir -p $(@D)
-	$< -g DepthwiseConv inv_depth_multiplier=1 shallow=true -f hannk::depthwise_conv_shallow_dm1_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+	$< -g DepthwiseConv inv_depth_multiplier=1 shallow=true -f hannk::depthwise_conv_shallow_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
 $(BIN)/%/halide/elementwise_5xuint8_1xuint8.a: $(GENERATOR_BIN)/elementwise.generator
 	@mkdir -p $(@D)
@@ -208,6 +204,10 @@ $(BIN)/%/halide/tile_conv_filter_uint8.a: $(GENERATOR_BIN)/conv.generator
 	@mkdir -p $(@D)
 	$< -g TileConvFilter -f hannk::tile_conv_filter_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
+$(BIN)/%/halide/upsample_channels_uint8.a: $(GENERATOR_BIN)/depthwise_conv.generator
+	@mkdir -p $(@D)
+	$< -g UpsampleChannels -f hannk::upsample_channels_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
 $(BIN)/%/halide/runtime.a: $(GENERATOR_BIN)/fill.generator
 	@mkdir -p $(@D)
 	$< -r runtime -o $(BIN)/$*/halide target=$(HL_TARGET)
@@ -220,8 +220,7 @@ OPS_HALIDE = \
 	$(BIN)/%/halide/copy_uint8_uint8.a \
 	$(BIN)/%/halide/depthwise_conv_uint8.a \
 	$(BIN)/%/halide/depthwise_conv_broadcast_uint8.a \
-	$(BIN)/%/halide/depthwise_conv_dm1_uint8.a \
-	$(BIN)/%/halide/depthwise_conv_shallow_dm1_uint8.a \
+	$(BIN)/%/halide/depthwise_conv_shallow_uint8.a \
 	$(BIN)/%/halide/elementwise_5xuint8_1xuint8.a \
 	$(BIN)/%/halide/elementwise_5xint16_1xuint8int16.a \
 	$(BIN)/%/halide/fill_uint8.a \
@@ -231,6 +230,7 @@ OPS_HALIDE = \
 	$(BIN)/%/halide/mul_uint8_uint8_uint8.a \
 	$(BIN)/%/halide/softmax_uint8.a \
 	$(BIN)/%/halide/tile_conv_filter_uint8.a \
+	$(BIN)/%/halide/upsample_channels_uint8.a \
 	$(BIN)/%/halide/runtime.a
 
 OPS_CXXFLAGS = -I$(BIN)/$*

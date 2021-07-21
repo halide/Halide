@@ -13,9 +13,8 @@
 #endif
 #include "halide/copy_uint8_uint8.h"
 #include "halide/depthwise_conv_broadcast_uint8.h"
-#include "halide/depthwise_conv_dm1_uint8.h"
-#include "halide/depthwise_conv_shallow_dm1_uint8.h"
 #include "halide/depthwise_conv_uint8.h"
+#include "halide/depthwise_conv_shallow_uint8.h"
 #include "halide/elementwise_5xint16_1xuint8int16.h"
 #include "halide/elementwise_5xuint8_1xuint8.h"
 #include "halide/fill_uint8.h"
@@ -25,6 +24,7 @@
 #include "halide/mul_uint8_uint8_uint8.h"
 #include "halide/softmax_uint8.h"
 #include "halide/tile_conv_filter_uint8.h"
+#include "halide/upsample_channels_uint8.h"
 #include "interpreter/elementwise_program.h"
 #include "interpreter/ops.h"
 #include "util/error_util.h"
@@ -834,29 +834,23 @@ void ConvOp::execute() {
 namespace {
 
 // Wrapper to dispatch to the appropriate variant of depthwise_conv.
-void depthwise_conv_uint8(
+void call_depthwise_conv_uint8(
     halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t *bias,
-    int depth_multiplier, const MultiplyParams &params, const std::array<int, 2> &stride, const std::array<int, 2> &dilation,
+    const MultiplyParams &params, const std::array<int, 2> &stride, const std::array<int, 2> &dilation,
     int input_stride_x, const Interval &output_range, halide_buffer_t *output) {
     if (input_stride_x != 0) {
-        assert(depth_multiplier == 1);
-        depthwise_conv_shallow_dm1_uint8(
-            input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
+        depthwise_conv_shallow_uint8(
+            input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias,
             stride[0], stride[1], dilation[0], dilation[1], input_stride_x, params.c.mantissa(), -params.c.exponent(),
             (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output);
-    } else if (depth_multiplier >= output->dim[0].extent) {
+    } else if (input->dim[0].extent == 1) {
         depthwise_conv_broadcast_uint8(
-            input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
-            stride[0], stride[1], dilation[0], dilation[1], input_stride_x, params.c.mantissa(), -params.c.exponent(),
-            (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output);
-    } else if (depth_multiplier == 1) {
-        depthwise_conv_dm1_uint8(
-            input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
+            input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias,
             stride[0], stride[1], dilation[0], dilation[1], input_stride_x, params.c.mantissa(), -params.c.exponent(),
             (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output);
     } else {
         ::hannk::depthwise_conv_uint8(
-            input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias, depth_multiplier,
+            input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias,
             stride[0], stride[1], dilation[0], dilation[1], input_stride_x, params.c.mantissa(), -params.c.exponent(),
             (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output);
     }
@@ -868,7 +862,7 @@ int get_depthwise_conv_channel_alignment() {
     HalideBuffer<int32_t> bias_buf(nullptr, 1);
     HalideBuffer<uint8_t> filter_buf(nullptr, 1, 1, 1);
     HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
-    depthwise_conv_dm1_uint8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, output_buf);
+    depthwise_conv_uint8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, output_buf);
     return input_buf.dim(0).extent();
 }
 
@@ -927,8 +921,7 @@ void DepthwiseConv2DOp::execute() {
         // version of depthwise conv, which fuses c and x, and passes the stride
         // of x into the pipeline manually.
         int input_stride_x = 0;
-        if (depth_multiplier_ == 1 &&
-            stride_[0] == 1 &&
+        if (stride_[0] == 1 &&
             can_fuse_cx(FuseType::InPlace, input_buf) &&
             can_fuse_cx(FuseType::InPlace, output_buf) &&
             get_depthwise_conv_channel_alignment() % input_buf.dim(0).extent() == 0) {
@@ -937,8 +930,9 @@ void DepthwiseConv2DOp::execute() {
             fuse_cx(FuseType::InPlace, output_buf);
         }
 
-        depthwise_conv_uint8(input_buf, filter_buf, bias_buf, depth_multiplier_, params,
-                             stride_, dilation_, input_stride_x, output_range, output_buf);
+        assert(depth_multiplier_ == 1);
+        call_depthwise_conv_uint8(input_buf, filter_buf, bias_buf, params,
+                                  stride_, dilation_, input_stride_x, output_range, output_buf);
     } else {
         HLOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
@@ -1704,6 +1698,30 @@ void UnaryOp::execute() {
         << " for types " << in->type() << ", " << out->type();
 }
 
+BoundsMap UpsampleChannelsOp::map_bounds(int input_idx, int output_idx) const {
+    assert(input_idx == 0);
+    assert(output_idx == 0);
+    // TODO: Maybe we can do better here for dimensions that aren't reordered.
+
+    int rank = output(output_idx)->rank();
+    assert(rank == input(input_idx)->rank());
+    return BoundsMap::elementwise(rank).upsample(0, 0, factor_);
+}
+
+void UpsampleChannelsOp::execute() {
+    const TensorPtr &in = input();
+    const TensorPtr &out = output();
+
+    if (in->type() == halide_type_of<uint8_t>() && out->type() == halide_type_of<uint8_t>()) {
+        auto in_buf = in->buffer();
+        auto out_buf = out->buffer();
+        upsample_channels_uint8(in_buf, factor_, out_buf);
+        return;
+    }
+    HLOG(FATAL)
+        << "Unsupported UpsampleChannels op for types " << in->type() << ", " << out->type();
+}
+
 void BinaryOp::accept(OpVisitor *v) {
     v->visit(this);
 }
@@ -1769,6 +1787,10 @@ void TileConvFilterOp::accept(OpVisitor *v) {
 }
 
 void TransposeOp::accept(OpVisitor *v) {
+    v->visit(this);
+}
+
+void UpsampleChannelsOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 
