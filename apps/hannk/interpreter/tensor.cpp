@@ -286,7 +286,7 @@ void Tensor::dump(std::ostream &os) const {
 
     os << " storage:@" << (void *)storage_.get();
 
-    os << " " << name() << " this:@" << (void *)this << std::endl;
+    os << " " << name() << " this:@" << (const void *)this << std::endl;
 }
 
 }  // namespace hannk
