@@ -379,6 +379,10 @@ enum class MemoryType {
      * intermediate buffers. Necessary for vgather-vscatter instructions
      * on Hexagon */
     VTCM,
+
+    /** AMX Tile register for X86. Any data that would be used in an AMX matrix
+     * multiplication must first be loaded into an AMX tile register. */
+    AMXTile,
 };
 
 namespace Internal {
