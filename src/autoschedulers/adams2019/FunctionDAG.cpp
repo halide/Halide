@@ -582,6 +582,31 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
         }
     } apply_param_estimates;
 
+    // Bounds inference can include image loads that are to a single
+    // location in returned bounds expressions. The idea is these are
+    // easily computed at runtime entry to the compiled code. However
+    // the values are not available to the autoscheduler and hence
+    // these cannot be used. Thus we rewrite such Image calls to
+    // Extern calls here to hide them from bounds inference.
+
+    class RemoveImageLoads : public IRMutator {
+        Expr visit(const Call *op) override {
+            if (op->call_type == Call::Image) {
+                vector<Expr> new_args(op->args.size());
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    const Expr &old_arg = op->args[i];
+                    Expr new_arg = mutate(old_arg);
+                    new_args[i] = std::move(new_arg);
+                }
+
+                return Call::make(op->type, op->name, new_args, Call::Extern,
+                                  op->func, op->value_index, op->image, op->param);
+            } else {
+                return IRMutator::visit(op);
+            }
+        }
+    } remove_image_loads;
+
     // Compute a realization order
     vector<string> order = topological_order(outputs, env);
 
@@ -653,6 +678,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             }
 
             FuncValueBounds func_value_bounds = compute_function_value_bounds(order, env);
+
             for (int j = 0; j < consumer.dimensions(); j++) {
                 // The region computed always uses the full extent of the rvars
                 Interval in = bounds_of_expr_in_scope(def.args()[j], stage_scope_with_concrete_rvar_bounds, func_value_bounds);
@@ -920,6 +946,16 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                         internal_assert(in.is_bounded())
                             << "Unbounded producer->consumer relationship: "
                             << edge.producer->func.name() << " -> " << edge.consumer->name << "\n";
+
+                        // Eliminate any scalar image loads. They're
+                        // acceptable when doing bounds inference in
+                        // Halide proper, but we can't make use of
+                        // them at compile-time.
+                        in.min = remove_image_loads.mutate(in.min);
+                        in.max = remove_image_loads.mutate(in.max);
+                        in.min = bounds_of_expr_in_scope(in.min, Scope<Interval>{}).min;
+                        in.max = bounds_of_expr_in_scope(in.max, Scope<Interval>{}).max;
+
                         Edge::BoundInfo min(simplify(in.min), *edge.consumer);
                         Edge::BoundInfo max(simplify(in.max), *edge.consumer);
                         edge.bounds.emplace_back(std::move(min), std::move(max));
