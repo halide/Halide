@@ -13,8 +13,8 @@
 #endif
 #include "halide/copy_uint8_uint8.h"
 #include "halide/depthwise_conv_broadcast_uint8.h"
-#include "halide/depthwise_conv_uint8.h"
 #include "halide/depthwise_conv_shallow_uint8.h"
+#include "halide/depthwise_conv_uint8.h"
 #include "halide/elementwise_5xint16_1xuint8int16.h"
 #include "halide/elementwise_5xuint8_1xuint8.h"
 #include "halide/fill_uint8.h"
