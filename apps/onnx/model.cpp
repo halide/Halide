@@ -344,8 +344,6 @@ std::vector<py::array> run(
     }
     Halide::Realization real(outputs);
     Halide::Target tgt = Halide::get_host_target();
-    // Don't allow LLVM to mess with the code.
-    tgt.set_feature(Halide::Target::DisableLLVMLoopOpt, true);
     // Don't create buffers larger than 2GB since we use 32bit signed indices to
     // index the data stored in them.
     tgt.set_feature(Halide::Target::LargeBuffers, false);
@@ -461,8 +459,6 @@ double benchmark(
 
     Halide::Realization real(outputs);
     Halide::Target tgt = Halide::get_host_target();
-    // Don't allow LLVM to mess with the code.
-    tgt.set_feature(Halide::Target::DisableLLVMLoopOpt, true);
     // Don't create buffers larger than 2GB since we use 32bit signed indices to
     // index the data stored in them.
     tgt.set_feature(Halide::Target::LargeBuffers, false);

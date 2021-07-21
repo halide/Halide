@@ -65,14 +65,6 @@ else
     echo Copying starting weights from ${START_WEIGHTS_FILE} to ${WEIGHTS}
 fi
 
-# We could add this unconditionally, but it's easier to wade thru
-# results if we only add if needed
-for F in disable_llvm_loop_opt; do
-    if [[ ! ${HL_TARGET} =~ .*${F}.* ]]; then
-        HL_TARGET="${HL_TARGET}-${F}"
-    fi
-done
-
 # A batch of this many samples is built in parallel, and then
 # benchmarked serially.
 BATCH_SIZE=32

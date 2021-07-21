@@ -238,7 +238,7 @@ int main(int argc, char **argv) {
         to_f16.compute_root().vectorize(x, 8, TailStrategy::RoundUp);
         from_f16.compute_root().vectorize(x, 8, TailStrategy::RoundUp);
 
-        from_f16.compile_to_assembly("/dev/stdout", {}, Target("host-no_asserts-no_bounds_query-no_runtime-disable_llvm_loop_unroll-disable_llvm_loop_vectorize"));
+        from_f16.compile_to_assembly("/dev/stdout", {}, Target("host-no_asserts-no_bounds_query-no_runtime"));
     }
 
     // Check infinity handling for both float16_t and Halide codegen.
