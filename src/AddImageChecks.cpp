@@ -149,6 +149,7 @@ Stmt add_image_checks_inner(Stmt s,
                             const Target &t,
                             const vector<string> &order,
                             const map<string, Function> &env,
+                            const string &pipeline_name,
                             const FuncValueBounds &fb,
                             bool will_inject_host_copies) {
 
@@ -311,7 +312,8 @@ Stmt add_image_checks_inner(Stmt s,
         maybe_return_condition = maybe_return_condition || inference_mode;
 
         // Come up with a name to refer to this buffer in the error messages
-        string error_name = (is_output_buffer ? "Output" : "Input");
+        string error_name = "In pipeline: " + pipeline_name + ", ";
+        error_name += (is_output_buffer ? "Output" : "Input");
         error_name += " buffer " + name;
 
         if (!is_output_buffer && t.has_feature(Target::MSAN)) {
@@ -725,6 +727,7 @@ Stmt add_image_checks(const Stmt &s,
                       const Target &t,
                       const vector<string> &order,
                       const map<string, Function> &env,
+                      const string &pipeline_name,
                       const FuncValueBounds &fb,
                       bool will_inject_host_copies) {
 
@@ -736,7 +739,7 @@ Stmt add_image_checks(const Stmt &s,
         Stmt visit(const Block *op) override {
             const Evaluate *e = op->first.as<Evaluate>();
             if (e && Call::as_intrinsic(e->value, {Call::add_image_checks_marker})) {
-                return add_image_checks_inner(op->rest, outputs, t, order, env, fb, will_inject_host_copies);
+                return add_image_checks_inner(op->rest, outputs, t, order, env, pipeline_name, fb, will_inject_host_copies);
             } else {
                 return IRMutator::visit(op);
             }
@@ -746,6 +749,7 @@ Stmt add_image_checks(const Stmt &s,
         const Target &t;
         const vector<string> &order;
         const map<string, Function> &env;
+        const std::string pipeline_name;
         const FuncValueBounds &fb;
         bool will_inject_host_copies;
 
@@ -754,11 +758,12 @@ Stmt add_image_checks(const Stmt &s,
                  const Target &t,
                  const vector<string> &order,
                  const map<string, Function> &env,
+                 const string &pipeline_name,
                  const FuncValueBounds &fb,
                  bool will_inject_host_copies)
-            : outputs(outputs), t(t), order(order), env(env), fb(fb), will_inject_host_copies(will_inject_host_copies) {
+            : outputs(outputs), t(t), order(order), env(env), pipeline_name(pipeline_name), fb(fb), will_inject_host_copies(will_inject_host_copies) {
         }
-    } injector(outputs, t, order, env, fb, will_inject_host_copies);
+    } injector(outputs, t, order, env, pipeline_name, fb, will_inject_host_copies);
 
     return injector.mutate(s);
 }
