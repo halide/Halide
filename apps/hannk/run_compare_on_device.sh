@@ -23,6 +23,10 @@ DEVICE_DIR=/data/local/tmp/halide/compare_vs_tflite
 if [[ -n "${ANDROID_SERIAL}" ]]; then
     echo Using ANDROID_SERIAL=${ANDROID_SERIAL}
 fi
+if [[ -n "${TASKSET}" ]]; then
+  echo Using TASKSET=${TASKSET}
+  TASKSET_CMD="taskset ${TASKSET}"
+fi
 echo Using HL_TARGET=${HL_TARGET}
 
 if [ "$#" -eq 0 ]; then
@@ -71,7 +75,7 @@ adb shell mkdir -p "${DEVICE_DIR}"
 
 adb push ${BUILD_TARGETS} ${TFLITE_SHARED_LIBRARY} ${LOCAL_FILES} ${DEVICE_DIR}/
 
-adb shell LD_LIBRARY_PATH=${DEVICE_DIR}:${LD_LIBRARY_PATH} ${DEVICE_DIR}/compare_vs_tflite ${DEVICE_ARGS}
+adb shell LD_LIBRARY_PATH=${DEVICE_DIR}:${LD_LIBRARY_PATH} ${TASKSET_CMD} ${DEVICE_DIR}/compare_vs_tflite ${DEVICE_ARGS}
 
 echo
 echo All comparisons complete.
