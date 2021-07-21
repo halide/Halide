@@ -1701,8 +1701,6 @@ void UnaryOp::execute() {
 BoundsMap UpsampleChannelsOp::map_bounds(int input_idx, int output_idx) const {
     assert(input_idx == 0);
     assert(output_idx == 0);
-    // TODO: Maybe we can do better here for dimensions that aren't reordered.
-
     int rank = output(output_idx)->rank();
     assert(rank == input(input_idx)->rank());
     return BoundsMap::elementwise(rank).upsample(0, 0, factor_);
