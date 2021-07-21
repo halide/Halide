@@ -223,6 +223,9 @@ public:
                 .vectorize(c, vector_size, TailStrategy::GuardWithIf);
 
             resampled_input.specialize(depth_multiplier_ == 1);
+            if (get_target().arch == Target::Hexagon) {
+                resampled_input.specialize_fail("This codepath is really slow to build (and probably run).");
+            }
         }
 
         LoopLevel filter_compute_at = shallow_ ? LoopLevel::root() : LoopLevel(output_, co);
