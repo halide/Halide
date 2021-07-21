@@ -28,6 +28,6 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 # when crosscompiling (it won't expand the target into a full path).
 # Setting CMAKE_CROSSCOMPILING_EMULATOR to /usr/bin/env tricks it into
 # doing the right thing (ie, running it directly). Note that if you want
-# to build/run on x86-64 systems, you could set this to some qemu command\
+# to build/run on x86-64 systems, you could set this to some qemu command
 # (though the results will likely be very slow).
 set(CMAKE_CROSSCOMPILING_EMULATOR /usr/bin/env)

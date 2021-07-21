@@ -6,8 +6,8 @@
 set(WF_CPP baseline.cpp)
 configure_file(baseline.weights baseline.weights COPYONLY)
 add_custom_command(OUTPUT ${WF_CPP}
-                   COMMAND binary2cpp baseline_weights < baseline.weights > ${WF_CPP}
-                   DEPENDS baseline.weights binary2cpp
+                   COMMAND HalideHost::binary2cpp baseline_weights < baseline.weights > ${WF_CPP}
+                   DEPENDS HalideHost::binary2cpp baseline.weights
                    VERBATIM)
 
 # cost_model, train_cost_model
@@ -21,6 +21,7 @@ add_halide_library(train_cost_model FROM cost_model.generator
                    USE_RUNTIME cost_model.runtime)
 
 # retrain_cost_model
+# todo: cross compile
 add_executable(retrain_cost_model
                ASLog.cpp
                DefaultCostModel.cpp
@@ -109,17 +110,15 @@ target_link_libraries(weightsdir_to_weightsfile PRIVATE Halide::Runtime)
 # =================================================================
 # Smaller tests
 
-if (BUILD_SHARED_LIBS)
-    add_executable(test_apps_autoscheduler test.cpp)
-    target_link_libraries(test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
+add_executable(test_apps_autoscheduler test.cpp)
+target_link_libraries(test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
 
-    add_test(NAME test_apps_autoscheduler
-             COMMAND test_apps_autoscheduler $<TARGET_FILE:Halide_Adams2019>)
+add_test(NAME test_apps_autoscheduler
+         COMMAND test_apps_autoscheduler $<TARGET_FILE:Halide_Adams2019>)
 
-    set_tests_properties(test_apps_autoscheduler PROPERTIES
-                         LABELS Adams2019
-                         ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Adams2019>:$ENV{LD_LIBRARY_PATH};HL_TARGET=${Halide_TARGET}")
-endif ()
+set_tests_properties(test_apps_autoscheduler PROPERTIES
+                     LABELS Adams2019
+                     ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Adams2019>:$ENV{LD_LIBRARY_PATH};HL_TARGET=${Halide_TARGET}")
 
 ##
 

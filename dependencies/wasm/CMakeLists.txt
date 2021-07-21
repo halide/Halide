@@ -58,17 +58,8 @@ if (WITH_WASM_SHELL)
     # Even if we have the latest Emscripten SDK installed, we can't rely on it having
     # an up-to-date shell for running wasm; it includes a version of Node.js that usually
     # lags on wasm updates, so we need something more recent to reliably test wasm.
-    # We'll go with a predictable version of d8 (the command-line shell for v8); this
-    # is directly mimicking the approach useed by jsvu.
-    # These are hosted at
-    if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
-        set(WASM_SHELL_PLATFORM "win64")
-    elseif ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Darwin")
-        set(WASM_SHELL_PLATFORM "mac64")
-    else ()
-        set(WASM_SHELL_PLATFORM "linux64")
-    endif ()
-
+    # We'll go with a predictable version of d8 (the command-line shell for v8);
+    #
     # We want to deliberately choose a stable version (rather than top-of-tree);
     # this might be a canary version (if needed to get the updates to v8 that we need)
     # but should be carefully tested before landing.
@@ -80,21 +71,7 @@ if (WITH_WASM_SHELL)
     # to a proper release version (vs canary) once it is final.
     #
     # see https://github.com/WebAssembly/simd/blob/master/proposals/simd/ImplementationStatus.md
-    set(WASM_SHELL_VERSION 9.1.269)
-    set(WASM_SHELL_URL "https://storage.googleapis.com/chromium-v8/official/canary/v8-${WASM_SHELL_PLATFORM}-rel-${WASM_SHELL_VERSION}.zip")
-    message(STATUS "Fetching WASM_SHELL ${WASM_SHELL_URL}...")
-    FetchContent_Declare(wasm_shell URL "${WASM_SHELL_URL}")
-    FetchContent_MakeAvailable(wasm_shell)
-
-    find_program(D8_PATH d8
-                 HINTS "${CMAKE_BINARY_DIR}/_deps/wasm_shell-src")
-
-    if (NOT D8_PATH)
-        message(FATAL_ERROR "Could not find or download D8 WASM shell")
-    endif ()
-
-    add_executable(d8 IMPORTED GLOBAL)
-    set_target_properties(d8 PROPERTIES IMPORTED_LOCATION "${D8_PATH}")
+    find_package(D8 9.1.269 REQUIRED)
 endif ()
 
 function(add_wasm_executable TARGET)
@@ -197,5 +174,5 @@ function(add_wasm_halide_test TARGET)
 
     add_halide_test("${TARGET}"
                     GROUPS ${args_GROUPS}
-                    COMMAND d8 ${WASM_SHELL_FLAGS} "${TARGET}.js")
+                    COMMAND D8::d8 ${WASM_SHELL_FLAGS} "${TARGET}.js")
 endfunction()

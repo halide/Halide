@@ -65,6 +65,8 @@ function(add_halide_test TARGET)
         add_dependencies(${META_TARGET} ${TARGET})
     endforeach ()
 
+    # On Windows, copy Halide.dll to the same folder as the target
+    _Halide_place_dll(${TARGET})
 endfunction()
 
 function(tests)
