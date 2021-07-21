@@ -5,11 +5,11 @@
 namespace Halide {
 
 Var::Var(const std::string &n)
-    : e(Internal::Variable::make(Int(32), n)) {
+    : e(Internal::Variable::make(Int(32), n).typed<int>()) {
 }
 
 Var::Var()
-    : e(Internal::Variable::make(Int(32), Internal::make_entity_name(this, "Halide:.*:Var", 'v'))) {
+    : e(Internal::Variable::make(Int(32), Internal::make_entity_name(this, "Halide:.*:Var", 'v')).typed<int>()) {
 }
 
 Var Var::implicit(int n) {

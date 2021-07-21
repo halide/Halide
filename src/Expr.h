@@ -250,6 +250,9 @@ struct StringImm : public ExprNode<StringImm> {
 
 }  // namespace Internal
 
+template<typename T>
+struct ExprT;
+
 /** A fragment of Halide syntax. It's implemented as reference-counted
  * handle to a concrete expression node, but it's immutable, so you
  * can treat it as a value type. */
@@ -320,7 +323,60 @@ struct Expr : public Internal::IRHandle {
     Type type() const {
         return get()->type;
     }
+
+    /** Convert to a statically-typed ExprT<T>, doing a runtime check as needed */
+    template<typename T>
+    ExprT<T> typed() const;
 };
+
+/** An ExprT<T> is just an Expr that can only hold values
+ * of type T; attempting to construct/copy/move one using
+ * the wrong type will fail at compile time. Note
+ * that an ExprT<T> is always implicitly convertible to an Expr,
+ * but the reverse is not true; you can use either:
+ *
+ *  - Expr::typed<T>(), which does a runtime check to verify that
+ *    the source Expr has the expected type (with assert-fail if
+ *    not the case)
+ *
+ *  - cast<T>(Expr), which will apply the usual coercion rules to
+ *    forcibly produce an Expr<T> of the given type (or assert-fail
+ *    if a cast is impossible by Halide rules)
+ */
+template<typename T>
+struct ExprT final : public Expr {
+
+    HALIDE_ALWAYS_INLINE
+    ExprT() = default;
+
+    HALIDE_ALWAYS_INLINE
+    explicit ExprT(T x)
+        : Expr(x) {
+    }
+
+    HALIDE_ALWAYS_INLINE
+    explicit ExprT(const Internal::BaseExprNode *n)
+        : Expr(n) {
+        check_type(n->type);
+    }
+
+    static void check_type(const Type &t) {
+        user_assert(t == type_of<T>())
+            << "Cannot convert an Expr of type " << t << " to ExprT<" << type_of<T>() << ">.\n";
+    }
+};
+
+// Must add a specialization for ExprT<bool> since Expr has no bool ctor
+template<>
+inline ExprT<bool>::ExprT(bool x)
+    : Expr(Internal::UIntImm::make(UInt(1), x)) {
+}
+
+template<typename T>
+inline ExprT<T> Expr::typed() const {
+    ExprT<T>::check_type(type());
+    return ExprT<T>(get());
+}
 
 /** This lets you use an Expr as a key in a map of the form
  * map<Expr, Foo, ExprCompare> */
