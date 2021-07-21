@@ -108,9 +108,11 @@ WEAK bool ends_with(const char *filename, const char *suffix) {
 }
 
 struct ScopedFile {
-    void *f;
-    ALWAYS_INLINE ScopedFile(const char *filename, const char *mode) {
-        f = fopen(filename, mode);
+    void *const user_context;
+    void *const f;
+    ALWAYS_INLINE ScopedFile(void *user_context, const char *filename, const char *mode)
+        : user_context(user_context), f(fopen(filename, mode)) {
+        halide_msan_annotate_memory_is_initialized(user_context, &f, sizeof(f));
     }
     ALWAYS_INLINE ~ScopedFile() {
         if (f) {
@@ -118,6 +120,7 @@ struct ScopedFile {
         }
     }
     ALWAYS_INLINE bool write(const void *ptr, size_t bytes) {
+        halide_msan_annotate_memory_is_initialized(user_context, ptr, bytes);
         return f ? fwrite(ptr, bytes, 1, f) > 0 : false;
     }
     ALWAYS_INLINE bool open() const {
@@ -144,7 +147,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
 
     halide_copy_to_host(user_context, buf);
 
-    ScopedFile f(filename, "wb");
+    ScopedFile f(user_context, filename, "wb");
     if (!f.open()) {
         return -2;
     }
