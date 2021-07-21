@@ -442,13 +442,26 @@ public:
 
     Stage &hexagon(const VarOrRVar &x = Var::outermost());
     Stage &prefetch(const Func &f, const VarOrRVar &var, Expr offset = 1,
-                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch_at(f, var, var, std::move(offset), strategy);
+    }
     Stage &prefetch(const Internal::Parameter &param, const VarOrRVar &var, Expr offset = 1,
-                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch_at(param, var, var, std::move(offset), strategy);
+    }
     template<typename T>
     Stage &prefetch(const T &image, VarOrRVar var, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(image.parameter(), var, offset, strategy);
+        return prefetch(image.parameter(), var, std::move(offset), strategy);
+    }
+    Stage &prefetch_at(const Func &f, const VarOrRVar &loop, const VarOrRVar &fetch, Expr offset = 1,
+                       PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+    Stage &prefetch_at(const Internal::Parameter &param, const VarOrRVar &loop, const VarOrRVar &fetch, Expr offset = 1,
+                       PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+    template<typename T>
+    Stage &prefetch_at(const T &image, const VarOrRVar &loop, const VarOrRVar &fetch, Expr offset = 1,
+                       PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch_at(image.parameter(), loop, fetch, std::move(offset), strategy);
     }
     // @}
 
@@ -1990,13 +2003,26 @@ public:
      */
     // @{
     Func &prefetch(const Func &f, const VarOrRVar &var, Expr offset = 1,
-                   PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+                   PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch_at(f, var, var, std::move(offset), strategy);
+    }
     Func &prefetch(const Internal::Parameter &param, const VarOrRVar &var, Expr offset = 1,
-                   PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+                   PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch_at(param, var, var, std::move(offset), strategy);
+    }
     template<typename T>
     Func &prefetch(const T &image, VarOrRVar var, Expr offset = 1,
                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(image.parameter(), var, offset, strategy);
+        return prefetch(image.parameter(), var, std::move(offset), strategy);
+    }
+    Func &prefetch_at(const Func &f, const VarOrRVar &loop, const VarOrRVar &fetch, Expr offset = 1,
+                      PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+    Func &prefetch_at(const Internal::Parameter &param, const VarOrRVar &loop, const VarOrRVar &fetch, Expr offset = 1,
+                      PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
+    template<typename T>
+    Func &prefetch_at(const T &image, const VarOrRVar &loop, const VarOrRVar &fetch, Expr offset = 1,
+                      PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch_at(image.parameter(), loop, fetch, std::move(offset), strategy);
     }
     // @}
 

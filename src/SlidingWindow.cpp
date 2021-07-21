@@ -704,9 +704,14 @@ class SubstitutePrefetchVar : public IRMutator {
 
     Stmt visit(const Prefetch *op) override {
         Stmt new_body = mutate(op->body);
-        if (op->prefetch.var == old_var) {
+        if (op->prefetch.loop_var == old_var || op->prefetch.fetch_var == old_var) {
             PrefetchDirective p = op->prefetch;
-            p.var = new_var;
+            if (op->prefetch.loop_var == old_var) {
+                p.loop_var = new_var;
+            }
+            if (op->prefetch.fetch_var == old_var) {
+                p.fetch_var = new_var;
+            }
             return Prefetch::make(op->name, op->types, op->bounds, p, op->condition, new_body);
         } else if (!new_body.same_as(op->body)) {
             return Prefetch::make(op->name, op->types, op->bounds, op->prefetch, op->condition, new_body);
