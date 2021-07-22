@@ -75,6 +75,24 @@ void HostClosure::visit(const Call *op) {
         ScopedBinding<> p1(ignore, bufname);
         ScopedBinding<> p2(ignore, bufname + ".buffer");
         Internal::Closure::visit(op);
+    } else if (op->call_type == Call::Intrinsic && starts_with(op->name, "wmma.")) {
+        const bool is_load = starts_with(op->name, "wmma.m16n16k16.load.");
+        const bool is_store = starts_with(op->name, "wmma.m16n16k16.store.");
+
+        if (is_load || is_store) {
+            const Variable *var = op->args[0].as<Variable>();
+            Buffer &ref = buffers[var->name];
+            ref.type = var->type;
+            ref.dimensions = 2;
+            ref.read = is_load;
+            ref.write = is_store;
+
+            for (size_t i = 1; i < op->args.size(); ++i) {
+                op->args[i].accept(this);
+            }
+        } else {
+            Internal::Closure::visit(op);
+        }
     } else {
         Internal::Closure::visit(op);
     }

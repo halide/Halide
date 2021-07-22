@@ -411,3 +411,235 @@ define weak_odr i32 @dp2a_u32_u32(<4 x i16> %a, <4 x i8> %b, i32 %i) nounwind re
        ret i32 %d
 }
 
+declare {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} @llvm.nvvm.wmma.m16n16k16.load.a.row.f16.p0i8(i8 addrspace(0)* %src );
+declare {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} @llvm.nvvm.wmma.m16n16k16.load.a.row.stride.f16.p0i8(i8 addrspace(0)* %src , i32 %stride);
+declare {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} @llvm.nvvm.wmma.m16n16k16.load.b.row.f16.p0i8(i8 addrspace(0)* %src );
+declare {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} @llvm.nvvm.wmma.m16n16k16.load.b.row.stride.f16.p0i8(i8 addrspace(0)* %src , i32 %stride);
+declare {float, float, float, float, float, float, float, float} @llvm.nvvm.wmma.m16n16k16.load.c.row.f32.p0i8(i8 addrspace(0)* %src );
+declare {float, float, float, float, float, float, float, float} @llvm.nvvm.wmma.m16n16k16.load.c.row.stride.f32.p0i8(i8 addrspace(0)* %src, i32 %stride );
+declare {float, float, float, float, float, float, float, float} @llvm.nvvm.wmma.m16n16k16.mma.row.row.f32.f32(
+        <2 x half> %a0, <2 x half> %a1, <2 x half> %a2, <2 x half> %a3, <2 x half> %a4, <2 x half> %a5, <2 x half> %a6, <2 x half> %a7,
+        <2 x half> %b0, <2 x half> %b1, <2 x half> %b2, <2 x half> %b3, <2 x half> %b4, <2 x half> %b5, <2 x half> %b6, <2 x half> %b7,
+        float %c0, float %c1, float %c2, float %c3, float %c4, float %c5, float %c6, float %c7);
+declare void @llvm.nvvm.wmma.m16n16k16.store.d.row.f32.p0i8(i8 addrspace(0)* %src, float %d0, float %d1, float %d2, float %d3, float %d4, float %d5, float %d6, float %d7);
+declare void @llvm.nvvm.wmma.m16n16k16.store.d.row.stride.f32.p0i8(i8 addrspace(0)* %src, float %d0, float %d1, float %d2, float %d3, float %d4, float %d5, float %d6, float %d7, i32 %stride);
+
+define <16 x half> @wmma.m16n16k16.load.a.row.f16.p0i8(i8 addrspace(0)* %src, i32 %offset, i32 %stride) {
+    %offset_bytes = mul i32 2, %offset
+    %addr = getelementptr inbounds i8, i8 addrspace(0)* %src, i32 %offset_bytes
+    %v0 = call {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} @llvm.nvvm.wmma.m16n16k16.load.a.row.stride.f16.p0i8(i8 addrspace(0)* %addr, i32 %stride);
+
+    %a0 = extractvalue {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} %v0, 0
+    %a1 = extractvalue {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} %v0, 1
+    %a2 = extractvalue {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} %v0, 2
+    %a3 = extractvalue {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} %v0, 3
+    %a4 = extractvalue {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} %v0, 4
+    %a5 = extractvalue {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} %v0, 5
+    %a6 = extractvalue {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} %v0, 6
+    %a7 = extractvalue {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} %v0, 7
+
+    %f0 = extractelement <2 x half> %a0, i32 0
+    %f1 = extractelement <2 x half> %a0, i32 1
+    %f2 = extractelement <2 x half> %a1, i32 0
+    %f3 = extractelement <2 x half> %a1, i32 1
+    %f4 = extractelement <2 x half> %a2, i32 0
+    %f5 = extractelement <2 x half> %a2, i32 1
+    %f6 = extractelement <2 x half> %a3, i32 0
+    %f7 = extractelement <2 x half> %a3, i32 1
+    %f8 = extractelement <2 x half> %a4, i32 0
+    %f9 = extractelement <2 x half> %a4, i32 1
+    %f10 = extractelement <2 x half> %a5, i32 0
+    %f11 = extractelement <2 x half> %a5, i32 1
+    %f12 = extractelement <2 x half> %a6, i32 0
+    %f13 = extractelement <2 x half> %a6, i32 1
+    %f14 = extractelement <2 x half> %a7, i32 0
+    %f15 = extractelement <2 x half> %a7, i32 1
+
+    %result_ptr = alloca <16 x half>, align 128
+    %result = load <16 x half>, <16 x half>* %result_ptr
+
+    %result0 = insertelement <16 x half> %result, half %f0, i32 0
+    %result1 = insertelement <16 x half> %result0, half %f1, i32 1
+    %result2 = insertelement <16 x half> %result1, half %f2, i32 2
+    %result3 = insertelement <16 x half> %result2, half %f3, i32 3
+    %result4 = insertelement <16 x half> %result3, half %f4, i32 4
+    %result5 = insertelement <16 x half> %result4, half %f5, i32 5
+    %result6 = insertelement <16 x half> %result5, half %f6, i32 6
+    %result7 = insertelement <16 x half> %result6, half %f7, i32 7
+    %result8 = insertelement <16 x half> %result7, half %f8, i32 8
+    %result9 = insertelement <16 x half> %result8, half %f9, i32 9
+    %result10 = insertelement <16 x half> %result9, half %f10, i32 10
+    %result11 = insertelement <16 x half> %result10, half %f11, i32 11
+    %result12 = insertelement <16 x half> %result11, half %f12, i32 12
+    %result13 = insertelement <16 x half> %result12, half %f13, i32 13
+    %result14 = insertelement <16 x half> %result13, half %f14, i32 14
+    %result15 = insertelement <16 x half> %result14, half %f15, i32 15
+
+    ret <16 x half> %result15
+}
+
+define <16 x half> @wmma.m16n16k16.load.b.row.f16.p0i8(i8 addrspace(0)* %src, i32 %offset, i32 %stride) {
+    %offset_bytes = mul i32 2, %offset
+    %addr = getelementptr inbounds i8, i8 addrspace(0)* %src, i32 %offset_bytes
+    %v0 = call {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} @llvm.nvvm.wmma.m16n16k16.load.b.row.stride.f16.p0i8(i8 addrspace(0)* %addr, i32 %stride);
+
+    %a0 = extractvalue {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} %v0, 0
+    %a1 = extractvalue {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} %v0, 1
+    %a2 = extractvalue {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} %v0, 2
+    %a3 = extractvalue {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} %v0, 3
+    %a4 = extractvalue {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} %v0, 4
+    %a5 = extractvalue {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} %v0, 5
+    %a6 = extractvalue {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} %v0, 6
+    %a7 = extractvalue {<2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>, <2 x half>} %v0, 7
+
+    %f0 = extractelement <2 x half> %a0, i32 0
+    %f1 = extractelement <2 x half> %a0, i32 1
+    %f2 = extractelement <2 x half> %a1, i32 0
+    %f3 = extractelement <2 x half> %a1, i32 1
+    %f4 = extractelement <2 x half> %a2, i32 0
+    %f5 = extractelement <2 x half> %a2, i32 1
+    %f6 = extractelement <2 x half> %a3, i32 0
+    %f7 = extractelement <2 x half> %a3, i32 1
+    %f8 = extractelement <2 x half> %a4, i32 0
+    %f9 = extractelement <2 x half> %a4, i32 1
+    %f10 = extractelement <2 x half> %a5, i32 0
+    %f11 = extractelement <2 x half> %a5, i32 1
+    %f12 = extractelement <2 x half> %a6, i32 0
+    %f13 = extractelement <2 x half> %a6, i32 1
+    %f14 = extractelement <2 x half> %a7, i32 0
+    %f15 = extractelement <2 x half> %a7, i32 1
+
+    %result_ptr = alloca <16 x half>, align 128
+    %result = load <16 x half>, <16 x half>* %result_ptr
+
+    %result0 = insertelement <16 x half> %result, half %f0, i32 0
+    %result1 = insertelement <16 x half> %result0, half %f1, i32 1
+    %result2 = insertelement <16 x half> %result1, half %f2, i32 2
+    %result3 = insertelement <16 x half> %result2, half %f3, i32 3
+    %result4 = insertelement <16 x half> %result3, half %f4, i32 4
+    %result5 = insertelement <16 x half> %result4, half %f5, i32 5
+    %result6 = insertelement <16 x half> %result5, half %f6, i32 6
+    %result7 = insertelement <16 x half> %result6, half %f7, i32 7
+    %result8 = insertelement <16 x half> %result7, half %f8, i32 8
+    %result9 = insertelement <16 x half> %result8, half %f9, i32 9
+    %result10 = insertelement <16 x half> %result9, half %f10, i32 10
+    %result11 = insertelement <16 x half> %result10, half %f11, i32 11
+    %result12 = insertelement <16 x half> %result11, half %f12, i32 12
+    %result13 = insertelement <16 x half> %result12, half %f13, i32 13
+    %result14 = insertelement <16 x half> %result13, half %f14, i32 14
+    %result15 = insertelement <16 x half> %result14, half %f15, i32 15
+
+    ret <16 x half> %result15
+}
+
+define <8 x float> @wmma.m16n16k16.load.c.row.f32.p0i8(i8 addrspace(0)* %src, i32 %offset, i32 %stride) {
+    %offset_bytes = mul i32 4, %offset
+    %addr = getelementptr inbounds i8, i8 addrspace(0)* %src, i32 %offset_bytes
+    %v2 = call {float, float, float, float, float, float, float, float} @llvm.nvvm.wmma.m16n16k16.load.c.row.stride.f32.p0i8(i8 addrspace(0)* %addr, i32 %stride)
+
+    %c0 = extractvalue {float, float, float, float, float, float, float, float} %v2, 0
+    %c1 = extractvalue {float, float, float, float, float, float, float, float} %v2, 1
+    %c2 = extractvalue {float, float, float, float, float, float, float, float} %v2, 2
+    %c3 = extractvalue {float, float, float, float, float, float, float, float} %v2, 3
+    %c4 = extractvalue {float, float, float, float, float, float, float, float} %v2, 4
+    %c5 = extractvalue {float, float, float, float, float, float, float, float} %v2, 5
+    %c6 = extractvalue {float, float, float, float, float, float, float, float} %v2, 6
+    %c7 = extractvalue {float, float, float, float, float, float, float, float} %v2, 7
+
+    %result_ptr = alloca <8 x float>, align 128
+    %result = load <8 x float>, <8 x float>* %result_ptr
+
+    %result0 = insertelement <8 x float> %result, float %c0, i32 0
+    %result1 = insertelement <8 x float> %result0, float %c1, i32 1
+    %result2 = insertelement <8 x float> %result1, float %c2, i32 2
+    %result3 = insertelement <8 x float> %result2, float %c3, i32 3
+    %result4 = insertelement <8 x float> %result3, float %c4, i32 4
+    %result5 = insertelement <8 x float> %result4, float %c5, i32 5
+    %result6 = insertelement <8 x float> %result5, float %c6, i32 6
+    %result7 = insertelement <8 x float> %result6, float %c7, i32 7
+
+    ret <8 x float> %result7
+}
+
+define weak_odr <2 x half> @extract_wmma_half_fragment(<16 x half> %v, i32 %idx1, i32 %idx2) nounwind readnone alwaysinline {
+    %a = extractelement <16 x half> %v, i32 %idx1
+    %b = extractelement <16 x half> %v, i32 %idx2
+    %frag_ptr = alloca <2 x half>, align 128
+    %frag = load <2 x half>, <2 x half>* %frag_ptr
+    %frag_0 = insertelement <2 x half> %frag, half %a, i32 0
+    %frag_1 = insertelement <2 x half> %frag_0, half %b, i32 1
+    ret <2 x half> %frag_1
+}
+
+define weak_odr <8 x float> @wmma.m16n16k16.mma.row.row.f32.f32(<16 x half> %a, <16 x half> %b, <8 x float> %c) nounwind readnone alwaysinline {
+    %a0 = call <2 x half> @extract_wmma_half_fragment(<16 x half> %a, i32 0, i32 1)
+    %a1 = call <2 x half> @extract_wmma_half_fragment(<16 x half> %a, i32 2, i32 3)
+    %a2 = call <2 x half> @extract_wmma_half_fragment(<16 x half> %a, i32 4, i32 5)
+    %a3 = call <2 x half> @extract_wmma_half_fragment(<16 x half> %a, i32 6, i32 7)
+    %a4 = call <2 x half> @extract_wmma_half_fragment(<16 x half> %a, i32 8, i32 9)
+    %a5 = call <2 x half> @extract_wmma_half_fragment(<16 x half> %a, i32 10, i32 11)
+    %a6 = call <2 x half> @extract_wmma_half_fragment(<16 x half> %a, i32 12, i32 13)
+    %a7 = call <2 x half> @extract_wmma_half_fragment(<16 x half> %a, i32 14, i32 15)
+
+    %b0 = call <2 x half> @extract_wmma_half_fragment(<16 x half> %b, i32 0, i32 1)
+    %b1 = call <2 x half> @extract_wmma_half_fragment(<16 x half> %b, i32 2, i32 3)
+    %b2 = call <2 x half> @extract_wmma_half_fragment(<16 x half> %b, i32 4, i32 5)
+    %b3 = call <2 x half> @extract_wmma_half_fragment(<16 x half> %b, i32 6, i32 7)
+    %b4 = call <2 x half> @extract_wmma_half_fragment(<16 x half> %b, i32 8, i32 9)
+    %b5 = call <2 x half> @extract_wmma_half_fragment(<16 x half> %b, i32 10, i32 11)
+    %b6 = call <2 x half> @extract_wmma_half_fragment(<16 x half> %b, i32 12, i32 13)
+    %b7 = call <2 x half> @extract_wmma_half_fragment(<16 x half> %b, i32 14, i32 15)
+
+    %c0 = extractelement <8 x float> %c, i32 0
+    %c1 = extractelement <8 x float> %c, i32 1
+    %c2 = extractelement <8 x float> %c, i32 2
+    %c3 = extractelement <8 x float> %c, i32 3
+    %c4 = extractelement <8 x float> %c, i32 4
+    %c5 = extractelement <8 x float> %c, i32 5
+    %c6 = extractelement <8 x float> %c, i32 6
+    %c7 = extractelement <8 x float> %c, i32 7
+
+    %v3 = call {float, float, float, float, float, float, float, float} @llvm.nvvm.wmma.m16n16k16.mma.row.row.f32.f32(
+        <2 x half> %a0, <2 x half> %a1, <2 x half> %a2, <2 x half> %a3, <2 x half> %a4, <2 x half> %a5, <2 x half> %a6, <2 x half> %a7,
+        <2 x half> %b0, <2 x half> %b1, <2 x half> %b2, <2 x half> %b3, <2 x half> %b4, <2 x half> %b5, <2 x half> %b6, <2 x half> %b7,
+        float %c0, float %c1, float %c2, float %c3, float %c4, float %c5, float %c6, float %c7)
+
+    %d0 = extractvalue {float, float, float, float, float, float, float, float} %v3, 0
+    %d1 = extractvalue {float, float, float, float, float, float, float, float} %v3, 1
+    %d2 = extractvalue {float, float, float, float, float, float, float, float} %v3, 2
+    %d3 = extractvalue {float, float, float, float, float, float, float, float} %v3, 3
+    %d4 = extractvalue {float, float, float, float, float, float, float, float} %v3, 4
+    %d5 = extractvalue {float, float, float, float, float, float, float, float} %v3, 5
+    %d6 = extractvalue {float, float, float, float, float, float, float, float} %v3, 6
+    %d7 = extractvalue {float, float, float, float, float, float, float, float} %v3, 7
+
+    %result_ptr = alloca <8 x float>, align 128
+    %result0 = load <8 x float>, <8 x float>* %result_ptr
+    %result1 = insertelement <8 x float> %result0, float %d0, i32 0
+    %result2 = insertelement <8 x float> %result1, float %d1, i32 1
+    %result3 = insertelement <8 x float> %result2, float %d2, i32 2
+    %result4 = insertelement <8 x float> %result3, float %d3, i32 3
+    %result5 = insertelement <8 x float> %result4, float %d4, i32 4
+    %result6 = insertelement <8 x float> %result5, float %d5, i32 5
+    %result7 = insertelement <8 x float> %result6, float %d6, i32 6
+    %result8 = insertelement <8 x float> %result7, float %d7, i32 7
+
+    ret <8 x float> %result8
+}
+
+define weak_odr i8 addrspace(0)* @wmma.m16n16k16.store.d.row.f32(i8 addrspace(0)* %d, i32 %offset, i32 %stride, <8 x float> %frag) nounwind {
+    %d0 = extractelement <8 x float> %frag, i32 0
+    %d1 = extractelement <8 x float> %frag, i32 1
+    %d2 = extractelement <8 x float> %frag, i32 2
+    %d3 = extractelement <8 x float> %frag, i32 3
+    %d4 = extractelement <8 x float> %frag, i32 4
+    %d5 = extractelement <8 x float> %frag, i32 5
+    %d6 = extractelement <8 x float> %frag, i32 6
+    %d7 = extractelement <8 x float> %frag, i32 7
+
+    %offset_bytes = mul i32 4, %offset
+    %addr = getelementptr inbounds i8, i8 addrspace(0)* %d, i32 %offset_bytes
+    call void @llvm.nvvm.wmma.m16n16k16.store.d.row.stride.f32.p0i8(i8 addrspace(0)* %addr, float %d0, float %d1, float %d2, float %d3, float %d4, float %d5, float %d6, float %d7, i32 %stride);
+
+    ret i8 addrspace(0)* %addr
+}
