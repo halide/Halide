@@ -452,7 +452,7 @@ public:
     template<typename T>
     Stage &prefetch(const T &image, VarOrRVar var, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(image.parameter(), var, std::move(offset), strategy);
+        return prefetch_at(image.parameter(), var, var, std::move(offset), strategy);
     }
     Stage &prefetch_at(const Func &f, const VarOrRVar &loop, const VarOrRVar &fetch, Expr offset = 1,
                        PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
@@ -2013,8 +2013,83 @@ public:
     template<typename T>
     Func &prefetch(const T &image, VarOrRVar var, Expr offset = 1,
                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(image.parameter(), var, std::move(offset), strategy);
+        return prefetch_at<T>(image, var, var, std::move(offset), strategy);
     }
+    // @}
+
+    /** prefetch_at() is a more fine-grained version of prefetch(), which allows
+     * specification of different vars for the location of the prefetch() instruction
+     * vs. the location that is being prefetched:
+     *
+     * - the first var specified, 'loop', indicates the loop in which the prefetch will be placed
+     * - the second var specified, 'fetch', determines the var used to find the bounds to prefetch
+     *   (in conjunction with 'offset')
+     *
+     * If 'fetch' and 'loop' are distinct vars, then 'fetch' must be at a nesting level outside 'loop.'
+     * Note that the value for 'offset' applies only to 'fetch', not 'loop'.
+     *
+     * For example, consider this pipeline:
+     \code
+     Func f, g;
+     Var x, y, z;
+     f(x, y) = x + y;
+     g(x, y) = 2 * f(x, y);
+     h(x, y) = 3 * f(x, y);
+     \endcode
+     *
+     * The following schedule:
+     \code
+     f.compute_root();
+     g.prefetch_at(f, x, x, 2, PrefetchBoundStrategy::NonFaulting);
+     h.prefetch_at(f, x, y, 2, PrefetchBoundStrategy::NonFaulting);
+     \endcode
+     *
+     * will inject prefetch call at the innermost loop of 'g' and 'h' and generate
+     * the following loop nest:
+     * for y = ...
+     *   for x = ...
+     *     f(x, y) = x + y
+     * for y = ..
+     *   for x = ...
+     *     prefetch(&f[x + 2, y], 1, 16);
+     *     g(x, y) = 2 * f(x, y)
+     * for y = ..
+     *   for x = ...
+     *     prefetch(&f[x, y + 2], 1, 16);
+     *     h(x, y) = 3 * f(x, y)
+     *
+     * Note that the 'fetch' nesting level need not be adjacent to 'loop':
+     \code
+     Func f, g;
+     Var x, y, z, w;
+     f(x, y, z, w) = x + y + z + w;
+     g(x, y, z, w) = 2 * f(x, y, z, w);
+     \endcode
+     *
+     * The following schedule:
+     \code
+     f.compute_root();
+     g.prefetch_at(f, y, w, 2, PrefetchBoundStrategy::NonFaulting);
+     \endcode
+     *
+     * will produce code that prefetches a tile of data:
+     * for w = ...
+     *   for z = ...
+     *     for y = ...
+     *       for x = ...
+     *     f(x, y, z, w) = x + y + z + w
+     * for w = ...
+     *   for z = ...
+     *     for y = ...
+     *       for x0 = ...
+     *          prefetch(&f[x0, y, z, w + 2], 1, 16);
+     *       for x = ...
+     *         g(x, y, z, w) = 2 * f(x, y, z, w)
+     *
+     * Note that calling prefetch_at() with the same var for both 'loop' and 'fetch'
+     * is exactly equivalent to calling prefetch() with that var.
+     */
+    // @{
     Func &prefetch_at(const Func &f, const VarOrRVar &loop, const VarOrRVar &fetch, Expr offset = 1,
                       PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     Func &prefetch_at(const Internal::Parameter &param, const VarOrRVar &loop, const VarOrRVar &fetch, Expr offset = 1,
