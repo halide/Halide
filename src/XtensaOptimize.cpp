@@ -71,7 +71,9 @@ Type get_native_xtensa_vector(const Type &t) {
 }
 
 std::string suffix_for_type(Type t) {
-    if (t.is_int() && (t.bits() == 8)) {
+    if (t.is_bool()) {
+        return "_u1";
+    } else if (t.is_int() && (t.bits() == 8)) {
         return "_i8";
     } else if (t.is_uint() && (t.bits() == 8)) {
         return "_u8";
@@ -1188,7 +1190,12 @@ private:
         return mutate(body);
     }
 
-    Expr match_load_store_predicate(Expr pred) {
+    Expr match_clamped_dense_ramp(Expr index, Expr pred) {
+        Expr dense_ramp_base = strided_ramp_base(index, 1);
+        if (!dense_ramp_base.defined()) {
+            return Expr();
+        }
+
         const std::vector<Expr> patterns = {
             ramp(wild_i32, 1, pred.type().lanes()) <= bc(wild_i32, pred.type().lanes())};
 
@@ -1208,7 +1215,7 @@ private:
 
     Expr visit(const Load *op) override {
         if (!is_const_one(op->predicate)) {
-            Expr new_pred = match_load_store_predicate(op->predicate);
+            Expr new_pred = match_clamped_dense_ramp(op->index, op->predicate);
 
             if (new_pred.defined()) {
                 return Load::make(op->type, op->name,
@@ -1224,7 +1231,7 @@ private:
 
     Stmt visit(const Store *op) override {
         if (!is_const_one(op->predicate)) {
-            Expr new_pred = match_load_store_predicate(op->predicate);
+            Expr new_pred = match_clamped_dense_ramp(op->index, op->predicate);
 
             if (new_pred.defined()) {
                 return Store::make(op->name, mutate(op->value), mutate(op->index),
@@ -2079,6 +2086,7 @@ Stmt match_xtensa_patterns(Stmt s) {
     s = DualQuadMulMutator().mutate(s);
     s = common_subexpression_elimination(s);
 
+    debug(0) << s << "\n";
     return s;
 }
 

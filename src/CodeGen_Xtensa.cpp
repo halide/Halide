@@ -226,6 +226,24 @@ struct MultipleOfNativeVector {
 
   inline MultipleOfNativeVector(FromCppVector, const NativeVector &src1, const NativeVector &src2, const NativeVector &src3, const NativeVector &src4,
                                                 const NativeVector &src5, const NativeVector &src6, const NativeVector &src7, const NativeVector &src8,
+                                                const NativeVector &src9, const NativeVector &src10, const NativeVector &src11, const NativeVector &src12) {
+      static_assert(N == 12, "Wrong kind of constructor");
+      native_vector[0] = src1;
+      native_vector[1] = src2;
+      native_vector[2] = src3;
+      native_vector[3] = src4;
+      native_vector[4] = src5;
+      native_vector[5] = src6;
+      native_vector[6] = src7;
+      native_vector[7] = src8;
+      native_vector[8] = src9;
+      native_vector[9] = src10;
+      native_vector[10] = src11;
+      native_vector[11] = src12;
+  }
+
+  inline MultipleOfNativeVector(FromCppVector, const NativeVector &src1, const NativeVector &src2, const NativeVector &src3, const NativeVector &src4,
+                                                const NativeVector &src5, const NativeVector &src6, const NativeVector &src7, const NativeVector &src8,
                                                 const NativeVector &src9, const NativeVector &src10, const NativeVector &src11, const NativeVector &src12,
                                                 const NativeVector &src13, const NativeVector &src14, const NativeVector &src15, const NativeVector &src16) {
       static_assert(N == 16, "Wrong kind of constructor");
@@ -249,9 +267,11 @@ struct MultipleOfNativeVector {
 
 };
 
+using uint1x256_t = MultipleOfNativeVector<uint1x64_t, 4>;
 using int8x128_t = MultipleOfNativeVector<int8x64_t, 2>;
 using int8x256_t = MultipleOfNativeVector<int8x64_t, 4>;
 using uint8x128_t = MultipleOfNativeVector<uint8x64_t, 2>;
+using uint8x192_t = MultipleOfNativeVector<uint8x64_t, 3>;
 using uint8x256_t = MultipleOfNativeVector<uint8x64_t, 4>;
 using int16x64_t = MultipleOfNativeVector<int16x32_t, 2>;
 using uint16x64_t = MultipleOfNativeVector<uint16x32_t, 2>;
@@ -262,6 +282,9 @@ using int32x32_t = MultipleOfNativeVector<int32x16_t, 2>;
 using uint32x32_t = MultipleOfNativeVector<uint32x16_t, 2>;
 using int32x64_t = MultipleOfNativeVector<int32x16_t, 4>;
 using uint32x64_t = MultipleOfNativeVector<uint32x16_t, 4>;
+// TODO(vksnk): this one should be generated automatically, but isn't.
+using int32x192_t = MultipleOfNativeVector<int32x16_t, 12>;
+using int32x256_t = MultipleOfNativeVector<int32x16_t, 16>;
 using int48x64_t = MultipleOfNativeVector<int48x32_t, 2>;
 using float32x32_t = MultipleOfNativeVector<float32x16_t, 2>;
 using float32x64_t = MultipleOfNativeVector<float32x16_t, 4>;
@@ -391,6 +414,88 @@ HALIDE_ALWAYS_INLINE VectorType gather_load(const void *base, const OffsetType& 
     }
 
     return *((VectorType *)tmp);
+}
+
+template <typename VectorType, typename OffsetType, typename BaseType, int Lanes>
+HALIDE_ALWAYS_INLINE void store_scatter(const VectorType& a, void *base, const OffsetType& offset) {
+    BaseType __attribute__((aligned(64))) tmp[Lanes];
+    aligned_store<VectorType, BaseType, Lanes>(a, &tmp[0], 0);
+
+    int __attribute__((aligned(64))) offsets[Lanes];
+    aligned_store<OffsetType, int32_t, Lanes>(offset, &offsets[0], 0);
+
+    for (int i = 0; i < Lanes; i++) {
+        ((BaseType*)base)[offsets[i]] = tmp[i];
+    }
+}
+
+template <typename VectorType, typename OffsetType, typename PredicateType, typename BaseType, int Lanes>
+HALIDE_ALWAYS_INLINE VectorType load_predicated(const void *base, const OffsetType& offset, const PredicateType& predicate) = delete;
+
+template <>
+HALIDE_ALWAYS_INLINE uint8x64_t load_predicated<uint8x64_t, int32x64_t, uint1x64_t, uint8_t, 64>(const void *base, const int32x64_t& offset, const uint1x64_t& predicate) {
+    int __attribute__((aligned(64))) offsets[64];
+    aligned_store<int32x64_t, int32_t, 64>(offset, &offsets[0], 0);
+    uint8x64_t vmask = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(1), predicate);
+    uint8_t __attribute__((aligned(64))) mask[64];
+    aligned_store<uint8x64_t, uint8_t, 64>(vmask, &mask[0], 0);
+
+    uint8_t __attribute__((aligned(64))) output[64];
+    for (int i = 0; i < 64; i++) {
+        if (mask[i] == 1) {
+            output[i] = ((const uint8_t*)base)[offsets[i]];
+        } else {
+            output[i] = 0;
+        }
+    }
+
+    return *((uint8x64_t *)output);
+}
+
+template <typename VectorType, typename OffsetType, typename PredicateType, typename BaseType, int Lanes>
+HALIDE_ALWAYS_INLINE void store_predicated(const VectorType& a, void *base, const OffsetType& offset, const PredicateType& predicate) = delete;
+
+template <>
+HALIDE_ALWAYS_INLINE void store_predicated<uint8x64_t, int32x64_t, uint1x64_t, uint8_t, 64>(const uint8x64_t& a, void *base, const int32x64_t& offset, const uint1x64_t& predicate) {
+    uint8_t __attribute__((aligned(64))) tmp[64];
+    aligned_store<uint8x64_t, uint8_t, 64>(a, &tmp[0], 0);
+
+    int __attribute__((aligned(64))) offsets[64];
+    aligned_store<int32x64_t, int32_t, 64>(offset, &offsets[0], 0);
+
+    uint8x64_t vmask = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(1), predicate);
+    uint8_t __attribute__((aligned(64))) mask[64];
+    aligned_store<uint8x64_t, uint8_t, 64>(vmask, &mask[0], 0);
+
+    for (int i = 0; i < 64; i++) {
+        if (mask[i]) {
+            ((uint8_t*)base)[offsets[i]] = tmp[i];
+        }
+    }
+}
+
+template <>
+HALIDE_ALWAYS_INLINE void store_predicated<uint8x256_t, int32x256_t, uint1x256_t, uint8_t, 256>(const uint8x256_t& a, void *base, const int32x256_t& offset, const uint1x256_t& predicate) {
+    uint8_t __attribute__((aligned(64))) tmp[256];
+    aligned_store<uint8x256_t, uint8_t, 256>(a, &tmp[0], 0);
+
+    int __attribute__((aligned(64))) offsets[256];
+    aligned_store<int32x256_t, int32_t, 256>(offset, &offsets[0], 0);
+
+    uint8x64_t vmask0 = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(1), predicate.native_vector[0]);
+    uint8x64_t vmask1 = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(1), predicate.native_vector[1]);
+    uint8x64_t vmask2 = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(1), predicate.native_vector[2]);
+    uint8x64_t vmask3 = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(1), predicate.native_vector[3]);
+
+    uint8_t __attribute__((aligned(64))) mask[256];
+    aligned_store<uint8x256_t, uint8_t, 256>(
+        uint8x256_t(uint8x256_t::from_native_vector, vmask0, vmask1, vmask2, vmask3), &mask[0], 0);
+
+    for (int i = 0; i < 256; i++) {
+        if (mask[i]) {
+            ((uint8_t*)base)[offsets[i]] = tmp[i];
+        }
+    }
 }
 
 template <typename VectorTypeFrom, typename VectorTypeTo, typename BaseType, int LanesFrom, int LanesTo>
@@ -747,6 +852,37 @@ HALIDE_ALWAYS_INLINE uint8x128_t halide_xtensa_interleave_u8(const uint8x64_t& a
                                 );
 }
 
+HALIDE_ALWAYS_INLINE uint8x256_t halide_xtensa_interleave_u8(const uint8x64_t& a, const uint8x64_t& b, const uint8x64_t& c, const uint8x64_t& d) {
+  const uint8x64_t ab0 = IVP_SEL2NX8UI(b, a, IVP_SELI_8B_INTERLEAVE_1_LO);
+  const uint8x64_t ab1 = IVP_SEL2NX8UI(b, a, IVP_SELI_8B_INTERLEAVE_1_HI);
+  const uint8x64_t cd0 = IVP_SEL2NX8UI(d, c, IVP_SELI_8B_INTERLEAVE_1_LO);
+  const uint8x64_t cd1 = IVP_SEL2NX8UI(d, c, IVP_SELI_8B_INTERLEAVE_1_HI);
+
+
+  return uint8x256_t(uint8x256_t::from_native_vector,
+                                IVP_SEL2NX8UI(cd0, ab0, IVP_SELI_8B_INTERLEAVE_2_LO),
+                                IVP_SEL2NX8UI(cd0, ab0, IVP_SELI_8B_INTERLEAVE_2_HI),
+                                IVP_SEL2NX8UI(cd1, ab1, IVP_SELI_8B_INTERLEAVE_2_LO),
+                                IVP_SEL2NX8UI(cd1, ab1, IVP_SELI_8B_INTERLEAVE_2_HI));
+}
+
+HALIDE_ALWAYS_INLINE uint1x256_t halide_xtensa_interleave_u1(const uint1x64_t& a, const uint1x64_t& b, const uint1x64_t& c, const uint1x64_t& d) {
+    uint8x64_t a8 = 0, b8 = 0, c8 = 0, d8 = 0;
+    IVP_INJBI2NX8(a8, a, 0);
+    IVP_INJBI2NX8(b8, b, 0);
+    IVP_INJBI2NX8(c8, c, 0);
+    IVP_INJBI2NX8(d8, d, 0);
+
+    uint8x256_t interleaved8 = halide_xtensa_interleave_u8(a8, b8, c8, d8);
+
+    uint1x64_t ra = IVP_EXTBI2NX8(interleaved8.native_vector[0], 0);
+    uint1x64_t rb = IVP_EXTBI2NX8(interleaved8.native_vector[1], 0);
+    uint1x64_t rc = IVP_EXTBI2NX8(interleaved8.native_vector[2], 0);
+    uint1x64_t rd = IVP_EXTBI2NX8(interleaved8.native_vector[3], 0);
+
+    return uint1x256_t(uint1x256_t::from_native_vector, ra, rb, rc, rd);
+}
+
 HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_extract_0_off_3_u8(const uint8x64_t& a0, const uint8x64_t& a1, const uint8x64_t& a2) {
   // TODO(vksnk): there is likely a better way to do it.
   uint8x64_t vR, vG, vB, vRG0, vRG1;
@@ -754,6 +890,10 @@ HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_extract_0_off_3_u8(const uint8x64_
   IVP_DSEL2NX8UI_H(vB, vRG1, a2, a1, IVP_DSELI_8B_DEINTERLEAVE_C3_STEP_1);
   IVP_DSEL2NX8UI (vG,vR, vRG1,vRG0, IVP_DSELI_8B_DEINTERLEAVE_1);
   return vR;
+}
+
+HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_extract_0_off_3_u8(const uint8x192_t& a) {
+  return halide_xtensa_extract_0_off_3_u8(a.native_vector[0], a.native_vector[1], a.native_vector[2]);
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_deinterleave_even_i16(const int16x64_t& a) {
@@ -1644,6 +1784,7 @@ class ScopedDmaInitializer {
             Int(8, 128),
             UInt(8, 4),
             UInt(8, 128),
+            UInt(8, 192),
             Int(8, 256),
             UInt(8, 256),
             Int(16, 64),
@@ -2105,7 +2246,23 @@ void CodeGen_Xtensa::visit(const Ramp *op) {
         if (is_native_xtensa_vector<int32_t>(op->type)) {
             print_assignment(vector_type, "/* ramp */ int32x16_t(" + id_base + ") + IVP_SEQN_2X32()");
         } else {
-            print_assignment(vector_type, "dense_ramp<" + print_type(vector_type) + ">(" + id_base + ")");
+            // If it's wide enough split it here into concat of smaller ramps.
+            if (op->type.is_int() && (op->type.bits() == 32) && (op->type.lanes() % 16 == 0) && (op->type.lanes() / 16 > 4)) {
+                int split_to = op->type.lanes() / 16;
+
+                std::vector<Expr> concat_args;
+                for (int ix = 0; ix < split_to; ix++) {
+                    Expr r = Ramp::make(op->base + op->stride * (16 * ix), op->stride, 16);
+                    concat_args.push_back(std::move(r));
+                }
+                Expr concat = Call::make(op->type,
+                                         "halide_xtensa_concat_from_native",
+                                         concat_args, Call::PureExtern);
+
+                concat.accept(this);
+            } else {
+                print_assignment(vector_type, "dense_ramp<" + print_type(vector_type) + ">(" + id_base + ")");
+            }
         }
     } else {
         if (is_native_xtensa_vector<int32_t>(op->type)) {
@@ -2287,7 +2444,13 @@ void CodeGen_Xtensa::visit(const Load *op) {
                 << print_type(t.element_of()) << ", " << t.lanes()
                 << ">(" << name << ", " << id_ramp_base << ", " << id_count << ")";
         } else {
-            user_assert(is_const_one(op->predicate)) << "This predicated load is not supported by Xtensa backend." << op->index << " " << op->predicate << "\n";
+            string id_index = print_expr(op->index);
+            string id_predicate = print_expr(op->predicate);
+            rhs << "load_predicated<" << print_type(t) << ", "
+                << print_type(op->index.type()) << ", "
+                << print_type(op->predicate.type()) << ", "
+                << print_type(t.element_of()) << ", " << t.lanes()
+                << ">(" << name << ", " << id_index << ", " << id_predicate << ")";
         }
     } else if (dense_ramp_base.defined()) {
         internal_assert(t.is_vector());
@@ -2325,7 +2488,6 @@ void CodeGen_Xtensa::visit(const Load *op) {
             << print_type(Int(32, t.lanes())) << ", "
             << print_type(t.element_of()) << ", " << t.lanes()
             << ">(" << name << ", " << id_index << ")";
-
         // }
     } else {
         string id_index = print_expr(op->index);
@@ -2423,7 +2585,13 @@ void CodeGen_Xtensa::visit(const Store *op) {
             stream << ", " << print_type(t.element_of()) << ", " << t.lanes()
                    << ">(" << id_value << ", " << name << ", " << id_ramp_base << ", " << id_count << ");\n";
         } else {
-            user_assert(is_const_one(op->predicate)) << "This predicated store is not supported by Xtensa backend.\n";
+            string id_index = print_expr(op->index);
+            string id_predicate = print_expr(op->predicate);
+            stream << get_indent() << "store_predicated<" << print_type(t) << ", "
+                   << print_type(op->index.type()) << ", "
+                   << print_type(op->predicate.type()) << ", "
+                   << print_type(t.element_of()) << ", " << t.lanes()
+                   << ">(" << id_value << ", " << name << ", " << id_index << ", " << id_predicate << ");\n";
         }
     } else if (dense_ramp_base.defined()) {
         internal_assert(op->value.type().is_vector());
@@ -2463,7 +2631,10 @@ void CodeGen_Xtensa::visit(const Store *op) {
         // If index is a vector, scatter vector elements.
         internal_assert(t.is_vector());
         string id_index = print_expr(op->index);
-        stream << get_indent() << id_value + ".store(" << name << ", " << id_index << ");\n";
+        stream << get_indent() << "store_scatter<" << print_type(t) << ", "
+               << print_type(op->index.type()) << ", "
+               << print_type(t.element_of()) << ", " << t.lanes()
+               << ">(" << id_value << ", " << name << ", " << id_index << ");\n";
     } else {
         bool type_cast_needed =
             t.is_handle() ||
@@ -2530,12 +2701,8 @@ void CodeGen_Xtensa::visit(const Call *op) {
             rhs << "IVP_SRAI2NX8U(" << a0 << ", " << std::to_string(*bits) << ")";
         } else if (is_native_xtensa_vector<uint16_t>(op->type) && bits) {
             rhs << "IVP_SRLINX16U(" << a0 << ", " << std::to_string(*bits) << ")";
-        } else if (is_native_xtensa_vector<int16_t>(op->type) && bits) {
-            rhs << "IVP_SRAINX16U(" << a0 << ", " << std::to_string(*bits) << ")";
         } else if (is_native_xtensa_vector<uint32_t>(op->type) && bits) {
             rhs << "IVP_SRLIN_2X32U(" << a0 << ", " << std::to_string(*bits) << ")";
-        } else if (is_native_xtensa_vector<int32_t>(op->type) && bits) {
-            rhs << "IVP_SRAIN_2X32U(" << a0 << ", " << std::to_string(*bits) << ")";
         } else {
             string a1 = print_expr(op->args[1]);
             if (is_native_xtensa_vector<uint8_t>(op->type)) {
@@ -2681,7 +2848,7 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
     }
 
     // Generate intrinsics for the interleave op.
-    if (op->is_interleave() && is_native_vector_type(op->vectors[0].type())) {
+    if (op->is_interleave() && (is_native_vector_type(op->vectors[0].type()) || (op->vectors[0].type().is_bool() && op->vectors[0].type().lanes() == 64))) {
         string type_suffix = suffix_for_type(op->type);
 
         Expr call = Call::make(op->type, "halide_xtensa_interleave" + type_suffix,
