@@ -188,10 +188,10 @@ public:
         }
 
         if (output_.type() == halide_type_of<uint8_t>()) {
-            output = quantize_and_relu_u8(convolved(c, x, y, b), output_multiplier_, output_shift_, output_zero_,
+            output = quantize_and_relu_u8(output, output_multiplier_, output_shift_, output_zero_,
                                           output_min_, output_max_, target);
         } else {
-            output = quantize_i16(convolved(c, x, y, b), output_multiplier_, output_shift_, target);
+            output = quantize_i16(output, output_multiplier_, output_shift_, target);
         }
         output_(c, x, y, b) = output;
 

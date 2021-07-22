@@ -173,7 +173,7 @@ public:
             output = convolved(c, x, y, b);
         }
 
-        output = quantize_and_relu_u8(convolved(c, x, y, b), output_multiplier_, output_shift_,
+        output = quantize_and_relu_u8(output, output_multiplier_, output_shift_,
                                  output_zero_, output_min_, output_max_, target);
         output_(c, x, y, b) = output;
             
@@ -294,7 +294,6 @@ public:
         offset_c.compute_at(filter_compute_at)
             .store_in(MemoryType::Stack)
             .vectorize(c, vector_size, TailStrategy::RoundUp);
-
 
         bias_bounded.compute_at(filter_compute_at)
             .store_in(MemoryType::Stack)
