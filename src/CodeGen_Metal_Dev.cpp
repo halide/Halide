@@ -551,7 +551,7 @@ void CodeGen_Metal_Dev::add_kernel(Stmt s,
 
     // We need to scalarize/de-predicate any loads/stores, since Metal does not
     // support predication.
-    s = scalarize_predicated_loads_store(s);
+    s = scalarize_predicated_loads_stores(s);
 
     debug(2) << "CodeGen_Metal_Dev: after removing predication: \n" << s;
 
