@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
         }
 
         printf("Realizing function...\n");
-        Buffer<float_t> input_img(32, 32);
+        Buffer<float> input_img(32, 32);
         for (int i=0; i<32; i++) {
             for (int j=0; j<32; j++) {
                 input_img(i, j) = i + j;
