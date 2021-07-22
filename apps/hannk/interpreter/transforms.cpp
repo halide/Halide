@@ -353,6 +353,26 @@ class PadForOps : public OpVisitor {
     }
 
     void visit(DepthwiseConv2DOp *op) {
+        TensorPtr input = op->input();
+        TensorPtr output = op->output();
+        if (op->depth_multiplier() != 1 && op->depth_multiplier() < output->extent(0)) {
+            // Make an UpsampleChannels op and a new tensor for the upsampled result.
+            Box upsampled_shape = input->bounds();
+            upsampled_shape[0].min *= op->depth_multiplier();
+            upsampled_shape[0].max = (upsampled_shape[0].max + 1) * op->depth_multiplier() - 1;
+            TensorPtr upsampled =
+                std::make_shared<Tensor>(input->name() + "_upsampled", input->type(), upsampled_shape, input->quantization());
+            op->set_input(upsampled);
+
+            // Add the new tensor, op, and update the input.
+            OpPtr upsample = make_op<UpsampleChannelsOp>(input, op->depth_multiplier(), upsampled);
+            new_ops.emplace_back(std::move(upsample));
+
+            op->set_depth_multiplier(1);
+        }
+
+        // TODO: It might be worth enabling UpsampleChannels to handle padding, and fusing the padding
+        // in the case we need to upsample the channels.
         pad_for_op(op, 0, 0);
     }
 
@@ -399,8 +419,10 @@ class FusePadOps : public OpVisitor {
 void pad_for_ops(OpGroup *op) {
     PadForOps padder;
     op->accept(&padder);
-    for (auto &i : padder.new_ops) {
-        op->add(std::move(i));
+    // We need to add in reverse order, so ops that depend on newly added ops go
+    // in the right place.
+    for (auto i = padder.new_ops.rbegin(); i != padder.new_ops.rend(); ++i) {
+        op->add(std::move(*i));
     }
 
     // Some networks use padding already for other reasons, so
