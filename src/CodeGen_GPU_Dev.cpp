@@ -102,9 +102,10 @@ namespace {
 class ScalarizePredicatedLoadStore : public IRMutator {
 public:
     using IRMutator::mutate;
+    using IRMutator::visit;
 
 protected:
-    Stmt visit(const Store *s) {
+    Stmt visit(const Store *s) override {
         if (!is_const_one(s->predicate)) {
             std::vector<Stmt> scalar_stmts;
             for (int ln = 0; ln < s->value.type().lanes(); ln++) {
@@ -124,7 +125,7 @@ protected:
         }
     }
 
-    Expr visit(const Load *op) {
+    Expr visit(const Load *op) override {
         if (!is_const_one(op->predicate)) {
             Expr load_expr = Load::make(op->type, op->name, op->index, op->image, 
                                         op->param, const_true(op->type.lanes()), op->alignment);
