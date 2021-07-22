@@ -92,7 +92,7 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
         .def(
             "prefetch", [](T &t, const ImageParam &image, const VarOrRVar &var, const Expr &offset, PrefetchBoundStrategy strategy) -> T & {
                 // Templated function; specializing only on ImageParam for now
-                return t.prefetch(image, var, offset, strategy);
+                return t.template prefetch<ImageParam>(image, var, offset, strategy);
             },
             py::arg("image"), py::arg("var"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
 
@@ -100,7 +100,7 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
         .def(
             "prefetch_at", [](T &t, const ImageParam &image, const VarOrRVar &loop, const VarOrRVar &fetch, const Expr &offset, PrefetchBoundStrategy strategy) -> T & {
                 // Templated function; specializing only on ImageParam for now
-                return t.prefetch_at(image, loop, fetch, offset, strategy);
+                return t.template prefetch_at<ImageParam>(image, loop, fetch, offset, strategy);
             },
             py::arg("image"), py::arg("loop"), py::arg("fetch"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
 
