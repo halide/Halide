@@ -549,6 +549,12 @@ void CodeGen_Metal_Dev::add_kernel(Stmt s,
                                    const vector<DeviceArgument> &args) {
     debug(2) << "CodeGen_Metal_Dev::compile " << name << "\n";
 
+    // We need to scalarize/de-predicate any loads/stores, since Metal does not
+    // support predication.
+    s = scalarize_predicated_loads_store(s);
+
+    debug(2) << "CodeGen_Metal_Dev: after removing predication: \n" << s;
+
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
     cur_kernel_name = name;
     metal_c.add_kernel(s, name, args);
@@ -575,6 +581,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::add_kernel(const Stmt &s,
                                                     const vector<DeviceArgument> &args) {
 
     debug(2) << "Adding Metal kernel " << name << "\n";
+
 
     // Figure out which arguments should be passed in constant.
     // Such arguments should be:

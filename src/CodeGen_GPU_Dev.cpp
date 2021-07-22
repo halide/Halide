@@ -1,5 +1,8 @@
 #include "CodeGen_GPU_Dev.h"
+#include "Deinterleave.h"
 #include "Bounds.h"
+#include "IRMutator.h"
+#include "IROperator.h"
 #include "IRVisitor.h"
 
 namespace Halide {
@@ -92,6 +95,55 @@ bool CodeGen_GPU_Dev::is_buffer_constant(const Stmt &kernel,
     IsBufferConstant v(buffer);
     kernel.accept(&v);
     return v.result;
+}
+
+namespace {
+
+class ScalarizePredicatedLoadStore : public IRMutator {
+public:
+    using IRMutator::mutate;
+
+protected:
+    Stmt visit(const Store *s) {
+        if (!is_const_one(s->predicate)) {
+            std::vector<Stmt> scalar_stmts;
+            for (int ln = 0; ln < s->value.type().lanes(); ln++) {
+                scalar_stmts.push_back(IfThenElse::make(
+                                           extract_lane(s->predicate, ln),
+                                           Store::make(s->name,
+                                                       mutate(extract_lane(s->value, ln)),
+                                                       mutate(extract_lane(s->index, ln)),
+                                                       s->param,
+                                                       make_bool(true),
+                                                       // TODO: alignment needs to be changed
+                                                       s->alignment)));
+            }
+            return Block::make(scalar_stmts);
+        } else {
+            return s;
+        }
+    }
+
+    Expr visit(const Load *op) {
+        if (!is_const_one(op->predicate)) {
+            Expr load_expr = Load::make(op->type, op->name, op->index, op->image, 
+                                        op->param, const_true(op->type.lanes()), op->alignment);
+            Expr pred_load = Call::make(load_expr.type(),
+                                        Call::if_then_else,
+                                        {op->predicate, load_expr},
+                                        Internal::Call::PureIntrinsic);
+            return pred_load;
+        } else {
+            return op;
+        }
+    }
+};
+
+} // namespace
+
+Stmt CodeGen_GPU_Dev::scalarize_predicated_loads_stores(Stmt &s) {
+    ScalarizePredicatedLoadStore sps;
+    return sps.mutate(s);
 }
 
 }  // namespace Internal
