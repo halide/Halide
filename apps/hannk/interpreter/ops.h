@@ -157,6 +157,13 @@ public:
 
     void accept(OpVisitor *v);
 
+    int depth_multiplier() const {
+        return depth_multiplier_;
+    }
+    void set_depth_multiplier(int depth_multiplier) {
+        depth_multiplier_ = depth_multiplier;
+    }
+
     const TensorPtr &filter() const {
         return Op::input(1);
     }
@@ -501,6 +508,25 @@ public:
     }
 };
 
+class UpsampleChannelsOp : public Op {
+    int factor_;
+
+public:
+    UpsampleChannelsOp(const TensorPtr &input, int factor, const TensorPtr &output)
+        : Op({input}, {output}), factor_(factor) {
+    }
+
+    void accept(OpVisitor *v);
+
+    BoundsMap map_bounds(int input_idx, int output_idx) const;
+
+    void execute();
+
+    void dump(std::ostream &os) const {
+        os << "  UpsampleChannels " << output()->name() << std::endl;
+    }
+};
+
 class OpVisitor {
 public:
     virtual ~OpVisitor() = default;
@@ -540,6 +566,8 @@ public:
     virtual void visit(TransposeOp *op) {
     }
     virtual void visit(UnaryOp *op) {
+    }
+    virtual void visit(UpsampleChannelsOp *op) {
     }
     virtual void visit(OpGroup *op) {
     }

@@ -8,8 +8,11 @@ namespace hannk {
 
 class DepthwiseConv : public Generator<DepthwiseConv> {
 public:
-    // If positive, a constant inverse depth multiplier.
-    GeneratorParam<int> inv_depth_multiplier_{"inv_depth_multiplier", -1};
+    // This is used to compute ci = co * inv_depth_multiplier. There are
+    // only 2 values that make sense here:
+    // - inv_depth_multiplier = 1 => depth_multiplier = 1
+    // - inv_depth_multiplier = 0 => broadcasting 1 channel of input
+    GeneratorParam<int> inv_depth_multiplier_{"inv_depth_multiplier", 1};
 
     // When true, we assume the vector size is divided evenly by the number
     // of channels, and we use the input_stride_x parameter as the stride of
@@ -26,9 +29,6 @@ public:
 
     // A 1D array of 32-bit biases indexed by co.
     Input<Buffer<int32_t>> bias_{"bias", 1};
-
-    // The depth multiplier specifies the ratio between co and ci.
-    Input<int> depth_multiplier_{"depth_multiplier"};
 
     // The stride specifies how the input [x, y] are sub-subsampled. For every
     // spatial location [x, y] in the output buffer, the input buffer is sampled
@@ -67,8 +67,7 @@ public:
 
         // Apply the c multiplier.
         Func resampled_input("resampled_input");
-        Expr c_resampled = inv_depth_multiplier_ >= 0 ? c * inv_depth_multiplier_ : c / depth_multiplier_;
-        resampled_input(c, x, y, b) = input_(c_resampled, x, y, b);
+        resampled_input(c, x, y, b) = input_(c * inv_depth_multiplier_, x, y, b);
 
         Func filter_bounded("filter_bounded");
         Func bias_bounded("bias_bounded");
@@ -214,17 +213,6 @@ public:
             .unroll(r.x)
             .unroll(r.y);
 
-        if (inv_depth_multiplier_ < 0) {
-            // The reason inv_depth_multiplier_ is a GeneratorParam and not a
-            // specialization is that we can't specialize the (lack of) compute_at here.
-            resampled_input
-                .compute_at(output_, b)
-                .store_in(MemoryType::Stack)
-                .vectorize(c, vector_size, TailStrategy::GuardWithIf);
-
-            resampled_input.specialize(depth_multiplier_ == 1);
-        }
-
         LoopLevel filter_compute_at = shallow_ ? LoopLevel::root() : LoopLevel(output_, co);
 
         // This doesn't read from any of the inputs directly, so we can vectorize
@@ -244,6 +232,38 @@ public:
     }
 };
 
+// A generator to resample the channels of a buffer. This is used to
+// implement depth_multiplier != 1 for DepthwiseConv above if the
+// depth_multiplier is too small to use the broadcasting version.
+class UpsampleChannels : public Generator<UpsampleChannels> {
+public:
+    // Unsigned 8-bit input tensor, indexed by ci, x, y, b.
+    Input<Buffer<uint8_t>> input_{"input", 4};
+
+    // The depth multiplier specifies the ratio between co and ci.
+    Input<int> factor_{"factor"};
+
+    // Unsigned 8-bit output tensor, indexed by co, x, y, b.
+    Output<Buffer<uint8_t>> output_{"output", 4};
+
+    void generate() {
+        Var x("x"), y("y"), c("c"), b("b");
+        output_(c, x, y, b) = input_(c / factor_, x, y, b);
+
+        require_same_min_extent(3, input_, output_);
+
+        const int vector_size = natural_vector_size<uint8_t>();
+
+        output_.compute_root()
+            .vectorize(c, vector_size, TailStrategy::Predicate);
+
+        output_.specialize(factor_ == 8);
+        // In this case, we should be reading scalars and broadcasting them.
+        output_.specialize(factor_ % vector_size == 0);
+    }
+};
+
 }  // namespace hannk
 
 HALIDE_REGISTER_GENERATOR(hannk::DepthwiseConv, DepthwiseConv)
+HALIDE_REGISTER_GENERATOR(hannk::UpsampleChannels, UpsampleChannels)

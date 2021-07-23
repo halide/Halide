@@ -103,7 +103,10 @@ struct ModelRunner {
     bool do_compare_results = true;
     bool keep_going = false;
     double tolerance;
+    bool csv_output = false;
+    int run_count = 0;
     std::string external_delegate_path;
+    std::vector<WhichRun> active_runs;
 
     ModelRunner();
 
