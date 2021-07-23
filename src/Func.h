@@ -445,18 +445,18 @@ public:
     HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
     Stage &prefetch(const Func &f, const VarOrRVar &var, int offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(f, var, var, std::move(offset), strategy);
+        return prefetch(f, var, var, offset, strategy);
     }
     HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
     Stage &prefetch(const Internal::Parameter &param, const VarOrRVar &var, int offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(param, var, var, std::move(offset), strategy);
+        return prefetch(param, var, var, offset, strategy);
     }
     template<typename T>
     HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
     Stage &prefetch(const T &image, VarOrRVar var, int offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(image.parameter(), var, var, std::move(offset), strategy);
+        return prefetch(image.parameter(), var, var, offset, strategy);
     }
     Stage &prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
@@ -2009,18 +2009,18 @@ public:
     HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
     Func &prefetch(const Func &f, const VarOrRVar &var, int offset = 1,
                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(f, var, var, std::move(offset), strategy);
+        return prefetch(f, var, var, offset, strategy);
     }
     HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
     Func &prefetch(const Internal::Parameter &param, const VarOrRVar &var, int offset = 1,
                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(param, var, var, std::move(offset), strategy);
+        return prefetch(param, var, var, offset, strategy);
     }
     template<typename T>
     HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
     Func &prefetch(const T &image, VarOrRVar var, int offset = 1,
                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch<T>(image, var, var, std::move(offset), strategy);
+        return prefetch<T>(image, var, var, offset, strategy);
     }
     // @}
 
