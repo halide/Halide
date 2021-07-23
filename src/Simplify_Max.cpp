@@ -97,6 +97,10 @@ Expr Simplify::visit(const Max *op, ExprInfo *bounds) {
              rewrite(max(max(x, y), min(z, x)), a) ||
              rewrite(max(max(x, y), min(z, y)), a) ||
 
+             rewrite(max(select(x, max(z, y), w), z), max(select(x, y, w), z)) ||
+             rewrite(max(select(x, max(z, y), w), y), max(select(x, z, w), y)) ||
+             rewrite(max(min(x*c0, y + c1) - min(select(0 < x, y, min(x*c0, y + c1)), x*c0), 0), 0, c1 < 0) ||
+
              rewrite(max(intrin(Call::likely, x), x), b) ||
              rewrite(max(x, intrin(Call::likely, x)), a) ||
              rewrite(max(intrin(Call::likely_if_innermost, x), x), b) ||
