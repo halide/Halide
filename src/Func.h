@@ -454,14 +454,14 @@ public:
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
         return prefetch_at(image.parameter(), var, var, std::move(offset), strategy);
     }
-    Stage &prefetch_at(const Func &f, const VarOrRVar &loop, const VarOrRVar &fetch, Expr offset = 1,
+    Stage &prefetch_at(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                        PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
-    Stage &prefetch_at(const Internal::Parameter &param, const VarOrRVar &loop, const VarOrRVar &fetch, Expr offset = 1,
+    Stage &prefetch_at(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                        PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     template<typename T>
-    Stage &prefetch_at(const T &image, const VarOrRVar &loop, const VarOrRVar &fetch, Expr offset = 1,
+    Stage &prefetch_at(const T &image, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                        PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch_at(image.parameter(), loop, fetch, std::move(offset), strategy);
+        return prefetch_at(image.parameter(), at, from, std::move(offset), strategy);
     }
     // @}
 
@@ -2021,12 +2021,12 @@ public:
      * specification of different vars for the location of the prefetch() instruction
      * vs. the location that is being prefetched:
      *
-     * - the first var specified, 'loop', indicates the loop in which the prefetch will be placed
-     * - the second var specified, 'fetch', determines the var used to find the bounds to prefetch
+     * - the first var specified, 'at', indicates the loop in which the prefetch will be placed
+     * - the second var specified, 'from', determines the var used to find the bounds to prefetch
      *   (in conjunction with 'offset')
      *
-     * If 'fetch' and 'loop' are distinct vars, then 'fetch' must be at a nesting level outside 'loop.'
-     * Note that the value for 'offset' applies only to 'fetch', not 'loop'.
+     * If 'at' and 'from' are distinct vars, then 'from' must be at a nesting level outside 'at.'
+     * Note that the value for 'offset' applies only to 'from', not 'at'.
      *
      * For example, consider this pipeline:
      \code
@@ -2058,7 +2058,7 @@ public:
      *     prefetch(&f[x, y + 2], 1, 16);
      *     h(x, y) = 3 * f(x, y)
      *
-     * Note that the 'fetch' nesting level need not be adjacent to 'loop':
+     * Note that the 'from' nesting level need not be adjacent to 'at':
      \code
      Func f, g;
      Var x, y, z, w;
@@ -2086,18 +2086,18 @@ public:
      *       for x = ...
      *         g(x, y, z, w) = 2 * f(x, y, z, w)
      *
-     * Note that calling prefetch_at() with the same var for both 'loop' and 'fetch'
+     * Note that calling prefetch_at() with the same var for both 'at' and 'from'
      * is exactly equivalent to calling prefetch() with that var.
      */
     // @{
-    Func &prefetch_at(const Func &f, const VarOrRVar &loop, const VarOrRVar &fetch, Expr offset = 1,
+    Func &prefetch_at(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                       PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
-    Func &prefetch_at(const Internal::Parameter &param, const VarOrRVar &loop, const VarOrRVar &fetch, Expr offset = 1,
+    Func &prefetch_at(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                       PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     template<typename T>
-    Func &prefetch_at(const T &image, const VarOrRVar &loop, const VarOrRVar &fetch, Expr offset = 1,
+    Func &prefetch_at(const T &image, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                       PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch_at(image.parameter(), loop, fetch, std::move(offset), strategy);
+        return prefetch_at(image.parameter(), at, from, std::move(offset), strategy);
     }
     // @}
 

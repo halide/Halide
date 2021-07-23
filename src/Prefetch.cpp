@@ -100,12 +100,12 @@ private:
         Stmt body = mutate(op->body);
 
         const PrefetchDirective &p = op->prefetch;
-        Expr loop_var = Variable::make(Int(32), p.loop_var);
-        Expr fetch_var = Variable::make(Int(32), p.fetch_var);
+        Expr at = Variable::make(Int(32), p.at);
+        Expr from = Variable::make(Int(32), p.from);
 
         // Add loop variable + prefetch offset to interval scope for box computation
-        Expr fetch_at = fetch_var + p.offset;
-        map<string, Box> boxes_rw = boxes_touched(LetStmt::make(p.fetch_var, fetch_at, body));
+        Expr fetch_at = from + p.offset;
+        map<string, Box> boxes_rw = boxes_touched(LetStmt::make(p.from, fetch_at, body));
 
         // TODO(psuriana): Only prefetch the newly accessed data. We
         // should subtract the box accessed during previous iteration
@@ -155,8 +155,8 @@ private:
         } else if (op->bounds.empty()) {
             // Remove the Prefetch IR since it is prefetching an empty region
             user_warning << "Removing prefetch of " << p.name
-                         << " within loop nest of " << p.loop_var
-                         << " at location " << p.fetch_var
+                         << " within loop nest of " << p.at
+                         << " at location " << p.from
                          << " + offset " << p.offset
                          << ") since it is not used at all.\n";
             return body;
@@ -180,10 +180,10 @@ private:
 
     using IRMutator::visit;
 
-    Stmt add_placeholder_prefetch(const string &loop_var, const string &fetch_var, PrefetchDirective p, const Stmt &body) {
-        debug(5) << "...Injecting placeholder prefetch for loop " << loop_var << "fetch " << fetch_var << "\n";
-        p.loop_var = loop_var;
-        p.fetch_var = fetch_var;
+    Stmt add_placeholder_prefetch(const string &at, const string &from, PrefetchDirective p, const Stmt &body) {
+        debug(5) << "...Injecting placeholder prefetch for loop " << at << "fetch " << from << "\n";
+        p.at = at;
+        p.from = from;
         internal_assert(body.defined());
         if (p.param.defined()) {
             return Prefetch::make(p.name, {p.param.type()}, Region(), p, const_true(), body);
@@ -203,12 +203,12 @@ private:
             set<string> seen;
             for (int i = prefetch_list.size() - 1; i >= 0; --i) {
                 const PrefetchDirective &p = prefetch_list[i];
-                if (!ends_with(op->name, "." + p.loop_var) || (seen.find(p.name) != seen.end())) {
+                if (!ends_with(op->name, "." + p.at) || (seen.find(p.name) != seen.end())) {
                     continue;
                 }
                 seen.insert(p.name);
 
-                body = add_placeholder_prefetch(op->name, prefix + p.fetch_var, p, body);
+                body = add_placeholder_prefetch(op->name, prefix + p.from, p, body);
             }
         }
 

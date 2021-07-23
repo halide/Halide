@@ -96,13 +96,13 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
             },
             py::arg("image"), py::arg("var"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
 
-        .def("prefetch_at", (T & (T::*)(const Func &, const VarOrRVar &, const VarOrRVar &, Expr, PrefetchBoundStrategy)) & T::prefetch_at, py::arg("func"), py::arg("loop"), py::arg("fetch"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
+        .def("prefetch_at", (T & (T::*)(const Func &, const VarOrRVar &, const VarOrRVar &, Expr, PrefetchBoundStrategy)) & T::prefetch_at, py::arg("func"), py::arg("at"), py::arg("from"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
         .def(
-            "prefetch_at", [](T &t, const ImageParam &image, const VarOrRVar &loop, const VarOrRVar &fetch, const Expr &offset, PrefetchBoundStrategy strategy) -> T & {
+            "prefetch_at", [](T &t, const ImageParam &image, const VarOrRVar &at, const VarOrRVar &from, const Expr &offset, PrefetchBoundStrategy strategy) -> T & {
                 // Templated function; specializing only on ImageParam for now
-                return t.template prefetch_at<ImageParam>(image, loop, fetch, offset, strategy);
+                return t.template prefetch_at<ImageParam>(image, at, from, offset, strategy);
             },
-            py::arg("image"), py::arg("loop"), py::arg("fetch"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
+            py::arg("image"), py::arg("at"), py::arg("from"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
 
         .def("source_location", &T::source_location);
 }

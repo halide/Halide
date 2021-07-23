@@ -36,8 +36,8 @@ namespace Internal {
 
 struct PrefetchDirective {
     std::string name;
-    std::string loop_var;   // the loop in which to do the prefetch
-    std::string fetch_var;  // the loop-var to use as the base for prefetching. It must be nested outside loop_var (or be equal to loop_var).
+    std::string at;         // the loop in which to do the prefetch
+    std::string from;       // the loop-var to use as the base for prefetching. It must be nested outside loop_var (or be equal to loop_var).
     Expr offset;            // 'fetch_var + offset' will determine the bounds being prefetched.
     PrefetchBoundStrategy strategy;
     // If it's a prefetch load from an image parameter, this points to that.
