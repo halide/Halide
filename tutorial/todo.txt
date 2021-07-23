@@ -1,11 +1,24 @@
-- debug_to_file
-- the bounds query interface
+High priority:
+- the device memory model (dirty flags, copy behavior)
+- extern functions and extern stages, including scheduling their loops, extern sources and sinks
 - multi-output pipelines
 - overriding the runtime
+
+Nice to have:
+- debug_to_file
+- the bounds query interface
 - lambdas
   useful tricks, e.g., `Buffer<float> image_buf = lambda(x, y, (sin(x+y)+1)/2).realize(10 * tile_size, 10 * tile_size);`
-- extern functions and extern stages
 - common scheduling patterns
 - scheduling rvars
 - tail strategies
-- Wrapping existing memory in a Halide::Buffer
+- wrapping existing memory in a Halide::Buffer
+- scatter/gather intrinsics 
+- prefetch
+- compute_with
+- RDom::where, including the pattern where we use r.x == 0, r.x == 1, r.x == 2 in the algorithm or where clause... then explicitly unrolling r.x to get an inner loop to do a sequence of things
+- the debugging loop (point to existing video?)
+- autodiff
+- using "require" to add runtime checks
+- common parallel algorithms (e.g. parallel sum-scan, parallel reductions using atomic vectorize, atomic scatters)
+- passing complex parameters into Halide, including single structs, arrays of structs.
