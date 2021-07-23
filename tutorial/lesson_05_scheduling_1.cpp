@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
 
         // The most powerful primitive scheduling operation you can do
         // to a var is to split it into inner and outer sub-variables:
-        Var x_outer, x_inner;
+        Var x_outer("x_outer"), x_inner("x_inner");
         gradient.split(x, x_outer, x_inner, 2);
 
         // This breaks the loop over x into two nested loops: an outer
@@ -164,7 +164,7 @@ int main(int argc, char **argv) {
         // splitting, but it also sees use (as we'll see later in this
         // lesson). Like splitting, fusing by itself doesn't change
         // the order of evaluation.
-        Var fused;
+        Var fused("fused");
         gradient.fuse(x, y, fused);
 
         printf("Evaluating gradient with x and y fused\n");
@@ -199,7 +199,7 @@ int main(int argc, char **argv) {
         // good for performance if neighboring pixels use overlapping
         // input data, for example in a blur. We can express a tiled
         // traversal like so:
-        Var x_outer, x_inner, y_outer, y_inner;
+        Var x_outer("x_outer"), x_inner("x_inner"), y_outer("y_outer"), y_inner("y_inner");
         gradient.split(x, x_outer, x_inner, 4);
         gradient.split(y, y_outer, y_inner, 4);
         gradient.reorder(x_inner, y_inner, x_outer, y_outer);
@@ -245,7 +245,7 @@ int main(int argc, char **argv) {
         // single vectorized computation. This time we'll split by a
         // factor of four, because on X86 we can use SSE to compute in
         // 4-wide vectors.
-        Var x_outer, x_inner;
+        Var x_outer("x_outer"), x_inner("x_inner");
         gradient.split(x, x_outer, x_inner, 4);
         gradient.vectorize(x_inner);
 
@@ -312,7 +312,7 @@ int main(int argc, char **argv) {
         // we expressed vectorizing. We split a dimension and then
         // fully unroll the loop of the inner variable. Unrolling
         // doesn't change the order in which things are evaluated.
-        Var x_outer, x_inner;
+        Var x_outer("x_outer"), x_inner("x_inner");
         gradient.split(x, x_outer, x_inner, 2);
         gradient.unroll(x_inner);
 
@@ -358,7 +358,7 @@ int main(int argc, char **argv) {
         // evaluate x over isn't a multiple of the split factor? We'll
         // split by a factor three, and we'll evaluate gradient over a
         // 7x2 box instead of the 4x4 box we've been using.
-        Var x_outer, x_inner;
+        Var x_outer("x_outer"), x_inner("x_inner");
         gradient.split(x, x_outer, x_inner, 3);
 
         printf("Evaluating gradient over a 7x2 box with x split by three \n");
@@ -433,7 +433,7 @@ int main(int argc, char **argv) {
 
         // First we'll tile, then we'll fuse the tile indices and
         // parallelize across the combination.
-        Var x_outer, y_outer, x_inner, y_inner, tile_index;
+        Var x_outer("x_outer"), y_outer("y_outer"), x_inner("x_inner"), y_inner("y_inner"), tile_index("tile_index");
         gradient.tile(x, y, x_outer, y_outer, x_inner, y_inner, 4, 4);
         gradient.fuse(x_outer, y_outer, tile_index);
         gradient.parallel(tile_index);
@@ -481,7 +481,7 @@ int main(int argc, char **argv) {
         gradient_fast(x, y) = x + y;
 
         // We'll process 64x64 tiles in parallel.
-        Var x_outer, y_outer, x_inner, y_inner, tile_index;
+        Var x_outer("x_outer"), y_outer("y_outer"), x_inner("x_inner"), y_inner("y_inner"), tile_index("tile_index");
         gradient_fast
             .tile(x, y, x_outer, y_outer, x_inner, y_inner, 64, 64)
             .fuse(x_outer, y_outer, tile_index)
@@ -492,7 +492,7 @@ int main(int argc, char **argv) {
         // express this is to recursively tile again within each tile
         // into 4x2 subtiles, then vectorize the subtiles across x and
         // unroll them across y:
-        Var x_inner_outer, y_inner_outer, x_vectors, y_pairs;
+        Var x_inner_outer("x_inner_outer"), y_inner_outer("y_inner_outer"), x_vectors("x_vectors"), y_pairs("y_pairs");
         gradient_fast
             .tile(x_inner, y_inner, x_inner_outer, y_inner_outer, x_vectors, y_pairs, 4, 2)
             .vectorize(x_vectors)
