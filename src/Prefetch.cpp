@@ -155,8 +155,8 @@ private:
         } else if (op->bounds.empty()) {
             // Remove the Prefetch IR since it is prefetching an empty region
             user_warning << "Removing prefetch of " << p.name
-                         << " within loop nest of " << p.at
-                         << " at location " << p.from
+                         << " at loop nest of " << p.at
+                         << " from location " << p.from
                          << " + offset " << p.offset
                          << ") since it is not used at all.\n";
             return body;
