@@ -1997,240 +1997,239 @@ void CodeGen_C::visit(const FloatImm *op) {
 void CodeGen_C::visit(const Call *op) {
 
     internal_assert(op->is_extern() || op->is_intrinsic())
-      << "Can only codegen extern calls and intrinsics\n";
+        << "Can only codegen extern calls and intrinsics\n";
 
     ostringstream rhs;
 
     // Handle intrinsics first
     if (op->is_intrinsic(Call::debug_to_file)) {
-      internal_assert(op->args.size() == 3);
-      const StringImm *string_imm = op->args[0].as<StringImm>();
-      internal_assert(string_imm);
-      string filename = string_imm->value;
-      string typecode = print_expr(op->args[1]);
-      string buffer = print_name(print_expr(op->args[2]));
+        internal_assert(op->args.size() == 3);
+        const StringImm *string_imm = op->args[0].as<StringImm>();
+        internal_assert(string_imm);
+        string filename = string_imm->value;
+        string typecode = print_expr(op->args[1]);
+        string buffer = print_name(print_expr(op->args[2]));
 
-      rhs << "halide_debug_to_file(_ucon, "
-          << "\"" << filename << "\", "
-          << typecode
-          << ", (struct halide_buffer_t *)" << buffer << ")";
+        rhs << "halide_debug_to_file(_ucon, "
+            << "\"" << filename << "\", "
+            << typecode
+            << ", (struct halide_buffer_t *)" << buffer << ")";
     } else if (op->is_intrinsic(Call::bitwise_and)) {
-      internal_assert(op->args.size() == 2);
-      string a0 = print_expr(op->args[0]);
-      string a1 = print_expr(op->args[1]);
-      rhs << a0 << " & " << a1;
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        rhs << a0 << " & " << a1;
     } else if (op->is_intrinsic(Call::bitwise_xor)) {
-      internal_assert(op->args.size() == 2);
-      string a0 = print_expr(op->args[0]);
-      string a1 = print_expr(op->args[1]);
-      rhs << a0 << " ^ " << a1;
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        rhs << a0 << " ^ " << a1;
     } else if (op->is_intrinsic(Call::bitwise_or)) {
-      internal_assert(op->args.size() == 2);
-      string a0 = print_expr(op->args[0]);
-      string a1 = print_expr(op->args[1]);
-      rhs << a0 << " | " << a1;
+        internal_assert(op->args.size() == 2);
+        string a0 = print_expr(op->args[0]);
+        string a1 = print_expr(op->args[1]);
+        rhs << a0 << " | " << a1;
     } else if (op->is_intrinsic(Call::bitwise_not)) {
-      internal_assert(op->args.size() == 1);
-      rhs << "~" << print_expr(op->args[0]);
+        internal_assert(op->args.size() == 1);
+        rhs << "~" << print_expr(op->args[0]);
     } else if (op->is_intrinsic(Call::reinterpret)) {
-      internal_assert(op->args.size() == 1);
-      rhs << print_reinterpret(op->type, op->args[0]);
+        internal_assert(op->args.size() == 1);
+        rhs << print_reinterpret(op->type, op->args[0]);
     } else if (op->is_intrinsic(Call::shift_left)) {
-      internal_assert(op->args.size() == 2);
-      if (op->args[1].type().is_uint()) {
-        string a0 = print_expr(op->args[0]);
-        string a1 = print_expr(op->args[1]);
-        rhs << a0 << " << " << a1;
-      } else {
-        rhs << print_expr(lower_signed_shift_left(op->args[0], op->args[1]));
-      }
+        internal_assert(op->args.size() == 2);
+        if (op->args[1].type().is_uint()) {
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " << " << a1;
+        } else {
+            rhs << print_expr(lower_signed_shift_left(op->args[0], op->args[1]));
+        }
     } else if (op->is_intrinsic(Call::shift_right)) {
-      internal_assert(op->args.size() == 2);
-      if (op->args[1].type().is_uint()) {
-        string a0 = print_expr(op->args[0]);
-        string a1 = print_expr(op->args[1]);
-        rhs << a0 << " >> " << a1;
-      } else {
-        rhs << print_expr(lower_signed_shift_right(op->args[0], op->args[1]));
-      }
+        internal_assert(op->args.size() == 2);
+        if (op->args[1].type().is_uint()) {
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " >> " << a1;
+        } else {
+            rhs << print_expr(lower_signed_shift_right(op->args[0], op->args[1]));
+        }
     } else if (op->is_intrinsic(Call::count_leading_zeros) ||
                op->is_intrinsic(Call::count_trailing_zeros) ||
                op->is_intrinsic(Call::popcount)) {
-      internal_assert(op->args.size() == 1);
-      if (op->args[0].type().is_vector()) {
-        rhs << print_scalarized_expr(op);
-      } else {
-        string a0 = print_expr(op->args[0]);
-        rhs << "halide_" << op->name << "(" << a0 << ")";
-      }
+        internal_assert(op->args.size() == 1);
+        if (op->args[0].type().is_vector()) {
+            rhs << print_scalarized_expr(op);
+        } else {
+            string a0 = print_expr(op->args[0]);
+            rhs << "halide_" << op->name << "(" << a0 << ")";
+        }
     } else if (op->is_intrinsic(Call::lerp)) {
-      internal_assert(op->args.size() == 3);
-      Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
-      rhs << print_expr(e);
+        internal_assert(op->args.size() == 3);
+        Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
+        rhs << print_expr(e);
     } else if (op->is_intrinsic(Call::absd)) {
-      internal_assert(op->args.size() == 2);
-      Expr a = op->args[0];
-      Expr b = op->args[1];
-      Expr e = cast(op->type, select(a < b, b - a, a - b));
-      rhs << print_expr(e);
+        internal_assert(op->args.size() == 2);
+        Expr a = op->args[0];
+        Expr b = op->args[1];
+        Expr e = cast(op->type, select(a < b, b - a, a - b));
+        rhs << print_expr(e);
     } else if (op->is_intrinsic(Call::return_second)) {
-      internal_assert(op->args.size() == 2);
-      string arg0 = print_expr(op->args[0]);
-      string arg1 = print_expr(op->args[1]);
-      rhs << "return_second(" << arg0 << ", " << arg1 << ")";
+        internal_assert(op->args.size() == 2);
+        string arg0 = print_expr(op->args[0]);
+        string arg1 = print_expr(op->args[1]);
+        rhs << "return_second(" << arg0 << ", " << arg1 << ")";
     } else if (op->is_intrinsic(Call::if_then_else)) {
-      internal_assert(op->args.size() == 2 || op->args.size() == 3);
+        internal_assert(op->args.size() == 3);
 
-      string result_id = unique_name('_');
+        string result_id = unique_name('_');
 
-      stream << get_indent() << print_type(op->args[1].type(), AppendSpace)
-             << result_id << ";\n";
+        stream << get_indent() << print_type(op->args[1].type(), AppendSpace)
+               << result_id << ";\n";
 
-      string cond_id = print_expr(op->args[0]);
+        string cond_id = print_expr(op->args[0]);
 
-      stream << get_indent() << "if (" << cond_id << ")\n";
-      open_scope();
-      string true_case = print_expr(op->args[1]);
-      stream << get_indent() << result_id << " = " << true_case << ";\n";
-      close_scope("if " + cond_id);
-      if (op->args.size() == 3) {
+        stream << get_indent() << "if (" << cond_id << ")\n";
+        open_scope();
+        string true_case = print_expr(op->args[1]);
+        stream << get_indent() << result_id << " = " << true_case << ";\n";
+        close_scope("if " + cond_id);
         stream << get_indent() << "else\n";
         open_scope();
         string false_case = print_expr(op->args[2]);
         stream << get_indent() << result_id << " = " << false_case << ";\n";
         close_scope("if " + cond_id + " else");
-      }
-      rhs << result_id;
+
+        rhs << result_id;
     } else if (op->is_intrinsic(Call::require)) {
-      internal_assert(op->args.size() == 3);
-      if (op->args[0].type().is_vector()) {
-        rhs << print_scalarized_expr(op);
-      } else {
-        create_assertion(op->args[0], op->args[2]);
-        rhs << print_expr(op->args[1]);
-      }
+        internal_assert(op->args.size() == 3);
+        if (op->args[0].type().is_vector()) {
+            rhs << print_scalarized_expr(op);
+        } else {
+            create_assertion(op->args[0], op->args[2]);
+            rhs << print_expr(op->args[1]);
+        }
     } else if (op->is_intrinsic(Call::abs)) {
-      internal_assert(op->args.size() == 1);
-      Expr a0 = op->args[0];
-      rhs << print_expr(cast(op->type, select(a0 > 0, a0, -a0)));
+        internal_assert(op->args.size() == 1);
+        Expr a0 = op->args[0];
+        rhs << print_expr(cast(op->type, select(a0 > 0, a0, -a0)));
     } else if (op->is_intrinsic(Call::memoize_expr)) {
-      internal_assert(!op->args.empty());
-      string arg = print_expr(op->args[0]);
-      rhs << "(" << arg << ")";
+        internal_assert(!op->args.empty());
+        string arg = print_expr(op->args[0]);
+        rhs << "(" << arg << ")";
     } else if (op->is_intrinsic(Call::alloca)) {
-      internal_assert(op->args.size() == 1);
-      internal_assert(op->type.is_handle());
-      if (op->type == type_of<struct halide_buffer_t *>() &&
-          Call::as_intrinsic(op->args[0], {Call::size_of_halide_buffer_t})) {
-        stream << get_indent();
-        string buf_name = unique_name('b');
-        stream << "halide_buffer_t " << buf_name << ";\n";
-        rhs << "&" << buf_name;
-      } else {
-        // Make a stack of uint64_ts
-        string size = print_expr(simplify((op->args[0] + 7) / 8));
-        stream << get_indent();
-        string array_name = unique_name('a');
-        stream << "uint64_t " << array_name << "[" << size << "];";
-        rhs << "(" << print_type(op->type) << ")(&" << array_name << ")";
-      }
+        internal_assert(op->args.size() == 1);
+        internal_assert(op->type.is_handle());
+        if (op->type == type_of<struct halide_buffer_t *>() &&
+            Call::as_intrinsic(op->args[0], {Call::size_of_halide_buffer_t})) {
+            stream << get_indent();
+            string buf_name = unique_name('b');
+            stream << "halide_buffer_t " << buf_name << ";\n";
+            rhs << "&" << buf_name;
+        } else {
+            // Make a stack of uint64_ts
+            string size = print_expr(simplify((op->args[0] + 7) / 8));
+            stream << get_indent();
+            string array_name = unique_name('a');
+            stream << "uint64_t " << array_name << "[" << size << "];";
+            rhs << "(" << print_type(op->type) << ")(&" << array_name << ")";
+        }
     } else if (op->is_intrinsic(Call::make_struct)) {
-      if (op->args.empty()) {
-        internal_assert(op->type.handle_type);
-        // Add explicit cast so that different structs can't cache to the same value
-        rhs << "(" << print_type(op->type) << ")(NULL)";
-      } else if (op->type == type_of<halide_dimension_t *>()) {
-        // Emit a shape
+        if (op->args.empty()) {
+            internal_assert(op->type.handle_type);
+            // Add explicit cast so that different structs can't cache to the same value
+            rhs << "(" << print_type(op->type) << ")(NULL)";
+        } else if (op->type == type_of<halide_dimension_t *>()) {
+            // Emit a shape
 
-        // Get the args
-        vector<string> values;
-        for (size_t i = 0; i < op->args.size(); i++) {
-          values.push_back(print_expr(op->args[i]));
+            // Get the args
+            vector<string> values;
+            for (size_t i = 0; i < op->args.size(); i++) {
+                values.push_back(print_expr(op->args[i]));
+            }
+
+            static_assert(sizeof(halide_dimension_t) == 4 * sizeof(int32_t),
+                          "CodeGen_C assumes a halide_dimension_t is four densely-packed int32_ts");
+
+            internal_assert(values.size() % 4 == 0);
+            int dimension = values.size() / 4;
+
+            string shape_name = unique_name('s');
+            stream
+                << get_indent() << "struct halide_dimension_t " << shape_name
+                << "[" << dimension << "] = {\n";
+            indent++;
+            for (int i = 0; i < dimension; i++) {
+                stream
+                    << get_indent() << "{"
+                    << values[i * 4 + 0] << ", "
+                    << values[i * 4 + 1] << ", "
+                    << values[i * 4 + 2] << ", "
+                    << values[i * 4 + 3] << "},\n";
+            }
+            indent--;
+            stream << get_indent() << "};\n";
+
+            rhs << shape_name;
+        } else {
+            // Emit a declaration like:
+            // struct {const int f_0, const char f_1, const int f_2} foo = {3, 'c', 4};
+
+            // Get the args
+            vector<string> values;
+            for (size_t i = 0; i < op->args.size(); i++) {
+                values.push_back(print_expr(op->args[i]));
+            }
+            stream << get_indent() << "struct {\n";
+            // List the types.
+            indent++;
+            for (size_t i = 0; i < op->args.size(); i++) {
+                stream << get_indent() << "const " << print_type(op->args[i].type()) << " f_" << i << ";\n";
+            }
+            indent--;
+            string struct_name = unique_name('s');
+            stream << get_indent() << "} " << struct_name << " = {\n";
+            // List the values.
+            indent++;
+            for (size_t i = 0; i < op->args.size(); i++) {
+                stream << get_indent() << values[i];
+                if (i < op->args.size() - 1) {
+                    stream << ",";
+                }
+                stream << "\n";
+            }
+            indent--;
+            stream << get_indent() << "};\n";
+
+            // Return a pointer to it of the appropriate type
+
+            // TODO: This is dubious type-punning. We really need to
+            // find a better way to do this. We dodge the problem for
+            // the specific case of buffer shapes in the case above.
+            if (op->type.handle_type) {
+                rhs << "(" << print_type(op->type) << ")";
+            }
+            rhs << "(&" << struct_name << ")";
         }
-
-        static_assert(sizeof(halide_dimension_t) == 4 * sizeof(int32_t),
-                      "CodeGen_C assumes a halide_dimension_t is four densely-packed int32_ts");
-
-        internal_assert(values.size() % 4 == 0);
-        int dimension = values.size() / 4;
-
-        string shape_name = unique_name('s');
-        stream
-          << get_indent() << "struct halide_dimension_t " << shape_name
-          << "[" << dimension << "] = {\n";
-        indent++;
-        for (int i = 0; i < dimension; i++) {
-          stream
-            << get_indent() << "{"
-            << values[i * 4 + 0] << ", "
-            << values[i * 4 + 1] << ", "
-            << values[i * 4 + 2] << ", "
-            << values[i * 4 + 3] << "},\n";
-        }
-        indent--;
-        stream << get_indent() << "};\n";
-
-        rhs << shape_name;
-      } else {
+    } else if (op->is_intrinsic(Call::make_struct_type)) {
         // Emit a declaration like:
-        // struct {const int f_0, const char f_1, const int f_2} foo = {3, 'c', 4};
+        // struct {const int f_0, const char f_1, const int f_2} foo;
 
-        // Get the args
-        vector<string> values;
-        for (size_t i = 0; i < op->args.size(); i++) {
-          values.push_back(print_expr(op->args[i]));
-        }
-        stream << get_indent() << "struct {\n";
+        // Declares a struct type. Returns a null pointer of the new type.
+        internal_assert(op->args.size() >= 1);
+
+        const StringImm *str_imm = op->args[0].as<StringImm>();
+        internal_assert(str_imm != nullptr);
+        std::string name = str_imm->value;
+
+        stream << get_indent() << "struct " << name << " {\n";
         // List the types.
         indent++;
         for (size_t i = 0; i < op->args.size(); i++) {
-          stream << get_indent() << "const " << print_type(op->args[i].type()) << " f_" << i << ";\n";
-        }
-        indent--;
-        string struct_name = unique_name('s');
-        stream << get_indent() << "} " << struct_name << " = {\n";
-        // List the values.
-        indent++;
-        for (size_t i = 0; i < op->args.size(); i++) {
-          stream << get_indent() << values[i];
-          if (i < op->args.size() - 1) {
-            stream << ",";
-          }
-          stream << "\n";
+            stream << get_indent() << "const " << print_type(op->args[i].type()) << " f_" << i << ";\n";
         }
         indent--;
         stream << get_indent() << "};\n";
-
-        // Return a pointer to it of the appropriate type
-
-        // TODO: This is dubious type-punning. We really need to
-        // find a better way to do this. We dodge the problem for
-        // the specific case of buffer shapes in the case above.
-        if (op->type.handle_type) {
-          rhs << "(" << print_type(op->type) << ")";
-        }
-        rhs << "(&" << struct_name << ")";
-      }
-    } else if (op->is_intrinsic(Call::make_struct_type)) {
-      // Emit a declaration like:
-      // struct {const int f_0, const char f_1, const int f_2} foo;
-
-      // Declares a struct type. Returns a null pointer of the new type.
-      internal_assert(op->args.size() >= 1);
-      
-      const StringImm *str_imm = op->args[0].as<StringImm>();
-      internal_assert(str_imm != nullptr);
-      std::string name = str_imm->value;
-
-      stream << get_indent() << "struct " << name << " {\n";
-      // List the types.
-      indent++;
-      for (size_t i = 0; i < op->args.size(); i++) {
-        stream << get_indent() << "const " << print_type(op->args[i].type()) << " f_" << i << ";\n";
-      }
-      indent--;
-      stream << get_indent() << "};\n";
-      rhs << "((" << name << " *)nullptr)";
+        rhs << "((" << name << " *)nullptr)";
     } else if (op->is_intrinsic(Call::make_typed_struct)) {
         internal_assert(op->args.size() >= 1);
 
