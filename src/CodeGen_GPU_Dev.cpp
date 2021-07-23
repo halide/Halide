@@ -115,7 +115,7 @@ protected:
                                 mutate(extract_lane(s->value, ln)),
                                 mutate(extract_lane(s->index, ln)),
                                 s->param,
-                                make_bool(true),
+                                const_true(),
                                 // TODO: alignment needs to be changed
                                 s->alignment)));
             }
