@@ -73,7 +73,7 @@ int test1(const Target &t) {
     g(x) = f(0);
 
     f.compute_root();
-    g.prefetch(f, x, 8);
+    g.prefetch(f, x, x, 8);
 
     Module m = g.compile_to_module({});
     CollectPrefetches collect;
@@ -96,7 +96,7 @@ int test2(const Target &t) {
     g(x) = f(0);
 
     f.compute_root();
-    g.specialize(p).prefetch(f, x, 8);
+    g.specialize(p).prefetch(f, x, x, 8);
     g.specialize_fail("No prefetch");
 
     Module m = g.compile_to_module({p});
@@ -121,7 +121,7 @@ int test3(const Target &t) {
     f.compute_root();
     g.split(x, xo, x, 32);
     h.compute_at(g, xo);
-    g.prefetch(f, xo, 1);
+    g.prefetch(f, xo, xo, 1);
 
     Module m = g.compile_to_module({});
     CollectPrefetches collect;
@@ -144,7 +144,7 @@ int test4(const Target &t) {
 
     f.compute_root();
     h.compute_root();
-    g.prefetch(f, x, 1);
+    g.prefetch(f, x, x, 1);
 
     Module m = g.compile_to_module({});
     CollectPrefetches collect;
@@ -167,7 +167,7 @@ int test5(const Target &t) {
     g(x, y) = f(0, 0);
 
     f.compute_root();
-    g.prefetch_at(f, x, y, 8);
+    g.prefetch(f, x, y, 8);
 
     Module m = g.compile_to_module({});
     CollectPrefetches collect;
@@ -190,7 +190,7 @@ int test6(const Target &t) {
     g(x, y) = f(0, 0);
 
     f.compute_root();
-    g.specialize(p).prefetch_at(f, x, y, 8);
+    g.specialize(p).prefetch(f, x, y, 8);
     g.specialize_fail("No prefetch");
 
     Module m = g.compile_to_module({p});
@@ -215,7 +215,7 @@ int test7(const Target &t) {
     f.compute_root();
     g.split(x, xo, x, 32);
     h.compute_at(g, xo);
-    g.prefetch_at(f, xo, y, 1);
+    g.prefetch(f, xo, y, 1);
 
     Module m = g.compile_to_module({});
     CollectPrefetches collect;
@@ -238,7 +238,7 @@ int test8(const Target &t) {
 
     f.compute_root();
     h.compute_root();
-    g.prefetch_at(f, x, y, 1);
+    g.prefetch(f, x, y, 1);
 
     Module m = g.compile_to_module({});
     CollectPrefetches collect;
