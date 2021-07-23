@@ -80,10 +80,10 @@ Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
             rewrite(max(x, y) * min(x, y), x * y) ||
             rewrite(max(x, y) * min(y, x), y * x) ||
 
-            rewrite(min(x*c0, c1)*c2, min(x*fold(c0*c2), fold(c1*c2)), c2 > 0) ||
-            rewrite(min(x*c0, c1)*c2, max(x*fold(c0*c2), fold(c1*c2)), c2 < 0) ||
-            rewrite(max(x*c0, c1)*c2, max(x*fold(c0*c2), fold(c1*c2)), c2 > 0) ||
-            rewrite(max(x*c0, c1)*c2, min(x*fold(c0*c2), fold(c1*c2)), c2 < 0) ||
+            rewrite(min(x * c0, c1) * c2, min(x * fold(c0 * c2), fold(c1 * c2)), c2 > 0) ||
+            rewrite(min(x * c0, c1) * c2, max(x * fold(c0 * c2), fold(c1 * c2)), c2 < 0) ||
+            rewrite(max(x * c0, c1) * c2, max(x * fold(c0 * c2), fold(c1 * c2)), c2 > 0) ||
+            rewrite(max(x * c0, c1) * c2, min(x * fold(c0 * c2), fold(c1 * c2)), c2 < 0) ||
 
             rewrite(broadcast(x, c0) * broadcast(y, c0), broadcast(x * y, c0)) ||
             rewrite(broadcast(x, c0) * broadcast(y, c1), broadcast(x * broadcast(y, fold(c1 / c0)), c0), c1 % c0 == 0) ||
