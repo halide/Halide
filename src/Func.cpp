@@ -1840,14 +1840,14 @@ Stage &Stage::hexagon(const VarOrRVar &x) {
     return *this;
 }
 
-Stage &Stage::prefetch_at(const Func &f, const VarOrRVar &loop, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
-    PrefetchDirective prefetch = {f.name(), loop.name(), from.name(), std::move(offset), strategy, Parameter()};
+Stage &Stage::prefetch_at(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+    PrefetchDirective prefetch = {f.name(), at.name(), from.name(), std::move(offset), strategy, Parameter()};
     definition.schedule().prefetches().push_back(prefetch);
     return *this;
 }
 
-Stage &Stage::prefetch_at(const Internal::Parameter &param, const VarOrRVar &loop, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
-    PrefetchDirective prefetch = {param.name(), loop.name(), from.name(), std::move(offset), strategy, param};
+Stage &Stage::prefetch_at(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+    PrefetchDirective prefetch = {param.name(), at.name(), from.name(), std::move(offset), strategy, param};
     definition.schedule().prefetches().push_back(prefetch);
     return *this;
 }
