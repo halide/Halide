@@ -70,7 +70,7 @@ public:
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
-    Output<Buffer<uint8_t>> output_{"output", 4};
+    Output<Buffer<>> output_{"output", 4};
 
     void configure() {
         if (use_8bit_multiply(target)) {
@@ -149,10 +149,14 @@ public:
         convolved(c, x, y, b) += i32(input_rdxyc) * i32(filter_rdxyc);
 
         // Saturate and narrow the output.
-        Expr output = multiply_2x_high(convolved(c, x, y, b), output_multiplier_);
-        output = i16_sat(rounding_shift_right(output, output_shift_));
-        output = u8_sat(saturating_add(output, output_zero_));
-        output_(c, x, y, b) = clamp(output, output_min_, output_max_);
+        Expr output;
+        if (output_.type() == halide_type_of<uint8_t>()) {
+            output = quantize_and_relu_u8(convolved(c, x, y, b), output_multiplier_, output_shift_, output_zero_,
+                                          output_min_, output_max_, target);
+        } else {
+            output = quantize_i16(convolved(c, x, y, b), output_multiplier_, output_shift_, target);
+        }
+        output_(c, x, y, b) = output;
 
         // Schedule
         interpret_as_tensor(input_);

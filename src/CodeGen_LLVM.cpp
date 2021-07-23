@@ -145,6 +145,22 @@ using std::vector;
 
 namespace {
 
+llvm::Value *CreateConstGEP1_32(IRBuilderBase *builder, Value *ptr, unsigned index) {
+#if LLVM_VERSION >= 130
+    return builder->CreateConstGEP1_32(ptr->getType()->getScalarType()->getPointerElementType(), ptr, index);
+#else
+    return builder->CreateConstGEP1_32(ptr, index);
+#endif
+}
+
+llvm::Value *CreateInBoundsGEP(IRBuilderBase *builder, Value *ptr, ArrayRef<Value *> index_list) {
+#if LLVM_VERSION >= 130
+    return builder->CreateInBoundsGEP(ptr->getType()->getScalarType()->getPointerElementType(), ptr, index_list);
+#else
+    return builder->CreateInBoundsGEP(ptr, index_list);
+#endif
+}
+
 // Get the LLVM linkage corresponding to a Halide linkage type.
 llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
     // TODO(dsharlet): For some reason, marking internal functions as
@@ -906,7 +922,7 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn,
     std::vector<llvm::Value *> wrapper_args;
     for (llvm::Function::arg_iterator i = fn->arg_begin(); i != fn->arg_end(); i++) {
         // Get the address of the nth argument
-        llvm::Value *ptr = builder->CreateConstGEP1_32(arg_array, wrapper_args.size());
+        llvm::Value *ptr = CreateConstGEP1_32(builder, arg_array, wrapper_args.size());
         ptr = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
         if (i->getType() == halide_buffer_t_type->getPointerTo()) {
             // Cast the argument to a halide_buffer_t *
@@ -923,7 +939,7 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn,
     result->setIsNoInline();
 
     if (result_in_argv) {
-        llvm::Value *result_in_argv_ptr = builder->CreateConstGEP1_32(arg_array, wrapper_args.size());
+        llvm::Value *result_in_argv_ptr = CreateConstGEP1_32(builder, arg_array, wrapper_args.size());
         if (fn->getReturnType() != void_t) {
             result_in_argv_ptr = builder->CreateLoad(result_in_argv_ptr->getType()->getPointerElementType(), result_in_argv_ptr);
             // Cast to the appropriate type and store
@@ -1778,7 +1794,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
         if (const int64_t *offset = as_const_int(add->b)) {
             Value *base = codegen_buffer_pointer(base_address, type, add->a);
             Value *off = codegen(make_const(Int(8 * d.getPointerSize()), *offset));
-            return builder->CreateInBoundsGEP(base, off);
+            return CreateInBoundsGEP(builder, base, off);
         }
     }
 
@@ -1815,7 +1831,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
         index = builder->CreateIntCast(index, i64_t, true);
     }
 
-    return builder->CreateInBoundsGEP(base_address, index);
+    return CreateInBoundsGEP(builder, base_address, index);
 }
 
 void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, const Expr &index) {
@@ -2009,7 +2025,7 @@ void CodeGen_LLVM::visit(const Load *op) {
                 LoadInst *val = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 value = builder->CreateInsertElement(value, val, lane);
-                ptr = builder->CreateInBoundsGEP(ptr, stride);
+                ptr = CreateInBoundsGEP(builder, ptr, stride);
             }
         } else if ((false)) { /* should_scalarize(op->index) */
             // TODO: put something sensible in for
@@ -2933,7 +2949,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             llvm::Value *buf = create_alloca_at_entry(i8_t, buf_size);
 
             llvm::Value *dst = buf;
-            llvm::Value *buf_end = builder->CreateConstGEP1_32(buf, buf_size);
+            llvm::Value *buf_end = CreateConstGEP1_32(builder, buf, buf_size);
 
             llvm::Function *append_string = module->getFunction("halide_string_to_string");
             llvm::Function *append_int64 = module->getFunction("halide_int64_to_string");
@@ -3759,7 +3775,7 @@ void CodeGen_LLVM::visit(const Store *op) {
                     // Increment the pointer by the stride for each element
                     StoreInst *store = builder->CreateStore(v, ptr);
                     annotate_store(store, op->index);
-                    ptr = builder->CreateInBoundsGEP(ptr, stride);
+                    ptr = CreateInBoundsGEP(builder, ptr, stride);
                 }
             }
         } else {

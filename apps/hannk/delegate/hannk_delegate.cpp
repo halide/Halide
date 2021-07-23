@@ -659,8 +659,8 @@ private:
             params->dilation_height_factor,
         }};
         auto activation = ConvertTfLiteActivation(params->activation);
-        return make_op<Conv2DOp>(input, filter, bias, output, stride,
-                                 dilation_factor, padding, activation);
+        return make_op<ConvOp>(input, filter, bias, output, stride,
+                               dilation_factor, padding, activation);
     }
 
     OpPtr BuildDepthwiseConv2d(TfLiteContext *context, TfLiteNode *node) {
@@ -691,7 +691,7 @@ private:
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteFullyConnectedParams *params = (const TfLiteFullyConnectedParams *)(node->builtin_data);
         auto activation = ConvertTfLiteActivation(params->activation);
-        return make_op<FullyConnectedOp>(input, filter, bias, output, activation);
+        return lower_tflite_fullyconnected(input, filter, bias, output, activation);
     }
 
     OpPtr BuildPad(TfLiteContext *context, TfLiteNode *node) {
@@ -1377,7 +1377,10 @@ class NodeSupport {
         if (!IsVersionOK(1, 1)) {
             return false;
         }
-        if (!InputsHaveCorrectTypes({U8, U8, I32_OR_NONE})) {
+        if (!(InputsHaveCorrectTypes({U8, U8, I32_OR_NONE}) && OutputsHaveCorrectTypes({U8})) &&
+            // Not sure if this combination is actually expected, but models in the wild
+            // require it, so we'll support it
+            !(InputsHaveCorrectTypes({U8, U8, I32_OR_NONE}) && OutputsHaveCorrectTypes({I16}))) {
             return false;
         }
         const TfLiteFullyConnectedParams *params = (const TfLiteFullyConnectedParams *)(node_->builtin_data);

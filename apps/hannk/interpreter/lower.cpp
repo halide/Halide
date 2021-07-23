@@ -18,7 +18,7 @@ OpPtr lower_tflite_lstm(TensorPtr data_input, TensorPtr prev_activ_input, Tensor
 
     std::vector<TensorPtr> concat_inputs = {data_input, prev_activ_input};
     ops.push_back(make_op<ConcatenationOp>(concat_inputs, concat_temp, 0));
-    ops.push_back(make_op<FullyConnectedOp>(concat_temp, weights_input, biases_input, activ_temp, activation));
+    ops.push_back(lower_tflite_fullyconnected(concat_temp, weights_input, biases_input, activ_temp, activation));
 
     // Split activ_temp into the 4 ops we need.
     Box elementwise_bounds = activ_temp->bounds();
@@ -72,6 +72,63 @@ OpPtr lower_tflite_lstm(TensorPtr data_input, TensorPtr prev_activ_input, Tensor
     ops.push_back(make_op<ElementwiseProgramOp>(elementwise_inputs, elementwise_outputs, program_buf));
 
     return make_op<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
+}
+
+namespace {
+
+TensorPtr make_shape_tensor(const TensorPtr &t) {
+    const auto &b = t->buffer();
+    const int dims = b.dimensions();
+    HalideBuffer<int32_t> data(dims);
+    for (int d = 0; d < dims; d++) {
+        data.data()[d] = b.extent(dims - d - 1);
+    }
+    TensorPtr shape_tensor = std::make_shared<Tensor>(t->name() + ".shape_tensor", std::move(data));
+    shape_tensor->set_constant();
+    return shape_tensor;
+}
+
+}  // namespace
+
+// Implement FullyConnected op using Hannk's Conv op.
+OpPtr lower_tflite_fullyconnected(const TensorPtr &input, const TensorPtr &filter, const TensorPtr &bias,
+                                  const TensorPtr &output, ActivationFunction activation) {
+    const std::array<int, 2> stride = {{1, 1}};
+    const std::array<int, 2> dilation_factor = {{1, 1}};
+
+    if (input->rank() == 2) {
+        return make_op<ConvOp>(input, filter, bias, output,
+                               stride, dilation_factor, Padding::Same, activation);
+    } else {
+        // Sometimes, fully connected op inputs contain extra dimensions, with the expectation that they
+        // are reshaped into a flat buffer.
+        Box bounds = input->bounds();
+#ifndef NDEBUG
+        for (const auto &i : bounds) {
+            assert(i.min == 0);
+        }
+#endif
+        int c_extent = 1;
+        int b_extent = bounds.back().extent();
+        for (size_t i = 0; i + 1 < bounds.size(); i++) {
+            c_extent *= bounds[i].extent();
+        }
+        Box reshaped_bounds = {{0, c_extent - 1}, {0, b_extent - 1}};
+        TensorPtr input_reshaped =
+            std::make_shared<Tensor>(input->name() + ".reshaped", input->type(), std::move(reshaped_bounds), input->quantization());
+        OpPtr reshape_input_op = make_op<ReshapeOp>(input, make_shape_tensor(input_reshaped), input_reshaped);
+
+        OpPtr conv_op = make_op<ConvOp>(input_reshaped, filter, bias, output,
+                                        stride, dilation_factor, Padding::Same, activation);
+
+        std::vector<TensorPtr> inputs = {input, filter, bias};
+        std::vector<TensorPtr> outputs = {output};
+        // std::initializer_list doesn't work well with move-only types, alas
+        std::vector<OpPtr> ops(2);
+        ops[0] = std::move(reshape_input_op);
+        ops[1] = std::move(conv_op);
+        return make_op<OpGroup>(std::move(inputs), std::move(outputs), std::move(ops));
+    }
 }
 
 }  // namespace hannk

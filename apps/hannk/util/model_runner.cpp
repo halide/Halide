@@ -245,7 +245,7 @@ int SeedTracker::seed_for_name(const std::string &name) {
         vsnprintf(buffer, sizeof(buffer), format, args_copy);
         va_end(args_copy);
 
-        *self->verbose_output_ << format;
+        *self->verbose_output_ << buffer;
     }
 }
 
@@ -468,6 +468,7 @@ bool ModelRunner::compare_results(const std::string &name_a, const std::string &
         CompareBuffersOptions options;
         options.close_thresh = std::ceil((1ull << tflite_buf.type().bits) * tolerance);
         options.max_diffs_to_log = 8;
+        options.verbose = !csv_output;
         CompareBuffersResult r = dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf, options);
         if (r.ok) {
             if (verbosity >= 2) {
@@ -499,6 +500,10 @@ int ModelRunner::parse_flags(int argc, char **argv, std::vector<std::string> &fi
          }},
         {"compare", [this](const std::string &value) {
              this->do_compare_results = std::stoi(value) != 0;
+             return 0;
+         }},
+        {"csv", [this](const std::string &value) {
+             this->csv_output = std::stoi(value) != 0;
              return 0;
          }},
         {"enable", [this](const std::string &value) {
@@ -571,18 +576,46 @@ int ModelRunner::parse_flags(int argc, char **argv, std::vector<std::string> &fi
 }
 
 void ModelRunner::run(const std::string &filename) {
-    std::cout << "Processing " << filename << " ...\n";
-
-    const std::vector<char> buffer = read_entire_file(filename);
-
     std::map<WhichRun, RunResult> results;
 
-    std::vector<WhichRun> active_runs;
-    for (int i = 0; i < kNumRuns; i++) {
-        if (do_run[i]) {
-            active_runs.push_back((WhichRun)i);
+    if (run_count == 0) {
+        run_count++;
+
+        for (int i = 0; i < kNumRuns; i++) {
+            if (do_run[i]) {
+                active_runs.push_back((WhichRun)i);
+            }
+        }
+
+        if (csv_output) {
+            // Output column headers
+            std::cout << "Filename";
+            if (do_benchmark) {
+                for (WhichRun i : active_runs) {
+                    std::cout << ',' << RunNames[i] << "_time_us";
+                }
+            }
+            if (do_compare_results && do_run[kTfLite]) {
+                for (WhichRun i : active_runs) {
+                    if (i == kTfLite) {
+                        continue;
+                    }
+                    std::cout << ',' << RunNames[i] << "_matches_tflite";
+                }
+            }
+            std::cout << '\n';
         }
     }
+
+    if (csv_output) {
+        // Try to print just the filename rather than a full pathname
+        const auto n = filename.rfind('/');
+        std::cout << (n == std::string::npos ? filename : filename.substr(n + 1));
+    } else {
+        std::cout << "Processing " << filename << " ...\n";
+    }
+
+    const std::vector<char> buffer = read_entire_file(filename);
 
     const auto exec_tflite = [this, &buffer]() {
         return run_in_tflite(buffer);
@@ -617,7 +650,12 @@ void ModelRunner::run(const std::string &filename) {
     // ----- Log benchmark times
     if (do_benchmark) {
         for (WhichRun i : active_runs) {
-            std::cout << RunNames[i] << " Time: " << std::chrono::duration_cast<std::chrono::microseconds>(results[i].time).count() << " us\n";
+            const auto t = std::chrono::duration_cast<std::chrono::microseconds>(results[i].time).count();
+            if (csv_output) {
+                std::cout << ',' << t;
+            } else {
+                std::cout << RunNames[i] << " Time: " << t << " us\n";
+            }
         }
     }
 
@@ -628,7 +666,11 @@ void ModelRunner::run(const std::string &filename) {
             if (i == kTfLite) {
                 continue;
             }
-            if (!compare_results(RunNames[kTfLite], RunNames[i], results[kTfLite], results[i])) {
+            const bool matched = compare_results(RunNames[kTfLite], RunNames[i], results[kTfLite], results[i]);
+            if (csv_output) {
+                std::cout << ',' << (matched ? '1' : '0');
+            }
+            if (!matched) {
                 all_matched = false;
             }
         }
@@ -636,6 +678,10 @@ void ModelRunner::run(const std::string &filename) {
         if (!all_matched && !keep_going) {
             exit(1);
         }
+    }
+
+    if (csv_output) {
+        std::cout << '\n';
     }
 }
 
