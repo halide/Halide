@@ -1,6 +1,6 @@
 #include "CodeGen_GPU_Dev.h"
-#include "Deinterleave.h"
 #include "Bounds.h"
+#include "Deinterleave.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
@@ -110,14 +110,14 @@ protected:
             std::vector<Stmt> scalar_stmts;
             for (int ln = 0; ln < s->value.type().lanes(); ln++) {
                 scalar_stmts.push_back(IfThenElse::make(
-                                           extract_lane(s->predicate, ln),
-                                           Store::make(s->name,
-                                                       mutate(extract_lane(s->value, ln)),
-                                                       mutate(extract_lane(s->index, ln)),
-                                                       s->param,
-                                                       make_bool(true),
-                                                       // TODO: alignment needs to be changed
-                                                       s->alignment)));
+                    extract_lane(s->predicate, ln),
+                    Store::make(s->name,
+                                mutate(extract_lane(s->value, ln)),
+                                mutate(extract_lane(s->index, ln)),
+                                s->param,
+                                make_bool(true),
+                                // TODO: alignment needs to be changed
+                                s->alignment)));
             }
             return Block::make(scalar_stmts);
         } else {
@@ -127,7 +127,7 @@ protected:
 
     Expr visit(const Load *op) override {
         if (!is_const_one(op->predicate)) {
-            Expr load_expr = Load::make(op->type, op->name, op->index, op->image, 
+            Expr load_expr = Load::make(op->type, op->name, op->index, op->image,
                                         op->param, const_true(op->type.lanes()), op->alignment);
             Expr pred_load = Call::make(load_expr.type(),
                                         Call::if_then_else,
@@ -140,7 +140,7 @@ protected:
     }
 };
 
-} // namespace
+}  // namespace
 
 Stmt CodeGen_GPU_Dev::scalarize_predicated_loads_stores(Stmt &s) {
     ScalarizePredicatedLoadStore sps;
