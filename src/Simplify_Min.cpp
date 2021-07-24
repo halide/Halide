@@ -100,6 +100,8 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              rewrite(min(max(x, y + c0), y), y, c0 > 0) ||
              rewrite(min(select(x, min(z, y), w), y), min(select(x, z, w), y)) ||
              rewrite(min(select(x, min(z, y), w), z), min(select(x, y, w), z)) ||
+             rewrite(min(select(x, w, min(z, y)), y), min(select(x, w, z), y)) ||
+             rewrite(min(select(x, w, min(z, y)), z), min(select(x, w, y), z)) ||
 
              rewrite(min(intrin(Call::likely, x), x), b) ||
              rewrite(min(x, intrin(Call::likely, x)), a) ||
