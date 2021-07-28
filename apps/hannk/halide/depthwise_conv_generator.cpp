@@ -7,7 +7,7 @@ using namespace Halide::ConciseCasts;
 namespace hannk {
 
 // Less general, but performs much better on Xtensa.
-//#define XTENSA_GOES_FAST
+// #define XTENSA_GOES_FAST
 
 class DepthwiseConv : public Generator<DepthwiseConv> {
 public:
@@ -174,9 +174,8 @@ public:
         }
 
         output = quantize_and_relu_u8(output, output_multiplier_, output_shift_,
-                                 output_zero_, output_min_, output_max_, target);
+                                      output_zero_, output_min_, output_max_, target);
         output_(c, x, y, b) = output;
-            
 
         // Schedule.
         interpret_as_tensor(input_);
@@ -250,7 +249,7 @@ public:
 #ifdef XTENSA_GOES_FAST
         output_
             .tile(x, y, xo, yo, x, y, 1, 1)
-            .split(c, co, c, vector_size, TailStrategy::PredicateStores)
+            .split(c, co, c, vector_size, TailStrategy::RoundUp)
             .reorder(x, y, c, xo, yo, b, co)
             .vectorize(c)
             .unroll(x)
