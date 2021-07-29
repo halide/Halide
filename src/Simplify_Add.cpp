@@ -74,6 +74,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
              rewrite(select(x, y, z) + (w + select(x, u, v)), select(x, y + u, z + v) + w) ||
              rewrite(select(x, y, z) + (select(x, u, v) - w), select(x, y + u, z + v) - w) ||
              rewrite(select(x, y, z) + (w - select(x, u, v)), select(x, y - u, z - v) + w) ||
+             rewrite(select(x, c0 - y, c1) + c2, select(x, fold(c0 + c2) - y, fold(c1 + c2))) ||
 
              rewrite(x + y*(-1), x - y) ||
              rewrite(x*(-1) + y, y - x) ||
@@ -83,6 +84,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
              rewrite(x + (y + c0), (x + y) + c0) ||
              rewrite((c0 - x) + c1, fold(c0 + c1) - x) ||
              rewrite((c0 - x) + y, (y - x) + c0) ||
+             rewrite(max(x, y*c0 + z) + (u - y)*c0, max(x - y*c0, z) + u*c0) ||
 
              rewrite((x - y) + y, x) ||
              rewrite(x + (y - x), y) ||
