@@ -81,7 +81,6 @@ Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
             rewrite(max(x, y) * min(y, x), y * x) ||
 
             rewrite(x * select(y, 1, 0), select(y, x, 0)) ||
-            rewrite(x * select(y, 1, 0), select(y, x, 0)) ||
 
             rewrite(broadcast(x, c0) * broadcast(y, c0), broadcast(x * y, c0)) ||
             rewrite(broadcast(x, c0) * broadcast(y, c1), broadcast(x * broadcast(y, fold(c1 / c0)), c0), c1 % c0 == 0) ||
