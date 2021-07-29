@@ -218,6 +218,7 @@ function(add_halide_library TARGET)
         set_target_properties("${TARGET}" PROPERTIES
                               POSITION_INDEPENDENT_CODE ON
                               LINKER_LANGUAGE CXX)
+        _Halide_fix_xcode("${TARGET}")
     endif ()
 
     # Load the plugins and setup dependencies
@@ -324,6 +325,7 @@ function(_Halide_add_halide_runtime RT)
     else ()
         add_library("${RT}" STATIC ${GEN_OUTS})
         set_target_properties("${RT}" PROPERTIES LINKER_LANGUAGE CXX)
+        _Halide_fix_xcode("${RT}")
     endif ()
 
     target_link_libraries("${RT}" INTERFACE Halide::Runtime Threads::Threads ${CMAKE_DL_LIBS})
@@ -406,5 +408,22 @@ function(_Halide_target_link_gpu_libs TARGET VISIBILITY)
         else ()
             target_link_libraries(${TARGET} ${VISIBILITY} "${FOUNDATION_LIBRARY}")
         endif ()
+    endif ()
+endfunction()
+
+##
+# Function for working around Xcode backend bugs
+##
+
+function(_Halide_fix_xcode TARGET)
+    if (CMAKE_GENERATOR STREQUAL "Xcode")
+        # Xcode generator requires at least one source file to work correctly.
+        # Touching the empty file unconditionally would cause the archiver to
+        # re-run every time CMake re-runs, even if nothing actually changed.
+        set(empty_file "${CMAKE_CURRENT_BINARY_DIR}/Halide_${TARGET}_empty.cpp")
+        if (NOT EXISTS "${empty_file}")
+            file(TOUCH "${empty_file}")
+        endif ()
+        target_sources("${TARGET}" PRIVATE "${empty_file}")
     endif ()
 endfunction()
