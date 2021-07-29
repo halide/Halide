@@ -149,7 +149,7 @@ $(BIN)/%/libhalide_hexagon_remote_skel.so: $(BIN)/%/halide_remote.o $(BIN)/%/hal
 
 $(BIN)/%/signed_by_debug/libhalide_hexagon_remote_skel.so: $(BIN)/%/libhalide_hexagon_remote_skel.so
 	mkdir -p $(@D)
-	python $(HEXAGON_ELFSIGNER) --no_disclaimer -i $^ -o `dirname $@`
+	python3 $(HEXAGON_ELFSIGNER) --no_disclaimer -i $^ -o `dirname $@`
 
 $(BIN)/%/libhalide_hexagon_host.so: $(BIN)/src/halide_hexagon_remote_stub.c $(BIN)/%/host_malloc.o $(BIN)/%/host_shim.o $(BIN)/%/libadsprpc_shim.o
 	mkdir -p $(@D)
