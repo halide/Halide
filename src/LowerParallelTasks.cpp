@@ -13,13 +13,14 @@ namespace Halide {
 namespace Internal {
 
 // TODO(zalman): Find a better place for this code to live.
-LoweredFunc GenreateClosureIR(const std::string &name, const Closure &closure, const Stmt &body) {
-    std::vector<LoweredArgument> args;
+LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
+                              std::vector<LoweredArgument> &args, int closure_arg_index,
+                              const Stmt &body) {
   
     // Figure out if user_context has to be dealt with here.
     std::string closure_arg_name = unique_name("closure_arg");
-    args.emplace_back(closure_arg_name, Argument::Kind::InputScalar,
-                      type_of<void *>(), 0, ArgumentEstimates());
+    args[closure_arg_index] = LoweredArgument(closure_arg_name, Argument::Kind::InputScalar,
+                                              type_of<void *>(), 0, ArgumentEstimates());
     Expr closure_arg = Variable::make(type_of<void *>(), closure_arg_name);
 
     Stmt wrapped_body = body;
@@ -33,7 +34,7 @@ LoweredFunc GenreateClosureIR(const std::string &name, const Closure &closure, c
         type_args[struct_index + 1] = make_zero(v.second);
         wrapped_body = LetStmt::make(v.first,
                                      Call::make(v.second, Call::load_struct_member,
-                                                { closure_arg, struct_type, struct_index },
+                                                { closure_arg, struct_type, make_const(UInt(32), struct_index) },
                                                 Call::PureIntrinsic),
                                      wrapped_body);
         struct_index++;
@@ -43,12 +44,12 @@ LoweredFunc GenreateClosureIR(const std::string &name, const Closure &closure, c
         type_args[struct_index + 2] = make_zero(type_of<halide_buffer_t *>());
         wrapped_body = LetStmt::make(b.first,
                                      Call::make(type_of<void *>(), Call::load_struct_member,
-                                                { closure_arg, struct_type, struct_index },
+                                                { closure_arg, struct_type, make_const(UInt(32), struct_index) },
                                                 Call::PureIntrinsic),
                                      wrapped_body);
         wrapped_body = LetStmt::make(b.first + ".buffer",
                                      Call::make(type_of<halide_buffer_t *>(), Call::load_struct_member,
-                                                { closure_arg, struct_type, struct_index + 1},
+                                                { closure_arg, struct_type, make_const(UInt(32), struct_index + 1) },
                                                 Call::PureIntrinsic),
                                      wrapped_body);
         struct_index += 2;
@@ -159,26 +160,18 @@ struct LowerParallelTasks : public IRMutator {
         }
 
         int num_tasks = (int)(tasks.size());
-        std::string tasks_allocation_name = unique_name("tasks_allocation");
-        // TODO(zalman): Might need to get type correct here.
-        Expr tasks_list = Variable::make(Handle(), tasks_allocation_name);
+        // TODO(zalman): Should probably move this to HalideRuntime.h or come up
+        // with a better way to do it, though this number is encoded in the code
+        // below as well so...
+        std::vector<Expr> tasks_array_args(2);
+        tasks_array_args[0] = Call::make(type_of<halide_parallel_task_t *>(), Call::make_struct_type, { }, Call::PureIntrinsic);
+        tasks_array_args[1] = num_tasks;
+
 
         std::string closure_name = unique_name("parallel_closure");
         Expr closure_struct = AllocateClosure(closure_name, closure);
  
-        // TODO: Allocate tasks list and wrap Let around body.
-    #if 0
-        // Make space on the stack for the tasks
-        llvm::Value *task_stack_ptr = create_alloca_at_entry(parallel_task_t_type, num_tasks);
-
-        llvm::Type *args_t[] = {i8_t->getPointerTo(), i32_t, i8_t->getPointerTo()};
-        FunctionType *task_t = FunctionType::get(i32_t, args_t, false);
-        llvm::Type *loop_args_t[] = {i8_t->getPointerTo(), i32_t, i32_t, i8_t->getPointerTo(), i8_t->getPointerTo()};
-        FunctionType *loop_task_t = FunctionType::get(i32_t, loop_args_t, false);
-
-        Value *result = nullptr;
-    #endif
-
+        Expr result;
         for (int i = 0; i < num_tasks; i++) {
             ParallelTask t = tasks[i];
 
@@ -295,6 +288,7 @@ struct LowerParallelTasks : public IRMutator {
             MinThreads min_threads;
             t.body.accept(&min_threads);
 
+            // TODO(zalman): Need to figure out how to make this choice in pure Halide IR.
 #if 0
             // Decide if we're going to call do_par_for or
             // do_parallel_tasks. halide_do_par_for is simpler, but
@@ -305,66 +299,38 @@ struct LowerParallelTasks : public IRMutator {
                                    min_threads.result == 0 &&
                                    t.semaphores.empty() &&
                                    !task_parent);
+#else
+            bool use_parallel_for = false;
+#endif
 
-            // Make the array of semaphore acquisitions this task needs to do before it runs.
-            Value *semaphores;
-            Value *num_semaphores = ConstantInt::get(i32_t, (int)t.semaphores.size());
+            Expr semaphore_type = Call::make(type_of<halide_semaphore_t *>(), Call::make_struct_type,
+                                             { Expr((int64_t)0), Expr((int64_t)0) }, Call::PureIntrinsic);
+            std::string semaphores_array_name = unique_name("task_semaphores");
+            Expr semaphores_array;
             if (!t.semaphores.empty()) {
-                semaphores = create_alloca_at_entry(semaphore_acquire_t_type, (int)t.semaphores.size());
+                std::vector<Expr> semaphore_args(2 + t.semaphores.size() * 2);
+                semaphore_args[0] = semaphore_type;
+                semaphore_args[1] = (int)t.semaphores.size();
                 for (int i = 0; i < (int)t.semaphores.size(); i++) {
-                    Value *semaphore = codegen(t.semaphores[i].semaphore);
-                    semaphore = builder->CreatePointerCast(semaphore, semaphore_t_type->getPointerTo());
-                    Value *count = codegen(t.semaphores[i].count);
-                    Value *slot_ptr = builder->CreateConstGEP2_32(semaphore_acquire_t_type, semaphores, i, 0);
-                    builder->CreateStore(semaphore, slot_ptr);
-                    slot_ptr = builder->CreateConstGEP2_32(semaphore_acquire_t_type, semaphores, i, 1);
-                    builder->CreateStore(count, slot_ptr);
+                    semaphore_args[2 + i * 2] = t.semaphores[i].semaphore;
+                    semaphore_args[2 + i * 2 + 1] = t.semaphores[i].count;
                 }
-            } else {
-                semaphores = ConstantPointerNull::get(semaphore_acquire_t_type->getPointerTo());
+                for (const auto &e : semaphore_args) {
+                    debug(0) << "Semaphore arg: " << e << "\n";
+                }
+                semaphores_array = Call::make(type_of<halide_parallel_task_t *>(), Call::make_typed_struct, semaphore_args, Call::PureIntrinsic);
             }
 
-            FunctionType *fn_type = use_do_par_for ? task_t : loop_task_t;
-            int closure_arg_idx = use_do_par_for ? 2 : 3;
-
-            // Make a new function that does the body
-            llvm::Function *containing_function = function;
-            function = llvm::Function::Create(fn_type, llvm::Function::InternalLinkage,
-                                              t.name, module.get());
-
-            llvm::Value *task_ptr = builder->CreatePointerCast(function, fn_type->getPointerTo());
-
-            function->addParamAttr(closure_arg_idx, Attribute::NoAlias);
-
-            set_function_attributes_for_target(function, target);
-
-            // Make the initial basic block and jump the builder into the new function
-            IRBuilderBase::InsertPoint call_site = builder->saveIP();
-            BasicBlock *block = BasicBlock::Create(*context, "entry", function);
-            builder->SetInsertPoint(block);
-
-            // Save the destructor block
-            BasicBlock *parent_destructor_block = destructor_block;
-            destructor_block = nullptr;
-
-            // Make a new scope to use
-            Scope<Value *> saved_symbol_table;
-            symbol_table.swap(saved_symbol_table);
-
-            // Get the function arguments
-
-            // The user context is first argument of the function; it's
-            // important that we override the name to be "__user_context",
-            // since the LLVM function has a random auto-generated name for
-            // this argument.
-            llvm::Function::arg_iterator iter = function->arg_begin();
-            sym_push("__user_context", iterator_to_pointer(iter));
-
-            if (use_do_par_for) {
-                // Next is the loop variable.
-                ++iter;
-                sym_push(t.loop_var, iterator_to_pointer(iter));
-            } else if (!t.loop_var.empty()) {
+            std::vector<LoweredArgument> closure_args(use_parallel_for ? 3 : 5);
+            int closure_arg_index;
+            closure_args[0] = LoweredArgument("_user_context", Argument::Kind::InputScalar,
+                                              type_of<void *>(), 0, ArgumentEstimates());
+            if (use_parallel_for) {
+                closure_arg_index = 2;
+                closure_args[0] = LoweredArgument(t.loop_var, Argument::Kind::InputScalar,
+                                                  Int(32), 0, ArgumentEstimates());
+            } else {
+                closure_arg_index = 3;
                 // We peeled off a loop. Wrap a new loop around the body
                 // that just does the slice given by the arguments.
                 std::string loop_min_name = unique_name('t');
@@ -375,113 +341,64 @@ struct LowerParallelTasks : public IRMutator {
                                    ForType::Serial,
                                    DeviceAPI::None,
                                    t.body);
-                ++iter;
-                sym_push(loop_min_name, iterator_to_pointer(iter));
-                ++iter;
-                sym_push(loop_extent_name, iterator_to_pointer(iter));
+                closure_args[1] = LoweredArgument(loop_min_name, Argument::Kind::InputScalar,
+                                                  Int(32), 0, ArgumentEstimates());
+                closure_args[2] = LoweredArgument(loop_extent_name, Argument::Kind::InputScalar,
+                                                  Int(32), 0, ArgumentEstimates());
+                closure_args[4] = LoweredArgument("__task_parent", Argument::Kind::InputScalar,
+                                                  type_of<void *>(), 0, ArgumentEstimates());
+            }
+              
+            closure_implementations.emplace_back(GenerateClosureIR(t.name, closure, closure_args, closure_arg_index, t.body));
+
+            if (use_parallel_for) {
+                std::vector<Expr> function_decl_args(5);
+                function_decl_args[0] = t.name;
+                function_decl_args[1] = make_zero(Int(32));
+                function_decl_args[2] = make_zero(type_of<int8_t *>());
+                function_decl_args[3] = make_zero(Int(32));
+                function_decl_args[4] = make_zero(type_of<int8_t *>());
+
+                std::vector<Expr> args(5);
+                args[0] = Variable::make(Handle(), "_user_context");
+                args[1] = Call::make(Handle(), Call::resolve_function_name, function_decl_args, Call::PureIntrinsic);
+                args[2] = t.min;
+                args[3] = t.extent;
+                args[4] = closure_struct;
+                result = Call::make(Int(32), "halide_do_par_for", args, Call::Extern);
             } else {
-                // This task is not any kind of loop, so skip these args.
-                ++iter;
-                ++iter;
-            }
+                std::vector<Expr> function_decl_args(7);
+                function_decl_args[0] = t.name;
+                function_decl_args[1] = make_zero(Int(32));
+                function_decl_args[2] = make_zero(type_of<int8_t *>());
+                function_decl_args[3] = make_zero(Int(32));
+                function_decl_args[4] = make_zero(Int(32));
+                function_decl_args[5] = make_zero(type_of<int8_t *>());
+                function_decl_args[6] = make_zero(type_of<int8_t *>());
 
-            // The closure pointer is either the last (for halide_do_par_for) or
-            // second to last argument (for halide_do_parallel_tasks).
-            ++iter;
-            iter->setName("closure");
-            Value *closure_handle = builder->CreatePointerCast(iterator_to_pointer(iter),
-                                                               closure_t->getPointerTo());
-
-            // Load everything from the closure into the new scope
-            unpack_closure(closure, symbol_table, closure_t, closure_handle, builder);
-
-            if (!use_do_par_for) {
-                // For halide_do_parallel_tasks the threading runtime task parent
-                // is the last argument.
-                ++iter;
-                iter->setName("task_parent");
-                sym_push("__task_parent", iterator_to_pointer(iter));
-            }
-
-            // Generate the new function body
-            codegen(t.body);
-
-            // Return success
-            return_with_error_code(ConstantInt::get(i32_t, 0));
-
-            // Move the builder back to the main function.
-            builder->restoreIP(call_site);
-
-            // Now restore the scope
-            symbol_table.swap(saved_symbol_table);
-            function = containing_function;
-
-            // Restore the destructor block
-            destructor_block = parent_destructor_block;
-
-            Value *min = codegen(t.min);
-            Value *extent = codegen(t.extent);
-            Value *serial = codegen(cast(UInt(8), t.serial));
-
-            if (use_do_par_for) {
-                llvm::Function *do_par_for = module->getFunction("halide_do_par_for");
-                internal_assert(do_par_for) << "Could not find halide_do_par_for in initial module\n";
-                do_par_for->addParamAttr(4, Attribute::NoAlias);
-                Value *args[] = {get_user_context(), task_ptr, min, extent, closure_ptr};
-                debug(4) << "Creating call to do_par_for\n";
-                result = builder->CreateCall(do_par_for, args);
-            } else {
-                // Populate the task struct
-                Value *slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 0);
-                builder->CreateStore(task_ptr, slot_ptr);
-                slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 1);
-                builder->CreateStore(closure_ptr, slot_ptr);
-                slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 2);
-                builder->CreateStore(create_string_constant(t.name), slot_ptr);
-                slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 3);
-                builder->CreateStore(semaphores, slot_ptr);
-                slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 4);
-                builder->CreateStore(num_semaphores, slot_ptr);
-                slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 5);
-                builder->CreateStore(min, slot_ptr);
-                slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 6);
-                builder->CreateStore(extent, slot_ptr);
-                slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 7);
-                builder->CreateStore(ConstantInt::get(i32_t, min_threads.result), slot_ptr);
-                slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 8);
-                builder->CreateStore(serial, slot_ptr);
+                tasks_array_args.push_back(Call::make(Handle(), Call::resolve_function_name, function_decl_args, Call::PureIntrinsic));
+                tasks_array_args.push_back(closure_struct);
+                tasks_array_args.push_back(StringImm::make(t.name));
+                tasks_array_args.push_back(semaphores_array.defined() ? semaphores_array : make_zero(Handle()));
+                tasks_array_args.push_back((int)t.semaphores.size());
+                tasks_array_args.push_back(t.min);
+                tasks_array_args.push_back(t.extent);
+                tasks_array_args.push_back(min_threads.result);
+                tasks_array_args.push_back(Cast::make(UInt(8), t.serial));
             }
         }
 
-        Expr tasks_allocation = Allocate::    static Stmt make(const std::string &name, Type type, MemoryType memory_type,
-                         const std::vector<Expr> &extents,
-                         Expr condition, Stmt body,
-                         Expr new_expr = Expr(), const std::string &free_function = std::string());
-
-        if (!result) {
-            llvm::Function *do_parallel_tasks = module->getFunction("halide_do_parallel_tasks");
-            internal_assert(do_parallel_tasks) << "Could not find halide_do_parallel_tasks in initial module\n";
-            do_parallel_tasks->addParamAttr(2, Attribute::NoAlias);
-            Value *task_parent = sym_get("__task_parent", false);
-            if (!task_parent) {
-                task_parent = ConstantPointerNull::get(i8_t->getPointerTo());  // void*
+        if (tasks_array_args.size() > 2) {
+            // Allocate task list array
+            for (const auto &e : tasks_array_args) {
+                debug(0) << "Tasks arg: " << e << "\n";
             }
-            Value *args[] = {get_user_context(),
-                             ConstantInt::get(i32_t, num_tasks),
-                             task_stack_ptr,
-                             task_parent};
-            result = builder->CreateCall(do_parallel_tasks, args);
+            Expr tasks_list = Call::make(Handle(), Call::make_typed_struct, tasks_array_args, Call::PureIntrinsic);
+            result = Call::make(Int(32), "halide_do_parallel_tasks", { Variable::make(Handle(), "_user_context"),
+                                                                      make_const(Int(32), num_tasks), tasks_list,
+                                                                      Variable::make(Handle(), "_task_parent") }, Call::Extern);
         }
-
-        // Check for success
-        Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32_t, 0));
-        create_assertion(did_succeed, Expr(), result);
-        return result;
-#else
-        }
-#endif
-
-        return body;
+        return AssertStmt:: make(result == 0, result);
     }
 
     void get_parallel_tasks(const Stmt &s, std::vector<ParallelTask> &result, std::pair<std::string, int> prefix) {
@@ -546,3 +463,4 @@ Stmt lower_parallel_tasks(Stmt s, std::vector<LoweredFunc> &closure_implementati
 
 }  // namespace Internal
 }  // namespace Halide
+

@@ -666,7 +666,7 @@ HEADER_FILES = \
   LLVM_Runtime_Linker.h \
   LoopCarry.h \
   Lower.h \
-  Lowerparalleltasks.h \
+  LowerParallelTasks.h \
   LowerWarpShuffles.h \
   MainPage.h \
   MatlabWrapper.h \

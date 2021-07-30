@@ -566,6 +566,7 @@ struct Call : public ExprNode<Call> {
         make_struct_type,
         make_typed_struct,
         load_struct_member,
+        resolve_function_name,
         IntrinsicOpCount  // Sentinel: keep last.
     };
 

@@ -655,6 +655,7 @@ const char *const intrinsic_op_names[] = {
     "make_struct_type",
     "make_typed_struct",
     "load_struct_member",
+    "resolve_function_name",
 };
 
 static_assert(sizeof(intrinsic_op_names) / sizeof(intrinsic_op_names[0]) == Call::IntrinsicOpCount,

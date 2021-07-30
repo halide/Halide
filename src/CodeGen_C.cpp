@@ -2231,25 +2231,44 @@ void CodeGen_C::visit(const Call *op) {
         stream << get_indent() << "};\n";
         rhs << "((" << name << " *)nullptr)";
     } else if (op->is_intrinsic(Call::make_typed_struct)) {
-        internal_assert(op->args.size() >= 1);
+        internal_assert(op->args.size() >= 2);
 
         string type_carrier = print_expr(op->args[0]);
+        const int64_t *count_ptr = as_const_int(op->args[1]);
+        internal_assert(count_ptr != nullptr);
+        int64_t count = *count_ptr;
+
         // Get the args
         vector<string> values;
-        for (size_t i = 0; i < op->args.size(); i++) {
-            values.push_back(print_expr(op->args[i]));
+        for (size_t i = 2; i < op->args.size(); i++) {
+            values.push_back(print_expr(op->args[i - 2]));
         }
         string struct_name = unique_name('s');
-        stream << get_indent() << "decltype(" << type_carrier << ") " << struct_name << " = {\n";
+        string array_specifier;
+        if (count > 0) {
+            array_specifier = "[]";
+        }
+        stream << get_indent() << "decltype(" << type_carrier << ") " << struct_name << array_specifier << " = {\n";
         // List the values.
         indent++;
-        for (size_t i = 0; i < op->args.size(); i++) {
-            stream << get_indent() << values[i];
-            if (i < op->args.size() - 1) {
-                stream << ",";
+        int item = 0;
+        do {
+            if (count > 0) {
+                stream << get_indent() << "{\n";
+                indent++;
             }
-            stream << "\n";
-        }
+            for (size_t i = 0; i < op->args.size(); i++) {
+                stream << get_indent() << values[i];
+                if (i < op->args.size() - 1) {
+                    stream << ",";
+                }
+                stream << "\n";
+            }
+            if (count > 0) {
+                stream << get_indent() << "},\n";
+                indent--;
+            }
+        } while (item < count);
         indent--;
         stream << get_indent() << "};\n";
         // Return a pointer to it of the appropriate type
@@ -2262,11 +2281,26 @@ void CodeGen_C::visit(const Call *op) {
         }
         rhs << "(&" << struct_name << ")";
     } else if (op->is_intrinsic(Call::load_struct_member)) {
-        internal_assert(op->args.size() == 2);
-        const uint64_t *index = as_const_uint(op->args[1]);
+        internal_assert(op->args.size() == 3);
+        const uint64_t *index = as_const_uint(op->args[2]);
         internal_assert(index != nullptr);
         std::string struct_base = print_expr(op->args[0]);
-        rhs << struct_base << "->" << "f_" << *index;
+        std::string type_carrier = print_expr(op->args[1]);
+        rhs << "((decltype(" << type_carrier << "))" << struct_base << ")->" << "f_" << *index;
+    } else if (op->is_intrinsic(Call::resolve_function_name)) {
+        internal_assert(op->args.size() > 2);
+        const StringImm *name = op->args[0].as<StringImm>();
+        //        extern "C" ret_type name(type 1,ty2,);
+        //        &name
+        stream << get_indent() << print_type(op->args[1].type()) << name->value << "(";
+        for (size_t i = 2; i < op->args.size(); i++) {
+          stream << print_type(op->args[i].type());
+            if (i != op->args.size()) {
+                stream << ", ";
+            }
+        }
+        stream << ";\n";
+        rhs << "(&" << name->value << ")";
     } else if (op->is_intrinsic(Call::stringify)) {
         // Rewrite to an snprintf
         vector<string> printf_args;

@@ -2848,42 +2848,68 @@ void CodeGen_LLVM::visit(const Call *op) {
         llvm::Type *struct_type = (llvm::Type *)llvm::StructType::create(*context, types, name);
         value = llvm::ConstantPointerNull::get(struct_type->getPointerTo());
     } else if (op->is_intrinsic(Call::make_typed_struct)) {
-        internal_assert(op->args.size() >= 1);
+        internal_assert(op->args.size() >= 2);
 
         llvm::Value *type_carrier = codegen(op->args[0]);
+        const int64_t *count_ptr = as_const_int(op->args[1]);
+        internal_assert(count_ptr != nullptr);
+        int64_t count = *count_ptr;
 
         // Codegen each element.
-        vector<llvm::Value *> args(op->args.size() - 1);
-        vector<llvm::Type *> types(op->args.size() - 1);
-        for (size_t i = 1; i < op->args.size(); i++) {
-            args[i - 1] = codegen(op->args[i]);
-            types[i - 1] = args[i]->getType();
+        vector<llvm::Value *> args(op->args.size() - 2);
+        vector<llvm::Type *> types(op->args.size() - 2);
+        for (size_t i = 2; i < op->args.size(); i++) {
+            args[i - 2] = codegen(op->args[i]);
+            types[i - 2] = args[i]->getType();
         }
 
         llvm::Type *aggregate_t = type_carrier->getType();
-
-        value = create_alloca_at_entry(aggregate_t, 1);
-        for (size_t i = 0; i < args.size(); i++) {
-            Value *elem_ptr = builder->CreateConstInBoundsGEP2_32(aggregate_t, value, 0, i);
-            builder->CreateStore(args[i], elem_ptr);
+        if (count > 0) {
+            aggregate_t = llvm::ArrayType::get(aggregate_t->getPointerElementType(), count)->getPointerTo();
         }
+
+        // This is creating a single structure or array, where the array is of count structures.
+        value = create_alloca_at_entry(aggregate_t, 1);
+        int item = 0;
+        do {
+            for (size_t i = 0; i < args.size(); i++) {
+                Value *elem_ptr;
+                std::vector<Value *> indices(count > 0 ? 3 : 2);
+                size_t indices_index = 0;
+                indices[indices_index++] = ConstantInt::get(i32_t, 0);
+                if (count > 0) {
+                    indices[indices_index++] = ConstantInt::get(i32_t, item);
+                }
+                indices[indices_index++] = ConstantInt::get(i32_t, 1);
+                elem_ptr = CreateInBoundsGEP(builder, value, indices);
+                builder->CreateStore(args[i], elem_ptr);
+            }
+        } while (item++ < count);
     } else if (op->is_intrinsic(Call::load_struct_member)) {
         // TODO(zalman): Validate the Halide type of the result matches the LLVM type?
         // TODO(zalman): Are struct types the right level of indirection.
         internal_assert(op->args.size() == 3);
         llvm::Value *struct_ref = codegen(op->args[0]);
         llvm::Type *struct_type;
-        if (op->args[1].defined()) {
-            llvm::Value *typed_value = codegen(op->args[1]);
-            struct_type = typed_value->getType();
-            struct_ref = builder->CreatePointerCast(struct_ref, struct_type);
-        } else {
-            struct_type = value->getType();
-        }
+        llvm::Value *typed_value = codegen(op->args[1]);
+        struct_type = typed_value->getType();
+        struct_ref = builder->CreatePointerCast(struct_ref, struct_type);
         const uint64_t *index = as_const_uint(op->args[2]);
         internal_assert(index != nullptr);
-        llvm::Value *gep = builder->CreateConstInBoundsGEP2_32(struct_type, struct_ref, 0, index);
-        value = builder->CreateLoad(gep);
+        llvm::Value *gep = builder->CreateConstInBoundsGEP2_32(struct_type, struct_ref, 0, (size_t)*index);
+        value = builder->CreateLoad(gep->getType()->getPointerElementType(), gep);
+    } else if (op->is_intrinsic(Call::resolve_function_name)) {
+        internal_assert(op->args.size() > 2);
+        const StringImm *name = op->args[0].as<StringImm>();
+        llvm::Type *return_type = codegen(op->args[1])->getType();
+        std::vector<llvm::Type *> arg_types;
+        for (size_t i = 2; i < op->args.size(); i++) {
+            arg_types.push_back(codegen(op->args[i])->getType());
+        }
+        FunctionType *function_t = FunctionType::get(return_type, arg_types, false);
+        llvm::Function *function = llvm::Function::Create(function_t, llvm::Function::InternalLinkage,
+                                                          name->value, module.get());
+        value = function;
     } else if (op->is_intrinsic(Call::saturating_add) || op->is_intrinsic(Call::saturating_sub)) {
         internal_assert(op->args.size() == 2);
 
