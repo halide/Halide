@@ -40,7 +40,7 @@ if [ ${#GENERATOR_ARGS_SETS_ARRAY[@]} -eq 0 ]; then
     GENERATOR_ARGS_SETS_ARRAY=( '' )
 fi
 
-COMPILATION_TIMEOUT=600000000s
+COMPILATION_TIMEOUT=600s
 BENCHMARKING_TIMEOUT=10s
 
 if [ -z ${HL_TARGET} ]; then
@@ -104,7 +104,6 @@ echo "Use freeze = ${USE_FREEZE}"
 echo "# GPUs = ${NUM_GPUS}"
 
 USE_BENCHMARK_QUEUE="${USE_BENCHMARK_QUEUE:-1}"
-USE_BENCHMARK_QUEUE=1
 BENCHMARK_QUEUE_DIR=${SAMPLES}/benchmark_queue
 
 ENABLE_BEAM_SEARCH=${ENABLE_BEAM_SEARCH:-1}
@@ -374,7 +373,7 @@ benchmark_sample() {
     ${AUTOSCHED_BIN}/featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample || echo "featurization_to_sample failed for ${D} (probably because benchmarking failed)"
 
     rm ${D}/${FNAME}.featurization
-    #rm ${D}/bench
+    rm ${D}/bench
     rm ${D}/${FNAME}.schedule.h
     rm ${D}/${FNAME}.stmt
 
@@ -509,7 +508,6 @@ if [[ $TRAIN_ONLY != 1 ]]; then
         echo "Starting PID: ${benchmark_loop_pid}"
     fi
 
-    BATCH_ID=8851377
     for ((BATCH_IDX=0;BATCH_IDX<${NUM_BATCHES};BATCH_IDX++)); do
         if [[ $BENCHMARK_QUEUE_ENABLED == 1 && $RETRAIN_AFTER_EACH_BATCH == 1 ]]; then
             echo "Starting benchmark queue"
@@ -518,16 +516,14 @@ if [[ $TRAIN_ONLY != 1 ]]; then
             echo "Starting PID: ${benchmark_loop_pid}"
         fi
 
-        #while [[ 1 ]]; do
-            #BATCH_ID=$(od -vAn -N3 -tu4 < /dev/urandom | awk '{print $1}')
+        while [[ 1 ]]; do
+            BATCH_ID=$(od -vAn -N3 -tu4 < /dev/urandom | awk '{print $1}')
 
-            #if [ ! -d "${SAMPLES}/batch_${BATCH_ID}_0" ]; then
-                #break
-            #fi
-        #done
+            if [ ! -d "${SAMPLES}/batch_${BATCH_ID}_0" ]; then
+                break
+            fi
+        done
 
-        #BATCH_ID=5204565
-        #BATCH_ID=8851377
         echo "Starting compiling of new batch with id: ${BATCH_ID}"
 
         for ((EXTRA_ARGS_IDX=0;EXTRA_ARGS_IDX<${#GENERATOR_ARGS_SETS_ARRAY[@]};EXTRA_ARGS_IDX++)); do
@@ -628,7 +624,6 @@ fi
 echo Retraining model...
 
 CUR_SECONDS="$SECONDS"
-#SAMPLES="/tmp/tmp.fFK27Z4goh/autotuned_samples"
 retrain_cost_model ${HALIDE_ROOT} ${SAMPLES} ${WEIGHTS} ${NUM_CORES} ${EPOCHS} ${PIPELINE} ${LEARNING_RATE}
 TRAIN_TIME=$((SECONDS-CUR_SECONDS))
 echo "Num batches = ${NUM_BATCHES}. Train time: ${TRAIN_TIME}"

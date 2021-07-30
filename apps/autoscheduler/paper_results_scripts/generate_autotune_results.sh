@@ -102,9 +102,6 @@ trap ctrl_c INT
 
 if [ -z $APP ]; then
     APPS="bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer cuda_mat_mul iir_blur depthwise_separable_conv basic_demosaic"
-    #APPS="bgu bilateral_grid local_laplacian nl_means lens_blur camera_pipe stencil_chain harris hist max_filter unsharp interpolate conv_layer cuda_mat_mul iir_blur depthwise_separable_conv basic_demosaic"
-    #APPS="interpolate depthwise_separable_conv basic_demosaic"
- #mobilenet0 mobilenet1 mobilenet2 mobilenet3 mobilenet4 mobilenet5 mobilenet6 mobilenet7
 else
     APPS=${APP}
 fi

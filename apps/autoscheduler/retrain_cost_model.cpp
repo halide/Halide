@@ -191,6 +191,7 @@ size_t load_samples(map<int, PipelineSample> &training_set, map<int, PipelineSam
         string s;
         std::cin >> s;
         if (s.empty()) {
+            std::cout << "Empty: " << s << "\n";
             continue;
         }
         if (!ends_with(s, ".sample")) {
@@ -527,7 +528,7 @@ int main(int argc, char **argv) {
                 b.first = first;
                 int end = std::min((int)p.second.schedules.size(), first + 64);
                 b.batch_size = end - first;
-                if (b.batch_size > 8 && !predict_only) {
+                if (b.batch_size > 8) {
                     if (train) {
                         training_batches.push_back(b);
                     } else {
@@ -582,7 +583,7 @@ int main(int argc, char **argv) {
                     for (auto &p : train ? training_batches : validation_batches) {
                         tp->reset();
                         const auto &pipeline = pipelines[p.pipeline_id];
-                        auto &sample = samples[p.pipeline_id];
+                        auto &sample = train ? samples[p.pipeline_id] : validation_set[p.pipeline_id];
                         tp->set_pipeline_features(pipeline.pipeline_features, flags.num_cores);
 
                         int fastest_idx = 0;
