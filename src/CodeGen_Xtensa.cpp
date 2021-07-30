@@ -2142,12 +2142,12 @@ void CodeGen_Xtensa::visit(const Div *op) {
 }
 
 void CodeGen_Xtensa::visit(const Mod *op) {
-    string sa = print_expr(op->a);
-    string sb = print_expr(op->b);
     if (is_native_xtensa_vector<int32_t>(op->type)) {
+        string sa = print_expr(op->a);
+        string sb = print_expr(op->b);
         print_assignment(op->type, "(common_int32x16_t)" + sa + " % (common_int32x16_t)" + sb);
     } else {
-        print_assignment(op->type, sa + " % " + sb);
+        CodeGen_C::visit(op);
     }
 }
 

@@ -899,7 +899,9 @@ private:
             {"halide_xtensa_sat_narrow_i8", i8_sat(wild_i16x)},
             {"halide_xtensa_sat_narrow_u8", u8_sat(wild_i16x)},
             {"halide_xtensa_sat_narrow_i16", i16_sat(wild_i32x)},
-            {"halide_xtensa_sat_narrow_u16", u16_sat(wild_i32x)},
+            // TODO(vksnk): looks like there is no such instruction for unsigned types, but need to
+            // double-check.
+            // {"halide_xtensa_sat_narrow_u16", u16_sat(wild_i32x)},
 
             // Concat and cast.
             {"halide_xtensa_convert_concat_i16_to_i8", i8(halide_xtensa_concat_from_native_i16(wild_i16x, wild_i16x))},
