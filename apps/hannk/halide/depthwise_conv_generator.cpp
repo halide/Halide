@@ -202,11 +202,12 @@ public:
             for (int d = 1; d < input_.dimensions(); d++) {
                 input_.dim(d).set_stride(align(input_.dim(d).stride(), input_alignment));
             }
-
+#ifdef XTENSA_GOES_FAST
             filter_.set_host_alignment(input_alignment);
             for (int d = 1; d < filter_.dimensions(); d++) {
                 filter_.dim(d).set_stride(align(filter_.dim(d).stride(), input_alignment));
             }
+#endif
         }
 #ifdef XTENSA_GOES_FAST
         // TODO(vksnk): there is a specialization below for this case, but
