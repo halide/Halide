@@ -323,11 +323,11 @@ struct LowerParallelTasks : public IRMutator {
 
             std::vector<LoweredArgument> closure_args(use_parallel_for ? 3 : 5);
             int closure_arg_index;
-            closure_args[0] = LoweredArgument("_user_context", Argument::Kind::InputScalar,
+            closure_args[0] = LoweredArgument("__user_context", Argument::Kind::InputScalar,
                                               type_of<void *>(), 0, ArgumentEstimates());
             if (use_parallel_for) {
                 closure_arg_index = 2;
-                closure_args[0] = LoweredArgument(t.loop_var, Argument::Kind::InputScalar,
+                closure_args[1] = LoweredArgument(t.loop_var, Argument::Kind::InputScalar,
                                                   Int(32), 0, ArgumentEstimates());
             } else {
                 closure_arg_index = 3;
@@ -360,7 +360,7 @@ struct LowerParallelTasks : public IRMutator {
                 function_decl_args[4] = make_zero(type_of<int8_t *>());
 
                 std::vector<Expr> args(5);
-                args[0] = Variable::make(Handle(), "_user_context");
+                args[0] = Variable::make(Handle(), "__user_context");
                 args[1] = Call::make(Handle(), Call::resolve_function_name, function_decl_args, Call::PureIntrinsic);
                 args[2] = t.min;
                 args[3] = t.extent;
@@ -394,7 +394,7 @@ struct LowerParallelTasks : public IRMutator {
                 debug(0) << "Tasks arg: " << e << "\n";
             }
             Expr tasks_list = Call::make(Handle(), Call::make_typed_struct, tasks_array_args, Call::PureIntrinsic);
-            result = Call::make(Int(32), "halide_do_parallel_tasks", { Variable::make(Handle(), "_user_context"),
+            result = Call::make(Int(32), "halide_do_parallel_tasks", { Variable::make(Handle(), "__user_context"),
                                                                       make_const(Int(32), num_tasks), tasks_list,
                                                                       Variable::make(Handle(), "_task_parent") }, Call::Extern);
         }

@@ -2843,7 +2843,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         std::string name = str_imm->value;
         vector<llvm::Type *> types(op->args.size() - 1);
         for (size_t i = 1; i < op->args.size(); i++) {
-            types[i] = codegen(op->args[i])->getType();
+            types[i - 1] = codegen(op->args[i])->getType();
         }
         llvm::Type *struct_type = (llvm::Type *)llvm::StructType::create(*context, types, name);
         value = llvm::ConstantPointerNull::get(struct_type->getPointerTo());
@@ -2896,7 +2896,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         struct_ref = builder->CreatePointerCast(struct_ref, struct_type);
         const uint64_t *index = as_const_uint(op->args[2]);
         internal_assert(index != nullptr);
-        llvm::Value *gep = builder->CreateConstInBoundsGEP2_32(struct_type, struct_ref, 0, (size_t)*index);
+        llvm::Value *gep = CreateInBoundsGEP(builder, struct_ref, { ConstantInt::get(i32_t, 0), ConstantInt::get(i32_t, (int)*index) });
         value = builder->CreateLoad(gep->getType()->getPointerElementType(), gep);
     } else if (op->is_intrinsic(Call::resolve_function_name)) {
         internal_assert(op->args.size() > 2);
