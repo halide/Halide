@@ -184,10 +184,10 @@ using uint1x16_t = vboolN_2;
 using uint1x32_t = vboolN;
 using uint1x64_t = vbool2N;
 using float32x16_t = xb_vecN_2xf32;
-using int8x4_t = int32_t;
+using int8x4_t = xb_int32pr;
+using uint8x4_t = xb_int32pr;
 using int8x8_t = xb_int64pr;
 using uint8x8_t = xb_int64pr;
-using uint8x4_t = uint32_t;
 
 template <typename NativeVector, int N>
 struct MultipleOfNativeVector {
@@ -340,6 +340,21 @@ HALIDE_ALWAYS_INLINE int32x64_t dense_ramp<int32x64_t>(int32_t base) {
                         IVP_ADDN_2X32(base_w, lanes_2),
                         IVP_ADDN_2X32(base_w, lanes_3),
                         IVP_ADDN_2X32(base_w, lanes_4));
+}
+
+template <typename ResultType, typename BaseType>
+HALIDE_ALWAYS_INLINE ResultType broadcast(BaseType value) = delete;
+
+template <>
+HALIDE_ALWAYS_INLINE uint8x4_t broadcast<uint8x4_t, uint8_t>(uint8_t value) {
+    uint8x64_t v = value;
+    return IVP_EXTRPRN_2X32(IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(v)), 0);
+}
+
+template <>
+HALIDE_ALWAYS_INLINE uint8x8_t broadcast<uint8x8_t, uint8_t>(uint8_t value) {
+    uint8x64_t v = value;
+    return IVP_EXTRPR64N_2X32(IVP_MOVN_2X32_FROMNX16(IVP_MOVNX16_FROM2NX8(v)), 0);
 }
 
 template <typename VectorType, typename BaseType, int Lanes>
@@ -1783,6 +1798,7 @@ class ScopedDmaInitializer {
             Int(8, 4),
             Int(8, 128),
             UInt(8, 4),
+            UInt(8, 8),
             UInt(8, 128),
             UInt(8, 192),
             Int(8, 256),
@@ -2289,6 +2305,9 @@ void CodeGen_Xtensa::visit(const Broadcast *op) {
         } else {
             rhs = std::to_string(op->value.as<IntImm>()->value);
         }
+    } else if (op->type.is_int_or_uint() && op->type.bits() == 8 && ((op->type.lanes() == 4) || (op->type.lanes() == 8))) {
+        string id_value = print_expr(op->value);
+        rhs = "broadcast<" + print_type(op->type) + ", " + print_type(op->value.type()) + ">(" + id_value + ")";
     } else {
         string id_value = print_expr(op->value);
 
