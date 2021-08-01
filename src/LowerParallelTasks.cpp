@@ -8,6 +8,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Module.h"
+#include "Param.h"
 
 namespace Halide {
 namespace Internal {
@@ -58,7 +59,8 @@ LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
     Expr struct_type_decl = Call::make(Handle(), Call::make_struct_type, type_args, Call::PureIntrinsic);
     wrapped_body = LetStmt::make(closure_type_name, struct_type_decl, wrapped_body);
 
-    return {name, args, wrapped_body, LinkageType::Internal, NameMangling::Default };
+    // TODO(zalman): Would be better if this were not External but llvm seems to require it.
+    return {name, args, wrapped_body, LinkageType::External, NameMangling::Default };
 }
 
 Expr AllocateClosure(const std::string &name, const Closure &closure) {
@@ -72,14 +74,12 @@ Expr AllocateClosure(const std::string &name, const Closure &closure) {
         // TODO(zalman): Verify types here...
         closure_elements.push_back(Variable::make(type_of<void *>(), b.first));
         // TODO(zalman): this has to allow a failed lookup.
-        closure_elements.push_back(Variable::make(type_of<halide_buffer_t *>(), b.first + ".buffer"));
+        closure_elements.push_back(Call::make(type_of<halide_buffer_t *>(), Call::get_pointer_symbol_or_null,
+                                              { StringImm::make(b.first + ".buffer"),
+                                                Call::make(Handle(), Call::make_struct_type, { StringImm::make("halide_buffer_t") }, Call::PureIntrinsic) },
+                                              Call::Intrinsic));
     }    
     return Call::make(type_of<void *>(), Call::make_struct, closure_elements, Call::Intrinsic);
-}
-
-Expr GenrerateClosureCall(const std::string &name, const Closure &closure, const Expr &closure_storage) {
-    // TODO(zalman): Figure out user_context.
-    return Call::make(Int(32), name, { closure_storage }, Call::Extern);
 }
 
 namespace {
@@ -164,7 +164,7 @@ struct LowerParallelTasks : public IRMutator {
         // with a better way to do it, though this number is encoded in the code
         // below as well so...
         std::vector<Expr> tasks_array_args(2);
-        tasks_array_args[0] = Call::make(type_of<halide_parallel_task_t *>(), Call::make_struct_type, { }, Call::PureIntrinsic);
+        tasks_array_args[0] = Call::make(type_of<halide_parallel_task_t *>(), Call::make_struct_type, { StringImm::make("halide_parallel_task_t") }, Call::PureIntrinsic);
         tasks_array_args[1] = num_tasks;
 
 
@@ -303,8 +303,8 @@ struct LowerParallelTasks : public IRMutator {
             bool use_parallel_for = false;
 #endif
 
-            Expr semaphore_type = Call::make(type_of<halide_semaphore_t *>(), Call::make_struct_type,
-                                             { Expr((int64_t)0), Expr((int64_t)0) }, Call::PureIntrinsic);
+            Expr semaphore_type = Call::make(type_of<halide_semaphore_acquire_t *>(), Call::make_struct_type,
+                                             { StringImm::make("halide_semaphore_acquire_t") }, Call::PureIntrinsic);
             std::string semaphores_array_name = unique_name("task_semaphores");
             Expr semaphores_array;
             if (!t.semaphores.empty()) {
@@ -360,7 +360,7 @@ struct LowerParallelTasks : public IRMutator {
                 function_decl_args[4] = make_zero(type_of<int8_t *>());
 
                 std::vector<Expr> args(5);
-                args[0] = Variable::make(Handle(), "__user_context");
+                args[0] = Call::make(type_of<void *>(), Call::get_user_context, {}, Call::PureIntrinsic);
                 args[1] = Call::make(Handle(), Call::resolve_function_name, function_decl_args, Call::PureIntrinsic);
                 args[2] = t.min;
                 args[3] = t.extent;
@@ -377,9 +377,9 @@ struct LowerParallelTasks : public IRMutator {
                 function_decl_args[6] = make_zero(type_of<int8_t *>());
 
                 tasks_array_args.push_back(Call::make(Handle(), Call::resolve_function_name, function_decl_args, Call::PureIntrinsic));
-                tasks_array_args.push_back(closure_struct);
+                tasks_array_args.push_back(Cast::make(type_of<uint8_t *>(), closure_struct));
                 tasks_array_args.push_back(StringImm::make(t.name));
-                tasks_array_args.push_back(semaphores_array.defined() ? semaphores_array : make_zero(Handle()));
+                tasks_array_args.push_back(semaphores_array.defined() ? semaphores_array : semaphore_type);
                 tasks_array_args.push_back((int)t.semaphores.size());
                 tasks_array_args.push_back(t.min);
                 tasks_array_args.push_back(t.extent);
@@ -394,9 +394,10 @@ struct LowerParallelTasks : public IRMutator {
                 debug(0) << "Tasks arg: " << e << "\n";
             }
             Expr tasks_list = Call::make(Handle(), Call::make_typed_struct, tasks_array_args, Call::PureIntrinsic);
-            result = Call::make(Int(32), "halide_do_parallel_tasks", { Variable::make(Handle(), "__user_context"),
+            result = Call::make(Int(32), "halide_do_parallel_tasks", { Call::make(type_of<void *>(), Call::get_user_context, {}, Call::PureIntrinsic),
                                                                       make_const(Int(32), num_tasks), tasks_list,
-                                                                      Variable::make(Handle(), "_task_parent") }, Call::Extern);
+                                                                      Call::make(Handle(), Call::get_pointer_symbol_or_null,
+                                                                                 { StringImm::make("_task_parent"), make_zero(Handle()) }, Call::Intrinsic) }, Call::Extern);
         }
         return AssertStmt:: make(result == 0, result);
     }

@@ -2221,14 +2221,19 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(str_imm != nullptr);
         std::string name = str_imm->value;
 
-        stream << get_indent() << "struct " << name << " {\n";
-        // List the types.
-        indent++;
-        for (size_t i = 0; i < op->args.size(); i++) {
-            stream << get_indent() << "const " << print_type(op->args[i].type()) << " f_" << i << ";\n";
+        stream << get_indent() << "struct " << name;
+        if (op->args.size() > 1) {
+            stream << " {\n";
+            // List the types.
+            indent++;
+            for (size_t i = 0; i < op->args.size(); i++) {
+                stream << get_indent() << "const " << print_type(op->args[i].type()) << " f_" << i << ";\n";
+            }
+            indent--;
+            stream << get_indent() << "};\n";
+        } else {
+            stream << ";\n";
         }
-        indent--;
-        stream << get_indent() << "};\n";
         rhs << "((" << name << " *)nullptr)";
     } else if (op->is_intrinsic(Call::make_typed_struct)) {
         internal_assert(op->args.size() >= 2);
@@ -2301,6 +2306,17 @@ void CodeGen_C::visit(const Call *op) {
         }
         stream << ";\n";
         rhs << "(&" << name->value << ")";
+    } else if (op->is_intrinsic(Call::get_user_context)) {
+        internal_assert(op->args.size() == 0);
+        if (have_user_context) {
+            rhs << "(__user_context)";
+        } else {
+            rhs << "(nullptr)";
+        }
+    } else if (op->is_intrinsic(Call::get_pointer_symbol_or_null)) {
+        internal_assert(op->args.size() == 2);
+        // TODO(zalman|abadams): Figure out how to get rid of the mayby foo.buffer exists, maybe it doesn't thing in closures.
+        rhs << "(nullptr)";
     } else if (op->is_intrinsic(Call::stringify)) {
         // Rewrite to an snprintf
         vector<string> printf_args;

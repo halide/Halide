@@ -2841,11 +2841,17 @@ void CodeGen_LLVM::visit(const Call *op) {
         const StringImm *str_imm = op->args[0].as<StringImm>();
         internal_assert(str_imm != nullptr);
         std::string name = str_imm->value;
-        vector<llvm::Type *> types(op->args.size() - 1);
-        for (size_t i = 1; i < op->args.size(); i++) {
-            types[i - 1] = codegen(op->args[i])->getType();
+        llvm::Type *struct_type;
+        if (op->args.size() > 1) {
+            vector<llvm::Type *> types(op->args.size() - 1);
+            for (size_t i = 1; i < op->args.size(); i++) {
+              types[i - 1] = codegen(op->args[i])->getType();
+            }
+            struct_type = (llvm::Type *)llvm::StructType::create(*context, types, "struct." + name);
+        } else {
+            struct_type = get_llvm_struct_type_by_name(module.get(), ("struct." + name).c_str());
+            internal_assert(struct_type != nullptr);
         }
-        llvm::Type *struct_type = (llvm::Type *)llvm::StructType::create(*context, types, name);
         value = llvm::ConstantPointerNull::get(struct_type->getPointerTo());
     } else if (op->is_intrinsic(Call::make_typed_struct)) {
         internal_assert(op->args.size() >= 2);
@@ -2860,12 +2866,15 @@ void CodeGen_LLVM::visit(const Call *op) {
         vector<llvm::Type *> types(op->args.size() - 2);
         for (size_t i = 2; i < op->args.size(); i++) {
             args[i - 2] = codegen(op->args[i]);
-            types[i - 2] = args[i]->getType();
+            types[i - 2] = args[i - 2]->getType();
         }
 
-        llvm::Type *aggregate_t = type_carrier->getType();
+        llvm::Type *aggregate_t_ptr = type_carrier->getType();
+        llvm::Type *aggregate_t;
         if (count > 0) {
-            aggregate_t = llvm::ArrayType::get(aggregate_t->getPointerElementType(), count)->getPointerTo();
+            aggregate_t = llvm::ArrayType::get(aggregate_t_ptr->getPointerElementType(), count);
+        } else {
+            aggregate_t = aggregate_t_ptr->getPointerElementType();
         }
 
         // This is creating a single structure or array, where the array is of count structures.
@@ -2880,7 +2889,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 if (count > 0) {
                     indices[indices_index++] = ConstantInt::get(i32_t, item);
                 }
-                indices[indices_index++] = ConstantInt::get(i32_t, 1);
+                indices[indices_index++] = ConstantInt::get(i32_t, i);
                 elem_ptr = CreateInBoundsGEP(builder, value, indices);
                 builder->CreateStore(args[i], elem_ptr);
             }
@@ -2901,6 +2910,7 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::resolve_function_name)) {
         internal_assert(op->args.size() > 2);
         const StringImm *name = op->args[0].as<StringImm>();
+        internal_assert(name != nullptr);
         llvm::Type *return_type = codegen(op->args[1])->getType();
         std::vector<llvm::Type *> arg_types;
         for (size_t i = 2; i < op->args.size(); i++) {
@@ -2910,6 +2920,19 @@ void CodeGen_LLVM::visit(const Call *op) {
         llvm::Function *function = llvm::Function::Create(function_t, llvm::Function::InternalLinkage,
                                                           name->value, module.get());
         value = function;
+    } else if (op->is_intrinsic(Call::get_user_context)) {
+        internal_assert(op->args.size() == 0);
+        value = get_user_context();
+    } else if (op->is_intrinsic(Call::get_pointer_symbol_or_null)) {
+        internal_assert(op->args.size() == 2);
+        const StringImm *name = op->args[0].as<StringImm>();
+        internal_assert(name != nullptr);
+        value = sym_get(name->value, false);
+        if (value == nullptr) {
+            llvm::Value *type_carrier = codegen(op->args[1]);
+            llvm::PointerType *expected_type = type_carrier->getType()->getPointerElementType()->getPointerTo();
+            value = ConstantPointerNull::get(expected_type);
+        }
     } else if (op->is_intrinsic(Call::saturating_add) || op->is_intrinsic(Call::saturating_sub)) {
         internal_assert(op->args.size() == 2);
 
