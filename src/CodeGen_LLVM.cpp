@@ -2871,14 +2871,8 @@ void CodeGen_LLVM::visit(const Call *op) {
 
         llvm::Type *aggregate_t_ptr = type_carrier->getType();
         llvm::Type *aggregate_t;
-        if (count > 0) {
-            aggregate_t = llvm::ArrayType::get(aggregate_t_ptr->getPointerElementType(), count);
-        } else {
-            aggregate_t = aggregate_t_ptr->getPointerElementType();
-        }
-        
-        // This is creating a single structure or array, where the array is of count structures.
-        value = create_alloca_at_entry(aggregate_t, 1);
+        aggregate_t = aggregate_t_ptr->getPointerElementType();
+        value = create_alloca_at_entry(aggregate_t, count);
 
         int item = 0;
         size_t initializer_count = args.size() / count;
@@ -2886,15 +2880,20 @@ void CodeGen_LLVM::visit(const Call *op) {
         do {
             for (size_t i = 0; i < initializer_count; i++) {
                 Value *elem_ptr;
-                std::vector<Value *> indices(count > 0 ? 3 : 2);
                 size_t indices_index = 0;
-                indices[indices_index++] = ConstantInt::get(i32_t, 0);
-                if (count > 0) {
-                    indices[indices_index++] = ConstantInt::get(i32_t, item);
-                }                  
+                std::vector<Value *> indices(2);
+                indices[indices_index++] = ConstantInt::get(i32_t, item);
                 indices[indices_index++] = ConstantInt::get(i32_t, i);
                 elem_ptr = CreateInBoundsGEP(builder, value, indices);
-                builder->CreateStore(args[i], elem_ptr);
+                Value *init_value = args[i];
+                // TODO(zalman): Halide IR is not strongly typed re: pointers,
+                // especially to structs. Specific case that is failing is
+                // halide_semaphort_t *.
+                if (init_value->getType() != elem_ptr->getType()->getPointerElementType() &&
+                    init_value->getType() == i8_t->getPointerTo()) {
+                  init_value = builder->CreatePointerCast(init_value, elem_ptr->getType()->getPointerElementType());
+                }
+                builder->CreateStore(init_value, elem_ptr);
             }
         } while (item++ < count);
     } else if (op->is_intrinsic(Call::load_struct_member)) {
@@ -3086,11 +3085,15 @@ void CodeGen_LLVM::visit(const Call *op) {
         // restrictions if we recognize the most common types we
         // expect to get alloca'd.
         const Call *call = op->args[0].as<Call>();
+        const int64_t *sz = as_const_int(op->args[0]);
         if (op->type == type_of<struct halide_buffer_t *>() &&
             call && call->is_intrinsic(Call::size_of_halide_buffer_t)) {
             value = create_alloca_at_entry(halide_buffer_t_type, 1);
+        } else if (op->type == type_of<struct halide_semaphore_t *>() &&
+                   semaphore_t_type != nullptr &&
+                   sz && *sz == 16) {
+            value = create_alloca_at_entry(semaphore_t_type, 1);
         } else {
-            const int64_t *sz = as_const_int(op->args[0]);
             internal_assert(sz != nullptr);
             if (op->type == type_of<struct halide_dimension_t *>()) {
                 value = create_alloca_at_entry(dimension_t_type, *sz / sizeof(halide_dimension_t));
@@ -3647,19 +3650,10 @@ void CodeGen_LLVM::visit(const For *op) {
     const Acquire *acquire = op->body.as<Acquire>();
 
 // TODO(zalman): remove this after validating it doesn't happen
-#if 0
-    if (op->for_type == ForType::Parallel ||
-        (op->for_type == ForType::Serial &&
-         acquire &&
-         !expr_uses_var(acquire->count, op->name))) {
-        do_as_parallel_task(op);
-    } else
-#else
     internal_assert(!(op->for_type == ForType::Parallel ||
                       (op->for_type == ForType::Serial &&
                        acquire &&
                        !expr_uses_var(acquire->count, op->name))));
-#endif
 
     if (op->for_type == ForType::Serial) {
 

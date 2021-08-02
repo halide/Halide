@@ -59,7 +59,7 @@ LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
     Expr struct_type_decl = Call::make(Handle(), Call::make_struct_type, type_args, Call::PureIntrinsic);
     wrapped_body = LetStmt::make(closure_type_name, struct_type_decl, wrapped_body);
 
-    return {name, args, wrapped_body, LinkageType::Internal, NameMangling::Default };
+    return {name, args, wrapped_body, LinkageType::External, NameMangling::Default };
 }
 
 Expr AllocateClosure(const std::string &name, const Closure &closure) {
@@ -135,7 +135,7 @@ struct LowerParallelTasks : public IRMutator {
              !expr_uses_var(acquire->count, op->name))) {
             return do_as_parallel_task(op);
         }
-        return op;
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const Acquire *op) override {
@@ -314,9 +314,6 @@ struct LowerParallelTasks : public IRMutator {
                     semaphore_args[2 + i * 2] = t.semaphores[i].semaphore;
                     semaphore_args[2 + i * 2 + 1] = t.semaphores[i].count;
                 }
-                for (const auto &e : semaphore_args) {
-                    debug(0) << "Semaphore arg: " << e << "\n";
-                }
                 semaphores_array = Call::make(type_of<halide_semaphore_acquire_t *>(), Call::make_typed_struct, semaphore_args, Call::PureIntrinsic);
             }
 
@@ -347,7 +344,12 @@ struct LowerParallelTasks : public IRMutator {
                 closure_args[4] = LoweredArgument("__task_parent", Argument::Kind::InputScalar,
                                                   type_of<void *>(), 0, ArgumentEstimates());
             }
-              
+
+            {              
+                ScopedValue<std::string> save_name(function_name, t.name);
+                t.body = mutate(t.body);
+            }
+
             closure_implementations.emplace_back(GenerateClosureIR(t.name, closure, closure_args, closure_arg_index, t.body));
 
             if (use_parallel_for) {

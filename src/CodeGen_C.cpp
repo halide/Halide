@@ -1579,7 +1579,7 @@ void CodeGen_C::compile(const LoweredFunc &f) {
     set_name_mangling_mode(name_mangling);
 
     std::vector<std::string> namespaces;
-    std::string simple_name = extract_namespaces(f.name, namespaces);
+    std::string simple_name = c_print_name(extract_namespaces(f.name, namespaces), false);
     if (!is_c_plus_plus_interface()) {
         user_assert(namespaces.empty()) << "Namespace qualifiers not allowed on function name if not compiling with Target::CPlusPlusNameMangling.\n";
     }
@@ -2300,15 +2300,16 @@ void CodeGen_C::visit(const Call *op) {
         const StringImm *name = op->args[0].as<StringImm>();
         //        extern "C" ret_type name(type 1,ty2,);
         //        &name
-        stream << get_indent() << print_type(op->args[1].type()) << name->value << "(";
+        std::string c_name = c_print_name(name->value, false);
+        stream << get_indent() << print_type(op->args[1].type()) << " " << c_name << "(";
         for (size_t i = 2; i < op->args.size(); i++) {
-          stream << print_type(op->args[i].type());
-            if (i != op->args.size()) {
+            stream << print_type(op->args[i].type());
+            if (i != op->args.size() - 1) {
                 stream << ", ";
             }
         }
-        stream << ";\n";
-        rhs << "(&" << name->value << ")";
+        stream << ");\n";
+        rhs << "(&" << c_name << ")";
     } else if (op->is_intrinsic(Call::get_user_context)) {
         internal_assert(op->args.size() == 0);
         if (have_user_context) {
