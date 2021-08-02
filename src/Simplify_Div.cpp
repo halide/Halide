@@ -143,6 +143,8 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                rewrite((x * c0) / c1, x / fold(c1 / c0),                          c1 % c0 == 0 && c0 > 0 && c1 / c0 != 0) ||
                // Pull out terms that are a multiple of the denominator
                rewrite((x * c0) / c1, x * fold(c0 / c1),                          c0 % c1 == 0 && c1 > 0) ||
+               rewrite(min((x * c0), c1) / c2, min(x * fold(c0 / c2), fold(c1 / c2)), c0 % c2 == 0 && c2 > 0) ||
+               rewrite(max((x * c0), c1) / c2, max(x * fold(c0 / c2), fold(c1 / c2)), c0 % c2 == 0 && c2 > 0) ||
 
                rewrite((x * c0 + y) / c1, y / c1 + x * fold(c0 / c1),             c0 % c1 == 0 && c1 > 0) ||
                rewrite((x * c0 - y) / c0, x + (0 - y) / c0) ||

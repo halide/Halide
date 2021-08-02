@@ -140,6 +140,10 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x, max(w, y), max(z, w)), max(w, select(x, y, z))) ||
              rewrite(select(x, max(w, y), max(w, z)), max(w, select(x, y, z))) ||
 
+             rewrite(select(0 < x, min(x*c0, c1), x*c0), min(x*c0, c1), c1 >= 0 && c0 >= 0) ||
+             rewrite(select(x < c0, 0, min(x, c0) + c1), 0, c0 == -c1) ||
+             rewrite(select(0 < x, ((x*c0) + c1) / x, y), select(0 < x, c0 - 1, y), c1 == -1) ||
+
              rewrite(select(x, select(y, z, min(w, z)), min(u, z)), min(select(x, select(y, z, w), u), z)) ||
              rewrite(select(x, select(y, min(w, z), z), min(u, z)), min(select(x, select(y, w, z), u), z)) ||
              rewrite(select(x, min(u, z), select(y, z, min(w, z))), min(select(x, u, select(y, z, w)), z)) ||
