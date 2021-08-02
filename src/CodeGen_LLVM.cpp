@@ -1139,7 +1139,7 @@ void CodeGen_LLVM::optimize_module() {
     ModulePassManager mpm(debug_pass_manager);
 #endif
 
-#if LLVM_VERSION >= 130
+#if LLVM_VERSION >= 140
     using OptimizationLevel = llvm::OptimizationLevel;
 #else
     using OptimizationLevel = PassBuilder::OptimizationLevel;
