@@ -24,8 +24,8 @@ if (LLVM_PACKAGE_VERSION VERSION_LESS 11.0)
     message(FATAL_ERROR "LLVM version must be 11.0 or newer")
 endif ()
 
-if (LLVM_PACKAGE_VERSION VERSION_GREATER 13.0)
-    message(WARNING "Halide is not tested on LLVM versions beyond 13.0")
+if (LLVM_PACKAGE_VERSION VERSION_GREATER 14.0)
+    message(WARNING "Halide is not tested on LLVM versions beyond 14.0")
 endif ()
 
 set(Halide_LLVM_DEFS ${LLVM_DEFINITIONS} $<BUILD_INTERFACE:LLVM_VERSION=${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}>)

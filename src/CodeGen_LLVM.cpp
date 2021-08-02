@@ -1139,12 +1139,18 @@ void CodeGen_LLVM::optimize_module() {
     ModulePassManager mpm(debug_pass_manager);
 #endif
 
-    PassBuilder::OptimizationLevel level = PassBuilder::OptimizationLevel::O3;
+#if LLVM_VERSION >= 140
+    using OptimizationLevel = llvm::OptimizationLevel;
+#else
+    using OptimizationLevel = PassBuilder::OptimizationLevel;
+#endif
+
+    OptimizationLevel level = OptimizationLevel::O3;
 
     if (get_target().has_feature(Target::ASAN)) {
 #if LLVM_VERSION >= 120
         pb.registerPipelineStartEPCallback([&](ModulePassManager &mpm,
-                                               PassBuilder::OptimizationLevel) {
+                                               OptimizationLevel) {
             mpm.addPass(
                 RequireAnalysisPass<ASanGlobalsMetadataAnalysis, llvm::Module>());
         });
@@ -1155,7 +1161,7 @@ void CodeGen_LLVM::optimize_module() {
         });
 #endif
         pb.registerOptimizerLastEPCallback(
-            [](ModulePassManager &mpm, PassBuilder::OptimizationLevel level) {
+            [](ModulePassManager &mpm, OptimizationLevel level) {
                 constexpr bool compile_kernel = false;
                 constexpr bool recover = false;
                 constexpr bool use_after_scope = true;
@@ -1164,7 +1170,7 @@ void CodeGen_LLVM::optimize_module() {
             });
 #if LLVM_VERSION >= 120
         pb.registerPipelineStartEPCallback(
-            [](ModulePassManager &mpm, PassBuilder::OptimizationLevel) {
+            [](ModulePassManager &mpm, OptimizationLevel) {
                 constexpr bool compile_kernel = false;
                 constexpr bool recover = false;
                 constexpr bool module_use_after_scope = false;
@@ -1189,7 +1195,7 @@ void CodeGen_LLVM::optimize_module() {
 
     if (get_target().has_feature(Target::TSAN)) {
         pb.registerOptimizerLastEPCallback(
-            [](ModulePassManager &mpm, PassBuilder::OptimizationLevel level) {
+            [](ModulePassManager &mpm, OptimizationLevel level) {
                 mpm.addPass(
                     createModuleToFunctionPassAdaptor(ThreadSanitizerPass()));
             });
