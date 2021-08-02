@@ -59,8 +59,7 @@ LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
     Expr struct_type_decl = Call::make(Handle(), Call::make_struct_type, type_args, Call::PureIntrinsic);
     wrapped_body = LetStmt::make(closure_type_name, struct_type_decl, wrapped_body);
 
-    // TODO(zalman): Would be better if this were not External but llvm seems to require it.
-    return {name, args, wrapped_body, LinkageType::External, NameMangling::Default };
+    return {name, args, wrapped_body, LinkageType::Internal, NameMangling::Default };
 }
 
 Expr AllocateClosure(const std::string &name, const Closure &closure) {
@@ -318,7 +317,7 @@ struct LowerParallelTasks : public IRMutator {
                 for (const auto &e : semaphore_args) {
                     debug(0) << "Semaphore arg: " << e << "\n";
                 }
-                semaphores_array = Call::make(type_of<halide_parallel_task_t *>(), Call::make_typed_struct, semaphore_args, Call::PureIntrinsic);
+                semaphores_array = Call::make(type_of<halide_semaphore_acquire_t *>(), Call::make_typed_struct, semaphore_args, Call::PureIntrinsic);
             }
 
             std::vector<LoweredArgument> closure_args(use_parallel_for ? 3 : 5);
@@ -390,9 +389,6 @@ struct LowerParallelTasks : public IRMutator {
 
         if (tasks_array_args.size() > 2) {
             // Allocate task list array
-            for (const auto &e : tasks_array_args) {
-                debug(0) << "Tasks arg: " << e << "\n";
-            }
             Expr tasks_list = Call::make(Handle(), Call::make_typed_struct, tasks_array_args, Call::PureIntrinsic);
             result = Call::make(Int(32), "halide_do_parallel_tasks", { Call::make(type_of<void *>(), Call::get_user_context, {}, Call::PureIntrinsic),
                                                                       make_const(Int(32), num_tasks), tasks_list,

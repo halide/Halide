@@ -523,7 +523,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         }
     }
 
-    debug(2) << module.get() << "\n";
+    debug(2) << "llvm::Module pointer: " << module.get() << "\n";
 
     return finish_codegen();
 }
@@ -2876,19 +2876,22 @@ void CodeGen_LLVM::visit(const Call *op) {
         } else {
             aggregate_t = aggregate_t_ptr->getPointerElementType();
         }
-
+        
         // This is creating a single structure or array, where the array is of count structures.
         value = create_alloca_at_entry(aggregate_t, 1);
+
         int item = 0;
+        size_t initializer_count = args.size() / count;
+        internal_assert((args.size() % count) == 0);
         do {
-            for (size_t i = 0; i < args.size(); i++) {
+            for (size_t i = 0; i < initializer_count; i++) {
                 Value *elem_ptr;
                 std::vector<Value *> indices(count > 0 ? 3 : 2);
                 size_t indices_index = 0;
                 indices[indices_index++] = ConstantInt::get(i32_t, 0);
                 if (count > 0) {
                     indices[indices_index++] = ConstantInt::get(i32_t, item);
-                }
+                }                  
                 indices[indices_index++] = ConstantInt::get(i32_t, i);
                 elem_ptr = CreateInBoundsGEP(builder, value, indices);
                 builder->CreateStore(args[i], elem_ptr);
@@ -2917,7 +2920,8 @@ void CodeGen_LLVM::visit(const Call *op) {
             arg_types.push_back(codegen(op->args[i])->getType());
         }
         FunctionType *function_t = FunctionType::get(return_type, arg_types, false);
-        llvm::Function *function = llvm::Function::Create(function_t, llvm::Function::InternalLinkage,
+        // TODO(zalman): Need a way to control linkage here.
+        llvm::Function *function = llvm::Function::Create(function_t, llvm::Function::ExternalLinkage,
                                                           name->value, module.get());
         value = function;
     } else if (op->is_intrinsic(Call::get_user_context)) {

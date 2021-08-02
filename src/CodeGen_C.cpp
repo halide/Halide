@@ -2257,12 +2257,14 @@ void CodeGen_C::visit(const Call *op) {
         // List the values.
         indent++;
         int item = 0;
+        size_t initializer_count = values.size() / count;
+        internal_assert((values.size() % count) == 0);
         do {
             if (count > 0) {
                 stream << get_indent() << "{\n";
                 indent++;
             }
-            for (size_t i = 0; i < op->args.size(); i++) {
+            for (size_t i = 0; i < initializer_count; i++) {
                 stream << get_indent() << values[i];
                 if (i < op->args.size() - 1) {
                     stream << ",";
@@ -2273,6 +2275,7 @@ void CodeGen_C::visit(const Call *op) {
                 stream << get_indent() << "},\n";
                 indent--;
             }
+            item += 1;
         } while (item < count);
         indent--;
         stream << get_indent() << "};\n";
