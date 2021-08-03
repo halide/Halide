@@ -132,13 +132,37 @@ $(BIN)/%/halide/add_uint8_uint8.a: $(GENERATOR_BIN)/elementwise.generator
 	@mkdir -p $(@D)
 	$< -g Add -f hannk::add_uint8_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-no_bounds_query-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
+$(BIN)/%/halide/add_uint8_uint8.halide_generated.cpp: $(GENERATOR_BIN)/elementwise.generator
+	@mkdir -p $(@D)
+	$< -g Add -f add_uint8_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-xtensa -e c_source,c_header
+
+$(BIN)/%/halide/add_uint8_uint8_c.halide_generated.cpp: $(GENERATOR_BIN)/elementwise.generator
+	@mkdir -p $(@D)
+	$< -g Add -f add_uint8_uint8_c -o $(BIN)/$*/halide target=$(HL_TARGET) -e c_source,c_header
+
 $(BIN)/%/halide/average_pool_uint8.a: $(GENERATOR_BIN)/pool.generator
 	@mkdir -p $(@D)
 	$< -g AveragePool -f hannk::average_pool_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
+$(BIN)/%/halide/average_pool_uint8.halide_generated.cpp: $(GENERATOR_BIN)/pool.generator
+	@mkdir -p $(@D)
+	$< -g AveragePool -f average_pool_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-xtensa -e c_source,c_header
+
+$(BIN)/%/halide/average_pool_uint8_c.halide_generated.cpp: $(GENERATOR_BIN)/pool.generator
+	@mkdir -p $(@D)
+	$< -g AveragePool -f average_pool_uint8_c -o $(BIN)/$*/halide target=$(HL_TARGET) -e c_source,c_header
+
 $(BIN)/%/halide/conv_u8_u8_u8.a: $(GENERATOR_BIN)/conv.generator
 	@mkdir -p $(@D)
 	$< -g Conv output.type=uint8 -f hannk::conv_u8_u8_u8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
+$(BIN)/%/halide/conv_uint8.halide_generated.cpp: $(GENERATOR_BIN)/conv.generator
+	@mkdir -p $(@D)
+	$< -g Conv unroll_reduction=64 output.type=uint8 -f conv_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-xtensa -e c_source,c_header
+
+$(BIN)/%/halide/conv_uint8_c.halide_generated.cpp: $(GENERATOR_BIN)/conv.generator
+	@mkdir -p $(@D)
+	$< -g Conv -f conv_uint8_c output.type=uint8 -o $(BIN)/$*/halide target=$(HL_TARGET) -e c_source,c_header
 
 $(BIN)/%/halide/conv_u8_u8_i16.a: $(GENERATOR_BIN)/conv.generator
 	@mkdir -p $(@D)
@@ -156,6 +180,10 @@ $(BIN)/%/halide/copy_uint8_uint8.a: $(GENERATOR_BIN)/copy.generator
 	@mkdir -p $(@D)
 	$< -g Copy input.type=uint8 output.type=uint8 -f hannk::copy_uint8_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-no_bounds_query-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
+$(BIN)/%/halide/copy_uint8_uint8.halide_generated.cpp: $(GENERATOR_BIN)/copy.generator
+	@mkdir -p $(@D)
+	$< -g Copy input.type=uint8 output.type=uint8 -f copy_uint8_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-xtensa -e c_source,c_header
+
 $(BIN)/%/halide/depthwise_conv_broadcast_uint8.a: $(GENERATOR_BIN)/depthwise_conv.generator
 	@mkdir -p $(@D)
 	$< -g DepthwiseConv inv_depth_multiplier=0 -f hannk::depthwise_conv_broadcast_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
@@ -168,13 +196,29 @@ $(BIN)/%/halide/depthwise_conv_shallow_uint8.a: $(GENERATOR_BIN)/depthwise_conv.
 	@mkdir -p $(@D)
 	$< -g DepthwiseConv inv_depth_multiplier=1 shallow=true -f hannk::depthwise_conv_shallow_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
+$(BIN)/%/halide/depthwise_conv_dm1_uint8.halide_generated.cpp: $(GENERATOR_BIN)/depthwise_conv.generator
+	@mkdir -p $(@D)
+	$< -g DepthwiseConv inv_depth_multiplier=1 -f depthwise_conv_dm1_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-xtensa -e c_source,c_header
+
+$(BIN)/%/halide/depthwise_conv_dm1_uint8_c.halide_generated.cpp: $(GENERATOR_BIN)/depthwise_conv.generator
+	@mkdir -p $(@D)
+	$< -g DepthwiseConv inv_depth_multiplier=1 -f depthwise_conv_dm1_uint8_c -o $(BIN)/$*/halide target=$(HL_TARGET) -e c_source,c_header
+
 $(BIN)/%/halide/elementwise_5xuint8_1xuint8.a: $(GENERATOR_BIN)/elementwise.generator
 	@mkdir -p $(@D)
 	$< -g Elementwise inputs.size=5 inputs.type=uint8 output1_type=uint8 -f hannk::elementwise_5xuint8_1xuint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-no_bounds_query-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
+$(BIN)/%/halide/elementwise_5xuint8_1xuint8.halide_generated.cpp: $(GENERATOR_BIN)/elementwise.generator
+	@mkdir -p $(@D)
+	$< -g Elementwise inputs.size=5 inputs.type=uint8 output1_type=uint8 -f elementwise_5xuint8_1xuint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-xtensa -e c_source,c_header
+
 $(BIN)/%/halide/elementwise_5xint16_1xuint8int16.a: $(GENERATOR_BIN)/elementwise.generator
 	@mkdir -p $(@D)
 	$< -g Elementwise inputs.size=5 inputs.type=int16 output1_type=uint8 output2_type=int16 -f hannk::elementwise_5xint16_1xuint8int16 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-no_bounds_query-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
+$(BIN)/%/halide/fill_uint8.halide_generated.cpp: $(GENERATOR_BIN)/fill.generator
+	@mkdir -p $(@D)
+	$< -g Fill -f fill_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-xtensa -e c_source,c_header
 
 $(BIN)/%/halide/fill_uint8.a: $(GENERATOR_BIN)/fill.generator
 	@mkdir -p $(@D)
@@ -184,9 +228,17 @@ $(BIN)/%/halide/l2_normalization_uint8.a: $(GENERATOR_BIN)/normalizations.genera
 	@mkdir -p $(@D)
 	$< -g L2Normalization -f hannk::l2_normalization_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-no_bounds_query-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
+$(BIN)/%/halide/l2_normalization_uint8.halide_generated.cpp: $(GENERATOR_BIN)/normalizations.generator
+	@mkdir -p $(@D)
+	$< -g L2Normalization -f l2_normalization_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-xtensa -e c_source,c_header
+
 $(BIN)/%/halide/max_pool_uint8.a: $(GENERATOR_BIN)/pool.generator
 	@mkdir -p $(@D)
 	$< -g MaxPool -f hannk::max_pool_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
+$(BIN)/%/halide/max_pool_uint8.halide_generated.cpp: $(GENERATOR_BIN)/pool.generator
+	@mkdir -p $(@D)
+	$< -g MaxPool -f max_pool_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-xtensa -e c_source,c_header
 
 $(BIN)/%/halide/mean_uint8.a: $(GENERATOR_BIN)/reductions.generator
 	@mkdir -p $(@D)
@@ -196,9 +248,21 @@ $(BIN)/%/halide/mul_uint8_uint8_uint8.a: $(GENERATOR_BIN)/elementwise.generator
 	@mkdir -p $(@D)
 	$< -g Mul -f hannk::mul_uint8_uint8_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-no_bounds_query-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
+$(BIN)/%/halide/mul_uint8_uint8_uint8.halide_generated.cpp: $(GENERATOR_BIN)/elementwise.generator
+	@mkdir -p $(@D)
+	$< -g Mul -f mul_uint8_uint8_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-xtensa -e c_source,c_header
+
 $(BIN)/%/halide/softmax_uint8.a: $(GENERATOR_BIN)/normalizations.generator
 	@mkdir -p $(@D)
 	$< -g Softmax -f hannk::softmax_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-no_bounds_query-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
+$(BIN)/%/halide/softmax_uint8.halide_generated.cpp: $(GENERATOR_BIN)/normalizations.generator
+	@mkdir -p $(@D)
+	$< -g Softmax -f softmax_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-xtensa -e c_source,c_header
+
+$(BIN)/%/halide/softmax_uint8_c.halide_generated.cpp: $(GENERATOR_BIN)/normalizations.generator
+	@mkdir -p $(@D)
+	$< -g Softmax -f softmax_uint8_c -o $(BIN)/$*/halide target=$(HL_TARGET) -e c_source,c_header
 
 $(BIN)/%/halide/tile_conv_filter_uint8.a: $(GENERATOR_BIN)/conv.generator
 	@mkdir -p $(@D)
@@ -208,9 +272,28 @@ $(BIN)/%/halide/upsample_channels_uint8.a: $(GENERATOR_BIN)/depthwise_conv.gener
 	@mkdir -p $(@D)
 	$< -g UpsampleChannels -f hannk::upsample_channels_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
+$(BIN)/%/halide/upsample_channels_uint8.halide_generated.cpp: $(GENERATOR_BIN)/depthwise_conv.generator
+	@mkdir -p $(@D)
+	$< -g UpsampleChannels -f upsample_channels_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-xtensa -e c_source,c_header
+
 $(BIN)/%/halide/runtime.a: $(GENERATOR_BIN)/fill.generator
 	@mkdir -p $(@D)
 	$< -r runtime -o $(BIN)/$*/halide target=$(HL_TARGET)
+
+OPS_HALIDE_XT = \
+	$(BIN)/%/halide/add_uint8_uint8.halide_generated.cpp \
+	$(BIN)/%/halide/average_pool_uint8.halide_generated.cpp \
+	$(BIN)/%/halide/copy_uint8_uint8.halide_generated.cpp \
+	$(BIN)/%/halide/depthwise_conv_dm1_uint8.halide_generated.cpp \
+	$(BIN)/%/halide/elementwise_5xuint8_1xuint8.halide_generated.cpp \
+	$(BIN)/%/halide/fill_uint8.halide_generated.cpp \
+	$(BIN)/%/halide/l2_normalization_uint8.halide_generated.cpp \
+	$(BIN)/%/halide/max_pool_uint8.halide_generated.cpp \
+	$(BIN)/%/halide/softmax_uint8.halide_generated.cpp \
+
+$(BIN)/%/xtensa_op_test: halide/xtensa_op_test.cpp $(BIN)/%/halide/depthwise_conv_dm1_uint8.halide_generated.cpp $(BIN)/%/halide/fill_uint8.halide_generated.cpp #$(BIN)/%/halide/conv_uint8.halide_generated.cpp $(BIN)/%/halide/depthwise_conv_dm1_uint8_c.halide_generated.cpp # $(BIN)/%/halide/conv_uint8.halide_generated.cpp $(BIN)/%/halide/softmax_uint8_c.halide_generated.cpp #$(BIN)/%/halide/fully_connected_uint8_uint8.halide_generated.cpp $(BIN)/%/halide/conv_uint8.halide_generated.cpp $(BIN)/%/halide/conv_uint8_c.halide_generated.cpp $(BIN)/%/halide/depthwise_conv_dm1_uint8.halide_generated.cpp #$(BIN)/%/halide/conv_uint8.halide_generated.cpp $(BIN)/%/halide/depthwise_conv_dm1_uint8.halide_generated.cpp #$(BIN)/%/halide/depthwise_conv_dm1_uint8_c.halide_generated.cpp $(BIN)/%/halide/add_uint8_uint8.halide_generated.cpp $(BIN)/%/halide/add_uint8_uint8_c.halide_generated.cpp# $(BIN)/%/halide/average_pool_uint8.halide_generated.cpp $(BIN)/%/halide/average_pool_uint8_c.halide_generated.cpp $(BIN)/%/halide/softmax_uint8.halide_generated.cpp $(BIN)/%/halide/softmax_uint8_c.halide_generated.cpp $(BIN)/%/halide/max_pool_uint8.halide_generated.cpp #$(BIN)/%/halide/elementwise_5xuint8_1xuint8.halide_generated.cpp 
+	@mkdir -p $(@D)
+	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ $(CXXFLAGS) -I$(BIN)/$*/halide -Wall $^ $(HALIDE_DISTRIB_PATH)/lib/libHalideRuntime-xtensa.a -o $@ 
 
 OPS_HALIDE = \
 	$(BIN)/%/halide/add_uint8_uint8.a \
@@ -383,6 +466,9 @@ HANNK_INTERNAL_DELEGATE_DEPS = \
 $(BIN)/%/$(BENCHMARK_OUT): benchmark.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UTIL_DEPS) util/file_util.h
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(BENCHMARK_HEXAGON_FLAGS) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
+# $(BIN)/%/benchmark-xt: benchmark.cpp interpreter/interpreter.cpp interpreter/interval.cpp interpreter/lower.cpp interpreter/elementwise_program.cpp interpreter/model.cpp interpreter/transforms.cpp interpreter/ops.cpp tflite/tflite_parser.cpp util/error_util.cpp util/hannk_log_stderr.cpp $(OPS_HALIDE_XT)
+# 	@mkdir -p $(@D)
+# 	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ $(CXXFLAGS-$*) $(APP_CXXFLAGS) -I$(BIN)/$*/ $(TFLITE_SCHEMA_CXXFLAGS) $(filter %.cpp %.o %.a,$^) $(HALIDE_DISTRIB_PATH)/lib/libHalideRuntime-xtensa.a -o $@
 
 
 # To build for Android, use `HL_TARGET=arm-64-android make compare_vs_tflite`
