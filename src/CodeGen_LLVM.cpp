@@ -506,6 +506,8 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     for (const auto &f : input.functions()) {
         const auto names = get_mangled_names(f, get_target());
 
+        debug(0) << "Compiling for mangled names -- simple " << names.simple_name << " extern " << names.extern_name << " argv_name " << names.argv_name << " metadata_name " << names.metadata_name << "\n";
+
         run_with_large_stack([&]() {
             compile_func(f, names.simple_name, names.extern_name);
         });
@@ -2845,7 +2847,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         if (op->args.size() > 1) {
             vector<llvm::Type *> types(op->args.size() - 1);
             for (size_t i = 1; i < op->args.size(); i++) {
-              types[i - 1] = codegen(op->args[i])->getType();
+                types[i - 1] = codegen(op->args[i])->getType();
             }
             struct_type = (llvm::Type *)llvm::StructType::create(*context, types, "struct." + name);
         } else {
@@ -2918,10 +2920,15 @@ void CodeGen_LLVM::visit(const Call *op) {
         for (size_t i = 2; i < op->args.size(); i++) {
             arg_types.push_back(codegen(op->args[i])->getType());
         }
-        FunctionType *function_t = FunctionType::get(return_type, arg_types, false);
-        // TODO(zalman): Need a way to control linkage here.
-        llvm::Function *function = llvm::Function::Create(function_t, llvm::Function::ExternalLinkage,
-                                                          name->value, module.get());
+        debug(0) << "Calling llvm::Function::Create with name " << name->value << ".\n";
+        llvm::Function *function = module->getFunction(name->value);
+        if (function == nullptr) {
+            FunctionType *function_t = FunctionType::get(return_type, arg_types, false);
+            // TODO(zalman): Need a way to control linkage here.
+            function = llvm::Function::Create(function_t, llvm::Function::ExternalLinkage,
+                                              name->value, module.get());
+        }
+        debug(0) << "Got llvm::Function::Create result with name " << function->getName().str() << ".\n";
         value = function;
     } else if (op->is_intrinsic(Call::get_user_context)) {
         internal_assert(op->args.size() == 0);
@@ -3054,7 +3061,9 @@ void CodeGen_LLVM::visit(const Call *op) {
                     dst = builder->CreateCall(append_buffer, call_args);
                 } else {
                     internal_assert(t.is_handle());
-                    call_args.push_back(codegen(op->args[i]));
+                    Value *ptr = codegen(op->args[i]);
+                    ptr = builder->CreatePointerCast(ptr, i8_t->getPointerTo());
+                    call_args.push_back(ptr);
                     dst = builder->CreateCall(append_pointer, call_args);
                 }
             }
