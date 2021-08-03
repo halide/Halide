@@ -15,7 +15,7 @@ namespace Halide {
 namespace Internal {
 
 Expr maybe_print(const std::string &label, Expr e) {
-#if 1
+#if 0
     std::string n = unique_name('t');
     Expr v = Variable::make(e.type(), n);
     return Let::make(n, e, Call::make(e.type(), Internal::Call::return_second,

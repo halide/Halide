@@ -2285,7 +2285,7 @@ void CodeGen_C::visit(const Call *op) {
         // find a better way to do this. We dodge the problem for
         // the specific case of buffer shapes in the case above.
         if (op->type.handle_type) {
-          rhs << "(" << print_type(op->type) << ")";
+            rhs << "(" << print_type(op->type) << ")";
         }
         rhs << "(&" << struct_name << ")";
     } else if (op->is_intrinsic(Call::load_struct_member)) {
@@ -2413,7 +2413,8 @@ void CodeGen_C::visit(const Call *op) {
         stream << get_indent() << rhs.str() << ";\n";
         // Make an innocuous assignment value for our caller (probably an Evaluate node) to ignore.
         print_assignment(op->type, "0");
-    } else if (op->is_intrinsic(Call::make_typed_struct)) {
+    } else if (op->is_intrinsic(Call::make_struct_type)) {
+        // print_assigment will get the type info wrong for this case.
         std::string rhs_str = rhs.str();
         auto cached = cache.find(rhs_str);
         if (cached == cache.end()) {
@@ -2662,7 +2663,14 @@ void CodeGen_C::visit(const VectorReduce *op) {
 void CodeGen_C::visit(const LetStmt *op) {
     string id_value = print_expr(op->value);
     Stmt body = op->body;
-    if (op->value.type().is_handle()) {
+    const Call *call = op->value.as<Call>();
+
+    if (call != nullptr && call->is_intrinsic(Call::make_struct_type)) {
+        // The body might contain a Load or Store that references this
+        // directly by name, so we can't rewrite the name.
+        stream << get_indent() << "auto " << print_name(op->name)
+               << " = " << id_value << ";\n";
+    } else if (op->value.type().is_handle()) {
         // The body might contain a Load or Store that references this
         // directly by name, so we can't rewrite the name.
         stream << get_indent() << print_type(op->value.type())
