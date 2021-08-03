@@ -1,0 +1,22 @@
+include ../support/Makefile.inc
+
+OBJECTS = $(BIN)/single_rule.o
+
+all: $(BIN)/single_rule_tool
+
+CXXFLAGS += -O3 -g
+
+LDFLAGS += -L ../../distrib/bin -L ../../distrib/lib -Wl,-rpath ../../distrib/lib
+
+STATIC_LDFLAGS = $(filter-out -lpthread,$(LDFLAGS)) -pthread -Wl,--whole-archive -lpthread -Wl,--no-whole-archive
+
+$(BIN)/%.o: %.cpp %.h
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BIN)/single_rule_tool: single_rule_tool.cpp $(OBJECTS) $(LIB_HALIDE)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $< $(OBJECTS) -o $@ $(LDFLAGS) -lHalide
+
+clean:
+	rm -rf $(BIN)
