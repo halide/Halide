@@ -24,9 +24,9 @@ enum class PrefetchBoundStrategy {
      * (i.e. all or nothing). */
     GuardWithIf,
 
-    /** Leave the prefetched exprs as are (no if-guards around the prefetch
+    /** Leave the prefetched exprs as-is (no if-guards around the prefetch
      * and no intersecting with the original extents). This makes the prefetch
-     * exprs simpler but this may cause prefetching of region outside the original
+     * exprs simpler but this may cause prefetching of the region outside the original
      * extents. This is good if prefetch won't fault when accessing region
      * outside the original extents. */
     NonFaulting
@@ -36,8 +36,9 @@ namespace Internal {
 
 struct PrefetchDirective {
     std::string name;
-    std::string var;
-    Expr offset;
+    std::string at;    // the loop in which to do the prefetch
+    std::string from;  // the loop-var to use as the base for prefetching. It must be nested outside loop_var (or be equal to loop_var).
+    Expr offset;       // 'fetch_var + offset' will determine the bounds being prefetched.
     PrefetchBoundStrategy strategy;
     // If it's a prefetch load from an image parameter, this points to that.
     Parameter param;
