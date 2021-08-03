@@ -15,7 +15,7 @@ namespace Halide {
 namespace Internal {
 
 Expr maybe_print(const std::string &label, Expr e) {
-#if 0
+#if 1
     std::string n = unique_name('t');
     Expr v = Variable::make(e.type(), n);
     return Let::make(n, e, Call::make(e.type(), Internal::Call::return_second,
@@ -50,7 +50,7 @@ LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
                                      maybe_print("Reading " + v.first + " ",
                                      Call::make(v.second, Call::load_struct_member,
                                                 { closure_arg, struct_type, make_const(UInt(32), struct_index) },
-                                                Call::PureIntrinsic)),
+                                                Call::Intrinsic)),
                                      wrapped_body);
         struct_index++;
     }
@@ -67,7 +67,7 @@ LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
                                      maybe_print("Reading buffer arg 2 " + b.first + ".buffer ",
                                      Call::make(type_of<halide_buffer_t *>(), Call::load_struct_member,
                                                 { closure_arg, struct_type, make_const(UInt(32), struct_index + 1) },
-                                                Call::PureIntrinsic)),
+                                                Call::Intrinsic)),
                                      wrapped_body);
         struct_index += 2;
     }

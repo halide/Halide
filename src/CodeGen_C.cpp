@@ -2413,6 +2413,15 @@ void CodeGen_C::visit(const Call *op) {
         stream << get_indent() << rhs.str() << ";\n";
         // Make an innocuous assignment value for our caller (probably an Evaluate node) to ignore.
         print_assignment(op->type, "0");
+    } else if (op->is_intrinsic(Call::make_typed_struct)) {
+        std::string rhs_str = rhs.str();
+        auto cached = cache.find(rhs_str);
+        if (cached == cache.end()) {
+            id = unique_name('_');
+            stream << get_indent() << "auto " << id << " = " << rhs_str << ";\n";
+        } else {
+            id = cached->second;
+        }                                    
     } else {
         print_assignment(op->type, rhs.str());
     }
