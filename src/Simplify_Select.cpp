@@ -105,6 +105,8 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x, z + y, (w + y) + u), select(x, z, w + u) + y) ||
              rewrite(select(x, z + y, (w + y) - u), select(x, z, w - u) + y) ||
              rewrite(select(x, z + y, u + (w + y)), select(x, z, u + w) + y) ||
+             rewrite(select(x, y + (z - w), u - w), select(x, y + z, u) - w) ||
+             rewrite(select(x, (y - z) + w, u - z), select(x, w + y, u) - z) ||
 
              rewrite(select(x, (y + z) + u, y), y + select(x, z + u, 0)) ||
              rewrite(select(x, (z + y) + u, y), y + select(x, z + u, 0)) ||
@@ -123,6 +125,23 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x, (y + z) + w, (u + y) + v), y + select(x, z + w, u + v)) ||
              rewrite(select(x, (y - z) + w, (u + y) + v), y + select(x, w - z, u + v)) ||
 
+             rewrite(select(x, y + (z + w), u + (v + w)), w + select(x, z + y, u + v)) ||
+             rewrite(select(x, y + (z + w), u + (v + z)), z + select(x, y + w, u + v)) ||
+             rewrite(select(x, y + (z + w), u + (w + v)), w + select(x, z + y, u + v)) ||
+             rewrite(select(x, y + (z + w), u + (z + v)), z + select(x, y + w, u + v)) ||
+             rewrite(select(x, y + (z + w), (u + w) + v), w + select(x, z + y, u + v)) ||
+             rewrite(select(x, y + (z + w), (u + z) + v), z + select(x, y + w, u + v)) ||
+             rewrite(select(x, y + (z + w), (w + u) + v), w + select(x, z + y, v + u)) ||
+             rewrite(select(x, y + (z + w), (z + u) + v), z + select(x, y + w, v + u)) ||
+             rewrite(select(x, (y + z) + w, u + (v + y)), y + select(x, z + w, u + v)) ||
+             rewrite(select(x, (y + z) + w, u + (v + z)), z + select(x, y + w, u + v)) ||
+             rewrite(select(x, (y + z) + w, u + (y + v)), y + select(x, z + w, u + v)) ||
+             rewrite(select(x, (y + z) + w, u + (z + v)), z + select(x, y + w, u + v)) ||
+             rewrite(select(x, (y + z) + w, (u + y) + v), y + select(x, z + w, u + v)) ||
+             rewrite(select(x, (y + z) + w, (u + z) + v), z + select(x, y + w, u + v)) ||
+             rewrite(select(x, (y + z) + w, (y + u) + v), y + select(x, z + w, v + u)) ||
+             rewrite(select(x, (y + z) + w, (z + u) + v), z + select(x, y + w, v + u)) ||
+
              rewrite(select(x, select(y, z, w), select(y, u, w)), select(y, select(x, z, u), w)) ||
              rewrite(select(x, select(y, z, w), select(y, z, u)), select(y, z, select(x, w, u))) ||
 
@@ -139,6 +158,10 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x, max(y, w), max(w, z)), max(select(x, y, z), w)) ||
              rewrite(select(x, max(w, y), max(z, w)), max(w, select(x, y, z))) ||
              rewrite(select(x, max(w, y), max(w, z)), max(w, select(x, y, z))) ||
+
+             rewrite(select(0 < x, min(x*c0, c1), x*c0), min(x*c0, c1), c1 >= 0 && c0 >= 0) ||
+             rewrite(select(x < c0, 0, min(x, c0) + c1), 0, c0 == -c1) ||
+             rewrite(select(0 < x, ((x*c0) + c1) / x, y), select(0 < x, c0 - 1, y), c1 == -1) ||
 
              rewrite(select(x, select(y, z, min(w, z)), min(u, z)), min(select(x, select(y, z, w), u), z)) ||
              rewrite(select(x, select(y, min(w, z), z), min(u, z)), min(select(x, select(y, w, z), u), z)) ||
@@ -187,6 +210,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              (no_overflow_int(op->type) &&
               (rewrite(select(x, y * c0, c1), select(x, y, fold(c1 / c0)) * c0, c1 % c0 == 0) ||
                rewrite(select(x, c0, y * c1), select(x, fold(c0 / c1), y) * c1, c0 % c1 == 0) ||
+               rewrite(select(x, y + c0, c1), select(x, y, fold(c1 - c0)) + c0) ||
 
                // Selects that are equivalent to mins/maxes
                rewrite(select(c0 < x, x + c1, c2), max(x + c1, c2), c2 == c0 + c1 || c2 == c0 + c1 + 1) ||

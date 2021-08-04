@@ -66,6 +66,14 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
              rewrite(select(x, w + y, z) - y, select(x, w, z - y)) ||
              rewrite(select(x, y, z + w) - z, select(x, y - z, w)) ||
              rewrite(select(x, y, w + z) - z, select(x, y - z, w)) ||
+             rewrite(select(x, y + (z + w), u) - w, select(x, y + z, u - w)) ||
+             rewrite(select(x, y + (z + w), u) - z, select(x, y + w, u - z)) ||
+             rewrite(select(x, (y + z) + w, u) - y, select(x, w + z, u - y)) ||
+             rewrite(select(x, (y + z) + w, u) - z, select(x, w + y, u - z)) ||
+             rewrite(select(x, y + z, w) - (u + y), select(x, z, w - y) - u) ||
+             rewrite(select(x, y + z, w) - (u + z), select(x, y, w - z) - u) ||
+             rewrite(select(x, y + z, w) - (y + u), select(x, z, w - y) - u) ||
+             rewrite(select(x, y + z, w) - (z + u), select(x, y, w - z) - u) ||
              rewrite(y - select(x, y + w, z), 0 - select(x, w, z - y)) ||
              rewrite(y - select(x, w + y, z), 0 - select(x, w, z - y)) ||
              rewrite(z - select(x, y, z + w), 0 - select(x, y - z, w)) ||
@@ -173,6 +181,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
              rewrite(((x - y) - z) - x, 0 - (y + z)) ||
 
              rewrite(x - x%c0, (x/c0)*c0) ||
+             rewrite(x - ((x + c0)/c1)*c1, (x + c0)%c1 - c0, c1 > 0) ||
 
              (no_overflow(op->type) &&
               (rewrite(max(x, y) - x, max(y - x, 0)) ||
@@ -243,6 +252,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
                rewrite(min(x, y) - min(y, x), 0) ||
                rewrite(min(x, y) - min(z, w), y - w, can_prove(x - y == z - w, this)) ||
                rewrite(min(x, y) - min(w, z), y - w, can_prove(x - y == z - w, this)) ||
+               rewrite(min(x*c0, c1) - min(x, c2)*c0, min(c1 - min(x, c2)*c0, 0), c0 > 0 && c1 <= c2*c0) ||
 
                rewrite((x - max(z, (x + y))), (0 - max(z - x, y)), !is_const(x)) ||
                rewrite((x - max(z, (y + x))), (0 - max(z - x, y)), !is_const(x)) ||
