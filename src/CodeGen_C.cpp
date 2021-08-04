@@ -2226,8 +2226,8 @@ void CodeGen_C::visit(const Call *op) {
             stream << " {\n";
             // List the types.
             indent++;
-            for (size_t i = 0; i < op->args.size(); i++) {
-                stream << get_indent() << "const " << print_type(op->args[i].type()) << " f_" << i << ";\n";
+            for (size_t i = 1; i < op->args.size(); i++) {
+                stream << get_indent() << "const " << print_type(op->args[i].type()) << " f_" << i - 1 << ";\n";
             }
             indent--;
             stream << get_indent() << "};\n";
