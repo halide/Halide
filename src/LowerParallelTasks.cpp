@@ -77,14 +77,13 @@ LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
     wrapped_body = LetStmt::make(closure_type_name, struct_type_decl, wrapped_body);
 
     LoweredFunc result{name, args, wrapped_body, LinkageType::External, NameMangling::Default };
-    debug_arguments(&result, Target("host-debug"));
+    //    debug_arguments(&result, Target("host-debug"));
     return result;
 }
 
 Expr AllocateClosure(const std::string &name, const Closure &closure) {
     std::vector<Expr> closure_elements;
     // TODO(zalman): Ensure this is unique within scopes it is used in.
-    closure_elements.push_back(name);
     for (const auto &v : closure.vars) {
         closure_elements.push_back(maybe_print("Storing " + v.first + " ", Variable::make(v.second, v.first)));
     }
@@ -480,10 +479,15 @@ struct LowerParallelTasks : public IRMutator {
 Stmt lower_parallel_tasks(Stmt s, std::vector<LoweredFunc> &closure_implementations, const std::string &name) {
     LowerParallelTasks lowering_mutator(name);
     Stmt result = lowering_mutator.mutate(s);
+#if 0
     for (const auto &lf : lowering_mutator.closure_implementations) {
-        debug(0) << "Added LoweredFunc " << lf.name << "\n";
+        debug(0) << "Lowered function " << lf.name << ":\n" << lf.body << "\n\n";
     }
+#endif
     closure_implementations = std::move(lowering_mutator.closure_implementations);
+#if 0
+    debug(0) << "Main body:\n" << result << "\n\n";
+#endif
     return result;
 }  
 

@@ -2867,8 +2867,9 @@ void CodeGen_LLVM::visit(const Call *op) {
         vector<llvm::Value *> args(op->args.size() - 2);
         vector<llvm::Type *> types(op->args.size() - 2);
         for (size_t i = 2; i < op->args.size(); i++) {
-            args[i - 2] = codegen(op->args[i]);
-            types[i - 2] = args[i - 2]->getType();
+            llvm::Value *value = codegen(op->args[i]);
+            args[i - 2] = value;
+            types[i - 2] = value->getType();
         }
 
         llvm::Type *aggregate_t_ptr = type_carrier->getType();
