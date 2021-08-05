@@ -65,14 +65,14 @@ public:
 
     std::vector<ArgInfo> get_input_arginfos() override {
         return {
-            ArgInfo("input", IOKind::Buffer, {Int(32)}, 2),
-            ArgInfo("offset", IOKind::Scalar, {Int(32)}, 0),
+            {"input", IOKind::Buffer, {Int(32)}, 2},
+            {"offset", IOKind::Scalar, {Int(32)}, 0},
         };
     }
 
     std::vector<ArgInfo> get_output_arginfos() override {
         return {
-            ArgInfo("output", IOKind::Buffer, {Int(32)}, 2),
+            {"output", IOKind::Buffer, {Int(32)}, 2},
         };
     }
 
