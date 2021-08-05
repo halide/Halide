@@ -1536,10 +1536,6 @@ void CodeGen_C::emit_metadata_getter(const std::string &function_name,
         return it == metadata_name_map.end() ? from : it->second;
     };
 
-    auto legalize_name = [](const std::string &from) -> std::string {
-        return replace_all(from, ".", "_");
-    };
-
     stream << "\nHALIDE_FUNCTION_ATTRS\nconst struct halide_filter_metadata_t *" << function_name << "_metadata() {\n";
 
     indent += 1;
@@ -1634,7 +1630,7 @@ void CodeGen_C::emit_metadata_getter(const std::string &function_name,
     };
 
     for (const auto &arg : args) {
-        const auto legalized_name = legalize_name(map_name(arg.name));
+        const auto legalized_name = c_print_name(map_name(arg.name));
 
         auto argument_estimates = arg.argument_estimates;
         if (arg.type.is_handle()) {
@@ -1695,7 +1691,7 @@ void CodeGen_C::emit_metadata_getter(const std::string &function_name,
     indent += 1;
     for (const auto &arg : args) {
         const auto name = map_name(arg.name);
-        const auto legalized_name = legalize_name(name);
+        const auto legalized_name = c_print_name(name);
 
         stream << get_indent() << "{\n";
         indent += 1;
