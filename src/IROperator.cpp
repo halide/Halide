@@ -1070,12 +1070,6 @@ Expr unwrap_tags(const Expr &e) {
     return e;
 }
 
-Expr predicate(Expr e) {
-    Type t = e.type();
-    return Internal::Call::make(t, Internal::Call::predicate,
-                                {std::move(e)}, Internal::Call::PureIntrinsic);
-}
-
 Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args) {
     return Internal::Call::make(Int(32),
                                 "halide_error_requirement_failed",

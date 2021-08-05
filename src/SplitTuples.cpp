@@ -273,7 +273,7 @@ class SplitTuples : public IRMutator {
                 // Just make a provide node
                 int i = *c.begin();
                 string name = op->name + "." + std::to_string(i);
-                s = Provide::make(name, {mutate(op->values[i])}, args);
+                s = Provide::make(name, {mutate(op->values[i])}, args, op->predicate);
             } else {
                 // Make a list of let statements that compute the
                 // values (doing any loads), and then a block of
@@ -286,7 +286,7 @@ class SplitTuples : public IRMutator {
                         lets.emplace_back(var_name, val);
                         val = Variable::make(val.type(), var_name);
                     }
-                    provides.push_back(Provide::make(name, {val}, args));
+                    provides.push_back(Provide::make(name, {val}, args, op->predicate));
                 }
 
                 s = Block::make(provides);
@@ -497,7 +497,7 @@ class SplitScatterGather : public IRMutator {
                 names.push_back(name);
                 v = Variable::make(v.type(), name);
             }
-            provides.push_back(Provide::make(op->name, values, args));
+            provides.push_back(Provide::make(op->name, values, args, op->predicate));
         }
 
         Stmt s = Block::make(provides);

@@ -441,14 +441,31 @@ public:
     Stage &atomic(bool override_associativity_test = false);
 
     Stage &hexagon(const VarOrRVar &x = Var::outermost());
-    Stage &prefetch(const Func &f, const VarOrRVar &var, Expr offset = 1,
+
+    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
+    Stage &prefetch(const Func &f, const VarOrRVar &var, int offset = 1,
+                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch(f, var, var, offset, strategy);
+    }
+    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
+    Stage &prefetch(const Internal::Parameter &param, const VarOrRVar &var, int offset = 1,
+                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch(param, var, var, offset, strategy);
+    }
+    template<typename T>
+    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
+    Stage &prefetch(const T &image, VarOrRVar var, int offset = 1,
+                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch(image.parameter(), var, var, offset, strategy);
+    }
+    Stage &prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
-    Stage &prefetch(const Internal::Parameter &param, const VarOrRVar &var, Expr offset = 1,
+    Stage &prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     template<typename T>
-    Stage &prefetch(const T &image, VarOrRVar var, Expr offset = 1,
+    Stage &prefetch(const T &image, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(image.parameter(), var, offset, strategy);
+        return prefetch(image.parameter(), at, from, std::move(offset), strategy);
     }
     // @}
 
@@ -809,28 +826,8 @@ public:
      * instead.
      *
      */
-    // @{
     Realization realize(std::vector<int32_t> sizes = {}, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
-    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
-    Realization realize(int x_size, int y_size, int z_size, int w_size, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
-    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
-    Realization realize(int x_size, int y_size, int z_size, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
-    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
-    Realization realize(int x_size, int y_size, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
-
-    // Making this a template function is a trick: `{intliteral}` is a valid scalar initializer
-    // in C++, but we want it to match the vector call, not the (deprecated) scalar one.
-    template<typename T, typename = typename std::enable_if<std::is_same<T, int>::value>::type>
-    HALIDE_ATTRIBUTE_DEPRECATED("Call realize() with a vector<int> instead")
-    HALIDE_ALWAYS_INLINE Realization realize(T x_size, const Target &target = Target(),
-                                             const ParamMap &param_map = ParamMap::empty_map()) {
-        return realize(std::vector<int32_t>{x_size}, target, param_map);
-    }
-    // @}
 
     /** Evaluate this function into an existing allocated buffer or
      * buffers. If the buffer is also one of the arguments to the
@@ -2009,14 +2006,109 @@ public:
      *     g(x, y) = 2 * f(x, y)
      */
     // @{
-    Func &prefetch(const Func &f, const VarOrRVar &var, Expr offset = 1,
+    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
+    Func &prefetch(const Func &f, const VarOrRVar &var, int offset = 1,
+                   PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch(f, var, var, offset, strategy);
+    }
+    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
+    Func &prefetch(const Internal::Parameter &param, const VarOrRVar &var, int offset = 1,
+                   PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch(param, var, var, offset, strategy);
+    }
+    template<typename T>
+    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
+    Func &prefetch(const T &image, VarOrRVar var, int offset = 1,
+                   PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch<T>(image, var, var, offset, strategy);
+    }
+    // @}
+
+    /** prefetch() is a more fine-grained version of prefetch(), which allows
+     * specification of different vars for the location of the prefetch() instruction
+     * vs. the location that is being prefetched:
+     *
+     * - the first var specified, 'at', indicates the loop in which the prefetch will be placed
+     * - the second var specified, 'from', determines the var used to find the bounds to prefetch
+     *   (in conjunction with 'offset')
+     *
+     * If 'at' and 'from' are distinct vars, then 'from' must be at a nesting level outside 'at.'
+     * Note that the value for 'offset' applies only to 'from', not 'at'.
+     *
+     * For example, consider this pipeline:
+     \code
+     Func f, g;
+     Var x, y, z;
+     f(x, y) = x + y;
+     g(x, y) = 2 * f(x, y);
+     h(x, y) = 3 * f(x, y);
+     \endcode
+     *
+     * The following schedule:
+     \code
+     f.compute_root();
+     g.prefetch(f, x, x, 2, PrefetchBoundStrategy::NonFaulting);
+     h.prefetch(f, x, y, 2, PrefetchBoundStrategy::NonFaulting);
+     \endcode
+     *
+     * will inject prefetch call at the innermost loop of 'g' and 'h' and generate
+     * the following loop nest:
+     \code
+     for y = ...
+       for x = ...
+         f(x, y) = x + y
+     for y = ..
+       for x = ...
+         prefetch(&f[x + 2, y], 1, 16);
+         g(x, y) = 2 * f(x, y)
+     for y = ..
+       for x = ...
+         prefetch(&f[x, y + 2], 1, 16);
+         h(x, y) = 3 * f(x, y)
+     \endcode
+     *
+     * Note that the 'from' nesting level need not be adjacent to 'at':
+     \code
+     Func f, g;
+     Var x, y, z, w;
+     f(x, y, z, w) = x + y + z + w;
+     g(x, y, z, w) = 2 * f(x, y, z, w);
+     \endcode
+     *
+     * The following schedule:
+     \code
+     f.compute_root();
+     g.prefetch(f, y, w, 2, PrefetchBoundStrategy::NonFaulting);
+     \endcode
+     *
+     * will produce code that prefetches a tile of data:
+     \code
+     for w = ...
+       for z = ...
+         for y = ...
+           for x = ...
+         f(x, y, z, w) = x + y + z + w
+     for w = ...
+       for z = ...
+         for y = ...
+           for x0 = ...
+              prefetch(&f[x0, y, z, w + 2], 1, 16);
+           for x = ...
+             g(x, y, z, w) = 2 * f(x, y, z, w)
+     \endcode
+     *
+     * Note that calling prefetch() with the same var for both 'at' and 'from'
+     * is equivalent to calling prefetch() with that var.
+     */
+    // @{
+    Func &prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
-    Func &prefetch(const Internal::Parameter &param, const VarOrRVar &var, Expr offset = 1,
+    Func &prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     template<typename T>
-    Func &prefetch(const T &image, VarOrRVar var, Expr offset = 1,
+    Func &prefetch(const T &image, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(image.parameter(), var, offset, strategy);
+        return prefetch(image.parameter(), at, from, std::move(offset), strategy);
     }
     // @}
 

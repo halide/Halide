@@ -41,10 +41,18 @@ _add_hannk_halide_library(
         GENERATOR_DEPS)
 
 _add_hannk_halide_library(
-        TARGET conv_uint8
+        TARGET conv_u8_u8_u8
         SRCS conv_generator.cpp
         GENERATOR_NAME Conv
-        GENERATOR_ARGS
+        GENERATOR_ARGS output.type=uint8
+        GENERATOR_DEPS)
+
+
+_add_hannk_halide_library(
+        TARGET conv_u8_u8_i16
+        SRCS conv_generator.cpp
+        GENERATOR_NAME Conv
+        GENERATOR_ARGS output.type=int16
         GENERATOR_DEPS)
 
 _add_hannk_halide_library(
@@ -59,7 +67,7 @@ _add_hannk_halide_library(
         TARGET depthwise_conv_uint8
         SRCS depthwise_conv_generator.cpp
         GENERATOR_NAME DepthwiseConv
-        GENERATOR_ARGS
+        GENERATOR_ARGS inv_depth_multiplier=1
         GENERATOR_DEPS)
 
 _add_hannk_halide_library(
@@ -70,10 +78,10 @@ _add_hannk_halide_library(
         GENERATOR_DEPS)
 
 _add_hannk_halide_library(
-        TARGET depthwise_conv_dm1_uint8
+        TARGET depthwise_conv_shallow_uint8
         SRCS depthwise_conv_generator.cpp
         GENERATOR_NAME DepthwiseConv
-        GENERATOR_ARGS inv_depth_multiplier=1
+        GENERATOR_ARGS inv_depth_multiplier=1 shallow=true
         GENERATOR_DEPS)
 
 _add_hannk_halide_library(
@@ -82,20 +90,6 @@ _add_hannk_halide_library(
         FEATURES no_bounds_query no_asserts
         GENERATOR_NAME Fill
         GENERATOR_ARGS
-        GENERATOR_DEPS)
-
-_add_hannk_halide_library(
-        TARGET fully_connected_uint8_uint8
-        SRCS fully_connected_generator.cpp
-        GENERATOR_NAME FullyConnected
-        GENERATOR_ARGS output.type=uint8
-        GENERATOR_DEPS)
-
-_add_hannk_halide_library(
-        TARGET fully_connected_uint8_int16
-        SRCS fully_connected_generator.cpp
-        GENERATOR_NAME FullyConnected
-        GENERATOR_ARGS output.type=int16
         GENERATOR_DEPS)
 
 _add_hannk_halide_library(
@@ -156,6 +150,13 @@ _add_hannk_halide_library(
         TARGET tile_conv_filter_uint8
         SRCS conv_generator.cpp
         GENERATOR_NAME TileConvFilter
+        GENERATOR_ARGS
+        GENERATOR_DEPS)
+
+_add_hannk_halide_library(
+        TARGET upsample_channels_uint8
+        SRCS depthwise_conv_generator.cpp
+        GENERATOR_NAME UpsampleChannels
         GENERATOR_ARGS
         GENERATOR_DEPS)
 

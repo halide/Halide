@@ -103,7 +103,10 @@ struct ModelRunner {
     bool do_compare_results = true;
     bool keep_going = false;
     double tolerance;
+    bool csv_output = false;
+    int run_count = 0;
     std::string external_delegate_path;
+    std::vector<WhichRun> active_runs;
 
     ModelRunner();
 
@@ -128,7 +131,7 @@ private:
     };
     RunResult run_in_hannk(const std::vector<char> &buffer);
     RunResult run_in_tflite(const std::vector<char> &buffer, TfLiteDelegate *delegate = nullptr);
-    bool compare_results(const std::string &msg, const RunResult &a, const RunResult &b);
+    bool compare_results(const std::string &name_a, const std::string &name_b, const RunResult &a, const RunResult &b);
 };
 
 }  // namespace hannk

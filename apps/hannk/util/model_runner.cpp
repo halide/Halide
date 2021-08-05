@@ -191,7 +191,7 @@ int FlagProcessor::process(int argc, char **argv) const {
         } else if (i + 1 < argc) {
             value = argv[++i];
         } else {
-            r = handle_missing_value(flag);
+            r = missing_value_handler(flag);
             if (r != 0) {
                 return r;
             } else {
@@ -200,7 +200,7 @@ int FlagProcessor::process(int argc, char **argv) const {
         }
         auto it = flag_handlers.find(flag);
         if (it == flag_handlers.end()) {
-            r = handle_unknown_flag(flag);
+            r = unknown_flag_handler(flag);
             if (r != 0) {
                 return r;
             } else {
@@ -245,7 +245,7 @@ int SeedTracker::seed_for_name(const std::string &name) {
         vsnprintf(buffer, sizeof(buffer), format, args_copy);
         va_end(args_copy);
 
-        *self->verbose_output_ << format;
+        *self->verbose_output_ << buffer;
     }
 }
 
@@ -365,10 +365,10 @@ void ModelRunner::set_seed(int seed) {
 }
 
 void ModelRunner::status() {
-    std::cout << "Using random seed: " << seed_tracker_.next_seed() << "\n";
-    std::cout << "Using threads: " << threads << "\n";
+    if (verbosity > 0) {
+        std::cout << "Using random seed: " << seed_tracker_.next_seed() << "\n";
+        std::cout << "Using threads: " << threads << "\n";
 
-    {
         std::string tf_ver = TfLiteVersion();
         std::cout << "Using TFLite version: " << tf_ver << "\n";
         std::string expected = std::to_string(TFLITE_VERSION_MAJOR) + "." + std::to_string(TFLITE_VERSION_MINOR) + ".";
@@ -388,9 +388,7 @@ ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer
     }
 
     InterpreterOptions options;
-    if (verbosity) {
-        options.verbose = true;
-    }
+    options.verbosity = verbosity;
     Interpreter interpreter(std::move(model), std::move(options));
 
     // Fill in the inputs with pseudorandom data (save the seeds for later).
@@ -436,7 +434,7 @@ ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer
 ModelRunner::RunResult ModelRunner::run_in_tflite(const std::vector<char> &buffer, TfLiteDelegate *delegate) {
     RunResult result;
 
-    TfLiteModelRunner tfrunner(buffer, threads, seed_tracker_, &std::cout, delegate);
+    TfLiteModelRunner tfrunner(buffer, threads, seed_tracker_, verbosity >= 1 ? &std::cout : nullptr, delegate);
 
     // Execute once, to prime the pump
     tfrunner.run_once();
@@ -454,7 +452,7 @@ ModelRunner::RunResult ModelRunner::run_in_tflite(const std::vector<char> &buffe
     return result;
 }
 
-bool ModelRunner::compare_results(const std::string &msg, const RunResult &a, const RunResult &b) {
+bool ModelRunner::compare_results(const std::string &name_a, const std::string &name_b, const RunResult &a, const RunResult &b) {
     bool all_matched = true;
     HCHECK(a.outputs.size() == b.outputs.size());
     for (size_t i = 0; i < a.outputs.size(); ++i) {
@@ -470,14 +468,12 @@ bool ModelRunner::compare_results(const std::string &msg, const RunResult &a, co
         CompareBuffersOptions options;
         options.close_thresh = std::ceil((1ull << tflite_buf.type().bits) * tolerance);
         options.max_diffs_to_log = 8;
-        std::cout << msg;
+        options.verbose = !csv_output;
         CompareBuffersResult r = dynamic_type_dispatch<CompareBuffers>(tflite_buf.type(), tflite_buf, halide_buf, options);
         if (r.ok) {
             if (verbosity >= 2) {
-                std::cout << "MATCHING output " << i << " is:\n";
+                std::cout << "Comparing " << name_a << " vs " << name_b << ": MATCHING output " << i << " is:\n";
                 dynamic_type_dispatch<DumpBuffer>(halide_buf.type(), halide_buf);
-            } else {
-                std::cout << "OK!\n";
             }
         } else {
             all_matched = false;
@@ -504,6 +500,10 @@ int ModelRunner::parse_flags(int argc, char **argv, std::vector<std::string> &fi
          }},
         {"compare", [this](const std::string &value) {
              this->do_compare_results = std::stoi(value) != 0;
+             return 0;
+         }},
+        {"csv", [this](const std::string &value) {
+             this->csv_output = std::stoi(value) != 0;
              return 0;
          }},
         {"enable", [this](const std::string &value) {
@@ -576,18 +576,46 @@ int ModelRunner::parse_flags(int argc, char **argv, std::vector<std::string> &fi
 }
 
 void ModelRunner::run(const std::string &filename) {
-    std::cout << "Processing " << filename << " ...\n";
-
-    const std::vector<char> buffer = read_entire_file(filename);
-
     std::map<WhichRun, RunResult> results;
 
-    std::vector<WhichRun> active_runs;
-    for (int i = 0; i < kNumRuns; i++) {
-        if (do_run[i]) {
-            active_runs.push_back((WhichRun)i);
+    if (run_count == 0) {
+        run_count++;
+
+        for (int i = 0; i < kNumRuns; i++) {
+            if (do_run[i]) {
+                active_runs.push_back((WhichRun)i);
+            }
+        }
+
+        if (csv_output) {
+            // Output column headers
+            std::cout << "Filename";
+            if (do_benchmark) {
+                for (WhichRun i : active_runs) {
+                    std::cout << ',' << RunNames[i] << "_time_us";
+                }
+            }
+            if (do_compare_results && do_run[kTfLite]) {
+                for (WhichRun i : active_runs) {
+                    if (i == kTfLite) {
+                        continue;
+                    }
+                    std::cout << ',' << RunNames[i] << "_matches_tflite";
+                }
+            }
+            std::cout << '\n';
         }
     }
+
+    if (csv_output) {
+        // Try to print just the filename rather than a full pathname
+        const auto n = filename.rfind('/');
+        std::cout << (n == std::string::npos ? filename : filename.substr(n + 1));
+    } else {
+        std::cout << "Processing " << filename << " ...\n";
+    }
+
+    const std::vector<char> buffer = read_entire_file(filename);
 
     const auto exec_tflite = [this, &buffer]() {
         return run_in_tflite(buffer);
@@ -615,57 +643,45 @@ void ModelRunner::run(const std::string &filename) {
         {kInternalDelegate, exec_hannk_internal_delegate},
     };
 
-    std::cout << '\n';
     for (WhichRun i : active_runs) {
-        std::cout << "Executing in " << RunNames[i] << " ...\n";
         results[i] = execs.at(i)();
     }
 
     // ----- Log benchmark times
     if (do_benchmark) {
-
-        std::cout << '\n';
         for (WhichRun i : active_runs) {
-            std::cout << RunNames[i] << " Time: " << std::chrono::duration_cast<std::chrono::microseconds>(results[i].time).count() << " us"
-                      << "\n";
-        }
-
-        std::cout << '\n';
-        for (WhichRun i : active_runs) {
-            if (i == kTfLite) {
-                continue;
+            const auto t = std::chrono::duration_cast<std::chrono::microseconds>(results[i].time).count();
+            if (csv_output) {
+                std::cout << ',' << t;
+            } else {
+                std::cout << RunNames[i] << " Time: " << t << " us\n";
             }
-            double ratio = (results[i].time / results[kTfLite].time);
-            std::cout << RunNames[i] << " = " << ratio * 100.0 << "% of " << RunNames[kTfLite];
-            if (ratio > 1.0) {
-                std::cout << "  *** " << RunNames[i] << " IS SLOWER";
-            }
-            std::cout << "\n";
         }
     }
 
     // ----- Now compare the outputs
     if (do_compare_results && do_run[kTfLite]) {
-        std::cout << '\n';
-
         bool all_matched = true;
         for (WhichRun i : active_runs) {
             if (i == kTfLite) {
                 continue;
             }
-            std::ostringstream msg;
-            msg << "Comparing " << RunNames[kTfLite] << " vs " << RunNames[i] << ":";
-            if (!compare_results(msg.str(), results[kTfLite], results[i])) {
+            const bool matched = compare_results(RunNames[kTfLite], RunNames[i], results[kTfLite], results[i]);
+            if (csv_output) {
+                std::cout << ',' << (matched ? '1' : '0');
+            }
+            if (!matched) {
                 all_matched = false;
             }
         }
 
-        if (!all_matched) {
-            std::cerr << "Some runs exceeded the error threshold!\n";
-            if (!keep_going) {
-                exit(1);
-            }
+        if (!all_matched && !keep_going) {
+            exit(1);
         }
+    }
+
+    if (csv_output) {
+        std::cout << '\n';
     }
 }
 

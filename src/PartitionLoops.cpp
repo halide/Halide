@@ -360,7 +360,11 @@ class FindSimplifications : public IRVisitor {
 
     void visit(const Call *op) override {
         if (op->is_intrinsic(Call::if_then_else)) {
-            visit_select(op->args[0], op, op->args[1], op->args[2]);
+            if (op->args.size() == 3) {
+                visit_select(op->args[0], op, op->args[1], op->args[2]);
+            } else {
+                visit_select(op->args[0], op, op->args[1], make_zero(op->type));
+            }
         } else {
             IRVisitor::visit(op);
         }
@@ -401,6 +405,22 @@ class FindSimplifications : public IRVisitor {
         }
 
         simplifications.insert(simplifications.end(), old.begin(), old.end());
+    }
+
+    void visit(const Store *op) override {
+        IRVisitor::visit(op);
+        if (has_uncaptured_likely_tag(op->predicate)) {
+            const int lanes = op->predicate.type().lanes();
+            new_simplification(op->predicate, op->predicate, const_true(lanes), op->predicate);
+        }
+    }
+
+    void visit(const Load *op) override {
+        IRVisitor::visit(op);
+        if (has_uncaptured_likely_tag(op->predicate)) {
+            const int lanes = op->predicate.type().lanes();
+            new_simplification(op->predicate, op->predicate, const_true(lanes), op->predicate);
+        }
     }
 
     template<typename LetOrLetStmt>

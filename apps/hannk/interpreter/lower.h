@@ -11,6 +11,10 @@ OpPtr lower_tflite_lstm(TensorPtr data_input, TensorPtr prev_activ_input, Tensor
                         TensorPtr activ_output, TensorPtr state_output, TensorPtr concat_temp, TensorPtr activ_temp,
                         ActivationFunction activation = ActivationFunction::None);
 
+// Implement the FullyConnected op.
+OpPtr lower_tflite_fullyconnected(const TensorPtr &input, const TensorPtr &filter, const TensorPtr &bias,
+                                  const TensorPtr &output, ActivationFunction activation = ActivationFunction::None);
+
 }  // namespace hannk
 
 #endif  // HANNK_LOWER_H_
