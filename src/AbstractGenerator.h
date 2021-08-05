@@ -79,19 +79,6 @@ public:
         // Note that this can have multiple entries for Tuple-valued Inputs or Outputs
         std::vector<Type> types;
         int dimensions = 0;
-
-        // In C++11, having member initializers above prevents default aggregate
-        // initialization from working; C++14 & onwards fixes this, so we should
-        // be able to remove this if/when we require C++14 as baseline.
-        ArgInfo(const std::string &n, IOKind k, const std::vector<Type> &t, int d)
-            : name(n), kind(k), types(t), dimensions(d) {
-        }
-
-        ArgInfo() = default;
-        ArgInfo(const ArgInfo &) = default;
-        ArgInfo &operator=(const ArgInfo &) = default;
-        ArgInfo(ArgInfo &&that) = default;
-        ArgInfo &operator=(ArgInfo &&that) = default;
     };
 
     /** Return the name of this Generator. (This should always be the name

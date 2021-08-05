@@ -1712,10 +1712,10 @@ std::vector<AbstractGenerator::ArgInfo> get_arguments(const T &t) {
     std::vector<AbstractGenerator::ArgInfo> args;
     args.reserve(t.size());
     for (auto *e : t) {
-        args.emplace_back(e->name(),
-                          e->kind(),
-                          e->types_defined() ? e->types() : std::vector<Type>{},
-                          e->dims_defined() ? e->dims() : 0);
+        args.push_back({e->name(),
+                        e->kind(),
+                        e->types_defined() ? e->types() : std::vector<Type>{},
+                        e->dims_defined() ? e->dims() : 0});
     }
     return args;
 }
