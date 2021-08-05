@@ -1505,8 +1505,6 @@ void CodeGen_C::emit_argv_wrapper(const std::string &function_name,
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
             stream << get_indent() << "(halide_buffer_t *)args[" << i << "]";
-        } else if (args[i].name == "__user_context") {
-            stream << get_indent() << "args[" << i << "]";
         } else {
             stream << get_indent() << "*(" << type_to_c_type(args[i].type, false) << " const *)args[" << i << "]";
         }
