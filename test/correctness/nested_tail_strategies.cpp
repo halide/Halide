@@ -18,7 +18,9 @@ void my_free(void *user_context, void *ptr) {
 
 void check(Func out, int line, std::vector<TailStrategy> tails) {
     bool has_round_up =
-        std::find(tails.begin(), tails.end(), TailStrategy::RoundUp) != tails.end();
+        std::find(tails.begin(), tails.end(), TailStrategy::RoundUp) != tails.end() ||
+        std::find(tails.begin(), tails.end(), TailStrategy::PredicateLoads) != tails.end() ||
+        std::find(tails.begin(), tails.end(), TailStrategy::PredicateStores) != tails.end();
     bool has_shift_inwards =
         std::find(tails.begin(), tails.end(), TailStrategy::ShiftInwards) != tails.end();
 
@@ -72,13 +74,20 @@ int main(int argc, char **argv) {
     TailStrategy tails[] = {
         TailStrategy::RoundUp,
         TailStrategy::GuardWithIf,
-        TailStrategy::Predicate,
+        TailStrategy::ShiftInwards,
+    };
+
+    TailStrategy innermost_tails[] = {
+        TailStrategy::RoundUp,
+        TailStrategy::GuardWithIf,
+        TailStrategy::PredicateLoads,
+        TailStrategy::PredicateStores,
         TailStrategy::ShiftInwards,
     };
 
     // Two stages. First stage computed at tiles of second.
-    for (auto t1 : tails) {
-        for (auto t2 : tails) {
+    for (auto t1 : innermost_tails) {
+        for (auto t2 : innermost_tails) {
             Func in, f, g;
             Var x;
 
@@ -97,9 +106,9 @@ int main(int argc, char **argv) {
 
     // Three stages. First stage computed at tiles of second, second
     // stage computed at tiles of third.
-    for (auto t1 : tails) {
-        for (auto t2 : tails) {
-            for (auto t3 : tails) {
+    for (auto t1 : innermost_tails) {
+        for (auto t2 : innermost_tails) {
+            for (auto t3 : innermost_tails) {
                 Func in("in"), f("f"), g("g"), h("h");
                 Var x;
 
@@ -122,8 +131,8 @@ int main(int argc, char **argv) {
     // Three stages. First stage computed at tiles of third, second
     // stage computed at smaller tiles of third.
     for (auto t1 : tails) {
-        for (auto t2 : tails) {
-            for (auto t3 : tails) {
+        for (auto t2 : innermost_tails) {
+            for (auto t3 : innermost_tails) {
                 Func in, f, g, h;
                 Var x;
 
@@ -146,9 +155,9 @@ int main(int argc, char **argv) {
     // Same as above, but the splits on the output are composed in
     // reverse order so we don't get a perfect split on the inner one
     // (but can handle smaller outputs).
-    for (auto t1 : tails) {
+    for (auto t1 : innermost_tails) {
         for (auto t2 : tails) {
-            for (auto t3 : tails) {
+            for (auto t3 : tails) {  // Not innermost_tails because of n^4 complexity here.
                 for (auto t4 : tails) {
                     Func in("in"), f("f"), g("g"), h("h");
                     Var x;

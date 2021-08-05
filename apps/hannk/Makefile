@@ -6,13 +6,23 @@ include ../support/Makefile.inc
 # builds but easier to enable it for everything.
 CXXFLAGS += -Wno-unused-private-field -fno-exceptions -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -Wunused-variable -I$(MAKEFILE_DIR)
 
+BENCHMARK_OUT = benchmark
+ifeq (hexagon-32-qurt,$(findstring hexagon-32-qurt,$(HL_TARGET)))
+	# Building benchmark application as shared object instead of elf for
+	# hexagon target.
+	BENCHMARK_OUT := $(BENCHMARK_OUT).so
+	BENCHMARK_HEXAGON_FLAGS = -shared -fPIC -G0
+	HEXAGON_STUBS = $(BIN)/$(HL_TARGET)/stubs.o
+endif
+
+
 ifneq (,$(findstring -O,$(OPTIMIZE)))
 	CXXFLAGS += -DNDEBUG
 endif
 
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 
-.PHONY: all build clean test delegate
+.PHONY: all build clean test delegate test-hexagon-sim test-hexagon-device
 all: build
 
 # .SECONDARY with no prerequisites causes all targets to be treated as secondary
@@ -20,11 +30,25 @@ all: build
 .SECONDARY:
 
 build: \
-	$(BIN)/$(HL_TARGET)/benchmark \
+	$(BIN)/$(HL_TARGET)/$(BENCHMARK_OUT) \
 	$(BIN)/$(HL_TARGET)/compare_vs_tflite
 
 test: compare_vs_tflite
-	$(BIN)/$(HL_TARGET)/compare_vs_tflite test/*/* --benchmark 0
+	$(foreach test_model, $(shell ls -1 test/*/*), $(BIN)/$(HL_TARGET)/compare_vs_tflite $(test_model) --benchmark 0;)
+
+test-hexagon-sim: $(BIN)/$(HL_TARGET)/$(BENCHMARK_OUT)
+	@mkdir -p $@
+	echo "Benchmarking tests..."
+	$(foreach test_model, $(shell ls -1 test/*/*), BIN=$(BIN) ./run_benchmark_on_hexagon_sim.sh $(test_model);)
+
+test-hexagon-device: $(BIN)/$(HL_TARGET)/$(BENCHMARK_OUT)
+	echo "Benchmarking tests..."
+	adb push $< /vendor/bin/$(BENCHMARK_OUT)
+	adb shell mkdir -p /vendor/bin/hannk-test
+	adb push test/. /vendor/bin/hannk-test
+	adb push $(HEXAGON_SDK_ROOT)/libs/run_main_on_hexagon/ship/android_aarch64/run_main_on_hexagon /vendor/bin/run_main_on_hexagon
+	adb push $(HEXAGON_SDK_ROOT)/libs/run_main_on_hexagon/ship/hexagon_toolv84_v65/librun_main_on_hexagon_skel.so /vendor/lib/rfsa/adsp/
+	$(foreach test_model, $(shell ls -1 test/*/*), adb shell 'cd /vendor/bin; touch /vendor/lib/rfsa/adsp/run_main_on_hexagon.farf; ./run_main_on_hexagon 3 /vendor/bin/$(BENCHMARK_OUT) --verbose hannk-$(test_model)';)
 
 clean:
 	rm -rf $(BIN)
@@ -112,29 +136,37 @@ $(BIN)/%/halide/average_pool_uint8.a: $(GENERATOR_BIN)/pool.generator
 	@mkdir -p $(@D)
 	$< -g AveragePool -f hannk::average_pool_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/halide/conv_uint8.a: $(GENERATOR_BIN)/conv.generator
+$(BIN)/%/halide/conv_u8_u8_u8.a: $(GENERATOR_BIN)/conv.generator
 	@mkdir -p $(@D)
-	$< -g Conv -f hannk::conv_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+	$< -g Conv output.type=uint8 -f hannk::conv_u8_u8_u8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/halide/conv_r16_uint8.a: $(GENERATOR_BIN)/conv.generator
+$(BIN)/%/halide/conv_u8_u8_i16.a: $(GENERATOR_BIN)/conv.generator
 	@mkdir -p $(@D)
-	$< -g Conv unroll_reduction=16 -f hannk::conv_r16_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+	$< -g Conv output.type=int16 -f hannk::conv_u8_u8_i16 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
+$(BIN)/%/halide/conv_r16_u8_u8_u8.a: $(GENERATOR_BIN)/conv.generator
+	@mkdir -p $(@D)
+	$< -g Conv unroll_reduction=16 output.type=uint8  -f hannk::conv_r16_u8_u8_u8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
+$(BIN)/%/halide/conv_r16_u8_u8_i16.a: $(GENERATOR_BIN)/conv.generator
+	@mkdir -p $(@D)
+	$< -g Conv unroll_reduction=16 output.type=int16  -f hannk::conv_r16_u8_u8_i16 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
 $(BIN)/%/halide/copy_uint8_uint8.a: $(GENERATOR_BIN)/copy.generator
 	@mkdir -p $(@D)
 	$< -g Copy input.type=uint8 output.type=uint8 -f hannk::copy_uint8_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-no_bounds_query-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/halide/depthwise_conv_uint8.a: $(GENERATOR_BIN)/depthwise_conv.generator
-	@mkdir -p $(@D)
-	$< -g DepthwiseConv -f hannk::depthwise_conv_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
-
 $(BIN)/%/halide/depthwise_conv_broadcast_uint8.a: $(GENERATOR_BIN)/depthwise_conv.generator
 	@mkdir -p $(@D)
 	$< -g DepthwiseConv inv_depth_multiplier=0 -f hannk::depthwise_conv_broadcast_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
-$(BIN)/%/halide/depthwise_conv_dm1_uint8.a: $(GENERATOR_BIN)/depthwise_conv.generator
+$(BIN)/%/halide/depthwise_conv_uint8.a: $(GENERATOR_BIN)/depthwise_conv.generator
 	@mkdir -p $(@D)
-	$< -g DepthwiseConv inv_depth_multiplier=1 -f hannk::depthwise_conv_dm1_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+	$< -g DepthwiseConv inv_depth_multiplier=1 -f hannk::depthwise_conv_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
+$(BIN)/%/halide/depthwise_conv_shallow_uint8.a: $(GENERATOR_BIN)/depthwise_conv.generator
+	@mkdir -p $(@D)
+	$< -g DepthwiseConv inv_depth_multiplier=1 shallow=true -f hannk::depthwise_conv_shallow_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
 $(BIN)/%/halide/elementwise_5xuint8_1xuint8.a: $(GENERATOR_BIN)/elementwise.generator
 	@mkdir -p $(@D)
@@ -147,14 +179,6 @@ $(BIN)/%/halide/elementwise_5xint16_1xuint8int16.a: $(GENERATOR_BIN)/elementwise
 $(BIN)/%/halide/fill_uint8.a: $(GENERATOR_BIN)/fill.generator
 	@mkdir -p $(@D)
 	$< -g Fill -f hannk::fill_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-no_asserts-no_bounds_query-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
-
-$(BIN)/%/halide/fully_connected_uint8_uint8.a: $(GENERATOR_BIN)/fully_connected.generator
-	@mkdir -p $(@D)
-	$< -g FullyConnected output.type=uint8 -f hannk::fully_connected_uint8_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
-
-$(BIN)/%/halide/fully_connected_uint8_int16.a: $(GENERATOR_BIN)/fully_connected.generator
-	@mkdir -p $(@D)
-	$< -g FullyConnected output.type=int16 -f hannk::fully_connected_uint8_int16 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
 $(BIN)/%/halide/l2_normalization_uint8.a: $(GENERATOR_BIN)/normalizations.generator
 	@mkdir -p $(@D)
@@ -180,6 +204,10 @@ $(BIN)/%/halide/tile_conv_filter_uint8.a: $(GENERATOR_BIN)/conv.generator
 	@mkdir -p $(@D)
 	$< -g TileConvFilter -f hannk::tile_conv_filter_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
 
+$(BIN)/%/halide/upsample_channels_uint8.a: $(GENERATOR_BIN)/depthwise_conv.generator
+	@mkdir -p $(@D)
+	$< -g UpsampleChannels -f hannk::upsample_channels_uint8 -o $(BIN)/$*/halide target=$(HL_TARGET)-no_runtime-c_plus_plus_name_mangling -e static_library,assembly,stmt,c_header,llvm_assembly
+
 $(BIN)/%/halide/runtime.a: $(GENERATOR_BIN)/fill.generator
 	@mkdir -p $(@D)
 	$< -r runtime -o $(BIN)/$*/halide target=$(HL_TARGET)
@@ -187,28 +215,29 @@ $(BIN)/%/halide/runtime.a: $(GENERATOR_BIN)/fill.generator
 OPS_HALIDE = \
 	$(BIN)/%/halide/add_uint8_uint8.a \
 	$(BIN)/%/halide/average_pool_uint8.a \
-	$(BIN)/%/halide/conv_uint8.a \
+	$(BIN)/%/halide/conv_u8_u8_u8.a \
+	$(BIN)/%/halide/conv_u8_u8_i16.a \
 	$(BIN)/%/halide/copy_uint8_uint8.a \
 	$(BIN)/%/halide/depthwise_conv_uint8.a \
 	$(BIN)/%/halide/depthwise_conv_broadcast_uint8.a \
-	$(BIN)/%/halide/depthwise_conv_dm1_uint8.a \
+	$(BIN)/%/halide/depthwise_conv_shallow_uint8.a \
 	$(BIN)/%/halide/elementwise_5xuint8_1xuint8.a \
 	$(BIN)/%/halide/elementwise_5xint16_1xuint8int16.a \
 	$(BIN)/%/halide/fill_uint8.a \
-	$(BIN)/%/halide/fully_connected_uint8_uint8.a \
-	$(BIN)/%/halide/fully_connected_uint8_int16.a \
 	$(BIN)/%/halide/l2_normalization_uint8.a \
 	$(BIN)/%/halide/max_pool_uint8.a \
 	$(BIN)/%/halide/mean_uint8.a \
 	$(BIN)/%/halide/mul_uint8_uint8_uint8.a \
 	$(BIN)/%/halide/softmax_uint8.a \
 	$(BIN)/%/halide/tile_conv_filter_uint8.a \
+	$(BIN)/%/halide/upsample_channels_uint8.a \
 	$(BIN)/%/halide/runtime.a
 
 OPS_CXXFLAGS = -I$(BIN)/$*
 
 ifneq (,$(findstring arm_dot_prod,$(HL_TARGET)))
-OPS_HALIDE += $(BIN)/%/halide/conv_r16_uint8.a
+OPS_HALIDE += $(BIN)/%/halide/conv_r16_u8_u8_u8.a
+OPS_HALIDE += $(BIN)/%/halide/conv_r16_u8_u8_i16.a
 OPS_CXXFLAGS += -DCONV_R16
 endif
 
@@ -271,6 +300,11 @@ $(BIN)/%/allocation_planner.o: interpreter/allocation_planner.cpp $(OPS_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) -c $< -o $@
 
+# Only needed for hexagon target.
+$(BIN)/%/stubs.o: interpreter/stubs.cpp
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(OPS_CXXFLAGS) -c $< -o $@
+
 INTERPRETER_DEPS = \
 	$(BIN)/%/interpreter.o \
 	$(BIN)/%/interval.o \
@@ -281,7 +315,7 @@ INTERPRETER_DEPS = \
 	$(BIN)/%/transforms.o \
 	$(BIN)/%/ops.o \
 	$(BIN)/%/allocation_planner.o \
-	$(OPS_HALIDE)
+	$(OPS_HALIDE) $(HEXAGON_STUBS)
 
 # ---------------------- tflite-parser
 
@@ -345,10 +379,10 @@ HANNK_INTERNAL_DELEGATE_DEPS = \
 
 # ---------------------- toplevel executables
 
-$(BIN)/%/benchmark: benchmark.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UTIL_DEPS)
-	@mkdir -p $(@D)
-	$(CXX-$*) $(CXXFLAGS-$*) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
+$(BIN)/%/$(BENCHMARK_OUT): benchmark.cpp $(INTERPRETER_DEPS) $(TFLITE_PARSER_DEPS) $(UTIL_DEPS) util/file_util.h
+	@mkdir -p $(@D)
+	$(CXX-$*) $(CXXFLAGS-$*) $(BENCHMARK_HEXAGON_FLAGS) $(APP_CXXFLAGS) $(filter %.cpp %.o %.a,$^) -o $@ $(LDFLAGS-$*)
 
 
 # To build for Android, use `HL_TARGET=arm-64-android make compare_vs_tflite`
@@ -366,4 +400,3 @@ $(BIN)/%/compare_vs_tflite: compare_vs_tflite.cpp \
 .PHONY: compare_vs_tflite
 
 compare_vs_tflite: $(BIN)/$(HL_TARGET)/compare_vs_tflite
-
