@@ -76,7 +76,7 @@ public:
     struct ArgInfo {
         std::string name;
         IOKind kind = IOKind::Scalar;
-        // Note that this can have multiple entries for Outputs that produce Tuples,
+        // Note that this can have multiple entries for Tuple-valued Inputs or Outputs
         std::vector<Type> types;
         int dimensions = 0;
 
