@@ -467,6 +467,26 @@ HALIDE_ALWAYS_INLINE uint8x64_t load_predicated<uint8x64_t, int32x64_t, uint1x64
     return *((uint8x64_t *)output);
 }
 
+template <>
+HALIDE_ALWAYS_INLINE int32x64_t load_predicated<int32x64_t, int32x64_t, uint1x64_t, int32_t, 64>(const void *base, const int32x64_t& offset, const uint1x64_t& predicate) {
+    int __attribute__((aligned(64))) offsets[64];
+    aligned_store<int32x64_t, int32_t, 64>(offset, &offsets[0], 0);
+    uint8x64_t vmask = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(1), predicate);
+    uint8_t __attribute__((aligned(64))) mask[64];
+    aligned_store<uint8x64_t, uint8_t, 64>(vmask, &mask[0], 0);
+
+    int32_t __attribute__((aligned(64))) output[64];
+    for (int i = 0; i < 64; i++) {
+        if (mask[i] == 1) {
+            output[i] = ((const int32_t*)base)[offsets[i]];
+        } else {
+            output[i] = 0;
+        }
+    }
+
+    return *((int32x64_t *)output);
+}
+
 template <typename VectorType, typename OffsetType, typename PredicateType, typename BaseType, int Lanes>
 HALIDE_ALWAYS_INLINE void store_predicated(const VectorType& a, void *base, const OffsetType& offset, const PredicateType& predicate) = delete;
 
@@ -1473,8 +1493,13 @@ HALIDE_ALWAYS_INLINE int32x16_t convert_to_int32x16_t_from_uint1x16_t(const uint
 
 HALIDE_ALWAYS_INLINE int32x64_t convert_to_int32x64_t_from_uint8x64_t(const uint8x64_t& src) {
     xb_vec2Nx24 wide = src * uint8x64_t(1);
-    // TODO(vksnk): check the order.
     return int32x64_t(int32x64_t::from_native_vector, IVP_CVT32S2NX24LL(wide), IVP_CVT32S2NX24LH(wide),
+                                                      IVP_CVT32S2NX24HL(wide), IVP_CVT32S2NX24HH(wide));
+}
+
+HALIDE_ALWAYS_INLINE uint32x64_t convert_to_uint32x64_t_from_uint8x64_t(const uint8x64_t& src) {
+    xb_vec2Nx24 wide = src * uint8x64_t(1);
+    return uint32x64_t(uint32x64_t::from_native_vector, IVP_CVT32S2NX24LL(wide), IVP_CVT32S2NX24LH(wide),
                                                       IVP_CVT32S2NX24HL(wide), IVP_CVT32S2NX24HH(wide));
 }
 

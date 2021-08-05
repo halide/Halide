@@ -729,6 +729,7 @@ private:
                 {"halide_xtensa_widen_mul_i24", i24(wild_i8x) * i24(wild_i8x)},
                 {"halide_xtensa_widen_mul_u24", i24(wild_u8x) * i24(wild_u8x)},
 
+                {"halide_xtensa_widen_mul_by_diff_u24", (i24(wild_u8x) - bc(i24(wild_u8))) * bc(i24(wild_u8))},
                 {"halide_xtensa_widen_mul_by_diff_u24", (i24(wild_u8x) - bc(i24(wild_u8))) * i24(wild_u8x)},
 
                 {"halide_xtensa_widen_mul_i48", i48(wild_i16x) * i48(wild_i16x)},
