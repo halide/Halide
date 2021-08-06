@@ -83,20 +83,40 @@ LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
 
 Expr AllocateClosure(const std::string &name, const Closure &closure) {
     std::vector<Expr> closure_elements;
-    // TODO(zalman): Ensure this is unique within scopes it is used in.
+    std::vector<Expr> closure_types;
+    
+    std::string buffer_t_type_name = unique_name("buffer_t_type");
+    Expr buffer_t_type = Variable::make(Handle(), buffer_t_type_name);
+
+    // Place holder for closure struct type
+    closure_elements.push_back(Expr());
+    closure_elements.push_back(1);
+    closure_types.push_back(unique_name(name + "_type"));
+
     for (const auto &v : closure.vars) {
-        closure_elements.push_back(maybe_print("Storing " + v.first + " ", Variable::make(v.second, v.first)));
+        Expr var = Variable::make(v.second, v.first);
+        closure_elements.push_back(maybe_print("Storing " + v.first + " ",
+                                               var));
+        closure_types.push_back(var);
     }
     for (const auto &b : closure.buffers) {
         // TODO(zalman): Verify types here...
-        closure_elements.push_back(maybe_print("Storing buffer arg 1 " + b.first + " ", Variable::make(type_of<void *>(), b.first)));
+        Expr ptr_var = Variable::make(type_of<void *>(), b.first);
+        closure_elements.push_back(maybe_print("Storing buffer arg 1 " + b.first + " ",
+                                               ptr_var));
         // TODO(zalman): this has to allow a failed lookup.
-        closure_elements.push_back(maybe_print("Storing buffer arg 2 " + b.first + ".buffer ", Call::make(type_of<halide_buffer_t *>(), Call::get_pointer_symbol_or_null,
-                                              { StringImm::make(b.first + ".buffer"),
-                                                Call::make(Handle(), Call::make_struct_type, { StringImm::make("halide_buffer_t") }, Call::PureIntrinsic) },
-                                                    Call::Intrinsic)));
+        closure_elements.push_back(maybe_print("Storing buffer arg 2 " + b.first + ".buffer ",
+                                               Call::make(type_of<halide_buffer_t *>(), Call::get_pointer_symbol_or_null,
+                                                          { StringImm::make(b.first + ".buffer"), buffer_t_type },
+                                                          Call::Intrinsic)));
+        closure_types.push_back(ptr_var);
+        closure_types.push_back(buffer_t_type);
     }    
-    return maybe_print("Closure after allocation: ", Call::make(type_of<void *>(), Call::make_struct, closure_elements, Call::Intrinsic));
+    closure_elements[0] = Call::make(Handle(), Call::make_struct_type, closure_types, Call::PureIntrinsic);
+    Expr result = Let::make(buffer_t_type_name, Call::make(Handle(), Call::make_struct_type,
+                                                           { StringImm::make("halide_buffer_t") }, Call::PureIntrinsic),
+                            Call::make(type_of<void *>(), Call::make_typed_struct, closure_elements, Call::Intrinsic));
+    return maybe_print("Closure after allocation: ", result);
 }
 
 namespace {
