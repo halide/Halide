@@ -21,7 +21,7 @@ public:
 
 protected:
     /** Emit the declarations contained in the module as C code. */
-    void compile(const LoweredFunc &func) override;
+    void compile(const LoweredFunc &func, const std::map<std::string, std::string> &metadata_name_map) override;
     void compile(const Buffer<> &buffer) override;
 
     using CodeGen_C::visit;

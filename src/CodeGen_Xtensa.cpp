@@ -25,7 +25,7 @@ void CodeGen_Xtensa::compile(const Module &module) {
 void CodeGen_Xtensa::compile(const Buffer<> &buffer) {
     CodeGen_C::compile(buffer);
 }
-void CodeGen_Xtensa::compile(const LoweredFunc &f) {
+void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, std::string> &metadata_name_map) {
     // Don't put non-external function declarations in headers.
     if (is_header_or_extern_decl() && f.linkage == LinkageType::Internal) {
         return;
@@ -117,12 +117,12 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f) {
         stream << "}\n";
     }
 
-    if (is_header_or_extern_decl() && f.linkage == LinkageType::ExternalPlusMetadata) {
+    if (f.linkage == LinkageType::ExternalPlusMetadata) {
         // Emit the argv version
-        stream << "\nHALIDE_FUNCTION_ATTRS\nint " << simple_name << "_argv(void **args);\n";
+        emit_argv_wrapper(simple_name, args);
 
         // And also the metadata.
-        stream << "\nHALIDE_FUNCTION_ATTRS\nconst struct halide_filter_metadata_t *" << simple_name << "_metadata();\n";
+        emit_metadata_getter(simple_name, args, metadata_name_map);
     }
 
     if (!namespaces.empty()) {
