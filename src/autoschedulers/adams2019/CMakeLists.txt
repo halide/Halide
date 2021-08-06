@@ -37,9 +37,11 @@ add_autoscheduler(NAME Adams2019
                   SOURCES
                   ASLog.cpp
                   AutoSchedule.cpp
+                  Cache.cpp
                   DefaultCostModel.cpp
                   FunctionDAG.cpp
                   LoopNest.cpp
+                  State.cpp
                   Weights.cpp
                   ${WF_CPP})
 
@@ -116,7 +118,7 @@ if (BUILD_SHARED_LIBS)
 
     set_tests_properties(test_apps_autoscheduler PROPERTIES
                          LABELS Adams2019
-                         ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Adams2019>;HL_TARGET=${Halide_TARGET}")
+                         ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Adams2019>:$ENV{LD_LIBRARY_PATH};HL_TARGET=${Halide_TARGET}")
 endif ()
 
 ##

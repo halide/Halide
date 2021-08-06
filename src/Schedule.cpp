@@ -219,10 +219,13 @@ struct FuncScheduleContents {
     std::vector<Bound> estimates;
     std::map<std::string, Internal::FunctionPtr> wrappers;
     MemoryType memory_type = MemoryType::Auto;
-    bool memoized = false, async = false;
+    bool memoized = false;
+    bool async = false;
+    Expr memoize_eviction_key;
 
     FuncScheduleContents()
-        : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()){};
+        : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()) {
+    }
 
     // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
     void mutate(IRMutator *mutator) {
@@ -336,6 +339,7 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->estimates = contents->estimates;
     copy.contents->memory_type = contents->memory_type;
     copy.contents->memoized = contents->memoized;
+    copy.contents->memoize_eviction_key = contents->memoize_eviction_key;
     copy.contents->async = contents->async;
 
     // Deep-copy wrapper functions.
@@ -362,6 +366,14 @@ bool &FuncSchedule::memoized() {
 
 bool FuncSchedule::memoized() const {
     return contents->memoized;
+}
+
+Expr &FuncSchedule::memoize_eviction_key() {
+    return contents->memoize_eviction_key;
+}
+
+Expr FuncSchedule::memoize_eviction_key() const {
+    return contents->memoize_eviction_key;
 }
 
 bool &FuncSchedule::async() {
@@ -461,6 +473,9 @@ void FuncSchedule::accept(IRVisitor *visitor) const {
         if (b.remainder.defined()) {
             b.remainder.accept(visitor);
         }
+    }
+    if (memoize_eviction_key().defined()) {
+        memoize_eviction_key().accept(visitor);
     }
 }
 

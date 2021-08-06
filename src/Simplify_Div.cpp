@@ -87,6 +87,7 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                 // a known-wrong value. (Note that no_overflow_int() should
                 // only be true for signed integers.)
                 internal_assert(op->type.is_int());
+                clear_bounds_info(bounds);
                 return make_signed_integer_overflow(op->type);
             }
         }
@@ -118,7 +119,6 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
         if (rewrite(IRMatcher::Overflow() / x, a) ||
             rewrite(x / IRMatcher::Overflow(), b) ||
             rewrite(x / 1, x) ||
-            rewrite(c0 / c1, fold(c0 / c1)) ||
             (!op->type.is_float() && rewrite(x / 0, 0)) ||
             (!op->type.is_float() && denominator_non_zero && rewrite(x / x, 1)) ||
             rewrite(0 / x, 0) ||
@@ -126,9 +126,13 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
             return rewrite.result;
         }
 
+        int a_mod = a_bounds.alignment.modulus;
+        int a_rem = a_bounds.alignment.remainder;
+
         // clang-format off
         if (EVAL_IN_LAMBDA
-            (rewrite(broadcast(x, c0) / broadcast(y, c0), broadcast(x / y, c0)) ||
+            (rewrite(c0 / c1, fold(c0 / c1)) ||
+             rewrite(broadcast(x, c0) / broadcast(y, c0), broadcast(x / y, c0)) ||
              rewrite(select(x, c0, c1) / c2, select(x, fold(c0/c2), fold(c1/c2))) ||
              (!op->type.is_float() &&
               rewrite(x / x, select(x == 0, 0, 1))) ||
@@ -139,6 +143,8 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                rewrite((x * c0) / c1, x / fold(c1 / c0),                          c1 % c0 == 0 && c0 > 0 && c1 / c0 != 0) ||
                // Pull out terms that are a multiple of the denominator
                rewrite((x * c0) / c1, x * fold(c0 / c1),                          c0 % c1 == 0 && c1 > 0) ||
+               rewrite(min((x * c0), c1) / c2, min(x * fold(c0 / c2), fold(c1 / c2)), c0 % c2 == 0 && c2 > 0) ||
+               rewrite(max((x * c0), c1) / c2, max(x * fold(c0 / c2), fold(c1 / c2)), c0 % c2 == 0 && c2 > 0) ||
 
                rewrite((x * c0 + y) / c1, y / c1 + x * fold(c0 / c1),             c0 % c1 == 0 && c1 > 0) ||
                rewrite((x * c0 - y) / c0, x + (0 - y) / c0) ||
@@ -177,9 +183,55 @@ Expr Simplify::visit(const Div *op, ExprInfo *bounds) {
                rewrite((w + (z + (x * c0 + y))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
                rewrite((w + (z + (y + x * c0))) / c1, (y + z + w) / c1 + x * fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
 
-               // Finally, pull out constant additions that are a multiple of the denominator
-               rewrite((x + c0) / c1, x / c1 + fold(c0 / c1), c0 % c1 == 0 && c1 > 0) ||
-               rewrite((c0 - y)/c1, fold(c0 / c1) - y / c1, (c0 + 1) % c1 == 0 && c1 > 0) ||
+               /** In (x + c0) / c1, when can we pull the constant
+                   addition out of the numerator? An obvious answer is
+                   the constant is a multiple of the denominator, but
+                   there are other cases too. The condition for the
+                   rewrite to be correct is:
+
+                 (x + c0) / c1 == x / c1 + c2
+
+                 Say we know (x + c0) = a_mod * y + a_rem
+
+                 (a_mod * y + a_rem) / c1 == (a_mod * y + a_rem - c0) / c1 + c2
+
+                 If a_mod % c1 == 0, we can subtract the term in y
+                 from both sides and get:
+
+                 a_rem / c1 == (a_rem - c0) / c1 + c2
+
+                 c2 == a_rem / c1 - (a_rem - c0) / c1
+
+                 This is a sufficient and necessary condition for the case when x_mod % c1 == 0.
+               */
+               (no_overflow_int(op->type) &&
+                (rewrite((x + c0) / c1, x / c1 + fold(a_rem / c1 - (a_rem - c0) / c1), a_mod % c1 == 0) ||
+
+                 /**
+                    Now do the same thing for subtraction from a constant.
+
+                    (c0 - x) / c1 == c2 - x / c1
+
+                    where c0 - x == a_mod * y + a_rem
+
+                    So x = c0 - a_mod * y - a_rem
+
+                    (a_mod * y + a_rem) / c1 == c2 - (c0 - a_mod * y - a_rem) / c1
+
+                    If a_mod % c1 == 0, we can pull that term out and cancel it:
+
+                    a_rem / c1 == c2 - (c0 - a_rem) / c1
+
+                    c2 == a_rem / c1 + (c0 - a_rem) / c1
+
+                 */
+                 rewrite((c0 - x)/c1, fold(a_rem / c1 + (c0 - a_rem) / c1) - x / c1, a_mod % c1 == 0) ||
+
+                 // We can also pull it out when the constant is a
+                 // multiple of the denominator.
+                 rewrite((x + c0) / c1, x / c1 + fold(c0 / c1), c0 % c1 == 0) ||
+                 rewrite((c0 - x) / c1, fold(c0 / c1) - x / c1, (c0 + 1) % c1 == 0))) ||
+
                (denominator_non_zero &&
                 (rewrite((x + y)/x, y/x + 1) ||
                  rewrite((y + x)/x, y/x + 1) ||

@@ -73,18 +73,18 @@ WEAK int halide_opengl_create_context(void *user_context) {
     }
 
     EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-    if (display == EGL_NO_DISPLAY || !eglInitialize(display, 0, 0)) {
+    if (display == EGL_NO_DISPLAY || !eglInitialize(display, nullptr, nullptr)) {
         PFNEGLQUERYDEVICESEXTPROC eglQueryDevicesEXT =
             reinterpret_cast<PFNEGLQUERYDEVICESEXTPROC>(
                 eglGetProcAddress("eglQueryDevicesEXT"));
-        if (eglQueryDevicesEXT == NULL) {
+        if (eglQueryDevicesEXT == nullptr) {
             return 1;
         }
 
         PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT =
             reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(
                 eglGetProcAddress("eglGetPlatformDisplayEXT"));
-        if (eglGetPlatformDisplayEXT == NULL) {
+        if (eglGetPlatformDisplayEXT == nullptr) {
             return 1;
         }
 
@@ -100,7 +100,7 @@ WEAK int halide_opengl_create_context(void *user_context) {
         EGLBoolean initialized = EGL_FALSE;
         for (EGLint i = 0; i < num_devices; ++i) {
             display = eglGetPlatformDisplayEXT(EGL_PLATFORM_DEVICE_EXT,
-                                               egl_devices[i], NULL);
+                                               egl_devices[i], nullptr);
             if (eglGetError() == EGL_SUCCESS && display != EGL_NO_DISPLAY) {
                 int major, minor;
                 initialized = eglInitialize(display, &major, &minor);
@@ -134,10 +134,12 @@ WEAK int halide_opengl_create_context(void *user_context) {
     };
     EGLConfig config;
     int numconfig;
-    eglChooseConfig(display, attribs, &config, 1, &numconfig);
-    if (numconfig != 1) {
+    EGLBoolean result = eglChooseConfig(display, attribs, &config, 1, &numconfig);
+    if (result != EGL_TRUE || numconfig != 1) {
         error(user_context) << "eglChooseConfig(): config not found: "
-                            << eglGetError() << " - " << numconfig;
+                            << " result=" << (int)result
+                            << " eglGetError=" << eglGetError()
+                            << " numConfig=" << numconfig;
         return -1;
     }
 
@@ -161,7 +163,13 @@ WEAK int halide_opengl_create_context(void *user_context) {
         return -1;
     }
 
-    eglMakeCurrent(display, surface, surface, context);
+    result = eglMakeCurrent(display, surface, surface, context);
+    if (result != EGL_TRUE) {
+        error(user_context) << "eglMakeCurrent fails: "
+                            << " result=" << (int)result
+                            << " eglGetError=" << eglGetError();
+        return -1;
+    }
     return 0;
 }
 

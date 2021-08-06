@@ -18,9 +18,7 @@
  * time type checking for both Halide generated functions and calls
  * from Halide to external functions.
  *
- * These are intended to be constexpr producable, but we don't depend
- * on C++11 yet. In C++14, it is possible these will be replaced with
- * introspection/reflection facilities.
+ * These are intended to be constexpr producable.
  *
  * halide_handle_traits has to go outside the Halide namespace due to template
  * resolution rules. TODO(zalman): Do all types need to be in global namespace?
@@ -73,9 +71,7 @@ struct halide_cplusplus_type_name {
 /** A structure to represent the fully scoped name of a C++ composite
  * type for use in generating function signatures that use that type.
  *
- * This is intended to be a constexpr usable type, but we don't depend
- * on C++11 yet. In C++14, it is possible this will be replaced with
- * introspection/reflection facilities.
+ * This is intended to be a constexpr usable type.
  *
  * Although this is in the global namespace, it should be considered "Halide Internal"
  * and subject to change; code outside Halide should avoid referencing it.
@@ -356,6 +352,16 @@ public:
         return Type(code(), bits(), new_lanes, handle_type);
     }
 
+    /** Return Type with the same type code and number of lanes, but with twice as many bits. */
+    Type widen() const {
+        return with_bits(bits() * 2);
+    }
+
+    /** Return Type with the same type code and number of lanes, but with half as many bits. */
+    Type narrow() const {
+        return with_bits(bits() / 2);
+    }
+
     /** Type to be printed when declaring handles of this type. */
     const halide_handle_cplusplus_type *handle_type = nullptr;
 
@@ -413,6 +419,18 @@ public:
     HALIDE_ALWAYS_INLINE
     bool is_handle() const {
         return code() == Handle;
+    }
+
+    // Returns true iff type is a signed integral type where overflow is defined.
+    HALIDE_ALWAYS_INLINE
+    bool can_overflow_int() const {
+        return is_int() && bits() <= 16;
+    }
+
+    // Returns true iff type does have a well-defined overflow behavior.
+    HALIDE_ALWAYS_INLINE
+    bool can_overflow() const {
+        return is_uint() || can_overflow_int();
     }
 
     /** Check that the type name of two handles matches. */

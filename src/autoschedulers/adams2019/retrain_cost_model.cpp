@@ -381,7 +381,7 @@ int main(int argc, char **argv) {
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::cout.precision(4);
 
-    auto seed = time(NULL);
+    auto seed = time(nullptr);
     std::mt19937 rng((uint32_t)seed);
 
     std::cout << "Iterating over " << samples.size() << " samples using seed = " << seed << "\n";

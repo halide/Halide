@@ -2,6 +2,7 @@
 export HL_TRACE_FILE=/dev/stdout
 export HL_NUMTHREADS=4
 rm -f $1/camera_pipe.mp4
+set -euo pipefail
 # Do trivial partial-overrides of trace settings via flags
 # (--zoom and --rlabel) just to demonstrate that it works.
 $1/process_viz ../images/bayer_small.png 3700 1.8 50 1 1 $1/out.png |

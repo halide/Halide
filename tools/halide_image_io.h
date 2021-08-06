@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdarg>
 #include <cstddef>
 #include <cstdio>
@@ -171,11 +172,11 @@ inline uint8_t convert(const int64_t &in) {
 }
 template<>
 inline uint8_t convert(const float &in) {
-    return (uint8_t)(in * 255.0f + 0.5f);
+    return (uint8_t)std::lround(in * 255.0f);
 }
 template<>
 inline uint8_t convert(const double &in) {
-    return (uint8_t)(in * 255.0 + 0.5);
+    return (uint8_t)std::lround(in * 255.0);
 }
 
 // Convert to u16
@@ -217,11 +218,11 @@ inline uint16_t convert(const int64_t &in) {
 }
 template<>
 inline uint16_t convert(const float &in) {
-    return (uint16_t)(in * 65535.0f + 0.5f);
+    return (uint16_t)std::lround(in * 65535.0f);
 }
 template<>
 inline uint16_t convert(const double &in) {
-    return (uint16_t)(in * 65535.0 + 0.5);
+    return (uint16_t)std::lround(in * 65535.0);
 }
 
 // Convert to u32
@@ -263,11 +264,11 @@ inline uint32_t convert(const int64_t &in) {
 }
 template<>
 inline uint32_t convert(const float &in) {
-    return (uint32_t)(in * 4294967295.0 + 0.5);
+    return (uint32_t)std::llround(in * 4294967295.0);
 }
 template<>
 inline uint32_t convert(const double &in) {
-    return (uint32_t)(in * 4294967295.0 + 0.5f);
+    return (uint32_t)std::llround(in * 4294967295.0);
 }
 
 // Convert to u64
@@ -309,11 +310,11 @@ inline uint64_t convert(const int64_t &in) {
 }
 template<>
 inline uint64_t convert(const float &in) {
-    return convert<uint64_t, uint32_t>((uint32_t)(in * 4294967295.0 + 0.5));
+    return convert<uint64_t, uint32_t>((uint32_t)std::llround(in * 4294967295.0));
 }
 template<>
 inline uint64_t convert(const double &in) {
-    return convert<uint64_t, uint32_t>((uint32_t)(in * 4294967295.0 + 0.5));
+    return convert<uint64_t, uint32_t>((uint32_t)std::llround(in * 4294967295.0));
 }
 
 // Convert to i8
@@ -766,7 +767,7 @@ bool load_png(const std::string &filename, ImageType *im) {
     }
 
     /* initialize stuff */
-    png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
     if (!check(png_ptr != nullptr, "png_create_read_struct failed")) {
         return false;
     }
@@ -812,7 +813,7 @@ bool load_png(const std::string &filename, ImageType *im) {
         copy_to_image(row.data(), y, im);
     }
 
-    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+    png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 
     return true;
 }
@@ -856,7 +857,7 @@ bool save_png(ImageType &im, const std::string &filename) {
     }
 
     // initialize stuff
-    png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
     if (!check(png_ptr != nullptr, "[write_png_file] png_create_write_struct failed")) {
         return false;
     }
@@ -892,7 +893,7 @@ bool save_png(ImageType &im, const std::string &filename) {
         copy_from_image(im, y, row.data());
         png_write_row(png_ptr, row.data());
     }
-    png_write_end(png_ptr, NULL);
+    png_write_end(png_ptr, nullptr);
     png_destroy_write_struct(&png_ptr, &info_ptr);
 
     return true;

@@ -37,9 +37,9 @@ Expr is_linear(const Expr &e, const Scope<Expr> &linear) {
     } else if (const Add *add = e.as<Add>()) {
         Expr la = is_linear(add->a, linear);
         Expr lb = is_linear(add->b, linear);
-        if (is_zero(lb)) {
+        if (is_const_zero(lb)) {
             return la;
-        } else if (is_zero(la)) {
+        } else if (is_const_zero(la)) {
             return lb;
         } else if (la.defined() && lb.defined()) {
             return la + lb;
@@ -49,7 +49,7 @@ Expr is_linear(const Expr &e, const Scope<Expr> &linear) {
     } else if (const Sub *sub = e.as<Sub>()) {
         Expr la = is_linear(sub->a, linear);
         Expr lb = is_linear(sub->b, linear);
-        if (is_zero(lb)) {
+        if (is_const_zero(lb)) {
             return la;
         } else if (la.defined() && lb.defined()) {
             return la - lb;
@@ -59,11 +59,11 @@ Expr is_linear(const Expr &e, const Scope<Expr> &linear) {
     } else if (const Mul *mul = e.as<Mul>()) {
         Expr la = is_linear(mul->a, linear);
         Expr lb = is_linear(mul->b, linear);
-        if (is_zero(la) && is_zero(lb)) {
+        if (is_const_zero(la) && is_const_zero(lb)) {
             return la;
-        } else if (is_zero(la) && lb.defined()) {
+        } else if (is_const_zero(la) && lb.defined()) {
             return mul->a * lb;
-        } else if (la.defined() && is_zero(lb)) {
+        } else if (la.defined() && is_const_zero(lb)) {
             return la * mul->b;
         } else {
             return Expr();
@@ -71,7 +71,7 @@ Expr is_linear(const Expr &e, const Scope<Expr> &linear) {
     } else if (const Ramp *r = e.as<Ramp>()) {
         Expr la = is_linear(r->base, linear);
         Expr lb = is_linear(r->stride, linear);
-        if (is_zero(lb)) {
+        if (is_const_zero(lb)) {
             return la;
         } else {
             return Expr();
@@ -146,7 +146,7 @@ class StepForwards : public IRGraphMutator {
                 // It's non-linear
                 success = false;
                 return op;
-            } else if (is_zero(step)) {
+            } else if (is_const_zero(step)) {
                 // It's a known inner constant
                 return op;
             } else {
@@ -525,7 +525,7 @@ class LoopCarry : public IRMutator {
     }
 
     Stmt visit(const For *op) override {
-        if (op->for_type == ForType::Serial && !is_one(op->extent)) {
+        if (op->for_type == ForType::Serial && !is_const_one(op->extent)) {
             Stmt stmt;
             Stmt body = mutate(op->body);
             LoopCarryOverLoop carry(op->name, in_consume, max_carried_values);

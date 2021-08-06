@@ -64,6 +64,8 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
         .def("gpu_threads", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, DeviceAPI)) & T::gpu_threads, py::arg("thread_x"), py::arg("thread_y"), py::arg("thread_z"), py::arg("device_api") = DeviceAPI::Default_GPU)
         .def("gpu_single_thread", (T & (T::*)(DeviceAPI)) & T::gpu_single_thread, py::arg("device_api") = DeviceAPI::Default_GPU)
 
+        .def("gpu_lanes", (T & (T::*)(const VarOrRVar &, DeviceAPI)) & T::gpu_lanes, py::arg("thread_x"), py::arg("device_api") = DeviceAPI::Default_GPU)
+
         .def("gpu_tile", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const VarOrRVar &, const Expr &, TailStrategy, DeviceAPI)) & T::gpu_tile, py::arg("x"), py::arg("bx"), py::arg("tx"), py::arg("x_size"), py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
 
         .def("gpu_tile", (T & (T::*)(const VarOrRVar &, const VarOrRVar &, const Expr &, TailStrategy, DeviceAPI)) & T::gpu_tile, py::arg("x"), py::arg("tx"), py::arg("x_size"), py::arg("tail") = TailStrategy::Auto, py::arg("device_api") = DeviceAPI::Default_GPU)
@@ -86,13 +88,33 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
 
         .def("hexagon", &T::hexagon, py::arg("x") = Var::outermost())
 
-        .def("prefetch", (T & (T::*)(const Func &, const VarOrRVar &, Expr, PrefetchBoundStrategy)) & T::prefetch, py::arg("func"), py::arg("var"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
         .def(
-            "prefetch", [](T &t, const ImageParam &image, const VarOrRVar &var, const Expr &offset, PrefetchBoundStrategy strategy) -> T & {
-                // Templated function; specializing only on ImageParam for now
-                return t.prefetch(image, var, offset, strategy);
+            "prefetch", [](T &t, const Func &f, const VarOrRVar &var, int offset, PrefetchBoundStrategy strategy) -> T & {
+                // HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
+                PyErr_WarnEx(PyExc_DeprecationWarning,
+                             "Call prefetch() with the two-var form instead.",
+                             1);
+                return t.prefetch(f, var, var, offset, strategy);
             },
             py::arg("image"), py::arg("var"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
+        .def(
+            "prefetch", [](T &t, const ImageParam &image, const VarOrRVar &var, int offset, PrefetchBoundStrategy strategy) -> T & {
+                // HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
+                PyErr_WarnEx(PyExc_DeprecationWarning,
+                             "Call prefetch() with the two-var form instead.",
+                             1);
+                // Templated function; specializing only on ImageParam for now
+                return t.template prefetch<ImageParam>(image, var, var, offset, strategy);
+            },
+            py::arg("image"), py::arg("var"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
+
+        .def("prefetch", (T & (T::*)(const Func &, const VarOrRVar &, const VarOrRVar &, Expr, PrefetchBoundStrategy)) & T::prefetch, py::arg("func"), py::arg("at"), py::arg("from"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
+        .def(
+            "prefetch", [](T &t, const ImageParam &image, const VarOrRVar &at, const VarOrRVar &from, const Expr &offset, PrefetchBoundStrategy strategy) -> T & {
+                // Templated function; specializing only on ImageParam for now
+                return t.template prefetch<ImageParam>(image, at, from, offset, strategy);
+            },
+            py::arg("image"), py::arg("at"), py::arg("from"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
 
         .def("source_location", &T::source_location);
 }

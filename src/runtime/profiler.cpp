@@ -9,7 +9,7 @@
 extern "C" {
 // Returns the address of the global halide_profiler state
 WEAK halide_profiler_state *halide_profiler_get_state() {
-    static halide_profiler_state s = {{{0}}, 1, 0, 0, 0, 0, NULL, NULL};
+    static halide_profiler_state s = {{{0}}, 1, 0, 0, 0, nullptr, nullptr, nullptr};
     return &s;
 }
 }
@@ -34,7 +34,7 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
     halide_profiler_pipeline_stats *p =
         (halide_profiler_pipeline_stats *)malloc(sizeof(halide_profiler_pipeline_stats));
     if (!p) {
-        return NULL;
+        return nullptr;
     }
     p->next = s->pipelines;
     p->name = pipeline_name;
@@ -52,7 +52,7 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
     p->funcs = (halide_profiler_func_stats *)malloc(num_funcs * sizeof(halide_profiler_func_stats));
     if (!p->funcs) {
         free(p);
-        return NULL;
+        return nullptr;
     }
     for (int i = 0; i < num_funcs; i++) {
         p->funcs[i].time = 0;
@@ -71,7 +71,7 @@ WEAK halide_profiler_pipeline_stats *find_or_create_pipeline(const char *pipelin
 }
 
 WEAK void bill_func(halide_profiler_state *s, int func_id, uint64_t time, int active_threads) {
-    halide_profiler_pipeline_stats *p_prev = NULL;
+    halide_profiler_pipeline_stats *p_prev = nullptr;
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
          p = (halide_profiler_pipeline_stats *)(p->next)) {
         if (func_id >= p->first_func_id && func_id < p->first_func_id + p->num_funcs) {
@@ -104,9 +104,9 @@ WEAK void sampling_profiler_thread(void *) {
 
     while (s->current_func != halide_profiler_please_stop) {
 
-        uint64_t t1 = halide_current_time_ns(NULL);
+        uint64_t t1 = halide_current_time_ns(nullptr);
         uint64_t t = t1;
-        while (1) {
+        while (true) {
             int func, active_threads;
             if (s->get_remote_profiler_state) {
                 // Execution has disappeared into remote code running
@@ -116,7 +116,7 @@ WEAK void sampling_profiler_thread(void *) {
                 func = s->current_func;
                 active_threads = s->active_threads;
             }
-            uint64_t t_now = halide_current_time_ns(NULL);
+            uint64_t t_now = halide_current_time_ns(nullptr);
             if (func == halide_profiler_please_stop) {
                 break;
             } else if (func >= 0) {
@@ -129,7 +129,7 @@ WEAK void sampling_profiler_thread(void *) {
             // Release the lock, sleep, reacquire.
             int sleep_ms = s->sleep_time;
             halide_mutex_unlock(&s->lock);
-            halide_sleep_ms(NULL, sleep_ms);
+            halide_sleep_ms(nullptr, sleep_ms);
             halide_mutex_lock(&s->lock);
         }
     }
@@ -172,7 +172,7 @@ WEAK halide_profiler_pipeline_stats *halide_profiler_get_pipeline_state(const ch
             return p;
         }
     }
-    return NULL;
+    return nullptr;
 }
 
 // Returns a token identifying this pipeline instance.
@@ -186,7 +186,7 @@ WEAK int halide_profiler_pipeline_start(void *user_context,
 
     if (!s->sampling_thread) {
         halide_start_clock(user_context);
-        s->sampling_thread = halide_spawn_thread(sampling_profiler_thread, NULL);
+        s->sampling_thread = halide_spawn_thread(sampling_profiler_thread, nullptr);
     }
 
     halide_profiler_pipeline_stats *p =
@@ -204,7 +204,7 @@ WEAK void halide_profiler_stack_peak_update(void *user_context,
                                             void *pipeline_state,
                                             uint64_t *f_values) {
     halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *)pipeline_state;
-    halide_assert(user_context, p_stats != NULL);
+    halide_assert(user_context, p_stats != nullptr);
 
     // Note: Update to the counter is done without grabbing the state's lock to
     // reduce lock contention. One potential issue is that other call that frees the
@@ -231,7 +231,7 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
     }
 
     halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *)pipeline_state;
-    halide_assert(user_context, p_stats != NULL);
+    halide_assert(user_context, p_stats != nullptr);
     halide_assert(user_context, func_id >= 0);
     halide_assert(user_context, func_id < p_stats->num_funcs);
 
@@ -267,7 +267,7 @@ WEAK void halide_profiler_memory_free(void *user_context,
     }
 
     halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *)pipeline_state;
-    halide_assert(user_context, p_stats != NULL);
+    halide_assert(user_context, p_stats != nullptr);
     halide_assert(user_context, func_id >= 0);
     halide_assert(user_context, func_id < p_stats->num_funcs);
 
@@ -298,10 +298,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             continue;
         }
         sstr.clear();
-        int alloc_avg = 0;
-        if (p->num_allocs != 0) {
-            alloc_avg = p->memory_total / p->num_allocs;
-        }
         bool serial = p->active_threads_numerator == p->active_threads_denominator;
         float threads = p->active_threads_numerator / (p->active_threads_denominator + 1e-10);
         sstr << p->name << "\n"
@@ -375,11 +371,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     }
                 }
 
-                int alloc_avg = 0;
-                if (fs->num_allocs != 0) {
-                    alloc_avg = fs->memory_total / fs->num_allocs;
-                }
-
                 if (fs->memory_peak) {
                     cursor += 15;
                     sstr << " peak: " << fs->memory_peak;
@@ -390,6 +381,10 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     cursor += 15;
                     while (sstr.size() < cursor) {
                         sstr << " ";
+                    }
+                    int alloc_avg = 0;
+                    if (fs->num_allocs != 0) {
+                        alloc_avg = fs->memory_total / fs->num_allocs;
                     }
                     sstr << " avg: " << alloc_avg;
                 }
@@ -442,12 +437,12 @@ halide_profiler_shutdown() {
 
     s->current_func = halide_profiler_please_stop;
     halide_join_thread(s->sampling_thread);
-    s->sampling_thread = NULL;
+    s->sampling_thread = nullptr;
     s->current_func = halide_profiler_outside_of_halide;
 
     // Print results. No need to lock anything because we just shut
     // down the thread.
-    halide_profiler_report_unlocked(NULL, s);
+    halide_profiler_report_unlocked(nullptr, s);
 
     halide_profiler_reset_unlocked(s);
 }
@@ -469,7 +464,7 @@ WEAK void halide_windows_profiler_shutdown() {
 
     // Print results. Avoid locking as it will cause problems and
     // nothing should be running.
-    halide_profiler_report_unlocked(NULL, s);
+    halide_profiler_report_unlocked(nullptr, s);
 }
 #endif
 }  // namespace

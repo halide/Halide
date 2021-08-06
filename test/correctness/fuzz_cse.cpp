@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
         check = check_stmt.as<Evaluate>()->value;
 
         // Don't use can_prove, because it recursively calls cse, which just confuses matters.
-        if (!is_one(simplify(check))) {
+        if (!is_const_one(simplify(check))) {
             std::cerr << "Mismatch with seed " << fuzz_seed << "\n"
                       << "Original: " << orig << "\n"
                       << "CSE: " << csed << "\n";

@@ -16,8 +16,8 @@ int main(int argc, char **argv) {
     sin_f.vectorize(x, 8);
     cos_f.vectorize(x, 8);
 
-    Buffer<float> sin_result = sin_f.realize(1000);
-    Buffer<float> cos_result = cos_f.realize(1000);
+    Buffer<float> sin_result = sin_f.realize({1000});
+    Buffer<float> cos_result = cos_f.realize({1000});
 
     for (int i = 0; i < 1000; ++i) {
         const float alpha = i / 1000.f;

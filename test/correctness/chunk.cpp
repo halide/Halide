@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
 
     printf("Realizing function...\n");
 
-    Buffer<int> im = g.realize(32, 32, target);
+    Buffer<int> im = g.realize({32, 32}, target);
 
     for (int i = 0; i < 32; i++) {
         for (int j = 0; j < 32; j++) {

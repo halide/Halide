@@ -10,6 +10,8 @@ namespace Internal {
 
 using std::vector;
 
+namespace {
+
 class RemoveUndef : public IRMutator {
 public:
     Expr predicate;
@@ -413,14 +415,16 @@ private:
                 << "  Condition " << i << ": " << values_predicates[i] << "\n";
         }
 
+        Expr new_pred = mutate(op->predicate);
+
         if (predicate.defined()) {
-            Stmt stmt = IfThenElse::make(predicate, Provide::make(op->name, new_values, new_args));
+            Stmt stmt = IfThenElse::make(predicate, Provide::make(op->name, new_values, new_args, new_pred));
             predicate = Expr();
             return stmt;
-        } else if (!changed) {
+        } else if (!changed && new_pred.same_as(op->predicate)) {
             return op;
         } else {
-            return Provide::make(op->name, new_values, new_args);
+            return Provide::make(op->name, new_values, new_args, new_pred);
         }
     }
 
@@ -575,6 +579,8 @@ private:
         }
     }
 };
+
+}  // namespace
 
 Stmt remove_undef(Stmt s) {
     RemoveUndef r;

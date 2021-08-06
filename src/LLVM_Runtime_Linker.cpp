@@ -1,5 +1,7 @@
 #include "LLVM_Runtime_Linker.h"
+#include "Error.h"
 #include "LLVM_Headers.h"
+#include "Target.h"
 
 namespace Halide {
 
@@ -25,8 +27,6 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
     return result;
 }
 
-}  // namespace
-
 #define DECLARE_INITMOD(mod)                                                              \
     extern "C" unsigned char halide_internal_initmod_##mod[];                             \
     extern "C" int halide_internal_initmod_##mod##_length;                                \
@@ -36,21 +36,17 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
         return parse_bitcode_file(sb, context, #mod);                                     \
     }
 
-#define DECLARE_NO_INITMOD(mod)                                                        \
-    std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *, bool, bool) { \
-        user_error << "Halide was compiled without support for this target\n";         \
-        return std::unique_ptr<llvm::Module>();                                        \
-    }                                                                                  \
-    std::unique_ptr<llvm::Module> get_initmod_##mod##_ll(llvm::LLVMContext *) {        \
-        user_error << "Halide was compiled without support for this target\n";         \
-        return std::unique_ptr<llvm::Module>();                                        \
+#define DECLARE_NO_INITMOD(mod)                                                                        \
+    std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *, bool = false, bool = false) { \
+        user_error << "Halide was compiled without support for this target\n";                         \
+        return std::unique_ptr<llvm::Module>();                                                        \
+    }                                                                                                  \
+    std::unique_ptr<llvm::Module> get_initmod_##mod##_ll(llvm::LLVMContext *) {                        \
+        user_error << "Halide was compiled without support for this target\n";                         \
+        return std::unique_ptr<llvm::Module>();                                                        \
     }
 
-#define DECLARE_CPP_INITMOD(mod)                                                                            \
-    DECLARE_INITMOD(mod##_32_debug)                                                                         \
-    DECLARE_INITMOD(mod##_64_debug)                                                                         \
-    DECLARE_INITMOD(mod##_32)                                                                               \
-    DECLARE_INITMOD(mod##_64)                                                                               \
+#define DECLARE_CPP_INITMOD_LOOKUP(mod)                                                                     \
     std::unique_ptr<llvm::Module> get_initmod_##mod(llvm::LLVMContext *context, bool bits_64, bool debug) { \
         if (bits_64) {                                                                                      \
             if (debug) {                                                                                    \
@@ -66,6 +62,13 @@ std::unique_ptr<llvm::Module> parse_bitcode_file(llvm::StringRef buf, llvm::LLVM
             }                                                                                               \
         }                                                                                                   \
     }
+
+#define DECLARE_CPP_INITMOD(mod)    \
+    DECLARE_INITMOD(mod##_32_debug) \
+    DECLARE_INITMOD(mod##_64_debug) \
+    DECLARE_INITMOD(mod##_32)       \
+    DECLARE_INITMOD(mod##_64)       \
+    DECLARE_CPP_INITMOD_LOOKUP(mod)
 
 #define DECLARE_LL_INITMOD(mod) \
     DECLARE_INITMOD(mod##_ll)
@@ -105,7 +108,6 @@ DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(msan)
 DECLARE_CPP_INITMOD(msan_stubs)
 DECLARE_CPP_INITMOD(opencl)
-DECLARE_CPP_INITMOD(opengl)
 DECLARE_CPP_INITMOD(openglcompute)
 DECLARE_CPP_INITMOD(opengl_egl_context)
 DECLARE_CPP_INITMOD(opengl_glx_context)
@@ -159,7 +161,7 @@ DECLARE_LL_INITMOD(ptx_dev)
 // Various conditional initmods follow (both LL and CPP).
 #ifdef WITH_METAL
 DECLARE_CPP_INITMOD(metal)
-#ifdef WITH_ARM
+#ifdef WITH_AARCH64
 DECLARE_CPP_INITMOD(metal_objc_arm)
 #else
 DECLARE_NO_INITMOD(metal_objc_arm)
@@ -199,19 +201,43 @@ DECLARE_LL_INITMOD(ptx_compute_30)
 DECLARE_LL_INITMOD(ptx_compute_35)
 #endif  // WITH_NVPTX
 
-#ifdef WITH_D3D12
+#if defined(WITH_D3D12) && defined(WITH_X86)
 DECLARE_CPP_INITMOD(windows_d3d12compute_x86)
 #else
 DECLARE_NO_INITMOD(windows_d3d12compute_x86)
 #endif
 
+#ifdef WITH_D3D12
+#ifdef WITH_ARM
+DECLARE_INITMOD(windows_d3d12compute_arm_32)
+DECLARE_INITMOD(windows_d3d12compute_arm_32_debug)
+#else
+DECLARE_NO_INITMOD(windows_d3d12compute_arm_32)
+DECLARE_NO_INITMOD(windows_d3d12compute_arm_32_debug)
+#endif
+
+#ifdef WITH_AARCH64
+DECLARE_INITMOD(windows_d3d12compute_arm_64)
+DECLARE_INITMOD(windows_d3d12compute_arm_64_debug)
+#else
+DECLARE_NO_INITMOD(windows_d3d12compute_arm_64)
+DECLARE_NO_INITMOD(windows_d3d12compute_arm_64_debug)
+#endif
+
+DECLARE_CPP_INITMOD_LOOKUP(windows_d3d12compute_arm)
+#else
+DECLARE_NO_INITMOD(windows_d3d12compute_arm)
+#endif  // WITH_D3D12
+
 #ifdef WITH_X86
+DECLARE_LL_INITMOD(x86_avx512)
 DECLARE_LL_INITMOD(x86_avx2)
 DECLARE_LL_INITMOD(x86_avx)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_sse41)
 DECLARE_CPP_INITMOD(x86_cpu_features)
 #else
+DECLARE_NO_INITMOD(x86_avx512)
 DECLARE_NO_INITMOD(x86_avx2)
 DECLARE_NO_INITMOD(x86_avx)
 DECLARE_NO_INITMOD(x86)
@@ -258,8 +284,6 @@ DECLARE_CPP_INITMOD(riscv_cpu_features)
 //DECLARE_NO_INITMOD(riscv)
 DECLARE_NO_INITMOD(riscv_cpu_features)
 #endif  // WITH_RISCV
-
-namespace {
 
 llvm::DataLayout get_data_layout_for_target(Target target) {
     if (target.arch == Target::X86) {
@@ -560,6 +584,25 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     const std::set<string> retain = {"__stack_chk_guard",
                                      "__stack_chk_fail"};
 
+    // COMDAT is not supported in MachO object files, hence it does
+    // not work on Mac OS or iOS. These sometimes show up in the
+    // runtime since we compile for an abstract target that is based
+    // on ELF. This code removes all Comdat items and leaves the
+    // symbols they were attached to as regular definitions, which
+    // only works if there is a single instance, which is generally
+    // the case for the runtime. Presumably if this isn't true,
+    // linking the module will fail.
+    //
+    // Comdats are left in for other platforms as they are required
+    // for certain things on Windows and they are useful in general in
+    // ELF based formats.
+    if (t.os == Target::IOS || t.os == Target::OSX) {
+        for (auto &global_obj : modules[0]->global_objects()) {
+            global_obj.setComdat(nullptr);
+        }
+        modules[0]->getComdatSymbolTable().clear();
+    }
+
     // Enumerate the global variables.
     for (auto &gv : modules[0]->globals()) {
         // No variables are part of the public interface (even the ones labelled halide_)
@@ -600,6 +643,12 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     llvm::GlobalValue *llvm_used = modules[0]->getNamedGlobal("llvm.used");
     if (llvm_used) {
         llvm_used->eraseFromParent();
+    }
+
+    llvm::GlobalValue *llvm_compiler_used =
+        modules[0]->getNamedGlobal("llvm.compiler.used");
+    if (llvm_compiler_used) {
+        llvm_compiler_used->eraseFromParent();
     }
 
     // Also drop the dummy runtime api usage. We only needed it so
@@ -794,7 +843,12 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_linux_yield(c, bits_64, debug));
-                modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+                if (t.has_feature(Target::WasmThreads)) {
+                    // Assume that the wasm libc will be providing pthreads
+                    modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
+                } else {
+                    modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+                }
                 modules.push_back(get_initmod_fake_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::OSX) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
@@ -1007,6 +1061,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             if (t.has_feature(Target::AVX2)) {
                 modules.push_back(get_initmod_x86_avx2_ll(c));
             }
+            if (t.has_feature(Target::AVX512)) {
+                modules.push_back(get_initmod_x86_avx512_ll(c));
+            }
             if (t.has_feature(Target::Profile)) {
                 user_assert(t.os != Target::WebAssemblyRuntime) << "The profiler cannot be used in a threadless environment.";
                 modules.push_back(get_initmod_profiler_inlined(c, bits_64, debug));
@@ -1068,22 +1125,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_opencl(c, bits_64, debug));
             }
         }
-        if (t.has_feature(Target::OpenGL)) {
-            modules.push_back(get_initmod_opengl(c, bits_64, debug));
-            if (t.os == Target::Linux) {
-                if (t.has_feature(Target::EGL)) {
-                    modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
-                } else {
-                    modules.push_back(get_initmod_opengl_glx_context(c, bits_64, debug));
-                }
-            } else if (t.os == Target::OSX) {
-                modules.push_back(get_initmod_osx_opengl_context(c, bits_64, debug));
-            } else if (t.os == Target::Android) {
-                modules.push_back(get_initmod_opengl_egl_context(c, bits_64, debug));
-            } else {
-                // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
-            }
-        }
         if (t.has_feature(Target::OpenGLCompute)) {
             modules.push_back(get_initmod_openglcompute(c, bits_64, debug));
             if (t.os == Target::Android) {
@@ -1114,7 +1155,13 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         if (t.has_feature(Target::D3D12Compute)) {
             user_assert(bits_64) << "D3D12Compute target only available on 64-bit targets for now.\n";
             user_assert(t.os == Target::Windows) << "D3D12Compute target only available on Windows targets.\n";
-            modules.push_back(get_initmod_windows_d3d12compute_x86(c, bits_64, debug));
+            if (t.arch == Target::X86) {
+                modules.push_back(get_initmod_windows_d3d12compute_x86(c, bits_64, debug));
+            } else if (t.arch == Target::ARM) {
+                modules.push_back(get_initmod_windows_d3d12compute_arm(c, bits_64, debug));
+            } else {
+                user_error << "Direct3D 12 can only be used on ARM or X86 architectures.\n";
+            }
         }
         if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {
             modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));

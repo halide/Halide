@@ -205,9 +205,9 @@ void test_1d_box_no_clamp() {
     f_loss() += blur(r.x) * blur(r.x);
     Derivative d = propagate_adjoints(f_loss);
 
-    Buffer<float> blur_buf = blur.realize(2);
+    Buffer<float> blur_buf = blur.realize({2});
     // d loss / d blur = 2 * blur(x)
-    Buffer<float> d_blur_buf = d(blur).realize(3);
+    Buffer<float> d_blur_buf = d(blur).realize({3});
     check(__LINE__, d_blur_buf(0), 2 * blur_buf(0));
     check(__LINE__, d_blur_buf(1), 2 * blur_buf(1));
     check(__LINE__, d_blur_buf(2), 0.f);
@@ -215,7 +215,7 @@ void test_1d_box_no_clamp() {
     Func d_input = d(input);
     // Every dependency of d_input should only use pure variables in lhs
     _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
-    Buffer<float> d_input_buf = d_input.realize(4);
+    Buffer<float> d_input_buf = d_input.realize({4});
     check(__LINE__, d_input_buf(0), d_blur_buf(0));
     check(__LINE__, d_input_buf(1), d_blur_buf(0) + d_blur_buf(1));
     check(__LINE__, d_input_buf(2), d_blur_buf(1));
@@ -237,21 +237,21 @@ void test_1d_box() {
     f_loss() += blur(r.x) * blur(r.x);
     Derivative d = propagate_adjoints(f_loss);
 
-    Buffer<float> blur_buf = blur.realize(2);
+    Buffer<float> blur_buf = blur.realize({2});
     // d loss / d blur = 2 * blur(x)
-    Buffer<float> d_blur_buf = d(blur).realize(2);
+    Buffer<float> d_blur_buf = d(blur).realize({2});
     check(__LINE__, d_blur_buf(0), 2 * blur_buf(0));
     check(__LINE__, d_blur_buf(1), 2 * blur_buf(1));
     // d clamped(x) = d blur(x) + d blur(x - 1)
     Func d_clamped = d(clamped);
     // Every dependency of d_clamped should only use pure variables in lhs
     _halide_user_assert(!has_non_pure_update(d_clamped)) << "Function has non pure update\n";
-    Buffer<float> d_clamped_buf = d_clamped.realize(3);
+    Buffer<float> d_clamped_buf = d_clamped.realize({3});
     check(__LINE__, d_clamped_buf(0), d_blur_buf(0));
     check(__LINE__, d_clamped_buf(1), d_blur_buf(0) + d_blur_buf(1));
     check(__LINE__, d_clamped_buf(2), d_blur_buf(1));
     // d input(clamp(x, 0, 1)) = d clamped (x)
-    Buffer<float> d_input_buf = d(input).realize(2);
+    Buffer<float> d_input_buf = d(input).realize({2});
     check(__LINE__, d_input_buf(0), d_clamped_buf(0));
     check(__LINE__, d_input_buf(1), d_clamped_buf(1) + d_clamped_buf(2));
 }
@@ -278,9 +278,9 @@ void test_2d_box() {
     loss() += blur_y(r.x, r.y) * blur_y(r.x, r.y);
     Derivative d = propagate_adjoints(loss);
 
-    Buffer<float> blur_y_buf = blur_y.realize(5, 5);
+    Buffer<float> blur_y_buf = blur_y.realize({5, 5});
     // d loss / d blur_y = 2 * blur_y(x, y)
-    Buffer<float> d_blur_y_buf = d(blur_y).realize(5, 5);
+    Buffer<float> d_blur_y_buf = d(blur_y).realize({5, 5});
     const float eps = 1e-6f;
     for (int y = 0; y < 5; y++) {
         for (int x = 0; x < 5; x++) {
@@ -291,7 +291,7 @@ void test_2d_box() {
         }
     }
     // d loss / d blur_x = d blur_y(x, y) + d blur_y(x, y - 1) + d blur_y(x, y + 1)
-    Buffer<float> d_blur_x_buf = d(blur_x).realize(5, 5);
+    Buffer<float> d_blur_x_buf = d(blur_x).realize({5, 5});
     for (int y = 0; y < 5; y++) {
         for (int x = 0; x < 5; x++) {
             float target = d_blur_y_buf(x, y);
@@ -309,7 +309,7 @@ void test_2d_box() {
     Func d_clamped = d(clamped);
     // Every dependency of d_clamped should only use pure variables in lhs
     _halide_user_assert(!has_non_pure_update(d_clamped)) << "Function has non pure update\n";
-    Buffer<float> d_clamped_buf = d_clamped.realize(5, 5);
+    Buffer<float> d_clamped_buf = d_clamped.realize({5, 5});
     // d loss / d clamped = d blur_x(x, y) + d blur_x(x - 1, y) + d blur_x(x - 2, y)
     for (int y = 0; y < 5; y++) {
         for (int x = 0; x < 5; x++) {
@@ -344,9 +344,9 @@ void test_update() {
     f_loss() += blur(r.x) * blur(r.x);
     Derivative d = propagate_adjoints(f_loss);
 
-    Buffer<float> blur_buf = blur.realize(3);
+    Buffer<float> blur_buf = blur.realize({3});
     // d loss / d blur = 2 * blur(x)
-    Buffer<float> d_blur_buf = d(blur).realize(3);
+    Buffer<float> d_blur_buf = d(blur).realize({3});
 
     check(__LINE__, d_blur_buf(0), 2 * blur_buf(0));
     check(__LINE__, d_blur_buf(1), 2 * blur_buf(1));
@@ -354,7 +354,7 @@ void test_update() {
     Func d_clamped = d(clamped);
     // Every dependency of d_clamped should only use pure variables in lhs
     _halide_user_assert(!has_non_pure_update(d_clamped)) << "Function has non pure update\n";
-    Buffer<float> d_clamped_buf = d_clamped.realize(3);
+    Buffer<float> d_clamped_buf = d_clamped.realize({3});
     check(__LINE__, d_clamped_buf(0), d_blur_buf(0));
     check(__LINE__, d_clamped_buf(1), d_blur_buf(0) + d_blur_buf(1));
     check(__LINE__, d_clamped_buf(2), d_blur_buf(1) + d_blur_buf(2));
@@ -385,7 +385,7 @@ void test_nonlinear_update() {
 
     Func d_clamped = d(clamped);
     // d_clamp(x) = 2 * clamp(x) * d_update(x) + d_update(x - 1)
-    Buffer<float> d_clamped_buf = d_clamped.realize(3);
+    Buffer<float> d_clamped_buf = d_clamped.realize({3});
     check(__LINE__, d_clamped_buf(0), 2.f * input(0));
     check(__LINE__, d_clamped_buf(1), 2.f * input(1) + 1.f);
     check(__LINE__, d_clamped_buf(2), 2.f * input(2) + 1.f);
@@ -410,9 +410,9 @@ void test_rdom_conv() {
     Func f_loss("f_loss");
     f_loss() += convolved(r.x) * convolved(r.x);
     Derivative d = propagate_adjoints(f_loss);
-    Buffer<float> convolved_buf = convolved.realize(4);
+    Buffer<float> convolved_buf = convolved.realize({4});
     // d loss / d blur = 2 * blur(x)
-    Buffer<float> d_convolved_buf = d(convolved).realize(4);
+    Buffer<float> d_convolved_buf = d(convolved).realize({4});
     for (int i = 0; i < 4; i++) {
         check(__LINE__, d_convolved_buf(i), 2 * convolved_buf(i));
     }
@@ -420,7 +420,7 @@ void test_rdom_conv() {
     Func d_clamped = d(clamped);
     // Every dependency of d_clamped should only use pure variables in lhs
     _halide_user_assert(!has_non_pure_update(d_clamped)) << "Function has non pure update\n";
-    Buffer<float> d_clamped_buf = d_clamped.realize(4);
+    Buffer<float> d_clamped_buf = d_clamped.realize({4});
     for (int i = 0; i < 4; i++) {
         float target = d_convolved_buf(i) * kernel(0);
         if (i >= 1) {
@@ -433,7 +433,7 @@ void test_rdom_conv() {
     //      = 30 k0^2 + 72 k0k1 + 45 k1^2
     // d loss / d kernel(0) = 2 * k0 * 30 + 72 * k1
     // d loss / d kernel(1) = 72 * k0 + 90 * k1
-    Buffer<float> d_kernel = d(kernel).realize(2);
+    Buffer<float> d_kernel = d(kernel).realize({2});
     check(__LINE__, d_kernel(0), 60.f * kernel(0) + 72.f * kernel(1));
     check(__LINE__, d_kernel(1), 72.f * kernel(0) + 90.f * kernel(1));
 }
@@ -471,7 +471,7 @@ void test_horner_polynomial() {
     // d_poly(x, 6) = \sum_x x
     // d_poly(x, 5) = \sum_x x^2
     // ...
-    Buffer<float> d_coeffs = d(coeffs).realize(8);
+    Buffer<float> d_coeffs = d(coeffs).realize({8});
     for (int i = 0; i < 8; i++) {
         float d = 0.f;
         for (int j = 0; j < 1024; j++) {
@@ -520,7 +520,7 @@ void test_nonlinear_order_dependent_rdom() {
     din0 += df0;
     Buffer<float> loss_buf = loss.realize();
     check(__LINE__, loss_, loss_buf());
-    Buffer<float> d_in = d(in).realize(2);
+    Buffer<float> d_in = d(in).realize({2});
     check(__LINE__, d_in(0), din0);
     check(__LINE__, d_in(1), din1);
 }
@@ -541,7 +541,7 @@ void test_1d_to_2d() {
     // loss = 5i0^2 + 5i1^2
     // d loss / d i0 = 10i0 = 10
     // d loss / d i1 = 10i1 = 20
-    Buffer<float> d_output = d(output).realize(2, 2);
+    Buffer<float> d_output = d(output).realize({2, 2});
     check(__LINE__, d_output(0, 0), 2.f);
     check(__LINE__, d_output(1, 0), 4.f);
     check(__LINE__, d_output(0, 1), 4.f);
@@ -550,7 +550,7 @@ void test_1d_to_2d() {
     Func d_input = d(input);
     // Every dependency of d_input should only use pure variables in lhs
     _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
-    Buffer<float> d_input_buf = d_input.realize(2);
+    Buffer<float> d_input_buf = d_input.realize({2});
     check(__LINE__, d_input_buf(0), 10.f);
     check(__LINE__, d_input_buf(1), 20.f);
 }
@@ -593,15 +593,15 @@ void test_linear_resampling_1d() {
     //                    (1 - (i0[1] - floor(i0[1])))
     // d loss / d i1[2] = i0[1] - floor(i0[1])
 
-    Buffer<float> interpolate_buf = interpolate.realize(2);
+    Buffer<float> interpolate_buf = interpolate.realize({2});
     check(__LINE__, interpolate_buf(0), 1.3f);
     check(__LINE__, interpolate_buf(1), 3.6f);
 
-    Buffer<float> d_clamped0 = d(clamped0).realize(2);
+    Buffer<float> d_clamped0 = d(clamped0).realize({2});
     check(__LINE__, d_clamped0(0), 1.f);
     check(__LINE__, d_clamped0(1), 2.f);
 
-    Buffer<float> d_clamped1 = d(clamped1).realize(3);
+    Buffer<float> d_clamped1 = d(clamped1).realize({3});
     check(__LINE__, d_clamped1(0), 0.7f);
     check(__LINE__, d_clamped1(1), 0.5f);
     check(__LINE__, d_clamped1(2), 0.8f);
@@ -638,15 +638,15 @@ void test_linear_resampling_2d() {
     Derivative d = propagate_adjoints(loss);
 
     // Same as test_linear_resampling_1d()
-    Buffer<float> interpolate_buf = interpolate.realize(2, 1);
+    Buffer<float> interpolate_buf = interpolate.realize({2, 1});
     check(__LINE__, interpolate_buf(0, 0), 1.3f);
     check(__LINE__, interpolate_buf(1, 0), 3.6f);
 
-    Buffer<float> d_clamped0 = d(clamped0).realize(2, 1);
+    Buffer<float> d_clamped0 = d(clamped0).realize({2, 1});
     check(__LINE__, d_clamped0(0, 0), 1.f);
     check(__LINE__, d_clamped0(1, 0), 2.f);
 
-    Buffer<float> d_clamped1 = d(clamped1).realize(3, 1);
+    Buffer<float> d_clamped1 = d(clamped1).realize({3, 1});
     check(__LINE__, d_clamped1(0, 0), 0.7f);
     check(__LINE__, d_clamped1(1, 0), 0.5f);
     check(__LINE__, d_clamped1(2, 0), 0.8f);
@@ -673,7 +673,7 @@ void test_sparse_update() {
     loss() += output(r.x);
     Derivative d = propagate_adjoints(loss);
 
-    Buffer<float> d_input = d(input).realize(3);
+    Buffer<float> d_input = d(input).realize({3});
     check(__LINE__, d_input(0), 1.0f);
     check(__LINE__, d_input(1), 2.0f);
     check(__LINE__, d_input(2), 0.0f);
@@ -706,7 +706,7 @@ void test_histogram() {
     // d_output(2) -> d_k(1)
     // d_output(1) -> d_k(2)
     // d_output(3) -> d_k(3)
-    Buffer<float> d_k = d(k).realize(5);
+    Buffer<float> d_k = d(k).realize({5});
     check(__LINE__, d_k(0), 3.0f);
     check(__LINE__, d_k(1), 3.0f);
     check(__LINE__, d_k(2), 2.0f);
@@ -744,7 +744,7 @@ void test_histogram_no_bounds() {
     // d_output(2) -> d_k(1)
     // d_output(1) -> d_k(2)
     // d_output(3) -> d_k(3)
-    Buffer<float> d_k = d(k).realize(5);
+    Buffer<float> d_k = d(k).realize({5});
     check(__LINE__, d_k(0), 3.0f);
     check(__LINE__, d_k(1), 3.0f);
     check(__LINE__, d_k(2), 2.0f);
@@ -790,7 +790,7 @@ void test_multiple_updates_histogram() {
     // d_output(2) -> d_k(1) * 2
     // d_output(1) -> d_k(2) * 2
     // d_output(3) -> d_k(3) * 2
-    Buffer<float> d_k = d(k).realize(5);
+    Buffer<float> d_k = d(k).realize({5});
     check(__LINE__, d_k(0), 30.0f);
     check(__LINE__, d_k(1), 30.0f);
     check(__LINE__, d_k(2), 20.0f);
@@ -815,7 +815,7 @@ void test_rdom_update() {
     loss() += output(r_target);
     Derivative d = propagate_adjoints(loss);
 
-    Buffer<float> d_input = d(input).realize(3);
+    Buffer<float> d_input = d(input).realize({3});
     check(__LINE__, d_input(0), 2.0f);
     check(__LINE__, d_input(1), 1.0f);
     check(__LINE__, d_input(2), 0.0f);
@@ -835,8 +835,8 @@ void test_repeat_edge() {
     Derivative d = propagate_adjoints(loss);
     // loss = (i0 + i1) + (i1 + i1) + (i1 + i1) = i0 + 5 * i1
 
-    Buffer<float> d_blur_buf = blur.realize(3);
-    Buffer<float> d_input_buf = d(input).realize(2);
+    Buffer<float> d_blur_buf = blur.realize({3});
+    Buffer<float> d_input_buf = d(input).realize({2});
     // d loss / d i0 = 1
     // d loss / d i1 = 5
     check(__LINE__, d_input_buf(0), 1.f);
@@ -857,8 +857,8 @@ void test_constant_exterior() {
     Derivative d = propagate_adjoints(loss);
     // loss = (i0 + i1) + i1 = i0 + 2 * i1
 
-    Buffer<float> d_blur_buf = blur.realize(3);
-    Buffer<float> d_input_buf = d(input).realize(2);
+    Buffer<float> d_blur_buf = blur.realize({3});
+    Buffer<float> d_input_buf = d(input).realize({2});
     // d loss / d i0 = 1
     // d loss / d i1 = 2
     check(__LINE__, d_input_buf(0), 1.f);
@@ -879,8 +879,8 @@ void test_repeat_image() {
     Derivative d = propagate_adjoints(loss);
     // loss = (i0 + i1) + (i1 + i0) + (i0 + i1) = 3 * i0 + 3 * i1
 
-    Buffer<float> d_blur_buf = blur.realize(3);
-    Buffer<float> d_input_buf = d(input).realize(2);
+    Buffer<float> d_blur_buf = blur.realize({3});
+    Buffer<float> d_input_buf = d(input).realize({2});
     // d loss / d i0 = 3
     // d loss / d i1 = 3
     check(__LINE__, d_input_buf(0), 3.f);
@@ -901,8 +901,8 @@ void test_mirror_image() {
     Derivative d = propagate_adjoints(loss);
     // loss = (i0 + i1) + (i1 + i1) + (i1 + i0) = 2 * i0 + 4 * i1
 
-    Buffer<float> d_blur_buf = blur.realize(3);
-    Buffer<float> d_input_buf = d(input).realize(2);
+    Buffer<float> d_blur_buf = blur.realize({3});
+    Buffer<float> d_input_buf = d(input).realize({2});
     // d loss / d i0 = 2
     // d loss / d i1 = 4
     check(__LINE__, d_input_buf(0), 2.f);
@@ -923,8 +923,8 @@ void test_mirror_interior() {
     Derivative d = propagate_adjoints(loss);
     // loss = (i0 + i1) + (i1 + i0) + (i0 + i1) = 3 * i0 + 3 * i1
 
-    Buffer<float> d_blur_buf = blur.realize(3);
-    Buffer<float> d_input_buf = d(input).realize(2);
+    Buffer<float> d_blur_buf = blur.realize({3});
+    Buffer<float> d_input_buf = d(input).realize({2});
     // d loss / d i0 = 3
     // d loss / d i1 = 3
     check(__LINE__, d_input_buf(0), 3.f);
@@ -977,28 +977,28 @@ void test_second_order_conv() {
     loss1() += d_input(rl);
     Derivative d2 = propagate_adjoints(loss1);
 
-    Buffer<float> conv_buf = conv.realize(9);
-    Buffer<float> d_conv_buf = d(conv).realize(9);
+    Buffer<float> conv_buf = conv.realize({9});
+    Buffer<float> d_conv_buf = d(conv).realize({9});
     // d_conv(x) = 2 * (conv(x) - target(x))
     for (int i = 0; i < 9; i++) {
         check(__LINE__, d_conv_buf(i), 2.f * (conv_buf(i) - target(i)));
     }
     // d_input(x) = d_conv(x + 1) + d_conv(x) + d_conv(x - 1)
-    Buffer<float> d_input_buf = d_input.realize(10);
+    Buffer<float> d_input_buf = d_input.realize({10});
     check(__LINE__, d_input_buf(0), d_conv_buf(0) + d_conv_buf(1));
     for (int i = 1; i < 8; i++) {
         check(__LINE__, d_input_buf(i), d_conv_buf(i + 1) + d_conv_buf(i) + d_conv_buf(i - 1));
     }
     check(__LINE__, d_input_buf(8), d_conv_buf(7) + d_conv_buf(8));
     check(__LINE__, d_input_buf(9), d_conv_buf(8));
-    Buffer<float> d2_conv_buf = d2(conv).realize(9);
+    Buffer<float> d2_conv_buf = d2(conv).realize({9});
     // d2_conv(x) = 6
     for (int i = 0; i < 8; i++) {
         check(__LINE__, d2_conv_buf(i), 6.f);
     }
     check(__LINE__, d2_conv_buf(8), 4.f);
     // d2_input(x) = d2_conv(x + 1) + d2_conv(x) + d2_conv(x - 1)
-    Buffer<float> d2_input_buf = d2(input).realize(10);
+    Buffer<float> d2_input_buf = d2(input).realize({10});
     check(__LINE__, d2_input_buf(0), 2.f * d2_conv_buf(0) + d2_conv_buf(1));
     for (int i = 1; i <= 7; i++) {
         check(__LINE__, d2_input_buf(i), d2_conv_buf(i) + d2_conv_buf(i + 1) + d2_conv_buf(i - 1));
@@ -1022,13 +1022,13 @@ void test_implicit_vars() {
     Func d_input = d(input);
     // Every dependency of d_input should only use pure variables in lhs
     _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
-    Buffer<float> d_input_buf = d_input.realize(2);
+    Buffer<float> d_input_buf = d_input.realize({2});
     check(__LINE__, d_input_buf(0), 1.f);
     check(__LINE__, d_input_buf(1), 1.f);
     Func d_copy = d(copy);
     // Every dependency of d_copy should only use pure variables in lhs
     _halide_user_assert(!has_non_pure_update(d_copy)) << "Function has non pure update\n";
-    Buffer<float> d_copy_buf = d_copy.realize(2);
+    Buffer<float> d_copy_buf = d_copy.realize({2});
     check(__LINE__, d_copy_buf(0), 1.f);
     check(__LINE__, d_copy_buf(1), 1.f);
 }
@@ -1059,7 +1059,7 @@ void test_tuple() {
     Func d_tuple = d(tuple);
     // Every dependency of d_tuple should only use pure variables in lhs
     _halide_user_assert(!has_non_pure_update(d_tuple)) << "Function has non pure update\n";
-    Realization d_tuple_buf = d_tuple.realize(2);
+    Realization d_tuple_buf = d_tuple.realize({2});
     Buffer<float> d_tuple_buf_0 = d_tuple_buf[0];
     Buffer<float> d_tuple_buf_1 = d_tuple_buf[1];
     check(__LINE__, d_tuple_buf_0(0), 1.f);
@@ -1070,7 +1070,7 @@ void test_tuple() {
     Func d_input = d(input);
     // Every dependency of d_input should only use pure variables in lhs
     _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
-    Buffer<float> d_input_buf = d_input.realize(3);
+    Buffer<float> d_input_buf = d_input.realize({3});
     check(__LINE__, d_input_buf(0), 1.f);
     check(__LINE__, d_input_buf(1), 2.f);
     check(__LINE__, d_input_buf(2), 1.f);
@@ -1097,7 +1097,7 @@ void test_floor_ceil() {
     // ceil_output(0) == input[0]
     // ceil_output(1~4) == input[1]
     // ceil_output(5~7) = input[2]
-    Buffer<float> d_input_buf = d(input).realize(3);
+    Buffer<float> d_input_buf = d(input).realize({3});
 
     check(__LINE__, d_input_buf(0), 5.f);
     check(__LINE__, d_input_buf(1), 8.f);
@@ -1123,7 +1123,7 @@ void test_downsampling() {
     // Every dependency of d_tuple should only use pure variables in lhs
 
     // _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
-    Buffer<float> d_input_buf = d_input.realize(10);
+    Buffer<float> d_input_buf = d_input.realize({10});
 
     for (int i = 0; i < 8; i++) {
         check(__LINE__, d_input_buf(i), 1.f);
@@ -1147,7 +1147,7 @@ void test_upsampling() {
     Func d_input = d(input);
     // Every dependency of d_tuple should only use pure variables in lhs
     _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
-    Buffer<float> d_input_buf = d_input.realize(4);
+    Buffer<float> d_input_buf = d_input.realize({4});
 
     for (int i = 0; i < 4; i++) {
         check(__LINE__, d_input_buf(i), 4.f);
@@ -1175,7 +1175,7 @@ void test_transpose() {
     loss() += pow(output(r.x, r.y) - target(r.x, r.y), 2);
     Derivative d = propagate_adjoints(loss);
     Func d_input = d(input);
-    Buffer<float> d_input_buf = d_input.realize(5, 5);
+    Buffer<float> d_input_buf = d_input.realize({5, 5});
     for (int i = 0; i < 5; i++) {
         for (int j = 0; j < 5; j++) {
             check(__LINE__, d_input_buf(i, j), 2.f * (input(i, j) - target(j, i)));
@@ -1206,7 +1206,7 @@ void test_change_var() {
     loss() += pow(ab_func(r.x, r.y) - target(r.x, r.y), 2);
     Derivative d = propagate_adjoints(loss);
     Func d_input = d(input);
-    Buffer<float> d_input_buf = d_input.realize(5, 5);
+    Buffer<float> d_input_buf = d_input.realize({5, 5});
     for (int i = 0; i < 5; i++) {
         for (int j = 0; j < 5; j++) {
             check(__LINE__, d_input_buf(i, j), 2.f * (input(i, j) - target(j, i)));
@@ -1233,7 +1233,7 @@ void test_rdom_predicate() {
     loss() += circle(r_full.x, r_full.y);
     Derivative d = propagate_adjoints(loss);
     Func d_input = d(input);
-    Buffer<float> d_input_buf = d_input.realize(7, 7);
+    Buffer<float> d_input_buf = d_input.realize({7, 7});
     for (int i = 0; i < 7; i++) {
         for (int j = 0; j < 7; j++) {
             bool in_circle =
@@ -1261,7 +1261,7 @@ void test_reverse_scan() {
     loss() += reverse(r.x) * (r.x + 1.f);
     Derivative d = propagate_adjoints(loss);
     Func d_input = d(input);
-    Buffer<float> d_input_buf = d_input.realize(5);
+    Buffer<float> d_input_buf = d_input.realize({5});
     for (int i = 0; i < 5; i++) {
         check(__LINE__, d_input_buf(i), (5.f - (float)i));
     }
@@ -1281,7 +1281,7 @@ void test_diagonal() {
     loss() += f(r.x, r.y);
     Derivative d = propagate_adjoints(loss);
     Func d_input = d(input);
-    Buffer<float> d_input_buf = d_input.realize(5);
+    Buffer<float> d_input_buf = d_input.realize({5});
     check(__LINE__, d_input_buf(0), 1.f);
     check(__LINE__, d_input_buf(1), 2.f);
     check(__LINE__, d_input_buf(2), 2.f);
@@ -1304,7 +1304,7 @@ void test_input_bounds() {
     loss() += g(r);
     Derivative d = propagate_adjoints(loss);
     Func d_f = d(f);
-    Buffer<float> d_f_buf = d_f.realize(4);
+    Buffer<float> d_f_buf = d_f.realize({4});
     // d_f(x) = d_g(x) * input(x)
     check(__LINE__, d_f_buf(0), 1.f);
     check(__LINE__, d_f_buf(1), 2.f);
@@ -1312,7 +1312,7 @@ void test_input_bounds() {
     check(__LINE__, d_f_buf(3), 4.f);
     Func d_input = d(input);
 
-    Buffer<float> d_input_buf = d_input.realize(5);
+    Buffer<float> d_input_buf = d_input.realize({5});
     // d_input(x) += d_f(x) * input(x + 1)
     //            += d_f(x - 1) * input(x - 1)
     //            += d_g(x) * f(x)
@@ -1338,7 +1338,7 @@ void test_select_guard() {
     loss() += f(r);
     Derivative d = propagate_adjoints(loss);
     Func d_input = d(input);
-    Buffer<float> d_input_buf = d_input.realize(2);
+    Buffer<float> d_input_buf = d_input.realize({2});
     check(__LINE__, d_input_buf(0), 1.f + 0.f + 2.f + 3.f);
     check(__LINE__, d_input_buf(1), -2.f + 0.5f - 0.5f + 1.f);
 }
@@ -1358,7 +1358,7 @@ void test_param() {
     Buffer<float> d_param_buf = d_param.realize();
     check(__LINE__, d_param_buf(), 8.f);
     Func d_buffer = d(buffer);
-    Buffer<float> d_buffer_buf = d_buffer.realize(2);
+    Buffer<float> d_buffer_buf = d_buffer.realize({2});
     check(__LINE__, d_buffer_buf(0), 8.f);
     check(__LINE__, d_buffer_buf(1), 0.f);
 }
@@ -1376,15 +1376,15 @@ void test_custom_adjoint_buffer() {
     adjoint(1) = 1.f;
     Derivative d = propagate_adjoints(blur, adjoint);
 
-    Buffer<float> blur_buf = blur.realize(2);
-    Buffer<float> d_blur_buf = d(blur).realize(2);
+    Buffer<float> blur_buf = blur.realize({2});
+    Buffer<float> d_blur_buf = d(blur).realize({2});
     check(__LINE__, d_blur_buf(0), 1.f);
     check(__LINE__, d_blur_buf(1), 1.f);
     // d input(x) = d blur(x) + d blur(x - 1)
     Func d_input = d(input);
     // Every dependency of d_input should only use pure variables in lhs
     _halide_user_assert(!has_non_pure_update(d_input)) << "Function has non pure update\n";
-    Buffer<float> d_input_buf = d_input.realize(3);
+    Buffer<float> d_input_buf = d_input.realize({3});
     check(__LINE__, d_input_buf(0), d_blur_buf(0));
     check(__LINE__, d_input_buf(1), d_blur_buf(0) + d_blur_buf(1));
     check(__LINE__, d_input_buf(2), d_blur_buf(1));
@@ -1398,7 +1398,7 @@ void test_print() {
     out() += print(input(r));
     Derivative d_out_d = propagate_adjoints(out);
     Func d_out_d_input = d_out_d(input);
-    Buffer<float> d = d_out_d_input.realize(1);
+    Buffer<float> d = d_out_d_input.realize({1});
     check(__LINE__, d(0), 1.f);
 }
 
@@ -1412,7 +1412,7 @@ void test_random_float() {
     out(x) += random_float() * input() + r;
     Derivative d_out_d = propagate_adjoints(out);
     Func d_out_d_input = d_out_d(input);
-    Buffer<float> o = out.realize(1);
+    Buffer<float> o = out.realize({1});
     Buffer<float> d_input = d_out_d_input.realize();
     check(__LINE__, d_input(), o(0));
 }

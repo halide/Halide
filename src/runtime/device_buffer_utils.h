@@ -89,7 +89,7 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
     // Offset the src base pointer to the right point in its buffer.
     c.src_begin = 0;
     for (int i = 0; i < src->dimensions; i++) {
-        c.src_begin += src->dim[i].stride * (dst->dim[i].min - src->dim[i].min);
+        c.src_begin += (uint64_t)src->dim[i].stride * (dst->dim[i].min - src->dim[i].min);
     }
     c.src_begin *= c.chunk_size;
 
@@ -114,8 +114,8 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
     // in ascending order in the dst.
     for (int i = 0; i < dst->dimensions; i++) {
         // TODO: deal with negative strides.
-        uint64_t dst_stride_bytes = dst->dim[i].stride * dst->type.bytes();
-        uint64_t src_stride_bytes = src->dim[i].stride * src->type.bytes();
+        uint64_t dst_stride_bytes = (uint64_t)dst->dim[i].stride * dst->type.bytes();
+        uint64_t src_stride_bytes = (uint64_t)src->dim[i].stride * src->type.bytes();
         // Insert the dimension sorted into the buffer copy.
         int insert;
         for (insert = 0; insert < i; insert++) {
@@ -131,7 +131,7 @@ WEAK device_copy make_buffer_copy(const halide_buffer_t *src, bool src_host,
             c.src_stride_bytes[j] = c.src_stride_bytes[j - 1];
         }
         c.extent[insert] = dst->dim[i].extent;
-        // debug(NULL) << "c.extent[" << insert << "] = " << (int)(c.extent[insert]) << "\n";
+        // debug(nullptr) << "c.extent[" << insert << "] = " << (int)(c.extent[insert]) << "\n";
         c.dst_stride_bytes[insert] = dst_stride_bytes;
         c.src_stride_bytes[insert] = src_stride_bytes;
     };
@@ -172,7 +172,7 @@ WEAK device_copy make_device_to_host_copy(const halide_buffer_t *buf) {
 ALWAYS_INLINE int64_t calc_device_crop_byte_offset(const struct halide_buffer_t *src, struct halide_buffer_t *dst) {
     int64_t offset = 0;
     for (int i = 0; i < src->dimensions; i++) {
-        offset += (dst->dim[i].min - src->dim[i].min) * src->dim[i].stride;
+        offset += (dst->dim[i].min - src->dim[i].min) * (int64_t)src->dim[i].stride;
     }
     offset *= src->type.bytes();
     return offset;
@@ -181,7 +181,7 @@ ALWAYS_INLINE int64_t calc_device_crop_byte_offset(const struct halide_buffer_t 
 // Caller is expected to verify that src->dimensions == dst->dimensions + 1,
 // and that slice_dim and slice_pos are valid within src
 ALWAYS_INLINE int64_t calc_device_slice_byte_offset(const struct halide_buffer_t *src, int slice_dim, int slice_pos) {
-    int64_t offset = (slice_pos - src->dim[slice_dim].min) * src->dim[slice_dim].stride;
+    int64_t offset = (slice_pos - src->dim[slice_dim].min) * (int64_t)src->dim[slice_dim].stride;
     offset *= src->type.bytes();
     return offset;
 }

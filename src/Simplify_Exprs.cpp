@@ -1,5 +1,7 @@
 #include "Simplify_Internal.h"
 
+using std::string;
+
 namespace Halide {
 namespace Internal {
 
@@ -11,6 +13,8 @@ Expr Simplify::visit(const IntImm *op, ExprInfo *bounds) {
         bounds->min = bounds->max = op->value;
         bounds->alignment.remainder = op->value;
         bounds->alignment.modulus = 0;
+    } else {
+        clear_bounds_info(bounds);
     }
     return op;
 }
@@ -21,15 +25,19 @@ Expr Simplify::visit(const UIntImm *op, ExprInfo *bounds) {
         bounds->min = bounds->max = (int64_t)(op->value);
         bounds->alignment.remainder = op->value;
         bounds->alignment.modulus = 0;
+    } else {
+        clear_bounds_info(bounds);
     }
     return op;
 }
 
 Expr Simplify::visit(const FloatImm *op, ExprInfo *bounds) {
+    clear_bounds_info(bounds);
     return op;
 }
 
 Expr Simplify::visit(const StringImm *op, ExprInfo *bounds) {
+    clear_bounds_info(bounds);
     return op;
 }
 
@@ -74,6 +82,14 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
                 bounds->max *= factor;
             }
             break;
+        case VectorReduce::SaturatingAdd:
+            if (bounds->min_defined) {
+                bounds->min = saturating_mul(bounds->min, factor);
+            }
+            if (bounds->max_defined) {
+                bounds->max = saturating_mul(bounds->max, factor);
+            }
+            break;
         case VectorReduce::Mul:
             // Don't try to infer anything about bounds. Leave the
             // alignment unchanged even though we could theoretically
@@ -92,7 +108,7 @@ Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
             bounds->alignment = ModulusRemainder{};
             break;
         }
-    };
+    }
 
     // We can pull multiplications by a broadcast out of horizontal
     // additions and do the horizontal addition earlier. This means we
@@ -298,6 +314,26 @@ Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
     ExprInfo index_info;
     Expr index = mutate(op->index, &index_info);
 
+    // If the load is fully out of bounds, replace it with undef.
+    // This should only occur inside branches that make the load unreachable,
+    // but perhaps the branch was hard to prove constant true or false. This
+    // provides an alternative mechanism to simplify these unreachable loads.
+    string alloc_extent_name = op->name + ".total_extent_bytes";
+    if (bounds_and_alignment_info.contains(alloc_extent_name)) {
+        if (index_info.max_defined && index_info.max < 0) {
+            in_unreachable = true;
+            return unreachable(op->type);
+        }
+        const ExprInfo &alloc_info = bounds_and_alignment_info.get(alloc_extent_name);
+        if (alloc_info.max_defined && index_info.min_defined) {
+            int index_min_bytes = index_info.min * op->type.bytes();
+            if (index_min_bytes > alloc_info.max) {
+                in_unreachable = true;
+                return unreachable(op->type);
+            }
+        }
+    }
+
     ExprInfo base_info;
     if (const Ramp *r = index.as<Ramp>()) {
         mutate(r->base, &base_info);
@@ -309,10 +345,10 @@ Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
 
     const Broadcast *b_index = index.as<Broadcast>();
     const Shuffle *s_index = index.as<Shuffle>();
-    if (is_zero(predicate)) {
+    if (is_const_zero(predicate)) {
         // Predicate is always false
         return undef(op->type);
-    } else if (b_index && is_one(predicate)) {
+    } else if (b_index && is_const_one(predicate)) {
         // Load of a broadcast should be broadcast of the load
         Expr new_index = b_index->value;
         int new_lanes = new_index.type().lanes();
@@ -320,7 +356,7 @@ Expr Simplify::visit(const Load *op, ExprInfo *bounds) {
                                op->image, op->param, const_true(new_lanes), align);
         return Broadcast::make(load, b_index->lanes);
     } else if (s_index &&
-               is_one(predicate) &&
+               is_const_one(predicate) &&
                (s_index->is_concat() ||
                 s_index->is_interleave())) {
         // Loads of concats/interleaves should be concats/interleaves of loads

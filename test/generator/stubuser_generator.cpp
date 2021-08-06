@@ -42,7 +42,7 @@ public:
 
         // We'll explicitly fill in the struct fields by name, just to show
         // it as an option. (Alternately, we could fill it in by using
-        // C++11 aggregate-initialization syntax.)
+        // aggregate-initialization syntax.)
         StubTest::Inputs inputs;
         inputs.typed_buffer_input = constant_image;
         inputs.untyped_buffer_input = input;
@@ -83,6 +83,7 @@ public:
         Func extra_func;
         extra_func(x, y, c) = cast<uint16_t>(3);
         const int extra_scalar = 0;
+        const int8_t extra_dynamic_scalar = 0;
         int_output = configure::generate(this, {configure_input,
                                                 bias,
                                                 extra_u8,
@@ -90,7 +91,8 @@ public:
                                                 extra_u8,
                                                 extra_i16,
                                                 extra_func,
-                                                extra_scalar})
+                                                extra_scalar,
+                                                cast<int8_t>(extra_dynamic_scalar)})
                          .output;
     }
 };

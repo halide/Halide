@@ -4,6 +4,7 @@
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Scope.h"
 #include "Simplify.h"
 
@@ -244,9 +245,9 @@ class CSEEveryExprInStmt : public IRMutator {
             lets.emplace_back(let->name, let->value);
             dummy = let->body;
         }
-        const Call *c = dummy.as<Call>();
-        internal_assert(c && c->is_intrinsic(Call::bundle) && c->args.size() == 2);
-        Stmt s = Store::make(op->name, c->args[0], c->args[1],
+        const Call *bundle = Call::as_intrinsic(dummy, {Call::bundle});
+        internal_assert(bundle && bundle->args.size() == 2);
+        Stmt s = Store::make(op->name, bundle->args[0], bundle->args[1],
                              op->param, mutate(op->predicate), op->alignment);
         for (auto it = lets.rbegin(); it != lets.rend(); it++) {
             s = LetStmt::make(it->first, it->second, s);
@@ -314,7 +315,7 @@ Expr common_subexpression_elimination(const Expr &e_in, bool lift_all) {
     // Wrap the final expr in the lets.
     for (size_t i = lets.size(); i > 0; i--) {
         Expr value = lets[i - 1].second;
-        // Drop this variable as an acceptible replacement for this expr.
+        // Drop this variable as an acceptable replacement for this expr.
         replacer.erase(value);
         // Use containing lets in the value.
         value = replacer.mutate(lets[i - 1].second);

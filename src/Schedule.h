@@ -48,6 +48,39 @@ enum class TailStrategy {
      * case to handle the if statement. */
     GuardWithIf,
 
+    /** Guard the loads and stores in the loop with an if statement
+     * that prevents evaluation beyond the original extent. Always
+     * legal. The if statement is treated like a boundary condition,
+     * and factored out into a loop epilogue if possible.
+     * Pros: no redundant re-evaluation; does not constrain input or
+     * output sizes. Cons: increases code size due to separate
+     * tail-case handling. */
+    Predicate,
+
+    /** Guard the loads in the loop with an if statement that
+     * prevents evaluation beyond the original extent. Only legal
+     * for innermost splits. Not legal for RVars, as it would change
+     * the meaning of the algorithm. The if statement is treated like
+     * a boundary condition, and factored out into a loop epilogue if
+     * possible.
+     * Pros: does not constrain input sizes, output size constraints
+     * are simpler than full predication. Cons: increases code size
+     * due to separate tail-case handling, constrains the output size
+     * to be a multiple of the split factor. */
+    PredicateLoads,
+
+    /** Guard the stores in the loop with an if statement that
+     * prevents evaluation beyond the original extent. Only legal
+     * for innermost splits. Not legal for RVars, as it would change
+     * the meaning of the algorithm. The if statement is treated like
+     * a boundary condition, and factored out into a loop epilogue if
+     * possible.
+     * Pros: does not constrain output sizes, input size constraints
+     * are simpler than full predication. Cons: increases code size
+     * due to separate tail-case handling, constraints the input size
+     * to be a multiple of the split factor.. */
+    PredicateStores,
+
     /** Prevent evaluation beyond the original extent by shifting
      * the tail case inwards, re-evaluating some points near the
      * end. Only legal for pure variables in pure definitions. If
@@ -432,7 +465,8 @@ struct Bound {
 
     /** If defined, the number of iterations will be a multiple of
      * "modulus", and the first iteration will be at a value congruent
-     * to "remainder" modulo "modulus". Set by Func::align_bounds. */
+     * to "remainder" modulo "modulus". Set by Func::align_bounds and
+     * Func::align_extent. */
     Expr modulus, remainder;
 };
 
@@ -529,6 +563,13 @@ public:
     bool memoized() const;
     // @}
 
+    /** This flag is set to true if the schedule is memoized and has an attached
+     *  eviction key. */
+    // @{
+    Expr &memoize_eviction_key();
+    Expr memoize_eviction_key() const;
+    // @}
+
     /** Is the production of this Function done asynchronously */
     bool &async();
     bool async() const;
@@ -550,14 +591,14 @@ public:
 
     /** You may explicitly bound some of the dimensions of a function,
      * or constrain them to lie on multiples of a given factor. See
-     * \ref Func::bound and \ref Func::align_bounds */
+     * \ref Func::bound and \ref Func::align_bounds and \ref Func::align_extent. */
     // @{
     const std::vector<Bound> &bounds() const;
     std::vector<Bound> &bounds();
     // @}
 
     /** You may explicitly specify an estimate of some of the function
-     * dimensions. See \ref Func::estimate */
+     * dimensions. See \ref Func::set_estimate */
     // @{
     const std::vector<Bound> &estimates() const;
     std::vector<Bound> &estimates();

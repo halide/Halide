@@ -47,7 +47,6 @@ set(RUNTIME_CPP
     msan
     msan_stubs
     opencl
-    opengl
     opengl_egl_context
     opengl_glx_context
     openglcompute
@@ -86,6 +85,7 @@ set(RUNTIME_CPP
     windows_clock
     windows_cuda
     windows_d3d12compute_x86
+    windows_d3d12compute_arm
     windows_get_symbol
     windows_io
     windows_opencl
@@ -132,7 +132,6 @@ set(RUNTIME_HEADER_FILES
     HalideRuntimeHexagonHost.h
     HalideRuntimeMetal.h
     HalideRuntimeOpenCL.h
-    HalideRuntimeOpenGL.h
     HalideRuntimeOpenGLCompute.h
     HalideRuntimeQurt.h
     )
@@ -147,6 +146,7 @@ add_library(Halide_initmod OBJECT)
 # Note: this always uses Clang-from-LLVM for compilation, so none of these flags should need conditionalization.
 set(RUNTIME_CXX_FLAGS
     -O3
+    -std=c++17
     -ffreestanding
     -fno-blocks
     -fno-exceptions
@@ -169,20 +169,49 @@ foreach (i IN LISTS RUNTIME_CPP)
     foreach (j IN ITEMS 32 64)
         # -fpic needs special treatment; see below on windows 64bits
         set(fpic -fpic)
-        if (j EQUAL 32)
-            if (i MATCHES "windows_.*")
-                # win32 uses the stdcall calling convention, which is x86-specific
-                set(TARGET "i386-unknown-unknown-unknown")
-            else ()
+        # for the generic windows 64-bit target, we need -fshort-wchar
+        set(fshort-wchar "")
+        # Windows
+        if (i MATCHES "windows_.*")
+            # must omit -fpic, otherwise clang will complain with the following:
+            # clang : error : unsupported option '-fpic' for target 'x86_64-pc-windows-msvc'
+            set(fpic "")
+            # Windows x86/x64
+            if (i MATCHES "windows_.*_x86$")
+                if (j EQUAL 32)
+                    # win32 uses the stdcall calling convention, which is x86-specific
+                    set(TARGET "i386-unknown-windows-unknown")
+                else ()
+                    set(TARGET "x86_64-unknown-windows-unknown")
+                endif ()
+            # Windows on ARM
+            elseif (i MATCHES "windows_.*_arm$")
+                if (j EQUAL 32 AND TARGET_ARM)
+                    set(TARGET "arm-unknown-windows-unknown")
+                elseif (j EQUAL 64 AND TARGET_AARCH64)
+                    set(TARGET "aarch64-unknown-windows-unknown")
+                else ()
+                    continue()
+                endif ()
+            # Windows Generic
+            else()
+                if (j EQUAL 32)
+                    # TODO(marcos): generic code won't hold for ARM32... If ARM32 support becomes necessary,
+                    # all windows-related runtime modules will have to be wrapped in windows_*_arm.cpp files
+                    # for now, generic Windows 32bit code just assumes x86 (i386)
+                    set(TARGET "i386-unknown-windows-unknown")
+                else ()
+                    # unfortunately, clang doesn't automatically set this flag even though the
+                    # ABI is msvc on windows
+                    set(fshort-wchar -fshort-wchar)
+                    set(TARGET "le64-unknown-windows-unknown")
+                endif ()
+            endif()
+        # Everything else
+        else()
+            if (j EQUAL 32)
                 # (The 'nacl' is a red herring. This is just a generic 32-bit little-endian target.)
                 set(TARGET "le32-unknown-nacl-unknown")
-            endif ()
-        else ()
-            if (i MATCHES "windows_.*")
-                # must omit -fpic, otherwise clang will complain with the following:
-                # clang : error : unsupported option '-fpic' for target 'x86_64-pc-windows-msvc'
-                set(fpic "")
-                set(TARGET "x86_64-unknown-windows-unknown")
             else ()
                 # generic 64-bit code
                 set(TARGET "le64-unknown-unknown-unknown")
@@ -201,35 +230,40 @@ foreach (i IN LISTS RUNTIME_CPP)
             set(INITMOD "_initmod_${i}_${j}${SUFFIX}.cpp")
             set(SYMBOL "halide_internal_initmod_${i}_${j}${SUFFIX}")
 
-            set(clang_flags ${RUNTIME_CXX_FLAGS} ${fpic} ${RUNTIME_DEFINES${SUFFIX}} -m${j} -target ${TARGET} -emit-llvm -S)
+            set(clang_flags ${RUNTIME_CXX_FLAGS} ${fpic} ${fshort-wchar} ${RUNTIME_DEFINES${SUFFIX}} -m${j} -target ${TARGET} -emit-llvm -S)
 
-            # Dep-files are subtle and require clang to run using *just* the right
-            # relative paths to the build root, NOT the Halide build root. This is
-            # a perfect storm of bad behavior from CMake, Ninja, and Clang.
-            file(RELATIVE_PATH ll_path "${CMAKE_BINARY_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/${LL}")
-            file(TO_NATIVE_PATH "${ll_path}" ll_path)
-
+            set(ll_path "${LL}")
             if (CMAKE_GENERATOR MATCHES "Ninja")
-                list(APPEND clang_flags -MD -MF "$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}/${basename}.d>")
-                set(dep_args DEPFILE "${CMAKE_CURRENT_BINARY_DIR}/${basename}.d")
-            elseif (NOT CMAKE_GENERATOR MATCHES "Make")
-                set(dep_args "")
+                if (POLICY CMP0116)
+                    # CMake 3.20+ does the right thing here and transforms the depfiles for us
+                    list(APPEND clang_flags -MD -MF "${basename}.d")
+                    set(dep_args DEPFILE "${basename}.d")
+                else()
+                    # Dep-files are subtle and require clang to run using *just* the right
+                    # relative paths to the build root, NOT the Halide build root. This is
+                    # a perfect storm of bad behavior from CMake <3.20, Ninja, and Clang.
+                    file(RELATIVE_PATH ll_path "${CMAKE_BINARY_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/${LL}")
+                    file(TO_NATIVE_PATH "${ll_path}" ll_path)
+                    list(APPEND clang_flags -MD -MF "$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}/${basename}.d>")
+                    set(dep_args
+                        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+                        DEPFILE "${CMAKE_CURRENT_BINARY_DIR}/${basename}.d")
+                endif()
+            elseif (CMAKE_GENERATOR MATCHES "Make")
+                set(dep_args IMPLICIT_DEPENDS CXX "${SOURCE}")
             endif ()
 
-            if (CMAKE_EXPORT_COMPILE_COMMANDS)
+            if (Halide_CLANG_TIDY_BUILD)
                 # Create a 'fake' entry just so that clang-tidy will see a C++ compilation command
                 # that it can use for tidy-checking. (This branch should never be taken by 'normal'
                 # compilations.)
                 add_library(${basename} STATIC "${SOURCE}")
-                target_compile_options(${basename} PRIVATE ${RUNTIME_CXX_FLAGS} ${fpic} -m${j} -target ${TARGET})
+                target_compile_options(${basename} PRIVATE ${RUNTIME_CXX_FLAGS} ${fpic} ${fshort-wchar} -m${j} -target ${TARGET})
                 target_compile_definitions(${basename} PRIVATE ${RUNTIME_DEFINES})
             else()
                 add_custom_command(OUTPUT "${LL}"
                                    COMMAND clang ${clang_flags} -o "${ll_path}" "$<SHELL_PATH:${SOURCE}>"
                                    DEPENDS "${SOURCE}"
-                                   # Note: IMPLICIT_DEPENDS only works for Makefile generators, ${dep_args} handles Ninja.
-                                   IMPLICIT_DEPENDS CXX "${SOURCE}"
-                                   WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
                                    ${dep_args}
                                    VERBATIM)
             endif()

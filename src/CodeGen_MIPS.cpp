@@ -1,20 +1,32 @@
-#include "CodeGen_MIPS.h"
-#include "LLVM_Headers.h"
-#include "Util.h"
+#include "CodeGen_Posix.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::string;
 
-using namespace llvm;
+#if defined(WITH_MIPS)
 
-CodeGen_MIPS::CodeGen_MIPS(Target t)
+namespace {
+
+/** A code generator that emits mips code from a given Halide stmt. */
+class CodeGen_MIPS : public CodeGen_Posix {
+public:
+    /** Create a mips code generator. Processor features can be
+     * enabled using the appropriate flags in the target struct. */
+    CodeGen_MIPS(const Target &);
+
+protected:
+    using CodeGen_Posix::visit;
+
+    string mcpu() const override;
+    string mattrs() const override;
+    bool use_soft_float_abi() const override;
+    int native_vector_bits() const override;
+};
+
+CodeGen_MIPS::CodeGen_MIPS(const Target &t)
     : CodeGen_Posix(t) {
-#if !defined(WITH_MIPS)
-    user_error << "llvm build not configured with MIPS target enabled.\n";
-#endif
-    user_assert(llvm_Mips_enabled) << "llvm build not configured with MIPS target enabled.\n";
 }
 
 string CodeGen_MIPS::mcpu() const {
@@ -40,6 +52,21 @@ bool CodeGen_MIPS::use_soft_float_abi() const {
 int CodeGen_MIPS::native_vector_bits() const {
     return 128;
 }
+
+}  // namespace
+
+std::unique_ptr<CodeGen_Posix> new_CodeGen_MIPS(const Target &target) {
+    return std::make_unique<CodeGen_MIPS>(target);
+}
+
+#else  // WITH_MIPS
+
+std::unique_ptr<CodeGen_Posix> new_CodeGen_MIPS(const Target &target) {
+    user_error << "MIPS not enabled for this build of Halide.\n";
+    return nullptr;
+}
+
+#endif  // WITH_MIPS
 
 }  // namespace Internal
 }  // namespace Halide

@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Build the generator to autotune. This script will be autotuning the
 # autoscheduler's cost model training pipeline, which is large enough
 # to be interesting.
@@ -125,7 +127,7 @@ make_featurization() {
     # We don't need image I/O for this purpose,
     # so leave out libpng and libjpeg
     c++ \
-        -std=c++11 \
+        -std=c++17 \
         -I ${HALIDE_DISTRIB_PATH}/include \
         ${HALIDE_DISTRIB_PATH}/tools/RunGenMain.cpp \
         ${D}/*.registration.cpp \

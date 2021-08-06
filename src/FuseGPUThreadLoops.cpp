@@ -28,9 +28,9 @@ using std::string;
 using std::vector;
 
 namespace {
+
 string thread_names[] = {"__thread_id_x", "__thread_id_y", "__thread_id_z", "__thread_id_w"};
 string block_names[] = {"__block_id_x", "__block_id_y", "__block_id_z", "__block_id_w"};
-}  // namespace
 
 class ExtractBlockSize : public IRVisitor {
     Expr block_extent[4], block_count[4];
@@ -349,29 +349,33 @@ private:
                 // repeated dependence on the block var
                 s.size = solve_expression(s.size, op->name).result;
                 s.size = simplify(common_subexpression_elimination(s.size));
-                auto result = is_monotonic(s.size, op->name);
-                if (result == Monotonic::Unknown) {
+                switch (is_monotonic(s.size, op->name)) {
+                case Monotonic::Unknown:
+                    // TODO: if bounds_of_expr_in_scope becomes more
+                    // powerful than is_monotonic, it might be better
+                    // to call it here. That would be risky though, as
+                    // it's not exact.
                     debug(1)
                         << "Shared allocation for " << s.name
-                        << " has a size that is non-monontonic in the gpu block variable " << op->name
+                        << " has a size that is non-monotonic in the gpu block variable " << op->name
                         << ": " << s.size << "\n";
                     if (get_compiler_logger()) {
                         get_compiler_logger()->record_non_monotonic_loop_var(op->name, s.size);
                     }
                     precompute_allocation_size(s);
-                } else {
-                    auto interval_bounds = bounds_of_expr_in_scope(s.size, scope);
-                    user_assert(interval_bounds.has_upper_bound())
-                        << "Couldn't infer bounds for " << s.name << " shared memory allocation\n";
-                    // In theory we could precompute the allocation
-                    // size if there's no upper bound too, but for the
-                    // assert above to fail we'd have to encounter an
-                    // expression that is_monotonic detects as
-                    // increasing, decreasing, or constant, but is
-                    // somehow unbounded. It's probable that no such
-                    // expression exists. is_monotonic is generally
-                    // less capable than bounds_of_expr_in_scope.
-                    s.size = interval_bounds.max;
+                    break;
+                case Monotonic::Increasing:
+                    s.size = substitute(op->name, simplify(op->min + op->extent - 1), s.size);
+                    break;
+                case Monotonic::Constant:
+                    // The size expression used the variable, but we
+                    // may have successfully eliminated it above, or
+                    // is_monotonic might have detected that the
+                    // dependence is false somehow. Just treat it as
+                    // decreasing...
+                case Monotonic::Decreasing:
+                    s.size = substitute(op->name, op->min, s.size);
+                    break;
                 }
             }
             if (in_threads && op->is_parallel()) {
@@ -1442,10 +1446,6 @@ class FuseGPUThreadLoops : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const For *op) override {
-        if (op->device_api == DeviceAPI::GLSL) {
-            return op;
-        }
-
         user_assert(!(CodeGen_GPU_Dev::is_gpu_thread_var(op->name)))
             << "Loops over GPU thread variable: \"" << op->name
             << "\" is outside of any loop over a GPU block variable. "
@@ -1491,7 +1491,7 @@ class ZeroGPULoopMins : public IRMutator {
                           (op->device_api == DeviceAPI::D3D12Compute);
 
         Stmt stmt = IRMutator::visit(op);
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_zero(op->min)) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_const_zero(op->min)) {
             op = stmt.as<For>();
             internal_assert(op);
             Expr adjusted = Variable::make(Int(32), op->name) + op->min;
@@ -1543,10 +1543,14 @@ class ValidateGPULoopNesting : public IRVisitor {
     }
 };
 
+}  // namespace
+
 // Also used by InjectImageIntrinsics
 Stmt zero_gpu_loop_mins(const Stmt &s) {
     return ZeroGPULoopMins().mutate(s);
 }
+
+namespace {
 
 // Find the inner most GPU block of a statement.
 class FindInnermostGPUBlock : public IRVisitor {
@@ -1614,6 +1618,8 @@ class NormalizeIfStatements : public IRMutator {
         return IRMutator::visit(op);
     }
 };
+
+}  // namespace
 
 Stmt fuse_gpu_thread_loops(Stmt s) {
     ValidateGPULoopNesting validate;

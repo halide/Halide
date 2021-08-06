@@ -87,10 +87,10 @@ int main(int argc, char **argv) {
     f.compute_at(h, y);
 
     variant.set(0);
-    h.realize(200, 200);
+    h.realize({200, 200});
 
     variant.set(1);
-    h.realize(200, 200);
+    h.realize({200, 200});
 
     printf("Success!\n");
 }

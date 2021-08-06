@@ -6,9 +6,7 @@
  * Methods for extracting an associative operator from a Func's update definition
  * if there is any and computing the identity of the associative operator.
  */
-#include <functional>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "AssociativeOpsTable.h"

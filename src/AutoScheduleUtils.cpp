@@ -2,6 +2,7 @@
 
 #include "AutoScheduleUtils.h"
 #include "IREquality.h"
+#include "IRMutator.h"
 #include "ImageParam.h"
 #include "Inline.h"
 #include "Param.h"
@@ -83,7 +84,7 @@ Expr box_size(const Box &b) {
         Expr extent = get_extent(b[i]);
         if (extent.defined() && size.defined()) {
             size *= extent;
-        } else if (is_zero(extent)) {
+        } else if (is_const_zero(extent)) {
             return make_zero(Int(64));
         } else {
             return Expr();

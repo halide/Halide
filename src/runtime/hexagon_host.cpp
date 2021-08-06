@@ -45,23 +45,23 @@ typedef void (*host_malloc_init_fn)();
 typedef void *(*host_malloc_fn)(size_t);
 typedef void (*host_free_fn)(void *);
 
-WEAK remote_load_library_fn remote_load_library = NULL;
-WEAK remote_get_symbol_fn remote_get_symbol = NULL;
-WEAK remote_run_fn remote_run = NULL;
-WEAK remote_release_library_fn remote_release_library = NULL;
-WEAK remote_poll_log_fn remote_poll_log = NULL;
-WEAK remote_poll_profiler_state_fn remote_poll_profiler_state = NULL;
-WEAK remote_profiler_set_current_func_fn remote_profiler_set_current_func = NULL;
-WEAK remote_power_fn remote_power_hvx_on = NULL;
-WEAK remote_power_fn remote_power_hvx_off = NULL;
-WEAK remote_power_perf_fn remote_set_performance = NULL;
-WEAK remote_power_mode_fn remote_set_performance_mode = NULL;
-WEAK remote_thread_priority_fn remote_set_thread_priority = NULL;
+WEAK remote_load_library_fn remote_load_library = nullptr;
+WEAK remote_get_symbol_fn remote_get_symbol = nullptr;
+WEAK remote_run_fn remote_run = nullptr;
+WEAK remote_release_library_fn remote_release_library = nullptr;
+WEAK remote_poll_log_fn remote_poll_log = nullptr;
+WEAK remote_poll_profiler_state_fn remote_poll_profiler_state = nullptr;
+WEAK remote_profiler_set_current_func_fn remote_profiler_set_current_func = nullptr;
+WEAK remote_power_fn remote_power_hvx_on = nullptr;
+WEAK remote_power_fn remote_power_hvx_off = nullptr;
+WEAK remote_power_perf_fn remote_set_performance = nullptr;
+WEAK remote_power_mode_fn remote_set_performance_mode = nullptr;
+WEAK remote_thread_priority_fn remote_set_thread_priority = nullptr;
 
-WEAK host_malloc_init_fn host_malloc_init = NULL;
-WEAK host_malloc_init_fn host_malloc_deinit = NULL;
-WEAK host_malloc_fn host_malloc = NULL;
-WEAK host_free_fn host_free = NULL;
+WEAK host_malloc_init_fn host_malloc_init = nullptr;
+WEAK host_malloc_init_fn host_malloc_deinit = nullptr;
+WEAK host_malloc_fn host_malloc = nullptr;
+WEAK host_free_fn host_free = nullptr;
 
 // This checks if there are any log messages available on the remote
 // side. It should be called after every remote call.
@@ -92,10 +92,20 @@ WEAK void poll_log(void *user_context) {
 WEAK void get_remote_profiler_state(int *func, int *threads) {
     if (!remote_poll_profiler_state) {
         // This should only have been called if there's a remote profiler func installed.
-        error(NULL) << "Hexagon: remote_poll_profiler_func not found\n";
+        error(nullptr) << "Hexagon: remote_poll_profiler_func not found\n";
     }
 
     remote_poll_profiler_state(func, threads);
+}
+
+template<typename T>
+ALWAYS_INLINE T *uint64_to_ptr(const uint64_t &u) {
+    return reinterpret_cast<T *>((uintptr_t)u);
+}
+
+template<typename T>
+ALWAYS_INLINE uint64_t ptr_to_uint64(T *ptr) {
+    return (uint64_t) reinterpret_cast<uintptr_t>(ptr);
 }
 
 template<typename T>
@@ -188,7 +198,7 @@ struct module_state {
     halide_hexagon_handle_t module;
     module_state *next;
 };
-WEAK module_state *state_list = NULL;
+WEAK module_state *state_list = nullptr;
 WEAK halide_hexagon_handle_t shared_runtime = 0;
 
 #ifdef DEBUG_RUNTIME
@@ -240,7 +250,7 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
                         << ", code_size: " << (int)code_size << ")\n"
                         << ", code: " << runtime
                         << ", code_size: " << (int)runtime_size << ")\n";
-    halide_assert(user_context, state_ptr != NULL);
+    halide_assert(user_context, state_ptr != nullptr);
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
@@ -323,6 +333,9 @@ WEAK int halide_hexagon_initialize_kernels(void *user_context, void **state_ptr,
     return result != 0 ? -1 : 0;
 }
 
+WEAK void halide_hexagon_finalize_kernels(void *user_context, void *state_ptr) {
+}
+
 namespace {
 
 // Prepare an array of remote_buffer arguments, mapping buffers if
@@ -349,7 +362,7 @@ WEAK int map_arguments(void *user_context, int arg_count,
             uint8_t *host = b->host;
             if (device) {
                 // This argument has a device handle.
-                ion_device_handle *ion_handle = reinterpret<ion_device_handle *>(device);
+                ion_device_handle *ion_handle = uint64_to_ptr<ion_device_handle>(device);
                 debug(user_context) << i << ", " << device << "\n";
                 mapped_arg.data = reinterpret_cast<uint8_t *>(ion_handle->buffer);
                 mapped_arg.dataLen = ion_handle->size;
@@ -376,8 +389,8 @@ WEAK int halide_hexagon_run(void *user_context,
                             uint64_t arg_sizes[],
                             void *args[],
                             int arg_flags[]) {
-    halide_assert(user_context, state_ptr != NULL);
-    halide_assert(user_context, function != NULL);
+    halide_assert(user_context, state_ptr != nullptr);
+    halide_assert(user_context, function != nullptr);
     int result = init_hexagon_runtime(user_context);
     if (result != 0) {
         return result;
@@ -465,7 +478,7 @@ WEAK int halide_hexagon_run(void *user_context,
         return result;
     }
 
-    halide_profiler_get_state()->get_remote_profiler_state = NULL;
+    halide_profiler_get_state()->get_remote_profiler_state = nullptr;
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -494,7 +507,7 @@ WEAK int halide_hexagon_device_release(void *user_context) {
         }
         state = state->next;
     }
-    state_list = NULL;
+    state_list = nullptr;
 
     if (shared_runtime) {
         debug(user_context) << "    releasing shared runtime\n";
@@ -616,7 +629,7 @@ WEAK int halide_hexagon_device_free(void *user_context, halide_buffer_t *buf) {
 
     if (buf->host == ion) {
         // If we also set the host pointer, reset it.
-        buf->host = NULL;
+        buf->host = nullptr;
         debug(user_context) << "    host <- 0x0\n";
     }
 
@@ -648,7 +661,7 @@ WEAK int halide_hexagon_copy_to_device(void *user_context, halide_buffer_t *buf)
     device_copy c = make_host_to_device_copy(buf);
 
     // Get the descriptor associated with the ion buffer.
-    c.dst = reinterpret<uintptr_t>(halide_hexagon_get_device_handle(user_context, buf));
+    c.dst = ptr_to_uint64(halide_hexagon_get_device_handle(user_context, buf));
     copy_memory(c, user_context);
 
 #ifdef DEBUG_RUNTIME
@@ -672,7 +685,7 @@ WEAK int halide_hexagon_copy_to_host(void *user_context, struct halide_buffer_t 
     device_copy c = make_device_to_host_copy(buf);
 
     // Get the descriptor associated with the ion buffer.
-    c.src = reinterpret<uintptr_t>(halide_hexagon_get_device_handle(user_context, buf));
+    c.src = ptr_to_uint64(halide_hexagon_get_device_handle(user_context, buf));
     copy_memory(c, user_context);
 
 #ifdef DEBUG_RUNTIME
@@ -705,30 +718,30 @@ WEAK int halide_hexagon_wrap_device_handle(void *user_context, struct halide_buf
     handle->size = size;
     buf->device_interface = &hexagon_device_interface;
     buf->device_interface->impl->use_module();
-    buf->device = reinterpret<uint64_t>(handle);
+    buf->device = ptr_to_uint64(handle);
     return 0;
 }
 
 WEAK int halide_hexagon_detach_device_handle(void *user_context, struct halide_buffer_t *buf) {
     if (buf->device == 0) {
-        return NULL;
+        return 0;
     }
     halide_assert(user_context, buf->device_interface == &hexagon_device_interface);
-    ion_device_handle *handle = reinterpret<ion_device_handle *>(buf->device);
+    ion_device_handle *handle = uint64_to_ptr<ion_device_handle>(buf->device);
     free(handle);
 
     buf->device_interface->impl->release_module();
     buf->device = 0;
-    buf->device_interface = NULL;
+    buf->device_interface = nullptr;
     return 0;
 }
 
 WEAK void *halide_hexagon_get_device_handle(void *user_context, struct halide_buffer_t *buf) {
     if (buf->device == 0) {
-        return NULL;
+        return nullptr;
     }
     halide_assert(user_context, buf->device_interface == &hexagon_device_interface);
-    ion_device_handle *handle = reinterpret<ion_device_handle *>(buf->device);
+    ion_device_handle *handle = uint64_to_ptr<ion_device_handle>(buf->device);
     return handle->buffer;
 }
 
@@ -737,7 +750,7 @@ WEAK uint64_t halide_hexagon_get_device_size(void *user_context, struct halide_b
         return 0;
     }
     halide_assert(user_context, buf->device_interface == &hexagon_device_interface);
-    ion_device_handle *handle = reinterpret<ion_device_handle *>(buf->device);
+    ion_device_handle *handle = uint64_to_ptr<ion_device_handle>(buf->device);
     return handle->size;
 }
 
@@ -753,7 +766,7 @@ WEAK int halide_hexagon_device_and_host_malloc(void *user_context, struct halide
 WEAK int halide_hexagon_device_and_host_free(void *user_context, struct halide_buffer_t *buf) {
     debug(user_context) << "halide_hexagon_device_and_host_free called.\n";
     halide_hexagon_device_free(user_context, buf);
-    buf->host = NULL;
+    buf->host = nullptr;
     return 0;
 }
 
@@ -761,10 +774,10 @@ WEAK int halide_hexagon_buffer_copy(void *user_context, struct halide_buffer_t *
                                     const struct halide_device_interface_t *dst_device_interface,
                                     struct halide_buffer_t *dst) {
     // We only handle copies to hexagon buffers or to host
-    halide_assert(user_context, dst_device_interface == NULL ||
+    halide_assert(user_context, dst_device_interface == nullptr ||
                                     dst_device_interface == &hexagon_device_interface);
 
-    if ((src->device_dirty() || src->host == NULL) &&
+    if ((src->device_dirty() || src->host == nullptr) &&
         src->device_interface != &hexagon_device_interface) {
         halide_assert(user_context, dst_device_interface == &hexagon_device_interface);
         // This is handled at the higher level.
@@ -773,7 +786,7 @@ WEAK int halide_hexagon_buffer_copy(void *user_context, struct halide_buffer_t *
 
     bool from_host = (src->device_interface != &hexagon_device_interface) ||
                      (src->device == 0) ||
-                     (src->host_dirty() && src->host != NULL);
+                     (src->host_dirty() && src->host != nullptr);
     bool to_host = !dst_device_interface;
 
     halide_assert(user_context, from_host || src->device);
@@ -789,10 +802,10 @@ WEAK int halide_hexagon_buffer_copy(void *user_context, struct halide_buffer_t *
 
     // Get the descriptor associated with the ion buffer.
     if (!from_host) {
-        c.src = reinterpret<uintptr_t>(halide_hexagon_get_device_handle(user_context, src));
+        c.src = ptr_to_uint64(halide_hexagon_get_device_handle(user_context, src));
     }
     if (!to_host) {
-        c.dst = reinterpret<uintptr_t>(halide_hexagon_get_device_handle(user_context, dst));
+        c.dst = ptr_to_uint64(halide_hexagon_get_device_handle(user_context, dst));
     }
     copy_memory(c, user_context);
 
@@ -815,7 +828,7 @@ WEAK int hexagon_device_crop_from_offset(const struct halide_buffer_t *src, int6
 
     dst_handle->buffer = (uint8_t *)src_handle->buffer + offset;
     dst_handle->size = src_handle->size - offset;
-    dst->device = reinterpret<uint64_t>(dst_handle);
+    dst->device = ptr_to_uint64(dst_handle);
     dst->device_interface = src->device_interface;
     dst->set_device_dirty(src->device_dirty());
     return 0;
@@ -998,7 +1011,7 @@ WEAK const halide_device_interface_t *halide_hexagon_device_interface() {
 
 namespace {
 WEAK __attribute__((destructor)) void halide_hexagon_cleanup() {
-    halide_hexagon_device_release(NULL);
+    halide_hexagon_device_release(nullptr);
 }
 }  // namespace
 
@@ -1043,7 +1056,7 @@ WEAK halide_device_interface_t hexagon_device_interface = {
     halide_device_release_crop,
     halide_device_wrap_native,
     halide_device_detach_native,
-    NULL,
+    nullptr,
     &hexagon_device_interface_impl};
 
 }  // namespace Hexagon

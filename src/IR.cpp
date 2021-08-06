@@ -371,7 +371,8 @@ Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter para
     return node;
 }
 
-Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args) {
+Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate) {
+    internal_assert(predicate.defined()) << "Provide with undefined predicate\n";
     internal_assert(!values.empty()) << "Provide of no values\n";
     for (size_t i = 0; i < values.size(); i++) {
         internal_assert(values[i].defined()) << "Provide of undefined value\n";
@@ -384,6 +385,7 @@ Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, con
     node->name = name;
     node->values = values;
     node->args = args;
+    node->predicate = predicate;
     return node;
 }
 
@@ -597,10 +599,9 @@ const char *const intrinsic_op_names[] = {
     "div_round_to_zero",
     "dynamic_shuffle",
     "extract_mask_element",
-    "glsl_texture_load",
-    "glsl_texture_store",
-    "glsl_varying",
     "gpu_thread_barrier",
+    "halving_add",
+    "halving_sub",
     "hvx_gather",
     "hvx_scatter",
     "hvx_scatter_acc",
@@ -615,7 +616,8 @@ const char *const intrinsic_op_names[] = {
     "make_struct",
     "memoize_expr",
     "mod_round_to_zero",
-    "mulhi_shr",
+    "mul_shift_right",
+    "mux",
     "popcount",
     "prefetch",
     "promise_clamped",
@@ -626,6 +628,14 @@ const char *const intrinsic_op_names[] = {
     "require_mask",
     "return_second",
     "rewrite_buffer",
+    "rounding_halving_add",
+    "rounding_halving_sub",
+    "rounding_mul_shift_right",
+    "rounding_shift_left",
+    "rounding_shift_right",
+    "saturating_add",
+    "saturating_sub",
+    "scatter_gather",
     "select_mask",
     "shift_left",
     "shift_right",
@@ -635,7 +645,13 @@ const char *const intrinsic_op_names[] = {
     "strict_float",
     "stringify",
     "undef",
+    "unreachable",
     "unsafe_promise_clamped",
+    "widening_add",
+    "widening_mul",
+    "widening_shift_left",
+    "widening_shift_right",
+    "widening_sub",
 };
 
 static_assert(sizeof(intrinsic_op_names) / sizeof(intrinsic_op_names[0]) == Call::IntrinsicOpCount,
@@ -764,9 +780,9 @@ Expr Shuffle::make_concat(const std::vector<Expr> &vectors) {
     return make(vectors, indices);
 }
 
-Expr Shuffle::make_broadcast(Expr vector, int lanes) {
-    std::vector<int> indices(lanes * vector.type().lanes());
-    for (int ix = 0; ix < lanes; ix++) {
+Expr Shuffle::make_broadcast(Expr vector, int factor) {
+    std::vector<int> indices(factor * vector.type().lanes());
+    for (int ix = 0; ix < factor; ix++) {
         std::iota(indices.begin() + ix * vector.type().lanes(),
                   indices.begin() + (ix + 1) * vector.type().lanes(), 0);
     }
@@ -789,6 +805,40 @@ Expr Shuffle::make_slice(Expr vector, int begin, int stride, int size) {
 
 Expr Shuffle::make_extract_element(Expr vector, int i) {
     return make_slice(std::move(vector), i, 1, 1);
+}
+
+bool Shuffle::is_broadcast() const {
+    int lanes = indices.size();
+    int factor = broadcast_factor();
+    if (factor == 0 || factor >= lanes) {
+        return false;
+    }
+    int broadcasted_lanes = lanes / factor;
+
+    if (broadcasted_lanes < 2 || broadcasted_lanes >= lanes || lanes % broadcasted_lanes != 0) {
+        return false;
+    }
+    for (int i = 0; i < lanes; i++) {
+        if (indices[i % broadcasted_lanes] != indices[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+int Shuffle::broadcast_factor() const {
+    int lanes = indices.size();
+    int broadcasted_lanes = 0;
+    for (; broadcasted_lanes < lanes; broadcasted_lanes++) {
+        if (indices[broadcasted_lanes] != broadcasted_lanes) {
+            break;
+        }
+    }
+    if (broadcasted_lanes > 0) {
+        return lanes / broadcasted_lanes;
+    } else {
+        return 0;
+    }
 }
 
 bool Shuffle::is_interleave() const {

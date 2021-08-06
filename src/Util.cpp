@@ -86,7 +86,7 @@ std::string get_env_variable(char const *env_var_name) {
 #ifdef _MSC_VER
     // call getenv_s without a buffer to determine the correct string length:
     size_t length = 0;
-    if ((getenv_s(&length, NULL, 0, env_var_name) != 0) || (length == 0)) {
+    if ((getenv_s(&length, nullptr, 0, env_var_name) != 0) || (length == 0)) {
         return "";
     }
     // call it again to retrieve the value of the environment variable;
@@ -102,9 +102,8 @@ std::string get_env_variable(char const *env_var_name) {
     if (lvl) {
         return std::string(lvl);
     }
-#endif
-
     return "";
+#endif
 }
 
 string running_program_name() {
@@ -286,6 +285,11 @@ std::string extract_namespaces(const std::string &name, std::vector<std::string>
     std::string result = namespaces.back();
     namespaces.pop_back();
     return result;
+}
+
+std::string extract_namespaces(const std::string &name) {
+    std::vector<std::string> unused;
+    return extract_namespaces(name, unused);
 }
 
 bool file_exists(const std::string &name) {
@@ -524,7 +528,7 @@ struct TickStackEntry {
     int line;
 };
 
-vector<TickStackEntry> tick_stack;
+static vector<TickStackEntry> tick_stack;
 
 void halide_tic_impl(const char *file, int line) {
     string f = file;
@@ -570,6 +574,84 @@ std::string c_print_name(const std::string &name) {
 int get_llvm_version() {
     static_assert(LLVM_VERSION > 0, "LLVM_VERSION is not defined");
     return LLVM_VERSION;
+}
+
+#ifdef _WIN32
+
+namespace {
+
+struct GenericFiberArgs {
+    const std::function<void()> &run;
+    LPVOID main_fiber;
+#ifdef HALIDE_WITH_EXCEPTIONS
+    std::exception_ptr exception = nullptr;  // NOLINT - clang-tidy complains this isn't thrown
+#endif
+};
+
+void WINAPI generic_fiber_entry_point(LPVOID argument) {
+    auto *action = reinterpret_cast<GenericFiberArgs *>(argument);
+#ifdef HALIDE_WITH_EXCEPTIONS
+    try {
+#endif
+        action->run();
+#ifdef HALIDE_WITH_EXCEPTIONS
+    } catch (...) {
+        action->exception = std::current_exception();
+    }
+#endif
+    SwitchToFiber(action->main_fiber);
+}
+
+}  // namespace
+
+#endif
+
+void run_with_large_stack(const std::function<void()> &action) {
+#if _WIN32
+    constexpr auto required_stack = 8 * 1024 * 1024;
+
+    // Only exists for its address, which is used to compute remaining stack space.
+    ULONG_PTR approx_stack_pos;
+
+    ULONG_PTR stack_low, stack_high;
+    GetCurrentThreadStackLimits(&stack_low, &stack_high);
+    ptrdiff_t stack_remaining = (char *)&approx_stack_pos - (char *)stack_low;
+
+    if (stack_remaining < required_stack) {
+        debug(1) << "Insufficient stack space (" << stack_remaining << " bytes). Switching to fiber with " << required_stack << "-byte stack.\n";
+
+        auto was_a_fiber = IsThreadAFiber();
+
+        auto *main_fiber = was_a_fiber ? GetCurrentFiber() : ConvertThreadToFiber(nullptr);
+        internal_assert(main_fiber) << "ConvertThreadToFiber failed with code: " << GetLastError() << "\n";
+
+        GenericFiberArgs fiber_args{action, main_fiber};
+        auto *lower_fiber = CreateFiber(required_stack, generic_fiber_entry_point, &fiber_args);
+        internal_assert(lower_fiber) << "CreateFiber failed with code: " << GetLastError() << "\n";
+
+        SwitchToFiber(lower_fiber);
+        DeleteFiber(lower_fiber);
+
+        debug(1) << "Returned from fiber.\n";
+
+#ifdef HALIDE_WITH_EXCEPTIONS
+        if (fiber_args.exception) {
+            debug(1) << "Fiber threw exception. Rethrowing...\n";
+            std::rethrow_exception(fiber_args.exception);
+        }
+#endif
+
+        if (!was_a_fiber) {
+            BOOL success = ConvertFiberToThread();
+            internal_assert(success) << "ConvertFiberToThread failed with code: " << GetLastError() << "\n";
+        }
+
+        return;
+    }
+
+#endif
+
+    action();
 }
 
 }  // namespace Internal

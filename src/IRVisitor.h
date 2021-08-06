@@ -1,9 +1,7 @@
 #ifndef HALIDE_IR_VISITOR_H
 #define HALIDE_IR_VISITOR_H
 
-#include <map>
 #include <set>
-#include <string>
 
 #include "IR.h"
 
@@ -159,10 +157,10 @@ template<typename T, typename ExprRet, typename StmtRet>
 class VariadicVisitor {
 private:
     template<typename... Args>
-    ExprRet dispatch_expr(const BaseExprNode *node, Args &&... args) {
+    ExprRet dispatch_expr(const BaseExprNode *node, Args &&...args) {
         if (node == nullptr) {
             return ExprRet{};
-        };
+        }
         switch (node->node_type) {
         case IRNodeType::IntImm:
             return ((T *)this)->visit((const IntImm *)node, std::forward<Args>(args)...);
@@ -249,10 +247,10 @@ private:
     }
 
     template<typename... Args>
-    StmtRet dispatch_stmt(const BaseStmtNode *node, Args &&... args) {
+    StmtRet dispatch_stmt(const BaseStmtNode *node, Args &&...args) {
         if (node == nullptr) {
             return StmtRet{};
-        };
+        }
         switch (node->node_type) {
         case IRNodeType::IntImm:
         case IRNodeType::UIntImm:
@@ -324,22 +322,22 @@ private:
 
 public:
     template<typename... Args>
-    HALIDE_ALWAYS_INLINE StmtRet dispatch(const Stmt &s, Args &&... args) {
+    HALIDE_ALWAYS_INLINE StmtRet dispatch(const Stmt &s, Args &&...args) {
         return dispatch_stmt(s.get(), std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    HALIDE_ALWAYS_INLINE StmtRet dispatch(Stmt &&s, Args &&... args) {
+    HALIDE_ALWAYS_INLINE StmtRet dispatch(Stmt &&s, Args &&...args) {
         return dispatch_stmt(s.get(), std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    HALIDE_ALWAYS_INLINE ExprRet dispatch(const Expr &e, Args &&... args) {
+    HALIDE_ALWAYS_INLINE ExprRet dispatch(const Expr &e, Args &&...args) {
         return dispatch_expr(e.get(), std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    HALIDE_ALWAYS_INLINE ExprRet dispatch(Expr &&e, Args &&... args) {
+    HALIDE_ALWAYS_INLINE ExprRet dispatch(Expr &&e, Args &&...args) {
         return dispatch_expr(e.get(), std::forward<Args>(args)...);
     }
 };

@@ -46,7 +46,7 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
     const int lanes = op->type.lanes();
 
     // If the delta is 0, then it's just x == x
-    if (is_zero(delta)) {
+    if (is_const_zero(delta)) {
         return const_true(lanes);
     }
 
@@ -66,9 +66,12 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
 
     auto rewrite = IRMatcher::rewriter(IRMatcher::eq(delta, 0), op->type, delta.type());
 
-    if (rewrite(broadcast(x, c0) == 0, broadcast(x == 0, c0)) ||
-        (no_overflow(delta.type()) && rewrite(x * y == 0, (x == 0) || (y == 0))) ||
+    bool allowed_overflow = no_overflow(delta.type());
 
+    if (rewrite(broadcast(x, c0) == 0, broadcast(x == 0, c0)) ||
+        (allowed_overflow &&
+         (rewrite(x * y == 0, (x == 0) || (y == 0)) ||
+          rewrite(x * c0 + c1 == 0, x == fold((0 - c1) / c0), c1 % c0 == 0))) ||
         rewrite(select(x, 0, y) == 0, x || (y == 0)) ||
         rewrite(select(x, c0, y) == 0, !x && (y == 0), c0 != 0) ||
         rewrite(select(x, y, 0) == 0, !x || (y == 0)) ||
@@ -87,12 +90,16 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         rewrite(y - min(x, y) == 0, y <= x) ||
         rewrite(y - max(y, x) == 0, x <= y) ||
         rewrite(y - min(y, x) == 0, y <= x) ||
-        rewrite(max(x, c0) + c1 == 0, x == fold(-c1), c0 + c1 < 0) ||
-        rewrite(min(x, c0) + c1 == 0, x == fold(-c1), c0 + c1 > 0) ||
-        rewrite(max(x, c0) + c1 == 0, false, c0 + c1 > 0) ||
-        rewrite(min(x, c0) + c1 == 0, false, c0 + c1 < 0) ||
-        rewrite(max(x, c0) + c1 == 0, x <= c0, c0 + c1 == 0) ||
-        rewrite(min(x, c0) + c1 == 0, c0 <= x, c0 + c1 == 0) ||
+
+        // Guard against `c0 + c1` overflowing.
+        (allowed_overflow &&
+         (rewrite(max(x, c0) + c1 == 0, x == fold(-c1), c0 + c1 < 0) ||
+          rewrite(min(x, c0) + c1 == 0, x == fold(-c1), c0 + c1 > 0) ||
+          rewrite(max(x, c0) + c1 == 0, false, c0 + c1 > 0) ||
+          rewrite(min(x, c0) + c1 == 0, false, c0 + c1 < 0) ||
+          rewrite(max(x, c0) + c1 == 0, x <= c0, c0 + c1 == 0) ||
+          rewrite(min(x, c0) + c1 == 0, c0 <= x, c0 + c1 == 0))) ||
+
         // Special case the above where c1 == 0
         rewrite(max(x, c0) == 0, x == 0, c0 < 0) ||
         rewrite(min(x, c0) == 0, x == 0, c0 > 0) ||
@@ -102,30 +109,28 @@ Expr Simplify::visit(const EQ *op, ExprInfo *bounds) {
         rewrite(min(x, 0) == 0, 0 <= x) ||
 
         false) {
-
         return mutate(rewrite.result, bounds);
     }
 
     if (rewrite(c0 == 0, fold(c0 == 0)) ||
         rewrite((x - y) + c0 == 0, x == y + fold(-c0)) ||
         rewrite(x + c0 == 0, x == fold(-c0)) ||
-        rewrite(c0 - x == 0, x == c0)) {
-        return rewrite.result;
-    }
-
-    if (const Sub *s = delta.as<Sub>()) {
-        Expr a = s->a, b = s->b;
-        if (should_commute(a, b)) {
-            std::swap(a, b);
-        }
-        if (a.same_as(op->a) && b.same_as(op->b)) {
+        rewrite(c0 - x == 0, x == c0) ||
+        rewrite(x - y == 0, x == y) ||
+        rewrite(x == 0, x == 0)) {
+        const EQ *eq = rewrite.result.as<EQ>();
+        if (eq &&
+            eq->a.same_as(op->a) &&
+            eq->b.same_as(op->b)) {
             return op;
         } else {
-            return EQ::make(a, b);
+            return rewrite.result;
         }
     }
 
-    return delta == make_zero(op->a.type());
+    // Unreachable. That last rewrite catches everything and
+    // constructs delta == 0 for us.
+    return Expr();
 }
 
 // ne redirects to not eq

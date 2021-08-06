@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
         f(x, y) = strict_float(select(is_nan(e), 0.0f, 1.0f));
         f.vectorize(x, 8);
 
-        Buffer<float> im = f.realize(w, h);
+        Buffer<float> im = f.realize({w, h});
         if (check_nans(im) != 0) {
             return -1;
         }
@@ -104,7 +104,7 @@ int main(int argc, char **argv) {
         f.vectorize(x, 8);
 
         in.set(non_halide_produced);
-        Buffer<float> im = f.realize(w, h);
+        Buffer<float> im = f.realize({w, h});
         if (check_nans(im) != 0) {
             return -1;
         }
@@ -120,7 +120,7 @@ int main(int argc, char **argv) {
         f(x, y) = strict_float(select(is_inf(e), 1.0f, 0.0f));
         f.vectorize(x, 8);
 
-        Buffer<float> im = f.realize(w, h);
+        Buffer<float> im = f.realize({w, h});
         if (check_infs(im) != 0) {
             return -1;
         }
@@ -143,7 +143,7 @@ int main(int argc, char **argv) {
         f.vectorize(x, 8);
 
         in.set(non_halide_produced);
-        Buffer<float> im = f.realize(w, h);
+        Buffer<float> im = f.realize({w, h});
         if (check_infs(im) != 0) {
             return -1;
         }
@@ -159,7 +159,7 @@ int main(int argc, char **argv) {
         f(x, y) = strict_float(select(is_finite(e), 1.0f, 0.0f));
         f.vectorize(x, 8);
 
-        Buffer<float> im = f.realize(w, h);
+        Buffer<float> im = f.realize({w, h});
         if (check_finites(im) != 0) {
             return -1;
         }
@@ -182,7 +182,7 @@ int main(int argc, char **argv) {
         f.vectorize(x, 8);
 
         in.set(non_halide_produced);
-        Buffer<float> im = f.realize(w, h);
+        Buffer<float> im = f.realize({w, h});
         if (check_finites(im) != 0) {
             return -1;
         }
@@ -200,7 +200,7 @@ int main(int argc, char **argv) {
             f(x, y) = strict_float(select(is_nan(e), 0.0f, 1.0f));
             f.gpu_tile(x, y, tx, ty, 8, 8);
 
-            Buffer<float> im = f.realize(w, h);
+            Buffer<float> im = f.realize({w, h});
             if (check_nans(im) != 0) {
                 return -1;
             }
@@ -224,7 +224,7 @@ int main(int argc, char **argv) {
             f.gpu_tile(x, y, tx, ty, 8, 8);
 
             in.set(non_halide_produced);
-            Buffer<float> im = f.realize(w, h);
+            Buffer<float> im = f.realize({w, h});
             if (check_nans(im) != 0) {
                 return -1;
             }
@@ -241,7 +241,7 @@ int main(int argc, char **argv) {
             f(x, y) = strict_float(select(is_inf(e), 1.0f, 0.0f));
             f.gpu_tile(x, y, tx, ty, 8, 8);
 
-            Buffer<float> im = f.realize(w, h);
+            Buffer<float> im = f.realize({w, h});
             if (check_infs(im) != 0) {
                 return -1;
             }
@@ -265,7 +265,7 @@ int main(int argc, char **argv) {
             f.gpu_tile(x, y, tx, ty, 8, 8);
 
             in.set(non_halide_produced);
-            Buffer<float> im = f.realize(w, h);
+            Buffer<float> im = f.realize({w, h});
             if (check_infs(im) != 0) {
                 return -1;
             }
@@ -282,7 +282,7 @@ int main(int argc, char **argv) {
             f(x, y) = strict_float(select(is_finite(e), 1.0f, 0.0f));
             f.gpu_tile(x, y, tx, ty, 8, 8);
 
-            Buffer<float> im = f.realize(w, h);
+            Buffer<float> im = f.realize({w, h});
             if (check_finites(im) != 0) {
                 return -1;
             }
@@ -306,7 +306,7 @@ int main(int argc, char **argv) {
             f.gpu_tile(x, y, tx, ty, 8, 8);
 
             in.set(non_halide_produced);
-            Buffer<float> im = f.realize(w, h);
+            Buffer<float> im = f.realize({w, h});
             if (check_finites(im) != 0) {
                 return -1;
             }

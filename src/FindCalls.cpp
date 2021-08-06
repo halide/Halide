@@ -9,7 +9,6 @@ namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::pair;
 using std::string;
 
 namespace {
@@ -74,7 +73,7 @@ void populate_environment_helper(Function f, map<string, Function> &env,
     } else {
         env[f.name()] = f;
 
-        for (pair<string, Function> i : calls.calls) {
+        for (const auto &i : calls.calls) {
             populate_environment_helper(i.second, env, recursive, include_wrappers);
         }
     }

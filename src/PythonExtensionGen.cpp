@@ -13,7 +13,9 @@ using std::ostream;
 using std::ostringstream;
 using std::string;
 
-static string sanitize_name(const string &name) {
+namespace {
+
+string sanitize_name(const string &name) {
     ostringstream oss;
     for (size_t i = 0; i < name.size(); i++) {
         if (name[i] == '.' || name[i] == '_') {
@@ -27,7 +29,7 @@ static string sanitize_name(const string &name) {
     return oss.str();
 }
 
-static string remove_namespaces(const string &name) {
+string remove_namespaces(const string &name) {
     size_t i = name.find_last_of(':');
     if (i == string::npos) {
         return name;
@@ -36,7 +38,7 @@ static string remove_namespaces(const string &name) {
     }
 }
 
-static bool can_convert(const LoweredArgument *arg) {
+bool can_convert(const LoweredArgument *arg) {
     if (arg->type.is_handle()) {
         if (arg->name == "__user_context") {
             /* __user_context is a void* pointer to a user supplied memory region.
@@ -95,6 +97,8 @@ std::pair<string, string> print_type(const LoweredArgument *arg) {
     }
 }
 
+}  // namespace
+
 void PythonExtensionGen::convert_buffer(const string &name, const LoweredArgument *arg) {
     internal_assert(arg->is_buffer());
     internal_assert(arg->dimensions);
@@ -111,7 +115,7 @@ void PythonExtensionGen::convert_buffer(const string &name, const LoweredArgumen
     dest << /*name*/ "\"" << name << "\"";
     dest << ") < 0) {\n";
     release_buffers("        ");
-    dest << "        return NULL;\n";
+    dest << "        return nullptr;\n";
     dest << "    }\n";
 }
 
@@ -266,10 +270,10 @@ int _convert_py_buffer_to_halide(
         if (f.linkage == LinkageType::ExternalPlusMetadata) {
             const string basename = remove_namespaces(f.name);
             dest << "    {\"" << basename << "\", (PyCFunction)_f_" << basename
-                 << ", METH_VARARGS|METH_KEYWORDS, NULL},\n";
+                 << ", METH_VARARGS|METH_KEYWORDS, nullptr},\n";
         }
     }
-    dest << "    {0, 0, 0, NULL},  // sentinel\n";
+    dest << "    {0, 0, 0, nullptr},  // sentinel\n";
     dest << "};\n";
 
     dest << R"INLINE_CODE(
@@ -277,7 +281,7 @@ static_assert(PY_MAJOR_VERSION >= 3, "Python bindings for Halide require Python 
 static struct PyModuleDef _moduledef = {
     PyModuleDef_HEAD_INIT,
     MODULE_NAME,
-    NULL,
+    nullptr,
     -1,
     _methods,
 };
@@ -310,7 +314,7 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
             // TODO: Add support for handles and vectors.
             dest << "    PyErr_Format(PyExc_NotImplementedError, "
                  << "\"Can't convert argument " << args[i].name << " from Python\");\n";
-            dest << "    return NULL;\n";
+            dest << "    return nullptr;\n";
             dest << "}";
             return;
         }
@@ -319,7 +323,7 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     for (size_t i = 0; i < args.size(); i++) {
         dest << "\"" << arg_names[i] << "\", ";
     }
-    dest << "NULL};\n";
+    dest << "nullptr};\n";
     for (size_t i = 0; i < args.size(); i++) {
         dest << "    " << print_type(&args[i]).second << " py_" << arg_names[i] << ";\n";
     }
@@ -333,7 +337,7 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
         dest << "&py_" << arg_names[i];
     }
     dest << ")) {\n";
-    dest << "        return NULL;\n";
+    dest << "        return nullptr;\n";
     dest << "    }\n";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
@@ -362,7 +366,7 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
          * in python_bindings/src, but since we're self-contained,
          * we don't have access to that API. */
         PyErr_Format(PyExc_ValueError, "Halide error %d", result);
-        return NULL;
+        return nullptr;
     }
     Py_INCREF(Py_True);
     return Py_True;

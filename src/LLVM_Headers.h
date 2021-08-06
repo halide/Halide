@@ -1,10 +1,10 @@
 #ifndef HALIDE_LLVM_HEADERS_H
 #define HALIDE_LLVM_HEADERS_H
 
-#if LLVM_VERSION >= 100
+#if LLVM_VERSION >= 110
 // We're good to go
 #else
-#error "Compiling Halide requires LLVM 10.0 or newer"
+#error "Compiling Halide requires LLVM 11.0 or newer"
 #endif
 
 // This seems to be required by some LLVM header, which is likely an LLVM bug.
@@ -34,6 +34,9 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <llvm/ADT/StringMap.h>
+#if LLVM_VERSION >= 12
+#include <llvm/Analysis/AliasAnalysis.h>
+#endif
 #include <llvm/Analysis/TargetLibraryInfo.h>
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
@@ -46,6 +49,9 @@
 #include <llvm/Object/ObjectFile.h>
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Support/CodeGen.h>
+#if LLVM_VERSION >= 12
+#include <llvm/Support/CommandLine.h>
+#endif
 #include <llvm/Support/DataExtractor.h>
 #include <llvm/Support/DynamicLibrary.h>
 #include <llvm/Support/FileSystem.h>
@@ -101,18 +107,18 @@ auto iterator_to_pointer(T iter) -> decltype(&*std::declval<T>()) {
 }
 
 inline std::string get_llvm_function_name(const llvm::Function *f) {
-#if LLVM_VERSION >= 110
     return f->getName().str();
-#else
-    return f->getName();
-#endif
 }
 
 inline std::string get_llvm_function_name(const llvm::Function &f) {
-#if LLVM_VERSION >= 110
     return f.getName().str();
+}
+
+inline llvm::StructType *get_llvm_struct_type_by_name(llvm::Module *module, const char *name) {
+#if LLVM_VERSION >= 120
+    return llvm::StructType::getTypeByName(module->getContext(), name);
 #else
-    return f.getName();
+    return module->getTypeByName(name);
 #endif
 }
 

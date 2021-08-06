@@ -93,9 +93,6 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
     case DeviceAPI::OpenGLCompute:
         out << "<OpenGLCompute>";
         break;
-    case DeviceAPI::GLSL:
-        out << "<GLSL>";
-        break;
     case DeviceAPI::Metal:
         out << "<Metal>";
         break;
@@ -149,6 +146,15 @@ std::ostream &operator<<(std::ostream &out, const TailStrategy &t) {
         break;
     case TailStrategy::GuardWithIf:
         out << "GuardWithIf";
+        break;
+    case TailStrategy::Predicate:
+        out << "Predicate";
+        break;
+    case TailStrategy::PredicateLoads:
+        out << "PredicateLoads";
+        break;
+    case TailStrategy::PredicateStores:
+        out << "PredicateStores";
         break;
     case TailStrategy::ShiftInwards:
         out << "ShiftInwards";
@@ -281,6 +287,9 @@ ostream &operator<<(ostream &out, const VectorReduce::Operator &op) {
     switch (op) {
     case VectorReduce::Add:
         out << "Add";
+        break;
+    case VectorReduce::SaturatingAdd:
+        out << "SaturatingAdd";
         break;
     case VectorReduce::Mul:
         out << "Mul";
@@ -633,7 +642,7 @@ void IRPrinter::visit(const Select *op) {
 }
 
 void IRPrinter::visit(const Load *op) {
-    const bool has_pred = !is_one(op->predicate);
+    const bool has_pred = !is_const_one(op->predicate);
     const bool show_alignment = op->type.is_vector() && op->alignment.modulus > 1;
     if (has_pred) {
         open();
@@ -767,7 +776,7 @@ void IRPrinter::print_lets(const Let *let) {
 
 void IRPrinter::visit(const Store *op) {
     stream << get_indent();
-    const bool has_pred = !is_one(op->predicate);
+    const bool has_pred = !is_const_one(op->predicate);
     const bool show_alignment = op->value.type().is_vector() && (op->alignment.modulus > 1);
     if (has_pred) {
         stream << "predicate (";
@@ -802,7 +811,16 @@ void IRPrinter::visit(const Store *op) {
 }
 
 void IRPrinter::visit(const Provide *op) {
-    stream << get_indent() << op->name << "(";
+    stream << get_indent();
+    const bool has_pred = !is_const_one(op->predicate);
+    if (has_pred) {
+        stream << "predicate (";
+        print_no_parens(op->predicate);
+        stream << ")\n";
+        indent++;
+        stream << get_indent();
+    }
+    stream << op->name << "(";
     print_list(op->args);
     stream << ") = ";
     if (op->values.size() > 1) {
@@ -814,6 +832,9 @@ void IRPrinter::visit(const Provide *op) {
     }
 
     stream << "\n";
+    if (has_pred) {
+        indent--;
+    }
 }
 
 void IRPrinter::visit(const Allocate *op) {
@@ -827,7 +848,7 @@ void IRPrinter::visit(const Allocate *op) {
     if (op->memory_type != MemoryType::Auto) {
         stream << " in " << op->memory_type;
     }
-    if (!is_one(op->condition)) {
+    if (!is_const_one(op->condition)) {
         stream << " if ";
         print(op->condition);
     }
@@ -867,7 +888,7 @@ void IRPrinter::visit(const Realize *op) {
     if (op->memory_type != MemoryType::Auto) {
         stream << " in " << op->memory_type;
     }
-    if (!is_one(op->condition)) {
+    if (!is_const_one(op->condition)) {
         stream << " if ";
         print(op->condition);
     }
@@ -882,7 +903,7 @@ void IRPrinter::visit(const Realize *op) {
 
 void IRPrinter::visit(const Prefetch *op) {
     stream << get_indent();
-    const bool has_cond = !is_one(op->condition);
+    const bool has_cond = !is_const_one(op->condition);
     if (has_cond) {
         stream << "if (";
         print_no_parens(op->condition);
@@ -937,7 +958,7 @@ void IRPrinter::visit(const Fork *op) {
 
 void IRPrinter::visit(const IfThenElse *op) {
     stream << get_indent();
-    while (1) {
+    while (true) {
         stream << "if (";
         print_no_parens(op->condition);
         stream << ") {\n";
@@ -990,6 +1011,10 @@ void IRPrinter::visit(const Shuffle *op) {
                << ", " << op->slice_stride()
                << ", " << op->indices.size()
                << ")";
+    } else if (op->is_broadcast()) {
+        stream << "broadcast(";
+        print_list(op->vectors);
+        stream << ", " << op->broadcast_factor() << ")";
     } else {
         stream << "shuffle(";
         print_list(op->vectors);
@@ -1011,7 +1036,7 @@ void IRPrinter::visit(const VectorReduce *op) {
            << op->op
            << ", "
            << op->value
-           << ")\n";
+           << ")";
 }
 
 void IRPrinter::visit(const Atomic *op) {

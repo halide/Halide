@@ -21,7 +21,7 @@ Buffer<double> test(bool with_vectorize) {
         output.vectorize(y, 4);
     }
 
-    Buffer<double> img = lambda(x, y, Expr(1.0)).realize(4, 4);
+    Buffer<double> img = lambda(x, y, Expr(1.0)).realize({4, 4});
     input.set(img);
 
     Buffer<double> result(4, 4);

@@ -67,12 +67,12 @@ typedef void (*PFNGLDELETETEXTURESPROC)(GLsizei n, const GLuint *textures);
 typedef void (*PFNGLDRAWBUFFERSPROC)(GLsizei n, const GLenum *bufs);
 typedef void (*PFNGLDRAWELEMENTSPROC)(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices);
 typedef void (*PFNGLGENTEXTURESPROC)(GLsizei n, GLuint *textures);
-typedef GLenum (*PFNGLGETERRORPROC)(void);
+typedef GLenum (*PFNGLGETERRORPROC)();
 typedef const GLubyte *(*PFNGLGETSTRINGPROC)(GLenum name);
 typedef void (*PFNGLGETTEXIMAGEPROC)(GLenum target, GLint level,
                                      GLenum format, GLenum type,
                                      GLvoid *pixels);
-typedef void (*PFNGLLOADIDENTITYPROC)(void);
+typedef void (*PFNGLLOADIDENTITYPROC)();
 typedef void (*PFNGLMATRIXMODEPROC)(GLenum mode);
 typedef void (*PFNGLORTHOPROC)(GLdouble left, GLdouble right,
                                GLdouble bottom, GLdouble top,
@@ -127,7 +127,7 @@ typedef void (*PFNGLBUFFERDATAPROC)(GLenum target, GLsizeiptr size, const GLvoid
 
 typedef void (*PFNGLATTACHSHADERPROC)(GLuint program, GLuint shader);
 typedef void (*PFNGLCOMPILESHADERPROC)(GLuint shader);
-typedef GLuint (*PFNGLCREATEPROGRAMPROC)(void);
+typedef GLuint (*PFNGLCREATEPROGRAMPROC)();
 typedef GLuint (*PFNGLCREATESHADERPROC)(GLenum type);
 typedef void (*PFNGLDELETEPROGRAMPROC)(GLuint program);
 typedef void (*PFNGLDELETESHADERPROC)(GLuint shader);
@@ -150,7 +150,7 @@ typedef void (*PFNGLUSEPROGRAMPROC)(GLuint program);
 typedef void (*PFNGLVERTEXATTRIBPOINTERPROC)(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid *pointer);
 typedef void (*PFNGLGETINTEGERV)(GLenum pname, GLint *data);
 typedef void (*PFNGLGETBOOLEANV)(GLenum pname, GLboolean *data);
-typedef void (*PFNGLFINISHPROC)(void);
+typedef void (*PFNGLFINISHPROC)();
 typedef void (*PFNGLGETVERTEXATTRIBIVPROC)(GLuint index, GLenum pname, GLint *params);
 
 // ---------- OpenGL 3.0 ----------

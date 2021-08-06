@@ -337,10 +337,23 @@ class InjectBufferCopiesForSingleBuffer : public IRMutator {
     // We want to break things down into a serial sequence of leaf
     // stmts, and possibly do copies and update state around each
     // leaf.
-
     Stmt visit(const For *op) override {
-        // All copies happen at the same loop level as the allocation.
-        return do_copies(op);
+        FindBufferUsage finder(buffer, DeviceAPI::Host);
+        op->accept(&finder);
+        if (finder.devices_touched.size() > 1) {
+            // The state of the buffer going into the loop is the
+            // union of the state before the loop starts and the state
+            // after one iteration. Just forget everything we know.
+            state = State{};
+            Stmt s = IRMutator::visit(op);
+            // The state after analyzing the loop body might not be the
+            // true state if the loop ran for zero iterations. So
+            // forget everything again.
+            state = State{};
+            return s;
+        } else {
+            return do_copies(op);
+        }
     }
 
     Stmt visit(const Fork *op) override {
@@ -549,7 +562,7 @@ class InjectBufferCopies : public IRMutator {
                 // Then the device_and_host malloc
                 Stmt device_malloc = call_extern_and_assert("halide_device_and_host_malloc",
                                                             {buf, device_interface});
-                if (!is_one(condition)) {
+                if (!is_const_one(condition)) {
                     device_malloc = IfThenElse::make(condition, device_malloc);
                 }
                 body = Block::make(device_malloc, body);

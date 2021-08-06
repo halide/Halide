@@ -4,7 +4,7 @@ project(interpolate)
 enable_testing()
 
 # Set up language settings
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
@@ -35,7 +35,7 @@ if (EXISTS ${IMAGE})
     configure_file(${IMAGE} rgba.png COPYONLY)
     add_test(NAME interpolate_filter COMMAND interpolate_filter rgba.png out.png)
     set_tests_properties(interpolate_filter PROPERTIES
-                         LABELS internal_app_tests
+                         LABELS interpolate
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
 endif ()

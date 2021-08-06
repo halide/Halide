@@ -9,7 +9,7 @@ namespace Internal {
 WEAK halide_can_use_target_features_t custom_can_use_target_features = halide_default_can_use_target_features;
 
 WEAK uint64_t halide_cpu_features_storage[sizeof(CpuFeatures) / sizeof(uint64_t)] = {0};
-WEAK bool halide_cpu_features_initialized = 0;
+WEAK bool halide_cpu_features_initialized = false;
 WEAK halide_mutex halide_cpu_features_initialized_lock;
 
 }  // namespace Internal
@@ -28,12 +28,6 @@ WEAK int halide_can_use_target_features(int count, const uint64_t *features) {
     return (*custom_can_use_target_features)(count, features);
 }
 
-// C++11 (and thus, static_assert) aren't available here. Use this old standby:
-#define fake_static_assert(VALUE)                \
-    do {                                         \
-        enum { __some_value = 1 / (!!(VALUE)) }; \
-    } while (0)
-
 WEAK int halide_default_can_use_target_features(int count, const uint64_t *features) {
     // cpu features should never change, so call once and cache.
     // Note that since CpuFeatures has a (trivial) ctor, compilers may insert guards
@@ -44,7 +38,7 @@ WEAK int halide_default_can_use_target_features(int count, const uint64_t *featu
     {
         ScopedMutexLock lock(&halide_cpu_features_initialized_lock);
 
-        fake_static_assert(sizeof(halide_cpu_features_storage) == sizeof(CpuFeatures));
+        static_assert(sizeof(halide_cpu_features_storage) == sizeof(CpuFeatures), "CpuFeatures Mismatch");
         if (!halide_cpu_features_initialized) {
             CpuFeatures tmp = halide_get_cpu_features();
             memcpy(&halide_cpu_features_storage, &tmp, sizeof(tmp));
@@ -55,9 +49,9 @@ WEAK int halide_default_can_use_target_features(int count, const uint64_t *featu
     if (count != CpuFeatures::kWordCount) {
         // This should not happen unless our runtime is out of sync with the rest of libHalide.
 #ifdef DEBUG_RUNTIME
-        debug(NULL) << "count " << count << " CpuFeatures::kWordCount " << CpuFeatures::kWordCount << "\n";
+        debug(nullptr) << "count " << count << " CpuFeatures::kWordCount " << CpuFeatures::kWordCount << "\n";
 #endif
-        halide_error(NULL, "Internal error: wrong structure size passed to halide_can_use_target_features()\n");
+        halide_error(nullptr, "Internal error: wrong structure size passed to halide_can_use_target_features()\n");
     }
     const CpuFeatures *cpu_features = reinterpret_cast<const CpuFeatures *>(&halide_cpu_features_storage[0]);
     for (int i = 0; i < CpuFeatures::kWordCount; ++i) {

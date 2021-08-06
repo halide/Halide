@@ -15,7 +15,7 @@ class CodeGen_Posix : public CodeGen_LLVM {
 public:
     /** Create an posix code generator. Processor features can be
      * enabled using the appropriate arguments */
-    CodeGen_Posix(Target t);
+    CodeGen_Posix(const Target &t);
 
 protected:
     using CodeGen_LLVM::visit;

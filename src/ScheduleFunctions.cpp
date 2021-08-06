@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "ApplySplit.h"
+#include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
 #include "ExprUsesVar.h"
 #include "Func.h"
@@ -31,6 +32,7 @@ using std::string;
 using std::vector;
 
 namespace {
+
 // A structure representing a containing LetStmt, IfThenElse, or For
 // loop. Used in build_provide_loop_nest below. Both If and IfInner represent
 // IfThenElse stmts, however, IfInner should not be reordered to outside of
@@ -57,8 +59,6 @@ bool var_name_match(const string &v1, const string &v2) {
             Internal::ends_with(v2, "." + v1));
 }
 
-}  // anonymous namespace
-
 class ContainsImpureCall : public IRVisitor {
     using IRVisitor::visit;
 
@@ -78,6 +78,98 @@ bool contains_impure_call(const Expr &expr) {
     ContainsImpureCall is_not_pure;
     expr.accept(&is_not_pure);
     return is_not_pure.result;
+}
+
+// A mutator that performs a substitute operation only on either the values or the
+// arguments of Provide nodes.
+class SubstituteIn : public IRGraphMutator {
+    const string &name;
+    const Expr &value;
+    bool calls;
+    bool provides;
+
+    using IRMutator::visit;
+
+    Stmt visit(const Provide *p) override {
+        if (!provides) {
+            return IRMutator::visit(p);
+        }
+        vector<Expr> args;
+        bool changed = false;
+        for (const Expr &i : p->args) {
+            args.push_back(graph_substitute(name, value, i));
+            changed = changed || !args.back().same_as(i);
+        }
+        if (changed) {
+            return Provide::make(p->name, p->values, args, p->predicate);
+        } else {
+            return p;
+        }
+    }
+
+    Expr visit(const Call *op) override {
+        Expr result = IRMutator::visit(op);
+        if (calls && op->call_type == Call::Halide) {
+            result = graph_substitute(name, value, op);
+        }
+        return result;
+    }
+
+public:
+    SubstituteIn(const string &name, const Expr &value, bool calls, bool provides)
+        : name(name), value(value), calls(calls), provides(provides) {
+    }
+};
+
+Stmt substitute_in(const string &name, const Expr &value, bool calls, bool provides, const Stmt &s) {
+    return SubstituteIn(name, value, calls, provides).mutate(s);
+}
+
+class AddPredicates : public IRGraphMutator {
+    const Expr &cond;
+    bool calls;
+    bool provides;
+
+    using IRMutator::visit;
+
+    Stmt visit(const Provide *p) override {
+        vector<Expr> values;
+        vector<Expr> args;
+        bool changed = false;
+        for (const Expr &i : p->args) {
+            args.push_back(mutate(i));
+            changed = changed || !args.back().same_as(i);
+        }
+        for (const Expr &i : p->values) {
+            values.push_back(mutate(i));
+            changed = changed || !args.back().same_as(i);
+        }
+        Expr predicate = mutate(p->predicate);
+        if (provides) {
+            return Provide::make(p->name, values, args, predicate && cond);
+        } else if (changed || !predicate.same_as(p->predicate)) {
+            return Provide::make(p->name, values, args, predicate);
+        } else {
+            return p;
+        }
+    }
+
+    Expr visit(const Call *op) override {
+        Expr result = IRMutator::visit(op);
+        if (calls && op->call_type == Call::Halide) {
+            result = Call::make(op->type, Call::if_then_else, {cond, result}, Call::PureIntrinsic);
+        }
+        return result;
+    }
+
+public:
+    AddPredicates(const Expr &cond, bool calls, bool provides)
+        : cond(cond), calls(calls), provides(provides) {
+    }
+};
+
+Stmt add_predicates(const Expr &cond, bool calls, bool provides, const Stmt &s) {
+    return AddPredicates(cond, calls, provides).mutate(s);
 }
 
 // Build a loop nest about a provide node using a schedule
@@ -119,13 +211,36 @@ Stmt build_loop_nest(
 
     vector<Split> splits = stage_s.splits();
 
+    // Find all the predicated inner variables. We can't split these.
+    set<string> predicated_vars;
+    for (const Split &split : splits) {
+        if (split.tail == TailStrategy::PredicateLoads || split.tail == TailStrategy::PredicateStores) {
+            predicated_vars.insert(split.inner);
+        }
+    }
+
     // Define the function args in terms of the loop variables using the splits
     for (const Split &split : splits) {
+        user_assert(predicated_vars.count(split.old_var) == 0)
+            << "Cannot split a loop variable resulting from a split using PredicateLoads or PredicateStores.";
+
         vector<ApplySplitResult> splits_result = apply_split(split, is_update, prefix, dim_extent_alignment);
 
+        // To ensure we substitute all indices used in call or provide,
+        // we need to substitute all lets in, so we correctly guard x in
+        // an example like let a = 2*x in a + f[a].
+        stmt = substitute_in_all_lets(stmt);
         for (const auto &res : splits_result) {
             if (res.is_substitution()) {
-                stmt = substitute(res.name, res.value, stmt);
+                stmt = graph_substitute(res.name, res.value, stmt);
+            } else if (res.is_substitution_in_calls()) {
+                stmt = substitute_in(res.name, res.value, true, false, stmt);
+            } else if (res.is_substitution_in_provides()) {
+                stmt = substitute_in(res.name, res.value, false, true, stmt);
+            } else if (res.is_predicate_calls()) {
+                stmt = add_predicates(res.value, true, false, stmt);
+            } else if (res.is_predicate_provides()) {
+                stmt = add_predicates(res.value, false, true, stmt);
             } else if (res.is_let()) {
                 stmt = LetStmt::make(res.name, res.value, stmt);
             } else {
@@ -133,6 +248,7 @@ Stmt build_loop_nest(
                 stmt = IfThenElse::make(res.value, stmt, Stmt());
             }
         }
+        stmt = common_subexpression_elimination(stmt);
     }
 
     // Order the Ifs, Fors, and Lets for bounds inference
@@ -192,9 +308,7 @@ Stmt build_loop_nest(
     for (Expr pred : predicates) {
         pred = qualify(prefix, pred);
         // Add a likely qualifier if there isn't already one
-        const Call *c = pred.as<Call>();
-        if (!(c && (c->is_intrinsic(Call::likely) ||
-                    c->is_intrinsic(Call::likely_if_innermost)))) {
+        if (Call::as_intrinsic(pred, {Call::likely, Call::likely_if_innermost})) {
             pred = likely(pred);
         }
         pred_container.emplace_back(Container::If, 0, "", pred);
@@ -209,6 +323,9 @@ Stmt build_loop_nest(
         // Only push up LetStmts.
         internal_assert(nest[i].value.defined());
         internal_assert(nest[i].type == Container::Let);
+        if (!is_pure(nest[i].value)) {
+            continue;
+        }
 
         for (int j = i - 1; j >= 0; j--) {
             // Try to push it up by one.
@@ -369,7 +486,7 @@ Stmt build_provide_loop_nest(const map<string, Function> &env,
     }
 
     // Make the (multi-dimensional multi-valued) store node.
-    Stmt body = Provide::make(func.name(), values, site);
+    Stmt body = Provide::make(func.name(), values, site, const_true());
     if (def.schedule().atomic()) {  // Add atomic node.
         bool any_unordered_parallel = false;
         for (const auto &d : def.schedule().dims()) {
@@ -932,7 +1049,7 @@ private:
 
             ForType for_type = op->for_type;
             DeviceAPI device_api = op->device_api;
-            if (is_one(extent_val)) {
+            if (is_const_one(extent_val)) {
                 // This is the child loop of a fused group. The real loop of the
                 // fused group is the loop of the parent function of the fused
                 // group. This child loop is just a scheduling point, and should
@@ -1056,11 +1173,10 @@ protected:
 
         // Dig through any let/if statements
         vector<pair<string, Expr>> containers;
-        while (1) {
+        while (true) {
             if (const LetStmt *l = body.as<LetStmt>()) {
-                const Call *call = l->value.as<Call>();
-                if (!(call && call->is_intrinsic(Call::promise_clamped)) &&
-                    !is_pure(l->value)) {
+                const Call *promise_clamped = Call::as_intrinsic(l->value, {Call::promise_clamped});
+                if (!promise_clamped && !is_pure(l->value)) {
                     // The consumer of the Func we're injecting may be an
                     // extern stage, which shows up in the IR as a let
                     // stmt with a side-effecty RHS. We need to take care
@@ -2262,7 +2378,7 @@ class RemoveLoopsOverOutermost : public IRMutator {
 
     Stmt visit(const For *op) override {
         if (ends_with(op->name, ".__outermost") &&
-            is_one(simplify(op->extent)) &&
+            is_const_one(simplify(op->extent)) &&
             op->device_api == DeviceAPI::None) {
             return mutate(substitute(op->name, op->min, op->body));
         } else {
@@ -2287,6 +2403,8 @@ bool group_should_be_inlined(const vector<Function> &funcs) {
             funcs[0].can_be_inlined() &&
             funcs[0].schedule().compute_level().is_inlined());
 }
+
+}  // namespace
 
 std::ostream &operator<<(std::ostream &out, const std::vector<Function> &v) {
     out << "{ ";

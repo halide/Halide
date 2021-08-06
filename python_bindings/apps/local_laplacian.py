@@ -197,7 +197,7 @@ def filter_test_image(local_laplacian, input):
 
     # do the actual computation
     input_width, input_height = input_data.shape[:2]
-    output_image = local_laplacian.realize(input_width, input_height, 3)
+    output_image = local_laplacian.realize([input_width, input_height, 3])
     output_data = np.asanyarray(output_image)
 
     # convert back to uint8

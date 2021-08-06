@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
             f.compute_root().store_in(memory_type).gpu_blocks(x);  // store f as integer
             g.output_buffer().store_in(memory_type);
 
-            Buffer<int> out = g.realize(100);
+            Buffer<int> out = g.realize({100});
             for (int x = 0; x < 100; x++) {
                 int correct = 2 * x + 10;
                 if (out(x) != correct) {
@@ -73,7 +73,7 @@ int main(int argc, char **argv) {
             f.compute_root().store_in(memory_type).gpu_blocks(x, y);  // store f as integer
             g.store_in(memory_type);
 
-            Buffer<int> out = g.realize(10);
+            Buffer<int> out = g.realize({10});
             for (int x = 0; x < 10; x++) {
                 int correct = 3 * x + 10;
                 if (out(x) != correct) {
@@ -103,7 +103,7 @@ int main(int argc, char **argv) {
 
             g.store_in(memory_type);
 
-            Buffer<int> out = g.realize(10);
+            Buffer<int> out = g.realize({10});
             for (int x = 0; x < 10; x++) {
                 int correct = 4 * x + 10;
                 if (out(x) != correct) {

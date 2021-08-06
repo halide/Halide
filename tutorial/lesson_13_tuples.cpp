@@ -4,11 +4,11 @@
 // values.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_13*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_13 -std=c++11
+// g++ lesson_13*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_13 -std=c++17
 // LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_13
 
 // On os x:
-// g++ lesson_13*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_13 -std=c++11
+// g++ lesson_13*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_13 -std=c++17
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_13
 
 // If you have the entire Halide source tree, you can also build it by
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
     // Buffers. We call this a Realization. It's equivalent to a
     // std::vector of Buffer objects:
     {
-        Realization r = multi_valued.realize(80, 60);
+        Realization r = multi_valued.realize({80, 60});
         assert(r.size() == 2);
         Buffer<int> im0 = r[0];
         Buffer<float> im1 = r[1];
@@ -121,7 +121,7 @@ int main(int argc, char **argv) {
 
     // You can construct a Tuple by passing multiple Exprs to the
     // Tuple constructor as we did above. Perhaps more elegantly, you
-    // can also take advantage of C++11 initializer lists and just
+    // can also take advantage of initializer lists and just
     // enclose your Exprs in braces:
     Func multi_valued_2;
     multi_valued_2(x, y) = {x + y, sin(x * y)};
@@ -147,7 +147,7 @@ int main(int argc, char **argv) {
         // First we create a Buffer to take the argmax over.
         Func input_func;
         input_func(x) = sin(x);
-        Buffer<float> input = input_func.realize(100);
+        Buffer<float> input = input_func.realize({100});
 
         // Then we define a 2-valued Tuple which tracks the index of
         // the maximum value and the value itself.
@@ -284,7 +284,7 @@ int main(int argc, char **argv) {
         escape(x, y) = first_escape[0];
 
         // Realize the pipeline and print the result as ascii art.
-        Buffer<int> result = escape.realize(61, 25);
+        Buffer<int> result = escape.realize({61, 25});
         const char *code = " .:-~*={}&%#@";
         for (int y = 0; y < result.height(); y++) {
             for (int x = 0; x < result.width(); x++) {

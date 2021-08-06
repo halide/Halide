@@ -39,8 +39,7 @@ private:
     set<string> outputs;
     set<string> textures;
     const Target &target;
-    Scope<> realizations, shader_scope_realizations;
-    bool in_shader = false;
+    Scope<> realizations;
     bool in_gpu = false;
 
     Expr make_shape_var(string name, const string &field, size_t dim,
@@ -98,7 +97,7 @@ private:
             idx -= base;
         }
 
-        if (!is_zero(constant_term)) {
+        if (!is_const_zero(constant_term)) {
             idx += constant_term;
         }
 
@@ -109,10 +108,6 @@ private:
 
     Stmt visit(const Realize *op) override {
         realizations.push(op->name);
-
-        if (in_shader) {
-            shader_scope_realizations.push(op->name);
-        }
 
         if (op->memory_type == MemoryType::GPUTexture) {
             textures.insert(op->name);
@@ -130,10 +125,6 @@ private:
         Expr condition = mutate(op->condition);
 
         realizations.pop(op->name);
-
-        if (in_shader) {
-            shader_scope_realizations.pop(op->name);
-        }
 
         // The allocation extents of the function taken into account of
         // the align_storage directives. It is only used to determine the
@@ -247,19 +238,8 @@ private:
         }
 
         Expr value = mutate(op->values[0]);
-        if (in_shader && !shader_scope_realizations.contains(op->name)) {
-            user_assert(op->args.size() == 3)
-                << "Image stores require three coordinates.\n";
-            Expr buffer_var =
-                Variable::make(type_of<halide_buffer_t *>(), op->name + ".buffer", output_buf);
-            vector<Expr> args = {
-                op->name, buffer_var,
-                op->args[0], op->args[1], op->args[2],
-                value};
-            Expr store = Call::make(value.type(), Call::image_store,
-                                    args, Call::Intrinsic);
-            return Evaluate::make(store);
-        } else if (in_gpu && textures.count(op->name)) {
+        Expr predicate = mutate(op->predicate);
+        if (in_gpu && textures.count(op->name)) {
             Expr buffer_var =
                 Variable::make(type_of<halide_buffer_t *>(), op->name + ".buffer", output_buf);
             vector<Expr> args(2);
@@ -272,10 +252,14 @@ private:
             args.push_back(value);
             Expr store = Call::make(value.type(), Call::image_store,
                                     args, Call::Intrinsic);
-            return Evaluate::make(store);
+            Stmt result = Evaluate::make(store);
+            if (!is_const_one(op->predicate)) {
+                result = IfThenElse::make(predicate, result);
+            }
+            return result;
         } else {
             Expr idx = mutate(flatten_args(op->name, op->args, Buffer<>(), output_buf));
-            return Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()), ModulusRemainder());
+            return Store::make(op->name, value, idx, output_buf, predicate, ModulusRemainder());
         }
     }
 
@@ -296,7 +280,7 @@ private:
 
             internal_assert(op->value_index == 0);
 
-            if ((in_shader && !shader_scope_realizations.contains(op->name)) || (in_gpu && textures.count(op->name))) {
+            if (in_gpu && textures.count(op->name)) {
                 ReductionDomain rdom;
                 Expr buffer_var =
                     Variable::make(type_of<halide_buffer_t *>(), op->name + ".buffer",
@@ -388,7 +372,7 @@ private:
 
         // TODO: Consider generating a prefetch call for each tuple element.
         Stmt prefetch_call = Evaluate::make(Call::make(op->types[0], Call::prefetch, args, Call::Intrinsic));
-        if (!is_one(condition)) {
+        if (!is_const_one(condition)) {
             prefetch_call = IfThenElse::make(condition, prefetch_call);
         }
         Stmt body = mutate(op->body);
@@ -396,19 +380,12 @@ private:
     }
 
     Stmt visit(const For *op) override {
-        bool old_in_shader = in_shader;
         bool old_in_gpu = in_gpu;
-        if ((op->for_type == ForType::GPUBlock ||
-             op->for_type == ForType::GPUThread) &&
-            op->device_api == DeviceAPI::GLSL) {
-            in_shader = true;
-        }
         if (op->for_type == ForType::GPUBlock ||
             op->for_type == ForType::GPUThread) {
             in_gpu = true;
         }
         Stmt stmt = IRMutator::visit(op);
-        in_shader = old_in_shader;
         in_gpu = old_in_gpu;
         return stmt;
     }

@@ -28,6 +28,18 @@
 namespace Halide {
 namespace Internal {
 
+inline int64_t saturating_mul(int64_t a, int64_t b) {
+    if (mul_would_overflow(64, a, b)) {
+        if ((a > 0) == (b > 0)) {
+            return INT64_MAX;
+        } else {
+            return INT64_MIN;
+        }
+    } else {
+        return a * b;
+    }
+}
+
 class Simplify : public VariadicVisitor<Simplify, Expr, Stmt> {
     using Super = VariadicVisitor<Simplify, Expr, Stmt>;
 
@@ -36,6 +48,7 @@ public:
 
     struct ExprInfo {
         // We track constant integer bounds when they exist
+        // TODO: Use ConstantInterval?
         int64_t min = 0, max = 0;
         bool min_defined = false, max_defined = false;
         // And the alignment of integer variables
@@ -90,6 +103,13 @@ public:
         }
     };
 
+    HALIDE_ALWAYS_INLINE
+    void clear_bounds_info(ExprInfo *b) {
+        if (b) {
+            *b = ExprInfo{};
+        }
+    }
+
 #if (LOG_EXPR_MUTATORIONS || LOG_STMT_MUTATIONS)
     static int debug_indent;
 #endif
@@ -113,9 +133,8 @@ public:
 #else
     HALIDE_ALWAYS_INLINE
     Expr mutate(const Expr &e, ExprInfo *b) {
-        Expr new_e = Super::dispatch(e, b);
-        internal_assert(new_e.type() == e.type()) << e << " -> " << new_e << "\n";
-        return new_e;
+        // This gets inlined into every call to mutate, so do not add any code here.
+        return Super::dispatch(e, b);
     }
 #endif
 
@@ -139,7 +158,7 @@ public:
     }
 #endif
 
-    bool remove_dead_lets;
+    bool remove_dead_code;
     bool no_float_simplify;
 
     HALIDE_ALWAYS_INLINE
@@ -194,15 +213,16 @@ public:
     // vectorized.
     bool in_vector_loop = false;
 
+    // Tracks whether or not the current IR is unconditionally unreachable.
+    bool in_unreachable = false;
+
     // If we encounter a reference to a buffer (a Load, Store, Call,
     // or Provide), there's an implicit dependence on some associated
     // symbols.
     void found_buffer_reference(const std::string &name, size_t dimensions = 0);
 
     // Wrappers for as_const_foo that are more convenient to use in
-    // the large chains of conditions in the visit methods
-    // below. Unlike the versions in IROperator, these only match
-    // scalars.
+    // the large chains of conditions in the visit methods below.
     bool const_float(const Expr &e, double *f);
     bool const_int(const Expr &e, int64_t *i);
     bool const_uint(const Expr &e, uint64_t *u);
@@ -239,6 +259,10 @@ public:
         void learn_true(const Expr &fact);
         void learn_upper_bound(const Variable *v, int64_t val);
         void learn_lower_bound(const Variable *v, int64_t val);
+
+        // Replace exprs known to be truths or falsehoods with const_true or const_false.
+        Expr substitute_facts(const Expr &e);
+        Stmt substitute_facts(const Stmt &s);
 
         ScopedFact(Simplify *s)
             : simplify(s) {
