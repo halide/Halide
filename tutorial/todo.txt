@@ -1,8 +1,9 @@
 High priority:
 - the device memory model (dirty flags, copy behavior)
-- extern functions and extern stages, including scheduling their loops, extern sources and sinks
+- extern functions and extern stages, including scheduling their loops, extern sources and sinks. Also include bounds proxy exprs when exposed in the front-end.
 - multi-output pipelines
 - overriding the runtime
+- cmake (JIT and AOT)
 
 Nice to have:
 - debug_to_file
