@@ -1815,14 +1815,14 @@ public:
                     // At present, we only attempt to generate these for LLVM >= 13.
 
                     // Extended (widening) integer multiplication
-                    check("i16x8.extmul_low_i8x16_s", 8 * w, i16(i8_1) * i8_2);
-                    check("i32x4.extmul_low_i16x8_s", 4 * w, i32(i16_1) * i16_2);
-                    check("i64x2.extmul_low_i32x4_s", 2 * w, i64(i32_1) * i32_2);
-                    check("i16x8.extmul_low_i8x16_u", 8 * w, u16(u8_1) * u8_2);
-                    check("i32x4.extmul_low_i16x8_u", 4 * w, u32(u16_1) * u16_2);
-                    check("i64x2.extmul_low_i32x4_u", 2 * w, u64(u32_1) * u32_2);
                     if (w > 1) {
                         // Need a register wider than 128 bits for us to generate these
+                        check("i16x8.extmul_low_i8x16_s", 8 * w, i16(i8_1) * i8_2);
+                        check("i32x4.extmul_low_i16x8_s", 4 * w, i32(i16_1) * i16_2);
+                        check("i64x2.extmul_low_i32x4_s", 2 * w, i64(i32_1) * i32_2);
+                        check("i16x8.extmul_low_i8x16_u", 8 * w, u16(u8_1) * u8_2);
+                        check("i32x4.extmul_low_i16x8_u", 4 * w, u32(u16_1) * u16_2);
+                        check("i64x2.extmul_low_i32x4_u", 2 * w, u64(u32_1) * u32_2);
                         check("i16x8.extmul_high_i8x16_s", 8 * w, i16(i8_1) * i8_2);
                         check("i32x4.extmul_high_i16x8_s", 4 * w, i32(i16_1) * i16_2);
                         check("i64x2.extmul_high_i32x4_s", 2 * w, i64(i32_1) * i32_2);

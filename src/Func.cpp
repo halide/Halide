@@ -1840,14 +1840,14 @@ Stage &Stage::hexagon(const VarOrRVar &x) {
     return *this;
 }
 
-Stage &Stage::prefetch(const Func &f, const VarOrRVar &var, Expr offset, PrefetchBoundStrategy strategy) {
-    PrefetchDirective prefetch = {f.name(), var.name(), std::move(offset), strategy, Parameter()};
+Stage &Stage::prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+    PrefetchDirective prefetch = {f.name(), at.name(), from.name(), std::move(offset), strategy, Parameter()};
     definition.schedule().prefetches().push_back(prefetch);
     return *this;
 }
 
-Stage &Stage::prefetch(const Internal::Parameter &param, const VarOrRVar &var, Expr offset, PrefetchBoundStrategy strategy) {
-    PrefetchDirective prefetch = {param.name(), var.name(), std::move(offset), strategy, param};
+Stage &Stage::prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+    PrefetchDirective prefetch = {param.name(), at.name(), from.name(), std::move(offset), strategy, param};
     definition.schedule().prefetches().push_back(prefetch);
     return *this;
 }
@@ -2534,15 +2534,15 @@ Func &Func::hexagon(const VarOrRVar &x) {
     return *this;
 }
 
-Func &Func::prefetch(const Func &f, const VarOrRVar &var, Expr offset, PrefetchBoundStrategy strategy) {
+Func &Func::prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
     invalidate_cache();
-    Stage(func, func.definition(), 0).prefetch(f, var, std::move(offset), strategy);
+    Stage(func, func.definition(), 0).prefetch(f, at, from, std::move(offset), strategy);
     return *this;
 }
 
-Func &Func::prefetch(const Internal::Parameter &param, const VarOrRVar &var, Expr offset, PrefetchBoundStrategy strategy) {
+Func &Func::prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
     invalidate_cache();
-    Stage(func, func.definition(), 0).prefetch(param, var, std::move(offset), strategy);
+    Stage(func, func.definition(), 0).prefetch(param, at, from, std::move(offset), strategy);
     return *this;
 }
 
