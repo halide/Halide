@@ -1,8 +1,8 @@
 include ../support/Makefile.inc
 
-OBJECTS = $(BIN)/single_rule.o
+OBJECTS = $(BIN)/single_rule.o $(BIN)/merge_rules.o
 
-all: $(BIN)/single_rule_tool
+all: $(BIN)/single_rule_tool $(BIN)/merge_rules_tool
 
 CXXFLAGS += -O3 -g
 
@@ -15,6 +15,10 @@ $(BIN)/%.o: %.cpp %.h
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(BIN)/single_rule_tool: single_rule_tool.cpp $(OBJECTS) $(LIB_HALIDE)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $< $(OBJECTS) -o $@ $(LDFLAGS) -lHalide
+
+$(BIN)/merge_rules_tool: merge_rules_tool.cpp $(OBJECTS) $(LIB_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< $(OBJECTS) -o $@ $(LDFLAGS) -lHalide
 
