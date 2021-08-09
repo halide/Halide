@@ -355,9 +355,9 @@ Stmt add_image_checks_inner(Stmt s,
             debug(3) << "In image " << name << " region touched is:\n";
             for (int j = 0; j < dimensions; j++) {
                 debug(3) << "  " << j << ": " << (touched.empty() ? Expr() : touched[j].min)
-                                              << " .. "
-                                              << (touched.empty() ? Expr() : touched[j].max)
-                                              <<"\n";
+                         << " .. "
+                         << (touched.empty() ? Expr() : touched[j].max)
+                         << "\n";
             }
         }
 
