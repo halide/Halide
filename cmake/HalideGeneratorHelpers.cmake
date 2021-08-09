@@ -158,7 +158,7 @@ function(add_halide_library TARGET)
         # When cross-compiling, we need to use a static, imported library
         list(APPEND generator_outputs static_library)
         set(generator_sources "${TARGET}${static_library_suffix}")
-    else ()
+    elseif (NOT CMAKE_OSX_ARCHITECTURES)
         # When compiling for the current CMake toolchain, create a native
         list(APPEND generator_outputs object)
         list(LENGTH ARG_TARGETS len)
@@ -205,6 +205,84 @@ function(add_halide_library TARGET)
         list(PREPEND ARG_PARAMS auto_schedule=true)
     endif ()
 
+    # Load the plugins and setup dependencies
+    set(generator_plugins "")
+    if (ARG_PLUGINS)
+        foreach (p IN LISTS ARG_PLUGINS)
+            list(APPEND generator_plugins "$<TARGET_FILE:${p}>")
+        endforeach ()
+        set(generator_plugins -p "$<JOIN:${generator_plugins},$<COMMA>>")
+    endif ()
+
+    if(CMAKE_OSX_ARCHITECTURES)
+        set(TRIPLE_ARM64  "arm-64-osx")
+        set(TRIPLE_X86_64 "x86-64-osx")
+
+        set(INTERMEDIATE_LIBRARIES "")
+
+        foreach(OSX_ARCHITECTURE ${CMAKE_OSX_ARCHITECTURES})
+            string(TOUPPER "TRIPLE_${OSX_ARCHITECTURE}" TRIPLE_LOOKUP)
+            set(TRIPLE ${${TRIPLE_LOOKUP}})
+            set(INTERMEDIATE_LIBRARY ${TARGET}-${TRIPLE})
+            list(APPEND INTERMEDIATE_LIBRARIES ${INTERMEDIATE_LIBRARY})
+
+            add_custom_command(OUTPUT ${INTERMEDIATE_LIBRARY}${object_suffix}
+                               COMMAND ${ARG_FROM}
+                               -n "${INTERMEDIATE_LIBRARY}"
+                               -d "${gradient_descent}"
+                               -g "${ARG_GENERATOR}"
+                               -f "${ARG_FUNCTION_NAME}"
+                               -e "object"
+                               ${generator_plugins}
+                               ${autoscheduler}
+                               -o .
+                               target=${TRIPLE}-${ARG_FEATURES}
+                               ${ARG_PARAMS}
+                               DEPENDS "${ARG_FROM}" ${ARG_PLUGINS}
+                               VERBATIM)
+        endforeach()
+
+        add_custom_command(OUTPUT ${generator_output_files}
+                           COMMAND ${ARG_FROM}
+                           -n "${TARGET}"
+                           -d "${gradient_descent}"
+                           -g "${ARG_GENERATOR}"
+                           -f "${ARG_FUNCTION_NAME}"
+                           -e "$<JOIN:${generator_outputs},$<COMMA>>"
+                           ${generator_plugins}
+                           ${autoscheduler}
+                           -o .
+                           "target=host-${ARG_FEATURES}"
+                           ${ARG_PARAMS}
+                           DEPENDS "${ARG_FROM}" ${ARG_PLUGINS}
+                           VERBATIM)
+
+        list(APPEND generator_sources ${TARGET}${object_suffix})
+        list(TRANSFORM INTERMEDIATE_LIBRARIES APPEND ${object_suffix})
+
+        add_custom_command(OUTPUT ${TARGET}${object_suffix}
+                           COMMAND lipo
+                           -create ${INTERMEDIATE_LIBRARIES}
+                           -output ${TARGET}${object_suffix}
+                           DEPENDS ${INTERMEDIATE_LIBRARIES}
+                           VERBATIM)
+    else()
+        add_custom_command(OUTPUT ${generator_output_files}
+                           COMMAND ${ARG_FROM}
+                           -n "${TARGET}"
+                           -d "${gradient_descent}"
+                           -g "${ARG_GENERATOR}"
+                           -f "${ARG_FUNCTION_NAME}"
+                           -e "$<JOIN:${generator_outputs},$<COMMA>>"
+                           ${generator_plugins}
+                           ${autoscheduler}
+                           -o .
+                           "target=$<JOIN:${ARG_TARGETS},$<COMMA>>"
+                           ${ARG_PARAMS}
+                           DEPENDS "${ARG_FROM}" ${ARG_PLUGINS}
+                           VERBATIM)
+        endif()
+
     ##
     # Main library target for filter.
     ##
@@ -220,30 +298,6 @@ function(add_halide_library TARGET)
                               LINKER_LANGUAGE CXX)
         _Halide_fix_xcode("${TARGET}")
     endif ()
-
-    # Load the plugins and setup dependencies
-    set(generator_plugins "")
-    if (ARG_PLUGINS)
-        foreach (p IN LISTS ARG_PLUGINS)
-            list(APPEND generator_plugins "$<TARGET_FILE:${p}>")
-        endforeach ()
-        set(generator_plugins -p "$<JOIN:${generator_plugins},$<COMMA>>")
-    endif ()
-
-    add_custom_command(OUTPUT ${generator_output_files}
-                       COMMAND ${ARG_FROM}
-                       -n "${TARGET}"
-                       -d "${gradient_descent}"
-                       -g "${ARG_GENERATOR}"
-                       -f "${ARG_FUNCTION_NAME}"
-                       -e "$<JOIN:${generator_outputs},$<COMMA>>"
-                       ${generator_plugins}
-                       ${autoscheduler}
-                       -o .
-                       "target=$<JOIN:${ARG_TARGETS},$<COMMA>>"
-                       ${ARG_PARAMS}
-                       DEPENDS "${ARG_FROM}" ${ARG_PLUGINS}
-                       VERBATIM)
 
     list(TRANSFORM generator_output_files PREPEND "${CMAKE_CURRENT_BINARY_DIR}/")
     add_custom_target("${TARGET}.update" ALL DEPENDS ${generator_output_files})
@@ -306,13 +360,40 @@ function(_Halide_add_halide_runtime RT)
         set(GEN_ARGS -e object)
     endif ()
 
-    add_custom_command(OUTPUT ${GEN_OUTS}
-                       COMMAND ${ARG_FROM} -r "${TARGET}.runtime" -o . ${GEN_ARGS}
-                       # Defers reading the list of targets for which to generate a common runtime to CMake _generation_ time.
-                       # This prevents issues where a lower GCD is required by a later Halide library linking to this runtime.
-                       target=$<JOIN:$<TARGET_PROPERTY:${TARGET}.runtime,Halide_RT_TARGETS>,$<COMMA>>
-                       DEPENDS "${ARG_FROM}"
-                       VERBATIM)
+    if (CMAKE_OSX_ARCHITECTURES)
+        set(TRIPLE_ARM64  "arm-64-osx")
+        set(TRIPLE_X86_64 "x86-64-osx")
+        set(INTERMEDIATE_LIBRARIES "")
+
+        foreach(OSX_ARCHITECTURE ${CMAKE_OSX_ARCHITECTURES})
+            string(TOUPPER "TRIPLE_${OSX_ARCHITECTURE}" TRIPLE_LOOKUP)
+            set(TRIPLE ${${TRIPLE_LOOKUP}})
+            set(INTERMEDIATE_LIBRARY ${TARGET}-${TRIPLE}.runtime)
+            list(APPEND INTERMEDIATE_LIBRARIES ${INTERMEDIATE_LIBRARY})
+
+            add_custom_command(OUTPUT ${INTERMEDIATE_LIBRARY}${object_suffix}
+                               COMMAND ${ARG_FROM} -r ${INTERMEDIATE_LIBRARY} -o . ${GEN_ARGS}
+                               target=${TRIPLE}-${ARG_FEATURES}
+                               DEPENDS "${ARG_FROM}"
+                               VERBATIM)
+        endforeach()
+
+        list(TRANSFORM INTERMEDIATE_LIBRARIES APPEND ${object_suffix})
+        add_custom_command(OUTPUT ${GEN_OUTS}
+                           COMMAND lipo
+                           -create ${INTERMEDIATE_LIBRARIES}
+                           -output ${TARGET}.runtime${object_suffix}
+                           DEPENDS ${INTERMEDIATE_LIBRARIES}
+                           VERBATIM)
+    else()
+            add_custom_command(OUTPUT ${GEN_OUTS}
+                           COMMAND ${ARG_FROM} -r "${TARGET}.runtime" -o . ${GEN_ARGS}
+                           # Defers reading the list of targets for which to generate a common runtime to CMake _generation_ time.
+                           # This prevents issues where a lower GCD is required by a later Halide library linking to this runtime.
+                           target=$<JOIN:$<TARGET_PROPERTY:${TARGET}.runtime,Halide_RT_TARGETS>,$<COMMA>>
+                           DEPENDS "${ARG_FROM}"
+                           VERBATIM)
+        endif()
 
     if (is_crosscompiling)
         add_custom_target("${RT}.update" DEPENDS "${GEN_OUTS}")
