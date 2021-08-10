@@ -84,10 +84,8 @@ WEAK int default_desired_num_threads() {
     }
     if (threads_str) {
         desired_num_threads = atoi(threads_str);
-        print(nullptr)<<"desired_num_threads(a) = "<<desired_num_threads<<"\n";
     } else {
         desired_num_threads = halide_host_cpu_count();
-        print(nullptr)<<"desired_num_threads(b) = "<<desired_num_threads<<"\n";
     }
     return desired_num_threads;
 }
@@ -447,10 +445,8 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
         // is locked.
         if (!work_queue.desired_threads_working) {
             work_queue.desired_threads_working = default_desired_num_threads();
-print(nullptr)<<"work_queue.desired_threads_working(a) = "<<work_queue.desired_threads_working<<"\n";
         }
         work_queue.desired_threads_working = clamp_num_threads(work_queue.desired_threads_working);
-print(nullptr)<<"work_queue.desired_threads_working(b) = "<<work_queue.desired_threads_working<<"\n";
         work_queue.initialized = true;
     }
 
@@ -683,11 +679,9 @@ WEAK int halide_set_num_threads(int n) {
     halide_mutex_lock(&work_queue.mutex);
     if (n == 0) {
         n = default_desired_num_threads();
-print(nullptr)<<"halide_set_num_threads(a) = "<<n<<"\n";
     }
     int old = work_queue.desired_threads_working;
     work_queue.desired_threads_working = clamp_num_threads(n);
-print(nullptr)<<"work_queue.desired_threads_working(c) = "<<work_queue.desired_threads_working<<"\n";
     halide_mutex_unlock(&work_queue.mutex);
     return old;
 }
