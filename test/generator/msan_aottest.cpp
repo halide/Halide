@@ -174,7 +174,7 @@ extern "C" int halide_msan_check_memory_is_initialized(void *user_context, const
 }
 
 extern "C" int halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len) {
-    // printf("ANNOTATE: %d:%p:%08x\n", (int)annotate_stage, ptr, (unsigned int)len);
+    printf("ANNOTATE: %d:%p:%08x\n", (int)annotate_stage, ptr, (unsigned int)len);
     if (annotate_stage == AnnotateBoundsInferenceBuffer) {
         if (output_previous != nullptr || len != sizeof(halide_buffer_t)) {
             fprintf(stderr, "Failure: Expected sizeof(halide_buffer_t), saw %d\n", (unsigned int)len);
