@@ -23,6 +23,13 @@
 #include "Util.h"
 #include "Var.h"
 
+#ifndef DO_TRACK_BOUNDS_INTERVALS
+#define DO_TRACK_BOUNDS_INTERVALS 0
+#endif
+#ifndef DO_DUMP_BOXES_TOUCHED
+#define DO_DUMP_BOXES_TOUCHED 0
+#endif
+
 namespace Halide {
 namespace Internal {
 
@@ -131,10 +138,6 @@ public:
     }
 
 private:
-#ifndef DO_TRACK_BOUNDS_INTERVALS
-#define DO_TRACK_BOUNDS_INTERVALS 0
-#endif
-
 #if DO_TRACK_BOUNDS_INTERVALS
 
     static int &get_logging() {
@@ -207,7 +210,7 @@ private:
     do {                       \
     } while (0)
 
-#endif
+#endif  // DO_TRACK_BOUNDS_INTERVALS
 
     // Compute the intrinsic bounds of a function.
     void bounds_of_func(const string &name, int value_index, Type t) {
@@ -1700,7 +1703,6 @@ Region region_union(const Region &a, const Region &b) {
         Expr max_plus_one = Max::make(max_a, max_b);
         Expr extent = max_plus_one - min;
         result.push_back(Range(simplify(min), simplify(extent)));
-        // result.push_back(Range(min, extent));
     }
     return result;
 }
@@ -2826,25 +2828,37 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
         }
     }
 
-    // for (const auto &it : calls.boxes) {
-    //     debug(0) << "calls.boxes[" << it.first << "] ->:\n";
-    //     for (size_t j = 0; j < it.second.size(); j++) {
-    //         debug(0) << "  " << j << ": " << it.second[j].min
-    //                  << " .. "
-    //                  << it.second[j].max
-    //                  << "\n";
-    //     }
-    // }
+#if DO_DUMP_BOXES_TOUCHED
+    if (consider_calls && consider_provides) {
+      debug(0) << "boxes_touched:\n";
+    } else if (consider_calls && !consider_provides) {
+      debug(0) << "boxes_required:\n";
+    } else if (!consider_calls && consider_provides) {
+      debug(0) << "boxes_provided:\n";
+    } else {
+      internal_error;
+    }
 
-    // for (const auto &it : provides.boxes) {
-    //     debug(0) << "provides.boxes[" << it.first << "] ->:\n";
-    //     for (size_t j = 0; j < it.second.size(); j++) {
-    //         debug(0) << "  " << j << ": " << it.second[j].min
-    //                  << " .. "
-    //                  << it.second[j].max
-    //                  << "\n";
-    //     }
-    // }
+    for (const auto &it : calls.boxes) {
+        debug(0) << "calls.boxes[" << it.first << "] ->:\n";
+        for (size_t j = 0; j < it.second.size(); j++) {
+            debug(0) << "  " << j << ": " << it.second[j].min
+                     << " .. "
+                     << it.second[j].max
+                     << "\n";
+        }
+    }
+
+    for (const auto &it : provides.boxes) {
+        debug(0) << "provides.boxes[" << it.first << "] ->:\n";
+        for (size_t j = 0; j < it.second.size(); j++) {
+            debug(0) << "  " << j << ": " << it.second[j].min
+                     << " .. "
+                     << it.second[j].max
+                     << "\n";
+        }
+    }
+#endif  // DO_DUMP_BOXES_TOUCHED
 
     if (!consider_calls) {
         return provides.boxes;
