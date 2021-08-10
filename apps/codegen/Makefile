@@ -18,5 +18,10 @@ $(BIN)/single_rule_tool: single_rule_tool.cpp $(OBJECTS) $(LIB_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< $(OBJECTS) -o $@ $(LDFLAGS) -lHalide
 
+# TODO: add $(OBJECTS) once code is cleaner / more modular
+$(BIN)/merge_tool: merge_tool.cpp $(LIB_HALIDE)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(LDFLAGS) -lHalide
+
 clean:
 	rm -rf $(BIN)
