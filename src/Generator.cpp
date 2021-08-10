@@ -991,13 +991,13 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
                                                               no_compiler_logger_factory;
 
     std::atomic<bool> generator_finished = false;
-    int timeout_in_seconds = std::stoi(flags_info["-t"]);
-    // Use ~1 year for "infinite" timeouts.
-    if (timeout_in_seconds <= 0) {
-        timeout_in_seconds = 60 * 24 * 365;
-    }
+    const int timeout_in_seconds = std::stoi(flags_info["-t"]);
     const auto timeout_time = std::chrono::steady_clock::now() + std::chrono::seconds(timeout_in_seconds);
     std::thread timeout_monitor([timeout_time, timeout_in_seconds, &generator_finished]() {
+        if (timeout_in_seconds <= 0) {
+            // No watchdog timer, just let it run as long as it likes.
+            return;
+        }
         while (!generator_finished) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             if (std::chrono::steady_clock::now() >= timeout_time) {
