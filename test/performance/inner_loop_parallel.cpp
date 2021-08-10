@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
         if (t == 2) {
             correct_time = min_time;
         } else if (min_time > correct_time * 5) {
-            fprintf(stderr, "Unacceptable overhead when using %d threads for 2 tasks: %f ms vs %f ms\n",
+            printf("Unacceptable overhead when using %d threads for 2 tasks: %f ms vs %f ms\n",
                     t, min_time, correct_time);
             return -1;
         }
