@@ -2830,13 +2830,13 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
 
 #if DO_DUMP_BOXES_TOUCHED
     if (consider_calls && consider_provides) {
-      debug(0) << "boxes_touched:\n";
+        debug(0) << "boxes_touched:\n";
     } else if (consider_calls && !consider_provides) {
-      debug(0) << "boxes_required:\n";
+        debug(0) << "boxes_required:\n";
     } else if (!consider_calls && consider_provides) {
-      debug(0) << "boxes_provided:\n";
+        debug(0) << "boxes_provided:\n";
     } else {
-      internal_error;
+        internal_error;
     }
 
     for (const auto &it : calls.boxes) {
