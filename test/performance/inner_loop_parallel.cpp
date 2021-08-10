@@ -23,12 +23,13 @@ int main(int argc, char **argv) {
     double correct_time = 0;
 
     for (int t = 2; t <= 64; t *= 2) {
-        std::ostringstream ss;
-        ss << "HL_NUM_THREADS=" << t;
-        std::string str = ss.str();
+        std::string str = "HL_NUM_THREADS=" + std::to_string(t);
         char buf[32] = {0};
         memcpy(buf, str.c_str(), str.size());
-        putenv(buf);
+        if (putenv(buf) != 0) {
+            fprintf(stderr, "putenv failed\n");
+            return -1;
+        }
         p.invalidate_cache();
         Halide::Internal::JITSharedRuntime::release_all();
 
@@ -36,14 +37,16 @@ int main(int argc, char **argv) {
         // Start the thread pool without giving any hints as to the
         // number of tasks we'll be using.
         p.realize({t, 1});
-        double min_time = benchmark([&]() { return p.realize({2, 1000000}); });
+        BenchmarkResult r = benchmark([&]() { return p.realize({2, 1000000}); });
+        double min_time = r.wall_time;
 
-        printf("%d: %f ms\n", t, min_time * 1e3);
+        printf("%d: %f ms (samples %lld iterations %lld accuracy %f)\n",
+               t, min_time * 1e3, (long long)r.samples, (long long)r.iterations, r.accuracy);
         if (t == 2) {
             correct_time = min_time;
         } else if (min_time > correct_time * 5) {
-            printf("Unacceptable overhead when using %d threads for 2 tasks: %f ms vs %f ms\n",
-                   t, min_time, correct_time);
+            fprintf(stderr, "Unacceptable overhead when using %d threads for 2 tasks: %f ms vs %f ms\n",
+                    t, min_time, correct_time);
             return -1;
         }
     }
