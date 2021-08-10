@@ -117,7 +117,7 @@ std::string build_expr(const Expr &expr, const VarScope &scope) {
         assert(false);
         return "";
     }
-    // TODO: add a bunch more cases
+    // TODO: Add any more cases we need to generate
 }
 
 } // namespace Printer
@@ -186,24 +186,9 @@ struct TypeCheck : public Node {
 
     TypeCheck(IRType _type, const std::string &_curr, const std::string &_out) : Node(_type), current_name(_curr), output_name(_out) {}
 
-     std::string get_type_name() const {
-        // TODO: make this statically defined by the value of T.
-        switch (type) {
-            case IRType::Add: {
-                return "Add";
-            }
-            case IRType::Sub: {
-                return "Sub";
-            }
-            case IRType::Select: {
-                return "Select";
-            }
-            // TODO: Do the rest
-            default: {
-                assert(false); // Should have implemented all TC types above.
-                return "ERROR";
-            }
-        }
+    // TODO: this could probably be manually inlined below.
+    const std::string get_type_name() const {
+        return T::type_name;
     }
 
     void print(std::ostream &stream, std::string indent) const override {
@@ -219,14 +204,17 @@ struct TypeCheck : public Node {
 
 struct Add final : public TypeCheck<Add> {
     Add(const std::string &_curr, const std::string &_out) : TypeCheck(IRType::Add, _curr, _out) {}
+    inline static const std::string type_name = "Add";
 };
 
 struct Sub final : public TypeCheck<Sub> {
     Sub(const std::string &_curr, const std::string &_out) : TypeCheck(IRType::Sub, _curr, _out) {}
+    inline static const std::string type_name = "Sub";
 };
 
 struct Select final : public TypeCheck<Select> {
     Select(const std::string &_curr, const std::string &_out) : TypeCheck(IRType::Select, _curr, _out) {}
+    inline static const std::string type_name = "Select";
 };
 
 
@@ -271,6 +259,7 @@ struct Return final : public Node {
     }
 };
 
+// Used as a generic condition, makes a lot of stuff easier. Probably could have just inherited from this.
 struct Condition final : public Node {
     std::string condition;
 
@@ -293,7 +282,7 @@ struct Condition final : public Node {
     }
 };
 
-// Used as the top level node
+// Used as the top level node *ONLY*
 struct Sequence final : public Node {
 
     bool equal(const shared_ptr<Node> &other) const override {
@@ -419,7 +408,6 @@ shared_ptr<Node> tree_constructor(shared_ptr<Node> root, const Expr &expr, const
             return handle_select(root, expr, name, scope);
         // TODO: handle IntImm and the rest
         case IRNodeType::Variable: {
-            // TODO: probably need to do something else here?
             const Variable *var = expr.as<Variable>();
             return handle_variable(root, var, name, scope);
         }
