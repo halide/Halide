@@ -66,6 +66,14 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
              rewrite(select(x, w + y, z) - y, select(x, w, z - y)) ||
              rewrite(select(x, y, z + w) - z, select(x, y - z, w)) ||
              rewrite(select(x, y, w + z) - z, select(x, y - z, w)) ||
+             rewrite(select(x, y + (z + w), u) - w, select(x, y + z, u - w)) ||
+             rewrite(select(x, y + (z + w), u) - z, select(x, y + w, u - z)) ||
+             rewrite(select(x, (y + z) + w, u) - y, select(x, w + z, u - y)) ||
+             rewrite(select(x, (y + z) + w, u) - z, select(x, w + y, u - z)) ||
+             rewrite(select(x, y + z, w) - (u + y), select(x, z, w - y) - u) ||
+             rewrite(select(x, y + z, w) - (u + z), select(x, y, w - z) - u) ||
+             rewrite(select(x, y + z, w) - (y + u), select(x, z, w - y) - u) ||
+             rewrite(select(x, y + z, w) - (z + u), select(x, y, w - z) - u) ||
              rewrite(y - select(x, y + w, z), 0 - select(x, w, z - y)) ||
              rewrite(y - select(x, w + y, z), 0 - select(x, w, z - y)) ||
              rewrite(z - select(x, y, z + w), 0 - select(x, y - z, w)) ||

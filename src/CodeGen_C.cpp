@@ -1489,6 +1489,246 @@ void CodeGen_C::forward_declare_type_if_needed(const Type &t) {
     forward_declared.insert(t.handle_type);
 }
 
+void CodeGen_C::emit_argv_wrapper(const std::string &function_name,
+                                  const std::vector<LoweredArgument> &args) {
+    if (is_header_or_extern_decl()) {
+        stream << "\nHALIDE_FUNCTION_ATTRS\nint " << function_name << "_argv(void **args);\n";
+        return;
+    }
+
+    stream << "\nHALIDE_FUNCTION_ATTRS\nint " << function_name << "_argv(void **args) {\n";
+    indent += 1;
+
+    stream << get_indent() << "return " << function_name << "(\n";
+    indent += 1;
+
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer()) {
+            stream << get_indent() << "(halide_buffer_t *)args[" << i << "]";
+        } else {
+            stream << get_indent() << "*(" << type_to_c_type(args[i].type, false) << " const *)args[" << i << "]";
+        }
+        if (i + 1 < args.size()) {
+            stream << ",";
+        }
+        stream << "\n";
+    }
+
+    indent -= 1;
+    stream << ");\n";
+
+    indent -= 1;
+    stream << "}";
+}
+
+void CodeGen_C::emit_metadata_getter(const std::string &function_name,
+                                     const std::vector<LoweredArgument> &args,
+                                     const std::map<std::string, std::string> &metadata_name_map) {
+    if (is_header_or_extern_decl()) {
+        stream << "\nHALIDE_FUNCTION_ATTRS\nconst struct halide_filter_metadata_t *" << function_name << "_metadata();\n";
+        return;
+    }
+
+    auto map_name = [&metadata_name_map](const std::string &from) -> std::string {
+        auto it = metadata_name_map.find(from);
+        return it == metadata_name_map.end() ? from : it->second;
+    };
+
+    stream << "\nHALIDE_FUNCTION_ATTRS\nconst struct halide_filter_metadata_t *" << function_name << "_metadata() {\n";
+
+    indent += 1;
+
+    static const char *const kind_names[] = {
+        "halide_argument_kind_input_scalar",
+        "halide_argument_kind_input_buffer",
+        "halide_argument_kind_output_buffer",
+    };
+
+    static const char *const type_code_names[] = {
+        "halide_type_int",
+        "halide_type_uint",
+        "halide_type_float",
+        "halide_type_handle",
+        "halide_type_bfloat",
+    };
+
+    std::set<int64_t> constant_int64_in_use;
+    const auto emit_constant_int64 = [this, &constant_int64_in_use](Expr e) -> std::string {
+        if (!e.defined()) {
+            return "nullptr";
+        }
+
+        internal_assert(!e.type().is_handle()) << "Should never see Handle types here.";
+        if (!is_const(e)) {
+            e = simplify(e);
+            internal_assert(is_const(e)) << "Should only see constant values here.";
+        }
+
+        const IntImm *int_imm = e.as<IntImm>();
+        internal_assert(int_imm && int_imm->type == Int(64));
+
+        const std::string id = "const_" + std::to_string(int_imm->value);
+        if (!constant_int64_in_use.count(int_imm->value)) {
+            stream << get_indent() << "static const int64_t " << id << " = " << int_imm->value << "LL;\n";
+            constant_int64_in_use.insert(int_imm->value);
+        }
+        return "&" + id;
+    };
+
+    int next_scalar_value_id = 0;
+    const auto emit_constant_scalar_value = [this, &next_scalar_value_id](Expr e) -> std::string {
+        if (!e.defined()) {
+            return "nullptr";
+        }
+
+        internal_assert(!e.type().is_handle()) << "Should never see Handle types here.";
+        if (!is_const(e)) {
+            e = simplify(e);
+            internal_assert(is_const(e)) << "Should only see constant values here.";
+        }
+
+        const IntImm *int_imm = e.as<IntImm>();
+        const UIntImm *uint_imm = e.as<UIntImm>();
+        const FloatImm *float_imm = e.as<FloatImm>();
+        internal_assert(int_imm || uint_imm || float_imm);
+        std::string value;
+        if (int_imm) {
+            value = std::to_string(int_imm->value);
+        } else if (uint_imm) {
+            value = std::to_string(uint_imm->value);
+        } else if (float_imm) {
+            value = std::to_string(float_imm->value);
+        }
+
+        std::string c_type = type_to_c_type(e.type(), false);
+        std::string id = "halide_scalar_value_" + std::to_string(next_scalar_value_id++);
+
+        // It's important that we allocate a full scalar_value_t_type here,
+        // even if the type of the value is smaller; downstream consumers should
+        // be able to correctly load an entire scalar_value_t_type regardless of its
+        // type, and if we emit just (say) a uint8 value here, the pointer may be
+        // misaligned and/or the storage after may be unmapped. We'll fake it by
+        // making a constant array of the elements we need, setting the first to the
+        // constant we want, and setting the rest to all-zeros. (This happens to work because
+        // sizeof(halide_scalar_value_t) is evenly divisible by sizeof(any-union-field.)
+
+        const size_t value_size = e.type().bytes();
+        internal_assert(value_size > 0 && value_size <= sizeof(halide_scalar_value_t));
+
+        const size_t array_size = sizeof(halide_scalar_value_t) / value_size;
+        internal_assert(array_size * value_size == sizeof(halide_scalar_value_t));
+
+        stream << get_indent() << "alignas(alignof(halide_scalar_value_t)) static const " << c_type << " " << id << "[" << array_size << "] = {" << value;
+        for (size_t i = 1; i < array_size; i++) {
+            stream << ", 0";
+        }
+        stream << "};\n";
+
+        return "(const halide_scalar_value_t *)&" + id;
+    };
+
+    for (const auto &arg : args) {
+        const auto legalized_name = c_print_name(map_name(arg.name));
+
+        auto argument_estimates = arg.argument_estimates;
+        if (arg.type.is_handle()) {
+            // Handle values are always emitted into metadata as "undefined", regardless of
+            // what sort of Expr is provided.
+            argument_estimates = ArgumentEstimates{};
+        }
+
+        const auto defined_count = [](const Region &r) -> size_t {
+            size_t c = 0;
+            for (const auto &be : r) {
+                c += be.min.defined() ? 1 : 0;
+                c += be.extent.defined() ? 1 : 0;
+            }
+            return c;
+        };
+
+        std::string buffer_estimates_array_ptr = "nullptr";
+        if (arg.is_buffer() && defined_count(argument_estimates.buffer_estimates) > 0) {
+            internal_assert((int)argument_estimates.buffer_estimates.size() == arg.dimensions);
+            std::vector<std::string> constants;
+            for (const auto &be : argument_estimates.buffer_estimates) {
+                Expr min = be.min;
+                if (min.defined()) {
+                    min = cast<int64_t>(min);
+                }
+                Expr extent = be.extent;
+                if (extent.defined()) {
+                    extent = cast<int64_t>(extent);
+                }
+                constants.push_back(emit_constant_int64(min));
+                constants.push_back(emit_constant_int64(extent));
+            }
+
+            stream << get_indent() << "static const int64_t * const buffer_estimates_" << legalized_name << "[" << (int)arg.dimensions * 2 << "] = {\n";
+            indent += 1;
+            for (const auto &c : constants) {
+                stream << get_indent() << c << ",\n";
+            }
+            indent -= 1;
+            stream << get_indent() << "};\n";
+        } else {
+            stream << get_indent() << "int64_t const *const *buffer_estimates_" << legalized_name << " = nullptr;\n";
+        }
+
+        auto scalar_def = emit_constant_scalar_value(argument_estimates.scalar_def);
+        auto scalar_min = emit_constant_scalar_value(argument_estimates.scalar_min);
+        auto scalar_max = emit_constant_scalar_value(argument_estimates.scalar_max);
+        auto scalar_estimate = emit_constant_scalar_value(argument_estimates.scalar_estimate);
+
+        stream << get_indent() << "const halide_scalar_value_t *scalar_def_" << legalized_name << " = " << scalar_def << ";\n";
+        stream << get_indent() << "const halide_scalar_value_t *scalar_min_" << legalized_name << " = " << scalar_min << ";\n";
+        stream << get_indent() << "const halide_scalar_value_t *scalar_max_" << legalized_name << " = " << scalar_max << ";\n";
+        stream << get_indent() << "const halide_scalar_value_t *scalar_estimate_" << legalized_name << " = " << scalar_estimate << ";\n";
+    }
+
+    stream << get_indent() << "static const halide_filter_argument_t args[" << args.size() << "] = {\n";
+    indent += 1;
+    for (const auto &arg : args) {
+        const auto name = map_name(arg.name);
+        const auto legalized_name = c_print_name(name);
+
+        stream << get_indent() << "{\n";
+        indent += 1;
+        stream << get_indent() << "\"" << name << "\",\n";
+        internal_assert(arg.kind < sizeof(kind_names) / sizeof(kind_names[0]));
+        stream << get_indent() << kind_names[arg.kind] << ",\n";
+        stream << get_indent() << (int)arg.dimensions << ",\n";
+        internal_assert(arg.type.code() < sizeof(type_code_names) / sizeof(type_code_names[0]));
+        stream << get_indent() << "{" << type_code_names[arg.type.code()] << ", " << (int)arg.type.bits() << ", " << (int)arg.type.lanes() << "},\n";
+        stream << get_indent() << "scalar_def_" << legalized_name << ",\n";
+        stream << get_indent() << "scalar_min_" << legalized_name << ",\n";
+        stream << get_indent() << "scalar_max_" << legalized_name << ",\n";
+        stream << get_indent() << "scalar_estimate_" << legalized_name << ",\n";
+        stream << get_indent() << "buffer_estimates_" << legalized_name << ",\n";
+        stream << get_indent() << "},\n";
+        indent -= 1;
+    }
+    stream << get_indent() << "};\n";
+    indent -= 1;
+
+    stream << get_indent() << "static const halide_filter_metadata_t md = {\n";
+
+    indent += 1;
+
+    stream << get_indent() << "halide_filter_metadata_t::VERSION,\n";
+    stream << get_indent() << args.size() << ",\n";
+    stream << get_indent() << "args,\n";
+    stream << get_indent() << "\"" << target.to_string() << "\",\n";
+    stream << get_indent() << "\"" << function_name << "\",\n";
+    stream << get_indent() << "};\n";
+    indent -= 1;
+
+    stream << get_indent() << "return &md;\n";
+
+    indent -= 1;
+
+    stream << "}\n";
+}
+
 void CodeGen_C::compile(const Module &input) {
     TypeInfoGatherer type_info;
     for (const auto &f : input.functions()) {
@@ -1552,12 +1792,13 @@ void CodeGen_C::compile(const Module &input) {
     for (const auto &b : input.buffers()) {
         compile(b);
     }
+    const auto metadata_name_map = input.get_metadata_name_map();
     for (const auto &f : input.functions()) {
-        compile(f);
+        compile(f, metadata_name_map);
     }
 }
 
-void CodeGen_C::compile(const LoweredFunc &f) {
+void CodeGen_C::compile(const LoweredFunc &f, const std::map<std::string, std::string> &metadata_name_map) {
     // Don't put non-external function declarations in headers.
     if (is_header_or_extern_decl() && f.linkage == LinkageType::Internal) {
         return;
@@ -1647,12 +1888,12 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << "}\n";
     }
 
-    if (is_header_or_extern_decl() && f.linkage == LinkageType::ExternalPlusMetadata) {
+    if (f.linkage == LinkageType::ExternalPlusMetadata) {
         // Emit the argv version
-        stream << "\nHALIDE_FUNCTION_ATTRS\nint " << simple_name << "_argv(void **args);\n";
+        emit_argv_wrapper(simple_name, args);
 
         // And also the metadata.
-        stream << "\nHALIDE_FUNCTION_ATTRS\nconst struct halide_filter_metadata_t *" << simple_name << "_metadata();\n";
+        emit_metadata_getter(simple_name, args, metadata_name_map);
     }
 
     if (!namespaces.empty()) {
