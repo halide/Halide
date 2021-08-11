@@ -30,7 +30,7 @@ LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
                               std::vector<LoweredArgument> &args, int closure_arg_index,
                               const Stmt &body) {
   
-  debug(0) << "Generating closure for " << name << ".\n";
+  debug(0) << "Making closure for " << name << "\n";
     // Figure out if user_context has to be dealt with here.
     std::string closure_arg_name = unique_name("closure_arg");
     args[closure_arg_index] = LoweredArgument(closure_arg_name, Argument::Kind::InputScalar,
@@ -38,14 +38,15 @@ LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
     Expr closure_arg = Variable::make(type_of<void *>(), closure_arg_name);
 
     Stmt wrapped_body = body;
-    std::vector<Expr> type_args(closure.vars.size() + closure.buffers.size() * 2 + 1);
+    std::vector<Expr> type_args(closure.vars.size() + closure.buffers.size() * 2 + 2);
     std::string closure_type_name = unique_name("closure_struct_type");
     Expr struct_type = Variable::make(Handle(), closure_type_name);
     type_args[0] = StringImm::make(closure_type_name);
+    type_args[1] = 1;
 
     int struct_index = 0;
     for (const auto &v : closure.vars) {
-        type_args[struct_index + 1] = make_zero(v.second);
+        type_args[struct_index + 2] = make_zero(v.second);
         wrapped_body = LetStmt::make(v.first,
                                      maybe_print("Reading " + v.first + " ",
                                      Call::make(v.second, Call::load_struct_member,
@@ -55,8 +56,8 @@ LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
         struct_index++;
     }
     for (const auto &b : closure.buffers) {
-        type_args[struct_index + 1] = make_zero(type_of<void *>());
-        type_args[struct_index + 2] = make_zero(type_of<halide_buffer_t *>());
+        type_args[struct_index + 2] = make_zero(type_of<void *>());
+        type_args[struct_index + 3] = make_zero(type_of<halide_buffer_t *>());
         wrapped_body = LetStmt::make(b.first,
                                      maybe_print("Reading buffer arg 1 " + b.first + " ",
                                      Call::make(type_of<void *>(), Call::load_struct_member,
@@ -92,6 +93,7 @@ Expr AllocateClosure(const std::string &name, const Closure &closure) {
     closure_elements.push_back(Expr());
     closure_elements.push_back(1);
     closure_types.push_back(unique_name(name + "_type"));
+    closure_types.push_back(1);
 
     for (const auto &v : closure.vars) {
         Expr var = Variable::make(v.second, v.first);
@@ -114,7 +116,7 @@ Expr AllocateClosure(const std::string &name, const Closure &closure) {
     }    
     closure_elements[0] = Call::make(Handle(), Call::make_struct_type, closure_types, Call::PureIntrinsic);
     Expr result = Let::make(buffer_t_type_name, Call::make(Handle(), Call::make_struct_type,
-                                                           { StringImm::make("halide_buffer_t") }, Call::PureIntrinsic),
+                                                           { StringImm::make("halide_buffer_t"), 0 }, Call::PureIntrinsic),
                             Call::make(type_of<void *>(), Call::make_typed_struct, closure_elements, Call::Intrinsic));
     return maybe_print("Closure after allocation: ", result);
 }
@@ -201,7 +203,7 @@ struct LowerParallelTasks : public IRMutator {
         // with a better way to do it, though this number is encoded in the code
         // below as well so...
         std::vector<Expr> tasks_array_args(2);
-        tasks_array_args[0] = Call::make(type_of<halide_parallel_task_t *>(), Call::make_struct_type, { StringImm::make("halide_parallel_task_t") }, Call::PureIntrinsic);
+        tasks_array_args[0] = Call::make(type_of<halide_parallel_task_t *>(), Call::make_struct_type, { StringImm::make("halide_parallel_task_t"), 0 }, Call::PureIntrinsic);
         tasks_array_args[1] = num_tasks;
 
 
@@ -342,7 +344,7 @@ struct LowerParallelTasks : public IRMutator {
 #endif
 
             Expr semaphore_type = Call::make(type_of<halide_semaphore_acquire_t *>(), Call::make_struct_type,
-                                             { StringImm::make("halide_semaphore_acquire_t") }, Call::PureIntrinsic);
+                                             { StringImm::make("halide_semaphore_acquire_t"), 0 }, Call::PureIntrinsic);
             std::string semaphores_array_name = unique_name("task_semaphores");
             Expr semaphores_array;
             if (!t.semaphores.empty()) {
@@ -392,7 +394,6 @@ struct LowerParallelTasks : public IRMutator {
             closure_implementations.emplace_back(GenerateClosureIR(t.name, closure, closure_args, closure_arg_index, t.body));
 
             if (use_parallel_for) {
-              debug(0) << "Declaring function name " << t.name << " (0).\n";
                 std::vector<Expr> function_decl_args(5);
                 function_decl_args[0] = t.name;
                 function_decl_args[1] = make_zero(Int(32));
@@ -408,7 +409,6 @@ struct LowerParallelTasks : public IRMutator {
                 args[4] = closure_struct;
                 result = Call::make(Int(32), "halide_do_par_for", args, Call::Extern);
             } else {
-              debug(0) << "Declaring function name " << t.name << " (1).\n";
                 std::vector<Expr> function_decl_args(7);
                 function_decl_args[0] = t.name;
                 function_decl_args[1] = make_zero(Int(32));
@@ -463,7 +463,8 @@ struct LowerParallelTasks : public IRMutator {
             result.push_back(t);
         } else if (loop && loop->for_type == ForType::Parallel) {
             add_suffix(prefix, ".par_for." + loop->name);
-            result.push_back(ParallelTask{loop->body, {}, loop->name, loop->min, loop->extent, const_false(), task_debug_name(prefix)});
+            ParallelTask t{loop->body, {}, loop->name, loop->min, loop->extent, const_false(), task_debug_name(prefix)};
+            result.push_back(t);
         } else if (loop &&
                    loop->for_type == ForType::Serial &&
                    acquire &&
@@ -480,7 +481,8 @@ struct LowerParallelTasks : public IRMutator {
             result.push_back(t);
         } else {
             add_suffix(prefix, "." + std::to_string(result.size()));
-            result.push_back(ParallelTask{s, {}, "", 0, 1, const_false(), task_debug_name(prefix)});
+            ParallelTask t{s, {}, "", 0, 1, const_false(), task_debug_name(prefix)};
+            result.push_back(t);
         }
     }
 
@@ -499,15 +501,19 @@ struct LowerParallelTasks : public IRMutator {
 Stmt lower_parallel_tasks(Stmt s, std::vector<LoweredFunc> &closure_implementations, const std::string &name) {
     LowerParallelTasks lowering_mutator(name);
     Stmt result = lowering_mutator.mutate(s);
+
 #if 0
     for (const auto &lf : lowering_mutator.closure_implementations) {
         debug(0) << "Lowered function " << lf.name << ":\n" << lf.body << "\n\n";
     }
 #endif
+
     closure_implementations = std::move(lowering_mutator.closure_implementations);
+
 #if 0
     debug(0) << "Main body:\n" << result << "\n\n";
 #endif
+
     return result;
 }  
 

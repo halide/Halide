@@ -506,8 +506,6 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     for (const auto &f : input.functions()) {
         const auto names = get_mangled_names(f, get_target());
 
-        debug(0) << "Compiling for mangled names -- simple " << names.simple_name << " extern " << names.extern_name << " argv_name " << names.argv_name << " metadata_name " << names.metadata_name << "\n";
-
         run_with_large_stack([&]() {
             compile_func(f, names.simple_name, names.extern_name);
         });
@@ -2844,21 +2842,25 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::make_struct_type)) {
         // Declares a struct type. Returns a null pointer of the new type.
-        internal_assert(op->args.size() >= 1);
+        internal_assert(op->args.size() >= 2);
       
         const StringImm *str_imm = op->args[0].as<StringImm>();
         internal_assert(str_imm != nullptr);
         std::string name = str_imm->value;
+
+        const int64_t *mode = as_const_int(op->args[1]);
+        internal_assert(mode != nullptr);
+
         llvm::Type *struct_type;
-        if (op->args.size() > 1) {
-            vector<llvm::Type *> types(op->args.size() - 1);
-            for (size_t i = 1; i < op->args.size(); i++) {
-                types[i - 1] = codegen(op->args[i])->getType();
+        if (*mode == 1) {
+            vector<llvm::Type *> types(op->args.size() - 2);
+            for (size_t i = 2; i < op->args.size(); i++) {
+                types[i - 2] = codegen(op->args[i])->getType();
             }
             struct_type = (llvm::Type *)llvm::StructType::create(*context, types, "struct." + name);
         } else {
             struct_type = get_llvm_struct_type_by_name(module.get(), ("struct." + name).c_str());
-            internal_assert(struct_type != nullptr);
+            internal_assert(struct_type != nullptr) << "Failed to find structure " << name << "\n";
         }
         value = llvm::ConstantPointerNull::get(struct_type->getPointerTo());
     } else if (op->is_intrinsic(Call::make_typed_struct)) {
@@ -2894,7 +2896,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 indices[indices_index++] = ConstantInt::get(i32_t, item);
                 indices[indices_index++] = ConstantInt::get(i32_t, i);
                 elem_ptr = CreateInBoundsGEP(builder, value, indices);
-                Value *init_value = args[i];
+                Value *init_value = args[i + item * initializer_count];
                 // TODO(zalman): Halide IR is not strongly typed re: pointers,
                 // especially to structs. Specific case that is failing is
                 // halide_semaphort_t *.
@@ -2904,7 +2906,8 @@ void CodeGen_LLVM::visit(const Call *op) {
                 }
                 builder->CreateStore(init_value, elem_ptr);
             }
-        } while (item++ < count);
+            item += 1;
+        } while (item < count);
     } else if (op->is_intrinsic(Call::load_struct_member)) {
         // TODO(zalman): Validate the Halide type of the result matches the LLVM type?
         // TODO(zalman): Are struct types the right level of indirection.
@@ -2927,7 +2930,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         for (size_t i = 2; i < op->args.size(); i++) {
             arg_types.push_back(codegen(op->args[i])->getType());
         }
-        debug(0) << "Calling llvm::Function::Create with name " << name->value << ".\n";
         llvm::Function *function = module->getFunction(name->value);
         if (function == nullptr) {
             FunctionType *function_t = FunctionType::get(return_type, arg_types, false);
@@ -2935,7 +2937,6 @@ void CodeGen_LLVM::visit(const Call *op) {
             function = llvm::Function::Create(function_t, llvm::Function::ExternalLinkage,
                                               name->value, module.get());
         }
-        debug(0) << "Got llvm::Function::Create result with name " << function->getName().str() << ".\n";
         value = function;
     } else if (op->is_intrinsic(Call::get_user_context)) {
         internal_assert(op->args.size() == 0);

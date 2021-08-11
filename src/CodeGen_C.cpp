@@ -2215,18 +2215,21 @@ void CodeGen_C::visit(const Call *op) {
         // struct {const int f_0, const char f_1, const int f_2} foo;
 
         // Declares a struct type. Returns a null pointer of the new type.
-        internal_assert(op->args.size() >= 1);
+        internal_assert(op->args.size() >= 2);
 
         const StringImm *str_imm = op->args[0].as<StringImm>();
         internal_assert(str_imm != nullptr);
         std::string name = str_imm->value;
 
+        const int64_t *mode = as_const_int(op->args[1]);
+        internal_assert(mode != nullptr);
+
         stream << get_indent() << "struct " << name;
-        if (op->args.size() > 1) {
+        if (*mode == 1) {
             stream << " {\n";
             // List the types.
             indent++;
-            for (size_t i = 1; i < op->args.size(); i++) {
+            for (size_t i = 2; i < op->args.size(); i++) {
                 stream << get_indent() << "const " << print_type(op->args[i].type()) << " f_" << i - 1 << ";\n";
             }
             indent--;
@@ -2265,7 +2268,7 @@ void CodeGen_C::visit(const Call *op) {
                 indent++;
             }
             for (size_t i = 0; i < initializer_count; i++) {
-                stream << get_indent() << values[i];
+                stream << get_indent() << values[i + item * initializer_count];
                 if (i < op->args.size() - 1) {
                     stream << ",";
                 }
