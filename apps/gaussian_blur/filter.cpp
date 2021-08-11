@@ -26,12 +26,11 @@ int main(int argc, char **argv) {
     }
 
     Halide::Runtime::Buffer<uint8_t> input = load_and_convert_image(argv[1]);
-    /*
-    input.crop(0, 0, 1296 - 2*195);
-    input.crop(1, 0, 1286);
-    */
+    input.crop(1, 0, 512);
 
     Halide::Runtime::Buffer<uint8_t> output(input.width(), input.height());
+
+    output.fill(0);
 
     int max_radius = 2048;
     Halide::Runtime::Buffer<uint8_t> padded(input.width() + max_radius * 2,
@@ -74,23 +73,36 @@ int main(int argc, char **argv) {
         printf("Box blur (recursive) (%d): %gms\n", r, best_manual * 1e3);
     }
     */
-    /*
-    for (int r = 1; r <= 1024; r *= 2) {
-        // Assume a padded input
-        double best_manual = benchmark(10, 10, [&]() {
-            box_blur_pyramid(padded, r, output);
+
+    auto throughput = [&](int r, double seconds) {
+        return (output.width() + r * 2 + 1) * (output.height() + r * 2 + 1) / (1000000 * seconds);
+    };
+
+    std::vector<int> radii = {1, 2, 3};
+    for (int r = 1; r < 256; r *= 2) {
+        radii.push_back(4 * r);
+        radii.push_back(5 * r);
+        radii.push_back(6 * r);
+        radii.push_back(7 * r);
+    }
+
+    for (int r : radii) {
+        Halide::Runtime::Buffer<uint8_t> translated = padded;
+        translated.set_min(r - max_radius, r - max_radius);
+        double best_manual = benchmark(30, 30, [&]() {
+            box_blur_pyramid(translated, 2 * r + 1, output.width(), output);
             output.device_sync();
         });
-        printf("Box blur (pyramid) (%d): %gms\n", r, best_manual * 1e3);
+        printf("Box blur (pyramid) (%d): %g\n", 2 * r + 1, throughput(r, best_manual));
+        convert_and_save_image(output, "out_pyramid_" + std::to_string(r) + ".png");
     }
-    */
-    // return 0;
 
-    for (int r = 1; r <= 1024; r *= 2) {
+    printf("Box blur (incremental)...\n");
+    for (int r : radii) {
         const int N = 8;
 
-        double best_manual = benchmark(10, 10, [&]() {
-            int slices = 8;  // set this to num_cores
+        double best_manual = benchmark(30, 30, [&]() {
+            int slices = 16;  // set this to num_cores
             int slice_size = (output.height() + slices - 1) / slices;
             slice_size = (slice_size + N - 1) / N * N;
 
@@ -115,7 +127,7 @@ int main(int argc, char **argv) {
                 for (int y = y_start; y < y_end; y += N) {
                     Halide::Runtime::Buffer<uint8_t> in_slice =
                         t->padded
-                            .cropped(0, -r, w + 2 * r)
+                            .cropped(0, -r, w + 2 * r + N * 2)
                             .cropped(1, y - r - 1, N + 2 * r + 1);
                     Halide::Runtime::Buffer<uint8_t> out_slice =
                         t->output.cropped(1, y, N);
@@ -131,7 +143,7 @@ int main(int argc, char **argv) {
 
             halide_do_par_for(nullptr, one_strip, 0, slices, (uint8_t *)&task);
         });
-        printf("Box blur (incremental) (%d): %gms\n", r, best_manual * 1e3);
+        printf("Box blur (incremental) (%d): %g\n", 2 * r + 1, throughput(r, best_manual));
 
         convert_and_save_image(output, "out_" + std::to_string(r) + ".png");
     }
