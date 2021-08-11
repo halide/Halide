@@ -914,7 +914,7 @@ private:
     }
 
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::if_then_else)) {
+        if (op->type.is_vector() && op->is_intrinsic(Call::if_then_else)) {
             return op;
         }
         if (op->is_intrinsic(Call::widening_add)) {
@@ -1077,7 +1077,7 @@ class VectorReducePatterns : public IRMutator {
     }
 
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::if_then_else)) {
+        if (op->type.is_vector() && op->is_intrinsic(Call::if_then_else)) {
             return op;
         }
         return IRMutator::visit(op);
@@ -1961,7 +1961,7 @@ class OptimizeShuffles : public IRMutator {
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::if_then_else)) {
+        if (op->type.is_vector() && op->is_intrinsic(Call::if_then_else)) {
             return op;
         }
         return IRMutator::visit(op);
@@ -2192,7 +2192,7 @@ class ScatterGatherGenerator : public IRMutator {
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        if (op->is_intrinsic(Call::if_then_else)) {
+        if (op->type.is_vector() && op->is_intrinsic(Call::if_then_else)) {
             return op;
         }
         return IRMutator::visit(op);
