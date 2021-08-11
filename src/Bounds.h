@@ -33,7 +33,8 @@ const FuncValueBounds &empty_func_value_bounds();
 Interval bounds_of_expr_in_scope(const Expr &expr,
                                  const Scope<Interval> &scope,
                                  const FuncValueBounds &func_bounds = empty_func_value_bounds(),
-                                 bool const_bound = false);
+                                 bool const_bound = false,
+                                 int indent = 0);
 
 /** Given a varying expression, try to find a constant that is either:
  * An upper bound (always greater than or equal to the expression), or
