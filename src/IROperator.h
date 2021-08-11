@@ -1481,7 +1481,7 @@ namespace Internal {
  * Note that this produces an intrinsic that is marked as 'pure' and thus is
  * allowed to be hoisted, etc.; thus, extra care must be taken with its use.
  **/
-Expr pure_promise_clamped(const Expr &value, const Expr &min, const Expr &max);
+Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max);
 }  // namespace Internal
 
 /** Scatter and gather are used for update definition which must store

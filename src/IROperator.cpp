@@ -1541,7 +1541,7 @@ Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max)
 }
 
 namespace Internal {
-Expr pure_promise_clamped(const Expr &value, const Expr &min, const Expr &max) {
+Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max) {
     internal_assert(value.defined()) << "promise_clamped with undefined value.\n";
     Expr n_min_val = min.defined() ? lossless_cast(value.type(), min) : value.type().min();
     Expr n_max_val = max.defined() ? lossless_cast(value.type(), max) : value.type().max();
