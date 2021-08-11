@@ -1470,8 +1470,12 @@ namespace Internal {
  * context-dependent, because 'value' might be statically bounded at
  * some point in the IR (e.g. due to a containing if statement), but
  * not elsewhere.
+ *
+ * If pure = true, the call is marked as a PureIntrinsic, allowing hoisting
+ * of the value; the caller must be (even more) vigilant in this case to
+ * ensure that the promise will remain valid in such conditions.
  **/
-Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max);
+Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max, bool pure = false);
 }  // namespace Internal
 
 /** Scatter and gather are used for update definition which must store
