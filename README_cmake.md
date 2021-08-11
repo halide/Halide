@@ -308,6 +308,9 @@ If you omit `-G Ninja`, a Makefile-based generator will likely be used instead.
 In either case, [`CMAKE_BUILD_TYPE`][cmake_build_type] must be set to one of the
 standard types: `Debug`, `RelWithDebInfo`, `MinSizeRel`, or `Release`.
 
+For your convenience, you can also use the `configure_cmake.sh` script located
+in the root directory.
+
 ### CMake Presets
 
 If you are using CMake 3.19+, we provide several [presets][cmake_presets] to
