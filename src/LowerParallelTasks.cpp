@@ -30,7 +30,6 @@ LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
                               std::vector<LoweredArgument> &args, int closure_arg_index,
                               const Stmt &body) {
   
-  debug(0) << "Making closure for " << name << "\n";
     // Figure out if user_context has to be dealt with here.
     std::string closure_arg_name = unique_name("closure_arg");
     args[closure_arg_index] = LoweredArgument(closure_arg_name, Argument::Kind::InputScalar,
@@ -391,11 +390,12 @@ struct LowerParallelTasks : public IRMutator {
                 t.body = mutate(t.body);
             }
 
-            closure_implementations.emplace_back(GenerateClosureIR(t.name, closure, closure_args, closure_arg_index, t.body));
+            std::string new_function_name = unique_name(t.name);
+            closure_implementations.emplace_back(GenerateClosureIR(new_function_name, closure, closure_args, closure_arg_index, t.body));
 
             if (use_parallel_for) {
                 std::vector<Expr> function_decl_args(5);
-                function_decl_args[0] = t.name;
+                function_decl_args[0] = new_function_name;
                 function_decl_args[1] = make_zero(Int(32));
                 function_decl_args[2] = make_zero(type_of<int8_t *>());
                 function_decl_args[3] = make_zero(Int(32));
@@ -410,7 +410,7 @@ struct LowerParallelTasks : public IRMutator {
                 result = Call::make(Int(32), "halide_do_par_for", args, Call::Extern);
             } else {
                 std::vector<Expr> function_decl_args(7);
-                function_decl_args[0] = t.name;
+                function_decl_args[0] = new_function_name;
                 function_decl_args[1] = make_zero(Int(32));
                 function_decl_args[2] = make_zero(type_of<int8_t *>());
                 function_decl_args[3] = make_zero(Int(32));
