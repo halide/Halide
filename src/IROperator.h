@@ -1471,11 +1471,17 @@ namespace Internal {
  * some point in the IR (e.g. due to a containing if statement), but
  * not elsewhere.
  *
- * If pure = true, the call is marked as a PureIntrinsic, allowing hoisting
- * of the value; the caller must be (even more) vigilant in this case to
- * ensure that the promise will remain valid in such conditions.
+ * This intrinsic always evaluates to its first argument. If this value is
+ * used by a side-effecting operation and it is outside the range specified
+ * by its second and third arguments, behavior is undefined. The compiler can
+ * therefore assume that the value is within the range given and optimize
+ * accordingly. Note that this permits promise_clamped to evaluate to
+ * something outside of the range, provided that this value is not used.
+ *
+ * Note that this produces an intrinsic that is marked as 'pure' and thus is
+ * allowed to be hoisted, etc.; thus, extra care must be taken with its use.
  **/
-Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max, bool pure = false);
+Expr pure_promise_clamped(const Expr &value, const Expr &min, const Expr &max);
 }  // namespace Internal
 
 /** Scatter and gather are used for update definition which must store

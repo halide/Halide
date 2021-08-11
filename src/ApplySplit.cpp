@@ -64,11 +64,7 @@ vector<ApplySplitResult> apply_split(const Split &split, bool is_update, const s
             // of it. We don't also use the original loop min because
             // it needlessly complicates the expressions and doesn't
             // actually communicate anything new.
-            //
-            // Note that we need to mark this value as 'pure' to ensure
-            // that this clamp's boundaries are considered in bounds inference.
-            constexpr bool pure = true;
-            Expr guarded = promise_clamped(old_var, old_var, old_max, pure);
+            Expr guarded = pure_promise_clamped(old_var, old_var, old_max);
             string guarded_var_name = prefix + split.old_var + ".guarded";
             Expr guarded_var = Variable::make(Int(32), guarded_var_name);
 

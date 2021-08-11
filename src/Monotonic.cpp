@@ -726,7 +726,7 @@ void is_monotonic_test() {
 
     check_unknown(select(x > 0, y, z));
 
-    check_increasing(select(0 < x, promise_clamped(x - 1, x - 1, z) + 1, promise_clamped(x, x, z)));
+    check_increasing(select(0 < x, pure_promise_clamped(x - 1, x - 1, z) + 1, pure_promise_clamped(x, x, z)));
 
     check_constant(y);
 
