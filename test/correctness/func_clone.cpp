@@ -66,7 +66,7 @@ int func_clone_test() {
     // in the final IR.
     Module m = g.compile_to_module({});
     CheckCalls c;
-    m.functions().front().body.accept(&c);
+    c.add_module(m);
 
     CallGraphs expected = {
         {g.name(), {clone.name()}},
@@ -102,7 +102,7 @@ int multiple_funcs_sharing_clone_test() {
     Pipeline p({g1, g2, g3});
     Module m = p.compile_to_module({}, "");
     CheckCalls c;
-    m.functions().front().body.accept(&c);
+    c.add_module(m);
 
     CallGraphs expected = {
         {g1.name(), {f_clone.name()}},
@@ -164,7 +164,7 @@ int update_defined_after_clone_test() {
         // 'clone' and 'g', clone' to call nothing, and 'f' not in the final IR.
         Module m = g.compile_to_module({g.infer_arguments()});
         CheckCalls c;
-        m.functions().front().body.accept(&c);
+        c.add_module(m);
 
         CallGraphs expected = {
             {g.name(), {clone.name(), g.name()}},
@@ -191,7 +191,7 @@ int update_defined_after_clone_test() {
         // 'clone' and 'g', clone' to call nothing, and 'f' not in the final IR.
         Module m = g.compile_to_module({g.infer_arguments()});
         CheckCalls c;
-        m.functions().front().body.accept(&c);
+        c.add_module(m);
 
         CallGraphs expected = {
             {g.name(), {clone.name(), g.name()}},
@@ -238,7 +238,7 @@ int clone_depend_on_mutated_func_test() {
     Pipeline p({d, e, f});
     Module m = p.compile_to_module({}, "");
     CheckCalls check;
-    m.functions().front().body.accept(&check);
+    check.add_module(m);
 
     CallGraphs expected = {
         {e.name(), {a.name()}},
@@ -300,7 +300,7 @@ int clone_on_clone_test() {
     Pipeline p({c, d, e, f});
     Module m = p.compile_to_module({}, "");
     CheckCalls check;
-    m.functions().front().body.accept(&check);
+    check.add_module(m);
 
     CallGraphs expected = {
         {e.name(), {b.name(), a_clone_in_b_e_in_e.name()}},

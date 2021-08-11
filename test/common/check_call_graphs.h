@@ -19,6 +19,17 @@ public:
     CallGraphs calls;  // Caller -> vector of callees
     std::string producer = "";
 
+    // TODO(zvookin|abadams): Figure out how to get the right graph across multiple
+    // lowered functions. Iterating in reverse order doesn't seem to change the result,
+    // which sort of makes sense as it seems the traversal just isn't seeing the edge
+    // between the callers of the newly introduced closures and the closures themselves.
+    void add_module(const Halide::Module &m) {
+        const auto &functions = m.functions();
+        for (size_t i = 0; i < functions.size(); i++) {
+            functions[i].body.accept(this);
+        }
+    }
+    
 private:
     using Halide::Internal::IRVisitor::visit;
 
@@ -47,9 +58,22 @@ private:
     }
 };
 
+inline void print_graph(const CallGraphs &g) {
+    for (const auto &node : g) {
+        printf("Graph node %s:\n", node.first.c_str());
+        for (const auto &edge : node.second) {
+            printf("    %s\n", edge.c_str());
+        }
+    }
+}
+
 // These are declared "inline" to avoid "unused function" warnings
 inline int check_call_graphs(CallGraphs &result, CallGraphs &expected) {
     if (result.size() != expected.size()) {
+        printf("Expected---\n");
+        print_graph(expected);
+        printf("Result---\n");
+        print_graph(result);
         printf("Expect %d callers instead of %d\n", (int)expected.size(), (int)result.size());
         return -1;
     }
@@ -74,7 +98,7 @@ inline int check_call_graphs(CallGraphs &result, CallGraphs &expected) {
                     return a.empty() ? b : a + ", " + b;
                 });
 
-            printf("Expect calless of %s to be (%s); got (%s) instead\n",
+            printf("Expect calleess of %s to be (%s); got (%s) instead\n",
                    iter.first.c_str(), expected_str.c_str(), result_str.c_str());
             return -1;
         }

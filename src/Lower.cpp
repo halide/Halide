@@ -433,7 +433,7 @@ void lower_impl(const vector<Function> &output_funcs,
 
     std::vector<LoweredFunc> closure_implementations;
     debug(1) << "Lowering Parallel Tasks...\n";
-    s = lower_parallel_tasks(s, closure_implementations, pipeline_name);
+    s = lower_parallel_tasks(s, closure_implementations, pipeline_name, t);
     for (auto& lowerd_func : closure_implementations) {
         result_module.append(lowerd_func);
     }

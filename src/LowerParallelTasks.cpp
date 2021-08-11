@@ -14,22 +14,10 @@
 namespace Halide {
 namespace Internal {
 
-Expr maybe_print(const std::string &label, Expr e) {
-#if 0
-    std::string n = unique_name('t');
-    Expr v = Variable::make(e.type(), n);
-    return Let::make(n, e, Call::make(e.type(), Internal::Call::return_second,
-        {print(StringImm::make(label), v), v}, Internal::Call::PureIntrinsic));
-#else
-    return e;
-#endif
-}
-
 // TODO(zalman): Find a better place for this code to live.
 LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
                               std::vector<LoweredArgument> &args, int closure_arg_index,
-                              const Stmt &body) {
-  
+                              const Stmt &body, const Target &t) {
     // Figure out if user_context has to be dealt with here.
     std::string closure_arg_name = unique_name("closure_arg");
     args[closure_arg_index] = LoweredArgument(closure_arg_name, Argument::Kind::InputScalar,
@@ -47,10 +35,9 @@ LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
     for (const auto &v : closure.vars) {
         type_args[struct_index + 2] = make_zero(v.second);
         wrapped_body = LetStmt::make(v.first,
-                                     maybe_print("Reading " + v.first + " ",
                                      Call::make(v.second, Call::load_struct_member,
                                                 { closure_arg, struct_type, make_const(UInt(32), struct_index) },
-                                                Call::Intrinsic)),
+                                                Call::Intrinsic),
                                      wrapped_body);
         struct_index++;
     }
@@ -58,26 +45,26 @@ LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
         type_args[struct_index + 2] = make_zero(type_of<void *>());
         type_args[struct_index + 3] = make_zero(type_of<halide_buffer_t *>());
         wrapped_body = LetStmt::make(b.first,
-                                     maybe_print("Reading buffer arg 1 " + b.first + " ",
                                      Call::make(type_of<void *>(), Call::load_struct_member,
                                                 { closure_arg, struct_type, make_const(UInt(32), struct_index) },
-                                                Call::PureIntrinsic)),
+                                                Call::PureIntrinsic),
                                      wrapped_body);
         wrapped_body = LetStmt::make(b.first + ".buffer",
-                                     maybe_print("Reading buffer arg 2 " + b.first + ".buffer ",
                                      Call::make(type_of<halide_buffer_t *>(), Call::load_struct_member,
                                                 { closure_arg, struct_type, make_const(UInt(32), struct_index + 1) },
-                                                Call::Intrinsic)),
+                                                Call::Intrinsic),
                                      wrapped_body);
         struct_index += 2;
     }
 
     Expr struct_type_decl = Call::make(Handle(), Call::make_struct_type, type_args, Call::PureIntrinsic);
-    wrapped_body = Block::make(Evaluate::make(maybe_print("closure arg incoming.", closure_arg)), wrapped_body);
+    wrapped_body = Block::make(Evaluate::make(closure_arg), wrapped_body);
     wrapped_body = LetStmt::make(closure_type_name, struct_type_decl, wrapped_body);
 
-    LoweredFunc result{name, args, wrapped_body, LinkageType::External, NameMangling::Default };
-    //    debug_arguments(&result, Target("host-debug"));
+    LoweredFunc result{name, args, wrapped_body, LinkageType::External, NameMangling::Default};
+    if (t.has_feature(Target::Debug)) {
+        debug_arguments(&result, t);
+    }
     return result;
 }
 
@@ -96,20 +83,14 @@ Expr AllocateClosure(const std::string &name, const Closure &closure) {
 
     for (const auto &v : closure.vars) {
         Expr var = Variable::make(v.second, v.first);
-        closure_elements.push_back(maybe_print("Storing " + v.first + " ",
-                                               var));
+        closure_elements.push_back(var);
         closure_types.push_back(var);
     }
     for (const auto &b : closure.buffers) {
-        // TODO(zalman): Verify types here...
         Expr ptr_var = Variable::make(type_of<void *>(), b.first);
-        closure_elements.push_back(maybe_print("Storing buffer arg 1 " + b.first + " ",
-                                               ptr_var));
-        // TODO(zalman): this has to allow a failed lookup.
-        closure_elements.push_back(maybe_print("Storing buffer arg 2 " + b.first + ".buffer ",
-                                               Call::make(type_of<halide_buffer_t *>(), Call::get_pointer_symbol_or_null,
-                                                          { StringImm::make(b.first + ".buffer"), buffer_t_type },
-                                                          Call::Intrinsic)));
+        closure_elements.push_back(ptr_var);
+        closure_elements.push_back(Call::make(type_of<halide_buffer_t *>(), Call::get_pointer_symbol_or_null,
+                                              { StringImm::make(b.first + ".buffer"), buffer_t_type }, Call::Intrinsic));
         closure_types.push_back(ptr_var);
         closure_types.push_back(buffer_t_type);
     }    
@@ -117,7 +98,7 @@ Expr AllocateClosure(const std::string &name, const Closure &closure) {
     Expr result = Let::make(buffer_t_type_name, Call::make(Handle(), Call::make_struct_type,
                                                            { StringImm::make("halide_buffer_t"), 0 }, Call::PureIntrinsic),
                             Call::make(type_of<void *>(), Call::make_typed_struct, closure_elements, Call::Intrinsic));
-    return maybe_print("Closure after allocation: ", result);
+    return result;
 }
 
 namespace {
@@ -198,9 +179,6 @@ struct LowerParallelTasks : public IRMutator {
         }
 
         int num_tasks = (int)(tasks.size());
-        // TODO(zalman): Should probably move this to HalideRuntime.h or come up
-        // with a better way to do it, though this number is encoded in the code
-        // below as well so...
         std::vector<Expr> tasks_array_args(2);
         tasks_array_args[0] = Call::make(type_of<halide_parallel_task_t *>(), Call::make_struct_type, { StringImm::make("halide_parallel_task_t"), 0 }, Call::PureIntrinsic);
         tasks_array_args[1] = num_tasks;
@@ -391,7 +369,8 @@ struct LowerParallelTasks : public IRMutator {
             }
 
             std::string new_function_name = unique_name(t.name);
-            closure_implementations.emplace_back(GenerateClosureIR(new_function_name, closure, closure_args, closure_arg_index, t.body));
+            closure_implementations.emplace_back(GenerateClosureIR(new_function_name, closure, closure_args,
+                                                                   closure_arg_index, t.body, target));
 
             if (use_parallel_for) {
                 std::vector<Expr> function_decl_args(5);
@@ -492,31 +471,31 @@ struct LowerParallelTasks : public IRMutator {
         return rewrite_parallel_tasks(tasks);
     }
 
-    LowerParallelTasks(const std::string &name) : function_name(name) { }
+    LowerParallelTasks(const std::string &name, const Target &t)
+        : function_name(name), target(t)  {
+    }
 
     std::string function_name;
+    const Target &target;
     std::vector<LoweredFunc> closure_implementations;
 };
 
-Stmt lower_parallel_tasks(Stmt s, std::vector<LoweredFunc> &closure_implementations, const std::string &name) {
-    LowerParallelTasks lowering_mutator(name);
+Stmt lower_parallel_tasks(Stmt s, std::vector<LoweredFunc> &closure_implementations,
+                          const std::string &name, const Target &t) {
+  LowerParallelTasks lowering_mutator(name, t);
     Stmt result = lowering_mutator.mutate(s);
 
-#if 0
-    for (const auto &lf : lowering_mutator.closure_implementations) {
-        debug(0) << "Lowered function " << lf.name << ":\n" << lf.body << "\n\n";
+    // Main body will be dumped as part of standard lowering debugging, but closures will not be.
+    if (debug::debug_level() >= 2) {
+        for (const auto &lf : lowering_mutator.closure_implementations) {
+            debug(2) << "lower_parallel_tasks generated closure lowered function " << lf.name << ":\n" << lf.body << "\n\n";
+        }
     }
-#endif
 
     closure_implementations = std::move(lowering_mutator.closure_implementations);
 
-#if 0
-    debug(0) << "Main body:\n" << result << "\n\n";
-#endif
-
     return result;
-}  
+}
 
 }  // namespace Internal
 }  // namespace Halide
-
