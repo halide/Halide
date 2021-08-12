@@ -152,11 +152,14 @@ public:
             // When we're broadcasting input channels, require that the input has only
             // one channel.
             input_.dim(0).set_extent(1);
-        } else if (inv_depth_multiplier_ == 1 && !shallow_) {
+        } else if (shallow_) {
+            // Don't require alignment for shallow. We'd like to do so, but don't
+            // have a good way to express it currently, since it requires
+            // padding the fusion of two dimensions, and requiring alignment
+            // will cause failures on wide-vector architectures like AVX512, HVX, etc.
+            // We'll just pay the alignment penalty here for now.
+        } else if (inv_depth_multiplier_ == 1) {
             // Require the input to be aligned.
-            // (Exception: don't require alignment for shallow; that would require
-            // padding on architectures with wide vectors, e.g. AVX512, HVX, which we'd
-            // rather not do. It's better to just pay an alignment penalty.)
             const int input_alignment = vector_size;
             input_.set_host_alignment(input_alignment);
             for (int d = 1; d < input_.dimensions(); d++) {
