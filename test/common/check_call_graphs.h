@@ -98,7 +98,7 @@ inline int check_call_graphs(CallGraphs &result, CallGraphs &expected) {
                     return a.empty() ? b : a + ", " + b;
                 });
 
-            printf("Expect calleess of %s to be (%s); got (%s) instead\n",
+            printf("Expect callees of %s to be (%s); got (%s) instead\n",
                    iter.first.c_str(), expected_str.c_str(), result_str.c_str());
             return -1;
         }
