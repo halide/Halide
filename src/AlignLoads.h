@@ -15,10 +15,10 @@ namespace Internal {
  * load, and then slice the original load out of the aligned
  * vectors.
  *
- * Types that are less than min_bytes_to_align in size do not have
- * alignment applied. This is intended to make a distinction between
- * data that will be accessed as a scalar and that which will be
- * accessed as a vector.
+ * Types that are less than min_bytes_to_align in size are not
+ * rewritten. This is intended to make a distinction between data that
+ * will be accessed as a scalar and that which will be accessed as a
+ * vector.
  */
 Stmt align_loads(const Stmt &s, int alignment, int min_bytes_to_align);
 
