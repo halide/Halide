@@ -94,10 +94,15 @@ Expr AllocateClosure(const std::string &name, const Closure &closure) {
         closure_types.push_back(ptr_var);
         closure_types.push_back(buffer_t_type);
     }    
-    closure_elements[0] = Call::make(Handle(), Call::make_struct_type, closure_types, Call::PureIntrinsic);
+    Expr closure_struct_type = Call::make(Handle(), Call::make_struct_type, closure_types, Call::PureIntrinsic);
+    std::string closure_type_name = unique_name("closure_struct_type");
+    Expr struct_type = Variable::make(Handle(), closure_type_name);
+
+    closure_elements[0] = struct_type;
     Expr result = Let::make(buffer_t_type_name, Call::make(Handle(), Call::make_struct_type,
                                                            { StringImm::make("halide_buffer_t"), 0 }, Call::PureIntrinsic),
-                            Call::make(type_of<void *>(), Call::make_typed_struct, closure_elements, Call::Intrinsic));
+                            Let::make(closure_type_name, closure_struct_type, 
+                                      Call::make(type_of<void *>(), Call::make_typed_struct, closure_elements, Call::Intrinsic)));
     return result;
 }
 
@@ -338,7 +343,7 @@ struct LowerParallelTasks : public IRMutator {
             std::vector<LoweredArgument> closure_args(use_parallel_for ? 3 : 5);
             int closure_arg_index;
             closure_args[0] = LoweredArgument("__user_context", Argument::Kind::InputScalar,
-                                              type_of<void *>(), 0, ArgumentEstimates());
+                                              type_of<const void *>(), 0, ArgumentEstimates());
             if (use_parallel_for) {
                 closure_arg_index = 2;
                 closure_args[1] = LoweredArgument(t.loop_var, Argument::Kind::InputScalar,
@@ -381,8 +386,8 @@ struct LowerParallelTasks : public IRMutator {
                 function_decl_args[4] = make_zero(type_of<int8_t *>());
 
                 std::vector<Expr> args(5);
-                args[0] = Call::make(type_of<void *>(), Call::get_user_context, {}, Call::PureIntrinsic);
-                args[1] = Call::make(Handle(), Call::resolve_function_name, function_decl_args, Call::PureIntrinsic);
+                args[0] = Call::make(type_of<const void *>(), Call::get_user_context, {}, Call::PureIntrinsic);
+                args[1] = Call::make(type_of<const void *>(), Call::resolve_function_name, function_decl_args, Call::PureIntrinsic);
                 args[2] = t.min;
                 args[3] = t.extent;
                 args[4] = closure_struct;
@@ -391,13 +396,13 @@ struct LowerParallelTasks : public IRMutator {
                 std::vector<Expr> function_decl_args(7);
                 function_decl_args[0] = new_function_name;
                 function_decl_args[1] = make_zero(Int(32));
-                function_decl_args[2] = make_zero(type_of<int8_t *>());
+                function_decl_args[2] = make_zero(type_of<void *>());
                 function_decl_args[3] = make_zero(Int(32));
                 function_decl_args[4] = make_zero(Int(32));
-                function_decl_args[5] = make_zero(type_of<int8_t *>());
-                function_decl_args[6] = make_zero(type_of<int8_t *>());
+                function_decl_args[5] = make_zero(type_of<uint8_t *>());
+                function_decl_args[6] = make_zero(type_of<void *>());
 
-                tasks_array_args.push_back(Call::make(Handle(), Call::resolve_function_name, function_decl_args, Call::PureIntrinsic));
+                tasks_array_args.push_back(Call::make(type_of<const void *>(), Call::resolve_function_name, function_decl_args, Call::PureIntrinsic));
                 tasks_array_args.push_back(Cast::make(type_of<uint8_t *>(), closure_struct));
                 tasks_array_args.push_back(StringImm::make(t.name));
                 tasks_array_args.push_back(semaphores_array.defined() ? semaphores_array : semaphore_type);
@@ -405,14 +410,14 @@ struct LowerParallelTasks : public IRMutator {
                 tasks_array_args.push_back(t.min);
                 tasks_array_args.push_back(t.extent);
                 tasks_array_args.push_back(min_threads.result);
-                tasks_array_args.push_back(Cast::make(UInt(8), t.serial));
+                tasks_array_args.push_back(Cast::make(Bool(), t.serial));
             }
         }
 
         if (tasks_array_args.size() > 2) {
             // Allocate task list array
             Expr tasks_list = Call::make(Handle(), Call::make_typed_struct, tasks_array_args, Call::PureIntrinsic);
-            result = Call::make(Int(32), "halide_do_parallel_tasks", { Call::make(type_of<void *>(), Call::get_user_context, {}, Call::PureIntrinsic),
+            result = Call::make(Int(32), "halide_do_parallel_tasks", { reinterpret(type_of<void *>(), Call::make(type_of<const void *>(), Call::get_user_context, {}, Call::PureIntrinsic)),
                                                                       make_const(Int(32), num_tasks), tasks_list,
                                                                       Call::make(Handle(), Call::get_pointer_symbol_or_null,
                                                                                  { StringImm::make("_task_parent"), make_zero(Handle()) }, Call::Intrinsic) }, Call::Extern);

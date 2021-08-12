@@ -82,7 +82,7 @@ struct halide_handle_cplusplus_type {
     std::vector<halide_cplusplus_type_name> enclosing_types;
 
     /// One set of modifiers on a type.
-    /// The const/volatile/restrict propertises are "inside" the pointer property.
+    /// The const/volatile/restrict properties are "inside" the pointer property.
     enum Modifier : uint8_t {
         Const = 1 << 0,     ///< Bitmask flag for "const"
         Volatile = 1 << 1,  ///< Bitmask flag for "volatile"

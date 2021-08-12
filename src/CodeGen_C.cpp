@@ -1288,6 +1288,17 @@ string CodeGen_C::print_type(Type type, AppendSpaceIfNeeded space_option) {
     return type_to_c_type(type, space_option == AppendSpace);
 }
 
+namespace {
+
+bool is_const_pointer(const Type &t) {
+    if (t.is_handle() && t.handle_type != nullptr && !t.handle_type->cpp_type_modifiers.empty()) {
+        return (t.handle_type->cpp_type_modifiers[0] & halide_handle_cplusplus_type::Const) != 0;
+    }
+    return false;
+}
+
+}
+
 string CodeGen_C::print_reinterpret(Type type, const Expr &e) {
     ostringstream oss;
     if (type.is_handle() || e.type().is_handle()) {
@@ -1300,7 +1311,12 @@ string CodeGen_C::print_reinterpret(Type type, const Expr &e) {
     } else {
         oss << "reinterpret<" << print_type(type) << ">";
     }
-    oss << "(" << print_expr(e) << ")";
+    if (type.is_handle() && !is_const_pointer(type) &&
+        is_const_pointer(e.type())) {
+        oss << "const_cast<std::add_pointer<std::remove_const<std::remove_pointer<decltype(" << print_expr(e) << ")>::type>::type>::type>(" << print_expr(e) << ")";
+    } else {
+        oss << "(" << print_expr(e) << ")";
+    }
     return oss.str();
 }
 
@@ -2224,18 +2240,20 @@ void CodeGen_C::visit(const Call *op) {
         const int64_t *mode = as_const_int(op->args[1]);
         internal_assert(mode != nullptr);
 
-        stream << get_indent() << "struct " << name;
-        if (*mode == 1) {
-            stream << " {\n";
-            // List the types.
-            indent++;
-            for (size_t i = 2; i < op->args.size(); i++) {
-                stream << get_indent() << "const " << print_type(op->args[i].type()) << " f_" << i - 1 << ";\n";
+        if (*mode == 1 || !starts_with(name, "halide_")) {
+            stream << get_indent() << "struct " << name;
+            if (*mode == 1) {
+                stream << " {\n";
+                // List the types.
+                indent++;
+                for (size_t i = 2; i < op->args.size(); i++) {
+                    stream << get_indent() << print_type(op->args[i].type()) << " f_" << i - 2 << ";\n";
+                }
+                indent--;
+                stream << get_indent() << "};\n";
+            } else {
+                stream << ";\n";
             }
-            indent--;
-            stream << get_indent() << "};\n";
-        } else {
-            stream << ";\n";
         }
         rhs << "((" << name << " *)nullptr)";
     } else if (op->is_intrinsic(Call::make_typed_struct)) {
@@ -2249,14 +2267,14 @@ void CodeGen_C::visit(const Call *op) {
         // Get the args
         vector<string> values;
         for (size_t i = 2; i < op->args.size(); i++) {
-            values.push_back(print_expr(op->args[i - 2]));
+            values.push_back(print_expr(op->args[i]));
         }
         string struct_name = unique_name('s');
         string array_specifier;
         if (count > 0) {
             array_specifier = "[]";
         }
-        stream << get_indent() << "decltype(" << type_carrier << ") " << struct_name << array_specifier << " = {\n";
+        stream << get_indent() << "std::remove_pointer<decltype(" << type_carrier << ")>::type " << struct_name << array_specifier << " = {\n";
         // List the values.
         indent++;
         int item = 0;
@@ -2290,7 +2308,7 @@ void CodeGen_C::visit(const Call *op) {
         if (op->type.handle_type) {
             rhs << "(" << print_type(op->type) << ")";
         }
-        rhs << "(&" << struct_name << ")";
+        rhs << "(&" << struct_name << ((count > 0) ? "[0])" : ")");
     } else if (op->is_intrinsic(Call::load_struct_member)) {
         internal_assert(op->args.size() == 3);
         const uint64_t *index = as_const_uint(op->args[2]);
@@ -2416,7 +2434,9 @@ void CodeGen_C::visit(const Call *op) {
         stream << get_indent() << rhs.str() << ";\n";
         // Make an innocuous assignment value for our caller (probably an Evaluate node) to ignore.
         print_assignment(op->type, "0");
-    } else if (op->is_intrinsic(Call::make_struct_type)) {
+    } else if (op->is_intrinsic(Call::make_struct_type) ||
+               op->is_intrinsic(Call::make_typed_struct) ||
+               op->is_intrinsic(Call::resolve_function_name)) {
         // print_assigment will get the type info wrong for this case.
         std::string rhs_str = rhs.str();
         auto cached = cache.find(rhs_str);
@@ -2576,7 +2596,7 @@ void CodeGen_C::visit(const Let *op) {
     if (op->value.type().is_handle()) {
         // The body might contain a Load that references this directly
         // by name, so we can't rewrite the name.
-        stream << get_indent() << print_type(op->value.type())
+        stream << get_indent() << "auto " /*print_type(op->value.type()) */
                << " " << print_name(op->name)
                << " = " << id_value << ";\n";
     } else {

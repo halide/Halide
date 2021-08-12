@@ -2875,7 +2875,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         vector<llvm::Value *> args(op->args.size() - 2);
         vector<llvm::Type *> types(op->args.size() - 2);
         for (size_t i = 2; i < op->args.size(); i++) {
-            llvm::Value *value = codegen(op->args[i]);
+            llvm::Value *value;
+            value = codegen(op->args[i]);
             args[i - 2] = value;
             types[i - 2] = value->getType();
         }
@@ -2900,8 +2901,9 @@ void CodeGen_LLVM::visit(const Call *op) {
                 // TODO(zalman): Halide IR is not strongly typed re: pointers,
                 // especially to structs. Specific case that is failing is
                 // halide_semaphort_t *.
-                if (init_value->getType() != elem_ptr->getType()->getPointerElementType() &&
-                    init_value->getType() == i8_t->getPointerTo()) {
+                if ((init_value->getType() != elem_ptr->getType()->getPointerElementType() &&
+                     init_value->getType() == i8_t->getPointerTo()) ||
+                    init_value->getType() == i1_t || elem_ptr->getType()->getPointerElementType() == i1_t) {
                   init_value = builder->CreatePointerCast(init_value, elem_ptr->getType()->getPointerElementType());
                 }
                 builder->CreateStore(init_value, elem_ptr);
