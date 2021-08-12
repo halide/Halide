@@ -9,7 +9,7 @@ mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
 
 if [ -z ${HALIDE_INSTALL_PATH} ]; then
-HALIDE_INSTALL_PATH=${HOME}/halide-13-install/
+HALIDE_INSTALL_PATH=${HOME}/halide-14-install/
 fi
 echo Using HalideInstall=${HALIDE_INSTALL_PATH}
 
