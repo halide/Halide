@@ -2840,7 +2840,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 }
             }
         }
-    } else if (op->is_intrinsic(Call::make_struct_type)) {
+    } else if (op->is_intrinsic(Call::declare_struct_type)) {
         // Declares a struct type. Returns a null pointer of the new type.
         internal_assert(op->args.size() >= 2);
       

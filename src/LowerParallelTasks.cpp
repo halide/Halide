@@ -57,7 +57,7 @@ LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
         struct_index += 2;
     }
 
-    Expr struct_type_decl = Call::make(Handle(), Call::make_struct_type, type_args, Call::PureIntrinsic);
+    Expr struct_type_decl = Call::make(Handle(), Call::declare_struct_type, type_args, Call::PureIntrinsic);
     wrapped_body = Block::make(Evaluate::make(closure_arg), wrapped_body);
     wrapped_body = LetStmt::make(closure_type_name, struct_type_decl, wrapped_body);
 
@@ -94,12 +94,12 @@ Expr AllocateClosure(const std::string &name, const Closure &closure) {
         closure_types.push_back(ptr_var);
         closure_types.push_back(buffer_t_type);
     }    
-    Expr closure_struct_type = Call::make(Handle(), Call::make_struct_type, closure_types, Call::PureIntrinsic);
+    Expr closure_struct_type = Call::make(Handle(), Call::declare_struct_type, closure_types, Call::PureIntrinsic);
     std::string closure_type_name = unique_name("closure_struct_type");
     Expr struct_type = Variable::make(Handle(), closure_type_name);
 
     closure_elements[0] = struct_type;
-    Expr result = Let::make(buffer_t_type_name, Call::make(Handle(), Call::make_struct_type,
+    Expr result = Let::make(buffer_t_type_name, Call::make(Handle(), Call::declare_struct_type,
                                                            { StringImm::make("halide_buffer_t"), 0 }, Call::PureIntrinsic),
                             Let::make(closure_type_name, closure_struct_type, 
                                       Call::make(type_of<void *>(), Call::make_typed_struct, closure_elements, Call::Intrinsic)));
@@ -185,7 +185,7 @@ struct LowerParallelTasks : public IRMutator {
 
         int num_tasks = (int)(tasks.size());
         std::vector<Expr> tasks_array_args(2);
-        tasks_array_args[0] = Call::make(type_of<halide_parallel_task_t *>(), Call::make_struct_type, { StringImm::make("halide_parallel_task_t"), 0 }, Call::PureIntrinsic);
+        tasks_array_args[0] = Call::make(type_of<halide_parallel_task_t *>(), Call::declare_struct_type, { StringImm::make("halide_parallel_task_t"), 0 }, Call::PureIntrinsic);
         tasks_array_args[1] = num_tasks;
 
 
@@ -325,7 +325,7 @@ struct LowerParallelTasks : public IRMutator {
             bool use_parallel_for = false;
 #endif
 
-            Expr semaphore_type = Call::make(type_of<halide_semaphore_acquire_t *>(), Call::make_struct_type,
+            Expr semaphore_type = Call::make(type_of<halide_semaphore_acquire_t *>(), Call::declare_struct_type,
                                              { StringImm::make("halide_semaphore_acquire_t"), 0 }, Call::PureIntrinsic);
             std::string semaphores_array_name = unique_name("task_semaphores");
             Expr semaphores_array;

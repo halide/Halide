@@ -652,7 +652,7 @@ const char *const intrinsic_op_names[] = {
     "widening_shift_left",
     "widening_shift_right",
     "widening_sub",
-    "make_struct_type",
+    "declare_struct_type",
     "make_typed_struct",
     "load_struct_member",
     "resolve_function_name",
