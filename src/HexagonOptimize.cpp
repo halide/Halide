@@ -914,8 +914,11 @@ private:
     }
 
     Expr visit(const Call *op) override {
-        if (op->type.is_vector() && op->is_intrinsic(Call::if_then_else)) {
-            return op;
+        if (op->is_intrinsic(Call::if_then_else) && op->args[0].type().is_vector()) {
+            const Broadcast *b = op->args[0].as<Broadcast>();
+            if (!b || b->value.type().is_vector()) {
+                return op;
+            }
         }
         if (op->is_intrinsic(Call::widening_add)) {
             Expr mpyadds = find_mpyadds(Add::make(cast(op->type, op->args[0]), cast(op->type, op->args[1])));
@@ -1077,8 +1080,11 @@ class VectorReducePatterns : public IRMutator {
     }
 
     Expr visit(const Call *op) override {
-        if (op->type.is_vector() && op->is_intrinsic(Call::if_then_else)) {
-            return op;
+        if (op->is_intrinsic(Call::if_then_else) && op->args[0].type().is_vector()) {
+            const Broadcast *b = op->args[0].as<Broadcast>();
+            if (!b || b->value.type().is_vector()) {
+                return op;
+            }
         }
         return IRMutator::visit(op);
     }
@@ -1961,8 +1967,11 @@ class OptimizeShuffles : public IRMutator {
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        if (op->type.is_vector() && op->is_intrinsic(Call::if_then_else)) {
-            return op;
+        if (op->is_intrinsic(Call::if_then_else) && op->args[0].type().is_vector()) {
+            const Broadcast *b = op->args[0].as<Broadcast>();
+            if (!b || b->value.type().is_vector()) {
+                return op;
+            }
         }
         return IRMutator::visit(op);
     }
@@ -2192,8 +2201,11 @@ class ScatterGatherGenerator : public IRMutator {
     using IRMutator::visit;
 
     Expr visit(const Call *op) override {
-        if (op->type.is_vector() && op->is_intrinsic(Call::if_then_else)) {
-            return op;
+        if (op->is_intrinsic(Call::if_then_else) && op->args[0].type().is_vector()) {
+            const Broadcast *b = op->args[0].as<Broadcast>();
+            if (!b || b->value.type().is_vector()) {
+                return op;
+            }
         }
         return IRMutator::visit(op);
     }
