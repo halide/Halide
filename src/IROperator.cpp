@@ -1537,7 +1537,7 @@ Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max)
     return Internal::Call::make(value.type(),
                                 Internal::Call::unsafe_promise_clamped,
                                 {value, n_min_val, n_max_val},
-                                Internal::Call::Intrinsic);
+                                Internal::Call::PureIntrinsic);
 }
 
 namespace Internal {
