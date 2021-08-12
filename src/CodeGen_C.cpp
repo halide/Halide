@@ -2336,7 +2336,7 @@ void CodeGen_C::visit(const Call *op) {
         string arg1 = print_expr(op->args[1]);
         rhs << "return_second(" << arg0 << ", " << arg1 << ")";
     } else if (op->is_intrinsic(Call::if_then_else)) {
-        internal_assert(op->args.size() == 3);
+        internal_assert(op->args.size() == 2 || op->args.size() == 3);
 
         string result_id = unique_name('_');
 
