@@ -436,6 +436,10 @@ void lower_impl(const vector<Function> &output_funcs,
     std::vector<LoweredFunc> closure_implementations;
     debug(1) << "Lowering Parallel Tasks...\n";
     s = lower_parallel_tasks(s, closure_implementations, pipeline_name, t);
+    // Process any LoweredFunctions added by other passes. In practice, this
+    // will likely not work well enough due to ordering issues with
+    // closure generating passes and instead all such passes will need to
+    // be done at once.
     for (size_t i = initial_lowered_function_count; i < result_module.functions().size(); i++) {
         result_module.functions()[i].body =
             lower_parallel_tasks(result_module.functions()[i].body, closure_implementations,
