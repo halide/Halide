@@ -23,6 +23,13 @@
 #include "Util.h"
 #include "Var.h"
 
+#ifndef DO_TRACK_BOUNDS_INTERVALS
+#define DO_TRACK_BOUNDS_INTERVALS 0
+#endif
+#ifndef DO_DUMP_BOXES_TOUCHED
+#define DO_DUMP_BOXES_TOUCHED 0
+#endif
+
 namespace Halide {
 namespace Internal {
 
@@ -131,10 +138,6 @@ public:
     }
 
 private:
-#ifndef DO_TRACK_BOUNDS_INTERVALS
-#define DO_TRACK_BOUNDS_INTERVALS 0
-#endif
-
 #if DO_TRACK_BOUNDS_INTERVALS
 
     static int &get_logging() {
@@ -142,20 +145,33 @@ private:
         return do_log;
     }
 
+public:
     int interval_log_indent = 0;
 
-    void log_interval(const std::string &msg) const {
+private:
+    std::string log_interval_spaces() const {
+        return std::string(interval_log_indent * 2, ' ');
+    }
+
+    void log_interval_exit(const std::string &msg) const {
         if (get_logging()) {
-            std::string spaces(interval_log_indent, ' ');
-            debug(0) << spaces << msg << "\n"
-                     << spaces << "  mn=" << interval.min << "\n"
-                     << spaces << "  mx=" << interval.max << "\n";
+            std::string spaces = log_interval_spaces();
+            debug(0) << spaces << "  mn=" << interval.min << "\n"
+                     << spaces << "  mx=" << interval.max << "\n"
+                     << spaces << "}\n";
         }
     }
 
-    void log_interval_msg(const std::string &msg) {
+    void log_interval_enter(const std::string &msg) {
         if (get_logging()) {
-            std::string spaces(interval_log_indent, ' ');
+            std::string spaces = log_interval_spaces();
+            debug(0) << spaces << msg << " {\n";
+        }
+    }
+
+    void log_interval_info(const std::string &msg) {
+        if (get_logging()) {
+            std::string spaces = log_interval_spaces();
             debug(0) << spaces << msg << "\n";
         }
     }
@@ -165,18 +181,24 @@ private:
         std::string name;
         IntervalLogger(Bounds *self, const char *pretty_function)
             : self(self) {
-            name = replace_all(pretty_function, "virtual void Halide::Internal::", "");
+            name = replace_all(pretty_function, "(anonymous namespace)::", "");
+            name = replace_all(name, "virtual void Halide::Internal::", "");
             name = replace_all(name, "(const Halide::Internal::", "(");
-            self->log_interval_msg("Enter " + name);
+            name = replace_all(name, "Bounds::", "");
+            self->log_interval_enter(name);
             self->interval_log_indent++;
         }
         ~IntervalLogger() {
             self->interval_log_indent--;
-            self->log_interval("Exit  " + name);
+            self->log_interval_exit(name);
         }
     };
 
 #define TRACK_BOUNDS_INTERVAL IntervalLogger log_me_here_(this, __PRETTY_FUNCTION__)
+#define TRACK_BOUNDS_INFO(str)  \
+    do {                        \
+        log_interval_info(str); \
+    } while (0)
 
 #else
 
@@ -184,7 +206,11 @@ private:
     do {                      \
     } while (0)
 
-#endif
+#define TRACK_BOUNDS_INFO(str) \
+    do {                       \
+    } while (0)
+
+#endif  // DO_TRACK_BOUNDS_INTERVALS
 
     // Compute the intrinsic bounds of a function.
     void bounds_of_func(const string &name, int value_index, Type t) {
@@ -348,6 +374,8 @@ private:
 
     void visit(const Variable *op) override {
         TRACK_BOUNDS_INTERVAL;
+        TRACK_BOUNDS_INFO("name:" + op->name);
+
         if (const_bound) {
             bounds_of_type(op->type);
             if (scope.contains(op->name)) {
@@ -1089,6 +1117,7 @@ private:
 
     void visit(const Call *op) override {
         TRACK_BOUNDS_INTERVAL;
+        TRACK_BOUNDS_INFO("name:" + op->name);
         // Tags are hints that don't affect the results of the expression,
         // and can be very deeply nested in the case of strict_float. The
         // bounds of this call are *always* exactly that of its first argument,
@@ -1634,10 +1663,20 @@ private:
 }  // namespace
 
 Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound) {
-    //debug(3) << "computing bounds_of_expr_in_scope " << expr << "\n";
+#if DO_TRACK_BOUNDS_INTERVALS
+    debug(0) << "{\n  Computing bounds_of_expr_in_scope for: " << expr << " ...\n";
+#endif
     Bounds b(&scope, fb, const_bound);
+#if DO_TRACK_BOUNDS_INTERVALS
+    b.interval_log_indent += 2;
+#endif
     expr.accept(&b);
-    //debug(3) << "bounds_of_expr_in_scope " << expr << " = " << simplify(b.interval.min) << ", " << simplify(b.interval.max) << "\n";
+#if DO_TRACK_BOUNDS_INTERVALS
+    debug(0) << "  bounds_of_expr_in_scope for " << expr << " is:\n"
+             << "  mn=" << simplify(b.interval.min) << "\n"
+             << "  mx=" << simplify(b.interval.max) << "\n"
+             << "}\n";
+#endif
     Type expected = expr.type().element_of();
     if (b.interval.has_lower_bound()) {
         internal_assert(b.interval.min.type() == expected)
@@ -1664,7 +1703,6 @@ Region region_union(const Region &a, const Region &b) {
         Expr max_plus_one = Max::make(max_a, max_b);
         Expr extent = max_plus_one - min;
         result.push_back(Range(simplify(min), simplify(extent)));
-        //result.push_back(Range(min, extent));
     }
     return result;
 }
@@ -2789,6 +2827,39 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
             s.accept(&provides);
         }
     }
+
+#if DO_DUMP_BOXES_TOUCHED
+    if (consider_calls && consider_provides) {
+        debug(0) << "boxes_touched:\n";
+    } else if (consider_calls && !consider_provides) {
+        debug(0) << "boxes_required:\n";
+    } else if (!consider_calls && consider_provides) {
+        debug(0) << "boxes_provided:\n";
+    } else {
+        internal_error;
+    }
+
+    for (const auto &it : calls.boxes) {
+        debug(0) << "calls.boxes[" << it.first << "] ->:\n";
+        for (size_t j = 0; j < it.second.size(); j++) {
+            debug(0) << "  " << j << ": " << it.second[j].min
+                     << " .. "
+                     << it.second[j].max
+                     << "\n";
+        }
+    }
+
+    for (const auto &it : provides.boxes) {
+        debug(0) << "provides.boxes[" << it.first << "] ->:\n";
+        for (size_t j = 0; j < it.second.size(); j++) {
+            debug(0) << "  " << j << ": " << it.second[j].min
+                     << " .. "
+                     << it.second[j].max
+                     << "\n";
+        }
+    }
+#endif  // DO_DUMP_BOXES_TOUCHED
+
     if (!consider_calls) {
         return provides.boxes;
     }
