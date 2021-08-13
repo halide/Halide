@@ -9,6 +9,7 @@
 #include "InjectHostDevBufferCopies.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
+#include "LowerParallelTasks.h"
 #include "Module.h"
 #include "Param.h"
 #include "Substitute.h"
@@ -750,6 +751,12 @@ class InjectHexagonRpc : public IRMutator {
         } else {
             body = For::make(loop->name, loop->min, loop->extent, loop->for_type,
                              DeviceAPI::None, loop->body);
+        }
+
+        std::vector<LoweredFunc> closure_implementations;
+        body = lower_parallel_tasks(body, closure_implementations, hex_name, device_code.target());
+        for (auto& lowered_func : closure_implementations) {
+            device_code.append(lowered_func);
         }
 
         // Build a closure for the device code.

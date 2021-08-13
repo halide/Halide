@@ -110,6 +110,8 @@ void lower_impl(const vector<Function> &output_funcs,
                 Module &result_module) {
     auto time_start = std::chrono::high_resolution_clock::now();
 
+    size_t initial_lowered_function_count = result_module.functions().size();
+
     // Compute an environment
     map<string, Function> env;
     for (const Function &f : output_funcs) {
@@ -434,6 +436,11 @@ void lower_impl(const vector<Function> &output_funcs,
     std::vector<LoweredFunc> closure_implementations;
     debug(1) << "Lowering Parallel Tasks...\n";
     s = lower_parallel_tasks(s, closure_implementations, pipeline_name, t);
+    for (size_t i = initial_lowered_function_count; i < result_module.functions().size(); i++) {
+        result_module.functions()[i].body =
+            lower_parallel_tasks(result_module.functions()[i].body, closure_implementations,
+                                 result_module.functions()[i].name, t);
+    }
     for (auto& lowerd_func : closure_implementations) {
         result_module.append(lowerd_func);
     }
