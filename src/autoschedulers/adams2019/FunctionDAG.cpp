@@ -553,6 +553,7 @@ void FunctionDAG::Edge::expand_footprint(const Span *consumer_loop, Span *produc
 class DependsOnEstimate : public IRVisitor {
 public:
     bool found_estimate = false;
+
 private:
     using IRVisitor::visit;
 
