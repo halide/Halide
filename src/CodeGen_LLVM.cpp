@@ -2900,7 +2900,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 Value *init_value = args[i + item * initializer_count];
                 // TODO(zalman): Halide IR is not strongly typed re: pointers,
                 // especially to structs. Specific case that is failing is
-                // halide_semaphort_t *.
+                // halide_semaphore_t *.
                 if ((init_value->getType() != elem_ptr->getType()->getPointerElementType() &&
                      init_value->getType() == i8_t->getPointerTo()) ||
                     init_value->getType() == i1_t || elem_ptr->getType()->getPointerElementType() == i1_t) {
