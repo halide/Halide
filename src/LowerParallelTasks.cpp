@@ -99,10 +99,14 @@ Expr AllocateClosure(const std::string &name, const Closure &closure) {
     Expr struct_type = Variable::make(Handle(), closure_type_name);
 
     closure_elements[0] = struct_type;
-    Expr result = Let::make(buffer_t_type_name, Call::make(Handle(), Call::declare_struct_type,
-                                                           { StringImm::make("halide_buffer_t"), 0 }, Call::PureIntrinsic),
-                            Let::make(closure_type_name, closure_struct_type, 
-                                      Call::make(type_of<void *>(), Call::make_typed_struct, closure_elements, Call::Intrinsic)));
+
+    Expr result = Let::make(closure_type_name, closure_struct_type, 
+                            Call::make(type_of<void *>(), Call::make_typed_struct, closure_elements, Call::Intrinsic));
+    if (!closure.buffers.empty()) {
+        result = Let::make(buffer_t_type_name, Call::make(Handle(), Call::declare_struct_type,
+                                                          { StringImm::make("halide_buffer_t"), 0 }, Call::PureIntrinsic),
+                           result);
+    }
     return result;
 }
 
@@ -181,6 +185,11 @@ struct LowerParallelTasks : public IRMutator {
                 s = LetStmt::make(t.loop_var, 0, s);
             }
             s.accept(&closure);
+        }
+
+        // The same name can appear as a var and a buffer. Remove the var name in this case.
+        for (auto b : closure.buffers) {
+            closure.vars.erase(b.first);
         }
 
         int num_tasks = (int)(tasks.size());
@@ -424,7 +433,9 @@ struct LowerParallelTasks : public IRMutator {
         }
 
         result = Let::make(closure_name, closure_struct_allocation, result);
-        return AssertStmt:: make(result == 0, result);
+        std::string closure_result_name = unique_name("closure_result");
+        Expr closure_result = Variable::make(Int(32), closure_result_name);
+        return LetStmt::make(closure_result_name, result, AssertStmt::make(closure_result == 0, closure_result));
     }
 
     void get_parallel_tasks(const Stmt &s, std::vector<ParallelTask> &result, std::pair<std::string, int> prefix) {
@@ -487,7 +498,7 @@ struct LowerParallelTasks : public IRMutator {
 
 Stmt lower_parallel_tasks(Stmt s, std::vector<LoweredFunc> &closure_implementations,
                           const std::string &name, const Target &t) {
-  LowerParallelTasks lowering_mutator(name, t);
+    LowerParallelTasks lowering_mutator(name, t);
     Stmt result = lowering_mutator.mutate(s);
 
     // Main body will be dumped as part of standard lowering debugging, but closures will not be.
