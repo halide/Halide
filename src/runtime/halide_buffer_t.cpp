@@ -151,7 +151,7 @@ halide_buffer_t *_halide_buffer_crop(void *user_context,
         offset += (min[i] - src->dim[i].min) * (int64_t)src->dim[i].stride;
     }
     if (dst->host) {
-        dst->host += offset * src->type.bytes();
+        dst->host += offset * src->type.bytes() * src->type.lanes;
     }
     dst->device_interface = nullptr;
     dst->device = 0;
