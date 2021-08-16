@@ -1,4 +1,5 @@
 #include <iostream>
+#include <sstream>
 #include "Halide.h"
 
 using namespace Halide;
@@ -13,7 +14,17 @@ using std::shared_ptr;
 using std::vector;
 using std::make_shared;
 
-typedef std::map<std::string, std::string> VarScope;
+struct VarInfo {
+    Halide::Type type;
+    std::string name;
+    VarInfo(Halide::Type _type, const std::string &_name) : type(_type), name(_name) {}
+    VarInfo() {
+        assert(false); // This should never happen.
+        // TODO: how to properly do this.
+    }
+};
+
+typedef std::map<std::string, VarInfo> VarScope;
 
 struct RewriteRule {
     const Expr before;
@@ -31,100 +42,44 @@ std::string make_type_checker_condition(const std::string &var_name, const std::
 
 std::string make_new_unique_name() {
     static int counter = 0;
-    return "t" + std::to_string(counter++);
+    return "a" + std::to_string(counter++);
 }
 
-std::string build_expr(const Expr &expr, const VarScope &scope);
+class IRPrinterNoType : public IRPrinter {
+public:
+    IRPrinterNoType(std::ostream &stream) : IRPrinter(stream) {}
 
-std::string make_inner_binary_op(const Expr &a, const Expr &b, const VarScope &scope, const std::string &symbol) {
-    std::string as = build_expr(a, scope);
-    std::string bs = build_expr(b, scope);
-    return "(" + as + " " + symbol + " " + bs + ")";
+protected:
+    using IRPrinter::visit;
+
+    void visit(const Variable *op) override {
+        stream << op->name;
+    }
+};
+
+std::string pretty_print(const Expr &expr) {
+    std::stringstream s;
+    IRPrinterNoType printer = s;
+    expr.accept(&printer);
+    return s.str();
 }
 
-std::string make_outer_binary_op(const Expr &a, const Expr &b, const VarScope &scope, const std::string &symbol) {
-    std::string as = build_expr(a, scope);
-    std::string bs = build_expr(b, scope);
-    return symbol + "(" + as + " , " + bs + ")";
-}
 
 std::string build_expr(const Expr &expr, const VarScope &scope) {
-    if (const Add *op = expr.as<Add>()) {
-        return make_inner_binary_op(op->a, op->b, scope, "+");
-    } else if (const Mul *op = expr.as<Mul>()) {
-        return make_inner_binary_op(op->a, op->b, scope, "*");
-    } else if (const Sub *op = expr.as<Sub>()) {
-        return make_inner_binary_op(op->a, op->b, scope, "-");
-    } else if (const Div *op = expr.as<Div>()) {
-        return make_inner_binary_op(op->a, op->b, scope, "/");
-    } else if (const Mod *op = expr.as<Mod>()) {
-        return make_inner_binary_op(op->a, op->b, scope, "%");
-    } else if (const Min *op = expr.as<Min>()) {
-        return make_outer_binary_op(op->a, op->b, scope, "min");
-    } else if (const Max *op = expr.as<Max>()) {
-        return make_outer_binary_op(op->a, op->b, scope, "max");
-    } else if (const EQ *op = expr.as<EQ>()) {
-        return make_inner_binary_op(op->a, op->b, scope, "==");
-    } else if (const NE *op = expr.as<NE>()) {
-        return make_inner_binary_op(op->a, op->b, scope, "!=");
-    } else if (const LT *op = expr.as<LT>()) {
-        return make_inner_binary_op(op->a, op->b, scope, "<");
-    } else if (const LE *op = expr.as<LE>()) {
-        return make_inner_binary_op(op->a, op->b, scope, "<=");
-    } else if (const GT *op = expr.as<GT>()) {
-        return make_inner_binary_op(op->a, op->b, scope, ">");
-    } else if (const GE *op = expr.as<GE>()) {
-        return make_inner_binary_op(op->a, op->b, scope, ">=");
-    } else if (const And *op = expr.as<And>()) {
-        return make_inner_binary_op(op->a, op->b, scope, "&&");
-    } else if (const Or *op = expr.as<Or>()) {
-        return make_inner_binary_op(op->a, op->b, scope, "||");
-    } else if (const Not *op = expr.as<Not>()) {
-        std::string a = build_expr(op->a, scope);
-        return "(!" + a + ")";
-    } else if (const Select *op = expr.as<Select>()) {
-        std::string c = build_expr(op->condition, scope);
-        std::string t = build_expr(op->true_value, scope);
-        std::string f = build_expr(op->false_value, scope);
-        return "select(" + c + ", " + t + ", " + f + ")";
-    } else if (const Broadcast *op = expr.as<Broadcast>()) {
-        std::string v = build_expr(op->value, scope);
-        std::string l = build_expr(op->lanes, scope);
-        return "broadcast(" + v + ", " + l + ")";
-    } else if (const Ramp *op = expr.as<Ramp>()) {
-        std::string b = build_expr(op->base, scope);
-        std::string s = build_expr(op->stride, scope);
-        std::string l = build_expr(op->lanes, scope);
-        return "ramp(" + b + ", " + s + ", " + l + ")";
-    } else if (const Variable *op = expr.as<Variable>()) {
-        auto iter = scope.find(op->name);
-        assert(iter != scope.end()); // TODO: if built inside Halide main code, use internal_assert or user_assert
-        return iter->second;
-    }  else if (const IntImm *op = expr.as<IntImm>()) {
-        return std::to_string(op->value);
-    }  else if (const Call *op = expr.as<Call>()) {
-        if (op->name == "fold") {
-            assert(op->args.size() == 1);
-            const std::string arg = build_expr(op->args[0], scope);
-            return "fold(" + arg + ")";
-        } else {
-            // What else could it be?
-            std::cerr << "Unknown Call Expr:" << expr << "\n";
-            assert(false);
-        }
-    } else {
-        std::cerr << expr << "\n";
-        assert(false);
-        return "";
+    std::map<std::string, Expr> replacements;
+    for (const auto &p : scope) {
+      replacements[p.first] = Variable::make(p.second.type, p.second.name);
     }
-    // TODO: Add any more cases we need to generate
+    // TODO: the old method asserted that all variables that exist in `expr` have a match in `scope`,
+    //       we should do that here too.
+    Expr new_expr = Halide::Internal::substitute(replacements, expr);
+    return pretty_print(new_expr);
 }
 
 } // namespace Printer
 
 
 namespace Language {
-
 
 enum class IRType {
     // Type checks
@@ -328,7 +283,7 @@ shared_ptr<Node> handle_variable(shared_ptr<Node> root, const Variable *var, con
     auto iter = scope.find(var->name);
     bool is_const_var = var->name.at(0) == 'c';
     if (iter == scope.end()) {
-        scope[var->name] = name;
+        scope.insert(std::make_pair(var->name, VarInfo(var->type, name)));
         if (!is_const_var) {
             // Insert into scope and don't worry about it.
             return root;
@@ -339,7 +294,7 @@ shared_ptr<Node> handle_variable(shared_ptr<Node> root, const Variable *var, con
             return root->get_child(cond_node);
         }
     } else {
-        std::string existing_name = iter->second;
+        std::string existing_name = iter->second.name;
         shared_ptr<Language::Equality> equal = make_shared<Language::Equality>(existing_name, name);
         shared_ptr<Language::Equality> pequal = root->get_child(equal); // Don't duplicate if possible.
         return pequal;
@@ -508,7 +463,7 @@ int main(void) {
       { (c0 - x) - (c1 - y), (y - x) + fold(c0 - c1) },
       { (c0 - x) - (y + c1), fold(c0 - c1) - (x + y) },
       { x - (y - z), x + (z - y) },
-      // This rule below scres things up for one of the rules above
+      // This rule below screws things up for one of the rules above
       { x - (y + c0), (x - y) - c0 },
       { (c0 - x) - c1, fold(c0 - c1) - x },
     };
@@ -516,6 +471,7 @@ int main(void) {
     print_function(rules, "simplify_sub", "expr");
 
     // this is for checking correctness, uncomment out when checking.
+
     /*
     for (const auto &rule : rules) {
         Expr simpl = simplify_sub(rule.before);
@@ -526,6 +482,7 @@ int main(void) {
         }
     }
     */
+
 
     // For testing a single rule (debugging codegen)
     /*
