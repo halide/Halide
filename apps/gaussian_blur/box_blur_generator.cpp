@@ -403,17 +403,35 @@ HALIDE_REGISTER_GENERATOR(BoxBlurIncremental, box_blur_incremental)
 
 class BoxBlurPyramid : public Generator<BoxBlurPyramid> {
 public:
-    Input<Buffer<uint8_t>> input{"input", 2};
+    Input<Buffer<>> input{"input", 2};
     Input<int> diameter{"diameter"};
     Input<int> width{"width"};
-    Output<Buffer<uint8_t>> output{"output", 2};
+    Output<Buffer<>> output{"output", 2};
 
     void generate() {
         Var x("x"), y("y"), ty("ty"), tx("tx"), yo("yo"), yi("yi");
 
+        // Figure out our intermediate accumulator types
+        Type small_sum_type, large_sum_type;
+        int max_count_for_small_sum, max_count_for_large_sum;
+        const int bits = input.type().bits();
+        if (input.type().is_float()) {
+            small_sum_type = input.type();
+            large_sum_type = input.type().with_bits(bits * 2);
+            // This is approximate. If we wanted an exact float blur,
+            // this should be set to 1.
+            max_count_for_small_sum = 256;
+            max_count_for_large_sum = 0x7fffffff;
+        } else {
+            small_sum_type = input.type().with_bits(bits * 2);
+            large_sum_type = input.type().with_bits(bits * 4);
+            max_count_for_small_sum = 1 << bits;
+            max_count_for_large_sum = std::min(0x7fffffffULL, 1ULL << (bits * 3));
+        }
+
         const int N = 8;
 
-        const int vec = 16;
+        const int vec = bits <= 16 ? 16 : 8;
 
         // We use slightly different algorithms as a function of the
         // max diameter supported. They get muxed together at the end.
@@ -423,22 +441,42 @@ public:
         // because it equalizes the number of samples taken inside the
         // low res and high res images, giving the best computational
         // complexity.
-        Expr down_factor = clamp(cast<int>(ceil(sqrt(diameter))), N, 256);
+        Expr down_factor = clamp(cast<int>(ceil(sqrt(diameter))), N, max_count_for_small_sum);
         RDom r_down(0, down_factor);
         Func down_y("down_y");
-        down_y(x, y) += cast<uint16_t>(input(x, y * down_factor + r_down));
+        down_y(x, y) += cast(small_sum_type, input(x, y * down_factor + r_down));
 
-        const int max_diameter_direct_blur_x = 6;    // Tuned empirically.
-        const int max_diameter_16_bit_blur_x = 16;   // Must be <= 16 or we'll get overflow. TODO: Figure out why this makes things slower?!
-        const int max_diameter_direct_blur_y = 80;   // Tuned empirically
-        const int max_diameter_16_bit_blur_y = 256;  // Must be <= 256 or we'll get overflow
-        const int max_diameter_supported = 32768;
+        // The maximum diameter at which we should just use a direct
+        // blur in x, instead of a sum-scan.  Tuned
+        // empirically.
+        const int max_diameter_direct_blur_x = 6;
+
+        // The maximum diameter at which we can get away with
+        // low-precision accumulators for the blur in x and the blur
+        // in y. Must be <= 16 for uint8 inputs or we'll get
+        // overflow.
+        const int max_diameter_low_bit_blur_x = std::sqrt(max_count_for_small_sum);
+
+        // The maximum diameter at which we should do a direct blur in
+        // y for the first scanline of each strip. Above this we use
+        // the precomputed downsampled-in-y Func. Tuned empirically.
+        const int max_diameter_direct_blur_y =
+            bits == 8  ? 80 :
+            bits == 16 ? 50 :
+                         30;
+
+        // The maximum diameter at which we can use a low-precision
+        // accumulator for the blur in y. Must be <= 256 for uint8
+        // inputs or we'll get overflow
+        const int max_diameter_low_bit_blur_y = max_count_for_small_sum;
 
         std::vector<int> max_diameters{max_diameter_direct_blur_x,
-                                       max_diameter_16_bit_blur_x,
+                                       max_diameter_low_bit_blur_x,
                                        max_diameter_direct_blur_y,
-                                       max_diameter_16_bit_blur_y,
-                                       max_diameter_supported};
+                                       max_diameter_low_bit_blur_y,
+                                       max_count_for_large_sum};
+        std::sort(max_diameters.begin(), max_diameters.end());
+
         std::vector<Expr> results, conditions;
         for (int max_diameter : max_diameters) {
 
@@ -473,39 +511,37 @@ public:
 
             RDom ry_init_full(0, diameter);
 
-            int bits = (max_diameter <= max_diameter_16_bit_blur_y) ? 16 : 32;
-            Type t = UInt(bits);
+            Type blur_y_t = (max_diameter <= max_diameter_low_bit_blur_y) ? small_sum_type : large_sum_type;
 
-            blur_y_init(x, ty) = cast(t, 0);
+            blur_y_init(x, ty) = cast(blur_y_t, 0);
             if (use_down_y) {
-                blur_y_init(x, ty) += cast(t, input(x, fine_start_1 + ry_init_fine_1));
-                blur_y_init(x, ty) += cast(t, down_y(x, coarse_start + ry_init_coarse));
-                blur_y_init(x, ty) += cast(t, input(x, fine_start_2 + ry_init_fine_2));
+                blur_y_init(x, ty) += cast(blur_y_t, input(x, fine_start_1 + ry_init_fine_1));
+                blur_y_init(x, ty) += cast(blur_y_t, down_y(x, coarse_start + ry_init_coarse));
+                blur_y_init(x, ty) += cast(blur_y_t, input(x, fine_start_2 + ry_init_fine_2));
             } else {
-                blur_y_init(x, ty) += cast(t, input(x, ty * N + ry_init_full));
+                blur_y_init(x, ty) += cast(blur_y_t, input(x, ty * N + ry_init_full));
             }
 
             // Compute the other in-between scanlines by incrementally
             // updating that one in a sliding window.
             RDom ry_scan(0, N - 1);
-            blur_y(x, ty, y) = undef(t);
+            blur_y(x, ty, y) = undef(blur_y_t);
             blur_y(x, ty, 0) = blur_y_init(x, ty);
             blur_y(x, ty, ry_scan + 1) =
                 (blur_y(x, ty, ry_scan) +
-                 cast(t, (cast<int16_t>(input(x, ty * N + ry_scan + diameter)) -
-                          input(x, ty * N + ry_scan))));
+                 cast(blur_y_t, (cast(blur_y_t, input(x, min(input.dim(1).max(), ty * N + ry_scan + diameter))) -
+                                 input(x, ty * N + ry_scan))));
 
             // For large diameter, we do the blur in x using the regular
             // sliding window approach.
 
             const bool use_blur_x_direct = max_diameter <= max_diameter_direct_blur_x;
 
-            bits = (max_diameter <= max_diameter_16_bit_blur_x) ? 16 : 32;
-            t = UInt(bits);
+            Type blur_x_t = (max_diameter <= max_diameter_low_bit_blur_x) ? small_sum_type : large_sum_type;
 
             Func integrate_x("integrate_x");
-            integrate_x(x, ty, y) = undef(t);
-            integrate_x(-1, ty, y) = cast(t, 0);
+            integrate_x(x, ty, y) = undef(blur_x_t);
+            integrate_x(-1, ty, y) = cast(blur_x_t, 0);
             RDom rx_scan(0, width + diameter);
             integrate_x(rx_scan, ty, y) =
                 (integrate_x(rx_scan - 1, ty, y) +
@@ -523,35 +559,18 @@ public:
             blur_x_direct(x, y) += blur_y_untiled(x + rx_direct, y);
 
             auto norm = [&](Expr e) {
-#if 1
-                e = cast<float>(e);
-                Expr den = cast<float>(diameter * diameter);
-                Expr result = round(e * (1 / den));
-                return cast<uint8_t>(result);
-#elif 0
-                if (e.type().bits() == 16) {
-                    Expr den = cast<uint8_t>(diameter * diameter);
-                    return cast<uint8_t>(fast_integer_divide(e + den / 2, den));
-                } else {
-
+                if (e.type().bits() <= 32) {
+                    // TODO: This is a bit suspect for blurs that produce between 23 and 32 bits.
                     e = cast<float>(e);
-                    // If 23 bits is enough...
-                    Expr inv_den = 1.0f / (256 * diameter * diameter);
-                    // Get the result between [0 and 255/256], with 23 bits of precision
-                    Expr result = e;
-                    result *= inv_den;
-                    // Map it to [1 + 1.0f/512, 2 - 1.0f/512]
-                    result += 1.0f + 1.0f / 512;
-                    // Extract the top 8 bits of the mantissa
-                    return cast<uint8_t>(reinterpret<uint32_t>(result) >> 15);
+                } else {
+                    e = cast<double>(e);
                 }
-#else
-                e = cast<double>(e);
-                // 52 bits of precision, plus exact division
-                Expr den = cast<double>(diameter * diameter);
-                Expr result = round(e / den);
-                return cast<uint8_t>(result);
-#endif
+                Expr den = cast(e.type(), diameter * diameter);
+                Expr result = e * (1 / den);
+                if (!input.type().is_float()) {
+                    result = round(result);
+                }
+                return cast(input.type(), result);
             };
 
             Func normalize("normalize");
@@ -566,6 +585,7 @@ public:
 
             if (use_blur_x_direct) {
                 blur_y
+                    .store_in(MemoryType::Register)
                     .compute_at(blur_y.in(), tx);
                 blur_y.update(0)
                     .vectorize(x);
@@ -578,33 +598,53 @@ public:
                     .split(x, tx, x, vec)
                     .reorder(y, x, tx)
                     .vectorize(x)
+                    .bound_extent(ty, 1)
+                    .unroll(y);
+
+                blur_x_direct
+                    .store_in(MemoryType::Register)
+                    .compute_at(output, tx)
+                    .bound_extent(x, vec)
+                    .bound_extent(y, N)
+                    .vectorize(x)
+                    .unroll(y)
+                    .update()
+                    .reorder(x, y, rx_direct)
+                    .vectorize(x)
                     .unroll(y);
 
             } else {
 
-                normalize.compute_at(output, tx).reorder_storage(y, x).vectorize(y).unroll(x);
-                normalize.in().compute_at(output, tx).vectorize(y).unroll(x);
+                normalize
+                    .store_in(MemoryType::Register)
+                    .compute_at(output, tx)
+                    .reorder_storage(y, x)
+                    .bound_extent(y, N)
+                    .bound_extent(x, vec)
+                    .vectorize(y)
+                    .unroll(x);
+                normalize.in()
+                    .store_in(MemoryType::Register)
+                    .compute_at(output, tx)
+                    .bound_extent(y, N)
+                    .bound_extent(x, vec)
+                    .vectorize(y)
+                    .unroll(x);
 
-                integrate_x.compute_at(output, yo)
+                integrate_x
+                    .compute_at(output, yo)
                     .reorder_storage(y, x, ty);
-
-                integrate_x.update(0).vectorize(y);
-                integrate_x.update(1).vectorize(y);
+                integrate_x.update(0)
+                    .vectorize(y);
+                integrate_x.update(1)
+                    .vectorize(y);
 
                 RVar rxo, rxi;
-                integrate_x.update(1).split(rx_scan, rxo, rxi, vec).reorder(y, rxi, rxo, ty).unroll(rxi);
-
-                // integrate_x.align_bounds(x, (diameter + width) * 2);
-
-                /*
-                blur_y.in()
-                    .compute_at(integrate_x, rxo)
-                    .reorder_storage(y, x, ty)
-                    .reorder(y, x, ty)
-                    .split(x, tx, x, 8)
-                    .vectorize(x)
-                    .unroll(y);
-                */
+                integrate_x
+                    .update(1)
+                    .split(rx_scan, rxo, rxi, vec)
+                    .reorder(y, rxi, rxo, ty)
+                    .unroll(rxi);
 
                 blur_y
                     .compute_at(integrate_x, rxo)
@@ -630,29 +670,28 @@ public:
                 .align_bounds(x, vec)
                 .vectorize(x, vec, TailStrategy::GuardWithIf);
             if (use_down_y) {
-                blur_y_init.update(0).reorder(x, ry_init_fine_1, ty).vectorize(x, vec, TailStrategy::GuardWithIf);
-                blur_y_init.update(1).reorder(x, ry_init_coarse, ty).vectorize(x, vec, TailStrategy::RoundUp);
-                blur_y_init.update(2).reorder(x, ry_init_fine_2, ty).vectorize(x, vec, TailStrategy::GuardWithIf);
+                blur_y_init.update(0)
+                    .reorder(x, ry_init_fine_1, ty)
+                    .vectorize(x, vec, TailStrategy::GuardWithIf);
+                blur_y_init.update(1)
+                    .reorder(x, ry_init_coarse, ty)
+                    .vectorize(x, vec, TailStrategy::RoundUp);
+                blur_y_init.update(2)
+                    .reorder(x, ry_init_fine_2, ty)
+                    .vectorize(x, vec, TailStrategy::GuardWithIf);
             } else {
-                blur_y_init.update(0).unroll(ry_init_full, 2).reorder(x, ry_init_full, ty).vectorize(x, vec, TailStrategy::GuardWithIf);
+                blur_y_init.update(0)
+                    .unroll(ry_init_full, 2)
+                    .reorder(x, ry_init_full, ty)
+                    .vectorize(x, vec, TailStrategy::GuardWithIf);
             }
-
-            /*
-            blur_y_init
-                .compute_at(integrate_x, rxo)
-                .vectorize(x, vec, TailStrategy::GuardWithIf);
-            if (use_down_y) {
-                blur_y_init.update(0).reorder(x, ry_init_fine_1, ty).vectorize(x, vec, TailStrategy::GuardWithIf);
-                blur_y_init.update(1).reorder(x, ry_init_coarse, ty).vectorize(x, vec, TailStrategy::RoundUp);
-                blur_y_init.update(2).reorder(x, ry_init_fine_2, ty).vectorize(x, vec, TailStrategy::GuardWithIf);
-            } else {
-                blur_y_init.update(0).unroll(ry_init_full, 2).reorder(x, ry_init_full, ty).vectorize(x, vec, TailStrategy::GuardWithIf);
-            }
-            */
         }
 
-        down_y.in().compute_root().parallel(y).vectorize(x, vec * 8).align_storage(x, vec);
-        // down_y.compute_at(down_y.in(), yi).vectorize(x, vec).update().reorder(x, r_down, y).vectorize(x, vec);
+        down_y.in()
+            .compute_root()
+            .parallel(y)
+            .vectorize(x, vec * 8)
+            .align_storage(x, vec);
 
         Expr result = 0;
         for (size_t i = conditions.size(); i > 0; i--) {
@@ -661,11 +700,15 @@ public:
 
         output(x, y) = result;
 
-        output.align_bounds(y, N)
-            .align_bounds(x, vec)
+        output.dim(0).set_min(0);
+        output.dim(1).set_min(0);
+
+        output
+            //            .align_bounds(y, N)
+            //            .align_bounds(x, vec)
             .split(y, ty, y, N, TailStrategy::GuardWithIf)
-            .split(y, yo, yi, 8)
-            .split(x, tx, x, vec)
+            .split(y, yo, yi, N)
+            .split(x, tx, x, vec, TailStrategy::GuardWithIf)
             .reorder(x, yi, tx, yo, ty)
             .parallel(ty)
             .vectorize(x)

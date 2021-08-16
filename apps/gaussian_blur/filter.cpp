@@ -12,7 +12,9 @@
 #include "gaussian_blur.h"
 #include "gaussian_blur_direct.h"
 
-#include "box_blur_pyramid.h"
+#include "box_blur_pyramid_f32.h"
+#include "box_blur_pyramid_u16.h"
+#include "box_blur_pyramid_u8.h"
 
 #include "halide_benchmark.h"
 #include "halide_image_io.h"
@@ -28,16 +30,25 @@ int main(int argc, char **argv) {
     Halide::Runtime::Buffer<uint8_t> input = load_and_convert_image(argv[1]);
     input.crop(1, 0, 512);
 
-    Halide::Runtime::Buffer<uint8_t> output(input.width(), input.height());
-
-    output.fill(0);
+    Halide::Runtime::Buffer<uint8_t> output8(input.width(), input.height());
+    output8.fill(0);
+    Halide::Runtime::Buffer<uint16_t> output16(input.width(), input.height());
+    output16.fill(0);
+    Halide::Runtime::Buffer<float> output32(input.width(), input.height());
+    output32.fill(0);
 
     int max_radius = 2048;
-    Halide::Runtime::Buffer<uint8_t> padded(input.width() + max_radius * 2,
-                                            input.height() + max_radius * 2);
-    padded.fill(0);
-    padded.set_min(-max_radius, -max_radius);
-    padded.cropped(0, 0, input.width()).cropped(1, 0, input.height()).copy_from(input);
+    Halide::Runtime::Buffer<uint8_t> padded8(input.width() + max_radius * 2,
+                                             input.height() + max_radius * 2);
+    padded8.fill(0);
+    padded8.set_min(-max_radius, -max_radius);
+    padded8.cropped(0, 0, input.width()).cropped(1, 0, input.height()).copy_from(input);
+
+    auto padded16 = Halide::Runtime::Buffer<uint16_t>::make_with_shape_of(padded8);
+    padded16.for_each_value([](uint16_t &x, uint8_t y) { x = y * 256; }, padded8);
+
+    auto padded32 = Halide::Runtime::Buffer<float>::make_with_shape_of(padded8);
+    padded32.for_each_value([](float &x, uint8_t y) { x = y / 255.0f; }, padded8);
 
     /*
     for (int r = 1; r < 20; r *= 2) {
@@ -75,7 +86,7 @@ int main(int argc, char **argv) {
     */
 
     auto throughput = [&](int r, double seconds) {
-        return (output.width() + r * 2 + 1) * (output.height() + r * 2 + 1) / (1000000 * seconds);
+        return (output8.width() + r * 2 + 1) * (output8.height() + r * 2 + 1) / (1000000 * seconds);
     };
 
     std::vector<int> radii = {1, 2, 3};
@@ -87,14 +98,39 @@ int main(int argc, char **argv) {
     }
 
     for (int r : radii) {
-        Halide::Runtime::Buffer<uint8_t> translated = padded;
-        translated.set_min(r - max_radius, r - max_radius);
-        double best_manual = benchmark(30, 30, [&]() {
-            box_blur_pyramid(translated, 2 * r + 1, output.width(), output);
-            output.device_sync();
-        });
-        printf("Box blur (pyramid) (%d): %g\n", 2 * r + 1, throughput(r, best_manual));
-        convert_and_save_image(output, "out_pyramid_" + std::to_string(r) + ".png");
+        float t8, t16, t32;
+        {
+            auto translated = padded8;
+            translated.set_min(r - max_radius, r - max_radius);
+            double best_manual = benchmark(10, 10, [&]() {
+                box_blur_pyramid_u8(translated, 2 * r + 1, output8.width(), output8);
+                output8.device_sync();
+            });
+            t8 = throughput(r, best_manual);
+            convert_and_save_image(output8, "out_8_pyramid_" + std::to_string(r) + ".png");
+        }
+        {
+            auto translated = padded16;
+            translated.set_min(r - max_radius, r - max_radius);
+            double best_manual = benchmark(10, 10, [&]() {
+                box_blur_pyramid_u16(translated, 2 * r + 1, output16.width(), output16);
+                output16.device_sync();
+            });
+            t16 = throughput(r, best_manual);
+            convert_and_save_image(output16, "out_16_pyramid_" + std::to_string(r) + ".png");
+        }
+        {
+            auto translated = padded32;
+            translated.set_min(r - max_radius, r - max_radius);
+            double best_manual = benchmark(10, 10, [&]() {
+                box_blur_pyramid_f32(translated, 2 * r + 1, output32.width(), output32);
+                output32.device_sync();
+            });
+            t32 = throughput(r, best_manual);
+            convert_and_save_image(output32, "out_32_pyramid_" + std::to_string(r) + ".png");
+        }
+
+        printf("Box blur (pyramid) (%4d): %6.1f %6.1f %6.1f\n", 2 * r + 1, t8, t16, t32);
     }
 
     printf("Box blur (incremental)...\n");
@@ -103,14 +139,14 @@ int main(int argc, char **argv) {
 
         double best_manual = benchmark(30, 30, [&]() {
             int slices = 16;  // set this to num_cores
-            int slice_size = (output.height() + slices - 1) / slices;
+            int slice_size = (output8.height() + slices - 1) / slices;
             slice_size = (slice_size + N - 1) / N * N;
 
             struct Task {
                 int N, r, slice_size;
                 Halide::Runtime::Buffer<uint8_t> &padded;
                 Halide::Runtime::Buffer<uint8_t> &output;
-            } task{N, r, slice_size, padded, output};
+            } task{N, r, slice_size, padded8, output8};
 
             auto one_strip = [](void *ucon, int s, uint8_t *closure) {
                 Task *t = (Task *)closure;
@@ -145,7 +181,7 @@ int main(int argc, char **argv) {
         });
         printf("Box blur (incremental) (%d): %g\n", 2 * r + 1, throughput(r, best_manual));
 
-        convert_and_save_image(output, "out_" + std::to_string(r) + ".png");
+        convert_and_save_image(output8, "out_" + std::to_string(r) + ".png");
     }
 
     /*
