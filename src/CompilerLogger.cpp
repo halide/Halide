@@ -25,7 +25,8 @@ class ObfuscateNames : public IRMutator {
     std::map<std::string, std::string> remapping;
 
     Expr visit(const Call *op) override {
-        auto [args, changed_args] = mutate_exprs(op->args);
+        auto [args, changed] = mutate_exprs(op->args);
+        (void)changed;  // unused
         std::string name = op->name;
         if (op->call_type == Call::Extern ||
             op->call_type == Call::ExternCPlusPlus ||

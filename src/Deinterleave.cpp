@@ -335,6 +335,7 @@ private:
 
             // Beware of intrinsics for which this is not true!
             auto [args, changed] = mutate_exprs(op->args);
+            (void)changed;  // unused
             return Call::make(t, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         }

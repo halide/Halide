@@ -1048,6 +1048,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                 replacements[op->name] = new_name;
 
                 auto [new_extents, changed] = mutate_exprs(op->extents);
+                (void)changed;  // unused
                 Stmt new_body = mutate(op->body);
                 Expr new_condition = mutate(op->condition);
                 Expr new_new_expr;
