@@ -35,6 +35,10 @@ public:
     virtual Expr mutate(const Expr &expr);
     virtual Stmt mutate(const Stmt &stmt);
 
+    // Mutate all the Exprs and return the new list.
+    // pair.second is true iff at least one item in the list changed.
+    std::pair<std::vector<Expr>, bool> mutate_exprs(const std::vector<Expr> &);
+
 protected:
     // ExprNode<> and StmtNode<> are allowed to call visit (to implement mutate_expr/mutate_stmt())
     template<typename T>

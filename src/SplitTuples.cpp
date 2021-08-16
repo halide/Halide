@@ -113,21 +113,17 @@ class SplitTuples : public IRMutator {
             internal_assert(it != env.end());
             Function f = it->second;
             string name = op->name;
-            bool changed = false;
+            bool changed_name = false;
             if (f.outputs() > 1) {
                 name += "." + std::to_string(op->value_index);
-                changed = true;
+                changed_name = true;
             }
-            vector<Expr> args;
-            for (const Expr &e : op->args) {
-                args.push_back(mutate(e));
-                changed = changed || !args.back().same_as(e);
-            }
+            auto [args, changed_args] = mutate_exprs(op->args);
             // It's safe to hook up the pointer to the function
             // unconditionally. This expr never gets held by a
             // Function, so there can't be a cycle. We do this even
             // for scalar provides.
-            if (changed) {
+            if (changed_name || changed_args) {
                 return Call::make(op->type, name, args, op->call_type, f.get_contents());
             } else {
                 return op;
@@ -148,10 +144,7 @@ class SplitTuples : public IRMutator {
         }
 
         // Mutate the args
-        vector<Expr> args;
-        for (const Expr &e : op->args) {
-            args.push_back(mutate(e));
-        }
+        auto [args, changed] = mutate_exprs(op->args);
 
         // Get the Function
         auto it = env.find(op->name);

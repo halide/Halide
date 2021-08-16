@@ -117,10 +117,9 @@ private:
         Stmt body = mutate(op->body);
 
         // Compute the size
-        vector<Expr> extents;
+        vector<Expr> extents(op->bounds.size());
         for (size_t i = 0; i < op->bounds.size(); i++) {
-            extents.push_back(op->bounds[i].extent);
-            extents[i] = mutate(extents[i]);
+            extents[i] = mutate(op->bounds[i].extent);
         }
         Expr condition = mutate(op->condition);
 
@@ -424,10 +423,7 @@ class PromoteToMemoryType : public IRMutator {
     Stmt visit(const Allocate *op) override {
         Type t = upgrade(op->type);
         if (t != op->type) {
-            vector<Expr> extents;
-            for (const Expr &e : op->extents) {
-                extents.push_back(mutate(e));
-            }
+            auto [extents, changed] = mutate_exprs(op->extents);
             return Allocate::make(op->name, t, op->memory_type, extents,
                                   mutate(op->condition), mutate(op->body),
                                   mutate(op->new_expr), op->free_function);
