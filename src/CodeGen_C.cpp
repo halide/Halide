@@ -1311,12 +1311,7 @@ string CodeGen_C::print_reinterpret(Type type, const Expr &e) {
     } else {
         oss << "reinterpret<" << print_type(type) << ">";
     }
-    if (type.is_handle() && !is_const_pointer(type) &&
-        is_const_pointer(e.type())) {
-        oss << "const_cast<std::add_pointer<std::remove_const<std::remove_pointer<decltype(" << print_expr(e) << ")>::type>::type>::type>(" << print_expr(e) << ")";
-    } else {
-        oss << "(" << print_expr(e) << ")";
-    }
+    oss << "(" << print_expr(e) << ")";
     return oss.str();
 }
 
@@ -2574,11 +2569,7 @@ void CodeGen_C::visit(const Call *op) {
         rhs << "(&" << c_name << ")";
     } else if (op->is_intrinsic(Call::get_user_context)) {
         internal_assert(op->args.size() == 0);
-        if (have_user_context) {
-            rhs << "(__user_context)";
-        } else {
-            rhs << "(nullptr)";
-        }
+        rhs << "_ucon";
     } else if (op->is_intrinsic(Call::get_pointer_symbol_or_null)) {
         internal_assert(op->args.size() == 2);
         // TODO(zalman|abadams): Figure out how to get rid of the mayby foo.buffer exists, maybe it doesn't thing in closures.

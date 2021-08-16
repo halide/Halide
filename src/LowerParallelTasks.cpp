@@ -395,7 +395,7 @@ struct LowerParallelTasks : public IRMutator {
                 function_decl_args[4] = make_zero(type_of<int8_t *>());
 
                 std::vector<Expr> args(5);
-                args[0] = Call::make(type_of<const void *>(), Call::get_user_context, {}, Call::PureIntrinsic);
+                args[0] = Call::make(type_of<void *>(), Call::get_user_context, {}, Call::PureIntrinsic);
                 args[1] = Call::make(type_of<const void *>(), Call::resolve_function_name, function_decl_args, Call::PureIntrinsic);
                 args[2] = t.min;
                 args[3] = t.extent;
@@ -426,7 +426,7 @@ struct LowerParallelTasks : public IRMutator {
         if (tasks_array_args.size() > 2) {
             // Allocate task list array
             Expr tasks_list = Call::make(Handle(), Call::make_typed_struct, tasks_array_args, Call::PureIntrinsic);
-            result = Call::make(Int(32), "halide_do_parallel_tasks", { reinterpret(type_of<void *>(), Call::make(type_of<const void *>(), Call::get_user_context, {}, Call::PureIntrinsic)),
+            result = Call::make(Int(32), "halide_do_parallel_tasks", { Call::make(type_of<void *>(), Call::get_user_context, {}, Call::PureIntrinsic),
                                                                       make_const(Int(32), num_tasks), tasks_list,
                                                                       Call::make(Handle(), Call::get_pointer_symbol_or_null,
                                                                                  { StringImm::make("_task_parent"), make_zero(Handle()) }, Call::Intrinsic) }, Call::Extern);
