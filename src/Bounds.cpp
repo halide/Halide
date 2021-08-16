@@ -1641,8 +1641,7 @@ private:
     }
 };
 
-}  // namespace
-
+// Version that exposes 'indent' is for internal use only
 Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound, int indent) {
 #if DO_TRACK_BOUNDS_INTERVALS
     const string spaces(indent, ' ');
@@ -1673,6 +1672,12 @@ Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope,
             << ": " << b.interval.max << "\n";
     }
     return b.interval;
+}
+
+}  // namespace
+
+Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound) {
+    return bounds_of_expr_in_scope(expr, scope, fb, const_bound, 0);
 }
 
 Region region_union(const Region &a, const Region &b) {
