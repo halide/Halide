@@ -55,6 +55,10 @@ protected:
     void visit(const Variable *op) override {
         stream << op->name;
     }
+
+    // TODO: print in proper C++/Halide (probably)
+    // void visit(const Cast *op) override {
+    // }
 };
 
 std::string pretty_print(const Expr &expr) {
@@ -83,7 +87,7 @@ namespace Language {
 
 enum class IRType {
     // Type checks
-    Add, Sub, Select,
+    Add, Sub, Select, IntImm,
     // TODO: add the rest
     
     // Stmt
@@ -170,6 +174,11 @@ struct Sub final : public TypeCheck<Sub> {
 struct Select final : public TypeCheck<Select> {
     Select(const std::string &_curr, const std::string &_out) : TypeCheck(IRType::Select, _curr, _out) {}
     inline static const std::string type_name = "Select";
+};
+
+struct IntImm final : public TypeCheck<IntImm> {
+    IntImm(const std::string &_curr, const std::string &_out) : TypeCheck(IRType::IntImm, _curr, _out) {}
+    inline static const std::string type_name = "IntImm";
 };
 
 
@@ -320,14 +329,30 @@ inline shared_ptr<Node> handle_select(shared_ptr<Node> &root, const Expr &expr, 
     return tree_constructor(true_node, op->false_value, false_name, scope);
 }
 
+inline shared_ptr<Node> handle_int_imm(shared_ptr<Node> &root, const IntImm *imm, const std::string &name, VarScope &scope) {
+    std::string typed_name = Printer::make_new_unique_name();
+
+    // Inserts the typecheck and fixes name if necessary
+    shared_ptr<Language::IntImm> imm_node = make_shared<Language::IntImm>(name, typed_name);
+    imm_node = root->get_child(imm_node);
+    assert(imm_node);
+    typed_name = imm_node->output_name;
+
+    const std::string condition = typed_name + "->value == " + std::to_string(imm->value);
+    shared_ptr<Language::Condition> cond_node = make_shared<Language::Condition>(condition);
+    // Inserts the condition after the typecheck
+    // It seems unlikely that this condition will already exist, but who knows? *shrug*
+    return imm_node->get_child(cond_node);
+}
+
 /*
 TODOs:
-    IntImm,
-    UIntImm,
-    FloatImm,
-    StringImm,
+    // IntImm,
+    UIntImm, // I don't think we will need this, but it's possible
+    FloatImm, // or this
+    StringImm, // or this
     Broadcast,
-    Cast,
+    Cast, // not sure about this one, it might make types and stuff difficult. lmk if you see one of these in a rule.
     // Variable,
     // Add,
     // Sub,
@@ -349,9 +374,9 @@ TODOs:
     Load, // do we actually need this? check simplifier
     Ramp,
     Call, // this will be tricky
-    Let, // probably don't
-    Shuffle, // not sure about this one
-    VectorReduce,
+    Let, // Don't need this.
+    Shuffle, // I don't think we need this right now.
+    VectorReduce, // Need this as well
 */
 shared_ptr<Node> tree_constructor(shared_ptr<Node> root, const Expr &expr, const std::string &name, VarScope &scope) {
     switch (expr->node_type) {
@@ -365,6 +390,10 @@ shared_ptr<Node> tree_constructor(shared_ptr<Node> root, const Expr &expr, const
         case IRNodeType::Variable: {
             const Variable *var = expr.as<Variable>();
             return handle_variable(root, var, name, scope);
+        }
+        case IRNodeType::IntImm: {
+            const IntImm *imm = expr.as<IntImm>();
+            return handle_int_imm(root, imm, name, scope);
         }
         default:
             assert(false);
@@ -430,6 +459,7 @@ int main(void) {
     // TODO: these should be sorted probably.
     // TODO: add some with conditions to check that (probably need more than just Add/Sub/Select)
     vector<RewriteRule> rules = {
+      { x - 0, x},
       { select(b0, y, z) - select(b0, w, u), select(b0, y - w, z - u) },
       { select(b0, y, z) - y, select(b0, 0, z - y) },
       { select(b0, y, z) - z, select(b0, y - z, 0) },
