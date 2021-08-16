@@ -1011,6 +1011,21 @@ WABT_HOST_CALLBACK(memcpy) {
     return wabt::Result::Ok;
 }
 
+WABT_HOST_CALLBACK(memmove) {
+    WabtContext &wabt_context = get_wabt_context(thread);
+
+    const int32_t dst = args[0].Get<int32_t>();
+    const int32_t src = args[1].Get<int32_t>();
+    const int32_t n = args[2].Get<int32_t>();
+
+    uint8_t *base = get_wasm_memory_base(wabt_context);
+
+    memmove(base + dst, base + src, n);
+
+    results[0] = wabt::interp::Value::Make(dst);
+    return wabt::Result::Ok;
+}
+
 WABT_HOST_CALLBACK(memset) {
     WabtContext &wabt_context = get_wabt_context(thread);
 
@@ -1079,6 +1094,7 @@ const HostCallbackMap &get_host_callback_map() {
         DEFINE_CALLBACK(malloc)
         DEFINE_CALLBACK(memcmp)
         DEFINE_CALLBACK(memcpy)
+        DEFINE_CALLBACK(memmove)
         DEFINE_CALLBACK(memset)
         DEFINE_CALLBACK(strlen)
         DEFINE_CALLBACK(write)
