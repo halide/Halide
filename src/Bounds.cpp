@@ -163,7 +163,7 @@ private:
         void log_line(Args &&...args) {
             debug(0) << self->log_spaces();
             // C++17 right fold
-            (debug(0) << ... << args) << '\n';
+            (debug(0) << ... << args) << "\n";
         }
 
         ~BoundsLogger() {
@@ -1647,7 +1647,7 @@ Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope,
 #if DO_TRACK_BOUNDS_INTERVALS
     const string spaces(indent, ' ');
     debug(0) << spaces << "BoundsOfExprInScope {\n"
-             << spaces << " expr: " << expr << '\n';
+             << spaces << " expr: " << expr << "\n";
 #endif
     Bounds b(&scope, fb, const_bound);
 #if DO_TRACK_BOUNDS_INTERVALS
@@ -1655,8 +1655,8 @@ Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope,
 #endif
     expr.accept(&b);
 #if DO_TRACK_BOUNDS_INTERVALS
-    debug(0) << spaces << " mn=" << simplify(b.interval.min) << '\n'
-             << spaces << " mx=" << simplify(b.interval.max) << '\n'
+    debug(0) << spaces << " mn=" << simplify(b.interval.min) << "\n"
+             << spaces << " mx=" << simplify(b.interval.max) << "\n"
              << spaces << "}\n";
 #endif
     Type expected = expr.type().element_of();
@@ -1664,13 +1664,13 @@ Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope,
         internal_assert(b.interval.min.type() == expected)
             << "Min of " << expr
             << " should have been a scalar of type " << expected
-            << ": " << b.interval.min << '\n';
+            << ": " << b.interval.min << "\n";
     }
     if (b.interval.has_upper_bound()) {
         internal_assert(b.interval.max.type() == expected)
             << "Max of " << expr
             << " should have been a scalar of type " << expected
-            << ": " << b.interval.max << '\n';
+            << ": " << b.interval.max << "\n";
     }
     return b.interval;
 }
@@ -1991,7 +1991,7 @@ private:
         void log_line(Args &&...args) {
             debug(0) << self->log_spaces();
             // C++17 right fold
-            (debug(0) << ... << args) << '\n';
+            (debug(0) << ... << args) << "\n";
         }
 
         BoxesTouchedLogger(BoxesTouched *self, const char *pretty_function)
@@ -2039,11 +2039,11 @@ private:
                 const auto old_box_it = before.find(key);
                 if (old_box_it == before.end()) {
                     // Added.
-                    debug(0) << spaces << "Added: " << key << " = " << new_box << '\n';
+                    debug(0) << spaces << "Added: " << key << " = " << new_box << "\n";
                 } else {
                     const auto &old_box = old_box_it->second;
                     if (!boxes_equal(old_box, new_box)) {
-                        debug(0) << spaces << "Changed: " << key << " = " << old_box << " -> " << new_box << '\n';
+                        debug(0) << spaces << "Changed: " << key << " = " << old_box << " -> " << new_box << "\n";
                     }
                 }
             }
@@ -2056,7 +2056,7 @@ private:
             internal_assert(self->current_logger == this);
             if (parent_logger) {
                 // Propagate changes to our parent.
-                // This isn't efficient at all, but it's ususally-disabled debugging code.
+                // This isn't efficient at all, but it's usually-disabled debugging code.
                 for (const auto &it : self->boxes) {
                     parent_logger->boxes[it.first] = it.second;
                 }
@@ -2967,7 +2967,7 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
             debug(0) << "  " << j << ": " << it.second[j].min
                      << " .. "
                      << it.second[j].max
-                     << '\n';
+                     << "\n";
         }
     }
 
@@ -2977,7 +2977,7 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
             debug(0) << "  " << j << ": " << it.second[j].min
                      << " .. "
                      << it.second[j].max
-                     << '\n';
+                     << "\n";
         }
     }
 #endif  // DO_DUMP_BOXES_TOUCHED
@@ -3125,7 +3125,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
 
             debug(2) << "Bounds on value " << j
                      << " for func " << order[i]
-                     << " are: " << result.min << ", " << result.max << '\n';
+                     << " are: " << result.min << ", " << result.max << "\n";
         }
     }
 
@@ -3141,13 +3141,13 @@ void check(const Scope<Interval> &scope, const Expr &e, const Expr &correct_min,
     result.max = simplify(result.max);
     if (!equal(result.min, correct_min)) {
         internal_error << "In bounds of " << e << ":\n"
-                       << "Incorrect min: " << result.min << '\n'
-                       << "Should have been: " << correct_min << '\n';
+                       << "Incorrect min: " << result.min << "\n"
+                       << "Should have been: " << correct_min << "\n";
     }
     if (!equal(result.max, correct_max)) {
         internal_error << "In bounds of " << e << ":\n"
-                       << "Incorrect max: " << result.max << '\n'
-                       << "Should have been: " << correct_max << '\n';
+                       << "Incorrect max: " << result.max << "\n"
+                       << "Should have been: " << correct_max << "\n";
     }
 }
 
@@ -3158,13 +3158,13 @@ void check_constant_bound(const Scope<Interval> &scope, const Expr &e, const Exp
     result.max = simplify(result.max);
     if (!equal(result.min, correct_min)) {
         internal_error << "In find constant bound of " << e << ":\n"
-                       << "Incorrect min constant bound: " << result.min << '\n'
-                       << "Should have been: " << correct_min << '\n';
+                       << "Incorrect min constant bound: " << result.min << "\n"
+                       << "Should have been: " << correct_min << "\n";
     }
     if (!equal(result.max, correct_max)) {
         internal_error << "In find constant bound of " << e << ":\n"
-                       << "Incorrect max constant bound: " << result.max << '\n'
-                       << "Should have been: " << correct_max << '\n';
+                       << "Incorrect max constant bound: " << result.max << "\n"
+                       << "Should have been: " << correct_max << "\n";
     }
 }
 
@@ -3313,13 +3313,13 @@ void boxes_touched_test() {
         b.max = simplify(b.max);
         if (!equal(correct.min, b.min)) {
             internal_error << "In bounds of dim " << i << ":\n"
-                           << "Incorrect min: " << b.min << '\n'
-                           << "Should have been: " << correct.min << '\n';
+                           << "Incorrect min: " << b.min << "\n"
+                           << "Should have been: " << correct.min << "\n";
         }
         if (!equal(correct.max, b.max)) {
             internal_error << "In bounds of dim " << i << ":\n"
-                           << "Incorrect max: " << b.max << '\n'
-                           << "Should have been: " << correct.max << '\n';
+                           << "Incorrect max: " << b.max << "\n"
+                           << "Should have been: " << correct.max << "\n";
         }
     }
 }
