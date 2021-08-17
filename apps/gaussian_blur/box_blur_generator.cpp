@@ -436,7 +436,8 @@ public:
         const int vec = bits <= 16 ? 16 : 8;
 
         Func input_clamped;
-        input_clamped(x, y) = input(min(likely(x), width + diameter - 1), min(y, input.dim(1).max()));
+        input_clamped(x, y) = input(clamp(likely(x), input.dim(0).min(), input.dim(0).max()),
+                                    clamp(y, input.dim(1).min(), input.dim(1).max()));
 
         // We use slightly different algorithms as a function of the
         // max diameter supported. They get muxed together at the end.
@@ -672,6 +673,7 @@ public:
             }
 
             blur_y_init
+                .bound_extent(ty, 1)
                 .compute_at(output, ty)
                 .vectorize(x, vec, TailStrategy::GuardWithIf);
             if (use_down_y) {
@@ -698,19 +700,22 @@ public:
             .vectorize(x, vec * 8)
             .align_storage(x, vec);
 
-        Expr result = 0;
-        for (size_t i = conditions.size(); i > 0; i--) {
+        Expr result = results.back();
+
+        for (size_t i = conditions.size() - 1; i > 0; i--) {
             result = select(conditions[i - 1], results[i - 1], result);
         }
 
         output(x, y) = result;
 
-        output.dim(0).set_min(0);
+        output.dim(0).set_bounds(0, width);
         output.dim(1).set_min(0);
+        input.dim(0).set_bounds(0, width + diameter);
+        input.dim(1).set_bounds(0, output.height() + diameter);
 
         output
             //            .align_bounds(y, N)
-            //            .align_bounds(x, vec)
+            //.align_bounds(x, vec)
             .split(y, ty, y, N, TailStrategy::GuardWithIf)
             .split(y, yo, yi, N)
             .split(x, tx, x, vec, TailStrategy::GuardWithIf)
@@ -718,10 +723,10 @@ public:
             .parallel(ty)
             .vectorize(x)
             .unroll(yi);
-        for (auto c : conditions) {
-            output.specialize(c);
+        for (size_t i = conditions.size() - 1; i > 0; i--) {
+            output.specialize(conditions[i - 1]);
         }
-        output.specialize_fail("Unsupported diameter");
+        add_requirement(conditions.back(), "Unsupported diameter");
 
         add_requirement(diameter > 0);
         add_requirement(diameter % 2 == 1);
