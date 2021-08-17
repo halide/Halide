@@ -405,6 +405,7 @@ SOURCE_FILES = \
   AlignLoads.cpp \
   AllocationBoundsInference.cpp \
   ApplySplit.cpp \
+	ApproximateDifferences.cpp \
   Argument.cpp \
   AssociativeOpsTable.cpp \
   Associativity.cpp \
@@ -579,6 +580,7 @@ HEADER_FILES = \
   AlignLoads.h \
   AllocationBoundsInference.h \
   ApplySplit.h \
+	ApproximateDifferences.h \
   Argument.h \
   AssociativeOpsTable.h \
   Associativity.h \
