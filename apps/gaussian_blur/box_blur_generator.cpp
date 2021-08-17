@@ -412,19 +412,21 @@ public:
         Var x("x"), y("y"), ty("ty"), tx("tx"), yo("yo"), yi("yi");
 
         // Figure out our intermediate accumulator types
-        Type small_sum_type, large_sum_type;
+        Type small_sum_type, large_sum_type, diff_type;
         int max_count_for_small_sum, max_count_for_large_sum;
         const int bits = input.type().bits();
         if (input.type().is_float()) {
             small_sum_type = input.type();
+            diff_type = input.type();
             large_sum_type = input.type().with_bits(bits * 2);
             // This is approximate. If we wanted an exact float blur,
             // this should be set to 1.
             max_count_for_small_sum = 256;
             max_count_for_large_sum = 0x7fffffff;
         } else {
-            small_sum_type = input.type().with_bits(bits * 2);
-            large_sum_type = input.type().with_bits(bits * 4);
+            small_sum_type = UInt(bits * 2);
+            diff_type = Int(bits * 2);
+            large_sum_type = UInt(bits * 4);
             max_count_for_small_sum = 1 << bits;
             max_count_for_large_sum = std::min(0x7fffffffULL, 1ULL << (bits * 3));
         }
@@ -432,6 +434,9 @@ public:
         const int N = 8;
 
         const int vec = bits <= 16 ? 16 : 8;
+
+        Func input_clamped;
+        input_clamped(x, y) = input(min(likely(x), width + diameter - 1), min(y, input.dim(1).max()));
 
         // We use slightly different algorithms as a function of the
         // max diameter supported. They get muxed together at the end.
@@ -444,7 +449,7 @@ public:
         Expr down_factor = clamp(cast<int>(ceil(sqrt(diameter))), N, max_count_for_small_sum);
         RDom r_down(0, down_factor);
         Func down_y("down_y");
-        down_y(x, y) += cast(small_sum_type, input(x, y * down_factor + r_down));
+        down_y(x, y) += cast(small_sum_type, input_clamped(x, y * down_factor + r_down));
 
         // The maximum diameter at which we should just use a direct
         // blur in x, instead of a sum-scan.  Tuned
@@ -515,11 +520,11 @@ public:
 
             blur_y_init(x, ty) = cast(blur_y_t, 0);
             if (use_down_y) {
-                blur_y_init(x, ty) += cast(blur_y_t, input(x, fine_start_1 + ry_init_fine_1));
+                blur_y_init(x, ty) += cast(blur_y_t, input_clamped(x, fine_start_1 + ry_init_fine_1));
                 blur_y_init(x, ty) += cast(blur_y_t, down_y(x, coarse_start + ry_init_coarse));
-                blur_y_init(x, ty) += cast(blur_y_t, input(x, fine_start_2 + ry_init_fine_2));
+                blur_y_init(x, ty) += cast(blur_y_t, input_clamped(x, fine_start_2 + ry_init_fine_2));
             } else {
-                blur_y_init(x, ty) += cast(blur_y_t, input(x, ty * N + ry_init_full));
+                blur_y_init(x, ty) += cast(blur_y_t, input_clamped(x, ty * N + ry_init_full));
             }
 
             // Compute the other in-between scanlines by incrementally
@@ -529,8 +534,8 @@ public:
             blur_y(x, ty, 0) = blur_y_init(x, ty);
             blur_y(x, ty, ry_scan + 1) =
                 (blur_y(x, ty, ry_scan) +
-                 cast(blur_y_t, (cast(blur_y_t, input(x, min(input.dim(1).max(), ty * N + ry_scan + diameter))) -
-                                 input(x, ty * N + ry_scan))));
+                 cast(blur_y_t, (cast(diff_type, input_clamped(x, ty * N + ry_scan + diameter)) -
+                                 input_clamped(x, ty * N + ry_scan))));
 
             // For large diameter, we do the blur in x using the regular
             // sliding window approach.
@@ -650,6 +655,7 @@ public:
                     .compute_at(integrate_x, rxo)
                     .store_in(MemoryType::Stack)
                     .bound_extent(x, vec);
+
                 blur_y.update(0)
                     .vectorize(x);
                 blur_y.update(1)
@@ -667,7 +673,6 @@ public:
 
             blur_y_init
                 .compute_at(output, ty)
-                .align_bounds(x, vec)
                 .vectorize(x, vec, TailStrategy::GuardWithIf);
             if (use_down_y) {
                 blur_y_init.update(0)
