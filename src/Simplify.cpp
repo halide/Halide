@@ -54,6 +54,14 @@ Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemaind
     }
 }
 
+std::vector<Expr> Simplify::mutate(const std::vector<Expr> &old_exprs, ExprInfo *bounds) {
+    vector<Expr> new_exprs(old_exprs.size());
+    for (size_t i = 0; i < old_exprs.size(); i++) {
+        new_exprs[i] = mutate(old_exprs[i], bounds);
+    }
+    return new_exprs;
+}
+
 void Simplify::found_buffer_reference(const string &name, size_t dimensions) {
     for (size_t i = 0; i < dimensions; i++) {
         string stride = name + ".stride." + std::to_string(i);

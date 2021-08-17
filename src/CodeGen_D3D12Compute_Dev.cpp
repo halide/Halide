@@ -1047,10 +1047,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                 std::string new_name = unique_name(op->name);
                 replacements[op->name] = new_name;
 
-                std::vector<Expr> new_extents;
-                for (size_t i = 0; i < op->extents.size(); i++) {
-                    new_extents.push_back(mutate(op->extents[i]));
-                }
+                auto new_extents = mutate(op->extents);
                 Stmt new_body = mutate(op->body);
                 Expr new_condition = mutate(op->condition);
                 Expr new_new_expr;

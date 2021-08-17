@@ -349,6 +349,8 @@ public:
     Stmt visit(const Acquire *op);
     Stmt visit(const Fork *op);
     Stmt visit(const Atomic *op);
+
+    std::vector<Expr> mutate(const std::vector<Expr> &old_exprs, ExprInfo *bounds);
 };
 
 }  // namespace Internal

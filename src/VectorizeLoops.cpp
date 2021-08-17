@@ -633,22 +633,15 @@ class VectorSubs : public IRMutator {
     Expr visit(const Call *op) override {
         // Widen the call by changing the lanes of all of its
         // arguments and its return type
-        vector<Expr> new_args(op->args.size());
-        bool changed = false;
 
         // Mutate the args
+        auto new_args = mutate(op->args);
         int max_lanes = 0;
-        for (size_t i = 0; i < op->args.size(); i++) {
-            Expr old_arg = op->args[i];
-            Expr new_arg = mutate(old_arg);
-            if (!new_arg.same_as(old_arg)) {
-                changed = true;
-            }
-            new_args[i] = new_arg;
+        for (const auto &new_arg : new_args) {
             max_lanes = std::max(new_arg.type().lanes(), max_lanes);
         }
 
-        if (!changed) {
+        if (same_as(new_args, op->args)) {
             return op;
         } else if (op->name == Call::trace) {
             const int64_t *event = as_const_int(op->args[6]);

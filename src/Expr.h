@@ -431,6 +431,24 @@ struct Stmt : public IRHandle {
     };
 };
 
+/** Return true iff:
+ * - both vectors are the same length
+ * - T::same_as() returns true for each corresponding entry pair. */
+template<typename T>
+bool same_as(const std::vector<T> &a, const std::vector<T> &b) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < a.size(); i++) {
+        if (!a[i].same_as(b[i])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 }  // namespace Internal
 }  // namespace Halide
 

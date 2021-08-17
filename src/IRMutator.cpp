@@ -146,20 +146,8 @@ Expr IRMutator::visit(const Broadcast *op) {
 }
 
 Expr IRMutator::visit(const Call *op) {
-    vector<Expr> new_args(op->args.size());
-    bool changed = false;
-
-    // Mutate the args
-    for (size_t i = 0; i < op->args.size(); i++) {
-        const Expr &old_arg = op->args[i];
-        Expr new_arg = mutate(old_arg);
-        if (!new_arg.same_as(old_arg)) {
-            changed = true;
-        }
-        new_args[i] = std::move(new_arg);
-    }
-
-    if (!changed) {
+    auto new_args = mutate(op->args);
+    if (!same_as(new_args, op->args)) {
         return op;
     }
     return Call::make(op->type, op->name, new_args, op->call_type,
@@ -228,50 +216,26 @@ Stmt IRMutator::visit(const Store *op) {
 }
 
 Stmt IRMutator::visit(const Provide *op) {
-    vector<Expr> new_args(op->args.size());
-    vector<Expr> new_values(op->values.size());
-    bool changed = false;
-
     // Mutate the args
-    for (size_t i = 0; i < op->args.size(); i++) {
-        const Expr &old_arg = op->args[i];
-        Expr new_arg = mutate(old_arg);
-        if (!new_arg.same_as(old_arg)) {
-            changed = true;
-        }
-        new_args[i] = new_arg;
-    }
-
-    for (size_t i = 0; i < op->values.size(); i++) {
-        const Expr &old_value = op->values[i];
-        Expr new_value = mutate(old_value);
-        if (!new_value.same_as(old_value)) {
-            changed = true;
-        }
-        new_values[i] = new_value;
-    }
+    auto new_args = mutate(op->args);
+    auto new_values = mutate(op->values);
     Expr new_predicate = mutate(op->predicate);
 
-    if (!changed && new_predicate.same_as(op->predicate)) {
+    if (same_as(new_args, op->args) && same_as(new_values, op->values) && new_predicate.same_as(op->predicate)) {
         return op;
     }
     return Provide::make(op->name, new_values, new_args, new_predicate);
 }
 
 Stmt IRMutator::visit(const Allocate *op) {
-    std::vector<Expr> new_extents;
-    bool all_extents_unmodified = true;
-    for (size_t i = 0; i < op->extents.size(); i++) {
-        new_extents.push_back(mutate(op->extents[i]));
-        all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
-    }
+    auto new_extents = mutate(op->extents);
     Stmt body = mutate(op->body);
     Expr condition = mutate(op->condition);
     Expr new_expr;
     if (op->new_expr.defined()) {
         new_expr = mutate(op->new_expr);
     }
-    if (all_extents_unmodified &&
+    if (same_as(new_extents, op->extents) &&
         body.same_as(op->body) &&
         condition.same_as(op->condition) &&
         new_expr.same_as(op->new_expr)) {
@@ -354,19 +318,8 @@ Stmt IRMutator::visit(const Evaluate *op) {
 }
 
 Expr IRMutator::visit(const Shuffle *op) {
-    vector<Expr> new_vectors(op->vectors.size());
-    bool changed = false;
-
-    for (size_t i = 0; i < op->vectors.size(); i++) {
-        Expr old_vector = op->vectors[i];
-        Expr new_vector = mutate(old_vector);
-        if (!new_vector.same_as(old_vector)) {
-            changed = true;
-        }
-        new_vectors[i] = new_vector;
-    }
-
-    if (!changed) {
+    auto new_vectors = mutate(op->vectors);
+    if (same_as(new_vectors, op->vectors)) {
         return op;
     }
     return Shuffle::make(new_vectors, op->indices);
@@ -431,6 +384,17 @@ Expr IRGraphMutator::mutate(const Expr &e) {
         p.first->second = IRMutator::mutate(e);
     }
     return p.first->second;
+}
+
+std::vector<Expr> IRMutator::mutate(const std::vector<Expr> &old_exprs) {
+    vector<Expr> new_exprs(old_exprs.size());
+
+    // Mutate the args
+    for (size_t i = 0; i < old_exprs.size(); i++) {
+        new_exprs[i] = mutate(old_exprs[i]);
+    }
+
+    return new_exprs;
 }
 
 }  // namespace Internal

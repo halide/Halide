@@ -35,6 +35,9 @@ public:
     virtual Expr mutate(const Expr &expr);
     virtual Stmt mutate(const Stmt &stmt);
 
+    // Mutate all the Exprs and return the new list.
+    std::vector<Expr> mutate(const std::vector<Expr> &exprs);
+
 protected:
     // ExprNode<> and StmtNode<> are allowed to call visit (to implement mutate_expr/mutate_stmt())
     template<typename T>
@@ -102,6 +105,11 @@ protected:
 public:
     Stmt mutate(const Stmt &s) override;
     Expr mutate(const Expr &e) override;
+
+    // Mutate all the Exprs and return the new list.
+    std::vector<Expr> mutate(const std::vector<Expr> &exprs) {
+        return IRMutator::mutate(exprs);
+    }
 };
 
 /** A helper function for mutator-like things to mutate regions */

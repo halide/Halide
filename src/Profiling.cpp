@@ -125,12 +125,7 @@ private:
     Stmt visit(const Allocate *op) override {
         int idx = get_func_id(op->name);
 
-        vector<Expr> new_extents;
-        bool all_extents_unmodified = true;
-        for (size_t i = 0; i < op->extents.size(); i++) {
-            new_extents.push_back(mutate(op->extents[i]));
-            all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
-        }
+        auto new_extents = mutate(op->extents);
         Expr condition = mutate(op->condition);
 
         bool on_stack;
@@ -158,7 +153,7 @@ private:
         if (op->new_expr.defined()) {
             new_expr = mutate(op->new_expr);
         }
-        if (all_extents_unmodified &&
+        if (same_as(new_extents, op->extents) &&
             body.same_as(op->body) &&
             condition.same_as(op->condition) &&
             new_expr.same_as(op->new_expr)) {

@@ -481,14 +481,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
 
         internal_assert(op->args.size() % 2 == 0);  // Format: {base, offset, extent0, min0, ...}
 
-        vector<Expr> args(op->args);
-        bool changed = false;
-        for (size_t i = 0; i < op->args.size(); ++i) {
-            args[i] = mutate(op->args[i], nullptr);
-            if (!args[i].same_as(op->args[i])) {
-                changed = true;
-            }
-        }
+        auto args = mutate(op->args, nullptr);
 
         // The {extent, stride} args in the prefetch call are sorted
         // based on the storage dimension in ascending order (i.e. innermost
@@ -513,7 +506,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         }
         internal_assert(args.size() <= op->args.size());
 
-        if (changed || (args.size() != op->args.size())) {
+        if (!same_as(args, op->args)) {
             return Call::make(op->type, Call::prefetch, args, Call::Intrinsic);
         } else {
             return op;
@@ -845,20 +838,8 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
 
     // No else: we want to fall thru from the PureExtern clause.
     {
-        vector<Expr> new_args(op->args.size());
-        bool changed = false;
-
-        // Mutate the args
-        for (size_t i = 0; i < op->args.size(); i++) {
-            const Expr &old_arg = op->args[i];
-            Expr new_arg = mutate(old_arg, nullptr);
-            if (!new_arg.same_as(old_arg)) {
-                changed = true;
-            }
-            new_args[i] = std::move(new_arg);
-        }
-
-        if (!changed) {
+        auto new_args = mutate(op->args, nullptr);
+        if (same_as(new_args, op->args)) {
             return op;
         } else {
             return Call::make(op->type, op->name, new_args, op->call_type,
