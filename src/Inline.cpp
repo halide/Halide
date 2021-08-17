@@ -103,6 +103,7 @@ class Inliner : public IRMutator {
 
             // Mutate the args
             auto [args, changed_args] = mutate_exprs(op->args);
+            (void)changed_args;  // unused
 
             // Grab the body
             Expr body = qualify(func.name() + ".", func.values()[op->value_index]);
