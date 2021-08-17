@@ -147,7 +147,7 @@ Expr IRMutator::visit(const Broadcast *op) {
 
 Expr IRMutator::visit(const Call *op) {
     auto new_args = mutate(op->args);
-    if (!same_as(new_args, op->args)) {
+    if (same_as(new_args, op->args)) {
         return op;
     }
     return Call::make(op->type, op->name, new_args, op->call_type,
