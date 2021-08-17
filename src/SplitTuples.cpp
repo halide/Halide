@@ -145,6 +145,7 @@ class SplitTuples : public IRMutator {
 
         // Mutate the args
         auto [args, changed] = mutate_exprs(op->args);
+        (void)changed;  // unused
 
         // Get the Function
         auto it = env.find(op->name);
