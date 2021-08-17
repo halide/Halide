@@ -105,6 +105,7 @@ bool can_parallelize_rvar(const string &v,
     // Make an expr representing the store done by a different thread.
     RenameFreeVars renamer;
     auto [other_store, changed] = renamer.mutate_exprs(args);
+    (void)changed;  // unused
 
     // Construct an expression which is true when the two threads are
     // in fact two different threads. We'll use this liberally in the
