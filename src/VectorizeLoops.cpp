@@ -635,7 +635,7 @@ class VectorSubs : public IRMutator {
         // arguments and its return type
 
         // Mutate the args
-        auto [new_args, changed] = mutate_exprs(op->args);
+        auto [new_args, changed] = mutate_with_changes(op->args);
         int max_lanes = 0;
         for (const auto &new_arg : new_args) {
             max_lanes = std::max(new_arg.type().lanes(), max_lanes);

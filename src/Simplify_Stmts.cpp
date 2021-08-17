@@ -276,8 +276,8 @@ Stmt Simplify::visit(const Provide *op) {
     found_buffer_reference(op->name, op->args.size());
 
     // Mutate the args
-    auto [new_args, changed_args] = mutate_exprs(op->args, nullptr);
-    auto [new_values, changed_values] = mutate_exprs(op->values, nullptr);
+    auto [new_args, changed_args] = mutate_with_changes(op->args, nullptr);
+    auto [new_values, changed_values] = mutate_with_changes(op->values, nullptr);
     Expr new_predicate = mutate(op->predicate, nullptr);
 
     if (!(changed_args || changed_values) && new_predicate.same_as(op->predicate)) {

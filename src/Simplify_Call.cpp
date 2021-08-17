@@ -481,7 +481,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
 
         internal_assert(op->args.size() % 2 == 0);  // Format: {base, offset, extent0, min0, ...}
 
-        auto [args, changed] = mutate_exprs(op->args, nullptr);
+        auto [args, changed] = mutate_with_changes(op->args, nullptr);
 
         // The {extent, stride} args in the prefetch call are sorted
         // based on the storage dimension in ascending order (i.e. innermost
@@ -838,7 +838,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
 
     // No else: we want to fall thru from the PureExtern clause.
     {
-        auto [new_args, changed] = mutate_exprs(op->args, nullptr);
+        auto [new_args, changed] = mutate_with_changes(op->args, nullptr);
         if (!changed) {
             return op;
         } else {

@@ -133,8 +133,8 @@ class AddPredicates : public IRGraphMutator {
     using IRMutator::visit;
 
     Stmt visit(const Provide *p) override {
-        auto [args, changed_args] = mutate_exprs(p->args);
-        auto [values, changed_values] = mutate_exprs(p->values);
+        auto [args, changed_args] = mutate_with_changes(p->args);
+        auto [values, changed_values] = mutate_with_changes(p->values);
         Expr predicate = mutate(p->predicate);
         if (provides) {
             return Provide::make(p->name, values, args, predicate && cond);

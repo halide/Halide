@@ -146,7 +146,7 @@ Expr IRMutator::visit(const Broadcast *op) {
 }
 
 Expr IRMutator::visit(const Call *op) {
-    auto [new_args, changed] = mutate_exprs(op->args);
+    auto [new_args, changed] = mutate_with_changes(op->args);
     if (!changed) {
         return op;
     }
@@ -217,8 +217,8 @@ Stmt IRMutator::visit(const Store *op) {
 
 Stmt IRMutator::visit(const Provide *op) {
     // Mutate the args
-    auto [new_args, changed_args] = mutate_exprs(op->args);
-    auto [new_values, changed_values] = mutate_exprs(op->values);
+    auto [new_args, changed_args] = mutate_with_changes(op->args);
+    auto [new_values, changed_values] = mutate_with_changes(op->values);
     Expr new_predicate = mutate(op->predicate);
 
     if (!(changed_args || changed_values) && new_predicate.same_as(op->predicate)) {
@@ -228,7 +228,7 @@ Stmt IRMutator::visit(const Provide *op) {
 }
 
 Stmt IRMutator::visit(const Allocate *op) {
-    auto [new_extents, changed] = mutate_exprs(op->extents);
+    auto [new_extents, changed] = mutate_with_changes(op->extents);
     Stmt body = mutate(op->body);
     Expr condition = mutate(op->condition);
     Expr new_expr;
@@ -318,7 +318,7 @@ Stmt IRMutator::visit(const Evaluate *op) {
 }
 
 Expr IRMutator::visit(const Shuffle *op) {
-    auto [new_vectors, changed] = mutate_exprs(op->vectors);
+    auto [new_vectors, changed] = mutate_with_changes(op->vectors);
     if (!changed) {
         return op;
     }
@@ -386,7 +386,7 @@ Expr IRGraphMutator::mutate(const Expr &e) {
     return p.first->second;
 }
 
-std::pair<std::vector<Expr>, bool> IRMutator::mutate_exprs(const std::vector<Expr> &old_exprs) {
+std::pair<std::vector<Expr>, bool> IRMutator::mutate_with_changes(const std::vector<Expr> &old_exprs) {
     vector<Expr> new_exprs(old_exprs.size());
     bool changed = false;
 

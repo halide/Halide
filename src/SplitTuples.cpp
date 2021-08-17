@@ -118,7 +118,7 @@ class SplitTuples : public IRMutator {
                 name += "." + std::to_string(op->value_index);
                 changed_name = true;
             }
-            auto [args, changed_args] = mutate_exprs(op->args);
+            auto [args, changed_args] = mutate_with_changes(op->args);
             // It's safe to hook up the pointer to the function
             // unconditionally. This expr never gets held by a
             // Function, so there can't be a cycle. We do this even
@@ -144,8 +144,7 @@ class SplitTuples : public IRMutator {
         }
 
         // Mutate the args
-        auto [args, changed] = mutate_exprs(op->args);
-        (void)changed;  // unused
+        auto args = mutate(op->args);
 
         // Get the Function
         auto it = env.find(op->name);

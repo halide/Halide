@@ -54,7 +54,7 @@ Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemaind
     }
 }
 
-std::pair<std::vector<Expr>, bool> Simplify::mutate_exprs(const std::vector<Expr> &old_exprs, ExprInfo *bounds) {
+std::pair<std::vector<Expr>, bool> Simplify::mutate_with_changes(const std::vector<Expr> &old_exprs, ExprInfo *bounds) {
     vector<Expr> new_exprs(old_exprs.size());
     bool changed = false;
 

@@ -125,7 +125,7 @@ private:
     Stmt visit(const Allocate *op) override {
         int idx = get_func_id(op->name);
 
-        auto [new_extents, changed] = mutate_exprs(op->extents);
+        auto [new_extents, changed] = mutate_with_changes(op->extents);
         Expr condition = mutate(op->condition);
 
         bool on_stack;

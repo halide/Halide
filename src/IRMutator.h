@@ -35,9 +35,14 @@ public:
     virtual Expr mutate(const Expr &expr);
     virtual Stmt mutate(const Stmt &stmt);
 
-    // Mutate all the Exprs and return the new list.
-    // pair.second is true iff at least one item in the list changed.
-    std::pair<std::vector<Expr>, bool> mutate_exprs(const std::vector<Expr> &);
+    // Mutate all the Exprs and return the new list in ret, along with
+    // a flag that is true iff at least one item in the list changed.
+    std::pair<std::vector<Expr>, bool> mutate_with_changes(const std::vector<Expr> &);
+
+    // Like mutate_with_changes, but discard the changes flag.
+    std::vector<Expr> mutate(const std::vector<Expr> &exprs) {
+        return mutate_with_changes(exprs).first;
+    }
 
 protected:
     // ExprNode<> and StmtNode<> are allowed to call visit (to implement mutate_expr/mutate_stmt())
@@ -106,6 +111,10 @@ protected:
 public:
     Stmt mutate(const Stmt &s) override;
     Expr mutate(const Expr &e) override;
+
+    std::vector<Expr> mutate(const std::vector<Expr> &exprs) {
+        return IRMutator::mutate(exprs);
+    }
 };
 
 /** A helper function for mutator-like things to mutate regions */
