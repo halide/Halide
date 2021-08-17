@@ -275,32 +275,12 @@ Stmt Simplify::visit(const For *op) {
 Stmt Simplify::visit(const Provide *op) {
     found_buffer_reference(op->name, op->args.size());
 
-    vector<Expr> new_args(op->args.size());
-    vector<Expr> new_values(op->values.size());
-    bool changed = false;
-
     // Mutate the args
-    for (size_t i = 0; i < op->args.size(); i++) {
-        const Expr &old_arg = op->args[i];
-        Expr new_arg = mutate(old_arg, nullptr);
-        if (!new_arg.same_as(old_arg)) {
-            changed = true;
-        }
-        new_args[i] = new_arg;
-    }
-
-    for (size_t i = 0; i < op->values.size(); i++) {
-        const Expr &old_value = op->values[i];
-        Expr new_value = mutate(old_value, nullptr);
-        if (!new_value.same_as(old_value)) {
-            changed = true;
-        }
-        new_values[i] = new_value;
-    }
-
+    auto [new_args, changed_args] = mutate_with_changes(op->args, nullptr);
+    auto [new_values, changed_values] = mutate_with_changes(op->values, nullptr);
     Expr new_predicate = mutate(op->predicate, nullptr);
 
-    if (!changed && new_predicate.same_as(op->predicate)) {
+    if (!(changed_args || changed_values) && new_predicate.same_as(op->predicate)) {
         return op;
     } else {
         return Provide::make(op->name, new_values, new_args, new_predicate);
