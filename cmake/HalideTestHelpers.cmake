@@ -97,4 +97,4 @@ function(tests)
     endforeach ()
 
     set(TEST_NAMES "${TEST_NAMES}" PARENT_SCOPE)
-endfunction(tests)
+endfunction()

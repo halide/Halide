@@ -1,11 +1,11 @@
 // Halide tutorial lesson 8: Scheduling multi-stage pipelines
 
 // On linux, you can compile and run it like so:
-// g++ lesson_08*.cpp -g -std=c++11 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_08
+// g++ lesson_08*.cpp -g -std=c++17 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_08
 // LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_08
 
 // On os x:
-// g++ lesson_08*.cpp -g -std=c++11 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_08
+// g++ lesson_08*.cpp -g -std=c++17 -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_08
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_08
 
 // If you have the entire Halide source tree, you can also build it by
@@ -345,7 +345,7 @@ int main(int argc, char **argv) {
         // producer.store_root().compute_at(consumer, y):
         // - Temporary memory allocated: 10 floats
         // - Loads: 64
-        // - Stores: 39
+        // - Stores: 41
         // - Calls to sin: 25
 
         // Note that my claimed amount of memory allocated doesn't
@@ -446,7 +446,7 @@ int main(int argc, char **argv) {
         // producer.store_root().compute_at(consumer, x):
         // - Temporary memory allocated: 10 floats
         // - Loads: 48
-        // - Stores: 56
+        // - Stores: 41
         // - Calls to sin: 25
     }
 

@@ -50,7 +50,7 @@ typedef enum {
 extern const struct halide_device_interface_t *halide_hexagon_dma_device_interface();
 
 /** This API is used to set up the DMA device interface to be used for DMA transfer. This also internally 
- * creates the DMA device handle and populates all the Buffer releated parameters (width, height, stride)
+ * creates the DMA device handle and populates all the Buffer related parameters (width, height, stride)
  * to be used for DMA configuration.
  */
 extern int halide_hexagon_dma_device_wrap_native(void *user_context, struct halide_buffer_t *buf,
@@ -90,7 +90,7 @@ extern int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, str
 extern int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t *buf);
 
 /** This API is used to setup the hexagon Operation modes. We will setup the necessary Operating frequency
- * based on the power mode choosen. Check the structure halide_hexagon_power_mode_t defined in Halide HalideRuntimeHexagonHost.h
+ * based on the power mode chosen. Check the structure halide_hexagon_power_mode_t defined in Halide HalideRuntimeHexagonHost.h
  * for the supported power modes.
  */
 extern int halide_hexagon_dma_power_mode_voting(void *user_context, halide_hexagon_power_mode_t cornercase);

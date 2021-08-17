@@ -38,8 +38,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::add(a, b), op->type);
 
-        if (rewrite(c0 + c1, fold(c0 + c1)) ||
-            rewrite(IRMatcher::Overflow() + x, a) ||
+        if (rewrite(IRMatcher::Overflow() + x, a) ||
             rewrite(x + IRMatcher::Overflow(), b) ||
             rewrite(x + 0, x) ||
             rewrite(0 + x, x)) {
@@ -48,7 +47,8 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
 
         // clang-format off
         if (EVAL_IN_LAMBDA
-            (rewrite(x + x, x * 2) ||
+            (rewrite(c0 + c1, fold(c0 + c1)) ||
+             rewrite(x + x, x * 2) ||
              rewrite(ramp(x, y, c0) + ramp(z, w, c0), ramp(x + z, y + w, c0)) ||
              rewrite(ramp(x, y, c0) + broadcast(z, c0), ramp(x + z, y, c0)) ||
              rewrite(broadcast(x, c0) + broadcast(y, c1), broadcast(x + broadcast(y, fold(c1/c0)), c0), c1 % c0 == 0) ||
@@ -64,6 +64,9 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
              rewrite((broadcast(z, c1) - x) + broadcast(y, c0), broadcast(y + broadcast(z, fold(c1/c0)), c0) - x, c1 % c0 == 0) ||
              rewrite(select(x, y, z) + select(x, w, u), select(x, y + w, z + u)) ||
              rewrite(select(x, c0, c1) + c2, select(x, fold(c0 + c2), fold(c1 + c2))) ||
+             rewrite(select(x, y + c0, c1) + c2, select(x, y + fold(c0 + c2), fold(c1 + c2))) ||
+             rewrite(select(x, c0, z + c1) + c2, select(x, fold(c0 + c2), z + fold(c1 + c2))) ||
+             rewrite(select(x, y + c0, z + c1) + c2, select(x, y + fold(c0 + c2), z + fold(c1 + c2))) ||
 
              rewrite(ramp(broadcast(x, c0), y, c1) + broadcast(z, c2), ramp(broadcast(x + z, c0), y, c1), c2 == c0 * c1) ||
              rewrite(ramp(ramp(x, y, c0), z, c1) + broadcast(w, c2), ramp(ramp(x + w, y, c0), z, c1), c2 == c0 * c1) ||
@@ -71,6 +74,9 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
              rewrite(select(x, y, z) + (w + select(x, u, v)), select(x, y + u, z + v) + w) ||
              rewrite(select(x, y, z) + (select(x, u, v) - w), select(x, y + u, z + v) - w) ||
              rewrite(select(x, y, z) + (w - select(x, u, v)), select(x, y - u, z - v) + w) ||
+             rewrite(select(x, c0 - y, c1) + c2, select(x, fold(c0 + c2) - y, fold(c1 + c2))) ||
+             rewrite(select(x, y, z + c0) + c1, select(x, y + c1, z), (c0 + c1) == 0) ||
+             rewrite(select(x, c0 - y, c1) + c2, fold(c0 + c2) - select(x, y, fold(c0 - c1))) ||
 
              rewrite(x + y*(-1), x - y) ||
              rewrite(x*(-1) + y, y - x) ||
@@ -80,6 +86,7 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
              rewrite(x + (y + c0), (x + y) + c0) ||
              rewrite((c0 - x) + c1, fold(c0 + c1) - x) ||
              rewrite((c0 - x) + y, (y - x) + c0) ||
+             rewrite(max(x, y*c0 + z) + (u - y)*c0, max(x - y*c0, z) + u*c0) ||
 
              rewrite((x - y) + y, x) ||
              rewrite(x + (y - x), y) ||

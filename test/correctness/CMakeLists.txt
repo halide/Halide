@@ -31,6 +31,7 @@ tests(GROUPS correctness
       bounds_of_func.cpp
       bounds_of_monotonic_math.cpp
       bounds_of_multiply.cpp
+      bounds_of_split.cpp
       bounds_query.cpp
       buffer_t.cpp
       c_function.cpp
@@ -104,6 +105,7 @@ tests(GROUPS correctness
       float16_t_comparison.cpp
       float16_t_constants.cpp
       float16_t_image_type.cpp
+      float16_t_neon_op_check.cpp
       for_each_element.cpp
       force_onto_stack.cpp
       func_clone.cpp
@@ -113,6 +115,7 @@ tests(GROUPS correctness
       fuse.cpp
       fuse_gpu_threads.cpp
       fused_where_inner_extent_is_zero.cpp
+      fuzz_bounds.cpp
       fuzz_cse.cpp
       fuzz_float_stores.cpp
       fuzz_simplify.cpp
@@ -148,6 +151,7 @@ tests(GROUPS correctness
       gpu_texture.cpp
       gpu_thread_barrier.cpp
       gpu_transpose.cpp
+      gpu_vectorize.cpp
       gpu_vectorized_shared_memory.cpp
       half_native_interleave.cpp
       halide_buffer.cpp
@@ -234,6 +238,7 @@ tests(GROUPS correctness
       parallel_gpu_nested.cpp
       parallel_nested.cpp
       parallel_nested_1.cpp
+      parallel_scatter.cpp
       parallel_reductions.cpp
       parallel_rvar.cpp
       param.cpp

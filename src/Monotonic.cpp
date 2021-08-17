@@ -428,25 +428,24 @@ class DerivativeBounds : public IRVisitor {
             ConstantInterval ra = result;
             op->false_value.accept(this);
             ConstantInterval rb = result;
-            ConstantInterval unified = unify(ra, rb);
+            result = unify(ra, rb);
 
-            // TODO: How to handle unsigned values?
-            Expr delta = simplify(op->true_value - op->false_value);
+            // If the condition is not constant, we hit a "bump" when the condition changes value.
+            if (!is_constant(rcond)) {
+                // TODO: How to handle unsigned values?
+                Expr delta = simplify(op->true_value - op->false_value);
 
-            Interval delta_bounds = find_constant_bounds(delta, bounds);
-            ConstantInterval adjusted_delta;
-            // TODO: Maybe we can do something with one-sided intervals?
-            if (delta_bounds.is_bounded()) {
-                ConstantInterval delta_low = multiply(rcond, delta_bounds.min);
-                ConstantInterval delta_high = multiply(rcond, delta_bounds.max);
-                adjusted_delta = ConstantInterval::make_union(delta_low, delta_high);
-            } else {
-                delta.accept(this);
-                ConstantInterval rdelta = result;
-                adjusted_delta = multiply(rcond, rdelta);
+                Interval delta_bounds = find_constant_bounds(delta, bounds);
+                // TODO: Maybe we can do something with one-sided intervals?
+                if (delta_bounds.is_bounded()) {
+                    ConstantInterval delta_low = multiply(rcond, delta_bounds.min);
+                    ConstantInterval delta_high = multiply(rcond, delta_bounds.max);
+                    result = add(result, ConstantInterval::make_union(delta_low, delta_high));
+                } else {
+                    // The bump is unbounded.
+                    result = ConstantInterval::everything();
+                }
             }
-
-            result = add(unified, adjusted_delta);
         } else {
             result = ConstantInterval::everything();
         }
@@ -470,8 +469,7 @@ class DerivativeBounds : public IRVisitor {
 
     void visit(const Call *op) override {
         // Some functions are known to be monotonic
-        if (op->is_intrinsic(Call::likely) ||
-            op->is_intrinsic(Call::likely_if_innermost) ||
+        if (Call::as_tag(op) ||
             op->is_intrinsic(Call::return_second)) {
             op->args.back().accept(this);
             return;
@@ -536,6 +534,7 @@ class DerivativeBounds : public IRVisitor {
         op->value.accept(this);
         switch (op->op) {
         case VectorReduce::Add:
+        case VectorReduce::SaturatingAdd:
             result = multiply(result, op->value.type().lanes() / op->type.lanes());
             break;
         case VectorReduce::Min:
@@ -632,7 +631,7 @@ ConstantInterval derivative_bounds(const Expr &e, const std::string &var, const 
         return ConstantInterval::everything();
     }
     DerivativeBounds m(var, scope);
-    e.accept(&m);
+    remove_likelies(remove_promises(e)).accept(&m);
     return m.result;
 }
 
@@ -680,6 +679,7 @@ void is_monotonic_test() {
 
     Expr x = Variable::make(Int(32), "x");
     Expr y = Variable::make(Int(32), "y");
+    Expr z = Variable::make(Int(32), "z");
 
     check_increasing(x);
     check_increasing(x + 4);
@@ -723,6 +723,10 @@ void is_monotonic_test() {
 
     check_unknown(select(x < 2, x, x - 5));
     check_unknown(select(x > 2, x - 5, x));
+
+    check_unknown(select(x > 0, y, z));
+
+    check_increasing(select(0 < x, promise_clamped(x - 1, x - 1, z) + 1, promise_clamped(x, x, z)));
 
     check_constant(y);
 

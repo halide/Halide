@@ -334,11 +334,7 @@ private:
             // can just deinterleave the args.
 
             // Beware of intrinsics for which this is not true!
-            std::vector<Expr> args(op->args.size());
-            for (size_t i = 0; i < args.size(); i++) {
-                args[i] = mutate(op->args[i]);
-            }
-
+            auto args = mutate(op->args);
             return Call::make(t, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         }
@@ -633,14 +629,14 @@ class Interleaver : public IRMutator {
 
         const int64_t *stride_ptr = as_const_int(r0->stride);
 
-        // The stride isn't a constant or is <= 0
-        if (!stride_ptr || *stride_ptr < 1) {
+        // The stride isn't a constant or is <= 1
+        if (!stride_ptr || *stride_ptr <= 1) {
             return Stmt();
         }
 
         const int64_t stride = *stride_ptr;
         const int lanes = r0->lanes;
-        const int64_t expected_stores = stride == 1 ? lanes : stride;
+        const int64_t expected_stores = stride;
 
         // Collect the rest of the stores.
         std::vector<Stmt> stores;
@@ -655,6 +651,16 @@ class Interleaver : public IRMutator {
 
         // Not enough stores collected.
         if (stores.size() != (size_t)expected_stores) {
+            return Stmt();
+        }
+
+        // Too many stores and lanes to represent in a single vector
+        // type.
+        int max_bits = sizeof(halide_type_t::lanes) * 8;
+        // mul_would_overflow is for signed types, but vector lanes
+        // are unsigned, so add a bit.
+        max_bits++;
+        if (mul_would_overflow(max_bits, stores.size(), lanes)) {
             return Stmt();
         }
 
@@ -690,53 +696,11 @@ class Interleaver : public IRMutator {
             if (*offs < min_offset) {
                 min_offset = *offs;
             }
-
-            if (stride == 1) {
-                // Difference between bases is not a multiple of the lanes.
-                if (*offs % lanes != 0) {
-                    return Stmt();
-                }
-
-                // This case only triggers if we have an immediate load of the correct stride on the RHS.
-                // TODO: Could we consider mutating the RHS so that we can handle more complex Expr's than just loads?
-                const Load *load = stores[i].as<Store>()->value.as<Load>();
-                if (!load) {
-                    return Stmt();
-                }
-                // TODO(psuriana): Predicated load is not currently handled.
-                if (!is_const_one(load->predicate)) {
-                    return Stmt();
-                }
-
-                const Ramp *ramp = load->index.as<Ramp>();
-                if (!ramp) {
-                    return Stmt();
-                }
-
-                // Load stride or lanes is not equal to the store lanes.
-                if (!is_const(ramp->stride, lanes) || ramp->lanes != lanes) {
-                    return Stmt();
-                }
-
-                if (i == 0) {
-                    load_name = load->name;
-                    load_image = load->image;
-                    load_param = load->param;
-                } else {
-                    if (load->name != load_name) {
-                        return Stmt();
-                    }
-                }
-            }
         }
 
         // Gather the args for interleaving.
         for (size_t i = 0; i < stores.size(); ++i) {
             int j = offsets[i] - min_offset;
-            if (stride == 1) {
-                j /= stores.size();
-            }
-
             if (j == 0) {
                 base = stores[i].as<Store>()->index.as<Ramp>()->base;
             }
@@ -751,14 +715,7 @@ class Interleaver : public IRMutator {
                 return Stmt();
             }
 
-            if (stride == 1) {
-                // Convert multiple dense vector stores of strided vector loads
-                // into one dense vector store of interleaving dense vector loads.
-                args[j] = Load::make(t, load_name, stores[i].as<Store>()->index,
-                                     load_image, load_param, const_true(t.lanes()), ModulusRemainder());
-            } else {
-                args[j] = stores[i].as<Store>()->value;
-            }
+            args[j] = stores[i].as<Store>()->value;
             predicates[j] = stores[i].as<Store>()->predicate;
         }
 

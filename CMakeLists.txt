@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.16...3.20)
-project(Halide VERSION 12.0.0)
+project(Halide
+        VERSION 13.0.0
+        DESCRIPTION "Halide compiler and libraries"
+        HOMEPAGE_URL "https://halide-lang.org")
 
 enable_testing()
 
@@ -14,9 +17,7 @@ include(MakeShellPath)
 include(CMakeDependentOption)
 
 # Build Halide as a shared lib by default, but still honor command-line settings.
-if (NOT DEFINED BUILD_SHARED_LIBS)
-    set(BUILD_SHARED_LIBS YES)
-endif ()
+option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 
 # Warn if the user did not set a build type and is using a single-configuration generator.
 get_property(IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
@@ -37,10 +38,14 @@ endif ()
 # Export all symbols on Windows to match GCC/Clang behavior on Linux/macOS
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
-# Require standard C++14
-set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+# Require standard C++17
+if(NOT CMAKE_CXX_STANDARD)
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    set(CMAKE_CXX_EXTENSIONS OFF)
+elseif(CMAKE_CXX_STANDARD LESS 17)
+    message(FATAL_ERROR "Halide requires C++17 or newer")
+endif()
 
 # Build Halide with ccache if the package is present
 option(Halide_CCACHE_BUILD "Set to ON for a ccache enabled build" OFF)

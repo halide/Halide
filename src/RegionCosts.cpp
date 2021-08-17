@@ -152,11 +152,13 @@ class ExprCost : public IRVisitor {
 
     void visit(const Call *call) override {
         if (call->is_intrinsic(Call::if_then_else)) {
-            internal_assert(call->args.size() == 3);
+            internal_assert(call->args.size() == 2 || call->args.size() == 3);
 
             int64_t current_arith = arith, current_memory = memory;
             arith = 0, memory = 0;
-            call->args[2].accept(this);
+            if (call->args.size() == 3) {
+                call->args[2].accept(this);
+            }
 
             // Check if this if_then_else is because of tracing or print_when.
             // If it is, we should only take into account the cost of computing
@@ -229,9 +231,8 @@ class ExprCost : public IRVisitor {
                        call->is_intrinsic(Call::count_leading_zeros) ||
                        call->is_intrinsic(Call::count_trailing_zeros)) {
                 arith += 5;
-            } else if (call->is_intrinsic(Call::likely) ||
-                       call->is_intrinsic(Call::likely_if_innermost)) {
-                // Likely does not result in actual operations.
+            } else if (Call::as_tag(call)) {
+                // Tags do not result in actual operations.
             } else {
                 // For other intrinsics, use 1 for the arithmetic cost.
                 arith += 1;

@@ -1,5 +1,7 @@
+#include <atomic>
 #include <cmath>
 #include <fstream>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 
@@ -751,7 +753,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
     const char kUsage[] =
         "gengen\n"
         "  [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-d 1|0]\n"
-        "  [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME] [-s AUTOSCHEDULER_NAME]\n"
+        "  [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME] [-s AUTOSCHEDULER_NAME] [-t TIMEOUT]\n"
         "       target=target-string[,target-string...] [generator_arg=value [...]]\n"
         "\n"
         " -d  Build a module that is suitable for using for gradient descent calculationn\n"
@@ -776,7 +778,9 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
         "     find one. Flags across all of the targets that do not affect runtime code\n"
         "     generation, such as `no_asserts` and `no_runtime`, are ignored.\n"
         "\n"
-        " -s  The name of an autoscheduler to set as the default.\n";
+        " -s  The name of an autoscheduler to set as the default.\n"
+        " -t  Timeout for the Generator to run, in seconds; mainly useful to ensure that bugs and/or degenerate"
+        "     cases don't stall build systems. Defaults to 900 (=15 minutes). Specify 0 to allow ~infinite time.\n";
 
     std::map<std::string, std::string> flags_info = {
         {"-d", "0"},
@@ -788,6 +792,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
         {"-p", ""},
         {"-r", ""},
         {"-s", ""},
+        {"-t", "900"},  // 15 minutes
     };
     GeneratorParamsMap generator_args;
 
@@ -985,6 +990,25 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
                                                               json_compiler_logger_factory :
                                                               no_compiler_logger_factory;
 
+    std::atomic<bool> generator_finished = false;
+    const int timeout_in_seconds = std::stoi(flags_info["-t"]);
+    const auto timeout_time = std::chrono::steady_clock::now() + std::chrono::seconds(timeout_in_seconds);
+    std::thread timeout_monitor([timeout_time, timeout_in_seconds, &generator_finished]() {
+        if (timeout_in_seconds <= 0) {
+            // No watchdog timer, just let it run as long as it likes.
+            return;
+        }
+        while (!generator_finished) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            if (std::chrono::steady_clock::now() >= timeout_time) {
+                fprintf(stderr, "Timed out waiting for Generator to complete (%d seconds)!\n", timeout_in_seconds);
+                fflush(stdout);
+                fflush(stderr);
+                exit(1);
+            }
+        }
+    });
+
     if (!runtime_name.empty()) {
         std::string base_path = compute_base_path(output_dir, runtime_name, "");
 
@@ -1033,6 +1057,9 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
             compile_multitarget(function_name, output_files, targets, target_strings, module_factory, compiler_logger_factory);
         }
     }
+
+    generator_finished = true;
+    timeout_monitor.join();
 
     return 0;
 }
@@ -1161,10 +1188,10 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
         const std::string &n = gio->name();
         const std::string &gn = generator->generator_registered_name;
 
-        if (gio->kind() != IOKind::Scalar) {
-            owned_synthetic_params.push_back(GeneratorParam_Synthetic<Type>::make(generator, gn, n + ".type", *gio, SyntheticParamType::Type, gio->types_defined()));
-            filter_generator_params.push_back(owned_synthetic_params.back().get());
+        owned_synthetic_params.push_back(GeneratorParam_Synthetic<Type>::make(generator, gn, n + ".type", *gio, SyntheticParamType::Type, gio->types_defined()));
+        filter_generator_params.push_back(owned_synthetic_params.back().get());
 
+        if (gio->kind() != IOKind::Scalar) {
             owned_synthetic_params.push_back(GeneratorParam_Synthetic<int>::make(generator, gn, n + ".dim", *gio, SyntheticParamType::Dim, gio->dims_defined()));
             filter_generator_params.push_back(owned_synthetic_params.back().get());
         }
@@ -1736,7 +1763,7 @@ const std::vector<Type> &GIOBase::types() const {
             check_matching_types(f.at(0).output_types());
         }
     }
-    user_assert(types_defined()) << "Type is not defined for " << input_or_output() << " '" << name() << "'; you may need to specify '" << name() << ".type' as a GeneratorParam.\n";
+    user_assert(types_defined()) << "Type is not defined for " << input_or_output() << " '" << name() << "'; you may need to specify '" << name() << ".type' as a GeneratorParam, or call set_type() from the configure() method.\n";
     return types_;
 }
 
@@ -1744,6 +1771,24 @@ Type GIOBase::type() const {
     const auto &t = types();
     internal_assert(t.size() == 1) << "Expected types_.size() == 1, saw " << t.size() << " for " << name() << "\n";
     return t.at(0);
+}
+
+void GIOBase::set_type(const Type &type) {
+    generator->check_exact_phase(GeneratorBase::ConfigureCalled);
+    user_assert(!types_defined()) << "set_type() may only be called on an Input or Output that has no type specified.";
+    types_ = {type};
+}
+
+void GIOBase::set_dimensions(int dims) {
+    generator->check_exact_phase(GeneratorBase::ConfigureCalled);
+    user_assert(!dims_defined()) << "set_dimensions() may only be called on an Input or Output that has no dimensionality specified.";
+    dims_ = dims;
+}
+
+void GIOBase::set_array_size(int size) {
+    generator->check_exact_phase(GeneratorBase::ConfigureCalled);
+    user_assert(!array_size_defined()) << "set_array_size() may only be called on an Input or Output that has no array size specified.";
+    array_size_ = size;
 }
 
 bool GIOBase::dims_defined() const {

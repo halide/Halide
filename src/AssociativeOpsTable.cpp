@@ -130,7 +130,7 @@ map<TableKey, vector<AssociativePattern>> pattern_tables;
     Expr one_##index = make_const((t), 1);                            \
     Expr neg_one_##index = make_const((t), -1);                       \
     Expr tmax_##index = (t).max();                                    \
-    Expr tmin_##index = (t).min();
+    Expr tmin_##index = (t).min()
 
 #define declare_vars_single(types)        \
     internal_assert((types).size() == 1); \
@@ -138,8 +138,8 @@ map<TableKey, vector<AssociativePattern>> pattern_tables;
 
 #define declare_vars_double(types)        \
     internal_assert((types).size() == 2); \
-    declare_vars((types)[0], 0)           \
-        declare_vars((types)[1], 1)
+    declare_vars((types)[0], 0);          \
+    declare_vars((types)[1], 1)
 
 void populate_ops_table_single_general_add(const vector<Type> &types, vector<AssociativePattern> &table) {
     declare_vars_single(types);

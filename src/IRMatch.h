@@ -50,6 +50,10 @@ bool expr_match(const Expr &pattern, const Expr &expr, std::vector<Expr> &result
  */
 bool expr_match(const Expr &pattern, const Expr &expr, std::map<std::string, Expr> &result);
 
+/** Rewrite the expression x to have `lanes` lanes. This is useful
+ * for substituting the results of expr_match into a pattern expression. */
+Expr with_lanes(const Expr &x, int lanes);
+
 void expr_match_test();
 
 /** An alternative template-metaprogramming approach to expression
@@ -252,7 +256,7 @@ struct WildConstInt {
             halide_scalar_value_t val;
             halide_type_t type;
             state.get_bound_const(i, val, type);
-            return e.type == type && value == val.u.i64;
+            return (halide_type_t)e.type == type && value == val.u.i64;
         }
         state.set_bound_const(i, value, e.type);
         return true;
@@ -318,7 +322,7 @@ struct WildConstUInt {
             halide_scalar_value_t val;
             halide_type_t type;
             state.get_bound_const(i, val, type);
-            return e.type == type && value == val.u.u64;
+            return (halide_type_t)e.type == type && value == val.u.u64;
         }
         state.set_bound_const(i, value, e.type);
         return true;
@@ -371,7 +375,7 @@ struct WildConstFloat {
             halide_scalar_value_t val;
             halide_type_t type;
             state.get_bound_const(i, val, type);
-            return e.type == type && value == val.u.f64;
+            return (halide_type_t)e.type == type && value == val.u.f64;
         }
         state.set_bound_const(i, value, e.type);
         return true;
@@ -1468,6 +1472,13 @@ struct Intrin {
             return rounding_shift_right(arg0, arg1);
         }
 
+        Expr arg2 = std::get<const_min(2, sizeof...(Args) - 1)>(args).make(state, type_hint);
+        if (intrin == Call::mul_shift_right) {
+            return mul_shift_right(arg0, arg1, arg2);
+        } else if (intrin == Call::rounding_mul_shift_right) {
+            return rounding_mul_shift_right(arg0, arg1, arg2);
+        }
+
         internal_error << "Unhandled intrinsic in IRMatcher: " << intrin;
         return Expr();
     }
@@ -1544,6 +1555,14 @@ auto rounding_shift_left(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a
 template<typename A, typename B>
 auto rounding_shift_right(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
     return {Call::rounding_shift_right, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B, typename C>
+auto mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
+    return {Call::mul_shift_right, pattern_arg(a), pattern_arg(b), pattern_arg(c)};
+}
+template<typename A, typename B, typename C>
+auto rounding_mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
+    return {Call::rounding_mul_shift_right, pattern_arg(a), pattern_arg(b), pattern_arg(c)};
 }
 
 template<typename A>
@@ -2158,6 +2177,8 @@ struct IsConst {
     constexpr static bool canonical = true;
 
     A a;
+    bool check_v;
+    int64_t v;
 
     constexpr static bool foldable = true;
 
@@ -2167,19 +2188,33 @@ struct IsConst {
         ty.code = halide_type_uint;
         ty.bits = 64;
         ty.lanes = 1;
-        val.u.u64 = ::Halide::Internal::is_const(e) ? 1 : 0;
+        if (check_v) {
+            val.u.u64 = ::Halide::Internal::is_const(e, v) ? 1 : 0;
+        } else {
+            val.u.u64 = ::Halide::Internal::is_const(e) ? 1 : 0;
+        }
     }
 };
 
 template<typename A>
 HALIDE_ALWAYS_INLINE auto is_const(A &&a) noexcept -> IsConst<decltype(pattern_arg(a))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a)};
+    return {pattern_arg(a), false, 0};
+}
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto is_const(A &&a, int64_t value) noexcept -> IsConst<decltype(pattern_arg(a))> {
+    assert_is_lvalue_if_expr<A>();
+    return {pattern_arg(a), true, value};
 }
 
 template<typename A>
 std::ostream &operator<<(std::ostream &s, const IsConst<A> &op) {
-    s << "is_const(" << op.a << ")";
+    if (op.check_v) {
+        s << "is_const(" << op.a << ")";
+    } else {
+        s << "is_const(" << op.a << ", " << op.v << ")";
+    }
     return s;
 }
 
@@ -2206,7 +2241,7 @@ struct CanProve {
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = condition.type().lanes();
-    };
+    }
 };
 
 template<typename A, typename Prover>
@@ -2243,7 +2278,7 @@ struct IsFloat {
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = t.lanes();
-    };
+    }
 };
 
 template<typename A>
@@ -2281,7 +2316,7 @@ struct IsInt {
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = t.lanes();
-    };
+    }
 };
 
 template<typename A>
@@ -2323,7 +2358,7 @@ struct IsUInt {
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = t.lanes();
-    };
+    }
 };
 
 template<typename A>
@@ -2364,13 +2399,19 @@ struct IsScalar {
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = t.lanes();
-    };
+    }
 };
 
 template<typename A>
 HALIDE_ALWAYS_INLINE auto is_scalar(A &&a) noexcept -> IsScalar<decltype(pattern_arg(a))> {
     assert_is_lvalue_if_expr<A>();
     return {pattern_arg(a)};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const IsScalar<A> &op) {
+    s << "is_scalar(" << op.a << ")";
+    return s;
 }
 
 template<typename A>
@@ -2399,13 +2440,19 @@ struct IsMaxValue {
         }
         ty.code = halide_type_uint;
         ty.bits = 1;
-    };
+    }
 };
 
 template<typename A>
 HALIDE_ALWAYS_INLINE auto is_max_value(A &&a) noexcept -> IsMaxValue<decltype(pattern_arg(a))> {
     assert_is_lvalue_if_expr<A>();
     return {pattern_arg(a)};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const IsMaxValue<A> &op) {
+    s << "is_max_value(" << op.a << ")";
+    return s;
 }
 
 template<typename A>
@@ -2436,7 +2483,7 @@ struct IsMinValue {
         }
         ty.code = halide_type_uint;
         ty.bits = 1;
-    };
+    }
 };
 
 template<typename A>
@@ -2446,8 +2493,8 @@ HALIDE_ALWAYS_INLINE auto is_min_value(A &&a) noexcept -> IsMinValue<decltype(pa
 }
 
 template<typename A>
-std::ostream &operator<<(std::ostream &s, const IsScalar<A> &op) {
-    s << "is_scalar(" << op.a << ")";
+std::ostream &operator<<(std::ostream &s, const IsMinValue<A> &op) {
+    s << "is_min_value(" << op.a << ")";
     return s;
 }
 
@@ -2644,10 +2691,10 @@ struct Rewriter {
         fuzz_test_rule(before, after, true, wildcard_type, output_type);
 #endif
         if (before.template match<0>(unwrap(instance), state)) {
+            build_replacement(after);
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << "\n";
 #endif
-            build_replacement(after);
             return true;
         } else {
 #if HALIDE_DEBUG_UNMATCHED_RULES
@@ -2714,10 +2761,10 @@ struct Rewriter {
 #endif
         if (before.template match<0>(unwrap(instance), state) &&
             evaluate_predicate(pred, state)) {
+            build_replacement(after);
 #if HALIDE_DEBUG_MATCHED_RULES
             debug(0) << instance << " -> " << result << " via " << before << " -> " << after << " when " << pred << "\n";
 #endif
-            build_replacement(after);
             return true;
         } else {
 #if HALIDE_DEBUG_UNMATCHED_RULES

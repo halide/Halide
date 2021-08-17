@@ -340,20 +340,10 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     // Note that we must restore it before using internal_error (and also on the non-error path).
     auto old_abort_handler = std::signal(SIGABRT, SIG_DFL);
 
-#if LLVM_VERSION >= 110
     if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, llvm::outs(), llvm::errs())) {
         std::signal(SIGABRT, old_abort_handler);
         internal_error << "lld::wasm::link failed\n";
     }
-#else
-    std::string lld_errs_string;
-    llvm::raw_string_ostream lld_errs(lld_errs_string);
-
-    if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, llvm::outs(), llvm::errs())) {
-        std::signal(SIGABRT, old_abort_handler);
-        internal_error << "lld::wasm::link failed: (" << lld_errs.str() << ")\n";
-    }
-#endif
 
     std::signal(SIGABRT, old_abort_handler);
 
@@ -1021,6 +1011,21 @@ WABT_HOST_CALLBACK(memcpy) {
     return wabt::Result::Ok;
 }
 
+WABT_HOST_CALLBACK(memmove) {
+    WabtContext &wabt_context = get_wabt_context(thread);
+
+    const int32_t dst = args[0].Get<int32_t>();
+    const int32_t src = args[1].Get<int32_t>();
+    const int32_t n = args[2].Get<int32_t>();
+
+    uint8_t *base = get_wasm_memory_base(wabt_context);
+
+    memmove(base + dst, base + src, n);
+
+    results[0] = wabt::interp::Value::Make(dst);
+    return wabt::Result::Ok;
+}
+
 WABT_HOST_CALLBACK(memset) {
     WabtContext &wabt_context = get_wabt_context(thread);
 
@@ -1089,6 +1094,7 @@ const HostCallbackMap &get_host_callback_map() {
         DEFINE_CALLBACK(malloc)
         DEFINE_CALLBACK(memcmp)
         DEFINE_CALLBACK(memcpy)
+        DEFINE_CALLBACK(memmove)
         DEFINE_CALLBACK(memset)
         DEFINE_CALLBACK(strlen)
         DEFINE_CALLBACK(write)
@@ -1362,9 +1368,10 @@ WasmModuleContents::WasmModuleContents(
       trampolines(JITModule::make_trampolines_module(get_host_target(), jit_externs, kTrampolineSuffix, extern_deps)) {
 
 #if WITH_WABT
+    // TODO: we should probably move this to LLVM 12 or 13, since LLVM11 won't support SIMD usefully enough for Halide
     user_assert(LLVM_VERSION >= 110) << "Using the WebAssembly JIT is only supported under LLVM 11+.";
 
-    user_assert(!target.has_feature(Target::WasmThreads)) << "The Halide WebAssembly JIT doesn't support wasm threads yet.";
+    user_assert(!target.has_feature(Target::WasmThreads)) << "wasm_threads requires Emscripten (or a similar compiler); it will never be supported under JIT.";
 
     wdebug(1) << "Compiling wasm function " << fn_name << "\n";
 
@@ -1586,11 +1593,11 @@ WasmModule WasmModule::compile(
 #if !defined(WITH_WABT)
     user_error << "Cannot run JITted WebAssembly without configuring a WebAssembly engine.";
     return WasmModule();
-#endif
-
+#else
     WasmModule wasm_module;
     wasm_module.contents = new WasmModuleContents(module, arguments, fn_name, jit_externs, extern_deps);
     return wasm_module;
+#endif
 }
 
 /** Run generated previously compiled wasm code with a set of arguments. */

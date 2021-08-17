@@ -1,0 +1,12 @@
+ Halide is a programming language designed to make it easier to write
+ high-performance image and array processing code on modern machines. Halide
+ currently targets:
+
+ * CPU architectures: X86, ARM, MIPS, Hexagon, PowerPC, RISC-V, WebAssembly
+ * Operating systems: Linux, Windows, macOS, Android, iOS, Qualcomm QuRT
+ * GPU APIs: CUDA, OpenCL, OpenGL Compute Shaders, Apple Metal, Direct X 12
+
+Rather than being a standalone programming language, Halide is embedded in C++.
+This means you write C++ code that builds an in-memory representation of a
+Halide pipeline using Halide's C++ API. You can then compile this representation
+to an object file, or JIT-compile it and run it in the same process.

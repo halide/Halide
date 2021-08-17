@@ -68,6 +68,10 @@ struct CodeGen_GPU_Dev {
      * uniform within the workgroup. */
     static bool is_buffer_constant(const Stmt &kernel, const std::string &buffer);
 
+    /** Modifies predicated loads and stores to be non-predicated, since most
+     * GPU backends do not support predication. */
+    static Stmt scalarize_predicated_loads_stores(Stmt &s);
+
     /** An mask describing which type of memory fence to use for the gpu_thread_barrier()
     * intrinsic.  Not all GPUs APIs support all types.
     */

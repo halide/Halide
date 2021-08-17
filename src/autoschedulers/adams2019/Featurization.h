@@ -360,6 +360,27 @@ struct ScheduleFeatures {
         auto os = aslog(0);
         dump(os);
     }
+
+    bool equal(const ScheduleFeatures &other) const {
+        const size_t n_features = ScheduleFeatures::num_features();
+        for (size_t i = 0; i < n_features; i++) {
+            if ((*this)[i] != other[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
+/*
+Some feature values cannot be cached, and need to be recomputed.
+These intermediates allow for faster recomputation of such features.
+*/
+struct FeatureIntermediates {
+    double inlined_calls;
+    double num_scalars;
+    double innermost_pure_loop_extent;
+    double outer_parallelism;
 };
 
 }  // namespace Internal

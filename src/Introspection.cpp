@@ -1,5 +1,13 @@
 #include "Introspection.h"
 
+#if defined(_MSC_VER)
+#undef WITH_INTROSPECTION
+#elif defined(__has_include)
+#if !__has_include(<execinfo.h>)
+#undef WITH_INTROSPECTION
+#endif
+#endif
+
 #ifdef WITH_INTROSPECTION
 
 #include "Debug.h"

@@ -613,19 +613,16 @@ public:
         check("vrmpy(v*.ub,v*.b)", hvx_width, i16(u8_1)*i8_1 + i16(u8_2)*i8_2 + i16(u8_3)*i8_3 + i16(u8_4)*i8_4);
 #endif
 
-#if 0
-        // Temporarily disabling this vrmpy test because of https://github.com/halide/Halide/issues/4248
         // These should also work with 16 bit results. However, it is
         // only profitable to do so if the interleave simplifies away.
         Expr u8_4x4[] = {
-            in_u8(4*x + 0),
-            in_u8(4*x + 1),
-            in_u8(4*x + 2),
-            in_u8(4*x + 3),
+            in_u8(4 * x + 0),
+            in_u8(4 * x + 1),
+            in_u8(4 * x + 2),
+            in_u8(4 * x + 3),
         };
-        check("vrmpy(v*.ub,r*.b)", hvx_width/2, i16(u8_4x4[0])*127 + i16(u8_4x4[1])*126 + i16(u8_4x4[2])*-125 + i16(u8_4x4[3])*124);
+        check("vrmpy(v*.ub,r*.b)", hvx_width / 2, i16(u8_4x4[0]) * 127 + i16(u8_4x4[1]) * 126 + i16(u8_4x4[2]) * -125 + i16(u8_4x4[3]) * 124);
 
-#endif
         // Make sure it doesn't generate if the operands don't interleave.
         check("vmpa(v*.ub,r*.b)", hvx_width, i16(u8_1) * 127 + i16(u8_2) * -126 + i16(u8_3) * 125 + i16(u8_4) * 124);
 
@@ -652,6 +649,10 @@ public:
         check("vnormamt(v*.w)", hvx_width / 4, max(count_leading_zeros(i32_1), count_leading_zeros(~i32_1)));
         check("vpopcount(v*.h)", hvx_width / 2, popcount(u16_1));
 
+        check("v* = vdelta(v*, v*)", hvx_width, in_u8((x / 8) * 9 + x % 8));
+        check("v* = vdelta(v*, v*)", hvx_width / 2, in_u16((x / 8) * 9 + x % 8));
+        check("v* = vdelta(v*, v*)", hvx_width / 4, in_u32((x / 8) * 9 + x % 8));
+
         int rfac = 4;
         RDom r(0, rfac);
         check("v*.uw = vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u16(in_u8(rfac * x + r))));
@@ -661,10 +662,13 @@ public:
         check("v*.w  = vrmpy(v*.ub,v*.b)", hvx_width / 4, sum(i16(in_u8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
         check("v*.w  = vrmpy(v*.b,v*.b)", hvx_width / 4, sum(i16(in_i8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
         check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r))));
+        check("v*.w += vrmpy(v*.ub,r*.b)", hvx_width / 4, sum(i32(in_u8(rfac * x + r))));
         check("v*.uw = vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * 34));
         check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * u8(r)));
+        check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(i32(in_u8(rfac * x + r)) * u8(r)));
         check("v*.w  += vrmpy(v*.ub,r*.b)", hvx_width / 4, sum(i32(in_u8(rfac * x + r)) * i8(r)));
         check("v*.uw += vrmpy(v*.ub,v*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * in_u8(rfac * x + r + 32)));
+        check("v*.uw += vrmpy(v*.ub,v*.ub)", hvx_width / 4, sum(i32(in_u8(rfac * x + r)) * in_u8(rfac * x + r + 32)));
         check("v*.w  += vrmpy(v*.ub,v*.b)", hvx_width / 4, sum(i32(in_u8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
         check("v*.w  += vrmpy(v*.b,v*.b)", hvx_width / 4, sum(i32(in_i8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
         // Sliding window
@@ -731,6 +735,10 @@ int main(int argc, char **argv) {
     if (getenv("HL_SIMD_OP_CHECK_FILTER")) {
         test_hvx.filter = getenv("HL_SIMD_OP_CHECK_FILTER");
     }
+
+    const int seed = argc > 2 ? atoi(argv[2]) : time(nullptr);
+    std::cout << "simd_op_check test seed: " << seed << "\n";
+    test_hvx.set_seed(seed);
 
     // Remove some features like simd_op_check.cpp used to do.
 

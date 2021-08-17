@@ -97,6 +97,12 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              rewrite(min(max(x, y), min(z, x)), b) ||
              rewrite(min(max(x, y), min(z, y)), b) ||
 
+             rewrite(min(max(x, y + c0), y), y, c0 > 0) ||
+             rewrite(min(select(x, min(z, y), w), y), min(select(x, z, w), y)) ||
+             rewrite(min(select(x, min(z, y), w), z), min(select(x, y, w), z)) ||
+             rewrite(min(select(x, w, min(z, y)), y), min(select(x, w, z), y)) ||
+             rewrite(min(select(x, w, min(z, y)), z), min(select(x, w, y), z)) ||
+
              rewrite(min(intrin(Call::likely, x), x), b) ||
              rewrite(min(x, intrin(Call::likely, x)), a) ||
              rewrite(min(intrin(Call::likely_if_innermost, x), x), b) ||
@@ -175,6 +181,17 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              rewrite(min(min(x, max(y, z)), z), min(x, z)) ||
              rewrite(min(min(max(x, y), z), x), min(z, x)) ||
              rewrite(min(min(max(x, y), z), y), min(z, y)) ||
+
+             rewrite(min(select(x, max(y, z), w), z), select(x, z, min(w, z))) ||
+             rewrite(min(select(x, max(z, y), w), z), select(x, z, min(w, z))) ||
+             rewrite(min(z, select(x, max(y, z), w)), select(x, z, min(z, w))) ||
+             rewrite(min(z, select(x, max(z, y), w)), select(x, z, min(z, w))) ||
+             rewrite(min(select(x, y, max(w, z)), z), select(x, min(y, z), z)) ||
+             rewrite(min(select(x, y, max(z, w)), z), select(x, min(y, z), z)) ||
+             rewrite(min(z, select(x, y, max(w, z))), select(x, min(z, y), z)) ||
+             rewrite(min(z, select(x, y, max(z, w))), select(x, min(z, y), z)) ||
+
+             rewrite(min(select(x, y, z), select(x, w, u)), select(x, min(y, w), min(z, u))) ||
 
              (no_overflow(op->type) &&
               (rewrite(min(min(x, y) + c0, x), min(x, y + c0), c0 > 0) ||
@@ -273,13 +290,19 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
 
                rewrite(min(((x + c0) / c1) * c1, x + c2), x + c2, c1 > 0 && c0 + 1 >= c1 + c2) ||
 
-               rewrite(min(select(x, y, z), select(x, w, u)), select(x, min(y, w), min(z, u))) ||
-
                rewrite(min(c0 - x, c1), c0 - max(x, fold(c0 - c1))) ||
 
                // Required for nested GuardWithIf tilings
                rewrite(min((min(((y + c0)/c1), x)*c1), y + c2), min(x * c1, y + c2), c1 > 0 && c1 + c2 <= c0 + 1) ||
                rewrite(min((min(((y + c0)/c1), x)*c1) + c2, y), min(x * c1 + c2, y), c1 > 0 && c1 <= c0 + c2 + 1) ||
+
+               rewrite(min((x + c0)/c1, ((x + c2)/c3)*c4), (x + c0)/c1, c0 + c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(min((x + c0)/c1, ((x + c2)/c3)*c4), ((x + c2)/c3)*c4, c2 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(min(x/c1, ((x + c2)/c3)*c4), x/c1, c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(min(x/c1, ((x + c2)/c3)*c4), ((x + c2)/c3)*c4, c2 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(min((x + c0)/c1, (x/c3)*c4), (x + c0)/c1, c0 + c3 - c1 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(min((x + c0)/c1, (x/c3)*c4), (x/c3)*c4, 0 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(min(x/c1, (x/c3)*c4), (x/c3)*c4, c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
 
                false )))) {
 

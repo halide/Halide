@@ -187,7 +187,7 @@ typedef bool (*halide_semaphore_try_acquire_t)(struct halide_semaphore_t *, int)
 
 /** A task representing a serial for loop evaluated over some range.
  * Note that task_parent is a pass through argument that should be
- * passed to any dependent taks that are invokved using halide_do_parallel_tasks
+ * passed to any dependent taks that are invoked using halide_do_parallel_tasks
  * underneath this call. */
 typedef int (*halide_loop_task_t)(void *user_context, int min, int extent,
                                   uint8_t *closure, void *task_parent);
@@ -929,7 +929,7 @@ extern void halide_memoization_cache_evict(void *user_context, uint64_t eviction
  * the case where halide_memoization_cache_lookup is handling multiple
  * buffers.  (This corresponds to memoizing a Tuple in Halide.) Note
  * that the host pointer must be sufficient to get to all information
- * the relase operation needs. The default Halide cache impleemntation
+ * the release operation needs. The default Halide cache impleemntation
  * accomplishes this by storing extra data before the start of the user
  * modifiable host storage.
  *
@@ -1328,14 +1328,16 @@ typedef enum halide_target_feature_t {
     halide_target_feature_wasm_simd128,           ///< Enable +simd128 instructions for WebAssembly codegen.
     halide_target_feature_wasm_signext,           ///< Enable +sign-ext instructions for WebAssembly codegen.
     halide_target_feature_wasm_sat_float_to_int,  ///< Enable saturating (nontrapping) float-to-int instructions for WebAssembly codegen.
-    halide_target_feature_wasm_threads,           ///< Enable the thread pool for WebAssembly codegen. (Also enables +atomics)
+    halide_target_feature_wasm_threads,           ///< Enable use of threads in WebAssembly codegen. Requires the use of a wasm runtime that provides pthread-compatible wrappers (typically, Emscripten with the -pthreads flag). Unsupported under WASI.
     halide_target_feature_wasm_bulk_memory,       ///< Enable +bulk-memory instructions for WebAssembly codegen.
     halide_target_feature_sve,                    ///< Enable ARM Scalable Vector Extensions
     halide_target_feature_sve2,                   ///< Enable ARM Scalable Vector Extensions v2
     halide_target_feature_egl,                    ///< Force use of EGL support.
     halide_target_feature_arm_dot_prod,           ///< Enable ARMv8.2-a dotprod extension (i.e. udot and sdot instructions)
+    halide_target_feature_arm_fp16,               ///< Enable ARMv8.2-a half-precision floating point data processing
     halide_llvm_large_code_model,                 ///< Use the LLVM large code model to compile
     halide_target_feature_rvv,                    ///< Enable RISCV "V" Vector Extension
+    halide_target_feature_armv81a,                ///< Enable ARMv8.1-a instructions
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
@@ -1459,7 +1461,7 @@ typedef struct halide_buffer_t {
         if (value) {
             flags |= flag;
         } else {
-            flags &= ~flag;
+            flags &= ~uint64_t(flag);
         }
     }
 
@@ -1490,33 +1492,52 @@ typedef struct halide_buffer_t {
         return s;
     }
 
-    /** A pointer to the element with the lowest address. If all
-     * strides are positive, equal to the host pointer. */
-    HALIDE_ALWAYS_INLINE uint8_t *begin() const {
+    /** Offset to the element with the lowest address.
+     * If all strides are positive, equal to zero.
+     * Offset is in elements, not bytes.
+     * Unlike begin(), this is ok to call on an unallocated buffer. */
+    HALIDE_ALWAYS_INLINE ptrdiff_t begin_offset() const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions; i++) {
-            if (dim[i].stride < 0) {
-                index += (ptrdiff_t)dim[i].stride * (dim[i].extent - 1);
+            const int stride = dim[i].stride;
+            if (stride < 0) {
+                index += stride * (ptrdiff_t)(dim[i].extent - 1);
             }
         }
-        return host + index * type.bytes();
+        return index;
     }
 
-    /** A pointer to one beyond the element with the highest address. */
-    HALIDE_ALWAYS_INLINE uint8_t *end() const {
+    /** An offset to one beyond the element with the highest address.
+     * Offset is in elements, not bytes.
+     * Unlike end(), this is ok to call on an unallocated buffer. */
+    HALIDE_ALWAYS_INLINE ptrdiff_t end_offset() const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions; i++) {
-            if (dim[i].stride > 0) {
-                index += (ptrdiff_t)dim[i].stride * (dim[i].extent - 1);
+            const int stride = dim[i].stride;
+            if (stride > 0) {
+                index += stride * (ptrdiff_t)(dim[i].extent - 1);
             }
         }
         index += 1;
-        return host + index * type.bytes();
+        return index;
+    }
+
+    /** A pointer to the element with the lowest address.
+     * If all strides are positive, equal to the host pointer.
+     * Illegal to call on an unallocated buffer. */
+    HALIDE_ALWAYS_INLINE uint8_t *begin() const {
+        return host + begin_offset() * type.bytes();
+    }
+
+    /** A pointer to one beyond the element with the highest address.
+     * Illegal to call on an unallocated buffer. */
+    HALIDE_ALWAYS_INLINE uint8_t *end() const {
+        return host + end_offset() * type.bytes();
     }
 
     /** The total number of bytes spanned by the data in memory. */
     HALIDE_ALWAYS_INLINE size_t size_in_bytes() const {
-        return (size_t)(end() - begin());
+        return (size_t)(end_offset() - begin_offset()) * type.bytes();
     }
 
     /** A pointer to the element at the given location. */

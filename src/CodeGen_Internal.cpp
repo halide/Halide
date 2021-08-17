@@ -168,13 +168,9 @@ llvm::Type *get_vector_element_type(llvm::Type *t) {
 llvm::ElementCount element_count(int e) {
     return llvm::ElementCount::getFixed(e);
 }
-#elif LLVM_VERSION >= 110
+#else
 llvm::ElementCount element_count(int e) {
     return llvm::ElementCount(e, /*scalable*/ false);
-}
-#else
-int element_count(int e) {
-    return e;
 }
 #endif
 
@@ -289,7 +285,8 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
                *const_int_divisor > 1 &&
                ((t.bits() > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
 
-        int64_t multiplier, shift;
+        int64_t multiplier;
+        int shift;
         if (t.bits() == 32) {
             multiplier = IntegerDivision::table_s32[*const_int_divisor][2];
             shift = IntegerDivision::table_s32[*const_int_divisor][3];
@@ -314,8 +311,7 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
         // Multiply and keep the high half of the
         // result, and then apply the shift.
         Expr mult = make_const(num.type(), multiplier);
-        num = Call::make(num.type(), Call::mulhi_shr, {num, mult, make_const(UInt(num.type().bits()), shift)},
-                         Call::PureIntrinsic);
+        num = mul_shift_right(num, mult, shift + num.type().bits());
 
         // Maybe flip the bits back again.
         num = cast(a.type(), num ^ sign);
@@ -347,9 +343,7 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
 
         // Widen, multiply, narrow
         Expr mult = make_const(num.type(), multiplier);
-        Expr val = Call::make(num.type(), Call::mulhi_shr,
-                              {num, mult, make_const(UInt(num.type().bits()), method == 1 ? (int)shift : 0)},
-                              Call::PureIntrinsic);
+        Expr val = mul_shift_right(num, mult, (method == 1 ? shift : 0) + num.type().bits());
 
         if (method == 2) {
             // Average with original numerator.
@@ -470,7 +464,7 @@ Expr lower_euclidean_div(Expr a, Expr b) {
         if (!can_prove(!b_is_const_zero)) {
             b = b | cast(a.type(), b_is_const_zero);
         }
-        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::Intrinsic);
+        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::PureIntrinsic);
         q = select(b_is_const_zero, 0, q);
     } else {
         internal_assert(a.type().is_int());
@@ -512,7 +506,7 @@ Expr lower_euclidean_div(Expr a, Expr b) {
         // If a is negative, add one to it to get the rounding to work out.
         a -= a_neg;
         // Do the C-style division
-        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::Intrinsic);
+        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::PureIntrinsic);
         // If a is negative, either add or subtract one, depending on
         // the sign of b, to fix the rounding. This can't overflow,
         // because we move the result towards zero in either case (we
@@ -536,7 +530,7 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
         if (!can_prove(!b_is_const_zero)) {
             b = b | cast(a.type(), b_is_const_zero);
         }
-        q = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::Intrinsic);
+        q = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::PureIntrinsic);
         q = select(b_is_const_zero, make_zero(a.type()), q);
     } else {
         internal_assert(a.type().is_int());
@@ -566,7 +560,7 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
         // If a is negative, add one to get the rounding to work out
         a -= a_neg;
         // Do the mod, avoiding taking mod by zero
-        q = Call::make(a.type(), Call::mod_round_to_zero, {a, (b | b_zero)}, Call::Intrinsic);
+        q = Call::make(a.type(), Call::mod_round_to_zero, {a, (b | b_zero)}, Call::PureIntrinsic);
         // If a is negative, we either need to add b - 1 to the
         // result, or -b - 1, depending on the sign of b.
         q += (a_neg & ((b ^ b_neg) + ~b_neg));
@@ -655,11 +649,7 @@ bool get_md_string(llvm::Metadata *value, std::string &result) {
     }
     llvm::MDString *c = llvm::dyn_cast<llvm::MDString>(value);
     if (c) {
-#if LLVM_VERSION >= 110
         result = c->getString().str();
-#else
-        result = c->getString();
-#endif
         return true;
     }
     return false;
@@ -686,7 +676,11 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.HonorSignDependentRoundingFPMathOption = !per_instruction_fast_math_flags;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
+#if LLVM_VERSION >= 13
+    // nothing
+#else
     options.StackAlignmentOverride = 0;
+#endif
     options.FunctionSections = true;
     options.UseInitArray = true;
     options.FloatABIType =

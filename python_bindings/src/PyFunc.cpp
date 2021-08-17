@@ -136,46 +136,6 @@ void define_func(py::module &m) {
                 },
                 py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target())
 
-            .def(
-                "realize",
-                [](Func &f, int x_size, const Target &target) -> py::object {
-                    PyErr_WarnEx(PyExc_DeprecationWarning,
-                                 "Call realize() with an explicit list of ints instead.",
-                                 1);
-                    return realization_to_object(f.realize(std::vector<int32_t>{x_size}, target));
-                },
-                py::arg("x_size"), py::arg("target") = Target())
-
-            .def(
-                "realize",
-                [](Func &f, int x_size, int y_size, const Target &target) -> py::object {
-                    PyErr_WarnEx(PyExc_DeprecationWarning,
-                                 "Call realize() with an explicit list of ints instead.",
-                                 1);
-                    return realization_to_object(f.realize({x_size, y_size}, target));
-                },
-                py::arg("x_size"), py::arg("y_size"), py::arg("target") = Target())
-
-            .def(
-                "realize",
-                [](Func &f, int x_size, int y_size, int z_size, const Target &target) -> py::object {
-                    PyErr_WarnEx(PyExc_DeprecationWarning,
-                                 "Call realize() with an explicit list of ints instead.",
-                                 1);
-                    return realization_to_object(f.realize({x_size, y_size, z_size}, target));
-                },
-                py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("target") = Target())
-
-            .def(
-                "realize",
-                [](Func &f, int x_size, int y_size, int z_size, int w_size, const Target &target) -> py::object {
-                    PyErr_WarnEx(PyExc_DeprecationWarning,
-                                 "Call realize() with an explicit list of ints instead.",
-                                 1);
-                    return realization_to_object(f.realize({x_size, y_size, z_size, w_size}, target));
-                },
-                py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("w_size"), py::arg("target") = Target())
-
             .def("defined", &Func::defined)
             .def("name", &Func::name)
             .def("dimensions", &Func::dimensions)
@@ -325,6 +285,7 @@ void define_func(py::module &m) {
             .def("set_estimates", &Func::set_estimates, py::arg("estimates"))
 
             .def("align_bounds", &Func::align_bounds, py::arg("var"), py::arg("modulus"), py::arg("remainder") = 0)
+            .def("align_extent", &Func::align_extent, py::arg("var"), py::arg("modulus"))
 
             .def("bound_extent", &Func::bound_extent, py::arg("var"), py::arg("extent"))
 
