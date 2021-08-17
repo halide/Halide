@@ -424,6 +424,7 @@ class PromoteToMemoryType : public IRMutator {
         Type t = upgrade(op->type);
         if (t != op->type) {
             auto [extents, changed] = mutate_exprs(op->extents);
+            (void)changed;  // unused
             return Allocate::make(op->name, t, op->memory_type, extents,
                                   mutate(op->condition), mutate(op->body),
                                   mutate(op->new_expr), op->free_function);
