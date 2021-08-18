@@ -880,6 +880,53 @@ int main(int argc, char **argv) {
         }
     }
 
+    if (true) {
+        Pipeline p1;
+        Pipeline p2;
+        for (int test_condition = 0; test_condition < 2; test_condition++) {
+            ImageParam im(Int(32), 1, "im");
+            ImageParam scalar(Int(32), 0, "scalar");
+
+            Func f("f");
+            f() = im(clamp(scalar(), 0, 42)) + 42;
+
+            if (test_condition) {
+                p2 = Pipeline(f);
+            } else {
+                p1 = Pipeline(f);
+            }
+        }
+
+        if (!test_caching(p1, p2, target, params)) {
+            std::cerr << "Caching check failed on scalar image load" << std::endl;
+            return 1;
+        }
+    }
+
+    if (true) {
+        Pipeline p1;
+        Pipeline p2;
+        for (int test_condition = 0; test_condition < 2; test_condition++) {
+            ImageParam im(Int(32), 1, "im");
+            ImageParam scalar(Int(32), 0, "scalar");
+            ImageParam invariant_load(Int(32), 1, "invariant_load");
+
+            Func f("f");
+            f() = im(clamp(invariant_load(clamp(scalar(), 0, 42)), 0, 42)) + 42;
+
+            if (test_condition) {
+                p2 = Pipeline(f);
+            } else {
+                p1 = Pipeline(f);
+            }
+        }
+
+        if (!test_caching(p1, p2, target, params)) {
+            std::cerr << "Caching check failed on invariant image load" << std::endl;
+            return 1;
+        }
+    }
+
     // Reset environment variables.
     set_env_variable("HL_DISABLE_MEMOIZED_FEATURES", cache_features, /* overwrite */ 1);
     set_env_variable("HL_DISABLE_MEMOIZED_BLOCKS", cache_blocks, /* overwrite */ 1);
