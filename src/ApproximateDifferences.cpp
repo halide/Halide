@@ -3,17 +3,10 @@
 #include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {
-
-Direction flip(const Direction &direction) {
-    if (direction == Direction::Lower) {
-        return Direction::Upper;
-    } else {
-        return Direction::Lower;
-    }
-}
 
 // For debugging purposes.
 std::ostream &operator<<(std::ostream &s, const Direction &d) {
@@ -23,6 +16,16 @@ std::ostream &operator<<(std::ostream &s, const Direction &d) {
         s << "Direction::Upper";
     }
     return s;
+}
+
+namespace {
+
+Direction flip(const Direction &direction) {
+    if (direction == Direction::Lower) {
+        return Direction::Upper;
+    } else {
+        return Direction::Lower;
+    }
 }
 
 Expr handle_push_div(const Expr &expr, Direction direction, int64_t denom);
@@ -77,7 +80,7 @@ Expr handle_push_div(const Expr &expr, const Direction direction, const int64_t 
         if (const IntImm *constant = op->b.as<IntImm>()) {
             // We will have to change direction if multiplying by a negative constant.
             const Direction new_direction = (constant->value > 0) ? direction : flip(direction);
-            
+
             if ((constant->value % denom) == 0) {
                 // Keep pushing.
                 const int64_t new_factor = div_imp(constant->value, denom);
@@ -227,11 +230,227 @@ Expr handle_push_none(const Expr &expr, Direction direction) {
             } else {
                 Expr recurse = handle_push_none(op->a, flip(direction));
                 return Div::make(std::move(recurse), op->b);
-            }            
+            }
         }
     }
     return expr;
 }
+
+// Taken from Simplify_Let.cpp
+// TODO: handle Let variables better...
+class CountVarUses : public IRVisitor {
+    std::map<std::string, int> &var_uses;
+
+    void visit(const Variable *var) override {
+        var_uses[var->name]++;
+    }
+
+    void visit(const Load *op) override {
+        var_uses[op->name]++;
+        IRVisitor::visit(op);
+    }
+
+    void visit(const Store *op) override {
+        var_uses[op->name]++;
+        IRVisitor::visit(op);
+    }
+
+    using IRVisitor::visit;
+
+public:
+    CountVarUses(std::map<std::string, int> &var_uses)
+        : var_uses(var_uses) {
+    }
+};
+
+class StripUnboundedTerms : public IRMutator {
+    Direction direction;
+    const Scope<Interval> *scope_ptr;
+    std::map<std::string, int> &var_uses;
+    int32_t unbounded_vars = 0;
+    void flip_direction() {
+       direction = flip(direction);
+    }
+
+    using IRMutator::visit;
+
+    Expr visit(const Variable *op) override {
+        // A variable is unbounded if it appears only once *and* has no constant bounds.
+        internal_assert(var_uses.count(op->name) > 0) << "Encountered uncounted variable: " << Expr(op) << "\n";
+        const int uses = var_uses[op->name];
+        if (uses == 1) {
+            if (scope_ptr->contains(op->name)) {
+                const Interval interval = scope_ptr->get(op->name);
+                if (interval.is_everything()) {
+                    unbounded_vars++;
+                }
+            } else {
+                unbounded_vars++;
+            }
+        }
+        return op;
+    }
+
+    Expr visit(const Add *op) override {
+        Expr a_new = mutate(op->a);
+        Expr b_new = mutate(op->b);
+
+        if (a_new.same_as(op->a) && b_new.same_as(op->b)) {
+            return op;
+        } else {
+            return Add::make(std::move(a_new), std::move(b_new));
+        }
+    }
+
+    Expr visit(const Sub *op) override {
+        Expr a_new = mutate(op->a);
+        flip_direction();
+        Expr b_new = mutate(op->b);
+        flip_direction();
+
+        if (a_new.same_as(op->a) && b_new.same_as(op->b)) {
+            return op;
+        } else {
+            return Sub::make(std::move(a_new), std::move(b_new));
+        }
+    }
+
+    Expr visit(const Mul *op) override {
+        // Assume constant is on the right due to simplification
+        if (is_const(op->b)) {
+            const bool neg_const = is_negative_const(op->b);
+            if (neg_const) {
+                flip_direction();
+            }
+
+            Expr a_new = mutate(op->a);
+
+            if (neg_const) {
+                flip_direction();
+            }
+
+            if (a_new.same_as(op->a)) {
+                return op;
+            } else {
+                return Mul::make(std::move(a_new), op->b);
+            }
+        }
+        return op;
+    }
+
+    Expr visit(const Div *op) override {
+        if (const IntImm *constant = op->b.as<IntImm>()) {
+            if (constant->value > 0) {
+                Expr a = mutate(op->a);
+                if (a.same_as(op->a)) {
+                    return op;
+                } else {
+                    return Div::make(std::move(a), op->b);
+                }
+            }
+        }
+        return op;
+    }
+
+    Expr visit(const Min *op) override {
+        // If we are trying to Lower bound a Min, we merge the lower bounds of the two sides.
+        if (direction == Direction::Lower) {
+            Expr a_new = mutate(op->a);
+            Expr b_new = mutate(op->b);
+            if (!a_new.same_as(op->a) || !b_new.same_as(op->b)) {
+                return Min::make(std::move(a_new), std::move(b_new));
+            } else {
+                return op;
+            }
+        }
+
+        // If we are trying to Lower bound a Min, then we can take either of the two sides of a Min,
+        // so choose the relevant one if possible.
+        const int32_t original_count = unbounded_vars;
+
+        Expr a_new = mutate(op->a);
+        const int32_t a_count = unbounded_vars;
+
+        // short circuit if a contains at least one unbounded var
+        if (a_count > original_count) {
+            unbounded_vars = original_count;
+            return mutate(op->b);
+        }
+
+        // Otherwise try to get rid of b
+
+        Expr b_new = mutate(op->b);
+        const int32_t b_count = unbounded_vars;
+
+        // Check if b contains at least one unbounded var
+        if (b_count > a_count) {
+            unbounded_vars = a_count;
+            return a_new;
+        }
+
+        // No luck, return the mutated Min
+        if (!a_new.same_as(op->a) || !b_new.same_as(op->b)) {
+            return Min::make(std::move(a_new), std::move(b_new));
+        } else {
+            return op;
+        }
+    }
+
+    Expr visit(const Max *op) override {
+        // If we are trying to Upper bound a Max, we merge the upper bounds of the two sides.
+        if (direction == Direction::Upper) {
+            Expr a_new = mutate(op->a);
+            Expr b_new = mutate(op->b);
+            if (!a_new.same_as(op->a) || !b_new.same_as(op->b)) {
+                return Max::make(std::move(a_new), std::move(b_new));
+            } else {
+                return op;
+            }
+        }
+
+        // If we are trying to Lower bound a Max, then we can take either of the two sides of a Max,
+        // so choose the relevant one if possible.
+        int32_t original_count = unbounded_vars;
+
+        Expr a_new = mutate(op->a);
+        int32_t a_count = unbounded_vars;
+
+        // short circuit if a contains at least one unbounded var
+        if (a_count > original_count) {
+            unbounded_vars = original_count;
+            return mutate(op->b);
+        }
+
+        // Otherwise try to get rid of b
+
+        Expr b_new = mutate(op->b);
+        int32_t b_count = unbounded_vars;
+
+        // Check if b contains at least one unbounded var
+        if (b_count > a_count) {
+            unbounded_vars = a_count;
+            return a_new;
+        }
+
+        // No luck, return the mutated Min
+        if (!a_new.same_as(op->a) || !b_new.same_as(op->b)) {
+            return Max::make(std::move(a_new), std::move(b_new));
+        } else {
+            return op;
+        }
+    }
+
+    // TODO: we might want to disable some IR types.
+
+public:
+    StripUnboundedTerms(Direction _direction, const Scope<Interval> *_scope_ptr,
+                              std::map<std::string, int> &_var_uses)
+      : direction(_direction), scope_ptr(_scope_ptr), var_uses(_var_uses) {}
+
+};
+
+} // namespace
+
 
 Expr push_rationals(const Expr &expr, const Direction direction) {
     if (expr.type() == Int(32)) {
@@ -239,6 +458,15 @@ Expr push_rationals(const Expr &expr, const Direction direction) {
     } else {
       return expr;
     }
+}
+
+
+Expr strip_unbounded_terms(const Expr &expr, Direction direction, const Scope<Interval> &scope) {
+    std::map<std::string, int> var_uses;
+    CountVarUses counter(var_uses);
+    expr.accept(&counter);
+    StripUnboundedTerms tool(direction, &scope, var_uses);
+    return tool.mutate(expr);
 }
 
 }  // namespace Internal

@@ -15,6 +15,8 @@ namespace Internal {
 
 Expr push_rationals(const Expr &expr, Direction direction);
 
+Expr strip_unbounded_terms(const Expr &expr, Direction direction, const Scope<Interval> &scope);
+
 }  // namespace Internal
 }  // namespace Halide
 
