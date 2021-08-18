@@ -691,7 +691,6 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                 for (int j = 0; j < consumer.dimensions(); j++) {
                     const auto &req = node.region_required[j];
                     auto &comp = node.region_computed[j];
-                    // TODO: is this the right thing to do?
                     comp.depends_on_estimate = depends_on_estimate(comp.in.min) || depends_on_estimate(comp.in.max);
                     comp.in.min = simplify(apply_param_estimates.mutate(comp.in.min));
                     comp.in.max = simplify(apply_param_estimates.mutate(comp.in.max));
