@@ -799,6 +799,7 @@ Expr push_rationals(const Expr &expr, const Direction direction) {
 }
 
 Expr strip_unbounded_terms(const Expr &expr, Direction direction, const Scope<Interval> &scope) {
+    // TODO: handle Lets better. Might be a Simplify_Let.cpp change.
     std::map<std::string, int> var_uses;
     CountVarUses counter(var_uses);
     expr.accept(&counter);

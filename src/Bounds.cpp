@@ -1,6 +1,7 @@
 #include <iostream>
 #include <utility>
 
+#include "ApproximateDifferences.h"
 #include "Bounds.h"
 #include "CSE.h"
 #include "ConciseCasts.h"
@@ -87,6 +88,12 @@ Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
     if (!is_const(interval.max)) {
         interval.max = Interval::pos_inf();
     }
+
+    Interval approx_interval = approximate_constant_bounds(expr, scope);
+
+    // Take the interesection of the previous method and the aggresive method.
+    interval.min = Interval::make_min(interval.min, approx_interval.min);
+    interval.max = Interval::make_max(interval.max, approx_interval.max);
 
     return interval;
 }
