@@ -274,7 +274,7 @@ class StripUnboundedTerms : public IRMutator {
     std::map<std::string, int> &var_uses;
     int32_t unbounded_vars = 0;
     void flip_direction() {
-       direction = flip(direction);
+        direction = flip(direction);
     }
 
     using IRMutator::visit;
@@ -449,9 +449,9 @@ class StripUnboundedTerms : public IRMutator {
 
 public:
     StripUnboundedTerms(Direction _direction, const Scope<Interval> *_scope_ptr,
-                              std::map<std::string, int> &_var_uses)
-      : direction(_direction), scope_ptr(_scope_ptr), var_uses(_var_uses) {}
-
+                        std::map<std::string, int> &_var_uses)
+        : direction(_direction), scope_ptr(_scope_ptr), var_uses(_var_uses) {
+    }
 };
 
 class ReorderTerms : public IRGraphMutator {
@@ -486,7 +486,7 @@ class ReorderTerms : public IRGraphMutator {
         return AffineTerm{term.expr, -term.coefficient};
     }
 
-        bool is_mul_by_int_const(const Expr &expr, AffineTerm &term) {
+    bool is_mul_by_int_const(const Expr &expr, AffineTerm &term) {
         const Mul *mul = expr.as<Mul>();
         if (mul) {
             // Assume constant is on the RHS due to simplification.
@@ -509,7 +509,7 @@ class ReorderTerms : public IRGraphMutator {
         const Add *add = e.as<Add>();
         const Sub *sub = e.as<Sub>();
         if (!(add || sub)) {
-            return pending; // Can't do anything with non-sum.
+            return pending;  // Can't do anything with non-sum.
         }
 
         while (!pending.empty()) {
@@ -566,7 +566,7 @@ class ReorderTerms : public IRGraphMutator {
             return terms;
         }
 
-        std::vector<AffineTerm> simplified = { terms[0] };
+        std::vector<AffineTerm> simplified = {terms[0]};
 
         int i_simpl = 0;
         int j_terms = 1;
@@ -725,7 +725,6 @@ class ReorderTerms : public IRGraphMutator {
         return visit_binary_op<Max>(op);
     }
 
-
     Expr visit(const Select *op) override {
         if (op->type == Int(32)) {
             const Expr true_value = mutate(op->true_value);
@@ -748,7 +747,6 @@ class ReorderTerms : public IRGraphMutator {
         }
     }
 };
-
 
 // Used to bound the number of substitutions.
 class SubstituteSomeLets : public IRMutator {
@@ -775,7 +773,8 @@ class SubstituteSomeLets : public IRMutator {
     }
 
 public:
-    SubstituteSomeLets(size_t _count) : count(_count) {
+    SubstituteSomeLets(size_t _count)
+        : count(_count) {
     }
 };
 
@@ -789,14 +788,13 @@ Expr approximate_optimizations(const Expr &expr, Direction direction, const Scop
     return simplify(simpl);
 }
 
-} // namespace
-
+}  // namespace
 
 Expr push_rationals(const Expr &expr, const Direction direction) {
     if (expr.type() == Int(32)) {
-      return handle_push_none(expr, direction);
+        return handle_push_none(expr, direction);
     } else {
-      return expr;
+        return expr;
     }
 }
 

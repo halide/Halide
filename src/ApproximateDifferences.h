@@ -28,4 +28,4 @@ Interval approximate_constant_bounds(const Expr &expr, const Scope<Interval> &sc
 }  // namespace Internal
 }  // namespace Halide
 
-#endif // HALIDE_APPROX_DIFFERENCES_H
+#endif  // HALIDE_APPROX_DIFFERENCES_H
