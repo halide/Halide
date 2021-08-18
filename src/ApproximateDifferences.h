@@ -17,6 +17,10 @@ Expr push_rationals(const Expr &expr, Direction direction);
 
 Expr strip_unbounded_terms(const Expr &expr, Direction direction, const Scope<Interval> &scope);
 
+Expr reorder_terms(const Expr &expr);
+
+Expr substitute_some_lets(const Expr &expr, size_t count = 100);
+
 }  // namespace Internal
 }  // namespace Halide
 

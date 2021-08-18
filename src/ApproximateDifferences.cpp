@@ -1,6 +1,7 @@
 #include "ApproximateDifferences.h"
 #include "Error.h"
 #include "IR.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
@@ -449,6 +450,332 @@ public:
 
 };
 
+class ReorderTerms : public IRGraphMutator {
+    using IRGraphMutator::visit;
+
+    // Directly taken from Simplify_Internal.h
+    HALIDE_ALWAYS_INLINE
+    bool should_commute(const Expr &a, const Expr &b) {
+        if (a.node_type() < b.node_type()) {
+            return true;
+        }
+        if (a.node_type() > b.node_type()) {
+            return false;
+        }
+
+        if (a.node_type() == IRNodeType::Variable) {
+            const Variable *va = a.as<Variable>();
+            const Variable *vb = b.as<Variable>();
+            return va->name.compare(vb->name) > 0;
+        }
+
+        return false;
+    }
+
+    // This is very similar to code in LICM, but we don't care about depth.
+    struct AffineTerm {
+        Expr expr;
+        int coefficient;
+    };
+
+    AffineTerm negate(const AffineTerm &term) {
+        return AffineTerm{term.expr, -term.coefficient};
+    }
+
+        bool is_mul_by_int_const(const Expr &expr, AffineTerm &term) {
+        const Mul *mul = expr.as<Mul>();
+        if (mul) {
+            // Assume constant is on the RHS due to simplification.
+            const IntImm *b = mul->b.as<IntImm>();
+            if (b) {
+                // TODO: check for overflow.
+                term.coefficient = b->value;
+                term.expr = mul->a;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    std::vector<AffineTerm> extract_summation(const Expr &e) {
+        std::vector<AffineTerm> pending, terms;
+        pending.push_back({e, 1});
+
+        // In case this is not a sum
+        const Add *add = e.as<Add>();
+        const Sub *sub = e.as<Sub>();
+        if (!(add || sub)) {
+            return pending; // Can't do anything with non-sum.
+        }
+
+        while (!pending.empty()) {
+            AffineTerm next = pending.back();
+            pending.pop_back();
+            const Add *add = next.expr.as<Add>();
+            const Sub *sub = next.expr.as<Sub>();
+            if (add) {
+                pending.push_back({add->a, next.coefficient});
+                pending.push_back({add->b, next.coefficient});
+            } else if (sub) {
+                pending.push_back({sub->a, next.coefficient});
+                pending.push_back({sub->b, -next.coefficient});
+            } else {
+                next.expr = mutate(next.expr);
+
+                if (next.expr.as<Add>() || next.expr.as<Sub>()) {
+                    // After mutation it became an add or sub, throw it back on the pending queue.
+                    pending.push_back(next);
+                } else {
+                    AffineTerm term;
+                    if (is_mul_by_int_const(next.expr, term)) {
+                        internal_assert(term.expr.defined());
+                        // TODO: check for overflow.
+                        term.coefficient *= next.coefficient;
+                        pending.push_back(term);
+                    } else {
+                        terms.push_back(next);
+                    }
+                }
+            }
+        }
+
+        std::stable_sort(terms.begin(), terms.end(),
+                         [&](const AffineTerm &a, const AffineTerm &b) {
+                             return should_commute(a.expr, b.expr);
+                         });
+
+        return terms;
+    }
+
+    inline std::vector<AffineTerm> simplify_summation(const std::vector<AffineTerm> &terms) {
+        // TODO: for now, only do linear-term simplification.
+        // There are other simplifications that can be done
+        // (i.e. pushing terms into a Min or Max to cancel terms),
+        // but I haven't figured out a good polynomial-time algorithm
+        // for that yet.
+        return simplify_linear_summation(terms);
+    }
+
+    // Two-finger O(n) algorithm for simplifying sums
+    std::vector<AffineTerm> simplify_linear_summation(const std::vector<AffineTerm> &terms) {
+        if (terms.empty()) {
+            return terms;
+        }
+
+        std::vector<AffineTerm> simplified = { terms[0] };
+
+        int i_simpl = 0;
+        int j_terms = 1;
+
+        const int n = terms.size();
+
+        while (j_terms < n) {
+            AffineTerm current_term = terms[j_terms];
+            if (graph_equal(simplified[i_simpl].expr, current_term.expr)) {
+                simplified[i_simpl].coefficient += current_term.coefficient;
+            } else {
+                simplified.push_back(current_term);
+                i_simpl++;
+            }
+            j_terms++;
+        }
+        return simplified;
+    }
+
+    Expr reconstruct_summation(std::vector<AffineTerm> &terms, Type t) {
+        Expr result = make_zero(t);
+
+        while (!terms.empty()) {
+            AffineTerm next = terms.back();
+            internal_assert(next.expr.defined()) << "Expr with coefficient: " << next.coefficient << " is undefined for partial result: " << result << "\n";
+            terms.pop_back();
+            if (next.coefficient == 0 || is_const_zero(next.expr)) {
+                continue;
+            } else {
+                if (is_const_zero(result)) {
+                    if (next.coefficient == 1) {
+                        result = next.expr;
+                    } else {
+                        result = (next.expr * next.coefficient);
+                    }
+                } else {
+                    if (next.coefficient == 1) {
+                        result += next.expr;
+                    } else if (next.coefficient == -1) {
+                        result -= next.expr;
+                    } else {
+                        result += (next.expr * next.coefficient);
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    Expr reassociate_summation(const Expr &e) {
+        std::vector<AffineTerm> terms = extract_summation(e);
+        terms = simplify_summation(terms);
+        return reconstruct_summation(terms, e.type());
+    }
+
+    Expr visit(const Add *op) override {
+        if (op->type == Int(32)) {
+            Expr ret = reassociate_summation(op);
+            return ret;
+        } else {
+            return IRGraphMutator::visit(op);
+        }
+    }
+
+    Expr visit(const Sub *op) override {
+        if (op->type == Int(32)) {
+            Expr ret = reassociate_summation(op);
+            return ret;
+        } else {
+            return IRGraphMutator::visit(op);
+        }
+    }
+
+    std::vector<AffineTerm> extract_and_simplify(const Expr &expr) {
+        auto extract = extract_summation(expr);
+        return simplify_summation(extract);
+    }
+
+    // Used to split Op(sum1, sum2) into sum3 + Op(sum1', sum2'),
+    // where sum1 = sum3 + sum1', sum2 = sum3 + sum1', and Op
+    // is a Min, Max, or Select
+    struct AffineTermsGather {
+        std::vector<AffineTerm> a;
+        std::vector<AffineTerm> b;
+        std::vector<AffineTerm> c;
+    };
+
+    // Assumes terms are simplified already.
+    AffineTermsGather extract_like_terms(const std::vector<AffineTerm> &a, const std::vector<AffineTerm> &b) {
+        internal_assert(!a.empty() && !b.empty()) << "Terms to extract should not be empty\n";
+
+        AffineTermsGather gatherer;
+
+        size_t i = 0, j = 0;
+
+        while (i < a.size() && j < b.size()) {
+            // TODO: We may not need matching coefficients, but need to check the reduction order.
+            if (a[i].coefficient == b[j].coefficient && graph_equal(a[i].expr, b[j].expr) && !is_const_zero(a[i].expr)) {
+                gatherer.c.push_back(a[i]);
+                i++;
+                j++;
+            } else if (should_commute(a[i].expr, b[j].expr)) {
+                // i term is earlier than j term
+                gatherer.a.push_back(a[i]);
+                i++;
+            } else {
+                // j term is earlier than i term
+                gatherer.b.push_back(b[j]);
+                j++;
+            }
+        }
+
+        // Wrap up tail conditions
+        while (i < a.size()) {
+            gatherer.a.push_back(a[i]);
+            i++;
+        }
+
+        while (j < b.size()) {
+            gatherer.b.push_back(b[j]);
+            j++;
+        }
+
+        return gatherer;
+    }
+
+    template<class BinOp>
+    Expr visit_binary_op(const BinOp *op) {
+        if (op->type == Int(32)) {
+            const Expr mutate_a = mutate(op->a);
+            const Expr mutate_b = mutate(op->b);
+            std::vector<AffineTerm> a_terms = extract_and_simplify(mutate_a);
+            std::vector<AffineTerm> b_terms = extract_and_simplify(mutate_b);
+            AffineTermsGather gathered = extract_like_terms(a_terms, b_terms);
+            if (gathered.c.empty()) {
+                Expr a = reconstruct_summation(a_terms, op->type);
+                Expr b = reconstruct_summation(b_terms, op->type);
+                return BinOp::make(a, b);
+            } else {
+                Expr like_terms = reconstruct_summation(gathered.c, op->type);
+                Expr a = reconstruct_summation(gathered.a, op->type);
+                Expr b = reconstruct_summation(gathered.b, op->type);
+                return BinOp::make(a, b) + like_terms;
+            }
+        } else {
+            return IRGraphMutator::visit(op);
+        }
+    }
+
+    Expr visit(const Min *op) override {
+        return visit_binary_op<Min>(op);
+    }
+
+    Expr visit(const Max *op) override {
+        return visit_binary_op<Max>(op);
+    }
+
+
+    Expr visit(const Select *op) override {
+        if (op->type == Int(32)) {
+            const Expr true_value = mutate(op->true_value);
+            const Expr false_value = mutate(op->false_value);
+            std::vector<AffineTerm> a_terms = extract_and_simplify(true_value);
+            std::vector<AffineTerm> b_terms = extract_and_simplify(false_value);
+            AffineTermsGather gathered = extract_like_terms(a_terms, b_terms);
+            if (gathered.c.empty()) {
+                Expr a = reconstruct_summation(a_terms, op->type);
+                Expr b = reconstruct_summation(b_terms, op->type);
+                return Select::make(op->condition, a, b);
+            } else {
+                Expr like_terms = reconstruct_summation(gathered.c, op->type);
+                Expr a = reconstruct_summation(gathered.a, op->type);
+                Expr b = reconstruct_summation(gathered.b, op->type);
+                return Select::make(op->condition, a, b) + like_terms;
+            }
+        } else {
+            return IRGraphMutator::visit(op);
+        }
+    }
+};
+
+
+// Used to bound the number of substitutions.
+class SubstituteSomeLets : public IRMutator {
+    using IRMutator::visit;
+
+    Scope<Expr> scope;
+    size_t count;
+
+    Expr visit(const Let *op) override {
+        Expr value = mutate(op->value);
+        ScopedBinding<Expr> bind(scope, op->name, value);
+        Expr body = mutate(op->body);
+        // Let simplify() handle the case that this var was removed.
+        return Let::make(op->name, value, body);
+    }
+
+    Expr visit(const Variable *op) override {
+        if (count > 0 && scope.contains(op->name)) {
+            count--;
+            return mutate(scope.get(op->name));
+        } else {
+            return op;
+        }
+    }
+
+public:
+    SubstituteSomeLets(size_t _count) : count(_count) {
+    }
+};
+
+
 } // namespace
 
 
@@ -460,13 +787,20 @@ Expr push_rationals(const Expr &expr, const Direction direction) {
     }
 }
 
-
 Expr strip_unbounded_terms(const Expr &expr, Direction direction, const Scope<Interval> &scope) {
     std::map<std::string, int> var_uses;
     CountVarUses counter(var_uses);
     expr.accept(&counter);
     StripUnboundedTerms tool(direction, &scope, var_uses);
     return tool.mutate(expr);
+}
+
+Expr reorder_terms(const Expr &expr) {
+    return ReorderTerms().mutate(expr);
+}
+
+Expr substitute_some_lets(const Expr &expr, size_t count) {
+    return SubstituteSomeLets(count).mutate(expr);
 }
 
 }  // namespace Internal
