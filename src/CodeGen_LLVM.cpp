@@ -2924,20 +2924,38 @@ void CodeGen_LLVM::visit(const Call *op) {
         llvm::Value *gep = CreateInBoundsGEP(builder, struct_ref, { ConstantInt::get(i32_t, 0), ConstantInt::get(i32_t, (int)*index) });
         value = builder->CreateLoad(gep->getType()->getPointerElementType(), gep);
     } else if (op->is_intrinsic(Call::resolve_function_name)) {
-        internal_assert(op->args.size() > 2);
-        const StringImm *name = op->args[0].as<StringImm>();
-        internal_assert(name != nullptr);
-        llvm::Type *return_type = codegen(op->args[1])->getType();
-        std::vector<llvm::Type *> arg_types;
-        for (size_t i = 2; i < op->args.size(); i++) {
-            arg_types.push_back(codegen(op->args[i])->getType());
+        internal_assert(op->args.size() == 1);
+        const Call *decl_call = op->args[0].as<Call>();
+        internal_assert(decl_call != nullptr);
+        std::string name;
+        if (decl_call->call_type == Call::ExternCPlusPlus) {
+            user_assert(get_target().has_feature(Target::CPlusPlusMangling)) << "Target must specify C++ name mangling (\"c_plus_plus_name_mangling\") in order to call C++ externs. (" << decl_call->name << ")\n";
+
+            std::vector<std::string> namespaces;
+            name = extract_namespaces(decl_call->name, namespaces);
+            std::vector<ExternFuncArgument> mangle_args;
+            for (const auto &arg : decl_call->args) {
+                mangle_args.emplace_back(arg);
+            }
+            name = cplusplus_function_mangled_name(name, namespaces, decl_call->type, mangle_args, get_target());
+        } else {
+            name = decl_call->name;
         }
-        llvm::Function *function = module->getFunction(name->value);
+
+        llvm::Function *function = module->getFunction(name);
+
+        // Codegen the args
         if (function == nullptr) {
+            vector<llvm::Type *> arg_types(decl_call->args.size());
+            for (size_t i = 0; i < decl_call->args.size(); i++) {
+                arg_types[i] = codegen(decl_call->args[i])->getType();
+            }
+            llvm::Type *return_type = llvm_type_of(upgrade_type_for_argument_passing(decl_call->type));
+
             FunctionType *function_t = FunctionType::get(return_type, arg_types, false);
             // TODO(zalman): Need a way to control linkage here.
             function = llvm::Function::Create(function_t, llvm::Function::ExternalLinkage,
-                                              name->value, module.get());
+                                              name, module.get());
         }
         value = function;
     } else if (op->is_intrinsic(Call::get_user_context)) {

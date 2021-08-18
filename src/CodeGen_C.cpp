@@ -2345,12 +2345,13 @@ void CodeGen_C::visit(const Call *op) {
         string true_case = print_expr(op->args[1]);
         stream << get_indent() << result_id << " = " << true_case << ";\n";
         close_scope("if " + cond_id);
-        stream << get_indent() << "else\n";
-        open_scope();
-        string false_case = print_expr(op->args[2]);
-        stream << get_indent() << result_id << " = " << false_case << ";\n";
-        close_scope("if " + cond_id + " else");
-
+        if (op->args.size() == 3) {
+            stream << get_indent() << "else\n";
+            open_scope();
+            string false_case = print_expr(op->args[2]);
+            stream << get_indent() << result_id << " = " << false_case << ";\n";
+            close_scope("if " + cond_id + " else");
+        }
         rhs << result_id;
     } else if (op->is_intrinsic(Call::require)) {
         internal_assert(op->args.size() == 3);
@@ -2471,7 +2472,7 @@ void CodeGen_C::visit(const Call *op) {
 
         const StringImm *str_imm = op->args[0].as<StringImm>();
         internal_assert(str_imm != nullptr);
-        std::string name = str_imm->value;
+        std::string name = c_print_name(str_imm->value, false);
 
         const int64_t *mode = as_const_int(op->args[1]);
         internal_assert(mode != nullptr);
@@ -2553,19 +2554,10 @@ void CodeGen_C::visit(const Call *op) {
         std::string type_carrier = print_expr(op->args[1]);
         rhs << "((decltype(" << type_carrier << "))" << struct_base << ")->" << "f_" << *index;
     } else if (op->is_intrinsic(Call::resolve_function_name)) {
-        internal_assert(op->args.size() > 2);
-        const StringImm *name = op->args[0].as<StringImm>();
-        //        extern "C" ret_type name(type 1,ty2,);
-        //        &name
-        std::string c_name = c_print_name(name->value, false);
-        stream << get_indent() << print_type(op->args[1].type()) << " " << c_name << "(";
-        for (size_t i = 2; i < op->args.size(); i++) {
-            stream << print_type(op->args[i].type());
-            if (i != op->args.size() - 1) {
-                stream << ", ";
-            }
-        }
-        stream << ");\n";
+        internal_assert(op->args.size() == 1);
+        const Call *decl_call = op->args[0].as<Call>();
+        internal_assert(decl_call != nullptr);
+        std::string c_name = c_print_name(decl_call->name, false);
         rhs << "(&" << c_name << ")";
     } else if (op->is_intrinsic(Call::get_user_context)) {
         internal_assert(op->args.size() == 0);
@@ -2677,7 +2669,9 @@ void CodeGen_C::visit(const Call *op) {
             stream << get_indent() << "auto " << id << " = " << rhs_str << ";\n";
         } else {
             id = cached->second;
-        }                                    
+        }
+        // Avoid unused variable warnings.
+        stream << get_indent() << "halide_unused(" << id << ");\n";
     } else {
         print_assignment(op->type, rhs.str());
     }
@@ -2828,9 +2822,10 @@ void CodeGen_C::visit(const Let *op) {
     if (op->value.type().is_handle()) {
         // The body might contain a Load that references this directly
         // by name, so we can't rewrite the name.
-        stream << get_indent() << "auto " /*print_type(op->value.type()) */
-               << " " << print_name(op->name)
-               << " = " << id_value << ";\n";
+        std::string name = print_name(op->name);
+        stream << get_indent() << "auto "
+               << " " << name << " = " << id_value << ";\n";
+        stream << get_indent() << "halide_unused(" << name << ");\n";
     } else {
         Expr new_var = Variable::make(op->value.type(), id_value);
         body = substitute(op->name, new_var, body);
@@ -2918,19 +2913,14 @@ void CodeGen_C::visit(const VectorReduce *op) {
 void CodeGen_C::visit(const LetStmt *op) {
     string id_value = print_expr(op->value);
     Stmt body = op->body;
-    const Call *call = op->value.as<Call>();
 
-    if (call != nullptr && call->is_intrinsic(Call::declare_struct_type)) {
+    if (op->value.type().is_handle()) {
         // The body might contain a Load or Store that references this
         // directly by name, so we can't rewrite the name.
-        stream << get_indent() << "auto " << print_name(op->name)
-               << " = " << id_value << ";\n";
-    } else if (op->value.type().is_handle()) {
-        // The body might contain a Load or Store that references this
-        // directly by name, so we can't rewrite the name.
-        stream << get_indent() << print_type(op->value.type())
-               << " " << print_name(op->name)
-               << " = " << id_value << ";\n";
+        std::string name = print_name(op->name);
+        stream << get_indent() << "auto "
+               << " " << name << " = " << id_value << ";\n";
+        stream << get_indent() << "halide_unused(" << name << ");\n";
     } else {
         Expr new_var = Variable::make(op->value.type(), id_value);
         body = substitute(op->name, new_var, body);

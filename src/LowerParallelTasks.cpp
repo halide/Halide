@@ -21,7 +21,7 @@ LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
     // Figure out if user_context has to be dealt with here.
     std::string closure_arg_name = unique_name("closure_arg");
     args[closure_arg_index] = LoweredArgument(closure_arg_name, Argument::Kind::InputScalar,
-                                              type_of<void *>(), 0, ArgumentEstimates());
+                                              type_of<uint8_t *>(), 0, ArgumentEstimates());
     Expr closure_arg = Variable::make(type_of<void *>(), closure_arg_name);
 
     Stmt wrapped_body = body;
@@ -61,7 +61,9 @@ LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
     wrapped_body = Block::make(Evaluate::make(closure_arg), wrapped_body);
     wrapped_body = LetStmt::make(closure_type_name, struct_type_decl, wrapped_body);
 
-    LoweredFunc result{name, args, wrapped_body, LinkageType::External, NameMangling::Default};
+    // TODO(zvookin): Figure out how we want to handle name mangling of closures.
+    // For now, the C++ backend makes them extern "C" so they have to be NameMangling::C.
+    LoweredFunc result{name, args, wrapped_body, LinkageType::External, NameMangling::C};
     if (t.has_feature(Target::Debug)) {
         debug_arguments(&result, t);
     }
@@ -352,7 +354,7 @@ struct LowerParallelTasks : public IRMutator {
             std::vector<LoweredArgument> closure_args(use_parallel_for ? 3 : 5);
             int closure_arg_index;
             closure_args[0] = LoweredArgument("__user_context", Argument::Kind::InputScalar,
-                                              type_of<const void *>(), 0, ArgumentEstimates());
+                                              type_of<void *>(), 0, ArgumentEstimates());
             if (use_parallel_for) {
                 closure_arg_index = 2;
                 closure_args[1] = LoweredArgument(t.loop_var, Argument::Kind::InputScalar,
@@ -382,36 +384,34 @@ struct LowerParallelTasks : public IRMutator {
                 t.body = mutate(t.body);
             }
 
-            std::string new_function_name = unique_name(t.name);
+            std::string new_function_name = c_print_name(unique_name(t.name), false);
             closure_implementations.emplace_back(GenerateClosureIR(new_function_name, closure, closure_args,
                                                                    closure_arg_index, t.body, target));
 
             if (use_parallel_for) {
-                std::vector<Expr> function_decl_args(5);
-                function_decl_args[0] = new_function_name;
+                std::vector<Expr> function_decl_args(3);
+                function_decl_args[0] = make_zero(type_of<int8_t *>());
                 function_decl_args[1] = make_zero(Int(32));
                 function_decl_args[2] = make_zero(type_of<int8_t *>());
-                function_decl_args[3] = make_zero(Int(32));
-                function_decl_args[4] = make_zero(type_of<int8_t *>());
+                Expr function_decl_call = Call::make(Int(32), new_function_name, function_decl_args, Call::Extern);
 
                 std::vector<Expr> args(5);
                 args[0] = Call::make(type_of<void *>(), Call::get_user_context, {}, Call::PureIntrinsic);
-                args[1] = Call::make(type_of<const void *>(), Call::resolve_function_name, function_decl_args, Call::PureIntrinsic);
+                args[1] = Call::make(type_of<const void *>(), Call::resolve_function_name, {function_decl_call}, Call::PureIntrinsic);
                 args[2] = t.min;
                 args[3] = t.extent;
                 args[4] = closure_struct;
                 result = Call::make(Int(32), "halide_do_par_for", args, Call::Extern);
             } else {
-                std::vector<Expr> function_decl_args(7);
-                function_decl_args[0] = new_function_name;
+                std::vector<Expr> function_decl_args(5);
+                function_decl_args[0] = make_zero(type_of<void *>());
                 function_decl_args[1] = make_zero(Int(32));
-                function_decl_args[2] = make_zero(type_of<void *>());
-                function_decl_args[3] = make_zero(Int(32));
-                function_decl_args[4] = make_zero(Int(32));
-                function_decl_args[5] = make_zero(type_of<uint8_t *>());
-                function_decl_args[6] = make_zero(type_of<void *>());
+                function_decl_args[2] = make_zero(Int(32));
+                function_decl_args[3] = make_zero(type_of<uint8_t *>());
+                function_decl_args[4] = make_zero(type_of<void *>());
+                Expr function_decl_call = Call::make(Int(32), new_function_name, function_decl_args, Call::Extern);
 
-                tasks_array_args.push_back(Call::make(type_of<const void *>(), Call::resolve_function_name, function_decl_args, Call::PureIntrinsic));
+                tasks_array_args.push_back(Call::make(type_of<const void *>(), Call::resolve_function_name, {function_decl_call}, Call::PureIntrinsic));
                 tasks_array_args.push_back(Cast::make(type_of<uint8_t *>(), closure_struct));
                 tasks_array_args.push_back(StringImm::make(t.name));
                 tasks_array_args.push_back(semaphores_array.defined() ? semaphores_array : semaphore_type);
