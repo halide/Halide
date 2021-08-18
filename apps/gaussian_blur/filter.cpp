@@ -109,7 +109,7 @@ int main(int argc, char **argv) {
                 output8.device_sync();
             });
             t8 = throughput(r, best_manual);
-            // convert_and_save_image(output8, "out_8_pyramid_" + std::to_string(r) + ".png");
+            convert_and_save_image(output8, "out_8_pyramid_" + std::to_string(r) + ".png");
         }
         if (1) {
             auto translated = padded16;

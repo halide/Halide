@@ -437,7 +437,7 @@ public:
 
         Func input_clamped;
         input_clamped(x, y) = input(x,
-                                    clamp(y, input.dim(1).min(), input.dim(1).max()));
+                                    min(likely(y), input.dim(1).max()));
 
         // We use slightly different algorithms as a function of the
         // max diameter supported. They get muxed together at the end.
@@ -447,7 +447,11 @@ public:
         // because it equalizes the number of samples taken inside the
         // low res and high res images, giving the best computational
         // complexity.
-        Expr down_factor = clamp(cast<int>(ceil(sqrt(diameter))), N, max_count_for_small_sum);
+
+        // We'll put a lower bound on the downsampling factor so that
+        // the intermediate downsampled image is likely to be
+        // in-cache.
+        Expr down_factor = clamp(cast<int>(ceil(sqrt(diameter))), N * 2, max_count_for_small_sum);
         RDom r_down(0, down_factor);
         Func down_y("down_y");
         down_y(x, y) += cast(small_sum_type, input_clamped(x, y * down_factor + r_down));
@@ -467,8 +471,8 @@ public:
         // y for the first scanline of each strip. Above this we use
         // the precomputed downsampled-in-y Func. Tuned empirically.
         const int max_diameter_direct_blur_y =
-            bits == 8  ? 80 :
-            bits == 16 ? 50 :
+            bits == 8  ? 50 :
+            bits == 16 ? 40 :
                          30;
 
         // The maximum diameter at which we can use a low-precision
@@ -530,13 +534,17 @@ public:
 
             // Compute the other in-between scanlines by incrementally
             // updating that one in a sliding window.
+            Func diff_y("diff_y");
+            diff_y(x, ty, y) =
+                (cast(diff_type, input_clamped(x, ty * N + y + diameter)) -
+                 input_clamped(x, ty * N + y));
+
             RDom ry_scan(0, N - 1);
             blur_y(x, ty, y) = undef(blur_y_t);
             blur_y(x, ty, 0) = blur_y_init(x, ty);
             blur_y(x, ty, ry_scan + 1) =
-                (blur_y(x, ty, ry_scan) +
-                 cast(blur_y_t, (cast(diff_type, input_clamped(x, ty * N + ry_scan + diameter)) -
-                                 input_clamped(x, ty * N + ry_scan))));
+                (blur_y(x, ty, ry_scan) + cast(blur_y_t, diff_y(x, ty, ry_scan)));
+
             // For large diameter, we do the blur in x using the regular
             // sliding window approach.
 
@@ -544,16 +552,18 @@ public:
 
             Type blur_x_t = (max_diameter <= max_diameter_low_bit_blur_x) ? small_sum_type : large_sum_type;
 
+            const int integrate_vec = vec;
+
             Func integrate_x("integrate_x");
             integrate_x(x, ty, y) = undef(blur_x_t);
             integrate_x(-1, ty, y) = cast(blur_x_t, 0);
-            RDom rx_scan(0, vec, 0, ((width + diameter) / vec));
-            Expr rx = rx_scan.x + vec * rx_scan.y;
+            RDom rx_scan(0, integrate_vec, 0, ((width + diameter) / integrate_vec));
+            Expr rx = rx_scan.x + integrate_vec * rx_scan.y;
             integrate_x(rx, ty, y) =
                 (integrate_x(rx - 1, ty, y) +
                  blur_y(rx, ty, y));
-            RDom rx_tail(((width + diameter) / vec) * vec, (width + diameter) % vec);
-            rx = clamp(rx_tail, input.dim(0).min(), input.dim(0).max());
+            RDom rx_tail(((width + diameter) / integrate_vec) * integrate_vec, (width + diameter) % integrate_vec);
+            rx = clamp(rx_tail, 0, width + diameter - 2);
             integrate_x(rx, ty, y) =
                 (integrate_x(rx - 1, ty, y) +
                  blur_y(rx, ty, y));
@@ -658,6 +668,7 @@ public:
                     .unroll(rx_scan.x);
                 integrate_x
                     .update(2)
+                    .reorder(y, rx_tail.x, ty)
                     .rename(rx_tail.x, rxo);
 
                 blur_y
@@ -670,6 +681,11 @@ public:
                     .vectorize(x)
                     .unroll(ry_scan);
 
+                diff_y.compute_at(integrate_x, rxo)
+                    .store_in(MemoryType::Register)
+                    .vectorize(x)
+                    .unroll(y);
+
                 blur_y.in()
                     .compute_at(integrate_x, rxo)
                     .store_in(MemoryType::Register)
@@ -680,23 +696,23 @@ public:
 
             blur_y_init
                 .bound_extent(ty, 1)
-                .compute_at(output, ty)
-                .vectorize(x, vec, TailStrategy::Predicate);
+                .compute_at(output, yo)
+                .vectorize(x, vec, TailStrategy::ShiftInwards);
             if (use_down_y) {
                 blur_y_init.update(0)
                     .reorder(x, ry_init_fine_1, ty)
-                    .vectorize(x, vec, TailStrategy::Predicate);
+                    .vectorize(x, vec * 2, TailStrategy::GuardWithIf);
                 blur_y_init.update(1)
                     .reorder(x, ry_init_coarse, ty)
-                    .vectorize(x, vec, TailStrategy::Predicate);
+                    .vectorize(x, vec * 2, TailStrategy::GuardWithIf);
                 blur_y_init.update(2)
                     .reorder(x, ry_init_fine_2, ty)
-                    .vectorize(x, vec, TailStrategy::Predicate);
+                    .vectorize(x, vec * 2, TailStrategy::GuardWithIf);
             } else {
                 blur_y_init.update(0)
                     .unroll(ry_init_full, 2)
                     .reorder(x, ry_init_full, ty)
-                    .vectorize(x, vec, TailStrategy::Predicate);
+                    .vectorize(x, vec * 2, TailStrategy::GuardWithIf);
             }
 
             for (Func f : {blur_y, blur_y_init}) {
@@ -708,7 +724,7 @@ public:
         down_y.in()
             .compute_root()
             .parallel(y)
-            .vectorize(x, vec * 8)
+            .vectorize(x, vec, TailStrategy::GuardWithIf)
             .align_storage(x, vec);
 
         Expr result = results.back();
@@ -727,7 +743,7 @@ public:
         output
             .split(y, ty, y, N, TailStrategy::GuardWithIf)
             .split(y, yo, yi, N)
-            .split(x, tx, x, vec, TailStrategy::Predicate)
+            .split(x, tx, x, vec, TailStrategy::ShiftInwards)
             .reorder(x, yi, tx, yo, ty)
             .parallel(ty)
             .vectorize(x)
