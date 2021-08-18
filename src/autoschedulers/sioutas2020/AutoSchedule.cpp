@@ -5,8 +5,8 @@
 #include <utility>
 
 using namespace std;
-//using namespace Halide;
-//using namespace Halide::Internal;
+// using namespace Halide;
+// using namespace Halide::Internal;
 
 namespace Halide {
 namespace Internal {
@@ -803,7 +803,7 @@ map<string, Box> get_pipeline_bounds(DependenceAnalysis &analysis,
         }
 
         set<string> prods;
-        for (const pair<string, Function> &fpair : analysis.env) {
+        for (const auto &fpair : analysis.env) {
             prods.insert(fpair.first);
         }
 
@@ -1469,7 +1469,7 @@ Cost Partitioner::get_pipeline_cost() {
     internal_assert(!group_costs.empty());
 
     Cost total_cost(0, 0);
-    for (const pair<FStage, Group> &g : groups) {
+    for (const auto &g : groups) {
         const GroupAnalysis &analysis = get_element(group_costs, g.first);
         if (!analysis.cost.defined()) {
             return Cost();
@@ -1488,7 +1488,7 @@ void Partitioner::disp_pipeline_costs() {
     debug(0) << "Pipeline costs:" << '\n';
     debug(0) << "===============" << '\n';
     debug(0) << "Group: (name) [arith cost, mem cost, parallelism]" << '\n';
-    for (const pair<FStage, Group> &g : groups) {
+    for (const auto &g : groups) {
         const GroupAnalysis &analysis = get_element(group_costs, g.first);
         if (!total_cost.arith.defined()) {
             continue;
@@ -1575,7 +1575,7 @@ Partitioner::Partitioner(const map<string, Box> &_pipeline_bounds,
         }
     }
 }
-//todo: this shouldnt be based on names
+// todo: this shouldnt be based on names
 bool Partitioner::check_for_boundary(const Group &group) {
     bool has_boundary = false;
     const vector<string> bound_conds = {"constant_exterior", "repeat_edge",
@@ -1636,7 +1636,7 @@ Partitioner::optimize_granularity(const Group &pre_g,
         if (g.inlined.find(st.func.name()) != g.inlined.end())
             continue;
         // find its consumers - set storage 1 level above reuse (if any)
-        for (const auto cons : g.members) {
+        for (const auto &cons : g.members) {
             if (cons.re.size() == 0)
                 continue;
             if (cons.func.name() == st.func.name())
@@ -1695,8 +1695,9 @@ Partitioner::optimize_granularity(const Group &pre_g,
             if (sum > 1) {
                 st.compute_stage = g.output.func.name();
                 st.compute_level = Expr();
-            } else if ((sum == 1))
+            } else if (sum == 1) {
                 st.compute_stage = g.output.func.name();
+            }
 
         } else {
 
@@ -2444,7 +2445,7 @@ void Partitioner::group(Partitioner::Level level) {
 
         fixpoint = true;
         vector<pair<string, string>> cand;
-        for (const pair<FStage, Group> &g : groups) {
+        for (const auto &g : groups) {
             bool is_output = false;
             for (const Function &f : outputs) {
                 if (g.first.func.name() == f.name()) {
@@ -3229,7 +3230,7 @@ Partitioner::evaluate_choice(Group &group, Partitioner::Level level) {
         best_tile_config = tile_sizes;
 
     } else {
-        //check if the group is valid (skip boundary conditions)
+        // check if the group is valid (skip boundary conditions)
         bool has_boundary_stages = check_for_boundary(group);
         if (has_boundary_stages) {
             return GroupConfig(best_tile_config, group_analysis);
@@ -4330,7 +4331,7 @@ void Partitioner::generate_cpu_schedule(const Target &t, AutoSchedule &sched) {
     set<string> will_fold;
     set<string> inlines;
     // Mark all functions that are inlined.
-    for (const pair<FStage, Group> &g : groups) {
+    for (const auto &g : groups) {
         debug(2) << "g name " << g.first.func.name() << '\n';
         if (g.second.members.size() - g.second.inlined.size() > 1) {
             GroupAnalysis asda = analyze_group(g.second, false, false);
@@ -5067,6 +5068,6 @@ struct Sioutas20 {
 
 REGISTER_AUTOSCHEDULER(Sioutas20)
 
-}  //namespace Internal
+}  // namespace Internal
 
-}  //namespace Halide
+}  // namespace Halide

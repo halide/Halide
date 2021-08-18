@@ -8,7 +8,7 @@ TIMING_ITERATIONS ?= 5
 
 $(GENERATOR_BIN)/camera_pipe.generator: camera_pipe_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -Wl,--no-as-needed -lautoschedule_sioutas2020
 
 $(BIN)/%/camera_pipe.a: $(GENERATOR_BIN)/camera_pipe.generator
 	@mkdir -p $(@D)
@@ -16,7 +16,7 @@ $(BIN)/%/camera_pipe.a: $(GENERATOR_BIN)/camera_pipe.generator
 
 $(BIN)/%/camera_pipe_auto_schedule.a: $(GENERATOR_BIN)/camera_pipe.generator
 	@mkdir -p $(@D)
-	$^ -g camera_pipe -e $(GENERATOR_OUTPUTS) -o $(@D) -f camera_pipe_auto_schedule target=$*-no_runtime auto_schedule=true
+	$^ -g camera_pipe -e $(GENERATOR_OUTPUTS) -o $(@D) -f camera_pipe_auto_schedule target=$*-no_runtime auto_schedule=true  -s Sioutas20
 
 $(BIN)/%/process: process.cpp $(BIN)/%/camera_pipe.a $(BIN)/%/camera_pipe_auto_schedule.a
 	@mkdir -p $(@D)
