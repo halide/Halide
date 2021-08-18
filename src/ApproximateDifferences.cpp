@@ -1,10 +1,14 @@
 #include "ApproximateDifferences.h"
+#include "Bounds.h"
 #include "Error.h"
 #include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
+#include "Simplify.h"
+
+#include <vector>
 
 namespace Halide {
 namespace Internal {
@@ -775,6 +779,15 @@ public:
     }
 };
 
+Expr approximate_optimizations(const Expr &expr, Direction direction, const Scope<Interval> &scope) {
+    Expr simpl = substitute_some_lets(expr);
+    simpl = simplify(reorder_terms(simpl));
+    // TODO: only do push_rationals if correlated divisions exist.
+    simpl = push_rationals(expr, direction);
+    simpl = simplify(simpl);
+    simpl = strip_unbounded_terms(expr, direction, scope);
+    return simplify(simpl);
+}
 
 } // namespace
 
@@ -801,6 +814,45 @@ Expr reorder_terms(const Expr &expr) {
 
 Expr substitute_some_lets(const Expr &expr, size_t count) {
     return SubstituteSomeLets(count).mutate(expr);
+}
+
+Expr approximate_constant_bound(const Expr &expr, Direction direction, const Scope<Interval> &scope) {
+    Expr simpl = approximate_optimizations(expr, direction, scope);
+    Interval interval = bounds_of_expr_in_scope(simpl, scope, FuncValueBounds(), true);
+    if (direction == Direction::Lower) {
+        Expr bound = simplify(interval.min);
+        if (is_const(bound)) {
+            return bound;
+        } else {
+            return Interval::neg_inf();
+        }
+    } else {
+        Expr bound = simplify(interval.max);
+        if (is_const(bound)) {
+            return bound;
+        } else {
+            return Interval::pos_inf();
+        }
+    }
+}
+
+Interval approximate_constant_bounds(const Expr &expr, const Scope<Interval> &scope) {
+    Expr lower = approximate_optimizations(expr, Direction::Lower, scope);
+    Expr upper = approximate_optimizations(expr, Direction::Upper, scope);
+    Interval interval;
+    interval.min = bounds_of_expr_in_scope(lower, scope, FuncValueBounds(), true).min;
+    interval.max = bounds_of_expr_in_scope(upper, scope, FuncValueBounds(), true).max;
+    interval.min = simplify(interval.min);
+    interval.max = simplify(interval.max);
+
+    if (!is_const(interval.min)) {
+        interval.min = Interval::neg_inf();
+    }
+    if (!is_const(interval.max)) {
+        interval.max = Interval::pos_inf();
+    }
+
+    return interval;
 }
 
 }  // namespace Internal
