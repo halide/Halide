@@ -5,7 +5,9 @@
  * Defines a base class for passes over the IR that modify it
  */
 
-#include "IRVisitor.h"
+#include <map>
+
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {
@@ -23,8 +25,8 @@ namespace Internal {
  */
 class IRMutator {
 public:
-    IRMutator();
-    virtual ~IRMutator();
+    IRMutator() = default;
+    virtual ~IRMutator() = default;
 
     /** This is the main interface for using a mutator. Also call
      * these in your subclass to mutate sub-expressions and
@@ -32,6 +34,15 @@ public:
      */
     virtual Expr mutate(const Expr &expr);
     virtual Stmt mutate(const Stmt &stmt);
+
+    // Mutate all the Exprs and return the new list in ret, along with
+    // a flag that is true iff at least one item in the list changed.
+    std::pair<std::vector<Expr>, bool> mutate_with_changes(const std::vector<Expr> &);
+
+    // Like mutate_with_changes, but discard the changes flag.
+    std::vector<Expr> mutate(const std::vector<Expr> &exprs) {
+        return mutate_with_changes(exprs).first;
+    }
 
 protected:
     // ExprNode<> and StmtNode<> are allowed to call visit (to implement mutate_expr/mutate_stmt())
@@ -100,11 +111,15 @@ protected:
 public:
     Stmt mutate(const Stmt &s) override;
     Expr mutate(const Expr &e) override;
+
+    std::vector<Expr> mutate(const std::vector<Expr> &exprs) {
+        return IRMutator::mutate(exprs);
+    }
 };
 
 /** A helper function for mutator-like things to mutate regions */
 template<typename Mutator, typename... Args>
-std::pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds, Args &&... args) {
+std::pair<Region, bool> mutate_region(Mutator *mutator, const Region &bounds, Args &&...args) {
     Region new_bounds(bounds.size());
     bool bounds_changed = false;
 

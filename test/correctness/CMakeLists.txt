@@ -14,11 +14,6 @@ tests(GROUPS correctness
       atomic_tuples.cpp
       atomics.cpp
       autodiff.cpp
-      autotune_bug.cpp
-      autotune_bug_2.cpp
-      autotune_bug_3.cpp
-      autotune_bug_4.cpp
-      autotune_bug_5.cpp
       bad_likely.cpp
       bit_counting.cpp
       bitwise_ops.cpp
@@ -36,6 +31,7 @@ tests(GROUPS correctness
       bounds_of_func.cpp
       bounds_of_monotonic_math.cpp
       bounds_of_multiply.cpp
+      bounds_of_split.cpp
       bounds_query.cpp
       buffer_t.cpp
       c_function.cpp
@@ -78,6 +74,7 @@ tests(GROUPS correctness
       deferred_loop_level.cpp
       deinterleave4.cpp
       device_buffer_copy.cpp
+      device_copy_at_inner_loop.cpp
       device_crop.cpp
       device_slice.cpp
       dilate3x3.cpp
@@ -108,6 +105,7 @@ tests(GROUPS correctness
       float16_t_comparison.cpp
       float16_t_constants.cpp
       float16_t_image_type.cpp
+      float16_t_neon_op_check.cpp
       for_each_element.cpp
       force_onto_stack.cpp
       func_clone.cpp
@@ -117,12 +115,14 @@ tests(GROUPS correctness
       fuse.cpp
       fuse_gpu_threads.cpp
       fused_where_inner_extent_is_zero.cpp
+      fuzz_bounds.cpp
       fuzz_cse.cpp
       fuzz_float_stores.cpp
       fuzz_simplify.cpp
       gameoflife.cpp
       gather.cpp
       gpu_allocation_cache.cpp
+      gpu_arg_types.cpp
       gpu_assertion_in_kernel.cpp
       gpu_bounds_inference_failure.cpp
       gpu_condition_lifting.cpp
@@ -134,6 +134,7 @@ tests(GROUPS correctness
       gpu_give_input_buffers_device_allocations.cpp
       gpu_jit_explicit_copy_to_device.cpp
       gpu_large_alloc.cpp
+      gpu_many_kernels.cpp
       gpu_mixed_dimensionality.cpp
       gpu_mixed_shared_mem_types.cpp
       gpu_multi_kernel.cpp
@@ -147,8 +148,10 @@ tests(GROUPS correctness
       gpu_specialize.cpp
       gpu_store_in_register_with_no_lanes_loop.cpp
       gpu_sum_scan.cpp
+      gpu_texture.cpp
       gpu_thread_barrier.cpp
       gpu_transpose.cpp
+      gpu_vectorize.cpp
       gpu_vectorized_shared_memory.cpp
       half_native_interleave.cpp
       halide_buffer.cpp
@@ -175,7 +178,9 @@ tests(GROUPS correctness
       interleave.cpp
       interleave_rgb.cpp
       interleave_x.cpp
+      interpreter.cpp
       interval.cpp
+      intrinsics.cpp
       introspection.cpp
       inverse.cpp
       isnan.cpp
@@ -193,6 +198,7 @@ tests(GROUPS correctness
       logical.cpp
       loop_invariant_extern_calls.cpp
       loop_level_generator_param.cpp
+      lossless_cast.cpp
       lots_of_dimensions.cpp
       lots_of_loop_invariants.cpp
       make_struct.cpp
@@ -213,6 +219,7 @@ tests(GROUPS correctness
       multipass_constraints.cpp
       multiple_outputs.cpp
       multiple_outputs_extern.cpp
+      multiple_scatter.cpp
       mux.cpp
       named_updates.cpp
       nested_shiftinwards.cpp
@@ -231,6 +238,7 @@ tests(GROUPS correctness
       parallel_gpu_nested.cpp
       parallel_nested.cpp
       parallel_nested_1.cpp
+      parallel_scatter.cpp
       parallel_reductions.cpp
       parallel_rvar.cpp
       param.cpp
@@ -240,6 +248,7 @@ tests(GROUPS correctness
       partial_realization.cpp
       partition_loops.cpp
       partition_loops_bug.cpp
+      partition_max_filter.cpp
       pipeline_set_jit_externs_func.cpp
       plain_c_includes.c
       popc_clz_ctz_bounds.cpp
@@ -332,6 +341,7 @@ tests(GROUPS correctness
       vector_tile.cpp
       vectorize_guard_with_if.cpp
       vectorize_mixed_widths.cpp
+      vectorize_nested.cpp
       vectorize_varying_allocation_size.cpp
       vectorized_gpu_allocation.cpp
       vectorized_initialization.cpp

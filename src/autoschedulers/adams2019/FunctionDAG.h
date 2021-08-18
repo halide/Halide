@@ -6,9 +6,11 @@
 #define FUNCTION_DAG_H
 
 #include <algorithm>
+#include <cstdint>
 #include <map>
-#include <stdint.h>
 #include <string>
+#include <utility>
+
 #include <vector>
 
 #include "Errors.h"
@@ -57,8 +59,12 @@ struct OptionalRational {
     }
 
     OptionalRational operator*(const OptionalRational &other) const {
-        if ((*this) == 0) return *this;
-        if (other == 0) return other;
+        if ((*this) == 0) {
+            return *this;
+        }
+        if (other == 0) {
+            return other;
+        }
         int64_t num = numerator * other.numerator;
         int64_t den = denominator * other.denominator;
         bool e = exists && other.exists;
@@ -70,7 +76,9 @@ struct OptionalRational {
     // operators are not comparable, so a < b is not the same as !(a
     // >= b).
     bool operator<(int x) const {
-        if (!exists) return false;
+        if (!exists) {
+            return false;
+        }
         if (denominator > 0) {
             return numerator < x * denominator;
         } else {
@@ -79,7 +87,9 @@ struct OptionalRational {
     }
 
     bool operator<=(int x) const {
-        if (!exists) return false;
+        if (!exists) {
+            return false;
+        }
         if (denominator > 0) {
             return numerator <= x * denominator;
         } else {
@@ -88,12 +98,16 @@ struct OptionalRational {
     }
 
     bool operator>(int x) const {
-        if (!exists) return false;
+        if (!exists) {
+            return false;
+        }
         return !((*this) <= x);
     }
 
     bool operator>=(int x) const {
-        if (!exists) return false;
+        if (!exists) {
+            return false;
+        }
         return !((*this) < x);
     }
 
@@ -155,11 +169,17 @@ public:
     // Try to merge another LoadJacobian into this one, increasing the
     // count if the coefficients match.
     bool merge(const LoadJacobian &other) {
-        if (other.coeffs.size() != coeffs.size()) return false;
+        if (other.coeffs.size() != coeffs.size()) {
+            return false;
+        }
         for (size_t i = 0; i < coeffs.size(); i++) {
-            if (other.coeffs[i].size() != coeffs[i].size()) return false;
+            if (other.coeffs[i].size() != coeffs[i].size()) {
+                return false;
+            }
             for (size_t j = 0; j < coeffs[i].size(); j++) {
-                if (!(other.coeffs[i][j] == coeffs[i][j])) return false;
+                if (!(other.coeffs[i][j] == coeffs[i][j])) {
+                    return false;
+                }
             }
         }
         c += other.count();
@@ -286,7 +306,7 @@ struct BoundContents {
     }
 
     BoundContents *make_copy() const {
-        auto b = layout->make();
+        auto *b = layout->make();
         size_t bytes = sizeof(data()[0]) * layout->total_size;
         memcpy(b->data(), data(), bytes);
         return b;
@@ -459,7 +479,7 @@ struct FunctionDAG {
             };
 
             Stage(Halide::Stage s)
-                : stage(s) {
+                : stage(std::move(s)) {
             }
         };
         vector<Stage> stages;
@@ -551,12 +571,15 @@ private:
     // Compute the featurization for the entire DAG
     void featurize();
 
-    // This class uses a lot of internal pointers, so we'll hide the copy constructor.
-    FunctionDAG(const FunctionDAG &other) = delete;
-    void operator=(const FunctionDAG &other) = delete;
-
     template<typename OS>
     void dump_internal(OS &os) const;
+
+public:
+    // This class uses a lot of internal pointers, so we'll make it uncopyable/unmovable.
+    FunctionDAG(const FunctionDAG &other) = delete;
+    FunctionDAG &operator=(const FunctionDAG &other) = delete;
+    FunctionDAG(FunctionDAG &&other) = delete;
+    FunctionDAG &operator=(FunctionDAG &&other) = delete;
 };
 
 }  // namespace Autoscheduler

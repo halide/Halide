@@ -4,7 +4,7 @@ project(depthwise_separable_conv)
 enable_testing()
 
 # Set up language settings
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
@@ -34,6 +34,6 @@ target_link_libraries(depthwise_separable_conv_process
 # Test that the app actually works!
 add_test(NAME depthwise_separable_conv_process COMMAND depthwise_separable_conv_process)
 set_tests_properties(depthwise_separable_conv_process PROPERTIES
-                     LABELS internal_app_tests
+                     LABELS depthwise_separable_conv
                      PASS_REGULAR_EXPRESSION "Success!"
                      SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")

@@ -1,12 +1,14 @@
 #include "CodeGen_GPU_Dev.h"
 #include "Bounds.h"
+#include "Deinterleave.h"
+#include "IRMutator.h"
+#include "IROperator.h"
 #include "IRVisitor.h"
 
 namespace Halide {
 namespace Internal {
 
-CodeGen_GPU_Dev::~CodeGen_GPU_Dev() {
-}
+CodeGen_GPU_Dev::~CodeGen_GPU_Dev() = default;
 
 bool CodeGen_GPU_Dev::is_gpu_var(const std::string &name) {
     return is_gpu_block_var(name) || is_gpu_thread_var(name);
@@ -40,11 +42,9 @@ class IsBlockUniform : public IRVisitor {
     }
 
 public:
-    bool result;
+    bool result = true;
 
-    IsBlockUniform()
-        : result(true) {
-    }
+    IsBlockUniform() = default;
 };
 }  // namespace
 
@@ -95,6 +95,56 @@ bool CodeGen_GPU_Dev::is_buffer_constant(const Stmt &kernel,
     IsBufferConstant v(buffer);
     kernel.accept(&v);
     return v.result;
+}
+
+namespace {
+
+class ScalarizePredicatedLoadStore : public IRMutator {
+public:
+    using IRMutator::mutate;
+    using IRMutator::visit;
+
+protected:
+    Stmt visit(const Store *s) override {
+        if (!is_const_one(s->predicate)) {
+            std::vector<Stmt> scalar_stmts;
+            for (int ln = 0; ln < s->value.type().lanes(); ln++) {
+                scalar_stmts.push_back(IfThenElse::make(
+                    extract_lane(s->predicate, ln),
+                    Store::make(s->name,
+                                mutate(extract_lane(s->value, ln)),
+                                mutate(extract_lane(s->index, ln)),
+                                s->param,
+                                const_true(),
+                                // TODO: alignment needs to be changed
+                                s->alignment)));
+            }
+            return Block::make(scalar_stmts);
+        } else {
+            return s;
+        }
+    }
+
+    Expr visit(const Load *op) override {
+        if (!is_const_one(op->predicate)) {
+            Expr load_expr = Load::make(op->type, op->name, op->index, op->image,
+                                        op->param, const_true(op->type.lanes()), op->alignment);
+            Expr pred_load = Call::make(load_expr.type(),
+                                        Call::if_then_else,
+                                        {op->predicate, load_expr},
+                                        Internal::Call::PureIntrinsic);
+            return pred_load;
+        } else {
+            return op;
+        }
+    }
+};
+
+}  // namespace
+
+Stmt CodeGen_GPU_Dev::scalarize_predicated_loads_stores(Stmt &s) {
+    ScalarizePredicatedLoadStore sps;
+    return sps.mutate(s);
 }
 
 }  // namespace Internal

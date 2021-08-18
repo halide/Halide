@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
         // over y outside of the loop over r, which is the default.
         sat.update(1).parallel(y);
 
-        sat.realize(100, 100);
+        sat.realize({100, 100});
     }
 
     printf("Success!\n");

@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
     h.bound(x, 0, 1024).bound(y, 0, 32);
 
     call_count = 0;
-    h.realize(1024, 32);
+    h.realize({1024, 32});
     if (call_count != 1024 * 32) {
         printf("call_count was supposed to be 1024 * 32: %d\n", call_count);
         return 1;

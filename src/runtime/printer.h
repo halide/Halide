@@ -34,9 +34,9 @@ public:
     bool own_mem;
     char scratch[length <= 256 ? length : 1];
 
-    Printer(void *ctx, char *mem = NULL)
-        : user_context(ctx), own_mem(mem == NULL) {
-        if (mem != NULL) {
+    Printer(void *ctx, char *mem = nullptr)
+        : user_context(ctx), own_mem(mem == nullptr) {
+        if (mem != nullptr) {
             buf = mem;
         } else if (length <= sizeof(scratch)) {
             buf = scratch;
@@ -55,9 +55,9 @@ public:
     }
 
     Printer &operator<<(const char *arg) {
-        // Crashing on NULL here is a big debugging time sink.
-        if (arg == NULL) {
-            dst = halide_string_to_string(dst, end, "<NULL>");
+        // Crashing on nullptr here is a big debugging time sink.
+        if (arg == nullptr) {
+            dst = halide_string_to_string(dst, end, "<nullptr>");
         } else {
             dst = halide_string_to_string(dst, end, arg);
         }

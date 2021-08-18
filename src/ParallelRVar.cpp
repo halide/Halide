@@ -1,10 +1,12 @@
 #include "ParallelRVar.h"
 #include "CSE.h"
 #include "Debug.h"
+#include "Definition.h"
 #include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Simplify.h"
 #include "Substitute.h"
 
@@ -102,10 +104,7 @@ bool can_parallelize_rvar(const string &v,
 
     // Make an expr representing the store done by a different thread.
     RenameFreeVars renamer;
-    vector<Expr> other_store(args.size());
-    for (size_t i = 0; i < args.size(); i++) {
-        other_store[i] = renamer.mutate(args[i]);
-    }
+    auto other_store = renamer.mutate(args);
 
     // Construct an expression which is true when the two threads are
     // in fact two different threads. We'll use this liberally in the
@@ -161,7 +160,7 @@ bool can_parallelize_rvar(const string &v,
         hazard = l->body;
     }
 
-    return is_zero(hazard);
+    return is_const_zero(hazard);
 }
 
 }  // namespace Internal

@@ -6,6 +6,8 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+
 class EliminateBoolVectors : public IRMutator {
 private:
     using IRMutator::visit;
@@ -136,7 +138,7 @@ private:
 
     Stmt visit(const Store *op) override {
         Expr predicate = op->predicate;
-        if (!is_one(predicate)) {
+        if (!is_const_one(predicate)) {
             predicate = mutate(predicate);
         }
         Expr value = op->value;
@@ -158,7 +160,7 @@ private:
 
     Expr visit(const Load *op) override {
         Expr predicate = op->predicate;
-        if (!is_one(predicate)) {
+        if (!is_const_one(predicate)) {
             predicate = mutate(predicate);
         }
         Expr index = mutate(op->index);
@@ -192,11 +194,11 @@ private:
 
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::if_then_else)) {
-            internal_assert(op->args.size() == 3);
+            internal_assert(op->args.size() == 2 || op->args.size() == 3);
             if (op->args[0].type().is_vector()) {
                 Expr cond = mutate(op->args[0]);
                 Expr true_value = mutate(op->args[1]);
-                Expr false_value = mutate(op->args[2]);
+                Expr false_value = mutate(op->args.size() == 3 ? op->args[2] : make_zero(op->type));
                 Type cond_ty = cond.type();
 
                 // If the condition is a vector, it should be a vector of ints.
@@ -313,6 +315,8 @@ private:
         return visit_let<Stmt>(op);
     }
 };
+
+}  // namespace
 
 Stmt eliminate_bool_vectors(const Stmt &s) {
     return EliminateBoolVectors().mutate(s);

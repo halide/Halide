@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     }
     Func g;
     g(x) = funcs[funcs.size() - 1](x);
-    g.realize(10);
+    g.realize({10});
 
     // Test a nest of highly connected exprs. Compilation will barf if
     // this gets expanded into a tree.
@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
 
     f(x) = e[e.size() - 1];
 
-    f.realize(10);
+    f.realize({10});
 
     printf("Success!\n");
     return 0;

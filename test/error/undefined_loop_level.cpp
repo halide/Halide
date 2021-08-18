@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     g.compute_root();
 
     // Trying to lower/realize with an undefined LoopLevel should be fatal
-    Buffer<int> result = g.realize(1);
+    Buffer<int> result = g.realize({1});
 
     printf("Success!\n");
     return 0;

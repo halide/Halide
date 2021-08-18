@@ -20,12 +20,12 @@ int main(int argc, char **argv) {
     f.compute_at(g, z);
 
     auto target = get_jit_target_from_environment();
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (target.has_feature(Target::HVX)) {
         g.hexagon().vectorize(x, 32);
         f.vectorize(x, 32);
     }
 
-    Buffer<int> im = g.realize(64, 64, 64);
+    Buffer<int> im = g.realize({64, 64, 64});
 
     for (int x = 0; x < 64; x++) {
         for (int y = 0; y < 64; y++) {

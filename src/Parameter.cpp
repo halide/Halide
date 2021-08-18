@@ -22,8 +22,9 @@ struct ParameterContents {
     uint64_t data;
     int host_alignment;
     std::vector<BufferConstraint> buffer_constraints;
-    Expr scalar_min, scalar_max, scalar_estimate;
+    Expr scalar_default, scalar_min, scalar_max, scalar_estimate;
     const bool is_buffer;
+    MemoryType memory_type = MemoryType::Auto;
 
     ParameterContents(Type t, bool b, int d, const std::string &n)
         : type(t), dimensions(d), name(n), buffer(Buffer<>()), data(0),
@@ -160,7 +161,9 @@ Buffer<> Parameter::buffer() const {
 }
 
 const halide_buffer_t *Parameter::raw_buffer() const {
-    if (!is_buffer()) return nullptr;
+    if (!is_buffer()) {
+        return nullptr;
+    }
     return contents->buffer.raw_buffer();
 }
 
@@ -260,6 +263,28 @@ int Parameter::host_alignment() const {
     check_is_buffer();
     return contents->host_alignment;
 }
+
+void Parameter::set_default_value(const Expr &e) {
+    check_is_scalar();
+    if (e.defined()) {
+        user_assert(e.type() == contents->type)
+            << "Can't set parameter " << name()
+            << " of type " << contents->type
+            << " to have default value " << e
+            << " of type " << e.type() << "\n";
+
+        user_assert(is_const(e))
+            << "Default value for parameter " << name()
+            << " must be constant: " << e << "\n";
+    }
+    contents->scalar_default = e;
+}
+
+Expr Parameter::default_value() const {
+    check_is_scalar();
+    return contents->scalar_default;
+}
+
 void Parameter::set_min_value(const Expr &e) {
     check_is_scalar();
     if (e.defined()) {
@@ -315,7 +340,7 @@ Expr Parameter::estimate() const {
 ArgumentEstimates Parameter::get_argument_estimates() const {
     ArgumentEstimates argument_estimates;
     if (!is_buffer()) {
-        argument_estimates.scalar_def = scalar_expr();
+        argument_estimates.scalar_def = default_value();
         argument_estimates.scalar_min = min_value();
         argument_estimates.scalar_max = max_value();
         argument_estimates.scalar_estimate = estimate();
@@ -347,6 +372,16 @@ void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int 
             (*args)[i] = Cast::make(Int(32), (*args)[i]);
         }
     }
+}
+
+void Parameter::store_in(MemoryType memory_type) {
+    check_is_buffer();
+    contents->memory_type = memory_type;
+}
+
+MemoryType Parameter::memory_type() const {
+    // check_is_buffer();
+    return contents->memory_type;
 }
 
 }  // namespace Internal

@@ -14,7 +14,7 @@
 namespace Halide {
 namespace Tools {
 
-#if !defined(__EMSCRIPTEN__)
+#if !(defined(__EMSCRIPTEN__) && defined(HALIDE_BENCHMARK_USE_EMSCRIPTEN_GET_NOW))
 
 // Prefer high_resolution_clock, but only if it's steady...
 template<bool HighResIsSteady = std::chrono::high_resolution_clock::is_steady>
@@ -46,13 +46,20 @@ inline double benchmark_duration_seconds(
 // that emscripten_get_now() is the best bet, as it is milliseconds
 // (but returned as a double, with microseconds in the fractional portion),
 // using either performance.now() or performance.hrtime() depending on the
-// environment.
+// environment. Unfortunately, it's not guaranteed to be steady, and the
+// auto-benchmark algorithm reacts badly to negative times, so we'll leave this
+// disabled for now; you can opt-in to this by defining HALIDE_BENCHMARK_USE_EMSCRIPTEN_GET_NOW
+// if you need to build for a wasm runtime with the exception behavior above.
 inline double benchmark_now() {
     return emscripten_get_now();
 }
 
 inline double benchmark_duration_seconds(double start, double end) {
-    return (end - start) / 1000.0;
+    // emscripten_get_now is *not* guaranteed to be steady.
+    // Clamping to a positive value is arguably better than nothing,
+    // but still produces unpredictable results in the adaptive case
+    // (which is why this is disabled by default).
+    return std::max((end - start) / 1000.0, 1e-9);
 }
 
 #endif
@@ -115,6 +122,15 @@ struct BenchmarkConfig {
     // Set an absolute upper time limit. Defaults to min_time * 4.
     double max_time{0.1 * 4};
 
+    // Maximum value for the computed iters-per-sample.
+    // We need this for degenerate cases in which we have a
+    // very coarse-grained timer (e.g. some Emscripten/browser environments),
+    // and a very short operation being benchmarked; in these cases,
+    // we can get timings that are effectively zero, which can explode
+    // the predicted next-iter into ~100B or more. It should be unusual
+    // that client code needs to adjust this value.
+    uint64_t max_iters_per_sample{1000000};
+
     // Terminate when the relative difference between the best runtime
     // seen and the third-best runtime seen is no more than
     // this. Controls accuracy. The closer to zero this gets the more
@@ -172,13 +188,31 @@ inline BenchmarkResult benchmark(const std::function<void()> &op, const Benchmar
             total_time += times[i] * iters_per_sample;
         }
         std::sort(times, times + kMinSamples);
-        if (times[0] * iters_per_sample * kMinSamples >= min_time) {
+
+        // Any time result <= to this is considered 'zero' here.
+        const double kTimeEpsilon = 1e-9;
+        if (times[0] < kTimeEpsilon) {
+            // If the fastest time is tiny, then trying to use it to predict next_iters
+            // can just explode into something unpredictably huge, which could take far too
+            // long to complete. Just double iters_per_sample and try again (or terminate if
+            // we're over the max).
+            iters_per_sample *= 2;
+        } else {
+            const double time_factor = std::max(times[0] * kMinSamples, kTimeEpsilon);
+            if (time_factor * iters_per_sample >= min_time) {
+                break;
+            }
+            // Use an estimate based on initial times to converge faster.
+            const double next_iters = std::max(min_time / time_factor,
+                                               iters_per_sample * 2.0);
+            iters_per_sample = (uint64_t)(next_iters + 0.5);
+        }
+
+        // Ensure we never explode beyond the max.
+        if (iters_per_sample >= config.max_iters_per_sample) {
+            iters_per_sample = config.max_iters_per_sample;
             break;
         }
-        // Use an estimate based on initial times to converge faster.
-        double next_iters = std::max(min_time / std::max(times[0] * kMinSamples, 1e-9),
-                                     iters_per_sample * 2.0);
-        iters_per_sample = (uint64_t)(next_iters + 0.5);
     }
 
     // - Keep taking samples until we are accurate enough (even if we run over min_time).

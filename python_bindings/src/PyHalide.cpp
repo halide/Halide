@@ -24,6 +24,12 @@
 #include "PyType.h"
 #include "PyVar.h"
 
+static_assert(PYBIND11_VERSION_MAJOR == 2 && PYBIND11_VERSION_MINOR >= 6,
+              "Halide requires PyBind 2.6+");
+
+static_assert(PY_VERSION_HEX >= 0x03000000,
+              "We appear to be compiling against Python 2.x rather than 3.x, which is not supported.");
+
 #ifndef HALIDE_PYBIND_MODULE_NAME
 #define HALIDE_PYBIND_MODULE_NAME halide
 #endif

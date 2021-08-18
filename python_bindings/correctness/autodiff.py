@@ -19,36 +19,36 @@ def test_autodiff():
 
     # gradient w.r.t. the initialization of f
     d_f_init = d[f]
-    d_f_init_buf = d_f_init.realize(3)
+    d_f_init_buf = d_f_init.realize([3])
     assert(d_f_init_buf[0] == 0.0)
     assert(d_f_init_buf[1] == 5.0)
     assert(d_f_init_buf[2] == 5.0)
     d_f_init = d[f]# test different interface
-    d_f_init_buf = d_f_init.realize(3)
+    d_f_init_buf = d_f_init.realize([3])
     assert(d_f_init_buf[0] == 0.0)
     assert(d_f_init_buf[1] == 5.0)
     assert(d_f_init_buf[2] == 5.0)
 
     # gradient w.r.t. the updated f
     d_f_update_0 = d[f, 0]
-    d_f_update_0_buf = d_f_update_0.realize(3)
+    d_f_update_0_buf = d_f_update_0.realize([3])
     assert(d_f_update_0_buf[0] == 5.0)
     assert(d_f_update_0_buf[1] == 5.0)
     assert(d_f_update_0_buf[2] == 5.0)
     d_f_update_0 = d[f, 0]
-    d_f_update_0_buf = d_f_update_0.realize(3)
+    d_f_update_0_buf = d_f_update_0.realize([3])
     assert(d_f_update_0_buf[0] == 5.0)
     assert(d_f_update_0_buf[1] == 5.0)
     assert(d_f_update_0_buf[2] == 5.0)
 
     # gradient w.r.t. the buffer
     d_b = d[b]
-    d_b_buf = d_b.realize(3)
+    d_b_buf = d_b.realize([3])
     assert(d_b_buf[0] == 0.0)
     assert(d_b_buf[1] == 5.0)
     assert(d_b_buf[2] == 5.0)
     d_b = d[b]
-    d_b_buf = d_b.realize(3)
+    d_b_buf = d_b.realize([3])
     assert(d_b_buf[0] == 0.0)
     assert(d_b_buf[1] == 5.0)
     assert(d_b_buf[2] == 5.0)

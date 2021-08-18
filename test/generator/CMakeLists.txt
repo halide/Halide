@@ -40,7 +40,9 @@ function(halide_define_aot_test NAME)
         add_wasm_halide_test("${TARGET}" GROUPS generator)
     else ()
         add_executable("${TARGET}" "${NAME}_aottest.cpp")
-        target_include_directories("${TARGET}" PRIVATE "${Halide_SOURCE_DIR}/test/common")
+        target_include_directories("${TARGET}" PRIVATE
+            "${Halide_SOURCE_DIR}/test/common"
+            "${Halide_SOURCE_DIR}/tools")
         if (NOT args_OMIT_DEFAULT_GENERATOR)
             target_link_libraries(${TARGET} PRIVATE ${NAME})
         endif ()
@@ -112,19 +114,25 @@ if (NOT ${USING_WASM})
     target_link_libraries(cxx_mangling_define_extern_externs PRIVATE cxx_mangling)
 endif ()
 
+if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
+    include(AddCudaToTarget)
+endif ()
+if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
+    find_package(OpenCL REQUIRED)
+endif ()
+
 ##
 # Create targets for the AOT tests
 ##
 
 # acquire_release_aottest.cpp
 # acquire_release_generator.cpp
+# acquire_release_generator.cpp
 halide_define_aot_test(acquire_release)
 if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
-    include(AddCudaToTarget)
     add_cuda_to_target(generator_aot_acquire_release PRIVATE)
 endif ()
 if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
-    find_package(OpenCL REQUIRED)
     target_link_libraries(generator_aot_acquire_release PRIVATE OpenCL::OpenCL)
 endif ()
 
@@ -255,6 +263,29 @@ halide_define_aot_test(external_code GEN_DEPS external_code_generator_deps)
 # float16_t_generator.cpp
 halide_define_aot_test(float16_t)
 
+# gpu_multi_context_threaded_aottest.cpp
+# gpu_multi_context_threaded_generator.cpp
+# (Doesn't build/link properly under wasm, and isn't useful there anyway)
+if (NOT Halide_TARGET MATCHES "wasm")
+  halide_define_aot_test(gpu_multi_context_threaded
+                         OMIT_DEFAULT_GENERATOR
+                         EXTRA_LIBS
+                         gpu_multi_context_threaded_add
+                         gpu_multi_context_threaded_mul)
+
+  add_halide_library(gpu_multi_context_threaded_add FROM gpu_multi_context_threaded.generator
+                     FEATURES user_context)
+  add_halide_library(gpu_multi_context_threaded_mul FROM gpu_multi_context_threaded.generator
+                     FEATURES user_context)
+
+  if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
+      add_cuda_to_target(generator_aot_gpu_multi_context_threaded PRIVATE)
+  endif ()
+  if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
+      target_link_libraries(generator_aot_gpu_multi_context_threaded PRIVATE OpenCL::OpenCL)
+  endif ()
+endif ()
+
 # gpu_object_lifetime_aottest.cpp
 # gpu_object_lifetime_generator.cpp
 halide_define_aot_test(gpu_object_lifetime FEATURES debug)
@@ -262,6 +293,10 @@ halide_define_aot_test(gpu_object_lifetime FEATURES debug)
 # gpu_only_aottest.cpp
 # gpu_only_generator.cpp
 halide_define_aot_test(gpu_only)
+
+# gpu_texture_aottest.cpp
+# gpu_texture_generator.cpp
+halide_define_aot_test(gpu_texture)
 
 # image_from_array_aottest.cpp
 # image_from_array_generator.cpp
@@ -316,6 +351,7 @@ set(metadata_tester_params
     buffer_array_input8.dim=3
     buffer_array_input8.type=float32
     buffer_f16_untyped.type=float16
+    untyped_scalar_input.type=uint8
     array_outputs.size=2
     array_outputs7.size=2
     array_outputs8.size=2
@@ -387,6 +423,10 @@ halide_define_aot_test(string_param PARAMS "rpn_expr=5 y * x +")
 # stubuser_aottest.cpp
 # stubuser_generator.cpp
 # stubs not supported in CMake
+
+# shuffler_aottest.cpp
+# shuffler_generator.cpp
+halide_define_aot_test(shuffler)
 
 # tiled_blur_aottest.cpp
 # tiled_blur_generator.cpp

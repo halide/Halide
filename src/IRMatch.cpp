@@ -4,6 +4,7 @@
 
 #include "IREquality.h"
 #include "IRMatch.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
 
@@ -49,6 +50,8 @@ void expr_match_test() {
 
     std::cout << "expr_match test passed" << std::endl;
 }
+
+namespace {
 
 class IRMatch : public IRVisitor {
 public:
@@ -294,10 +297,16 @@ public:
     }
 };
 
+}  // namespace
+
 bool expr_match(const Expr &pattern, const Expr &expr, vector<Expr> &matches) {
     matches.clear();
-    if (!pattern.defined() && !expr.defined()) return true;
-    if (!pattern.defined() || !expr.defined()) return false;
+    if (!pattern.defined() && !expr.defined()) {
+        return true;
+    }
+    if (!pattern.defined() || !expr.defined()) {
+        return false;
+    }
 
     IRMatch eq(expr, matches);
     pattern.accept(&eq);
@@ -313,8 +322,12 @@ bool expr_match(const Expr &pattern, const Expr &expr, map<string, Expr> &matche
     // Explicitly don't clear matches. This allows usages to pre-match
     // some variables.
 
-    if (!pattern.defined() && !expr.defined()) return true;
-    if (!pattern.defined() || !expr.defined()) return false;
+    if (!pattern.defined() && !expr.defined()) {
+        return true;
+    }
+    if (!pattern.defined() || !expr.defined()) {
+        return false;
+    }
 
     IRMatch eq(expr, matches);
     pattern.accept(&eq);
@@ -324,6 +337,53 @@ bool expr_match(const Expr &pattern, const Expr &expr, map<string, Expr> &matche
         matches.clear();
         return false;
     }
+}
+
+namespace {
+
+class WithLanes : public IRMutator {
+    using IRMutator::visit;
+
+    int lanes;
+
+    Type with_lanes(Type t) const {
+        return t.with_lanes(lanes);
+    }
+
+    Expr visit(const Cast *op) override {
+        if (op->type.lanes() != lanes) {
+            return Cast::make(with_lanes(op->type), mutate(op->value));
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+    Expr visit(const Variable *op) override {
+        if (op->type.lanes() != lanes) {
+            return Variable::make(with_lanes(op->type), op->name);
+        } else {
+            return op;
+        }
+    }
+
+    Expr visit(const Broadcast *op) override {
+        if (op->type.lanes() != lanes) {
+            return Broadcast::make(op->value, lanes);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+public:
+    WithLanes(int lanes)
+        : lanes(lanes) {
+    }
+};
+
+}  // namespace
+
+Expr with_lanes(const Expr &x, int lanes) {
+    return WithLanes(lanes).mutate(x);
 }
 
 namespace IRMatcher {
@@ -346,9 +406,13 @@ bool equal_helper(int a, int b) {
 
 template<typename T>
 HALIDE_ALWAYS_INLINE bool equal_helper(const std::vector<T> &a, const std::vector<T> &b) {
-    if (a.size() != b.size()) return false;
+    if (a.size() != b.size()) {
+        return false;
+    }
     for (size_t i = 0; i < a.size(); i++) {
-        if (!equal_helper(a[i], b[i])) return false;
+        if (!equal_helper(a[i], b[i])) {
+            return false;
+        }
     }
     return true;
 }

@@ -1,6 +1,6 @@
+#include <cstdint>
 #include <mutex>
 #include <set>
-#include <stdint.h>
 #include <string>
 
 #ifdef _WIN32
@@ -54,49 +54,34 @@ bool have_symbol(const char *s) {
 
 typedef struct CUctx_st *CUcontext;
 
-struct SharedCudaContext {
-    CUctx_st *ptr;
-    volatile int lock;
-
-    // Will be created on first use by a jitted kernel that uses it
-    SharedCudaContext()
-        : ptr(0), lock(0) {
-    }
-
-    // Note that we never free the context, because static destructor
-    // order is unpredictable, and we can't free the context before
-    // all JITModules are freed. Users may be stashing Funcs or Images
-    // in globals, and these keep JITModules around.
-} cuda_ctx;
-
 typedef struct cl_context_st *cl_context;
 typedef struct cl_command_queue_st *cl_command_queue;
 
-// A single global OpenCL context and command queue to share between
-// jitted functions.
-struct SharedOpenCLContext {
-    cl_context context;
-    cl_command_queue command_queue;
-    volatile int lock;
-
-    SharedOpenCLContext()
-        : context(nullptr), command_queue(nullptr), lock(0) {
-    }
-
-    // We never free the context, for the same reason as above.
-} cl_ctx;
-
-void load_opengl() {
+void load_opengl(bool needs_egl) {
 #if defined(__linux__)
     if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {
         debug(1) << "OpenGL support code already linked in...\n";
     } else {
         debug(1) << "Looking for OpenGL support code...\n";
         string error;
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
-        user_assert(error.empty()) << "Could not find libGL.so\n";
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so", &error);
-        user_assert(error.empty()) << "Could not find libX11.so\n";
+        if (needs_egl) {
+            // NVIDIA EGL prefers users to load libOpenGL.so instead of libGL.so
+            // The way we're using it, it seems like libGL.so.1 is a valid fallback.
+            // See here for more details: https://developer.nvidia.com/blog/linking-opengl-server-side-rendering
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libOpenGL.so.0", &error);
+            if (!error.empty()) {
+                debug(1) << "Could not find libOpenGL.so.0 when EGL requested. Falling back to libGL.so.1\n";
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
+            }
+            user_assert(error.empty()) << "Could not find libOpenGL.so.0 or libGL.so.1\n";
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libEGL.so.1", &error);
+            user_assert(error.empty()) << "Could not find libEGL.so.1\n";
+        } else {
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
+            user_assert(error.empty()) << "Could not find libGL.so\n";
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so.6", &error);
+            user_assert(error.empty()) << "Could not find libX11.so.6\n";
+        }
     }
 #elif defined(__APPLE__)
     if (have_symbol("aglCreateContext") && have_symbol("glDeleteTextures")) {
@@ -138,9 +123,7 @@ public:
     mutable RefCount ref_count;
 
     // Just construct a module with symbols to import into other modules.
-    JITModuleContents()
-        : execution_engine(nullptr) {
-    }
+    JITModuleContents() = default;
 
     ~JITModuleContents() {
         if (execution_engine != nullptr) {
@@ -151,7 +134,7 @@ public:
 
     std::map<std::string, JITModule::Symbol> exports;
     llvm::LLVMContext context;
-    ExecutionEngine *execution_engine;
+    ExecutionEngine *execution_engine = nullptr;
     std::vector<JITModule> dependencies;
     JITModule::Symbol entrypoint;
     JITModule::Symbol argv_entrypoint;
@@ -174,7 +157,7 @@ namespace {
 // Retrieve a function pointer from an llvm module, possibly by compiling it.
 JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &name) {
     debug(2) << "JIT Compiling " << name << "\n";
-    llvm::Function *fn = ee.FindFunctionNamed(name.c_str());
+    llvm::Function *fn = ee.FindFunctionNamed(name);
     internal_assert(fn->getName() == name);
     void *f = (void *)ee.getFunctionAddress(name);
     if (!f) {
@@ -304,7 +287,9 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     }
     ExecutionEngine *ee = engine_builder.create(tm);
 
-    if (!ee) std::cerr << error_string << "\n";
+    if (!ee) {
+        std::cerr << error_string << "\n";
+    }
     internal_assert(ee) << "Couldn't create execution engine\n";
 
     // Do any target-specific initialization
@@ -400,7 +385,9 @@ JITModule::Symbol JITModule::find_symbol_by_name(const std::string &name) const 
     }
     for (const JITModule &dep : jit_module->dependencies) {
         JITModule::Symbol s = dep.find_symbol_by_name(name);
-        if (s.address) return s;
+        if (s.address) {
+            return s;
+        }
     }
     return JITModule::Symbol();
 }
@@ -459,6 +446,14 @@ void JITModule::memoization_cache_set_size(int64_t size) const {
         exports().find("halide_memoization_cache_set_size");
     if (f != exports().end()) {
         (reinterpret_bits<void (*)(int64_t)>(f->second.address))(size);
+    }
+}
+
+void JITModule::memoization_cache_evict(uint64_t eviction_key) const {
+    std::map<std::string, Symbol>::const_iterator f =
+        exports().find("halide_memoization_cache_evict");
+    if (f != exports().end()) {
+        (reinterpret_bits<void (*)(void *, uint64_t)>(f->second.address))(nullptr, eviction_key);
     }
 }
 
@@ -629,14 +624,12 @@ enum RuntimeKind {
     OpenCL,
     Metal,
     CUDA,
-    OpenGL,
     OpenGLCompute,
     Hexagon,
     D3D12Compute,
     OpenCLDebug,
     MetalDebug,
     CUDADebug,
-    OpenGLDebug,
     OpenGLComputeDebug,
     HexagonDebug,
     D3D12ComputeDebug,
@@ -672,9 +665,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::OpenCL, false);
         one_gpu.set_feature(Target::Metal, false);
         one_gpu.set_feature(Target::CUDA, false);
-        one_gpu.set_feature(Target::HVX_64, false);
-        one_gpu.set_feature(Target::HVX_128, false);
-        one_gpu.set_feature(Target::OpenGL, false);
+        one_gpu.set_feature(Target::HVX, false);
         one_gpu.set_feature(Target::OpenGLCompute, false);
         one_gpu.set_feature(Target::D3D12Compute, false);
         string module_name;
@@ -708,35 +699,24 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             one_gpu.set_feature(Target::CUDA);
             module_name += "cuda";
             break;
-        case OpenGLDebug:
-            one_gpu.set_feature(Target::Debug);
-            one_gpu.set_feature(Target::OpenGL);
-            module_name = "debug_opengl";
-            load_opengl();
-            break;
-        case OpenGL:
-            one_gpu.set_feature(Target::OpenGL);
-            module_name += "opengl";
-            load_opengl();
-            break;
         case OpenGLComputeDebug:
             one_gpu.set_feature(Target::Debug);
             one_gpu.set_feature(Target::OpenGLCompute);
             module_name = "debug_openglcompute";
-            load_opengl();
+            load_opengl(one_gpu.has_feature(Target::EGL));
             break;
         case OpenGLCompute:
             one_gpu.set_feature(Target::OpenGLCompute);
             module_name += "openglcompute";
-            load_opengl();
+            load_opengl(one_gpu.has_feature(Target::EGL));
             break;
         case HexagonDebug:
             one_gpu.set_feature(Target::Debug);
-            one_gpu.set_feature(Target::HVX_64);
+            one_gpu.set_feature(Target::HVX);
             module_name = "debug_hexagon";
             break;
         case Hexagon:
-            one_gpu.set_feature(Target::HVX_64);
+            one_gpu.set_feature(Target::HVX);
             module_name += "hexagon";
             break;
         case D3D12ComputeDebug:
@@ -880,13 +860,6 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
             result.push_back(m);
         }
     }
-    if (target.has_feature(Target::OpenGL)) {
-        auto kind = target.has_feature(Target::Debug) ? OpenGLDebug : OpenGL;
-        JITModule m = make_module(for_module, target, kind, result, create);
-        if (m.compiled()) {
-            result.push_back(m);
-        }
-    }
     if (target.has_feature(Target::OpenGLCompute)) {
         auto kind = target.has_feature(Target::Debug) ? OpenGLComputeDebug : OpenGLCompute;
         JITModule m = make_module(for_module, target, kind, result, create);
@@ -894,7 +867,7 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
             result.push_back(m);
         }
     }
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    if (target.has_feature(Target::HVX)) {
         auto kind = target.has_feature(Target::Debug) ? HexagonDebug : Hexagon;
         JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
@@ -947,6 +920,11 @@ void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
         default_cache_size = size;
         shared_runtimes(MainShared).memoization_cache_set_size(size);
     }
+}
+
+void JITSharedRuntime::memoization_cache_evict(uint64_t eviction_key) {
+    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    shared_runtimes(MainShared).memoization_cache_evict(eviction_key);
 }
 
 void JITSharedRuntime::reuse_device_allocations(bool b) {

@@ -42,14 +42,14 @@ int main(int arch, char **argv) {
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             f.gpu_tile(x, y, xi, yi, 16, 16);
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        } else if (target.has_feature(Target::HVX)) {
             f.hexagon().vectorize(x, 128);
         } else {
             f.vectorize(x, target.natural_vector_size<uint8_t>());
         }
 
         // Run the pipeline and verify the results are correct.
-        Buffer<uint8_t> out = f.realize(W, H, target);
+        Buffer<uint8_t> out = f.realize({W, H}, target);
 
         for (int y = 1; y < H - 1; y++) {
             for (int x = 1; x < W - 1; x++) {
@@ -84,14 +84,14 @@ int main(int arch, char **argv) {
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             g.gpu_tile(x, y, xi, yi, 16, 16);
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        } else if (target.has_feature(Target::HVX)) {
             g.hexagon().vectorize(x, 128);
         } else {
             g.vectorize(x, target.natural_vector_size<uint8_t>());
         }
 
         // Run the pipeline and verify the results are correct.
-        Buffer<uint8_t> out = g.realize(W, H, target);
+        Buffer<uint8_t> out = g.realize({W, H}, target);
 
         for (int y = 1; y < H - 1; y++) {
             for (int x = 1; x < W - 1; x++) {
@@ -125,7 +125,7 @@ int main(int arch, char **argv) {
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             g.gpu_tile(x, y, xi, yi, 16, 16);
-        } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+        } else if (target.has_feature(Target::HVX)) {
             g.hexagon().vectorize(x, 128);
             f.compute_at(g, y).vectorize(x, 128, TailStrategy::RoundUp);
         } else {
@@ -136,7 +136,7 @@ int main(int arch, char **argv) {
         g.output_buffer().dim(1).set_min(0).set_extent(H);
 
         // Run the pipeline and verify the results are correct.
-        Buffer<uint8_t> out = g.realize(W - 2, H, target);
+        Buffer<uint8_t> out = g.realize({W - 2, H}, target);
 
         for (int y = 1; y < H - 1; y++) {
             for (int x = 0; x < W - 3; x++) {

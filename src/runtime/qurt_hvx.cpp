@@ -7,20 +7,8 @@ using namespace Halide::Runtime::Internal::Qurt;
 
 extern "C" {
 
-WEAK int halide_qurt_hvx_lock(void *user_context, int size) {
-    qurt_hvx_mode_t mode;
-    switch (size) {
-    case 64:
-        mode = QURT_HVX_MODE_64B;
-        break;
-    case 128:
-        mode = QURT_HVX_MODE_128B;
-        break;
-    default:
-        error(user_context) << "HVX lock size must be 64 or 128.\n";
-        return -1;
-    }
-
+WEAK int halide_qurt_hvx_lock(void *user_context) {
+    const qurt_hvx_mode_t mode = QURT_HVX_MODE_128B;
     debug(user_context) << "QuRT: qurt_hvx_lock(" << mode << ") ->\n";
     int result = qurt_hvx_lock(mode);
     debug(user_context) << "        " << result << "\n";
@@ -69,7 +57,7 @@ WEAK_INLINE int _halide_prefetch_2d(const void *ptr, int width_bytes, int height
     return 0;
 }
 
-WEAK_INLINE int _halide_prefetch(const void *ptr, int size) {
+WEAK_INLINE int _halide_prefetch_1d(const void *ptr, int size) {
     _halide_prefetch_2d(ptr, size, 1, 1);
     return 0;
 }

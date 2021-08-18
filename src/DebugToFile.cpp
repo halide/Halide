@@ -15,6 +15,8 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
+namespace {
+
 class DebugToFile : public IRMutator {
     const map<string, Function> &env;
 
@@ -99,7 +101,7 @@ class RemoveDummyRealizations : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const Realize *op) override {
-        for (Function f : outputs) {
+        for (const Function &f : outputs) {
             if (op->name == f.name()) {
                 return mutate(op->body);
             }
@@ -120,7 +122,7 @@ class AddDummyRealizations : public IRMutator {
 
     Stmt visit(const ProducerConsumer *op) override {
         Stmt s = IRMutator::visit(op);
-        for (Function out : outputs) {
+        for (const Function &out : outputs) {
             if (op->name == out.name()) {
                 std::vector<Range> output_bounds;
                 for (int i = 0; i < out.dimensions(); i++) {
@@ -145,6 +147,8 @@ public:
         : outputs(o) {
     }
 };
+
+}  // namespace
 
 Stmt debug_to_file(Stmt s, const vector<Function> &outputs, const map<string, Function> &env) {
     // Temporarily wrap the produce nodes for the output functions in

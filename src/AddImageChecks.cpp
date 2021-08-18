@@ -16,6 +16,8 @@ using std::pair;
 using std::string;
 using std::vector;
 
+namespace {
+
 /* Find all the externally referenced buffers in a stmt */
 class FindBuffers : public IRGraphVisitor {
 public:
@@ -158,7 +160,7 @@ Stmt add_image_checks_inner(Stmt s,
     map<string, FindBuffers::Result> &bufs = finder.buffers;
 
     // Add the output buffer(s).
-    for (Function f : outputs) {
+    for (const Function &f : outputs) {
         for (size_t i = 0; i < f.values().size(); i++) {
             FindBuffers::Result output_buffer;
             output_buffer.type = f.values()[i].type();
@@ -241,7 +243,7 @@ Stmt add_image_checks_inner(Stmt s,
         bool is_output_buffer = false;
         bool is_secondary_output_buffer = false;
         string buffer_name = name;
-        for (Function f : outputs) {
+        for (const Function &f : outputs) {
             for (size_t i = 0; i < f.output_buffers().size(); i++) {
                 if (param.defined() &&
                     param.same_as(f.output_buffers()[i])) {
@@ -349,7 +351,15 @@ Stmt add_image_checks_inner(Stmt s,
         }
 
         // Check that the region passed in (after applying constraints) is within the region used
-        debug(3) << "In image " << name << " region touched is:\n";
+        if (debug::debug_level() >= 3) {
+            debug(3) << "In image " << name << " region touched is:\n";
+            for (int j = 0; j < dimensions; j++) {
+                debug(3) << "  " << j << ": " << (touched.empty() ? Expr() : touched[j].min)
+                         << " .. "
+                         << (touched.empty() ? Expr() : touched[j].max)
+                         << "\n";
+            }
+        }
 
         for (int j = 0; j < dimensions; j++) {
             string dim = std::to_string(j);
@@ -591,9 +601,13 @@ Stmt add_image_checks_inner(Stmt s,
             ss << constraints[i].second;
             string constrained_var_str = ss.str();
 
-            replace_with_constrained[name] = constrained_var;
-
             lets_constrained.emplace_back(name + ".constrained", constraints[i].second);
+
+            // Substituting in complex expressions is not typically a good idea
+            if (constraints[i].second.as<Variable>() ||
+                is_const(constraints[i].second)) {
+                replace_with_constrained[name] = constrained_var;
+            }
 
             Expr error = 0;
             if (!no_asserts) {
@@ -710,6 +724,8 @@ Stmt add_image_checks_inner(Stmt s,
     return s;
 }
 
+}  // namespace
+
 // The following function repeats the arguments list it just passes
 // through six times. Surely there is a better way?
 Stmt add_image_checks(const Stmt &s,
@@ -727,8 +743,7 @@ Stmt add_image_checks(const Stmt &s,
 
         Stmt visit(const Block *op) override {
             const Evaluate *e = op->first.as<Evaluate>();
-            const Call *c = e ? e->value.as<Call>() : nullptr;
-            if (c && c->is_intrinsic(Call::add_image_checks_marker)) {
+            if (e && Call::as_intrinsic(e->value, {Call::add_image_checks_marker})) {
                 return add_image_checks_inner(op->rest, outputs, t, order, env, fb, will_inject_host_copies);
             } else {
                 return IRMutator::visit(op);

@@ -1,9 +1,9 @@
 #ifndef FEATURIZATION_H
 #define FEATURIZATION_H
 
+#include <cstdint>
 #include <cstring>
 #include <iostream>
-#include <stdint.h>
 
 #include "ASLog.h"
 
@@ -104,7 +104,9 @@ struct PipelineFeatures {
         for (int i = 0; i < (int)ScalarType::NumScalarTypes; i++) {
             const char *type_names[] = {"Bool", "UInt8", "UInt16", "UInt32", "UInt64", "Float", "Double"};
             // Skip printing for types not used
-            if (!types_in_use[i]) continue;
+            if (!types_in_use[i]) {
+                continue;
+            }
 
             os << "    Featurization for type " << type_names[i] << "\n"
                << "     Op histogram:\n"
@@ -184,7 +186,7 @@ struct ScheduleFeatures {
     double num_realizations = 0;
 
     // The number of times a tile of the stage is computed. The
-    // pProduct of outer loops at compute_at site. Always at least as
+    // product of outer loops at compute_at site. Always at least as
     // large as num_realizations.
     double num_productions = 0;
 
@@ -358,6 +360,27 @@ struct ScheduleFeatures {
         auto os = aslog(0);
         dump(os);
     }
+
+    bool equal(const ScheduleFeatures &other) const {
+        const size_t n_features = ScheduleFeatures::num_features();
+        for (size_t i = 0; i < n_features; i++) {
+            if ((*this)[i] != other[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
+/*
+Some feature values cannot be cached, and need to be recomputed.
+These intermediates allow for faster recomputation of such features.
+*/
+struct FeatureIntermediates {
+    double inlined_calls;
+    double num_scalars;
+    double innermost_pure_loop_extent;
+    double outer_parallelism;
 };
 
 }  // namespace Internal

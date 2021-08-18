@@ -19,7 +19,10 @@ using std::map;
 using std::string;
 using std::vector;
 
+namespace {
+
 class InjectProfiling : public IRMutator {
+
 public:
     map<string, int> indices;  // maps from func name -> index in buffer.
 
@@ -29,8 +32,15 @@ public:
 
     InjectProfiling(const string &pipeline_name)
         : pipeline_name(pipeline_name) {
-        indices["overhead"] = 0;
-        stack.push_back(0);
+        stack.push_back(get_func_id("overhead"));
+        // ID 0 is treated specially in the runtime as overhead
+        internal_assert(stack.back() == 0);
+
+        malloc_id = get_func_id("halide_malloc");
+        free_id = get_func_id("halide_free");
+        profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
+        profiler_state = Variable::make(Handle(), "profiler_state");
+        profiler_token = Variable::make(Int(32), "profiler_token");
     }
 
     map<int, uint64_t> func_stack_current;  // map from func id -> current stack allocation
@@ -38,6 +48,11 @@ public:
 
 private:
     using IRMutator::visit;
+
+    int malloc_id, free_id;
+    Expr profiler_pipeline_state;
+    Expr profiler_state;
+    Expr profiler_token;
 
     struct AllocSize {
         bool on_stack;
@@ -68,6 +83,12 @@ private:
         return idx;
     }
 
+    Stmt set_current_func(const Expr &id) {
+        // This call gets inlined and becomes a single store instruction.
+        return Evaluate::make(Call::make(Int(32), "halide_profiler_set_current_func",
+                                         {profiler_state, profiler_token, id}, Call::Extern));
+    }
+
     Expr compute_allocation_size(const vector<Expr> &extents,
                                  const Expr &condition,
                                  const Type &type,
@@ -76,11 +97,11 @@ private:
         on_stack = true;
 
         Expr cond = simplify(condition);
-        if (is_zero(cond)) {  // Condition always false
+        if (is_const_zero(cond)) {  // Condition always false
             return make_zero(UInt(64));
         }
 
-        int32_t constant_size = Allocate::constant_allocation_size(extents, name);
+        int64_t constant_size = Allocate::constant_allocation_size(extents, name);
         if (constant_size > 0) {
             int64_t stack_bytes = constant_size * type.bytes();
             if (can_allocation_fit_on_stack(stack_bytes)) {  // Allocation on stack
@@ -104,12 +125,7 @@ private:
     Stmt visit(const Allocate *op) override {
         int idx = get_func_id(op->name);
 
-        vector<Expr> new_extents;
-        bool all_extents_unmodified = true;
-        for (size_t i = 0; i < op->extents.size(); i++) {
-            new_extents.push_back(mutate(op->extents[i]));
-            all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
-        }
+        auto [new_extents, changed] = mutate_with_changes(op->extents);
         Expr condition = mutate(op->condition);
 
         bool on_stack;
@@ -120,13 +136,15 @@ private:
         // compute_allocation_size() might return a zero size, if the allocation is
         // always conditionally false. remove_dead_allocations() is called after
         // inject_profiling() so this is a possible scenario.
-        if (!is_zero(size) && on_stack) {
+        if (!is_const_zero(size) && on_stack) {
             const uint64_t *int_size = as_const_uint(size);
-            internal_assert(int_size != NULL);  // Stack size is always a const int
+            internal_assert(int_size != nullptr);  // Stack size is always a const int
             func_stack_current[idx] += *int_size;
             func_stack_peak[idx] = std::max(func_stack_peak[idx], func_stack_current[idx]);
-            debug(3) << "  Allocation on stack: " << op->name << "(" << size << ") in pipeline " << pipeline_name
-                     << "; current: " << func_stack_current[idx] << "; peak: " << func_stack_peak[idx] << "\n";
+            debug(3) << "  Allocation on stack: " << op->name
+                     << "(" << size << ") in pipeline " << pipeline_name
+                     << "; current: " << func_stack_current[idx]
+                     << "; peak: " << func_stack_peak[idx] << "\n";
         }
 
         Stmt body = mutate(op->body);
@@ -135,7 +153,7 @@ private:
         if (op->new_expr.defined()) {
             new_expr = mutate(op->new_expr);
         }
-        if (all_extents_unmodified &&
+        if (!changed &&
             body.same_as(op->body) &&
             condition.same_as(op->condition) &&
             new_expr.same_as(op->new_expr)) {
@@ -145,13 +163,21 @@ private:
                                   new_extents, condition, body, new_expr, op->free_function);
         }
 
-        if (!is_zero(size) && !on_stack && profiling_memory) {
-            Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
-            debug(3) << "  Allocation on heap: " << op->name << "(" << size << ") in pipeline " << pipeline_name << "\n";
-            Expr set_task = Call::make(Int(32), "halide_profiler_memory_allocate",
-                                       {profiler_pipeline_state, idx, size}, Call::Extern);
-            stmt = Block::make(Evaluate::make(set_task), stmt);
+        if (!is_const_zero(size) && !on_stack && profiling_memory) {
+            debug(3) << "  Allocation on heap: " << op->name
+                     << "(" << size << ") in pipeline "
+                     << pipeline_name << "\n";
+
+            vector<Stmt> tasks{
+                set_current_func(malloc_id),
+                Evaluate::make(Call::make(Int(32), "halide_profiler_memory_allocate",
+                                          {profiler_pipeline_state, idx, size}, Call::Extern)),
+                stmt,
+                set_current_func(stack.back())};
+
+            stmt = Block::make(tasks);
         }
+
         return stmt;
     }
 
@@ -164,15 +190,19 @@ private:
 
         Stmt stmt = IRMutator::visit(op);
 
-        if (!is_zero(alloc.size)) {
-            Expr profiler_pipeline_state = Variable::make(Handle(), "profiler_pipeline_state");
-
+        if (!is_const_zero(alloc.size)) {
             if (!alloc.on_stack) {
                 if (profiling_memory) {
                     debug(3) << "  Free on heap: " << op->name << "(" << alloc.size << ") in pipeline " << pipeline_name << "\n";
-                    Expr set_task = Call::make(Int(32), "halide_profiler_memory_free",
-                                               {profiler_pipeline_state, idx, alloc.size}, Call::Extern);
-                    stmt = Block::make(Evaluate::make(set_task), stmt);
+
+                    vector<Stmt> tasks{
+                        set_current_func(free_id),
+                        Evaluate::make(Call::make(Int(32), "halide_profiler_memory_free",
+                                                  {profiler_pipeline_state, idx, alloc.size}, Call::Extern)),
+                        stmt,
+                        set_current_func(stack.back())};
+
+                    stmt = Block::make(tasks);
                 }
             } else {
                 const uint64_t *int_size = as_const_uint(alloc.size);
@@ -201,28 +231,19 @@ private:
             idx = stack.back();
         }
 
-        Expr profiler_token = Variable::make(Int(32), "profiler_token");
-        Expr profiler_state = Variable::make(Handle(), "profiler_state");
-
-        // This call gets inlined and becomes a single store instruction.
-        Expr set_task = Call::make(Int(32), "halide_profiler_set_current_func",
-                                   {profiler_state, profiler_token, idx}, Call::Extern);
-
-        body = Block::make(Evaluate::make(set_task), body);
+        body = Block::make(set_current_func(idx), body);
 
         return ProducerConsumer::make(op->name, op->is_producer, body);
     }
 
     Stmt incr_active_threads() {
-        Expr state = Variable::make(Handle(), "profiler_state");
         return Evaluate::make(Call::make(Int(32), "halide_profiler_incr_active_threads",
-                                         {state}, Call::Extern));
+                                         {profiler_state}, Call::Extern));
     }
 
     Stmt decr_active_threads() {
-        Expr state = Variable::make(Handle(), "profiler_state");
         return Evaluate::make(Call::make(Int(32), "halide_profiler_decr_active_threads",
-                                         {state}, Call::Extern));
+                                         {profiler_state}, Call::Extern));
     }
 
     Stmt visit_parallel_task(const Stmt &s) {
@@ -292,6 +313,8 @@ private:
     }
 };
 
+}  // namespace
+
 Stmt inject_profiling(Stmt s, const string &pipeline_name) {
     InjectProfiling profiling(pipeline_name);
     s = profiling.mutate(s);
@@ -351,7 +374,7 @@ Stmt inject_profiling(Stmt s, const string &pipeline_name) {
                            MemoryType::Auto, {num_funcs}, const_true(), s);
     }
 
-    for (std::pair<string, int> p : profiling.indices) {
+    for (const auto &p : profiling.indices) {
         s = Block::make(Store::make("profiling_func_names", p.first, p.second, Parameter(), const_true(), ModulusRemainder()), s);
     }
 

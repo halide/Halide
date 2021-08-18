@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
     g.add_custom_lowering_pass(&checker, []() {});
 
     p.set(true);
-    g.realize(1024, 1024);
+    g.realize({1024, 1024});
 
     if (checker.if_in_loop) {
         printf("Found an if statement inside a loop. This was not supposed to happen\n");

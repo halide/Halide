@@ -1,16 +1,12 @@
-#include <iostream>
-
-#include "CodeGen_X86.h"
+#include "CodeGen_Posix.h"
 #include "ConciseCasts.h"
 #include "Debug.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "JITModule.h"
 #include "LLVM_Headers.h"
-#include "Param.h"
+#include "Simplify.h"
 #include "Util.h"
-#include "Var.h"
 
 namespace Halide {
 namespace Internal {
@@ -21,11 +17,20 @@ using std::vector;
 using namespace Halide::ConciseCasts;
 using namespace llvm;
 
+#if defined(WITH_X86)
+
 namespace {
+
 // Populate feature flags in a target according to those implied by
 // existing flags, so that instruction patterns can just check for the
 // oldest feature flag that supports an instruction.
 Target complete_x86_target(Target t) {
+    if (t.has_feature(Target::AVX512_SapphireRapids)) {
+        t.set_feature(Target::AVX512_Cannonlake);
+    }
+    if (t.has_feature(Target::AVX512_Cannonlake)) {
+        t.set_feature(Target::AVX512_Skylake);
+    }
     if (t.has_feature(Target::AVX512_Cannonlake) ||
         t.has_feature(Target::AVX512_Skylake) ||
         t.has_feature(Target::AVX512_KNL)) {
@@ -39,99 +44,265 @@ Target complete_x86_target(Target t) {
     }
     return t;
 }
-}  // namespace
+
+/** A code generator that emits x86 code from a given Halide stmt. */
+class CodeGen_X86 : public CodeGen_Posix {
+public:
+    /** Create an x86 code generator. Processor features can be
+     * enabled using the appropriate flags in the target struct. */
+    CodeGen_X86(Target);
+
+protected:
+    string mcpu() const override;
+    string mattrs() const override;
+    bool use_soft_float_abi() const override;
+    int native_vector_bits() const override;
+
+    int vector_lanes_for_slice(const Type &t) const;
+
+    llvm::Type *llvm_type_of(const Type &t) const override;
+
+    using CodeGen_Posix::visit;
+
+    void init_module() override;
+
+    /** Nodes for which we want to emit specific sse/avx intrinsics */
+    // @{
+    void visit(const Add *) override;
+    void visit(const Sub *) override;
+    void visit(const Cast *) override;
+    void visit(const Call *) override;
+    void visit(const GT *) override;
+    void visit(const LT *) override;
+    void visit(const LE *) override;
+    void visit(const GE *) override;
+    void visit(const EQ *) override;
+    void visit(const NE *) override;
+    void visit(const Select *) override;
+    void codegen_vector_reduce(const VectorReduce *, const Expr &init) override;
+    // @}
+};
 
 CodeGen_X86::CodeGen_X86(Target t)
     : CodeGen_Posix(complete_x86_target(t)) {
-
-#if !defined(WITH_X86)
-    user_error << "x86 not enabled for this build of Halide.\n";
-#endif
-
-    user_assert(llvm_X86_enabled) << "llvm build not configured with X86 target enabled.\n";
 }
 
-namespace {
+const int max_intrinsic_args = 4;
+
+struct x86Intrinsic {
+    const char *intrin_name;
+    halide_type_t ret_type;
+    const char *name;
+    halide_type_t arg_types[max_intrinsic_args];
+    Target::Feature feature = Target::FeatureEnd;
+};
+
+// clang-format off
+const x86Intrinsic intrinsic_defs[] = {
+    {"abs_i8x32", UInt(8, 32), "abs", {Int(8, 32)}, Target::AVX2},
+    {"abs_i16x16", UInt(16, 16), "abs", {Int(16, 16)}, Target::AVX2},
+    {"abs_i32x8", UInt(32, 8), "abs", {Int(32, 8)}, Target::AVX2},
+    {"abs_f32x8", Float(32, 8), "abs", {Float(32, 8)}, Target::AVX2},
+    {"abs_i8x16", UInt(8, 16), "abs", {Int(8, 16)}, Target::SSE41},
+    {"abs_i16x8", UInt(16, 8), "abs", {Int(16, 8)}, Target::SSE41},
+    {"abs_i32x4", UInt(32, 4), "abs", {Int(32, 4)}, Target::SSE41},
+    {"abs_f32x4", Float(32, 4), "abs", {Float(32, 4)}},
+
+    {"llvm.sadd.sat.v32i8", Int(8, 32), "saturating_add", {Int(8, 32), Int(8, 32)}, Target::AVX2},
+    {"llvm.sadd.sat.v16i8", Int(8, 16), "saturating_add", {Int(8, 16), Int(8, 16)}},
+    {"llvm.sadd.sat.v8i8", Int(8, 8), "saturating_add", {Int(8, 8), Int(8, 8)}},
+    {"llvm.ssub.sat.v32i8", Int(8, 32), "saturating_sub", {Int(8, 32), Int(8, 32)}, Target::AVX2},
+    {"llvm.ssub.sat.v16i8", Int(8, 16), "saturating_sub", {Int(8, 16), Int(8, 16)}},
+    {"llvm.ssub.sat.v8i8", Int(8, 8), "saturating_sub", {Int(8, 8), Int(8, 8)}},
+
+    {"llvm.sadd.sat.v16i16", Int(16, 16), "saturating_add", {Int(16, 16), Int(16, 16)}, Target::AVX2},
+    {"llvm.sadd.sat.v8i16", Int(16, 8), "saturating_add", {Int(16, 8), Int(16, 8)}},
+    {"llvm.ssub.sat.v16i16", Int(16, 16), "saturating_sub", {Int(16, 16), Int(16, 16)}, Target::AVX2},
+    {"llvm.ssub.sat.v8i16", Int(16, 8), "saturating_sub", {Int(16, 8), Int(16, 8)}},
+
+    // Some of the instructions referred to below only appear with
+    // AVX2, but LLVM generates better AVX code if you give it
+    // full 256-bit vectors and let it do the slicing up into
+    // individual instructions itself. This is why we use
+    // Target::AVX instead of Target::AVX2 as the feature flag
+    // requirement.
+    // TODO: Just use llvm.*add/*sub.sat, and verify the above comment?
+    {"paddusbx32", UInt(8, 32), "saturating_add", {UInt(8, 32), UInt(8, 32)}, Target::AVX},
+    {"paddusbx16", UInt(8, 16), "saturating_add", {UInt(8, 16), UInt(8, 16)}},
+    {"psubusbx32", UInt(8, 32), "saturating_sub", {UInt(8, 32), UInt(8, 32)}, Target::AVX},
+    {"psubusbx16", UInt(8, 16), "saturating_sub", {UInt(8, 16), UInt(8, 16)}},
+
+    {"padduswx16", UInt(16, 16), "saturating_add", {UInt(16, 16), UInt(16, 16)}, Target::AVX},
+    {"padduswx8", UInt(16, 8), "saturating_add", {UInt(16, 8), UInt(16, 8)}},
+    {"psubuswx16", UInt(16, 16), "saturating_sub", {UInt(16, 16), UInt(16, 16)}, Target::AVX},
+    {"psubuswx8", UInt(16, 8), "saturating_sub", {UInt(16, 8), UInt(16, 8)}},
+
+    // LLVM 6.0+ require using helpers from x86.ll, x86_avx.ll
+    {"pavgbx32", UInt(8, 32), "rounding_halving_add", {UInt(8, 32), UInt(8, 32)}, Target::AVX2},
+    {"pavgbx16", UInt(8, 16), "rounding_halving_add", {UInt(8, 16), UInt(8, 16)}},
+    {"pavgwx16", UInt(16, 16), "rounding_halving_add", {UInt(16, 16), UInt(16, 16)}, Target::AVX2},
+    {"pavgwx8", UInt(16, 8), "rounding_halving_add", {UInt(16, 8), UInt(16, 8)}},
+
+    {"packssdwx16", Int(16, 16), "saturating_narrow", {Int(32, 16)}, Target::AVX2},
+    {"packssdwx8", Int(16, 8), "saturating_narrow", {Int(32, 8)}},
+    {"packsswbx32", Int(8, 32), "saturating_narrow", {Int(16, 32)}, Target::AVX2},
+    {"packsswbx16", Int(8, 16), "saturating_narrow", {Int(16, 16)}},
+    {"packusdwx16", UInt(16, 16), "saturating_narrow", {Int(32, 16)}, Target::AVX2},
+    {"packusdwx8", UInt(16, 8), "saturating_narrow", {Int(32, 8)}, Target::SSE41},
+    {"packuswbx32", UInt(8, 32), "saturating_narrow", {Int(16, 32)}, Target::AVX2},
+    {"packuswbx16", UInt(8, 16), "saturating_narrow", {Int(16, 16)}},
+
+    // Multiply keep high half
+    {"llvm.x86.avx2.pmulh.w", Int(16, 16), "pmulh", {Int(16, 16), Int(16, 16)}, Target::AVX2},
+    {"llvm.x86.avx2.pmulhu.w", UInt(16, 16), "pmulh", {UInt(16, 16), UInt(16, 16)}, Target::AVX2},
+    {"llvm.x86.avx2.pmul.hr.sw", Int(16, 16), "pmulhrs", {Int(16, 16), Int(16, 16)}, Target::AVX2},
+    {"saturating_pmulhrswx16", Int(16, 16), "saturating_pmulhrs", {Int(16, 16), Int(16, 16)}, Target::AVX2},
+    {"llvm.x86.sse2.pmulh.w", Int(16, 8), "pmulh", {Int(16, 8), Int(16, 8)}},
+    {"llvm.x86.sse2.pmulhu.w", UInt(16, 8), "pmulh", {UInt(16, 8), UInt(16, 8)}},
+    {"llvm.x86.ssse3.pmul.hr.sw.128", Int(16, 8), "pmulhrs", {Int(16, 8), Int(16, 8)}, Target::SSE41},
+    {"saturating_pmulhrswx8", Int(16, 8), "saturating_pmulhrs", {Int(16, 8), Int(16, 8)}, Target::SSE41},
+
+    // Convert FP32 to BF16
+    {"vcvtne2ps2bf16x32", BFloat(16, 32), "f32_to_bf16", {Float(32, 32)}, Target::AVX512_SapphireRapids},
+    {"llvm.x86.avx512bf16.cvtneps2bf16.512", BFloat(16, 16), "f32_to_bf16", {Float(32, 16)}, Target::AVX512_SapphireRapids},
+    {"llvm.x86.avx512bf16.cvtneps2bf16.256", BFloat(16, 8), "f32_to_bf16", {Float(32, 8)}, Target::AVX512_SapphireRapids},
+    // LLVM does not provide an unmasked 128bit cvtneps2bf16 intrinsic, so provide a wrapper around the masked version.
+    {"vcvtneps2bf16x4", BFloat(16, 4), "f32_to_bf16", {Float(32, 4)}, Target::AVX512_SapphireRapids},
+
+    // 2-way dot products
+    {"llvm.x86.avx2.pmadd.ub.sw", Int(16, 16), "saturating_dot_product", {UInt(8, 32), Int(8, 32)}, Target::AVX2},
+    {"llvm.x86.ssse3.pmadd.ub.sw.128", Int(16, 8), "saturating_dot_product", {UInt(8, 16), Int(8, 16)}, Target::SSE41},
+
+    {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "dot_product", {Int(16, 32), Int(16, 32)}, Target::AVX512_Skylake},
+    {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "dot_product", {Int(16, 32), Int(16, 32)}, Target::AVX512_Cannonlake},
+    {"llvm.x86.avx2.pmadd.wd", Int(32, 8), "dot_product", {Int(16, 16), Int(16, 16)}, Target::AVX2},
+    {"llvm.x86.sse2.pmadd.wd", Int(32, 4), "dot_product", {Int(16, 8), Int(16, 8)}},
+
+    // 4-way dot product vector reduction
+    // The LLVM intrinsics combine the bf16 pairs into i32, so provide a wrapper to correctly call the intrinsic.
+    {"dpbf16psx16", Float(32, 16), "dot_product", {Float(32, 16), BFloat(16, 32), BFloat(16, 32)}, Target::AVX512_SapphireRapids},
+    {"dpbf16psx8", Float(32, 8), "dot_product", {Float(32, 8), BFloat(16, 16), BFloat(16, 16)}, Target::AVX512_SapphireRapids},
+    {"dpbf16psx4", Float(32, 4), "dot_product", {Float(32, 4), BFloat(16, 8), BFloat(16, 8)}, Target::AVX512_SapphireRapids},
+
+    {"dpbusdx16", Int(32, 16), "dot_product", {Int(32, 16), UInt(8, 64), Int(8, 64)}, Target::AVX512_SapphireRapids},
+    {"dpbusdx8", Int(32, 8), "dot_product", {Int(32, 8), UInt(8, 32), Int(8, 32)}, Target::AVX512_SapphireRapids},
+    {"dpbusdx4", Int(32, 4), "dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, Target::AVX512_SapphireRapids},
+
+    {"dpwssdx16", Int(32, 16), "dot_product", {Int(32, 16), Int(16, 32), Int(16, 32)}, Target::AVX512_SapphireRapids},
+    {"dpwssdx8", Int(32, 8), "dot_product", {Int(32, 8), Int(16, 16), Int(16, 16)}, Target::AVX512_SapphireRapids},
+    {"dpwssdx4", Int(32, 4), "dot_product", {Int(32, 4), Int(16, 8), Int(16, 8)}, Target::AVX512_SapphireRapids},
+
+    {"dpbusdsx16", Int(32, 16), "saturating_dot_product", {Int(32, 16), UInt(8, 64), Int(8, 64)}, Target::AVX512_SapphireRapids},
+    {"dpbusdsx8", Int(32, 8), "saturating_dot_product", {Int(32, 8), UInt(8, 32), Int(8, 32)}, Target::AVX512_SapphireRapids},
+    {"dpbusdsx4", Int(32, 4), "saturating_dot_product", {Int(32, 4), UInt(8, 16), Int(8, 16)}, Target::AVX512_SapphireRapids},
+
+    {"dpwssdsx16", Int(32, 16), "saturating_dot_product", {Int(32, 16), Int(16, 32), Int(16, 32)}, Target::AVX512_SapphireRapids},
+    {"dpwssdsx8", Int(32, 8), "saturating_dot_product", {Int(32, 8), Int(16, 16), Int(16, 16)}, Target::AVX512_SapphireRapids},
+    {"dpwssdsx4", Int(32, 4), "saturating_dot_product", {Int(32, 4), Int(16, 8), Int(16, 8)}, Target::AVX512_SapphireRapids},
+};
+// clang-format on
+
+void CodeGen_X86::init_module() {
+    CodeGen_Posix::init_module();
+
+    for (const x86Intrinsic &i : intrinsic_defs) {
+        if (i.feature != Target::FeatureEnd && !target.has_feature(i.feature)) {
+            continue;
+        }
+
+        Type ret_type = i.ret_type;
+        vector<Type> arg_types;
+        arg_types.reserve(max_intrinsic_args);
+        for (halide_type_t j : i.arg_types) {
+            if (j.bits == 0) {
+                break;
+            }
+            arg_types.emplace_back(j);
+        }
+
+        auto *fn = declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
+        fn->addFnAttr(llvm::Attribute::ReadNone);
+        fn->addFnAttr(llvm::Attribute::NoUnwind);
+    }
+}
 
 // i32(i16_a)*i32(i16_b) +/- i32(i16_c)*i32(i16_d) can be done by
-// interleaving a, c, and b, d, and then using pmaddwd. We
-// recognize it here, and implement it in the initial module.
-bool should_use_pmaddwd(const Expr &a, const Expr &b, vector<Expr> &result) {
+// interleaving a, c, and b, d, and then using dot_product.
+bool should_use_dot_product(const Expr &a, const Expr &b, vector<Expr> &result) {
     Type t = a.type();
     internal_assert(b.type() == t);
 
-    const Mul *ma = a.as<Mul>();
-    const Mul *mb = b.as<Mul>();
-
-    if (!(ma && mb && t.is_int() && t.bits() == 32 && (t.lanes() >= 4))) {
+    if (!(t.is_int() && t.bits() == 32 && t.lanes() >= 4)) {
         return false;
     }
 
-    Type narrow = t.with_bits(16);
-    vector<Expr> args = {lossless_cast(narrow, ma->a),
-                         lossless_cast(narrow, ma->b),
-                         lossless_cast(narrow, mb->a),
-                         lossless_cast(narrow, mb->b)};
-    if (!args[0].defined() || !args[1].defined() ||
-        !args[2].defined() || !args[3].defined()) {
+    const Call *ma = Call::as_intrinsic(a, {Call::widening_mul});
+    const Call *mb = Call::as_intrinsic(b, {Call::widening_mul});
+    // dot_product can't handle mixed type widening muls.
+    if (ma && ma->args[0].type() != ma->args[1].type()) {
         return false;
     }
-
-    result.swap(args);
-    return true;
+    if (mb && mb->args[0].type() != mb->args[1].type()) {
+        return false;
+    }
+    // If the operands are widening shifts, we might be able to treat these as
+    // multiplies.
+    const Call *sa = Call::as_intrinsic(a, {Call::widening_shift_left});
+    const Call *sb = Call::as_intrinsic(b, {Call::widening_shift_left});
+    if (sa && !is_const(sa->args[1])) {
+        sa = nullptr;
+    }
+    if (sb && !is_const(sb->args[1])) {
+        sb = nullptr;
+    }
+    if ((ma || sa) && (mb || sb)) {
+        Expr a0 = ma ? ma->args[0] : sa->args[0];
+        Expr a1 = ma ? ma->args[1] : lossless_cast(sa->args[0].type(), simplify(make_const(sa->type, 1) << sa->args[1]));
+        Expr b0 = mb ? mb->args[0] : sb->args[0];
+        Expr b1 = mb ? mb->args[1] : lossless_cast(sb->args[0].type(), simplify(make_const(sb->type, 1) << sb->args[1]));
+        if (a1.defined() && b1.defined()) {
+            std::vector<Expr> args = {a0, a1, b0, b1};
+            result.swap(args);
+            return true;
+        }
+    }
+    return false;
 }
-
-}  // namespace
 
 void CodeGen_X86::visit(const Add *op) {
     vector<Expr> matches;
-    if (should_use_pmaddwd(op->a, op->b, matches)) {
-        codegen(Call::make(op->type, "pmaddwd", matches, Call::Extern));
-    } else {
-        CodeGen_Posix::visit(op);
+    if (should_use_dot_product(op->a, op->b, matches)) {
+        Expr ac = Shuffle::make_interleave({matches[0], matches[2]});
+        Expr bd = Shuffle::make_interleave({matches[1], matches[3]});
+        value = call_overloaded_intrin(op->type, "dot_product", {ac, bd});
+        if (value) {
+            return;
+        }
     }
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_X86::visit(const Sub *op) {
     vector<Expr> matches;
-    if (should_use_pmaddwd(op->a, op->b, matches)) {
+    if (should_use_dot_product(op->a, op->b, matches)) {
         // Negate one of the factors in the second expression
-        if (is_const(matches[2])) {
-            matches[2] = -matches[2];
-        } else {
-            matches[3] = -matches[3];
+        Expr negative_2 = lossless_negate(matches[2]);
+        Expr negative_3 = lossless_negate(matches[3]);
+        if (negative_2.defined() || negative_3.defined()) {
+            if (negative_2.defined()) {
+                matches[2] = negative_2;
+            } else {
+                matches[3] = negative_3;
+            }
+            Expr ac = Shuffle::make_interleave({matches[0], matches[2]});
+            Expr bd = Shuffle::make_interleave({matches[1], matches[3]});
+            value = call_overloaded_intrin(op->type, "dot_product", {ac, bd});
+            if (value) {
+                return;
+            }
         }
-        codegen(Call::make(op->type, "pmaddwd", matches, Call::Extern));
-    } else {
-        CodeGen_Posix::visit(op);
     }
-}
-
-void CodeGen_X86::visit(const Mul *op) {
-
-#if LLVM_VERSION < 110
-    // Widening integer multiply of non-power-of-two vector sizes is
-    // broken in older llvms for older x86:
-    // https://bugs.llvm.org/show_bug.cgi?id=44976
-    const int lanes = op->type.lanes();
-    if (!target.has_feature(Target::SSE41) &&
-        (lanes & (lanes - 1)) &&
-        (op->type.bits() >= 32) &&
-        !op->type.is_float()) {
-        // Any fancy shuffles to pad or slice into smaller vectors
-        // just gets undone by LLVM and retriggers the bug. Just
-        // scalarize.
-        vector<Expr> result;
-        for (int i = 0; i < lanes; i++) {
-            result.emplace_back(Shuffle::make_extract_element(op->a, i) *
-                                Shuffle::make_extract_element(op->b, i));
-        }
-        codegen(Shuffle::make_concat(result));
-        return;
-    }
-#endif
-
-    return CodeGen_Posix::visit(op);
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_X86::visit(const GT *op) {
@@ -247,198 +418,43 @@ void CodeGen_X86::visit(const Cast *op) {
         return;
     }
 
-    vector<Expr> matches;
-
     struct Pattern {
-        Target::Feature feature;
-        bool wide_op;
-        Type type;
-        int min_lanes;
         string intrin;
         Expr pattern;
     };
 
+    // clang-format off
     static Pattern patterns[] = {
-        {Target::AVX2, true, Int(8, 32), 17, "llvm.sadd.sat.v32i8",
-         i8_sat(wild_i16x_ + wild_i16x_)},
-        {Target::FeatureEnd, true, Int(8, 16), 9, "llvm.sadd.sat.v16i8",
-         i8_sat(wild_i16x_ + wild_i16x_)},
-        {Target::FeatureEnd, true, Int(8, 8), 0, "llvm.sadd.sat.v8i8",
-         i8_sat(wild_i16x_ + wild_i16x_)},
-        {Target::AVX2, true, Int(8, 32), 17, "llvm.ssub.sat.v32i8",
-         i8_sat(wild_i16x_ - wild_i16x_)},
-        {Target::FeatureEnd, true, Int(8, 16), 9, "llvm.ssub.sat.v16i8",
-         i8_sat(wild_i16x_ - wild_i16x_)},
-        {Target::FeatureEnd, true, Int(8, 8), 0, "llvm.ssub.sat.v8i8",
-         i8_sat(wild_i16x_ - wild_i16x_)},
-        {Target::AVX2, true, Int(16, 16), 9, "llvm.sadd.sat.v16i16",
-         i16_sat(wild_i32x_ + wild_i32x_)},
-        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.sadd.sat.v8i16",
-         i16_sat(wild_i32x_ + wild_i32x_)},
-        {Target::AVX2, true, Int(16, 16), 9, "llvm.ssub.sat.v16i16",
-         i16_sat(wild_i32x_ - wild_i32x_)},
-        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.ssub.sat.v8i16",
-         i16_sat(wild_i32x_ - wild_i32x_)},
+        // This isn't rounding_multiply_quantzied(i16, i16, 15) because it doesn't
+        // saturate the result.
+        {"pmulhrs", i16(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), 15))},
 
-        // Some of the instructions referred to below only appear with
-        // AVX2, but LLVM generates better AVX code if you give it
-        // full 256-bit vectors and let it do the slicing up into
-        // individual instructions itself. This is why we use
-        // Target::AVX instead of Target::AVX2 as the feature flag
-        // requirement.
-        {Target::AVX, true, UInt(8, 32), 17, "paddusbx32",
-         u8_sat(wild_u16x_ + wild_u16x_)},
-        {Target::FeatureEnd, true, UInt(8, 16), 0, "paddusbx16",
-         u8_sat(wild_u16x_ + wild_u16x_)},
-        {Target::AVX, true, UInt(8, 32), 17, "psubusbx32",
-         u8(max(wild_i16x_ - wild_i16x_, 0))},
-        {Target::FeatureEnd, true, UInt(8, 16), 0, "psubusbx16",
-         u8(max(wild_i16x_ - wild_i16x_, 0))},
-        {Target::AVX, true, UInt(16, 16), 9, "padduswx16",
-         u16_sat(wild_u32x_ + wild_u32x_)},
-        {Target::FeatureEnd, true, UInt(16, 8), 0, "padduswx8",
-         u16_sat(wild_u32x_ + wild_u32x_)},
-        {Target::AVX, true, UInt(16, 16), 9, "psubuswx16",
-         u16(max(wild_i32x_ - wild_i32x_, 0))},
-        {Target::FeatureEnd, true, UInt(16, 8), 0, "psubuswx8",
-         u16(max(wild_i32x_ - wild_i32x_, 0))},
+        {"saturating_narrow", i16_sat(wild_i32x_)},
+        {"saturating_narrow", u16_sat(wild_i32x_)},
+        {"saturating_narrow", i8_sat(wild_i16x_)},
+        {"saturating_narrow", u8_sat(wild_i16x_)},
 
-        // Only use the avx2 version if we have > 8 lanes
-        {Target::AVX2, true, Int(16, 16), 9, "llvm.x86.avx2.pmulh.w",
-         i16((wild_i32x_ * wild_i32x_) / 65536)},
-        {Target::AVX2, true, UInt(16, 16), 9, "llvm.x86.avx2.pmulhu.w",
-         u16((wild_u32x_ * wild_u32x_) / 65536)},
-        {Target::AVX2, true, Int(16, 16), 9, "llvm.x86.avx2.pmul.hr.sw",
-         i16((((wild_i32x_ * wild_i32x_) + 16384)) / 32768)},
+        {"f32_to_bf16", bf16(wild_f32x_)},
+    };
+    // clang-format on
 
-        {Target::FeatureEnd, true, Int(16, 8), 0, "llvm.x86.sse2.pmulh.w",
-         i16((wild_i32x_ * wild_i32x_) / 65536)},
-        {Target::FeatureEnd, true, UInt(16, 8), 0, "llvm.x86.sse2.pmulhu.w",
-         u16((wild_u32x_ * wild_u32x_) / 65536)},
-        {Target::SSE41, true, Int(16, 8), 0, "llvm.x86.ssse3.pmul.hr.sw.128",
-         i16((((wild_i32x_ * wild_i32x_) + 16384)) / 32768)},
-        // LLVM 6.0+ require using helpers from x86.ll, x86_avx.ll
-        {Target::AVX2, true, UInt(8, 32), 17, "pavgbx32",
-         u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
-        {Target::FeatureEnd, true, UInt(8, 16), 0, "pavgbx16",
-         u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
-        {Target::AVX2, true, UInt(16, 16), 9, "pavgwx16",
-         u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
-        {Target::FeatureEnd, true, UInt(16, 8), 0, "pavgwx8",
-         u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
-        {Target::AVX2, false, Int(16, 16), 9, "packssdwx16",
-         i16_sat(wild_i32x_)},
-        {Target::FeatureEnd, false, Int(16, 8), 0, "packssdwx8",
-         i16_sat(wild_i32x_)},
-        {Target::AVX2, false, Int(8, 32), 17, "packsswbx32",
-         i8_sat(wild_i16x_)},
-        {Target::FeatureEnd, false, Int(8, 16), 0, "packsswbx16",
-         i8_sat(wild_i16x_)},
-        {Target::AVX2, false, UInt(8, 32), 17, "packuswbx32",
-         u8_sat(wild_i16x_)},
-        {Target::FeatureEnd, false, UInt(8, 16), 0, "packuswbx16",
-         u8_sat(wild_i16x_)},
-        {Target::AVX2, false, UInt(16, 16), 9, "packusdwx16",
-         u16_sat(wild_i32x_)},
-        {Target::SSE41, false, UInt(16, 8), 0, "packusdwx8",
-         u16_sat(wild_i32x_)}};
-
-    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
-        const Pattern &pattern = patterns[i];
-
-        if (!target.has_feature(pattern.feature)) {
-            continue;
-        }
-
-        if (op->type.lanes() < pattern.min_lanes) {
-            continue;
-        }
-
-        if (expr_match(pattern.pattern, op, matches)) {
-            bool match = true;
-            if (pattern.wide_op) {
-                // Try to narrow the matches to the target type.
-                for (size_t i = 0; i < matches.size(); i++) {
-                    matches[i] = lossless_cast(op->type, matches[i]);
-                    if (!matches[i].defined()) match = false;
-                }
-            }
-            if (match) {
-                value = call_intrin(op->type, pattern.type.lanes(), pattern.intrin, matches);
+    vector<Expr> matches;
+    for (const Pattern &p : patterns) {
+        if (expr_match(p.pattern, op, matches)) {
+            value = call_overloaded_intrin(op->type, p.intrin, matches);
+            if (value) {
                 return;
             }
         }
     }
 
-    // Workaround for https://llvm.org/bugs/show_bug.cgi?id=24512
-    // LLVM uses a numerically unstable method for vector
-    // uint32->float conversion before AVX.
-    if (op->value.type().element_of() == UInt(32) &&
-        op->type.is_float() &&
-        op->type.is_vector() &&
-        !target.has_feature(Target::AVX)) {
-        Type signed_type = Int(32, op->type.lanes());
-
-        // Convert the top 31 bits to float using the signed version
-        Expr top_bits = cast(signed_type, op->value / 2);
-        top_bits = cast(op->type, top_bits);
-
-        // Convert the bottom bit
-        Expr bottom_bit = cast(signed_type, op->value % 2);
-        bottom_bit = cast(op->type, bottom_bit);
-
-        // Recombine as floats
-        codegen(top_bits + top_bits + bottom_bit);
-        return;
-    }
-
-    CodeGen_Posix::visit(op);
-}
-
-void CodeGen_X86::visit(const Call *op) {
-    if (op->is_intrinsic(Call::mulhi_shr) &&
-        op->type.is_vector() && op->type.bits() == 16) {
-        internal_assert(op->args.size() == 3);
-        Expr p;
-        if (op->type.is_uint()) {
-            p = u16(u32(op->args[0]) * u32(op->args[1]) / 65536);
-        } else {
-            p = i16(i32(op->args[0]) * i32(op->args[1]) / 65536);
-        }
-        const UIntImm *shift = op->args[2].as<UIntImm>();
-        internal_assert(shift != nullptr) << "Third argument to mulhi_shr intrinsic must be an unsigned integer immediate.\n";
-        if (shift->value != 0) {
-            p = p >> shift->value;
-        }
-        value = codegen(p);
-        return;
-    }
-
-    CodeGen_Posix::visit(op);
-}
-
-void CodeGen_X86::visit(const VectorReduce *op) {
-    const int factor = op->value.type().lanes() / op->type.lanes();
-
-    // Match pmaddwd. X86 doesn't have many horizontal reduction ops,
-    // and the ones that exist are hit by llvm automatically using the
-    // base class lowering of VectorReduce (see
-    // test/correctness/simd_op_check.cpp).
-    if (const Mul *mul = op->value.as<Mul>()) {
-        Type narrower = Int(16, mul->type.lanes());
-        Expr a = lossless_cast(narrower, mul->a);
-        Expr b = lossless_cast(narrower, mul->b);
-        if (op->type.is_int() &&
-            op->type.bits() == 32 &&
-            a.defined() &&
-            b.defined() &&
-            factor == 2 &&
-            op->op == VectorReduce::Add) {
-            if (target.has_feature(Target::AVX2) && op->type.lanes() > 4) {
-                value = call_intrin(op->type, 8, "llvm.x86.avx2.pmadd.wd", {a, b});
-            } else {
-                value = call_intrin(op->type, 4, "llvm.x86.sse2.pmadd.wd", {a, b});
-            }
+    if (const Call *mul = Call::as_intrinsic(op->value, {Call::widening_mul})) {
+        if (op->value.type().bits() < op->type.bits() && op->type.bits() <= 32) {
+            // LLVM/x86 really doesn't like 8 -> 16 bit multiplication. If we're
+            // widening to 32-bits after a widening multiply, LLVM prefers to see a
+            // widening multiply directly to 32-bits. This may result in extra
+            // casts, so simplify to remove them.
+            value = codegen(simplify(Mul::make(Cast::make(op->type, mul->args[0]), Cast::make(op->type, mul->args[1]))));
             return;
         }
     }
@@ -446,21 +462,158 @@ void CodeGen_X86::visit(const VectorReduce *op) {
     CodeGen_Posix::visit(op);
 }
 
+void CodeGen_X86::visit(const Call *op) {
+    if (!op->type.is_vector()) {
+        // We only have peephole optimizations for vectors in here.
+        CodeGen_Posix::visit(op);
+        return;
+    }
+
+    struct Pattern {
+        string intrin;
+        Expr pattern;
+    };
+
+    // clang-format off
+    static Pattern patterns[] = {
+        {"pmulh", mul_shift_right(wild_i16x_, wild_i16x_, 16)},
+        {"pmulh", mul_shift_right(wild_u16x_, wild_u16x_, 16)},
+        {"saturating_pmulhrs", rounding_mul_shift_right(wild_i16x_, wild_i16x_, 15)},
+    };
+    // clang-format on
+
+    vector<Expr> matches;
+    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
+        const Pattern &pattern = patterns[i];
+        if (expr_match(pattern.pattern, op, matches)) {
+            value = call_overloaded_intrin(op->type, pattern.intrin, matches);
+            if (value) {
+                return;
+            }
+        }
+    }
+
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
+    if (op->op != VectorReduce::Add && op->op != VectorReduce::SaturatingAdd) {
+        CodeGen_Posix::codegen_vector_reduce(op, init);
+        return;
+    }
+    const int factor = op->value.type().lanes() / op->type.lanes();
+
+    struct Pattern {
+        VectorReduce::Operator reduce_op;
+        int factor;
+        Expr pattern;
+        const char *intrin;
+        Type narrow_type;
+        uint32_t flags = 0;
+        enum {
+            CombineInit = 1 << 0,
+            SwapOperands = 1 << 1,
+        };
+    };
+    // clang-format off
+    // These patterns are roughly sorted "best to worst", in case there are two
+    // patterns that match the expression.
+    static const Pattern patterns[] = {
+        // 4-way dot products
+        {VectorReduce::Add, 4, i32(widening_mul(wild_u8x_, wild_i8x_)), "dot_product", {}, Pattern::CombineInit},
+        {VectorReduce::Add, 4, i32(widening_mul(wild_i8x_, wild_u8x_)), "dot_product", {}, Pattern::CombineInit | Pattern::SwapOperands},
+        {VectorReduce::SaturatingAdd, 4, i32(widening_mul(wild_u8x_, wild_i8x_)), "saturating_dot_product", {}, Pattern::CombineInit},
+        {VectorReduce::SaturatingAdd, 4, i32(widening_mul(wild_i8x_, wild_u8x_)), "saturating_dot_product", {}, Pattern::CombineInit | Pattern::SwapOperands},
+
+        // 2-way dot products
+        {VectorReduce::Add, 2, i32(widening_mul(wild_i8x_, wild_i8x_)), "dot_product", Int(16)},
+        {VectorReduce::Add, 2, i32(widening_mul(wild_i8x_, wild_u8x_)), "dot_product", Int(16)},
+        {VectorReduce::Add, 2, i32(widening_mul(wild_u8x_, wild_i8x_)), "dot_product", Int(16)},
+        {VectorReduce::Add, 2, i32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Int(16)},
+        {VectorReduce::SaturatingAdd, 2, i32(widening_mul(wild_u8x_, wild_i8x_)), "saturating_dot_product", {}, Pattern::CombineInit},
+        {VectorReduce::SaturatingAdd, 2, i32(widening_mul(wild_i8x_, wild_u8x_)), "saturating_dot_product", {}, Pattern::CombineInit | Pattern::SwapOperands},
+        {VectorReduce::SaturatingAdd, 2, widening_mul(wild_u8x_, wild_i8x_), "saturating_dot_product"},
+        {VectorReduce::SaturatingAdd, 2, widening_mul(wild_i8x_, wild_u8x_), "saturating_dot_product", {}, Pattern::SwapOperands},
+
+        {VectorReduce::Add, 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "dot_product", {}, Pattern::CombineInit},
+        {VectorReduce::Add, 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "dot_product", Int(16)},
+        {VectorReduce::SaturatingAdd, 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "saturating_dot_product", {}, Pattern::CombineInit},
+
+        {VectorReduce::Add, 2, wild_f32x_ * wild_f32x_, "dot_product", BFloat(16), Pattern::CombineInit},
+
+        // One could do a horizontal widening addition with
+        // dot_product against a vector of ones. Currently disabled
+        // because I haven't found case where it's clearly better.
+    };
+    // clang-format on
+
+    std::vector<Expr> matches;
+    for (const Pattern &p : patterns) {
+        if (op->op != p.reduce_op || p.factor != factor) {
+            continue;
+        }
+        if (expr_match(p.pattern, op->value, matches)) {
+            Expr a = matches[0];
+            Expr b = matches[1];
+            if (p.flags & Pattern::SwapOperands) {
+                std::swap(a, b);
+            }
+            if (p.narrow_type.bits() > 0) {
+                a = lossless_cast(p.narrow_type.with_lanes(a.type().lanes()), a);
+                b = lossless_cast(p.narrow_type.with_lanes(b.type().lanes()), b);
+            }
+            if (!a.defined() || !b.defined()) { continue; }
+
+            if (init.defined() && (p.flags & Pattern::CombineInit)) {
+                value = call_overloaded_intrin(op->type, p.intrin, {init, a, b});
+                if (value) { return; }
+            } else {
+                value = call_overloaded_intrin(op->type, p.intrin, {a, b});
+                if (value) {
+                    if (init.defined()) {
+                        Value *x = value;
+                        Value *y = codegen(init);
+                        value = builder->CreateAdd(x, y);
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
+    CodeGen_Posix::codegen_vector_reduce(op, init);
+}
+
 string CodeGen_X86::mcpu() const {
-    if (target.has_feature(Target::AVX512_Cannonlake)) return "cannonlake";
-    if (target.has_feature(Target::AVX512_Skylake)) return "skylake-avx512";
-    if (target.has_feature(Target::AVX512_KNL)) return "knl";
-    if (target.has_feature(Target::AVX2)) return "haswell";
-    if (target.has_feature(Target::AVX)) return "corei7-avx";
-    // We want SSE4.1 but not SSE4.2, hence "penryn" rather than "corei7"
-    if (target.has_feature(Target::SSE41)) return "penryn";
-    // Default should not include SSSE3, hence "k8" rather than "core2"
-    return "k8";
+    if (target.has_feature(Target::AVX512_SapphireRapids)) {
+#if LLVM_VERSION >= 120
+        return "sapphirerapids";
+#else
+        user_error << "AVX512 SapphireRapids requires LLVM 12 or later.";
+        return "";
+#endif
+    } else if (target.has_feature(Target::AVX512_Cannonlake)) {
+        return "cannonlake";
+    } else if (target.has_feature(Target::AVX512_Skylake)) {
+        return "skylake-avx512";
+    } else if (target.has_feature(Target::AVX512_KNL)) {
+        return "knl";
+    } else if (target.has_feature(Target::AVX2)) {
+        return "haswell";
+    } else if (target.has_feature(Target::AVX)) {
+        return "corei7-avx";
+    } else if (target.has_feature(Target::SSE41)) {
+        // We want SSE4.1 but not SSE4.2, hence "penryn" rather than "corei7"
+        return "penryn";
+    } else {
+        // Default should not include SSSE3, hence "k8" rather than "core2"
+        return "k8";
+    }
 }
 
 string CodeGen_X86::mattrs() const {
-    std::string features;
-    std::string separator;
+    string features;
+    string separator;
     if (target.has_feature(Target::FMA)) {
         features += "+fma";
         separator = ",";
@@ -488,6 +641,13 @@ string CodeGen_X86::mattrs() const {
         }
         if (target.has_feature(Target::AVX512_Cannonlake)) {
             features += ",+avx512ifma,+avx512vbmi";
+        }
+        if (target.has_feature(Target::AVX512_SapphireRapids)) {
+#if LLVM_VERSION >= 120
+            features += ",+avx512bf16,+avx512vnni";
+#else
+            user_error << "AVX512 SapphireRapids requires LLVM 12 or later.";
+#endif
         }
     }
     return features;
@@ -539,6 +699,21 @@ llvm::Type *CodeGen_X86::llvm_type_of(const Type &t) const {
         return CodeGen_Posix::llvm_type_of(t);
     }
 }
+
+}  // namespace
+
+std::unique_ptr<CodeGen_Posix> new_CodeGen_X86(const Target &target) {
+    return std::make_unique<CodeGen_X86>(target);
+}
+
+#else  // WITH_X86
+
+std::unique_ptr<CodeGen_Posix> new_CodeGen_X86(const Target &target) {
+    user_error << "x86 not enabled for this build of Halide.\n";
+    return nullptr;
+}
+
+#endif  // WITH_X86
 
 }  // namespace Internal
 }  // namespace Halide

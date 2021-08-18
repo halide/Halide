@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
 
         f(x, y) += Tuple(x + y);
 
-        Realization result = f.realize(1024, 1024);
+        Realization result = f.realize({1024, 1024});
         Buffer<int> a = result[0];
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
         f(x, y) /= Tuple(2, 2);
         f(x, y) -= Tuple(x, y);
 
-        Realization result = f.realize(1024, 1024);
+        Realization result = f.realize({1024, 1024});
         Buffer<int> a = result[0], b = result[1];
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
         f(x, _) = Tuple(cast<int16_t>(x), cast<int32_t>(g(_)));
         f(x, _) += Tuple(cast<int16_t>(2 * x), cast<int32_t>(x));
 
-        Realization result = f.realize(100, 100, 100);
+        Realization result = f.realize({100, 100, 100});
         Buffer<int16_t> a = result[0];
         Buffer<int32_t> b = result[1];
         for (int j = 0; j < a.channels(); j++) {
@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
         f(x, y) = Tuple(x + 13, x + y);
         f(x, y) *= f(x, y);
 
-        Realization result = f.realize(1024, 1024);
+        Realization result = f.realize({1024, 1024});
         Buffer<int> a = result[0], b = result[1];
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {
@@ -106,7 +106,7 @@ int main(int argc, char **argv) {
         f(x, y) += Tuple(x);
         f(x, y) *= f(x, y);
 
-        Realization result = f.realize(1024, 1024);
+        Realization result = f.realize({1024, 1024});
         Buffer<int> a = result[0];
         for (int y = 0; y < a.height(); y++) {
             for (int x = 0; x < a.width(); x++) {

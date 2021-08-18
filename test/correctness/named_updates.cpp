@@ -7,8 +7,7 @@ int main(int argc, char **argv) {
 
     // Test various possible pieces of syntax for tracking the various
     // definitions of a Func. Mostly we just want to make sure they
-    // compile. We restrict ourselves to not using C++11 for now,
-    // though uniform initializer syntax opens some new possibilities.
+    // compile.
     RDom r(0, 16);
 
     Func f;
@@ -56,8 +55,8 @@ int main(int argc, char **argv) {
         ref(5 * r) = 2;
     }
 
-    Buffer<int> result = f.realize(128);
-    Buffer<int> result_ref = ref.realize(128);
+    Buffer<int> result = f.realize({128});
+    Buffer<int> result_ref = ref.realize({128});
 
     RDom check(result);
     uint32_t error = evaluate<uint32_t>(

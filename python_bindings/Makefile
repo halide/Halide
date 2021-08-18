@@ -38,8 +38,10 @@ OPTIMIZE ?= -O3
 # defining DEBUG + undefining NDEBUG gives extra debug info in PyBind11
 # OPTIMIZE ?= -g -DDEBUG=1 -UNDEBUG
 
-# Compiling with -fvisibility=hidden saves ~80k on optimized x64 builds
-CCFLAGS=$(shell $(PYTHON)-config --cflags) $(PYBIND11_CFLAGS) -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) -std=c++11 $(FPIC) -fvisibility=hidden -fvisibility-inlines-hidden $(OPTIMIZE) $(CXXFLAGS)
+# Compiling with -fvisibility=hidden saves ~80k on optimized x64 builds.
+# It's critical to include -fno-omit-frame-pointer, otherwise introspection can
+# break in amusing ways.
+CCFLAGS=$(shell $(PYTHON)-config --cflags) $(PYBIND11_CFLAGS) -I $(HALIDE_DISTRIB_PATH)/include -I $(ROOT_DIR) -std=c++17 $(FPIC) -fvisibility=hidden -fvisibility-inlines-hidden -fno-omit-frame-pointer $(OPTIMIZE) $(CXXFLAGS)
 # Filter out a pointless warning present in some Python installs
 CCFLAGS := $(filter-out -Wstrict-prototypes,$(CCFLAGS))
 
@@ -131,7 +133,6 @@ $(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.a $(BIN)/runtime.a
 
 # TODO: In the optimal case, we'd do %.run on all our generators. Unfortunately,
 # every generator needs its own settings. See https://github.com/halide/Halide/issues/2977.
-.PHONY: test_correctness_bit_test test_correctness_addconstant_test test_correctness_pystub test_correctness_user_context
 test_correctness_addconstant_test: addconstant.run ;
 test_correctness_bit_test: bit.run ;
 test_correctness_user_context_test: user_context.run ;

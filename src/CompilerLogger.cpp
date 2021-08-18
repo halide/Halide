@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <set>
 #include <vector>
 
 #include "IRMutator.h"
@@ -24,11 +25,7 @@ class ObfuscateNames : public IRMutator {
     std::map<std::string, std::string> remapping;
 
     Expr visit(const Call *op) override {
-        std::vector<Expr> args;
-        for (const Expr &e : op->args) {
-            args.emplace_back(mutate(e));
-        }
-
+        auto args = mutate(op->args);
         std::string name = op->name;
         if (op->call_type == Call::Extern ||
             op->call_type == Call::ExternCPlusPlus ||

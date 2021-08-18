@@ -4,7 +4,7 @@ project(c_backend)
 enable_testing()
 
 # Set up language settings
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
@@ -50,6 +50,6 @@ add_test(NAME c_backend COMMAND run_c_backend_and_native)
 add_test(NAME c_backend_cpp COMMAND run_c_backend_and_native_cpp)
 
 set_tests_properties(c_backend c_backend_cpp PROPERTIES
-                     LABELS internal_app_tests
+                     LABELS c_backend
                      PASS_REGULAR_EXPRESSION "Success!"
                      SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")

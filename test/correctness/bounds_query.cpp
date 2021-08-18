@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     second(x, y) = tmp(x - 1, y - 1) + tmp(x + 3, y + 1);
 
     // This would fail, because tmp isn't attached to an allocated buffer.
-    // Buffer<int> out = second.realize(1024, 1024);
+    // Buffer<int> out = second.realize({1024, 1024});
 
     // Allocate an output image.
     Buffer<int> out(1024, 1024);
@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     Func first_and_second;
     first_and_second(x, y) = first(x - 1, y - 1) + first(x + 3, y + 1);
 
-    Buffer<int> reference = first_and_second.realize(1024, 1024);
+    Buffer<int> reference = first_and_second.realize({1024, 1024});
 
     for (int y = 0; y < 1024; y++) {
         for (int x = 0; x < 1024; x++) {

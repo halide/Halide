@@ -20,6 +20,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
     }
 
     if (may_simplify(op->type)) {
+        int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::select(condition, true_value, false_value), op->type);
 
         // clang-format off
@@ -42,7 +43,7 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
 
         // clang-format off
         if (EVAL_IN_LAMBDA
-            (rewrite(select(broadcast(x), y, z), select(x, y, z)) ||
+            (rewrite(select(broadcast(x, lanes), y, z), select(x, y, z)) ||
              rewrite(select(x != y, z, w), select(x == y, w, z)) ||
              rewrite(select(x <= y, z, w), select(y < x, w, z)) ||
              rewrite(select(x, select(y, z, w), z), select(x && !y, w, z)) ||
@@ -65,6 +66,15 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x, y * z, w * y), y * select(x, z, w)) ||
              rewrite(select(x, z * y, y * w), y * select(x, z, w)) ||
              rewrite(select(x, z * y, w * y), select(x, z, w) * y) ||
+             rewrite(select(x, 0 - y * z, y * w), y * select(x, 0 - z, w)) ||
+             rewrite(select(x, 0 - y * z, w * y), y * select(x, 0 - z, w)) ||
+             rewrite(select(x, 0 - z * y, y * w), y * select(x, 0 - z, w)) ||
+             rewrite(select(x, 0 - z * y, w * y), select(x, 0 - z, w) * y) ||
+             rewrite(select(x, y * z, 0 - y * w), y * select(x, z, 0 - w)) ||
+             rewrite(select(x, y * z, 0 - w * y), y * select(x, z, 0 - w)) ||
+             rewrite(select(x, z * y, 0 - y * w), y * select(x, z, 0 - w)) ||
+             rewrite(select(x, z * y, 0 - w * y), select(x, z, 0 - w) * y) ||
+
              rewrite(select(x, z / y, w / y), select(x, z, w) / y) ||
              rewrite(select(x, z % y, w % y), select(x, z, w) % y) ||
 
@@ -95,11 +105,97 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x, z + y, (w + y) + u), select(x, z, w + u) + y) ||
              rewrite(select(x, z + y, (w + y) - u), select(x, z, w - u) + y) ||
              rewrite(select(x, z + y, u + (w + y)), select(x, z, u + w) + y) ||
+             rewrite(select(x, y + (z - w), u - w), select(x, y + z, u) - w) ||
+             rewrite(select(x, (y - z) + w, u - z), select(x, w + y, u) - z) ||
+
+             rewrite(select(x, (y + z) + u, y), y + select(x, z + u, 0)) ||
+             rewrite(select(x, (z + y) + u, y), y + select(x, z + u, 0)) ||
+             rewrite(select(x, (y + z) - u, y), y + select(x, z - u, 0)) ||
+             rewrite(select(x, (z + y) - u, y), y + select(x, z - u, 0)) ||
+             rewrite(select(x, u + (y + z), y), y + select(x, u + z, 0)) ||
+             rewrite(select(x, u + (z + y), y), y + select(x, u + z, 0)) ||
+
+             rewrite(select(x, y, (y + z) + u), y + select(x, 0, z + u)) ||
+             rewrite(select(x, y, (z + y) + u), y + select(x, 0, z + u)) ||
+             rewrite(select(x, y, (y + z) - u), y + select(x, 0, z - u)) ||
+             rewrite(select(x, y, (z + y) - u), y + select(x, 0, z - u)) ||
+             rewrite(select(x, y, u + (y + z)), y + select(x, 0, u + z)) ||
+             rewrite(select(x, y, u + (z + y)), y + select(x, 0, u + z)) ||
+
+             rewrite(select(x, (y + z) + w, (u + y) + v), y + select(x, z + w, u + v)) ||
+             rewrite(select(x, (y - z) + w, (u + y) + v), y + select(x, w - z, u + v)) ||
+
+             rewrite(select(x, y + (z + w), u + (v + w)), w + select(x, z + y, u + v)) ||
+             rewrite(select(x, y + (z + w), u + (v + z)), z + select(x, y + w, u + v)) ||
+             rewrite(select(x, y + (z + w), u + (w + v)), w + select(x, z + y, u + v)) ||
+             rewrite(select(x, y + (z + w), u + (z + v)), z + select(x, y + w, u + v)) ||
+             rewrite(select(x, y + (z + w), (u + w) + v), w + select(x, z + y, u + v)) ||
+             rewrite(select(x, y + (z + w), (u + z) + v), z + select(x, y + w, u + v)) ||
+             rewrite(select(x, y + (z + w), (w + u) + v), w + select(x, z + y, v + u)) ||
+             rewrite(select(x, y + (z + w), (z + u) + v), z + select(x, y + w, v + u)) ||
+             rewrite(select(x, (y + z) + w, u + (v + y)), y + select(x, z + w, u + v)) ||
+             rewrite(select(x, (y + z) + w, u + (v + z)), z + select(x, y + w, u + v)) ||
+             rewrite(select(x, (y + z) + w, u + (y + v)), y + select(x, z + w, u + v)) ||
+             rewrite(select(x, (y + z) + w, u + (z + v)), z + select(x, y + w, u + v)) ||
+             rewrite(select(x, (y + z) + w, (u + y) + v), y + select(x, z + w, u + v)) ||
+             rewrite(select(x, (y + z) + w, (u + z) + v), z + select(x, y + w, u + v)) ||
+             rewrite(select(x, (y + z) + w, (y + u) + v), y + select(x, z + w, v + u)) ||
+             rewrite(select(x, (y + z) + w, (z + u) + v), z + select(x, y + w, v + u)) ||
+
+             rewrite(select(x, select(y, z, w), select(y, u, w)), select(y, select(x, z, u), w)) ||
+             rewrite(select(x, select(y, z, w), select(y, z, u)), select(y, z, select(x, w, u))) ||
 
              rewrite(select(x < y, x, y), min(x, y)) ||
              rewrite(select(x < y, y, x), max(x, y)) ||
              rewrite(select(x < 0, x * y, 0), min(x, 0) * y) ||
              rewrite(select(x < 0, 0, x * y), max(x, 0) * y) ||
+
+             rewrite(select(x, min(y, w), min(z, w)), min(select(x, y, z), w)) ||
+             rewrite(select(x, min(y, w), min(w, z)), min(select(x, y, z), w)) ||
+             rewrite(select(x, min(w, y), min(z, w)), min(w, select(x, y, z))) ||
+             rewrite(select(x, min(w, y), min(w, z)), min(w, select(x, y, z))) ||
+             rewrite(select(x, max(y, w), max(z, w)), max(select(x, y, z), w)) ||
+             rewrite(select(x, max(y, w), max(w, z)), max(select(x, y, z), w)) ||
+             rewrite(select(x, max(w, y), max(z, w)), max(w, select(x, y, z))) ||
+             rewrite(select(x, max(w, y), max(w, z)), max(w, select(x, y, z))) ||
+
+             rewrite(select(0 < x, min(x*c0, c1), x*c0), min(x*c0, c1), c1 >= 0 && c0 >= 0) ||
+             rewrite(select(x < c0, 0, min(x, c0) + c1), 0, c0 == -c1) ||
+             rewrite(select(0 < x, ((x*c0) + c1) / x, y), select(0 < x, c0 - 1, y), c1 == -1) ||
+
+             rewrite(select(x, select(y, z, min(w, z)), min(u, z)), min(select(x, select(y, z, w), u), z)) ||
+             rewrite(select(x, select(y, min(w, z), z), min(u, z)), min(select(x, select(y, w, z), u), z)) ||
+             rewrite(select(x, min(u, z), select(y, z, min(w, z))), min(select(x, u, select(y, z, w)), z)) ||
+             rewrite(select(x, min(u, z), select(y, min(w, z), z)), min(select(x, u, select(y, w, z)), z)) ||
+             rewrite(select(x, select(y, z, min(w, z)), min(z, u)), min(select(x, select(y, z, w), u), z)) ||
+             rewrite(select(x, select(y, min(w, z), z), min(z, u)), min(select(x, select(y, w, z), u), z)) ||
+             rewrite(select(x, min(z, u), select(y, z, min(w, z))), min(select(x, u, select(y, z, w)), z)) ||
+             rewrite(select(x, min(z, u), select(y, min(w, z), z)), min(select(x, u, select(y, w, z)), z)) ||
+             rewrite(select(x, select(y, z, min(z, w)), min(u, z)), min(select(x, select(y, z, w), u), z)) ||
+             rewrite(select(x, select(y, min(z, w), z), min(u, z)), min(select(x, select(y, w, z), u), z)) ||
+             rewrite(select(x, min(u, z), select(y, z, min(z, w))), min(select(x, u, select(y, z, w)), z)) ||
+             rewrite(select(x, min(u, z), select(y, min(z, w), z)), min(select(x, u, select(y, w, z)), z)) ||
+             rewrite(select(x, select(y, z, min(z, w)), min(z, u)), min(select(x, select(y, z, w), u), z)) ||
+             rewrite(select(x, select(y, min(z, w), z), min(z, u)), min(select(x, select(y, w, z), u), z)) ||
+             rewrite(select(x, min(z, u), select(y, z, min(z, w))), min(select(x, u, select(y, z, w)), z)) ||
+             rewrite(select(x, min(z, u), select(y, min(z, w), z)), min(select(x, u, select(y, w, z)), z)) ||
+
+             rewrite(select(x, select(y, z, max(w, z)), max(u, z)), max(select(x, select(y, z, w), u), z)) ||
+             rewrite(select(x, select(y, max(w, z), z), max(u, z)), max(select(x, select(y, w, z), u), z)) ||
+             rewrite(select(x, max(u, z), select(y, z, max(w, z))), max(select(x, u, select(y, z, w)), z)) ||
+             rewrite(select(x, max(u, z), select(y, max(w, z), z)), max(select(x, u, select(y, w, z)), z)) ||
+             rewrite(select(x, select(y, z, max(w, z)), max(z, u)), max(select(x, select(y, z, w), u), z)) ||
+             rewrite(select(x, select(y, max(w, z), z), max(z, u)), max(select(x, select(y, w, z), u), z)) ||
+             rewrite(select(x, max(z, u), select(y, z, max(w, z))), max(select(x, u, select(y, z, w)), z)) ||
+             rewrite(select(x, max(z, u), select(y, max(w, z), z)), max(select(x, u, select(y, w, z)), z)) ||
+             rewrite(select(x, select(y, z, max(z, w)), max(u, z)), max(select(x, select(y, z, w), u), z)) ||
+             rewrite(select(x, select(y, max(z, w), z), max(u, z)), max(select(x, select(y, w, z), u), z)) ||
+             rewrite(select(x, max(u, z), select(y, z, max(z, w))), max(select(x, u, select(y, z, w)), z)) ||
+             rewrite(select(x, max(u, z), select(y, max(z, w), z)), max(select(x, u, select(y, w, z)), z)) ||
+             rewrite(select(x, select(y, z, max(z, w)), max(z, u)), max(select(x, select(y, z, w), u), z)) ||
+             rewrite(select(x, select(y, max(z, w), z), max(z, u)), max(select(x, select(y, w, z), u), z)) ||
+             rewrite(select(x, max(z, u), select(y, z, max(z, w))), max(select(x, u, select(y, z, w)), z)) ||
+             rewrite(select(x, max(z, u), select(y, max(z, w), z)), max(select(x, u, select(y, w, z)), z)) ||
 
              // Note that in the rules below we know y is not a
              // constant because it appears on the LHS of an
@@ -108,9 +204,13 @@ Expr Simplify::visit(const Select *op, ExprInfo *bounds) {
              rewrite(select(x, y + z, y), y + select(x, z, 0)) ||
              rewrite(select(x, y, y + z), y + select(x, 0, z)) ||
 
+             rewrite(select(x, y - z, y), y + select(x, 0 - z, 0), !is_const(y)) ||
+             rewrite(select(x, y, y - z), y + select(x, 0, 0 - z), !is_const(y)) ||
+
              (no_overflow_int(op->type) &&
               (rewrite(select(x, y * c0, c1), select(x, y, fold(c1 / c0)) * c0, c1 % c0 == 0) ||
                rewrite(select(x, c0, y * c1), select(x, fold(c0 / c1), y) * c1, c0 % c1 == 0) ||
+               rewrite(select(x, y + c0, c1), select(x, y, fold(c1 - c0)) + c0) ||
 
                // Selects that are equivalent to mins/maxes
                rewrite(select(c0 < x, x + c1, c2), max(x + c1, c2), c2 == c0 + c1 || c2 == c0 + c1 + 1) ||

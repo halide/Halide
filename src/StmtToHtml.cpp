@@ -1,13 +1,14 @@
 #include "StmtToHtml.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
+#include "Module.h"
 #include "Scope.h"
 
+#include <cstdio>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <sstream>
-#include <stdio.h>
 
 namespace Halide {
 namespace Internal {
@@ -301,7 +302,7 @@ private:
         stream << close_span();
         print(op->index);
         stream << matched("]");
-        if (!is_one(op->predicate)) {
+        if (!is_const_one(op->predicate)) {
             stream << " " << keyword("if") << " ";
             print(op->predicate);
         }
@@ -374,7 +375,7 @@ private:
         stream << var(op->name);
         stream << close_expand_button() << " {";
         stream << close_span();
-        ;
+
         stream << open_div(op->is_producer ? "ProduceBody Indent" : "ConsumeBody Indent", produce_id);
         print(op->body);
         stream << close_div();
@@ -451,7 +452,7 @@ private:
         stream << " " << span("Operator Assign Matched", "=") << " ";
         stream << open_span("StoreValue");
         print(op->value);
-        if (!is_one(op->predicate)) {
+        if (!is_const_one(op->predicate)) {
             stream << " " << keyword("if") << " ";
             print(op->predicate);
         }
@@ -490,7 +491,7 @@ private:
             print(op->extents[i]);
         }
         stream << matched("]");
-        if (!is_one(op->condition)) {
+        if (!is_const_one(op->condition)) {
             stream << " " << keyword("if") << " ";
             print(op->condition);
         }
@@ -529,10 +530,12 @@ private:
         stream << matched("(");
         for (size_t i = 0; i < op->bounds.size(); i++) {
             print_list("[", {op->bounds[i].min, op->bounds[i].extent}, "]");
-            if (i < op->bounds.size() - 1) stream << ", ";
+            if (i < op->bounds.size() - 1) {
+                stream << ", ";
+            }
         }
         stream << matched(")");
-        if (!is_one(op->condition)) {
+        if (!is_const_one(op->condition)) {
             stream << " " << keyword("if") << " ";
             print(op->condition);
         }
@@ -554,10 +557,12 @@ private:
         stream << matched("(");
         for (size_t i = 0; i < op->bounds.size(); i++) {
             print_list("[", {op->bounds[i].min, op->bounds[i].extent}, "]");
-            if (i < op->bounds.size() - 1) stream << ", ";
+            if (i < op->bounds.size() - 1) {
+                stream << ", ";
+            }
         }
         stream << matched(")");
-        if (!is_one(op->condition)) {
+        if (!is_const_one(op->condition)) {
             stream << " " << keyword("if") << " ";
             print(op->condition);
         }
@@ -623,7 +628,7 @@ private:
         stream << open_span("Matched");
         stream << keyword("if") << " (";
         stream << close_span();
-        while (1) {
+        while (true) {
             print(op->condition);
             stream << matched(")");
             stream << close_expand_button() << " ";

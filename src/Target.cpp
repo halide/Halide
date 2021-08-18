@@ -10,7 +10,11 @@
 #include "Util.h"
 #include "WasmExecutor.h"
 
-#if defined(__powerpc__) && defined(__linux__)
+#if defined(__powerpc__) && (defined(__FreeBSD__) || defined(__linux__))
+#if defined(__FreeBSD__)
+#include <machine/cpu.h>
+#include <sys/elf_common.h>
+#endif
 // This uses elf.h and must be included after "LLVM_Headers.h", which
 // uses llvm/support/Elf.h.
 #include <sys/auxv.h>
@@ -38,7 +42,7 @@ static void cpuid(int info[4], int infoType, int extra) {
 // (https://github.com/ispc/ispc/blob/master/builtins/dispatch.ll)
 
 #ifdef _LP64
-static void cpuid(int info[4], int infoType, int extra) {
+void cpuid(int info[4], int infoType, int extra) {
     __asm__ __volatile__(
         "cpuid                 \n\t"
         : "=a"(info[0]), "=b"(info[1]), "=c"(info[2]), "=d"(info[3])
@@ -83,11 +87,17 @@ Target calculate_host_target() {
 #if defined(__arm__) || defined(__aarch64__)
     Target::Arch arch = Target::ARM;
 #else
-#if defined(__powerpc__) && defined(__linux__)
+#if defined(__powerpc__) && (defined(__FreeBSD__) || defined(__linux__))
     Target::Arch arch = Target::POWERPC;
 
+#if defined(__linux__)
     unsigned long hwcap = getauxval(AT_HWCAP);
     unsigned long hwcap2 = getauxval(AT_HWCAP2);
+#elif defined(__FreeBSD__)
+    unsigned long hwcap, hwcap2;
+    elf_aux_info(AT_HWCAP, &hwcap, sizeof(hwcap));
+    elf_aux_info(AT_HWCAP2, &hwcap2, sizeof(hwcap2));
+#endif
     bool have_altivec = (hwcap & PPC_FEATURE_HAS_ALTIVEC) != 0;
     bool have_vsx = (hwcap & PPC_FEATURE_HAS_VSX) != 0;
     bool arch_2_07 = (hwcap2 & PPC_FEATURE2_ARCH_2_07) != 0;
@@ -118,10 +128,18 @@ Target calculate_host_target() {
         << ", " << info[3]
         << std::dec << "\n";
 
-    if (have_sse41) initial_features.push_back(Target::SSE41);
-    if (have_avx) initial_features.push_back(Target::AVX);
-    if (have_f16c) initial_features.push_back(Target::F16C);
-    if (have_fma) initial_features.push_back(Target::FMA);
+    if (have_sse41) {
+        initial_features.push_back(Target::SSE41);
+    }
+    if (have_avx) {
+        initial_features.push_back(Target::AVX);
+    }
+    if (have_f16c) {
+        initial_features.push_back(Target::F16C);
+    }
+    if (have_fma) {
+        initial_features.push_back(Target::FMA);
+    }
 
     if (use_64_bits && have_avx && have_f16c && have_rdrand) {
         // So far, so good.  AVX2/512?
@@ -154,6 +172,18 @@ Target calculate_host_target() {
             }
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
                 initial_features.push_back(Target::AVX512_Cannonlake);
+
+#if LLVM_VERSION >= 120
+                // Sapphire Rapids support was added in LLVM 12, so earlier versions cannot support this CPU's features.
+                const uint32_t avx512vnni = 1U << 11;  // vnni result in ecx
+                const uint32_t avx512bf16 = 1U << 5;   // bf16 result in eax, with cpuid(eax=7, ecx=1)
+                int info3[4];
+                cpuid(info3, 7, 1);
+                if ((info2[2] & avx512vnni) == avx512vnni &&
+                    (info3[0] & avx512bf16) == avx512bf16) {
+                    initial_features.push_back(Target::AVX512_SapphireRapids);
+                }
+#endif
             }
         }
     }
@@ -166,8 +196,7 @@ Target calculate_host_target() {
 }
 
 bool is_using_hexagon(const Target &t) {
-    return (t.has_feature(Target::HVX_64) ||
-            t.has_feature(Target::HVX_128) ||
+    return (t.has_feature(Target::HVX) ||
             t.has_feature(Target::HVX_v62) ||
             t.has_feature(Target::HVX_v65) ||
             t.has_feature(Target::HVX_v66) ||
@@ -307,7 +336,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cl_doubles", Target::CLDoubles},
     {"cl_half", Target::CLHalf},
     {"cl_atomics64", Target::CLAtomics64},
-    {"opengl", Target::OpenGL},
     {"openglcompute", Target::OpenGLCompute},
     {"egl", Target::EGL},
     {"user_context", Target::UserContext},
@@ -317,7 +345,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"metal", Target::Metal},
     {"c_plus_plus_name_mangling", Target::CPlusPlusMangling},
     {"large_buffers", Target::LargeBuffers},
-    {"hvx_64", Target::HVX_64},
+    {"hvx", Target::HVX_128},
     {"hvx_128", Target::HVX_128},
     {"hvx_v62", Target::HVX_v62},
     {"hvx_v65", Target::HVX_v65},
@@ -330,6 +358,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"avx512_knl", Target::AVX512_KNL},
     {"avx512_skylake", Target::AVX512_Skylake},
     {"avx512_cannonlake", Target::AVX512_Cannonlake},
+    {"avx512_sapphirerapids", Target::AVX512_SapphireRapids},
     {"trace_loads", Target::TraceLoads},
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
@@ -346,9 +375,15 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"wasm_simd128", Target::WasmSimd128},
     {"wasm_signext", Target::WasmSignExt},
     {"wasm_sat_float_to_int", Target::WasmSatFloatToInt},
+    {"wasm_threads", Target::WasmThreads},
+    {"wasm_bulk_memory", Target::WasmBulkMemory},
     {"sve", Target::SVE},
     {"sve2", Target::SVE2},
     {"arm_dot_prod", Target::ARMDotProd},
+    {"arm_fp16", Target::ARMFp16},
+    {"llvm_large_code_model", Target::LLVMLargeCodeModel},
+    {"rvv", Target::RVV},
+    {"armv81a", Target::ARMv81a},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -530,8 +565,7 @@ void bad_target_string(const std::string &target) {
 
 }  // namespace
 
-Target::Target(const std::string &target)
-    : os(OSUnknown), arch(ArchUnknown), bits(0) {
+Target::Target(const std::string &target) {
     Target host = get_host_target();
 
     if (target.empty()) {
@@ -635,8 +669,8 @@ bool Target::supported() const {
 #if !defined(WITH_METAL)
     bad |= has_feature(Target::Metal);
 #endif
-#if !defined(WITH_OPENGL)
-    bad |= has_feature(Target::OpenGL) || has_feature(Target::OpenGLCompute);
+#if !defined(WITH_OPENGLCOMPUTE)
+    bad |= has_feature(Target::OpenGLCompute);
 #endif
 #if !defined(WITH_D3D12)
     bad |= has_feature(Target::D3D12Compute);
@@ -649,7 +683,9 @@ bool Target::has_unknowns() const {
 }
 
 void Target::set_feature(Feature f, bool value) {
-    if (f == FeatureEnd) return;
+    if (f == FeatureEnd) {
+        return;
+    }
     user_assert(f < FeatureEnd) << "Invalid Target feature.\n";
     features.set(f, value);
 }
@@ -661,7 +697,9 @@ void Target::set_features(const std::vector<Feature> &features_to_set, bool valu
 }
 
 bool Target::has_feature(Feature f) const {
-    if (f == FeatureEnd) return true;
+    if (f == FeatureEnd) {
+        return true;
+    }
     user_assert(f < FeatureEnd) << "Invalid Target feature.\n";
     return features[f];
 }
@@ -739,14 +777,12 @@ bool Target::supports_type(const Type &t) const {
     if (t.bits() == 64) {
         if (t.is_float()) {
             return !has_feature(Metal) &&
-                   !has_feature(OpenGL) &&
                    !has_feature(OpenGLCompute) &&
                    !has_feature(D3D12Compute) &&
                    (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
         } else {
             return (!has_feature(Metal) &&
                     !has_feature(OpenGLCompute) &&
-                    !has_feature(OpenGL) &&
                     !has_feature(D3D12Compute));
         }
     }
@@ -792,7 +828,7 @@ bool Target::supports_device_api(DeviceAPI api) const {
     case DeviceAPI::Default_GPU:
         return has_gpu_feature();
     case DeviceAPI::Hexagon:
-        return has_feature(Target::HVX_64) || has_feature(Target::HVX_128);
+        return has_feature(Target::HVX);
     case DeviceAPI::HexagonDma:
         return has_feature(Target::HexagonDma);
     default:
@@ -801,14 +837,27 @@ bool Target::supports_device_api(DeviceAPI api) const {
 }
 
 DeviceAPI Target::get_required_device_api() const {
-    if (has_feature(Target::CUDA)) return DeviceAPI::CUDA;
-    if (has_feature(Target::D3D12Compute)) return DeviceAPI::D3D12Compute;
-    if (has_feature(Target::HVX_128)) return DeviceAPI::Hexagon;
-    if (has_feature(Target::HexagonDma)) return DeviceAPI::HexagonDma;
-    if (has_feature(Target::Metal)) return DeviceAPI::Metal;
-    if (has_feature(Target::OpenCL)) return DeviceAPI::OpenCL;
-    if (has_feature(Target::OpenGL)) return DeviceAPI::GLSL;
-    if (has_feature(Target::OpenGLCompute)) return DeviceAPI::OpenGLCompute;
+    if (has_feature(Target::CUDA)) {
+        return DeviceAPI::CUDA;
+    }
+    if (has_feature(Target::D3D12Compute)) {
+        return DeviceAPI::D3D12Compute;
+    }
+    if (has_feature(Target::HVX)) {
+        return DeviceAPI::Hexagon;
+    }
+    if (has_feature(Target::HexagonDma)) {
+        return DeviceAPI::HexagonDma;
+    }
+    if (has_feature(Target::Metal)) {
+        return DeviceAPI::Metal;
+    }
+    if (has_feature(Target::OpenCL)) {
+        return DeviceAPI::OpenCL;
+    }
+    if (has_feature(Target::OpenGLCompute)) {
+        return DeviceAPI::OpenGLCompute;
+    }
     return DeviceAPI::None;
 }
 
@@ -818,14 +867,12 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
         return Target::CUDA;
     case DeviceAPI::OpenCL:
         return Target::OpenCL;
-    case DeviceAPI::GLSL:
-        return Target::OpenGL;
     case DeviceAPI::OpenGLCompute:
         return Target::OpenGLCompute;
     case DeviceAPI::Metal:
         return Target::Metal;
     case DeviceAPI::Hexagon:
-        return Target::HVX_128;
+        return Target::HVX;
     case DeviceAPI::D3D12Compute:
         return Target::D3D12Compute;
     default:
@@ -842,13 +889,10 @@ int Target::natural_vector_size(const Halide::Type &t) const {
 
     if (arch == Target::Hexagon) {
         if (is_integer) {
-            // HVX is either 64 or 128 *byte* vector size.
-            if (has_feature(Halide::Target::HVX_128)) {
+            if (has_feature(Halide::Target::HVX)) {
                 return 128 / data_size;
-            } else if (has_feature(Halide::Target::HVX_64)) {
-                return 64 / data_size;
             } else {
-                user_error << "Target uses hexagon arch without hvx_128 or hvx_64 set.\n";
+                user_error << "Target uses hexagon arch without target feature hvx set.\n";
                 return 0;
             }
         } else {
@@ -879,10 +923,6 @@ int Target::natural_vector_size(const Halide::Type &t) const {
         }
     } else if (arch == Target::WebAssembly) {
         if (has_feature(Halide::Target::WasmSimd128)) {
-            if (t.bits() == 64) {
-                // int64 and float64 aren't supported in simd128.
-                return 1;
-            }
             // 128-bit vectors for other types.
             return 16 / data_size;
         } else {
@@ -900,32 +940,80 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // (a) must be included if either target has the feature (union)
     // (b) must be included if both targets have the feature (intersection)
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
-    const std::array<Feature, 18> union_features = {{// These are true union features.
-                                                     CUDA, OpenCL, OpenGL, OpenGLCompute, Metal, D3D12Compute, NoNEON,
 
-                                                     // These features are actually intersection-y, but because targets only record the _highest_,
-                                                     // we have to put their union in the result and then take a lower bound.
-                                                     CUDACapability30, CUDACapability32, CUDACapability35, CUDACapability50, CUDACapability61, CUDACapability70, CUDACapability75, CUDACapability80,
-                                                     HVX_v62, HVX_v65, HVX_v66}};
+    // clang-format off
+    const std::array<Feature, 18> union_features = {{
+        // These are true union features.
+        CUDA,
+        D3D12Compute,
+        Metal,
+        NoNEON,
+        OpenCL,
+        OpenGLCompute,
 
-    const std::array<Feature, 12> intersection_features = {{SSE41, AVX, AVX2, FMA, FMA4, F16C, ARMv7s, VSX, AVX512, AVX512_KNL, AVX512_Skylake, AVX512_Cannonlake}};
+        // These features are actually intersection-y, but because targets only record the _highest_,
+        // we have to put their union in the result and then take a lower bound.
+        CUDACapability30,
+        CUDACapability32,
+        CUDACapability35,
+        CUDACapability50,
+        CUDACapability61,
+        CUDACapability70,
+        CUDACapability75,
+        CUDACapability80,
+        HVX_v62,
+        HVX_v65,
+        HVX_v66,
+    }};
+    // clang-format on
 
-    const std::array<Feature, 10> matching_features = {{SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, HexagonDma, HVX_shared_object}};
+    // clang-format off
+    const std::array<Feature, 14> intersection_features = {{
+        ARMv7s,
+        ARMv81a,
+        AVX,
+        AVX2,
+        AVX512,
+        AVX512_Cannonlake,
+        AVX512_KNL,
+        AVX512_SapphireRapids,
+        AVX512_Skylake,
+        F16C,
+        FMA,
+        FMA4,
+        SSE41,
+        VSX,
+    }};
+    // clang-format on
+
+    // clang-format off
+    const std::array<Feature, 12> matching_features = {{
+        ASAN,
+        Debug,
+        HexagonDma,
+        HVX,
+        HVX_shared_object,
+        MSAN,
+        SoftFloatABI,
+        TSAN,
+        WasmThreads,
+    }};
+    // clang-format on
 
     // bitsets need to be the same width.
     decltype(result.features) union_mask;
     decltype(result.features) intersection_mask;
     decltype(result.features) matching_mask;
 
-    for (auto &feature : union_features) {
+    for (const auto &feature : union_features) {
         union_mask.set(feature);
     }
 
-    for (auto &feature : intersection_features) {
+    for (const auto &feature : intersection_features) {
         intersection_mask.set(feature);
     }
 
-    for (auto &feature : matching_features) {
+    for (const auto &feature : matching_features) {
         matching_mask.set(feature);
     }
 
@@ -937,7 +1025,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     }
 
     if ((features & matching_mask) != (other.features & matching_mask)) {
-        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX_64, HVX_128, HexagonDma, and HVX_shared_object\n"
+        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, and HVX_shared_object\n"
                            << "  this:  " << *this << "\n"
                            << "  other: " << other << "\n";
         return false;
@@ -949,6 +1037,11 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     Target output = Target{os, arch, bits};
     output.features = ((features | other.features) & union_mask) | ((features | other.features) & matching_mask) | ((features & other.features) & intersection_mask);
 
+#if LLVM_VERSION < 120
+    // We require LLVM 12+ to compile SapphireRapids features.
+    output.features.reset(AVX512_SapphireRapids);
+#endif
+
     // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features
     int cuda_a = get_cuda_capability_lower_bound();
     int cuda_b = other.get_cuda_capability_lower_bound();
@@ -957,14 +1050,30 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // large, so min selects the true lower bound when one target doesn't specify a capability,
     // and the other doesn't use CUDA at all.
     int cuda_capability = std::min((unsigned)cuda_a, (unsigned)cuda_b);
-    if (cuda_capability < 30) output.features.reset(CUDACapability30);
-    if (cuda_capability < 32) output.features.reset(CUDACapability32);
-    if (cuda_capability < 35) output.features.reset(CUDACapability35);
-    if (cuda_capability < 50) output.features.reset(CUDACapability50);
-    if (cuda_capability < 61) output.features.reset(CUDACapability61);
-    if (cuda_capability < 70) output.features.reset(CUDACapability70);
-    if (cuda_capability < 75) output.features.reset(CUDACapability75);
-    if (cuda_capability < 80) output.features.reset(CUDACapability80);
+    if (cuda_capability < 30) {
+        output.features.reset(CUDACapability30);
+    }
+    if (cuda_capability < 32) {
+        output.features.reset(CUDACapability32);
+    }
+    if (cuda_capability < 35) {
+        output.features.reset(CUDACapability35);
+    }
+    if (cuda_capability < 50) {
+        output.features.reset(CUDACapability50);
+    }
+    if (cuda_capability < 61) {
+        output.features.reset(CUDACapability61);
+    }
+    if (cuda_capability < 70) {
+        output.features.reset(CUDACapability70);
+    }
+    if (cuda_capability < 75) {
+        output.features.reset(CUDACapability75);
+    }
+    if (cuda_capability < 80) {
+        output.features.reset(CUDACapability80);
+    }
 
     // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
     int hvx_a = get_hvx_lower_bound(*this);
@@ -972,9 +1081,15 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
 
     // Same trick as above for CUDA
     int hvx_version = std::min((unsigned)hvx_a, (unsigned)hvx_b);
-    if (hvx_version < 62) output.features.reset(HVX_v62);
-    if (hvx_version < 65) output.features.reset(HVX_v65);
-    if (hvx_version < 66) output.features.reset(HVX_v66);
+    if (hvx_version < 62) {
+        output.features.reset(HVX_v62);
+    }
+    if (hvx_version < 65) {
+        output.features.reset(HVX_v65);
+    }
+    if (hvx_version < 66) {
+        output.features.reset(HVX_v66);
+    }
 
     result = output;
     return true;
@@ -1000,11 +1115,10 @@ void target_test() {
         {{"x86-64-linux-cuda", "x86-64-linux", "x86-64-linux-cuda"}},
         {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda", "x86-64-linux-cuda"}},
         {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda-cuda_capability_30", "x86-64-linux-cuda-cuda_capability_30"}},
-        {{"x86-64-linux-cuda", "x86-64-linux-opengl", "x86-64-linux-cuda-opengl"}},
         {{"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"}},
         {{"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}},
-        {{"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt", ""}},
-        {{"hexagon-32-qurt-hvx_v62-hvx_64", "hexagon-32-qurt-hvx_64", "hexagon-32-qurt-hvx_64"}},
+        {{"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt", ""}},
+        {{"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt-hvx", "hexagon-32-qurt-hvx"}},
     };
 
     for (const auto &test : gcd_tests) {

@@ -57,8 +57,8 @@ int test() {
     g(x, y) = f(x, y);
 
     Target target = get_jit_target_from_environment();
-    if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
-        const int vector_size = target.has_feature(Target::HVX_128) ? 128 : 64;
+    if (target.has_feature(Target::HVX)) {
+        const int vector_size = target.has_feature(Target::HVX) ? 128 : 64;
         Var yi;
 
         f
@@ -81,7 +81,7 @@ int test() {
         }
     }
 
-    Buffer<DTYPE> buf = g.realize(W, H);
+    Buffer<DTYPE> buf = g.realize({W, H});
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {

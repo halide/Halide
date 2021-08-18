@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
 
     input.compute_at(output, xo);
 
-    Buffer<int32_t> buf = output.realize(75, 35);  // Use uneven splits.
+    Buffer<int32_t> buf = output.realize({75, 35});  // Use uneven splits.
 
     for (int y = 0; y < buf.height(); y++) {
         for (int x = 0; x < buf.width(); x++) {

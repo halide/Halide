@@ -29,10 +29,12 @@ class OutputImageParam;
 class RVar {
     std::string _name;
     Internal::ReductionDomain _domain;
-    int _index;
+    int _index = -1;
 
     const Internal::ReductionVariable &_var() const {
-        return _domain.domain().at(_index);
+        const auto &d = _domain.domain();
+        internal_assert(_index >= 0 && _index < (int)d.size());
+        return d.at(_index);
     }
 
 public:
@@ -87,7 +89,7 @@ public:
  RDom r(0, 10);
  f(x) = x; // the initial value
  f(r) = f(r) * 2;
- Buffer<int> result = f.realize(10);
+ Buffer<int> result = f.realize({10});
  \endcode
  *
  * This function creates a single-dimensional buffer of size 10, in
@@ -196,7 +198,7 @@ class RDom {
     void initialize_from_region(const Region &region, std::string name = "");
 
     template<typename... Args>
-    HALIDE_NO_USER_CODE_INLINE void initialize_from_region(Region &region, const Expr &min, const Expr &extent, Args &&... args) {
+    HALIDE_NO_USER_CODE_INLINE void initialize_from_region(Region &region, const Expr &min, const Expr &extent, Args &&...args) {
         region.push_back({min, extent});
         initialize_from_region(region, std::forward<Args>(args)...);
     }
@@ -213,7 +215,7 @@ public:
     }
 
     template<typename... Args>
-    HALIDE_NO_USER_CODE_INLINE RDom(Expr min, Expr extent, Args &&... args) {
+    HALIDE_NO_USER_CODE_INLINE RDom(Expr min, Expr extent, Args &&...args) {
         // This should really just be a delegating constructor, but I couldn't make
         // that work with variadic template unpacking in visual studio 2013
         Region region;

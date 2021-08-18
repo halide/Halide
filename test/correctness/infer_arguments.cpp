@@ -7,7 +7,7 @@ using namespace Halide::Internal;
 template<typename T>
 bool constant_expr_equals(Expr expr, T expected) {
     return (expr.type() == type_of<T>() &&
-            is_one(simplify(expr == Expr(expected))));
+            is_const_one(simplify(expr == Expr(expected))));
 }
 
 int main(int argc, char **argv) {

@@ -26,6 +26,9 @@ BIN_DIR ?= bin
 BIN ?= $(BIN_DIR)
 HL_TARGET ?= host
 
+# Running examples on Hexagon requires Hexagon_SDK
+SDK_ROOT ?= ${HOME}/Qualcomm
+HEXAGON_SDK_ROOT ?= ${SDK_ROOT}/Hexagon_SDK/4.0.0
 
 # GENERATOR_BIN is used mainly for Generators, which are always built
 # (and executed) on the host, regardless of the final target; this saves a bit
@@ -54,7 +57,7 @@ GXX ?= g++
 OPTIMIZE ?= -O3
 
 CFLAGS += $(OPTIMIZE) -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ -I $(HALIDE_DISTRIB_PATH)/apps/support/
-CXXFLAGS += $(OPTIMIZE) -std=c++11 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ $(SANITIZER_FLAGS) -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi
+CXXFLAGS += $(OPTIMIZE) -std=c++17 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ $(SANITIZER_FLAGS) -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi
 
 CXX_VERSION = $(shell $(CXX) --version | head -n1)
 ifneq (,$(findstring clang,$(CXX_VERSION)))
@@ -85,42 +88,55 @@ else
 SHARED_EXT=so
 endif
 
-# To run apps on android that support this, build a separate toolchain from the Android NDK
-# using the make-standalone-toolchain.sh script:
-#$ build/tools/make-standalone-toolchain.sh --arch=arm64 --platform=android-21 --install-dir=$ANDROID_ARM64_TOOLCHAIN
-#$ build/tools/make-standalone-toolchain.sh --arch=arm --platform=android-21 --install-dir=$ANDROID_ARM_TOOLCHAIN
+# We expect $ANDROID_NDK_ROOT to be defined by an env var.
+# We require at least NDK r19b or later.
+ANDROID_NDK_ROOT ?= /path/to/android_ndk_root
+
+# e.g. 'darwin' or 'linux'
+ANDROID_NDK_HOST_PLATFORM ?= $(shell echo `uname` | tr '[:upper:]' '[:lower:]')
+
+# The minimum Android API version to compile against. (This is *not* the same as the NDK version.)
+# 26 - Android 8 (aka Oreo)
+ANDROID_API_VERSION ?= 26
+
 CXX-host ?= $(CXX)
 CXX-host-opencl ?= $(CXX)
-CXX-host-opengl ?= $(CXX)
 CXX-host-cuda ?= $(CXX)
 CXX-host-metal ?= $(CXX)
-CXX-host-hvx_128 ?= $(CXX)
-CXX-host-hvx_64 ?= $(CXX)
-CXX-$(HL_TARGET) ?= $(CXX)
-CXX-arm-64-android ?= $(ANDROID_ARM64_TOOLCHAIN)/bin/aarch64-linux-android-c++
-CXX-arm-32-android ?= $(ANDROID_ARM_TOOLCHAIN)/bin/arm-linux-androideabi-c++
+CXX-host-hvx ?= $(CXX)
+CXX-hexagon-32-qurt-hvx ?= hexagon-clang++
+CXX-arm-64-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/aarch64-linux-android${ANDROID_API_VERSION}-clang++
+CXX-arm-64-android-arm_dot_prod ?= $(CXX-arm-64-android)
+CXX-arm-32-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/armv7a-linux-androideabi${ANDROID_API_VERSION}-clang++
+CXX-arm-64-profile-android ?= $(CXX-arm-64-android)
+CXX-arm-32-profile-android ?= $(CXX-arm-32-android)
 
 CXXFLAGS-host ?= $(CXXFLAGS)
 CXXFLAGS-host-opencl ?= $(CXXFLAGS)
-CXXFLAGS-host-opengl ?= $(CXXFLAGS)
 CXXFLAGS-host-cuda ?= $(CXXFLAGS)
 CXXFLAGS-host-metal ?= $(CXXFLAGS)
-CXXFLAGS-host-hvx_128 ?= $(CXXFLAGS)
-CXXFLAGS-host-hvx_64 ?= $(CXXFLAGS)
-CXXFLAGS-$(HL_TARGET) ?= $(CXXFLAGS)
 CXXFLAGS-arm-64-android ?= $(CXXFLAGS)
+CXXFLAGS-arm-64-android-arm_dot_prod ?= $(CXXFLAGS-arm-64-android)
+CXXFLAGS-hexagon-32-qurt-hvx ?= -mv65 $(CXXFLAGS) -I$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/include/qurt -I$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/include/posix
 CXXFLAGS-arm-32-android ?= $(CXXFLAGS)
 
 LDFLAGS-host ?= $(LDFLAGS)
 LDFLAGS-host-opencl ?= $(LDFLAGS)
-LDFLAGS-host-opengl ?= $(LDFLAGS)
 LDFLAGS-host-cuda ?= $(LDFLAGS)
 LDFLAGS-host-metal ?= $(LDFLAGS)
-LDFLAGS-host-hvx_128 ?= $(LDFLAGS)
-LDFLAGS-host-hvx_64 ?= $(LDFLAGS)
+LDFLAGS-host-hvx ?= $(LDFLAGS)
+LDFLAGS-hexagon-32-qurt-hvx =
+# Use the statically-linked version of libc++ on Android by default, for simplicity
+# of deployment. (Despite the name, this applies to libc++, not libstdc++)
+LDFLAGS-arm-64-android ?= -llog -fPIE -pie -static-libstdc++
+LDFLAGS-arm-64-android-arm_dot_prod ?= $(LDFLAGS-arm-64-android)
+LDFLAGS-arm-32-android ?= -llog -fPIE -pie -static-libstdc++
+
+# Put HL_TARGET variants of all of these last, to avoid conflict with the android variants
+# if building with `HL_TARGET=arm-64-android make foo`
+CXX-$(HL_TARGET) ?= $(CXX)
+CXXFLAGS-$(HL_TARGET) ?= $(CXXFLAGS)
 LDFLAGS-$(HL_TARGET) ?= $(LDFLAGS)
-LDFLAGS-arm-64-android ?= -llog -fPIE -pie
-LDFLAGS-arm-32-android ?= -llog -fPIE -pie
 
 LIB_HALIDE_STATIC = $(HALIDE_DISTRIB_PATH)/lib/libHalide.a
 
@@ -133,10 +149,10 @@ GENERATOR_DEPS_STATIC ?= $(LIB_HALIDE_STATIC) $(HALIDE_DISTRIB_PATH)/include/Hal
 LIBHALIDE_LDFLAGS ?= -Wl,-rpath,$(dir $(LIB_HALIDE)) -L $(dir $(LIB_HALIDE)) -lHalide $(LDFLAGS)
 LIBHALIDE_LDFLAGS_STATIC ?= $(LIB_HALIDE_STATIC) $(LDFLAGS)
 
-# Autoschedulers. Mullapudi2016 is currently the default, because it's fast. 
+# Autoschedulers. Mullapudi2016 is currently the default, because it's fast.
 AUTOSCHEDULER ?= mullapudi2016
 ifneq ($(AUTOSCHEDULER),)
-LIB_AUTOSCHEDULER ?= $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(SHARED_EXT) 
+LIB_AUTOSCHEDULER ?= $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(SHARED_EXT)
 ifeq ($(UNAME), Darwin)
 LIBHALIDE_LDFLAGS +=  -Wl,-force_load $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(SHARED_EXT)
 else
@@ -169,15 +185,6 @@ IMAGE_IO_LIBS = $(LIBPNG_LIBS) $(LIBJPEG_LIBS)
 IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
 
 IMAGE_IO_FLAGS = $(IMAGE_IO_LIBS) $(IMAGE_IO_CXX_FLAGS)
-
-PLATFORM_OPENGL_LDFLAGS=-lGL -lX11
-ifeq ($(UNAME), Darwin)
-PLATFORM_OPENGL_LDFLAGS=-framework OpenGL
-endif
-
-ifneq (, $(findstring opengl,$(HL_TARGET)))
-  OPENGL_LDFLAGS=$(PLATFORM_OPENGL_LDFLAGS)
-endif
 
 ifneq (, $(findstring metal,$(HL_TARGET)))
   LDFLAGS += -framework Metal -framework Foundation

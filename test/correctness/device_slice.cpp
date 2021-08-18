@@ -17,7 +17,7 @@ Halide::Runtime::Buffer<int32_t> make_gpu_buffer(bool hexagon_rpc) {
         f.gpu_tile(x, y, xi, yi, 8, 8);
     }
 
-    Buffer<int32_t> result = f.realize(kEdges[0], kEdges[1], kEdges[2]);
+    Buffer<int32_t> result = f.realize({kEdges[0], kEdges[1], kEdges[2]});
     return *result.get();
 }
 
@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
     bool hexagon_rpc = (target.arch != Target::Hexagon) &&
-                       target.features_any_of({Target::HVX_64, Target::HVX_128});
+                       target.has_feature(Target::HVX);
 
     if (!hexagon_rpc && !target.has_gpu_feature()) {
         printf("[SKIP] No GPU target enabled.\n");

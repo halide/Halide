@@ -210,8 +210,7 @@ public:
             : iter(i) {
         }
 
-        const_iterator() {
-        }
+        const_iterator() = default;
 
         bool operator!=(const const_iterator &other) {
             return iter != other.iter;

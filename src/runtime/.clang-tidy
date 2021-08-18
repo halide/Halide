@@ -1,0 +1,9 @@
+---
+InheritParentConfig: true
+
+Checks: >
+    -bugprone-dynamic-static-initializers,
+    -bugprone-sizeof-expression,
+    -bugprone-suspicious-include,
+    -misc-definitions-in-headers,
+...

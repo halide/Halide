@@ -2,6 +2,12 @@
 
 extern "C" {
 
+// Fake mutex array. We still define a pointer to halide_mutex since empty struct leads
+// to compile error (empty struct has size 0 in C, size 1 in C++).
+struct halide_mutex_array {
+    halide_mutex *mutex;
+};
+
 WEAK int halide_default_do_task(void *user_context, halide_task_t f, int idx,
                                 uint8_t *closure) {
     return f(user_context, idx, closure);
@@ -27,22 +33,22 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
 WEAK int halide_default_do_parallel_tasks(void *user_context, int num_tasks,
                                           struct halide_parallel_task_t *tasks,
                                           void *task_parent) {
-    halide_error(NULL, "halide_default_do_parallel_tasks not implemented on this platform.");
+    halide_error(nullptr, "halide_default_do_parallel_tasks not implemented on this platform.");
     return -1;
 }
 
 WEAK int halide_default_semaphore_init(halide_semaphore_t *s, int n) {
-    halide_error(NULL, "halide_default_semaphore_init not implemented on this platform.");
+    halide_error(nullptr, "halide_default_semaphore_init not implemented on this platform.");
     return 0;
 }
 
 WEAK int halide_default_semaphore_release(halide_semaphore_t *s, int n) {
-    halide_error(NULL, "halide_default_semaphore_release not implemented on this platform.");
+    halide_error(nullptr, "halide_default_semaphore_release not implemented on this platform.");
     return 0;
 }
 
 WEAK bool halide_default_semaphore_try_acquire(halide_semaphore_t *s, int n) {
-    halide_error(NULL, "halide_default_semaphore_try_acquire not implemented on this platform.");
+    halide_error(nullptr, "halide_default_semaphore_try_acquire not implemented on this platform.");
     return false;
 }
 
@@ -59,6 +65,7 @@ WEAK halide_do_parallel_tasks_t custom_do_parallel_tasks = halide_default_do_par
 WEAK halide_semaphore_init_t custom_semaphore_init = halide_default_semaphore_init;
 WEAK halide_semaphore_try_acquire_t custom_semaphore_try_acquire = halide_default_semaphore_try_acquire;
 WEAK halide_semaphore_release_t custom_semaphore_release = halide_default_semaphore_release;
+WEAK halide_mutex_array halide_fake_mutex_array;
 
 }  // namespace Internal
 }  // namespace Runtime
@@ -68,12 +75,12 @@ extern "C" {
 
 WEAK halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
     // We can't fake spawning a thread. Emit an error.
-    halide_error(NULL, "halide_spawn_thread not implemented on this platform.");
-    return NULL;
+    halide_error(nullptr, "halide_spawn_thread not implemented on this platform.");
+    return nullptr;
 }
 
 WEAK void halide_join_thread(halide_thread *thread_arg) {
-    halide_error(NULL, "halide_join_thread not implemented on this platform.");
+    halide_error(nullptr, "halide_join_thread not implemented on this platform.");
 }
 
 // Don't need to do anything with mutexes since we are in a fake thread pool.
@@ -83,17 +90,17 @@ WEAK void halide_mutex_lock(halide_mutex *mutex) {
 WEAK void halide_mutex_unlock(halide_mutex *mutex) {
 }
 
-// Fake mutex array. We still define a pointer to halide_mutex since empty struct leads
-// to compile error (empty struct has size 0 in C, size 1 in C++).
-struct halide_mutex_array {
-    halide_mutex *mutex;
-};
-
+// Return a fake but non-null pointer here: this can be legitimately called
+// from non-threaded code that uses the .atomic() schedule directive
+// (e.g. correctness/multiple_scatter). Since we don't have threads, we don't
+// need to mutex to do anything, but returning a null would trigger an error
+// condition that would be misrepoted as out-of-memory.
 WEAK halide_mutex_array *halide_mutex_array_create(int sz) {
-    return NULL;
+    return &halide_fake_mutex_array;
 }
 
 WEAK void halide_mutex_array_destroy(void *user_context, void *array) {
+    // Don't destroy the array! It's just halide_fake_mutex_array!
 }
 
 WEAK int halide_mutex_array_lock(halide_mutex_array *array, int entry) {
@@ -109,7 +116,7 @@ WEAK void halide_shutdown_thread_pool() {
 
 WEAK int halide_set_num_threads(int n) {
     if (n != 1) {
-        halide_error(NULL, "halide_set_num_threads: only supports a value of 1 on this platform.");
+        halide_error(nullptr, "halide_set_num_threads: only supports a value of 1 on this platform.");
     }
     return 1;
 }

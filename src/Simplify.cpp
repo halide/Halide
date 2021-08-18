@@ -20,7 +20,7 @@ int Simplify::debug_indent = 0;
 #endif
 
 Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai)
-    : remove_dead_lets(r), no_float_simplify(false) {
+    : remove_dead_code(r), no_float_simplify(false) {
 
     // Only respect the constant bounds from the containing scope.
     for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
@@ -54,6 +54,23 @@ Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemaind
     }
 }
 
+std::pair<std::vector<Expr>, bool> Simplify::mutate_with_changes(const std::vector<Expr> &old_exprs, ExprInfo *bounds) {
+    vector<Expr> new_exprs(old_exprs.size());
+    bool changed = false;
+
+    // Mutate the args
+    for (size_t i = 0; i < old_exprs.size(); i++) {
+        const Expr &old_e = old_exprs[i];
+        Expr new_e = mutate(old_e, bounds);
+        if (!new_e.same_as(old_e)) {
+            changed = true;
+        }
+        new_exprs[i] = std::move(new_e);
+    }
+
+    return {std::move(new_exprs), changed};
+}
+
 void Simplify::found_buffer_reference(const string &name, size_t dimensions) {
     for (size_t i = 0; i < dimensions; i++) {
         string stride = name + ".stride." + std::to_string(i);
@@ -73,9 +90,7 @@ void Simplify::found_buffer_reference(const string &name, size_t dimensions) {
 }
 
 bool Simplify::const_float(const Expr &e, double *f) {
-    if (e.type().is_vector()) {
-        return false;
-    } else if (const double *p = as_const_float(e)) {
+    if (const double *p = as_const_float(e)) {
         *f = *p;
         return true;
     } else {
@@ -84,9 +99,7 @@ bool Simplify::const_float(const Expr &e, double *f) {
 }
 
 bool Simplify::const_int(const Expr &e, int64_t *i) {
-    if (e.type().is_vector()) {
-        return false;
-    } else if (const int64_t *p = as_const_int(e)) {
+    if (const int64_t *p = as_const_int(e)) {
         *i = *p;
         return true;
     } else {
@@ -95,9 +108,7 @@ bool Simplify::const_int(const Expr &e, int64_t *i) {
 }
 
 bool Simplify::const_uint(const Expr &e, uint64_t *u) {
-    if (e.type().is_vector()) {
-        return false;
-    } else if (const uint64_t *p = as_const_uint(e)) {
+    if (const uint64_t *p = as_const_uint(e)) {
         *u = *p;
         return true;
     } else {
@@ -155,13 +166,19 @@ void Simplify::ScopedFact::learn_false(const Expr &fact) {
                 learn_upper_bound(v, i.max - 1);
             }
         }
+    } else if (const Call *c = Call::as_tag(fact)) {
+        learn_false(c->args[0]);
+        return;
     } else if (const Or *o = fact.as<Or>()) {
         // Both must be false
         learn_false(o->a);
         learn_false(o->b);
+        return;
     } else if (const Not *n = fact.as<Not>()) {
         learn_true(n->a);
-    } else if (simplify->falsehoods.insert(fact).second) {
+        return;
+    }
+    if (simplify->falsehoods.insert(fact).second) {
         falsehoods.push_back(fact);
     }
 }
@@ -284,22 +301,48 @@ void Simplify::ScopedFact::learn_true(const Expr &fact) {
                 learn_lower_bound(v, i.min);
             }
         }
+    } else if (const Call *c = Call::as_tag(fact)) {
+        learn_true(c->args[0]);
+        return;
     } else if (const And *a = fact.as<And>()) {
         // Both must be true
         learn_true(a->a);
         learn_true(a->b);
+        return;
     } else if (const Not *n = fact.as<Not>()) {
         learn_false(n->a);
-    } else if (simplify->truths.insert(fact).second) {
+        return;
+    }
+    if (simplify->truths.insert(fact).second) {
         truths.push_back(fact);
     }
 }
 
+template<class T>
+T substitute_facts_impl(T t, const vector<Expr> &truths, const vector<Expr> &falsehoods) {
+    // An std::map<Expr, Expr> version of substitute might be an optimization?
+    for (const auto &i : truths) {
+        t = substitute(i, const_true(i.type().lanes()), t);
+    }
+    for (const auto &i : falsehoods) {
+        t = substitute(i, const_false(i.type().lanes()), t);
+    }
+    return t;
+}
+
+Expr Simplify::ScopedFact::substitute_facts(const Expr &e) {
+    return substitute_facts_impl(e, truths, falsehoods);
+}
+
+Stmt Simplify::ScopedFact::substitute_facts(const Stmt &s) {
+    return substitute_facts_impl(s, truths, falsehoods);
+}
+
 Simplify::ScopedFact::~ScopedFact() {
-    for (auto v : pop_list) {
+    for (const auto *v : pop_list) {
         simplify->var_info.pop(v->name);
     }
-    for (auto v : bounds_pop_list) {
+    for (const auto *v : bounds_pop_list) {
         simplify->bounds_and_alignment_info.pop(v->name);
     }
     for (const auto &e : truths) {
@@ -313,13 +356,23 @@ Simplify::ScopedFact::~ScopedFact() {
 Expr simplify(const Expr &e, bool remove_dead_let_stmts,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
-    return Simplify(remove_dead_let_stmts, &bounds, &alignment).mutate(e, nullptr);
+    Simplify m(remove_dead_let_stmts, &bounds, &alignment);
+    Expr result = m.mutate(e, nullptr);
+    if (m.in_unreachable) {
+        return unreachable(e.type());
+    }
+    return result;
 }
 
 Stmt simplify(const Stmt &s, bool remove_dead_let_stmts,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
-    return Simplify(remove_dead_let_stmts, &bounds, &alignment).mutate(s);
+    Simplify m(remove_dead_let_stmts, &bounds, &alignment);
+    Stmt result = m.mutate(s);
+    if (m.in_unreachable) {
+        return Evaluate::make(unreachable());
+    }
+    return result;
 }
 
 class SimplifyExprs : public IRMutator {
@@ -384,21 +437,15 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
         static std::mt19937 rng(0);
         for (int i = 0; i < 100; i++) {
             map<string, Expr> s;
-            for (auto p : renamer.out_vars) {
+            for (const auto &p : renamer.out_vars) {
                 if (p.first.is_handle()) {
                     // This aint gonna work
                     return false;
                 }
                 s[p.second] = make_const(p.first, (int)(rng() & 0xffff) - 0x7fff);
             }
-            Expr probe = simplify(substitute(s, e));
-            if (const Call *c = probe.as<Call>()) {
-                if (c->is_intrinsic(Call::likely) ||
-                    c->is_intrinsic(Call::likely_if_innermost)) {
-                    probe = c->args[0];
-                }
-            }
-            if (!is_one(probe)) {
+            Expr probe = unwrap_tags(simplify(substitute(s, e)));
+            if (!is_const_one(probe)) {
                 // Found a counter-example, or something that fails to fold
                 return false;
             }
@@ -414,7 +461,7 @@ bool can_prove(Expr e, const Scope<Interval> &bounds) {
         return false;
     }
 
-    return is_one(e);
+    return is_const_one(e);
 }
 
 }  // namespace Internal

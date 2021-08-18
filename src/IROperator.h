@@ -49,28 +49,16 @@ bool is_positive_const(const Expr &e);
  * strictly less than zero (in all lanes, if a vector expression) */
 bool is_negative_const(const Expr &e);
 
-/** Is the expression a const (as defined by is_const), and also
- * strictly less than zero (in all lanes, if a vector expression) and
- * is its negative value representable. (This excludes the most
- * negative value of the Expr's type from inclusion. Intended to be
- * used when the value will be negated as part of simplification.)
- */
-bool is_negative_negatable_const(const Expr &e);
-
 /** Is the expression an undef */
 bool is_undef(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to zero (in all lanes, if a vector expression) */
-bool is_zero(const Expr &e);
+bool is_const_zero(const Expr &e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to one (in all lanes, if a vector expression) */
-bool is_one(const Expr &e);
-
-/** Is the expression a const (as defined by is_const), and also equal
- * to two (in all lanes, if a vector expression) */
-bool is_two(const Expr &e);
+bool is_const_one(const Expr &e);
 
 /** Is the statement a no-op (which we represent as either an
  * undefined Stmt, or as an Evaluate node of a constant) */
@@ -119,6 +107,9 @@ inline Expr make_const(Type t, float16_t val) {
 /** Construct a unique signed_integer_overflow Expr */
 Expr make_signed_integer_overflow(Type type);
 
+/** Check if an expression is a signed_integer_overflow */
+bool is_signed_integer_overflow(const Expr &expr);
+
 /** Check if a constant value can be correctly represented as the given type. */
 void check_representable(Type t, int64_t val);
 
@@ -153,6 +144,10 @@ Expr const_false(int lanes = 1);
  * losing information. If it can't be done, return an undefined
  * Expr. */
 Expr lossless_cast(Type t, Expr e);
+
+/** Attempt to negate x without introducing new IR and without overflow.
+ * If it can't be done, return an undefined Expr. */
+Expr lossless_negate(const Expr &x);
 
 /** Coerce the two expressions to have the same type, using C-style
  * casting rules. For the purposes of casting, a boolean type is
@@ -315,18 +310,30 @@ Expr remove_likelies(const Expr &e);
  * all calls to likely() and likely_if_innermost() removed. */
 Stmt remove_likelies(const Stmt &s);
 
+/** Return an Expr that is identical to the input Expr, but with
+ * all calls to promise_clamped() and unsafe_promise_clamped() removed. */
+Expr remove_promises(const Expr &e);
+
+/** Return a Stmt that is identical to the input Stmt, but with
+ * all calls to promise_clamped() and unsafe_promise_clamped() removed. */
+Stmt remove_promises(const Stmt &s);
+
+/** If the expression is a tag helper call, remove it and return
+ * the tagged expression. If not, returns the expression. */
+Expr unwrap_tags(const Expr &e);
+
 // Secondary args to print can be Exprs or const char *
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {
 }
 
 template<typename... Args>
-inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args, const char *arg, Args &&... more_args) {
+inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args, const char *arg, Args &&...more_args) {
     args.emplace_back(std::string(arg));
     collect_print_args(args, std::forward<Args>(more_args)...);
 }
 
 template<typename... Args>
-inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args &&... more_args) {
+inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args, Expr arg, Args &&...more_args) {
     args.push_back(std::move(arg));
     collect_print_args(args, std::forward<Args>(more_args)...);
 }
@@ -334,6 +341,49 @@ inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &arg
 Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args);
 
 Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
+
+/** Compute widen(a) + widen(b). The result is always signed. */
+Expr widening_add(Expr a, Expr b);
+/** Compute widen(a) * widen(b). a and b may have different signedness. */
+Expr widening_mul(Expr a, Expr b);
+/** Compute widen(a) - widen(b). The result is always signed. */
+Expr widening_sub(Expr a, Expr b);
+/** Compute widen(a) << b. */
+Expr widening_shift_left(Expr a, Expr b);
+Expr widening_shift_left(Expr a, int b);
+/** Compute widen(a) >> b. */
+Expr widening_shift_right(Expr a, Expr b);
+Expr widening_shift_right(Expr a, int b);
+
+/** Compute saturating_add(a, (1 >> min(b, 0)) / 2) << b. When b is positive
+ * indicating a left shift, the rounding term is zero. */
+Expr rounding_shift_left(Expr a, Expr b);
+Expr rounding_shift_left(Expr a, int b);
+/** Compute saturating_add(a, (1 << max(b, 0)) / 2) >> b. When b is negative
+ * indicating a left shift, the rounding term is zero. */
+Expr rounding_shift_right(Expr a, Expr b);
+Expr rounding_shift_right(Expr a, int b);
+
+/** Compute saturating_narrow(widen(a) + widen(b)) */
+Expr saturating_add(Expr a, Expr b);
+/** Compute saturating_narrow(widen(a) - widen(b)) */
+Expr saturating_sub(Expr a, Expr b);
+
+/** Compute narrow((widen(a) + widen(b)) / 2) */
+Expr halving_add(Expr a, Expr b);
+/** Compute narrow((widen(a) + widen(b) + 1) / 2) */
+Expr rounding_halving_add(Expr a, Expr b);
+/** Compute narrow((widen(a) - widen(b)) / 2) */
+Expr halving_sub(Expr a, Expr b);
+/** Compute narrow((widen(a) - widen(b) + 1) / 2) */
+Expr rounding_halving_sub(Expr a, Expr b);
+
+/** Compute saturating_narrow(shift_right(widening_mul(a, b), q)) */
+Expr mul_shift_right(Expr a, Expr b, Expr q);
+Expr mul_shift_right(Expr a, Expr b, int q);
+/** Compute saturating_narrow(rounding_shift_right(widening_mul(a, b), q)) */
+Expr rounding_mul_shift_right(Expr a, Expr b, Expr q);
+Expr rounding_mul_shift_right(Expr a, Expr b, int q);
 
 }  // namespace Internal
 
@@ -632,7 +682,7 @@ inline Expr max(Expr a, float b) {
  * The arguments can be any mix of types but must all be convertible to Expr. */
 template<typename A, typename B, typename C, typename... Rest,
          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Rest...>::value>::type * = nullptr>
-inline Expr max(A &&a, B &&b, C &&c, Rest &&... rest) {
+inline Expr max(A &&a, B &&b, C &&c, Rest &&...rest) {
     return max(std::forward<A>(a), max(std::forward<B>(b), std::forward<C>(c), std::forward<Rest>(rest)...));
 }
 
@@ -667,7 +717,7 @@ inline Expr min(Expr a, float b) {
  * The arguments can be any mix of types but must all be convertible to Expr. */
 template<typename A, typename B, typename C, typename... Rest,
          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Rest...>::value>::type * = nullptr>
-inline Expr min(A &&a, B &&b, C &&c, Rest &&... rest) {
+inline Expr min(A &&a, B &&b, C &&c, Rest &&...rest) {
     return min(std::forward<A>(a), min(std::forward<B>(b), std::forward<C>(c), std::forward<Rest>(rest)...));
 }
 
@@ -772,7 +822,7 @@ Expr select(Expr condition, Expr true_value, Expr false_value);
  * final value if all conditions are false. */
 template<typename... Args,
          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Args...>::value>::type * = nullptr>
-inline Expr select(Expr c0, Expr v0, Expr c1, Expr v1, Args &&... args) {
+inline Expr select(Expr c0, Expr v0, Expr c1, Expr v1, Args &&...args) {
     return select(std::move(c0), std::move(v0), select(std::move(c1), std::move(v1), std::forward<Args>(args)...));
 }
 
@@ -787,12 +837,12 @@ Tuple tuple_select(const Expr &condition, const Tuple &true_value, const Tuple &
  * a Tuple, it must match the size of the true and false Tuples. */
 // @{
 template<typename... Args>
-inline Tuple tuple_select(const Tuple &c0, const Tuple &v0, const Tuple &c1, const Tuple &v1, Args &&... args) {
+inline Tuple tuple_select(const Tuple &c0, const Tuple &v0, const Tuple &c1, const Tuple &v1, Args &&...args) {
     return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
 }
 
 template<typename... Args>
-inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const Tuple &v1, Args &&... args) {
+inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const Tuple &v1, Args &&...args) {
     return tuple_select(c0, v0, tuple_select(c1, v1, std::forward<Args>(args)...));
 }
 // @}
@@ -805,6 +855,9 @@ inline Tuple tuple_select(const Expr &c0, const Tuple &v0, const Expr &c1, const
  * This is tedious when the list is long. The following function
  * provide convinent syntax that allow one to write:
  * img(x, y, c) = mux(c, {100, 50, 25});
+ *
+ * As with the select equivalent, if the first argument (the index) is
+ * out of range, the expression evaluates to the last value.
  */
 // @{
 Expr mux(const Expr &id, const std::initializer_list<Expr> &values);
@@ -1217,7 +1270,7 @@ Expr random_int(Expr seed = Expr());
 Expr print(const std::vector<Expr> &values);
 
 template<typename... Args>
-inline HALIDE_NO_USER_CODE_INLINE Expr print(Expr a, Args &&... args) {
+inline HALIDE_NO_USER_CODE_INLINE Expr print(Expr a, Args &&...args) {
     std::vector<Expr> collected_args = {std::move(a)};
     Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return print(collected_args);
@@ -1230,7 +1283,7 @@ inline HALIDE_NO_USER_CODE_INLINE Expr print(Expr a, Args &&... args) {
 Expr print_when(Expr condition, const std::vector<Expr> &values);
 
 template<typename... Args>
-inline HALIDE_NO_USER_CODE_INLINE Expr print_when(Expr condition, Expr a, Args &&... args) {
+inline HALIDE_NO_USER_CODE_INLINE Expr print_when(Expr condition, Expr a, Args &&...args) {
     std::vector<Expr> collected_args = {std::move(a)};
     Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return print_when(std::move(condition), collected_args);
@@ -1263,7 +1316,7 @@ inline HALIDE_NO_USER_CODE_INLINE Expr print_when(Expr condition, Expr a, Args &
 Expr require(Expr condition, const std::vector<Expr> &values);
 
 template<typename... Args>
-inline HALIDE_NO_USER_CODE_INLINE Expr require(Expr condition, Expr value, Args &&... args) {
+inline HALIDE_NO_USER_CODE_INLINE Expr require(Expr condition, Expr value, Args &&...args) {
     std::vector<Expr> collected_args = {std::move(value)};
     Internal::collect_print_args(collected_args, std::forward<Args>(args)...);
     return require(std::move(condition), collected_args);
@@ -1295,6 +1348,21 @@ inline Expr undef() {
     return undef(type_of<T>());
 }
 
+namespace Internal {
+
+/** Return an expression that should never be evaluated. Expressions
+ * that depend on unreachabale values are also unreachable, and
+ * statements that execute unreachable expressions are also considered
+ * unreachable. */
+Expr unreachable(Type t = Int(32));
+
+template<typename T>
+inline Expr unreachable() {
+    return unreachable(type_of<T>());
+}
+
+}  // namespace Internal
+
 /** Control the values used in the memoization cache key for memoize.
  * Normally parameters and other external dependencies are
  * automatically inferred and added to the cache key. The memoize_tag
@@ -1323,7 +1391,7 @@ inline Expr undef() {
  * on the digest. */
 // @{
 template<typename... Args>
-inline HALIDE_NO_USER_CODE_INLINE Expr memoize_tag(Expr result, Args &&... args) {
+inline HALIDE_NO_USER_CODE_INLINE Expr memoize_tag(Expr result, Args &&...args) {
     std::vector<Expr> collected_args{std::forward<Args>(args)...};
     return Internal::memoize_tag_helper(std::move(result), collected_args);
 }
@@ -1402,9 +1470,98 @@ namespace Internal {
  * context-dependent, because 'value' might be statically bounded at
  * some point in the IR (e.g. due to a containing if statement), but
  * not elsewhere.
+ *
+ * This intrinsic always evaluates to its first argument. If this value is
+ * used by a side-effecting operation and it is outside the range specified
+ * by its second and third arguments, behavior is undefined. The compiler can
+ * therefore assume that the value is within the range given and optimize
+ * accordingly. Note that this permits promise_clamped to evaluate to
+ * something outside of the range, provided that this value is not used.
+ *
+ * Note that this produces an intrinsic that is marked as 'pure' and thus is
+ * allowed to be hoisted, etc.; thus, extra care must be taken with its use.
  **/
 Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max);
 }  // namespace Internal
+
+/** Scatter and gather are used for update definition which must store
+ * multiple values to distinct locations at the same time. The
+ * multiple expressions on the right-hand-side are bundled together
+ * into a "gather", which must match a "scatter" the the same number
+ * of arguments on the left-hand-size. For example, to store the
+ * values 1 and 2 to the locations (x, y, 3) and (x, y, 4),
+ * respectively:
+ *
+\code
+f(x, y, scatter(3, 4)) = gather(1, 2);
+\endcode
+ *
+ * The result of gather or scatter can be treated as an
+ * expression. Any containing operations on it can be assumed to
+ * distribute over the elements. If two gather expressions are
+ * combined with an arithmetic operator (e.g. added), they combine
+ * element-wise. The following example stores the values 2 * x, 2 * y,
+ * and 2 * c to the locations (x + 1, y, c), (x, y + 3, c), and (x, y,
+ * c + 2) respectively:
+ *
+\code
+f(x + scatter(1, 0, 0), y + scatter(0, 3, 0), c + scatter(0, 0, 2)) = 2 * gather(x, y, c);
+\endcode
+*
+* Repeated values in the scatter cause multiple stores to the same
+* location. The stores happen in order from left to right, so the
+* rightmost value wins. The following code is equivalent to f(x) = 5
+*
+\code
+f(scatter(x, x)) = gather(3, 5);
+\endcode
+*
+* Gathers are most useful for algorithms which require in-place
+* swapping or permutation of multiple elements, or other kinds of
+* in-place mutations that require loading multiple inputs, doing some
+* operations to them jointly, then storing them again. The following
+* update definition swaps the values of f at locations 3 and 5 if an
+* input parameter p is true:
+*
+\code
+f(scatter(3, 5)) = f(select(p, gather(5, 3), gather(3, 5)));
+\endcode
+*
+* For more examples of the use of scatter and gather, see
+* test/correctness/multiple_scatter.cpp
+*
+* It is not currently possible to use scatter and gather to write an
+* update definition in which the *number* of values loaded or stored
+* varies, as the size of the scatter/gather packet must be fixed a
+* compile-time. A workaround is to make the unwanted extra operations
+* a redundant copy of the last operation, which will be
+* dead-code-eliminated by the compiler. For example, the following
+* update definition swaps the values at locations 3 and 5 when the
+* parameter p is true, and rotates the values at locations 1, 2, and 3
+* when it is false. The load from 3 and store to 5 will be redundantly
+* repeated:
+*
+\code
+f(select(p, scatter(3, 5, 5), scatter(1, 2, 3))) = f(select(p, gather(5, 3, 3), gather(2, 3, 1)));
+\endcode
+*
+* Note that in the p == true case, we redudantly load from 3 and write
+* to 5 twice.
+*/
+//@{
+Expr scatter(const std::vector<Expr> &args);
+Expr gather(const std::vector<Expr> &args);
+
+template<typename... Args>
+Expr scatter(const Expr &e, Args &&...args) {
+    return scatter({e, std::forward<Args>(args)...});
+}
+
+template<typename... Args>
+Expr gather(const Expr &e, Args &&...args) {
+    return gather({e, std::forward<Args>(args)...});
+}
+// @}
 
 }  // namespace Halide
 

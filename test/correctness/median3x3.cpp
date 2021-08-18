@@ -47,14 +47,14 @@ int main(int arch, char **argv) {
     if (target.has_gpu_feature()) {
         Var xi("xi"), yi("yi");
         median3x3.gpu_tile(x, y, xi, yi, 16, 16);
-    } else if (target.features_any_of({Target::HVX_64, Target::HVX_128})) {
+    } else if (target.has_feature(Target::HVX)) {
         median3x3.hexagon().vectorize(x, 64);
     } else {
         median3x3.vectorize(x, target.natural_vector_size<uint8_t>());
     }
 
     // Run the pipeline and verify the results are correct.
-    Buffer<uint8_t> out = median3x3.realize(W, H, target);
+    Buffer<uint8_t> out = median3x3.realize({W, H}, target);
 
     for (int y = 1; y < H - 1; y++) {
         for (int x = 1; x < W - 1; x++) {

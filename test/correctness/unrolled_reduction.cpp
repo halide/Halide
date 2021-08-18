@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     g.compute_at(f, y).update().split(r.x, rxo, rxi, 2).unroll(rxi);
     f.unroll(z, 2);
 
-    Buffer<float> im = f.realize(64, 64, 4);
+    Buffer<float> im = f.realize({64, 64, 4});
 
     printf("Success!\n");
     return 0;

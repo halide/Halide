@@ -52,7 +52,7 @@ namespace {
 // aggressive about eliminating terms than using % and then
 // calling the simplifier.
 Expr reduce_expr_helper(Expr e, const Expr &modulus) {
-    if (is_one(modulus)) {
+    if (is_const_one(modulus)) {
         return make_zero(e.type());
     } else if (is_const(e)) {
         return simplify(e % modulus);
@@ -77,7 +77,7 @@ Expr reduce_expr_helper(Expr e, const Expr &modulus) {
 
 Expr reduce_expr(Expr e, const Expr &modulus, const Scope<Interval> &bounds) {
     e = reduce_expr_helper(simplify(e, true, bounds), modulus);
-    if (is_one(simplify(e >= 0 && e < modulus, true, bounds))) {
+    if (is_const_one(simplify(e >= 0 && e < modulus, true, bounds))) {
         return e;
     } else {
         return e % modulus;
@@ -166,7 +166,7 @@ class DetermineAllocStride : public IRVisitor {
             }
         } else if (const Mul *mul = e.as<Mul>()) {
             Expr sa = warp_stride(mul->a), sb = warp_stride(mul->b);
-            if (sa.defined() && sb.defined() && is_zero(sb)) {
+            if (sa.defined() && sb.defined() && is_const_zero(sb)) {
                 return sa * mul->b;
             }
         } else if (const Broadcast *b = e.as<Broadcast>()) {
@@ -174,7 +174,7 @@ class DetermineAllocStride : public IRVisitor {
         } else if (const Ramp *r = e.as<Ramp>()) {
             Expr sb = warp_stride(r->base);
             Expr ss = warp_stride(r->stride);
-            if (sb.defined() && ss.defined() && is_zero(ss)) {
+            if (sb.defined() && ss.defined() && is_const_zero(ss)) {
                 return sb;
             }
         } else if (const Let *let = e.as<Let>()) {
@@ -254,24 +254,24 @@ class DetermineAllocStride : public IRVisitor {
             << "(rounding down), becomes a multiple of the warp size (" << warp_size << ").\n";
         if (!stores.empty()) {
             message << alloc << " is stored to at the following indices by multiple lanes:\n";
-            for (Expr e : stores) {
+            for (const Expr &e : stores) {
                 message << "  " << e << "\n";
             }
         }
         if (!single_stores.empty()) {
             message << "And the following indicies by lane zero:\n";
-            for (Expr e : single_stores) {
+            for (const Expr &e : single_stores) {
                 message << "  " << e << "\n";
             }
         }
         if (!loads.empty()) {
             message << "And loaded from at the following indices:\n";
-            for (Expr e : loads) {
+            for (const Expr &e : loads) {
                 message << "  " << e << "\n";
             }
         }
         message << "The problematic indices are:\n";
-        for (Expr e : bad) {
+        for (const Expr &e : bad) {
             message << "  " << e << "\n";
         }
         user_error << message.str();
@@ -285,7 +285,7 @@ public:
 
     // A version of can_prove which exploits the constant bounds we've been tracking
     bool can_prove(const Expr &e) {
-        return is_one(simplify(e, true, bounds));
+        return is_const_one(simplify(e, true, bounds));
     }
 
     Expr get_stride() {
@@ -293,7 +293,7 @@ public:
         Expr stride;
         Expr var = Variable::make(Int(32), lane_var);
         vector<Expr> bad;
-        for (Expr e : stores) {
+        for (const Expr &e : stores) {
             Expr s = warp_stride(e);
             if (s.defined()) {
                 // Constant-fold
@@ -317,7 +317,7 @@ public:
             ok = ok && this_ok;
         }
 
-        for (Expr e : loads) {
+        for (const Expr &e : loads) {
             // We can handle any access pattern for loads, but it's
             // better if the stride matches up because then it's just
             // a register access, not a warp shuffle.
@@ -328,7 +328,7 @@ public:
         }
 
         if (stride.defined()) {
-            for (Expr e : single_stores) {
+            for (const Expr &e : single_stores) {
                 // If only thread zero was active for the store, that makes the proof simpler.
                 Expr simpler = substitute(lane_var, 0, e);
                 bool this_ok = can_prove(reduce_expr(simpler / stride, warp_size, bounds) == 0);
@@ -339,7 +339,9 @@ public:
             }
         }
 
-        if (!ok) fail(bad);
+        if (!ok) {
+            fail(bad);
+        }
 
         if (!stride.defined()) {
             // This allocation must only accessed via single-threaded stores.
@@ -398,7 +400,7 @@ class LowerWarpShuffles : public IRMutator {
 
             // Figure out the shrunken size of the hoisted allocations
             // and populate the scope.
-            for (Stmt s : allocations) {
+            for (const Stmt &s : allocations) {
                 const Allocate *alloc = s.as<Allocate>();
                 internal_assert(alloc && alloc->extents.size() == 1);
                 // The allocation has been moved into the lane loop,
@@ -425,7 +427,7 @@ class LowerWarpShuffles : public IRMutator {
 
             // Wrap the hoisted warp-level allocations, at their new
             // reduced size.
-            for (Stmt s : allocations) {
+            for (const Stmt &s : allocations) {
                 const Allocate *alloc = s.as<Allocate>();
                 internal_assert(alloc && alloc->extents.size() == 1);
                 int new_size = allocation_info.get(alloc->name).size;
@@ -444,7 +446,7 @@ class LowerWarpShuffles : public IRMutator {
             body = mutate(body);
 
             // Rewrap any hoisted allocations that weren't placed outside some inner loop
-            for (Stmt s : allocations) {
+            for (const Stmt &s : allocations) {
                 const Allocate *alloc = s.as<Allocate>();
                 body = Allocate::make(alloc->name, alloc->type, alloc->memory_type,
                                       alloc->extents, alloc->condition,
@@ -537,6 +539,15 @@ class LowerWarpShuffles : public IRMutator {
         Expr base_val = Load::make(type, name, idx, Buffer<>(),
                                    Parameter(), const_true(idx.type().lanes()), ModulusRemainder());
 
+        Expr scalar_lane = lane;
+        if (const Broadcast *b = scalar_lane.as<Broadcast>()) {
+            scalar_lane = b->value;
+        }
+        if (equal(scalar_lane, this_lane)) {
+            // This is a regular load. No shuffling required.
+            return base_val;
+        }
+
         // Make 32-bit with a combination of reinterprets and zero extension
         Type shuffle_type = type;
         if (type.bits() < 32) {
@@ -547,15 +558,6 @@ class LowerWarpShuffles : public IRMutator {
             user_error << "Warp shuffles of 64-bit types not yet implemented\n";
         } else {
             user_assert(type.bits() == 32) << "Warp shuffles not supported for this type: " << type << "\n";
-        }
-
-        Expr scalar_lane = lane;
-        if (const Broadcast *b = scalar_lane.as<Broadcast>()) {
-            scalar_lane = b->value;
-        }
-        if (equal(scalar_lane, this_lane)) {
-            // This is a regular load. No shuffling required.
-            return base_val;
         }
 
         internal_assert(may_use_warp_shuffle) << name << ", " << idx << ", " << lane << "\n";
@@ -569,7 +571,7 @@ class LowerWarpShuffles : public IRMutator {
 
         Expr wild = Variable::make(Int(32), "*");
         vector<Expr> result;
-        int bits;
+        int bits = 0;
 
         // Move this_lane as far left as possible in the expression to
         // reduce the number of cases to check below.
@@ -710,7 +712,7 @@ class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
             body = rewrap(body);
             success = false;
         } else {
-            debug(0) << "Successfully hoisted shuffle out of for loop\n";
+            debug(3) << "Successfully hoisted shuffle out of for loop\n";
         }
         return For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
     }

@@ -337,8 +337,9 @@ struct Provide : public StmtNode<Provide> {
     std::string name;
     std::vector<Expr> values;
     std::vector<Expr> args;
+    Expr predicate;
 
-    static Stmt make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args);
+    static Stmt make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate);
 
     static const IRNodeType _node_type = IRNodeType::Provide;
 };
@@ -509,10 +510,9 @@ struct Call : public ExprNode<Call> {
         div_round_to_zero,
         dynamic_shuffle,
         extract_mask_element,
-        glsl_texture_load,
-        glsl_texture_store,
-        glsl_varying,
         gpu_thread_barrier,
+        halving_add,
+        halving_sub,
         hvx_gather,
         hvx_scatter,
         hvx_scatter_acc,
@@ -527,7 +527,8 @@ struct Call : public ExprNode<Call> {
         make_struct,
         memoize_expr,
         mod_round_to_zero,
-        mulhi_shr,  // Compute high_half(arg[0] * arg[1]) >> arg[3]. Note that this is a shift in addition to taking the upper half of multiply result. arg[3] must be an unsigned integer immediate.
+        mul_shift_right,
+        mux,
         popcount,
         prefetch,
         promise_clamped,
@@ -538,6 +539,14 @@ struct Call : public ExprNode<Call> {
         require_mask,
         return_second,
         rewrite_buffer,
+        rounding_halving_add,
+        rounding_halving_sub,
+        rounding_mul_shift_right,
+        rounding_shift_left,
+        rounding_shift_right,
+        saturating_add,
+        saturating_sub,
+        scatter_gather,
         select_mask,
         shift_left,
         shift_right,
@@ -547,7 +556,13 @@ struct Call : public ExprNode<Call> {
         strict_float,
         stringify,
         undef,
+        unreachable,
         unsafe_promise_clamped,
+        widening_add,
+        widening_mul,
+        widening_shift_left,
+        widening_shift_right,
+        widening_sub,
         IntrinsicOpCount  // Sentinel: keep last.
     };
 
@@ -634,6 +649,36 @@ struct Call : public ExprNode<Call> {
 
     bool is_intrinsic(IntrinsicOp op) const {
         return is_intrinsic() && this->name == get_intrinsic_name(op);
+    }
+
+    bool is_intrinsic(std::initializer_list<IntrinsicOp> intrinsics) const {
+        for (IntrinsicOp i : intrinsics) {
+            if (is_intrinsic(i)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool is_tag() const {
+        return is_intrinsic({Call::likely, Call::likely_if_innermost, Call::strict_float});
+    }
+
+    /** Returns a pointer to a call node if the expression is a call to
+     * one of the requested intrinsics. */
+    static const Call *as_intrinsic(const Expr &e, std::initializer_list<IntrinsicOp> intrinsics) {
+        if (const Call *c = e.as<Call>()) {
+            for (IntrinsicOp i : intrinsics) {
+                if (c->is_intrinsic(i)) {
+                    return c;
+                }
+            }
+        }
+        return nullptr;
+    }
+
+    static const Call *as_tag(const Expr &e) {
+        return as_intrinsic(e, {Call::likely, Call::likely_if_innermost, Call::strict_float});
     }
 
     bool is_extern() const {
@@ -731,7 +776,7 @@ struct Shuffle : public ExprNode<Shuffle> {
 
     /** Indices indicating which vector element to place into the
      * result. The elements are numbered by their position in the
-     * concatenation of the vector argumentss. */
+     * concatenation of the vector arguments. */
     std::vector<int> indices;
 
     static Expr make(const std::vector<Expr> &vectors,
@@ -746,6 +791,10 @@ struct Shuffle : public ExprNode<Shuffle> {
     static Expr make_concat(const std::vector<Expr> &vectors);
 
     /** Convenience constructor for making a shuffle representing a
+     * broadcast of a vector. */
+    static Expr make_broadcast(Expr vector, int factor);
+
+    /** Convenience constructor for making a shuffle representing a
      * contiguous subset of a vector. */
     static Expr make_slice(Expr vector, int begin, int stride, int size);
 
@@ -756,6 +805,14 @@ struct Shuffle : public ExprNode<Shuffle> {
     /** Check if this shuffle is an interleaving of the vector
      * arguments. */
     bool is_interleave() const;
+
+    /** Check if this shuffle can be represented as a broadcast.
+     * For example:
+     * A uint8 shuffle of with 4*n lanes and indices:
+     *     0, 1, 2, 3, 0, 1, 2, 3, ....., 0, 1, 2, 3
+     * can be represented as a uint32 broadcast with n lanes (factor = 4). */
+    bool is_broadcast() const;
+    int broadcast_factor() const;
 
     /** Check if this shuffle is a concatenation of the vector
      * arguments. */
@@ -830,6 +887,7 @@ struct VectorReduce : public ExprNode<VectorReduce> {
     // operators.
     typedef enum {
         Add,
+        SaturatingAdd,
         Mul,
         Min,
         Max,

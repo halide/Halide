@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
 
     Func output("output");
     output(x, y, c) = cast<float>(f(x, y, c));
-    Buffer<float> im = output.realize(1024, 1024, 3);
+    Buffer<float> im = output.realize({1024, 1024, 3});
 
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {

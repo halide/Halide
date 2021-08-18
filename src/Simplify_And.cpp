@@ -57,6 +57,7 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
          rewrite(!x && x, false) ||
          rewrite(y <= x && x < y, false) ||
          rewrite(x != c0 && x == c1, b, c0 != c1) ||
+         rewrite(x == c0 && x == c1, false, c0 != c1) ||
          // Note: In the predicate below, if undefined overflow
          // occurs, the predicate counts as false. If well-defined
          // overflow occurs, the condition couldn't possibly
@@ -76,8 +77,7 @@ Expr Simplify::visit(const And *op, ExprInfo *bounds) {
     }
     // clang-format on
 
-    if (rewrite(broadcast(x) && broadcast(y), broadcast(x && y, op->type.lanes())) ||
-
+    if (rewrite(broadcast(x, c0) && broadcast(y, c0), broadcast(x && y, c0)) ||
         rewrite((x || (y && z)) && y, (x || z) && y) ||
         rewrite((x || (z && y)) && y, (x || z) && y) ||
         rewrite(y && (x || (y && z)), y && (x || z)) ||

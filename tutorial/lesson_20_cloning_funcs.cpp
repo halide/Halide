@@ -4,11 +4,11 @@
 // a Func.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_20*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_20 -std=c++11
+// g++ lesson_20*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -lpthread -ldl -o lesson_20 -std=c++17
 // LD_LIBRARY_PATH=<path/to/libHalide.so> ./lesson_20
 
 // On os x:
-// g++ lesson_20*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_20 -std=c++11
+// g++ lesson_20*.cpp -g -I <path/to/Halide.h> -L <path/to/libHalide.so> -lHalide -o lesson_20 -std=c++17
 // DYLD_LIBRARY_PATH=<path/to/libHalide.dylib> ./lesson_20
 
 // If you have the entire Halide source tree, you can also build it by
@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
         //   for x:
         //     h(x, y) = f(x, y) + g(x, y) + 10
 
-        h.realize(5, 5);
+        h.realize({5, 5});
 
         // The schedule directive f.clone_in(g) replaces all calls to 'f'
         // inside 'g' with a clone of 'f' and then returns that clone.
@@ -134,7 +134,7 @@ int main(int argc, char **argv) {
         //   for x:
         //     out(x, y) = f(x, y) + g(x, y) + h(x, y)
 
-        out.realize(5, 5);
+        out.realize({5, 5});
     }
 
     {

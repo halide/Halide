@@ -83,7 +83,7 @@ halide_dimension_t *_halide_buffer_get_shape(halide_buffer_t *buf) {
 
 HALIDE_BUFFER_HELPER_ATTRS
 bool _halide_buffer_is_bounds_query(const halide_buffer_t *buf) {
-    return buf->host == NULL && buf->device == 0;
+    return buf->host == nullptr && buf->device == 0;
 }
 
 HALIDE_BUFFER_HELPER_ATTRS
@@ -148,12 +148,12 @@ halide_buffer_t *_halide_buffer_crop(void *user_context,
         dst->dim[i] = src->dim[i];
         dst->dim[i].min = min[i];
         dst->dim[i].extent = extent[i];
-        offset += (min[i] - src->dim[i].min) * src->dim[i].stride;
+        offset += (min[i] - src->dim[i].min) * (int64_t)src->dim[i].stride;
     }
     if (dst->host) {
         dst->host += offset * src->type.bytes();
     }
-    dst->device_interface = 0;
+    dst->device_interface = nullptr;
     dst->device = 0;
     if (src->device_interface) {
         src->device_interface->device_crop(user_context, src, dst);
