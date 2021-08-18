@@ -436,7 +436,7 @@ public:
         const int vec = bits <= 16 ? 16 : 8;
 
         Func input_clamped;
-        input_clamped(x, y) = input(clamp(likely(x), input.dim(0).min(), input.dim(0).max()),
+        input_clamped(x, y) = input(x,
                                     clamp(y, input.dim(1).min(), input.dim(1).max()));
 
         // We use slightly different algorithms as a function of the
@@ -455,7 +455,7 @@ public:
         // The maximum diameter at which we should just use a direct
         // blur in x, instead of a sum-scan.  Tuned
         // empirically.
-        const int max_diameter_direct_blur_x = 6;
+        const int max_diameter_direct_blur_x = 8;
 
         // The maximum diameter at which we can get away with
         // low-precision accumulators for the blur in x and the blur
@@ -537,7 +537,6 @@ public:
                 (blur_y(x, ty, ry_scan) +
                  cast(blur_y_t, (cast(diff_type, input_clamped(x, ty * N + ry_scan + diameter)) -
                                  input_clamped(x, ty * N + ry_scan))));
-
             // For large diameter, we do the blur in x using the regular
             // sliding window approach.
 
@@ -548,10 +547,16 @@ public:
             Func integrate_x("integrate_x");
             integrate_x(x, ty, y) = undef(blur_x_t);
             integrate_x(-1, ty, y) = cast(blur_x_t, 0);
-            RDom rx_scan(0, width + diameter);
-            integrate_x(rx_scan, ty, y) =
-                (integrate_x(rx_scan - 1, ty, y) +
-                 blur_y(rx_scan, ty, y));
+            RDom rx_scan(0, vec, 0, ((width + diameter) / vec));
+            Expr rx = rx_scan.x + vec * rx_scan.y;
+            integrate_x(rx, ty, y) =
+                (integrate_x(rx - 1, ty, y) +
+                 blur_y(rx, ty, y));
+            RDom rx_tail(((width + diameter) / vec) * vec, (width + diameter) % vec);
+            rx = clamp(rx_tail, input.dim(0).min(), input.dim(0).max());
+            integrate_x(rx, ty, y) =
+                (integrate_x(rx - 1, ty, y) +
+                 blur_y(rx, ty, y));
 
             Func blur_x("blur_x");
             blur_x(x, ty, y) = integrate_x(x + diameter - 1, ty, y) - integrate_x(x - 1, ty, y);
@@ -587,7 +592,8 @@ public:
             } else {
                 results.push_back(normalize(x, y));
             }
-            conditions.push_back(diameter <= max_diameter);
+            Expr condition = diameter <= max_diameter;
+            conditions.push_back(condition);
 
             if (use_blur_x_direct) {
                 blur_y
@@ -618,7 +624,6 @@ public:
                     .reorder(x, y, rx_direct)
                     .vectorize(x)
                     .unroll(y);
-
             } else {
 
                 normalize
@@ -645,17 +650,19 @@ public:
                 integrate_x.update(1)
                     .vectorize(y);
 
-                RVar rxo, rxi;
+                RVar rxo;
                 integrate_x
                     .update(1)
-                    .split(rx_scan, rxo, rxi, vec)
-                    .reorder(y, rxi, rxo, ty)
-                    .unroll(rxi);
+                    .reorder(y, rx_scan.x, rx_scan.y, ty)
+                    .rename(rx_scan.y, rxo)
+                    .unroll(rx_scan.x);
+                integrate_x
+                    .update(2)
+                    .rename(rx_tail.x, rxo);
 
                 blur_y
                     .compute_at(integrate_x, rxo)
-                    .store_in(MemoryType::Stack)
-                    .bound_extent(x, vec);
+                    .store_in(MemoryType::Register);
 
                 blur_y.update(0)
                     .vectorize(x);
@@ -665,8 +672,7 @@ public:
 
                 blur_y.in()
                     .compute_at(integrate_x, rxo)
-                    .store_in(MemoryType::Stack)
-                    .bound_extent(x, vec)
+                    .store_in(MemoryType::Register)
                     .reorder_storage(y, x, ty)
                     .vectorize(x)
                     .unroll(y);
@@ -675,22 +681,27 @@ public:
             blur_y_init
                 .bound_extent(ty, 1)
                 .compute_at(output, ty)
-                .vectorize(x, vec, TailStrategy::GuardWithIf);
+                .vectorize(x, vec, TailStrategy::Predicate);
             if (use_down_y) {
                 blur_y_init.update(0)
                     .reorder(x, ry_init_fine_1, ty)
-                    .vectorize(x, vec, TailStrategy::GuardWithIf);
+                    .vectorize(x, vec, TailStrategy::Predicate);
                 blur_y_init.update(1)
                     .reorder(x, ry_init_coarse, ty)
-                    .vectorize(x, vec, TailStrategy::RoundUp);
+                    .vectorize(x, vec, TailStrategy::Predicate);
                 blur_y_init.update(2)
                     .reorder(x, ry_init_fine_2, ty)
-                    .vectorize(x, vec, TailStrategy::GuardWithIf);
+                    .vectorize(x, vec, TailStrategy::Predicate);
             } else {
                 blur_y_init.update(0)
                     .unroll(ry_init_full, 2)
                     .reorder(x, ry_init_full, ty)
-                    .vectorize(x, vec, TailStrategy::GuardWithIf);
+                    .vectorize(x, vec, TailStrategy::Predicate);
+            }
+
+            for (Func f : {blur_y, blur_y_init}) {
+                f.specialize(condition);
+                f.specialize_fail("unreachable");
             }
         }
 
@@ -710,15 +721,13 @@ public:
 
         output.dim(0).set_bounds(0, width);
         output.dim(1).set_min(0);
-        input.dim(0).set_bounds(0, width + diameter);
-        input.dim(1).set_bounds(0, output.height() + diameter);
+        input.dim(0).set_min(0);
+        input.dim(1).set_min(0);
 
         output
-            //            .align_bounds(y, N)
-            //.align_bounds(x, vec)
             .split(y, ty, y, N, TailStrategy::GuardWithIf)
             .split(y, yo, yi, N)
-            .split(x, tx, x, vec, TailStrategy::GuardWithIf)
+            .split(x, tx, x, vec, TailStrategy::Predicate)
             .reorder(x, yi, tx, yo, ty)
             .parallel(ty)
             .vectorize(x)

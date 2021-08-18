@@ -98,24 +98,24 @@ int main(int argc, char **argv) {
     }
 
     for (int r : radii) {
-        float t8, t16, t32;
-        {
+        float t8 = 0, t16 = 0, t32 = 0;
+        if (1) {
             auto translated = padded8;
             translated.set_min(r - max_radius, r - max_radius);
-            translated.crop(0, 0, output8.width() + 2 * r + 1);
-            translated.crop(1, 0, output8.height() + 2 * r + 1);
+            translated.crop(0, 0, output8.width() + 2 * r);
+            translated.crop(1, 0, output8.height() + 2 * r);
             double best_manual = benchmark(10, 10, [&]() {
                 box_blur_pyramid_u8(translated, 2 * r + 1, output8.width(), output8);
                 output8.device_sync();
             });
             t8 = throughput(r, best_manual);
-            convert_and_save_image(output8, "out_8_pyramid_" + std::to_string(r) + ".png");
+            // convert_and_save_image(output8, "out_8_pyramid_" + std::to_string(r) + ".png");
         }
-        {
+        if (1) {
             auto translated = padded16;
             translated.set_min(r - max_radius, r - max_radius);
-            translated.crop(0, 0, output8.width() + 2 * r + 1);
-            translated.crop(1, 0, output8.height() + 2 * r + 1);
+            translated.crop(0, 0, output8.width() + 2 * r);
+            translated.crop(1, 0, output8.height() + 2 * r);
             double best_manual = benchmark(10, 10, [&]() {
                 box_blur_pyramid_u16(translated, 2 * r + 1, output16.width(), output16);
                 output16.device_sync();
@@ -123,11 +123,11 @@ int main(int argc, char **argv) {
             t16 = throughput(r, best_manual);
             convert_and_save_image(output16, "out_16_pyramid_" + std::to_string(r) + ".png");
         }
-        {
+        if (1) {
             auto translated = padded32;
             translated.set_min(r - max_radius, r - max_radius);
-            translated.crop(0, 0, output8.width() + 2 * r + 1);
-            translated.crop(1, 0, output8.height() + 2 * r + 1);
+            translated.crop(0, 0, output8.width() + 2 * r);
+            translated.crop(1, 0, output8.height() + 2 * r);
             double best_manual = benchmark(10, 10, [&]() {
                 box_blur_pyramid_f32(translated, 2 * r + 1, output32.width(), output32);
                 output32.device_sync();
@@ -187,7 +187,7 @@ int main(int argc, char **argv) {
         });
         printf("Box blur (incremental) (%d): %g\n", 2 * r + 1, throughput(r, best_manual));
 
-        convert_and_save_image(output8, "out_" + std::to_string(r) + ".png");
+        // convert_and_save_image(output8, "out_" + std::to_string(r) + ".png");
     }
 
     /*
