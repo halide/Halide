@@ -469,22 +469,18 @@ public:
         // The maximum diameter at which we should do a direct blur in
         // y for the first scanline of each strip. Above this we use
         // the precomputed downsampled-in-y Func. Tuned empirically.
-        const int max_diameter_direct_blur_y =
-            bits == 8  ? 50 :
-            bits == 16 ? 40 :
-                         30;
+        const int max_diameter_direct_blur_y = 50;
 
         // The maximum diameter at which we can use a low-precision
         // accumulator for the blur in y. Must be <= 256 for uint8
         // inputs or we'll get overflow
         const int max_diameter_low_bit_blur_y = max_count_for_small_sum;
 
-        std::vector<int> max_diameters{max_diameter_direct_blur_x,
+        std::set<int> max_diameters{max_diameter_direct_blur_x,
                                        max_diameter_low_bit_blur_x,
                                        max_diameter_direct_blur_y,
                                        max_diameter_low_bit_blur_y,
                                        max_count_for_large_sum};
-        std::sort(max_diameters.begin(), max_diameters.end());
 
         std::vector<Expr> results, conditions;
         for (int max_diameter : max_diameters) {
@@ -551,7 +547,7 @@ public:
 
             Type blur_x_t = (max_diameter <= max_diameter_low_bit_blur_x) ? small_sum_type : large_sum_type;
 
-            const int integrate_vec = vec;
+            const int integrate_vec = natural_vector_size(blur_y_t);
 
             Func integrate_x("integrate_x");
             integrate_x(x, ty, y) = undef(blur_x_t);
