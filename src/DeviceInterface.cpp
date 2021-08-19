@@ -150,6 +150,8 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
         return DeviceAPI::CUDA;
     } else if (target.has_feature(Target::OpenGLCompute)) {
         return DeviceAPI::OpenGLCompute;
+    } else if (target.arch != Target::Hexagon && target.has_feature(Target::HVX)) {
+        return DeviceAPI::Hexagon;
     } else if (target.has_feature(Target::HexagonDma)) {
         return DeviceAPI::HexagonDma;
     } else if (target.has_feature(Target::D3D12Compute)) {
