@@ -818,7 +818,7 @@ private:
             Expr dense_ramp_base = strided_ramp_base(load->index, 1);
             if (dense_ramp_base.defined() && is_const_one(load->predicate) && (op->type.is_int_or_uint()) && ((op->type.bits() == 16) || (op->type.bits() == 32)) && (load->type.is_int_or_uint()) && (2 * load->type.bits() == op->type.bits())) {
                 // The third argument is just to pass the type of load.
-                return Call::make(op->type, "halide_xtensa_widening_load", {load->name, dense_ramp_base, make_one(load->type.element_of())}, Call::PureExtern);
+                return Call::make(op->type, "halide_xtensa_widening_load", {Variable::make(type_of<void *>(), load->name), dense_ramp_base, make_one(load->type.element_of())}, Call::PureExtern);
             }
         }
 
@@ -830,7 +830,7 @@ private:
                         Expr dense_ramp_base = strided_ramp_base(load->index, 1);
                         if (dense_ramp_base.defined() && is_const_one(load->predicate) && (op->type.is_int_or_uint()) && ((op->type.bits() == 16) || (op->type.bits() == 32)) && (load->type.is_int_or_uint()) && (2 * load->type.bits() == op->type.bits())) {
                             // The third argument is just to pass the type of load.
-                            widened_loads.push_back(Call::make(op->type.with_lanes(v.type().lanes()), "halide_xtensa_widening_load", {load->name, dense_ramp_base, make_one(load->type.element_of())}, Call::PureExtern));
+                            widened_loads.push_back(Call::make(op->type.with_lanes(v.type().lanes()), "halide_xtensa_widening_load", {Variable::make(type_of<void *>(), load->name), dense_ramp_base, make_one(load->type.element_of())}, Call::PureExtern));
                         }
                     }
                 }
@@ -976,7 +976,7 @@ private:
                         // arg1 is an index and arg2 is a native vector size.
                         dense_ramp_base = dense_ramp_base + op->args[1] * op->args[2];
                         // The third argument is just to pass the type of load.
-                        return Call::make(op->type, "halide_xtensa_widening_load", {load->name, dense_ramp_base, make_one(load->type.element_of())}, Call::PureExtern);
+                        return Call::make(op->type, "halide_xtensa_widening_load", {Variable::make(type_of<void *>(), load->name), dense_ramp_base, make_one(load->type.element_of())}, Call::PureExtern);
                     }
                 }
             }

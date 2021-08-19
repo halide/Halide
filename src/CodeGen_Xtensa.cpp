@@ -1978,9 +1978,15 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
     vector<string> args(op->args.size());
 
     if (op->name == "halide_xtensa_copy_1d") {
-        args[0] = print_name(op->args[0].as<StringImm>()->value);
+        internal_assert(op->args.size() >= 3);
+
+        const Variable *dest = op->args[0].as<Variable>();
+        internal_assert(dest != nullptr);
+        args[0] = print_name(dest->name);
         args[1] = print_expr(op->args[1]);
-        args[2] = print_name(op->args[2].as<StringImm>()->value);
+        const Variable *src = op->args[2].as<Variable>();
+        internal_assert(src != nullptr);
+        args[2] = print_name(src->name);
 
         for (size_t i = 3; i < op->args.size(); i++) {
             args[i] = print_expr(op->args[i]);
@@ -1991,7 +1997,9 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
 
     if (op->name == "halide_xtensa_widening_load") {
         internal_assert(op->args.size() == 3);
-        args[0] = print_name(op->args[0].as<StringImm>()->value);
+        const Variable *src = op->args[0].as<Variable>();
+        internal_assert(src != nullptr);
+        args[0] = print_name(src->name);
         args[1] = print_expr(op->args[1]);
         // We are only using args[2] argument to get the type of the load.
 

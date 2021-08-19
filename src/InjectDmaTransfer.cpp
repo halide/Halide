@@ -195,7 +195,10 @@ class InjectDmaTransferIntoProducer : public IRMutator {
                  << value_base << "\n>>>" << v.extent << "\n";
 
         // TODO(vksnk): is using Intrinsic here correct?
-        Expr copy_call = Call::make(Int(32), "halide_xtensa_copy_1d", {op->name, store_base, maybe_load->name, value_base, v.extent, op->value.type().bytes()}, Call::Intrinsic);
+        Expr copy_call = Call::make(Int(32), "halide_xtensa_copy_1d",
+                                    {Variable::make(type_of<void *>(), op->name), store_base,
+                                     Variable::make(type_of<void *>(), maybe_load->name), value_base,
+                                     v.extent, op->value.type().bytes()}, Call::Intrinsic);
         Expr wait_result = Call::make(Int(32), "halide_xtensa_wait_for_copy", {copy_call}, Call::Intrinsic);
         Stmt wait_is_done = AssertStmt::make(wait_result == 0, -1);
 
