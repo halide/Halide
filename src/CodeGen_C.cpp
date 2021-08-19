@@ -2824,7 +2824,7 @@ void CodeGen_C::visit(const Let *op) {
         // by name, so we can't rewrite the name.
         std::string name = print_name(op->name);
         stream << get_indent() << "auto "
-               << " " << name << " = " << id_value << ";\n";
+               << name << " = " << id_value << ";\n";
         stream << get_indent() << "halide_unused(" << name << ");\n";
     } else {
         Expr new_var = Variable::make(op->value.type(), id_value);
@@ -2919,7 +2919,7 @@ void CodeGen_C::visit(const LetStmt *op) {
         // directly by name, so we can't rewrite the name.
         std::string name = print_name(op->name);
         stream << get_indent() << "auto "
-               << " " << name << " = " << id_value << ";\n";
+               << name << " = " << id_value << ";\n";
         stream << get_indent() << "halide_unused(" << name << ");\n";
     } else {
         Expr new_var = Variable::make(op->value.type(), id_value);
@@ -3337,7 +3337,8 @@ HALIDE_FUNCTION_ATTRS
 int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) {
  void * const _ucon = const_cast<void *>(__user_context);
  void *_0 = _halide_buffer_get_host(_buf_buffer);
- void * _buf = _0;
+ auto _buf = _0;
+ halide_unused(_buf);
  {
   int64_t _1 = 43;
   int64_t _2 = _1 * _beta;

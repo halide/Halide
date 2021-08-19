@@ -365,12 +365,16 @@ struct LowerParallelTasks : public IRMutator {
                 // that just does the slice given by the arguments.
                 std::string loop_min_name = unique_name('t');
                 std::string loop_extent_name = unique_name('t');
-                t.body = For::make(t.loop_var,
-                                   Variable::make(Int(32), loop_min_name),
-                                   Variable::make(Int(32), loop_extent_name),
-                                   ForType::Serial,
-                                   DeviceAPI::None,
-                                   t.body);
+                if (!t.loop_var.empty()) {
+                    t.body = For::make(t.loop_var,
+                                       Variable::make(Int(32), loop_min_name),
+                                       Variable::make(Int(32), loop_extent_name),
+                                       ForType::Serial,
+                                       DeviceAPI::None,
+                                       t.body);
+                } else {
+                    internal_assert(is_const_one(t.extent));
+                }
                 closure_args[1] = LoweredArgument(loop_min_name, Argument::Kind::InputScalar,
                                                   Int(32), 0, ArgumentEstimates());
                 closure_args[2] = LoweredArgument(loop_extent_name, Argument::Kind::InputScalar,
