@@ -35,7 +35,7 @@ bool test_interleave(int x_stride) {
     Buffer<T> buff = Buffer<T>::make_interleaved(255, 128, x_stride);
     buff.fill(7);
     if (target.has_gpu_feature() || target.has_feature(Target::HVX)) {
-        buff.copy_to_device();
+        buff.copy_to_device(target);
     }
     Buffer<T> buff_cropped = buff;
     buff_cropped.crop(2, 0, 3);
