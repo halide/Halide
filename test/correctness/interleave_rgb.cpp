@@ -4,7 +4,7 @@
 using namespace Halide;
 
 template<typename T>
-bool test_interleave() {
+bool test_interleave(int x_stride) {
     Var x("x"), y("y"), c("c");
 
     Func input("input");
@@ -18,7 +18,7 @@ bool test_interleave() {
     interleaved.reorder(c, x, y).bound(c, 0, 3);
     interleaved.output_buffer()
         .dim(0)
-        .set_stride(3)
+        .set_stride(x_stride)
         .dim(2)
         .set_stride(1)
         .set_extent(3);
@@ -28,17 +28,23 @@ bool test_interleave() {
         interleaved.gpu_tile(x, y, xi, yi, 16, 16);
     } else if (target.has_feature(Target::HVX)) {
         const int vector_width = 128 / sizeof(T);
-        interleaved.hexagon().vectorize(x, vector_width).unroll(c);
+        interleaved.hexagon().vectorize(x, vector_width, TailStrategy::GuardWithIf).unroll(c);
     } else {
-        interleaved.vectorize(x, target.natural_vector_size<uint8_t>()).unroll(c);
+        interleaved.vectorize(x, target.natural_vector_size<uint8_t>(), TailStrategy::GuardWithIf).unroll(c);
     }
-    Buffer<T> buff = Buffer<T>::make_interleaved(256, 128, 3);
-    interleaved.realize(buff, target);
+    Buffer<T> buff = Buffer<T>::make_interleaved(255, 128, x_stride);
+    buff.fill(7);
+    if (target.has_gpu_feature() || target.has_feature(Target::HVX)) {
+        buff.copy_to_device();
+    }
+    Buffer<T> buff_cropped = buff;
+    buff_cropped.crop(2, 0, 3);
+    interleaved.realize(buff_cropped, target);
     buff.copy_to_host();
     for (int y = 0; y < buff.height(); y++) {
         for (int x = 0; x < buff.width(); x++) {
-            for (int c = 0; c < 3; c++) {
-                T correct = x * 3 + y * 5 + c;
+            for (int c = 0; c < x_stride; c++) {
+                T correct = c < 3 ? x * 3 + y * 5 + c : 7;
                 if (buff(x, y, c) != correct) {
                     printf("out(%d, %d, %d) = %d instead of %d\n", x, y, c, buff(x, y, c), correct);
                     return false;
@@ -50,9 +56,11 @@ bool test_interleave() {
 }
 
 int main(int argc, char **argv) {
-    if (!test_interleave<uint8_t>()) return -1;
-    if (!test_interleave<uint16_t>()) return -1;
-    if (!test_interleave<uint32_t>()) return -1;
+    for (int x_stride : {3, 4}) {
+        if (!test_interleave<uint8_t>(x_stride)) return -1;
+        if (!test_interleave<uint16_t>(x_stride)) return -1;
+        if (!test_interleave<uint32_t>(x_stride)) return -1;
+    }
 
     printf("Success!\n");
     return 0;
