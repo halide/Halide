@@ -251,11 +251,8 @@ Stmt IRMutator::visit(const Free *op) {
 }
 
 Stmt IRMutator::visit(const Realize *op) {
-    Region new_bounds;
-    bool bounds_changed;
-
     // Mutate the bounds
-    std::tie(new_bounds, bounds_changed) = mutate_region(this, op->bounds);
+    auto [new_bounds, bounds_changed] = mutate_region(this, op->bounds);
 
     Stmt body = mutate(op->body);
     Expr condition = mutate(op->condition);
@@ -272,11 +269,8 @@ Stmt IRMutator::visit(const Prefetch *op) {
     Stmt body = mutate(op->body);
     Expr condition = mutate(op->condition);
 
-    Region new_bounds;
-    bool bounds_changed;
-
     // Mutate the bounds
-    std::tie(new_bounds, bounds_changed) = mutate_region(this, op->bounds);
+    auto [new_bounds, bounds_changed] = mutate_region(this, op->bounds);
 
     if (!bounds_changed &&
         body.same_as(op->body) &&

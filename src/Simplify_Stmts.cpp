@@ -609,11 +609,8 @@ Stmt Simplify::visit(const Block *op) {
 }
 
 Stmt Simplify::visit(const Realize *op) {
-    Region new_bounds;
-    bool bounds_changed;
-
     // Mutate the bounds
-    std::tie(new_bounds, bounds_changed) = mutate_region(this, op->bounds, nullptr);
+    auto [new_bounds, bounds_changed] = mutate_region(this, op->bounds, nullptr);
 
     Stmt body = mutate(op->body);
     Expr condition = mutate(op->condition, nullptr);
@@ -635,11 +632,8 @@ Stmt Simplify::visit(const Prefetch *op) {
         return body;
     }
 
-    Region new_bounds;
-    bool bounds_changed;
-
     // Mutate the bounds
-    std::tie(new_bounds, bounds_changed) = mutate_region(this, op->bounds, nullptr);
+    auto [new_bounds, bounds_changed] = mutate_region(this, op->bounds, nullptr);
 
     if (!bounds_changed &&
         body.same_as(op->body) &&
