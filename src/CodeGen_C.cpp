@@ -2832,7 +2832,7 @@ void CodeGen_C::visit(const Let *op) {
         // by name, so we can't rewrite the name.
         std::string name = print_name(op->name);
         stream << get_indent() << "auto "
-               << " " << name << " = " << id_value << ";\n";
+               << name << " = " << id_value << ";\n";
         stream << get_indent() << "halide_unused(" << name << ");\n";
     } else {
         Expr new_var = Variable::make(op->value.type(), id_value);
@@ -2927,7 +2927,7 @@ void CodeGen_C::visit(const LetStmt *op) {
         // directly by name, so we can't rewrite the name.
         std::string name = print_name(op->name);
         stream << get_indent() << "auto "
-               << " " << name << " = " << id_value << ";\n";
+               << name << " = " << id_value << ";\n";
         stream << get_indent() << "halide_unused(" << name << ");\n";
     } else {
         Expr new_var = Variable::make(op->value.type(), id_value);
