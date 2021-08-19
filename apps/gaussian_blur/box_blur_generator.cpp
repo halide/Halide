@@ -436,8 +436,7 @@ public:
         const int vec = bits <= 16 ? 16 : 8;
 
         Func input_clamped;
-        input_clamped(x, y) = input(x,
-                                    min(likely(y), input.dim(1).max()));
+        input_clamped(x, y) = input(x, min(likely(y), input.dim(1).max()));
 
         // We use slightly different algorithms as a function of the
         // max diameter supported. They get muxed together at the end.
@@ -697,7 +696,8 @@ public:
             blur_y_init
                 .bound_extent(ty, 1)
                 .compute_at(output, yo)
-                .vectorize(x, vec, TailStrategy::ShiftInwards);
+                .vectorize(x, vec, TailStrategy::GuardWithIf)
+                .align_storage(x, vec);
             if (use_down_y) {
                 blur_y_init.update(0)
                     .reorder(x, ry_init_fine_1, ty)
@@ -710,7 +710,6 @@ public:
                     .vectorize(x, vec * 2, TailStrategy::GuardWithIf);
             } else {
                 blur_y_init.update(0)
-                    .unroll(ry_init_full, 2)
                     .reorder(x, ry_init_full, ty)
                     .vectorize(x, vec * 2, TailStrategy::GuardWithIf);
             }
@@ -724,8 +723,13 @@ public:
         down_y.in()
             .compute_root()
             .parallel(y)
-            .vectorize(x, vec, TailStrategy::GuardWithIf)
-            .align_storage(x, vec);
+            .vectorize(x, vec * 2, TailStrategy::GuardWithIf)
+            .align_storage(x, vec * 2);
+
+        down_y.compute_at(down_y.in(), y)
+            .update()
+            .reorder(x, r_down, y)
+            .vectorize(x, vec * 2, TailStrategy::GuardWithIf);
 
         Expr result = results.back();
 
