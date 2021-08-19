@@ -2372,12 +2372,19 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::alloca)) {
         internal_assert(op->args.size() == 1);
         internal_assert(op->type.is_handle());
+        const int64_t *sz = as_const_int(op->args[0]);
         if (op->type == type_of<struct halide_buffer_t *>() &&
             Call::as_intrinsic(op->args[0], {Call::size_of_halide_buffer_t})) {
             stream << get_indent();
             string buf_name = unique_name('b');
             stream << "halide_buffer_t " << buf_name << ";\n";
             rhs << "&" << buf_name;
+        } else if (op->type == type_of<struct halide_semaphore_t *>() &&
+                   sz && *sz == 16) {
+            stream << get_indent();
+            string semaphore_name = unique_name("sema");
+            stream << "halide_semaphore_t " << semaphore_name << ";\n";
+            rhs << "&" << semaphore_name;
         } else {
             // Make a stack of uint64_ts
             string size = print_expr(simplify((op->args[0] + 7) / 8));
@@ -2484,7 +2491,7 @@ void CodeGen_C::visit(const Call *op) {
                 // List the types.
                 indent++;
                 for (size_t i = 2; i < op->args.size(); i++) {
-                    stream << get_indent() << print_type(op->args[i].type()) << " f_" << i - 2 << ";\n";
+                    stream << get_indent() << print_type(op->args[i].type(), AppendSpace) << "f_" << i - 2 << ";\n";
                 }
                 indent--;
                 stream << get_indent() << "};\n";
@@ -2530,8 +2537,8 @@ void CodeGen_C::visit(const Call *op) {
                 stream << "\n";
             }
             if (count > 0) {
-                stream << get_indent() << "},\n";
                 indent--;
+                stream << get_indent() << "},\n";
             }
             item += 1;
         } while (item < count);
@@ -2660,6 +2667,7 @@ void CodeGen_C::visit(const Call *op) {
         print_assignment(op->type, "0");
     } else if (op->is_intrinsic(Call::declare_struct_type) ||
                op->is_intrinsic(Call::make_typed_struct) ||
+               op->is_intrinsic(Call::load_struct_member) ||
                op->is_intrinsic(Call::resolve_function_name)) {
         // print_assigment will get the type info wrong for this case.
         std::string rhs_str = rhs.str();
@@ -2824,7 +2832,7 @@ void CodeGen_C::visit(const Let *op) {
         // by name, so we can't rewrite the name.
         std::string name = print_name(op->name);
         stream << get_indent() << "auto "
-               << name << " = " << id_value << ";\n";
+               << " " << name << " = " << id_value << ";\n";
         stream << get_indent() << "halide_unused(" << name << ");\n";
     } else {
         Expr new_var = Variable::make(op->value.type(), id_value);
@@ -2919,7 +2927,7 @@ void CodeGen_C::visit(const LetStmt *op) {
         // directly by name, so we can't rewrite the name.
         std::string name = print_name(op->name);
         stream << get_indent() << "auto "
-               << name << " = " << id_value << ";\n";
+               << " " << name << " = " << id_value << ";\n";
         stream << get_indent() << "halide_unused(" << name << ");\n";
     } else {
         Expr new_var = Variable::make(op->value.type(), id_value);
