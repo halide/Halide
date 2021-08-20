@@ -17,6 +17,7 @@ Checks: >
     -misc-unconventional-assign-operator,
     -misc-unused-parameters,
     modernize-deprecated-headers,
+    modernize-loop-convert,
     modernize-redundant-void-arg,
     modernize-use-bool-literals,
     modernize-use-default-member-init,

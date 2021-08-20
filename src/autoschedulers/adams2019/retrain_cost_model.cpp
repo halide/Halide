@@ -266,8 +266,8 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
             Sample sample;
             sample.filename = s;
             sample.runtimes.push_back(runtime);
-            for (int i = 0; i < kModels; i++) {
-                sample.prediction[i] = 0.0;
+            for (double &i : sample.prediction) {
+                i = 0.0;
             }
             sample.schedule_id = schedule_id;
             sample.schedule_features = Buffer<float>(head2_w, num_stages);

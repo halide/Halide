@@ -136,8 +136,8 @@ std::vector<Type> parse_halide_type_list(const std::string &types) {
 void ValueTracker::track_values(const std::string &name, const std::vector<Expr> &values) {
     std::vector<std::vector<Expr>> &history = values_history[name];
     if (history.empty()) {
-        for (size_t i = 0; i < values.size(); ++i) {
-            history.push_back({values[i]});
+        for (const auto &value : values) {
+            history.push_back({value});
         }
         return;
     }
@@ -581,8 +581,8 @@ void StubEmitter::emit() {
     stream << get_indent() << "generator_params.to_generator_params_map(),\n";
     stream << get_indent() << "{\n";
     indent_level++;
-    for (size_t i = 0; i < inputs.size(); ++i) {
-        stream << get_indent() << "Stub::to_stub_input_vector(inputs." << inputs[i]->name() << ")";
+    for (auto *input : inputs) {
+        stream << get_indent() << "Stub::to_stub_input_vector(inputs." << input->name() << ")";
         stream << ",\n";
     }
     indent_level--;

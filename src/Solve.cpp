@@ -1294,18 +1294,18 @@ void solve_test() {
         for (int num = 5; num <= 10; num++) {
             Expr in[] = {x * den<num, x * den <= num, x * den == num, x * den != num, x * den >= num, x * den> num,
                          x / den<num, x / den <= num, x / den == num, x / den != num, x / den >= num, x / den> num};
-            for (int j = 0; j < 12; j++) {
-                SolverResult solved = solve_expression(in[j], "x");
-                internal_assert(solved.fully_solved) << "Error: failed to solve for x in " << in[j] << "\n";
+            for (auto &j : in) {
+                SolverResult solved = solve_expression(j, "x");
+                internal_assert(solved.fully_solved) << "Error: failed to solve for x in " << j << "\n";
                 Expr out = simplify(solved.result);
                 for (int i = -10; i < 10; i++) {
-                    Expr in_val = substitute("x", i, in[j]);
+                    Expr in_val = substitute("x", i, j);
                     Expr out_val = substitute("x", i, out);
                     in_val = simplify(in_val);
                     out_val = simplify(out_val);
                     internal_assert(equal(in_val, out_val))
                         << "Error: "
-                        << in[j] << " is not equivalent to "
+                        << j << " is not equivalent to "
                         << out << " when x == " << i << "\n";
                 }
             }

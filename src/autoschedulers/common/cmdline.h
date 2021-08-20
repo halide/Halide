@@ -377,9 +377,8 @@ class parser {
 public:
     parser() = default;
     ~parser() {
-        for (std::map<std::string, option_base *>::iterator p = options.begin();
-             p != options.end(); p++) {
-            delete p->second;
+        for (auto &option : options) {
+            delete option.second;
         }
     }
 
@@ -489,8 +488,8 @@ public:
             args.push_back(buf);
         }
 
-        for (size_t i = 0; i < args.size(); i++) {
-            std::cout << "\"" << args[i] << "\"" << std::endl;
+        for (auto &arg : args) {
+            std::cout << "\"" << arg << "\"" << std::endl;
         }
 
         return parse(args);
@@ -520,19 +519,18 @@ public:
         }
 
         std::map<char, std::string> lookup;
-        for (std::map<std::string, option_base *>::iterator p = options.begin();
-             p != options.end(); p++) {
-            if (p->first.length() == 0) {
+        for (auto &option : options) {
+            if (option.first.length() == 0) {
                 continue;
             }
-            char initial = p->second->short_name();
+            char initial = option.second->short_name();
             if (initial) {
                 if (lookup.count(initial) > 0) {
                     lookup[initial] = "";
                     errors.push_back(std::string("short option '") + initial + "' is ambiguous");
                     return false;
                 } else {
-                    lookup[initial] = p->first;
+                    lookup[initial] = option.first;
                 }
             }
         }
@@ -600,10 +598,9 @@ public:
             }
         }
 
-        for (std::map<std::string, option_base *>::iterator p = options.begin();
-             p != options.end(); p++) {
-            if (!p->second->valid()) {
-                errors.push_back("need option: --" + std::string(p->first));
+        for (auto &option : options) {
+            if (!option.second->valid()) {
+                errors.push_back("need option: --" + std::string(option.first));
             }
         }
 
@@ -637,8 +634,8 @@ public:
 
     std::string error_full() const {
         std::ostringstream oss;
-        for (size_t i = 0; i < errors.size(); i++) {
-            oss << errors[i] << std::endl;
+        for (const auto &error : errors) {
+            oss << error << std::endl;
         }
         return oss.str();
     }
@@ -646,9 +643,9 @@ public:
     std::string usage() const {
         std::ostringstream oss;
         oss << "usage: " << prog_name << " ";
-        for (size_t i = 0; i < ordered.size(); i++) {
-            if (ordered[i]->must()) {
-                oss << ordered[i]->short_description() << " ";
+        for (const auto &i : ordered) {
+            if (i->must()) {
+                oss << i->short_description() << " ";
             }
         }
 
@@ -656,21 +653,21 @@ public:
         oss << "options:" << std::endl;
 
         size_t max_width = 0;
-        for (size_t i = 0; i < ordered.size(); i++) {
-            max_width = std::max(max_width, ordered[i]->name().length());
+        for (const auto &i : ordered) {
+            max_width = std::max(max_width, i->name().length());
         }
-        for (size_t i = 0; i < ordered.size(); i++) {
-            if (ordered[i]->short_name()) {
-                oss << "  -" << ordered[i]->short_name() << ", ";
+        for (const auto &i : ordered) {
+            if (i->short_name()) {
+                oss << "  -" << i->short_name() << ", ";
             } else {
                 oss << "      ";
             }
 
-            oss << "--" << ordered[i]->name();
-            for (size_t j = ordered[i]->name().length(); j < max_width + 4; j++) {
+            oss << "--" << i->name();
+            for (size_t j = i->name().length(); j < max_width + 4; j++) {
                 oss << ' ';
             }
-            oss << ordered[i]->description() << std::endl;
+            oss << i->description() << std::endl;
         }
         return oss.str();
     }

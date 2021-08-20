@@ -155,8 +155,8 @@ inline bool HashMap::init(void *user_context, copy_value_func _copy_value, destr
     kDefaultCacheSize = 1 << 20;
     max_cache_size = kDefaultCacheSize;
     current_cache_size = 0;
-    for (size_t i = 0; i < kHashTableSize; ++i) {
-        cache_entries[i] = nullptr;
+    for (auto &cache_entrie : cache_entries) {
+        cache_entrie = nullptr;
     }
     halide_assert(nullptr, _copy_value);
     halide_assert(nullptr, _destroy_value);
@@ -371,9 +371,9 @@ inline void HashMap::release(void *user_context, void *host) {
 
 inline void HashMap::cleanup() {
     debug(nullptr) << "halide_memoization_cache_cleanup\n";
-    for (size_t i = 0; i < kHashTableSize; i++) {
-        CacheEntry *entry = cache_entries[i];
-        cache_entries[i] = nullptr;
+    for (auto &cache_entrie : cache_entries) {
+        CacheEntry *entry = cache_entrie;
+        cache_entrie = nullptr;
         while (entry != nullptr) {
             CacheEntry *next = entry->next;
             entry->destroy(this->user_context, destroy_value);

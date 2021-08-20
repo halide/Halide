@@ -72,9 +72,9 @@ string get_sanitized_name(string name) {
     if (isdigit(name[0])) {
         name = "_" + name;
     }
-    for (size_t i = 0; i < name.size(); ++i) {
-        if (!isalnum(name[i])) {
-            name[i] = '_';
+    for (char &i : name) {
+        if (!isalnum(i)) {
+            i = '_';
         }
     }
     return name;
@@ -817,8 +817,8 @@ struct AutoSchedule {
                 if (s.first > 0) {
                     schedule_ss << ".update(" << std::to_string(s.first - 1) << ")";
                 }
-                for (size_t i = 0; i < s.second.size(); ++i) {
-                    schedule_ss << "\n        ." << s.second[i];
+                for (const auto &i : s.second) {
+                    schedule_ss << "\n        ." << i;
                 }
                 schedule_ss << ";\n";
             }
@@ -1681,8 +1681,8 @@ void Partitioner::group(Partitioner::Level level) {
         debug(3) << "\n============================\n"
                  << "Current grouping candidates:\n"
                  << "============================\n";
-        for (size_t i = 0; i < cand.size(); ++i) {
-            debug(3) << "{" << cand[i].first << ", " << cand[i].second << "}\n";
+        for (auto &i : cand) {
+            debug(3) << "{" << i.first << ", " << i.second << "}\n";
         }
 
         vector<pair<GroupingChoice, GroupConfig>> best = choose_candidate_grouping(cand, level);
@@ -1911,8 +1911,8 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     Box out_tile_extent;
     if (g.output.stage_num == 0) {
         const vector<string> &args = g.output.func.args();
-        for (size_t d = 0; d < args.size(); d++) {
-            const auto &iter = tile_bounds.find(args[d]);
+        for (const auto &arg : args) {
+            const auto &iter = tile_bounds.find(arg);
             if (iter != tile_bounds.end()) {
                 out_tile_extent.push_back(iter->second);
             } else {

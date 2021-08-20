@@ -2842,11 +2842,11 @@ private:
         }
 
         if (consider_calls) {
-            for (size_t i = 0; i < op->args.size(); i++) {
-                op->args[i].accept(this);
+            for (const auto &arg : op->args) {
+                arg.accept(this);
             }
-            for (size_t i = 0; i < op->values.size(); i++) {
-                op->values[i].accept(this);
+            for (const auto &value : op->values) {
+                value.accept(this);
             }
         }
     }
@@ -3086,8 +3086,8 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                                               const map<string, Function> &env) {
     FuncValueBounds fb;
 
-    for (size_t i = 0; i < order.size(); i++) {
-        Function f = env.find(order[i])->second;
+    for (const auto &i : order) {
+        Function f = env.find(i)->second;
         const vector<string> f_args = f.args();
         for (int j = 0; j < f.outputs(); j++) {
             pair<string, int> key = {f.name(), j};
@@ -3129,7 +3129,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
             }
 
             debug(2) << "Bounds on value " << j
-                     << " for func " << order[i]
+                     << " for func " << i
                      << " are: " << result.min << ", " << result.max << "\n";
         }
     }
