@@ -22,6 +22,22 @@ using std::set;
 using std::string;
 using std::vector;
 
+/**
+ * The steps by which prefetch directives are injected and lowered are a bit nonobvious;
+ * here's the overall flow at the time this comment was written:
+ *
+ *  - When the .prefetch() schedule directive is used, a PrefetchDirective is
+ *    added to the relevant Functiob
+ *  - At the start of lowering (schedule_functions()), a placeholder Prefetch IR nodes (w/ no region) are inserted
+ *  - Various lowering passes mutate the placeholder Prefetch IR nodes as appropriate
+ *  - After storage folding, the Prefetch IR nodes are updated with a proper region (via inject_prefetch())
+ *  - In storage_flattening(), Prefetch IR nodes transformed to Call::prefetch intrinsics:
+ *    - These calls are always wrapped in Evaluate IR Nodes
+ *    - The Evaluate IR nodes are, in turn, possibly in IfTheElse (if condition != const_true())
+ *    - After this point, no Prefetch IR nodes should remain in the IR (only prefetch intrinsics)
+ *  - reduce_prefetch_dimension() is later called to reduce prefetch the dimensionality of the prefetch intrinsic.
+ */
+
 namespace {
 
 // Collect the bounds of all the externally referenced buffers in a stmt.
@@ -227,7 +243,7 @@ private:
 class ReducePrefetchDimension : public IRMutator {
     using IRMutator::visit;
 
-    size_t max_dim;
+    const size_t max_dim;
 
     Stmt visit(const Evaluate *op) override {
         Stmt stmt = IRMutator::visit(op);
@@ -240,7 +256,7 @@ class ReducePrefetchDimension : public IRMutator {
         // the dimensions with larger strides and keep the smaller ones in
         // the prefetch call.
 
-        size_t max_arg_size = 2 + 2 * max_dim;  // Prefetch: {base, offset, extent0, stride0, extent1, stride1, ...}
+        const size_t max_arg_size = 2 + 2 * max_dim;  // Prefetch: {base, offset, extent0, stride0, extent1, stride1, ...}
         if (prefetch && (prefetch->args.size() > max_arg_size)) {
             const Variable *base = prefetch->args[0].as<Variable>();
             internal_assert(base && base->type.is_handle());
@@ -248,7 +264,8 @@ class ReducePrefetchDimension : public IRMutator {
             vector<string> index_names;
             Expr new_offset = prefetch->args[1];
             for (size_t i = max_arg_size; i < prefetch->args.size(); i += 2) {
-                Expr stride = prefetch->args[i + 1];
+                // const Expr &extent = prefetch->args[i + 0];  // unused
+                const Expr &stride = prefetch->args[i + 1];
                 string index_name = "prefetch_reduce_" + base->name + "." + std::to_string((i - 1) / 2);
                 index_names.push_back(index_name);
                 new_offset += Variable::make(Int(32), index_name) * stride;
@@ -324,7 +341,9 @@ class SplitPrefetch : public IRMutator {
                 extents.push_back(outer_extent);
             }
 
-            vector<Expr> args = {base, new_offset, Expr(1), simplify(max_byte_size / elem_size)};
+            Expr new_extent = 1;
+            Expr new_stride = simplify(max_byte_size / elem_size);
+            vector<Expr> args = {base, std::move(new_offset), std::move(new_extent), std::move(new_stride)};
             stmt = Evaluate::make(Call::make(prefetch->type, Call::prefetch, args, Call::Intrinsic));
             for (size_t i = 0; i < index_names.size(); ++i) {
                 stmt = For::make(index_names[i], 0, extents[i],
