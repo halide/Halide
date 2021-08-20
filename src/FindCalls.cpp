@@ -92,13 +92,13 @@ map<string, Function> build_environment(const vector<Function> &funcs) {
 
 map<string, Function> find_transitive_calls(const Function &f) {
     map<string, Function> res;
-    populate_environment_helper(std::move(f), res, true, false);
+    populate_environment_helper(f, res, true, false);
     return res;
 }
 
 map<string, Function> find_direct_calls(const Function &f) {
     map<string, Function> res;
-    populate_environment_helper(std::move(f), res, false, false);
+    populate_environment_helper(f, res, false, false);
     return res;
 }
 

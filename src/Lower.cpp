@@ -76,7 +76,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::map;
 using std::ostringstream;
 using std::string;
 using std::vector;
