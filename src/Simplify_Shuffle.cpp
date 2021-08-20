@@ -17,9 +17,7 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                     // the same shuffle back.
                     break;
                 } else {
-                    Expr result = extract_lane(vector, index);
-                    internal_assert(!result.as<Shuffle>());
-                    return mutate(result, bounds);
+                    return extract_lane(mutate(vector, bounds), index);
                 }
             }
             index -= vector.type().lanes();
