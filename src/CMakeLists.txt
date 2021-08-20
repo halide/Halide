@@ -11,7 +11,6 @@ set(HEADER_FILES
     AlignLoads.h
     AllocationBoundsInference.h
     ApplySplit.h
-    ApproximateDifferences.h
     Argument.h
     AssociativeOpsTable.h
     Associativity.h
@@ -38,6 +37,7 @@ set(HEADER_FILES
     CodeGen_Targets.h
     CompilerLogger.h
     ConciseCasts.h
+    ConstantBounds.h
     CPlusPlusMangle.h
     CSE.h
     Debug.h
@@ -203,6 +203,7 @@ set(SOURCE_FILES
     CodeGen_WebAssembly.cpp
     CodeGen_X86.cpp
     CompilerLogger.cpp
+    ConstantBounds.cpp
     CPlusPlusMangle.cpp
     CSE.cpp
     Debug.cpp

@@ -1,4 +1,4 @@
-#include "ApproximateDifferences.h"
+#include "ConstantBounds.h"
 #include "Bounds.h"
 #include "Error.h"
 #include "IR.h"
@@ -7,6 +7,7 @@
 #include "IROperator.h"
 #include "IRVisitor.h"
 #include "Simplify.h"
+#include "SimplifyCorrelatedDifferences.h"
 
 #include <vector>
 
@@ -778,18 +779,6 @@ public:
     }
 };
 
-Expr approximate_optimizations(const Expr &expr, Direction direction, const Scope<Interval> &scope) {
-    Expr simpl = substitute_some_lets(expr);
-    simpl = simplify(reorder_terms(simpl));
-    // TODO: only do push_rationals if correlated divisions exist.
-    simpl = push_rationals(expr, direction);
-    simpl = simplify(simpl);
-    simpl = strip_unbounded_terms(expr, direction, scope);
-    return simplify(simpl);
-}
-
-}  // namespace
-
 Expr push_rationals(const Expr &expr, const Direction direction) {
     if (expr.type() == Int(32)) {
         return handle_push_none(expr, direction);
@@ -811,8 +800,18 @@ Expr reorder_terms(const Expr &expr) {
     return ReorderTerms().mutate(expr);
 }
 
-Expr substitute_some_lets(const Expr &expr, size_t count) {
+Expr substitute_some_lets(const Expr &expr, size_t count = 100) {
     return SubstituteSomeLets(count).mutate(expr);
+}
+
+Expr approximate_optimizations(const Expr &expr, Direction direction, const Scope<Interval> &scope) {
+    Expr simpl = substitute_some_lets(expr);
+    simpl = simplify(reorder_terms(simpl));
+    // TODO: only do push_rationals if correlated divisions exist.
+    simpl = push_rationals(expr, direction);
+    simpl = simplify(simpl);
+    simpl = strip_unbounded_terms(expr, direction, scope);
+    return simplify(simpl);
 }
 
 Expr approximate_constant_bound(const Expr &expr, Direction direction, const Scope<Interval> &scope) {
@@ -849,6 +848,49 @@ Interval approximate_constant_bounds(const Expr &expr, const Scope<Interval> &sc
     }
     if (!is_const(interval.max)) {
         interval.max = Interval::pos_inf();
+    }
+
+    return interval;
+}
+
+}  // namespace
+
+Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scope) {
+    Interval interval = find_constant_bounds(e, scope);
+    Expr bound;
+    if (interval.has_lower_bound() && (d == Direction::Lower)) {
+        bound = interval.min;
+    } else if (interval.has_upper_bound() && (d == Direction::Upper)) {
+        bound = interval.max;
+    }
+    return bound;
+}
+
+static bool enable_approximate_methods() {
+    return get_env_variable("HL_APPROXIMATE_METHODS") == "1";
+}
+
+Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
+    Expr expr = bound_correlated_differences(simplify(remove_likelies(e)));
+    Interval interval = bounds_of_expr_in_scope(expr, scope, FuncValueBounds(), true);
+    interval.min = simplify(interval.min);
+    interval.max = simplify(interval.max);
+
+    // Note that we can get non-const but well-defined results (e.g. signed_integer_overflow);
+    // for our purposes here, treat anything non-const as no-bound.
+    if (!is_const(interval.min)) {
+        interval.min = Interval::neg_inf();
+    }
+    if (!is_const(interval.max)) {
+        interval.max = Interval::pos_inf();
+    }
+
+    if (enable_approximate_methods()) {
+        Interval approx_interval = approximate_constant_bounds(expr, scope);
+
+        // Take the interesection of the previous method and the aggresive method.
+        interval.min = Interval::make_min(interval.min, approx_interval.min);
+        interval.max = Interval::make_max(interval.max, approx_interval.max);    
     }
 
     return interval;

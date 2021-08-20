@@ -405,7 +405,6 @@ SOURCE_FILES = \
   AlignLoads.cpp \
   AllocationBoundsInference.cpp \
   ApplySplit.cpp \
-	ApproximateDifferences.cpp \
   Argument.cpp \
   AssociativeOpsTable.cpp \
   Associativity.cpp \
@@ -437,6 +436,7 @@ SOURCE_FILES = \
   CodeGen_WebAssembly.cpp \
   CodeGen_X86.cpp \
   CompilerLogger.cpp \
+	ConstantBounds.cpp \
   CPlusPlusMangle.cpp \
   CSE.cpp \
   Debug.cpp \
@@ -580,7 +580,6 @@ HEADER_FILES = \
   AlignLoads.h \
   AllocationBoundsInference.h \
   ApplySplit.h \
-	ApproximateDifferences.h \
   Argument.h \
   AssociativeOpsTable.h \
   Associativity.h \
@@ -607,6 +606,7 @@ HEADER_FILES = \
   CodeGen_Targets.h \
   CompilerLogger.h \
   ConciseCasts.h \
+	ConstantBounds.h \
   CPlusPlusMangle.h \
   CSE.h \
   Debug.h \

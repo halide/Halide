@@ -1,7 +1,6 @@
 #include <iostream>
 #include <utility>
 
-#include "ApproximateDifferences.h"
 #include "Bounds.h"
 #include "CSE.h"
 #include "ConciseCasts.h"
@@ -61,41 +60,6 @@ int static_sign(const Expr &x) {
 const FuncValueBounds &empty_func_value_bounds() {
     static FuncValueBounds empty;
     return empty;
-}
-
-Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scope) {
-    Interval interval = find_constant_bounds(e, scope);
-    Expr bound;
-    if (interval.has_lower_bound() && (d == Direction::Lower)) {
-        bound = interval.min;
-    } else if (interval.has_upper_bound() && (d == Direction::Upper)) {
-        bound = interval.max;
-    }
-    return bound;
-}
-
-Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
-    Expr expr = bound_correlated_differences(simplify(remove_likelies(e)));
-    Interval interval = bounds_of_expr_in_scope(expr, scope, FuncValueBounds(), true);
-    interval.min = simplify(interval.min);
-    interval.max = simplify(interval.max);
-
-    // Note that we can get non-const but well-defined results (e.g. signed_integer_overflow);
-    // for our purposes here, treat anything non-const as no-bound.
-    if (!is_const(interval.min)) {
-        interval.min = Interval::neg_inf();
-    }
-    if (!is_const(interval.max)) {
-        interval.max = Interval::pos_inf();
-    }
-
-    Interval approx_interval = approximate_constant_bounds(expr, scope);
-
-    // Take the interesection of the previous method and the aggresive method.
-    interval.min = Interval::make_min(interval.min, approx_interval.min);
-    interval.max = Interval::make_max(interval.max, approx_interval.max);
-
-    return interval;
 }
 
 bool Box::maybe_unused() const {
