@@ -147,11 +147,11 @@ private:
                 condition = simplify(prefetch_box.used && condition);
             }
             internal_assert(!new_bounds.empty());
-            return Prefetch::make(op->name, op->types, new_bounds, op->prefetch, condition, body);
+            return Prefetch::make(op->name, op->types, new_bounds, op->prefetch, std::move(condition), std::move(body));
         }
 
         if (!body.same_as(op->body)) {
-            return Prefetch::make(op->name, op->types, op->bounds, op->prefetch, op->condition, body);
+            return Prefetch::make(op->name, op->types, op->bounds, op->prefetch, op->condition, std::move(body));
         } else if (op->bounds.empty()) {
             // Remove the Prefetch IR since it is prefetching an empty region
             user_warning << "Removing prefetch of " << p.name
@@ -180,17 +180,17 @@ private:
 
     using IRMutator::visit;
 
-    Stmt add_placeholder_prefetch(const string &at, const string &from, PrefetchDirective p, const Stmt &body) {
+    Stmt add_placeholder_prefetch(const string &at, const string &from, PrefetchDirective p, Stmt body) {
         debug(5) << "...Injecting placeholder prefetch for loop " << at << "fetch " << from << "\n";
         p.at = at;
         p.from = from;
         internal_assert(body.defined());
         if (p.param.defined()) {
-            return Prefetch::make(p.name, {p.param.type()}, Region(), p, const_true(), body);
+            return Prefetch::make(p.name, {p.param.type()}, Region(), p, const_true(), std::move(body));
         } else {
             const auto &it = env.find(p.name);
             internal_assert(it != env.end());
-            return Prefetch::make(p.name, it->second.output_types(), Region(), p, const_true(), body);
+            return Prefetch::make(p.name, it->second.output_types(), Region(), p, const_true(), std::move(body));
         }
     }
 
@@ -208,13 +208,13 @@ private:
                 }
                 seen.insert(p.name);
 
-                body = add_placeholder_prefetch(op->name, prefix + p.from, p, body);
+                body = add_placeholder_prefetch(op->name, prefix + p.from, p, std::move(body));
             }
         }
 
         Stmt stmt;
         if (!body.same_as(op->body)) {
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, std::move(body));
         } else {
             stmt = op;
         }
