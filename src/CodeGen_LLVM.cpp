@@ -1165,8 +1165,16 @@ void CodeGen_LLVM::optimize_module() {
                 constexpr bool compile_kernel = false;
                 constexpr bool recover = false;
                 constexpr bool use_after_scope = true;
+#if LLVM_VERSION >= 140
+                // TODO: this is the value that the default ctor uses.
+                // Not sure if it's ideal for Halide.
+                constexpr AsanDetectStackUseAfterReturnMode use_after_return = AsanDetectStackUseAfterReturnMode::Runtime;
+                mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(
+                    AddressSanitizerOptions(compile_kernel, recover, use_after_scope, use_after_return))));
+#else
                 mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(
                     compile_kernel, recover, use_after_scope)));
+#endif
             });
 #if LLVM_VERSION >= 120
         pb.registerPipelineStartEPCallback(
