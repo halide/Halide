@@ -1,0 +1,93 @@
+ARG TENSORRT_BASE="20.08-py3"
+FROM nvcr.io/nvidia/tensorrt:${TENSORRT_BASE}
+
+ARG JOBS="8"
+ARG CMAKE_VERSION="3.16.5"
+ARG LLVM_VERSION="12.0.0"
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Install required packages
+# ----------------------------------------------------------------------------------------------------------------------
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt update -y  && \
+    apt install -y software-properties-common \
+      curl \
+      sudo \
+      libpng-dev\
+      git \
+      cmake \
+      ninja-build \
+      python3-dev \
+      python3-pip \
+      python3-venv
+# ----------------------------------------------------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Install gcc/g++ 9
+# ----------------------------------------------------------------------------------------------------------------------
+RUN add-apt-repository ppa:ubuntu-toolchain-r/test && apt update -y && apt install -y gcc-9 g++-9 && \
+  update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 10 && \
+  update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 10 || true # If already present pass with success
+# ----------------------------------------------------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Create non root user
+# ----------------------------------------------------------------------------------------------------------------------
+RUN adduser --disabled-password --gecos '' --shell /bin/bash user
+RUN echo "user ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/90-user
+USER user
+ENV HOME=/home/user
+RUN chmod 777 /home/user
+# ----------------------------------------------------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Prepare for isntallation of dependencies
+# ----------------------------------------------------------------------------------------------------------------------
+WORKDIR /home/user/deps
+RUN sudo chown -R user:user /home/user/deps
+ENV CC=/usr/bin/gcc-9
+ENV CXX=/usr/bin/g++-9
+# ----------------------------------------------------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Install cmake
+# ----------------------------------------------------------------------------------------------------------------------
+RUN cd /tmp && wget https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}.tar.gz && \
+    tar -xvf cmake-${CMAKE_VERSION}.tar.gz && \
+    cd cmake-${CMAKE_VERSION} && \
+    ./bootstrap --system-curl && \
+    sudo make && \
+    sudo make install -j ${JOBS} && \
+    sudo rm -rf /tmp/*
+# ----------------------------------------------------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Install llvm
+# ----------------------------------------------------------------------------------------------------------------------
+RUN cd /home/user/deps && git clone --depth 1 --branch llvmorg-${LLVM_VERSION} https://github.com/llvm/llvm-project.git && \
+    sudo cmake -DCMAKE_BUILD_TYPE=Release \
+        -DLLVM_ENABLE_PROJECTS="clang;lld;clang-tools-extra" \
+        -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX;AArch64;Mips;Hexagon;WebAssembly" \
+        -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_ENABLE_ASSERTIONS=ON \
+        -DLLVM_ENABLE_EH=ON -DLLVM_ENABLE_RTTI=ON -DLLVM_BUILD_32_BITS=OFF \
+        -S llvm-project/llvm -B llvm-build && \
+    sudo cmake --build llvm-build -j ${JOBS}
+RUN cd /home/user/deps && sudo cmake --install llvm-build --prefix llvm-install
+# ----------------------------------------------------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Install Halide
+# ----------------------------------------------------------------------------------------------------------------------
+ENV LLVM_ROOT=/home/user/deps/llvm-install
+ENV LLVM_CONFIG=${LLVM_ROOT}/bin/llvm-config
+RUN cd /home/user/deps && git clone --recurse-submodules  https://github.com/halide/Halide.git && \
+    cd Halide && \
+    sudo cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DLLVM_DIR=$LLVM_ROOT/lib/cmake/llvm -S . -B build && \
+    sudo cmake --build build -j ${JOBS}
+ENV LD_LIBRARY_PATH "${LD_LIBRARY_PATH}:/home/user/deps/Halide/build/src/"
+
+ENV HALIDE_INCLUDE_DIR=/home/user/deps/Halide/build/include/
+ENV HALIDE_TOOL_DIR=/home/user/deps/Halide/tools/
+# ----------------------------------------------------------------------------------------------------------------------
+
+WORKDIR /home/user/app
