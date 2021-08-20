@@ -32,9 +32,7 @@ std::pair<std::string, bool> get_env_variable(char const *env_var_name) {
 }
 
 bool use_noboundsquery_feature() {
-    std::string value;
-    bool read;
-    std::tie(value, read) = get_env_variable("HL_MULTITARGET_TEST_USE_NOBOUNDSQUERY_FEATURE");
+    auto [value, read] = get_env_variable("HL_MULTITARGET_TEST_USE_NOBOUNDSQUERY_FEATURE");
     if (!read) {
         return false;
     }
