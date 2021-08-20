@@ -1480,9 +1480,16 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
         native_vector_bits() / element_ty->getScalarSizeInBits();
     int result_elements = indices.size();
 
-    // If the input is not a vector of 8 bit elements, replicate the
-    // indices and cast the LUT.
-    if (element_bits != 8) {
+    if (element_bits == 1) {
+        // If this is a vector of booleans, convert it to a vector of ints,
+        // do the shuffle, and convert back.
+        llvm::Type *new_lut_ty = get_vector_type(i8_t, lut_elements);
+        Value *i8_lut = builder->CreateIntCast(lut, new_lut_ty, true);
+        Value *result = vdelta(i8_lut, indices);
+        return builder->CreateIntCast(result, lut_ty, true);
+    } else if (element_bits != 8) {
+        // If the input is not a vector of 8 bit elements, replicate the
+        // indices and cast the LUT.
         int replicate = element_bits / 8;
         internal_assert(replicate != 0);
         llvm::Type *new_lut_ty = get_vector_type(i8_t, lut_elements * replicate);
