@@ -356,6 +356,18 @@ private:
             }
         }
 
+        if (new_lanes == 1) {
+            int index = starting_lane;
+            for (const auto &i : op->vectors) {
+                if (index < i.type().lanes()) {
+                    ScopedValue<int> lane(starting_lane, index);
+                    return mutate(i);
+                }
+                index -= i.type().lanes();
+            }
+            internal_error << "extract_lane index out of bounds: " << Expr(op) << " " << index << "\n";
+        }
+
         // Keep the same set of vectors and extract every nth numeric
         // arg to the shuffle.
         std::vector<int> indices;

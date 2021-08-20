@@ -1,4 +1,5 @@
 #include "Simplify_Internal.h"
+#include "Deinterleave.h"
 
 namespace Halide {
 namespace Internal {
@@ -11,13 +12,12 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
         internal_assert(index >= 0);
         for (const Expr &vector : op->vectors) {
             if (index < vector.type().lanes()) {
-                // Extracting a single lane of a ramp or broadcast
-                if (const Ramp *r = vector.as<Ramp>()) {
-                    return mutate(r->base + index * r->stride, bounds);
-                } else if (const Broadcast *b = vector.as<Broadcast>()) {
-                    return mutate(b->value, bounds);
-                } else {
+                if (vector.as<Variable>()) {
+                    // If we try to extract_lane of a variable, we'll just get
+                    // the same shuffle back.
                     break;
+                } else {
+                    return mutate(extract_lane(vector, index), bounds);
                 }
             }
             index -= vector.type().lanes();
