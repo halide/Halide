@@ -711,6 +711,13 @@ class VectorSubs : public IRMutator {
             if (load) {
                 return Load::make(op->type.with_lanes(max_lanes), load->name, load->index, load->image, load->param, cond, load->alignment);
             }
+        } else if (op->is_intrinsic(Call::prefetch)) {
+            // Just prefetch the first vector lane (Temporary hack to work around prefetch bugs)
+            Expr e = op;
+            for (auto v : vectorized_vars) {
+                e = substitute(v.name, v.min, e);
+            }
+            return e;
         }
 
         // Widen the args to have the same lanes as the max lanes found
