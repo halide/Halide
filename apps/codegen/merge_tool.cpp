@@ -345,6 +345,108 @@ inline shared_ptr<Node> handle_int_imm(shared_ptr<Node> &root, const IntImm *imm
     return imm_node->get_child(cond_node);
 }
 
+
+template<typename Op>
+int64_t constant_fold_bin_op(halide_type_t &, int64_t, int64_t) noexcept;
+
+template<typename Op>
+uint64_t constant_fold_bin_op(halide_type_t &, uint64_t, uint64_t) noexcept;
+
+template<typename Op>
+double constant_fold_bin_op(halide_type_t &, double, double) noexcept;
+
+template<>
+HALIDE_ALWAYS_INLINE int64_t constant_fold_bin_op<Add>(halide_type_t &t, int64_t a, int64_t b) noexcept {
+    // t.lanes |= ((t.bits >= 32) && add_would_overflow(t.bits, a, b)) ? MatcherState::signed_integer_overflow : 0;
+    int dead_bits = 64 - t.bits;
+    // Drop the high bits then sign-extend them back
+    return int64_t((uint64_t(a) + uint64_t(b)) << dead_bits) >> dead_bits;
+}
+
+template<>
+HALIDE_ALWAYS_INLINE uint64_t constant_fold_bin_op<Add>(halide_type_t &t, uint64_t a, uint64_t b) noexcept {
+    uint64_t ones = (uint64_t)(-1);
+    return (a + b) & (ones >> (64 - t.bits));
+}
+
+template<>
+HALIDE_ALWAYS_INLINE double constant_fold_bin_op<Add>(halide_type_t &t, double a, double b) noexcept {
+    return a + b;
+}
+
+class ConstantFold : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const IntImm *op) override {
+        value.u.i64 = op->value;
+    }
+
+    void visit(const UIntImm *op) override {
+        value.u.u64 = op->value;
+    }
+
+    void visit(const FloatImm *op) override {
+        value.u.f64 = op->value;
+    }
+
+    void visit(const Add *op) override {
+        op->a.accept(this);
+        auto a = value;
+        op->b.accept(this);
+        auto b = value;
+        Type type = op->type;
+        halide_type_t _type = type;
+        switch (type.code()) {
+            case Type::Int: {
+                value.u.i64 = constant_fold_bin_op<Add>(_type, a.u.i64, b.u.i64);
+                break;
+            }
+            case Type::UInt: {
+                value.u.u64 = constant_fold_bin_op<Add>(_type, a.u.u64, b.u.u64);
+                break;
+            }
+            case Type::Float:
+            case Type::BFloat: {
+                value.u.f64 = constant_fold_bin_op<Add>(_type, a.u.f64, b.u.f64);
+                break;
+            }
+            default: {
+                // Silent failure. Ask Andrew if we should error out.
+                value.u.u64 = 0;
+                break;
+            }
+        }
+    }
+
+public:
+    halide_scalar_value_t value;
+
+};
+
+
+Expr fold_actual(const Expr &expr) {
+    ConstantFold folder;
+    expr.accept(&folder);
+    Type type = expr.type();
+    switch (type.code()) {
+        case Type::Int: {
+            return IntImm::make(type, folder.value.u.i64);
+        }
+        case Type::UInt: {
+            return UIntImm::make(type, folder.value.u.u64);
+        }
+        case Type::Float:
+        case Type::BFloat: {
+            return FloatImm::make(type, folder.value.u.f64);
+        }
+        default: {
+            assert(false);
+            return Expr();
+        }
+    }
+}
+
+
 /*
 TODOs:
     // IntImm,
@@ -395,6 +497,18 @@ shared_ptr<Node> tree_constructor(shared_ptr<Node> root, const Expr &expr, const
             const IntImm *imm = expr.as<IntImm>();
             return handle_int_imm(root, imm, name, scope);
         }
+        // case IRNodeType::Call: {
+        //     const Call *call = expr.as<Call>();
+        //     // Do cases on possible call types
+        //     // TODO handle more cases.
+        //     if (call->name == "$ramp") {
+        //         assert(call->args.size() == 3);
+        //         return handle_ramp(root, call->args[0], call->args[1], call->args[2], name, scope);
+        //     }
+        //     // We don't know what this call is.
+        //     std::cerr << "Encountered bad call node in tree_constructor: " << expr << "\n";
+        //     assert(false);
+        // }
         default:
             assert(false);
     }
@@ -440,6 +554,10 @@ Expr fold(const Expr &expr) {
     return Call::make(expr.type(), "fold", {expr}, Call::PureIntrinsic);
 }
 
+Expr ramp(const Expr &base, const Expr &stride, const Expr &lanes) {
+    return Call::make(base.type(), "$ramp", {base, stride, lanes}, Call::PureIntrinsic);
+}
+
 // This is for generated code
 bool is_const_v(const Expr &expr) {
     if (const Variable *var = expr.as<Variable>()) {
@@ -448,6 +566,7 @@ bool is_const_v(const Expr &expr) {
         return is_const(expr);
     }
 }
+
 
 int main(void) {
     Var x("x"), y("y"), z("z"), w("w"), u("u"), v("v");
