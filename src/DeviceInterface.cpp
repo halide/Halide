@@ -96,6 +96,8 @@ const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d
         name = "cuda";
     } else if (d == DeviceAPI::OpenGLCompute) {
         name = "openglcompute";
+    } else if (d == DeviceAPI::Hexagon) {
+        name = "hexagon";
     } else if (d == DeviceAPI::HexagonDma) {
         name = "hexagon_dma";
     } else if (d == DeviceAPI::D3D12Compute) {
@@ -150,6 +152,8 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
         return DeviceAPI::CUDA;
     } else if (target.has_feature(Target::OpenGLCompute)) {
         return DeviceAPI::OpenGLCompute;
+    } else if (target.arch != Target::Hexagon && target.has_feature(Target::HVX)) {
+        return DeviceAPI::Hexagon;
     } else if (target.has_feature(Target::HexagonDma)) {
         return DeviceAPI::HexagonDma;
     } else if (target.has_feature(Target::D3D12Compute)) {
