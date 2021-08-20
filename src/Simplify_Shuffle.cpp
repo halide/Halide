@@ -1,5 +1,5 @@
-#include "Simplify_Internal.h"
 #include "Deinterleave.h"
+#include "Simplify_Internal.h"
 
 namespace Halide {
 namespace Internal {
