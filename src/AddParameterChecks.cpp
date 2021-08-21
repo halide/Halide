@@ -89,7 +89,7 @@ Stmt add_parameter_checks(const vector<Stmt> &preconditions, Stmt s, const Targe
     s = substitute(replace_with_constrained, s);
 
     // Inject the let statements
-    for (auto &let : lets) {
+    for (const auto &let : lets) {
         s = LetStmt::make(let.first, let.second, s);
     }
 

@@ -972,7 +972,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
     // Check that the new names aren't already in the dims list.
     for (auto &dim : dims) {
         string new_names[2] = {inner, outer};
-        for (auto &new_name : new_names) {
+        for (const auto &new_name : new_names) {
             if (var_name_match(dim.var, new_name) && new_name != old) {
                 user_error << "In schedule for " << name()
                            << ", can't create var " << new_name
@@ -2589,9 +2589,9 @@ Func &Func::align_storage(const Var &dim, const Expr &alignment) {
     invalidate_cache();
 
     vector<StorageDim> &dims = func.schedule().storage_dims();
-    for (auto &i : dims) {
-        if (var_name_match(i.var, dim.name())) {
-            i.alignment = alignment;
+    for (auto &d : dims) {
+        if (var_name_match(d.var, dim.name())) {
+            d.alignment = alignment;
             return *this;
         }
     }
@@ -2606,10 +2606,10 @@ Func &Func::fold_storage(const Var &dim, const Expr &factor, bool fold_forward) 
     invalidate_cache();
 
     vector<StorageDim> &dims = func.schedule().storage_dims();
-    for (auto &i : dims) {
-        if (var_name_match(i.var, dim.name())) {
-            i.fold_factor = factor;
-            i.fold_forward = fold_forward;
+    for (auto &d : dims) {
+        if (var_name_match(d.var, dim.name())) {
+            d.fold_factor = factor;
+            d.fold_forward = fold_forward;
             return *this;
         }
     }

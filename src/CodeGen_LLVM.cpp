@@ -1209,22 +1209,22 @@ void CodeGen_LLVM::optimize_module() {
             });
     }
 
-    for (auto &i : *module) {
+    for (auto &function : *module) {
         if (get_target().has_feature(Target::ASAN)) {
-            i.addFnAttr(Attribute::SanitizeAddress);
+            function.addFnAttr(Attribute::SanitizeAddress);
         }
         if (get_target().has_feature(Target::TSAN)) {
             // Do not annotate any of Halide's low-level synchronization code as it has
             // tsan interface calls to mark its behavior and is much faster if
             // it is not analyzed instruction by instruction.
-            if (!(i.getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
+            if (!(function.getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
                   // TODO: this is a benign data race that re-initializes the detected features;
                   // we should really fix it properly inside the implementation, rather than disabling
                   // it here as a band-aid.
-                  i.getName().startswith("halide_default_can_use_target_features") ||
-                  i.getName().startswith("halide_mutex_") ||
-                  i.getName().startswith("halide_cond_"))) {
-                i.addFnAttr(Attribute::SanitizeThread);
+                  function.getName().startswith("halide_default_can_use_target_features") ||
+                  function.getName().startswith("halide_mutex_") ||
+                  function.getName().startswith("halide_cond_"))) {
+                function.addFnAttr(Attribute::SanitizeThread);
             }
         }
     }

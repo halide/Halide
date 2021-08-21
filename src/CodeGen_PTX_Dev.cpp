@@ -218,7 +218,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     debug(2) << "Done generating llvm bitcode for PTX\n";
 
     // Clear the symbol table
-    for (auto &arg_sym_name : arg_sym_names) {
+    for (const auto &arg_sym_name : arg_sym_names) {
         sym_pop(arg_sym_name);
     }
 }
@@ -703,8 +703,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     // Run optimization passes
     function_pass_manager.doInitialization();
-    for (auto &i : *module) {
-        function_pass_manager.run(i);
+    for (const auto &function : *module) {
+        function_pass_manager.run(function);
     }
     function_pass_manager.doFinalization();
     module_pass_manager.run(*module);

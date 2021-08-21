@@ -1371,7 +1371,7 @@ Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,
                 } else if (max_index >= pass_index * native_lut_elements / lut_passes) {
                     // Not the first native LUT, accumulate the LUT
                     // with the previous result.
-                    for (auto &m : mask) {
+                    for (const auto &m : mask) {
                         result_i =
                             call_intrin_cast(native_result_ty, vlut_acc,
                                              {result_i, idx_i, lut_slices[j], m});

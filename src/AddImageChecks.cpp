@@ -267,8 +267,8 @@ Stmt add_image_checks_inner(Stmt s,
         if (param.defined()) {
             // Find the extern users.
             vector<string> extern_users;
-            for (const auto &i : order) {
-                Function f = env.find(i)->second;
+            for (const auto &func_name : order) {
+                Function f = env.find(func_name)->second;
                 if (f.has_extern_definition() &&
                     !f.extern_definition_proxy_expr().defined()) {
                     const vector<ExternFuncArgument> &args = f.extern_arguments();
@@ -277,7 +277,7 @@ Stmt add_image_checks_inner(Stmt s,
                              arg.image_param.name() == param.name()) ||
                             (arg.buffer.defined() &&
                              arg.buffer.name() == param.name())) {
-                            extern_users.push_back(i);
+                            extern_users.push_back(func_name);
                         }
                     }
                 }
@@ -591,7 +591,7 @@ Stmt add_image_checks_inner(Stmt s,
         }
 
         // Assert all the conditions, and set the new values
-        for (auto &constraint : constraints) {
+        for (const auto &constraint : constraints) {
             Expr var = constraint.first;
             const string &name = var.as<Variable>()->name;
             Expr constrained_var = Variable::make(Int(32), name + ".constrained");

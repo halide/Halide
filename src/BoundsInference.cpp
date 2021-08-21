@@ -775,7 +775,7 @@ public:
             s = Block::make(check, s);
 
             // Wrap in let stmts defining the args
-            for (auto &let : lets) {
+            for (const auto &let : lets) {
                 s = LetStmt::make(let.first, let.second, s);
             }
 
@@ -873,7 +873,7 @@ public:
 
         // Remove the inlined stages
         vector<Stage> new_stages;
-        for (auto &stage : stages) {
+        for (const auto &stage : stages) {
             if (!stage.func.schedule().compute_level().is_inlined() ||
                 !stage.func.can_be_inlined()) {
                 new_stages.push_back(stage);
@@ -1322,9 +1322,9 @@ Stmt bounds_inference(Stmt s,
                           f.definition().schedule().fused_pairs().end(),
                           std::inserter(pairs, pairs.end()));
 
-                for (const auto &i : f.updates()) {
-                    std::copy(i.schedule().fused_pairs().begin(),
-                              i.schedule().fused_pairs().end(),
+                for (const auto &update : f.updates()) {
+                    std::copy(update.schedule().fused_pairs().begin(),
+                              update.schedule().fused_pairs().end(),
                               std::inserter(pairs, pairs.end()));
                 }
             }

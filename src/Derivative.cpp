@@ -1495,8 +1495,8 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
 
     // Simplify expressions
     adjoint = simplify(common_subexpression_elimination(adjoint));
-    for (auto &lh : lhs) {
-        lh = simplify(common_subexpression_elimination(lh));
+    for (auto &e : lhs) {
+        e = simplify(common_subexpression_elimination(e));
     }
 
     vector<Var> func_to_update_args = func_to_update.args();
@@ -1767,8 +1767,8 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
 
     // Simplify expressions
     adjoint = simplify(common_subexpression_elimination(adjoint));
-    for (auto &lh : lhs) {
-        lh = simplify(common_subexpression_elimination(lh));
+    for (auto &e : lhs) {
+        e = simplify(common_subexpression_elimination(e));
     }
 
     if (debug_flag) {
