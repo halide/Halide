@@ -39,6 +39,7 @@ std::vector<halide_dimension_t> get_buffer_shape(const Buffer<> &b) {
         return {};
     }
     std::vector<halide_dimension_t> s;
+    s.reserve(b.dimensions());
     for (int i = 0; i < b.dimensions(); ++i) {
         s.push_back(b.raw_buffer()->dim[i]);
     }

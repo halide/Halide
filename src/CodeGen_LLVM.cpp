@@ -4353,6 +4353,7 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
             if (interleave_of_slices) {
                 value = codegen(op->vectors[0]);
                 vector<Value *> slices;
+                slices.reserve(f);
                 for (int i = 0; i < f; i++) {
                     slices.push_back(slice_vector(value, i * step, step));
                 }
@@ -4579,6 +4580,7 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
             // call will assume that the args should scalarize.
             if (!module->getFunction(intrin_name)) {
                 vector<llvm::Type *> arg_types;
+                arg_types.reserve(args.size());
                 for (const Expr &e : args) {
                     arg_types.push_back(llvm_type_of(e.type()));
                 }

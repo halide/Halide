@@ -771,6 +771,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
     // Ensure that we output the symbols deterministically, since a map of pointers
     // will vary in ordering from run to tun.
     std::vector<std::pair<const Symbol *, const Symbol *>> sorted_symbols;
+    sorted_symbols.reserve(symbols.size());
     for (const auto &i : symbols) {
         sorted_symbols.emplace_back(i);
     }
@@ -939,6 +940,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
         return d;
     };
 
+    dyn.reserve(dependencies.size());
     for (const auto &i : dependencies) {
         dyn.push_back(make_dyn(DT_NEEDED, strings.get(i)));
     }

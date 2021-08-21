@@ -305,6 +305,7 @@ private:
                 // Uh-oh, we don't know how to deinterleave this vector expression
                 // Make llvm do it
                 std::vector<int> indices;
+                indices.reserve(new_lanes);
                 for (int i = 0; i < new_lanes; i++) {
                     indices.push_back(starting_lane + lane_stride * i);
                 }

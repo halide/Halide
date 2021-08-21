@@ -905,6 +905,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
 
     auto target_strings = split_string(generator_args["target"].string_value, ",");
     std::vector<Target> targets;
+    targets.reserve(target_strings.size());
     for (const auto &s : target_strings) {
         targets.emplace_back(s);
     }
@@ -1645,6 +1646,7 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
                     // just replace with a dummy Func that is all zeros. This ensures
                     // that the signature of the Pipeline we produce is always predictable.
                     std::vector<Var> vars;
+                    vars.reserve(d_output.dimensions());
                     for (int i = 0; i < d_output.dimensions(); i++) {
                         vars.push_back(Var::implicit(i));
                     }

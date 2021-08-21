@@ -92,6 +92,7 @@ struct FuncInfo {
 
     void allocate() {
         std::vector<int> extents;
+        extents.reserve(dimensions);
         for (int i = 0; i < dimensions; i++) {
             extents.push_back(max_coords[i] - min_coords[i] + 1);
         }

@@ -902,6 +902,7 @@ void compile_multitarget(const std::string &fn_name,
         Expr can_use;
         if (target != base_target) {
             std::vector<Expr> features_struct_args;
+            features_struct_args.reserve(kFeaturesWordCount);
             for (int i = 0; i < kFeaturesWordCount; ++i) {
                 features_struct_args.emplace_back(UIntImm::make(UInt(64), cur_target_features[i]));
             }

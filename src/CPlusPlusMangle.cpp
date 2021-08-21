@@ -998,6 +998,7 @@ void cplusplus_mangle_test() {
                 {}, {halide_handle_cplusplus_type::Pointer}));
             type_info.push_back(t);
         }
+        args.reserve(200);
         for (int i = 0; i < 200; i++) {
             args.emplace_back(make_zero(Handle(1, &type_info[i % 100])));
         }
@@ -1024,6 +1025,7 @@ void cplusplus_mangle_test() {
                 {}, {halide_handle_cplusplus_type::Pointer}));
             type_info.push_back(t);
         }
+        args.reserve(50);
         for (int i = 0; i < 50; i++) {
             args.emplace_back(make_zero(Handle(1, &type_info[i % 25])));
         }
@@ -1050,6 +1052,7 @@ void cplusplus_mangle_test() {
                 {}, {}, mods));
             type_info.push_back(t);
         }
+        args.reserve(type_info.size());
         for (const auto &ti : type_info) {
             args.emplace_back(make_zero(Handle(1, &ti)));
         }

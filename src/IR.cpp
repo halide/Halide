@@ -796,6 +796,7 @@ Expr Shuffle::make_slice(Expr vector, int begin, int stride, int size) {
     }
 
     std::vector<int> indices;
+    indices.reserve(size);
     for (int i = 0; i < size; i++) {
         indices.push_back(begin + i * stride);
     }

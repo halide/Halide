@@ -27,7 +27,6 @@ Checks: >
     modernize-use-override,
     performance-*,
     -performance-inefficient-string-concatenation,
-    -performance-inefficient-vector-operation,
     readability-avoid-const-params-in-decls,
     readability-braces-around-statements,
     readability-const-return-type,

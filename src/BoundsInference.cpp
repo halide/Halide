@@ -1309,6 +1309,7 @@ Stmt bounds_inference(Stmt s,
     vector<vector<Function>> fused_func_groups;
     for (const vector<string> &group : fused_groups) {
         vector<Function> fs;
+        fs.reserve(group.size());
         for (const string &fname : group) {
             fs.push_back(env.find(fname)->second);
         }

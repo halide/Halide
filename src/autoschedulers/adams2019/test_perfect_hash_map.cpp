@@ -29,6 +29,7 @@ int main(int argc, char **argv) {
     std::vector<Key> keys;
     const int N = 100;
 
+    keys.reserve(N);
     for (int i = 0; i < N; i++) {
         keys.emplace_back(i, N);
     }

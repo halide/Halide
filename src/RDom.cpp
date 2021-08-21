@@ -24,6 +24,7 @@ const char *const dom_var_names[] = {"$x", "$y", "$z", "$w"};
 template<typename T>
 Internal::ReductionDomain make_dom_from_dimensions(const T &t, const std::string &name) {
     std::vector<Internal::ReductionVariable> vars;
+    vars.reserve(t.dimensions());
     for (int i = 0; i < t.dimensions(); i++) {
         vars.push_back({name + dom_var_names[i],
                         t.dim(i).min(),

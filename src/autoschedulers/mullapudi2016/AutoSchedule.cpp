@@ -2698,6 +2698,7 @@ void Partitioner::generate_group_cpu_schedule(
     if (!outer_dims.empty()) {
 
         vector<VarOrRVar> ordering;
+        ordering.reserve(inner_dims.size());
         for (const auto &v : inner_dims) {
             ordering.push_back(v);
         }
