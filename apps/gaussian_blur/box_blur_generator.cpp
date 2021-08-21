@@ -409,7 +409,7 @@ public:
     Output<Buffer<>> output{"output", 2};
 
     void generate() {
-        Var x("x"), y("y"), ty("ty"), tx("tx"), yo("yo"), yi("yi");
+        Var x("x"), y("y"), ty("ty"), tx("tx"), yo("yo"), yi("yi"), xo("xo"), xi("xi");
 
         // Figure out our intermediate accumulator types
         Type small_sum_type, large_sum_type, diff_type;
@@ -434,7 +434,6 @@ public:
         const int N = 8;
 
         const int vec = bits <= 16 ? 16 : 8;
-
         Func input_clamped;
         input_clamped(x, y) = input(x, min(likely(y), input.dim(1).max()));
 
@@ -477,10 +476,10 @@ public:
         const int max_diameter_low_bit_blur_y = max_count_for_small_sum;
 
         std::set<int> max_diameters{max_diameter_direct_blur_x,
-                                       max_diameter_low_bit_blur_x,
-                                       max_diameter_direct_blur_y,
-                                       max_diameter_low_bit_blur_y,
-                                       max_count_for_large_sum};
+                                    max_diameter_low_bit_blur_x,
+                                    max_diameter_direct_blur_y,
+                                    max_diameter_low_bit_blur_y,
+                                    max_count_for_large_sum};
 
         std::vector<Expr> results, conditions;
         for (int max_diameter : max_diameters) {
@@ -716,6 +715,13 @@ public:
             }
         }
 
+        Expr result = results.back();
+
+        for (size_t i = conditions.size() - 1; i > 0; i--) {
+            result = select(conditions[i - 1], results[i - 1], result);
+        }
+
+        output(x, y) = result;
         down_y.in()
             .compute_root()
             .parallel(y)
@@ -727,27 +733,34 @@ public:
             .reorder(x, r_down, y)
             .vectorize(x, vec * 2, TailStrategy::GuardWithIf);
 
-        Expr result = results.back();
-
-        for (size_t i = conditions.size() - 1; i > 0; i--) {
-            result = select(conditions[i - 1], results[i - 1], result);
-        }
-
-        output(x, y) = result;
-
         output.dim(0).set_bounds(0, width);
         output.dim(1).set_min(0);
         input.dim(0).set_min(0);
         input.dim(1).set_min(0);
 
+        // When doing a direct blur in x we can tile in x too
+        output
+            .specialize(diameter <= max_diameter_direct_blur_x)
+            .split(y, ty, y, N, TailStrategy::GuardWithIf)
+            .split(y, yo, yi, N)
+            .split(x, xo, xi, vec * 128, TailStrategy::GuardWithIf)  // TODO: worry about narrow images
+            .split(xi, tx, xi, vec)
+            .reorder(xi, yi, tx, yo, xo, ty)
+            .vectorize(xi)
+            .unroll(yi)
+            .fuse(xo, ty, ty)
+            .parallel(ty);
+
+        // Otherwise, we can only tile in y
         output
             .split(y, ty, y, N, TailStrategy::GuardWithIf)
             .split(y, yo, yi, N)
-            .split(x, tx, x, vec, TailStrategy::ShiftInwards)
+            .split(x, tx, x, vec, TailStrategy::GuardWithIf)
             .reorder(x, yi, tx, yo, ty)
             .parallel(ty)
             .vectorize(x)
             .unroll(yi);
+
         for (size_t i = conditions.size() - 1; i > 0; i--) {
             output.specialize(conditions[i - 1]);
         }
