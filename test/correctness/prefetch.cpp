@@ -39,7 +39,7 @@ bool check(const vector<vector<Expr>> &expected, vector<vector<Expr>> &result) {
         for (size_t j = 0; j < expected[i].size(); ++j) {
             if (!equal(expected[i][j], result[i][j])) {
                 std::cout << "Expect \"" << expected[i][j] << "\" at arg index "
-                          << j << ", got \"" << result[i][j] << " instead\n";
+                          << j << ", got \"" << result[i][j] << "\" instead\n";
                 return false;
             }
         }
