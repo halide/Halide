@@ -3167,12 +3167,13 @@ void CodeGen_LLVM::visit(const Call *op) {
         llvm::CallInst *call = builder->CreateCall(base_fn->getFunctionType(), phi, call_args);
         value = call;
     } else if (op->is_intrinsic(Call::prefetch)) {
+        user_assert((op->args.size() == 4) && is_const_one(op->args[2]))
+            << "Only prefetch of 1 cache line is supported.\n";
+
         const Expr &base_address = op->args[0];
         const Expr &base_offset = op->args[1];
-        const Expr &extent0 = op->args[2];
+        // const Expr &extent0 = op->args[2];  // unused
         // const Expr &stride0 = op->args[3];  // unused
-        user_assert((op->args.size() == 4) && is_const_one(extent0))
-            << "Only prefetch of 1 cache line is supported.\n";
 
         llvm::Function *prefetch_fn = module->getFunction("_halide_prefetch");
         internal_assert(prefetch_fn);

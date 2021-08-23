@@ -2511,13 +2511,13 @@ void CodeGen_C::visit(const Call *op) {
                       " integer overflow for int32 and int64 is undefined behavior in"
                       " Halide.\n";
     } else if (op->is_intrinsic(Call::prefetch)) {
+        user_assert((op->args.size() == 4) && is_const_one(op->args[2]))
+            << "Only prefetch of 1 cache line is supported in C backend.\n";
+
         const Expr &base_address = op->args[0];
         const Expr &base_offset = op->args[1];
-        const Expr &extent0 = op->args[2];  // unused
+        // const Expr &extent0 = op->args[2];  // unused
         // const Expr &stride0 = op->args[3];  // unused
-
-        user_assert((op->args.size() == 4) && is_const_one(extent0))
-            << "Only prefetch of 1 cache line is supported in C backend.\n";
 
         const Variable *base = base_address.as<Variable>();
         internal_assert(base && base->type.is_handle());

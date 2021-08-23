@@ -27,7 +27,7 @@ using std::vector;
  * here's the overall flow at the time this comment was written:
  *
  *  - When the .prefetch() schedule directive is used, a PrefetchDirective is
- *    added to the relevant Functiob
+ *    added to the relevant Function
  *  - At the start of lowering (schedule_functions()), a placeholder Prefetch IR nodes (w/ no region) are inserted
  *  - Various lowering passes mutate the placeholder Prefetch IR nodes as appropriate
  *  - After storage folding, the Prefetch IR nodes are updated with a proper region (via inject_prefetch())
