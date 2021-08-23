@@ -356,8 +356,18 @@ private:
             }
         }
 
-        if (new_lanes == 1) {
-            int index = starting_lane;
+        // Keep the same set of vectors and extract every nth numeric
+        // arg to the shuffle.
+        std::vector<int> indices;
+        for (int i = 0; i < new_lanes; i++) {
+            int idx = i * lane_stride + starting_lane;
+            indices.push_back(op->indices[idx]);
+        }
+
+        // If this is extracting a single lane, try to recursively deinterleave rather
+        // than leaving behind a shuffle.
+        if (indices.size() == 1) {
+            int index = indices.front();
             for (const auto &i : op->vectors) {
                 if (index < i.type().lanes()) {
                     ScopedValue<int> lane(starting_lane, index);
@@ -368,13 +378,6 @@ private:
             internal_error << "extract_lane index out of bounds: " << Expr(op) << " " << index << "\n";
         }
 
-        // Keep the same set of vectors and extract every nth numeric
-        // arg to the shuffle.
-        std::vector<int> indices;
-        for (int i = 0; i < new_lanes; i++) {
-            int idx = i * lane_stride + starting_lane;
-            indices.push_back(op->indices[idx]);
-        }
         return Shuffle::make(op->vectors, indices);
     }
 };
