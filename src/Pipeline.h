@@ -7,9 +7,9 @@
  * pipeline.
  */
 
+#include <initializer_list>
 #include <map>
 #include <memory>
-#include <initializer_list>
 #include <vector>
 
 #include "ExternalCode.h"
