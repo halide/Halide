@@ -235,7 +235,7 @@ private:
                 string from_var;
                 for (int j = (int)loop_nest.size() - 1; j >= 0; --j) {
                     if (starts_with(loop_nest[j], prefix) && ends_with(loop_nest[j], "." + p.from)) {
-                        from_var = loop_nest[i];
+                        from_var = loop_nest[j];
                         break;
                     }
                 }
