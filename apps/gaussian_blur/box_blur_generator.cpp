@@ -406,7 +406,8 @@ public:
     Input<Buffer<>> input{"input", 2};
     Input<int> diameter{"diameter"};
     Input<int> width{"width"};
-    Output<Buffer<>> output{"output", 2};
+    Input<int> tx_stride{"stride"};
+    Output<Buffer<>> output{"output", 3};
 
     void generate() {
         Var x("x"), y("y"), ty("ty"), tx("tx"), yo("yo"), yi("yi"), xo("xo"), xi("xi");
@@ -457,7 +458,7 @@ public:
         // The maximum diameter at which we should just use a direct
         // blur in x, instead of a sum-scan.  Tuned
         // empirically.
-        const int max_diameter_direct_blur_x = 8;
+        const int max_diameter_direct_blur_x = 32;
 
         // The maximum diameter at which we can get away with
         // low-precision accumulators for the blur in x and the blur
@@ -592,9 +593,9 @@ public:
             normalize(x, y) = norm(blur_x(x, y / N, y % N));
 
             if (use_blur_x_direct) {
-                results.push_back(norm(blur_x_direct(x, y)));
+                results.push_back(norm(blur_x_direct(x + tx * tx_stride, y)));
             } else {
-                results.push_back(normalize(x, y));
+                results.push_back(normalize(x + tx * tx_stride, y));
             }
             Expr condition = diameter <= max_diameter;
             conditions.push_back(condition);
@@ -619,20 +620,17 @@ public:
 
                 blur_x_direct
                     .store_in(MemoryType::Register)
-                    .compute_at(output, tx)
+                    .compute_at(output, xo)
                     .bound_extent(x, vec)
-                    .bound_extent(y, N)
                     .vectorize(x)
-                    .unroll(y)
                     .update()
                     .reorder(x, y, rx_direct)
-                    .vectorize(x)
-                    .unroll(y);
+                    .vectorize(x);
             } else {
 
                 normalize
                     .store_in(MemoryType::Register)
-                    .compute_at(output, tx)
+                    .compute_at(output, xo)
                     .reorder_storage(y, x)
                     .bound_extent(y, N)
                     .bound_extent(x, vec)
@@ -640,7 +638,7 @@ public:
                     .unroll(x);
                 normalize.in()
                     .store_in(MemoryType::Register)
-                    .compute_at(output, tx)
+                    .compute_at(output, xo)
                     .bound_extent(y, N)
                     .bound_extent(x, vec)
                     .vectorize(y)
@@ -712,6 +710,9 @@ public:
             for (Func f : {blur_y, blur_y_init}) {
                 f.specialize(condition);
                 f.specialize_fail("unreachable");
+                if (use_blur_x_direct) {
+                    // f.store_in(MemoryType::Register);
+                }
             }
         }
 
@@ -721,7 +722,7 @@ public:
             result = select(conditions[i - 1], results[i - 1], result);
         }
 
-        output(x, y) = result;
+        output(x, tx, y) = result;
         down_y.in()
             .compute_root()
             .parallel(y)
@@ -738,28 +739,24 @@ public:
         input.dim(0).set_min(0);
         input.dim(1).set_min(0);
 
-        // When doing a direct blur in x we can tile in x too
-        output
-            .specialize(diameter <= max_diameter_direct_blur_x)
+        output.specialize(diameter <= max_diameter_direct_blur_x)
             .split(y, ty, y, N, TailStrategy::GuardWithIf)
             .split(y, yo, yi, N)
-            .split(x, xo, xi, vec * 128, TailStrategy::GuardWithIf)  // TODO: worry about narrow images
-            .split(xi, tx, xi, vec)
-            .reorder(xi, yi, tx, yo, xo, ty)
+            .split(x, xo, xi, vec, TailStrategy::GuardWithIf)
+            .reorder(xi, xo, yi, yo, tx, ty)
             .vectorize(xi)
-            .unroll(yi)
-            .fuse(xo, ty, ty)
+            .fuse(tx, ty, ty)
             .parallel(ty);
 
-        // Otherwise, we can only tile in y
         output
             .split(y, ty, y, N, TailStrategy::GuardWithIf)
             .split(y, yo, yi, N)
-            .split(x, tx, x, vec, TailStrategy::GuardWithIf)
-            .reorder(x, yi, tx, yo, ty)
-            .parallel(ty)
-            .vectorize(x)
-            .unroll(yi);
+            .split(x, xo, xi, vec, TailStrategy::GuardWithIf)
+            .reorder(xi, yi, xo, yo, tx, ty)
+            .vectorize(xi)
+            .unroll(yi)
+            .fuse(tx, ty, ty)
+            .parallel(ty);
 
         for (size_t i = conditions.size() - 1; i > 0; i--) {
             output.specialize(conditions[i - 1]);

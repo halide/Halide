@@ -28,7 +28,6 @@ int main(int argc, char **argv) {
     }
 
     Halide::Runtime::Buffer<uint8_t> input = load_and_convert_image(argv[1]);
-    input.crop(1, 0, 512);
 
     Halide::Runtime::Buffer<uint8_t> output8(input.width(), input.height());
     output8.fill(0);
@@ -99,45 +98,63 @@ int main(int argc, char **argv) {
 
     for (int r : radii) {
         float t8 = 0, t16 = 0, t32 = 0;
+        const int xtile = 16;
+        const int tile_width = output8.width() / xtile;
+        auto tile = [&](halide_buffer_t *buf) {
+            buf->dimensions++;
+            buf->dim[2] = buf->dim[1];
+            buf->dim[0].extent = tile_width;
+            buf->dim[1].min = 0;
+            buf->dim[1].extent = xtile;
+            buf->dim[1].stride = tile_width;
+        };
         if (1) {
             auto translated = padded8;
             translated.set_min(r - max_radius, r - max_radius);
             translated.crop(0, 0, output8.width() + 2 * r);
             translated.crop(1, 0, output8.height() + 2 * r);
-            double best_manual = benchmark(10, 10, [&]() {
-                box_blur_pyramid_u8(translated, 2 * r + 1, output8.width(), output8);
-                output8.device_sync();
+            auto out_window = output8;
+            tile(out_window);
+            double best_manual = benchmark(3, 3, [&]() {
+                box_blur_pyramid_u8(translated, 2 * r + 1, tile_width, tile_width, out_window);
+                out_window.device_sync();
             });
             t8 = throughput(r, best_manual);
-            convert_and_save_image(output8, "out_8_pyramid_" + std::to_string(r) + ".png");
+            // convert_and_save_image(output8, "out_8_pyramid_" + std::to_string(r) + ".png");
         }
         if (1) {
             auto translated = padded16;
             translated.set_min(r - max_radius, r - max_radius);
             translated.crop(0, 0, output8.width() + 2 * r);
             translated.crop(1, 0, output8.height() + 2 * r);
-            double best_manual = benchmark(10, 10, [&]() {
-                box_blur_pyramid_u16(translated, 2 * r + 1, output16.width(), output16);
-                output16.device_sync();
+            auto out_window = output16;
+            tile(out_window);
+            double best_manual = benchmark(3, 3, [&]() {
+                box_blur_pyramid_u16(translated, 2 * r + 1, tile_width, tile_width, out_window);
+                out_window.device_sync();
             });
             t16 = throughput(r, best_manual);
-            convert_and_save_image(output16, "out_16_pyramid_" + std::to_string(r) + ".png");
+            // convert_and_save_image(output16, "out_16_pyramid_" + std::to_string(r) + ".png");
         }
         if (1) {
             auto translated = padded32;
             translated.set_min(r - max_radius, r - max_radius);
             translated.crop(0, 0, output8.width() + 2 * r);
             translated.crop(1, 0, output8.height() + 2 * r);
-            double best_manual = benchmark(10, 10, [&]() {
-                box_blur_pyramid_f32(translated, 2 * r + 1, output32.width(), output32);
-                output32.device_sync();
+            auto out_window = output32;
+            tile(out_window);
+            double best_manual = benchmark(3, 3, [&]() {
+                box_blur_pyramid_f32(translated, 2 * r + 1, tile_width, tile_width, out_window);
+                out_window.device_sync();
             });
             t32 = throughput(r, best_manual);
-            convert_and_save_image(output32, "out_32_pyramid_" + std::to_string(r) + ".png");
+            // convert_and_save_image(output32, "out_32_pyramid_" + std::to_string(r) + ".png");
         }
 
         printf("Box blur (pyramid) (%4d): %6.1f %6.1f %6.1f\n", 2 * r + 1, t8, t16, t32);
     }
+
+    return 0;
 
     printf("Box blur (incremental)...\n");
     for (int r : radii) {
