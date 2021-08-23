@@ -174,7 +174,7 @@ private:
                          << " at loop nest of " << p.at
                          << " from location " << p.from
                          << " + offset " << p.offset
-                         << ") since it is not used at all.\n";
+                         << ") since the prefetched area will always be empty.\n";
             return body;
         } else {
             return op;
@@ -193,6 +193,7 @@ private:
     const map<string, Function> &env;
     const string &prefix;
     const vector<PrefetchDirective> &prefetch_list;
+    std::vector<string> loop_nest;
 
     using IRMutator::visit;
 
@@ -211,6 +212,8 @@ private:
     }
 
     Stmt visit(const For *op) override {
+        loop_nest.push_back(op->name);
+
         Stmt body = mutate(op->body);
 
         if (!prefetch_list.empty() && starts_with(op->name, prefix)) {
@@ -224,7 +227,22 @@ private:
                 }
                 seen.insert(p.name);
 
-                body = add_placeholder_prefetch(op->name, prefix + p.from, p, std::move(body));
+                // We pass op->name for the prefetch 'at', so that should always be a fully-qualified loop variable name
+                // at this point; however, 'from' will be just the left-name of the loop var and must be qualified further.
+                // Look through the loop_nest list to find the most recent loop that starts with 'prefix' and ends with 'from'.
+                // Note that it is not good enough to just prepend use 'prefix + from', as there may be splits involved, e.g.,
+                // prefix = g.s0, from = xo, but the var we seek is actually g.s0.x.xo (because 'g' was split at x).
+                string from_var;
+                for (int j = (int)loop_nest.size() - 1; j >= 0; --j) {
+                    if (starts_with(loop_nest[j], prefix) && ends_with(loop_nest[j], "." + p.from)) {
+                        from_var = loop_nest[i];
+                        break;
+                    }
+                }
+                if (from_var.empty()) {
+                    user_error << "Prefetch 'from' variable '" << p.from << "' could not be found in an active loop. (Are the 'at' and 'from' variables swapped?)";
+                }
+                body = add_placeholder_prefetch(op->name, from_var, p, std::move(body));
             }
         }
 
@@ -234,6 +252,9 @@ private:
         } else {
             stmt = op;
         }
+
+        internal_assert(loop_nest.back() == op->name);
+        loop_nest.pop_back();
         return stmt;
     }
 };

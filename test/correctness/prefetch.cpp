@@ -46,7 +46,7 @@ bool check(const vector<vector<Expr>> &expected, vector<vector<Expr>> &result) {
             bool is_wild = var && var->name == "*";
             if (!is_wild && !equal(expected[i][j], result[i][j])) {
                 std::cout << "Expect \"" << expected[i][j] << "\" at arg index "
-                          << j << ", got \"" << result[i][j] << " instead\n";
+                          << j << ", got \"" << result[i][j] << "\" instead\n";
                 return false;
             }
         }
