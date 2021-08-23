@@ -1480,9 +1480,16 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
         native_vector_bits() / element_ty->getScalarSizeInBits();
     int result_elements = indices.size();
 
-    // If the input is not a vector of 8 bit elements, replicate the
-    // indices and cast the LUT.
-    if (element_bits != 8) {
+    if (element_bits == 1) {
+        // If this is a vector of booleans, convert it to a vector of ints,
+        // do the shuffle, and convert back.
+        llvm::Type *new_lut_ty = get_vector_type(i8_t, lut_elements);
+        Value *i8_lut = builder->CreateIntCast(lut, new_lut_ty, true);
+        Value *result = vdelta(i8_lut, indices);
+        return builder->CreateIntCast(result, lut_ty, true);
+    } else if (element_bits != 8) {
+        // If the input is not a vector of 8 bit elements, replicate the
+        // indices and cast the LUT.
         int replicate = element_bits / 8;
         internal_assert(replicate != 0);
         llvm::Type *new_lut_ty = get_vector_type(i8_t, lut_elements * replicate);
@@ -1907,23 +1914,31 @@ void CodeGen_Hexagon::visit(const Call *op) {
         internal_assert((op->args.size() == 4) || (op->args.size() == 6))
             << "Hexagon only supports 1D or 2D prefetch\n";
 
-        vector<llvm::Value *> args;
-        args.push_back(
-            codegen_buffer_pointer(codegen(op->args[0]), op->type, op->args[1]));
+        const int elem_size = op->type.bytes();
+        const Expr &base_address = op->args[0];
+        const Expr &base_offset = op->args[1];
+        const Expr &extent0 = op->args[2];
+        const Expr &stride0 = op->args[3];
 
-        Expr extent_0_bytes = op->args[2] * op->args[3] * op->type.bytes();
-        args.push_back(codegen(extent_0_bytes));
-
-        llvm::Function *prefetch_fn = nullptr;
-        if (op->args.size() ==
-            4) {  // 1D prefetch: {base, offset, extent0, stride0}
-            prefetch_fn = module->getFunction("_halide_prefetch_1d");
-        } else {  // 2D prefetch: {base, offset, extent0, stride0, extent1, stride1}
-            prefetch_fn = module->getFunction("_halide_prefetch_2d");
-            args.push_back(codegen(op->args[4]));
-            Expr stride_1_bytes = op->args[5] * op->type.bytes();
-            args.push_back(codegen(stride_1_bytes));
+        Expr width_bytes = extent0 * stride0 * elem_size;
+        Expr height, stride_bytes;
+        if (op->args.size() == 6) {
+            const Expr &extent1 = op->args[4];
+            const Expr &stride1 = op->args[5];
+            height = extent1;
+            stride_bytes = stride1 * elem_size;
+        } else {
+            height = 1;
+            stride_bytes = 1;
         }
+
+        vector<llvm::Value *> args;
+        args.push_back(codegen_buffer_pointer(codegen(base_address), op->type, base_offset));
+        args.push_back(codegen(width_bytes));
+        args.push_back(codegen(height));
+        args.push_back(codegen(stride_bytes));
+
+        llvm::Function *prefetch_fn = module->getFunction("_halide_prefetch_2d");
         internal_assert(prefetch_fn);
 
         // The first argument is a pointer, which has type i8*. We

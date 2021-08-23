@@ -97,7 +97,6 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              rewrite(min(max(x, y), min(z, x)), b) ||
              rewrite(min(max(x, y), min(z, y)), b) ||
 
-             rewrite(min(max(x, y + c0), y), y, c0 > 0) ||
              rewrite(min(select(x, min(z, y), w), y), min(select(x, z, w), y)) ||
              rewrite(min(select(x, min(z, y), w), z), min(select(x, y, w), z)) ||
              rewrite(min(select(x, w, min(z, y)), y), min(select(x, w, z), y)) ||
@@ -133,6 +132,7 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                rewrite(min(x, max(y, x) + c0), a, 0 <= c0) ||
                rewrite(min(max(x, y) + c0, x), b, 0 <= c0) ||
                rewrite(min(max(x, y) + c0, y), b, 0 <= c0) ||
+               rewrite(min(max(x, y + c0), y), y, c0 > 0) ||
 
                (no_overflow_int(op->type) &&
                 (rewrite(min(max(c0 - x, x), c1), b, 2*c1 <= c0 + 1) ||
