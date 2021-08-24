@@ -458,7 +458,7 @@ public:
         // The maximum diameter at which we should just use a direct
         // blur in x, instead of a sum-scan.  Tuned
         // empirically.
-        const int max_diameter_direct_blur_x = 32;
+        const int max_diameter_direct_blur_x = 8;
 
         // The maximum diameter at which we can get away with
         // low-precision accumulators for the blur in x and the blur
@@ -736,6 +736,7 @@ public:
 
         output.dim(0).set_bounds(0, width);
         output.dim(1).set_min(0);
+        output.dim(2).set_min(0);
         input.dim(0).set_min(0);
         input.dim(1).set_min(0);
 

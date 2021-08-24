@@ -98,15 +98,33 @@ int main(int argc, char **argv) {
 
     for (int r : radii) {
         float t8 = 0, t16 = 0, t32 = 0;
-        const int xtile = 16;
-        const int tile_width = output8.width() / xtile;
+
+        // Compute the output in tiles in x. We do the tiling outside
+        // of Halide because inside Halide we're going to do a
+        // sum-scan over x, and the indexing gets complicated.
+        const int xtile = output8.width() / 2048 + 1;
+
+        // The output width may not be a multiple of the number of
+        // tiles. If we overlap the tiles slightly, then to reach the
+        // end of an output of width w exactly we must have:
+        //
+        // w == tile_stride * (xtile - 1) + tile_width
+        //
+        // where tile_width >= tile_stride
+        //
+        // This is satisfied by:
+        const int tile_stride = output8.width() / xtile;
+        const int tile_width = output8.width() - tile_stride * (xtile - 1);
+
+        assert(output8.width() == tile_stride * (xtile - 1) + tile_width);
+
         auto tile = [&](halide_buffer_t *buf) {
             buf->dimensions++;
             buf->dim[2] = buf->dim[1];
             buf->dim[0].extent = tile_width;
             buf->dim[1].min = 0;
             buf->dim[1].extent = xtile;
-            buf->dim[1].stride = tile_width;
+            buf->dim[1].stride = tile_stride;
         };
         if (1) {
             auto translated = padded8;
@@ -115,8 +133,8 @@ int main(int argc, char **argv) {
             translated.crop(1, 0, output8.height() + 2 * r);
             auto out_window = output8;
             tile(out_window);
-            double best_manual = benchmark(3, 3, [&]() {
-                box_blur_pyramid_u8(translated, 2 * r + 1, tile_width, tile_width, out_window);
+            double best_manual = benchmark(30, 30, [&]() {
+                box_blur_pyramid_u8(translated, 2 * r + 1, tile_width, tile_stride, out_window);
                 out_window.device_sync();
             });
             t8 = throughput(r, best_manual);
@@ -129,8 +147,8 @@ int main(int argc, char **argv) {
             translated.crop(1, 0, output8.height() + 2 * r);
             auto out_window = output16;
             tile(out_window);
-            double best_manual = benchmark(3, 3, [&]() {
-                box_blur_pyramid_u16(translated, 2 * r + 1, tile_width, tile_width, out_window);
+            double best_manual = benchmark(30, 30, [&]() {
+                box_blur_pyramid_u16(translated, 2 * r + 1, tile_width, tile_stride, out_window);
                 out_window.device_sync();
             });
             t16 = throughput(r, best_manual);
@@ -143,8 +161,8 @@ int main(int argc, char **argv) {
             translated.crop(1, 0, output8.height() + 2 * r);
             auto out_window = output32;
             tile(out_window);
-            double best_manual = benchmark(3, 3, [&]() {
-                box_blur_pyramid_f32(translated, 2 * r + 1, tile_width, tile_width, out_window);
+            double best_manual = benchmark(30, 30, [&]() {
+                box_blur_pyramid_f32(translated, 2 * r + 1, tile_width, tile_stride, out_window);
                 out_window.device_sync();
             });
             t32 = throughput(r, best_manual);
@@ -153,8 +171,6 @@ int main(int argc, char **argv) {
 
         printf("Box blur (pyramid) (%4d): %6.1f %6.1f %6.1f\n", 2 * r + 1, t8, t16, t32);
     }
-
-    return 0;
 
     printf("Box blur (incremental)...\n");
     for (int r : radii) {
@@ -203,14 +219,13 @@ int main(int argc, char **argv) {
             halide_do_par_for(nullptr, one_strip, 0, slices, (uint8_t *)&task);
         });
         printf("Box blur (incremental) (%d): %g\n", 2 * r + 1, throughput(r, best_manual));
-
         // convert_and_save_image(output8, "out_" + std::to_string(r) + ".png");
     }
 
     /*
     for (int r = 1; r < 256; r *= 2) {
 
-        double best_manual = benchmark(10, 10, [&]() {
+        double best_manual = benchmark(3, 3, [&]() {
             box_blur_log(input, r, output);
             output.device_sync();
         });
