@@ -82,7 +82,7 @@ int test1(const Target &t) {
     f.compute_root();
     g.prefetch(f, x, x, 8);
 
-    Module m = g.compile_to_module({});
+    Module m = g.compile_to_module({}, "", t);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -106,7 +106,7 @@ int test2(const Target &t) {
     g.specialize(p).prefetch(f, x, x, 8);
     g.specialize_fail("No prefetch");
 
-    Module m = g.compile_to_module({p});
+    Module m = g.compile_to_module({p}, "", t);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -130,7 +130,7 @@ int test3(const Target &t) {
     h.compute_at(g, xo);
     g.prefetch(f, xo, xo, 1);
 
-    Module m = g.compile_to_module({});
+    Module m = g.compile_to_module({}, "", t);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -153,7 +153,7 @@ int test4(const Target &t) {
     h.compute_root();
     g.prefetch(f, x, x, 1);
 
-    Module m = g.compile_to_module({});
+    Module m = g.compile_to_module({}, "", t);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -176,7 +176,7 @@ int test5(const Target &t) {
     f.compute_root();
     g.prefetch(f, x, y, 8);
 
-    Module m = g.compile_to_module({});
+    Module m = g.compile_to_module({}, "", t);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -200,7 +200,7 @@ int test6(const Target &t) {
     g.specialize(p).prefetch(f, x, y, 8);
     g.specialize_fail("No prefetch");
 
-    Module m = g.compile_to_module({p});
+    Module m = g.compile_to_module({p}, "", t);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -224,7 +224,7 @@ int test7(const Target &t) {
     h.compute_at(g, xo);
     g.prefetch(f, xo, y, 1);
 
-    Module m = g.compile_to_module({});
+    Module m = g.compile_to_module({}, "", t);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -247,7 +247,7 @@ int test8(const Target &t) {
     h.compute_root();
     g.prefetch(f, x, y, 1);
 
-    Module m = g.compile_to_module({});
+    Module m = g.compile_to_module({}, "", t);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -278,7 +278,7 @@ int test9(const Target &t) {
         .unroll(y)
         .prefetch(f, x, y, 123, PrefetchBoundStrategy::NonFaulting);
 
-    Module m = g.compile_to_module({});
+    Module m = g.compile_to_module({}, "", t);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -314,7 +314,7 @@ int test10(const Target &t) {
         .unroll(y)
         .prefetch(f, y, xo, 123 / 4, PrefetchBoundStrategy::NonFaulting);
 
-    Module m = g.compile_to_module({});
+    Module m = g.compile_to_module({}, "", t);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -350,7 +350,7 @@ int test11(const Target &t) {
         .unroll(y)
         .prefetch(f, xo, xo, 123 / 4, PrefetchBoundStrategy::NonFaulting);
 
-    Module m = g.compile_to_module({});
+    Module m = g.compile_to_module({}, "", t);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -369,6 +369,7 @@ int test11(const Target &t) {
 
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
+    std::cout << "Testing target: " << t << "\n";
 
     using Fn = int (*)(const Target &t);
     std::vector<Fn> tests = {test1, test2, test3, test4, test5, test6, test7, test8, test9, test10, test11};
