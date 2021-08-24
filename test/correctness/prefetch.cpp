@@ -322,6 +322,8 @@ int test10(const Target &t) {
         .unroll(xo)
         .reorder(xi, y, xo)
         .unroll(y)
+        // 123/4 because it's supposed to be equivalent to prefetching 123 elements ahead in the x direction.
+        // Because this is the xo loop, the correct amount is 123/4.
         .prefetch(f, y, xo, 123 / 4, PrefetchBoundStrategy::NonFaulting);
 
     Module m = g.compile_to_module({}, "", t);
@@ -370,6 +372,8 @@ int test11(const Target &t) {
         .unroll(xo)
         .reorder(xi, xo, y)
         .unroll(y)
+        // 123/4 because it's supposed to be equivalent to prefetching 123 elements ahead in the x direction.
+        // Because this is the xo loop, the correct amount is 123/4.
         .prefetch(f, xo, xo, 123 / 4, PrefetchBoundStrategy::NonFaulting);
 
     Module m = g.compile_to_module({}, "", t);
