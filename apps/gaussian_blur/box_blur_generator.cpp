@@ -406,7 +406,7 @@ public:
     Input<Buffer<>> input{"input", 2};
     Input<int> diameter{"diameter"};
     Input<int> width{"width"};
-    Input<int> tx_stride{"stride"};
+    Input<int> tx_stride{"tx_stride"};
     Output<Buffer<>> output{"output", 3};
 
     void generate() {
@@ -436,7 +436,7 @@ public:
 
         const int vec = bits <= 16 ? 16 : 8;
         Func input_clamped;
-        input_clamped(x, y) = input(x, min(likely(y), input.dim(1).max()));
+        input_clamped(x, tx, y) = input(x + tx * tx_stride, min(likely(y), input.dim(1).max()));
 
         // We use slightly different algorithms as a function of the
         // max diameter supported. They get muxed together at the end.
@@ -453,7 +453,7 @@ public:
         Expr down_factor = clamp(cast<int>(ceil(sqrt(diameter))), N * 2, max_count_for_small_sum);
         RDom r_down(0, down_factor);
         Func down_y("down_y");
-        down_y(x, y) += cast(small_sum_type, input_clamped(x, y * down_factor + r_down));
+        down_y(x, tx, y) += cast(small_sum_type, input_clamped(x, tx, y * down_factor + r_down));
 
         // The maximum diameter at which we should just use a direct
         // blur in x, instead of a sum-scan.  Tuned
@@ -518,27 +518,27 @@ public:
 
             Type blur_y_t = (max_diameter <= max_diameter_low_bit_blur_y) ? small_sum_type : large_sum_type;
 
-            blur_y_init(x, ty) = cast(blur_y_t, 0);
+            blur_y_init(x, tx, ty) = cast(blur_y_t, 0);
             if (use_down_y) {
-                blur_y_init(x, ty) += cast(blur_y_t, input_clamped(x, fine_start_1 + ry_init_fine_1));
-                blur_y_init(x, ty) += cast(blur_y_t, down_y(x, coarse_start + ry_init_coarse));
-                blur_y_init(x, ty) += cast(blur_y_t, input_clamped(x, fine_start_2 + ry_init_fine_2));
+                blur_y_init(x, tx, ty) += cast(blur_y_t, input_clamped(x, tx, fine_start_1 + ry_init_fine_1));
+                blur_y_init(x, tx, ty) += cast(blur_y_t, down_y(x, tx, coarse_start + ry_init_coarse));
+                blur_y_init(x, tx, ty) += cast(blur_y_t, input_clamped(x, tx, fine_start_2 + ry_init_fine_2));
             } else {
-                blur_y_init(x, ty) += cast(blur_y_t, input_clamped(x, ty * N + ry_init_full));
+                blur_y_init(x, tx, ty) += cast(blur_y_t, input_clamped(x, tx, ty * N + ry_init_full));
             }
 
             // Compute the other in-between scanlines by incrementally
             // updating that one in a sliding window.
             Func diff_y("diff_y");
-            diff_y(x, ty, y) =
-                (cast(diff_type, input_clamped(x, ty * N + y + diameter)) -
-                 input_clamped(x, ty * N + y));
+            diff_y(x, tx, ty, y) =
+                (cast(diff_type, input_clamped(x, tx, ty * N + y + diameter)) -
+                 input_clamped(x, tx, ty * N + y));
 
             RDom ry_scan(0, N - 1);
-            blur_y(x, ty, y) = undef(blur_y_t);
-            blur_y(x, ty, 0) = blur_y_init(x, ty);
-            blur_y(x, ty, ry_scan + 1) =
-                (blur_y(x, ty, ry_scan) + cast(blur_y_t, diff_y(x, ty, ry_scan)));
+            blur_y(x, tx, ty, y) = undef(blur_y_t);
+            blur_y(x, tx, ty, 0) = blur_y_init(x, tx, ty);
+            blur_y(x, tx, ty, ry_scan + 1) =
+                (blur_y(x, tx, ty, ry_scan) + cast(blur_y_t, diff_y(x, tx, ty, ry_scan)));
 
             // For large diameter, we do the blur in x using the regular
             // sliding window approach.
@@ -550,29 +550,29 @@ public:
             const int integrate_vec = natural_vector_size(blur_y_t);
 
             Func integrate_x("integrate_x");
-            integrate_x(x, ty, y) = undef(blur_x_t);
-            integrate_x(-1, ty, y) = cast(blur_x_t, 0);
+            integrate_x(x, tx, ty, y) = undef(blur_x_t);
+            integrate_x(-1, tx, ty, y) = cast(blur_x_t, 0);
             RDom rx_scan(0, integrate_vec, 0, ((width + diameter) / integrate_vec));
             Expr rx = rx_scan.x + integrate_vec * rx_scan.y;
-            integrate_x(rx, ty, y) =
-                (integrate_x(rx - 1, ty, y) +
-                 blur_y(rx, ty, y));
+            integrate_x(rx, tx, ty, y) =
+                (integrate_x(rx - 1, tx, ty, y) +
+                 blur_y(rx, tx, ty, y));
             RDom rx_tail(((width + diameter) / integrate_vec) * integrate_vec, (width + diameter) % integrate_vec);
             rx = clamp(rx_tail, 0, width + diameter - 2);
-            integrate_x(rx, ty, y) =
-                (integrate_x(rx - 1, ty, y) +
-                 blur_y(rx, ty, y));
+            integrate_x(rx, tx, ty, y) =
+                (integrate_x(rx - 1, tx, ty, y) +
+                 blur_y(rx, tx, ty, y));
 
             Func blur_x("blur_x");
-            blur_x(x, ty, y) = integrate_x(x + diameter - 1, ty, y) - integrate_x(x - 1, ty, y);
+            blur_x(x, tx, ty, y) = integrate_x(x + diameter - 1, tx, ty, y) - integrate_x(x - 1, tx, ty, y);
 
             Func blur_y_untiled("blur_y_untiled");
-            blur_y_untiled(x, y) = blur_y(x, y / N, y % N);
+            blur_y_untiled(x, tx, y) = blur_y(x, tx, y / N, y % N);
 
             // For small diameter, we do it directly and stay in 16-bit
             Func blur_x_direct("blur_x_direct");
             RDom rx_direct(0, diameter);
-            blur_x_direct(x, y) += blur_y_untiled(x + rx_direct, y);
+            blur_x_direct(x, tx, y) += blur_y_untiled(x + rx_direct, tx, y);
 
             auto norm = [&](Expr e) {
                 if (e.type().bits() <= 32) {
@@ -590,12 +590,12 @@ public:
             };
 
             Func normalize("normalize");
-            normalize(x, y) = norm(blur_x(x, y / N, y % N));
+            normalize(x, tx, y) = norm(blur_x(x, tx, y / N, y % N));
 
             if (use_blur_x_direct) {
-                results.push_back(norm(blur_x_direct(x + tx * tx_stride, y)));
+                results.push_back(norm(blur_x_direct(x, tx, y)));
             } else {
-                results.push_back(normalize(x + tx * tx_stride, y));
+                results.push_back(normalize(x, tx, y));
             }
             Expr condition = diameter <= max_diameter;
             conditions.push_back(condition);
@@ -603,7 +603,7 @@ public:
             if (use_blur_x_direct) {
                 blur_y
                     .store_in(MemoryType::Register)
-                    .compute_at(blur_y.in(), tx);
+                    .compute_at(blur_y.in(), xo);
                 blur_y.update(0)
                     .vectorize(x);
                 blur_y.update(1)
@@ -612,8 +612,8 @@ public:
 
                 blur_y.in()
                     .compute_at(output, yo)
-                    .split(x, tx, x, vec)
-                    .reorder(y, x, tx)
+                    .split(x, xo, x, vec)
+                    .reorder(y, x, xo)
                     .vectorize(x)
                     .bound_extent(ty, 1)
                     .unroll(y);
@@ -641,6 +641,7 @@ public:
                     .compute_at(output, xo)
                     .bound_extent(y, N)
                     .bound_extent(x, vec)
+                    .bound_extent(tx, 1)
                     .vectorize(y)
                     .unroll(x);
 
