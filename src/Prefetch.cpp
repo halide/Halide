@@ -198,7 +198,7 @@ private:
     using IRMutator::visit;
 
     Stmt add_placeholder_prefetch(const string &at, const string &from, PrefetchDirective p, Stmt body) {
-        debug(5) << "...Injecting placeholder prefetch for loop " << at << "fetch " << from << "\n";
+        debug(5) << "...Injecting placeholder prefetch for loop " << at << " from " << from << "\n";
         p.at = at;
         p.from = from;
         internal_assert(body.defined());
@@ -235,7 +235,8 @@ private:
                 string from_var;
                 for (int j = (int)loop_nest.size() - 1; j >= 0; --j) {
                     if (starts_with(loop_nest[j], prefix) && ends_with(loop_nest[j], "." + p.from)) {
-                        from_var = loop_nest[i];
+                        from_var = loop_nest[j];
+                        debug(5) << "Prefetch from " << p.from << " -> from_var " << from_var << "\n";
                         break;
                     }
                 }
@@ -279,11 +280,14 @@ class ReducePrefetchDimension : public IRMutator {
 
         const size_t max_arg_size = 2 + 2 * max_dim;  // Prefetch: {base, offset, extent0, stride0, extent1, stride1, ...}
         if (prefetch && (prefetch->args.size() > max_arg_size)) {
-            const Variable *base = prefetch->args[0].as<Variable>();
+            const Expr &base_address = prefetch->args[0];
+            const Expr &base_offset = prefetch->args[1];
+
+            const Variable *base = base_address.as<Variable>();
             internal_assert(base && base->type.is_handle());
 
             vector<string> index_names;
-            Expr new_offset = prefetch->args[1];
+            Expr new_offset = base_offset;
             for (size_t i = max_arg_size; i < prefetch->args.size(); i += 2) {
                 // const Expr &extent = prefetch->args[i + 0];  // unused
                 const Expr &stride = prefetch->args[i + 1];
@@ -329,14 +333,17 @@ class SplitPrefetch : public IRMutator {
         op = stmt.as<Evaluate>();
         internal_assert(op);
         if (const Call *prefetch = Call::as_intrinsic(op->value, {Call::prefetch})) {
-            const Variable *base = prefetch->args[0].as<Variable>();
+            const Expr &base_address = prefetch->args[0];
+            const Expr &base_offset = prefetch->args[1];
+
+            const Variable *base = base_address.as<Variable>();
             internal_assert(base && base->type.is_handle());
 
             int elem_size = prefetch->type.bytes();
 
             vector<string> index_names;
             vector<Expr> extents;
-            Expr new_offset = prefetch->args[1];
+            Expr new_offset = base_offset;
             for (size_t i = 2; i < prefetch->args.size(); i += 2) {
                 Expr extent = prefetch->args[i];
                 Expr stride = prefetch->args[i + 1];
