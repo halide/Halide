@@ -284,8 +284,18 @@ int test9(const Target &t) {
 
     vector<vector<Expr>> expected;
     for (int i = 0; i < 4; i++) {
+        Expr base = Variable::make(Handle(), f.name());
         // The offset arg is a variable that is ticklish to get right, so just use a wildcard for matching
-        expected.push_back({Variable::make(Handle(), f.name()), wild<int>(), 1, get_stride(t, 4)});
+        Expr offset = wild<int>();
+        Expr extent0 = 1;
+        Expr stride0 = get_stride(t, 4);
+        if (t.has_feature(Target::HVX)) {
+            Expr extent1 = 1;
+            Expr stride1 = wild<int>();
+            expected.push_back({base, offset, extent0, stride0, extent1, stride1});
+        } else {
+            expected.push_back({base, offset, extent0, stride0});
+        }
     }
     if (!check(expected, collect.prefetches)) {
         return -1;
@@ -320,8 +330,20 @@ int test10(const Target &t) {
 
     vector<vector<Expr>> expected;
     for (int i = 0; i < 8; i++) {
+        Expr base = Variable::make(Handle(), f.name());
         // The offset arg is a variable that is ticklish to get right, so just use a wildcard for matching
-        expected.push_back({Variable::make(Handle(), f.name()), wild<int>(), 1, get_stride(t, 4)});
+        Expr offset = wild<int>();
+        if (t.has_feature(Target::HVX)) {
+            Expr extent0 = 4;
+            Expr stride0 = get_stride(t, 4);
+            Expr extent1 = 1;
+            Expr stride1 = wild<int>();
+            expected.push_back({base, offset, extent0, stride0, extent1, stride1});
+        } else {
+            Expr extent0 = 1;
+            Expr stride0 = get_stride(t, 4);
+            expected.push_back({base, offset, extent0, stride0});
+        }
     }
     if (!check(expected, collect.prefetches)) {
         return -1;
@@ -356,8 +378,20 @@ int test11(const Target &t) {
 
     vector<vector<Expr>> expected;
     for (int i = 0; i < 8; i++) {
+        Expr base = Variable::make(Handle(), f.name());
         // The offset arg is a variable that is ticklish to get right, so just use a wildcard for matching
-        expected.push_back({Variable::make(Handle(), f.name()), wild<int>(), 1, get_stride(t, 4)});
+        Expr offset = wild<int>();
+        if (t.has_feature(Target::HVX)) {
+            Expr extent0 = 4;
+            Expr stride0 = get_stride(t, 4);
+            Expr extent1 = 1;
+            Expr stride1 = wild<int>();
+            expected.push_back({base, offset, extent0, stride0, extent1, stride1});
+        } else {
+            Expr extent0 = 1;
+            Expr stride0 = get_stride(t, 4);
+            expected.push_back({base, offset, extent0, stride0});
+        }
     }
     if (!check(expected, collect.prefetches)) {
         return -1;
