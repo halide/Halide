@@ -391,7 +391,7 @@ public:
     }
 };
 
-void traverse_block(const Stmt &s, std::function<void(const Stmt &)> f) {
+void traverse_block(const Stmt &s, const std::function<void(const Stmt &)> &f) {
     const Block *b = s.as<Block>();
     if (!b) {
         f(s);
