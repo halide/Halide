@@ -2513,11 +2513,18 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::prefetch)) {
         user_assert((op->args.size() == 4) && is_const_one(op->args[2]))
             << "Only prefetch of 1 cache line is supported in C backend.\n";
-        const Variable *base = op->args[0].as<Variable>();
+
+        const Expr &base_address = op->args[0];
+        const Expr &base_offset = op->args[1];
+        // const Expr &extent0 = op->args[2];  // unused
+        // const Expr &stride0 = op->args[3];  // unused
+
+        const Variable *base = base_address.as<Variable>();
         internal_assert(base && base->type.is_handle());
+        // TODO: provide some way to customize the rw and locality?
         rhs << "__builtin_prefetch("
             << "((" << print_type(op->type) << " *)" << print_name(base->name)
-            << " + " << print_expr(op->args[1]) << "), 1)";
+            << " + " << print_expr(base_offset) << "), /*rw*/0, /*locality*/0)";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         rhs << "(sizeof(halide_buffer_t))";
     } else if (op->is_intrinsic(Call::strict_float)) {

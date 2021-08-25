@@ -18,6 +18,8 @@ Checks: >
     -misc-unused-parameters,
     modernize-deprecated-headers,
     modernize-loop-convert,
+    modernize-make-shared,
+    modernize-make-unique,
     modernize-redundant-void-arg,
     modernize-use-bool-literals,
     modernize-use-default-member-init,

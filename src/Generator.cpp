@@ -1,6 +1,7 @@
 #include <atomic>
 #include <cmath>
 #include <fstream>
+#include <memory>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -1304,7 +1305,7 @@ void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
     Halide::GeneratorContext::init_from_context(context);
     internal_assert(param_info_ptr == nullptr);
     // pre-emptively build our param_info now
-    param_info_ptr.reset(new GeneratorParamInfo(this, size));
+    param_info_ptr = std::make_unique<GeneratorParamInfo>(this, size);
 }
 
 void GeneratorBase::set_generator_names(const std::string &registered_name, const std::string &stub_name) {

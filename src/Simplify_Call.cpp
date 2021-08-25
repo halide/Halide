@@ -479,7 +479,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // Collapse the prefetched region into lower dimension whenever is possible.
         // TODO(psuriana): Deal with negative strides and overlaps.
 
-        internal_assert(op->args.size() % 2 == 0);  // Format: {base, offset, extent0, min0, ...}
+        internal_assert(op->args.size() % 2 == 0);  // Prefetch: {base, offset, extent0, stride0, ...}
 
         auto [args, changed] = mutate_with_changes(op->args, nullptr);
 

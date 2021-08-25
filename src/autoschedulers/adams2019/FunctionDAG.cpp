@@ -1,5 +1,7 @@
 #include "FunctionDAG.h"
 
+#include <memory>
+
 #include "ASLog.h"
 
 namespace Halide {
@@ -957,7 +959,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
 
     // Initialize the memory layouts for the bounds structs
     for (auto &n : nodes) {
-        n.bounds_memory_layout.reset(new BoundContents::Layout);
+        n.bounds_memory_layout = std::make_unique<BoundContents::Layout>();
         auto &l = *(n.bounds_memory_layout);
         l.computed_offset = n.func.dimensions();
         l.total_size = l.computed_offset + n.func.dimensions();
