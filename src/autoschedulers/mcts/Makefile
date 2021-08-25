@@ -66,8 +66,6 @@ $(BIN)/libautoschedule_mcts.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp \
                                $(SRC)/ASLog.cpp \
                                $(SRC)/CPU_State.h \
                                $(SRC)/CPU_State.cpp \
-                               $(SRC)/mcts_stats.cpp \
-                               $(SRC)/mcts_stats.h \
                                $(SRC)/MCTS.h \
                                $(SRC)/MCTreeNode.h \
                                $(SRC)/DefaultCostModel.h \

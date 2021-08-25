@@ -185,6 +185,18 @@ namespace MCTS {
         std::string beam_str = Halide::Internal::get_env_variable("HL_MCTS_DISABLE_BEAM");
         return beam_str != "1";
     }
+
+    void print_env_variables() {
+       // TODO: add to this if we add to the variables above
+       std::cerr << "export HL_RANDOM_DROPOUT=" << get_dropout_threshold() << ";  ";
+       std::cerr << "export HL_MCTS_EXPLORATION=" << get_exploration_percent() << ";  ";
+       std::cerr << "export HL_MCTS_EXPLOITATION=" << get_exploitation_percent() << ";  ";
+       std::cerr << "export HL_MCTS_EXPLORE_MIN=" << get_min_explore() << ";  ";
+       std::cerr << "export HL_MCTS_EXPLOIT_MIN=" << get_min_exploit() << ";  ";
+       std::cerr << "export HL_MCTS_ROLLOUT_LENGTH=" << get_rollout_length() << ";  ";
+       std::cerr << "export HL_MCTS_BEAM_SIZE=" << get_beam_size() << ";  ";
+       std::cerr << "export HL_MCTS_DISABLE_BEAM=" << !use_beam() << ";\n";
+    }
 }
 
 namespace Halide {
@@ -292,21 +304,13 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     aslog(0) << "Size: " << dag.nodes.size() << "\n";
 
-    // TODO(rootjalex): do this in parallel.
+    // TODO(rootjalex): should probably only print these if a verbose flag is set.
+    MCTS::print_env_variables();
+
     Timer timer;
+    auto solver = MCTS::Solver<CPU_State, CPU_Action>::MakeRandomizedSolver();
 
-    // TODO(rootjalex): figure out a formula for these.
-    string mcts_iterations_str = get_env_variable("HL_MCTS_ITERS");
-    string mcts_simulations_str = get_env_variable("HL_MCTS_N_SIMS");
-    const uint32_t n_simulations = mcts_simulations_str.empty() ? dag.nodes.size() * 2 : std::stoul(mcts_simulations_str.c_str());
-    const uint32_t n_iterations = mcts_iterations_str.empty() ? dag.nodes.size() * 32 : std::stoul(mcts_iterations_str.c_str());
-
-    auto solver = MCTS::Solver<CPU_State, CPU_Action>::MakeIterationSolver(n_iterations, n_simulations);
-#ifdef SS_PROFILE
-    __ss_init_stats(&solver.s);
-#endif
-    START_INTERVAL(&solver.s, INTERVAL_PRE_AUTOSCHEDULE);
-
+    // TODO(rootjalex): do this in parallel.
     LoopNest *root = new LoopNest;
     CPU_State start_state(&dag, &params, cost_model.get(), root, /* n_decisions */ 0, memory_limit);
     aslog(0) << "Starting\n";
@@ -324,25 +328,50 @@ void generate_schedule(const std::vector<Function> &outputs,
         schedule_source = optimal.apply_schedule(python_schedule_source);
         std::cerr << "is_terminal? " << optimal.is_terminal() << std::endl;
         std::cerr << "n states generated: " << MCTS::state_count << std::endl;
+
+        LoopNest optimal_root;
+        optimal.copy_root_to(&optimal_root);
+
+        // Save the featurization, so that we can use this schedule as
+        // training data (once we've benchmarked it).
+        internal_assert(optimal.dag_ptr) << "Dag ptr empty " << optimal.dag_ptr;
+        internal_assert(optimal.params_ptr) << "Params ptr empty " << optimal.params_ptr;
+
+        string feature_file = get_env_variable("HL_FEATURE_FILE");
+        if (!feature_file.empty()) {
+            user_warning << "HL_FEATURE_FILE is deprecated; use the featurization output from Generator instead\n";
+            std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
+            save_featurization(optimal.dag_ptr, optimal.params_ptr, &optimal_root, binfile);
+            binfile.close();
+            internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
+        }
+
+        if (auto_scheduler_results) {
+            auto_scheduler_results->scheduler_name = "mcts";
+            auto_scheduler_results->schedule_source = schedule_source;
+            auto_scheduler_results->python_schedule_source = python_schedule_source;
+            {
+                std::ostringstream out;
+                save_featurization(optimal.dag_ptr, optimal.params_ptr, &optimal_root, out);
+                auto_scheduler_results->featurization.resize(out.str().size());
+                memcpy(auto_scheduler_results->featurization.data(), out.str().data(), out.str().size());
+            }
+        }
+
     } catch (const std::bad_alloc& e) {
         std::cerr << "Allocation failed: " << e.what() << std::endl;
     } catch (...) {
         std::cerr << "Some other exception?" << std::endl;
     }
-
-    STOP_INTERVAL(&solver.s, INTERVAL_POST_AUTOSCHEDULE);
+    // TODO: Search time includes the time needed to save features. Need to remove it from timing
     std::chrono::duration<double> total_time = timer.elapsed();
     auto milli = std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count();
 
-    aslog(0) << "Found Pipeline with cost: " << cost << "\n";
-
+    //aslog(0) << "Found Pipeline with cost: " << cost << "\n";
+    aslog(0) << "Best cost: " << cost << "\n";
     aslog(0) << "Execution time: " << milli << " ms\n\n";
 
     // aslog(0) << "Source:" << schedule_source << "\n\n\n";
-
-#ifdef SS_PROFILE
-    dump_interesting_stats(stderr, &solver.s);
-#endif
     HALIDE_TOC;
 
     // TODO(rootjalex): dump cost info and stuff.
@@ -371,32 +400,6 @@ void generate_schedule(const std::vector<Function> &outputs,
         internal_assert(!f.fail()) << "Failed to write " << python_schedule_file;
     }
 
-    // TODO(rootjalex): Figure out how to save featurization.
-    /*
-    // Save the featurization, so that we can use this schedule as
-    // training data (once we've benchmarked it).
-    string feature_file = get_env_variable("HL_FEATURE_FILE");
-    if (!feature_file.empty()) {
-        user_warning << "HL_FEATURE_FILE is deprecated; use the featurization output from Generator instead\n";
-        std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
-        optimal->save_featurization(dag, params, binfile);
-        binfile.close();
-        internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
-    }
-    */
-
-    if (auto_scheduler_results) {
-        auto_scheduler_results->scheduler_name = "mcts";
-        auto_scheduler_results->schedule_source = schedule_source;
-        auto_scheduler_results->python_schedule_source = python_schedule_source;
-        {
-            // TODO(rootjalex): Figure out how to save featurization.
-            // std::ostringstream out;
-            // optimal->save_featurization(dag, params, out);
-            // auto_scheduler_results->featurization.resize(out.str().size());
-            // memcpy(auto_scheduler_results->featurization.data(), out.str().data(), out.str().size());
-        }
-    }
 }
 
 struct mcts {

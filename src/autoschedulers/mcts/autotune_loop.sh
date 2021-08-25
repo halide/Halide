@@ -97,23 +97,41 @@ make_featurization() {
     if [[ $D == */0 ]]; then
         # Sample 0 in each batch is best effort beam search, with no randomness
         dropout=100
-        beam=32
+        beam=4
+        disable_beam=0
+        rollout_len=0
+        exploit_min=4
+        explore_min=4
+        exploitation=0
+        exploration=0
     else
-        # The other samples are random probes biased by the cost model
-        dropout=1  # 1% chance of operating entirely greedily
+        # The other samples are random probes
+        dropout=1
         beam=1
+        disable_beam=1
+        rollout_len=0
+        exploit_min=0
+        explore_min=1
+        exploitation=0
+        exploration=0
     fi
     HL_SEED=${SEED} \
         HL_WEIGHTS_DIR=${WEIGHTS} \
         HL_RANDOM_DROPOUT=${dropout} \
-        HL_BEAM_SIZE=${beam} \
+        HL_MCTS_BEAM_SIZE=${beam} \
+        HL_MCTS_DISABLE_BEAM=${disable_beam} \
+        HL_MCTS_ROLLOUT_LENGTH=${rollout_len} \
+        HL_MCTS_EXPLOIT_MIN=${exploit_min} \
+        HL_MCTS_EXPLORE_MIN=${explore_min} \
+        HL_MCTS_EXPLOITATION=${exploitation} \
+        HL_MCTS_EXPLORATION=${exploration} \
         HL_MACHINE_PARAMS=32,24000000,40 \
         ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
         ${GENERATOR} \
         -g ${PIPELINE} \
         -f ${FNAME} \
         -o ${D} \
-        -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
+        -e stmt,assembly,static_library,c_header,registration,schedule,featurization,python_schedule \
         target=${HL_TARGET} \
         auto_schedule=true \
         ${EXTRA_GENERATOR_ARGS} \
@@ -225,7 +243,8 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
                 --initial_weights=${WEIGHTS} \
                 --weights_out=${WEIGHTS} \
                 --best_benchmark=${SAMPLES}/best.${PIPELINE}.benchmark.txt \
-                --best_schedule=${SAMPLES}/best.${PIPELINE}.schedule.h
+                --best_schedule=${SAMPLES}/best.${PIPELINE}.schedule.h \
+                --best_python_schedule=${SAMPLES}/best_${PIPELINE}_schedule.py
     done
 
     echo Batch ${BATCH_ID} took ${SECONDS} seconds to compile, benchmark, and retrain

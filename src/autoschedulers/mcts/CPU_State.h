@@ -196,6 +196,9 @@ public:
     // Apply this State to the FunctionDag.
     std::string apply_schedule(std::string& python_schedule_source);
 
+    // Copy cpu_state's root nest to dst
+    void copy_root_to(LoopNest* dst);
+
     void dump() const;
 };
 
@@ -205,6 +208,9 @@ bool prunable(const FunctionDAG *dag_ptr, const MachineParams *params_ptr, const
 
 // Used by the above to check if a LoopNest is prunable.
 void compute_featurization(const FunctionDAG *dag_ptr, const MachineParams *params_ptr, const LoopNest *root_ptr, StageMap<ScheduleFeatures> *features);
+
+// Calls `compute_featurization` and prints those features to `out`.
+void save_featurization(const FunctionDAG *dag_ptr, const MachineParams *params_ptr, const LoopNest *root_ptr, std::ostream &out);
 
 }  // namespace Autoscheduler
 }  // namespace Internal

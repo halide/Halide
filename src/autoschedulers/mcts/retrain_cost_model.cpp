@@ -33,6 +33,7 @@ struct Flags {
     bool randomize_weights = false;
     string best_benchmark_path;
     string best_schedule_path;
+    string best_python_schedule_path;
 
     Flags(int argc, char **argv) {
         cmdline::parser a;
@@ -48,6 +49,7 @@ struct Flags {
         a.add<int>("num_cores");
         a.add<string>("best_benchmark");
         a.add<string>("best_schedule");
+        a.add<string>("best_python_schedule");
 
         a.parse_check(argc, argv);  // exits if parsing fails
 
@@ -58,6 +60,7 @@ struct Flags {
         randomize_weights = a.exist("randomize_weights") && a.get<bool>("randomize_weights");
         best_benchmark_path = a.get<string>("best_benchmark");
         best_schedule_path = a.get<string>("best_schedule");
+        best_python_schedule_path = a.get<string>("best_python_schedule");
 
         if (epochs <= 0) {
             std::cerr << "--epochs must be specified and > 0.\n";
@@ -366,6 +369,7 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
     };
 
     copy_best_schedule(flags.best_schedule_path, ".schedule.h");
+    copy_best_schedule(flags.best_python_schedule_path, "_schedule.py");
 
     return result;
 }

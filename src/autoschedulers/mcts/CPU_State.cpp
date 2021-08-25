@@ -668,6 +668,9 @@ double CPU_State::get_exploitation_value(uint32_t num_visits) {
     return schedule_source;
 }
 
+void CPU_State::copy_root_to(LoopNest* dst) {
+    dst->copy_from(*root.get());
+}
 
 void CPU_State::dump() const {
     std::cerr << "root:" << root.get()
@@ -785,6 +788,36 @@ void compute_featurization(const FunctionDAG *dag_ptr, const MachineParams *para
             internal_assert(!features->contains(&(n.stages[0])))
                 << "Somehow an input or unscheduled node ended up in the featurization: "
                 << n.func.name() << "\n";
+        }
+    }
+}
+
+// This is directly taken from State::save_featurization.
+void save_featurization(const FunctionDAG *dag_ptr, const MachineParams *params_ptr, const LoopNest *root_ptr, std::ostream &out) {
+    StageMap<ScheduleFeatures> features;
+    compute_featurization(dag_ptr, params_ptr, root_ptr, &features);
+
+    for (const auto &n : dag_ptr->nodes) {
+        if (n.is_input) {
+            continue;
+        }
+        for (size_t stage_idx = n.stages.size(); stage_idx > 0; stage_idx--) {
+            const auto &s = n.stages[stage_idx - 1];
+            const size_t num_schedule_features = ScheduleFeatures::num_features();
+            const size_t num_pipeline_features = PipelineFeatures::num_features();
+            const auto &sched_feat = features.get(&s);
+
+            float buf[num_schedule_features + num_pipeline_features];
+            // Save them as floats
+            for (size_t i = 0; i < num_schedule_features; i++) {
+                buf[i] = sched_feat[i];
+            }
+
+            for (size_t i = 0; i < num_pipeline_features; i++) {
+                buf[i + num_schedule_features] = s.features[i];
+            }
+
+            out.write((const char *)buf, sizeof(buf));
         }
     }
 }
