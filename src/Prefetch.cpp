@@ -391,6 +391,43 @@ public:
     }
 };
 
+void traverse_block(const Stmt &s, std::function<void(const Stmt &)> f) {
+    const Block *b = s.as<Block>();
+    if (!b) {
+        f(s);
+    } else {
+        traverse_block(b->first, f);
+        traverse_block(b->rest, f);
+    }
+}
+
+class HoistPrefetches : public IRMutator {
+    using IRMutator::visit;
+
+    Stmt visit(const Block *op) override {
+        Stmt s = IRMutator::visit(op);
+
+        Stmt prefetches, body;
+        traverse_block(s, [&prefetches, &body](const Stmt &s) {
+            const Evaluate *eval = s.as<Evaluate>();
+            if (eval && Call::as_intrinsic(eval->value, {Call::prefetch})) {
+                prefetches = prefetches.defined() ? Block::make(prefetches, s) : s;
+            } else {
+                body = body.defined() ? Block::make(body, s) : s;
+            }
+        });
+        if (prefetches.defined()) {
+            if (body.defined()) {
+                return Block::make(prefetches, body);
+            } else {
+                return prefetches;
+            }
+        } else {
+            return body;
+        }
+    }
+};
+
 }  // anonymous namespace
 
 Stmt inject_placeholder_prefetch(const Stmt &s, const map<string, Function> &env,
@@ -432,6 +469,10 @@ Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t) {
         stmt = SplitPrefetch(max_byte_size).mutate(stmt);
     }
     return stmt;
+}
+
+Stmt hoist_prefetches(const Stmt &s) {
+    return HoistPrefetches().mutate(s);
 }
 
 }  // namespace Internal
