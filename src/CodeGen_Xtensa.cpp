@@ -1652,6 +1652,16 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_sat_narrow_i16(const int32x32_t& a
   return IVP_PACKVRNX48(wide, 0);
 }
 
+HALIDE_ALWAYS_INLINE int8x64_t halide_xtensa_sat_narrow_with_shift_i8(const int16x64_t& a, uint32_t shift) {
+  xb_vec2Nx24 wide = IVP_CVT24S2NX16(a.native_vector[1], a.native_vector[0]);
+  return IVP_PACKVR2NX24(wide, shift);
+}
+
+HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_sat_narrow_with_shift_u8(const int16x64_t& a, uint32_t shift) {
+  xb_vec2Nx24 wide = IVP_CVT24S2NX16(a.native_vector[1], a.native_vector[0]);
+  return IVP_PACKVRU2NX24(wide, shift);
+}
+
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_sat_narrow_with_shift_i16(const int32x32_t& a, uint32_t shift) {
   xb_vecNx48 wide = IVP_CVT48SNX32(a.native_vector[1], a.native_vector[0]);
   return IVP_PACKVRNX48(wide, shift);
