@@ -405,10 +405,11 @@ class HoistPrefetches : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const Block *op) override {
-        Stmt s = IRMutator::visit(op);
+        Stmt s = op;
 
         Stmt prefetches, body;
-        traverse_block(s, [&prefetches, &body](const Stmt &s) {
+        traverse_block(s, [this, &prefetches, &body](const Stmt &s_in) {
+            Stmt s = IRMutator::mutate(s_in);
             const Evaluate *eval = s.as<Evaluate>();
             if (eval && Call::as_intrinsic(eval->value, {Call::prefetch})) {
                 prefetches = prefetches.defined() ? Block::make(prefetches, s) : s;
