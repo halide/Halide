@@ -1385,9 +1385,7 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
 
         int variable_id = variable_ids[0];
         const string &variable = current_args[variable_id].name();
-        bool solved;
-        Expr result_rhs;
-        std::tie(solved, result_rhs) =
+        auto [solved, result_rhs] =
             solve_inverse(new_args[arg_id] == lhs[arg_id],
                           new_args[arg_id].name(),
                           variable);

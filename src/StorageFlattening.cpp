@@ -339,8 +339,8 @@ private:
 
         auto iter = env.find(op->name);
         if (iter != env.end()) {
-            // Order the <min, extent> args based on the storage dims (i.e. innermost
-            // dimension should be first in args)
+            // Order the <min, extent> args based on the storage dims
+            // (i.e. innermost dimension should be first in args)
             vector<int> storage_permutation;
             {
                 Function f = iter->second.first;

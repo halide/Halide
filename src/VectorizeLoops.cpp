@@ -3,6 +3,7 @@
 
 #include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
+#include "Deinterleave.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMutator.h"
@@ -724,7 +725,21 @@ class VectorSubs : public IRMutator {
         for (size_t i = 0; i < new_args.size(); i++) {
             new_args[i] = widen(new_args[i], max_lanes);
         }
-        return Call::make(op->type.with_lanes(max_lanes), op->name, new_args,
+        Type new_op_type = op->type.with_lanes(max_lanes);
+
+        if (op->is_intrinsic(Call::prefetch)) {
+            // We don't want prefetch args to ve vectorized, but we can't just skip the mutation
+            // (otherwise we can end up with dead loop variables. Instead, use extract_lane() on each arg
+            // to scalarize it again.
+            for (auto &arg : new_args) {
+                if (arg.type().is_vector()) {
+                    arg = extract_lane(arg, 0);
+                }
+            }
+            new_op_type = op->type;
+        }
+
+        return Call::make(new_op_type, op->name, new_args,
                           op->call_type, op->func, op->value_index, op->image, op->param);
     }
 
