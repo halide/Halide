@@ -1115,7 +1115,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
         flag_processor(&state);
 
         // allocate the surface after all tags and flags are processed
-        surface = std::unique_ptr<Surface>(new Surface(state.globals.frame_size));
+        surface = std::make_unique<Surface>(state.globals.frame_size);
 
         if (state.globals.auto_layout_grid.x < 0 || state.globals.auto_layout_grid.y < 0) {
             int cells_needed = 0;

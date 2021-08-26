@@ -1166,8 +1166,16 @@ void CodeGen_LLVM::optimize_module() {
                 constexpr bool compile_kernel = false;
                 constexpr bool recover = false;
                 constexpr bool use_after_scope = true;
+#if LLVM_VERSION >= 140
+                // TODO: this is the value that the default ctor uses.
+                // Not sure if it's ideal for Halide.
+                constexpr AsanDetectStackUseAfterReturnMode use_after_return = AsanDetectStackUseAfterReturnMode::Runtime;
+                mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(
+                    AddressSanitizerOptions(compile_kernel, recover, use_after_scope, use_after_return))));
+#else
                 mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(
                     compile_kernel, recover, use_after_scope)));
+#endif
             });
 #if LLVM_VERSION >= 120
         pb.registerPipelineStartEPCallback(
@@ -3300,11 +3308,16 @@ void CodeGen_LLVM::visit(const Call *op) {
         user_assert((op->args.size() == 4) && is_const_one(op->args[2]))
             << "Only prefetch of 1 cache line is supported.\n";
 
+        const Expr &base_address = op->args[0];
+        const Expr &base_offset = op->args[1];
+        // const Expr &extent0 = op->args[2];  // unused
+        // const Expr &stride0 = op->args[3];  // unused
+
         llvm::Function *prefetch_fn = module->getFunction("_halide_prefetch");
         internal_assert(prefetch_fn);
 
         vector<llvm::Value *> args;
-        args.push_back(codegen_buffer_pointer(codegen(op->args[0]), op->type, op->args[1]));
+        args.push_back(codegen_buffer_pointer(codegen(base_address), op->type, base_offset));
         // The first argument is a pointer, which has type i8*. We
         // need to cast the argument, which might be a pointer to a
         // different type.
@@ -3312,7 +3325,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         args[0] = builder->CreateBitCast(args[0], ptr_type);
 
         value = builder->CreateCall(prefetch_fn, args);
-
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
                       " integer overflow for int32 and int64 is undefined behavior in"
