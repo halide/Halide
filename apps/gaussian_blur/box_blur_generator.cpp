@@ -436,7 +436,10 @@ public:
 
         const int vec = bits <= 16 ? 16 : 8;
         Func input_clamped;
-        input_clamped(x, tx, y) = input(x + tx * tx_stride, min(likely(y), input.dim(1).max()));
+        input_clamped(x, y) = input(x, clamp(likely(y), 0, input.dim(1).max()));
+
+        Func input_tiled;
+        input_tiled(x, tx, y) = input_clamped(x + tx * tx_stride, y);
 
         // We use slightly different algorithms as a function of the
         // max diameter supported. They get muxed together at the end.
@@ -450,10 +453,22 @@ public:
         // We'll put a lower bound on the downsampling factor so that
         // the intermediate downsampled image is likely to be
         // in-cache.
-        Expr down_factor = clamp(cast<int>(ceil(sqrt(diameter))), N * 2, max_count_for_small_sum);
-        RDom r_down(0, down_factor);
+        Expr down_factor = N;
+        Expr group_factor = clamp(diameter / (2 * N), 1, 32);
+
+        Expr coarse_offset = 0;
+
+        Func down_y_1("down_y_1"), down_y_2("down_y_2");
+        RDom r_down_1(0, down_factor);
+        down_y_1(x, y) += cast(small_sum_type, input_clamped(x, y * down_factor + r_down_1 - coarse_offset));
+
+        RDom r_down_2(1, group_factor - 1);
+        down_y_2(x, y, ty) = undef(small_sum_type);
+        down_y_2(x, 0, ty) = down_y_1(x, ty * group_factor);
+        down_y_2(x, r_down_2, ty) = down_y_1(x, ty * group_factor + r_down_2) + down_y_2(x, r_down_2 - 1, ty);
+
         Func down_y("down_y");
-        down_y(x, tx, y) += cast(small_sum_type, input_clamped(x, tx, y * down_factor + r_down));
+        down_y(x, y, ty) = down_y_2(x, y, ty);
 
         // The maximum diameter at which we should just use a direct
         // blur in x, instead of a sum-scan.  Tuned
@@ -491,14 +506,39 @@ public:
             // Slice the footprint of the vertical blur into three pieces.
             Expr fine_start_1 = ty * N;
             Expr fine_end_2 = ty * N + diameter;
-            Expr coarse_start = (fine_start_1 - 1) / down_factor + 1;
-            Expr coarse_end = fine_end_2 / down_factor;
-            Expr fine_end_1 = coarse_start * down_factor;
-            Expr fine_start_2 = coarse_end * down_factor;
+
+            Expr coarse_start = (fine_start_1 - 1 + coarse_offset) / down_factor + 1;
+            Expr coarse_end = (fine_end_2 + coarse_offset) / down_factor;
+
+            Expr fine_end_1 = coarse_start * down_factor - coarse_offset;
+            Expr fine_start_2 = coarse_end * down_factor - coarse_offset;
 
             Expr coarse_pieces = coarse_end - coarse_start;
             Expr fine_pieces_1 = fine_end_1 - fine_start_1;
             Expr fine_pieces_2 = fine_end_2 - fine_start_2;
+
+            // How many complete groups of aligned group_factor-sized
+            // groups of coarse pieces does our coarse component span?
+            // There will also be partial groups at the start and end.
+            Expr coarse_group_start = coarse_start / group_factor;
+            Expr coarse_group_end = coarse_end / group_factor;
+            Expr coarse_group_pieces = coarse_group_end - coarse_group_start;
+
+            // The group index of the coarse piece just before the
+            // start of the filter footprint, assuming coarse_start is
+            // not a multiple of group_factor.
+            Expr partial_group_1_idx = max(0, coarse_start / group_factor);
+
+            // The group index of the last coarse piece.
+            Expr partial_group_2_idx = max(0, (coarse_end - 1) / group_factor);
+
+            // The within-group index of the first coarse piece just
+            // before the start of the filter footprint.
+            Expr partial_group_1_subidx = (coarse_start % group_factor) - 1;
+
+            // The within-group index of the last coarse piece in the
+            // footprint.
+            Expr partial_group_2_subidx = (coarse_end % group_factor) - 1;
 
             // An empirically-tuned threshold for when it starts making
             // sense to use the downsampled-in-y input to boost the
@@ -508,8 +548,8 @@ public:
             RDom ry_init_fine_1(0, down_factor - 1);
             ry_init_fine_1.where(ry_init_fine_1 < fine_pieces_1);
 
-            RDom ry_init_coarse(0, diameter / down_factor);
-            ry_init_coarse.where(ry_init_coarse < coarse_pieces);
+            RDom ry_init_coarse(0, (diameter - 1) / (down_factor * group_factor) + 1);
+            ry_init_coarse.where(ry_init_coarse < coarse_group_pieces);
 
             RDom ry_init_fine_2(0, down_factor - 1);
             ry_init_fine_2.where(ry_init_fine_2 < fine_pieces_2);
@@ -518,21 +558,36 @@ public:
 
             Type blur_y_t = (max_diameter <= max_diameter_low_bit_blur_y) ? small_sum_type : large_sum_type;
 
-            blur_y_init(x, tx, ty) = cast(blur_y_t, 0);
             if (use_down_y) {
-                blur_y_init(x, tx, ty) += cast(blur_y_t, input_clamped(x, tx, fine_start_1 + ry_init_fine_1));
-                blur_y_init(x, tx, ty) += cast(blur_y_t, down_y(x, tx, coarse_start + ry_init_coarse));
-                blur_y_init(x, tx, ty) += cast(blur_y_t, input_clamped(x, tx, fine_start_2 + ry_init_fine_2));
+                // Start with the two partial coarse groups.
+                blur_y_init(x, tx, ty) =
+                    (cast(blur_y_t, select(partial_group_2_subidx >= 0,
+                                           down_y(x + tx * tx_stride, max(0, partial_group_2_subidx), partial_group_2_idx), 0)) -
+                     select(partial_group_1_subidx >= 0, down_y(x + tx * tx_stride, max(0, partial_group_1_subidx), partial_group_1_idx), 0));
+
+                // Now add entire coarse groups. Each group is sum-scanned, so
+                // to add the entire group we can just access its last
+                // element.
+                Expr dy = coarse_group_start + ry_init_coarse;
+                blur_y_init(x, tx, ty) += cast(blur_y_t, down_y(x + tx * tx_stride, group_factor - 1, dy));
+
+                // Now add individual scanlines at the start and
+                // end. We do the ones at the start last, because
+                // we're about to subtract them to do the sliding
+                // window update, so we get better temporal locality
+                // that way.
+                blur_y_init(x, tx, ty) += cast(blur_y_t, input_tiled(x, tx, fine_start_2 + ry_init_fine_2));
+                blur_y_init(x, tx, ty) += cast(blur_y_t, input_tiled(x, tx, fine_start_1 + ry_init_fine_1));
             } else {
-                blur_y_init(x, tx, ty) += cast(blur_y_t, input_clamped(x, tx, ty * N + ry_init_full));
+                blur_y_init(x, tx, ty) += cast(blur_y_t, input_tiled(x, tx, ty * N + ry_init_full));
             }
 
             // Compute the other in-between scanlines by incrementally
             // updating that one in a sliding window.
             Func diff_y("diff_y");
             diff_y(x, tx, ty, y) =
-                (cast(diff_type, input_clamped(x, tx, ty * N + y + diameter)) -
-                 input_clamped(x, tx, ty * N + y));
+                (cast(diff_type, input_tiled(x, tx, ty * N + y + diameter)) -
+                 input_tiled(x, tx, ty * N + y));
 
             RDom ry_scan(0, N - 1);
             blur_y(x, tx, ty, y) = undef(blur_y_t);
@@ -627,7 +682,6 @@ public:
                     .reorder(x, y, rx_direct)
                     .vectorize(x);
             } else {
-
                 normalize
                     .store_in(MemoryType::Register)
                     .compute_at(output, xo)
@@ -693,14 +747,16 @@ public:
                 .vectorize(x, vec, TailStrategy::GuardWithIf)
                 .align_storage(x, vec);
             if (use_down_y) {
-                blur_y_init.update(0)
-                    .reorder(x, ry_init_fine_1, ty)
+                blur_y_init
                     .vectorize(x, vec * 2, TailStrategy::GuardWithIf);
-                blur_y_init.update(1)
+                blur_y_init.update(0)
                     .reorder(x, ry_init_coarse, ty)
                     .vectorize(x, vec * 2, TailStrategy::GuardWithIf);
-                blur_y_init.update(2)
+                blur_y_init.update(1)
                     .reorder(x, ry_init_fine_2, ty)
+                    .vectorize(x, vec * 2, TailStrategy::GuardWithIf);
+                blur_y_init.update(2)
+                    .reorder(x, ry_init_fine_1, ty)
                     .vectorize(x, vec * 2, TailStrategy::GuardWithIf);
             } else {
                 blur_y_init.update(0)
@@ -724,16 +780,30 @@ public:
         }
 
         output(x, tx, y) = result;
-        down_y.in()
-            .compute_root()
-            .parallel(y)
-            .vectorize(x, vec * 2, TailStrategy::GuardWithIf)
-            .align_storage(x, vec * 2);
 
-        down_y.compute_at(down_y.in(), y)
+        down_y.compute_root()
+            .split(x, tx, x, 1024, TailStrategy::GuardWithIf)
+            .reorder(y, x, tx, ty)
+            .fuse(tx, ty, ty)
+            .parallel(ty)
+            .unroll(y)
+            .split(x, xo, xi, natural_vector_size(small_sum_type), TailStrategy::RoundUp)
+            .vectorize(xi);
+
+        /*
+        down_y_1.compute_at(down_y, xi).unroll(y).update().unroll(r_down_1).unroll(y);
+        down_y_2.compute_at(down_y, xi).update().unroll(r_down_2);
+        */
+
+        down_y_1.compute_at(down_y, ty)
+            .vectorize(x, natural_vector_size(small_sum_type), TailStrategy::GuardWithIf)
             .update()
-            .reorder(x, r_down, y)
-            .vectorize(x, vec * 2, TailStrategy::GuardWithIf);
+            .vectorize(x, natural_vector_size(small_sum_type), TailStrategy::GuardWithIf)
+            .unroll(r_down_1);
+        down_y_2
+            .compute_at(down_y, xi)
+            .update(1)
+            .unroll(r_down_2);
 
         output.dim(0).set_bounds(0, width);
         output.dim(1).set_min(0);
