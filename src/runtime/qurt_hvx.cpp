@@ -57,11 +57,6 @@ WEAK_INLINE int _halide_prefetch_2d(const void *ptr, int width_bytes, int height
     return 0;
 }
 
-WEAK_INLINE int _halide_prefetch_1d(const void *ptr, int size) {
-    _halide_prefetch_2d(ptr, size, 1, 1);
-    return 0;
-}
-
 struct hexagon_buffer_t_arg {
     uint64_t device;
     uint8_t *host;

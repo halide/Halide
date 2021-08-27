@@ -99,7 +99,7 @@ class SplitTuples : public IRMutator {
 
             for (const auto &idx : indices->second) {
                 internal_assert(idx < (int)op->types.size());
-                body = Prefetch::make(op->name + "." + std::to_string(idx), {op->types[(idx)]}, op->bounds, op->prefetch, op->condition, body);
+                body = Prefetch::make(op->name + "." + std::to_string(idx), {op->types[(idx)]}, op->bounds, op->prefetch, op->condition, std::move(body));
             }
             return body;
         } else {

@@ -10,6 +10,11 @@ using std::vector;
 using namespace Halide;
 using namespace Halide::Internal;
 
+template<typename T>
+Expr wild() {
+    return Variable::make(halide_type_of<T>(), "*");
+}
+
 class CollectPrefetches : public IRVisitor {
 private:
     using IRVisitor::visit;
@@ -37,9 +42,11 @@ bool check(const vector<vector<Expr>> &expected, vector<vector<Expr>> &result) {
             return false;
         }
         for (size_t j = 0; j < expected[i].size(); ++j) {
-            if (!equal(expected[i][j], result[i][j])) {
+            const Variable *var = expected[i][j].as<Variable>();
+            bool is_wild = var && var->name == "*";
+            if (!is_wild && !equal(expected[i][j], result[i][j])) {
                 std::cout << "Expect \"" << expected[i][j] << "\" at arg index "
-                          << j << ", got \"" << result[i][j] << " instead\n";
+                          << j << ", got \"" << result[i][j] << "\" instead\n";
                 return false;
             }
         }
@@ -75,7 +82,7 @@ int test1(const Target &t) {
     f.compute_root();
     g.prefetch(f, x, x, 8);
 
-    Module m = g.compile_to_module({});
+    Module m = g.compile_to_module({}, "", t);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -99,7 +106,7 @@ int test2(const Target &t) {
     g.specialize(p).prefetch(f, x, x, 8);
     g.specialize_fail("No prefetch");
 
-    Module m = g.compile_to_module({p});
+    Module m = g.compile_to_module({p}, "", t);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -123,7 +130,7 @@ int test3(const Target &t) {
     h.compute_at(g, xo);
     g.prefetch(f, xo, xo, 1);
 
-    Module m = g.compile_to_module({});
+    Module m = g.compile_to_module({}, "", t);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -146,7 +153,7 @@ int test4(const Target &t) {
     h.compute_root();
     g.prefetch(f, x, x, 1);
 
-    Module m = g.compile_to_module({});
+    Module m = g.compile_to_module({}, "", t);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -169,7 +176,7 @@ int test5(const Target &t) {
     f.compute_root();
     g.prefetch(f, x, y, 8);
 
-    Module m = g.compile_to_module({});
+    Module m = g.compile_to_module({}, "", t);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -193,7 +200,7 @@ int test6(const Target &t) {
     g.specialize(p).prefetch(f, x, y, 8);
     g.specialize_fail("No prefetch");
 
-    Module m = g.compile_to_module({p});
+    Module m = g.compile_to_module({p}, "", t);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -217,7 +224,7 @@ int test7(const Target &t) {
     h.compute_at(g, xo);
     g.prefetch(f, xo, y, 1);
 
-    Module m = g.compile_to_module({});
+    Module m = g.compile_to_module({}, "", t);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -240,7 +247,7 @@ int test8(const Target &t) {
     h.compute_root();
     g.prefetch(f, x, y, 1);
 
-    Module m = g.compile_to_module({});
+    Module m = g.compile_to_module({}, "", t);
     CollectPrefetches collect;
     m.functions()[0].body.accept(&collect);
 
@@ -253,13 +260,157 @@ int test8(const Target &t) {
     return 0;
 }
 
+int test9(const Target &t) {
+    Func f("f"), g("g");
+    Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi");
+
+    f(x, y) = x + y;
+    f.compute_root();
+
+    g(x, y) = f(x, y);
+    g.tile(x, y, xo, yo, xi, yi, 8, 4, TailStrategy::RoundUp)
+        .vectorize(xi)
+        .unroll(yi);
+
+    f.in()
+        .compute_at(g, xo)
+        .vectorize(x)
+        .unroll(y)
+        .prefetch(f, x, y, 123, PrefetchBoundStrategy::NonFaulting);
+
+    Module m = g.compile_to_module({}, "", t);
+    CollectPrefetches collect;
+    m.functions()[0].body.accept(&collect);
+
+    vector<vector<Expr>> expected;
+    for (int i = 0; i < 4; i++) {
+        Expr base = Variable::make(Handle(), f.name());
+        // The offset arg is a variable that is ticklish to get right, so just use a wildcard for matching
+        Expr offset = wild<int>();
+        Expr extent0 = 1;
+        Expr stride0 = get_stride(t, 4);
+        if (t.has_feature(Target::HVX)) {
+            Expr extent1 = 1;
+            Expr stride1 = wild<int>();
+            expected.push_back({base, offset, extent0, stride0, extent1, stride1});
+        } else {
+            expected.push_back({base, offset, extent0, stride0});
+        }
+    }
+    if (!check(expected, collect.prefetches)) {
+        return -1;
+    }
+    return 0;
+}
+
+int test10(const Target &t) {
+    Func f("f"), g("g");
+    Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi");
+
+    f(x, y) = x + y;
+    f.compute_root();
+
+    g(x, y) = f(x, y);
+    g.tile(x, y, xo, yo, xi, yi, 8, 4, TailStrategy::RoundUp)
+        .vectorize(xi)
+        .unroll(yi);
+
+    f.in()
+        .compute_at(g, xo)
+        .split(x, xo, xi, 4)
+        .vectorize(xi)
+        .unroll(xo)
+        .reorder(xi, y, xo)
+        .unroll(y)
+        // 123/4 because it's supposed to be equivalent to prefetching 123 elements ahead in the x direction.
+        // Because this is the xo loop, the correct amount is 123/4.
+        .prefetch(f, y, xo, 123 / 4, PrefetchBoundStrategy::NonFaulting);
+
+    Module m = g.compile_to_module({}, "", t);
+    CollectPrefetches collect;
+    m.functions()[0].body.accept(&collect);
+
+    vector<vector<Expr>> expected;
+    for (int i = 0; i < 8; i++) {
+        Expr base = Variable::make(Handle(), f.name());
+        // The offset arg is a variable that is ticklish to get right, so just use a wildcard for matching
+        Expr offset = wild<int>();
+        if (t.has_feature(Target::HVX)) {
+            Expr extent0 = 4;
+            Expr stride0 = get_stride(t, 4);
+            Expr extent1 = 1;
+            Expr stride1 = wild<int>();
+            expected.push_back({base, offset, extent0, stride0, extent1, stride1});
+        } else {
+            Expr extent0 = 1;
+            Expr stride0 = get_stride(t, 4);
+            expected.push_back({base, offset, extent0, stride0});
+        }
+    }
+    if (!check(expected, collect.prefetches)) {
+        return -1;
+    }
+    return 0;
+}
+
+int test11(const Target &t) {
+    Func f("f"), g("g");
+    Var x("x"), y("y"), xo("xo"), yo("yo"), xi("xi"), yi("yi");
+
+    f(x, y) = x + y;
+    f.compute_root();
+
+    g(x, y) = f(x, y);
+    g.tile(x, y, xo, yo, xi, yi, 8, 4, TailStrategy::RoundUp)
+        .vectorize(xi)
+        .unroll(yi);
+
+    f.in()
+        .compute_at(g, xo)
+        .split(x, xo, xi, 4, TailStrategy::RoundUp)
+        .vectorize(xi)
+        .unroll(xo)
+        .reorder(xi, xo, y)
+        .unroll(y)
+        // 123/4 because it's supposed to be equivalent to prefetching 123 elements ahead in the x direction.
+        // Because this is the xo loop, the correct amount is 123/4.
+        .prefetch(f, xo, xo, 123 / 4, PrefetchBoundStrategy::NonFaulting);
+
+    Module m = g.compile_to_module({}, "", t);
+    CollectPrefetches collect;
+    m.functions()[0].body.accept(&collect);
+
+    vector<vector<Expr>> expected;
+    for (int i = 0; i < 8; i++) {
+        Expr base = Variable::make(Handle(), f.name());
+        // The offset arg is a variable that is ticklish to get right, so just use a wildcard for matching
+        Expr offset = wild<int>();
+        if (t.has_feature(Target::HVX)) {
+            Expr extent0 = 4;
+            Expr stride0 = get_stride(t, 4);
+            Expr extent1 = 1;
+            Expr stride1 = wild<int>();
+            expected.push_back({base, offset, extent0, stride0, extent1, stride1});
+        } else {
+            Expr extent0 = 1;
+            Expr stride0 = get_stride(t, 4);
+            expected.push_back({base, offset, extent0, stride0});
+        }
+    }
+    if (!check(expected, collect.prefetches)) {
+        return -1;
+    }
+    return 0;
+}
+
 }  // anonymous namespace
 
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
+    std::cout << "Testing target: " << t << "\n";
 
     using Fn = int (*)(const Target &t);
-    std::vector<Fn> tests = {test1, test2, test3, test4, test5, test6, test7, test8};
+    std::vector<Fn> tests = {test1, test2, test3, test4, test5, test6, test7, test8, test9, test10, test11};
 
     for (size_t i = 0; i < tests.size(); i++) {
         printf("Running prefetch test %d\n", (int)i + 1);

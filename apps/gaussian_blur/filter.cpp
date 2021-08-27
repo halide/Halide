@@ -36,7 +36,9 @@ int main(int argc, char **argv) {
     Halide::Runtime::Buffer<float> output32(input.width(), input.height());
     output32.fill(0);
 
-    int max_radius = 2048;
+    const bool save_output = output8.number_of_elements() <= 1024 * 1024;
+
+    const int max_radius = 2048;
     Halide::Runtime::Buffer<uint8_t> padded8(input.width() + max_radius * 2,
                                              input.height() + max_radius * 2);
     padded8.fill(0);
@@ -76,7 +78,7 @@ int main(int argc, char **argv) {
         scratch.allocate();
         printf("%d kilobytes of scratch\n", (int)(scratch.size_in_bytes() / 1024));
 
-        double best_manual = benchmark(10, 10, [&]() {
+        double best_manual = benchmark(3, 3, [&]() {
             box_blur(padded, r, output.width(), output.height(), scratch, output);
             output.device_sync();
         });
@@ -85,7 +87,7 @@ int main(int argc, char **argv) {
     */
 
     auto throughput = [&](int r, double seconds) {
-        return (output8.width() + r * 2 + 1) * (output8.height() + r * 2 + 1) / (1000000 * seconds);
+        return (output8.width()) * (output8.height()) / (1000000 * seconds);
     };
 
     std::vector<int> radii = {1, 2, 3};
@@ -95,6 +97,9 @@ int main(int argc, char **argv) {
         radii.push_back(6 * r);
         radii.push_back(7 * r);
     }
+
+    radii.clear();
+    radii.push_back(25);
 
     for (int r : radii) {
         float t8 = 0, t16 = 0, t32 = 0;
@@ -118,6 +123,8 @@ int main(int argc, char **argv) {
 
         assert(output8.width() == tile_stride * (xtile - 1) + tile_width);
 
+        const int tile_height = 512;
+
         auto tile = [&](halide_buffer_t *buf) {
             buf->dimensions++;
             buf->dim[2] = buf->dim[1];
@@ -134,11 +141,20 @@ int main(int argc, char **argv) {
             auto out_window = output8;
             tile(out_window);
             double best_manual = benchmark(3, 3, [&]() {
-                box_blur_pyramid_u8(translated, 2 * r + 1, tile_width, tile_stride, out_window);
-                out_window.device_sync();
+                for (int y = 0; y < output8.height(); y += tile_height) {
+                    auto iw = translated;
+                    iw.translate(1, -y);
+                    iw.crop(1, 0, tile_height + 2 * r);
+                    auto ow = out_window;
+                    ow.translate(2, -y);
+                    ow.crop(2, 0, tile_height);
+                    box_blur_pyramid_u8(iw, 2 * r + 1, tile_width, tile_stride, ow);
+                }
             });
             t8 = throughput(r, best_manual);
-            // convert_and_save_image(output8, "out_8_pyramid_" + std::to_string(r) + ".png");
+            if (save_output) {
+                convert_and_save_image(output8, "out_8_pyramid_" + std::to_string(r) + ".png");
+            }
         }
         if (1) {
             auto translated = padded16;
@@ -148,11 +164,20 @@ int main(int argc, char **argv) {
             auto out_window = output16;
             tile(out_window);
             double best_manual = benchmark(3, 3, [&]() {
-                box_blur_pyramid_u16(translated, 2 * r + 1, tile_width, tile_stride, out_window);
-                out_window.device_sync();
+                for (int y = 0; y < output8.height(); y += tile_height) {
+                    auto iw = translated;
+                    iw.translate(1, -y);
+                    iw.crop(1, 0, tile_height + 2 * r);
+                    auto ow = out_window;
+                    ow.translate(2, -y);
+                    ow.crop(2, 0, tile_height);
+                    box_blur_pyramid_u16(iw, 2 * r + 1, tile_width, tile_stride, ow);
+                }
             });
             t16 = throughput(r, best_manual);
-            // convert_and_save_image(output16, "out_16_pyramid_" + std::to_string(r) + ".png");
+            if (save_output) {
+                convert_and_save_image(output16, "out_16_pyramid_" + std::to_string(r) + ".png");
+            }
         }
         if (1) {
             auto translated = padded32;
@@ -162,15 +187,26 @@ int main(int argc, char **argv) {
             auto out_window = output32;
             tile(out_window);
             double best_manual = benchmark(3, 3, [&]() {
-                box_blur_pyramid_f32(translated, 2 * r + 1, tile_width, tile_stride, out_window);
-                out_window.device_sync();
+                for (int y = 0; y < output8.height(); y += tile_height) {
+                    auto iw = translated;
+                    iw.translate(1, -y);
+                    iw.crop(1, 0, tile_height + 2 * r);
+                    auto ow = out_window;
+                    ow.translate(2, -y);
+                    ow.crop(2, 0, tile_height);
+                    box_blur_pyramid_f32(iw, 2 * r + 1, tile_width, tile_stride, ow);
+                }
             });
             t32 = throughput(r, best_manual);
-            // convert_and_save_image(output32, "out_32_pyramid_" + std::to_string(r) + ".png");
+            if (save_output) {
+                convert_and_save_image(output32, "out_32_pyramid_" + std::to_string(r) + ".png");
+            }
         }
 
         printf("Box blur (pyramid) (%4d): %6.1f %6.1f %6.1f\n", 2 * r + 1, t8, t16, t32);
     }
+
+    // return 0;
 
     printf("Box blur (incremental)...\n");
     for (int r : radii) {
@@ -219,7 +255,9 @@ int main(int argc, char **argv) {
             halide_do_par_for(nullptr, one_strip, 0, slices, (uint8_t *)&task);
         });
         printf("Box blur (incremental) (%d): %g\n", 2 * r + 1, throughput(r, best_manual));
-        // convert_and_save_image(output8, "out_" + std::to_string(r) + ".png");
+        if (save_output) {
+            convert_and_save_image(output8, "out_" + std::to_string(r) + ".png");
+        }
     }
 
     /*
