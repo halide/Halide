@@ -75,6 +75,8 @@ Expr Simplify::visit(const Add *op, ExprInfo *bounds) {
              rewrite(select(x, y, z) + (select(x, u, v) - w), select(x, y + u, z + v) - w) ||
              rewrite(select(x, y, z) + (w - select(x, u, v)), select(x, y - u, z - v) + w) ||
              rewrite(select(x, c0 - y, c1) + c2, select(x, fold(c0 + c2) - y, fold(c1 + c2))) ||
+             rewrite(select(x, y, z + c0) + c1, select(x, y + c1, z), (c0 + c1) == 0) ||
+             rewrite(select(x, c0 - y, c1) + c2, fold(c0 + c2) - select(x, y, fold(c0 - c1))) ||
 
              rewrite(x + y*(-1), x - y) ||
              rewrite(x*(-1) + y, y - x) ||
