@@ -45,8 +45,11 @@ typedef ptrdiff_t ssize_t;
 // for a few places in the runtime where we can't inline in the traditional
 // way.
 
+#ifdef __XTENSA__
+#define WEAK
+#else
 #define WEAK __attribute__((weak))
-
+#endif
 // Note that ALWAYS_INLINE should *always* also be `inline`.
 #define ALWAYS_INLINE inline __attribute__((always_inline))
 
