@@ -98,9 +98,6 @@ int main(int argc, char **argv) {
         radii.push_back(7 * r);
     }
 
-    radii.clear();
-    radii.push_back(25);
-
     for (int r : radii) {
         float t8 = 0, t16 = 0, t32 = 0;
 
