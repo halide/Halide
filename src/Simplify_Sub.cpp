@@ -1,4 +1,5 @@
 #include "Simplify_Internal.h"
+#include "Simplify_Sub_Helper.h"
 
 namespace Halide {
 namespace Internal {
@@ -38,6 +39,19 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
             rewrite(x - IRMatcher::Overflow(), b) ||
             rewrite(x - 0, x)) {
             return rewrite.result;
+        }
+
+        static bool use_codegen = get_env_variable("HL_USE_CODEGEN") == "1";
+
+        if (use_codegen) {
+            const Expr expr = Sub::make(a, b);
+            const Expr recurse = simplify_sub(expr, this);
+            if (!recurse.same_as(expr)) {
+                // We mutated this object! Try again.
+                return mutate(recurse, bounds);
+            } else {
+                goto finished;
+            }
         }
 
         // clang-format off
@@ -450,6 +464,7 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
     }
     // clang-format on
 
+finished:
     const Shuffle *shuffle_a = a.as<Shuffle>();
     const Shuffle *shuffle_b = b.as<Shuffle>();
     if (shuffle_a && shuffle_b &&

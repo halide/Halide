@@ -530,6 +530,7 @@ SOURCE_FILES = \
   Simplify_Div.cpp \
   Simplify_EQ.cpp \
   Simplify_Exprs.cpp \
+	Simplify_Helper_Internal.cpp \
   Simplify_Let.cpp \
   Simplify_LT.cpp \
   Simplify_Max.cpp \
@@ -1091,7 +1092,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp $(BUILD_DIR)/llvm_ok
 	@mkdir -p $(@D)
 	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
-$(BUILD_DIR)/Simplify_%.o: $(SRC_DIR)/Simplify_%.cpp $(SRC_DIR)/Simplify_Internal.h $(BUILD_DIR)/llvm_ok
+$(BUILD_DIR)/Simplify_%.o: $(SRC_DIR)/Simplify_%.cpp $(SRC_DIR)/Simplify_Internal.h $(SRC_DIR)/Simplify_Helper_Internal.h $(SRC_DIR)/Simplify_%_Helper.h $(BUILD_DIR)/llvm_ok
 	@mkdir -p $(@D)
 	$(CXX) $(CXX_FLAGS) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/Simplify_$*.d -MT $@
 
