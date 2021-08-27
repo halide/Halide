@@ -416,13 +416,15 @@ inline shared_ptr<Node> handle_broadcast(shared_ptr<Node> &root, const Expr &exp
     assert(node); 
     typed_name = node->output_name; 
 
-    const Broadcast *op = expr.as<Broadcast>();
+    const Call *op = expr.as<Call>();
     assert(op); 
     const std::string value_name = typed_name + "->value";
     const std::string lanes_name = typed_name + "->lanes";
+    const Expr value = op->args[0];
+    const Expr lanes = op->args[1];
 
-    shared_ptr<Node> value_node = tree_constructor(node, op->value, value_name, scope);
-    return tree_constructor(value_node, op->lanes, lanes_name, scope);
+    shared_ptr<Node> value_node = tree_constructor(node, value, value_name, scope);
+    return tree_constructor(value_node, lanes, lanes_name, scope);
 } 
 
 inline shared_ptr<Node> handle_ramp(shared_ptr<Node> &root, const Expr &expr, const std::string &name, VarScope &scope) {
@@ -433,14 +435,17 @@ inline shared_ptr<Node> handle_ramp(shared_ptr<Node> &root, const Expr &expr, co
     assert(node); 
     typed_name = node->output_name; 
 
-    const Ramp *op = expr.as<Ramp>();
+    const Call *op = expr.as<Call>();
     assert(op); 
     const std::string base_name = typed_name + "->base";
     const std::string stride_name = typed_name + "->stride";
     const std::string lanes_name = typed_name + "->lanes";
-    shared_ptr<Node> base_node = tree_constructor(node, op->base, base_name, scope);
-    shared_ptr<Node> stride_node = tree_constructor(base_node, op->stride, stride_name, scope);
-    return tree_constructor(stride_node, op->lanes, lanes_name, scope);
+    const Expr base = op->args[0];
+    const Expr stride = op->args[1];
+    const Expr lanes = op->args[2];
+    shared_ptr<Node> base_node = tree_constructor(node, base, base_name, scope);
+    shared_ptr<Node> stride_node = tree_constructor(base_node, stride, stride_name, scope);
+    return tree_constructor(stride_node, lanes, lanes_name, scope);
 }
 
 inline shared_ptr<Node> handle_not(shared_ptr<Node> &root, const Expr &expr, const std::string &name, VarScope &scope) {
@@ -614,80 +619,414 @@ bool is_const_v(const Expr &expr) {
     }
 }
 
-Expr ramp(Expr base, Expr stride, Var lanes) {
+Expr ramp(Expr base, Expr stride, Expr lanes) {
     return Call::make(base.type(), "ramp", {base, stride, lanes}, Call::PureIntrinsic);
 } 
 
-Expr broadcast(Expr a, Var lanes) {
+Expr broadcast(Expr a, Expr lanes) {
     return Call::make(a.type(), "broadcast", {a, lanes}, Call::PureIntrinsic);
+}
+
+Expr ramp(Expr base, Expr stride, int lanes) {
+   return Ramp::make(base, stride, lanes);
+}
+
+Expr broadcast(Expr base, int lanes) {
+   return Broadcast::make(base, lanes);
+}
+
+Expr _can_prove(Expr a) {
+    return Call::make(a.type(), "can_prove", {a}, Call::PureIntrinsic);
 }
 
 int main(void) {
     Var x("x"), y("y"), z("z"), w("w"), u("u"), v("v");
     Var c0("c0"), c1("c1"), c2("c2"), c3("c3"), c4("c4");
 
-    // had to change select(x, stuff) to select(b0, stuff) for type reasons.
+    // had to change select(b0, stuff) to select(b0, stuff) for type reasons.
     Expr b0 = Variable::make(UInt(1), "b0");
     
     // TODO: these should be sorted probably.
     // TODO: add some with conditions to check that (probably need more than just Add/Sub/Select)
     vector<RewriteRule> rules = {
-    //   { x - 0, x},
-    // { ramp(x, y, c0) - ramp(z, w, c0), ramp(x - z, y - w, c0) },
-    // { broadcast(x, c0) - ramp(z, w, c0), ramp(x - z, -w, c0) },
-    // { min(x + y, z) - x, min(z - x, y) },
-      { select(b0, y, z) - select(b0, w, u), select(b0, y - w, z - u) },
-      { select(b0, y, z) - y, select(b0, 0, z - y) },
-      { select(b0, y, z) - z, select(b0, y - z, 0) },
-      { y - select(b0, y, z), select(b0, 0, y - z) },
-      { z - select(b0, y, z), select(b0, z - y, 0) },
+            { c0 - c1, fold(c0 - c1) },
+            { x - x, 0 }, // We want to remutate this just to get better bounds
+            { ramp(x, y, c0) - ramp(z, w, c0), ramp(x - z, y - w, c0) },
+            { ramp(x, y, c0) - broadcast(z, c0), ramp(x - z, y, c0) },
+            { broadcast(x, c0) - ramp(z, w, c0), ramp(x - z, -w, c0) },
+            { broadcast(x, c0) - broadcast(y, c0), broadcast(x - y, c0) },
+            { broadcast(x, c0) - broadcast(y, c1), broadcast(x - broadcast(y, fold(c1/c0)), c0), c1 % c0 == 0 },
+            { broadcast(y, c1) - broadcast(x, c0), broadcast(broadcast(y, fold(c1/c0)) - x, c0), c1 % c0 == 0 },
+            { (x - broadcast(y, c0)) - broadcast(z, c0), x - broadcast(y + z, c0) },
+            { (x + broadcast(y, c0)) - broadcast(z, c0), x + broadcast(y - z, c0) },
 
-      { select(b0, y + w, z) - y, select(b0, w, z - y) },
-      { select(b0, w + y, z) - y, select(b0, w, z - y) },
-      { select(b0, y, z + w) - z, select(b0, y - z, w) },
-      { select(b0, y, w + z) - z, select(b0, y - z, w) },
-      { y - select(b0, y + w, z), 0 - select(b0, w, z - y) },
-      { y - select(b0, w + y, z), 0 - select(b0, w, z - y) },
-      { z - select(b0, y, z + w), 0 - select(b0, y - z, w) },
-      { z - select(b0, y, w + z), 0 - select(b0, y - z, w) },
+            { ramp(broadcast(x, c0), y, c1) - broadcast(z, c2), ramp(broadcast(x - z, c0), y, c1), c2 == c0 * c1 },
+            { ramp(ramp(x, y, c0), z, c1) - broadcast(w, c2), ramp(ramp(x - w, y, c0), z, c1), c2 == c0 * c1 },
+            { select(b0, y, z) - select(b0, w, u), select(b0, y - w, z - u) },
+            { select(b0, y, z) - y, select(b0, 0, z - y) },
+            { select(b0, y, z) - z, select(b0, y - z, 0) },
+            { y - select(b0, y, z), select(b0, 0, y - z) },
+            { z - select(b0, y, z), select(b0, z - y, 0) },
 
-      { (x + y) - x, y },
-      { (x + y) - y, x },
-      { x - (x + y), -y },
-      { y - (x + y), -x },
-      { (x - y) - x, -y },
-      { (select(b0, y, z) + w) - select(b0, u, v), select(b0, y - u, z - v) + w },
-      { (w + select(b0, y, z)) - select(b0, u, v), select(b0, y - u, z - v) + w },
-      { select(b0, y, z) - (select(b0, u, v) + w), select(b0, y - u, z - v) - w },
-      { select(b0, y, z) - (w + select(b0, u, v)), select(b0, y - u, z - v) - w },
-      { (select(b0, y, z) - w) - select(b0, u, v), select(b0, y - u, z - v) - w },
-      { c0 - select(b0, c1, c2), select(b0, fold(c0 - c1), fold(c0 - c2)) },
-      { (x + c0) - c1, x + fold(c0 - c1) },
-      { (x + c0) - (c1 - y), (x + y) + fold(c0 - c1) },
-      { (x + c0) - (y + c1), (x - y) + fold(c0 - c1) },
-      { (x + c0) - y, (x - y) + c0 },
-      { (c0 - x) - (c1 - y), (y - x) + fold(c0 - c1) },
-      { (c0 - x) - (y + c1), fold(c0 - c1) - (x + y) },
-      { x - (y - z), x + (z - y) },
-      // This rule below screws things up for one of the rules above
-      { x - (y + c0), (x - y) - c0 },
-      { (c0 - x) - c1, fold(c0 - c1) - x },
+            { select(b0, y + w, z) - y, select(b0, w, z - y) },
+            { select(b0, w + y, z) - y, select(b0, w, z - y) },
+            { select(b0, y, z + w) - z, select(b0, y - z, w) },
+            { select(b0, y, w + z) - z, select(b0, y - z, w) },
+            { y - select(b0, y + w, z), 0 - select(b0, w, z - y) },
+            { y - select(b0, w + y, z), 0 - select(b0, w, z - y) },
+            { z - select(b0, y, z + w), 0 - select(b0, y - z, w) },
+            { z - select(b0, y, w + z), 0 - select(b0, y - z, w) },
+
+            { (x + y) - x, y },
+            { (x + y) - y, x },
+            { x - (x + y), -y },
+            { y - (x + y), -x },
+            { (x - y) - x, -y },
+            { (select(b0, y, z) + w) - select(b0, u, v), select(b0, y - u, z - v) + w },
+            { (w + select(b0, y, z)) - select(b0, u, v), select(b0, y - u, z - v) + w },
+            { select(b0, y, z) - (select(b0, u, v) + w), select(b0, y - u, z - v) - w },
+            { select(b0, y, z) - (w + select(b0, u, v)), select(b0, y - u, z - v) - w },
+            { (select(b0, y, z) - w) - select(b0, u, v), select(b0, y - u, z - v) - w },
+            { c0 - select(b0, c1, c2), select(b0, fold(c0 - c1), fold(c0 - c2)) },
+            { (x + c0) - c1, x + fold(c0 - c1) },
+            { (x + c0) - (c1 - y), (x + y) + fold(c0 - c1) },
+            { (x + c0) - (y + c1), (x - y) + fold(c0 - c1) },
+            { (x + c0) - y, (x - y) + c0 },
+            { (c0 - x) - (c1 - y), (y - x) + fold(c0 - c1) },
+            { (c0 - x) - (y + c1), fold(c0 - c1) - (x + y) },
+            { x - (y - z), x + (z - y) },
+            { x - y*c0, x + y*fold(-c0), c0 < 0 && -c0 > 0 },
+            { x - (y + c0), (x - y) - c0 },
+            { (c0 - x) - c1, fold(c0 - c1) - x },
+            { x*y - z*y, (x - z)*y },
+            { x*y - y*z, (x - z)*y },
+            { y*x - z*y, y*(x - z) },
+            { y*x - y*z, y*(x - z) },
+            { (u + x*y) - z*y, u + (x - z)*y },
+            { (u + x*y) - y*z, u + (x - z)*y },
+            { (u + y*x) - z*y, u + y*(x - z) },
+            { (u + y*x) - y*z, u + y*(x - z) },
+            { (u - x*y) - z*y, u - (x + z)*y },
+            { (u - x*y) - y*z, u - (x + z)*y },
+            { (u - y*x) - z*y, u - y*(x + z) },
+            { (u - y*x) - y*z, u - y*(x + z) },
+            { (x*y + u) - z*y, u + (x - z)*y },
+            { (x*y + u) - y*z, u + (x - z)*y },
+            { (y*x + u) - z*y, u + y*(x - z) },
+            { (y*x + u) - y*z, u + y*(x - z) },
+            { (x*y - u) - z*y, (x - z)*y - u },
+            { (x*y - u) - y*z, (x - z)*y - u },
+            { (y*x - u) - z*y, y*(x - z) - u },
+            { (y*x - u) - y*z, y*(x - z) - u },
+            { x*y - (u + z*y), (x - z)*y - u },
+            { x*y - (u + y*z), (x - z)*y - u },
+            { y*x - (u + z*y), y*(x - z) - u },
+            { y*x - (u + y*z), y*(x - z) - u },
+            { x*y - (u - z*y), (x + z)*y - u },
+            { x*y - (u - y*z), (x + z)*y - u },
+            { y*x - (u - z*y), y*(x + z) - u },
+            { y*x - (u - y*z), y*(x + z) - u },
+            { x*y - (z*y + u), (x - z)*y - u },
+            { x*y - (y*z + u), (x - z)*y - u },
+            { y*x - (z*y + u), y*(x - z) - u },
+            { y*x - (y*z + u), y*(x - z) - u },
+            { x*y - (z*y - u), (x - z)*y + u },
+            { x*y - (y*z - u), (x - z)*y + u },
+            { y*x - (z*y - u), y*(x - z) + u },
+            { y*x - (y*z - u), y*(x - z) + u },
+            { (x + y) - (x + z), y - z },
+            { (x + y) - (z + x), y - z },
+            { (y + x) - (x + z), y - z },
+            { (y + x) - (z + x), y - z },
+            { ((x + y) + z) - x, y + z },
+            { ((y + x) + z) - x, y + z },
+            { (z + (x + y)) - x, z + y },
+            { (z + (y + x)) - x, z + y },
+
+            { x - (y + (x - z)), z - y },
+            { x - ((x - y) + z), y - z },
+            { (x + (y - z)) - y, x - z },
+            { ((x - y) + z) - x, z - y },
+
+            { x - (y + (x + z)), 0 - (y + z) },
+            { x - (y + (z + x)), 0 - (y + z) },
+            { x - ((x + y) + z), 0 - (y + z) },
+            { x - ((y + x) + z), 0 - (y + z) },
+            { (x + y) - (z + (w + x)), y - (z + w) },
+            { (x + y) - (z + (w + y)), x - (z + w) },
+            { (x + y) - (z + (x + w)), y - (z + w) },
+            { (x + y) - (z + (y + w)), x - (z + w) },
+            { (x + y) - ((x + z) + w), y - (z + w) },
+            { (x + y) - ((y + z) + w), x - (z + w) },
+            { (x + y) - ((z + x) + w), y - (z + w) },
+            { (x + y) - ((z + y) + w), x - (z + w) },
+
+            { (x - y) - (x + z), 0 - y - z },
+            { (x - y) - (z + x), 0 - y - z },
+
+            { ((x + y) - z) - x, y - z },
+            { ((x + y) - z) - y, x - z },
+
+            { x - min(x - y, 0), max(x, y) },
+            { x - max(x - y, 0), min(x, y) },
+            { (x + y) - min(x, y), max(y, x) },
+            { (x + y) - min(y, x), max(y, x) },
+            { (x + y) - max(x, y), min(y, x) },
+            { (x + y) - max(y, x), min(x, y) },
+
+            { 0 - (x + (y - z)), z - (x + y) },
+            { 0 - ((x - y) + z), y - (x + z) },
+            { ((x - y) - z) - x, 0 - (y + z) },
+
+            { x - x%c0, (x/c0)*c0 },
+            { x - ((x + c0)/c1)*c1, (x + c0)%c1 - c0, c1 > 0 },
+
+            { max(x, y) - x, max(y - x, 0) },
+            { min(x, y) - x, min(y - x, 0) },
+            { max(x, y) - y, max(x - y, 0) },
+            { min(x, y) - y, min(x - y, 0) },
+
+            { x - max(x, y), min(x - y, 0), !is_const(x) },
+            { x - min(x, y), max(x - y, 0), !is_const(x) },
+            { y - max(x, y), min(y - x, 0), !is_const(y) },
+            { y - min(x, y), max(y - x, 0), !is_const(y) },
+
+            { x - min(y, x - z), max(x - y, z) },
+            { x - min(x - y, z), max(y, x - z) },
+            { x - max(y, x - z), min(x - y, z) },
+            { x - max(x - y, z), min(y, x - z) },
+
+            { min(x - y, 0) - x, 0 - max(x, y) },
+            { max(x - y, 0) - x, 0 - min(x, y) },
+            { min(x, y) - (x + y), 0 - max(y, x) },
+            { min(x, y) - (y + x), 0 - max(x, y) },
+            { max(x, y) - (x + y), 0 - min(x, y) },
+            { max(x, y) - (y + x), 0 - min(y, x) },
+
+            // Negate a clamped subtract
+            { z - max(x - y, c0), z + min(y - x, fold(-c0)) },
+            { z - min(x - y, c0), z + max(y - x, fold(-c0)) },
+            { z - max(min(x - y, c0), c1), z + min(max(y - x, fold(-c0)), fold(-c1)) },
+            { z - min(max(x - y, c0), c1), z + max(min(y - x, fold(-c0)), fold(-c1)) },
+
+            { x*y - x, x*(y - 1) },
+            { x*y - y, (x - 1)*y },
+            { x - x*y, x*(1 - y) },
+            { x - y*x, (1 - y)*x },
+
+            // Cancel a term from one side of a min or max. Some of
+            // these rules introduce a new constant zero, so we require
+            // that the cancelled term is not a constant. This way
+            // there can't be a cycle. For some rules we know by
+            // context that the cancelled term is not a constant
+            // (e.g. it appears on the LHS of an addition).
+            { (x - min(z, (x + y))), (0 - min(z - x, y)), !is_const(x) },
+            { (x - min(z, (y + x))), (0 - min(z - x, y)), !is_const(x) },
+            { (x - min((x + y), z)), (0 - min(z - x, y)), !is_const(x) },
+            { (x - min((y + x), z)), (0 - min(z - x, y)), !is_const(x) },
+            { (x - min(y, (w + (x + z)))), (0 - min(y - x, w + z)), !is_const(x) },
+            { (x - min(y, (w + (z + x)))), (0 - min(y - x, z + w)), !is_const(x) },
+            { (x - min(y, ((x + z) + w))), (0 - min(y - x, z + w)), !is_const(x) },
+            { (x - min(y, ((z + x) + w))), (0 - min(y - x, z + w)), !is_const(x) },
+            { (x - min((w + (x + z)), y)), (0 - min(y - x, w + z)), !is_const(x) },
+            { (x - min((w + (z + x)), y)), (0 - min(y - x, z + w)), !is_const(x) },
+            { (x - min(((x + z) + w), y)), (0 - min(y - x, w + z)), !is_const(x) },
+            { (x - min(((z + x) + w), y)), (0 - min(y - x, w + z)), !is_const(x) },
+
+            { min(x + y, z) - x, min(z - x, y) },
+            { min(y + x, z) - x, min(z - x, y) },
+            { min(z, x + y) - x, min(z - x, y) },
+            { min(z, y + x) - x, min(z - x, y) },
+            { (min(x, (w + (y + z))) - z), min(x - z, w + y) },
+            { (min(x, (w + (z + y))) - z), min(x - z, w + y) },
+            { (min(x, ((y + z) + w)) - z), min(x - z, y + w) },
+            { (min(x, ((z + y) + w)) - z), min(x - z, y + w) },
+            { (min((w + (y + z)), x) - z), min(x - z, w + y) },
+            { (min((w + (z + y)), x) - z), min(x - z, w + y) },
+            { (min(((y + z) + w), x) - z), min(x - z, y + w) },
+            { (min(((z + y) + w), x) - z), min(x - z, y + w) },
+
+            { min(x, y) - min(y, x), 0 },
+            { min(x, y) - min(z, w), y - w, can_prove(x - y == z - w) },
+            { min(x, y) - min(w, z), y - w, can_prove(x - y == z - w) },
+            { min(x*c0, c1) - min(x, c2)*c0, min(c1 - min(x, c2)*c0, 0), c0 > 0 && c1 <= c2*c0 },
+
+            { (x - max(z, (x + y))), (0 - max(z - x, y)), !is_const(x) },
+            { (x - max(z, (y + x))), (0 - max(z - x, y)), !is_const(x) },
+            { (x - max((x + y), z)), (0 - max(z - x, y)), !is_const(x) },
+            { (x - max((y + x), z)), (0 - max(z - x, y)), !is_const(x) },
+            { (x - max(y, (w + (x + z)))), (0 - max(y - x, w + z)), !is_const(x) },
+            { (x - max(y, (w + (z + x)))), (0 - max(y - x, z + w)), !is_const(x) },
+            { (x - max(y, ((x + z) + w))), (0 - max(y - x, z + w)), !is_const(x) },
+            { (x - max(y, ((z + x) + w))), (0 - max(y - x, z + w)), !is_const(x) },
+            { (x - max((w + (x + z)), y)), (0 - max(y - x, w + z)), !is_const(x) },
+            { (x - max((w + (z + x)), y)), (0 - max(y - x, z + w)), !is_const(x) },
+            { (x - max(((x + z) + w), y)), (0 - max(y - x, w + z)), !is_const(x) },
+            { (x - max(((z + x) + w), y)), (0 - max(y - x, w + z)), !is_const(x) },
+
+            { max(x + y, z) - x, max(z - x, y) },
+            { max(y + x, z) - x, max(z - x, y) },
+            { max(z, x + y) - x, max(z - x, y) },
+            { max(z, y + x) - x, max(z - x, y) },
+            { (max(x, (w + (y + z))) - z), max(x - z, w + y) },
+            { (max(x, (w + (z + y))) - z), max(x - z, w + y) },
+            { (max(x, ((y + z) + w)) - z), max(x - z, y + w) },
+            { (max(x, ((z + y) + w)) - z), max(x - z, y + w) },
+            { (max((w + (y + z)), x) - z), max(x - z, w + y) },
+            { (max((w + (z + y)), x) - z), max(x - z, w + y) },
+            { (max(((y + z) + w), x) - z), max(x - z, y + w) },
+            { (max(((z + y) + w), x) - z), max(x - z, y + w) },
+
+            { max(x, y) - max(y, x), 0 },
+            { max(x, y) - max(z, w), y - w, can_prove(x - y == z - w) },
+            { max(x, y) - max(w, z), y - w, can_prove(x - y == z - w) },
+            { min(x, y) - min(x, w), min(y - min(x, w), 0), can_prove(y <= w) },
+            { min(x, y) - min(x, w), max(min(x, y) - w, 0), can_prove(y >= w) },
+            { min(x + c0, y) - min(x, w), min(y - min(x, w), c0), can_prove(y <= w + c0) },
+            { min(x + c0, y) - min(x, w), max(min(x + c0, y) - w, c0), can_prove(y >= w + c0) },
+            { min(x, y) - min(x + c1, w), min(y - min(x + c1, w), fold(-c1)), can_prove(y + c1 <= w) },
+            { min(x, y) - min(x + c1, w), max(min(x, y) - w, fold(-c1)), can_prove(y + c1 >= w) },
+            { min(x + c0, y) - min(x + c1, w), min(y - min(x + c1, w), fold(c0 - c1)), can_prove(y + c1 <= w + c0) },
+            { min(x + c0, y) - min(x + c1, w), max(min(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 >= w + c0) },
+
+            { min(y, x) - min(w, x), min(y - min(x, w), 0), can_prove(y <= w) },
+            { min(y, x) - min(w, x), max(min(x, y) - w, 0), can_prove(y >= w) },
+            { min(y, x + c0) - min(w, x), min(y - min(x, w), c0), can_prove(y <= w + c0) },
+            { min(y, x + c0) - min(w, x), max(min(x + c0, y) - w, c0), can_prove(y >= w + c0) },
+            { min(y, x) - min(w, x + c1), min(y - min(x + c1, w), fold(-c1)), can_prove(y + c1 <= w) },
+            { min(y, x) - min(w, x + c1), max(min(x, y) - w, fold(-c1)), can_prove(y + c1 >= w) },
+            { min(y, x + c0) - min(w, x + c1), min(y - min(x + c1, w), fold(c0 - c1)), can_prove(y + c1 <= w + c0) },
+            { min(y, x + c0) - min(w, x + c1), max(min(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 >= w + c0) },
+
+            { min(x, y) - min(w, x), min(y - min(x, w), 0), can_prove(y <= w) },
+            { min(x, y) - min(w, x), max(min(x, y) - w, 0), can_prove(y >= w) },
+            { min(x + c0, y) - min(w, x), min(y - min(x, w), c0), can_prove(y <= w + c0) },
+            { min(x + c0, y) - min(w, x), max(min(x + c0, y) - w, c0), can_prove(y >= w + c0) },
+            { min(x, y) - min(w, x + c1), min(y - min(x + c1, w), fold(-c1)), can_prove(y + c1 <= w) },
+            { min(x, y) - min(w, x + c1), max(min(x, y) - w, fold(-c1)), can_prove(y + c1 >= w) },
+            { min(x + c0, y) - min(w, x + c1), min(y - min(x + c1, w), fold(c0 - c1)), can_prove(y + c1 <= w + c0) },
+            { min(x + c0, y) - min(w, x + c1), max(min(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 >= w + c0) },
+
+            { min(y, x) - min(x, w), min(y - min(x, w), 0), can_prove(y <= w) },
+            { min(y, x) - min(x, w), max(min(x, y) - w, 0), can_prove(y >= w) },
+            { min(y, x + c0) - min(x, w), min(y - min(x, w), c0), can_prove(y <= w + c0) },
+            { min(y, x + c0) - min(x, w), max(min(x + c0, y) - w, c0), can_prove(y >= w + c0) },
+            { min(y, x) - min(x + c1, w), min(y - min(x + c1, w), fold(-c1)), can_prove(y + c1 <= w) },
+            { min(y, x) - min(x + c1, w), max(min(x, y) - w, fold(-c1)), can_prove(y + c1 >= w) },
+            { min(y, x + c0) - min(x + c1, w), min(y - min(x + c1, w), fold(c0 - c1)), can_prove(y + c1 <= w + c0) },
+            { min(y, x + c0) - min(x + c1, w), max(min(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 >= w + c0) },
+
+            // The equivalent rules for max are what you'd
+            // expect. Just swap < and > and min and max (apply the
+            // isomorphism x -> -x).
+            { max(x, y) - max(x, w), max(y - max(x, w), 0), can_prove(y >= w) },
+            { max(x, y) - max(x, w), min(max(x, y) - w, 0), can_prove(y <= w) },
+            { max(x + c0, y) - max(x, w), max(y - max(x, w), c0), can_prove(y >= w + c0) },
+            { max(x + c0, y) - max(x, w), min(max(x + c0, y) - w, c0), can_prove(y <= w + c0) },
+            { max(x, y) - max(x + c1, w), max(y - max(x + c1, w), fold(-c1)), can_prove(y + c1 >= w) },
+            { max(x, y) - max(x + c1, w), min(max(x, y) - w, fold(-c1)), can_prove(y + c1 <= w) },
+            { max(x + c0, y) - max(x + c1, w), max(y - max(x + c1, w), fold(c0 - c1)), can_prove(y + c1 >= w + c0) },
+            { max(x + c0, y) - max(x + c1, w), min(max(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 <= w + c0) },
+
+            { max(y, x) - max(w, x), max(y - max(x, w), 0), can_prove(y >= w) },
+            { max(y, x) - max(w, x), min(max(x, y) - w, 0), can_prove(y <= w) },
+            { max(y, x + c0) - max(w, x), max(y - max(x, w), c0), can_prove(y >= w + c0) },
+            { max(y, x + c0) - max(w, x), min(max(x + c0, y) - w, c0), can_prove(y <= w + c0) },
+            { max(y, x) - max(w, x + c1), max(y - max(x + c1, w), fold(-c1)), can_prove(y + c1 >= w) },
+            { max(y, x) - max(w, x + c1), min(max(x, y) - w, fold(-c1)), can_prove(y + c1 <= w) },
+            { max(y, x + c0) - max(w, x + c1), max(y - max(x + c1, w), fold(c0 - c1)), can_prove(y + c1 >= w + c0) },
+            { max(y, x + c0) - max(w, x + c1), min(max(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 <= w + c0) },
+
+            { max(x, y) - max(w, x), max(y - max(x, w), 0), can_prove(y >= w) },
+            { max(x, y) - max(w, x), min(max(x, y) - w, 0), can_prove(y <= w) },
+            { max(x + c0, y) - max(w, x), max(y - max(x, w), c0), can_prove(y >= w + c0) },
+            { max(x + c0, y) - max(w, x), min(max(x + c0, y) - w, c0), can_prove(y <= w + c0) },
+            { max(x, y) - max(w, x + c1), max(y - max(x + c1, w), fold(-c1)), can_prove(y + c1 >= w) },
+            { max(x, y) - max(w, x + c1), min(max(x, y) - w, fold(-c1)), can_prove(y + c1 <= w) },
+            { max(x + c0, y) - max(w, x + c1), max(y - max(x + c1, w), fold(c0 - c1)), can_prove(y + c1 >= w + c0) },
+            { max(x + c0, y) - max(w, x + c1), min(max(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 <= w + c0) },
+
+            { max(y, x) - max(x, w), max(y - max(x, w), 0), can_prove(y >= w) },
+            { max(y, x) - max(x, w), min(max(x, y) - w, 0), can_prove(y <= w) },
+            { max(y, x + c0) - max(x, w), max(y - max(x, w), c0), can_prove(y >= w + c0) },
+            { max(y, x + c0) - max(x, w), min(max(x + c0, y) - w, c0), can_prove(y <= w + c0) },
+            { max(y, x) - max(x + c1, w), max(y - max(x + c1, w), fold(-c1)), can_prove(y + c1 >= w) },
+            { max(y, x) - max(x + c1, w), min(max(x, y) - w, fold(-c1)), can_prove(y + c1 <= w) },
+            { max(y, x + c0) - max(x + c1, w), max(y - max(x + c1, w), fold(c0 - c1)), can_prove(y + c1 >= w + c0) },
+            { max(y, x + c0) - max(x + c1, w), min(max(x + c0, y) - w, fold(c0 - c1)), can_prove(y + c1 <= w + c0) },
+
+            { c0 - (c1 - x)/c2, (fold(c0*c2 - c1 + c2 - 1) + x)/c2, c2 > 0 },
+            { c0 - (x + c1)/c2, (fold(c0*c2 - c1 + c2 - 1) - x)/c2, c2 > 0 },
+            { x - (x + y)/c0, (x*fold(c0 - 1) - y + fold(c0 - 1))/c0, c0 > 0 },
+            { x - (x - y)/c0, (x*fold(c0 - 1) + y + fold(c0 - 1))/c0, c0 > 0 },
+            { x - (y + x)/c0, (x*fold(c0 - 1) - y + fold(c0 - 1))/c0, c0 > 0 },
+            { x - (y - x)/c0, (x*fold(c0 + 1) - y + fold(c0 - 1))/c0, c0 > 0 },
+            { (x + y)/c0 - x, (x*fold(1 - c0) + y)/c0 },
+            { (y + x)/c0 - x, (y + x*fold(1 - c0))/c0 },
+            { (x - y)/c0 - x, (x*fold(1 - c0) - y)/c0 },
+            { (y - x)/c0 - x, (y - x*fold(1 + c0))/c0 },
+
+            { (x/c0)*c0 - x, -(x % c0), c0 > 0 },
+            { x - (x/c0)*c0, x % c0, c0 > 0 },
+            { ((x + c0)/c1)*c1 - x, (-x) % c1, c1 > 0 && c0 + 1 == c1 },
+            { x - ((x + c0)/c1)*c1, ((x + c0) % c1) + fold(-c0), c1 > 0 && c0 + 1 == c1 },
+            { x * c0 - y * c1, (x * fold(c0 / c1) - y) * c1, c0 % c1 == 0 },
+            { x * c0 - y * c1, (x - y * fold(c1 / c0)) * c0, c1 % c0 == 0 },
+            // Various forms of (x +/- a)/c - (x +/- b)/c. We can
+            // *almost* cancel the x.  The right thing to do depends
+            // on which of a or b is a constant, and we also need to
+            // catch the cases where that constant is zero.
+            { ((x + y) + z)/c0 - ((y + x) + w)/c0, ((x + y) + z)/c0 - ((x + y) + w)/c0, c0 > 0 },
+            { (x + y)/c0 - (y + x)/c0, 0, c0 != 0 },
+            { (x + y)/c0 - (x + c1)/c0, (((x + fold(c1 % c0)) % c0) + (y - c1))/c0, c0 > 0 },
+            { (x + c1)/c0 - (x + y)/c0, ((fold(c0 + c1 - 1) - y) - ((x + fold(c1 % c0)) % c0))/c0, c0 > 0 },
+            { (x - y)/c0 - (x + c1)/c0, (((x + fold(c1 % c0)) % c0) - y - c1)/c0, c0 > 0 },
+            { (x + c1)/c0 - (x - y)/c0, ((y + fold(c0 + c1 - 1)) - ((x + fold(c1 % c0)) % c0))/c0, c0 > 0 },
+            { x/c0 - (x + y)/c0, ((fold(c0 - 1) - y) - (x % c0))/c0, c0 > 0 },
+            { (x + y)/c0 - x/c0, ((x % c0) + y)/c0, c0 > 0 },
+            { x/c0 - (x - y)/c0, ((y + fold(c0 - 1)) - (x % c0))/c0, c0 > 0 },
+            { (x - y)/c0 - x/c0, ((x % c0) - y)/c0, c0 > 0 },
+
+            // Simplification of bounds code for various tail
+            // strategies requires cancellations of the form:
+            // min(f(x), y) - g(x)
+
+            // There are many potential variants of these rules if
+            // we start adding commutative/associative rewritings
+            // of them, or consider max as well as min. We
+            // explicitly only include the ones necessary to get
+            // correctness_nested_tail_strategies to pass.
+            { (min(x + y, z) + w) - x, min(z - x, y) + w },
+            { min((x + y) + w, z) - x, min(z - x, y + w) },
+            { min(min(x + z, y), w) - x, min(min(y, w) - x, z) },
+            { min(min(y, x + z), w) - x, min(min(y, w) - x, z) },
+
+            { min((x + y)*u + z, w) - x*u, min(w - x*u, y*u + z) },
+            { min((y + x)*u + z, w) - x*u, min(w - x*u, y*u + z) },
+
+            // Splits can introduce confounding divisions
+            { min(x*c0 + y, z) / c1 - x*c2, min(y, z - x*c0) / c1, c0 == c1 * c2 },
+            { min(z, x*c0 + y) / c1 - x*c2, min(y, z - x*c0) / c1, c0 == c1 * c2 },
+
+            // There could also be an addition inside the division (e.g. if it's division rounding up)
+            { (min(x*c0 + y, z) + w) / c1 - x*c2, (min(y, z - x*c0) + w) / c1, c0 == c1 * c2 },
+            { (min(z, x*c0 + y) + w) / c1 - x*c2, (min(z - x*c0, y) + w) / c1, c0 == c1 * c2 },
     };
 
     print_function(rules, "simplify_sub", "expr");
 
     // this is for checking correctness, uncomment out when checking.
 
-    /*
-    for (const auto &rule : rules) {
-        Expr simpl = simplify_sub(rule.before);
-        std::cerr << "Original: " << rule.before << "\n";
-        std::cerr << simpl << " vs. " << rule.after << "\n";
-        if (!equal(simpl, rule.after)) {
-            std::cerr << "ERROR\n";
-        }
-    }
-    */
+    
+    // for (const auto &rule : rules) {
+    //     Expr simpl = simplify_sub(rule.before);
+    //     std::cerr << "Original: " << rule.before << "\n";
+    //     std::cerr << simpl << " vs. " << rule.after << "\n";
+    //     if (!equal(simpl, rule.after)) {
+    //         std::cerr << "ERROR\n";
+    //     }
+    // }
+    
 
 
     // For testing a single rule (debugging codegen)
