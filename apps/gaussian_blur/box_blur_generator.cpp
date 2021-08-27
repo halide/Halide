@@ -484,7 +484,7 @@ public:
         // The maximum diameter at which we should do a direct blur in
         // y for the first scanline of each strip. Above this we use
         // the precomputed downsampled-in-y Func. Tuned empirically.
-        const int max_diameter_direct_blur_y = 50;
+        const int max_diameter_direct_blur_y = 80;
 
         // The maximum diameter at which we can use a low-precision
         // accumulator for the blur in y. Must be <= 256 for uint8
