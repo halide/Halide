@@ -104,7 +104,7 @@ int main(int argc, char **argv) {
         // Compute the output in tiles in x. We do the tiling outside
         // of Halide because inside Halide we're going to do a
         // sum-scan over x, and the indexing gets complicated.
-        const int xtile = output8.width() / 2048 + 1;
+        const int xtile = output8.width() / 4096 + 1;
 
         // The output width may not be a multiple of the number of
         // tiles. If we overlap the tiles slightly, then to reach the
