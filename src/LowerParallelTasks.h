@@ -19,4 +19,3 @@ Stmt lower_parallel_tasks(Stmt s, std::vector<LoweredFunc> &closure_implementati
 }  // namespace Halide
 
 #endif  // HALIDE_LOWER_PARALLEL_TASKS_H
-

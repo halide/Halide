@@ -2851,7 +2851,7 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::declare_struct_type)) {
         // Declares a struct type. Returns a null pointer of the new type.
         internal_assert(op->args.size() >= 2);
-      
+
         const StringImm *str_imm = op->args[0].as<StringImm>();
         internal_assert(str_imm != nullptr);
         std::string name = str_imm->value;
@@ -2912,7 +2912,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 if ((init_value->getType() != elem_ptr->getType()->getPointerElementType() &&
                      init_value->getType() == i8_t->getPointerTo()) ||
                     init_value->getType() == i1_t || elem_ptr->getType()->getPointerElementType() == i1_t) {
-                  init_value = builder->CreatePointerCast(init_value, elem_ptr->getType()->getPointerElementType());
+                    init_value = builder->CreatePointerCast(init_value, elem_ptr->getType()->getPointerElementType());
                 }
                 builder->CreateStore(init_value, elem_ptr);
             }
@@ -2929,7 +2929,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         struct_ref = builder->CreatePointerCast(struct_ref, struct_type);
         const uint64_t *index = as_const_uint(op->args[2]);
         internal_assert(index != nullptr);
-        llvm::Value *gep = CreateInBoundsGEP(builder, struct_ref, { ConstantInt::get(i32_t, 0), ConstantInt::get(i32_t, (int)*index) });
+        llvm::Value *gep = CreateInBoundsGEP(builder, struct_ref, {ConstantInt::get(i32_t, 0), ConstantInt::get(i32_t, (int)*index)});
         value = builder->CreateLoad(gep->getType()->getPointerElementType(), gep);
     } else if (op->is_intrinsic(Call::resolve_function_name)) {
         internal_assert(op->args.size() == 1);
@@ -3698,7 +3698,7 @@ void CodeGen_LLVM::visit(const For *op) {
     Value *extent = codegen(op->extent);
     const Acquire *acquire = op->body.as<Acquire>();
 
-// TODO(zalman): remove this after validating it doesn't happen
+    // TODO(zalman): remove this after validating it doesn't happen
     internal_assert(!(op->for_type == ForType::Parallel ||
                       (op->for_type == ForType::Serial &&
                        acquire &&

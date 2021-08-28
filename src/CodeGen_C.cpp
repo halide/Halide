@@ -1297,7 +1297,7 @@ bool is_const_pointer(const Type &t) {
     return false;
 }
 
-}
+}  // anonymous namespace
 
 string CodeGen_C::print_reinterpret(Type type, const Expr &e) {
     ostringstream oss;
@@ -2559,7 +2559,8 @@ void CodeGen_C::visit(const Call *op) {
         internal_assert(index != nullptr);
         std::string struct_base = print_expr(op->args[0]);
         std::string type_carrier = print_expr(op->args[1]);
-        rhs << "((decltype(" << type_carrier << "))" << struct_base << ")->" << "f_" << *index;
+        rhs << "((decltype(" << type_carrier << "))" << struct_base << ")->"
+            << "f_" << *index;
     } else if (op->is_intrinsic(Call::resolve_function_name)) {
         internal_assert(op->args.size() == 1);
         const Call *decl_call = op->args[0].as<Call>();

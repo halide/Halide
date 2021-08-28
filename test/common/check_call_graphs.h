@@ -29,7 +29,7 @@ public:
             functions[i].body.accept(this);
         }
     }
-    
+
 private:
     using Halide::Internal::IRVisitor::visit;
 

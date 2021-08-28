@@ -755,7 +755,7 @@ class InjectHexagonRpc : public IRMutator {
 
         std::vector<LoweredFunc> closure_implementations;
         body = lower_parallel_tasks(body, closure_implementations, hex_name, device_code.target());
-        for (auto& lowered_func : closure_implementations) {
+        for (auto &lowered_func : closure_implementations) {
             device_code.append(lowered_func);
         }
 
