@@ -78,23 +78,23 @@ Expr AllocateClosure(const std::string &name, const Closure &closure) {
     Expr buffer_t_type = Variable::make(Handle(), buffer_t_type_name);
 
     // Place holder for closure struct type
-    closure_elements.push_back(Expr());
-    closure_elements.push_back(1);
-    closure_types.push_back(unique_name(name + "_type"));
-    closure_types.push_back(1);
+    closure_elements.emplace_back(Expr());
+    closure_elements.emplace_back(1);
+    closure_types.emplace_back(unique_name(name + "_type"));
+    closure_types.emplace_back(1);
 
     for (const auto &v : closure.vars) {
         Expr var = Variable::make(v.second, v.first);
-        closure_elements.push_back(var);
-        closure_types.push_back(var);
+        closure_elements.emplace_back(var);
+        closure_types.emplace_back(var);
     }
     for (const auto &b : closure.buffers) {
         Expr ptr_var = Variable::make(type_of<void *>(), b.first);
-        closure_elements.push_back(ptr_var);
-        closure_elements.push_back(Call::make(type_of<halide_buffer_t *>(), Call::get_pointer_symbol_or_null,
+        closure_elements.emplace_back(ptr_var);
+        closure_elements.emplace_back(Call::make(type_of<halide_buffer_t *>(), Call::get_pointer_symbol_or_null,
                                               {StringImm::make(b.first + ".buffer"), buffer_t_type}, Call::Intrinsic));
-        closure_types.push_back(ptr_var);
-        closure_types.push_back(buffer_t_type);
+        closure_types.emplace_back(ptr_var);
+        closure_types.emplace_back(buffer_t_type);
     }
     Expr closure_struct_type = Call::make(Handle(), Call::declare_struct_type, closure_types, Call::PureIntrinsic);
     std::string closure_type_name = unique_name("closure_struct_type");
@@ -190,7 +190,7 @@ struct LowerParallelTasks : public IRMutator {
         }
 
         // The same name can appear as a var and a buffer. Remove the var name in this case.
-        for (auto b : closure.buffers) {
+        for (auto const &b : closure.buffers) {
             closure.vars.erase(b.first);
         }
 
@@ -410,15 +410,15 @@ struct LowerParallelTasks : public IRMutator {
                 function_decl_args[4] = make_zero(type_of<void *>());
                 Expr function_decl_call = Call::make(Int(32), new_function_name, function_decl_args, Call::Extern);
 
-                tasks_array_args.push_back(Call::make(type_of<const void *>(), Call::resolve_function_name, {function_decl_call}, Call::PureIntrinsic));
-                tasks_array_args.push_back(Cast::make(type_of<uint8_t *>(), closure_struct));
-                tasks_array_args.push_back(StringImm::make(t.name));
-                tasks_array_args.push_back(semaphores_array.defined() ? semaphores_array : semaphore_type);
-                tasks_array_args.push_back((int)t.semaphores.size());
-                tasks_array_args.push_back(t.min);
-                tasks_array_args.push_back(t.extent);
-                tasks_array_args.push_back(min_threads.result);
-                tasks_array_args.push_back(Cast::make(Bool(), t.serial));
+                tasks_array_args.emplace_back(Call::make(type_of<const void *>(), Call::resolve_function_name, {function_decl_call}, Call::PureIntrinsic));
+                tasks_array_args.emplace_back(Cast::make(type_of<uint8_t *>(), closure_struct));
+                tasks_array_args.emplace_back(StringImm::make(t.name));
+                tasks_array_args.emplace_back(semaphores_array.defined() ? semaphores_array : semaphore_type);
+                tasks_array_args.emplace_back((int)t.semaphores.size());
+                tasks_array_args.emplace_back(t.min);
+                tasks_array_args.emplace_back(t.extent);
+                tasks_array_args.emplace_back(min_threads.result);
+                tasks_array_args.emplace_back(Cast::make(Bool(), t.serial));
             }
         }
 
@@ -454,11 +454,11 @@ struct LowerParallelTasks : public IRMutator {
                 t.body = acquire->body;
                 acquire = t.body.as<Acquire>();
             }
-            result.push_back(t);
+            result.emplace_back(t);
         } else if (loop && loop->for_type == ForType::Parallel) {
             add_suffix(prefix, ".par_for." + loop->name);
             ParallelTask t{loop->body, {}, loop->name, loop->min, loop->extent, const_false(), task_debug_name(prefix)};
-            result.push_back(t);
+            result.emplace_back(t);
         } else if (loop &&
                    loop->for_type == ForType::Serial &&
                    acquire &&
@@ -472,11 +472,11 @@ struct LowerParallelTasks : public IRMutator {
                 t.body = acquire->body;
                 acquire = t.body.as<Acquire>();
             }
-            result.push_back(t);
+            result.emplace_back(t);
         } else {
             add_suffix(prefix, "." + std::to_string(result.size()));
             ParallelTask t{s, {}, "", 0, 1, const_false(), task_debug_name(prefix)};
-            result.push_back(t);
+            result.emplace_back(t);
         }
     }
 
@@ -496,7 +496,7 @@ struct LowerParallelTasks : public IRMutator {
     bool has_task_parent;
 };
 
-Stmt lower_parallel_tasks(Stmt s, std::vector<LoweredFunc> &closure_implementations,
+Stmt lower_parallel_tasks(const Stmt &s, std::vector<LoweredFunc> &closure_implementations,
                           const std::string &name, const Target &t) {
     LowerParallelTasks lowering_mutator(name, t);
     Stmt result = lowering_mutator.mutate(s);

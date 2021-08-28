@@ -2568,7 +2568,7 @@ void CodeGen_C::visit(const Call *op) {
         std::string c_name = c_print_name(decl_call->name, false);
         rhs << "(&" << c_name << ")";
     } else if (op->is_intrinsic(Call::get_user_context)) {
-        internal_assert(op->args.size() == 0);
+        internal_assert(op->args.empty());
         rhs << "_ucon";
     } else if (op->is_intrinsic(Call::get_pointer_symbol_or_null)) {
         internal_assert(op->args.size() == 2);

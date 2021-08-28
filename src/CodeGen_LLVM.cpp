@@ -2967,7 +2967,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
         value = function;
     } else if (op->is_intrinsic(Call::get_user_context)) {
-        internal_assert(op->args.size() == 0);
+        internal_assert(op->args.empty());
         value = get_user_context();
     } else if (op->is_intrinsic(Call::get_pointer_symbol_or_null)) {
         internal_assert(op->args.size() == 2);
