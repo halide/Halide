@@ -92,7 +92,7 @@ Expr AllocateClosure(const std::string &name, const Closure &closure) {
         Expr ptr_var = Variable::make(type_of<void *>(), b.first);
         closure_elements.emplace_back(ptr_var);
         closure_elements.emplace_back(Call::make(type_of<halide_buffer_t *>(), Call::get_pointer_symbol_or_null,
-                                              {StringImm::make(b.first + ".buffer"), buffer_t_type}, Call::Intrinsic));
+                                                 {StringImm::make(b.first + ".buffer"), buffer_t_type}, Call::Intrinsic));
         closure_types.emplace_back(ptr_var);
         closure_types.emplace_back(buffer_t_type);
     }
@@ -105,8 +105,7 @@ Expr AllocateClosure(const std::string &name, const Closure &closure) {
     Expr result = Let::make(closure_type_name, closure_struct_type,
                             Call::make(type_of<void *>(), Call::make_typed_struct, closure_elements, Call::Intrinsic));
     if (!closure.buffers.empty()) {
-        result = Let::make(buffer_t_type_name, Call::make(Handle(), Call::declare_struct_type,
-                                                          {StringImm::make("halide_buffer_t"), 0}, Call::PureIntrinsic),
+        result = Let::make(buffer_t_type_name, Call::make(Handle(), Call::declare_struct_type, {StringImm::make("halide_buffer_t"), 0}, Call::PureIntrinsic),
                            result);
     }
     return result;
@@ -425,10 +424,12 @@ struct LowerParallelTasks : public IRMutator {
         if (tasks_array_args.size() > 2) {
             // Allocate task list array
             Expr tasks_list = Call::make(Handle(), Call::make_typed_struct, tasks_array_args, Call::PureIntrinsic);
-            result = Call::make(Int(32), "halide_do_parallel_tasks", {Call::make(type_of<void *>(), Call::get_user_context, {}, Call::PureIntrinsic),
-                                                                      make_const(Int(32), num_tasks), tasks_list,
-                                                                      Call::make(Handle(), Call::get_pointer_symbol_or_null,
-                                                                                 {StringImm::make("_task_parent"), make_zero(Handle())}, Call::Intrinsic)}, Call::Extern);
+            Expr user_context = Call::make(type_of<void *>(), Call::get_user_context, {}, Call::PureIntrinsic);
+            Expr task_parent = Call::make(Handle(), Call::get_pointer_symbol_or_null,
+                                          {StringImm::make("_task_parent"), make_zero(Handle())}, Call::Intrinsic);
+            result = Call::make(Int(32), "halide_do_parallel_tasks",
+                                {user_context, make_const(Int(32), num_tasks), tasks_list, task_parent},
+                                Call::Extern);
         }
 
         result = Let::make(closure_name, closure_struct_allocation, result);
