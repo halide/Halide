@@ -321,20 +321,14 @@ struct LowerParallelTasks : public IRMutator {
             MinThreads min_threads;
             t.body.accept(&min_threads);
 
-            // TODO(zalman): Need to figure out how to make this choice in pure Halide IR.
-#if 0
             // Decide if we're going to call do_par_for or
             // do_parallel_tasks. halide_do_par_for is simpler, but
             // assumes a bunch of things. Programs that don't use async
             // can also enter the task system via do_par_for.
-            Value *task_parent = sym_get("__task_parent", false);
-            bool use_do_par_for = (num_tasks == 1 &&
-                                   min_threads.result == 0 &&
-                                   t.semaphores.empty() &&
-                                   !task_parent);
-#else
-            bool use_parallel_for = false;
-#endif
+            bool use_parallel_for = (num_tasks == 1 &&
+                                     min_threads.result == 0 &&
+                                     t.semaphores.empty() &&
+                                     !has_task_parent);
 
             Expr semaphore_type = Call::make(type_of<halide_semaphore_acquire_t *>(), Call::declare_struct_type,
                                              { StringImm::make("halide_semaphore_acquire_t"), 0 }, Call::PureIntrinsic);
@@ -385,6 +379,7 @@ struct LowerParallelTasks : public IRMutator {
 
             {              
                 ScopedValue<std::string> save_name(function_name, t.name);
+                ScopedValue<bool> save_has_task_parent(has_task_parent, !use_parallel_for);
                 t.body = mutate(t.body);
             }
 
@@ -394,17 +389,18 @@ struct LowerParallelTasks : public IRMutator {
 
             if (use_parallel_for) {
                 std::vector<Expr> function_decl_args(3);
-                function_decl_args[0] = make_zero(type_of<int8_t *>());
+                function_decl_args[0] = make_zero(type_of<void *>());
                 function_decl_args[1] = make_zero(Int(32));
-                function_decl_args[2] = make_zero(type_of<int8_t *>());
+                function_decl_args[2] = make_zero(type_of<uint8_t *>());
                 Expr function_decl_call = Call::make(Int(32), new_function_name, function_decl_args, Call::Extern);
 
-                std::vector<Expr> args(5);
-                args[0] = Call::make(type_of<void *>(), Call::get_user_context, {}, Call::PureIntrinsic);
-                args[1] = Call::make(type_of<const void *>(), Call::resolve_function_name, {function_decl_call}, Call::PureIntrinsic);
-                args[2] = t.min;
-                args[3] = t.extent;
-                args[4] = closure_struct;
+                std::vector<Expr> args(4);
+                // CodeGen adds user_context for us apparently.
+                //                args[0] = Call::make(type_of<void *>(), Call::get_user_context, {}, Call::PureIntrinsic);
+                args[0] = Call::make(type_of<const void *>(), Call::resolve_function_name, {function_decl_call}, Call::PureIntrinsic);
+                args[1] = t.min;
+                args[2] = t.extent;
+                args[3] = Cast::make(type_of<uint8_t *>(), closure_struct);
                 result = Call::make(Int(32), "halide_do_par_for", args, Call::Extern);
             } else {
                 std::vector<Expr> function_decl_args(5);
@@ -492,12 +488,13 @@ struct LowerParallelTasks : public IRMutator {
     }
 
     LowerParallelTasks(const std::string &name, const Target &t)
-        : function_name(name), target(t)  {
+        : function_name(name), target(t), has_task_parent(false) {
     }
 
     std::string function_name;
     const Target &target;
     std::vector<LoweredFunc> closure_implementations;
+    bool has_task_parent;
 };
 
 Stmt lower_parallel_tasks(Stmt s, std::vector<LoweredFunc> &closure_implementations,
