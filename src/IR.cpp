@@ -1,6 +1,7 @@
 #include "IR.h"
 
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "IRPrinter.h"
 #include "IRVisitor.h"
 #include <numeric>
@@ -490,6 +491,8 @@ Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
     internal_assert(body.defined()) << "Prefetch of undefined\n";
     internal_assert(condition.defined()) << "Prefetch with undefined condition\n";
     internal_assert(condition.type().is_bool()) << "Prefetch condition is not boolean\n";
+
+    user_assert(is_pure(prefetch.offset)) << "The offset to the prefetch directive must be pure.";
 
     Prefetch *node = new Prefetch;
     node->name = name;
