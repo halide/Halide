@@ -71,6 +71,7 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, s
     stream << "int " << simple_name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
+            external_buffers.insert(args[i].name);
             stream << "struct halide_buffer_t *"
                    << print_name(args[i].name)
                    << "_buffer";
@@ -106,8 +107,10 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, s
             }
 
             stream << "ScopedDmaInitializer dma_initializer;\n";
+            // stream << "printf(\"" << simple_name << "\\n\");";
             // Emit the body
             print(body);
+            // stream << "printf(\"[end]" << simple_name << "\\n\");";
 
             // Return success.
             stream << get_indent() << "return 0;\n";
@@ -2525,7 +2528,11 @@ void CodeGen_Xtensa::visit(const Load *op) {
         if (op->type.element_of().bytes() == 6) {
             native_lanes = 32;
         }
-        if ((op->alignment.modulus % native_lanes == 0) && (op->alignment.remainder % native_lanes == 0)) {
+        bool is_aligned_load = (op->alignment.modulus % native_lanes == 0) && (op->alignment.remainder % native_lanes == 0);
+        if (external_buffers.count(op->name) > 0) {
+            is_aligned_load = is_aligned_load && (op->param.host_alignment() % 64 == 0);
+        }
+        if (is_aligned_load) {
             op_name = "aligned_load";
         } else {
             op_name = "load";
@@ -2667,7 +2674,12 @@ void CodeGen_Xtensa::visit(const Store *op) {
             native_lanes = 32;
         }
 
-        if ((op->alignment.modulus % native_lanes == 0) && (op->alignment.remainder % native_lanes == 0)) {
+        bool is_aligned_store = (op->alignment.modulus % native_lanes == 0) && (op->alignment.remainder % native_lanes == 0);
+        if (external_buffers.count(op->name) > 0) {
+            is_aligned_store = is_aligned_store && (op->param.host_alignment() % 64 == 0);
+        }
+
+        if (is_aligned_store) {
             op_name = "aligned_store";
         } else {
             op_name = "store";
@@ -3085,7 +3097,7 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
         } else if (op->memory_type == MemoryType::VTCM) {
             stream << "*"
                    << "__attribute__((aligned(64))) "
-                   //    << " __restrict "
+                   << " __restrict "
                    << op_name
                    << " = ("
                    << op_type

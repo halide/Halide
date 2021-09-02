@@ -62,6 +62,8 @@ protected:
 protected:
     int current_loop_level = 0;
     std::vector<std::string> global_static_allocations;
+
+    std::set<std::string> external_buffers;
 };
 
 }  // namespace Internal
