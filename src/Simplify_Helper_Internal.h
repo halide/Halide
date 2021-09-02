@@ -13,8 +13,10 @@ Expr broadcast(const Expr &value, int lanes);
 Expr broadcast(const Expr &value, const Expr &lanes);
 
 Expr fold(const Expr &expr, Simplify *simplify);
+Expr fold(bool value, Simplify *simplify);
 bool evaluate_predicate(const Expr &expr);
-bool _can_prove(Simplify *simplifier, const Expr &expr);
+Expr _can_prove(Simplify *simplifier, const Expr &expr);
+bool _is_const(const Expr &expr);
 
 } // namespace Internal
 } // namespace Halide

@@ -44,12 +44,19 @@ Expr Simplify::visit(const Sub *op, ExprInfo *bounds) {
         static bool use_codegen = get_env_variable("HL_USE_CODEGEN") == "1";
 
         if (use_codegen) {
+            // TODO: figure out how to add this rule to the generated code.
+            if ((!op->type.is_uint() && rewrite(x - c0, x + fold(-c0), !overflows(-c0)))) {
+                return mutate(rewrite.result, bounds);
+            }
+
+            // TODO: allow codegen to handle stripping the outter layer, for ease of use.
             const Expr expr = Sub::make(a, b);
             const Expr recurse = simplify_sub(expr, this);
             if (!recurse.same_as(expr)) {
                 // We mutated this object! Try again.
                 return mutate(recurse, bounds);
             } else {
+                // TODO: do NOT use `goto`
                 goto finished;
             }
         }

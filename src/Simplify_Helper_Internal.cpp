@@ -1,4 +1,5 @@
 #include "Simplify_Helper_Internal.h"
+#include "IR.h"
 #include "Type.h"
 
 namespace Halide {
@@ -429,7 +430,8 @@ class ConstantFold : public IRVisitor {
     }
 
 public:
-    halide_scalar_value_t value;  
+    halide_scalar_value_t value;
+    // TODO: we should also keep track of type.
     Simplify* simplifier;
 
     ConstantFold(Simplify* simplify) : simplifier{simplify} {}
@@ -437,32 +439,57 @@ public:
 
 }  // namspace
 
+Expr fold(bool value, Simplify *simplify) {
+    return value ? const_true() : const_false();
+}
 
 Expr fold(const Expr &expr, Simplify *simplify) {
     ConstantFold folder(simplify);
     expr.accept(&folder);
     Type type = expr.type();
+    Type scalar_type = type.is_scalar() ? type : type.element_of();
+    Expr ret;
     switch (type.code()) {
         case Type::Int: {
-            return IntImm::make(type, folder.value.u.i64);
+            ret = IntImm::make(scalar_type, folder.value.u.i64);
+            break;
         }
         case Type::UInt: {
-            return UIntImm::make(type, folder.value.u.u64);
+            ret = UIntImm::make(scalar_type, folder.value.u.u64);
+            break;
         }
         case Type::Float:
         case Type::BFloat: {
-            return FloatImm::make(type, folder.value.u.f64);
+            ret = FloatImm::make(scalar_type, folder.value.u.f64);
+            break;
         }
         default: {
             internal_error << "Bad type for folded object:" << expr << "\n";
-            return Expr();
         }
     }
+    if (!type.is_scalar()) {
+        ret = Broadcast::make(ret, type.lanes());
+    }
+    debug(1) << "fold(" << expr << ") = " << ret << "\n";
+    return ret;
 }
 
-bool _can_prove(Simplify *simplifier, const Expr &expr) {
+Expr _can_prove(Simplify *simplifier, const Expr &expr) {
     Expr condition = simplifier->mutate(expr, nullptr);
-    return is_const_one(condition);
+    return is_const_one(condition) ? const_true() : const_false(); 
+}
+
+bool _is_const(const Expr &e) {
+    if (e.as<IntImm>() ||
+        e.as<UIntImm>() ||
+        e.as<FloatImm>() ||
+        e.as<StringImm>()) {
+        return true;
+    } else if (const Broadcast *b = e.as<Broadcast>()) {
+        return is_const(b->value);
+    } else {
+        return false;
+    }
 }
 
 }  // namespace Internal

@@ -10,21 +10,21 @@ namespace Internal {
 
 Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
   if (const Sub *a0 = expr.as<Sub>()) {
-    if (is_const(a0->a)) {
-      if (is_const(a0->b)) {
+    if (_is_const(a0->a)) {
+      if (_is_const(a0->b)) {
         return fold(a0->a - a0->b, simplifier);
       }
       if (const Select *a102 = a0->b.as<Select>()) {
-        if (is_const(a102->true_value)) {
-          if (is_const(a102->false_value)) {
+        if (_is_const(a102->true_value)) {
+          if (_is_const(a102->false_value)) {
             return select(a102->condition, fold(a0->a - a102->true_value, simplifier), fold(a0->a - a102->false_value, simplifier));
           }
         }
       }
       if (const Div *a922 = a0->b.as<Div>()) {
         if (const Sub *a923 = a922->a.as<Sub>()) {
-          if (is_const(a923->a)) {
-            if (is_const(a922->b)) {
+          if (_is_const(a923->a)) {
+            if (_is_const(a922->b)) {
               if (evaluate_predicate(fold((a922->b > 0), simplifier))) {
                 return ((fold((((a0->a*a922->b) - a923->a) + a922->b) - 1, simplifier) + a923->b)/a922->b);
               }
@@ -32,8 +32,8 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
           }
         }
         if (const Add *a926 = a922->a.as<Add>()) {
-          if (is_const(a926->b)) {
-            if (is_const(a922->b)) {
+          if (_is_const(a926->b)) {
+            if (_is_const(a922->b)) {
               if (evaluate_predicate(fold((a922->b > 0), simplifier))) {
                 return ((fold((((a0->a*a922->b) - a926->b) + a922->b) - 1, simplifier) - a926->a)/a922->b);
               }
@@ -46,7 +46,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
       return 0;
     }
     if (const Ramp *a3 = a0->a.as<Ramp>()) {
-      if (is_const(a3->lanes)) {
+      if (_is_const(a3->lanes)) {
         if (const Ramp *a4 = a0->b.as<Ramp>()) {
           if (equal(a3->lanes, a4->lanes)) {
             return ramp(a3->base - a4->base, a3->stride - a4->stride, a3->lanes);
@@ -59,10 +59,10 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
         }
       }
       if (const Broadcast *a30 = a3->base.as<Broadcast>()) {
-        if (is_const(a30->lanes)) {
-          if (is_const(a3->lanes)) {
+        if (_is_const(a30->lanes)) {
+          if (_is_const(a3->lanes)) {
             if (const Broadcast *a31 = a0->b.as<Broadcast>()) {
-              if (is_const(a31->lanes)) {
+              if (_is_const(a31->lanes)) {
                 if (evaluate_predicate(fold((a31->lanes == (a30->lanes*a3->lanes)), simplifier))) {
                   return ramp(broadcast(a30->value - a31->value, a30->lanes), a3->stride, a3->lanes);
                 }
@@ -72,10 +72,10 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
         }
       }
       if (const Ramp *a34 = a3->base.as<Ramp>()) {
-        if (is_const(a34->lanes)) {
-          if (is_const(a3->lanes)) {
+        if (_is_const(a34->lanes)) {
+          if (_is_const(a3->lanes)) {
             if (const Broadcast *a35 = a0->b.as<Broadcast>()) {
-              if (is_const(a35->lanes)) {
+              if (_is_const(a35->lanes)) {
                 if (evaluate_predicate(fold((a35->lanes == (a34->lanes*a3->lanes)), simplifier))) {
                   return ramp(ramp(a34->base - a35->value, a34->stride, a34->lanes), a3->stride, a3->lanes);
                 }
@@ -86,7 +86,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
       }
     }
     if (const Broadcast *a9 = a0->a.as<Broadcast>()) {
-      if (is_const(a9->lanes)) {
+      if (_is_const(a9->lanes)) {
         if (const Ramp *a10 = a0->b.as<Ramp>()) {
           if (equal(a9->lanes, a10->lanes)) {
             return ramp(a9->value - a10->base, 0 - a10->stride, a9->lanes);
@@ -96,7 +96,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
           if (equal(a9->lanes, a13->lanes)) {
             return broadcast(a9->value - a13->value, a9->lanes);
           }
-          if (is_const(a13->lanes)) {
+          if (_is_const(a13->lanes)) {
             if (evaluate_predicate(fold(((a13->lanes % a9->lanes) == 0), simplifier))) {
               return broadcast(a9->value - broadcast(a13->value, fold(a13->lanes/a9->lanes, simplifier)), a9->lanes);
             }
@@ -109,7 +109,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
     }
     if (const Sub *a21 = a0->a.as<Sub>()) {
       if (const Broadcast *a22 = a21->b.as<Broadcast>()) {
-        if (is_const(a22->lanes)) {
+        if (_is_const(a22->lanes)) {
           if (const Broadcast *a23 = a0->b.as<Broadcast>()) {
             if (equal(a22->lanes, a23->lanes)) {
               return (a21->a - broadcast(a22->value + a23->value, a22->lanes));
@@ -127,18 +127,18 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
           }
         }
       }
-      if (is_const(a21->a)) {
+      if (_is_const(a21->a)) {
         if (const Sub *a115 = a0->b.as<Sub>()) {
-          if (is_const(a115->a)) {
+          if (_is_const(a115->a)) {
             return ((a115->b - a21->b) + fold(a21->a - a115->a, simplifier));
           }
         }
         if (const Add *a118 = a0->b.as<Add>()) {
-          if (is_const(a118->b)) {
+          if (_is_const(a118->b)) {
             return (fold(a21->a - a118->b, simplifier) - (a21->b + a118->a));
           }
         }
-        if (is_const(a0->b)) {
+        if (_is_const(a0->b)) {
           return (fold(a21->a - a0->b, simplifier) - a21->b);
         }
       }
@@ -198,7 +198,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
     }
     if (const Add *a25 = a0->a.as<Add>()) {
       if (const Broadcast *a26 = a25->b.as<Broadcast>()) {
-        if (is_const(a26->lanes)) {
+        if (_is_const(a26->lanes)) {
           if (const Broadcast *a27 = a0->b.as<Broadcast>()) {
             if (equal(a26->lanes, a27->lanes)) {
               return (a25->a + broadcast(a26->value - a27->value, a26->lanes));
@@ -226,17 +226,17 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
           }
         }
       }
-      if (is_const(a25->b)) {
-        if (is_const(a0->b)) {
+      if (_is_const(a25->b)) {
+        if (_is_const(a0->b)) {
           return (a25->a + fold(a25->b - a0->b, simplifier));
         }
         if (const Sub *a107 = a0->b.as<Sub>()) {
-          if (is_const(a107->a)) {
+          if (_is_const(a107->a)) {
             return ((a25->a + a107->b) + fold(a25->b - a107->a, simplifier));
           }
         }
         if (const Add *a110 = a0->b.as<Add>()) {
-          if (is_const(a110->b)) {
+          if (_is_const(a110->b)) {
             return ((a25->a - a110->a) + fold(a25->b - a110->b, simplifier));
           }
         }
@@ -446,7 +446,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
       if (equal(a0->a, a76->b)) {
         return (0 - a76->a);
       }
-      if (is_const(a76->b)) {
+      if (_is_const(a76->b)) {
         return ((a0->a - a76->a) - a76->b);
       }
       if (const Sub *a293 = a76->b.as<Sub>()) {
@@ -480,7 +480,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
       return (a0->a + (a120->b - a120->a));
     }
     if (const Mul *a122 = a0->b.as<Mul>()) {
-      if (is_const(a122->b)) {
+      if (_is_const(a122->b)) {
         if (evaluate_predicate(fold(((a122->b < 0) && ((0 - a122->b) > 0)), simplifier))) {
           return (a0->a + (a122->a*fold(0 - a122->b, simplifier)));
         }
@@ -488,8 +488,8 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
       if (const Div *a394 = a122->a.as<Div>()) {
         if (const Add *a395 = a394->a.as<Add>()) {
           if (equal(a0->a, a395->a)) {
-            if (is_const(a395->b)) {
-              if (is_const(a394->b)) {
+            if (_is_const(a395->b)) {
+              if (_is_const(a394->b)) {
                 if (equal(a394->b, a122->b)) {
                   if (evaluate_predicate(fold((a394->b > 0), simplifier))) {
                     return (((a0->a + a395->b) % a394->b) - a395->b);
@@ -503,7 +503,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
           }
         }
         if (equal(a0->a, a394->a)) {
-          if (is_const(a394->b)) {
+          if (_is_const(a394->b)) {
             if (equal(a394->b, a122->b)) {
               if (evaluate_predicate(fold((a394->b > 0), simplifier))) {
                 return (a0->a % a394->b);
@@ -601,7 +601,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
         return ((a128->a - 1)*a128->b);
       }
       if (const Div *a953 = a128->a.as<Div>()) {
-        if (is_const(a953->b)) {
+        if (_is_const(a953->b)) {
           if (equal(a953->b, a128->b)) {
             if (equal(a953->a, a0->b)) {
               if (evaluate_predicate(fold((a953->b > 0), simplifier))) {
@@ -611,8 +611,8 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
           }
         }
         if (const Add *a960 = a953->a.as<Add>()) {
-          if (is_const(a960->b)) {
-            if (is_const(a953->b)) {
+          if (_is_const(a960->b)) {
+            if (_is_const(a953->b)) {
               if (equal(a953->b, a128->b)) {
                 if (equal(a960->a, a0->b)) {
                   if (evaluate_predicate(fold(((a953->b > 0) && ((a960->b + 1) == a953->b)), simplifier))) {
@@ -624,9 +624,9 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
           }
         }
       }
-      if (is_const(a128->b)) {
+      if (_is_const(a128->b)) {
         if (const Mul *a967 = a0->b.as<Mul>()) {
-          if (is_const(a967->b)) {
+          if (_is_const(a967->b)) {
             if (evaluate_predicate(fold(((a128->b % a967->b) == 0), simplifier))) {
               return (((a128->a*fold(a128->b/a967->b, simplifier)) - a967->a)*a967->b);
             }
@@ -647,17 +647,17 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
           }
           return max(a361->b, a0->a - a360->b);
         }
-        if (is_const(a360->b)) {
+        if (_is_const(a360->b)) {
           return (a0->a + max(a361->b - a361->a, fold(0 - a360->b, simplifier)));
         }
       }
       if (equal(a0->a, a360->a)) {
-        if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+        if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
           return max(a0->a - a360->b, 0);
         }
       }
       if (equal(a0->a, a360->b)) {
-        if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+        if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
           return max(a0->a - a360->a, 0);
         }
       }
@@ -668,8 +668,8 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
       }
       if (const Max *a456 = a360->a.as<Max>()) {
         if (const Sub *a457 = a456->a.as<Sub>()) {
-          if (is_const(a456->b)) {
-            if (is_const(a360->b)) {
+          if (_is_const(a456->b)) {
+            if (_is_const(a360->b)) {
               return (a0->a + max(min(a457->b - a457->a, fold(0 - a456->b, simplifier)), fold(0 - a360->b, simplifier)));
             }
           }
@@ -677,35 +677,35 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
       }
       if (const Add *a468 = a360->b.as<Add>()) {
         if (equal(a0->a, a468->a)) {
-          if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+          if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
             return (0 - min(a360->a - a0->a, a468->b));
           }
         }
         if (equal(a0->a, a468->b)) {
-          if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+          if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
             return (0 - min(a360->a - a0->a, a468->a));
           }
         }
         if (const Add *a481 = a468->b.as<Add>()) {
           if (equal(a0->a, a481->a)) {
-            if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+            if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
               return (0 - min(a360->a - a0->a, a468->a + a481->b));
             }
           }
           if (equal(a0->a, a481->b)) {
-            if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+            if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
               return (0 - min(a360->a - a0->a, a481->a + a468->a));
             }
           }
         }
         if (const Add *a489 = a468->a.as<Add>()) {
           if (equal(a0->a, a489->a)) {
-            if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+            if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
               return (0 - min(a360->a - a0->a, a489->b + a468->b));
             }
           }
           if (equal(a0->a, a489->b)) {
-            if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+            if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
               return (0 - min(a360->a - a0->a, a489->a + a468->b));
             }
           }
@@ -713,35 +713,35 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
       }
       if (const Add *a474 = a360->a.as<Add>()) {
         if (equal(a0->a, a474->a)) {
-          if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+          if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
             return (0 - min(a360->b - a0->a, a474->b));
           }
         }
         if (equal(a0->a, a474->b)) {
-          if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+          if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
             return (0 - min(a360->b - a0->a, a474->a));
           }
         }
         if (const Add *a497 = a474->b.as<Add>()) {
           if (equal(a0->a, a497->a)) {
-            if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+            if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
               return (0 - min(a360->b - a0->a, a474->a + a497->b));
             }
           }
           if (equal(a0->a, a497->b)) {
-            if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+            if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
               return (0 - min(a360->b - a0->a, a497->a + a474->a));
             }
           }
         }
         if (const Add *a505 = a474->a.as<Add>()) {
           if (equal(a0->a, a505->a)) {
-            if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+            if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
               return (0 - min(a360->b - a0->a, a474->b + a505->b));
             }
           }
           if (equal(a0->a, a505->b)) {
-            if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+            if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
               return (0 - min(a360->b - a0->a, a474->b + a505->a));
             }
           }
@@ -758,17 +758,17 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
           }
           return min(a365->b, a0->a - a364->b);
         }
-        if (is_const(a364->b)) {
+        if (_is_const(a364->b)) {
           return (a0->a + min(a365->b - a365->a, fold(0 - a364->b, simplifier)));
         }
       }
       if (equal(a0->a, a364->a)) {
-        if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+        if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
           return min(a0->a - a364->b, 0);
         }
       }
       if (equal(a0->a, a364->b)) {
-        if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+        if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
           return min(a0->a - a364->a, 0);
         }
       }
@@ -779,8 +779,8 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
       }
       if (const Min *a452 = a364->a.as<Min>()) {
         if (const Sub *a453 = a452->a.as<Sub>()) {
-          if (is_const(a452->b)) {
-            if (is_const(a364->b)) {
+          if (_is_const(a452->b)) {
+            if (_is_const(a364->b)) {
               return (a0->a + min(max(a453->b - a453->a, fold(0 - a452->b, simplifier)), fold(0 - a364->b, simplifier)));
             }
           }
@@ -788,35 +788,35 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
       }
       if (const Add *a570 = a364->b.as<Add>()) {
         if (equal(a0->a, a570->a)) {
-          if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+          if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
             return (0 - max(a364->a - a0->a, a570->b));
           }
         }
         if (equal(a0->a, a570->b)) {
-          if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+          if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
             return (0 - max(a364->a - a0->a, a570->a));
           }
         }
         if (const Add *a583 = a570->b.as<Add>()) {
           if (equal(a0->a, a583->a)) {
-            if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+            if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
               return (0 - max(a364->a - a0->a, a570->a + a583->b));
             }
           }
           if (equal(a0->a, a583->b)) {
-            if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+            if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
               return (0 - max(a364->a - a0->a, a583->a + a570->a));
             }
           }
         }
         if (const Add *a591 = a570->a.as<Add>()) {
           if (equal(a0->a, a591->a)) {
-            if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+            if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
               return (0 - max(a364->a - a0->a, a591->b + a570->b));
             }
           }
           if (equal(a0->a, a591->b)) {
-            if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+            if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
               return (0 - max(a364->a - a0->a, a591->a + a570->b));
             }
           }
@@ -824,35 +824,35 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
       }
       if (const Add *a576 = a364->a.as<Add>()) {
         if (equal(a0->a, a576->a)) {
-          if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+          if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
             return (0 - max(a364->b - a0->a, a576->b));
           }
         }
         if (equal(a0->a, a576->b)) {
-          if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+          if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
             return (0 - max(a364->b - a0->a, a576->a));
           }
         }
         if (const Add *a599 = a576->b.as<Add>()) {
           if (equal(a0->a, a599->a)) {
-            if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+            if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
               return (0 - max(a364->b - a0->a, a576->a + a599->b));
             }
           }
           if (equal(a0->a, a599->b)) {
-            if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+            if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
               return (0 - max(a364->b - a0->a, a599->a + a576->a));
             }
           }
         }
         if (const Add *a607 = a576->a.as<Add>()) {
           if (equal(a0->a, a607->a)) {
-            if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+            if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
               return (0 - max(a364->b - a0->a, a576->b + a607->b));
             }
           }
           if (equal(a0->a, a607->b)) {
-            if (evaluate_predicate(fold(!is_const(a0->a), simplifier))) {
+            if (evaluate_predicate(fold(!_is_const(a0->a), simplifier))) {
               return (0 - max(a364->b - a0->a, a576->b + a607->a));
             }
           }
@@ -873,7 +873,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
     }
     if (const Mod *a391 = a0->b.as<Mod>()) {
       if (equal(a0->a, a391->a)) {
-        if (is_const(a391->b)) {
+        if (_is_const(a391->b)) {
           return ((a0->a/a391->b)*a391->b);
         }
       }
@@ -929,7 +929,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
             return max(a397->b - a651->a, a651->b + a614->b);
           }
         }
-        if (is_const(a614->b)) {
+        if (_is_const(a614->b)) {
           if (const Max *a802 = a0->b.as<Max>()) {
             if (equal(a614->a, a802->a)) {
               if (evaluate_predicate(fold(_can_prove(simplifier, a397->b >= (a802->b + a614->b)), simplifier))) {
@@ -941,7 +941,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
             }
             if (const Add *a819 = a802->a.as<Add>()) {
               if (equal(a614->a, a819->a)) {
-                if (is_const(a819->b)) {
+                if (_is_const(a819->b)) {
                   if (evaluate_predicate(fold(_can_prove(simplifier, (a397->b + a819->b) >= (a802->b + a614->b)), simplifier))) {
                     return max(a397->b - max(a614->a + a819->b, a802->b), fold(a614->b - a819->b, simplifier));
                   }
@@ -961,7 +961,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
             }
             if (const Add *a883 = a802->b.as<Add>()) {
               if (equal(a614->a, a883->a)) {
-                if (is_const(a883->b)) {
+                if (_is_const(a883->b)) {
                   if (evaluate_predicate(fold(_can_prove(simplifier, (a397->b + a883->b) >= (a802->a + a614->b)), simplifier))) {
                     return max(a397->b - max(a614->a + a883->b, a802->a), fold(a614->b - a883->b, simplifier));
                   }
@@ -997,7 +997,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
             return max(a397->a - a635->a, a635->b + a620->b);
           }
         }
-        if (is_const(a620->b)) {
+        if (_is_const(a620->b)) {
           if (const Max *a834 = a0->b.as<Max>()) {
             if (equal(a620->a, a834->b)) {
               if (evaluate_predicate(fold(_can_prove(simplifier, a397->a >= (a834->a + a620->b)), simplifier))) {
@@ -1009,7 +1009,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
             }
             if (const Add *a851 = a834->b.as<Add>()) {
               if (equal(a620->a, a851->a)) {
-                if (is_const(a851->b)) {
+                if (_is_const(a851->b)) {
                   if (evaluate_predicate(fold(_can_prove(simplifier, (a397->a + a851->b) >= (a834->a + a620->b)), simplifier))) {
                     return max(a397->a - max(a620->a + a851->b, a834->a), fold(a620->b - a851->b, simplifier));
                   }
@@ -1029,7 +1029,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
             }
             if (const Add *a915 = a834->a.as<Add>()) {
               if (equal(a620->a, a915->a)) {
-                if (is_const(a915->b)) {
+                if (_is_const(a915->b)) {
                   if (evaluate_predicate(fold(_can_prove(simplifier, (a397->a + a915->b) >= (a834->b + a620->b)), simplifier))) {
                     return max(a397->a - max(a620->a + a915->b, a834->b), fold(a620->b - a915->b, simplifier));
                   }
@@ -1070,7 +1070,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
         }
         if (const Add *a810 = a658->a.as<Add>()) {
           if (equal(a397->a, a810->a)) {
-            if (is_const(a810->b)) {
+            if (_is_const(a810->b)) {
               if (evaluate_predicate(fold(_can_prove(simplifier, (a397->b + a810->b) >= a658->b), simplifier))) {
                 return max(a397->b - max(a397->a + a810->b, a658->b), fold(0 - a810->b, simplifier));
               }
@@ -1080,7 +1080,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
             }
           }
           if (equal(a397->b, a810->a)) {
-            if (is_const(a810->b)) {
+            if (_is_const(a810->b)) {
               if (evaluate_predicate(fold(_can_prove(simplifier, (a397->a + a810->b) >= a658->b), simplifier))) {
                 return max(a397->a - max(a397->b + a810->b, a658->b), fold(0 - a810->b, simplifier));
               }
@@ -1100,7 +1100,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
         }
         if (const Add *a842 = a658->b.as<Add>()) {
           if (equal(a397->b, a842->a)) {
-            if (is_const(a842->b)) {
+            if (_is_const(a842->b)) {
               if (evaluate_predicate(fold(_can_prove(simplifier, (a397->a + a842->b) >= a658->a), simplifier))) {
                 return max(a397->a - max(a397->b + a842->b, a658->a), fold(0 - a842->b, simplifier));
               }
@@ -1110,7 +1110,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
             }
           }
           if (equal(a397->a, a842->a)) {
-            if (is_const(a842->b)) {
+            if (_is_const(a842->b)) {
               if (evaluate_predicate(fold(_can_prove(simplifier, (a397->b + a842->b) >= a658->a), simplifier))) {
                 return max(a397->b - max(a397->a + a842->b, a658->a), fold(0 - a842->b, simplifier));
               }
@@ -1181,7 +1181,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
             return min(a399->b - a549->a, a549->b + a512->b);
           }
         }
-        if (is_const(a512->b)) {
+        if (_is_const(a512->b)) {
           if (const Min *a674 = a0->b.as<Min>()) {
             if (equal(a512->a, a674->a)) {
               if (evaluate_predicate(fold(_can_prove(simplifier, a399->b <= (a674->b + a512->b)), simplifier))) {
@@ -1193,7 +1193,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
             }
             if (const Add *a691 = a674->a.as<Add>()) {
               if (equal(a512->a, a691->a)) {
-                if (is_const(a691->b)) {
+                if (_is_const(a691->b)) {
                   if (evaluate_predicate(fold(_can_prove(simplifier, (a399->b + a691->b) <= (a674->b + a512->b)), simplifier))) {
                     return min(a399->b - min(a512->a + a691->b, a674->b), fold(a512->b - a691->b, simplifier));
                   }
@@ -1213,7 +1213,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
             }
             if (const Add *a755 = a674->b.as<Add>()) {
               if (equal(a512->a, a755->a)) {
-                if (is_const(a755->b)) {
+                if (_is_const(a755->b)) {
                   if (evaluate_predicate(fold(_can_prove(simplifier, (a399->b + a755->b) <= (a674->a + a512->b)), simplifier))) {
                     return min(a399->b - min(a512->a + a755->b, a674->a), fold(a512->b - a755->b, simplifier));
                   }
@@ -1265,7 +1265,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
             return min(a399->a - a533->a, a533->b + a518->b);
           }
         }
-        if (is_const(a518->b)) {
+        if (_is_const(a518->b)) {
           if (const Min *a706 = a0->b.as<Min>()) {
             if (equal(a518->a, a706->b)) {
               if (evaluate_predicate(fold(_can_prove(simplifier, a399->a <= (a706->a + a518->b)), simplifier))) {
@@ -1277,7 +1277,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
             }
             if (const Add *a723 = a706->b.as<Add>()) {
               if (equal(a518->a, a723->a)) {
-                if (is_const(a723->b)) {
+                if (_is_const(a723->b)) {
                   if (evaluate_predicate(fold(_can_prove(simplifier, (a399->a + a723->b) <= (a706->a + a518->b)), simplifier))) {
                     return min(a399->a - min(a518->a + a723->b, a706->a), fold(a518->b - a723->b, simplifier));
                   }
@@ -1297,7 +1297,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
             }
             if (const Add *a787 = a706->a.as<Add>()) {
               if (equal(a518->a, a787->a)) {
-                if (is_const(a787->b)) {
+                if (_is_const(a787->b)) {
                   if (evaluate_predicate(fold(_can_prove(simplifier, (a399->a + a787->b) <= (a706->b + a518->b)), simplifier))) {
                     return min(a399->a - min(a518->a + a787->b, a706->b), fold(a518->b - a787->b, simplifier));
                   }
@@ -1338,7 +1338,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
         }
         if (const Add *a682 = a556->a.as<Add>()) {
           if (equal(a399->a, a682->a)) {
-            if (is_const(a682->b)) {
+            if (_is_const(a682->b)) {
               if (evaluate_predicate(fold(_can_prove(simplifier, (a399->b + a682->b) <= a556->b), simplifier))) {
                 return min(a399->b - min(a399->a + a682->b, a556->b), fold(0 - a682->b, simplifier));
               }
@@ -1348,7 +1348,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
             }
           }
           if (equal(a399->b, a682->a)) {
-            if (is_const(a682->b)) {
+            if (_is_const(a682->b)) {
               if (evaluate_predicate(fold(_can_prove(simplifier, (a399->a + a682->b) <= a556->b), simplifier))) {
                 return min(a399->a - min(a399->b + a682->b, a556->b), fold(0 - a682->b, simplifier));
               }
@@ -1368,7 +1368,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
         }
         if (const Add *a714 = a556->b.as<Add>()) {
           if (equal(a399->b, a714->a)) {
-            if (is_const(a714->b)) {
+            if (_is_const(a714->b)) {
               if (evaluate_predicate(fold(_can_prove(simplifier, (a399->a + a714->b) <= a556->a), simplifier))) {
                 return min(a399->a - min(a399->b + a714->b, a556->a), fold(0 - a714->b, simplifier));
               }
@@ -1378,7 +1378,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
             }
           }
           if (equal(a399->a, a714->a)) {
-            if (is_const(a714->b)) {
+            if (_is_const(a714->b)) {
               if (evaluate_predicate(fold(_can_prove(simplifier, (a399->b + a714->b) <= a556->a), simplifier))) {
                 return min(a399->b - min(a399->a + a714->b, a556->a), fold(0 - a714->b, simplifier));
               }
@@ -1398,12 +1398,12 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
         }
       }
       if (const Mul *a565 = a399->a.as<Mul>()) {
-        if (is_const(a565->b)) {
-          if (is_const(a399->b)) {
+        if (_is_const(a565->b)) {
+          if (_is_const(a399->b)) {
             if (const Mul *a566 = a0->b.as<Mul>()) {
               if (const Min *a567 = a566->a.as<Min>()) {
                 if (equal(a565->a, a567->a)) {
-                  if (is_const(a567->b)) {
+                  if (_is_const(a567->b)) {
                     if (equal(a565->b, a566->b)) {
                       if (evaluate_predicate(fold(((a565->b > 0) && (a399->b <= (a567->b*a565->b))), simplifier))) {
                         return min(a399->b - (min(a565->a, a567->b)*a565->b), 0);
@@ -1432,14 +1432,14 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
     if (const Div *a928 = a0->b.as<Div>()) {
       if (const Add *a929 = a928->a.as<Add>()) {
         if (equal(a0->a, a929->a)) {
-          if (is_const(a928->b)) {
+          if (_is_const(a928->b)) {
             if (evaluate_predicate(fold((a928->b > 0), simplifier))) {
               return ((((a0->a*fold(a928->b - 1, simplifier)) - a929->b) + fold(a928->b - 1, simplifier))/a928->b);
             }
           }
         }
         if (equal(a0->a, a929->b)) {
-          if (is_const(a928->b)) {
+          if (_is_const(a928->b)) {
             if (evaluate_predicate(fold((a928->b > 0), simplifier))) {
               return ((((a0->a*fold(a928->b - 1, simplifier)) - a929->a) + fold(a928->b - 1, simplifier))/a928->b);
             }
@@ -1448,14 +1448,14 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
       }
       if (const Sub *a932 = a928->a.as<Sub>()) {
         if (equal(a0->a, a932->a)) {
-          if (is_const(a928->b)) {
+          if (_is_const(a928->b)) {
             if (evaluate_predicate(fold((a928->b > 0), simplifier))) {
               return ((((a0->a*fold(a928->b - 1, simplifier)) + a932->b) + fold(a928->b - 1, simplifier))/a928->b);
             }
           }
         }
         if (equal(a0->a, a932->b)) {
-          if (is_const(a928->b)) {
+          if (_is_const(a928->b)) {
             if (evaluate_predicate(fold((a928->b > 0), simplifier))) {
               return ((((a0->a*fold(a928->b + 1, simplifier)) - a932->a) + fold(a928->b - 1, simplifier))/a928->b);
             }
@@ -1465,7 +1465,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
     }
     if (const Div *a940 = a0->a.as<Div>()) {
       if (const Add *a941 = a940->a.as<Add>()) {
-        if (is_const(a940->b)) {
+        if (_is_const(a940->b)) {
           if (equal(a941->a, a0->b)) {
             return (((a941->a*fold(1 - a940->b, simplifier)) + a941->b)/a940->b);
           }
@@ -1484,7 +1484,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
                 }
               }
               if (equal(a941->a, a982->a)) {
-                if (is_const(a982->b)) {
+                if (_is_const(a982->b)) {
                   if (equal(a940->b, a981->b)) {
                     if (evaluate_predicate(fold((a940->b > 0), simplifier))) {
                       return ((((a941->a + fold(a982->b % a940->b, simplifier)) % a940->b) + (a941->b - a982->b))/a940->b);
@@ -1503,7 +1503,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
           }
         }
         if (const Add *a974 = a941->a.as<Add>()) {
-          if (is_const(a940->b)) {
+          if (_is_const(a940->b)) {
             if (const Div *a975 = a0->b.as<Div>()) {
               if (const Add *a976 = a975->a.as<Add>()) {
                 if (const Add *a977 = a976->a.as<Add>()) {
@@ -1521,8 +1521,8 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
             }
           }
         }
-        if (is_const(a941->b)) {
-          if (is_const(a940->b)) {
+        if (_is_const(a941->b)) {
+          if (_is_const(a940->b)) {
             if (const Div *a991 = a0->b.as<Div>()) {
               if (const Add *a992 = a991->a.as<Add>()) {
                 if (equal(a941->a, a992->a)) {
@@ -1548,11 +1548,11 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
         if (const Min *a1062 = a941->a.as<Min>()) {
           if (const Add *a1063 = a1062->a.as<Add>()) {
             if (const Mul *a1064 = a1063->a.as<Mul>()) {
-              if (is_const(a1064->b)) {
-                if (is_const(a940->b)) {
+              if (_is_const(a1064->b)) {
+                if (_is_const(a940->b)) {
                   if (const Mul *a1065 = a0->b.as<Mul>()) {
                     if (equal(a1064->a, a1065->a)) {
-                      if (is_const(a1065->b)) {
+                      if (_is_const(a1065->b)) {
                         if (evaluate_predicate(fold((a1064->b == (a940->b*a1065->b)), simplifier))) {
                           return ((min(a1063->b, a1062->b - (a1064->a*a1064->b)) + a941->b)/a940->b);
                         }
@@ -1565,11 +1565,11 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
           }
           if (const Add *a1070 = a1062->b.as<Add>()) {
             if (const Mul *a1071 = a1070->a.as<Mul>()) {
-              if (is_const(a1071->b)) {
-                if (is_const(a940->b)) {
+              if (_is_const(a1071->b)) {
+                if (_is_const(a940->b)) {
                   if (const Mul *a1072 = a0->b.as<Mul>()) {
                     if (equal(a1071->a, a1072->a)) {
-                      if (is_const(a1072->b)) {
+                      if (_is_const(a1072->b)) {
                         if (evaluate_predicate(fold((a1071->b == (a940->b*a1072->b)), simplifier))) {
                           return ((min(a1062->a - (a1071->a*a1071->b), a1070->b) + a941->b)/a940->b);
                         }
@@ -1583,7 +1583,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
         }
       }
       if (const Sub *a947 = a940->a.as<Sub>()) {
-        if (is_const(a940->b)) {
+        if (_is_const(a940->b)) {
           if (equal(a947->a, a0->b)) {
             return (((a947->a*fold(1 - a940->b, simplifier)) - a947->b)/a940->b);
           }
@@ -1593,7 +1593,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
           if (const Div *a996 = a0->b.as<Div>()) {
             if (const Add *a997 = a996->a.as<Add>()) {
               if (equal(a947->a, a997->a)) {
-                if (is_const(a997->b)) {
+                if (_is_const(a997->b)) {
                   if (equal(a940->b, a996->b)) {
                     if (evaluate_predicate(fold((a940->b > 0), simplifier))) {
                       return (((((a947->a + fold(a997->b % a940->b, simplifier)) % a940->b) - a947->b) - a997->b)/a940->b);
@@ -1612,7 +1612,7 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
           }
         }
       }
-      if (is_const(a940->b)) {
+      if (_is_const(a940->b)) {
         if (const Div *a1005 = a0->b.as<Div>()) {
           if (const Add *a1006 = a1005->a.as<Add>()) {
             if (equal(a940->a, a1006->a)) {
@@ -1637,11 +1637,11 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
       if (const Min *a1049 = a940->a.as<Min>()) {
         if (const Add *a1050 = a1049->a.as<Add>()) {
           if (const Mul *a1051 = a1050->a.as<Mul>()) {
-            if (is_const(a1051->b)) {
-              if (is_const(a940->b)) {
+            if (_is_const(a1051->b)) {
+              if (_is_const(a940->b)) {
                 if (const Mul *a1052 = a0->b.as<Mul>()) {
                   if (equal(a1051->a, a1052->a)) {
-                    if (is_const(a1052->b)) {
+                    if (_is_const(a1052->b)) {
                       if (evaluate_predicate(fold((a1051->b == (a940->b*a1052->b)), simplifier))) {
                         return (min(a1050->b, a1049->b - (a1051->a*a1051->b))/a940->b);
                       }
@@ -1654,11 +1654,11 @@ Expr simplify_sub(const Expr &expr, Simplify *simplifier) {
         }
         if (const Add *a1056 = a1049->b.as<Add>()) {
           if (const Mul *a1057 = a1056->a.as<Mul>()) {
-            if (is_const(a1057->b)) {
-              if (is_const(a940->b)) {
+            if (_is_const(a1057->b)) {
+              if (_is_const(a940->b)) {
                 if (const Mul *a1058 = a0->b.as<Mul>()) {
                   if (equal(a1057->a, a1058->a)) {
-                    if (is_const(a1058->b)) {
+                    if (_is_const(a1058->b)) {
                       if (evaluate_predicate(fold((a1057->b == (a940->b*a1058->b)), simplifier))) {
                         return (min(a1056->b, a1049->a - (a1057->a*a1057->b))/a940->b);
                       }
