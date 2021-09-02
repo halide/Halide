@@ -267,7 +267,7 @@ Stmt convert_to_tile_store(const Store *op, const string &amx_name, int tile_x, 
         auto bytes = op->value.type().bytes();
         internal_assert(bytes == 4) << "AMX store only supported for int32 and float32 output, not for " << op->value.type() << "\n";
         // {tile_x, tile_y, var, base, stride}
-        auto store = Call::make(Bool(2), "tile_store", {tile_x, tile_y * bytes, std::move(out), tile.base * bytes, tile.stride[0] * bytes, std::move(tile_val)}, Call::Intrinsic);
+        auto store = Call::make(Int(32), "tile_store", {tile_x, tile_y * bytes, std::move(out), tile.base * bytes, tile.stride[0] * bytes, std::move(tile_val)}, Call::Intrinsic);
         return Evaluate::make(std::move(store));
     }
     return {};

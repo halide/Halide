@@ -63,19 +63,19 @@ define weak_odr <256 x float> @tdpbf16ps(i16 %rows, i16 %colbytes, i16 %acc, <25
 }
 declare x86_amx @llvm.x86.tdpbf16ps.internal(i16, i16, i16, x86_amx, x86_amx, x86_amx)
 
-define weak_odr <2 x i1> @tilestored64_i32(i16 %rows, i16 %cols, i8* %ptr, i64 %off, i64 %stride, <256 x i32> %val) nounwind alwaysinline writeonly {
+define weak_odr i32 @tilestored64_i32(i16 %rows, i16 %cols, i8* %ptr, i64 %off, i64 %stride, <256 x i32> %val) nounwind alwaysinline writeonly {
   %1 = getelementptr i8, i8* %ptr, i64 %off
   %2 = bitcast <256 x i32> %val to x86_amx
   tail call void @llvm.x86.tilestored64.internal(i16 %rows, i16 %cols, i8* %1, i64 %stride, x86_amx %2) nounwind writeonly
-  ret <2 x i1> zeroinitializer
+  ret i32 zeroinitializer ; return 0 since Halide has no void return value
 }
 declare void @llvm.x86.tilestored64.internal(i16, i16, i8*, i64, x86_amx)
 
-define weak_odr <2 x i1> @tilestored64_f32(i16 %rows, i16 %cols, i8* %ptr, i64 %off, i64 %stride, <256 x float> %val) nounwind alwaysinline writeonly {
+define weak_odr i32 @tilestored64_f32(i16 %rows, i16 %cols, i8* %ptr, i64 %off, i64 %stride, <256 x float> %val) nounwind alwaysinline writeonly {
   %1 = getelementptr i8, i8* %ptr, i64 %off
   %2 = bitcast <256 x float> %val to x86_amx
   tail call void @llvm.x86.tilestored64.internal(i16 %rows, i16 %cols, i8* %1, i64 %stride, x86_amx %2) nounwind writeonly
-  ret <2 x i1> zeroinitializer
+  ret i32 zeroinitializer
 }
 
 ; NB: Even though this should be readnone, that will cause LLVM to try to

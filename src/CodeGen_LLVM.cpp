@@ -2529,12 +2529,11 @@ void CodeGen_LLVM::visit(const Call *op) {
     internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
 
-    if (op->type.is_vector()) {
-        value = call_overloaded_intrin(op->type, op->name, op->args);
-        if (value) {
-            return;
-        }
+    value = call_overloaded_intrin(op->type, op->name, op->args);
+    if (value) {
+        return;
     }
+    
 
     // Some call nodes are actually injected at various stages as a
     // cue for llvm to generate particular ops. In general these are
