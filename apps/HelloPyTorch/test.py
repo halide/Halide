@@ -56,17 +56,21 @@ class TestAdd(unittest.TestCase):
             diff = (output-self.gt).sum().item()
             assert diff == 0.0, "Test failed: sum should be 4, got %f" % diff
 
-            # Test the gradient is correct
             self.a.requires_grad = True
             self.b.requires_grad = True
 
-            with warnings.catch_warnings():
-                # Inputs are float, the gradient checker wants double inputs and
-                # will issue a warning.
-                warnings.filterwarnings(
-                    "ignore", message="At least one of the inputs that requires "
-                    "gradient is not of double precision")
-                res = th.autograd.gradcheck(add, [self.a, self.b], eps=1e-2)
+            for i in range(100):
+                output = add(self.a, self.b).sum()
+                output.backward()
+            
+            # # Test the gradient is correct
+            # with warnings.catch_warnings():
+            # Inputs are float, the gradient checker wants double inputs and
+            # will issue a warning.
+            warnings.filterwarnings(
+                "ignore", message="At least one of the inputs that requires "
+                "gradient is not of double precision")
+            res = th.autograd.gradcheck(add, [self.a, self.b], eps=1e-2)
 
             print("  Test ran successfully: difference is", diff)
 
