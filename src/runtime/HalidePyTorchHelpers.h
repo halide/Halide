@@ -12,8 +12,6 @@
 #include <string>
 #include <vector>
 
-#include "torch/extension.h"
-
 #include "HalideBuffer.h"
 
 #ifdef HL_PT_CUDA

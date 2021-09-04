@@ -28,11 +28,9 @@ void CodeGen_PyTorch::compile(const Module &module) {
         stream << "#include \"HalideBuffer.h\"\n";
         stream << "#include \"HalidePyTorchCudaHelpers.h\"\n";
         stream << "#include \"HalidePyTorchHelpers.h\"\n";
-        stream << "#include \"torch/extension.h\"\n";
     } else {
         stream << "#include \"HalideBuffer.h\"\n";
         stream << "#include \"HalidePyTorchHelpers.h\"\n";
-        stream << "#include \"torch/extension.h\"\n";
     }
 
     stream << "\n";
@@ -259,7 +257,6 @@ void CodeGen_PyTorch::test() {
         std::string correct_src =
             R"GOLDEN_CODE(#include "HalideBuffer.h"
 #include "HalidePyTorchHelpers.h"
-#include "torch/extension.h"
 
 struct halide_buffer_t;
 struct halide_filter_metadata_t;
@@ -327,7 +324,6 @@ inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
 #include "HalideBuffer.h"
 #include "HalidePyTorchCudaHelpers.h"
 #include "HalidePyTorchHelpers.h"
-#include "torch/extension.h"
 
 struct halide_buffer_t;
 struct halide_filter_metadata_t;
