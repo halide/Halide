@@ -171,7 +171,6 @@ set(SOURCE_FILES
     AlignLoads.cpp
     AllocationBoundsInference.cpp
     ApplySplit.cpp
-    ApproximateDifferences.cpp
     Argument.cpp
     AssociativeOpsTable.cpp
     Associativity.cpp
