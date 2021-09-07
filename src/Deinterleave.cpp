@@ -334,11 +334,7 @@ private:
             // can just deinterleave the args.
 
             // Beware of intrinsics for which this is not true!
-            std::vector<Expr> args(op->args.size());
-            for (size_t i = 0; i < args.size(); i++) {
-                args[i] = mutate(op->args[i]);
-            }
-
+            auto args = mutate(op->args);
             return Call::make(t, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         }

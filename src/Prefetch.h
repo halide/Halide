@@ -38,6 +38,15 @@ Stmt inject_prefetch(const Stmt &s, const std::map<std::string, Function> &env);
  * on the architecture), this also adds an outer loops that tile the prefetches. */
 Stmt reduce_prefetch_dimension(Stmt stmt, const Target &t);
 
+/** Hoist all the prefetches in a Block to the beginning of the Block.
+ * This generally only happens when a loop with prefetches is unrolled;
+ * in some cases, LLVM's code generation can be suboptimal (unnecessary register spills)
+ * when prefetches are scattered through the loop. Hoisting to the top of the
+ * loop is a good way to mitigate this, at the cost of the prefetch calls possibly
+ * being less useful due to distance from use point. (This is a bit experimental
+ * and may need revisiting.) See also https://bugs.llvm.org/show_bug.cgi?id=51172 */
+Stmt hoist_prefetches(const Stmt &s);
+
 }  // namespace Internal
 }  // namespace Halide
 

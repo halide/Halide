@@ -102,10 +102,8 @@ class Inliner : public IRMutator {
         if (op->name == func.name()) {
 
             // Mutate the args
-            vector<Expr> args(op->args.size());
-            for (size_t i = 0; i < args.size(); i++) {
-                args[i] = mutate(op->args[i]);
-            }
+            auto args = mutate(op->args);
+
             // Grab the body
             Expr body = qualify(func.name() + ".", func.values()[op->value_index]);
 

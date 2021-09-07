@@ -911,7 +911,7 @@ void IRPrinter::visit(const Prefetch *op) {
         indent++;
         stream << get_indent();
     }
-    stream << "prefetch " << op->name << "(";
+    stream << "prefetch " << op->name << ", " << op->prefetch.at << ", " << op->prefetch.from << ", (";
     for (size_t i = 0; i < op->bounds.size(); i++) {
         stream << "[";
         print_no_parens(op->bounds[i].min);

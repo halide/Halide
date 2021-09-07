@@ -2182,12 +2182,9 @@ public:
                 check("f32x4.convert_i32x4_u", 8 * w, cast<float>(u32_1));
 
                 // Integer to double-precision floating point
-                if (Halide::Internal::get_llvm_version() >= 130) {
-                    // TODO: we can't directly generate these instructions at LLVM top of tree,
-                    // but LLVM isn't generating the f64x2.convert_low_i32x4_s/u instructions;
-                    // investigation needed.
-                    // check("f64x2.convert_low_i32x4_s", 2 * w, cast<double>(i32_1));
-                    // check("f64x2.convert_low_i32x4_u", 2 * w, cast<double>(u32_1));
+                if (Halide::Internal::get_llvm_version() >= 140) {
+                    check("f64x2.convert_low_i32x4_s", 2 * w, cast<double>(i32_1));
+                    check("f64x2.convert_low_i32x4_u", 2 * w, cast<double>(u32_1));
                 }
 
                 // Single-precision floating point to integer with saturation
@@ -2204,7 +2201,12 @@ public:
                 // check("f32x4.demote_f64x2_zero", 4 * w, ???);
 
                 // Single-precision floating point to double-precision
-                if (Halide::Internal::get_llvm_version() >= 130) {
+                if (Halide::Internal::get_llvm_version() >= 140) {
+                    // TODO(https://github.com/halide/Halide/issues/5130): broken for > 128bit vector widths
+                    if (w < 2) {
+                        check("f64x2.promote_low_f32x4", 2 * w, cast<double>(f32_1));
+                    }
+                } else if (Halide::Internal::get_llvm_version() >= 130) {
                     check("f64x2.promote_low_f32x4", 2 * w, cast<double>(f32_1));
                 }
 
