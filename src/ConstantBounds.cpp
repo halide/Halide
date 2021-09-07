@@ -264,15 +264,15 @@ class CountVarUses : public IRVisitor {
     using IRVisitor::visit;
 
 public:
-    CountVarUses(std::map<std::string, int> &var_uses)
-        : var_uses(var_uses) {
+    CountVarUses(std::map<std::string, int> &_var_uses)
+        : var_uses(_var_uses) {
     }
 };
 
 class StripUnboundedTerms : public IRMutator {
     Direction direction;
     const Scope<Interval> *scope_ptr;
-    std::map<std::string, int> &var_uses;
+    const std::map<std::string, int> &var_uses;
     int32_t unbounded_vars = 0;
     void flip_direction() {
         direction = flip(direction);
@@ -282,8 +282,9 @@ class StripUnboundedTerms : public IRMutator {
 
     Expr visit(const Variable *op) override {
         // A variable is unbounded if it appears only once *and* has no constant bounds.
-        internal_assert(var_uses.count(op->name) > 0) << "Encountered uncounted variable: " << Expr(op) << "\n";
-        const int uses = var_uses[op->name];
+        const auto iter = var_uses.find(op->name);
+        internal_assert(iter != var_uses.end()) << "Encountered uncounted variable: " << Expr(op) << "\n";
+        const int uses = iter->second;
         if (uses == 1) {
             if (scope_ptr->contains(op->name)) {
                 const Interval interval = scope_ptr->get(op->name);
@@ -450,7 +451,7 @@ class StripUnboundedTerms : public IRMutator {
 
 public:
     StripUnboundedTerms(Direction _direction, const Scope<Interval> *_scope_ptr,
-                        std::map<std::string, int> &_var_uses)
+                        const std::map<std::string, int> &_var_uses)
         : direction(_direction), scope_ptr(_scope_ptr), var_uses(_var_uses) {
     }
 };
@@ -779,6 +780,8 @@ public:
     }
 };
 
+}  // namespace
+
 Expr push_rationals(const Expr &expr, const Direction direction) {
     if (expr.type() == Int(32)) {
         return handle_push_none(expr, direction);
@@ -808,52 +811,45 @@ Expr approximate_optimizations(const Expr &expr, Direction direction, const Scop
     Expr simpl = substitute_some_lets(expr);
     simpl = simplify(reorder_terms(simpl));
     // TODO: only do push_rationals if correlated divisions exist.
-    simpl = push_rationals(expr, direction);
+    simpl = push_rationals(simpl, direction);
     simpl = simplify(simpl);
-    simpl = strip_unbounded_terms(expr, direction, scope);
+    simpl = strip_unbounded_terms(simpl, direction, scope);
     return simplify(simpl);
 }
 
-Expr approximate_constant_bound(const Expr &expr, Direction direction, const Scope<Interval> &scope) {
-    Expr simpl = approximate_optimizations(expr, direction, scope);
-    Interval interval = bounds_of_expr_in_scope(simpl, scope, FuncValueBounds(), true);
-    if (direction == Direction::Lower) {
-        Expr bound = simplify(interval.min);
-        if (is_const(bound)) {
-            return bound;
-        } else {
-            return Interval::neg_inf();
-        }
-    } else {
-        Expr bound = simplify(interval.max);
-        if (is_const(bound)) {
-            return bound;
-        } else {
-            return Interval::pos_inf();
+bool possibly_correlated(const Expr &expr) {
+    // TODO: find a better way to detect possible correlations
+    std::map<std::string, int> var_uses;
+    CountVarUses counter(var_uses);
+    expr.accept(&counter);
+    for (const auto &iter : var_uses) {
+        if (iter.second > 1) {
+            return true;
         }
     }
+    return false;
 }
 
 Interval approximate_constant_bounds(const Expr &expr, const Scope<Interval> &scope) {
-    Expr lower = approximate_optimizations(expr, Direction::Lower, scope);
-    Expr upper = approximate_optimizations(expr, Direction::Upper, scope);
     Interval interval;
-    interval.min = bounds_of_expr_in_scope(lower, scope, FuncValueBounds(), true).min;
-    interval.max = bounds_of_expr_in_scope(upper, scope, FuncValueBounds(), true).max;
-    interval.min = simplify(interval.min);
-    interval.max = simplify(interval.max);
+    if (!is_const(expr) && expr.type() == Int(32) && possibly_correlated(expr)) {
+        Expr lower = approximate_optimizations(expr, Direction::Lower, scope);
+        Expr upper = approximate_optimizations(expr, Direction::Upper, scope);
+        interval.min = bounds_of_expr_in_scope(lower, scope, FuncValueBounds(), true).min;
+        interval.max = bounds_of_expr_in_scope(upper, scope, FuncValueBounds(), true).max;
+        interval.min = simplify(interval.min);
+        interval.max = simplify(interval.max);
 
-    if (!is_const(interval.min)) {
-        interval.min = Interval::neg_inf();
-    }
-    if (!is_const(interval.max)) {
-        interval.max = Interval::pos_inf();
+        if (!is_const(interval.min)) {
+            interval.min = Interval::neg_inf();
+        }
+        if (!is_const(interval.max)) {
+            interval.max = Interval::pos_inf();
+        }
     }
 
     return interval;
 }
-
-}  // namespace
 
 Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scope) {
     Interval interval = find_constant_bounds(e, scope);
@@ -864,10 +860,6 @@ Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scop
         bound = interval.max;
     }
     return bound;
-}
-
-static bool enable_approximate_methods() {
-    return get_env_variable("HL_APPROXIMATE_METHODS") == "1";
 }
 
 Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
@@ -885,13 +877,10 @@ Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
         interval.max = Interval::pos_inf();
     }
 
-    if (enable_approximate_methods()) {
-        Interval approx_interval = approximate_constant_bounds(expr, scope);
-
-        // Take the interesection of the previous method and the aggresive method.
-        interval.min = Interval::make_min(interval.min, approx_interval.min);
-        interval.max = Interval::make_max(interval.max, approx_interval.max);    
-    }
+    Interval approx_interval = approximate_constant_bounds(expr, scope);
+    // Take the interesection of the previous method and the aggresive method.
+    interval.min = Interval::make_max(interval.min, approx_interval.min);
+    interval.max = Interval::make_min(interval.max, approx_interval.max);
 
     return interval;
 }
