@@ -98,162 +98,170 @@ int main(int argc, char **argv) {
         radii.push_back(7 * r);
     }
 
+    // radii.clear();
+    // radii.push_back(100);
+
     for (int r : radii) {
-        float t8 = 0, t16 = 0, t32 = 0;
+        {
+            float t8 = 0, t16 = 0, t32 = 0;
 
-        // Compute the output in tiles in x. We do the tiling outside
-        // of Halide because inside Halide we're going to do a
-        // sum-scan over x, and the indexing gets complicated.
-        const int xtile = output8.width() / 4096 + 1;
+            // Compute the output in tiles in x. We do the tiling outside
+            // of Halide because inside Halide we're going to do a
+            // sum-scan over x, and the indexing gets complicated.
+            const int xtile = output8.width() / 4096 + 1;
 
-        // The output width may not be a multiple of the number of
-        // tiles. If we overlap the tiles slightly, then to reach the
-        // end of an output of width w exactly we must have:
-        //
-        // w == tile_stride * (xtile - 1) + tile_width
-        //
-        // where tile_width >= tile_stride
-        //
-        // This is satisfied by:
-        const int tile_stride = output8.width() / xtile;
-        const int tile_width = output8.width() - tile_stride * (xtile - 1);
+            // The output width may not be a multiple of the number of
+            // tiles. If we overlap the tiles slightly, then to reach the
+            // end of an output of width w exactly we must have:
+            //
+            // w == tile_stride * (xtile - 1) + tile_width
+            //
+            // where tile_width >= tile_stride
+            //
+            // This is satisfied by:
+            const int tile_stride = output8.width() / xtile;
+            const int tile_width = output8.width() - tile_stride * (xtile - 1);
 
-        assert(output8.width() == tile_stride * (xtile - 1) + tile_width);
+            assert(output8.width() == tile_stride * (xtile - 1) + tile_width);
 
-        const int tile_height = 512;
+            const int strip_height = 512;
 
-        auto tile = [&](halide_buffer_t *buf) {
-            buf->dimensions++;
-            buf->dim[2] = buf->dim[1];
-            buf->dim[0].extent = tile_width;
-            buf->dim[1].min = 0;
-            buf->dim[1].extent = xtile;
-            buf->dim[1].stride = tile_stride;
-        };
-        if (1) {
-            auto translated = padded8;
-            translated.set_min(r - max_radius, r - max_radius);
-            translated.crop(0, 0, output8.width() + 2 * r);
-            translated.crop(1, 0, output8.height() + 2 * r);
-            auto out_window = output8;
-            tile(out_window);
-            double best_manual = benchmark(3, 3, [&]() {
-                for (int y = 0; y < output8.height(); y += tile_height) {
-                    auto iw = translated;
-                    iw.translate(1, -y);
-                    iw.crop(1, 0, tile_height + 2 * r);
-                    auto ow = out_window;
-                    ow.translate(2, -y);
-                    ow.crop(2, 0, tile_height);
-                    box_blur_pyramid_u8(iw, 2 * r + 1, tile_width, tile_stride, ow);
-                }
-            });
-            t8 = throughput(r, best_manual);
-            if (save_output) {
-                convert_and_save_image(output8, "out_8_pyramid_" + std::to_string(r) + ".png");
-            }
-        }
-        if (1) {
-            auto translated = padded16;
-            translated.set_min(r - max_radius, r - max_radius);
-            translated.crop(0, 0, output8.width() + 2 * r);
-            translated.crop(1, 0, output8.height() + 2 * r);
-            auto out_window = output16;
-            tile(out_window);
-            double best_manual = benchmark(3, 3, [&]() {
-                for (int y = 0; y < output8.height(); y += tile_height) {
-                    auto iw = translated;
-                    iw.translate(1, -y);
-                    iw.crop(1, 0, tile_height + 2 * r);
-                    auto ow = out_window;
-                    ow.translate(2, -y);
-                    ow.crop(2, 0, tile_height);
-                    box_blur_pyramid_u16(iw, 2 * r + 1, tile_width, tile_stride, ow);
-                }
-            });
-            t16 = throughput(r, best_manual);
-            if (save_output) {
-                convert_and_save_image(output16, "out_16_pyramid_" + std::to_string(r) + ".png");
-            }
-        }
-        if (1) {
-            auto translated = padded32;
-            translated.set_min(r - max_radius, r - max_radius);
-            translated.crop(0, 0, output8.width() + 2 * r);
-            translated.crop(1, 0, output8.height() + 2 * r);
-            auto out_window = output32;
-            tile(out_window);
-            double best_manual = benchmark(3, 3, [&]() {
-                for (int y = 0; y < output8.height(); y += tile_height) {
-                    auto iw = translated;
-                    iw.translate(1, -y);
-                    iw.crop(1, 0, tile_height + 2 * r);
-                    auto ow = out_window;
-                    ow.translate(2, -y);
-                    ow.crop(2, 0, tile_height);
-                    box_blur_pyramid_f32(iw, 2 * r + 1, tile_width, tile_stride, ow);
-                }
-            });
-            t32 = throughput(r, best_manual);
-            if (save_output) {
-                convert_and_save_image(output32, "out_32_pyramid_" + std::to_string(r) + ".png");
-            }
-        }
-
-        printf("Box blur (pyramid) (%4d): %6.1f %6.1f %6.1f\n", 2 * r + 1, t8, t16, t32);
-    }
-
-    // return 0;
-
-    printf("Box blur (incremental)...\n");
-    for (int r : radii) {
-        const int N = 8;
-
-        double best_manual = benchmark(3, 3, [&]() {
-            int slices = 16;  // set this to num_cores
-            int slice_size = (output8.height() + slices - 1) / slices;
-            slice_size = (slice_size + N - 1) / N * N;
-
-            struct Task {
-                int N, r, slice_size;
-                Halide::Runtime::Buffer<uint8_t> &padded;
-                Halide::Runtime::Buffer<uint8_t> &output;
-            } task{N, r, slice_size, padded8, output8};
-
-            auto one_strip = [](void *ucon, int s, uint8_t *closure) {
-                Task *t = (Task *)closure;
-                const int N = t->N;
-                const int w = t->output.width();
-                const int r = t->r;
-                Halide::Runtime::Buffer<uint32_t> scratch1(N, w + 2 * r + 1);
-                Halide::Runtime::Buffer<uint32_t> scratch2(N, w + 2 * r + 1);
-                scratch1.set_min(0, -1);
-                scratch2.set_min(0, -1);
-                int y_start = std::min(s * t->slice_size, t->output.height() - t->slice_size);
-                int y_end = y_start + t->slice_size;
-                bool valid = false;
-                for (int y = y_start; y < y_end; y += N) {
-                    Halide::Runtime::Buffer<uint8_t> in_slice =
-                        t->padded
-                            .cropped(0, -r, w + 2 * r + N * 2)
-                            .cropped(1, y - r - 1, N + 2 * r + 1);
-                    Halide::Runtime::Buffer<uint8_t> out_slice =
-                        t->output.cropped(1, y, N);
-                    in_slice.set_min(0, -1);
-                    out_slice.set_min(0, 0);
-                    box_blur_incremental(in_slice, scratch1, valid, r, w, scratch2, out_slice);
-                    out_slice.device_sync();
-                    valid = true;
-                    std::swap(scratch1, scratch2);
-                }
-                return 0;
+            auto tile = [&](halide_buffer_t *buf) {
+                buf->dimensions++;
+                buf->dim[2] = buf->dim[1];
+                buf->dim[0].extent = tile_width;
+                buf->dim[1].min = 0;
+                buf->dim[1].extent = xtile;
+                buf->dim[1].stride = tile_stride;
             };
+            if (1) {
+                auto translated = padded8;
+                translated.set_min(r - max_radius, r - max_radius);
+                translated.crop(0, 0, output8.width() + 2 * r + 16);
+                translated.crop(1, 0, output8.height() + 2 * r);
+                auto out_window = output8;
+                tile(out_window);
+                double best_manual = benchmark(3, 3, [&]() {
+                    for (int y = 0; y < output8.height(); y += strip_height) {
+                        auto iw = translated;
+                        iw.translate(1, -y);
+                        iw.crop(1, 0, strip_height + 2 * r);
+                        auto ow = out_window;
+                        ow.translate(2, -y);
+                        ow.crop(2, 0, strip_height);
+                        box_blur_pyramid_u8(iw, 2 * r + 1, tile_width, tile_stride, ow);
+                    }
+                });
+                t8 = throughput(r, best_manual);
+                if (save_output) {
+                    convert_and_save_image(output8, "out_8_pyramid_" + std::to_string(r) + ".png");
+                }
+            }
+            if (1) {
+                auto translated = padded16;
+                translated.set_min(r - max_radius, r - max_radius);
+                translated.crop(0, 0, output8.width() + 2 * r + 16);
+                translated.crop(1, 0, output8.height() + 2 * r);
+                auto out_window = output16;
+                tile(out_window);
+                double best_manual = benchmark(3, 3, [&]() {
+                    for (int y = 0; y < output8.height(); y += strip_height) {
+                        auto iw = translated;
+                        iw.translate(1, -y);
+                        iw.crop(1, 0, strip_height + 2 * r);
+                        auto ow = out_window;
+                        ow.translate(2, -y);
+                        ow.crop(2, 0, strip_height);
+                        box_blur_pyramid_u16(iw, 2 * r + 1, tile_width, tile_stride, ow);
+                    }
+                });
+                t16 = throughput(r, best_manual);
+                if (save_output) {
+                    convert_and_save_image(output16, "out_16_pyramid_" + std::to_string(r) + ".png");
+                }
+            }
+            if (1) {
+                auto translated = padded32;
+                translated.set_min(r - max_radius, r - max_radius);
+                translated.crop(0, 0, output8.width() + 2 * r + 16);
+                translated.crop(1, 0, output8.height() + 2 * r);
+                auto out_window = output32;
+                tile(out_window);
+                double best_manual = benchmark(3, 3, [&]() {
+                    for (int y = 0; y < output8.height(); y += strip_height) {
+                        auto iw = translated;
+                        iw.translate(1, -y);
+                        iw.crop(1, 0, strip_height + 2 * r);
+                        auto ow = out_window;
+                        ow.translate(2, -y);
+                        ow.crop(2, 0, strip_height);
+                        box_blur_pyramid_f32(iw, 2 * r + 1, tile_width, tile_stride, ow);
+                    }
+                });
+                t32 = throughput(r, best_manual);
+                if (save_output) {
+                    convert_and_save_image(output32, "out_32_pyramid_" + std::to_string(r) + ".png");
+                }
+            }
 
-            halide_do_par_for(nullptr, one_strip, 0, slices, (uint8_t *)&task);
-        });
-        printf("Box blur (incremental) (%d): %g\n", 2 * r + 1, throughput(r, best_manual));
-        if (save_output) {
-            convert_and_save_image(output8, "out_" + std::to_string(r) + ".png");
+            printf("Box blur (pyramid) (%4d): %6.1f %6.1f %6.1f\n", 2 * r + 1, t8, t16, t32);
+        }
+        {
+            const int N = 8;
+
+            const int strip_height = 512;
+
+            double best_manual = benchmark(3, 3, [&]() {
+                for (int yo = 0; yo < output8.height(); yo += strip_height) {
+
+                    int h = std::min(strip_height, output8.height() - yo);
+
+                    const int slices = 16;  // set this to num_cores
+                    const int slice_size = (h + slices - 1) / slices;
+
+                    struct Task {
+                        int yo, N, r, h, slice_size;
+                        Halide::Runtime::Buffer<uint8_t> &padded;
+                        Halide::Runtime::Buffer<uint8_t> &output;
+                    } task{yo, N, r, h, slice_size, padded8, output8};
+
+                    auto one_strip = [](void *ucon, int s, uint8_t *closure) {
+                        Task *t = (Task *)closure;
+                        const int w = t->output.width();
+                        const int r = t->r;
+                        const int yo = t->yo;
+                        const int h = t->h;
+                        Halide::Runtime::Buffer<uint32_t> scratch1(w + 2 * r + 1);
+                        Halide::Runtime::Buffer<uint32_t> scratch2(w + 2 * r + 1);
+                        scratch1.set_min(-1);
+                        scratch2.set_min(-1);
+                        int y_start = yo + std::min(s * t->slice_size, h - t->slice_size);
+                        int y_end = y_start + t->slice_size;
+                        bool valid = false;
+                        for (int y = y_start; y < y_end; y++) {
+                            Halide::Runtime::Buffer<uint8_t> in_slice =
+                                t->padded
+                                    .cropped(0, -r, w + 2 * r + 16)
+                                    .cropped(1, y - r - 1, 2 * r + 2);
+                            Halide::Runtime::Buffer<uint8_t> out_slice =
+                                t->output.sliced(1, y);
+                            in_slice.set_min(0, -1);
+                            out_slice.set_min(0);
+                            box_blur_incremental(in_slice, scratch1, valid, r, w, scratch2, out_slice);
+                            out_slice.device_sync();
+                            valid = true;
+                            std::swap(scratch1, scratch2);
+                        }
+                        return 0;
+                    };
+
+                    halide_do_par_for(nullptr, one_strip, 0, slices, (uint8_t *)&task);
+                }
+            });
+            printf("Box blur (incremental) (%d): %g\n", 2 * r + 1, throughput(r, best_manual));
+            if (save_output) {
+                convert_and_save_image(output8, "out_" + std::to_string(r) + ".png");
+            }
         }
     }
 
