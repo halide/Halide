@@ -1,5 +1,6 @@
 #include "Monotonic.h"
 #include "Bounds.h"
+#include "ConstantBounds.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
 #include "Scope.h"

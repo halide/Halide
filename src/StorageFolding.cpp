@@ -1,6 +1,7 @@
 #include "StorageFolding.h"
 
 #include "Bounds.h"
+#include "ConstantBounds.h"
 #include "CSE.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"
