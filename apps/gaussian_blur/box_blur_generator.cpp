@@ -236,8 +236,67 @@ public:
     Input<int> tx_stride{"tx_stride"};
     Output<Buffer<>> output{"output", 3};
 
+    Var x{"x"}, y{"y"}, ty{"ty"}, tx{"tx"}, yo{"yo"}, yi{"yi"}, xo{"xo"}, xi{"xi"};
+
+    void vectorized_sum_scan(Func out, Func in, Expr width, int vec, Type small_sum_t) {
+        assert((vec & (vec - 1)) == 0);  // vec must be a power of two
+
+        assert(vec == 8);
+
+        Var xo, xi0, xi1, xi2;
+        Func in_vecs;
+        in_vecs(xi0, xi1, xi2, xo, tx, ty, y) = cast(small_sum_t, in(xi0 + xi1 * 2 + xi2 * 4 + xo * 8, tx, ty, y));
+
+        Expr zero = cast(small_sum_t, 0);
+
+        RDom r2(0, 2, 0, 2, 0, 2);
+        in_vecs(r2[0], r2[1], r2[2], xo, tx, ty, y) +=
+            select(r2[0] == 0, zero,
+                   in_vecs(0, r2[1], r2[2], xo, tx, ty, y));
+        in_vecs(r2[0], r2[1], r2[2], xo, tx, ty, y) +=
+            select(r2[1] == 0, zero,
+                   in_vecs(1, 0, r2[2], xo, tx, ty, y));
+        in_vecs(r2[0], r2[1], r2[2], xo, tx, ty, y) +=
+            select(r2[2] == 0, zero,
+                   in_vecs(1, 1, 0, xo, tx, ty, y));
+
+        RDom r(0, 2,
+               0, 2,
+               0, 2,
+               0, width / vec);
+
+        out(r[0] + r[1] * 2 + r[2] * 4 + r[3] * 8, tx, ty, y) =
+            out(r[3] * vec - 1, tx, ty, y) + in_vecs(r[0], r[1], r[2], r[3], tx, ty, y);
+
+        out
+            .update(out.num_update_definitions() - 1)
+            .allow_race_conditions()
+            .vectorize(r[0])
+            .vectorize(r[1])
+            .vectorize(r[2])
+            .reorder(r[0], r[1], r[2], y, r[3], tx, ty)
+            .unroll(y);
+
+        in.compute_at(out, r[3]);
+
+        in_vecs.compute_at(out, y)
+            .vectorize(xi0)
+            .vectorize(xi1)
+            .vectorize(xi2);
+
+        for (int i = 0; i < in_vecs.num_update_definitions(); i++) {
+            in_vecs
+                .update(i)
+                .allow_race_conditions()
+                .vectorize(r2[0])
+                .vectorize(r2[1])
+                .vectorize(r2[2]);
+        }
+
+        // TODO: tail
+    }
+
     void generate() {
-        Var x("x"), y("y"), ty("ty"), tx("tx"), yo("yo"), yi("yi"), xo("xo"), xi("xi");
 
         // Figure out our intermediate accumulator types
         Type small_sum_type, large_sum_type, diff_type;
@@ -429,21 +488,31 @@ public:
 
             Type blur_x_t = (max_diameter <= max_diameter_low_bit_blur_x) ? small_sum_type : large_sum_type;
 
-            const int integrate_vec = natural_vector_size(blur_y_t);
+            // TODO: Should probably just always be 8?
+            const int integrate_vec = 8;  // natural_vector_size(blur_y_t);
 
             Func integrate_x("integrate_x");
             integrate_x(x, tx, ty, y) = undef(blur_x_t);
             integrate_x(-1, tx, ty, y) = cast(blur_x_t, 0);
+
+            vectorized_sum_scan(integrate_x, blur_y, width + diameter, integrate_vec, blur_x_t);
+
+            /*
             RDom rx_scan(0, integrate_vec, 0, ((width + diameter) / integrate_vec));
             Expr rx = rx_scan.x + integrate_vec * rx_scan.y;
             integrate_x(rx, tx, ty, y) =
                 (integrate_x(rx - 1, tx, ty, y) +
                  blur_y(rx, tx, ty, y));
+            */
+
+            /*
+            // TODO: This belongs in the helper
             RDom rx_tail(((width + diameter) / integrate_vec) * integrate_vec, (width + diameter) % integrate_vec);
             rx = clamp(rx_tail, 0, width + diameter - 2);
             integrate_x(rx, tx, ty, y) =
                 (integrate_x(rx - 1, tx, ty, y) +
                  blur_y(rx, tx, ty, y));
+            */
 
             Func blur_x("blur_x");
             blur_x(x, tx, ty, y) = integrate_x(x + diameter - 1, tx, ty, y) - integrate_x(x - 1, tx, ty, y);
@@ -512,42 +581,31 @@ public:
                 normalize
                     .store_in(MemoryType::Register)
                     .compute_at(output, xo)
-                    .reorder_storage(y, x)
-                    .bound_extent(y, N)
-                    .bound_extent(x, vec)
-                    .vectorize(y)
-                    .unroll(x);
-                normalize.in()
-                    .store_in(MemoryType::Register)
-                    .compute_at(output, xo)
-                    .bound_extent(y, N)
                     .bound_extent(x, vec)
                     .bound_extent(tx, 1)
-                    .vectorize(y)
-                    .unroll(x);
+                    .vectorize(x);
 
                 integrate_x
-                    .compute_at(output, yo)
-                    .reorder_storage(y, x, ty);
-                integrate_x.update(0)
-                    .vectorize(y);
-                integrate_x.update(1)
-                    .vectorize(y);
+                    .compute_at(output, yo);
 
+                /*
                 RVar rxo;
                 integrate_x
                     .update(1)
-                    .reorder(y, rx_scan.x, rx_scan.y, ty)
+                    .reorder(rx_scan.x, y, rx_scan.y, ty)
                     .rename(rx_scan.y, rxo)
-                    .unroll(rx_scan.x);
+                    .unroll(rx_scan.x)
+                    .unroll(y);
                 integrate_x
                     .update(2)
                     .reorder(y, rx_tail.x, ty)
-                    .rename(rx_tail.x, rxo);
+                    .rename(rx_tail.x, rxo)
+                    .unroll(y);
 
                 blur_y
                     .compute_at(integrate_x, rxo)
                     .store_in(MemoryType::Register);
+                */
 
                 blur_y.update(0)
                     .vectorize(x);
@@ -555,15 +613,8 @@ public:
                     .vectorize(x)
                     .unroll(ry_scan);
 
-                diff_y.compute_at(integrate_x, rxo)
+                diff_y.compute_at(blur_y, Var::outermost())
                     .store_in(MemoryType::Register)
-                    .vectorize(x)
-                    .unroll(y);
-
-                blur_y.in()
-                    .compute_at(integrate_x, rxo)
-                    .store_in(MemoryType::Register)
-                    .reorder_storage(y, x, ty)
                     .vectorize(x)
                     .unroll(y);
             }
@@ -638,22 +689,12 @@ public:
         input.dim(0).set_min(0);
         input.dim(1).set_min(0);
 
-        output.specialize(diameter <= max_diameter_direct_blur_x)
+        output
             .split(y, ty, y, N, TailStrategy::GuardWithIf)
             .split(y, yo, yi, N)
             .split(x, xo, xi, vec, TailStrategy::GuardWithIf)
             .reorder(xi, xo, yi, yo, tx, ty)
             .vectorize(xi)
-            .fuse(tx, ty, ty)
-            .parallel(ty);
-
-        output
-            .split(y, ty, y, N, TailStrategy::GuardWithIf)
-            .split(y, yo, yi, N)
-            .split(x, xo, xi, vec, TailStrategy::GuardWithIf)
-            .reorder(xi, yi, xo, yo, tx, ty)
-            .vectorize(xi)
-            .unroll(yi)
             .fuse(tx, ty, ty)
             .parallel(ty);
 
@@ -668,340 +709,3 @@ public:
 };
 
 HALIDE_REGISTER_GENERATOR(BoxBlurPyramid, box_blur_pyramid)
-
-#if 0
-
-template<typename TOutput, typename TSum>
-class BoxBlurTiled : public Generator<BoxBlurTiled<TOutput, TSum>> {
-    template<typename T>
-    using Input = GeneratorInput<T>;
-
-    template<typename T>
-    using Output = GeneratorOutput<T>;
-
-public:
-    Input<Buffer<TOutput>> input{"input", 2};
-    Input<int> diameter{"diameter"};
-    Input<int> tile_extent_x{"tile_extent_x"};
-    Input<int> tile_stride_x{"tile_stride_x"};
-    Input<int> tile_extent_y{"tile_extent_y"};
-    Input<int> tile_stride_y{"tile_stride_y"};
-    Output<Func> output{"output", {halide_type_of<TOutput>(), halide_type_of<TSum>}, 4};
-
-    void generate() {
-        Var x("x"), y("y"), ty("ty"), tx("tx");
-
-        Func input_tiled;
-        input_tiled(x, y, tx, ty) = input(x + tx * tile_stride_x, y + ty * tile_stride_y);
-
-        // Figure out our intermediate accumulator types
-        Type small_sum_type, large_sum_type, diff_type;
-        int max_count_for_small_sum, max_count_for_large_sum;
-        const int bits = input.type().bits();
-        if (input.type().is_float()) {
-            small_sum_type = input.type();
-            diff_type = input.type();
-            large_sum_type = input.type().with_bits(bits * 2);
-            // This is approximate. If we wanted an exact float blur,
-            // this should be set to 1.
-            max_count_for_small_sum = 256;
-            max_count_for_large_sum = 0x7fffffff;
-        } else {
-            small_sum_type = UInt(bits * 2);
-            diff_type = Int(bits * 2);
-            large_sum_type = UInt(bits * 4);
-            max_count_for_small_sum = 1 << bits;
-            max_count_for_large_sum = std::min(0x7fffffffULL, 1ULL << (bits * 3));
-        }
-
-        Func blur_y_init("blur_y_init");
-        Func blur_y("blur_y");
-
-        auto norm = [&](Expr e) {
-            if (e.type().bits() <= 32) {
-                // TODO: This is a bit suspect for blurs that produce between 23 and 32 bits.
-                e = cast<float>(e);
-            } else {
-                e = cast<double>(e);
-            }
-            Expr den = cast(e.type(), diameter * diameter);
-            Expr result = e * (1 / den);
-            if (!input.type().is_float()) {
-                result = round(result);
-            }
-            return cast(input.type(), result);
-        };
-
-        // TODO: resurrect downsample-in-y strategy for computing blur_y_init
-
-        RDom ry_init_full(0, diameter);
-        blur_y_init(x, tx, ty) += cast(blur_y_t, input_tiled(x, ry_init_full, tx, ty));
-
-        output(x, 0, tx, ty) = {norm(blur_y_init(x, tx, ty), blur_y_init(x, tx, ty))};
-
-        // const int vec = natural_vector_size<TOutput>();
-        RDom r(1, tile_extent_x - 1, 1, tile_extent_y - 1);
-
-        Expr new_blur =
-            output(r.x, r.y - 1, tx, ty)[1] -
-            output(r.x - 1, r.y - 1, tx, ty)[1] +
-            output(r.x - 1, r.y, tx, ty)[1] +
-            ((cast(diff_type, input_tiled(r.x + diameter - 1, r.y + diameter - 1, tx, ty)) -
-              input_tiled(r.x + diameter - 1, r.y - 1, tx, ty)) -
-             (cast(diff_type, input_tiled(r.x, r.y + diameter - 1, tx, ty)) -
-              input_tiled(r.x - 1, r.y - 1, tx, ty)));
-
-        output(r.x, r.y, tx, ty) =
-            {
-                norm(new_blur_y_sum_x - output(r.x - diameter, r.y, tx, ty)),
-                new_blur_y_sum_x};
-
-        // Compute the other in-between scanlines by incrementally
-        // updating that one in a sliding window.
-        Func diff_y("diff_y");
-        diff_y(x, y, tx, ty) =
-            (cast(diff_type, input_tiled(x, y + diameter, tx, ty)) -
-             input_tiled(x, y, tx, ty));
-
-        RDom ry_scan(0, tile_extent_y - 1);
-        blur_y(x, y, tx, ty) = undef(blur_y_t);
-        blur_y(x, 0, tx, ty) = blur_y_init(x, tx, ty);
-        blur_y(x, ry_scan + 1, tx, ty) =
-            (blur_y(x, ry_scan, tx, ty) + cast(blur_y_t, diff_y(x, ry_scan, tx, ty)));
-
-        // TODO: resurrect blur-x-direct
-        Type blur_x_t = (max_diameter <= max_diameter_low_bit_blur_x) ? small_sum_type : large_sum_type;
-
-        const int integrate_vec = natural_vector_size(blur_y_t);
-
-        Func integrate_x("integrate_x");
-        integrate_x(x, tx, ty, y) = undef(blur_x_t);
-        integrate_x(-1, tx, ty, y) = cast(blur_x_t, 0);
-        RDom rx_scan(0, integrate_vec, 0, ((width + diameter) / integrate_vec));
-        Expr rx = rx_scan.x + integrate_vec * rx_scan.y;
-        integrate_x(rx, tx, ty, y) =
-            (integrate_x(rx - 1, tx, ty, y) +
-             blur_y(rx, tx, ty, y));
-        RDom rx_tail(((width + diameter) / integrate_vec) * integrate_vec, (width + diameter) % integrate_vec);
-        rx = clamp(rx_tail, 0, width + diameter - 2);
-        integrate_x(rx, tx, ty, y) =
-            (integrate_x(rx - 1, tx, ty, y) +
-             blur_y(rx, tx, ty, y));
-
-        Func blur_x("blur_x");
-        blur_x(x, tx, ty, y) = integrate_x(x + diameter - 1, tx, ty, y) - integrate_x(x - 1, tx, ty, y);
-
-        Func blur_y_untiled("blur_y_untiled");
-        blur_y_untiled(x, tx, y) = blur_y(x, tx, y / N, y % N);
-
-        // For small diameter, we do it directly and stay in 16-bit
-        Func blur_x_direct("blur_x_direct");
-        RDom rx_direct(0, diameter);
-        blur_x_direct(x, tx, y) += blur_y_untiled(x + rx_direct, tx, y);
-
-        Func normalize("normalize");
-        normalize(x, tx, y) = norm(blur_x(x, tx, y / N, y % N));
-
-        if (use_blur_x_direct) {
-            results.push_back(norm(blur_x_direct(x, tx, y)));
-        } else {
-            results.push_back(normalize(x, tx, y));
-        }
-        Expr condition = diameter <= max_diameter;
-        conditions.push_back(condition);
-
-        if (use_blur_x_direct) {
-            blur_y
-                .store_in(MemoryType::Register)
-                .compute_at(blur_y.in(), xo);
-            blur_y.update(0)
-                .vectorize(x);
-            blur_y.update(1)
-                .vectorize(x)
-                .unroll(ry_scan);
-
-            blur_y.in()
-                .compute_at(output, yo)
-                .split(x, xo, x, vec)
-                .reorder(y, x, xo)
-                .vectorize(x)
-                .bound_extent(ty, 1)
-                .unroll(y);
-
-            blur_x_direct
-                .store_in(MemoryType::Register)
-                .compute_at(output, xo)
-                .bound_extent(x, vec)
-                .vectorize(x)
-                .update()
-                .reorder(x, y, rx_direct)
-                .vectorize(x);
-        } else {
-            normalize
-                .store_in(MemoryType::Register)
-                .compute_at(output, xo)
-                .reorder_storage(y, x)
-                .bound_extent(y, N)
-                .bound_extent(x, vec)
-                .vectorize(y)
-                .unroll(x);
-            normalize.in()
-                .store_in(MemoryType::Register)
-                .compute_at(output, xo)
-                .bound_extent(y, N)
-                .bound_extent(x, vec)
-                .bound_extent(tx, 1)
-                .vectorize(y)
-                .unroll(x);
-
-            integrate_x
-                .compute_at(output, yo)
-                .reorder_storage(y, x, ty);
-            integrate_x.update(0)
-                .vectorize(y);
-            integrate_x.update(1)
-                .vectorize(y);
-
-            RVar rxo;
-            integrate_x
-                .update(1)
-                .reorder(y, rx_scan.x, rx_scan.y, ty)
-                .rename(rx_scan.y, rxo)
-                .unroll(rx_scan.x);
-            integrate_x
-                .update(2)
-                .reorder(y, rx_tail.x, ty)
-                .rename(rx_tail.x, rxo);
-
-            blur_y
-                .compute_at(integrate_x, rxo)
-                .store_in(MemoryType::Register);
-
-            blur_y.update(0)
-                .vectorize(x);
-            blur_y.update(1)
-                .vectorize(x)
-                .unroll(ry_scan);
-
-            diff_y.compute_at(integrate_x, rxo)
-                .store_in(MemoryType::Register)
-                .vectorize(x)
-                .unroll(y);
-
-            blur_y.in()
-                .compute_at(integrate_x, rxo)
-                .store_in(MemoryType::Register)
-                .reorder_storage(y, x, ty)
-                .vectorize(x)
-                .unroll(y);
-        }
-
-        blur_y_init
-            .bound_extent(ty, 1)
-            .compute_at(output, yo)
-            .vectorize(x, vec, TailStrategy::GuardWithIf)
-            .align_storage(x, vec);
-        if (use_down_y) {
-            blur_y_init
-                .vectorize(x, vec * 2, TailStrategy::GuardWithIf);
-            blur_y_init.update(0)
-                .reorder(x, ry_init_coarse, ty)
-                .vectorize(x, vec * 2, TailStrategy::GuardWithIf);
-            blur_y_init.update(1)
-                .reorder(x, ry_init_fine_2, ty)
-                .vectorize(x, vec * 2, TailStrategy::GuardWithIf);
-            blur_y_init.update(2)
-                .reorder(x, ry_init_fine_1, ty)
-                .vectorize(x, vec * 2, TailStrategy::GuardWithIf);
-        } else {
-            blur_y_init.update(0)
-                .reorder(x, ry_init_full, ty)
-                .vectorize(x, vec * 2, TailStrategy::GuardWithIf);
-        }
-
-        for (Func f : {blur_y, blur_y_init}) {
-            f.specialize(condition);
-            f.specialize_fail("unreachable");
-            if (use_blur_x_direct) {
-                // f.store_in(MemoryType::Register);
-            }
-        }
-    }
-
-    Expr result = results.back();
-
-    for (size_t i = conditions.size() - 1; i > 0; i--) {
-        result = select(conditions[i - 1], results[i - 1], result);
-    }
-
-    output(x, tx, y) = result;
-
-    down_y.compute_root()
-        .split(x, tx, x, 1024, TailStrategy::GuardWithIf)
-        .reorder(y, x, tx, ty)
-        .fuse(tx, ty, ty)
-        .parallel(ty)
-        .unroll(y)
-        .split(x, xo, xi, natural_vector_size(small_sum_type), TailStrategy::RoundUp)
-        .vectorize(xi);
-
-    /*
-    down_y_1.compute_at(down_y, xi).unroll(y).update().unroll(r_down_1).unroll(y);
-    down_y_2.compute_at(down_y, xi).update().unroll(r_down_2);
-    */
-
-    down_y_1.compute_at(down_y, ty)
-        .vectorize(x, natural_vector_size(small_sum_type), TailStrategy::GuardWithIf)
-        .update()
-        .vectorize(x, natural_vector_size(small_sum_type), TailStrategy::GuardWithIf)
-        .unroll(r_down_1);
-    down_y_2
-        .compute_at(down_y, xi)
-        .update(1)
-        .unroll(r_down_2);
-
-    output.dim(0).set_bounds(0, width);
-    output.dim(1).set_min(0);
-    output.dim(2).set_min(0);
-    input.dim(0).set_min(0);
-    input.dim(1).set_min(0);
-
-    output.specialize(diameter <= max_diameter_direct_blur_x)
-        .split(y, ty, y, N, TailStrategy::GuardWithIf)
-        .split(y, yo, yi, N)
-        .split(x, xo, xi, vec, TailStrategy::GuardWithIf)
-        .reorder(xi, xo, yi, yo, tx, ty)
-        .vectorize(xi)
-        .fuse(tx, ty, ty)
-        .parallel(ty);
-
-    output
-        .split(y, ty, y, N, TailStrategy::GuardWithIf)
-        .split(y, yo, yi, N)
-        .split(x, xo, xi, vec, TailStrategy::GuardWithIf)
-        .reorder(xi, yi, xo, yo, tx, ty)
-        .vectorize(xi)
-        .unroll(yi)
-        .fuse(tx, ty, ty)
-        .parallel(ty);
-
-    for (size_t i = conditions.size() - 1; i > 0; i--) {
-        output.specialize(conditions[i - 1]);
-    }
-    add_requirement(conditions.back(), "Unsupported diameter");
-
-    add_requirement(diameter > 0);
-    add_requirement(diameter % 2 == 1);
-}
-}
-;
-
-// TODO: low precision versions for small blurs
-using BoxBlurTiledU8 = BoxBlurTile<uint8_t, uint32_t>;
-using BoxBlurTiledU16 = BoxBlurTile<uint16_t, uint64_t>;
-using BoxBlurTiledF32 = BoxBlurTile<double, double>;
-HALIDE_REGISTER_GENERATOR(BoxBlurTiledU8, box_blur_tiled_u8)
-HALIDE_REGISTER_GENERATOR(BoxBlurTiledU16, box_blur_tiled_u16)
-HALIDE_REGISTER_GENERATOR(BoxBlurTiledF32, box_blur_tiled_f32)
-
-#endif
