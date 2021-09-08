@@ -479,16 +479,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // Collapse the prefetched region into lower dimension whenever is possible.
         // TODO(psuriana): Deal with negative strides and overlaps.
 
-        internal_assert(op->args.size() % 2 == 0);  // Format: {base, offset, extent0, min0, ...}
+        internal_assert(op->args.size() % 2 == 0);  // Prefetch: {base, offset, extent0, stride0, ...}
 
-        vector<Expr> args(op->args);
-        bool changed = false;
-        for (size_t i = 0; i < op->args.size(); ++i) {
-            args[i] = mutate(op->args[i], nullptr);
-            if (!args[i].same_as(op->args[i])) {
-                changed = true;
-            }
-        }
+        auto [args, changed] = mutate_with_changes(op->args, nullptr);
 
         // The {extent, stride} args in the prefetch call are sorted
         // based on the storage dimension in ascending order (i.e. innermost
@@ -611,7 +604,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // Note that this call promises to evaluate exactly one of the conditions,
         // so this optimization should be safe.
 
-        internal_assert(op->args.size() == 3);
+        internal_assert(op->args.size() == 2 || op->args.size() == 3);
         Expr cond_value = mutate(op->args[0], nullptr);
 
         // Ignore tags for our purposes here
@@ -623,16 +616,20 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         if (is_const_one(cond)) {
             return mutate(op->args[1], bounds);
         } else if (is_const_zero(cond)) {
-            return mutate(op->args[2], bounds);
+            if (op->args.size() == 3) {
+                return mutate(op->args[2], bounds);
+            } else {
+                return mutate(make_zero(op->type), bounds);
+            }
         } else {
             Expr true_value = mutate(op->args[1], nullptr);
             bool true_unreachable = in_unreachable;
             in_unreachable = false;
-            Expr false_value = mutate(op->args[2], nullptr);
+            Expr false_value = op->args.size() == 3 ? mutate(op->args[2], nullptr) : Expr();
             bool false_unreachable = in_unreachable;
 
             if (true_unreachable && false_unreachable) {
-                return false_value;
+                return true_value;
             }
             in_unreachable = false;
             if (true_unreachable) {
@@ -643,13 +640,14 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
 
             if (cond_value.same_as(op->args[0]) &&
                 true_value.same_as(op->args[1]) &&
-                false_value.same_as(op->args[2])) {
+                (op->args.size() == 2 || false_value.same_as(op->args[2]))) {
                 return op;
             } else {
-                return Internal::Call::make(op->type,
-                                            Call::if_then_else,
-                                            {std::move(cond_value), std::move(true_value), std::move(false_value)},
-                                            op->call_type);
+                vector<Expr> args = {std::move(cond_value), std::move(true_value)};
+                if (op->args.size() == 3) {
+                    args.push_back(std::move(false_value));
+                }
+                return Internal::Call::make(op->type, Call::if_then_else, args, op->call_type);
             }
         }
     } else if (op->is_intrinsic(Call::mux)) {
@@ -840,19 +838,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
 
     // No else: we want to fall thru from the PureExtern clause.
     {
-        vector<Expr> new_args(op->args.size());
-        bool changed = false;
-
-        // Mutate the args
-        for (size_t i = 0; i < op->args.size(); i++) {
-            const Expr &old_arg = op->args[i];
-            Expr new_arg = mutate(old_arg, nullptr);
-            if (!new_arg.same_as(old_arg)) {
-                changed = true;
-            }
-            new_args[i] = std::move(new_arg);
-        }
-
+        auto [new_args, changed] = mutate_with_changes(op->args, nullptr);
         if (!changed) {
             return op;
         } else {

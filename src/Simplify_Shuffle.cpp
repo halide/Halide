@@ -6,17 +6,21 @@ namespace Internal {
 using std::vector;
 
 Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
-    if (op->is_extract_element() &&
-        (op->vectors[0].as<Ramp>() ||
-         op->vectors[0].as<Broadcast>())) {
-        // Extracting a single lane of a ramp or broadcast
-        if (const Ramp *r = op->vectors[0].as<Ramp>()) {
-            return mutate(r->base + op->indices[0] * r->stride, bounds);
-        } else if (const Broadcast *b = op->vectors[0].as<Broadcast>()) {
-            return mutate(b->value, bounds);
-        } else {
-            internal_error << "Unreachable";
-            return Expr();
+    if (op->is_extract_element()) {
+        int index = op->indices[0];
+        internal_assert(index >= 0);
+        for (const Expr &vector : op->vectors) {
+            if (index < vector.type().lanes()) {
+                // Extracting a single lane of a ramp or broadcast
+                if (const Ramp *r = vector.as<Ramp>()) {
+                    return mutate(r->base + index * r->stride, bounds);
+                } else if (const Broadcast *b = vector.as<Broadcast>()) {
+                    return mutate(b->value, bounds);
+                } else {
+                    break;
+                }
+            }
+            index -= vector.type().lanes();
         }
     }
 

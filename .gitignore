@@ -12,7 +12,7 @@ python_bindings/bin/*
 build-64/*
 build-ios/*
 build-osx/*
-build_wasm/*
+build_wasm*/*
 cmake_build*/*
 */build/*
 tmp/*

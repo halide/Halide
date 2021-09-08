@@ -1,5 +1,8 @@
+#include <atomic>
 #include <cmath>
 #include <fstream>
+#include <memory>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 
@@ -751,7 +754,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
     const char kUsage[] =
         "gengen\n"
         "  [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-d 1|0]\n"
-        "  [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME] [-s AUTOSCHEDULER_NAME]\n"
+        "  [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME] [-s AUTOSCHEDULER_NAME] [-t TIMEOUT]\n"
         "       target=target-string[,target-string...] [generator_arg=value [...]]\n"
         "\n"
         " -d  Build a module that is suitable for using for gradient descent calculationn\n"
@@ -776,7 +779,9 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
         "     find one. Flags across all of the targets that do not affect runtime code\n"
         "     generation, such as `no_asserts` and `no_runtime`, are ignored.\n"
         "\n"
-        " -s  The name of an autoscheduler to set as the default.\n";
+        " -s  The name of an autoscheduler to set as the default.\n"
+        " -t  Timeout for the Generator to run, in seconds; mainly useful to ensure that bugs and/or degenerate"
+        "     cases don't stall build systems. Defaults to 900 (=15 minutes). Specify 0 to allow ~infinite time.\n";
 
     std::map<std::string, std::string> flags_info = {
         {"-d", "0"},
@@ -788,6 +793,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
         {"-p", ""},
         {"-r", ""},
         {"-s", ""},
+        {"-t", "900"},  // 15 minutes
     };
     GeneratorParamsMap generator_args;
 
@@ -985,6 +991,25 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
                                                               json_compiler_logger_factory :
                                                               no_compiler_logger_factory;
 
+    std::atomic<bool> generator_finished = false;
+    const int timeout_in_seconds = std::stoi(flags_info["-t"]);
+    const auto timeout_time = std::chrono::steady_clock::now() + std::chrono::seconds(timeout_in_seconds);
+    std::thread timeout_monitor([timeout_time, timeout_in_seconds, &generator_finished]() {
+        if (timeout_in_seconds <= 0) {
+            // No watchdog timer, just let it run as long as it likes.
+            return;
+        }
+        while (!generator_finished) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            if (std::chrono::steady_clock::now() >= timeout_time) {
+                fprintf(stderr, "Timed out waiting for Generator to complete (%d seconds)!\n", timeout_in_seconds);
+                fflush(stdout);
+                fflush(stderr);
+                exit(1);
+            }
+        }
+    });
+
     if (!runtime_name.empty()) {
         std::string base_path = compute_base_path(output_dir, runtime_name, "");
 
@@ -1033,6 +1058,9 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
             compile_multitarget(function_name, output_files, targets, target_strings, module_factory, compiler_logger_factory);
         }
     }
+
+    generator_finished = true;
+    timeout_monitor.join();
 
     return 0;
 }
@@ -1277,7 +1305,7 @@ void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
     Halide::GeneratorContext::init_from_context(context);
     internal_assert(param_info_ptr == nullptr);
     // pre-emptively build our param_info now
-    param_info_ptr.reset(new GeneratorParamInfo(this, size));
+    param_info_ptr = std::make_unique<GeneratorParamInfo>(this, size);
 }
 
 void GeneratorBase::set_generator_names(const std::string &registered_name, const std::string &stub_name) {

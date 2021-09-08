@@ -322,12 +322,6 @@ Stmt remove_promises(const Stmt &s);
  * the tagged expression. If not, returns the expression. */
 Expr unwrap_tags(const Expr &e);
 
-/** Expressions tagged with this intrinsic are suggestions that
- * vectorization of loops with guard ifs should be implemented with
- * non-faulting predicated loads and stores, instead of scalarizing
- * an if statement. */
-Expr predicate(Expr e);
-
 // Secondary args to print can be Exprs or const char *
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {
 }
@@ -1476,6 +1470,16 @@ namespace Internal {
  * context-dependent, because 'value' might be statically bounded at
  * some point in the IR (e.g. due to a containing if statement), but
  * not elsewhere.
+ *
+ * This intrinsic always evaluates to its first argument. If this value is
+ * used by a side-effecting operation and it is outside the range specified
+ * by its second and third arguments, behavior is undefined. The compiler can
+ * therefore assume that the value is within the range given and optimize
+ * accordingly. Note that this permits promise_clamped to evaluate to
+ * something outside of the range, provided that this value is not used.
+ *
+ * Note that this produces an intrinsic that is marked as 'pure' and thus is
+ * allowed to be hoisted, etc.; thus, extra care must be taken with its use.
  **/
 Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max);
 }  // namespace Internal

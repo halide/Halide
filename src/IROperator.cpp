@@ -1070,12 +1070,6 @@ Expr unwrap_tags(const Expr &e) {
     return e;
 }
 
-Expr predicate(Expr e) {
-    Type t = e.type();
-    return Internal::Call::make(t, Internal::Call::predicate,
-                                {std::move(e)}, Internal::Call::PureIntrinsic);
-}
-
 Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args) {
     return Internal::Call::make(Int(32),
                                 "halide_error_requirement_failed",
@@ -1543,7 +1537,7 @@ Expr unsafe_promise_clamped(const Expr &value, const Expr &min, const Expr &max)
     return Internal::Call::make(value.type(),
                                 Internal::Call::unsafe_promise_clamped,
                                 {value, n_min_val, n_max_val},
-                                Internal::Call::Intrinsic);
+                                Internal::Call::PureIntrinsic);
 }
 
 namespace Internal {
@@ -1556,7 +1550,7 @@ Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max) {
     return Internal::Call::make(value.type(),
                                 Internal::Call::promise_clamped,
                                 {value, n_min_val, n_max_val},
-                                Internal::Call::Intrinsic);
+                                Internal::Call::PureIntrinsic);
 }
 }  // namespace Internal
 

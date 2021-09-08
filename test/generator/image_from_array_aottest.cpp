@@ -102,10 +102,8 @@ void verify_image_construction_from_array(Array &vals) {
     Buffer<T> img(vals);
     vector<int> sizes(dimension_sizes(vals));
     int dims = (int)sizes.size();
-    int n = 1;
     for (int i = 0; i < dims; ++i) {
         compare_extents(img, sizes[i], i);
-        n *= sizes[i];
     }
     const void *reference = (const void *)first_of_array(vals);
     const void *under_test = (const void *)(&img());

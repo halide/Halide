@@ -7,7 +7,9 @@
  * pipeline.
  */
 
+#include <initializer_list>
 #include <map>
+#include <memory>
 #include <vector>
 
 #include "ExternalCode.h"
@@ -121,8 +123,8 @@ public:
         }
         template<typename T, typename... Args,
                  typename = typename std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>::type>
-        RealizationArg(Buffer<T> &a, Args &&...args) {
-            buffer_list.reset(new std::vector<Buffer<>>({a, args...}));
+        RealizationArg(Buffer<T> &a, Args &&...args)
+            : buffer_list(std::make_unique<std::vector<Buffer<>>>(std::initializer_list<Buffer<>>{a, std::forward<Args>(args)...})) {
         }
         RealizationArg(RealizationArg &&from) = default;
 

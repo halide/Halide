@@ -21,7 +21,7 @@ void run_benchmark(const std::string &filename, const InterpreterOptions &option
     std::vector<char> buffer = read_entire_file(filename);
     std::unique_ptr<OpGroup> model = parse_tflite_model_from_buffer(buffer.data());
 
-    if (options.verbose) {
+    if (options.verbosity >= 1) {
         model->dump(std::cout);
     }
 
@@ -49,7 +49,7 @@ __attribute__((visibility("default"))) int main(int argc, char **argv) {
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--verbose")) {
-            options.verbose = true;
+            options.verbosity = 1;
             continue;
         }
         if (!strcmp(argv[i], "--trace")) {
@@ -62,7 +62,7 @@ __attribute__((visibility("default"))) int main(int argc, char **argv) {
         }
     }
 
-    if (options.verbose && options.trace) {
+    if (options.verbosity > 0 && options.trace) {
         HLOG(ERROR) << "You cannot specify --trace and --verbose at the same time.\n";
         exit(-1);
     }

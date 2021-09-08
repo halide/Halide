@@ -91,15 +91,7 @@ bool has_storage(const TensorPtr &t) {
 class InPlace : public OpVisitor {
     using OpVisitor::visit;
 
-    // We can alias two tensors if the input is not used after the output is written,
-    // and we meet a number of other requirements.
-    bool maybe_alias_tensors(TensorPtr input, TensorPtr output, TensorOffset offset = {}) const {
-        // If the input is used anywhere else, we should not alias it.
-        // TODO: This is conservative, we could alias it if it is the *last* use.
-        if (input->consumers().size() != 1) {
-            return false;
-        }
-
+    bool is_alias_possible(TensorPtr input, TensorPtr output) const {
         // If either tensor is dynamic, can't alias them.
         if (input->is_dynamic() || output->is_dynamic()) {
             return false;
@@ -111,11 +103,6 @@ class InPlace : public OpVisitor {
             return false;
         }
 
-        if (input->rank() != output->rank()) {
-            // TODO: We should be able to alias reshapes.
-            return false;
-        }
-
         if (input->type().bytes() != output->type().bytes()) {
             // We can't alias tensors with types of different size.
             return false;
@@ -124,6 +111,27 @@ class InPlace : public OpVisitor {
         // We can't alias an input that is an input or output of the root graph.
         // TODO: We could, if we don't change the shape.
         if (is_root_input_or_output(input)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    // We can alias two tensors if the input is not used after the output is written,
+    // and we meet a number of other requirements.
+    bool maybe_alias_tensors(TensorPtr input, TensorPtr output, TensorOffset offset = {}) const {
+        if (!is_alias_possible(input, output)) {
+            return false;
+        }
+
+        // If the input is used anywhere else, we should not alias it.
+        // TODO: This is conservative, we could alias it if it is the *last* use.
+        if (input->consumers().size() != 1) {
+            return false;
+        }
+
+        // rank has to match for most aliasing (note that Reshape is an exception to this)
+        if (input->rank() != output->rank()) {
             return false;
         }
 
@@ -220,7 +228,27 @@ class InPlace : public OpVisitor {
     }
 
     void visit(ReshapeOp *op) {
-        maybe_alias_tensors(op->input(), op->output());
+        const TensorPtr &input = op->input();
+        const TensorPtr &output = op->output();
+
+        // Reshape is unusual in that it's OK to alias Reshapes with mismatched rank
+        // (indeed, this is almost always the case), so we handle everything here
+        // instead of calling maybe_alias_tensors().
+        if (!is_alias_possible(input, output)) {
+            return;
+        }
+
+        if (!input->is_dense() || !output->is_dense()) {
+            // Can't alias a Reshape unless both Tensors have dense strides.
+            return;
+        }
+
+        constexpr bool is_reshape = true;
+        if (!has_storage(input)) {
+            input->set_alias_of(output, {}, is_reshape);
+        } else if (!has_storage(output)) {
+            output->set_alias_of(input, {}, is_reshape);
+        }
     }
 
     void visit(OpGroup *op) {
@@ -298,12 +326,13 @@ class PadForOps : public OpVisitor {
         new_ops.emplace_back(std::move(pad));
     }
 
-    void visit(Conv2DOp *op) {
+    void visit(ConvOp *op) {
         pad_for_op(op, 0, 0);
 
         // We also need to tile the filter.
         TensorPtr filter = op->filter();
-        if (op->filter()->rank() == 4) {
+        if (op->filter()->rank() == op->input()->rank()) {
+            // This op has not yet had its filter tiled, do it now.
             BoundsMap bounds = op->map_bounds(1, 0);
             Box tiled_shape = bounds.evaluate(op->output()->bounds());
 
@@ -314,7 +343,7 @@ class PadForOps : public OpVisitor {
                 std::fill(quantization.zero.begin(), quantization.zero.end(), 0);
             }
             TensorPtr tiled =
-                std::make_shared<Tensor>(filter->name() + "_tiled", type, tiled_shape, quantization);
+                std::make_shared<Tensor>(filter->name() + ".tiled", type, tiled_shape, quantization);
             // Maybe more than one op uses this same filter...?
             replace_consumers(filter, tiled);
 
@@ -324,6 +353,26 @@ class PadForOps : public OpVisitor {
     }
 
     void visit(DepthwiseConv2DOp *op) {
+        TensorPtr input = op->input();
+        TensorPtr output = op->output();
+        if (op->depth_multiplier() != 1 && op->depth_multiplier() < output->extent(0)) {
+            // Make an UpsampleChannels op and a new tensor for the upsampled result.
+            Box upsampled_shape = input->bounds();
+            upsampled_shape[0].min *= op->depth_multiplier();
+            upsampled_shape[0].max = (upsampled_shape[0].max + 1) * op->depth_multiplier() - 1;
+            TensorPtr upsampled =
+                std::make_shared<Tensor>(input->name() + "_upsampled", input->type(), upsampled_shape, input->quantization());
+            op->set_input(upsampled);
+
+            // Add the new tensor, op, and update the input.
+            OpPtr upsample = make_op<UpsampleChannelsOp>(input, op->depth_multiplier(), upsampled);
+            new_ops.emplace_back(std::move(upsample));
+
+            op->set_depth_multiplier(1);
+        }
+
+        // TODO: It might be worth enabling UpsampleChannels to handle padding, and fusing the padding
+        // in the case we need to upsample the channels.
         pad_for_op(op, 0, 0);
     }
 
@@ -370,8 +419,10 @@ class FusePadOps : public OpVisitor {
 void pad_for_ops(OpGroup *op) {
     PadForOps padder;
     op->accept(&padder);
-    for (auto &i : padder.new_ops) {
-        op->add(std::move(i));
+    // We need to add in reverse order, so ops that depend on newly added ops go
+    // in the right place.
+    for (auto i = padder.new_ops.rbegin(); i != padder.new_ops.rend(); ++i) {
+        op->add(std::move(*i));
     }
 
     // Some networks use padding already for other reasons, so
@@ -407,7 +458,11 @@ void fold_constants(OpGroup *root) {
             // Since we aren't ready for arena allocation,
             // we'll just do these as one-off heap allocs.
             for (int j = 0; j < op->output_count(); j++) {
-                op->output(j)->allocate_from_heap();
+                // Note that an output could be 'allocated' here if it
+                // is the result of a ReshapeOp that aliases constant data.
+                if (!op->output(j)->is_allocated()) {
+                    op->output(j)->allocate_from_heap();
+                }
             }
 
             // Run the whole op.

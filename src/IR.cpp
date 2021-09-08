@@ -1,6 +1,7 @@
 #include "IR.h"
 
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "IRPrinter.h"
 #include "IRVisitor.h"
 #include <numeric>
@@ -371,7 +372,8 @@ Stmt Store::make(const std::string &name, Expr value, Expr index, Parameter para
     return node;
 }
 
-Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args) {
+Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate) {
+    internal_assert(predicate.defined()) << "Provide with undefined predicate\n";
     internal_assert(!values.empty()) << "Provide of no values\n";
     for (size_t i = 0; i < values.size(); i++) {
         internal_assert(values[i].defined()) << "Provide of undefined value\n";
@@ -384,6 +386,7 @@ Stmt Provide::make(const std::string &name, const std::vector<Expr> &values, con
     node->name = name;
     node->values = values;
     node->args = args;
+    node->predicate = predicate;
     return node;
 }
 
@@ -488,6 +491,8 @@ Stmt Prefetch::make(const std::string &name, const std::vector<Type> &types,
     internal_assert(body.defined()) << "Prefetch of undefined\n";
     internal_assert(condition.defined()) << "Prefetch with undefined condition\n";
     internal_assert(condition.type().is_bool()) << "Prefetch condition is not boolean\n";
+
+    user_assert(is_pure(prefetch.offset)) << "The offset to the prefetch directive must be pure.";
 
     Prefetch *node = new Prefetch;
     node->name = name;
@@ -617,7 +622,6 @@ const char *const intrinsic_op_names[] = {
     "mul_shift_right",
     "mux",
     "popcount",
-    "predicate",
     "prefetch",
     "promise_clamped",
     "random",

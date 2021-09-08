@@ -62,6 +62,13 @@ Halide::Expr approx_logistic(int q, const Halide::Expr &x, const Halide::Expr &q
 // Approximate 2^q*tanh(x/2^q_x)
 Halide::Expr approx_tanh(int q, const Halide::Expr &x, const Halide::Expr &q_x, const Halide::Type &type = Halide::Int(32));
 
+// Compute i16(x * multiplier >> shift). The optimal expression for this may depend on the target.
+Halide::Expr quantize_i16(const Halide::Expr &x, const Halide::Expr &multiplier, const Halide::Expr &shift, const Halide::Target &target);
+
+// Compute u8(clamp((x * multiplier >> shift) + zero, min, max)). The optimal expression for this may depend on the target.
+Halide::Expr quantize_and_relu_u8(const Halide::Expr &x, const Halide::Expr &multiplier, const Halide::Expr &shift, const Halide::Expr &zero,
+                                  const Halide::Expr &min, const Halide::Expr &max, const Halide::Target &target);
+
 }  // namespace hannk
 
 #endif  // HANNK_COMMON_HALIDE_H

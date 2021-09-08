@@ -31,6 +31,7 @@ tests(GROUPS correctness
       bounds_of_func.cpp
       bounds_of_monotonic_math.cpp
       bounds_of_multiply.cpp
+      bounds_of_split.cpp
       bounds_query.cpp
       buffer_t.cpp
       c_function.cpp
@@ -150,6 +151,7 @@ tests(GROUPS correctness
       gpu_texture.cpp
       gpu_thread_barrier.cpp
       gpu_transpose.cpp
+      gpu_vectorize.cpp
       gpu_vectorized_shared_memory.cpp
       half_native_interleave.cpp
       halide_buffer.cpp

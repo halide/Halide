@@ -1169,18 +1169,6 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cleanup_on_error,$(GENER
 # https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_buffer_copy,$(GENERATOR_AOTCPP_TESTS))
 
-# https://github.com/halide/Halide/issues/2071
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_user_context,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2071
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_argvcall,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2071
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_metadata_tester,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2071
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cxx_mangling,$(GENERATOR_AOTCPP_TESTS))
-
 # https://github.com/halide/Halide/issues/2075
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_msan,$(GENERATOR_AOTCPP_TESTS))
 
@@ -1470,6 +1458,8 @@ $(FILTERS_DIR)/metadata_tester_ucon.a: $(BIN_DIR)/metadata_tester.generator
 	$(CURDIR)/$< -g metadata_tester -f metadata_tester_ucon $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-user_context-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
 
 $(BIN_DIR)/$(TARGET)/generator_aot_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.a
+
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.halide_generated.cpp
 
 $(FILTERS_DIR)/multitarget.a: $(BIN_DIR)/multitarget.generator
 	@mkdir -p $(@D)
@@ -2131,6 +2121,10 @@ ifneq (,$(findstring clang version 13.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring clang version 14.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
@@ -2151,7 +2145,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 110 111 120 130))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 110 111 120 130 140))
 LLVM_OK=yes
 endif
 
@@ -2345,7 +2339,7 @@ $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/uti
 
 # Note: you must have CLANG_FORMAT_LLVM_INSTALL_DIR set for this rule to work.
 # Let's default to the Ubuntu install location.
-CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-11
+CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-12
 
 .PHONY: format
 format:
@@ -2353,7 +2347,7 @@ format:
 
 # Note: you must have CLANG_TIDY_LLVM_INSTALL_DIR set for these rules to work.
 # Let's default to the Ubuntu install location.
-CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-11
+CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-12
 
 .PHONY: clang-tidy
 clang-tidy:

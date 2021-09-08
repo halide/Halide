@@ -1712,7 +1712,7 @@ void check_boolean() {
     check(select(x == 3, 5, 7) - 7, select(x == 3, -2, 0));
     check(select(x == 3, 5, y) - y, select(x == 3, 5 - y, 0));
     check(select(x == 3, y, 5) - y, select(x == 3, 0, 5 - y));
-    check(y - select(x == 3, 5, y), select(x == 3, y + (-5), 0));
+    check(y - select(x == 3, 5, y), select(x == 3, y, 5) + (-5));
     check(y - select(x == 3, y, 5), select(x == 3, 0, y + (-5)));
 
     check(select(x == 3, 5, 7) == 7, x != 3);
@@ -2139,8 +2139,9 @@ int main(int argc, char **argv) {
     {
         // Check that contiguous prefetch call get collapsed
         Expr base = Variable::make(Handle(), "buf");
-        check(Call::make(Int(32), Call::prefetch, {base, x, 4, 1, 64, 4, min(x + y, 128), 256}, Call::Intrinsic),
-              Call::make(Int(32), Call::prefetch, {base, x, min(x + y, 128) * 256, 1}, Call::Intrinsic));
+        Expr offset = x;
+        check(Call::make(Int(32), Call::prefetch, {base, offset, 4, 1, 64, 4, min(x + y, 128), 256}, Call::Intrinsic),
+              Call::make(Int(32), Call::prefetch, {base, offset, min(x + y, 128) * 256, 1}, Call::Intrinsic));
     }
 
     // This expression is a good stress-test. It caused exponential

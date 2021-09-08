@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
     // ApplySplit should respect the order of the application of substitutions/
     // predicates/lets; otherwise, this combination of tail strategies will
     // cause an access out of bound error.
-    for (TailStrategy tail_strategy : {TailStrategy::GuardWithIf, TailStrategy::Predicate}) {
+    for (TailStrategy tail_strategy : {TailStrategy::GuardWithIf, TailStrategy::Predicate, TailStrategy::PredicateLoads}) {
         Func f("f"), input("input");
         Var x("x"), y("y"), c("c");
 

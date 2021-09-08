@@ -972,6 +972,13 @@ void CodeGen_D3D12Compute_Dev::add_kernel(Stmt s,
                                           const vector<DeviceArgument> &args) {
     debug(2) << "CodeGen_D3D12Compute_Dev::compile " << name << "\n";
 
+    // We need to scalarize/de-predicate any loads/stores, since HLSL does not
+    // support predication.
+    s = scalarize_predicated_loads_stores(s);
+
+    debug(2) << "CodeGen_D3D12Compute_Dev: after removing predication: \n"
+             << s;
+
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
     cur_kernel_name = name;
     d3d12compute_c.add_kernel(s, name, args);
@@ -1040,10 +1047,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
                 std::string new_name = unique_name(op->name);
                 replacements[op->name] = new_name;
 
-                std::vector<Expr> new_extents;
-                for (size_t i = 0; i < op->extents.size(); i++) {
-                    new_extents.push_back(mutate(op->extents[i]));
-                }
+                auto new_extents = mutate(op->extents);
                 Stmt new_body = mutate(op->body);
                 Expr new_condition = mutate(op->condition);
                 Expr new_new_expr;
