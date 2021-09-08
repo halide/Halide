@@ -59,14 +59,13 @@ Tile<3> is_3d_tile_index(const Expr &e) {
     vector<Expr> matches;
 
     // there could be a sub node
-    const Sub* sub = e.as<Sub>();
+    const Sub *sub = e.as<Sub>();
 
-    const Add* add = nullptr;
+    const Add *add = nullptr;
 
     if (sub) {
         add = sub->a.as<Add>();
-    }
-    else {
+    } else {
         add = e.as<Add>();
     }
 
@@ -74,8 +73,8 @@ Tile<3> is_3d_tile_index(const Expr &e) {
         return {};
     }
 
-    auto& first = add->a;
-    auto& second = add->b;
+    auto &first = add->a;
+    auto &second = add->b;
 
     // ramp(x[x*r](base), x[x*r](stride), x) + x[x*y](ramp(idx, 1, r))
 
@@ -120,7 +119,7 @@ Tile<3> is_3d_tile_index(const Expr &e) {
 
     if (sub) {
         Expr adj = sub->b;
-        const Broadcast* bcast = adj.as<Broadcast>();
+        const Broadcast *bcast = adj.as<Broadcast>();
 
         if (!bcast) {
             return {};

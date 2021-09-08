@@ -2568,7 +2568,6 @@ void CodeGen_LLVM::visit(const Call *op) {
     if (value) {
         return;
     }
-    
 
     // Some call nodes are actually injected at various stages as a
     // cue for llvm to generate particular ops. In general these are
