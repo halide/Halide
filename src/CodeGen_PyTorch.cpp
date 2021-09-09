@@ -25,13 +25,9 @@ void CodeGen_PyTorch::compile(const Module &module) {
                           "Please add \"-user_context\" to the generator's target options.\n";
         }
         stream << "#include \"ATen/cuda/CUDAContext.h\"\n";
-        stream << "#include \"HalideBuffer.h\"\n";
-        stream << "#include \"HalidePyTorchCudaHelpers.h\"\n";
-        stream << "#include \"HalidePyTorchHelpers.h\"\n";
-    } else {
-        stream << "#include \"HalideBuffer.h\"\n";
-        stream << "#include \"HalidePyTorchHelpers.h\"\n";
     }
+    stream << "#include \"HalideBuffer.h\"\n";
+    stream << "#include \"HalidePyTorchHelpers.h\"\n";
 
     stream << "\n";
 
@@ -100,7 +96,11 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
         stream << get_indent() << "CUresult res = cuCtxGetCurrent(&ctx);\n";
         stream << get_indent() << "AT_ASSERTM(res == 0, \"Could not acquire CUDA context\");\n";
         stream << get_indent() << "cudaStream_t stream = at::cuda::getCurrentCUDAStream(device_id);\n";
-        stream << get_indent() << "Halide::PyTorch::UserContext user_ctx(device_id, &ctx, &stream);\n";
+        stream << get_indent() << "struct UserContext {int device_id; CUcontext *cuda_context; cudaStream_t *stream; } user_ctx;\n";
+        stream << get_indent() << "user_ctx.device_id = device_id;\n";
+        stream << get_indent() << "user_ctx.cuda_context = &ctx;\n";
+        stream << get_indent() << "user_ctx.stream = &stream;\n";
+        // stream << get_indent() << "Halide::PyTorch::UserContext user_ctx(device_id, &ctx, &stream);\n";
         stream << get_indent() << "void* __user_context = (void*) &user_ctx;\n\n";
     }
 
@@ -322,7 +322,6 @@ inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
         std::string correct_src =
             R"GOLDEN_CODE(#include "ATen/cuda/CUDAContext.h"
 #include "HalideBuffer.h"
-#include "HalidePyTorchCudaHelpers.h"
 #include "HalidePyTorchHelpers.h"
 
 struct halide_buffer_t;
@@ -367,7 +366,10 @@ inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     CUresult res = cuCtxGetCurrent(&ctx);
     AT_ASSERTM(res == 0, "Could not acquire CUDA context");
     cudaStream_t stream = at::cuda::getCurrentCUDAStream(device_id);
-    Halide::PyTorch::UserContext user_ctx(device_id, &ctx, &stream);
+    struct UserContext {int device_id; CUcontext *cuda_context; cudaStream_t *stream; } user_ctx;
+    user_ctx.device_id = device_id;
+    user_ctx.cuda_context = &ctx;
+    user_ctx.stream = &stream;
     void* __user_context = (void*) &user_ctx;
 
     // Check tensors have contiguous memory and are on the correct device
