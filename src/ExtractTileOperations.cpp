@@ -73,8 +73,8 @@ Tile<3> is_3d_tile_index(const Expr &e) {
         return {};
     }
 
-    auto &first = add->a;
-    auto &second = add->b;
+    const auto &first = add->a;
+    const auto &second = add->b;
 
     // ramp(x[x*r](base), x[x*r](stride), x) + x[x*y](ramp(idx, 1, r))
 
