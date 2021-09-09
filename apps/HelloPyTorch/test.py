@@ -49,9 +49,9 @@ class TestAdd(unittest.TestCase):
             output = add(self.a, self.b)
 
             if is_double:
-                print("  Double-precision mode, backward_op:", backward_op)
+                print("  .Double-precision mode, backward_op:", backward_op)
             else:
-                print("  Single-precision mode, backward_op:", backward_op)
+                print("  .Single-precision mode, backward_op:", backward_op)
 
             diff = (output-self.gt).sum().item()
             assert diff == 0.0, "Test failed: sum should be 4, got %f" % diff
@@ -63,16 +63,15 @@ class TestAdd(unittest.TestCase):
                 output = add(self.a, self.b).sum()
                 output.backward()
             
-            # # Test the gradient is correct
-            # with warnings.catch_warnings():
             # Inputs are float, the gradient checker wants double inputs and
             # will issue a warning.
             warnings.filterwarnings(
-                "ignore", message="At least one of the inputs that requires "
-                "gradient is not of double precision")
+                "ignore", module=r".*gradcheck*")
+
+            # Test the gradient is correct
             res = th.autograd.gradcheck(add, [self.a, self.b], eps=1e-2)
 
-            print("  Test ran successfully: difference is", diff)
+            print("     Test ran successfully: difference is", diff)
 
 
 if __name__ == "__main__":
