@@ -780,6 +780,17 @@ public:
     }
 };
 
+void make_const_interval(Interval &interval) {
+    // Note that we can get non-const but well-defined results (e.g. signed_integer_overflow);
+    // for our purposes here, treat anything non-const as no-bound.
+    if (!is_const(interval.min)) {
+        interval.min = Interval::neg_inf();
+    }
+    if (!is_const(interval.max)) {
+        interval.max = Interval::pos_inf();
+    }
+}
+
 }  // namespace
 
 Expr push_rationals(const Expr &expr, const Direction direction) {
@@ -818,7 +829,7 @@ Expr approximate_optimizations(const Expr &expr, Direction direction, const Scop
 }
 
 bool possibly_correlated(const Expr &expr) {
-    // TODO: find a better way to detect possible correlations
+    // TODO: find a better (cheaper) way to detect possible correlations
     std::map<std::string, int> var_uses;
     CountVarUses counter(var_uses);
     expr.accept(&counter);
@@ -840,12 +851,7 @@ Interval approximate_constant_bounds(const Expr &expr, const Scope<Interval> &sc
         interval.min = simplify(interval.min);
         interval.max = simplify(interval.max);
 
-        if (!is_const(interval.min)) {
-            interval.min = Interval::neg_inf();
-        }
-        if (!is_const(interval.max)) {
-            interval.max = Interval::pos_inf();
-        }
+        make_const_interval(interval);
     }
 
     return interval;
@@ -862,25 +868,23 @@ Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scop
     return bound;
 }
 
+static bool disable_approximate_methods() {
+    return get_env_variable("HL_DISABLE_APPROX_CBOUNDS") == "1";
+}
+
 Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
     Expr expr = bound_correlated_differences(simplify(remove_likelies(e)));
     Interval interval = bounds_of_expr_in_scope(expr, scope, FuncValueBounds(), true);
     interval.min = simplify(interval.min);
     interval.max = simplify(interval.max);
+    make_const_interval(interval);
 
-    // Note that we can get non-const but well-defined results (e.g. signed_integer_overflow);
-    // for our purposes here, treat anything non-const as no-bound.
-    if (!is_const(interval.min)) {
-        interval.min = Interval::neg_inf();
+    if (!disable_approximate_methods()) {
+        Interval approx_interval = approximate_constant_bounds(expr, scope);
+        // Take the interesection of the previous method and the aggresive method.
+        interval.min = Interval::make_max(interval.min, approx_interval.min);
+        interval.max = Interval::make_min(interval.max, approx_interval.max);
     }
-    if (!is_const(interval.max)) {
-        interval.max = Interval::pos_inf();
-    }
-
-    Interval approx_interval = approximate_constant_bounds(expr, scope);
-    // Take the interesection of the previous method and the aggresive method.
-    interval.min = Interval::make_max(interval.min, approx_interval.min);
-    interval.max = Interval::make_min(interval.max, approx_interval.max);
 
     return interval;
 }
