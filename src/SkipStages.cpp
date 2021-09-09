@@ -78,37 +78,48 @@ private:
         op->body.accept(this);
         if (should_pop) {
             varying.pop(op->name);
-            //internal_assert(!expr_uses_var(predicate, op->name));
+            // internal_assert(!expr_uses_var(predicate, op->name));
         } else if (expr_uses_var(predicate, op->name)) {
             predicate = Let::make(op->name, op->min, predicate);
         }
     }
 
     template<typename T>
-    void visit_let(const std::string &name, const Expr &value, T body) {
-        bool old_varies = varies;
-        varies = false;
-        value.accept(this);
-        bool value_varies = varies;
-        varies |= old_varies;
-        if (value_varies) {
-            varying.push(name);
-        }
+    void visit_let(const T *op) {
+        struct Frame {
+            const T *op;
+            ScopedBinding<> binding;
+        };
+        vector<Frame> frames;
+
+        decltype(op->body) body;
+        do {
+            bool old_varies = varies;
+            varies = false;
+            op->value.accept(this);
+
+            frames.push_back(Frame{op, ScopedBinding<>(varies, varying, op->name)});
+
+            varies |= old_varies;
+            body = op->body;
+            op = body.template as<T>();
+        } while (op);
+
         body.accept(this);
-        if (value_varies) {
-            varying.pop(name);
-        }
-        if (expr_uses_var(predicate, name)) {
-            predicate = Let::make(name, value, predicate);
+
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            if (expr_uses_var(predicate, it->op->name)) {
+                predicate = Let::make(it->op->name, it->op->value, predicate);
+            }
         }
     }
 
     void visit(const LetStmt *op) override {
-        visit_let(op->name, op->value, op->body);
+        visit_let(op);
     }
 
     void visit(const Let *op) override {
-        visit_let(op->name, op->value, op->body);
+        visit_let(op);
     }
 
     void visit(const ProducerConsumer *op) override {
