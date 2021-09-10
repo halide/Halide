@@ -42,7 +42,7 @@ public:
 
     template<typename T>
     auto visit_let(const T *op) -> decltype(op->body) {
-        auto orig = op;
+        decltype(op->body) orig = op;
 
         struct Frame {
             const T *op;
