@@ -327,6 +327,7 @@ tests(GROUPS correctness
       uninitialized_read.cpp
       unique_func_image.cpp
       unroll_dynamic_loop.cpp
+      unroll_huge_mux.cpp
       unrolled_reduction.cpp
       unsafe_dedup_lets.cpp
       unsafe_promises.cpp
