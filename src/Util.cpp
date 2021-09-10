@@ -1,3 +1,9 @@
+#ifdef __APPLE__
+// This needs to be defined before any other includes in translation
+// units that use the getcontext/swapcontext family of functions
+#define _XOPEN_SOURCE
+#endif
+
 #include "Util.h"
 #include "Debug.h"
 #include "Error.h"
@@ -39,7 +45,22 @@
 #ifdef __APPLE__
 #define CAN_GET_RUNNING_PROGRAM_NAME
 #include <mach-o/dyld.h>
-#include <ucontext.h>  // For swapcontext
+
+// Get swapcontext/makecontext etc.
+//
+// Apple gets cranky about people using these (because at least some
+// part of passing a pointer to a function that takes some arguments
+// as if it's a function that takes no args and then calling it as a
+// variadic function is deprecated in C) but provides no
+// alternatives. It's likely they'll continue to have to allow them on
+// macos for a long time, and these are the entrypoints that tools
+// like tsan know about, so rolling your own asm is worse. We can
+// switch to an alternative when one exists. Meanwhile, we work around
+// their pesky deprecation macro. This is the last include in this
+// file, so there's no need to restore the value of the macro.
+#undef __OSX_AVAILABLE_BUT_DEPRECATED
+#define __OSX_AVAILABLE_BUT_DEPRECATED(...)
+#include <ucontext.h>
 #endif
 
 #ifdef _WIN32
