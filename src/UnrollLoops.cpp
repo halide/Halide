@@ -83,6 +83,11 @@ class UnrollLoops : public IRMutator {
             Stmt iters;
             for (int i = e->value - 1; i >= 0; i--) {
                 Stmt iter = substitute(for_loop->name, for_loop->min + i, body);
+                // It's necessary to simplify eagerly this iteration
+                // here to resolve things like muxes down to a single
+                // item before we go and make N copies of something of
+                // size N.
+                iter = simplify(iter);
                 if (!iters.defined()) {
                     iters = iter;
                 } else {
@@ -93,7 +98,7 @@ class UnrollLoops : public IRMutator {
                 }
             }
 
-            return simplify(iters);
+            return iters;
 
         } else {
             return IRMutator::visit(for_loop);

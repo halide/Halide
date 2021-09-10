@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
     Var x;
 
     std::vector<Expr> exprs;
-    for (int i = 0; i < 1000; i++) {  // Was 10000. See the associated github issue.
+    for (int i = 0; i < 10000; i++) {
         exprs.push_back(x & i);
     }
 
