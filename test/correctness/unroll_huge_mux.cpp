@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
     Var x;
 
     std::vector<Expr> exprs;
-    for (int i = 0; i < 10000; i++) {
+    for (int i = 0; i < 1000; i++) {  // Was 10000. See the associated github issue.
         exprs.push_back(x & i);
     }
 
@@ -16,11 +16,12 @@ int main(int argc, char **argv) {
     f.bound(x, 0, (int)exprs.size());
     f.unroll(x);
 
-    // This test uses more than 8MB in stack because the simplifier's
-    // Block visitor is still recursive and has a large stack
-    // frame. We'll put a 10MB cap on it to at least make sure the
-    // problem doesn't get worse. If this test crashes try raising the
-    // cap to see if we have a stack size regression.
+    // For 10000 expressions in the mux, this test uses more than 8MB
+    // in stack because the simplifier's Block visitor is still
+    // recursive and has a large stack frame. We'll put a 10MB cap on
+    // it to at least make sure the problem doesn't get worse. If this
+    // test crashes try raising the cap to see if we have a stack size
+    // regression.
     //
     // https://github.com/halide/Halide/issues/6238
 
