@@ -741,10 +741,10 @@ void run_with_large_stack(const std::function<void()> &action) {
     // stack frames - 64k.
     const size_t guard_band = 64 * 1024;
 
-    void *stack = mmap(nullptr, stack_size.size + guard_pages, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    void *stack = mmap(nullptr, stack_size.size + guard_band, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     internal_assert(stack);
 
-    mprotect((char *)stack + stack_size.size, guard_pages, PROT_NONE);
+    mprotect((char *)stack + stack_size.size, guard_band, PROT_NONE);
 
     getcontext(&context);
     context.uc_stack.ss_sp = stack;
@@ -759,7 +759,7 @@ void run_with_large_stack(const std::function<void()> &action) {
 
     swapcontext(&calling_context, &context);
 
-    munmap(stack, stack_size.size + guard_pages);
+    munmap(stack, stack_size.size + guard_band);
 
 #ifdef HALIDE_WITH_EXCEPTIONS
     if (args.exception) {
