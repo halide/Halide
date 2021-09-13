@@ -316,11 +316,21 @@ struct Dag {
         while ((1 << log_kernel_sum) < kernel_sum) {
             log_kernel_sum++;
         }
+
+        // Figure out the max depth of each value from the root of the tree (the output)
+        vector<int> depth(num_inputs + ops.size(), 0);
+        for (size_t j = ops.size() + num_inputs - 1; j >= (size_t)num_inputs; j--) {
+            const auto &op = ops[j - num_inputs];
+            int d = depth[j];
+            depth[op.i] = std::max(depth[op.i], d + 1);
+            depth[op.j] = std::max(depth[op.j], d + 1);
+        }
+
         vector<int> bits_per_input;
         vector<uint8_t> mask, shift;
         int total_bits = 0;
         for (int i = 0; i < num_inputs; i++) {
-            const int bits = log_kernel_sum - __builtin_ctz(k[i]);
+            const int bits = depth[i];
             bits_per_input.push_back(bits);
             mask.push_back((uint8_t)((1 << bits) - 1));
             shift.push_back(total_bits);
@@ -422,7 +432,7 @@ int main(int argc, const char **argv) {
 
     auto dags = enumerate_dags(num_inputs, max_ops);
 
-    map<vector<int>, pair<float, float>> bias_map;
+    map<vector<int>, float> best_error_map, best_bias_map;
 
     for (auto &dag : dags) {
         if (dag.ops.empty()) {
@@ -469,50 +479,78 @@ int main(int argc, const char **argv) {
             normalized_kernel.push_back(i >> shift);
         }
 
-        auto it = bias_map.find(normalized_kernel);
-        if (it != bias_map.end() && it->second.first == 0 && it->second.second <= 0.5) {
+        auto error_it = best_error_map.find(normalized_kernel);
+        auto bias_it = best_bias_map.find(normalized_kernel);
+        if (error_it != best_error_map.end() &&
+            bias_it->second == 0 &&
+            error_it->second <= 0.5) {
             // We already know how to do this one unbiased with minimal error
             continue;
         }
 
         // Try all possible roundings and find the one with the least
-        // bias.
-        pair<float, float> best_bias_and_error{0, 0};
-        size_t best_i = 0;
+        // bias and the one with the least error
+        float best_bias = 0, best_error = 0, error_of_best_bias = 0, bias_of_best_error = 0;
+        size_t best_bias_idx = 0, best_error_idx = 0;
         for (size_t i = 0; i < ((size_t)1 << dag.ops.size()); i++) {
             for (size_t j = 0; j < dag.ops.size(); j++) {
                 dag.ops[j].round = ((i >> j) & 1) ? Round::Up : Round::Down;
             }
             auto bias_and_error = dag.bias();
             auto bias = bias_and_error.first;
-            // Sort based on bias alone. Could change this to be error.
-            if (i == 0 || std::abs(bias) < std::abs(best_bias_and_error.first)) {
-                best_bias_and_error = bias_and_error;
-                best_i = i;
+            auto error = bias_and_error.second;
+            if (i == 0 || std::abs(bias) < std::abs(best_bias) ||
+                (std::abs(bias) == std::abs(best_bias) &&
+                 error < error_of_best_bias)) {
+                best_bias = bias;
+                error_of_best_bias = error;
+                best_bias_idx = i;
+            }
+            if (i == 0 || error < best_error ||
+                (error == best_error &&
+                 std::abs(bias) < std::abs(bias_of_best_error))) {
+                best_error = error;
+                bias_of_best_error = bias;
+                best_error_idx = i;
             }
         }
+
+        auto bias_dag = dag;
+        auto error_dag = dag;
+
         for (size_t j = 0; j < dag.ops.size(); j++) {
-            dag.ops[j].round = ((best_i >> j) & 1) ? Round::Up : Round::Down;
+            bias_dag.ops[j].round = ((best_bias_idx >> j) & 1) ? Round::Up : Round::Down;
+            error_dag.ops[j].round = ((best_error_idx >> j) & 1) ? Round::Up : Round::Down;
         }
 
-        /*
-        if (abs(best_bias_and_error.second) > 0.5) {
-            // Ignore ones with a max error > 0.5
-            continue;
-        }
-        */
+        if (error_it == best_error_map.end() ||
+            std::abs(best_bias) < std::abs(bias_it->second) ||
+            std::abs(best_error) < std::abs(error_it->second)) {
 
-        if (it == bias_map.end() || std::abs(best_bias_and_error.first) < std::abs(it->second.first)) {
-            bias_map[normalized_kernel] = best_bias_and_error;
+            // TODO: Use the other thing to break ties
 
-            dag.dump();
+            best_bias_map[normalized_kernel] = best_bias;
+            best_error_map[normalized_kernel] = best_error;
+
+            bias_dag.dump();
             std::cout << "Kernel: ";
-            for (int c : kernel) {
+            for (int c : normalized_kernel) {
                 std::cout << c << " ";
             }
             std::cout << "\n"
-                      << "Bias: " << best_bias_and_error.first << "\n"
-                      << "Max error: " << best_bias_and_error.second << "\n";
+                      << "Bias: " << best_bias << "\n"
+                      << "Error: " << error_of_best_bias << "\n";
+
+            if (best_error_idx != best_bias_idx) {
+                error_dag.dump();
+                std::cout << "Kernel: ";
+                for (int c : normalized_kernel) {
+                    std::cout << c << " ";
+                }
+                std::cout << "\n"
+                          << "Bias: " << bias_of_best_error << "\n"
+                          << "Error: " << best_error << "\n";
+            }
         }
     }
 
