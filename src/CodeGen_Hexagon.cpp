@@ -1268,9 +1268,8 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
         return concat_vectors(ret);
     }
 
-    // Maybe LLVM can do something with this.
-    // Hopefully it uses vdelta in the worst case.
-    return CodeGen_Posix::shuffle_vectors(a, b, indices);
+    // Use a general delta operation.
+    return vdelta(concat_vectors({a, b}), indices);
 }
 
 Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,
