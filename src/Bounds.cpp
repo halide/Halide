@@ -1642,7 +1642,7 @@ private:
 };
 
 // Version that exposes 'indent' is for internal use only
-Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound, int indent) {
+Interval bounds_of_expr_in_scope_with_indent(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound, int indent) {
 #if DO_TRACK_BOUNDS_INTERVALS
     const string spaces(indent, ' ');
     debug(0) << spaces << "BoundsOfExprInScope {\n"
@@ -1677,7 +1677,7 @@ Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope,
 }  // namespace
 
 Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound) {
-    return bounds_of_expr_in_scope(expr, scope, fb, const_bound, 0);
+    return bounds_of_expr_in_scope_with_indent(expr, scope, fb, const_bound, 0);
 }
 
 Region region_union(const Region &a, const Region &b) {
@@ -1980,7 +1980,7 @@ private:
                                      const Scope<Interval> &scope,
                                      const FuncValueBounds &func_bounds = empty_func_value_bounds(),
                                      bool const_bound = false) {
-        return ::Halide::Internal::bounds_of_expr_in_scope(expr, scope, func_bounds, const_bound, log_indent);
+        return bounds_of_expr_in_scope_with_indent(expr, scope, func_bounds, const_bound, log_indent);
     }
 
     std::string log_spaces() const {

@@ -3,6 +3,7 @@
 #include <array>
 #include <fstream>
 #include <future>
+#include <memory>
 #include <utility>
 
 #include "CodeGen_C.h"
@@ -377,7 +378,7 @@ Module::Module(const std::string &name, const Target &target)
 
 void Module::set_auto_scheduler_results(const AutoSchedulerResults &auto_scheduler_results) {
     internal_assert(contents->auto_scheduler_results.get() == nullptr);
-    contents->auto_scheduler_results.reset(new AutoSchedulerResults(auto_scheduler_results));
+    contents->auto_scheduler_results = std::make_unique<AutoSchedulerResults>(auto_scheduler_results);
 }
 
 void Module::set_any_strict_float(bool any_strict_float) {
