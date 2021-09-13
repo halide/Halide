@@ -285,9 +285,11 @@ public:
         check("vpacko(v*.w,v*.w)", hvx_width / 2, in_u16(2 * x + 1));
         check("vdeal(v*,v*,r*)", hvx_width / 4, in_u32(2 * x + 1));
 
-        check("vdelta(v*.b,v*.b,r*)", hvx_width / 1, in_u8(3 * x / 2));
-        check("vdelta(v*.b,v*.h,r*)", hvx_width / 2, in_u16(3 * x / 2));
-        check("vdelta(v*.b,v*.h,r*)", hvx_width / 2, in_u32(3 * x / 2));
+        check("vdelta(v*,v*)", hvx_width / 1, in_u8(3 * x / 2));
+        check("vdelta(v*,v*)", hvx_width / 2, in_u16(3 * x / 2));
+        check("vdelta(v*,v*)", hvx_width / 2, in_u32(3 * x / 2));
+        check("vdelta(v*,v*)", hvx_width * 3, in_u16(x * 3));
+        check("vdelta(v*,v*)", hvx_width * 3, in_u8(x * 3));
 
         check("vlut32(v*.b,v*.b,r*)", hvx_width / 1, in_u8(u8_1));
         check("vlut32(v*.b,v*.b,r*)", hvx_width / 1, in_u8(clamp(u16_1, 0, 63)));
@@ -295,11 +297,6 @@ public:
         check("vlut16(v*.b,v*.h,r*)", hvx_width / 2, in_u16(clamp(u16_1, 0, 15)));
         check("vlut16(v*.b,v*.h,r*)", hvx_width / 2, in_u32(u8_1));
         check("vlut16(v*.b,v*.h,r*)", hvx_width / 2, in_u32(clamp(u16_1, 0, 15)));
-
-        // This tests the case of vlut with > 256 elements (thus forcing us to split into
-        // multiple vluts)
-        check("vdelta(v*.b,v*.h,r*)", hvx_width * 3, in_u16(x * 3));
-        check("vdelta(v*.b,v*.b,r*)", hvx_width * 3, in_u8(x * 3));
 
         check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width / 1, u8_sat(i16_1));
         check("v*.b = vpack(v*.h,v*.h):sat", hvx_width / 1, i8_sat(i16_1));
