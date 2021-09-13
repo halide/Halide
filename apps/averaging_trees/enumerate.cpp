@@ -9,6 +9,7 @@
 
 using namespace Halide;
 
+using std::map;
 using std::pair;
 using std::set;
 using std::vector;
@@ -234,7 +235,7 @@ struct Dag {
     }
 
     void dump() const {
-        std::cout << "Dag with " << num_inputs << " inputs:\n";
+        std::cout << "\nDag with " << num_inputs << " inputs:\n";
         int i = num_inputs;
         for (const auto &op : ops) {
             std::cout << i << ": ";
@@ -370,8 +371,7 @@ int main(int argc, const char **argv) {
 
     auto dags = enumerate_dags(num_inputs, max_ops);
 
-    set<vector<int>> seen_kernels;
-    set<vector<int>> unbiased_kernels;
+    map<vector<int>, double> bias_map;
 
     for (auto &dag : dags) {
         if (dag.ops.empty()) {
@@ -388,12 +388,25 @@ int main(int argc, const char **argv) {
         }
         */
 
-        // Don't filter on seeing a kernel before, because maybe
-        // there's a longer dag that gives us an unbiased version and
-        // we don't want to miss it.
-        // if (!seen_kernels.insert(kernel).second) continue;
+        // Shift all the kernel coefficients as rightwards as possible
+        // to canonicalize the kernel.
+        vector<int> normalized_kernel;
+        normalized_kernel.reserve(kernel.size());
+        int mask = 0;
+        for (int i : kernel) {
+            mask |= i;
+        }
+        int shift = 0;
+        while (!(mask & 1)) {
+            mask >>= 1;
+            shift++;
+        }
+        for (int i : kernel) {
+            normalized_kernel.push_back(i >> shift);
+        }
 
-        if (unbiased_kernels.count(kernel)) {
+        auto it = bias_map.find(normalized_kernel);
+        if (it != bias_map.end() && it->second == 0) {
             // We already know how to do this one unbiased
             continue;
         }
@@ -416,32 +429,23 @@ int main(int argc, const char **argv) {
             dag.ops[j].round = ((best_i >> j) & 1) ? Round::Up : Round::Down;
         }
 
-        if (std::abs(best_bias) > 1e-5) continue;
+        /*
+        if (abs(best_bias) > 0.5) {
+            continue;
+        }
+        */
 
-        // Shift all the kernel coefficients as rightwards as possible
-        // to canonicalize the kernel.
-        int mask = 0;
-        for (int i : kernel) {
-            mask |= i;
-        }
-        int shift = 0;
-        while (!(mask & 1)) {
-            mask >>= 1;
-            shift++;
-        }
-        for (int &i : kernel) {
-            i >>= shift;
-        }
+        if (it == bias_map.end() || std::abs(best_bias) < std::abs(it->second)) {
+            bias_map[kernel] = best_bias;
 
-        if (!unbiased_kernels.insert(kernel).second) continue;
-
-        dag.dump();
-        std::cout << "Kernel: ";
-        for (int c : kernel) {
-            std::cout << c << " ";
+            dag.dump();
+            std::cout << "Kernel: ";
+            for (int c : kernel) {
+                std::cout << c << " ";
+            }
+            std::cout << "\n"
+                      << "Bias: " << best_bias << "\n";
         }
-        std::cout << "\n"
-                  << "Bias: " << best_bias << "\n";
     }
 
     return 0;
