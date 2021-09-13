@@ -159,6 +159,59 @@ void avg_up(uint8_t m_a, uint8_t s_a, uint8_t m_b, uint8_t s_b, Runtime::Buffer<
     f.realize(out);
 }
 
+template<int N>
+std::pair<float, float> compute_bias_and_error(vector<uint8_t> &s,
+                                               vector<uint8_t> &m,
+                                               vector<int> &c,
+                                               Runtime::Buffer<uint8_t> buf) {
+    static ImageParam in_buf(UInt(8), 1), shifts(UInt(8), 1), masks(UInt(8), 1), coeffs(Int(32), 1);
+    static Param<int> denom;
+    static Func f = [&]() {
+        Var x;
+        RDom r(0, in_buf.dim(0).extent() / 32);
+        Expr correct16 = cast<uint16_t>(0);
+        Expr idx = r * 32 + x;
+        for (int i = 0; i < N; i++) {
+            Expr e = cast<uint16_t>((idx >> cast<int>(shifts(i)))) & masks(i);
+            correct16 += e * cast<uint16_t>(coeffs(i));
+        }
+        Expr correct = cast<float>(correct16) * (1.0f / denom);
+
+        Func f;
+        f(x) = Tuple{0.f, 0.f};
+        Expr actual = cast<float>(in_buf(idx));
+        Expr error = actual - correct;
+        f(x) = Tuple{f(x)[0] + error, max(f(x)[1], abs(error))};
+        f.compute_root().vectorize(x).update().vectorize(x);
+
+        Func h;
+        RDom r2(0, 32);
+        h() = Tuple{0.f, 0.f};
+        h() = Tuple{h()[0] + f(r2)[0], max(h()[1], f(r2)[1])};
+
+        h.compile_jit();
+        return h;
+    }();
+
+    assert(s.size() == N);
+    assert(m.size() == N);
+    assert(c.size() == N);
+    const int size = buf.number_of_elements();
+    shifts.set(Buffer<uint8_t>(s.data(), N));
+    masks.set(Buffer<uint8_t>(m.data(), N));
+    coeffs.set(Buffer<int>(c.data(), N));
+    in_buf.set(Buffer<uint8_t>(std::move(buf)));
+    int d = 0;
+    for (int i : c) {
+        d += i;
+    }
+    denom.set(d);
+    auto bias_out = Buffer<float>::make_scalar();
+    auto error_out = Buffer<float>::make_scalar();
+    f.realize({bias_out, error_out});
+    return {bias_out() / size, error_out()};
+}
+
 uint64_t sum(Runtime::Buffer<uint8_t> a) {
     static ImageParam in(UInt(8), 1);
     static Buffer<uint32_t> out(1);
@@ -253,7 +306,7 @@ struct Dag {
         }
     }
 
-    double bias() {
+    pair<float, float> bias() {
         int kernel_sum = 0;
         auto k = effective_kernel();
         for (int i : k) {
@@ -302,25 +355,23 @@ struct Dag {
             i++;
         }
 
-        uint64_t s = sum(buf.sliced(1, buf.dim(1).max()));
-
-        uint32_t correct_sum = 0;
-        // Figure out the expected value of each input, and combine
-        // them using the kernel, to get the correct expected value of
-        // the output.
-        const uint32_t scale = N / kernel_sum;
-        for (int i = 0; i < num_inputs; i++) {
-            const double mean_input = ((1 << bits_per_input[i]) - 1) / 2.0;
-            correct_sum += (uint32_t)(scale * k[i] * mean_input);
+        switch (num_inputs) {
+        case 2:
+            return compute_bias_and_error<2>(shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+        case 3:
+            return compute_bias_and_error<3>(shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+        case 4:
+            return compute_bias_and_error<4>(shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+        case 5:
+            return compute_bias_and_error<5>(shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+        case 6:
+            return compute_bias_and_error<6>(shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+        case 7:
+            return compute_bias_and_error<7>(shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+        default:
+            assert(false);
+            return std::pair<float, float>{};
         }
-
-        // Note that we're letting things overflow on purpose, so
-        // we're only getting the bottom 32 bits of the bias. I'm
-        // hoping that's small enough that zero means zero.
-
-        int32_t bias = (s - correct_sum);
-
-        return ((double)bias / N);
     }
 };
 
@@ -371,7 +422,7 @@ int main(int argc, const char **argv) {
 
     auto dags = enumerate_dags(num_inputs, max_ops);
 
-    map<vector<int>, double> bias_map;
+    map<vector<int>, pair<float, float>> bias_map;
 
     for (auto &dag : dags) {
         if (dag.ops.empty()) {
@@ -387,6 +438,19 @@ int main(int argc, const char **argv) {
             continue;
         }
         */
+
+        // Skip dags that compute something then discard it
+        vector<bool> used(dag.ops.size() + num_inputs, false);
+        for (auto op : dag.ops) {
+            used[op.i] = used[op.j] = true;
+        }
+        bool unused_intermediate = false;
+        for (int i = 0; i < (int)dag.ops.size() - 1; i++) {
+            unused_intermediate |= (!used[num_inputs + i]);
+        }
+        if (unused_intermediate) {
+            continue;
+        }
 
         // Shift all the kernel coefficients as rightwards as possible
         // to canonicalize the kernel.
@@ -406,22 +470,24 @@ int main(int argc, const char **argv) {
         }
 
         auto it = bias_map.find(normalized_kernel);
-        if (it != bias_map.end() && it->second == 0) {
-            // We already know how to do this one unbiased
+        if (it != bias_map.end() && it->second.first == 0 && it->second.second <= 0.5) {
+            // We already know how to do this one unbiased with minimal error
             continue;
         }
 
         // Try all possible roundings and find the one with the least
         // bias.
-        double best_bias = 0;
+        pair<float, float> best_bias_and_error{0, 0};
         size_t best_i = 0;
         for (size_t i = 0; i < ((size_t)1 << dag.ops.size()); i++) {
             for (size_t j = 0; j < dag.ops.size(); j++) {
                 dag.ops[j].round = ((i >> j) & 1) ? Round::Up : Round::Down;
             }
-            auto bias = dag.bias();
-            if (i == 0 || std::abs(bias) < std::abs(best_bias)) {
-                best_bias = bias;
+            auto bias_and_error = dag.bias();
+            auto bias = bias_and_error.first;
+            // Sort based on bias alone. Could change this to be error.
+            if (i == 0 || std::abs(bias) < std::abs(best_bias_and_error.first)) {
+                best_bias_and_error = bias_and_error;
                 best_i = i;
             }
         }
@@ -430,13 +496,14 @@ int main(int argc, const char **argv) {
         }
 
         /*
-        if (abs(best_bias) > 0.5) {
+        if (abs(best_bias_and_error.second) > 0.5) {
+            // Ignore ones with a max error > 0.5
             continue;
         }
         */
 
-        if (it == bias_map.end() || std::abs(best_bias) < std::abs(it->second)) {
-            bias_map[kernel] = best_bias;
+        if (it == bias_map.end() || std::abs(best_bias_and_error.first) < std::abs(it->second.first)) {
+            bias_map[normalized_kernel] = best_bias_and_error;
 
             dag.dump();
             std::cout << "Kernel: ";
@@ -444,7 +511,8 @@ int main(int argc, const char **argv) {
                 std::cout << c << " ";
             }
             std::cout << "\n"
-                      << "Bias: " << best_bias << "\n";
+                      << "Bias: " << best_bias_and_error.first << "\n"
+                      << "Max error: " << best_bias_and_error.second << "\n";
         }
     }
 
