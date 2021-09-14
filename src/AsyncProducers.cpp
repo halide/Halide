@@ -457,7 +457,12 @@ class TightenProducerConsumerNodes : public IRMutator {
 
     Stmt make_producer_consumer(const string &name, bool is_producer, Stmt body, const Scope<int> &scope) {
         if (const LetStmt *let = body.as<LetStmt>()) {
-            Stmt orig = body;  // Only used to keep a reference to the let chain in scope.
+            Stmt orig = body;
+            // 'orig' is only used to keep a reference to the let
+            // chain in scope. We're going to be keeping pointers to
+            // LetStmts we peeled off 'body' while also mutating
+            // 'body', which is probably the only reference counted
+            // object that keeps those pointers live.
 
             // Peel off all lets that don't depend on any vars in scope.
             vector<const LetStmt *> containing_lets;
