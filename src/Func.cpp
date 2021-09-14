@@ -211,14 +211,12 @@ int Func::dimensions() const {
 }
 
 FuncRef Func::operator()(vector<Var> args) const {
-    int placeholder_pos, count;
-    std::tie(placeholder_pos, count) = add_implicit_vars(args);
+    auto [placeholder_pos, count] = add_implicit_vars(args);
     return FuncRef(func, args, placeholder_pos, count);
 }
 
 FuncRef Func::operator()(vector<Expr> args) const {
-    int placeholder_pos, count;
-    std::tie(placeholder_pos, count) = add_implicit_vars(args);
+    auto [placeholder_pos, count] = add_implicit_vars(args);
     return FuncRef(func, args, placeholder_pos, count);
 }
 
