@@ -96,11 +96,10 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
         stream << get_indent() << "CUresult res = cuCtxGetCurrent(&ctx);\n";
         stream << get_indent() << "AT_ASSERTM(res == 0, \"Could not acquire CUDA context\");\n";
         stream << get_indent() << "cudaStream_t stream = at::cuda::getCurrentCUDAStream(device_id);\n";
-        stream << get_indent() << "struct UserContext {int device_id; CUcontext *cuda_context; cudaStream_t *stream; } user_ctx;\n";
+        stream << get_indent() << "struct UserContext { int device_id; CUcontext *cuda_context; cudaStream_t *stream; } user_ctx;\n";
         stream << get_indent() << "user_ctx.device_id = device_id;\n";
         stream << get_indent() << "user_ctx.cuda_context = &ctx;\n";
         stream << get_indent() << "user_ctx.stream = &stream;\n";
-        // stream << get_indent() << "Halide::PyTorch::UserContext user_ctx(device_id, &ctx, &stream);\n";
         stream << get_indent() << "void* __user_context = (void*) &user_ctx;\n\n";
     }
 

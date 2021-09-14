@@ -1571,7 +1571,7 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
     // rather being promoted into zero-dimensional buffers.
     for (const auto *input : pi.inputs()) {
         // There can be multiple Funcs/Parameters per input if the
-        // input is an Array
+        // input is an Array.
         if (input->is_array()) {
             internal_assert(input->parameters_.size() == input->funcs_.size());
         }
