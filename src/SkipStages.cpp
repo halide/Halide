@@ -78,7 +78,6 @@ private:
         op->body.accept(this);
         if (should_pop) {
             varying.pop(op->name);
-            // internal_assert(!expr_uses_var(predicate, op->name));
         } else if (expr_uses_var(predicate, op->name)) {
             predicate = Let::make(op->name, op->min, predicate);
         }
