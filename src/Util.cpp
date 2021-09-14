@@ -742,11 +742,14 @@ void run_with_large_stack(const std::function<void()> &action) {
     const size_t guard_band = 64 * 1024;
 
     void *stack = mmap(nullptr, stack_size.size + guard_band, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-    internal_assert(stack);
+    internal_assert(stack) << "mmap failed with error " << strerror(errno);
 
-    mprotect((char *)stack + stack_size.size, guard_band, PROT_NONE);
+    int err = mprotect((char *)stack + stack_size.size, guard_band, PROT_NONE);
+    internal_assert(err == 0) << "mprotect failed with error " << strerror(errno);
 
-    getcontext(&context);
+    err = getcontext(&context);
+    internal_assert(err == 0) << "getcontext failed with error " << strerror(errno);
+
     context.uc_stack.ss_sp = stack;
     context.uc_stack.ss_size = stack_size.size;
     context.uc_stack.ss_flags = 0;
@@ -757,9 +760,11 @@ void run_with_large_stack(const std::function<void()> &action) {
     auto fnptr = reinterpret_bits<required_fn_ptr_type>((correct_fn_ptr_type)trampoline);
     makecontext(&context, fnptr, 1, &args);
 
-    swapcontext(&calling_context, &context);
+    err = swapcontext(&calling_context, &context);
+    internal_assert(err == 0) << "swapcontext failed with error " << strerror(errno);
 
-    munmap(stack, stack_size.size + guard_band);
+    err = munmap(stack, stack_size.size + guard_band);
+    internal_assert(err == 0) << "munmap failed with error " << strerror(errno);
 
 #ifdef HALIDE_WITH_EXCEPTIONS
     if (args.exception) {
