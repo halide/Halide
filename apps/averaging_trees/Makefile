@@ -1,5 +1,5 @@
 include ../support/Makefile.inc
 
-bin/enumerate: enumerate.cpp
+bin/%: %.cpp
 	mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIBHALIDE_LDFLAGS)
