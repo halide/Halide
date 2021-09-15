@@ -26,6 +26,14 @@ struct Avg {
     // Round up or down
     Round round;
 
+    Avg(int i, int j, Round round)
+        : i(i), j(j), round(round) {
+    }
+
+    bool operator==(const Avg &other) const {
+        return i == other.i && j == other.j && round == other.round;
+    }
+
     void dump() const {
         std::cout << "avg_" << (round == Round::Down ? "d" : "u") << "(" << i << ", " << j << ")";
     }
@@ -287,6 +295,20 @@ struct Dag {
         return i;
     }
 
+    int unused_values() const {
+        vector<bool> used(num_inputs + ops.size(), false);
+        for (size_t i = ops.size(); i > 0; i--) {
+            const auto &op = ops[i - 1];
+            used[op.i] = true;
+            used[op.j] = true;
+        }
+        int unused = 0;
+        for (bool u : used) {
+            unused += !u;
+        }
+        return unused;
+    }
+
     void dump() const {
         std::cout << "\nDag with " << num_inputs << " inputs:\n";
         int i = num_inputs;
@@ -385,17 +407,19 @@ struct Dag {
     }
 };
 
-vector<Dag> enumerate_dags(int num_inputs, int num_ops) {
+vector<Dag> enumerate_dags(int num_inputs, int num_ops, int max_unused_values = 1) {
     if (num_ops == 0) {
         Dag do_nothing{num_inputs, vector<Avg>{}};
         return vector<Dag>{do_nothing};
     }
 
-    vector<Dag> dags = enumerate_dags(num_inputs, num_ops - 1);
+    vector<Dag> dags = enumerate_dags(num_inputs, num_ops - 1, max_unused_values + 1);
     vector<Dag> new_dags;
     for (const auto &dag : dags) {
         // Add one new op to this dag. Don't worry about rounding direction.
-        new_dags.push_back(dag);
+        if (dag.unused_values() <= max_unused_values) {
+            new_dags.push_back(dag);
+        }
         int l = dag.last_used_input();
         for (int i = 0; i < num_inputs + (int)dag.ops.size(); i++) {
             // We're invariant to the order of the inputs, so force
@@ -404,14 +428,18 @@ vector<Dag> enumerate_dags(int num_inputs, int num_ops) {
             for (int j = i + 1; j < num_inputs + (int)dag.ops.size(); j++) {
                 if (j < num_inputs && j > std::max(i, l) + 1) continue;
 
-                bool already_has_this_op = false;
+                int instances_of_this_op = 0;
                 for (const auto &op : dag.ops) {
-                    already_has_this_op |= (op.i == i && op.j == j);
+                    instances_of_this_op += (op.i == i && op.j == j) ? 1 : 0;
                 }
+                // We're allowed two instances of each op: one rounding up and another rounding down
 
-                if (!already_has_this_op) {
+                if (instances_of_this_op < 2) {
                     new_dags.push_back(dag);
                     new_dags.back().ops.push_back(Avg{i, j, Round::Down});
+                    if (new_dags.back().unused_values() > max_unused_values) {
+                        new_dags.pop_back();
+                    }
                 }
             }
         }
@@ -432,22 +460,24 @@ int main(int argc, const char **argv) {
 
     auto dags = enumerate_dags(num_inputs, max_ops);
 
-    map<vector<int>, float> best_error_map, best_bias_map;
+    map<vector<int>, pair<float, float>> best_error_map, best_bias_map;
+
+    std::cout << "Enumerating " << dags.size() << " dags\n";
+    size_t counter = 0;
 
     for (auto &dag : dags) {
+        counter++;
+
+        if (counter % 10000 == 0) {
+            std::cout << counter << "/" << dags.size() << "\n";
+        }
+
         if (dag.ops.empty()) {
             continue;
         }
 
         vector<int> kernel = dag.effective_kernel();
         std::sort(kernel.begin(), kernel.end());
-
-        /*
-        if (kernel[0] == 0) {
-            // This kernel doesn't use one of its inputs
-            continue;
-        }
-        */
 
         // Skip dags that compute something then discard it
         vector<bool> used(dag.ops.size() + num_inputs, false);
@@ -479,15 +509,6 @@ int main(int argc, const char **argv) {
             normalized_kernel.push_back(i >> shift);
         }
 
-        auto error_it = best_error_map.find(normalized_kernel);
-        auto bias_it = best_bias_map.find(normalized_kernel);
-        if (error_it != best_error_map.end() &&
-            bias_it->second == 0 &&
-            error_it->second <= 0.5) {
-            // We already know how to do this one unbiased with minimal error
-            continue;
-        }
-
         // Try all possible roundings and find the one with the least
         // bias and the one with the least error
         float best_bias = 0, best_error = 0, error_of_best_bias = 0, bias_of_best_error = 0;
@@ -496,17 +517,26 @@ int main(int argc, const char **argv) {
             for (size_t j = 0; j < dag.ops.size(); j++) {
                 dag.ops[j].round = ((i >> j) & 1) ? Round::Up : Round::Down;
             }
+            // Skip dags that duplicate an op
+            bool bad = false;
+            for (size_t j = 0; j < dag.ops.size(); j++) {
+                for (size_t k = 0; k < j; k++) {
+                    bad |= (dag.ops[j] == dag.ops[k]);
+                }
+            }
+            if (bad) continue;
+
             auto bias_and_error = dag.bias();
             auto bias = bias_and_error.first;
             auto error = bias_and_error.second;
-            if (i == 0 || std::abs(bias) < std::abs(best_bias) ||
+            if (best_error == 0 || std::abs(bias) < std::abs(best_bias) ||
                 (std::abs(bias) == std::abs(best_bias) &&
                  error < error_of_best_bias)) {
                 best_bias = bias;
                 error_of_best_bias = error;
                 best_bias_idx = i;
             }
-            if (i == 0 || error < best_error ||
+            if (best_error == 0 || error < best_error ||
                 (error == best_error &&
                  std::abs(bias) < std::abs(bias_of_best_error))) {
                 best_error = error;
@@ -523,15 +553,23 @@ int main(int argc, const char **argv) {
             error_dag.ops[j].round = ((best_error_idx >> j) & 1) ? Round::Up : Round::Down;
         }
 
-        if (error_it == best_error_map.end() ||
-            std::abs(best_bias) < std::abs(bias_it->second) ||
-            std::abs(best_error) < std::abs(error_it->second)) {
+        auto error_it = best_error_map.find(normalized_kernel);
+        auto bias_it = best_bias_map.find(normalized_kernel);
+        bool better_bias =
+            error_it == best_error_map.end() ||
+            std::abs(best_bias) < std::abs(bias_it->second.first) ||
+            (std::abs(best_bias) == std::abs(bias_it->second.first) &&
+             error_of_best_bias < bias_it->second.second);
 
-            // TODO: Use the other thing to break ties
+        bool better_error =
+            error_it == best_error_map.end() ||
+            best_error < error_it->second.second ||
+            (best_error == error_it->second.second &&
+             std::abs(bias_of_best_error) < std::abs(bias_it->second.first));
 
-            best_bias_map[normalized_kernel] = best_bias;
-            best_error_map[normalized_kernel] = best_error;
-
+        if (better_bias) {
+            // This breaks a record for the best bias seen so far
+            best_bias_map[normalized_kernel] = std::make_pair(best_bias, error_of_best_bias);
             bias_dag.dump();
             std::cout << "Kernel: ";
             for (int c : normalized_kernel) {
@@ -540,8 +578,13 @@ int main(int argc, const char **argv) {
             std::cout << "\n"
                       << "Bias: " << best_bias << "\n"
                       << "Error: " << error_of_best_bias << "\n";
+        }
 
-            if (best_error_idx != best_bias_idx) {
+        if (better_error) {
+            best_error_map[normalized_kernel] = std::make_pair(bias_of_best_error, best_error);
+
+            if (!better_bias || best_error_idx != best_bias_idx) {
+                // Only print it if we didn't just print it above
                 error_dag.dump();
                 std::cout << "Kernel: ";
                 for (int c : normalized_kernel) {
