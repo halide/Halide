@@ -365,7 +365,7 @@ inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     CUresult res = cuCtxGetCurrent(&ctx);
     AT_ASSERTM(res == 0, "Could not acquire CUDA context");
     cudaStream_t stream = at::cuda::getCurrentCUDAStream(device_id);
-    struct UserContext {int device_id; CUcontext *cuda_context; cudaStream_t *stream; } user_ctx;
+    struct UserContext { int device_id; CUcontext *cuda_context; cudaStream_t *stream; } user_ctx;
     user_ctx.device_id = device_id;
     user_ctx.cuda_context = &ctx;
     user_ctx.stream = &stream;
