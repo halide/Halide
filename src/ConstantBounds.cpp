@@ -65,7 +65,6 @@ Expr handle_push_div(const Expr &expr, const Direction direction, const int64_t 
     } else if (const Div *op = expr.as<Div>()) {
         if (const IntImm *imm = op->b.as<IntImm>()) {
             if (imm->value > 0) {
-                // TODO: is it reasonable to be concerned about overflow here?
                 return handle_push_div(op->a, direction, denom * imm->value);
             }
         }
@@ -88,7 +87,7 @@ Expr handle_push_div(const Expr &expr, const Direction direction, const int64_t 
             const Direction new_direction = (constant->value > 0) ? direction : flip(direction);
 
             if ((constant->value % denom) == 0) {
-                // Keep pushing.
+                // (c0 * x) / c1 when c0 % c1 == 0 -> x * (c0 / c1)
                 const int64_t new_factor = div_imp(constant->value, denom);
                 if (new_factor == 1) {
                     return handle_push_none(op->a, new_direction);
@@ -96,6 +95,7 @@ Expr handle_push_div(const Expr &expr, const Direction direction, const int64_t 
                     return handle_push_mul(op->a, new_direction, new_factor);
                 }
             } else if ((denom % constant->value) == 0 && constant->value > 0) {
+                // (c0 * x) / c1 when c1 % c0 == 0 and c1 > 0 -> x / (c1 / c0)
                 const int64_t new_denom = div_imp(denom, constant->value);
                 if (new_denom == 1) {
                     return handle_push_none(op->a, new_direction);
@@ -124,7 +124,6 @@ Expr handle_push_mul(const Expr &expr, Direction direction, int64_t factor) {
     internal_assert(factor != 1) << "handle_push_mul called with factor=1 on Expr: " << expr << "\n";
 
     if (const IntImm *op = expr.as<IntImm>()) {
-        // TODO: check for overflow.
         int64_t value = op->value * factor;
         return IntImm::make(op->type, value);
     } else if (const Add *op = expr.as<Add>()) {
@@ -158,7 +157,6 @@ Expr handle_push_mul(const Expr &expr, Direction direction, int64_t factor) {
     } else if (const Mul *op = expr.as<Mul>()) {
         // Assume constant is on the RHS of Mul due to simplification.
         if (const IntImm *constant = op->b.as<IntImm>()) {
-            // TODO: check for overflow
             const Direction new_direction = (constant->value > 0) ? direction : flip(direction);
             return handle_push_mul(op->a, new_direction, factor * constant->value);
         }
@@ -243,7 +241,6 @@ Expr handle_push_none(const Expr &expr, Direction direction) {
 }
 
 // Taken from Simplify_Let.cpp
-// TODO: handle Let variables better...
 class CountVarUses : public IRVisitor {
     std::map<std::string, int> &var_uses;
 
@@ -279,6 +276,12 @@ class StripUnboundedTerms : public IRMutator {
     }
 
     using IRMutator::visit;
+
+    // Do nothing for constants.
+    // Don't recurse on casts, casts can bound the size of an Expr.
+    Expr visit(const Cast *op) override {
+        return op;
+    }
 
     Expr visit(const Variable *op) override {
         // A variable is unbounded if it appears only once *and* has no constant bounds.
@@ -447,7 +450,41 @@ class StripUnboundedTerms : public IRMutator {
         }
     }
 
-    // TODO: we might want to disable some IR types.
+    Expr visit(const Select *op) override {
+        // Do not visit condition, don't care about those variables.
+        Expr true_value = mutate(op->true_value);
+        Expr false_value = mutate(op->false_value);
+        if (true_value.same_as(op->true_value) &&
+            false_value.same_as(op->false_value)) {
+            return op;
+        }
+        return Select::make(op->condition, std::move(true_value), std::move(false_value));
+    }
+
+    // Do nothing for Loads, Ramps, Broadcasts, Calls, Shuffles, VectorReduce
+    Expr visit(const Load *op) override {
+        return op;
+    }
+
+    Expr visit(const Ramp *op) override {
+        return op;
+    }
+
+    Expr visit(const Broadcast *op) override {
+        return op;
+    }
+
+    Expr visit(const Call *op) override {
+        return op;
+    }
+
+    Expr visit(const Shuffle *op) override {
+        return op;
+    }
+
+    Expr visit(const VectorReduce *op) override {
+        return op;
+    }
 
 public:
     StripUnboundedTerms(Direction _direction, const Scope<Interval> *_scope_ptr,
@@ -494,7 +531,6 @@ class ReorderTerms : public IRGraphMutator {
             // Assume constant is on the RHS due to simplification.
             const IntImm *b = mul->b.as<IntImm>();
             if (b) {
-                // TODO: check for overflow.
                 term.coefficient = b->value;
                 term.expr = mul->a;
                 return true;
@@ -535,7 +571,6 @@ class ReorderTerms : public IRGraphMutator {
                     AffineTerm term;
                     if (is_mul_by_int_const(next.expr, term)) {
                         internal_assert(term.expr.defined());
-                        // TODO: check for overflow.
                         term.coefficient *= next.coefficient;
                         pending.push_back(term);
                     } else {
@@ -557,8 +592,7 @@ class ReorderTerms : public IRGraphMutator {
         // TODO: for now, only do linear-term simplification.
         // There are other simplifications that can be done
         // (i.e. pushing terms into a Min or Max to cancel terms),
-        // but I haven't figured out a good polynomial-time algorithm
-        // for that yet.
+        // but we need a good polynomial-time algorithm for it.
         return simplify_linear_summation(terms);
     }
 
@@ -666,7 +700,7 @@ class ReorderTerms : public IRGraphMutator {
         size_t i = 0, j = 0;
 
         while (i < a.size() && j < b.size()) {
-            // TODO: We may not need matching coefficients, but need to check the reduction order.
+            // Both sets contain the same non-zero value.
             if (a[i].coefficient == b[j].coefficient && graph_equal(a[i].expr, b[j].expr) && !is_const_zero(a[i].expr)) {
                 gatherer.c.push_back(a[i]);
                 i++;
@@ -802,7 +836,6 @@ Expr push_rationals(const Expr &expr, const Direction direction) {
 }
 
 Expr strip_unbounded_terms(const Expr &expr, Direction direction, const Scope<Interval> &scope) {
-    // TODO: handle Lets better. Might be a Simplify_Let.cpp change.
     std::map<std::string, int> var_uses;
     CountVarUses counter(var_uses);
     expr.accept(&counter);
@@ -850,10 +883,8 @@ Interval approximate_constant_bounds(const Expr &expr, const Scope<Interval> &sc
         interval.max = bounds_of_expr_in_scope(upper, scope, FuncValueBounds(), true).max;
         interval.min = simplify(interval.min);
         interval.max = simplify(interval.max);
-
         make_const_interval(interval);
     }
-
     return interval;
 }
 
