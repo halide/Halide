@@ -60,6 +60,8 @@
 // file, so there's no need to restore the value of the macro.
 #undef __OSX_AVAILABLE_BUT_DEPRECATED
 #define __OSX_AVAILABLE_BUT_DEPRECATED(...)
+#undef __API_DEPRECATED
+#define __API_DEPRECATED(...)
 #include <ucontext.h>
 #endif
 
@@ -658,6 +660,14 @@ size_t get_compiler_stack_size() {
 
 namespace Internal {
 
+namespace {
+    // We can't reliably pass arguments through makecontext, because
+    // the calling convention involves an invalid function pointer
+    // cast which passes different numbers of bits on different
+    // platforms, so we use a thread local to pass arguments.
+    static thread_local void *run_with_large_stack_arg = nullptr;
+}
+
 void run_with_large_stack(const std::function<void()> &action) {
     if (stack_size.size == 0) {
         // User has requested no stack swapping
@@ -714,7 +724,8 @@ void run_with_large_stack(const std::function<void()> &action) {
         std::exception_ptr exception = nullptr;  // NOLINT - clang-tidy complains this isn't thrown
     } args{action};
 
-    auto trampoline = [](Args *arg) {
+    auto trampoline = []() {
+        auto arg = (Args *)run_with_large_stack_arg;
         try {
             arg->run();
         } catch (...) {
@@ -727,8 +738,8 @@ void run_with_large_stack(const std::function<void()> &action) {
         const std::function<void()> &run;
     } args{action};
 
-    auto trampoline = [](Args *arg) {
-        arg->run();
+    auto trampoline = []() {
+        ((Args *)run_with_large_stack_arg)->run();
     };
 #endif
 
@@ -754,11 +765,9 @@ void run_with_large_stack(const std::function<void()> &action) {
     context.uc_stack.ss_size = stack_size.size;
     context.uc_stack.ss_flags = 0;
     context.uc_link = &calling_context;
-    // makecontext plays pretty fast and loose with the type of the function argument
-    typedef void (*correct_fn_ptr_type)(Args *);
-    typedef void (*required_fn_ptr_type)();
-    auto fnptr = reinterpret_bits<required_fn_ptr_type>((correct_fn_ptr_type)trampoline);
-    makecontext(&context, fnptr, 1, &args);
+
+    run_with_large_stack_arg = &args;
+    makecontext(&context, trampoline, 0);
 
     err = swapcontext(&calling_context, &context);
     internal_assert(err == 0) << "swapcontext failed with error " << strerror(errno);
@@ -816,3 +825,4 @@ void load_plugin(const std::string &lib_name) {
 }
 
 }  // namespace Halide
+B
