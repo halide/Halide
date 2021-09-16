@@ -665,7 +665,7 @@ namespace {
 // the calling convention involves an invalid function pointer
 // cast which passes different numbers of bits on different
 // platforms, so we use a thread local to pass arguments.
-static thread_local void *run_with_large_stack_arg = nullptr;
+thread_local void *run_with_large_stack_arg = nullptr;
 }  // namespace
 
 void run_with_large_stack(const std::function<void()> &action) {
@@ -725,7 +725,7 @@ void run_with_large_stack(const std::function<void()> &action) {
     } args{action};
 
     auto trampoline = []() {
-        auto arg = (Args *)run_with_large_stack_arg;
+        Args *arg = (Args *)run_with_large_stack_arg;
         try {
             arg->run();
         } catch (...) {
