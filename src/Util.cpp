@@ -661,12 +661,12 @@ size_t get_compiler_stack_size() {
 namespace Internal {
 
 namespace {
-    // We can't reliably pass arguments through makecontext, because
-    // the calling convention involves an invalid function pointer
-    // cast which passes different numbers of bits on different
-    // platforms, so we use a thread local to pass arguments.
-    static thread_local void *run_with_large_stack_arg = nullptr;
-}
+// We can't reliably pass arguments through makecontext, because
+// the calling convention involves an invalid function pointer
+// cast which passes different numbers of bits on different
+// platforms, so we use a thread local to pass arguments.
+static thread_local void *run_with_large_stack_arg = nullptr;
+}  // namespace
 
 void run_with_large_stack(const std::function<void()> &action) {
     if (stack_size.size == 0) {
@@ -825,4 +825,3 @@ void load_plugin(const std::string &lib_name) {
 }
 
 }  // namespace Halide
-B
