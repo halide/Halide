@@ -390,6 +390,10 @@ void lower_impl(const vector<Function> &output_funcs,
     s = find_intrinsics(s);
     log("Lowering after finding intrinsics:", s);
 
+    debug(1) << "Hoisting prefetches...\n";
+    s = hoist_prefetches(s);
+    log("Lowering after hoisting prefetches:", s);
+
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";
 

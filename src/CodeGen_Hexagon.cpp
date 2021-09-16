@@ -1226,8 +1226,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
             return call_intrin_cast(native_ty, intrin_id, {b, a, codegen(bytes_off)});
         }
         return CodeGen_Posix::shuffle_vectors(a, b, indices);
-    } else if (stride == 2) {
-        internal_assert(start == 0 || start == 1);
+    } else if (stride == 2 && (start == 0 || start == 1)) {
         // For stride 2 shuffles, we can use vpack or vdeal.
         // It's hard to use call_intrin here. We'll just slice and
         // concat manually.
@@ -1269,10 +1268,8 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
         return concat_vectors(ret);
     }
 
-    // TODO: There are more HVX permute instructions that could be
-    // implemented here, such as vdelta/vrdelta.
-
-    return vlut(concat_vectors({a, b}), indices);
+    // Use a general delta operation.
+    return vdelta(concat_vectors({a, b}), indices);
 }
 
 Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,

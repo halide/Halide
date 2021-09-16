@@ -31,6 +31,7 @@ Checks: >
     performance-*,
     -performance-inefficient-string-concatenation,
     -performance-inefficient-vector-operation,
+    -performance-no-int-to-ptr,
     readability-avoid-const-params-in-decls,
     readability-braces-around-statements,
     readability-const-return-type,
