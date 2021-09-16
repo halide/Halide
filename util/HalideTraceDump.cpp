@@ -171,9 +171,9 @@ bool check_and_continue(bool condition, const char *msg) {
 
 void dump_func(string name, FuncInfo &func, BufferOutputOpts output_opts) {
     // Remove special characters
-    for (char &i : name) {
-        if (!std::isalnum(i)) {
-            i = '_';
+    for (char &c : name) {
+        if (!std::isalnum(c)) {
+            c = '_';
         }
     }
 

@@ -72,9 +72,9 @@ string get_sanitized_name(string name) {
     if (isdigit(name[0])) {
         name = "_" + name;
     }
-    for (char &i : name) {
-        if (!isalnum(i)) {
-            i = '_';
+    for (char &c : name) {
+        if (!isalnum(c)) {
+            c = '_';
         }
     }
     return name;
