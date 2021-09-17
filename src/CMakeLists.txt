@@ -343,9 +343,8 @@ set(SOURCE_FILES
 # Build and import the runtime.
 ##
 
-if (CMAKE_CROSSCOMPILING)
-    find_package(HalideHost REQUIRED)
-else ()
+find_package(HalideHost QUIET)
+if (NOT HalideHost_FOUND)
     add_subdirectory(tools)
 endif ()
 
@@ -413,66 +412,66 @@ endif ()
 ##
 
 target_compile_options(
-        Halide
-        PRIVATE
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall>
+    Halide
+    PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall>
 
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wcast-qual>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wignored-qualifiers>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Woverloaded-virtual>
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wcast-qual>
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wignored-qualifiers>
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Woverloaded-virtual>
 
-        $<$<CXX_COMPILER_ID:GNU>:-Wsuggest-override>
+    $<$<CXX_COMPILER_ID:GNU>:-Wsuggest-override>
 
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-destructor-override>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-override>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-destructor-override>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-override>
 
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-deprecated-declarations>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-double-promotion>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-conversion>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-equal>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-missing-field-initializers>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-old-style-cast>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-shadow>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-sign-conversion>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-switch-enum>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-undef>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-function>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-macros>
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-parameter>
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-deprecated-declarations>
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-double-promotion>
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-conversion>
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-equal>
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-missing-field-initializers>
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-old-style-cast>
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-shadow>
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-sign-conversion>
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-switch-enum>
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-undef>
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-function>
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-macros>
+    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-unused-parameter>
 
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-c++98-compat-pedantic>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-c++98-compat>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-cast-align>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-comma>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-covered-switch-default>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-documentation-unknown-command>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-documentation>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-exit-time-destructors>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-global-constructors>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-float-conversion>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-int-conversion>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-int-float-conversion>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-missing-prototypes>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-nonportable-system-include-path>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-reserved-id-macro>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-return-std-move-in-c++11>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-field-in-constructor>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-field>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shorten-64-to-32>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-undefined-func-template>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-member-function>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-template>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-c++98-compat-pedantic>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-c++98-compat>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-cast-align>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-comma>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-covered-switch-default>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-documentation-unknown-command>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-documentation>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-exit-time-destructors>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-global-constructors>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-float-conversion>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-int-conversion>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-implicit-int-float-conversion>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-missing-prototypes>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-nonportable-system-include-path>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-reserved-id-macro>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-return-std-move-in-c++11>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-field-in-constructor>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-field>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shorten-64-to-32>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-undefined-func-template>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-member-function>
+    $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-template>
 
-        $<$<CXX_COMPILER_ID:MSVC>:/W3>
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4018>  # 4018: disable "signed/unsigned mismatch"
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4141>  # 4141: 'inline' used more than once
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4146>  # 4146: unary minus applied to unsigned type
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4244>  # 4244: conversion, possible loss of data
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4267>  # 4267: conversion from 'size_t' to 'int', possible loss of data
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4291>  # 4291: No matching operator delete found
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4503>  # 4503: disable "decorated name length exceeded, name was truncated"
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4800>  # 4800: forcing value to bool 'true' or 'false' (performance warning)
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4996>  # 4996: compiler encountered deprecated declaration
+    $<$<CXX_COMPILER_ID:MSVC>:/W3>
+    $<$<CXX_COMPILER_ID:MSVC>:/wd4018>  # 4018: disable "signed/unsigned mismatch"
+    $<$<CXX_COMPILER_ID:MSVC>:/wd4141>  # 4141: 'inline' used more than once
+    $<$<CXX_COMPILER_ID:MSVC>:/wd4146>  # 4146: unary minus applied to unsigned type
+    $<$<CXX_COMPILER_ID:MSVC>:/wd4244>  # 4244: conversion, possible loss of data
+    $<$<CXX_COMPILER_ID:MSVC>:/wd4267>  # 4267: conversion from 'size_t' to 'int', possible loss of data
+    $<$<CXX_COMPILER_ID:MSVC>:/wd4291>  # 4291: No matching operator delete found
+    $<$<CXX_COMPILER_ID:MSVC>:/wd4503>  # 4503: disable "decorated name length exceeded, name was truncated"
+    $<$<CXX_COMPILER_ID:MSVC>:/wd4800>  # 4800: forcing value to bool 'true' or 'false' (performance warning)
+    $<$<CXX_COMPILER_ID:MSVC>:/wd4996>  # 4996: compiler encountered deprecated declaration
 )
 
 if (CMAKE_GENERATOR MATCHES "Visual Studio")

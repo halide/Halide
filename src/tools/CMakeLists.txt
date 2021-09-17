@@ -1,3 +1,16 @@
+if (CMAKE_CROSSCOMPILING
+    AND NOT CMAKE_CROSSCOMPILING_EMULATOR
+    AND NOT CMAKE_OSX_SYSROOT
+    AND NOT CMAKE_GENERATOR MATCHES "Xcode")
+    message(
+        WARNING
+        "Cross-compiling toolchain detected, but no emulator is configured, "
+        "and Halide host tools were not found. Did you mean to set "
+        "CMAKE_CROSSCOMPILING_EMULATOR in your toolchain, or did you mean to "
+        "set HalideHost_ROOT to use previously built host tools?"
+    )
+endif ()
+
 add_executable(build_halide_h build_halide_h.cpp)
 add_executable(HalideHost::build_halide_h ALIAS build_halide_h)
 target_compile_options(build_halide_h PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd4996>)
@@ -5,6 +18,9 @@ target_compile_options(build_halide_h PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd4996>
 add_executable(binary2cpp binary2cpp.cpp)
 add_executable(HalideHost::binary2cpp ALIAS binary2cpp)
 target_compile_options(binary2cpp PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd4996>)
+
+add_custom_target(HalideHost)
+add_dependencies(HalideHost build_halide_h binary2cpp)
 
 # Use of ${CMAKE_BINARY_DIR} here is intentional; exported targets should
 # be available by using the top-level build directory as <Pkg>_ROOT.
