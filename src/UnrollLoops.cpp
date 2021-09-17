@@ -83,7 +83,7 @@ class UnrollLoops : public IRMutator {
             Stmt iters;
             for (int i = e->value - 1; i >= 0; i--) {
                 Stmt iter = substitute(for_loop->name, for_loop->min + i, body);
-                // It's necessary to simplify eagerly this iteration
+                // It's necessary to eagerly simplify this iteration
                 // here to resolve things like muxes down to a single
                 // item before we go and make N copies of something of
                 // size N.
