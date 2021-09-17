@@ -21,12 +21,9 @@ public:
     std::map<std::string, std::string> module_producers;
     Halide::Target target;
 
-    // TODO(zvookin|abadams): Figure out how to get the right graph across multiple
-    // lowered functions. Iterating in reverse order doesn't seem to change the result,
-    // which sort of makes sense as it seems the traversal just isn't seeing the edge
-    // between the callers of the newly introduced closures and the closures themselves.
     void add_module(const Halide::Module &m) {
         const auto &functions = m.functions();
+        // Iterate in reverse order to get the main block before the closures it calls.
         for (size_t i = functions.size(); i > 0; i--) {
             auto dominating_producer = module_producers.find(functions[i - 1].name.c_str());
             if (dominating_producer != module_producers.end()) {
