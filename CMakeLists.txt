@@ -4,7 +4,10 @@ project(Halide
         DESCRIPTION "Halide compiler and libraries"
         HOMEPAGE_URL "https://halide-lang.org")
 
-enable_testing()
+string(COMPARE EQUAL "${CMAKE_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}" is_top_level)
+if (is_top_level)
+    include(CTest)
+endif ()
 
 ##
 # Set up project-wide properties
