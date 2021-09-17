@@ -347,13 +347,7 @@ bool test(int lanes, int seed) {
     }
 
     // Extern function call
-    // Skip the hypot() test for LLVM10: on machines with AVX2, the accuracy
-    // of the generated code deviates outside the expected error range for
-    // some cases. Since this is no longer the case in LLVM11+ (and Halide
-    // support for LLVM10 is in bug-fix mode only), we'll just skip this entirely
-    // for LLVM10, rather than try to tweak the error detection to deal with
-    // this corner case.
-    if (Halide::Internal::get_llvm_version() >= 110) {
+    {
         if (verbose) printf("External call to hypot\n");
         Func f8;
         f8(x, y) = hypot(1.1f, cast<float>(input(x, y)));
