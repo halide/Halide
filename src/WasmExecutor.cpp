@@ -1368,9 +1368,6 @@ WasmModuleContents::WasmModuleContents(
       trampolines(JITModule::make_trampolines_module(get_host_target(), jit_externs, kTrampolineSuffix, extern_deps)) {
 
 #if WITH_WABT
-    // TODO: we should probably move this to LLVM 12 or 13, since LLVM11 won't support SIMD usefully enough for Halide
-    user_assert(LLVM_VERSION >= 110) << "Using the WebAssembly JIT is only supported under LLVM 11+.";
-
     user_assert(!target.has_feature(Target::WasmThreads)) << "wasm_threads requires Emscripten (or a similar compiler); it will never be supported under JIT.";
 
     wdebug(1) << "Compiling wasm function " << fn_name << "\n";
