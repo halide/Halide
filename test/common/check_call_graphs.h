@@ -31,7 +31,7 @@ public:
             auto dominating_producer = module_producers.find(functions[i - 1].name.c_str());
             if (dominating_producer != module_producers.end()) {
                 producer = dominating_producer->second;
-            }        
+            }
             target = m.target();
             functions[i - 1].body.accept(this);
             producer = "";
@@ -44,7 +44,7 @@ private:
     void visit(const Halide::Internal::Call *op) override {
         if (op->is_intrinsic(Halide::Internal::Call::resolve_function_name)) {
             assert(op->args.size() == 1);
-          
+
             const Halide::Internal::Call *decl_call = op->args[0].as<Halide::Internal::Call>();
             assert(decl_call != nullptr);
             std::string name;
