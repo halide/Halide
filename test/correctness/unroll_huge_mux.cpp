@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     //
     // https://github.com/halide/Halide/issues/6238
 
-    set_compiler_stack_size(12 * 1024 * 1024);
+    set_compiler_stack_size(16 * 1024 * 1024);
 
     f.compile_jit();
 
