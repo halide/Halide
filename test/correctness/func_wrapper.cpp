@@ -175,8 +175,6 @@ int global_wrapper_test() {
         {wrapper.name(), {f.name()}},
         {f.name(), {}},
     };
-    print_graph(c.calls);
-    print_graph(expected);
 
     if (check_call_graphs(c.calls, expected) != 0) {
         return -1;
@@ -222,9 +220,7 @@ int update_defined_after_wrapper_test() {
         // 'wrapper' and 'g', wrapper' to call 'f', 'f' to call nothing
         Module m = g.compile_to_module({g.infer_arguments()});
         CheckCalls c;
-        for (const auto &lowered_function : m.functions()) {
-            lowered_function.body.accept(&c);
-        }
+        c.add_module(m);
 
         CallGraphs expected = {
             {g.name(), {wrapper.name(), g.name()}},
@@ -252,9 +248,7 @@ int update_defined_after_wrapper_test() {
         // 'wrapper' and 'g', wrapper' to call 'f', 'f' to call nothing
         Module m = g.compile_to_module({g.infer_arguments()});
         CheckCalls c;
-        for (const auto &lowered_function : m.functions()) {
-            lowered_function.body.accept(&c);
-        }
+        c.add_module(m);
 
         CallGraphs expected = {
             {g.name(), {wrapper.name(), g.name()}},
@@ -635,8 +629,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-// TODO(zalman|abadams): Fix call graph production.
-#if 0
     printf("Running global wrap test\n");
     if (global_wrapper_test() != 0) {
         return -1;
@@ -646,7 +638,6 @@ int main(int argc, char **argv) {
     if (update_defined_after_wrapper_test() != 0) {
         return -1;
     }
-#endif
 
     printf("Running rdom wrapper test\n");
     if (rdom_wrapper_test() != 0) {

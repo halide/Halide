@@ -18,6 +18,8 @@ class CheckCalls : public Halide::Internal::IRVisitor {
 public:
     CallGraphs calls;  // Caller -> vector of callees
     std::string producer = "";
+    std::map<std::string, std::string> module_producers;
+    Halide::Target target;
 
     // TODO(zvookin|abadams): Figure out how to get the right graph across multiple
     // lowered functions. Iterating in reverse order doesn't seem to change the result,
@@ -25,13 +27,45 @@ public:
     // between the callers of the newly introduced closures and the closures themselves.
     void add_module(const Halide::Module &m) {
         const auto &functions = m.functions();
-        for (size_t i = 0; i < functions.size(); i++) {
-            functions[i].body.accept(this);
+        for (size_t i = functions.size(); i > 0; i--) {
+            auto dominating_producer = module_producers.find(functions[i - 1].name.c_str());
+            if (dominating_producer != module_producers.end()) {
+                producer = dominating_producer->second;
+            }        
+            target = m.target();
+            functions[i - 1].body.accept(this);
+            producer = "";
         }
     }
 
 private:
     using Halide::Internal::IRVisitor::visit;
+
+    void visit(const Halide::Internal::Call *op) override {
+        if (op->is_intrinsic(Halide::Internal::Call::resolve_function_name)) {
+            assert(op->args.size() == 1);
+          
+            const Halide::Internal::Call *decl_call = op->args[0].as<Halide::Internal::Call>();
+            assert(decl_call != nullptr);
+            std::string name;
+            if (decl_call->call_type == Halide::Internal::Call::ExternCPlusPlus) {
+                std::vector<std::string> namespaces;
+                name = Halide::Internal::extract_namespaces(decl_call->name, namespaces);
+                std::vector<Halide::ExternFuncArgument> mangle_args;
+                for (const auto &arg : decl_call->args) {
+                    mangle_args.emplace_back(arg);
+                }
+                name = Halide::Internal::cplusplus_function_mangled_name(name, namespaces, decl_call->type, mangle_args, target);
+            } else {
+                name = decl_call->name;
+            }
+
+            if (module_producers.find(name) == module_producers.end()) {
+                module_producers[name] = producer;
+            }
+        }
+        Halide::Internal::IRVisitor::visit(op);
+    }
 
     void visit(const Halide::Internal::ProducerConsumer *op) override {
         if (op->is_producer) {

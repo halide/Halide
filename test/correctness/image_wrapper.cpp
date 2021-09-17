@@ -645,8 +645,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-// TODO(zalman|abadams): Fix call graph production.
-#if 0
     printf("Running global wrap test\n");
     if (global_wrapper_test() != 0) {
         return -1;
@@ -656,7 +654,6 @@ int main(int argc, char **argv) {
     if (update_defined_after_wrapper_test() != 0) {
         return -1;
     }
-#endif
 
     printf("Running rdom wrapper test\n");
     if (rdom_wrapper_test() != 0) {

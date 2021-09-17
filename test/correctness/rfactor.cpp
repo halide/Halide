@@ -1104,8 +1104,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-// TODO(zalman|abadams): Fix call graph production.
-#if 0
     printf("Running histogram rfactor test\n");
     printf("    checking call graphs...\n");
     if (histogram_rfactor_test(true) != 0) {
@@ -1165,7 +1163,6 @@ int main(int argc, char **argv) {
     if (tuple_partial_reduction_rfactor_test(false) != 0) {
         return -1;
     }
-#endif
 
     printf("Running check allocation bound test\n");
     if (check_allocation_bound_test() != 0) {
