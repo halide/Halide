@@ -21,18 +21,19 @@
 #pragma clang system_header
 #endif
 
-#include "llvm/ADT/APFloat.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringRef.h"
-#include "llvm/Support/ErrorHandling.h"
-#include <lld/Common/Driver.h>  // WITH_WABT
+#ifdef WITH_WABT
+#include <lld/Common/Driver.h>
+#endif
+#include <llvm/ADT/APFloat.h>
 #include <llvm/ADT/ArrayRef.h>
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/StringMap.h>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/ADT/Triple.h>
 #include <llvm/ADT/Twine.h>
-#include <llvm/Analysis/AliasAnalysis.h>  // LLVM_VERSION >= 12
+#if LLVM_VERSION >= 12
+#include <llvm/Analysis/AliasAnalysis.h>
+#endif
 #include <llvm/Analysis/TargetLibraryInfo.h>
 #include <llvm/Analysis/TargetTransformInfo.h>
 #include <llvm/Bitcode/BitcodeReader.h>
@@ -51,7 +52,9 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Intrinsics.h>
-#include <llvm/IR/IntrinsicsHexagon.h>  // WITH_HEXAGON
+#ifdef WITH_HEXAGON
+#include <llvm/IR/IntrinsicsHexagon.h>
+#endif
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/IR/Metadata.h>
@@ -67,9 +70,12 @@
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/CodeGen.h>
-#include <llvm/Support/CommandLine.h>  // LLVM_VERSION >= 12
+#if LLVM_VERSION >= 12
+#include <llvm/Support/CommandLine.h>
+#endif
 #include <llvm/Support/DataExtractor.h>
 #include <llvm/Support/DynamicLibrary.h>
+#include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/FormattedStream.h>
 #include <llvm/Support/TargetRegistry.h>
