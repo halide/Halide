@@ -118,24 +118,26 @@ echo Running iwyu_tool.py...
 # iwyu_tool.py returns nonzero if anything is found to fix, so disable exiting on error for this command
 set +e
 ${IWYU_TOOL} ${IWYU_TARGETS} -j ${IWYU_J} -p ${IWYU_BUILD_DIR}/compile_commands.json > ${IWYU_LOG}
+IWYU_TOOL_RESULT=${PIPESTATUS[0]}
 set -e
 
-RESULT=${PIPESTATUS[0]}
-
-echo iwyu_tool.py finished with status ${RESULT}
+echo iwyu_tool.py finished with status ${IWYU_TOOL_RESULT}
 
 if [ ! -z ${FIX} ]
 then
     echo "YES (${FIX})"
     echo Running fix_includes.py...
+    echo ${IWYU_FIX_INCLUDES} \
+        --nocomments \
+        --basedir=${ROOT_DIR} \
+        < ${IWYU_LOG}
+
     ${IWYU_FIX_INCLUDES} \
-        -v=1 \
         --nocomments \
         --basedir=${ROOT_DIR} \
         < ${IWYU_LOG}
 fi
 
-echo IWYU_LOG is at ${IWYU_LOG}
 
 echo Done! (You probably want to run clang-format now.)
 
