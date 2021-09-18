@@ -99,7 +99,7 @@ cmake --build ${IWYU_BUILD_DIR} --target HalideIncludes
 # We deliberately skip apps/ and test/ for now, as the compile commands won't include
 # generated headers files from Generators.
 #
-# Skip everything in hexagon_remote because reasons.
+# Skip everything in runtime because we need to forward-declare everything there.
 # Skip find_inverse.cpp as we don't usually build it.
 # Skip DefaultCostModel.cpp as it relies on cost_model.h.
 IWYU_TARGETS=$(find \
@@ -108,7 +108,7 @@ IWYU_TARGETS=$(find \
      "${ROOT_DIR}/tools" \
      "${ROOT_DIR}/util" \
      \( -name *.cpp -o -name *.c \) -and -not -wholename "*/.*" \
-     ! -path "${ROOT_DIR}/src/runtime/hexagon_remote/*" \
+     ! -path "${ROOT_DIR}/src/runtime/*" \
      ! -name find_inverse.cpp \
      ! -name DefaultCostModel.cpp)
 
