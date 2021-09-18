@@ -140,10 +140,9 @@ then
         < ${IWYU_LOG}
 
     ${IWYU_FIX_INCLUDES} \
-        --comments \
+        --nocomments \
+        --reorder \
         --basedir=${ROOT_DIR} \
-        -- \
-        -Xiwyu --mapping_file=${ROOT_DIR}/iwyu.imp \
         < ${IWYU_LOG}
 fi
 
