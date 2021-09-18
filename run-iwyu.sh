@@ -23,7 +23,7 @@ echo Using IWYU=${IWYU}
 
 if [ -z ${IWYU_J} ]; then
 # Linux usually installs as `iwyu` as well but Homebrew only includes the full name
-IWYU_J=16
+IWYU_J=32
 fi
 echo Using IWYU_J=${IWYU_J}
 
@@ -96,14 +96,31 @@ cmake -DCMAKE_BUILD_TYPE=Debug \
 # We must populate the includes directory to check things outside of src/
 cmake --build ${IWYU_BUILD_DIR} --target HalideIncludes
 
+# We deliberately skip apps/ and test/ for now, as the compile commands won't include
+# generated headers files from Generators.
+#
+# Skip everything in hexagon_remote because reasons.
+# Skip DefaultCostModel.cpp as it relies on cost_model.h.
+IWYU_TARGETS=$(find \
+     "${ROOT_DIR}/src" \
+     "${ROOT_DIR}/python_bindings" \
+     "${ROOT_DIR}/tools" \
+     "${ROOT_DIR}/util" \
+     \( -name *.cpp -o -name *.c \) -and -not -wholename "*/.*" \
+     ! -path "${ROOT_DIR}/src/runtime/hexagon_remote/*" \
+     ! -name DefaultCostModel.cpp)
+
 IWYU_LOG="${IWYU_BUILD_DIR}/iwyu.log"
 echo Running iwyu_tool.py...
-${IWYU_TOOL} -j ${IWYU_J} -p ${IWYU_BUILD_DIR}/compile_commands.json > ${IWYU_LOG}
+${IWYU_TOOL} ${IWYU_TARGETS} -j ${IWYU_J} -p ${IWYU_BUILD_DIR}/compile_commands.json > ${IWYU_LOG}
 
 if [ ! -z ${FIX} ]
 then
     echo Running fix_includes.py...
-    ${IWYU_FIX_INCLUDES} -j ${IWYU_J} < ${IWYU_LOG}
+    ${IWYU_FIX_INCLUDES} -j ${IWYU_J} \
+        --nocomments \
+        --basedir=${ROOT_DIR} \
+        < ${IWYU_LOG}
 fi
 
 echo IWYU_LOG is at ${IWYU_LOG}
