@@ -52,26 +52,26 @@ fi
 echo Using IWYU_CLANGPP=${IWYU_CLANGPP}
 
 # Check the versions
-# IWYU_VERSION=$(${IWYU} --version)
-# if [[ ! ${IWYU_VERSION} =~ .*include-what-you-use\ 0.16.* ]]
-# then
-#     echo "IWYU must point to an IWYU 0.16 install!"
-#     exit 1
-# fi
+IWYU_VERSION=$(${IWYU} --version)
+if [[ ! ${IWYU_VERSION} =~ .*include-what-you-use\ 0.16.* ]]
+then
+    echo "IWYU must point to an IWYU 0.16 install!"
+    exit 1
+fi
 
-# IWYU_CLANG_VERSION=$(${IWYU_CLANG} --version)
-# if [[ ! ${IWYU_CLANG_VERSION} =~ .*version\ 12.* ]]
-# then
-#     echo "IWYU_CLANG must point to a Clang 12 install!"
-#     exit 1
-# fi
+IWYU_CLANG_VERSION=$(${IWYU_CLANG} --version)
+if [[ ! ${IWYU_CLANG_VERSION} =~ .*version\ 12.* ]]
+then
+    echo "IWYU_CLANG must point to a Clang 12 install!"
+    exit 1
+fi
 
-# IWYU_CLANGPP_VERSION=$(${IWYU_CLANGPP} --version)
-# if [[ ! ${IWYU_CLANGPP_VERSION} =~ .*version\ 12.* ]]
-# then
-#     echo "IWYU_CLANGPP must point to a Clang 12 install!"
-#     exit 1
-# fi
+IWYU_CLANGPP_VERSION=$(${IWYU_CLANGPP} --version)
+if [[ ! ${IWYU_CLANGPP_VERSION} =~ .*version\ 12.* ]]
+then
+    echo "IWYU_CLANGPP must point to a Clang 12 install!"
+    exit 1
+fi
 
 # Use a temp folder for the CMake stuff here, so it's fresh & correct every time
 IWYU_BUILD_DIR=`mktemp -d`
