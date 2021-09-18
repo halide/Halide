@@ -117,7 +117,13 @@ echo Running iwyu_tool.py...
 
 # iwyu_tool.py returns nonzero if anything is found to fix, so disable exiting on error for this command
 set +e
-${IWYU_TOOL} ${IWYU_TARGETS} -j ${IWYU_J} -p ${IWYU_BUILD_DIR}/compile_commands.json > ${IWYU_LOG}
+${IWYU_TOOL} \
+    ${IWYU_TARGETS} \
+    -j ${IWYU_J} \
+    -p ${IWYU_BUILD_DIR}/compile_commands.json \
+    -- \
+    -Xiwyu --mapping_file=${ROOT_DIR}/iwyu.imp \
+    > ${IWYU_LOG}
 IWYU_TOOL_RESULT=${PIPESTATUS[0]}
 set -e
 
