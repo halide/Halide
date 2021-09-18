@@ -131,11 +131,12 @@ echo iwyu_tool.py finished with status ${IWYU_TOOL_RESULT}
 
 if [ ! -z ${FIX} ]
 then
-    echo "YES (${FIX})"
     echo Running fix_includes.py...
     echo ${IWYU_FIX_INCLUDES} \
-        --nocomments \
+        --comments \
         --basedir=${ROOT_DIR} \
+        -- \
+        -Xiwyu --mapping_file=${ROOT_DIR}/iwyu.imp \
         < ${IWYU_LOG}
 
     ${IWYU_FIX_INCLUDES} \
@@ -147,7 +148,7 @@ then
 fi
 
 
-echo Done! (You may want to run clang-format now.)
+echo "Done! (You may want to run clang-format now.)"
 
 # rm -rf ${IWYU_BUILD_DIR}
 
