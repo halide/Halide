@@ -129,14 +129,15 @@ set -e
 
 echo iwyu_tool.py finished with status ${IWYU_TOOL_RESULT}
 
-if [ ! -z ${FIX} ]
+if [ -z ${FIX} ]
 then
+    cat ${IWYU_LOG}
+else
     echo Running fix_includes.py...
     echo ${IWYU_FIX_INCLUDES} \
         --comments \
+        --reorder \
         --basedir=${ROOT_DIR} \
-        -- \
-        -Xiwyu --mapping_file=${ROOT_DIR}/iwyu.imp \
         < ${IWYU_LOG}
 
     ${IWYU_FIX_INCLUDES} \
