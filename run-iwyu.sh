@@ -139,13 +139,15 @@ then
         < ${IWYU_LOG}
 
     ${IWYU_FIX_INCLUDES} \
-        --nocomments \
+        --comments \
         --basedir=${ROOT_DIR} \
+        -- \
+        -Xiwyu --mapping_file=${ROOT_DIR}/iwyu.imp \
         < ${IWYU_LOG}
 fi
 
 
-echo Done! (You probably want to run clang-format now.)
+echo Done! (You may want to run clang-format now.)
 
 # rm -rf ${IWYU_BUILD_DIR}
 
