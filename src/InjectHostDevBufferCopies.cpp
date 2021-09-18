@@ -2,7 +2,7 @@
 
 #include "CodeGen_GPU_Dev.h"
 #include "Debug.h"
-#include "ExternFuncArgument.h"
+#include "ExternFuncArgument.h"  // IWYU pragma: keep
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"

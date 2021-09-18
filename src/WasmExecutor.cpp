@@ -1,5 +1,13 @@
 #include "WasmExecutor.h"
 
+#include <cmath>
+#include <csignal>
+#include <cstdlib>
+#include <mutex>
+#include <sstream>
+#include <unordered_map>
+#include <vector>
+
 #include "CodeGen_Posix.h"
 #include "CodeGen_Targets.h"
 #include "Error.h"
@@ -14,23 +22,18 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Target.h"
 
-#include <cmath>
-#include <csignal>
-#include <cstdlib>
-#include <mutex>
-#include <sstream>
-#include <unordered_map>
-#include <vector>
-
 #if WITH_WABT
 #include "wabt-src/src/binary-reader.h"
+#include "wabt-src/src/cast.h"
+#include "wabt-src/src/common.h"
 #include "wabt-src/src/error-formatter.h"
+#include "wabt-src/src/error.h"
 #include "wabt-src/src/feature.h"
 #include "wabt-src/src/interp/binary-reader-interp.h"
 #include "wabt-src/src/interp/interp-util.h"
-#include "wabt-src/src/interp/interp-wasi.h"
 #include "wabt-src/src/interp/interp.h"
-#include "wabt-src/src/option-parser.h"
+#include "wabt-src/src/interp/istream.h"
+#include "wabt-src/src/result.h"
 #include "wabt-src/src/stream.h"
 #endif
 
