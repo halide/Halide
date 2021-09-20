@@ -6,6 +6,7 @@
 {"include": ["<__string>", "private", "<string>", "public"]},
 {"include": ["<__tree>", "private", "<cstddef>", "public"]},
 {"include": ["<_ctype.h>", "private", "<cctype>", "public"]},
+{"include": ["<sys/errno.h>", "private", "<cerrno>", "public"]},
 {"include": ["<sys/signal.h>", "private", "<csignal>", "public"]},
 {"include": ["<sys/unistd.h>", "private", "<unistd.h>", "public"]},
 {"include": ["@<pybind11/detail/.*>", "private", "<pybind11/pybind11.h>", "public"]},
