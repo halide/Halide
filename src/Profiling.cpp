@@ -1,15 +1,25 @@
+#include <stddef.h>
 #include <algorithm>
-#include <limits>
+#include <cstdint>
 #include <map>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "CodeGen_Internal.h"
+#include "Debug.h"
+#include "DeviceAPI.h"
+#include "Error.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "ModulusRemainder.h"
+#include "Parameter.h"
 #include "Profiling.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include "Type.h"
 #include "Util.h"
 
 namespace Halide {

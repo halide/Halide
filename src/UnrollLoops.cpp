@@ -1,11 +1,19 @@
 #include "UnrollLoops.h"
+
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "Bounds.h"
-#include "CSE.h"
+#include "Error.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Interval.h"
+#include "Scope.h"
 #include "Simplify.h"
-#include "SimplifyCorrelatedDifferences.h"
 #include "Substitute.h"
+#include "Util.h"
 
 using std::pair;
 using std::vector;

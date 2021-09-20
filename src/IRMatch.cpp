@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <iostream>
 #include <map>
 #include <utility>
@@ -7,6 +8,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
+#include "ModulusRemainder.h"
 
 namespace Halide {
 namespace Internal {

@@ -5,6 +5,7 @@
  * Defines the lowering pass that flattens nested ramps and broadcasts.
  * */
 
+#include "Expr.h"
 #include "IR.h"
 
 namespace Halide {

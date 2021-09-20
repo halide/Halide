@@ -1,9 +1,19 @@
 #include "ModulusRemainder.h"
 
+#include <stdlib.h>
+#include <iostream>
+#include <type_traits>
+#include <vector>
+
+#include "Error.h"
+#include "Expr.h"
 #include "IR.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "Simplify.h"
+#include "IRVisitor.h"
+#include "Scope.h"
+#include "Type.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {

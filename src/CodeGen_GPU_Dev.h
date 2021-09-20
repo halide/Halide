@@ -12,6 +12,7 @@
 
 namespace Halide {
 namespace Internal {
+struct DeviceArgument;
 
 /** A code generator that emits GPU code from a given Halide stmt. */
 struct CodeGen_GPU_Dev {

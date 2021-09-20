@@ -1,13 +1,22 @@
 #include "AllocationBoundsInference.h"
+
+#include <stddef.h>
+#include <set>
+#include <vector>
+
 #include "Bounds.h"
 #include "CSE.h"
+#include "Error.h"
 #include "ExternFuncArgument.h"
 #include "Function.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Interval.h"
+#include "Schedule.h"
+#include "Scope.h"
 #include "Simplify.h"
-
-#include <set>
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {

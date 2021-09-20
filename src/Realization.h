@@ -1,9 +1,12 @@
 #ifndef HALIDE_REALIZATION_H
 #define HALIDE_REALIZATION_H
 
+#include <stddef.h>
 #include <cstdint>
+#include <type_traits>
 #include <vector>
 
+#include "Buffer.h"
 #include "Util.h"  // for all_are_convertible
 
 /** \file

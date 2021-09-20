@@ -1,11 +1,12 @@
-#include <map>
+#include <string>
 #include <utility>
 
 #include "EarlyFree.h"
-#include "ExprUsesVar.h"
-#include "IREquality.h"
+#include "Error.h"
+#include "IR.h"
 #include "IRMutator.h"
-#include "InjectHostDevBufferCopies.h"
+#include "IRVisitor.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {

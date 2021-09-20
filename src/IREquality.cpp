@@ -1,6 +1,16 @@
 #include "IREquality.h"
+
+#include <cstdint>
+#include <string>
+
+#include "Debug.h"
+#include "Error.h"
+#include "IR.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
+#include "IntrusivePtr.h"
+#include "ModulusRemainder.h"
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {

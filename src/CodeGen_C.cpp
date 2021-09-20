@@ -1,18 +1,32 @@
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <limits>
+#include <utility>
 
+#include "Argument.h"
 #include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "Deinterleave.h"
+#include "Error.h"
+#include "ExternalCode.h"
 #include "FindIntrinsics.h"
+#include "IR.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Lerp.h"
+#include "Module.h"
+#include "ModulusRemainder.h"
 #include "Param.h"
+#include "Parameter.h"
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Type.h"
 #include "Util.h"
 #include "Var.h"
+#include "runtime/HalideBuffer.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {
@@ -68,6 +82,7 @@ const string headers = R"INLINE_CODE(
 #include <stdio.h>
 #include <string.h>
 #include <type_traits>
+
 )INLINE_CODE";
 
 // We now add definitions of things in the runtime which are

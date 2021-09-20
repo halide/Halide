@@ -5,10 +5,14 @@
  * Subtypes for Halide expressions (\ref Halide::Expr) and statements (\ref Halide::Internal::Stmt)
  */
 
+#include <stdint.h>
+#include <initializer_list>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Buffer.h"
+#include "DeviceAPI.h"
 #include "Expr.h"
 #include "FunctionPtr.h"
 #include "ModulusRemainder.h"
@@ -16,6 +20,7 @@
 #include "PrefetchDirective.h"
 #include "Reduction.h"
 #include "Type.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {

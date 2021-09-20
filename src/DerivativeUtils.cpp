@@ -1,3 +1,7 @@
+#include <stdint.h>
+#include <__bit_reference>
+#include <algorithm>
+#include <cstddef>
 #include <iterator>
 #include <map>
 #include <set>
@@ -5,19 +9,28 @@
 #include <utility>
 #include <vector>
 
+#include "Bounds.h"
+#include "Buffer.h"
 #include "CSE.h"
 #include "DerivativeUtils.h"
+#include "Error.h"
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
+#include "Func.h"
+#include "Function.h"
+#include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
-#include "Monotonic.h"
+#include "Interval.h"
+#include "Parameter.h"
 #include "RealizationOrder.h"
+#include "Scope.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {

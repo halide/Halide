@@ -1,17 +1,23 @@
 #ifndef HALIDE_DEVICE_ARGUMENT_H
 #define HALIDE_DEVICE_ARGUMENT_H
 
+#include <stddef.h>
+#include <stdint.h>
 /** \file
  * Defines helpers for passing arguments to separate devices, such as GPUs.
  */
 #include <string>
+#include <vector>
 
 #include "Closure.h"
 #include "Expr.h"
 #include "ModulusRemainder.h"
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {
+struct Call;
+struct For;
 
 /** A DeviceArgument looks similar to an Halide::Argument, but has behavioral
  * differences that make it specific to the GPU pipeline; the fact that

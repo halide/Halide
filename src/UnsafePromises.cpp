@@ -1,6 +1,14 @@
 #include "UnsafePromises.h"
+
+#include <iosfwd>
+#include <vector>
+
+#include "Debug.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Target.h"
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {

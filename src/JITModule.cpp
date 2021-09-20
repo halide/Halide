@@ -1,7 +1,10 @@
+#include <cstddef>
 #include <cstdint>
+#include <iostream>
 #include <mutex>
 #include <set>
 #include <string>
+#include <utility>
 
 #ifdef _WIN32
 #ifdef _MSC_VER
@@ -10,17 +13,22 @@
 #include <windows.h>
 #else
 #include <dlfcn.h>
-#include <sys/mman.h>
 #endif
 
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
 #include "Debug.h"
+#include "Error.h"
 #include "JITModule.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
+#include "Module.h"
 #include "Pipeline.h"
+#include "Target.h"
+#include "Util.h"
+
+struct halide_trace_event_t;
 
 namespace Halide {
 namespace Internal {

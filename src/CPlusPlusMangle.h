@@ -14,6 +14,7 @@ namespace Halide {
 
 struct ExternFuncArgument;
 struct Target;
+struct Type;
 
 namespace Internal {
 
