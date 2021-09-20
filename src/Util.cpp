@@ -1,9 +1,8 @@
 #include "Util.h"
-#include "Debug.h"
-#include "Error.h"
-#include "Introspection.h"
+
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <map>
@@ -14,8 +13,7 @@
 #ifdef _MSC_VER
 #include <io.h>
 #else
-#include <cstdlib>
-#include <unistd.h>
+#include <unistd.h>  // IWYU pragma: keep
 #endif
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -24,6 +22,7 @@
 #define CAN_GET_RUNNING_PROGRAM_NAME
 #include <linux/limits.h>  // For PATH_MAX
 #endif
+
 #if defined(_MSC_VER) && !defined(NOMINMAX)
 #define NOMINMAX
 #endif
@@ -34,10 +33,16 @@
 #else
 #include <dlfcn.h>
 #endif
+
 #ifdef __APPLE__
 #define CAN_GET_RUNNING_PROGRAM_NAME
 #include <mach-o/dyld.h>
+#include <sys/syslimits.h>  // For PATH_MAX
 #endif
+
+#include "Debug.h"
+#include "Error.h"
+#include "Introspection.h"
 
 #ifdef _WIN32
 namespace {
