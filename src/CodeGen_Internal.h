@@ -8,8 +8,10 @@
  * front-end-facing interface to CodeGen).
  */
 
+#include <stdint.h>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "Closure.h"
 #include "Expr.h"
@@ -34,8 +36,11 @@ class IRBuilder;
 namespace Halide {
 
 struct Target;
+struct Type;
 
 namespace Internal {
+class Closure;
+struct Call;
 
 /** The llvm type of a struct containing all of the externally referenced state of a Closure. */
 llvm::StructType *build_closure_type(const Closure &closure, llvm::StructType *halide_buffer_t_type, llvm::LLVMContext *context);

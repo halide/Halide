@@ -1,4 +1,8 @@
+#include <memory>
+#include <string>
+
 #include "CodeGen_Posix.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {

@@ -15,12 +15,19 @@
  */
 
 #include <ostream>
+#include <vector>
 
+#include "DeviceAPI.h"
+#include "Expr.h"
+#include "Function.h"
+#include "IR.h"
 #include "IRVisitor.h"
 #include "Module.h"
+#include "Schedule.h"
 #include "Scope.h"
 
 namespace Halide {
+struct Type;
 
 /** Emit an expression on an output stream (such as std::cout) in
  * human-readable form */
@@ -47,13 +54,14 @@ std::ostream &operator<<(std::ostream &stream, const TailStrategy &t);
 std::ostream &operator<<(std::ostream &stream, const LoopLevel &);
 
 struct Target;
+
 /** Emit a halide Target in a human readable form */
 std::ostream &operator<<(std::ostream &stream, const Target &);
 
 namespace Internal {
 
-struct AssociativePattern;
 struct AssociativeOp;
+struct AssociativePattern;
 
 /** Emit a halide associative pattern on an output stream (such as std::cout)
  * in a human-readable form */

@@ -1,19 +1,33 @@
+#include <stddef.h>
+#include <stdint.h>
 #include <algorithm>
+#include <set>
+#include <type_traits>
 #include <utility>
+#include <vector>
 
-#include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
+#include "Debug.h"
 #include "Deinterleave.h"
+#include "DeviceAPI.h"
+#include "Error.h"
 #include "ExprUsesVar.h"
+#include "Function.h"
+#include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
+#include "Interval.h"
+#include "ModulusRemainder.h"
 #include "Scope.h"
 #include "Simplify.h"
-#include "Solve.h"
 #include "Substitute.h"
+#include "Type.h"
+#include "Util.h"
 #include "VectorizeLoops.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

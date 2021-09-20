@@ -1,10 +1,20 @@
 #include "FlattenNestedRamps.h"
+
+#include <stdint.h>
+#include <algorithm>
+#include <vector>
+
 #include "Bounds.h"
 #include "CSE.h"
 #include "Deinterleave.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Interval.h"
+#include "ModulusRemainder.h"
+#include "Scope.h"
 #include "Simplify.h"
+#include "Type.h"
 
 using std::vector;
 

@@ -1,5 +1,8 @@
 #include "IRMutator.h"
 
+#include "IR.h"
+#include "Type.h"
+
 namespace Halide {
 namespace Internal {
 

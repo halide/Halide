@@ -1,15 +1,18 @@
-#include "HalideBuffer.h"
-#include "HalideTraceUtils.h"
-#include "halide_image_io.h"
-
+#include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
-#include <fcntl.h>
+#include <functional>
 #include <map>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
+
+#include "HalideBuffer.h"
+#include "HalideRuntime.h"
+#include "HalideTraceUtils.h"
+#include "halide_image_io.h"
 
 /** \file
  *

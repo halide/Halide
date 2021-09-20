@@ -1,6 +1,8 @@
 #ifndef HALIDE_CLOSURE_H
 #define HALIDE_CLOSURE_H
 
+#include <stddef.h>
+#include <stdint.h>
 /** \file
  *
  * Provides Closure class.
@@ -8,9 +10,12 @@
 #include <map>
 #include <string>
 
+#include "Buffer.h"
+#include "Expr.h"
 #include "IR.h"
 #include "IRVisitor.h"
 #include "Scope.h"
+#include "Type.h"
 
 namespace Halide {
 
@@ -18,6 +23,14 @@ template<typename T>
 class Buffer;
 
 namespace Internal {
+struct Allocate;
+struct Atomic;
+struct For;
+struct Let;
+struct LetStmt;
+struct Load;
+struct Store;
+struct Variable;
 
 /** A helper class to manage closures. Walks over a statement and
  * retrieves all the references within it to external symbols

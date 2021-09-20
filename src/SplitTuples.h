@@ -1,8 +1,10 @@
 #ifndef HALIDE_SPLIT_TUPLES_H
 #define HALIDE_SPLIT_TUPLES_H
 
-#include "Expr.h"
 #include <map>
+#include <string>
+
+#include "Expr.h"
 
 /** \file
  * Defines the lowering pass that breaks up Tuple-valued realization

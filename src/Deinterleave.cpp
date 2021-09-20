@@ -1,16 +1,29 @@
 #include "Deinterleave.h"
 
+#include <stddef.h>
+#include <stdint.h>
+#include <iostream>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "Buffer.h"
 #include "CSE.h"
-#include "Debug.h"
+#include "Error.h"
 #include "FlattenNestedRamps.h"
+#include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "ModulusRemainder.h"
+#include "Parameter.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include "Type.h"
+#include "Util.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

@@ -13,6 +13,8 @@
  * the PyTorch input, when applicable.
  */
 
+#include <iosfwd>
+
 #include "IRPrinter.h"
 
 namespace Halide {

@@ -1,13 +1,18 @@
+#include <stdlib.h>
 #include <algorithm>
 #include <cassert>
+#include <cerrno>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
+#include <functional>
 #include <iostream>
 #include <list>
 #include <map>
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #ifdef _MSC_VER
@@ -24,9 +29,8 @@
 #endif
 
 #include "HalideRuntime.h"
-#include "inconsolata.h"
-
 #include "halide_trace_config.h"
+#include "inconsolata.h"
 
 using namespace Halide;
 using namespace Halide::Trace;
