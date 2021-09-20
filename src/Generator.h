@@ -1,6 +1,8 @@
 #ifndef HALIDE_GENERATOR_H_
 #define HALIDE_GENERATOR_H_
 
+// IWYU pragma: private, include "Halide.h"
+
 /** \file
  *
  * Generator is a class used to encapsulate the building of Funcs in user
@@ -3795,7 +3797,6 @@ public:
 namespace halide_register_generator {
 struct halide_global_ns;
 };
-// IWYU pragma: no_forward_declare halide_register_generator::halide_global_ns
 
 #define _HALIDE_REGISTER_GENERATOR_IMPL(GEN_CLASS_NAME, GEN_REGISTRY_NAME, FULLY_QUALIFIED_STUB_NAME)                               \
     namespace halide_register_generator {                                                                                           \
