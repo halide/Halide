@@ -25,6 +25,7 @@
 #include "Expr.h"
 #include "ExternalCode.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 #include "IntrusivePtr.h"
 #include "JITModule.h"
 #include "Module.h"
@@ -40,6 +41,7 @@
 namespace Halide {
 
 class Func;
+
 namespace Internal {
 struct JITHandlers;
 struct JITModule;

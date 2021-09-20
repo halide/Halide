@@ -1,5 +1,7 @@
 #include "IRMutator.h"
 
+#include <type_traits>
+
 #include "IR.h"
 #include "Type.h"
 

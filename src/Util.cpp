@@ -1,6 +1,7 @@
 #include "Util.h"
 
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
@@ -13,7 +14,6 @@
 #else
 #include <unistd.h>  // IWYU pragma: keep
 #endif
-#include <_ctype.h>
 #include <sys/stat.h>
 
 #ifdef __linux__

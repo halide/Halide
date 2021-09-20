@@ -1,4 +1,4 @@
-#include <_ctype.h>
+#include <cctype>
 #include <cstddef>
 #include <iostream>
 #include <string>

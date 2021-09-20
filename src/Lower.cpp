@@ -3,7 +3,6 @@
 #include <functional>
 #include <iostream>
 #include <map>
-#include <ratio>
 #include <utility>
 
 #include "AddAtomicMutex.h"

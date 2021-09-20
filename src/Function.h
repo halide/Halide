@@ -19,6 +19,7 @@
 namespace Halide {
 
 class Var;
+
 namespace Internal {
 class Definition;
 class FuncSchedule;

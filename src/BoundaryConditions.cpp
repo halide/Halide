@@ -5,6 +5,7 @@
 
 #include "Error.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 
 namespace Halide {
 

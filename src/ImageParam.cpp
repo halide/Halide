@@ -4,6 +4,7 @@
 
 #include "Error.h"
 #include "IR.h"
+#include "IRPrinter.h"
 #include "Parameter.h"
 #include "Type.h"
 #include "Var.h"

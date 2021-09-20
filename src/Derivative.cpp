@@ -20,6 +20,7 @@
 #include "IR.h"
 #include "IREquality.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 #include "IRVisitor.h"
 #include "Interval.h"
 #include "Parameter.h"
