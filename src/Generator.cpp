@@ -1,4 +1,3 @@
-#include <stdlib.h>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -7,6 +6,7 @@
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <stdlib.h>
 #include <thread>
 #include <unordered_map>
 #include <utility>

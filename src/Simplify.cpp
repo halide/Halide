@@ -1,11 +1,11 @@
 #include "Simplify.h"
 
-#include <stddef.h>
-#include <stdint.h>
 #include <iosfwd>
 #include <map>
 #include <random>
 #include <set>
+#include <stddef.h>
+#include <stdint.h>
 #include <string>
 #include <utility>
 #include <vector>

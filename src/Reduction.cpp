@@ -1,7 +1,7 @@
 #include "Reduction.h"
 
-#include <stddef.h>
 #include <iostream>
+#include <stddef.h>
 #include <utility>
 
 #include "Debug.h"

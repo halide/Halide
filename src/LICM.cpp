@@ -1,9 +1,9 @@
 #include "LICM.h"
 
-#include <stddef.h>
 #include <algorithm>
 #include <map>
 #include <set>
+#include <stddef.h>
 #include <string>
 #include <utility>
 #include <vector>

@@ -1,10 +1,10 @@
 #include "Memoization.h"
 
-#include <ctype.h>
-#include <stddef.h>
 #include <atomic>
 #include <cstdint>
+#include <ctype.h>
 #include <map>
+#include <stddef.h>
 #include <utility>
 
 #include "Buffer.h"

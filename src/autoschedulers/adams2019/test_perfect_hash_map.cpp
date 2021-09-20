@@ -1,9 +1,9 @@
-#include <stdio.h>
-#include <stdlib.h>
 #include <algorithm>
 #include <ctime>
 #include <map>
 #include <random>
+#include <stdio.h>
+#include <stdlib.h>
 #include <utility>
 #include <vector>
 

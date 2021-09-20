@@ -1,4 +1,3 @@
-#include <stddef.h>
 #include <algorithm>
 #include <cstdint>
 #include <initializer_list>
@@ -6,6 +5,7 @@
 #include <map>
 #include <memory>
 #include <sstream>
+#include <stddef.h>
 #include <string>
 #include <utility>
 #include <vector>

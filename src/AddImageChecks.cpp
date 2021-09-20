@@ -1,8 +1,8 @@
 #include "AddImageChecks.h"
 
+#include <iosfwd>
 #include <stddef.h>
 #include <stdint.h>
-#include <iosfwd>
 #include <utility>
 
 #include "Buffer.h"

@@ -7,10 +7,10 @@
  * computing some function regions.
  */
 
-#include <stdint.h>
 #include <map>
 #include <ostream>
 #include <set>
+#include <stdint.h>
 #include <string>
 #include <utility>
 #include <vector>

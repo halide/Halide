@@ -5,8 +5,8 @@
  * Defines a base class for passes over the IR that modify it
  */
 
-#include <stddef.h>
 #include <map>
+#include <stddef.h>
 #include <utility>
 #include <vector>
 

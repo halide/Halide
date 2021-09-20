@@ -1,12 +1,12 @@
 #include "HexagonOptimize.h"
 
-#include <stddef.h>
 #include <algorithm>
 #include <cstdint>
 #include <initializer_list>
 #include <limits>
 #include <map>
 #include <set>
+#include <stddef.h>
 #include <type_traits>
 #include <unordered_map>
 #include <utility>

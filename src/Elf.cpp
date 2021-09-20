@@ -1,6 +1,5 @@
 #include "Elf.h"
 
-#include <string.h>
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -8,6 +7,7 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <string.h>
 
 #include "Debug.h"
 #include "Error.h"

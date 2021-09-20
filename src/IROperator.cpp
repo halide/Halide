@@ -1,7 +1,7 @@
-#include <stddef.h>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <stddef.h>
 #include <utility>
 
 #include "Buffer.h"

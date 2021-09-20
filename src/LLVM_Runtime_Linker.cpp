@@ -1,9 +1,9 @@
 #include "LLVM_Runtime_Linker.h"
 
-#include <stddef.h>
 #include <algorithm>
 #include <cstdint>
 #include <set>
+#include <stddef.h>
 #include <utility>
 
 #include "Error.h"

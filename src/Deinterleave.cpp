@@ -1,8 +1,8 @@
 #include "Deinterleave.h"
 
+#include <iostream>
 #include <stddef.h>
 #include <stdint.h>
-#include <iostream>
 #include <string>
 #include <utility>
 #include <vector>

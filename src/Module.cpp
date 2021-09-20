@@ -1,6 +1,5 @@
 #include "Module.h"
 
-#include <string.h>
 #include <algorithm>
 #include <array>
 #include <bitset>
@@ -9,6 +8,7 @@
 #include <initializer_list>
 #include <iostream>
 #include <memory>
+#include <string.h>
 #include <utility>
 
 #include "Buffer.h"

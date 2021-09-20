@@ -6,11 +6,11 @@
  * Defines util functions that used by auto scheduler.
  */
 
-#include <stddef.h>
 #include <cstdint>
 #include <limits>
 #include <map>
 #include <set>
+#include <stddef.h>
 #include <string>
 #include <utility>
 #include <vector>

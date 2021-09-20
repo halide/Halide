@@ -1,7 +1,7 @@
-#include <ctype.h>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <ctype.h>
 #include <functional>
 #include <map>
 #include <set>

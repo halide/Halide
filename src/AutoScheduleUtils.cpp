@@ -1,7 +1,7 @@
-#include <stdio.h>
 #include <algorithm>
 #include <cstddef>
 #include <iostream>
+#include <stdio.h>
 
 #include "AutoScheduleUtils.h"
 #include "Bounds.h"

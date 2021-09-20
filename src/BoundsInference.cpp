@@ -1,11 +1,11 @@
 #include "BoundsInference.h"
 
-#include <stdint.h>
 #include <algorithm>
 #include <cstddef>
 #include <iterator>
 #include <ostream>
 #include <set>
+#include <stdint.h>
 
 #include "Bounds.h"
 #include "Buffer.h"

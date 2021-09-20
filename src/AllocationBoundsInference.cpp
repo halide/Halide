@@ -1,7 +1,7 @@
 #include "AllocationBoundsInference.h"
 
-#include <stddef.h>
 #include <set>
+#include <stddef.h>
 #include <vector>
 
 #include "Bounds.h"

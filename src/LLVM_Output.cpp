@@ -1,11 +1,11 @@
 #include "LLVM_Output.h"
 
-#include <stdint.h>
-#include <stdlib.h>
 #include <chrono>
 #include <fstream>
 #include <functional>
 #include <map>
+#include <stdint.h>
+#include <stdlib.h>
 #include <system_error>
 #include <utility>
 
@@ -23,8 +23,8 @@
 #endif
 #include <windows.h>
 #else
-#include <unistd.h>
 #include <cstdio>
+#include <unistd.h>
 #endif
 
 namespace Halide {

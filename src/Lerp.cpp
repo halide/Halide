@@ -1,7 +1,7 @@
-#include <stdint.h>
-#include <stdlib.h>
 #include <algorithm>
 #include <cmath>
+#include <stdint.h>
+#include <stdlib.h>
 
 #include "CSE.h"
 #include "Error.h"

@@ -1,6 +1,6 @@
+#include <array>
 #include <stddef.h>
 #include <stdint.h>
-#include <array>
 #include <utility>
 
 #include "IR.h"

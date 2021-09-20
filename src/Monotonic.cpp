@@ -1,9 +1,9 @@
 #include "Monotonic.h"
 
-#include <stddef.h>
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <stddef.h>
 #include <vector>
 
 #include "Bounds.h"

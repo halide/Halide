@@ -7,9 +7,9 @@
  * it more pleasant to work with Halide expressions.
  */
 
-#include <stdint.h>
 #include <cmath>
 #include <initializer_list>
+#include <stdint.h>
 #include <string>
 #include <type_traits>
 #include <utility>

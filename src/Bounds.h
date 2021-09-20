@@ -6,9 +6,9 @@
  * and the regions of a function read or written by a statement.
  */
 
-#include <stddef.h>
 #include <iosfwd>
 #include <map>
+#include <stddef.h>
 #include <string>
 #include <utility>
 #include <vector>

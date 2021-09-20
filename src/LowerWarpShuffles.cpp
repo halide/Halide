@@ -1,7 +1,7 @@
 #include "LowerWarpShuffles.h"
 
-#include <stdint.h>
 #include <ostream>
+#include <stdint.h>
 #include <string>
 #include <utility>
 #include <vector>

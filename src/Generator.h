@@ -260,7 +260,6 @@
  * more information.)
  */
 
-#include <stdio.h>
 #include <algorithm>
 #include <cstdint>
 #include <functional>
@@ -271,6 +270,7 @@
 #include <mutex>
 #include <set>
 #include <sstream>
+#include <stdio.h>
 #include <string>
 #include <tuple>
 #include <type_traits>

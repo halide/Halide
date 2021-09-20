@@ -1,8 +1,8 @@
 #include "Error.h"
 
-#include <stdlib.h>
 #include <exception>
 #include <iostream>
+#include <stdlib.h>
 
 #include "Debug.h"
 #include "Introspection.h"

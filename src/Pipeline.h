@@ -7,13 +7,13 @@
  * pipeline.
  */
 
-#include <stddef.h>
 #include <cstdint>
 #include <functional>
 #include <initializer_list>
 #include <map>
 #include <memory>
 #include <ostream>
+#include <stddef.h>
 #include <string>
 #include <type_traits>
 #include <utility>

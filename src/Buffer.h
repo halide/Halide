@@ -1,9 +1,9 @@
 #ifndef HALIDE_BUFFER_H
 #define HALIDE_BUFFER_H
 
+#include <ostream>
 #include <stddef.h>
 #include <stdint.h>
-#include <ostream>
 #include <string>
 #include <type_traits>
 #include <utility>

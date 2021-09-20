@@ -1,8 +1,8 @@
-#include <ctype.h>
-#include <string.h>
 #include <algorithm>
 #include <atomic>
 #include <cstdlib>
+#include <ctype.h>
+#include <string.h>
 #include <utility>
 
 #include "Argument.h"

@@ -1,12 +1,12 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <algorithm>
 #include <cstdint>
 #include <iostream>
 #include <list>
 #include <map>
 #include <memory>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <string>
 #include <utility>
 #include <vector>

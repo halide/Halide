@@ -1,5 +1,5 @@
-#include <stdint.h>
 #include <memory>
+#include <stdint.h>
 
 #include "CSE.h"
 #include "CodeGen_Internal.h"

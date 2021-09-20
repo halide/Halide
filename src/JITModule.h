@@ -6,10 +6,10 @@
  * a JIT compiled halide pipeline
  */
 
-#include <stddef.h>
-#include <stdint.h>
 #include <map>
 #include <memory>
+#include <stddef.h>
+#include <stdint.h>
 #include <string>
 #include <vector>
 

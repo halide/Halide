@@ -5,8 +5,8 @@
  * Subtypes for Halide expressions (\ref Halide::Expr) and statements (\ref Halide::Internal::Stmt)
  */
 
-#include <stdint.h>
 #include <initializer_list>
+#include <stdint.h>
 #include <string>
 #include <utility>
 #include <vector>

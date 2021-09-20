@@ -1,8 +1,8 @@
 #include "UniquifyVariableNames.h"
 
-#include <stddef.h>
 #include <algorithm>
 #include <iostream>
+#include <stddef.h>
 #include <string>
 #include <utility>
 #include <vector>

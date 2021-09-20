@@ -1,8 +1,8 @@
 #include "DeviceInterface.h"
 
+#include <map>
 #include <stddef.h>
 #include <stdint.h>
-#include <map>
 #include <string>
 #include <utility>
 #include <vector>

@@ -6,10 +6,10 @@
  * Defines Func - the front-end handle on a halide function, and related classes.
  */
 
-#include <stddef.h>
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <stddef.h>
 #include <string>
 #include <type_traits>
 #include <utility>

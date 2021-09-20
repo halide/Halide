@@ -8,8 +8,8 @@
  * front-end-facing interface to CodeGen).
  */
 
-#include <stdint.h>
 #include <memory>
+#include <stdint.h>
 #include <string>
 #include <utility>
 

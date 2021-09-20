@@ -32,10 +32,10 @@ template<typename, typename>
 class IRBuilder;
 }  // namespace llvm
 
-#include <stddef.h>
 #include <map>
 #include <memory>
 #include <set>
+#include <stddef.h>
 #include <string>
 #include <utility>
 #include <vector>

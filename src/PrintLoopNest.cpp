@@ -1,8 +1,8 @@
 #include "PrintLoopNest.h"
 
-#include <stddef.h>
 #include <map>
 #include <ostream>
+#include <stddef.h>
 #include <utility>
 
 #include "AllocationBoundsInference.h"

@@ -1,4 +1,3 @@
-#include <math.h>
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
@@ -7,6 +6,7 @@
 #include <initializer_list>
 #include <iostream>
 #include <limits>
+#include <math.h>
 #include <memory>
 #include <mutex>
 #include <ratio>

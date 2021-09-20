@@ -6,10 +6,10 @@
  * Defines Module, an IR container that fully describes a Halide program.
  */
 
-#include <stdint.h>
 #include <functional>
 #include <map>
 #include <memory>
+#include <stdint.h>
 #include <string>
 #include <vector>
 

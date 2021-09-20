@@ -1,5 +1,5 @@
-#include <stdint.h>
 #include <algorithm>
+#include <stdint.h>
 #include <vector>
 
 #include "AlignLoads.h"

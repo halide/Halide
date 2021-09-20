@@ -1,7 +1,7 @@
 #include "Solve.h"
 
-#include <stdint.h>
 #include <map>
+#include <stdint.h>
 #include <type_traits>
 #include <utility>
 #include <vector>

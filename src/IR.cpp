@@ -1,7 +1,7 @@
 #include "IR.h"
 
-#include <stddef.h>
 #include <numeric>
+#include <stddef.h>
 #include <utility>
 
 #include "Error.h"

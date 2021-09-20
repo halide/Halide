@@ -1,7 +1,7 @@
 #include "EmulateFloat16Math.h"
 
-#include <stddef.h>
 #include <map>
+#include <stddef.h>
 #include <string>
 #include <utility>
 #include <vector>

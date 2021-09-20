@@ -1,9 +1,9 @@
 #include "Introspection.h"
 
-#include <string.h>
 #include <algorithm>
 #include <cstdint>
 #include <map>
+#include <string.h>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -19,8 +19,8 @@
 #ifdef WITH_INTROSPECTION
 
 // defines backtrace, which gets the call stack as instruction pointers
-#include <execinfo.h>
 #include <cstdio>
+#include <execinfo.h>
 #include <iostream>
 #include <regex>
 #include <string>

@@ -5,14 +5,14 @@
  * Defines a method to match a fragment of IR against a pattern containing wildcards
  */
 
-#include <stdint.h>
-#include <stdlib.h>
 #include <algorithm>
 #include <cmath>
 #include <map>
 #include <ostream>
 #include <random>
 #include <set>
+#include <stdint.h>
+#include <stdlib.h>
 #include <string>
 #include <tuple>
 #include <type_traits>

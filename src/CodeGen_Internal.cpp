@@ -1,8 +1,8 @@
 #include "CodeGen_Internal.h"
 
-#include <stdlib.h>
 #include <iostream>
 #include <map>
+#include <stdlib.h>
 #include <vector>
 
 #include "CSE.h"

@@ -1,6 +1,6 @@
-#include <stddef.h>
 #include <iostream>
 #include <sstream>
+#include <stddef.h>
 #include <string>
 
 #include "AssociativeOpsTable.h"

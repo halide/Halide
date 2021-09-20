@@ -1,9 +1,9 @@
 #include "StorageFlattening.h"
 
-#include <stddef.h>
-#include <stdint.h>
 #include <set>
 #include <sstream>
+#include <stddef.h>
+#include <stdint.h>
 #include <utility>
 
 #include "Buffer.h"

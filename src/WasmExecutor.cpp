@@ -1,6 +1,5 @@
 #include "WasmExecutor.h"
 
-#include <string.h>
 #include <algorithm>
 #include <cmath>
 #include <csignal>
@@ -12,6 +11,7 @@
 #include <memory>
 #include <mutex>
 #include <set>
+#include <string.h>
 #include <unordered_map>
 #include <utility>
 #include <vector>

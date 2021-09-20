@@ -1,8 +1,8 @@
 #include "LoopCarry.h"
 
-#include <stddef.h>
 #include <algorithm>
 #include <set>
+#include <stddef.h>
 #include <string>
 #include <utility>
 #include <vector>

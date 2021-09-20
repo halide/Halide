@@ -1,7 +1,7 @@
 #include "InlineReductions.h"
 
-#include <stddef.h>
 #include <iosfwd>
+#include <stddef.h>
 #include <utility>
 #include <vector>
 

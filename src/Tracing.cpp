@@ -1,8 +1,8 @@
 #include "Tracing.h"
 
+#include <set>
 #include <stddef.h>
 #include <stdint.h>
-#include <set>
 #include <utility>
 
 #include "Bounds.h"
