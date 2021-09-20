@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# Note that IWYU is known to be aklpha-quality, fragile, and highly system-dependent;
+# this script is *NOT* meant to be run on a regular basis (much less as a pre-commit check!).
+# Rather, it's meant to be run on an occasional basis, to clean up include dependencies
+# inside Halide. It is entirely likely that every run of this may need manual attention.
+# This particular version was tested on OSX, using Homebrew-instealld IWYU v0.16;
+# hence the checks below. Other versions / platforms / etc may or may not work without
+# additional attention.
+
 set -e
 
 ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
