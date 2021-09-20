@@ -2,7 +2,7 @@
 [
 # Mappings necessary using recent AppleClang on OSX
 {"include": ["<__tree>", "private", "<cstddef>", "public"]},
-{"include": ["<sys/signal.h>", "private", "<csignal.h>", "public"]},
+{"include": ["<sys/signal.h>", "private", "<csignal>", "public"]},
 {"include": ["@<pybind11/detail/.*>", "private", "<pybind11/pybind11.h>", "public"]},
 {"include": ["@[\"<]llvm/.*[\">]", "private", "\"LLVM_Headers.h\"", "public"]},
 {"include": ["@[\"<].*src/interp/interp-inl\\.h[\">]", "private", "\"wabt-src/src/interp/interp.h\"", "public"]},
@@ -11,14 +11,6 @@
 {"symbol": ["std::ofstream", "private", "<fstream>", "public"]},
 
 #{"symbol": ["__base", "private", "<cstddef>", "public"]},
-
-#{"symbol": ["Py_GetVersion", "private", "<Python.h>", "public"]},
-#{"symbol": ["PY_MAJOR_VERSION", "private", "<Python.h>", "public"]},
-#{"symbol": ["PY_MINOR_VERSION", "private", "<Python.h>", "public"]},
-#{"symbol": ["PyErr_SetString", "private", "<Python.h>", "public"]},
-#{"symbol": ["PyExc_ImportError", "private", "<Python.h>", "public"]},
-#{"symbol": ["PyModuleDef", "private", "<Python.h>", "public"]},
-#{"symbol": ["PyObject", "private", "<Python.h>", "public"]},
 
 # Copied directly from https://github.com/include-what-you-use/include-what-you-use/blob/master/libcxx.imp
 {"include": ["<__functional_base>", "private", "<functional>", "public"]},

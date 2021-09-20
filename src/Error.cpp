@@ -1,16 +1,20 @@
 #include "Error.h"
-#include "Introspection.h"
-#include "Util.h"  // for get_env_variable
 
-#include <csignal>
+#include <stdlib.h>
+#include <exception>
+#include <iostream>
+
+#include "Debug.h"
+#include "Introspection.h"
 
 #ifdef _MSC_VER
 #include <io.h>
+
 inline int isatty(int fd) {
     return _isatty(fd);
 }
 #else
-#include <unistd.h>
+#include <unistd.h>  // IWYU pragma: keep
 #endif
 
 namespace Halide {
