@@ -1,7 +1,17 @@
 #include "AssociativeOpsTable.h"
-#include "IRPrinter.h"
 
+#include <cstdint>
+#include <map>
 #include <mutex>
+#include <ostream>
+#include <string>
+
+#include "Debug.h"
+#include "Error.h"
+#include "IR.h"
+#include "IROperator.h"
+#include "IRPrinter.h"
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {

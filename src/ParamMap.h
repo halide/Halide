@@ -1,14 +1,18 @@
 #ifndef HALIDE_PARAM_MAP_H
 #define HALIDE_PARAM_MAP_H
 
+#include <stddef.h>
+#include <initializer_list>
 /** \file
  * Defines a collection of parameters to be passed as formal arguments
  * to a JIT invocation.
  */
 #include <map>
 
+#include "Buffer.h"
 #include "Param.h"
 #include "Parameter.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 

@@ -1,7 +1,12 @@
 #include "UnifyDuplicateLets.h"
+
+#include <map>
+#include <string>
+#include <utility>
+
+#include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
-#include <map>
 
 namespace Halide {
 namespace Internal {

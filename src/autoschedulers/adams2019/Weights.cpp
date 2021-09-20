@@ -4,7 +4,6 @@
 
 #include "Featurization.h"
 #include "HalideBuffer.h"
-#include "NetworkSize.h"
 #include "Weights.h"
 
 namespace Halide {

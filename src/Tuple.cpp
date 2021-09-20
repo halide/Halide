@@ -1,6 +1,7 @@
 #include "Tuple.h"
-#include "Debug.h"
+
 #include "Func.h"
+#include "Function.h"
 
 namespace Halide {
 

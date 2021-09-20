@@ -1,11 +1,13 @@
 #include "CompilerLogger.h"
 
-#include <algorithm>
-#include <fstream>
+#include <cstddef>
+#include <initializer_list>
 #include <iostream>
 #include <set>
 #include <vector>
 
+#include "Debug.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "Util.h"
 

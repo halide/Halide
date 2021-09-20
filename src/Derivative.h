@@ -5,12 +5,15 @@
  *  Automatic differentiation
  */
 
-#include "Expr.h"
-#include "Func.h"
-
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
+
+#include "Buffer.h"
+#include "Expr.h"
+#include "Func.h"
+#include "Param.h"
 
 namespace Halide {
 

@@ -1,9 +1,16 @@
 #include "WrapCalls.h"
+
+#include <cstddef>
+#include <ostream>
+#include <set>
+#include <utility>
+
+#include "Debug.h"
+#include "Error.h"
 #include "FindCalls.h"
 #include "Function.h"
 #include "FunctionPtr.h"
-
-#include <set>
+#include "Schedule.h"
 
 namespace Halide {
 namespace Internal {

@@ -1,9 +1,14 @@
 #include "FindCalls.h"
 
+#include <utility>
+
+#include "Error.h"
 #include "ExternFuncArgument.h"
 #include "Function.h"
+#include "FunctionPtr.h"
+#include "IR.h"
 #include "IRVisitor.h"
-#include <utility>
+#include "Schedule.h"
 
 namespace Halide {
 namespace Internal {

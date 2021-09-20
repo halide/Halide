@@ -12,6 +12,8 @@
 #include "Target.h"
 
 namespace Halide {
+struct Target;
+
 namespace Internal {
 
 /** Insert checks to make sure that all referenced parameters meet

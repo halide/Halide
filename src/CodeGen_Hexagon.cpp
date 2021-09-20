@@ -1,22 +1,38 @@
+#include <stddef.h>
+#include <algorithm>
+#include <cstdint>
+#include <initializer_list>
+#include <limits>
+#include <map>
+#include <memory>
 #include <sstream>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "AlignLoads.h"
 #include "CSE.h"
 #include "CodeGen_Internal.h"
+#include "CodeGen_LLVM.h"
 #include "CodeGen_Posix.h"
 #include "Debug.h"
+#include "Error.h"
+#include "Expr.h"
 #include "HexagonOptimize.h"
-#include "IREquality.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "LLVM_Headers.h"
 #include "LoopCarry.h"
+#include "Module.h"
+#include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
 #include "Target.h"
+#include "Type.h"
 #include "Util.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

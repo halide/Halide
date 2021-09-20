@@ -6,22 +6,27 @@
  * Defines Module, an IR container that fully describes a Halide program.
  */
 
+#include <stdint.h>
 #include <functional>
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "Argument.h"
 #include "Expr.h"
 #include "ExternalCode.h"
 #include "Function.h"  // for NameMangling
+#include "IntrusivePtr.h"
 #include "ModulusRemainder.h"
 
 namespace Halide {
 
+class ExternalCode;
+struct Target;
+struct Type;
 template<typename T>
 class Buffer;
-struct Target;
 
 /** Enums specifying various kinds of outputs that can be produced from a Halide Pipeline. */
 enum class Output {
@@ -124,8 +129,8 @@ struct LoweredFunc {
 }  // namespace Internal
 
 namespace Internal {
-struct ModuleContents;
 class CompilerLogger;
+struct ModuleContents;
 }  // namespace Internal
 
 struct AutoSchedulerResults;

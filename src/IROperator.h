@@ -7,10 +7,19 @@
  * it more pleasant to work with Halide expressions.
  */
 
+#include <stdint.h>
 #include <cmath>
+#include <initializer_list>
+#include <string>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 #include "Expr.h"
+#include "Float16.h"
 #include "Tuple.h"
+#include "Type.h"
+#include "Util.h"
 
 namespace Halide {
 

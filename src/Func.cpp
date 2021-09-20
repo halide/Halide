@@ -1,6 +1,8 @@
+#include <stdint.h>
 #include <algorithm>
-#include <cstring>
-#include <iostream>
+#include <cstddef>
+#include <fstream>
+#include <set>
 #include <utility>
 
 #ifdef _MSC_VER
@@ -9,28 +11,33 @@
 
 #include "ApplySplit.h"
 #include "Argument.h"
+#include "AssociativeOpsTable.h"
 #include "Associativity.h"
-#include "CodeGen_LLVM.h"
 #include "Debug.h"
+#include "DeviceInterface.h"
 #include "ExprUsesVar.h"
 #include "Func.h"
 #include "Function.h"
+#include "FunctionPtr.h"
 #include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "ImageParam.h"
-#include "LLVM_Output.h"
-#include "Lower.h"
-#include "Param.h"
-#include "PrintLoopNest.h"
+#include "IRVisitor.h"
+#include "IntrusivePtr.h"
+#include "OutputImageParam.h"
+#include "Parameter.h"
+#include "Reduction.h"
+#include "Scope.h"
 #include "Simplify.h"
-#include "Solve.h"
 #include "Substitute.h"
 #include "Util.h"
 
 namespace Halide {
+namespace Internal {
+struct JITHandlers;
+}  // namespace Internal
 
 using std::map;
 using std::ofstream;

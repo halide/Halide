@@ -1,6 +1,16 @@
-#include "IR.h"
-#include <cfloat>
+#include <stddef.h>
+#include <cstdint>
+#include <limits>
 #include <sstream>
+#include <string>
+#include <vector>
+
+#include "Error.h"
+#include "Expr.h"
+#include "Float16.h"
+#include "IR.h"
+#include "Type.h"
+#include "Util.h"
 
 namespace Halide {
 
