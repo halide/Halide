@@ -4,7 +4,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
-#include <iomanip>
+#include <iomanip>  // IWYU pragma: keep
 #include <map>
 #include <mutex>
 #include <sstream>
