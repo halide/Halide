@@ -26,7 +26,7 @@ namespace Internal {
 class Parameter;
 template<typename T2>
 class GeneratorInput_Buffer;
-}
+}  // namespace Internal
 
 /** An Image parameter to a halide pipeline. E.g., the input image. */
 class ImageParam : public OutputImageParam {
