@@ -14,6 +14,8 @@
 {"symbol": ["std::condition_variable", "private", "<condition_variable>", "public"]},
 {"symbol": ["std::ifstream", "private", "<fstream>", "public"]},
 {"symbol": ["std::ofstream", "private", "<fstream>", "public"]},
+{"symbol": ["std::setfill", "private", "<iomanip>", "public"]},
+{"symbol": ["std::setw", "private", "<iomanip>", "public"]},
 
 # From https://github.com/include-what-you-use/include-what-you-use/blob/master/libcxx.imp
 {"include": ["<__functional_base>", "private", "<functional>", "public"]},

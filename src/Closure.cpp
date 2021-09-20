@@ -1,6 +1,5 @@
 #include "Closure.h"
 
-#include <utility>
 #include <vector>
 
 #include "Debug.h"

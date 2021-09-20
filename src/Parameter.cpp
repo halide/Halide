@@ -1,7 +1,6 @@
 #include "Parameter.h"
 
 #include <cstdint>
-#include <stddef.h>
 #include <utility>
 
 #include "Argument.h"

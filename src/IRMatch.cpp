@@ -1,6 +1,5 @@
 #include <iostream>
 #include <map>
-#include <stddef.h>
 #include <utility>
 
 #include "IREquality.h"

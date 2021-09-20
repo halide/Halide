@@ -46,6 +46,7 @@ namespace Halide {
 class Func;
 class OutputImageParam;
 class ParamMap;
+
 namespace Internal {
 class Parameter;
 struct JITHandlers;

@@ -7,6 +7,7 @@
 
 #include "Argument.h"
 #include "CodeGen_Internal.h"
+#include "Debug.h"
 #include "FindCalls.h"
 #include "Func.h"
 #include "Function.h"

@@ -2,7 +2,6 @@
 #include <cstddef>
 #include <fstream>
 #include <set>
-#include <stdint.h>
 #include <utility>
 
 #ifdef _MSC_VER

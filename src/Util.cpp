@@ -4,7 +4,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
-#include <ratio>
+#include <iomanip>  // IWYU pragma: keep
 #include <string>
 
 #ifdef _MSC_VER

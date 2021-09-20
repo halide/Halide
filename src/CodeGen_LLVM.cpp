@@ -9,7 +9,6 @@
 #include <math.h>
 #include <memory>
 #include <mutex>
-#include <ratio>
 #include <type_traits>
 
 #include "Argument.h"

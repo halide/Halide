@@ -1,6 +1,5 @@
 #include "HalideTraceUtils.h"
 
-#include <cstdint>
 #include <cstdlib>
 
 namespace Halide {

@@ -4,6 +4,7 @@
 #include <fstream>
 #include <functional>
 #include <map>
+#include <ratio>
 #include <stdint.h>
 #include <stdlib.h>
 #include <system_error>

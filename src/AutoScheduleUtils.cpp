@@ -14,6 +14,7 @@
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
 #include "ImageParam.h"
 #include "Inline.h"
 #include "Param.h"
