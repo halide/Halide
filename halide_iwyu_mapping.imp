@@ -2,6 +2,9 @@
 [
 # Mappings necessary using recent AppleClang on OSX
 {"include": ["<__tree>", "private", "<cstddef>", "public"]},
+{"include": ["<_ctype.h>", "private", "<ctype.h>", "public"]},
+{"include": ["<__string>", "private", "<string>", "public"]},
+{"include": ["<__bit_reference>", "private", "<vector>", "public"]},
 {"include": ["<sys/signal.h>", "private", "<csignal>", "public"]},
 {"include": ["@<pybind11/detail/.*>", "private", "<pybind11/pybind11.h>", "public"]},
 {"include": ["@[\"<]llvm/.*[\">]", "private", "\"LLVM_Headers.h\"", "public"]},
