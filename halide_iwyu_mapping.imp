@@ -12,7 +12,7 @@
 
 #{"symbol": ["__base", "private", "<cstddef>", "public"]},
 
-# Copied directly from https://github.com/include-what-you-use/include-what-you-use/blob/master/libcxx.imp
+# From https://github.com/include-what-you-use/include-what-you-use/blob/master/libcxx.imp
 {"include": ["<__functional_base>", "private", "<functional>", "public"]},
 {"include": ["<__mutex_base>", "private", "<mutex>", "public"]},
 {"symbol": ["std::declval", "private", "<utility>", "public"]},
@@ -21,7 +21,7 @@
 {"symbol": ["std::nullptr_t", "private", "<cstddef>", "public"]},
 {"symbol": ["std::string", "private", "<string>", "public"]},
 
-# Copied directly from https://github.com/include-what-you-use/include-what-you-use/blob/master/python3.8.imp
+# From https://github.com/include-what-you-use/include-what-you-use/blob/master/python3.8.imp
 {"include": ["@[\"<]ImPlatform\\.h[\">]", "private", "<Python.h>", "public"]},
 {"include": ["@[\"<]ImagingUtils\\.h[\">]", "private", "<Python.h>", "public"]},
 {"include": ["@[\"<]Python-ast\\.h[\">]", "private", "<Python.h>", "public"]},
