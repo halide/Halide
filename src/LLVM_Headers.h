@@ -21,6 +21,8 @@
 #pragma clang system_header
 #endif
 
+// IWYU pragma: begin_exports
+
 #ifdef WITH_WABT
 #include <lld/Common/Driver.h>
 #endif
@@ -95,6 +97,8 @@
 #include <llvm/Transforms/Scalar/GVN.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>
 #include <llvm/Transforms/Utils/SymbolRewriter.h>
+
+// IWYU pragma: end_exports
 
 // No msvc warnings from llvm headers please
 #ifdef _MSC_VER
