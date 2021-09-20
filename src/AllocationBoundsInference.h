@@ -15,6 +15,7 @@ namespace Halide {
 namespace Internal {
 
 class Function;
+struct Interval;
 
 /** Take a partially statement with Realize nodes in terms of
  * variables, and define values for those variables. */

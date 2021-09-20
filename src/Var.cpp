@@ -1,5 +1,7 @@
 #include "Var.h"
+
 #include "IR.h"
+#include "Type.h"
 #include "Util.h"
 
 namespace Halide {

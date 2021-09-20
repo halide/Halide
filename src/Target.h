@@ -8,6 +8,7 @@
 #include <bitset>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "DeviceAPI.h"
 #include "Type.h"

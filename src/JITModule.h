@@ -6,12 +6,18 @@
  * a JIT compiled halide pipeline
  */
 
+#include <stddef.h>
+#include <stdint.h>
 #include <map>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "IntrusivePtr.h"
 #include "Type.h"
 #include "runtime/HalideRuntime.h"
+
+struct halide_trace_event_t;
 
 namespace llvm {
 class Module;
@@ -19,10 +25,10 @@ class Module;
 
 namespace Halide {
 
+class Module;
 struct ExternCFunction;
 struct JITExtern;
 struct Target;
-class Module;
 
 namespace Internal {
 

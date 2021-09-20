@@ -1,10 +1,14 @@
+#include <algorithm>
 #include <atomic>
 #include <cstdlib>
-#include <memory>
-#include <set>
+#include <ostream>
 #include <utility>
 
+#include "Buffer.h"
 #include "CSE.h"
+#include "Debug.h"
+#include "Definition.h"
+#include "ExternFuncArgument.h"
 #include "Func.h"
 #include "Function.h"
 #include "IR.h"
@@ -12,9 +16,18 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "IRVisitor.h"
+#include "IntrusivePtr.h"
 #include "ParallelRVar.h"
+#include "Parameter.h"
+#include "RDom.h"
 #include "Random.h"
+#include "Reduction.h"
+#include "Schedule.h"
 #include "Scope.h"
+#include "Target.h"
+#include "Type.h"
+#include "Util.h"
 #include "Var.h"
 
 namespace Halide {

@@ -1,19 +1,28 @@
+#include <stdlib.h>
 #include <atomic>
-#include <cmath>
-#include <condition_variable>
+#include <chrono>
+#include <cstddef>
 #include <fstream>
+#include <iostream>
 #include <memory>
+#include <stdexcept>
 #include <thread>
 #include <unordered_map>
 #include <utility>
 
+#include "Argument.h"
 #include "BoundaryConditions.h"
 #include "CompilerLogger.h"
+#include "Debug.h"
 #include "Derivative.h"
+#include "Dimension.h"
 #include "Generator.h"
+#include "IR.h"
 #include "IRPrinter.h"
 #include "Module.h"
+#include "ObjectInstanceRegistry.h"
 #include "Simplify.h"
+#include "runtime/HalideBuffer.h"
 
 namespace Halide {
 

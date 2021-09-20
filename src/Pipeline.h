@@ -7,11 +7,22 @@
  * pipeline.
  */
 
+#include <stddef.h>
+#include <cstdint>
+#include <functional>
 #include <initializer_list>
 #include <map>
 #include <memory>
+#include <ostream>
+#include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
+#include "Buffer.h"
+#include "Debug.h"
+#include "Error.h"
+#include "Expr.h"
 #include "ExternalCode.h"
 #include "IROperator.h"
 #include "IntrusivePtr.h"
@@ -21,11 +32,19 @@
 #include "Realization.h"
 #include "Target.h"
 #include "Tuple.h"
+#include "Type.h"
+#include "Util.h"
+#include "runtime/HalideBuffer.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 
-struct Argument;
 class Func;
+namespace Internal {
+struct JITHandlers;
+struct JITModule;
+}  // namespace Internal
+struct Argument;
 struct PipelineContents;
 
 /** A struct representing the machine parameters to generate the auto-scheduled

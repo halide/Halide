@@ -1,5 +1,13 @@
 #include "Introspection.h"
 
+#include <string.h>
+#include <algorithm>
+#include <cstdint>
+#include <map>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
 #if defined(_MSC_VER)
 #undef WITH_INTROSPECTION
 #elif defined(__has_include)
@@ -10,20 +18,17 @@
 
 #ifdef WITH_INTROSPECTION
 
+// defines backtrace, which gets the call stack as instruction pointers
+#include <execinfo.h>
+#include <cstdio>
+#include <iostream>
+#include <regex>
+#include <string>
+
 #include "Debug.h"
 #include "Error.h"
 #include "LLVM_Headers.h"
 #include "Util.h"
-
-#include <cstdio>
-#include <iostream>
-#include <sstream>
-#include <string>
-
-// defines backtrace, which gets the call stack as instruction pointers
-#include <execinfo.h>
-
-#include <regex>
 
 using std::map;
 using std::pair;

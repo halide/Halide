@@ -5,24 +5,27 @@
  * Defines the internal representation of a halide function's definition and related classes
  */
 
+#include <map>
+#include <string>
+#include <vector>
+
 #include "Expr.h"
 #include "IntrusivePtr.h"
 #include "Schedule.h"
 
-#include <map>
-
 namespace Halide {
 
 namespace Internal {
+class ReductionDomain;
 struct DefinitionContents;
 struct FunctionContents;
-class ReductionDomain;
 }  // namespace Internal
 
 namespace Internal {
 
-class IRVisitor;
 class IRMutator;
+class IRVisitor;
+class StageSchedule;
 struct Specialization;
 
 /** A Function definition which can either represent a init or an update

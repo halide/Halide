@@ -1,7 +1,15 @@
 #include "LLVM_Runtime_Linker.h"
+
+#include <stddef.h>
+#include <algorithm>
+#include <cstdint>
+#include <set>
+#include <utility>
+
 #include "Error.h"
 #include "LLVM_Headers.h"
 #include "Target.h"
+#include "Util.h"
 
 namespace Halide {
 

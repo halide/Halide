@@ -5,10 +5,26 @@
  * Defines a base-class for code-generators on posixy cpu platforms
  */
 
+#include <stddef.h>
+#include <string>
+#include <vector>
+
 #include "CodeGen_LLVM.h"
+#include "Expr.h"
+#include "Scope.h"
+#include "Type.h"
+
+namespace llvm {
+class Function;
+class Value;
+}  // namespace llvm
 
 namespace Halide {
+struct Target;
+
 namespace Internal {
+struct Allocate;
+struct Free;
 
 /** A code generator that emits posix code from a given Halide stmt. */
 class CodeGen_Posix : public CodeGen_LLVM {

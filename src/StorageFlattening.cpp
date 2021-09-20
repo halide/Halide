@@ -1,15 +1,30 @@
 #include "StorageFlattening.h"
 
-#include "Bounds.h"
+#include <stddef.h>
+#include <stdint.h>
+#include <set>
+#include <sstream>
+#include <utility>
+
+#include "Buffer.h"
+#include "Debug.h"
+#include "Error.h"
 #include "Function.h"
+#include "FunctionPtr.h"
 #include "FuseGPUThreadLoops.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "ModulusRemainder.h"
 #include "Parameter.h"
+#include "PrefetchDirective.h"
+#include "Reduction.h"
+#include "Schedule.h"
 #include "Scope.h"
-
-#include <sstream>
+#include "Target.h"
+#include "Type.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

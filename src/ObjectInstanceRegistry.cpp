@@ -1,4 +1,7 @@
 #include "ObjectInstanceRegistry.h"
+
+#include <utility>
+
 #include "Error.h"
 #include "Introspection.h"
 

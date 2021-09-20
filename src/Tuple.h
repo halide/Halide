@@ -1,13 +1,17 @@
 #ifndef HALIDE_TUPLE_H
 #define HALIDE_TUPLE_H
 
+#include <stddef.h>
+#include <utility>
 /** \file
  *
  * Defines Tuple - the front-end handle on small arrays of expressions.
  */
 #include <vector>
 
+#include "Error.h"
 #include "Expr.h"
+#include "Util.h"
 
 namespace Halide {
 

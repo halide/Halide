@@ -1,5 +1,10 @@
 #include "Closure.h"
+
+#include <utility>
+#include <vector>
+
 #include "Debug.h"
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {

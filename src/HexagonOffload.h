@@ -7,6 +7,8 @@
  * Hexagon host runtime module.
  */
 
+#include <stdint.h>
+
 #include "Buffer.h"
 #include "Expr.h"
 
