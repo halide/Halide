@@ -11,7 +11,8 @@
 #include "Util.h"
 #include "runtime/HalideRuntime.h"
 
-template <typename T> struct halide_c_type_to_name;
+template<typename T>
+struct halide_c_type_to_name;
 
 namespace Halide {
 struct bfloat16_t;
