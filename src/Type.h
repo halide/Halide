@@ -15,7 +15,8 @@ namespace Halide {
 struct bfloat16_t;
 struct float16_t;
 }  // namespace Halide
-template <typename T> struct halide_c_type_to_name;
+template<typename T>
+struct halide_c_type_to_name;
 
 /** \file
  * Defines halide types

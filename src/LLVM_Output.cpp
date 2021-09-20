@@ -24,8 +24,8 @@
 #endif
 #include <windows.h>
 #else
-#include <unistd.h>
 #include <cstdio>
+#include <unistd.h>
 #endif
 
 namespace Halide {
