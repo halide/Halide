@@ -1,3 +1,4 @@
+# This is the mapping file used by the run_iwyu.sh script.
 # Note that this is file is JSON, except that it uses # instead of // for comments
 [
 # Mappings necessary using recent AppleClang on OSX
