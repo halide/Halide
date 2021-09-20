@@ -1,8 +1,8 @@
 #include "Introspection.h"
 
-#include <string.h>
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <map>
 #include <type_traits>
 #include <utility>

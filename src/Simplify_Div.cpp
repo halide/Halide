@@ -1,5 +1,5 @@
-#include <stdint.h>
 #include <algorithm>
+#include <cstdint>
 
 #include "Error.h"
 #include "Expr.h"

@@ -6,7 +6,7 @@
  * generated halide pipeline
  */
 
-#include <stdint.h>
+#include <cstdint>
 #include <string>
 
 #include "Expr.h"

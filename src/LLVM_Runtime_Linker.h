@@ -5,7 +5,7 @@
  * Support for linking LLVM modules that comprise the runtime.
  */
 
-#include <stdint.h>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>

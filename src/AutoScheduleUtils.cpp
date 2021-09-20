@@ -1,6 +1,6 @@
-#include <stdio.h>
 #include <algorithm>
 #include <cstddef>
+#include <cstdio>
 #include <iostream>
 
 #include "AutoScheduleUtils.h"

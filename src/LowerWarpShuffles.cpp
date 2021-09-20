@@ -1,6 +1,6 @@
 #include "LowerWarpShuffles.h"
 
-#include <stdint.h>
+#include <cstdint>
 #include <ostream>
 #include <string>
 #include <utility>

@@ -1,6 +1,6 @@
 #include "ParallelRVar.h"
 
-#include <stddef.h>
+#include <cstddef>
 #include <map>
 #include <utility>
 #include <vector>

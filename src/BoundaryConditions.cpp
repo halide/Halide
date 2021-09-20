@@ -1,6 +1,6 @@
 #include "BoundaryConditions.h"
 
-#include <stddef.h>
+#include <cstddef>
 #include <vector>
 
 #include "Error.h"

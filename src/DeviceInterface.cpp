@@ -1,7 +1,7 @@
 #include "DeviceInterface.h"
 
-#include <stddef.h>
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
 #include <map>
 #include <string>
 #include <utility>

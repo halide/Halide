@@ -6,7 +6,7 @@
  * and the regions of a function read or written by a statement.
  */
 
-#include <stddef.h>
+#include <cstddef>
 #include <iosfwd>
 #include <map>
 #include <string>

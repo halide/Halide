@@ -1,6 +1,6 @@
 #include "SimplifySpecializations.h"
 
-#include <stddef.h>
+#include <cstddef>
 #include <utility>
 #include <vector>
 

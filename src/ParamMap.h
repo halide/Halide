@@ -1,7 +1,7 @@
 #ifndef HALIDE_PARAM_MAP_H
 #define HALIDE_PARAM_MAP_H
 
-#include <stddef.h>
+#include <cstddef>
 #include <initializer_list>
 /** \file
  * Defines a collection of parameters to be passed as formal arguments

@@ -1,9 +1,9 @@
 #include "Elf.h"
 
-#include <string.h>
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <initializer_list>
 #include <limits>
 #include <map>

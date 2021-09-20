@@ -1,7 +1,7 @@
 #include "Deinterleave.h"
 
-#include <stddef.h>
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <string>
 #include <utility>

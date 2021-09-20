@@ -1,8 +1,8 @@
 #ifndef HALIDE_DEVICE_ARGUMENT_H
 #define HALIDE_DEVICE_ARGUMENT_H
 
-#include <stddef.h>
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
 /** \file
  * Defines helpers for passing arguments to separate devices, such as GPUs.
  */

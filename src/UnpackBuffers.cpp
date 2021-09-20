@@ -1,6 +1,6 @@
 #include "UnpackBuffers.h"
 
-#include <stdint.h>
+#include <cstdint>
 #include <map>
 #include <set>
 #include <string>

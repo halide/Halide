@@ -1,6 +1,6 @@
 #include "CPlusPlusMangle.h"
 
-#include <stddef.h>
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <ostream>

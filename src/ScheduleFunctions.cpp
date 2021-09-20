@@ -1,6 +1,6 @@
-#include <stdint.h>
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <ostream>
 #include <set>
 #include <type_traits>

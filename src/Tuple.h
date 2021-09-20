@@ -1,7 +1,7 @@
 #ifndef HALIDE_TUPLE_H
 #define HALIDE_TUPLE_H
 
-#include <stddef.h>
+#include <cstddef>
 #include <utility>
 /** \file
  *

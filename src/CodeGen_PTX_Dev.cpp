@@ -1,7 +1,7 @@
 #include "CodeGen_PTX_Dev.h"
 
-#include <stdint.h>
-#include <stdlib.h>
+#include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <string>
 #include <type_traits>

@@ -1,7 +1,7 @@
 #include "Tracing.h"
 
-#include <stddef.h>
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
 #include <set>
 #include <utility>
 

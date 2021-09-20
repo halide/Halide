@@ -1,6 +1,6 @@
 #include "IR.h"
 
-#include <stddef.h>
+#include <cstddef>
 #include <numeric>
 #include <utility>
 

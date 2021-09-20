@@ -5,7 +5,7 @@
  * Defines a base-class for code-generators on posixy cpu platforms
  */
 
-#include <stddef.h>
+#include <cstddef>
 #include <string>
 #include <vector>
 

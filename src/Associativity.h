@@ -1,7 +1,7 @@
 #ifndef HALIDE_ASSOCIATIVITY_H
 #define HALIDE_ASSOCIATIVITY_H
 
-#include <stddef.h>
+#include <cstddef>
 /** \file
  *
  * Methods for extracting an associative operator from a Func's update definition

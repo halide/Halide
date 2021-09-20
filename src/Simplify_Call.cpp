@@ -12,9 +12,9 @@
 #include <intrin.h>
 #endif
 
-#include <stdio.h>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <limits>
 #include <string>
 #include <unordered_map>

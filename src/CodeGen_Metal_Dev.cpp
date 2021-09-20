@@ -1,6 +1,6 @@
-#include <stddef.h>
-#include <stdint.h>
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <map>
 #include <string>

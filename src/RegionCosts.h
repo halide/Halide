@@ -7,7 +7,7 @@
  * computing some function regions.
  */
 
-#include <stdint.h>
+#include <cstdint>
 #include <map>
 #include <ostream>
 #include <set>

@@ -1,6 +1,6 @@
-#include <stddef.h>
-#include <stdint.h>
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <utility>
 
 #include "IR.h"

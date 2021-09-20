@@ -1,7 +1,7 @@
 #include "HexagonOptimize.h"
 
-#include <stddef.h>
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <initializer_list>
 #include <limits>
