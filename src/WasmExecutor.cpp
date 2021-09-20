@@ -1,5 +1,13 @@
 #include "WasmExecutor.h"
 
+#include <cmath>
+#include <csignal>
+#include <cstdlib>
+#include <mutex>
+#include <sstream>
+#include <unordered_map>
+#include <vector>
+
 #include "CodeGen_Posix.h"
 #include "CodeGen_Targets.h"
 #include "Error.h"
@@ -13,14 +21,6 @@
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
 #include "Target.h"
-
-#include <cmath>
-#include <csignal>
-#include <cstdlib>
-#include <mutex>
-#include <sstream>
-#include <unordered_map>
-#include <vector>
 
 #if WITH_WABT
 #include "wabt-src/src/binary-reader.h"
