@@ -4,6 +4,7 @@
 #{"symbol": ["__base", "private", "<cstddef>", "public"]},
 {"include": ["<__tree>", "private", "<cstddef>", "public"]},
 {"include": ["@<pybind11/detail/.*>", "private", "<pybind11/pybind11.h>", "public"]},
+{"include": ["@[\"<]llvm/.*[\">]", "private", "\"LLVM_Headers.h\"", "public"]},
 {"symbol": ["std::ifstream", "private", "<fstream>", "public"]},
 {"symbol": ["std::ofstream", "private", "<fstream>", "public"]},
 {"symbol": ["halide_register_generator::halide_global_ns", "private", "\"Halide.h\"", "public"]},
