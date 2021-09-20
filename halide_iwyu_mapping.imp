@@ -11,6 +11,7 @@
 {"include": ["@[\"<].*src/interp/interp-inl\\.h[\">]", "private", "\"wabt-src/src/interp/interp.h\"", "public"]},
 {"include": ["@[\"<]llvm/.*[\">]", "private", "\"LLVM_Headers.h\"", "public"]},
 {"symbol": ["halide_register_generator::halide_global_ns", "private", "\"Halide.h\"", "public"]},
+{"symbol": ["std::condition_variable", "private", "<condition_variable>", "public"]},
 {"symbol": ["std::ifstream", "private", "<fstream>", "public"]},
 {"symbol": ["std::ofstream", "private", "<fstream>", "public"]},
 
