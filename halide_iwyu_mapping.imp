@@ -5,6 +5,8 @@
 {"include": ["@<pybind11/detail/.*>", "private", "<pybind11/pybind11.h>", "public"]},
 {"symbol": ["std::ifstream", "private", "<fstream>", "public"]},
 {"symbol": ["std::ofstream", "private", "<fstream>", "public"]},
+{"symbol": ["halide_register_generator::halide_global_ns", "private", "Halide.h", "public"]}
+{"symbol": ["Halide::ExternFuncArgument", "private", "ExternFuncArgument.h", "public"]}
 # Copied directly from https://github.com/include-what-you-use/include-what-you-use/blob/master/libcxx.imp
 {"include": ["<__functional_base>", "private", "<functional>", "public"]},
 {"include": ["<__mutex_base>", "private", "<mutex>", "public"]},
