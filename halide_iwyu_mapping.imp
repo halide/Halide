@@ -1,12 +1,20 @@
 # Note that this is file is JSON, except that it uses # instead of // for comments
 [
 # Mappings necessary using recent AppleClang on OSX
+#{"symbol": ["__base", "private", "<cstddef>", "public"]},
 {"include": ["<__tree>", "private", "<cstddef>", "public"]},
 {"include": ["@<pybind11/detail/.*>", "private", "<pybind11/pybind11.h>", "public"]},
 {"symbol": ["std::ifstream", "private", "<fstream>", "public"]},
 {"symbol": ["std::ofstream", "private", "<fstream>", "public"]},
-{"symbol": ["halide_register_generator::halide_global_ns", "private", "Halide.h", "public"]}
-{"symbol": ["Halide::ExternFuncArgument", "private", "ExternFuncArgument.h", "public"]}
+{"symbol": ["halide_register_generator::halide_global_ns", "private", "\"Halide.h\"", "public"]},
+#{"symbol": ["Halide::ExternFuncArgument", "private", "ExternFuncArgument.h", "public"]},
+#{"symbol": ["PyModuleDef", "private", "<Python.h>", "public"]},
+#{"symbol": ["PyObject", "private", "<Python.h>", "public"]},
+#{"symbol": ["PY_MAJOR_VERSION", "private", "<Python.h>", "public"]},
+#{"symbol": ["PY_MINOR_VERSION", "private", "<Python.h>", "public"]},
+#{"symbol": ["PyErr_SetString", "private", "<Python.h>", "public"]},
+#{"symbol": ["PyExc_ImportError", "private", "<Python.h>", "public"]},
+#{"symbol": ["Py_GetVersion", "private", "<Python.h>", "public"]},
 # Copied directly from https://github.com/include-what-you-use/include-what-you-use/blob/master/libcxx.imp
 {"include": ["<__functional_base>", "private", "<functional>", "public"]},
 {"include": ["<__mutex_base>", "private", "<mutex>", "public"]},

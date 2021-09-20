@@ -112,11 +112,23 @@ IWYU_TARGETS=$(find \
      ! -name find_inverse.cpp \
      ! -name DefaultCostModel.cpp)
 
+# TODO REMOVE ME
+#IWYU_TARGETS=$(find \
+#     "${ROOT_DIR}/python_bindings" \
+#     \( -name *.cpp -o -name *.c \) -and -not -wholename "*/.*")
+
 IWYU_LOG="${IWYU_BUILD_DIR}/iwyu.log"
 echo Running iwyu_tool.py...
 
 # iwyu_tool.py returns nonzero if anything is found to fix, so disable exiting on error for this command
 set +e
+#echo ${IWYU_TOOL} \
+#    ${IWYU_TARGETS} \
+#    -j ${IWYU_J} \
+#    -p ${IWYU_BUILD_DIR}/compile_commands.json \
+#    -- \
+#    -Xiwyu --mapping_file=${ROOT_DIR}/halide_iwyu_mapping.imp \
+#    > ${IWYU_LOG}
 ${IWYU_TOOL} \
     ${IWYU_TARGETS} \
     -j ${IWYU_J} \
