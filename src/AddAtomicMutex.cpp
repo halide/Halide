@@ -1,25 +1,12 @@
 #include "AddAtomicMutex.h"
 
-#include <cstddef>
-#include <set>
-#include <utility>
-#include <vector>
-
-#include "Dimension.h"
-#include "Error.h"
 #include "ExprUsesVar.h"
 #include "Func.h"
-#include "Function.h"
-#include "IR.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "IRVisitor.h"
 #include "OutputImageParam.h"
-#include "Scope.h"
-#include "Type.h"
-#include "Util.h"
-
-struct halide_mutex_array;
+#include <utility>
 
 namespace Halide {
 namespace Internal {

@@ -1,32 +1,19 @@
-#include <stdint.h>
-#include <cstddef>
-#include <initializer_list>
-#include <map>
-#include <memory>
 #include <set>
 #include <sstream>
-#include <string>
-#include <type_traits>
-#include <utility>
-#include <vector>
 
+#include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Posix.h"
 #include "ConciseCasts.h"
 #include "Debug.h"
-#include "Error.h"
-#include "Expr.h"
-#include "IR.h"
+#include "IREquality.h"
 #include "IRMatch.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "LLVM_Headers.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include "Target.h"
-#include "Type.h"
 #include "Util.h"
-#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

@@ -3,8 +3,6 @@
 
 /** Defines methods for manipulating and analyzing boolean expressions. */
 
-#include <string>
-
 #include "Bounds.h"
 #include "Expr.h"
 #include "Interval.h"

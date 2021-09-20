@@ -5,9 +5,6 @@
  * Defines the Interval class
  */
 
-#include <stdint.h>
-
-#include "Error.h"
 #include "Expr.h"
 
 namespace Halide {

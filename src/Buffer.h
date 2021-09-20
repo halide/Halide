@@ -1,24 +1,10 @@
 #ifndef HALIDE_BUFFER_H
 #define HALIDE_BUFFER_H
 
-#include <stddef.h>
-#include <stdint.h>
-#include <ostream>
-#include <string>
-#include <type_traits>
-#include <utility>
-#include <vector>
-
-#include "DeviceAPI.h"
 #include "DeviceInterface.h"
-#include "Error.h"
 #include "Expr.h"
 #include "IntrusivePtr.h"
-#include "Target.h"
-#include "Type.h"
-#include "Util.h"
 #include "runtime/HalideBuffer.h"
-#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 

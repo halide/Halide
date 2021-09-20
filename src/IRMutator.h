@@ -5,58 +5,12 @@
  * Defines a base class for passes over the IR that modify it
  */
 
-#include <stddef.h>
 #include <map>
-#include <utility>
-#include <vector>
 
-#include "Expr.h"
 #include "IR.h"
 
 namespace Halide {
 namespace Internal {
-struct Acquire;
-struct Add;
-struct Allocate;
-struct And;
-struct AssertStmt;
-struct Atomic;
-struct Block;
-struct Broadcast;
-struct Call;
-struct Cast;
-struct Div;
-struct EQ;
-struct Evaluate;
-struct For;
-struct Fork;
-struct Free;
-struct GE;
-struct GT;
-struct IfThenElse;
-struct LE;
-struct LT;
-struct Let;
-struct LetStmt;
-struct Load;
-struct Max;
-struct Min;
-struct Mod;
-struct Mul;
-struct NE;
-struct Not;
-struct Or;
-struct Prefetch;
-struct ProducerConsumer;
-struct Provide;
-struct Ramp;
-struct Realize;
-struct Select;
-struct Shuffle;
-struct Store;
-struct Sub;
-struct Variable;
-struct VectorReduce;
 
 /** A base class for passes over the IR which modify it
  * (e.g. replacing a variable with a value (Substitute.h), or

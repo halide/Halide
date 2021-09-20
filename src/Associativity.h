@@ -1,19 +1,16 @@
 #ifndef HALIDE_ASSOCIATIVITY_H
 #define HALIDE_ASSOCIATIVITY_H
 
-#include <stddef.h>
 /** \file
  *
  * Methods for extracting an associative operator from a Func's update definition
  * if there is any and computing the identity of the associative operator.
  */
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "AssociativeOpsTable.h"
 #include "Expr.h"
-#include "IREquality.h"
 
 namespace Halide {
 namespace Internal {

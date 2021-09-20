@@ -1,20 +1,13 @@
-#include <cstddef>
-#include <cstdint>
 #include <iostream>
-#include <set>
-#include <type_traits>
 #include <utility>
 
 #include "Bounds.h"
-#include "Buffer.h"
 #include "CSE.h"
 #include "ConciseCasts.h"
 #include "Debug.h"
-#include "Definition.h"
-#include "DeviceAPI.h"
-#include "Error.h"
+#include "Deinterleave.h"
 #include "ExprUsesVar.h"
-#include "Function.h"
+#include "Func.h"
 #include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
@@ -22,18 +15,13 @@
 #include "IRPrinter.h"
 #include "IRVisitor.h"
 #include "InlineReductions.h"
-#include "ModulusRemainder.h"
 #include "Param.h"
-#include "Parameter.h"
 #include "PurifyIndexMath.h"
-#include "RDom.h"
 #include "Simplify.h"
 #include "SimplifyCorrelatedDifferences.h"
 #include "Solve.h"
-#include "Type.h"
 #include "Util.h"
 #include "Var.h"
-#include "runtime/HalideRuntime.h"
 
 #ifndef DO_TRACK_BOUNDS_INTERVALS
 #define DO_TRACK_BOUNDS_INTERVALS 0

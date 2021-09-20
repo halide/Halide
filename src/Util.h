@@ -1,9 +1,7 @@
 // Always use assert, even if llvm-config defines NDEBUG
-#include <type_traits>
 #ifdef NDEBUG
 #undef NDEBUG
 #include <assert.h>
-
 #define NDEBUG
 #else
 #include <cassert>

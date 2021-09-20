@@ -1,21 +1,9 @@
-#include <math.h>
-#include <algorithm>
-#include <chrono>
-#include <cstddef>
-#include <cstdint>
-#include <functional>
-#include <initializer_list>
-#include <iostream>
 #include <limits>
 #include <memory>
-#include <mutex>
-#include <ratio>
-#include <type_traits>
+#include <sstream>
 
-#include "Argument.h"
 #include "CPlusPlusMangle.h"
 #include "CSE.h"
-#include "Closure.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
 #include "CodeGen_Posix.h"
@@ -23,29 +11,21 @@
 #include "CompilerLogger.h"
 #include "Debug.h"
 #include "Deinterleave.h"
-#include "DeviceAPI.h"
 #include "EmulateFloat16Math.h"
-#include "Error.h"
 #include "ExprUsesVar.h"
-#include "ExternFuncArgument.h"
-#include "ExternalCode.h"
 #include "FindIntrinsics.h"
-#include "Float16.h"
-#include "Function.h"
-#include "IR.h"
 #include "IREquality.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
+#include "IntegerDivisionTable.h"
+#include "JITModule.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
 #include "Lerp.h"
 #include "MatlabWrapper.h"
-#include "ModulusRemainder.h"
-#include "Parameter.h"
 #include "Pipeline.h"
 #include "Simplify.h"
 #include "Util.h"
-#include "runtime/HalideRuntime.h"
 
 // MSVC won't set __cplusplus correctly unless certain compiler flags are set
 // (and CMake doesn't set those flags for you even if you specify C++17),
@@ -76,21 +56,18 @@ using std::vector;
     inline void Initialize##target##Target() { \
     }
 #include <llvm/Config/Targets.def>
-
 #undef LLVM_TARGET
 
 #define LLVM_ASM_PARSER(target)                   \
     inline void Initialize##target##AsmParser() { \
     }
 #include <llvm/Config/AsmParsers.def>
-
 #undef LLVM_ASM_PARSER
 
 #define LLVM_ASM_PRINTER(target)                   \
     inline void Initialize##target##AsmPrinter() { \
     }
 #include <llvm/Config/AsmPrinters.def>
-
 #undef LLVM_ASM_PRINTER
 
 #define InitializeTarget(target)          \
@@ -301,20 +278,17 @@ void CodeGen_LLVM::initialize_llvm() {
 #define LLVM_TARGET(target) \
     Initialize##target##Target();
 #include <llvm/Config/Targets.def>
-
 #undef LLVM_TARGET
 
 #define LLVM_ASM_PARSER(target) \
     Initialize##target##AsmParser();
 #include <llvm/Config/AsmParsers.def>
-
 #undef LLVM_ASM_PARSER
 
 #define LLVM_ASM_PRINTER(target) \
     Initialize##target##AsmPrinter();
 #include <llvm/Config/AsmPrinters.def>
 #include <utility>
-
 #undef LLVM_ASM_PRINTER
     });
 }

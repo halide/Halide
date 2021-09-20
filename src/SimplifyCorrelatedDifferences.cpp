@@ -1,23 +1,16 @@
 #include "SimplifyCorrelatedDifferences.h"
 
-#include <string>
-#include <utility>
-#include <vector>
-
 #include "CSE.h"
 #include "CompilerLogger.h"
-#include "Debug.h"
 #include "ExprUsesVar.h"
-#include "IR.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Interval.h"
 #include "Monotonic.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Solve.h"
-#include "Type.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {

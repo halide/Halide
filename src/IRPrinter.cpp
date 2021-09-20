@@ -1,22 +1,13 @@
-#include <stddef.h>
 #include <iostream>
 #include <sstream>
-#include <string>
+
+#include "IRPrinter.h"
 
 #include "AssociativeOpsTable.h"
 #include "Associativity.h"
-#include "Buffer.h"
-#include "Debug.h"
-#include "Error.h"
 #include "IROperator.h"
-#include "IRPrinter.h"
 #include "Module.h"
-#include "ModulusRemainder.h"
-#include "Parameter.h"
-#include "PrefetchDirective.h"
 #include "Target.h"
-#include "Type.h"
-#include "Util.h"
 
 namespace Halide {
 

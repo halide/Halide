@@ -1,20 +1,18 @@
-#include <stddef.h>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <iostream>
+#include <sstream>
 #include <utility>
 
-#include "Buffer.h"
 #include "CSE.h"
-#include "Error.h"
-#include "IR.h"
+#include "Debug.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "IRVisitor.h"
-#include "Parameter.h"
 #include "Util.h"
-#include "runtime/HalideRuntime.h"
+#include "Var.h"
 
 namespace Halide {
 

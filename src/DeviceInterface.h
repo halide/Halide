@@ -5,11 +5,8 @@
  * Methods for managing device allocations when jitting
  */
 
-#include "DeviceAPI.h"
 #include "Expr.h"
 #include "Target.h"
-
-struct halide_device_interface_t;
 
 namespace Halide {
 

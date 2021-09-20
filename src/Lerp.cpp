@@ -1,15 +1,11 @@
-#include <stdint.h>
-#include <stdlib.h>
 #include <algorithm>
 #include <cmath>
 
 #include "CSE.h"
-#include "Error.h"
 #include "IR.h"
 #include "IROperator.h"
 #include "Lerp.h"
 #include "Simplify.h"
-#include "Type.h"
 
 namespace Halide {
 namespace Internal {

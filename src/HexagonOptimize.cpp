@@ -1,41 +1,21 @@
 #include "HexagonOptimize.h"
-
-#include <stddef.h>
-#include <algorithm>
-#include <cstdint>
-#include <initializer_list>
-#include <limits>
-#include <map>
-#include <set>
-#include <type_traits>
-#include <unordered_map>
-#include <utility>
-
 #include "Bounds.h"
-#include "Buffer.h"
 #include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
-#include "Debug.h"
-#include "Error.h"
 #include "ExprUsesVar.h"
 #include "FindIntrinsics.h"
 #include "HexagonAlignment.h"
-#include "IR.h"
 #include "IREquality.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Interval.h"
 #include "Lerp.h"
-#include "ModulusRemainder.h"
-#include "Parameter.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include "Target.h"
-#include "Type.h"
-#include "Util.h"
+#include <unordered_map>
+#include <utility>
 
 namespace Halide {
 namespace Internal {

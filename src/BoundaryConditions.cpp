@@ -1,11 +1,5 @@
 #include "BoundaryConditions.h"
 
-#include <stddef.h>
-#include <vector>
-
-#include "Error.h"
-#include "IROperator.h"
-
 namespace Halide {
 
 namespace BoundaryConditions {

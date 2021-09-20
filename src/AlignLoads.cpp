@@ -1,18 +1,13 @@
-#include <stdint.h>
 #include <algorithm>
-#include <vector>
 
 #include "AlignLoads.h"
-#include "Buffer.h"
-#include "Error.h"
+#include "Bounds.h"
 #include "HexagonAlignment.h"
-#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "ModulusRemainder.h"
+#include "Scope.h"
 #include "Simplify.h"
-#include "Type.h"
-
 using std::vector;
 
 namespace Halide {

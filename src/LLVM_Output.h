@@ -10,12 +10,12 @@
 #include <vector>
 
 namespace llvm {
-class LLVMContext;
 class Module;
 class TargetOptions;
+class LLVMContext;
 class raw_fd_ostream;
-class raw_ostream;
 class raw_pwrite_stream;
+class raw_ostream;
 }  // namespace llvm
 
 namespace Halide {

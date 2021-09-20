@@ -1,21 +1,10 @@
 #include "AddParameterChecks.h"
-
-#include <stddef.h>
-#include <map>
-#include <string>
-#include <utility>
-
-#include "Error.h"
-#include "IR.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
-#include "Parameter.h"
 #include "Substitute.h"
-#include "Type.h"
+#include "Target.h"
 
 namespace Halide {
-struct Target;
-
 namespace Internal {
 
 using std::map;

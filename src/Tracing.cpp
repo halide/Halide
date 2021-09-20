@@ -1,24 +1,12 @@
 #include "Tracing.h"
-
-#include <stddef.h>
-#include <stdint.h>
-#include <set>
-#include <utility>
-
 #include "Bounds.h"
-#include "Error.h"
 #include "Function.h"
-#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Interval.h"
-#include "Parameter.h"
 #include "RealizationOrder.h"
-#include "Schedule.h"
-#include "Target.h"
-#include "Type.h"
-#include "Util.h"
 #include "runtime/HalideRuntime.h"
+
+#include <set>
 
 namespace Halide {
 namespace Internal {

@@ -1,11 +1,7 @@
 #include "Interval.h"
-
-#include <algorithm>
-
-#include "IR.h"
+#include "IREquality.h"
 #include "IRMatch.h"
 #include "IROperator.h"
-#include "Type.h"
 
 namespace Halide {
 namespace Internal {

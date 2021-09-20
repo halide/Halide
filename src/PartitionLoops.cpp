@@ -1,27 +1,18 @@
 #include <algorithm>
-#include <string>
-#include <type_traits>
+#include <numeric>
 #include <utility>
-#include <vector>
 
 #include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
-#include "Debug.h"
-#include "Error.h"
 #include "ExprUsesVar.h"
-#include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "IRVisitor.h"
-#include "Interval.h"
 #include "PartitionLoops.h"
-#include "Scope.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
-#include "Type.h"
-#include "Util.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {

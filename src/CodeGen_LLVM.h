@@ -8,95 +8,45 @@
  */
 
 namespace llvm {
-class AllocaInst;
-class BasicBlock;
-class CallInst;
-class Constant;
-class ConstantFolder;
-class DataLayout;
-class ExecutionEngine;
+class Value;
+class Module;
 class Function;
 class FunctionType;
-class GlobalVariable;
 class IRBuilderDefaultInserter;
-class Instruction;
-class LLVMContext;
-class MDNode;
-class Module;
-class NamedMDNode;
-class StructType;
-class Triple;
-class Type;
-class Value;
+class ConstantFolder;
 template<typename, typename>
 class IRBuilder;
+class LLVMContext;
+class Type;
+class StructType;
+class Instruction;
+class CallInst;
+class ExecutionEngine;
+class AllocaInst;
+class Constant;
+class Triple;
+class MDNode;
+class NamedMDNode;
+class DataLayout;
+class BasicBlock;
+class GlobalVariable;
 }  // namespace llvm
 
-#include <stddef.h>
 #include <map>
 #include <memory>
-#include <set>
 #include <string>
-#include <utility>
 #include <vector>
 
-#include "Buffer.h"
-#include "Expr.h"
 #include "IRVisitor.h"
 #include "Module.h"
 #include "Scope.h"
 #include "Target.h"
-#include "Type.h"
 
 namespace Halide {
 
 struct ExternSignature;
 
 namespace Internal {
-class Parameter;
-struct Acquire;
-struct Add;
-struct Allocate;
-struct And;
-struct AssertStmt;
-struct Atomic;
-struct Block;
-struct Broadcast;
-struct Call;
-struct Cast;
-struct Div;
-struct EQ;
-struct Evaluate;
-struct For;
-struct Fork;
-struct Free;
-struct GE;
-struct GT;
-struct IfThenElse;
-struct LE;
-struct LT;
-struct Let;
-struct LetStmt;
-struct Load;
-struct Max;
-struct Min;
-struct Mod;
-struct ModulusRemainder;
-struct Mul;
-struct NE;
-struct Not;
-struct Or;
-struct Prefetch;
-struct ProducerConsumer;
-struct Provide;
-struct Ramp;
-struct Realize;
-struct Select;
-struct Shuffle;
-struct Store;
-struct Sub;
-struct Variable;
-struct VectorReduce;
 
 /** A code generator abstract base class. Actual code generators
  * (e.g. CodeGen_X86) inherit from this. This class is responsible

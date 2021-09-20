@@ -1,29 +1,12 @@
 #include "Solve.h"
 
-#include <stdint.h>
-#include <map>
-#include <type_traits>
-#include <utility>
-#include <vector>
-
-#include "Bounds.h"
-#include "Buffer.h"
 #include "CSE.h"
 #include "ConciseCasts.h"
-#include "Debug.h"
-#include "Error.h"
 #include "ExprUsesVar.h"
-#include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
-#include "IROperator.h"
-#include "IRVisitor.h"
-#include "ModulusRemainder.h"
-#include "Parameter.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include "Type.h"
-#include "Util.h"
 
 namespace Halide {
 namespace Internal {

@@ -1,34 +1,22 @@
 #include "SlidingWindow.h"
 
-#include <cstddef>
-#include <list>
-#include <set>
-#include <utility>
-#include <vector>
-
 #include "Bounds.h"
 #include "CompilerLogger.h"
 #include "Debug.h"
-#include "Definition.h"
-#include "Error.h"
-#include "Function.h"
-#include "IR.h"
+#include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "IRVisitor.h"
-#include "Interval.h"
 #include "Monotonic.h"
-#include "PrefetchDirective.h"
-#include "Schedule.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
-#include "Type.h"
-#include "Util.h"
+#include <list>
+#include <set>
+#include <utility>
 
 namespace Halide {
 namespace Internal {

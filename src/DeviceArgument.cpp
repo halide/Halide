@@ -1,13 +1,5 @@
 #include "DeviceArgument.h"
-
-#include <map>
-#include <utility>
-
 #include "CodeGen_GPU_Dev.h"
-#include "Debug.h"
-#include "Error.h"
-#include "IR.h"
-#include "Scope.h"
 
 namespace Halide {
 namespace Internal {

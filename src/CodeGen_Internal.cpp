@@ -1,21 +1,12 @@
 #include "CodeGen_Internal.h"
-
-#include <stdlib.h>
-#include <iostream>
-#include <map>
-#include <vector>
-
 #include "CSE.h"
-#include "Closure.h"
 #include "Debug.h"
-#include "Error.h"
-#include "IR.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "IntegerDivisionTable.h"
 #include "LLVM_Headers.h"
 #include "Simplify.h"
-#include "Type.h"
-#include "Util.h"
+#include "Simplify_Internal.h"
 
 namespace Halide {
 namespace Internal {

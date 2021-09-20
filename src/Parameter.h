@@ -1,12 +1,10 @@
 #ifndef HALIDE_PARAMETER_H
 #define HALIDE_PARAMETER_H
 
-#include <string.h>
 /** \file
  * Defines the internal representation of parameters to halide piplines
  */
 #include <string>
-#include <vector>
 
 #include "IntrusivePtr.h"
 #include "Type.h"
@@ -16,11 +14,10 @@
 namespace Halide {
 
 struct ArgumentEstimates;
-struct Expr;
-struct Type;
 template<typename T>
 class Buffer;
-
+struct Expr;
+struct Type;
 enum class MemoryType;
 
 namespace Internal {

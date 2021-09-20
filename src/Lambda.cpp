@@ -1,10 +1,5 @@
 #include "Lambda.h"
 
-#include <string>
-#include <type_traits>
-
-#include "Util.h"
-
 namespace Halide {
 
 Func lambda(const Expr &e) {

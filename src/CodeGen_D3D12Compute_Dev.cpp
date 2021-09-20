@@ -1,12 +1,7 @@
-#include <stddef.h>
-#include <stdint.h>
 #include <algorithm>
 #include <iomanip>
-#include <iostream>
-#include <map>
-#include <string>
+#include <sstream>
 #include <utility>
-#include <vector>
 
 #include "CodeGen_C.h"
 #include "CodeGen_D3D12Compute_Dev.h"
@@ -14,18 +9,9 @@
 #include "CodeGen_Internal.h"
 #include "Debug.h"
 #include "DeviceArgument.h"
-#include "Error.h"
-#include "Expr.h"
-#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "IRPrinter.h"
-#include "IRVisitor.h"
-#include "Scope.h"
 #include "Simplify.h"
-#include "Type.h"
-#include "Util.h"
-#include "runtime/HalideRuntime.h"
 
 #define DEBUG_TYPES (0)
 

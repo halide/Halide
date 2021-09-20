@@ -1,7 +1,6 @@
 #ifndef HALIDE_VAR_H
 #define HALIDE_VAR_H
 
-#include <stdlib.h>
 /** \file
  * Defines the Var - the front-end variable
  */

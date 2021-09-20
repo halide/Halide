@@ -1,19 +1,9 @@
 #include "Schedule.h"
-
-#include "Error.h"
 #include "Func.h"
 #include "Function.h"
-#include "FunctionPtr.h"
+#include "IR.h"
 #include "IRMutator.h"
-#include "PrefetchDirective.h"
-#include "Reduction.h"
-#include "Util.h"
-
-namespace Halide {
-namespace Internal {
-class IRVisitor;
-}  // namespace Internal
-}  // namespace Halide
+#include "Var.h"
 
 namespace {
 

@@ -1,26 +1,14 @@
-#include <stddef.h>
-#include <string>
-#include <vector>
+#include <set>
 
-#include "Buffer.h"
 #include "CSE.h"
-#include "Definition.h"
-#include "Error.h"
+#include "Debug.h"
 #include "ExternFuncArgument.h"
-#include "Function.h"
-#include "FunctionPtr.h"
-#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Inline.h"
-#include "Parameter.h"
 #include "Qualify.h"
-#include "Schedule.h"
 #include "Substitute.h"
-#include "Type.h"
-#include "Util.h"
-#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

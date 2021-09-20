@@ -1,7 +1,4 @@
 #include "ParamMap.h"
-
-#include <utility>
-
 #include "ImageParam.h"
 
 namespace Halide {

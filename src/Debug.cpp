@@ -1,8 +1,4 @@
 #include "Debug.h"
-
-#include <cstdlib>
-#include <string>
-
 #include "Util.h"
 
 namespace Halide {

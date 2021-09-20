@@ -1,23 +1,13 @@
 #include "LLVM_Output.h"
-
-#include <stdint.h>
-#include <stdlib.h>
-#include <__string>
-#include <chrono>
-#include <fstream>
-#include <functional>
-#include <map>
-#include <ratio>
-#include <system_error>
-#include <utility>
-
+#include "CodeGen_C.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
 #include "CompilerLogger.h"
-#include "Debug.h"
-#include "Error.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
+
+#include <fstream>
+#include <iostream>
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -25,8 +15,9 @@
 #endif
 #include <windows.h>
 #else
-#include <unistd.h>
 #include <cstdio>
+#include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 namespace Halide {

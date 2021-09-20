@@ -1,11 +1,4 @@
 #include "RemoveUndef.h"
-
-#include <stddef.h>
-#include <utility>
-#include <vector>
-
-#include "Error.h"
-#include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"

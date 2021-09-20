@@ -1,24 +1,16 @@
-#include <stddef.h>
-#include <string>
-#include <vector>
+#include <algorithm>
 
-#include "Buffer.h"
 #include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
-#include "Debug.h"
 #include "ExprUsesVar.h"
-#include "IR.h"
+#include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "IRVisitor.h"
-#include "Interval.h"
-#include "Parameter.h"
-#include "Scope.h"
 #include "Simplify.h"
 #include "Solve.h"
+#include "Substitute.h"
 #include "TrimNoOps.h"
-#include "Type.h"
-#include "Util.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {

@@ -1,18 +1,4 @@
-#include <assert.h>
-#include <stdint.h>
-#include <cstdlib>
-#include <functional>
-#include <iostream>
-#include <map>
-#include <mutex>
-#include <set>
-#include <string>
-#include <utility>
-#include <vector>
-
-#include "HalideRuntime.h"
 #include "RunGen.h"
-#include "halide_benchmark.h"
 
 using namespace Halide::RunGen;
 using Halide::Tools::BenchmarkConfig;

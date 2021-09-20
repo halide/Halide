@@ -1,9 +1,6 @@
 #include "FuzzFloatStores.h"
-
-#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "Type.h"
 
 namespace Halide {
 namespace Internal {

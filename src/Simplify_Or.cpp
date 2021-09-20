@@ -1,12 +1,4 @@
-#include <set>
-#include <type_traits>
-
-#include "Expr.h"
-#include "IR.h"
-#include "IRMatch.h"
-#include "IROperator.h"
 #include "Simplify_Internal.h"
-#include "Type.h"
 
 namespace Halide {
 namespace Internal {

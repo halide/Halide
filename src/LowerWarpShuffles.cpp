@@ -1,33 +1,15 @@
 #include "LowerWarpShuffles.h"
 
-#include <stdint.h>
-#include <ostream>
-#include <string>
-#include <utility>
-#include <vector>
-
-#include "Bounds.h"
-#include "Buffer.h"
-#include "Debug.h"
-#include "DeviceAPI.h"
-#include "Error.h"
 #include "ExprUsesVar.h"
-#include "IR.h"
 #include "IREquality.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "IRVisitor.h"
-#include "Interval.h"
 #include "LICM.h"
-#include "ModulusRemainder.h"
-#include "Parameter.h"
-#include "Scope.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
-#include "Type.h"
-#include "Util.h"
+#include <utility>
 
 // In CUDA, allocations stored in registers and shared across lanes
 // look like private per-lane allocations, even though communication

@@ -1,15 +1,12 @@
-#include <stddef.h>
-#include <algorithm>
 #include <array>
 #include <iostream>
-#include <map>
 #include <string>
-#include <utility>
+
+#include "Target.h"
 
 #include "Debug.h"
 #include "DeviceInterface.h"
 #include "Error.h"
-#include "Target.h"
 #include "Util.h"
 #include "WasmExecutor.h"
 

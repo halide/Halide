@@ -6,51 +6,24 @@
  * Defines Func - the front-end handle on a halide function, and related classes.
  */
 
-#include <stddef.h>
-#include <cstdint>
-#include <functional>
-#include <map>
-#include <string>
-#include <type_traits>
-#include <utility>
-#include <vector>
-
 #include "Argument.h"
-#include "Buffer.h"
-#include "Definition.h"
-#include "DeviceAPI.h"
-#include "Error.h"
 #include "Expr.h"
-#include "ExternFuncArgument.h"
-#include "Function.h"
-#include "IROperator.h"
-#include "IRPrinter.h"
 #include "JITModule.h"
 #include "Module.h"
 #include "Param.h"
-#include "ParamMap.h"
 #include "Pipeline.h"
-#include "PrefetchDirective.h"
 #include "RDom.h"
-#include "Realization.h"
-#include "Schedule.h"
 #include "Target.h"
 #include "Tuple.h"
-#include "Type.h"
-#include "Util.h"
 #include "Var.h"
-#include "runtime/HalideRuntime.h"
+
+#include <map>
+#include <utility>
 
 namespace Halide {
 
-class Func;
 class OutputImageParam;
 class ParamMap;
-namespace Internal {
-class Parameter;
-struct JITHandlers;
-}  // namespace Internal
-struct Argument;
 
 /** A class that can represent Vars or RVars. Used for reorder calls
  * which can accept a mix of either. */

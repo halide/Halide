@@ -1,15 +1,6 @@
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
-
 #include "CodeGen_Posix.h"
-#include "Expr.h"
-#include "IR.h"
+
 #include "LLVM_Headers.h"
-#include "Target.h"
-#include "Type.h"
-#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

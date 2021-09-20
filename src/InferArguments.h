@@ -1,15 +1,12 @@
 #ifndef HALIDE_INFER_ARGUMENTS_H
 #define HALIDE_INFER_ARGUMENTS_H
 
-#include <string>
-#include <utility>
 #include <vector>
 
 #include "Argument.h"
 #include "Buffer.h"
 #include "Expr.h"
 #include "Parameter.h"
-#include "Type.h"
 
 /** \file
  *

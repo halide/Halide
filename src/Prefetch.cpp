@@ -1,29 +1,17 @@
-#include <cstddef>
+#include <algorithm>
 #include <map>
-#include <set>
 #include <string>
 #include <utility>
 
 #include "Bounds.h"
-#include "Buffer.h"
-#include "Debug.h"
-#include "DeviceAPI.h"
-#include "Error.h"
-#include "Expr.h"
+#include "ExprUsesVar.h"
 #include "Function.h"
-#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "IRVisitor.h"
-#include "Interval.h"
-#include "Parameter.h"
 #include "Prefetch.h"
-#include "PrefetchDirective.h"
-#include "Reduction.h"
 #include "Scope.h"
 #include "Simplify.h"
 #include "Target.h"
-#include "Type.h"
 #include "Util.h"
 
 namespace Halide {

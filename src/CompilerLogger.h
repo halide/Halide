@@ -10,13 +10,11 @@
  * replaced by custom definitions if you have unusual logging needs.
  */
 
-#include <stdint.h>
 #include <iostream>
 #include <map>
 #include <memory>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include "Expr.h"
 #include "Target.h"

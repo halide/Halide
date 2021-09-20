@@ -1,14 +1,8 @@
-#include <stddef.h>
-#include <cstdint>
 #include <mutex>
-#include <utility>
 
-#include "Buffer.h"
-#include "Error.h"
 #include "FastIntegerDivide.h"
 #include "IROperator.h"
 #include "IntegerDivisionTable.h"
-#include "Type.h"
 
 namespace Halide {
 

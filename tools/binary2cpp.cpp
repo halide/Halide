@@ -1,5 +1,7 @@
 
+#include <cassert>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #ifdef _WIN32

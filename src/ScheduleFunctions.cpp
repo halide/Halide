@@ -1,47 +1,29 @@
-#include <stdint.h>
-#include <__bit_reference>
 #include <algorithm>
-#include <cstddef>
-#include <ostream>
+#include <memory>
 #include <set>
-#include <type_traits>
 #include <utility>
 
 #include "ApplySplit.h"
-#include "Buffer.h"
 #include "CSE.h"
-#include "Debug.h"
-#include "Definition.h"
-#include "DeviceAPI.h"
-#include "Error.h"
+#include "CodeGen_GPU_Dev.h"
 #include "ExprUsesVar.h"
-#include "ExternFuncArgument.h"
 #include "Func.h"
-#include "Function.h"
-#include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "IRVisitor.h"
 #include "Inline.h"
-#include "Parameter.h"
 #include "Prefetch.h"
 #include "Qualify.h"
-#include "Reduction.h"
-#include "Schedule.h"
 #include "ScheduleFunctions.h"
 #include "Simplify.h"
+#include "Solve.h"
 #include "Substitute.h"
 #include "Target.h"
-#include "Type.h"
-#include "Util.h"
 #include "Var.h"
-#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {
-struct PrefetchDirective;
 
 using std::map;
 using std::pair;

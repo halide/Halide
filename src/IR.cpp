@@ -1,15 +1,11 @@
 #include "IR.h"
 
-#include <stddef.h>
-#include <numeric>
-#include <utility>
-
-#include "Error.h"
-#include "Function.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "IRVisitor.h"
+#include <numeric>
+#include <utility>
 
 namespace Halide {
 namespace Internal {

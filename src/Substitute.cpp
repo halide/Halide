@@ -1,8 +1,4 @@
 #include "Substitute.h"
-
-#include <utility>
-
-#include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "Scope.h"

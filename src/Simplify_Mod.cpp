@@ -1,12 +1,4 @@
-#include <algorithm>
-
-#include "Expr.h"
-#include "IR.h"
-#include "IRMatch.h"
-#include "IROperator.h"
-#include "ModulusRemainder.h"
 #include "Simplify_Internal.h"
-#include "Type.h"
 
 namespace Halide {
 namespace Internal {

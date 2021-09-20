@@ -1,25 +1,13 @@
-#include "Debug.h"
-#include "Error.h"
-#include "Expr.h"
-#include "IR.h"
-#include "IROperator.h"
 #include "Simplify_Internal.h"
-#include "Type.h"
-#include "Util.h"
-#include "runtime/HalideRuntime.h"
+
+#include "Simplify.h"
 
 #ifdef _MSC_VER
 #include <intrin.h>
 #endif
 
-#include <stdio.h>
-#include <cmath>
-#include <cstdint>
-#include <limits>
-#include <string>
+#include <functional>
 #include <unordered_map>
-#include <utility>
-#include <vector>
 
 namespace Halide {
 namespace Internal {

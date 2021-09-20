@@ -1,8 +1,7 @@
 #include "OutputImageParam.h"
 
+#include "IROperator.h"
 #include <utility>
-
-#include "Error.h"
 
 namespace Halide {
 

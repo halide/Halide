@@ -2,12 +2,6 @@
 
 #include <utility>
 
-#include "Error.h"
-#include "IR.h"
-#include "Parameter.h"
-#include "Type.h"
-#include "Var.h"
-
 namespace Halide {
 
 ImageParam::ImageParam(Type t, int d)

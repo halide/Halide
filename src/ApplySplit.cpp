@@ -1,11 +1,8 @@
 #include "ApplySplit.h"
-
-#include "Error.h"
 #include "IR.h"
 #include "IROperator.h"
-#include "Schedule.h"
 #include "Simplify.h"
-#include "Type.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {

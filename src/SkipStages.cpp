@@ -1,24 +1,17 @@
 #include "SkipStages.h"
-
-#include <algorithm>
-#include <cstddef>
-#include <iterator>
-#include <set>
-#include <utility>
-
 #include "CSE.h"
 #include "Debug.h"
-#include "Error.h"
 #include "ExprUsesVar.h"
-#include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "IRVisitor.h"
 #include "Scope.h"
 #include "Simplify.h"
-#include "Util.h"
+#include "Substitute.h"
+
+#include <iterator>
+#include <utility>
 
 namespace Halide {
 namespace Internal {

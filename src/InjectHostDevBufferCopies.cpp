@@ -1,26 +1,15 @@
 #include "InjectHostDevBufferCopies.h"
 
-#include <cstddef>
-#include <map>
-#include <set>
-#include <utility>
-
-#include "Buffer.h"
-#include "DeviceAPI.h"
-#include "DeviceInterface.h"
-#include "Error.h"
+#include "CodeGen_GPU_Dev.h"
+#include "Debug.h"
 #include "ExternFuncArgument.h"  // IWYU pragma: keep
-#include "Function.h"
-#include "FunctionPtr.h"
-#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "IRVisitor.h"
-#include "Parameter.h"
+#include "IRPrinter.h"
 #include "Substitute.h"
-#include "Target.h"
-#include "Type.h"
-#include "Util.h"
+
+#include <map>
+#include <utility>
 
 namespace Halide {
 namespace Internal {

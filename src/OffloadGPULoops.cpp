@@ -1,37 +1,19 @@
-#include <string.h>
-#include <algorithm>
-#include <cstdint>
-#include <map>
 #include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 
-#include "Buffer.h"
+#include "Closure.h"
 #include "CodeGen_D3D12Compute_Dev.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Metal_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_OpenGLCompute_Dev.h"
 #include "CodeGen_PTX_Dev.h"
-#include "Debug.h"
-#include "DeviceAPI.h"
-#include "DeviceArgument.h"
-#include "Error.h"
 #include "ExprUsesVar.h"
-#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "IRVisitor.h"
 #include "InjectHostDevBufferCopies.h"
-#include "ModulusRemainder.h"
 #include "OffloadGPULoops.h"
-#include "Parameter.h"
-#include "Target.h"
-#include "Type.h"
 #include "Util.h"
-#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

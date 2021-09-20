@@ -1,16 +1,9 @@
 #include "EmulateFloat16Math.h"
-
-#include <stddef.h>
-#include <map>
-#include <string>
-#include <utility>
-#include <vector>
-
 #include "CSE.h"
-#include "Error.h"
-#include "IR.h"
+#include "IRMutator.h"
 #include "IROperator.h"
-#include "Type.h"
+#include "Lerp.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {

@@ -1,13 +1,13 @@
 #include <cstdlib>
+
 #include <utility>
 
 #include "Definition.h"
-#include "Error.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Introspection.h"
-#include "Reduction.h"
-#include "Schedule.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {

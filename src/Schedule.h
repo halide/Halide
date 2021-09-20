@@ -5,7 +5,6 @@
  * Defines the internal representation of the schedule for a function
  */
 
-#include <stddef.h>
 #include <map>
 #include <string>
 #include <utility>
@@ -14,7 +13,6 @@
 #include "DeviceAPI.h"
 #include "Expr.h"
 #include "FunctionPtr.h"
-#include "IntrusivePtr.h"
 #include "Parameter.h"
 #include "PrefetchDirective.h"
 
@@ -25,11 +23,8 @@ struct VarOrRVar;
 
 namespace Internal {
 class Function;
-class IRVisitor;
 struct FunctionContents;
-struct FunctionPtr;
 struct LoopLevelContents;
-struct PrefetchDirective;
 }  // namespace Internal
 
 /** Different ways to handle a tail case in a split when the
@@ -535,8 +530,8 @@ struct FusedPair {
 };
 
 struct FuncScheduleContents;
-struct FunctionContents;
 struct StageScheduleContents;
+struct FunctionContents;
 
 /** A schedule for a Function of a Halide pipeline. This schedule is
  * applied to all stages of the Function. Right now this interface is

@@ -3,10 +3,10 @@
  * gcc -std=c99 the_sort_function.c -shared -o the_sort_function.so
  */
 
+#include "HalideRuntime.h"
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
-#include "HalideRuntime.h"
 
 /* Returns -1 if something went wrong, 0 otherwise */
 int32_t the_sort_func(halide_buffer_t *data) {

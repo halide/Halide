@@ -1,8 +1,7 @@
 #include "PurifyIndexMath.h"
-
-#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {

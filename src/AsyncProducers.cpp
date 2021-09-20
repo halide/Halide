@@ -1,22 +1,9 @@
 #include "AsyncProducers.h"
-
-#include <set>
-#include <utility>
-#include <vector>
-
-#include "Error.h"
 #include "ExprUsesVar.h"
 #include "Function.h"
-#include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "IRVisitor.h"
-#include "Schedule.h"
-#include "Scope.h"
-#include "Type.h"
-#include "Util.h"
-#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

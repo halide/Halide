@@ -1,36 +1,17 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <algorithm>
-#include <cstdint>
 #include <iostream>
-#include <list>
-#include <map>
 #include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 
-#include "Argument.h"
 #include "Closure.h"
-#include "Debug.h"
-#include "DeviceAPI.h"
 #include "Elf.h"
-#include "Error.h"
 #include "HexagonOffload.h"
-#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "InjectHostDevBufferCopies.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
 #include "Module.h"
-#include "ModulusRemainder.h"
-#include "Parameter.h"
-#include "Target.h"
-#include "Type.h"
-#include "Util.h"
-#include "runtime/HalideRuntime.h"
+#include "Param.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {

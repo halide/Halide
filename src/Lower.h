@@ -16,7 +16,6 @@
 
 namespace Halide {
 
-struct Argument;
 struct Target;
 
 namespace Internal {

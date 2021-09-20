@@ -1,38 +1,20 @@
-#include <stddef.h>
-#include <stdint.h>
 #include <algorithm>
 #include <array>
-#include <iostream>
-#include <map>
-#include <set>
-#include <string>
+#include <sstream>
 #include <utility>
-#include <vector>
 
-#include "Buffer.h"
 #include "CSE.h"
 #include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_OpenCL_Dev.h"
 #include "Debug.h"
-#include "DeviceArgument.h"
 #include "EliminateBoolVectors.h"
 #include "EmulateFloat16Math.h"
-#include "Error.h"
-#include "Expr.h"
 #include "ExprUsesVar.h"
-#include "IR.h"
+#include "IRMutator.h"
 #include "IROperator.h"
-#include "IRPrinter.h"
-#include "IRVisitor.h"
-#include "ModulusRemainder.h"
-#include "Scope.h"
 #include "Simplify.h"
-#include "Target.h"
-#include "Type.h"
-#include "Util.h"
-#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {
@@ -720,6 +702,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     }
 
     cache.clear();
+}
+
+namespace {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const EQ *op) {

@@ -10,25 +10,15 @@
 #include <vector>
 
 #include "Definition.h"
-#include "DeviceAPI.h"
-#include "Error.h"
 #include "Expr.h"
 #include "FunctionPtr.h"
 #include "Schedule.h"
 
 namespace Halide {
 
-class Var;
-namespace Internal {
-class Definition;
-class FuncSchedule;
-class IRMutator;
-class IRVisitor;
-class StageSchedule;
-}  // namespace Internal
 struct ExternFuncArgument;
-struct Target;
-struct Type;
+
+class Var;
 
 /** An enum to specify calling convention for extern stages. */
 enum class NameMangling {
@@ -39,8 +29,8 @@ enum class NameMangling {
 
 namespace Internal {
 
-class Parameter;
 struct Call;
+class Parameter;
 
 /** A reference-counted handle to Halide's internal representation of
  * a function. Similar to a front-end Func object, but with no

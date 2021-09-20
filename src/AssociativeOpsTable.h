@@ -5,13 +5,11 @@
  * Tables listing associative operators and their identities.
  */
 
-#include <stddef.h>
-#include <utility>
-#include <vector>
-
-#include "Expr.h"
 #include "IREquality.h"
 #include "IROperator.h"
+
+#include <utility>
+#include <vector>
 
 namespace Halide {
 namespace Internal {

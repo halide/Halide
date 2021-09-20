@@ -10,26 +10,17 @@
  * Currently, only the WABT interpreter is supported.
  */
 
-#include <map>
-#include <string>
-#include <vector>
-
 #include "Argument.h"
-#include "IntrusivePtr.h"
 #include "JITModule.h"
 #include "Parameter.h"
 #include "Type.h"
 
 namespace Halide {
 
-class Module;
-struct Argument;
-struct JITExtern;
 struct Target;
 
 namespace Internal {
 
-struct JITModule;
 struct WasmModuleContents;
 
 /** Handle to compiled wasm code which can be called later. */

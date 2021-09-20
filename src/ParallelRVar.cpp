@@ -1,29 +1,14 @@
 #include "ParallelRVar.h"
-
-#include <stddef.h>
-#include <map>
-#include <utility>
-#include <vector>
-
-#include "Buffer.h"
 #include "CSE.h"
 #include "Debug.h"
 #include "Definition.h"
-#include "Error.h"
-#include "Expr.h"
 #include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
-#include "Interval.h"
-#include "Parameter.h"
-#include "Reduction.h"
-#include "Schedule.h"
-#include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include "Type.h"
 
 namespace Halide {
 namespace Internal {

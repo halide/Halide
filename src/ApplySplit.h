@@ -17,7 +17,6 @@
 
 namespace Halide {
 namespace Internal {
-struct Split;
 
 struct ApplySplitResult {
     // If type is "Substitution", then this represents a substitution of

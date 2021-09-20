@@ -3,7 +3,6 @@
 
 #include <sstream>
 #include <stdexcept>
-#include <string>
 
 #include "Debug.h"
 #include "runtime/HalideRuntime.h"  // for HALIDE_ALWAYS_INLINE

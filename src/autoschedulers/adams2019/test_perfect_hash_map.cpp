@@ -1,10 +1,8 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <algorithm>
 #include <ctime>
+
+#include <iostream>
 #include <map>
 #include <random>
-#include <utility>
 #include <vector>
 
 #include "PerfectHashMap.h"

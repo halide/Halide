@@ -1,17 +1,11 @@
 #include "CPlusPlusMangle.h"
 
-#include <stddef.h>
-#include <cstdint>
 #include <map>
-#include <ostream>
-#include <utility>
 
-#include "Buffer.h"
-#include "Error.h"
-#include "Expr.h"
 #include "ExternFuncArgument.h"
+#include "Function.h"
+#include "IR.h"
 #include "IROperator.h"
-#include "Target.h"
 #include "Type.h"
 
 /** \file Support for creating C++ mangled function names from a type signature. */

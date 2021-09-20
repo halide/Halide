@@ -5,15 +5,14 @@
  * Support for linking LLVM modules that comprise the runtime.
  */
 
-#include <stdint.h>
 #include <memory>
 #include <string>
 #include <vector>
 
 namespace llvm {
 class GlobalValue;
-class LLVMContext;
 class Module;
+class LLVMContext;
 class Triple;
 }  // namespace llvm
 

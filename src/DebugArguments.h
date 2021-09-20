@@ -10,8 +10,6 @@
  */
 
 namespace Halide {
-struct Target;
-
 namespace Internal {
 
 struct LoweredFunc;

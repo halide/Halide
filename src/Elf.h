@@ -1,8 +1,6 @@
 #ifndef HALIDE_ELF_H
 #define HALIDE_ELF_H
 
-#include <stddef.h>
-#include <stdint.h>
 #include <algorithm>
 #include <iterator>
 #include <list>
@@ -25,9 +23,9 @@ namespace Elf {
 // for the ELF structs and constants.
 
 class Object;
-class Relocation;
-class Section;
 class Symbol;
+class Section;
+class Relocation;
 
 // Helpful wrapper to allow range-based for loops.
 template<typename T>

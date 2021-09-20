@@ -1,35 +1,16 @@
 #include "StorageFolding.h"
 
-#include <math.h>
-#include <stdint.h>
-#include <algorithm>
-#include <cstddef>
-#include <utility>
-#include <vector>
-
 #include "Bounds.h"
-#include "Buffer.h"
 #include "CSE.h"
 #include "Debug.h"
-#include "Error.h"
 #include "ExprUsesVar.h"
-#include "Function.h"
-#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "IRVisitor.h"
-#include "Interval.h"
-#include "ModulusRemainder.h"
 #include "Monotonic.h"
-#include "Parameter.h"
-#include "Schedule.h"
-#include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
-#include "Type.h"
-#include "Util.h"
-#include "runtime/HalideRuntime.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {

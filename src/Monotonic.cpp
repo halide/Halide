@@ -1,20 +1,10 @@
 #include "Monotonic.h"
-
-#include <stddef.h>
-#include <algorithm>
-#include <cstdint>
-#include <limits>
-#include <vector>
-
 #include "Bounds.h"
-#include "Error.h"
-#include "IR.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
 #include "Scope.h"
 #include "Simplify.h"
-#include "Type.h"
-#include "Util.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {

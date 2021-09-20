@@ -1,22 +1,11 @@
-#include <stdint.h>
-#include <stdlib.h>
 #include <algorithm>
-#include <cstddef>
-#include <map>
-#include <set>
-#include <string>
+#include <cmath>
 #include <utility>
-#include <vector>
 
 #include "Bounds.h"
-#include "Buffer.h"
 #include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CompilerLogger.h"
-#include "Debug.h"
-#include "DeviceAPI.h"
-#include "DeviceInterface.h"
-#include "Error.h"
 #include "ExprUsesVar.h"
 #include "FuseGPUThreadLoops.h"
 #include "IR.h"
@@ -24,18 +13,10 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
-#include "IRVisitor.h"
-#include "Interval.h"
-#include "ModulusRemainder.h"
 #include "Monotonic.h"
-#include "Parameter.h"
-#include "Scope.h"
 #include "Simplify.h"
 #include "Solve.h"
 #include "Substitute.h"
-#include "Type.h"
-#include "Util.h"
-#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

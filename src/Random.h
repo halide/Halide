@@ -12,8 +12,6 @@
 #include "Func.h"
 
 namespace Halide {
-struct VarOrRVar;
-
 namespace Internal {
 
 /** Return a random floating-point number between zero and one that

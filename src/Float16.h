@@ -1,10 +1,9 @@
 #ifndef HALIDE_FLOAT16_H
 #define HALIDE_FLOAT16_H
 
+#include "runtime/HalideRuntime.h"
 #include <cstdint>
 #include <string>
-
-#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 

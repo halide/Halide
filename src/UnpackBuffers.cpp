@@ -1,19 +1,8 @@
 #include "UnpackBuffers.h"
-
-#include <stdint.h>
-#include <map>
-#include <set>
-#include <string>
-#include <utility>
-#include <vector>
-
-#include "Buffer.h"
-#include "IR.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
-#include "Parameter.h"
-#include "Type.h"
-#include "runtime/HalideRuntime.h"
+
+#include <map>
 
 namespace Halide {
 namespace Internal {

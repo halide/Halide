@@ -1,24 +1,12 @@
-#include <stddef.h>
 #include <map>
-#include <memory>
-#include <string>
-#include <utility>
-#include <vector>
 
-#include "Buffer.h"
 #include "CSE.h"
-#include "Debug.h"
-#include "Error.h"
-#include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
-#include "ModulusRemainder.h"
-#include "Parameter.h"
 #include "Scope.h"
-#include "Type.h"
-#include "Util.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {

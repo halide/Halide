@@ -1,26 +1,24 @@
 #include "Util.h"
-
-#include <__string>
-#include <atomic>
-#include <chrono>
-#include <fstream>
-#include <ratio>
-#include <string>
-
 #include "Debug.h"
 #include "Error.h"
 #include "Introspection.h"
+#include <atomic>
+#include <chrono>
+#include <fstream>
+#include <iomanip>
+#include <map>
+#include <mutex>
+#include <sstream>
+#include <string>
 
 #ifdef _MSC_VER
 #include <io.h>
 #else
-#include <unistd.h>
 #include <cstdlib>
+#include <unistd.h>
 #endif
-#include <_ctype.h>
 #include <sys/stat.h>
-#include <sys/syslimits.h>
-#include <sys/unistd.h>
+#include <sys/types.h>
 
 #ifdef __linux__
 #define CAN_GET_RUNNING_PROGRAM_NAME

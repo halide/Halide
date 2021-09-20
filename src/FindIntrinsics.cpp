@@ -1,18 +1,9 @@
 #include "FindIntrinsics.h"
-
-#include <initializer_list>
-#include <utility>
-#include <vector>
-
+#include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
-#include "Error.h"
-#include "IR.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
-#include "IROperator.h"
 #include "Simplify.h"
-#include "Type.h"
-#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

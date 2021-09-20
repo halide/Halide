@@ -1,24 +1,9 @@
 #include "DeviceInterface.h"
-
-#include <stddef.h>
-#include <stdint.h>
-#include <map>
-#include <string>
-#include <utility>
-#include <vector>
-
-#include "Debug.h"
-#include "Error.h"
 #include "IR.h"
 #include "IROperator.h"
-#include "IntrusivePtr.h"
 #include "JITModule.h"
 #include "Target.h"
-#include "Type.h"
-#include "Util.h"
 #include "runtime/HalideBuffer.h"
-
-struct halide_device_interface_t;
 
 using namespace Halide;
 using namespace Halide::Internal;

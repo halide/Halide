@@ -1,22 +1,12 @@
 #include "RegionCosts.h"
-
-#include <algorithm>
-#include <cstddef>
-#include <cstdint>
-
-#include "Bounds.h"
-#include "Definition.h"
-#include "Error.h"
 #include "FindCalls.h"
 #include "Function.h"
-#include "IR.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
-#include "Parameter.h"
+#include "PartitionLoops.h"
 #include "RealizationOrder.h"
-#include "Schedule.h"
 #include "Simplify.h"
-#include "Util.h"
 
 namespace Halide {
 namespace Internal {

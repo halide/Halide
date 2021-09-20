@@ -260,49 +260,25 @@
  * more information.)
  */
 
-#include <stdio.h>
 #include <algorithm>
-#include <cstdint>
 #include <functional>
 #include <iterator>
 #include <limits>
-#include <map>
 #include <memory>
 #include <mutex>
 #include <set>
 #include <sstream>
 #include <string>
-#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
-#include "Buffer.h"
-#include "Error.h"
-#include "Expr.h"
-#include "ExternFuncArgument.h"
 #include "ExternalCode.h"
 #include "Func.h"
-#include "Function.h"
-#include "IROperator.h"
 #include "ImageParam.h"
 #include "Introspection.h"
-#include "Module.h"
 #include "ObjectInstanceRegistry.h"
-#include "OutputImageParam.h"
-#include "Param.h"
-#include "Parameter.h"
-#include "Pipeline.h"
-#include "PrefetchDirective.h"
-#include "RDom.h"
-#include "Realization.h"
-#include "Schedule.h"
 #include "Target.h"
-#include "Tuple.h"
-#include "Type.h"
-#include "Util.h"
-#include "Var.h"
-#include "runtime/HalideRuntime.h"
 
 #if !(__cplusplus >= 201703L || _MSVC_LANG >= 201703L)
 #error "Halide requires C++17 or later; please upgrade your compiler."
@@ -314,7 +290,6 @@ template<typename T>
 class Buffer;
 
 namespace Internal {
-class GeneratorOutputBase;
 
 void generator_test();
 
@@ -2186,7 +2161,6 @@ protected:
     // since we can't use std::enable_if on ctors, define the argument to be one that
     // can only be properly resolved for TBase=Func.
     struct Unused;
-
     using IntIfNonScalar =
         typename Internal::select_type<
             Internal::cond<Internal::has_static_halide_type_method<TBase>::value, int>,

@@ -1,20 +1,14 @@
 #include "StmtToHtml.h"
-
-#include <cstdio>
-#include <fstream>
-#include <vector>
-
-#include "Buffer.h"
-#include "Debug.h"
-#include "Error.h"
-#include "Expr.h"
-#include "IR.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
 #include "Module.h"
 #include "Scope.h"
-#include "Target.h"
-#include "Type.h"
+
+#include <cstdio>
+#include <fstream>
+#include <iostream>
+#include <iterator>
+#include <sstream>
 
 namespace Halide {
 namespace Internal {
