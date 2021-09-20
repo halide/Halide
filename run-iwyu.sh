@@ -150,7 +150,7 @@ else
 fi
 
 
-echo "Done! (You may want to run clang-format now.)"
+echo "Done! (You should probably run clang-tidy and then clang-format now.)"
 
 rm -rf ${IWYU_BUILD_DIR}
 

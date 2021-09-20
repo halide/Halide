@@ -5,20 +5,21 @@
 {"include": ["<__bit_reference>", "private", "<vector>", "public"]},
 {"include": ["<__string>", "private", "<string>", "public"]},
 {"include": ["<__tree>", "private", "<cstddef>", "public"]},
-{"include": ["<_ctype.h>", "private", "<cctype>", "public"]},
-{"include": ["<ctype.h>", "private", "<cctype>", "public"]},
-{"include": ["<stdint.h>", "private", "<cstdint>", "public"]},
-{"include": ["<stdlib.h>", "private", "<cstdlib>", "public"]},
 {"include": ["<sys/signal.h>", "private", "<csignal>", "public"]},
 {"include": ["<sys/unistd.h>", "private", "<unistd.h>", "public"]},
 {"include": ["@<pybind11/detail/.*>", "private", "<pybind11/pybind11.h>", "public"]},
 {"include": ["@[\"<].*src/interp/interp-inl\\.h[\">]", "private", "\"wabt-src/src/interp/interp.h\"", "public"]},
 {"include": ["@[\"<]llvm/.*[\">]", "private", "\"LLVM_Headers.h\"", "public"]},
+
 {"symbol": ["std::condition_variable", "private", "<condition_variable>", "public"]},
 {"symbol": ["std::ifstream", "private", "<fstream>", "public"]},
 {"symbol": ["std::ofstream", "private", "<fstream>", "public"]},
 {"symbol": ["std::setfill", "private", "<iomanip>", "public"]},
 {"symbol": ["std::setw", "private", "<iomanip>", "public"]},
+{"symbol": ["errno", "private", "<cerrno>", "public"]},
+
+# There doesn't seem to be a reliable way to get IWYU to avoid suggesting stdint.h instead of cstdlib
+# (etc), but we can rely on clang-tidy (which applies modernize-headers) to clean up that weirdness for us.
 
 # From https://github.com/include-what-you-use/include-what-you-use/blob/master/libcxx.imp
 {"include": ["<__functional_base>", "private", "<functional>", "public"]},
