@@ -707,7 +707,7 @@ class InjectHexagonRpc : public IRMutator {
             storage() = nullptr;
             buf = Variable::make(type_of<halide_buffer_t *>(), storage.name() + ".buffer", storage);
         }
-        return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
+        return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::PureExtern);
     }
 
     Expr module_state() {
@@ -724,7 +724,7 @@ class InjectHexagonRpc : public IRMutator {
         Buffer<uint8_t> code((int)size, name);
         memcpy(code.data(), buffer, (int)size);
         Expr buf = Variable::make(type_of<halide_buffer_t *>(), string(name) + ".buffer", code);
-        return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
+        return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::PureExtern);
     }
 
     using IRMutator::visit;
@@ -863,8 +863,8 @@ class InjectHexagonRpc : public IRMutator {
                 // If this isn't the scalars buffer, assume it has a '.buffer'
                 // description in the IR.
                 Expr buf = Variable::make(type_of<halide_buffer_t *>(), i.first + ".buffer");
-                Expr device = Call::make(UInt(64), Call::buffer_get_device, {buf}, Call::Extern);
-                Expr host = Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
+                Expr device = Call::make(UInt(64), Call::buffer_get_device, {buf}, Call::PureExtern);
+                Expr host = Call::make(Handle(), Call::buffer_get_host, {buf}, Call::PureExtern);
                 Expr pseudo_buffer = Call::make(Handle(), Call::make_struct, {device, host}, Call::Intrinsic);
                 arg_ptrs.push_back(pseudo_buffer);
                 arg_sizes.emplace_back((uint64_t)(pseudo_buffer.type().bytes()));
@@ -932,12 +932,12 @@ public:
         if (!device_code.functions().empty()) {
             // Wrap the statement in calls to halide_initialize_kernels.
             Expr runtime_buf_var = Variable::make(type_of<struct halide_buffer_t *>(), runtime_module_name + ".buffer");
-            Expr runtime_size = Call::make(Int(32), Call::buffer_get_extent, {runtime_buf_var, 0}, Call::Extern);
-            Expr runtime_ptr = Call::make(Handle(), Call::buffer_get_host, {runtime_buf_var}, Call::Extern);
+            Expr runtime_size = Call::make(Int(32), Call::buffer_get_extent, {runtime_buf_var, 0}, Call::PureExtern);
+            Expr runtime_ptr = Call::make(Handle(), Call::buffer_get_host, {runtime_buf_var}, Call::PureExtern);
 
             Expr code_buf_var = Variable::make(type_of<struct halide_buffer_t *>(), pipeline_module_name + ".buffer");
-            Expr code_size = Call::make(Int(32), Call::buffer_get_extent, {code_buf_var, 0}, Call::Extern);
-            Expr code_ptr = Call::make(Handle(), Call::buffer_get_host, {code_buf_var}, Call::Extern);
+            Expr code_size = Call::make(Int(32), Call::buffer_get_extent, {code_buf_var, 0}, Call::PureExtern);
+            Expr code_ptr = Call::make(Handle(), Call::buffer_get_host, {code_buf_var}, Call::PureExtern);
             Stmt init_kernels = call_extern_and_assert("halide_hexagon_initialize_kernels",
                                                        {module_state_ptr(), code_ptr, cast<uint64_t>(code_size), runtime_ptr, cast<uint64_t>(runtime_size)});
             s = Block::make(init_kernels, s);

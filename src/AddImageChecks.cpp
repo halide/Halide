@@ -291,9 +291,9 @@ Stmt add_image_checks_inner(Stmt s,
                                                 param.name() + ".bounds_query." + extern_user);
                 for (int j = 0; j < dimensions; j++) {
                     Expr min = Call::make(Int(32), Call::buffer_get_min,
-                                          {query_buf, j}, Call::Extern);
+                                          {query_buf, j}, Call::PureExtern);
                     Expr max = Call::make(Int(32), Call::buffer_get_max,
-                                          {query_buf, j}, Call::Extern);
+                                          {query_buf, j}, Call::PureExtern);
                     query_box.push_back(Interval(min, max));
                 }
                 merge_boxes(touched, query_box);
@@ -468,7 +468,7 @@ Stmt add_image_checks_inner(Stmt s,
         builder.buffer_memory = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
         builder.shape_memory = Call::make(type_of<struct halide_dimension_t *>(),
                                           Call::buffer_get_shape, {builder.buffer_memory},
-                                          Call::Extern);
+                                          Call::PureExtern);
         builder.type = type;
         builder.dimensions = dimensions;
         for (int i = 0; i < dimensions; i++) {

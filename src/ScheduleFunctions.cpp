@@ -733,7 +733,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
                 Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",
                                           {buffer, sizeof_buffer_t}, Call::Extern));
             Expr shape = Call::make(type_of<halide_dimension_t *>(), Call::buffer_get_shape, {buffer},
-                                    Call::Extern);
+                                    Call::PureExtern);
             Expr shape_size = Expr((uint64_t)(sizeof(halide_dimension_t) * dimensions));
             Stmt mark_shape =
                 Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",

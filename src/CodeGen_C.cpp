@@ -3181,7 +3181,7 @@ void CodeGen_C::test() {
     s = Allocate::make("tmp.stack", Int(32), MemoryType::Stack, {127}, const_true(), s);
     s = Allocate::make("tmp.heap", Int(32), MemoryType::Heap, {43, beta}, const_true(), s);
     Expr buf = Variable::make(Handle(), "buf.buffer");
-    s = LetStmt::make("buf", Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern), s);
+    s = LetStmt::make("buf", Call::make(Handle(), Call::buffer_get_host, {buf}, Call::PureExtern), s);
 
     Module m("", get_host_target());
     m.append(LoweredFunc("test1", args, s, LinkageType::External));

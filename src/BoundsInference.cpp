@@ -490,14 +490,14 @@ public:
                     Expr inner_query = Variable::make(type_of<struct halide_buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
                         Expr outer_min = Call::make(Int(32), Call::buffer_get_min,
-                                                    {outer_query, i}, Call::Extern);
+                                                    {outer_query, i}, Call::PureExtern);
                         Expr outer_max = Call::make(Int(32), Call::buffer_get_max,
-                                                    {outer_query, i}, Call::Extern);
+                                                    {outer_query, i}, Call::PureExtern);
 
                         Expr inner_min = Call::make(Int(32), Call::buffer_get_min,
-                                                    {inner_query, i}, Call::Extern);
+                                                    {inner_query, i}, Call::PureExtern);
                         Expr inner_max = Call::make(Int(32), Call::buffer_get_max,
-                                                    {inner_query, i}, Call::Extern);
+                                                    {inner_query, i}, Call::PureExtern);
 
                         // Push 'inner' inside of 'outer'
                         Expr shift = Min::make(0, outer_max - inner_max);
@@ -528,9 +528,9 @@ public:
                     Expr inner_query = Variable::make(type_of<struct halide_buffer_t *>(), inner_query_name);
                     for (int i = 0; i < func.dimensions(); i++) {
                         Expr new_min = Call::make(Int(32), Call::buffer_get_min,
-                                                  {inner_query, i}, Call::Extern);
+                                                  {inner_query, i}, Call::PureExtern);
                         Expr new_max = Call::make(Int(32), Call::buffer_get_max,
-                                                  {inner_query, i}, Call::Extern);
+                                                  {inner_query, i}, Call::PureExtern);
 
                         s = LetStmt::make(func.name() + ".s0." + func_args[i] + ".max", new_max, s);
                         s = LetStmt::make(func.name() + ".s0." + func_args[i] + ".min", new_min, s);
@@ -741,7 +741,7 @@ public:
                         Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",
                                                   {buffer, sizeof_buffer_t}, Call::Extern));
                     Expr shape = Call::make(type_of<halide_dimension_t *>(), Call::buffer_get_shape, {buffer},
-                                            Call::Extern);
+                                            Call::PureExtern);
                     Expr shape_size = Expr((uint64_t)(sizeof(halide_dimension_t) * dimensions));
                     Stmt mark_shape =
                         Evaluate::make(Call::make(Int(32), "halide_msan_annotate_memory_is_initialized",
@@ -922,9 +922,9 @@ public:
                             string buf_name = f.name() + ".o0.bounds_query." + consumer.name;
                             Expr buf = Variable::make(type_of<struct halide_buffer_t *>(), buf_name);
                             Expr min = Call::make(Int(32), Call::buffer_get_min,
-                                                  {buf, d}, Call::Extern);
+                                                  {buf, d}, Call::PureExtern);
                             Expr max = Call::make(Int(32), Call::buffer_get_max,
-                                                  {buf, d}, Call::Extern);
+                                                  {buf, d}, Call::PureExtern);
                             b[d] = Interval(min, max);
                         }
                         merge_boxes(boxes[f.name()], b);

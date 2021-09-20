@@ -319,10 +319,10 @@ class InjectFoldingCheck : public IRMutator {
                 Expr leading_edge;
                 if (storage_dim.fold_forward) {
                     leading_edge =
-                        Call::make(Int(32), Call::buffer_get_max, {buf, dim}, Call::Extern);
+                        Call::make(Int(32), Call::buffer_get_max, {buf, dim}, Call::PureExtern);
                 } else {
                     leading_edge =
-                        Call::make(Int(32), Call::buffer_get_min, {buf, dim}, Call::Extern);
+                        Call::make(Int(32), Call::buffer_get_min, {buf, dim}, Call::PureExtern);
                 }
 
                 Stmt update_leading_edge =
@@ -354,10 +354,10 @@ class InjectFoldingCheck : public IRMutator {
                 Expr leading_edge;
                 if (storage_dim.fold_forward) {
                     leading_edge =
-                        Call::make(Int(32), Call::buffer_get_min, {buf, dim}, Call::Extern) - 1 + storage_dim.fold_factor;
+                        Call::make(Int(32), Call::buffer_get_min, {buf, dim}, Call::PureExtern) - 1 + storage_dim.fold_factor;
                 } else {
                     leading_edge =
-                        Call::make(Int(32), Call::buffer_get_max, {buf, dim}, Call::Extern) + 1 - storage_dim.fold_factor;
+                        Call::make(Int(32), Call::buffer_get_max, {buf, dim}, Call::PureExtern) + 1 - storage_dim.fold_factor;
                 }
 
                 Stmt update_leading_edge =

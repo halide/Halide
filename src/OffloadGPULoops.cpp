@@ -111,7 +111,7 @@ class InjectGpuOffload : public IRMutator {
         auto storage = Buffer<void *>::make_scalar(name + "_buf");
         storage() = nullptr;
         Expr buf = Variable::make(type_of<halide_buffer_t *>(), storage.name() + ".buffer", storage);
-        return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
+        return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::PureExtern);
     }
 
     // Create a Buffer containing the given vector, and return an
@@ -120,7 +120,7 @@ class InjectGpuOffload : public IRMutator {
         Buffer<uint8_t> code((int)data.size(), name);
         memcpy(code.data(), data.data(), (int)data.size());
         Expr buf = Variable::make(type_of<halide_buffer_t *>(), name + ".buffer", code);
-        return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::Extern);
+        return Call::make(Handle(), Call::buffer_get_host, {buf}, Call::PureExtern);
     }
 
     using IRMutator::visit;

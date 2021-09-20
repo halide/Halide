@@ -974,7 +974,7 @@ public:
             Expr allocate_heap_result_var = Variable::make(Int(32), allocate_heap_result_var_name);
             Stmt check_allocated =
                 AssertStmt::make(allocate_heap_result_var == 0, allocate_heap_result_var);
-            Expr device_field = Call::make(Handle(), Call::buffer_get_device, {buffer_var}, Call::Extern);
+            Expr device_field = Call::make(Handle(), Call::buffer_get_device, {buffer_var}, Call::PureExtern);
             s = LetStmt::make(alloc.name, device_field, s);
             s = Block::make(check_allocated, s);
             s = LetStmt::make(allocate_heap_result_var_name, allocate_heap_call, s);
