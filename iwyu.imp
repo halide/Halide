@@ -1,6 +1,0 @@
-[
-{ include: ["@<__.*>", "private", "<cstddef>", "public"] },
-{ include: ["@<pybind11/detail/.*>", "private", "<pybind11/pybind11.h>", "public"] },
-{ symbol: ["std::ifstream", "private", "<fstream>", "public"] },
-{ symbol: ["std::ofstream", "private", "<fstream>", "public"] }
-]

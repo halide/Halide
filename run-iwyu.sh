@@ -122,7 +122,7 @@ ${IWYU_TOOL} \
     -j ${IWYU_J} \
     -p ${IWYU_BUILD_DIR}/compile_commands.json \
     -- \
-    -Xiwyu --mapping_file=${ROOT_DIR}/iwyu.imp \
+    -Xiwyu --mapping_file=${ROOT_DIR}/halide_iwyu_mapping.imp \
     > ${IWYU_LOG}
 IWYU_TOOL_RESULT=${PIPESTATUS[0]}
 set -e
