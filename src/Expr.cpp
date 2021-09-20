@@ -1,4 +1,6 @@
 #include "Expr.h"
+
+#include "Error.h"
 #include "IROperator.h"  // for lossless_cast()
 
 namespace Halide {

@@ -11,15 +11,17 @@
 #include <utility>
 #include <vector>
 
+#include "Buffer.h"
+#include "Error.h"
 #include "Expr.h"
 #include "Reduction.h"
 #include "Util.h"
 
 namespace Halide {
 
+class OutputImageParam;
 template<typename T>
 class Buffer;
-class OutputImageParam;
 
 /** A reduction variable represents a single dimension of a reduction
  * domain (RDom). Don't construct them directly, instead construct an

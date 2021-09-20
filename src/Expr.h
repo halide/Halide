@@ -5,14 +5,18 @@
  * Base classes for Halide expressions (\ref Halide::Expr) and statements (\ref Halide::Internal::Stmt)
  */
 
+#include <stdint.h>
 #include <string>
 #include <vector>
 
+#include "Float16.h"
 #include "IntrusivePtr.h"
 #include "Type.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 
+struct Expr;
 struct bfloat16_t;
 struct float16_t;
 
@@ -20,6 +24,7 @@ namespace Internal {
 
 class IRMutator;
 class IRVisitor;
+struct Stmt;
 
 /** All our IR node types get unique IDs for the purposes of RTTI */
 enum class IRNodeType {
