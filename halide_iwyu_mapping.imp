@@ -1,19 +1,17 @@
 # Note that this is file is JSON, except that it uses # instead of // for comments
 [
 # Mappings necessary using recent AppleClang on OSX
+{"include": ["<__bit_reference>", "private", "<vector>", "public"]},
+{"include": ["<__string>", "private", "<string>", "public"]},
 {"include": ["<__tree>", "private", "<cstddef>", "public"]},
 {"include": ["<_ctype.h>", "private", "<ctype.h>", "public"]},
-{"include": ["<__string>", "private", "<string>", "public"]},
-{"include": ["<__bit_reference>", "private", "<vector>", "public"]},
 {"include": ["<sys/signal.h>", "private", "<csignal>", "public"]},
 {"include": ["@<pybind11/detail/.*>", "private", "<pybind11/pybind11.h>", "public"]},
-{"include": ["@[\"<]llvm/.*[\">]", "private", "\"LLVM_Headers.h\"", "public"]},
 {"include": ["@[\"<].*src/interp/interp-inl\\.h[\">]", "private", "\"wabt-src/src/interp/interp.h\"", "public"]},
+{"include": ["@[\"<]llvm/.*[\">]", "private", "\"LLVM_Headers.h\"", "public"]},
 {"symbol": ["halide_register_generator::halide_global_ns", "private", "\"Halide.h\"", "public"]},
 {"symbol": ["std::ifstream", "private", "<fstream>", "public"]},
 {"symbol": ["std::ofstream", "private", "<fstream>", "public"]},
-
-#{"symbol": ["__base", "private", "<cstddef>", "public"]},
 
 # From https://github.com/include-what-you-use/include-what-you-use/blob/master/libcxx.imp
 {"include": ["<__functional_base>", "private", "<functional>", "public"]},
