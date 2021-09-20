@@ -1,5 +1,8 @@
 #include "Qualify.h"
+
+#include "IR.h"
 #include "IRMutator.h"
+#include "Parameter.h"
 
 namespace Halide {
 namespace Internal {

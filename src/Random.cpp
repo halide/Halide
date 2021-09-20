@@ -1,7 +1,18 @@
 #include "Random.h"
+
+#include <stddef.h>
+#include <stdint.h>
+#include <string>
+
+#include "Error.h"
 #include "Func.h"
+#include "IR.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "RDom.h"
+#include "Type.h"
+#include "Util.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {

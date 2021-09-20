@@ -1,7 +1,13 @@
 #include "RemoveDeadAllocations.h"
+
+#include <stddef.h>
+#include <string>
+#include <vector>
+
+#include "IR.h"
 #include "IRMutator.h"
-#include "IROperator.h"
 #include "Scope.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {

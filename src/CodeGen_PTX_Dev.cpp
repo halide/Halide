@@ -1,23 +1,35 @@
 #include "CodeGen_PTX_Dev.h"
+
+#include <stdint.h>
+#include <stdlib.h>
+#include <fstream>
+#include <string>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
 #include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_LLVM.h"
 #include "ConciseCasts.h"
 #include "Debug.h"
-#include "ExprUsesVar.h"
-#include "IREquality.h"
+#include "DeviceArgument.h"
+#include "Error.h"
+#include "Expr.h"
+#include "IR.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
+#include "ModulusRemainder.h"
 #include "Simplify.h"
-#include "Solve.h"
 #include "Target.h"
-
-#include <fstream>
+#include "Type.h"
+#include "Util.h"
+#include "runtime/HalideRuntime.h"
 
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
 // hardcoding a path to the .h file.

@@ -1,8 +1,14 @@
 #include "Dimension.h"
 
+#include <ostream>
+#include <utility>
+#include <vector>
+
+#include "Error.h"
 #include "IR.h"
 #include "IROperator.h"
-#include <utility>
+#include "Type.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {

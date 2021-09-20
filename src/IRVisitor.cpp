@@ -1,7 +1,11 @@
 #include "IRVisitor.h"
 
+#include <stddef.h>
+#include <vector>
+
 #include "ExternFuncArgument.h"
 #include "Function.h"
+#include "FunctionPtr.h"
 
 namespace Halide {
 namespace Internal {

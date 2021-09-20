@@ -1,5 +1,11 @@
 #include "SelectGPUAPI.h"
+
+#include <string>
+
+#include "DeviceAPI.h"
 #include "DeviceInterface.h"
+#include "Error.h"
+#include "IR.h"
 #include "IRMutator.h"
 
 namespace Halide {

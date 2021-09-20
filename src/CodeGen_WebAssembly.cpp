@@ -1,11 +1,22 @@
 #include <functional>
+#include <memory>
 #include <sstream>
+#include <string>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 #include "CodeGen_Posix.h"
 #include "ConciseCasts.h"
+#include "Error.h"
+#include "Expr.h"
+#include "IR.h"
 #include "IRMatch.h"
 #include "IROperator.h"
 #include "LLVM_Headers.h"
+#include "Target.h"
+#include "Type.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {

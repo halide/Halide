@@ -6,16 +6,28 @@
  * Defines util functions that used by auto scheduler.
  */
 
+#include <stddef.h>
+#include <cstdint>
 #include <limits>
+#include <map>
 #include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "Bounds.h"
 #include "Definition.h"
+#include "Error.h"
+#include "Expr.h"
+#include "IR.h"
 #include "IRVisitor.h"
 #include "Interval.h"
 
 namespace Halide {
 namespace Internal {
+class Function;
+struct Box;
+struct Dim;
 
 typedef std::map<std::string, Interval> DimBounds;
 

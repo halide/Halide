@@ -5,11 +5,15 @@
  * Tools for optimizing IR for Hexagon.
  */
 
+#include <string>
+#include <vector>
+
 #include "Expr.h"
 
 namespace Halide {
 
 struct Target;
+struct Type;
 
 namespace Internal {
 

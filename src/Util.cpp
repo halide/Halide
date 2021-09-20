@@ -4,10 +4,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
-#include <iomanip>
-#include <map>
-#include <mutex>
-#include <sstream>
+#include <ratio>
 #include <string>
 
 #ifdef _MSC_VER
@@ -15,8 +12,8 @@
 #else
 #include <unistd.h>  // IWYU pragma: keep
 #endif
+#include <ctype.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 
 #ifdef __linux__
 #define CAN_GET_RUNNING_PROGRAM_NAME

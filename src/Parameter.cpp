@@ -1,6 +1,13 @@
 #include "Parameter.h"
 
+#include <stddef.h>
+#include <cstdint>
+#include <utility>
+
 #include "Argument.h"
+#include "Buffer.h"
+#include "Error.h"
+#include "Expr.h"
 #include "Float16.h"
 #include "IR.h"
 #include "IROperator.h"

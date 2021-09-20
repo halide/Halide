@@ -8,6 +8,7 @@
 #include <iostream>
 #include <string>
 
+#include "Expr.h"
 #include "Interval.h"
 #include "Scope.h"
 

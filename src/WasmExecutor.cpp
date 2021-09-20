@@ -1,20 +1,34 @@
 #include "WasmExecutor.h"
 
+#include <string.h>
+#include <algorithm>
 #include <cmath>
 #include <csignal>
+#include <cstdint>
 #include <cstdlib>
+#include <functional>
+#include <iostream>
+#include <iterator>
+#include <memory>
 #include <mutex>
-#include <sstream>
+#include <set>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
+#include "Argument.h"
 #include "CodeGen_Posix.h"
 #include "CodeGen_Targets.h"
+#include "Debug.h"
 #include "Error.h"
 #include "Float16.h"
-#include "Func.h"
-#include "ImageParam.h"
 #include "JITModule.h"
+#include "Module.h"
+#include "Pipeline.h"
+#include "Type.h"
+#include "Util.h"
+#include "runtime/HalideBuffer.h"
+#include "runtime/HalideRuntime.h"
 #if WITH_WABT
 #include "LLVM_Headers.h"
 #endif

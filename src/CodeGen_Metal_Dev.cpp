@@ -1,13 +1,27 @@
+#include <stddef.h>
+#include <stdint.h>
 #include <algorithm>
-#include <sstream>
+#include <iostream>
+#include <map>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Metal_Dev.h"
 #include "Debug.h"
+#include "DeviceArgument.h"
+#include "Error.h"
+#include "Expr.h"
+#include "IR.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
+#include "IRVisitor.h"
+#include "Scope.h"
+#include "Type.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {

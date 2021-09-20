@@ -1,10 +1,14 @@
+#include <ctype.h>
+#include <stddef.h>
 #include <iostream>
 #include <string>
+#include <utility>
 
 #include "CodeGen_C.h"
+#include "Error.h"
 #include "Module.h"
 #include "PythonExtensionGen.h"
-#include "Util.h"
+#include "Type.h"
 
 namespace Halide {
 namespace Internal {

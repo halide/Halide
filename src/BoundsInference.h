@@ -7,6 +7,7 @@
 
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Expr.h"
@@ -19,6 +20,7 @@ struct Target;
 namespace Internal {
 
 class Function;
+struct Interval;
 
 /** Take a partially lowered statement that includes symbolic
  * representations of the bounds over which things should be realized,

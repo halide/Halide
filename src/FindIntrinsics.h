@@ -5,10 +5,12 @@
  * Tools to replace common patterns with more readily recognizable intrinsics.
  */
 
+#include "Expr.h"
 #include "IR.h"
 
 namespace Halide {
 namespace Internal {
+struct Call;
 
 /** Implement intrinsics with non-intrinsic using equivalents. */
 Expr lower_widening_add(const Expr &a, const Expr &b);

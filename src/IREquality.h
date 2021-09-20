@@ -5,6 +5,10 @@
  * Methods to test Exprs and Stmts for equality of value
  */
 
+#include <stddef.h>
+#include <stdint.h>
+#include <vector>
+
 #include "Expr.h"
 
 namespace Halide {

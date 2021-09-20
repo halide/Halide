@@ -1,16 +1,30 @@
 #include "CodeGen_OpenGLCompute_Dev.h"
+
+#include <math.h>
+#include <stddef.h>
+#include <iomanip>
+#include <iostream>
+#include <map>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "CSE.h"
 #include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
 #include "Debug.h"
-#include "Deinterleave.h"
-#include "IRMatch.h"
-#include "IRMutator.h"
+#include "DeviceArgument.h"
+#include "Error.h"
+#include "Expr.h"
+#include "IR.h"
 #include "IROperator.h"
+#include "IRPrinter.h"
+#include "IRVisitor.h"
+#include "Scope.h"
 #include "Simplify.h"
-#include <iomanip>
-#include <limits>
-#include <map>
+#include "Target.h"
+#include "Type.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {

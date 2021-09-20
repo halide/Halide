@@ -1,8 +1,19 @@
 #include "DebugArguments.h"
-#include "Function.h"
+
+#include <ostream>
+#include <string>
+#include <vector>
+
+#include "Argument.h"
+#include "Debug.h"
+#include "Error.h"
+#include "Expr.h"
 #include "IR.h"
 #include "IROperator.h"
 #include "Module.h"
+#include "Target.h"
+#include "Type.h"
+#include "runtime/HalideRuntime.h"
 
 namespace Halide {
 namespace Internal {
