@@ -1,10 +1,12 @@
 #ifndef HALIDE_PYTHON_BINDINGS_PYHALIDE_H
 #define HALIDE_PYTHON_BINDINGS_PYHALIDE_H
 
+// IWYU pragma: begin_exports
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+// IWYU pragma: end_exports
 
 // Some very-commonly-used headers here, to simplify things.
 #include <iostream>
