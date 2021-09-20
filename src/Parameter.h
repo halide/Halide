@@ -1,7 +1,7 @@
 #ifndef HALIDE_PARAMETER_H
 #define HALIDE_PARAMETER_H
 
-#include <string.h>
+#include <cstring>
 /** \file
  * Defines the internal representation of parameters to halide piplines
  */

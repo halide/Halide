@@ -1,8 +1,8 @@
 #include "Memoization.h"
 
-#include <stddef.h>
 #include <atomic>
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <utility>

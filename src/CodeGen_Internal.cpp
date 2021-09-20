@@ -1,6 +1,6 @@
 #include "CodeGen_Internal.h"
 
-#include <stdlib.h>
+#include <cstdlib>
 #include <iostream>
 #include <map>
 #include <vector>

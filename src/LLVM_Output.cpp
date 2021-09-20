@@ -1,8 +1,8 @@
 #include "LLVM_Output.h"
 
-#include <stdint.h>
-#include <stdlib.h>
 #include <chrono>
+#include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <functional>
 #include <map>

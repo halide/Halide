@@ -5,8 +5,8 @@
  * Methods to test Exprs and Stmts for equality of value
  */
 
-#include <stddef.h>
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include "Expr.h"

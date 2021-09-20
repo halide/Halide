@@ -1,9 +1,9 @@
 #ifndef HALIDE_ELF_H
 #define HALIDE_ELF_H
 
-#include <stddef.h>
-#include <stdint.h>
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <iterator>
 #include <list>
 #include <memory>

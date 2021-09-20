@@ -1,7 +1,7 @@
 #ifndef HALIDE_REALIZATION_H
 #define HALIDE_REALIZATION_H
 
-#include <stddef.h>
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 #include <vector>

@@ -7,7 +7,7 @@
  * pipeline.
  */
 
-#include <stddef.h>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <initializer_list>

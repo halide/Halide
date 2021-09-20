@@ -5,7 +5,7 @@
  * Tables listing associative operators and their identities.
  */
 
-#include <stddef.h>
+#include <cstddef>
 #include <utility>
 #include <vector>
 

@@ -1,7 +1,7 @@
 #include "LoopCarry.h"
 
-#include <stddef.h>
 #include <algorithm>
+#include <cstddef>
 #include <set>
 #include <string>
 #include <utility>

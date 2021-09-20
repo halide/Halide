@@ -1,6 +1,6 @@
 #include "AllocationBoundsInference.h"
 
-#include <stddef.h>
+#include <cstddef>
 #include <set>
 #include <vector>
 

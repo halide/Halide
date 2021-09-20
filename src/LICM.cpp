@@ -1,7 +1,7 @@
 #include "LICM.h"
 
-#include <stddef.h>
 #include <algorithm>
+#include <cstddef>
 #include <map>
 #include <set>
 #include <string>

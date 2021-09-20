@@ -1,6 +1,6 @@
-#include <stdint.h>
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <fstream>
 #include <set>
 #include <utility>

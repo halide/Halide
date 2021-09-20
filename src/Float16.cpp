@@ -1,8 +1,8 @@
 #include "Float16.h"
 
-#include <stdlib.h>
-#include <string.h>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 
 #include "Debug.h"
 #include "Util.h"

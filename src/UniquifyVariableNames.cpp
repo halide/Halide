@@ -1,7 +1,7 @@
 #include "UniquifyVariableNames.h"
 
-#include <stddef.h>
 #include <algorithm>
+#include <cstddef>
 #include <iostream>
 #include <string>
 #include <utility>

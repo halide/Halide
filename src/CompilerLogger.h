@@ -10,7 +10,7 @@
  * replaced by custom definitions if you have unusual logging needs.
  */
 
-#include <stdint.h>
+#include <cstdint>
 #include <iostream>
 #include <map>
 #include <memory>

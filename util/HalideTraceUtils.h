@@ -1,7 +1,7 @@
 #ifndef HALIDE_TRACE_UTILS_H
 #define HALIDE_TRACE_UTILS_H
 
-#include <stdint.h>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 

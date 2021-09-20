@@ -1,6 +1,6 @@
 #include "IRVisitor.h"
 
-#include <stddef.h>
+#include <cstddef>
 #include <vector>
 
 #include "ExternFuncArgument.h"

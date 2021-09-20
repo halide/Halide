@@ -1,11 +1,11 @@
 #include "WasmExecutor.h"
 
-#include <string.h>
 #include <algorithm>
 #include <cmath>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <iostream>
 #include <iterator>

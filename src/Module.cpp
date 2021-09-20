@@ -1,10 +1,10 @@
 #include "Module.h"
 
-#include <string.h>
 #include <algorithm>
 #include <array>
 #include <bitset>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <initializer_list>
 #include <iostream>

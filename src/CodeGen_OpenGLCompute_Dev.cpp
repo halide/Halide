@@ -1,7 +1,7 @@
 #include "CodeGen_OpenGLCompute_Dev.h"
 
-#include <math.h>
-#include <stddef.h>
+#include <cmath>
+#include <cstddef>
 #include <iomanip>
 #include <iostream>
 #include <map>

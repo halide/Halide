@@ -260,9 +260,9 @@
  * more information.)
  */
 
-#include <stdio.h>
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <functional>
 #include <iterator>
 #include <limits>

@@ -1,9 +1,9 @@
 #include "StorageFolding.h"
 
-#include <math.h>
-#include <stdint.h>
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <utility>
 #include <vector>
 

@@ -1,7 +1,7 @@
 #include "Monotonic.h"
 
-#include <stddef.h>
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <vector>

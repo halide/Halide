@@ -5,7 +5,7 @@
  * Defines the internal representation of the schedule for a function
  */
 
-#include <stddef.h>
+#include <cstddef>
 #include <map>
 #include <string>
 #include <utility>

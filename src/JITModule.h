@@ -6,8 +6,8 @@
  * a JIT compiled halide pipeline
  */
 
-#include <stddef.h>
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>

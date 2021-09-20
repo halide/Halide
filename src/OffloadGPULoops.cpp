@@ -1,6 +1,6 @@
-#include <string.h>
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <map>
 #include <memory>
 #include <string>

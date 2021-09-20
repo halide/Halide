@@ -1,6 +1,6 @@
 #include "ModulusRemainder.h"
 
-#include <stdlib.h>
+#include <cstdlib>
 #include <iostream>
 #include <type_traits>
 #include <vector>

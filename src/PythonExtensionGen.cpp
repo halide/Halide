@@ -1,5 +1,5 @@
-#include <stddef.h>
 #include <cctype>
+#include <cstddef>
 #include <iostream>
 #include <string>
 #include <utility>

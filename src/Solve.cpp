@@ -1,6 +1,6 @@
 #include "Solve.h"
 
-#include <stdint.h>
+#include <cstdint>
 #include <map>
 #include <type_traits>
 #include <utility>

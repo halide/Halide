@@ -1,6 +1,6 @@
 #include "Reduction.h"
 
-#include <stddef.h>
+#include <cstddef>
 #include <iostream>
 #include <utility>
 

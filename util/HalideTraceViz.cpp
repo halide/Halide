@@ -1,9 +1,9 @@
-#include <stdlib.h>
 #include <algorithm>
 #include <cassert>
 #include <cerrno>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <iostream>

@@ -1,6 +1,6 @@
 #include "Parameter.h"
 
-#include <stddef.h>
+#include <cstddef>
 #include <cstdint>
 #include <utility>
 

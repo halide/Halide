@@ -1,8 +1,8 @@
 #ifndef HALIDE_CLOSURE_H
 #define HALIDE_CLOSURE_H
 
-#include <stddef.h>
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
 /** \file
  *
  * Provides Closure class.

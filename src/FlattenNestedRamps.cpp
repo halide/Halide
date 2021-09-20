@@ -1,7 +1,7 @@
 #include "FlattenNestedRamps.h"
 
-#include <stdint.h>
 #include <algorithm>
+#include <cstdint>
 #include <vector>
 
 #include "Bounds.h"

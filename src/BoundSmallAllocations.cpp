@@ -1,6 +1,6 @@
 #include "BoundSmallAllocations.h"
 
-#include <stdint.h>
+#include <cstdint>
 #include <vector>
 
 #include "Bounds.h"

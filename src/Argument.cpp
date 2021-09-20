@@ -1,6 +1,6 @@
 #include "Argument.h"
 
-#include <stddef.h>
+#include <cstddef>
 
 #include "Error.h"
 

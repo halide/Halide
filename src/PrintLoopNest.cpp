@@ -1,6 +1,6 @@
 #include "PrintLoopNest.h"
 
-#include <stddef.h>
+#include <cstddef>
 #include <map>
 #include <ostream>
 #include <utility>

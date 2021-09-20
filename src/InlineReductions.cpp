@@ -1,6 +1,6 @@
 #include "InlineReductions.h"
 
-#include <stddef.h>
+#include <cstddef>
 #include <iosfwd>
 #include <utility>
 #include <vector>
