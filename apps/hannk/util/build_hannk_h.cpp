@@ -8,7 +8,7 @@
 std::set<std::string> done;
 
 std::string real_path(const std::string &raw_path) {
-    char fullpath_buffer[PATH_MAX];
+    char fullpath_buffer[4096];
     if (!realpath(raw_path.c_str(), fullpath_buffer)) {
         fullpath_buffer[0] = 0;
     }
