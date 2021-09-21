@@ -1,9 +1,9 @@
 #include "ExtractTileOperations.h"
 
-#include "IRMatch.h"  // expr_match
+#include "IRMatch.h"
 #include "IRMutator.h"
-#include "IROperator.h"  // Expr + Expr
-#include "Util.h"        // ScopedValue
+#include "IROperator.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
@@ -23,7 +23,7 @@ struct Tile {
 
 enum class AMXOpType {
     Int8,
-    Bf16,
+    Bfloat16,
 };
 
 /// returns the appropriate `Halide::Type` for the given operation type
@@ -31,17 +31,17 @@ Type amx_op_type_result_type(AMXOpType op_ty) {
     switch (op_ty) {
     case AMXOpType::Int8:
         return Int(32, 256);
-    case AMXOpType::Bf16:
+    case AMXOpType::Bfloat16:
         return Float(32, 256);
     default:
-        return Type();
+        internal_error << "Unexpected";
     }
 }
 
 const auto wild_i32 = Variable::make(Int(32), "*");
 const auto wild_i32x = Variable::make(Int(32, 0), "*");
 
-Tile<2> is_2d_tile_index(const Expr &e) {
+Tile<2> get_2d_tile_index(const Expr &e) {
     // ramp(ramp(base, 1, 4), x4(stride), 4)
     vector<Expr> matches;
     if (const auto *r1 = e.as<Ramp>()) {
@@ -55,12 +55,11 @@ Tile<2> is_2d_tile_index(const Expr &e) {
     return {};
 }
 
-Tile<3> is_3d_tile_index(const Expr &e) {
+Tile<3> get_3d_tile_index(const Expr &e) {
     vector<Expr> matches;
 
     // there could be a sub node
     const Sub *sub = e.as<Sub>();
-
     const Add *add = nullptr;
 
     if (sub) {
@@ -156,7 +155,7 @@ NewMatmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType o
         if (!expr_match(pattern1, op->value, matches)) {
             return {};
         }
-    } else {  // AMXOpType::Bf16
+    } else {  // AMXOpType::Bfloat16
         const auto pattern1 = wild_f32x + wild_f32x;
         if (!expr_match(pattern1, op->value, matches)) {
             return {};
@@ -198,8 +197,7 @@ NewMatmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType o
             if (!(rhs_cast->value.type().element_of() == Int(8) || rhs_cast->value.type().element_of() == UInt(8))) {
                 user_assert(false) << "Expected rhs cast of i8/u8";
             }
-        } else  // AMXOpType::Bf16
-        {
+        } else {  // AMXOpType::Bfloat16
             user_assert(rhs_cast->value.type().element_of() == BFloat(16)) << "Expected rhs cast of bf16";
         }
     } else {
@@ -211,8 +209,8 @@ NewMatmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType o
         return {};
     }
 
-    const auto lhs_tile = is_3d_tile_index(lhs_load->index);
-    const auto rhs_tile = is_2d_tile_index(rhs_load->index);
+    const auto lhs_tile = get_3d_tile_index(lhs_load->index);
+    const auto rhs_tile = get_2d_tile_index(rhs_load->index);
     if (!lhs_tile.result || !rhs_tile.result) {
         return {};
     }
@@ -229,7 +227,7 @@ NewMatmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType o
     }
 
 #if LLVM_VERSION < 130
-    user_assert(op_type != AMXOpType::Bf16 &&
+    user_assert(op_type != AMXOpType::Bfloat16 &&
                 lhs_load->type.is_int() && rhs_cast->value.type().is_int())
         << "LLVM 13 or above is required for unsigned or float AMX instructions";
 #endif
@@ -252,8 +250,7 @@ NewMatmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType o
 
     // 4 bytes for i32, f32
     auto colbytes = tile_y * 4;
-    auto matmul =
-        Call::make(res_type, "tile_matmul", {tile_x, colbytes, tile_r, out, lhs, rhs}, Call::Intrinsic);
+    auto matmul = Call::make(res_type, "tile_matmul", {tile_x, colbytes, tile_r, out, lhs, rhs}, Call::Intrinsic);
     auto store = Store::make(new_name, matmul, Ramp::make(0, 1, 256), Parameter(), const_true(256), ModulusRemainder());
     return {true, std::move(store), tile_x, tile_y, tile_r};
 }
@@ -280,7 +277,7 @@ Stmt convert_to_zero(const Store *op, int tile_x, int tile_y, const string &new_
 }
 
 Stmt convert_to_tile_store(const Store *op, const string &amx_name, int tile_x, int tile_y) {
-    auto tile = is_2d_tile_index(op->index);
+    auto tile = get_2d_tile_index(op->index);
     if (tile.result && tile.extent[0] == tile_x && tile.extent[1] == tile_y) {
         auto out = Variable::make(Handle(), op->name);
         auto tile_type = op->value.type().with_lanes(256);
@@ -316,10 +313,10 @@ class ExtractTileOperations : public IRMutator {
             if (op->type.is_int() && op->type.bits() == 32) {
                 op_type = AMXOpType::Int8;
             } else {
-                op_type = AMXOpType::Bf16;
+                op_type = AMXOpType::Bfloat16;
             }
 
-            user_assert(!in_allocate) << "Found two possible tile allocations for AMX allocation";
+            user_assert(!in_allocate) << "Already in AMX allocation: " << amx_name;
             ScopedValue<string> old_amx_name(amx_name, op->name + ".amx");
             ScopedValue<string> old_tile_name(tile_name, op->name);
             ScopedValue<bool> old_in_alloc(in_allocate, true);
@@ -336,7 +333,6 @@ class ExtractTileOperations : public IRMutator {
             }
 
             auto alloc_type = amx_op_type_result_type(op_type);
-
             return Allocate::make(amx_name, alloc_type, MemoryType::AMXTile, {1}, const_true(), body);
         }
         return IRMutator::visit(op);
@@ -355,7 +351,7 @@ class ExtractTileOperations : public IRMutator {
         }
 
         auto body = mutate(op->body);
-        return ProducerConsumer::make(amx_name, op->is_producer, body);
+        return ProducerConsumer::make(amx_name, op->is_producer, std::move(body));
     }
 
     Expr visit(const Load *op) override {

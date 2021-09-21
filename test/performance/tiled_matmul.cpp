@@ -224,7 +224,6 @@ bool matmul_bf16(Halide::Target target) {
         .vectorize(mmyi);
 
     Func result = mm.in();
-    //result.print_loop_nest();
 
     Buffer<bfloat16_t> a_buf(acc, row);
     fill_buffer_a_bf16(a_buf, row, acc);
