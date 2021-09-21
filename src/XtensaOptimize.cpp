@@ -1006,10 +1006,14 @@ private:
                               {mutate(op->args[0]), mutate(op->args[1])},
                               Call::PureExtern);
         }
-        // else if (op->is_intrinsic(Call::widening_shift_left)) {
-        //     // Replace widening left shift with multiplication.
-        //     return mutate(widening_mul(op->args[0], make_one(op->args[0].type()) << op->args[1]));
-        // }
+        else if (op->is_intrinsic(Call::widening_shift_left)) {
+            // Replace widening left shift with multiplication.
+            const uint64_t* c = as_const_uint(op->args[1]);
+            if (c && op->args[1].type().can_represent((uint64_t)1 << *c)) {
+
+              return mutate(widening_mul(op->args[0], bc(UIntImm::make(op->args[1].type().with_lanes(1), (uint64_t)1 << *c), op->args[1].type().lanes())));
+            }
+        }
 
         static const std::vector<Pattern> calls = {
             {"halide_xtensa_avg_u16", halving_add(wild_u16x, wild_u16x)},
@@ -1023,6 +1027,8 @@ private:
             {"halide_xtensa_sat_sub_i16", saturating_sub(wild_i16x, wild_i16x)},
 
             {"halide_xtensa_widen_mul_i48", widening_mul(wild_i16x, wild_i16x), Pattern::AccumulatorOutput48},
+            {"halide_xtensa_widen_mul_ui48", widening_mul(wild_u16x, wild_i16x), Pattern::AccumulatorOutput48},
+            {"halide_xtensa_widen_mul_ui48", widening_mul(wild_i16x, wild_u16x), Pattern::AccumulatorOutput48 | Pattern::SwapOps01},
             {"halide_xtensa_widen_mul_u48", widening_mul(wild_u16x, wild_u16x), Pattern::AccumulatorOutput48},
             {"halide_xtensa_widen_mul_i64", widening_mul(wild_i32x, wild_i32x), Pattern::AccumulatorOutput64},
             {"halide_xtensa_widen_mul_u64", widening_mul(wild_u32x, wild_u32x), Pattern::AccumulatorOutput64},
@@ -2089,7 +2095,7 @@ Stmt match_xtensa_patterns(Stmt s) {
     s = DualQuadMulMutator().mutate(s);
     s = common_subexpression_elimination(s);
 
-    debug(0) << s << "\n";
+    // debug(0) << s << "\n";
     return s;
 }
 

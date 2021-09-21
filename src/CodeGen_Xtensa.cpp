@@ -682,11 +682,9 @@ HALIDE_ALWAYS_INLINE void store<uint8x64_t, uint8_t, 64>(const uint8x64_t& a, vo
 template<>
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x32_t load<int16x32_t, int16_t, 32>(const void *base, int32_t offset) {
     xb_vecNx16 r;
-    // xb_vec2Nx8* ptr8 = (xb_vec2Nx8*)((const int16_t*)base + offset);
-    const xb_vecNx16* __restrict ptr = (const xb_vecNx16*)((const int16_t*)base + offset);
-    IVP_L2UNX16_XP(r, ptr, 0);
-    // valign align = IVP_LA_PP(ptr8);
-    // IVP_LANX16_IP(r, align, ptr);
+    const xb_vec2Nx8*  __restrict ptr8 = (const xb_vec2Nx8*)((const int16_t*)base + offset);
+    valign align = IVP_LA_PP(ptr8);
+    IVP_LANX16_IP(r, align, (const xb_vecNx16*)ptr8);
     return r;
 }
 
@@ -702,8 +700,10 @@ HALIDE_ALWAYS_INLINE void store<int16x32_t, int16_t, 32>(const int16x32_t& a, vo
 template<>
 HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint16x32_t load<uint16x32_t, uint16_t, 32>(const void *base, int32_t offset) {
     xb_vecNx16U r;
-    const xb_vecNx16U*  __restrict ptr = (const xb_vecNx16U*)((const uint16_t*)base + offset);
-    IVP_L2UNX16U_XP(r, ptr, 0);
+    const xb_vec2Nx8*  __restrict ptr8 = (const xb_vec2Nx8*)((const uint16_t*)base + offset);
+    valign align = IVP_LA_PP(ptr8);
+    IVP_LANX16U_IP(r, align, (const xb_vecNx16U*)ptr8);
+
     return r;
 }
 
@@ -1351,11 +1351,6 @@ HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_narrow_i48_with_shift_u16(const i
   return xb_vecNx16_rtor_xb_vecNx16U(IVP_PACKVRNRNX48(a, shift));
 }
 
-HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_mul_u48(const uint16x32_t& a,
-                                                                         const uint16x32_t& b) {
-  return IVP_MULUUNX16U(a, b);
-}
-
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_narrow_with_shift_i16(const int32x32_t& a, int shift) {
   xb_vecNx48 wide = IVP_CVT48SNX32(a.native_vector[1], a.native_vector[0]);
   return IVP_PACKVRNRNX48(wide, shift);
@@ -1407,11 +1402,13 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_lerp_i16(const int16x32_t& a, cons
   // TODO(vksnk): Halide lerp actually uses full range, but it's not clear from the documentation
   // if we can pass unsigned type to IVP_MULPN16XR16, so just to be extra careful reduce it to 14-bit
   // for now.
-  uint32_t w32 = ((uint32_t(w)) >> 2);
-  uint32_t alphaMalpha = ((16384 - w32) << 16) | w32;
-  xb_vecNx48 output = IVP_MULPN16XR16(a, b, alphaMalpha);
-  return IVP_PACKVRNRNX48(output, 14);
+  uint32_t w32 = ((uint32_t(w)) >> 0);
+  uint32_t alphaMalpha = ((65536 - w32) << 16) | w32;
+  xb_vecNx48 output = IVP_MULSUPN16XR16(a, b, alphaMalpha);
+  IVP_DECNEGWNX48(output);
+  return IVP_PACKVRNX48(output, 16);
 }
+
 /*
 HALIDE_ALWAYS_INLINE uint16x64_t convert_to_uint16x64_t_from_uint8x64_t(const uint8x64_t& src) {
   xb_vec2Nx24 wide = src * uint8x64_t(1);
@@ -2060,36 +2057,36 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         return rhs.str();
     }
 
-    if (op->name.find("halide_xtensa_slice_start") == 0) {
+    if ((op->name.find("halide_xtensa_slice_right") == 0) || (op->name.find("halide_xtensa_slice_left") == 0)) {
         string intrinsic_name;
         string shift_define;
-
+        string direction = (op->name.find("halide_xtensa_slice_right") == 0) ? "RIGHT_" : "LEFT_";
         if (is_native_xtensa_vector<int8_t>(op->type)) {
             intrinsic_name = "IVP_SEL2NX8I";
-            shift_define = "IVP_SELI_8B_ROTATE_RIGHT_";
+            shift_define = "IVP_SELI_8B_ROTATE_";
         } else if (is_native_xtensa_vector<uint8_t>(op->type)) {
             intrinsic_name = "IVP_SEL2NX8UI";
-            shift_define = "IVP_SELI_8B_ROTATE_RIGHT_";
+            shift_define = "IVP_SELI_8B_ROTATE_";
         } else if (is_native_xtensa_vector<int16_t>(op->type)) {
             intrinsic_name = "IVP_SELNX16I";
-            shift_define = "IVP_SELI_16B_ROTATE_RIGHT_";
+            shift_define = "IVP_SELI_16B_ROTATE_";
         } else if (is_native_xtensa_vector<uint16_t>(op->type)) {
             intrinsic_name = "IVP_SELNX16UI";
-            shift_define = "IVP_SELI_16B_ROTATE_RIGHT_";
+            shift_define = "IVP_SELI_16B_ROTATE_";
         } else if (is_native_xtensa_vector<int32_t>(op->type)) {
             intrinsic_name = "IVP_SELN_2X32I";
-            shift_define = "IVP_SELI_32B_ROTATE_RIGHT_";
+            shift_define = "IVP_SELI_32B_ROTATE_";
         } else if (is_native_xtensa_vector<uint32_t>(op->type)) {
             intrinsic_name = "IVP_SELN_2X32UI";
-            shift_define = "IVP_SELI_32B_ROTATE_RIGHT_";
+            shift_define = "IVP_SELI_32B_ROTATE_";
         } else if (is_native_xtensa_vector<float>(op->type)) {
             intrinsic_name = "IVP_SELN_2XF32I";
-            shift_define = "IVP_SELI_32B_ROTATE_RIGHT_";
+            shift_define = "IVP_SELI_32B_ROTATE_";
         } else {
             internal_assert(false) << "Unsupported type for slicing";
         }
 
-        rhs << intrinsic_name << "(" << args[0] << ".native_vector[1], " << args[0] << ".native_vector[0], " << shift_define << args[1] << ")";
+        rhs << intrinsic_name << "(" << args[0] << ".native_vector[1], " << args[0] << ".native_vector[0], " << shift_define << direction << args[1] << ")";
 
         return rhs.str();
     }
@@ -2130,6 +2127,8 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
         {"halide_xtensa_avg_round_i16", "IVP_AVGRNX16"},
         {"halide_xtensa_avg_round_u16", "IVP_AVGRUNX16U"},
         {"halide_xtensa_widen_mul_i48", "IVP_MULNX16"},
+        {"halide_xtensa_widen_mul_u48", "IVP_MULUUNX16"},
+        {"halide_xtensa_widen_mul_ui48", "IVP_MULUSNX16"},
         {"halide_xtensa_widen_pair_mul_u48", "IVP_MULUUPNX16"},
         {"halide_xtensa_convert_i48_low_i32", "IVP_CVT32SNX48L"},
         {"halide_xtensa_convert_i48_high_i32", "IVP_CVT32SNX48H"},
@@ -2933,9 +2932,17 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
 
     if (op->is_slice() && (op->slice_stride() == 1) && (is_native_xtensa_vector<int8_t>(op->type) || is_native_xtensa_vector<uint8_t>(op->type) || is_native_xtensa_vector<int16_t>(op->type) || is_native_xtensa_vector<uint16_t>(op->type) || is_native_xtensa_vector<int32_t>(op->type) || is_native_xtensa_vector<uint32_t>(op->type) || is_native_xtensa_vector<float>(op->type))) {
         string type_suffix = suffix_for_type(op->type);
-        string function_name = std::string("halide_xtensa_slice") + ((op->slice_begin() < 5) ? "_start" : "");
+        string function_name = "halide_xtensa_slice";
+        int slice_begin = op->slice_begin();
+        if (op->slice_begin() < 5) {
+            function_name += "_right";
+        }
+        if ((op->type.lanes() - op->slice_begin() < 5) && (op->type.lanes() > op->slice_begin())) {
+            function_name += "_left";
+            slice_begin = op->type.lanes() - op->slice_begin();
+        }
         Expr call = Call::make(op->type, function_name + type_suffix,
-                               {op->vectors[0], op->slice_begin()}, Call::PureExtern);
+                               {op->vectors[0], slice_begin}, Call::PureExtern);
         call.accept(this);
         return;
     }
