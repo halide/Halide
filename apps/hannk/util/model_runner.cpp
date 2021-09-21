@@ -11,10 +11,8 @@
 
 #include "delegate/hannk_delegate.h"
 #include "halide_benchmark.h"
-#include "interpreter/interpreter.h"
+#include "hannk.h"
 #include "tflite/tflite_parser.h"
-#include "util/buffer_util.h"
-#include "util/error_util.h"
 #include "util/file_util.h"
 
 // IMPORTANT: use only the TFLite C API here.

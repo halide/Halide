@@ -4,14 +4,11 @@
 #include <string>
 #include <vector>
 
-#include "interpreter/interpreter.h"
-#include "interpreter/lower.h"
-#include "interpreter/ops.h"
+#include "hannk.h"
 #include "tensorflow/lite/builtin_ops.h"
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/c_api.h"
 #include "tensorflow/lite/context_util.h"
-#include "util/error_util.h"
 
 // Use a List-Of-X approach here to ensure that places we handle ops are kept in sync
 #define ALL_KNOWN_OPS         \

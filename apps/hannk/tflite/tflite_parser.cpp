@@ -3,8 +3,7 @@
 #include <algorithm>
 #include <memory>
 
-#include "interpreter/lower.h"
-#include "interpreter/ops.h"
+#include "hannk.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 #include "util/error_util.h"
 

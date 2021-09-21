@@ -3,7 +3,7 @@
 
 #include <memory>
 
-#include "interpreter/model.h"
+#include "hannk.h"
 
 namespace tflite {
 

@@ -111,6 +111,18 @@ CXX-arm-32-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK
 CXX-arm-64-profile-android ?= $(CXX-arm-64-android)
 CXX-arm-32-profile-android ?= $(CXX-arm-32-android)
 
+AR-host ?= ar
+AR-host-opencl ?= $(AR)
+AR-host-cuda ?= $(AR)
+AR-host-metal ?= $(AR)
+AR-host-hvx ?= $(AR)
+AR-hexagon-32-qurt-hvx ?= ar
+AR-arm-64-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/aarch64-linux-android-ar
+AR-arm-64-android-arm_dot_prod ?= $(AR-arm-64-android)
+AR-arm-32-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/armv7a-linux-androideabi-ar
+AR-arm-64-profile-android ?= $(AR-arm-64-android)
+AR-arm-32-profile-android ?= $(AR-arm-32-android)
+
 CXXFLAGS-host ?= $(CXXFLAGS)
 CXXFLAGS-host-opencl ?= $(CXXFLAGS)
 CXXFLAGS-host-cuda ?= $(CXXFLAGS)
