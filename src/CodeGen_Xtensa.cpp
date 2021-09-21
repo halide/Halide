@@ -1409,6 +1409,12 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_lerp_i16(const int16x32_t& a, cons
   return IVP_PACKVRNX48(output, 16);
 }
 
+HALIDE_ALWAYS_INLINE int16x64_t convert_to_int16x64_t_from_int8x64_t(const int8x64_t& src) {
+  xb_vec2Nx24 wide = src * int8x64_t(1);
+  return int16x64_t(int16x64_t::from_native_vector,
+                        IVP_CVT16S2NX24L(wide), IVP_CVT16S2NX24H(wide));
+}
+
 /*
 HALIDE_ALWAYS_INLINE uint16x64_t convert_to_uint16x64_t_from_uint8x64_t(const uint8x64_t& src) {
   xb_vec2Nx24 wide = src * uint8x64_t(1);
@@ -1443,6 +1449,14 @@ HALIDE_ALWAYS_INLINE int8x64_t convert_to_int8x64_t_from_int32x64_t(const int32x
   return IVP_PACKL2NX24(wide);
 }
 
+HALIDE_ALWAYS_INLINE int8x64_t convert_to_int8x64_t_from_uint1x64_t(const uint1x64_t& src) {
+  return IVP_MOV2NX8T(int8x64_t(1), int8x64_t(0), src);
+}
+
+HALIDE_ALWAYS_INLINE uint8x64_t convert_to_uint8x64_t_from_uint1x64_t(const uint1x64_t& src) {
+  return IVP_MOV2NX8UT(uint8x64_t(1), uint8x64_t(0), src);
+}
+
 HALIDE_ALWAYS_INLINE uint8x64_t convert_to_uint8x64_t_from_int32x64_t(const int32x64_t& src) {
   xb_vec2Nx24 wide = IVP_CVT24UNX32L(src.native_vector[1], src.native_vector[0]);
   IVP_CVT24UNX32H(wide, src.native_vector[3], src.native_vector[2]);
@@ -1452,6 +1466,10 @@ HALIDE_ALWAYS_INLINE uint8x64_t convert_to_uint8x64_t_from_int32x64_t(const int3
 HALIDE_ALWAYS_INLINE uint8x64_t convert_to_uint8x64_t_from_uint16x64_t(const uint16x64_t& src) {
   xb_vec2Nx24 wide = IVP_CVT24U2NX16(src.native_vector[1], src.native_vector[0]);
   return xb_vec2Nx8_rtor_xb_vec2Nx8U(IVP_PACKL2NX24(wide));
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t convert_to_int16x32_t_from_uint1x32_t(const uint1x32_t& src) {
+  return IVP_MOVNX16T(int16x32_t(1), int16x32_t(0), src);
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t convert_to_int16x32_t_from_int32x32_t(const int32x32_t& src) {
@@ -1478,6 +1496,11 @@ HALIDE_ALWAYS_INLINE int16x64_t convert_to_int16x64_t_from_int32x64_t(const int3
 HALIDE_ALWAYS_INLINE uint16x32_t convert_to_uint16x32_t_from_int32x32_t(const int32x32_t& src) {
   xb_vecNx48 wide = IVP_CVT48SNX32(src.native_vector[1], src.native_vector[0]);
   return xb_vecNx16_rtor_xb_vecNx16U(IVP_PACKLNX48(wide));
+}
+
+
+HALIDE_ALWAYS_INLINE uint16x32_t convert_to_uint16x32_t_from_uint1x32_t(const uint1x32_t& src) {
+  return IVP_MOVNX16UT(uint16x32_t(1), uint16x32_t(0), src);
 }
 
 HALIDE_ALWAYS_INLINE uint16x32_t convert_to_uint16x32_t_from_uint32x32_t(const uint32x32_t& src) {
@@ -2593,7 +2616,7 @@ void CodeGen_Xtensa::visit(const Store *op) {
     bool is_sat_narrowing = false;
     Expr value = op->value;
     if (const Cast *cast = value.as<Cast>()) {
-        if (cast->value.type().is_vector() && (cast->value.type().bits() == value.type().bits() * 2)) {
+        if (cast->value.type().is_vector() && cast->type.is_int_or_uint() && cast->value.type().is_int_or_uint() && (cast->value.type().bits() == value.type().bits() * 2)) {
             is_narrowing = true;
             value = cast->value;
         }
@@ -2602,7 +2625,7 @@ void CodeGen_Xtensa::visit(const Store *op) {
         // TODO: more checks for this one are needed.
         if (call->name == "halide_xtensa_slice_from_padded") {
             if (const Cast *cast = call->args[0].as<Cast>()) {
-                if (cast->value.type().is_vector() && (cast->value.type().bits() == value.type().bits() * 2)) {
+                if (cast->value.type().is_vector() && cast->type.is_int_or_uint() && cast->value.type().is_int_or_uint() && (cast->value.type().bits() == value.type().bits() * 2)) {
                     if (const Call *inner_call = cast->value.as<Call>()) {
                         if (inner_call->name == "halide_xtensa_pad_to_native") {
                             is_narrowing = true;
@@ -2612,10 +2635,12 @@ void CodeGen_Xtensa::visit(const Store *op) {
                 }
             }
         }
-        if (call->name.find("halide_xtensa_sat_narrow_i") == 0) {
-            is_sat_narrowing = true;
-            value = call->args[0];
-        }
+        // TODO(vksnk): disabled for now, because corresponding implementation
+        // is missing.
+        // if (call->name.find("halide_xtensa_sat_narrow_i") == 0) {
+        //     is_sat_narrowing = true;
+        //     value = call->args[0];
+        // }
     }
 
     string id_value = print_expr(value);
