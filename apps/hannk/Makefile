@@ -81,7 +81,8 @@ TFLITE_TAG = v$(TFLITE_VERSION)
 #   $ mkdir tflite_build_android && cd tflite_build_android
 #   $ cmake ../tensorflow/lite/c \
 #         -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
-#         -DANDROID_ABI=arm64-v8a
+#         -DANDROID_ABI=arm64-v8a \
+#         -DCMAKE_Fortran_COMPILER=NO
 #   $ cmake --build . -j`nproc`
 
 # Assume a desktop system for now (linux, osx, etc)
