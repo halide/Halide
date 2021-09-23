@@ -44,8 +44,14 @@ HEXAGON_SDK_INCLUDES ?= "${HEXAGON_SDK_ROOT}/incs"
 # Some SDK versions use "lib/", some use "libs/"
 HEXAGON_SDK_LIBS ?= "${HEXAGON_SDK_ROOT}/libs"
 
+# Allow for passing extra preprocessor definitions via env var, e.g.
+#
+#    make HEXAGON_EXTRA_CCFLAGS="-DENABLE_FOO=1" ...
+#
+HEXAGON_EXTRA_CCFLAGS ?=
+
 COMMON_FLAGS = -I ${HEXAGON_SDK_INCLUDES}/stddef -I../ -I ${HEXAGON_SDK_INCLUDES}
-COMMON_CCFLAGS = ${COMMON_FLAGS} -O3 -I ${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release -I ${HEXAGON_SDK_ROOT}/libs/qprintf/inc
+COMMON_CCFLAGS = ${COMMON_FLAGS} -O3 -I ${HEXAGON_SDK_LIBS}/common/remote/ship/android_Release -I ${HEXAGON_SDK_ROOT}/libs/qprintf/inc ${HEXAGON_EXTRA_CCFLAGS}
 HEXAGON_QAICFLAGS = ${COMMON_FLAGS}
 
 BIN ?= bin

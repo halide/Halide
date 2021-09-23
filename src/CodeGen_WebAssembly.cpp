@@ -311,7 +311,6 @@ int CodeGen_WebAssembly::native_vector_bits() const {
 }  // namespace
 
 std::unique_ptr<CodeGen_Posix> new_CodeGen_WebAssembly(const Target &target) {
-    user_assert(LLVM_VERSION >= 110) << "Generating WebAssembly is only supported under LLVM 11+.";
     user_assert(target.bits == 32) << "Only wasm32 is supported.";
     return std::make_unique<CodeGen_WebAssembly>(target);
 }
