@@ -27,6 +27,7 @@ set(SOURCES
     PyType.cpp
     PyVar.cpp
     PyVarOrRVar.cpp
+    PyEvictionKey.cpp
     )
 
 pybind11_add_module(Halide_Python MODULE ${SOURCES})

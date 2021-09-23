@@ -24,6 +24,8 @@
 #include "PyType.h"
 #include "PyVar.h"
 
+#include "PyEvictionKey.h"
+
 static_assert(PYBIND11_VERSION_MAJOR == 2 && PYBIND11_VERSION_MINOR >= 6,
               "Halide requires PyBind 2.6+");
 
@@ -43,6 +45,9 @@ PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     define_enums(m);
     define_target(m);
     define_expr(m);
+    
+    define_evictionkey(m);
+
     define_tuple(m);
     define_argument(m);
     define_boundary_conditions(m);

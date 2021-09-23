@@ -4,6 +4,9 @@
 
 #include "PyBuffer.h"
 #include "PyExpr.h"
+
+#include "PyEvictionKey.h"
+
 #include "PyFuncRef.h"
 #include "PyLoopLevel.h"
 #include "PyScheduleMethods.h"
@@ -205,7 +208,9 @@ void define_func(py::module &m) {
             .def("store_at", (Func & (Func::*)(LoopLevel)) & Func::store_at, py::arg("loop_level"))
 
             .def("async_", &Func::async)
-            .def("memoize", &Func::memoize)
+
+            .def("memoize", &Func::memoize, py::arg("evictionkey") = EvictionKey(Expr()))
+
             .def("compute_inline", &Func::compute_inline)
             .def("compute_root", &Func::compute_root)
             .def("store_root", &Func::store_root)
