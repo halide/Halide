@@ -22,7 +22,7 @@ endif
 
 MAKEFILE_DIR=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 
-.PHONY: all build clean test delegate test-hexagon-sim test-hexagon-device
+.PHONY: all build clean test delegate test-hexagon-sim test-hexagon-device halide
 all: build
 
 # .SECONDARY with no prerequisites causes all targets to be treated as secondary
@@ -81,7 +81,8 @@ TFLITE_TAG = v$(TFLITE_VERSION)
 #   $ mkdir tflite_build_android && cd tflite_build_android
 #   $ cmake ../tensorflow/lite/c \
 #         -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
-#         -DANDROID_ABI=arm64-v8a
+#         -DANDROID_ABI=arm64-v8a \
+#         -DCMAKE_Fortran_COMPILER=NO
 #   $ cmake --build . -j`nproc`
 
 # Assume a desktop system for now (linux, osx, etc)
@@ -212,34 +213,38 @@ $(BIN)/%/halide/runtime.a: $(GENERATOR_BIN)/fill.generator
 	@mkdir -p $(@D)
 	$< -r runtime -o $(BIN)/$*/halide target=$(HL_TARGET)
 
-OPS_HALIDE = \
-	$(BIN)/%/halide/add_uint8_uint8.a \
-	$(BIN)/%/halide/average_pool_uint8.a \
-	$(BIN)/%/halide/conv_u8_u8_u8.a \
-	$(BIN)/%/halide/conv_u8_u8_i16.a \
-	$(BIN)/%/halide/copy_uint8_uint8.a \
-	$(BIN)/%/halide/depthwise_conv_uint8.a \
-	$(BIN)/%/halide/depthwise_conv_broadcast_uint8.a \
-	$(BIN)/%/halide/depthwise_conv_shallow_uint8.a \
-	$(BIN)/%/halide/elementwise_5xuint8_1xuint8.a \
-	$(BIN)/%/halide/elementwise_5xint16_1xuint8int16.a \
-	$(BIN)/%/halide/fill_uint8.a \
-	$(BIN)/%/halide/l2_normalization_uint8.a \
-	$(BIN)/%/halide/max_pool_uint8.a \
-	$(BIN)/%/halide/mean_uint8.a \
-	$(BIN)/%/halide/mul_uint8_uint8_uint8.a \
-	$(BIN)/%/halide/softmax_uint8.a \
-	$(BIN)/%/halide/tile_conv_filter_uint8.a \
-	$(BIN)/%/halide/upsample_channels_uint8.a \
-	$(BIN)/%/halide/runtime.a
-
 OPS_CXXFLAGS = -I$(BIN)/$*
 
+OP_HALIDE_NAMES = \
+	add_uint8_uint8 \
+	average_pool_uint8 \
+	conv_u8_u8_u8 \
+	conv_u8_u8_i16 \
+	copy_uint8_uint8 \
+	depthwise_conv_uint8 \
+	depthwise_conv_broadcast_uint8 \
+	depthwise_conv_shallow_uint8 \
+	elementwise_5xuint8_1xuint8 \
+	elementwise_5xint16_1xuint8int16 \
+	fill_uint8 \
+	l2_normalization_uint8 \
+	max_pool_uint8 \
+	mean_uint8 \
+	mul_uint8_uint8_uint8 \
+	softmax_uint8 \
+	tile_conv_filter_uint8 \
+	upsample_channels_uint8 \
+	runtime
+
 ifneq (,$(findstring arm_dot_prod,$(HL_TARGET)))
-OPS_HALIDE += $(BIN)/%/halide/conv_r16_u8_u8_u8.a
-OPS_HALIDE += $(BIN)/%/halide/conv_r16_u8_u8_i16.a
+OP_HALIDE_NAMES += conv_r16_u8_u8_u8
+OP_HALIDE_NAMES += conv_r16_u8_u8_i16
 OPS_CXXFLAGS += -DCONV_R16
 endif
+
+OPS_HALIDE = $(foreach V,$(OP_HALIDE_NAMES),$(BIN)/%/halide/$(V).a)
+
+halide: $(foreach V,$(OP_HALIDE_NAMES),$(BIN)/$(HL_TARGET)/halide/$(V).a)
 
 # ---------------------- util
 
