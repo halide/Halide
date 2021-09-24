@@ -7,7 +7,7 @@
 // This utility concats the runtime and ids onto a featurization to produce a sample.
 int main(int argc, char **argv) {
     if (argc != 6) {
-        std::cout << "Usage: featurization_to_sample in.featurization runtime pipeline_id schedule_id out.sample\n";
+        std::cout << "Usage: halide_featurization_to_sample in.featurization runtime pipeline_id schedule_id out.sample\n";
         return -1;
     }
 

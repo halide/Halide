@@ -27,6 +27,7 @@ add_executable(retrain_cost_model
                Weights.cpp
                retrain_cost_model.cpp
                ${WF_CPP})
+set_target_properties(retrain_cost_model PROPERTIES OUTPUT_NAME halide_retrain_cost_model)
 target_link_libraries(retrain_cost_model PRIVATE cost_model train_cost_model Halide::Halide Halide::Plugin)
 
 ##
@@ -99,11 +100,14 @@ set_tests_properties(demo_included_schedule_file
 # TODO(#4053): implement auto-tuning support in CMake?
 
 add_executable(featurization_to_sample featurization_to_sample.cpp)
+set_target_properties(featurization_to_sample PROPERTIES OUTPUT_NAME halide_featurization_to_sample)
 
 add_executable(get_host_target get_host_target.cpp)
+set_target_properties(get_host_target PROPERTIES OUTPUT_NAME halide_get_host_target)
 target_link_libraries(get_host_target PRIVATE Halide::Halide)
 
 add_executable(weightsdir_to_weightsfile weightsdir_to_weightsfile.cpp Weights.cpp)
+set_target_properties(weightsdir_to_weightsfile PROPERTIES OUTPUT_NAME halide_weightsdir_to_weightsfile)
 target_link_libraries(weightsdir_to_weightsfile PRIVATE Halide::Runtime)
 
 # =================================================================

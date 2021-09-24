@@ -19,7 +19,7 @@ function(add_autoscheduler)
     string(TOLOWER "${arg_NAME}" name_lower)
     set_target_properties(Halide_${arg_NAME} PROPERTIES
                           EXPORT_NAME ${arg_NAME}
-                          OUTPUT_NAME autoschedule_${name_lower})
+                          OUTPUT_NAME Halide_autoschedule_${name_lower})
 endfunction()
 
 add_subdirectory(common)

@@ -3,8 +3,8 @@
 # Build the generator to autotune. This script will be autotuning the
 # autoscheduler's cost model training pipeline, which is large enough
 # to be interesting.
-if [ $# -lt 6 -o $# -gt 8 ]; then
-  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_file autoschedule_bin_dir halide_distrib_path samples_out_path [generator_args_sets]"
+if [ $# -lt 5 -o $# -gt 7 ]; then
+  echo "Usage: $0 /path/to/some.generator generatorname halide_target weights_file install_prefix samples_out_path [generator_args_sets]"
   exit
 fi
 
@@ -17,15 +17,14 @@ GENERATOR=${1}
 PIPELINE=${2}
 HL_TARGET=${3}
 START_WEIGHTS_FILE=${4}
-AUTOSCHED_BIN=${5}
-HALIDE_DISTRIB_PATH=${6}
-SAMPLES=${7}
+INSTALL_PREFIX=${5}
+SAMPLES=${6}
 
 # Read the generator-arg sets into an array. Each set is delimited
 # by space; multiple values within each set are are delimited with ;
 # e.g. "set1arg1=1;set1arg2=foo set2=bar set3arg1=3.14;set4arg2=42"
 if [ $# -ge 8 ]; then
-    IFS=' ' read -r -a GENERATOR_ARGS_SETS_ARRAY <<< "${8}"
+    IFS=' ' read -r -a GENERATOR_ARGS_SETS_ARRAY <<< "${7}"
 else
     declare -a GENERATOR_ARGS_SETS_ARRAY=
 fi
@@ -41,7 +40,7 @@ BENCHMARKING_TIMEOUT=60s
 if [ -z ${HL_TARGET} ]; then
 # Use the host target -- but remove features that we don't want to train
 # for by default, at least not yet (most notably, AVX512).
-HL_TARGET=`${AUTOSCHED_BIN}/get_host_target avx512 avx512_knl avx512_skylake avx512_cannonlake`
+HL_TARGET=`${INSTALL_PREFIX}/bin/halide_get_host_target avx512 avx512_knl avx512_skylake avx512_cannonlake`
 fi
 echo Training target is: ${HL_TARGET}
 
@@ -119,7 +118,7 @@ make_featurization() {
         target=${HL_TARGET} \
         auto_schedule=true \
         ${EXTRA_GENERATOR_ARGS} \
-        -p ${AUTOSCHED_BIN}/libautoschedule_adams2019.so \
+        -p ${INSTALL_PREFIX}/lib/libHalide_Halide_autoschedule_adams2019.so \
         -s Adams2019 \
           2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
 
@@ -128,8 +127,8 @@ make_featurization() {
     # so leave out libpng and libjpeg
     c++ \
         -std=c++17 \
-        -I ${HALIDE_DISTRIB_PATH}/include \
-        ${HALIDE_DISTRIB_PATH}/tools/RunGenMain.cpp \
+        -I ${INSTALL_PREFIX}/include \
+        ${INSTALL_PREFIX}/src/halide/RunGenMain.cpp \
         ${D}/*.registration.cpp \
         ${D}/*.a \
         -o ${D}/bench \
@@ -153,7 +152,7 @@ benchmark_sample() {
     P=$3
     S=$2
     FNAME=$4
-    ${AUTOSCHED_BIN}/featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample || echo "featurization_to_sample failed for ${D} (probably because benchmarking failed)"
+    ${INSTALL_PREFIX}/bin/halide_featurization_to_sample ${D}/${FNAME}.featurization $R $P $S ${D}/${FNAME}.sample || echo "halide_featurization_to_sample failed for ${D} (probably because benchmarking failed)"
 }
 
 # Don't clobber existing samples
@@ -220,7 +219,7 @@ for ((BATCH_ID=$((FIRST+1));BATCH_ID<$((FIRST+1+NUM_BATCHES));BATCH_ID++)); do
         echo Retraining model...
 
         find ${SAMPLES} -name "*.sample" | \
-            ${AUTOSCHED_BIN}/retrain_cost_model \
+            ${INSTALL_PREFIX}/bin/halide_retrain_cost_model \
                 --epochs=${BATCH_SIZE} \
                 --rates="0.0001" \
                 --num_cores=32 \

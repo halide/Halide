@@ -14,7 +14,7 @@ set(Halide_INSTALL_HELPERSDIR "${CMAKE_INSTALL_LIBDIR}/cmake/HalideHelpers"
 set(Halide_INSTALL_PLUGINDIR "${CMAKE_INSTALL_LIBDIR}"
     CACHE STRING "Path to Halide plugins folder")
 
-set(Halide_INSTALL_TOOLSDIR "${CMAKE_INSTALL_DATADIR}/tools"
+set(Halide_INSTALL_TOOLSDIR "${CMAKE_INSTALL_PREFIX}/src/halide"
     CACHE STRING "Path to Halide build-time tools and sources")
 
 ##
@@ -61,7 +61,7 @@ install(TARGETS Halide_Runtime
 
 # Captures both the runtime and Halide.h
 install(DIRECTORY ${Halide_BINARY_DIR}/include/
-        TYPE INCLUDE
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/halide
         COMPONENT Halide_Development
         FILES_MATCHING PATTERN "include/*.h")
 
@@ -99,7 +99,7 @@ install(FILES
         ${Halide_SOURCE_DIR}/README_rungen.md
         ${Halide_SOURCE_DIR}/README_webassembly.md
         COMPONENT Halide_Documentation
-        TYPE DATA)
+        DESTINATION ${CMAKE_INSTALL_DOCDIR})
 
 ##
 # Tools
@@ -130,12 +130,12 @@ install(FILES ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/autotune_loop.sh
 
 if (WITH_TUTORIALS)
     install(DIRECTORY ${Halide_SOURCE_DIR}/tutorial
-            TYPE DATA
+            DESTINATION ${CMAKE_INSTALL_DOCDIR}
             COMPONENT Halide_Documentation
             FILES_MATCHING
             PATTERN "*.cpp"
             PATTERN "*.h"
-            PATTERN "lesson_*.sh"
+            PATTERN "lesson_*/opt/halide-new/share/tools"
             PATTERN "*.gif"
             PATTERN "*.jpg"
             PATTERN "*.mp4"
