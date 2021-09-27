@@ -108,6 +108,8 @@ void lower_impl(const vector<Function> &output_funcs,
                 Module &result_module) {
     auto time_start = std::chrono::high_resolution_clock::now();
 
+    HALIDE_TIC;
+
     // Create a deep-copy of the entire graph of Funcs.
     auto [outputs, env] = deep_copy(output_funcs, build_environment(output_funcs));
 
@@ -506,6 +508,8 @@ void lower_impl(const vector<Function> &output_funcs,
     }
 
     result_module.append(main_func);
+
+    HALIDE_TOC;
 
     auto *logger = get_compiler_logger();
     if (logger) {

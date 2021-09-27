@@ -345,6 +345,8 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
 
     auto time_start = std::chrono::high_resolution_clock::now();
 
+    HALIDE_TIC;
+
     // Work on a copy of the module to avoid modifying the original.
     std::unique_ptr<llvm::Module> module = clone_module(module_in);
 
@@ -383,6 +385,8 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     target_machine->addPassesToEmitFile(pass_manager, out, nullptr, file_type);
 
     pass_manager.run(*module);
+
+    HALIDE_TOC;
 
     auto *logger = Internal::get_compiler_logger();
     if (logger) {
