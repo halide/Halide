@@ -79,7 +79,6 @@ void halide_free(void *user_context, void *ptr);
 WEAK int64_t halide_current_time_ns(void *user_context);
 WEAK void halide_print(void *user_context, const char *msg);
 WEAK void halide_error(void *user_context, const char *msg);
-WEAK void (*halide_set_custom_print(void (*print)(void *, const char *)))(void *, const char *);
 WEAK void (*halide_set_error_handler(void (*handler)(void *, const char *)))(void *, const char *);
 
 char *getenv(const char *);

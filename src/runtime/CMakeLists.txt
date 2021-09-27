@@ -60,7 +60,6 @@ set(RUNTIME_CPP
     posix_error_handler
     posix_get_symbol
     posix_io
-    posix_print
     posix_threads
     posix_threads_tsan
     powerpc_cpu_features

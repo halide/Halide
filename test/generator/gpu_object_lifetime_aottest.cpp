@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     return 0;
 #endif
 
-    halide_set_custom_print(&my_halide_print);
+    halide_default_context()->print = my_halide_print;
 
     // Run the whole program several times.
     for (int wrap_memory = 0; wrap_memory < 2; wrap_memory++) {

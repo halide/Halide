@@ -65,21 +65,17 @@ extern "C" {
 #endif
 #endif
 
-// #ifndef HALIDE_ATTRIBUTE_UNUSED
-// #ifdef __has_attribute
-// #if __has_attribute(maybe_unused)
-// // C++17 or later
-// #define HALIDE_ATTRIBUTE_UNUSED [[maybe_unused]]
-// #elif __has_attribute(unused)
-// // Clang/GCC
-// #define HALIDE_ATTRIBUTE_UNUSED __attribute__((unused))
-// #else
-// #define HALIDE_ATTRIBUTE_UNUSED /* oh well */
-// #endif
-// #else
-// #define HALIDE_ATTRIBUTE_UNUSED  /* probably MSVC */
-// #endif
-// #endif
+#ifndef HALIDE_ATTRIBUTE_DEPRECATED
+#ifdef HALIDE_ALLOW_DEPRECATED
+#define HALIDE_ATTRIBUTE_DEPRECATED(x)
+#else
+#ifdef _MSC_VER
+#define HALIDE_ATTRIBUTE_DEPRECATED(x) __declspec(deprecated(x))
+#else
+#define HALIDE_ATTRIBUTE_DEPRECATED(x) __attribute__((deprecated(x)))
+#endif
+#endif
+#endif
 
 /** \file
  *
@@ -148,9 +144,6 @@ struct halide_buffer_t;
  */
 // @{
 extern void halide_print(void *user_context, const char *);
-extern void halide_default_print(void *user_context, const char *);
-typedef void (*halide_print_t)(void *, const char *);
-extern halide_print_t halide_set_custom_print(halide_print_t print);
 // @}
 
 /** Halide calls this function on runtime errors (for example bounds
@@ -1615,18 +1608,6 @@ typedef struct halide_buffer_t {
 
 #ifdef __cplusplus
 extern "C" {
-#endif
-
-#ifndef HALIDE_ATTRIBUTE_DEPRECATED
-#ifdef HALIDE_ALLOW_DEPRECATED
-#define HALIDE_ATTRIBUTE_DEPRECATED(x)
-#else
-#ifdef _MSC_VER
-#define HALIDE_ATTRIBUTE_DEPRECATED(x) __declspec(deprecated(x))
-#else
-#define HALIDE_ATTRIBUTE_DEPRECATED(x) __attribute__((deprecated(x)))
-#endif
-#endif
 #endif
 
 /** halide_scalar_value_t is a simple union able to represent all the well-known

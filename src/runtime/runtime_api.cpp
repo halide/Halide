@@ -183,7 +183,6 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_set_custom_get_symbol,
     (void *)&halide_set_custom_load_library,
     (void *)&halide_set_custom_malloc,
-    (void *)&halide_set_custom_print,
     (void *)&halide_set_custom_trace,
     (void *)&halide_set_error_handler,
     (void *)&halide_set_gpu_device,

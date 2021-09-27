@@ -1106,7 +1106,7 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
 
     // 1) Before the pipeline runs, when the single shared runtime
     // module is created, halide_custom_print in posix_print.cpp is
-    // set to print_handler in JITModule.cpp
+    // set to print_handler in JITModule.cpp TODO
 
     // 2) When the jitted module is compiled, we tell llvm to resolve
     // calls to halide_print to the halide_print in the shared module
