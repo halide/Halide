@@ -16,6 +16,6 @@ for app in $APP_LIST; do
     pushd ${app}
     make clean
     rm -rf results results_baseline
-    bash ../run_experiment.sh 256 266
+    bash ../run_experiment.sh 256 512
     popd
 done
