@@ -38,7 +38,7 @@ struct Avg {
     }
 
     void dump() const {
-        std::cout << "avg_" << (round == Round::Down ? "d" : "u") << "(" << i << ", " << j << ")";
+        std::cout << "avg_" << (round == Round::Down ? "d" : "u") << "(v" << i << ", v" << j << ")";
     }
 };
 
@@ -49,7 +49,7 @@ void avg_down(Runtime::Buffer<uint8_t> a, Runtime::Buffer<uint8_t> b, Runtime::B
         Var x;
         f(x) = cast<uint8_t>((cast<uint16_t>(in_a(x)) + in_b(x)) / 2);
         f.vectorize(x, 32, TailStrategy::RoundUp);
-        f.parallel(x, 4096, TailStrategy::GuardWithIf);
+        // f.parallel(x, 4096, TailStrategy::GuardWithIf);
         f.align_bounds(x, 32);
         f.compile_jit();
         return f;
@@ -59,18 +59,18 @@ void avg_down(Runtime::Buffer<uint8_t> a, Runtime::Buffer<uint8_t> b, Runtime::B
     f.realize(out);
 }
 
-void avg_down(uint8_t m, uint8_t s, Runtime::Buffer<uint8_t> b, Runtime::Buffer<uint8_t> out) {
+void avg_down(int start, uint8_t m, uint8_t s, Runtime::Buffer<uint8_t> b, Runtime::Buffer<uint8_t> out) {
     static ImageParam in_b(UInt(8), 1);
     static Param<uint8_t> mask, shift;
     static Func f = [&]() {
         Var x;
         Func in_a;
-        in_a(x) = cast<uint8_t>((x >> cast<int>(shift))) & mask;
+        in_a(x) = cast<uint8_t>(((x + start) >> cast<int>(shift))) & mask;
 
         Func f;
         f(x) = cast<uint8_t>((cast<uint16_t>(in_a(x)) + in_b(x)) / 2);
         f.vectorize(x, 32, TailStrategy::RoundUp);
-        f.parallel(x, 4096, TailStrategy::GuardWithIf);
+        // f.parallel(x, 4096, TailStrategy::GuardWithIf);
         f.align_bounds(x, 32);
         f.compile_jit();
         return f;
@@ -81,20 +81,20 @@ void avg_down(uint8_t m, uint8_t s, Runtime::Buffer<uint8_t> b, Runtime::Buffer<
     f.realize(out);
 }
 
-void avg_down(uint8_t m_a, uint8_t s_a, uint8_t m_b, uint8_t s_b, Runtime::Buffer<uint8_t> out) {
+void avg_down(int start, uint8_t m_a, uint8_t s_a, uint8_t m_b, uint8_t s_b, Runtime::Buffer<uint8_t> out) {
     static ImageParam in_b(UInt(8), 1);
     static Param<uint8_t> mask_a, shift_a, mask_b, shift_b;
     static Func f = [&]() {
         Var x;
         Func in_a;
-        in_a(x) = cast<uint8_t>((x >> cast<int>(shift_a))) & mask_a;
+        in_a(x) = cast<uint8_t>(((x + start) >> cast<int>(shift_a))) & mask_a;
         Func in_b;
-        in_b(x) = cast<uint8_t>((x >> cast<int>(shift_b))) & mask_b;
+        in_b(x) = cast<uint8_t>(((x + start) >> cast<int>(shift_b))) & mask_b;
 
         Func f;
         f(x) = cast<uint8_t>((cast<uint16_t>(in_a(x)) + in_b(x)) / 2);
         f.vectorize(x, 32, TailStrategy::RoundUp);
-        f.parallel(x, 4096, TailStrategy::GuardWithIf);
+        // f.parallel(x, 4096, TailStrategy::GuardWithIf);
         f.align_bounds(x, 32);
         f.compile_jit();
         return f;
@@ -113,7 +113,7 @@ void avg_up(Runtime::Buffer<uint8_t> a, Runtime::Buffer<uint8_t> b, Runtime::Buf
         Var x;
         f(x) = cast<uint8_t>((cast<uint16_t>(in_a(x)) + in_b(x) + 1) / 2);
         f.vectorize(x, 32);
-        f.parallel(x, 4096, TailStrategy::GuardWithIf);
+        // f.parallel(x, 4096, TailStrategy::GuardWithIf);
         f.align_bounds(x, 32);
         f.compile_jit();
         return f;
@@ -123,18 +123,18 @@ void avg_up(Runtime::Buffer<uint8_t> a, Runtime::Buffer<uint8_t> b, Runtime::Buf
     f.realize(out);
 }
 
-void avg_up(uint8_t m, uint8_t s, Runtime::Buffer<uint8_t> b, Runtime::Buffer<uint8_t> out) {
+void avg_up(int start, uint8_t m, uint8_t s, Runtime::Buffer<uint8_t> b, Runtime::Buffer<uint8_t> out) {
     static ImageParam in_b(UInt(8), 1);
     static Param<uint8_t> mask, shift;
     static Func f = [&]() {
         Var x;
         Func in_a;
-        in_a(x) = cast<uint8_t>((x >> cast<int>(shift))) & mask;
+        in_a(x) = cast<uint8_t>((x + start) >> cast<int>(shift)) & mask;
 
         Func f;
         f(x) = cast<uint8_t>((cast<uint16_t>(in_a(x)) + in_b(x) + 1) / 2);
         f.vectorize(x, 32, TailStrategy::RoundUp);
-        f.parallel(x, 4096, TailStrategy::GuardWithIf);
+        // f.parallel(x, 4096, TailStrategy::GuardWithIf);
         f.align_bounds(x, 32);
         f.compile_jit();
         return f;
@@ -145,20 +145,20 @@ void avg_up(uint8_t m, uint8_t s, Runtime::Buffer<uint8_t> b, Runtime::Buffer<ui
     f.realize(out);
 }
 
-void avg_up(uint8_t m_a, uint8_t s_a, uint8_t m_b, uint8_t s_b, Runtime::Buffer<uint8_t> out) {
+void avg_up(int start, uint8_t m_a, uint8_t s_a, uint8_t m_b, uint8_t s_b, Runtime::Buffer<uint8_t> out) {
     static ImageParam in_b(UInt(8), 1);
     static Param<uint8_t> mask_a, shift_a, mask_b, shift_b;
     static Func f = [&]() {
         Var x;
         Func in_a;
-        in_a(x) = cast<uint8_t>((x >> cast<int>(shift_a))) & mask_a;
+        in_a(x) = cast<uint8_t>(((x + start) >> cast<int>(shift_a))) & mask_a;
         Func in_b;
-        in_b(x) = cast<uint8_t>((x >> cast<int>(shift_b))) & mask_b;
+        in_b(x) = cast<uint8_t>(((x + start) >> cast<int>(shift_b))) & mask_b;
 
         Func f;
         f(x) = cast<uint8_t>((cast<uint16_t>(in_a(x)) + in_b(x) + 1) / 2);
         f.vectorize(x, 32, TailStrategy::RoundUp);
-        f.parallel(x, 4096, TailStrategy::GuardWithIf);
+        // f.parallel(x, 4096, TailStrategy::GuardWithIf);
         f.align_bounds(x, 32);
         f.compile_jit();
         return f;
@@ -182,7 +182,7 @@ void avg_up(Runtime::Buffer<int32_t> inputs, uint8_t m, uint8_t s, Runtime::Buff
         Func f;
         f(x) = cast<uint8_t>((cast<uint16_t>(in_a(x)) + in_b(x) + 1) / 2);
         f.vectorize(x, 32, TailStrategy::RoundUp);
-        f.parallel(x, 4096, TailStrategy::GuardWithIf);
+        // f.parallel(x, 4096, TailStrategy::GuardWithIf);
         f.align_bounds(x, 32);
         f.compile_jit();
         return f;
@@ -208,7 +208,7 @@ void avg_up(Runtime::Buffer<int32_t> inputs, uint8_t m_a, uint8_t s_a, uint8_t m
         Func f;
         f(x) = cast<uint8_t>((cast<uint16_t>(in_a(x)) + in_b(x) + 1) / 2);
         f.vectorize(x, 32, TailStrategy::RoundUp);
-        f.parallel(x, 4096, TailStrategy::GuardWithIf);
+        // f.parallel(x, 4096, TailStrategy::GuardWithIf);
         f.align_bounds(x, 32);
         f.compile_jit();
         return f;
@@ -233,7 +233,7 @@ void avg_down(Runtime::Buffer<int32_t> inputs, uint8_t m, uint8_t s, Runtime::Bu
         Func f;
         f(x) = cast<uint8_t>((cast<uint16_t>(in_a(x)) + in_b(x)) / 2);
         f.vectorize(x, 32, TailStrategy::RoundUp);
-        f.parallel(x, 4096, TailStrategy::GuardWithIf);
+        // f.parallel(x, 4096, TailStrategy::GuardWithIf);
         f.align_bounds(x, 32);
         f.compile_jit();
         return f;
@@ -259,7 +259,7 @@ void avg_down(Runtime::Buffer<int32_t> inputs, uint8_t m_a, uint8_t s_a, uint8_t
         Func f;
         f(x) = cast<uint8_t>((cast<uint16_t>(in_a(x)) + in_b(x)) / 2);
         f.vectorize(x, 32, TailStrategy::RoundUp);
-        f.parallel(x, 4096, TailStrategy::GuardWithIf);
+        // f.parallel(x, 4096, TailStrategy::GuardWithIf);
         f.align_bounds(x, 32);
         f.compile_jit();
         return f;
@@ -347,7 +347,13 @@ Result compute_bias_and_error(Runtime::Buffer<int32_t> inputs,
     auto max_error_out = Buffer<float>::make_scalar();
     auto worst_index_out = Buffer<int32_t>::make_scalar();
     f.realize({bias_out, min_error_out, max_error_out, worst_index_out});
-    return {bias_out() / size, std::max(std::abs(min_error_out()), std::abs(max_error_out())), min_error_out(), max_error_out(), worst_index_out()};
+    assert(min_error_out() <= 0.f);
+    assert(max_error_out() >= 0.f);
+    return {bias_out() / size,
+            std::max(std::abs(min_error_out()), std::abs(max_error_out())),
+            min_error_out(),
+            max_error_out(),
+            worst_index_out()};
 }
 
 uint64_t sum(Runtime::Buffer<uint8_t> a) {
@@ -511,9 +517,9 @@ struct Dag {
         std::cout << "\nDag with " << num_inputs << " inputs:\n";
         int i = num_inputs;
         for (const auto &op : ops) {
-            std::cout << i << ": ";
+            std::cout << "v" << i << " = ";
             op.dump();
-            std::cout << "  Kernel: ";
+            std::cout << "; //  Kernel: ";
             auto subdag = *this;
             while ((int)subdag.ops.size() > (i - num_inputs + 1)) {
                 subdag.ops.pop_back();
@@ -523,6 +529,8 @@ struct Dag {
                 std::cout << j << " ";
             }
             auto p = subdag.bias();
+            assert(p.min_error <= 0);
+            assert(p.max_error >= 0);
             std::cout << " : " << p.bias << " " << p.min_error << " " << p.max_error << "\n";
             i++;
         }
@@ -570,86 +578,124 @@ struct Dag {
 
         const int N =
             inputs.empty() ? std::max(32, 1 << (total_bits)) : inputs_buf.dim(0).extent();
-        Runtime::Buffer<uint8_t> buf(N, ops.size());
-        vector<Runtime::Buffer<uint8_t>> stack;
-        int i = 0;
-        for (const auto &op : ops) {
-            // TODO: Add an outer loop to reduce peak memory usage
-            if (op.round == Round::Down) {
-                if (inputs.empty() && op.j < num_inputs) {
-                    assert(op.i < num_inputs);
-                    avg_down(mask[op.i], shift[op.i], mask[op.j], shift[op.j], buf.sliced(1, i));
-                } else if (inputs.empty() && op.i < num_inputs) {
-                    avg_down(mask[op.i], shift[op.i], buf.sliced(1, op.j - num_inputs), buf.sliced(1, i));
-                } else if (op.j < num_inputs) {
-                    assert(op.i < num_inputs);
-                    avg_down(inputs_buf, mask[op.i], shift[op.i], mask[op.j], shift[op.j], buf.sliced(1, i));
-                } else if (op.i < num_inputs) {
-                    avg_down(inputs_buf, mask[op.i], shift[op.i], buf.sliced(1, op.j - num_inputs), buf.sliced(1, i));
+
+        const int slice = std::min(N, 1024 * 128);
+        const int num_slices = N / slice;
+        assert(slice * num_slices == N);
+        Runtime::Buffer<uint8_t> buf(slice, ops.size());
+
+        assert(num_slices == 1 || inputs.empty());
+
+        Result result;
+
+        for (int s = 0; s < N; s += slice) {
+            int i = 0;
+            for (const auto &op : ops) {
+                // TODO: Add an outer loop to reduce peak memory usage
+                // TODO: Add an extra dimension for all possible rounding modes
+                if (op.round == Round::Down) {
+                    if (inputs.empty() && op.j < num_inputs) {
+                        assert(op.i < num_inputs);
+                        avg_down(s, mask[op.i], shift[op.i], mask[op.j], shift[op.j], buf.sliced(1, i));
+                    } else if (inputs.empty() && op.i < num_inputs) {
+                        avg_down(s, mask[op.i], shift[op.i], buf.sliced(1, op.j - num_inputs), buf.sliced(1, i));
+                    } else if (op.j < num_inputs) {
+                        assert(op.i < num_inputs);
+                        avg_down(inputs_buf, mask[op.i], shift[op.i], mask[op.j], shift[op.j], buf.sliced(1, i));
+                    } else if (op.i < num_inputs) {
+                        avg_down(inputs_buf, mask[op.i], shift[op.i], buf.sliced(1, op.j - num_inputs), buf.sliced(1, i));
+                    } else {
+                        assert(op.j >= num_inputs && op.i >= num_inputs);
+                        avg_down(buf.sliced(1, op.i - num_inputs), buf.sliced(1, op.j - num_inputs), buf.sliced(1, i));
+                    }
                 } else {
-                    assert(op.j >= num_inputs && op.i >= num_inputs);
-                    avg_down(buf.sliced(1, op.i - num_inputs), buf.sliced(1, op.j - num_inputs), buf.sliced(1, i));
+                    if (inputs.empty() && op.j < num_inputs) {
+                        assert(op.i < num_inputs);
+                        avg_up(s, mask[op.i], shift[op.i], mask[op.j], shift[op.j], buf.sliced(1, i));
+                    } else if (inputs.empty() && op.i < num_inputs) {
+                        avg_up(s, mask[op.i], shift[op.i], buf.sliced(1, op.j - num_inputs), buf.sliced(1, i));
+                    } else if (op.j < num_inputs) {
+                        assert(op.i < num_inputs);
+                        avg_up(inputs_buf, mask[op.i], shift[op.i], mask[op.j], shift[op.j], buf.sliced(1, i));
+                    } else if (op.i < num_inputs) {
+                        avg_up(inputs_buf, mask[op.i], shift[op.i], buf.sliced(1, op.j - num_inputs), buf.sliced(1, i));
+                    } else {
+                        assert(op.j >= num_inputs && op.i >= num_inputs);
+                        avg_up(buf.sliced(1, op.i - num_inputs), buf.sliced(1, op.j - num_inputs), buf.sliced(1, i));
+                    }
+                }
+                i++;
+            }
+
+            Result r{0};
+
+            if (inputs.empty()) {
+                switch (num_inputs) {
+                case 2:
+                    r = compute_bias_and_error<2, true>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+                    break;
+                case 3:
+                    r = compute_bias_and_error<3, true>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+                    break;
+                case 4:
+                    r = compute_bias_and_error<4, true>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+                    break;
+                case 5:
+                    r = compute_bias_and_error<5, true>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+                    break;
+                case 6:
+                    r = compute_bias_and_error<6, true>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+                    break;
+                case 7:
+                    r = compute_bias_and_error<7, true>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+                    break;
+                case 8:
+                    r = compute_bias_and_error<8, true>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+                    break;
+                default:
+                    assert(false);
                 }
             } else {
-                if (inputs.empty() && op.j < num_inputs) {
-                    assert(op.i < num_inputs);
-                    avg_up(mask[op.i], shift[op.i], mask[op.j], shift[op.j], buf.sliced(1, i));
-                } else if (inputs.empty() && op.i < num_inputs) {
-                    avg_up(mask[op.i], shift[op.i], buf.sliced(1, op.j - num_inputs), buf.sliced(1, i));
-                } else if (op.j < num_inputs) {
-                    assert(op.i < num_inputs);
-                    avg_up(inputs_buf, mask[op.i], shift[op.i], mask[op.j], shift[op.j], buf.sliced(1, i));
-                } else if (op.i < num_inputs) {
-                    avg_up(inputs_buf, mask[op.i], shift[op.i], buf.sliced(1, op.j - num_inputs), buf.sliced(1, i));
-                } else {
-                    assert(op.j >= num_inputs && op.i >= num_inputs);
-                    avg_up(buf.sliced(1, op.i - num_inputs), buf.sliced(1, op.j - num_inputs), buf.sliced(1, i));
+                switch (num_inputs) {
+                case 2:
+                    r = compute_bias_and_error<2, false>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+                    break;
+                case 3:
+                    r = compute_bias_and_error<3, false>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+                    break;
+                case 4:
+                    r = compute_bias_and_error<4, false>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+                    break;
+                case 5:
+                    r = compute_bias_and_error<5, false>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+                    break;
+                case 6:
+                    r = compute_bias_and_error<6, false>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+                    break;
+                case 7:
+                    r = compute_bias_and_error<7, false>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+                    break;
+                case 8:
+                    r = compute_bias_and_error<8, false>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
+                    break;
+                default:
+                    assert(false);
                 }
             }
-            i++;
-        }
 
-        if (inputs.empty()) {
-            switch (num_inputs) {
-            case 2:
-                return compute_bias_and_error<2, true>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
-            case 3:
-                return compute_bias_and_error<3, true>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
-            case 4:
-                return compute_bias_and_error<4, true>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
-            case 5:
-                return compute_bias_and_error<5, true>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
-            case 6:
-                return compute_bias_and_error<6, true>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
-            case 7:
-                return compute_bias_and_error<7, true>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
-            case 8:
-                return compute_bias_and_error<8, true>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
-            default:
-                assert(false);
-                return Result{};
-            }
-        } else {
-            switch (num_inputs) {
-            case 2:
-                return compute_bias_and_error<2, false>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
-            case 3:
-                return compute_bias_and_error<3, false>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
-            case 4:
-                return compute_bias_and_error<4, false>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
-            case 5:
-                return compute_bias_and_error<5, false>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
-            case 6:
-                return compute_bias_and_error<6, false>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
-            case 7:
-                return compute_bias_and_error<7, false>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
-            case 8:
-                return compute_bias_and_error<8, false>(inputs_buf, shift, mask, k, buf.sliced(1, buf.dim(1).max()));
-            default:
-                assert(false);
-                return Result{};
+            if (s == 0) {
+                result = r;
+            } else {
+                result.bias += r.bias;
+                result.worst_input = result.error > r.error ? result.worst_input : r.worst_input;
+                result.error = std::max(result.error, r.error);
+                result.min_error = std::min(result.error, r.min_error);
+                result.max_error = std::max(result.error, r.max_error);
             }
         }
+        result.bias /= num_slices;
+
+        return result;
     }
 
     Result bias() {
