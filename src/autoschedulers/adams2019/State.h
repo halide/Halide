@@ -92,7 +92,7 @@ struct State {
     // Pipeline. Also generate source code for the schedule for the
     // user to copy-paste to freeze this schedule as permanent artifact.
     // Also fills `schedule_source`.
-    void apply_schedule(const FunctionDAG &dag, const MachineParams &params);
+    void apply_schedule(const FunctionDAG &dag, const MachineParams &params, std::mt19937 &rng);
 };
 
 }  // namespace Autoscheduler

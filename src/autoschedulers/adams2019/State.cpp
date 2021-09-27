@@ -537,9 +537,9 @@ void State::dump() const {
 // Apply the schedule represented by this state to a Halide
 // Pipeline. Also generate source code for the schedule for the
 // user to copy-paste to freeze this schedule as permanent artifact.
-void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params) {
+void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, std::mt19937 &rng) {
     StageMap<std::unique_ptr<LoopNest::StageScheduleState>> state_map;
-    root->apply(LoopLevel::root(), state_map, params.parallelism, 0, nullptr, nullptr);
+    root->apply(LoopLevel::root(), state_map, params.parallelism, 0, nullptr, nullptr, rng);
 
     std::ostringstream src;
 

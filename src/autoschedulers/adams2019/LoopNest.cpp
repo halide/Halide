@@ -1671,17 +1671,23 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
     return result;
 }
 
+TailStrategy random_strategy(std::mt19937 &rng, const std::vector<TailStrategy> &strategies) {
+    int index = rng() % strategies.size();
+    return strategies[index];
+}
+
 // Apply the schedule represented by this loop nest to a Halide pipeline.
 void LoopNest::apply(LoopLevel here,
                      StageMap<std::unique_ptr<StageScheduleState>> &state_map,
                      double num_cores,
                      int depth,
                      const LoopNest *parent,
-                     const LoopNest *compute_site) const {
+                     const LoopNest *compute_site,
+                     std::mt19937 &rng) const {
     if (is_root()) {
         for (const auto &c : children) {
             Func(c->node->func).compute_root();
-            c->apply(LoopLevel::root(), state_map, num_cores, 1, this, c.get());
+            c->apply(LoopLevel::root(), state_map, num_cores, 1, this, c.get(), rng);
             if (c->stage->index == 0) {
                 auto &state = state_map.get(c->stage);
                 state->schedule_source << "\n    .compute_root()";
@@ -1753,7 +1759,58 @@ void LoopNest::apply(LoopLevel here,
         }
 
         // Pick a tail strategy for any splits of pure vars. RVars always use guardwithif
+        static std::vector<TailStrategy> predicate_strategies = {
+            TailStrategy::GuardWithIf,
+            TailStrategy::Predicate,
+        };
+
+        static std::vector<TailStrategy> predicate_strategies_load = {
+            TailStrategy::GuardWithIf,
+            TailStrategy::Predicate,
+            TailStrategy::PredicateLoads,
+        };
+
+        static std::vector<TailStrategy> predicate_strategies_store = {
+            TailStrategy::GuardWithIf,
+            TailStrategy::Predicate,
+            TailStrategy::PredicateStores,
+        };
+
+        static std::vector<TailStrategy> non_predmem_strategies = {
+            TailStrategy::RoundUp,
+            TailStrategy::GuardWithIf,
+            TailStrategy::Predicate,
+            TailStrategy::ShiftInwards,
+        };
+
+        static std::vector<TailStrategy> all_strategies = {
+            TailStrategy::RoundUp,
+            TailStrategy::GuardWithIf,
+            TailStrategy::Predicate,
+            TailStrategy::ShiftInwards,
+            TailStrategy::PredicateLoads,
+            TailStrategy::PredicateStores,
+        };
+
         auto pure_var_tail_strategy = TailStrategy::Auto;
+        if (stage->index > 0) {
+            // update def: GuardWithIf/Predicate
+            pure_var_tail_strategy = random_strategy(rng, predicate_strategies);
+        } else if (compute_site->accesses_input_buffer() && !node->is_output) {
+            // pure stage that accesses input and is not output: GuardWithIf/Predicate, and also PredicateLoads if innermost
+            pure_var_tail_strategy = innermost ? random_strategy(rng, predicate_strategies_load) : random_strategy(rng, predicate_strategies);
+        } else if (!compute_site->accesses_input_buffer() && node->is_output) {
+            // pure stage that  is the output and does not access the input: GuardWithIf/Predicate and PredicateStores if innermost
+            pure_var_tail_strategy = innermost ? random_strategy(rng, predicate_strategies_store) : random_strategy(rng, predicate_strategies);
+        } else if (compute_site->accesses_input_buffer() && node->is_output) {
+            // pure stage that is the output and also accesses the input: GuardWithIf/Predicate
+            pure_var_tail_strategy = random_strategy(rng, predicate_strategies);
+        } else {
+            // pure stage that is not the output and does not access the input: RoundUp/ShiftInwards/GuardWithIf/Predicate plus PredicateStores/PredicateLoads if innermost
+            pure_var_tail_strategy = innermost ? random_strategy(rng, all_strategies) : random_strategy(rng, non_predmem_strategies);
+        }
+
+        /*
         if (!compute_site->accesses_input_buffer() && !node->is_output) {
             // Roundup is lowest overhead, provided it doesn't
             // expand the bounds read on the input or written on
@@ -1770,6 +1827,7 @@ void LoopNest::apply(LoopLevel here,
             // recompute
             pure_var_tail_strategy = TailStrategy::GuardWithIf;
         }
+        */
 
         if (!size.empty()) {
             if (innermost) {
@@ -1937,7 +1995,7 @@ void LoopNest::apply(LoopLevel here,
             if (c->node != node) {
                 Func(c->node->func).compute_at(here);
             }
-            c->apply(here, state_map, num_cores, depth + 1, this, compute_site);
+            c->apply(here, state_map, num_cores, depth + 1, this, compute_site, rng);
             if (c->node != node && c->stage->index == 0) {
                 auto &state = *(state_map.get(c->stage));
                 state.schedule_source << "\n    .compute" << loop_level;
