@@ -191,6 +191,8 @@ class HalideMemoryTracker {
     // Access controlled by tracker_mutex.
     uint64_t memory_allocated{0};
 
+    uint64_t malloc_calls{0};
+
     // High-water mark of CPU memory allocated since program start
     // (or last call to get_cpu_memory_highwater_reset).
     // Access controlled by tracker_mutex.
@@ -213,6 +215,8 @@ class HalideMemoryTracker {
             halide_error(user_context, "Tracking error in tracker_malloc");
         }
         memory_size_map[ptr] = x;
+
+        malloc_calls++;
 
         return ptr;
     }
@@ -258,6 +262,11 @@ public:
     void highwater_reset() {
         std::lock_guard<std::mutex> lock(tracker_mutex);
         memory_highwater = memory_allocated;
+    }
+
+    uint64_t total_malloc_calls() {
+        std::lock_guard<std::mutex> lock(tracker_mutex);
+        return malloc_calls;
     }
 };
 
@@ -529,7 +538,8 @@ int main(int argc, char **argv) {
         // we report on memory usage.
         r.copy_outputs_to_host();
         std::cout << "Maximum Halide memory: " << tracker.highwater()
-                  << " bytes for output of " << r.megapixels_out() << " mpix.\n";
+                  << " bytes for output of " << r.megapixels_out() << " mpix.\n"
+                  << "Calls to halide_malloc: " << tracker.total_malloc_calls() << "\n";
     }
 
     // Save the output(s), if necessary.
