@@ -150,7 +150,7 @@ LIBHALIDE_LDFLAGS ?= -Wl,-rpath,$(dir $(LIB_HALIDE)) -L $(dir $(LIB_HALIDE)) -lH
 LIBHALIDE_LDFLAGS_STATIC ?= $(LIB_HALIDE_STATIC) $(LDFLAGS)
 
 # Autoschedulers. Mullapudi2016 is currently the default, because it's fast.
-AUTOSCHEDULER ?= mullapudi2016
+AUTOSCHEDULER ?= adams2019
 ifneq ($(AUTOSCHEDULER),)
 LIB_AUTOSCHEDULER ?= $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(SHARED_EXT)
 ifeq ($(UNAME), Darwin)
