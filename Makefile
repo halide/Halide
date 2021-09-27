@@ -807,6 +807,7 @@ RUNTIME_CPP_COMPONENTS = \
   qurt_yield \
   riscv_cpu_features \
   runtime_api \
+  runtime_context \
   ssp \
   to_string \
   trace_helper \

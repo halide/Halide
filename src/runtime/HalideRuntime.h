@@ -55,6 +55,32 @@ extern "C" {
 #endif
 #endif
 
+// Note that while __attribute__ can go before or after the declaration,
+// __declspec apparently is only allowed before.
+#ifndef HALIDE_ATTRIBUTE_ALIGN
+#ifdef _MSC_VER
+#define HALIDE_ATTRIBUTE_ALIGN(x) __declspec(align(x))
+#else
+#define HALIDE_ATTRIBUTE_ALIGN(x) __attribute__((aligned(x)))
+#endif
+#endif
+
+// #ifndef HALIDE_ATTRIBUTE_UNUSED
+// #ifdef __has_attribute
+// #if __has_attribute(maybe_unused)
+// // C++17 or later
+// #define HALIDE_ATTRIBUTE_UNUSED [[maybe_unused]]
+// #elif __has_attribute(unused)
+// // Clang/GCC
+// #define HALIDE_ATTRIBUTE_UNUSED __attribute__((unused))
+// #else
+// #define HALIDE_ATTRIBUTE_UNUSED /* oh well */
+// #endif
+// #else
+// #define HALIDE_ATTRIBUTE_UNUSED  /* probably MSVC */
+// #endif
+// #endif
+
 /** \file
  *
  * This file declares the routines used by Halide internally in its
@@ -83,6 +109,33 @@ extern "C" {
  * Linux, LD_DYNAMIC_WEAK=1 may help.
  *
  */
+
+typedef struct halide_runtime_function_table_t {
+    /** Print a message to stderr. Main use is to support tracing
+     * functionality, print, and print_when calls. Also called by the default
+     * halide_error.  This function can be replaced in JITed code by using
+     * halide_custom_print and providing an implementation of halide_print
+     * in AOT code. See Func::set_custom_print.
+     */
+    void (*print)(void *user_context, const char *msg);
+} halide_runtime_function_table_t;
+
+typedef struct halide_context_t {
+    /** Arbitrary value that user code can specify. Halide will always
+     * initialize this to nullptr and won't change it or examine it. */
+    void *user_context;
+
+    /** The function table that defines the current Halide runtime. */
+    halide_runtime_function_table_t fns;
+
+    HALIDE_ATTRIBUTE_ALIGN(128)
+    char reserved[4096];
+} halide_context_t;
+
+/**
+ * Return a pointer to the global halide_context_t.
+ * All fields will be initialized to the default values for the build-in runtime. */
+extern struct halide_context_t *halide_default_context();
 
 // Forward-declare to suppress warnings if compiling as C.
 struct halide_buffer_t;
@@ -411,16 +464,6 @@ typedef enum halide_type_code_t
     halide_type_handle = 3,  ///< opaque pointer type (void *)
     halide_type_bfloat = 4,  ///< floating point numbers in the bfloat format
 } halide_type_code_t;
-
-// Note that while __attribute__ can go before or after the declaration,
-// __declspec apparently is only allowed before.
-#ifndef HALIDE_ATTRIBUTE_ALIGN
-#ifdef _MSC_VER
-#define HALIDE_ATTRIBUTE_ALIGN(x) __declspec(align(x))
-#else
-#define HALIDE_ATTRIBUTE_ALIGN(x) __attribute__((aligned(x)))
-#endif
-#endif
 
 /** A runtime tag for a type in the halide type system. Can be ints,
  * unsigned ints, or floats of various bit-widths (the 'bits'

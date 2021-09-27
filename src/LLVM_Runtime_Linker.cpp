@@ -138,6 +138,7 @@ DECLARE_CPP_INITMOD(qurt_threads)
 DECLARE_CPP_INITMOD(qurt_threads_tsan)
 DECLARE_CPP_INITMOD(qurt_yield)
 DECLARE_CPP_INITMOD(runtime_api)
+DECLARE_CPP_INITMOD(runtime_context)
 DECLARE_CPP_INITMOD(ssp)
 DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(trace_helper)
@@ -614,7 +615,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
         const std::string f_name = Internal::get_llvm_function_name(f);
 
         bool is_halide_extern_c_sym = Internal::starts_with(f_name, "halide_");
-        internal_assert(!is_halide_extern_c_sym || f.isWeakForLinker() || f.isDeclaration())
+        internal_assert(!is_halide_extern_c_sym || f.isWeakForLinker() || f.isDeclaration() || f_name == "halide_default_context")
             << " for function " << f_name << "\n";
 
         // We never want *any* Function marked as external-weak here;
@@ -1076,6 +1077,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         if (module_type == ModuleAOT) {
             // These modules are only used for AOT compilation
             modules.push_back(get_initmod_can_use_target(c, bits_64, debug));
+            modules.push_back(get_initmod_runtime_context(c, bits_64, debug));
             if (t.arch == Target::X86) {
                 modules.push_back(get_initmod_x86_cpu_features(c, bits_64, debug));
             }
