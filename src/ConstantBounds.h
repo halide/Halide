@@ -26,6 +26,8 @@ Expr find_constant_bound(const Expr &e, Direction d,
  * +/-inf. */
 Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope);
 
+std::ostream &operator<<(std::ostream &s, const Direction &d);
+
 }  // namespace Internal
 }  // namespace Halide
 

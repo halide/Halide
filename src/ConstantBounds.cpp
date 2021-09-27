@@ -34,29 +34,47 @@ Direction flip(const Direction &direction) {
     }
 }
 
+/*
+* Methods that push divisions or multiplications by constants inwards
+* These are approximation techniques that approximate in a give direction.
+*/
 Expr handle_push_div(const Expr &expr, Direction direction, int64_t denom);
 Expr handle_push_mul(const Expr &expr, Direction direction, int64_t factor);
 Expr handle_push_none(const Expr &expr, Direction direction);
 
+/*
+* Approximate method. Push division by a constant inside a number of possible IR nodes.
+* Requires that the denominator being pushed is positive. This is the common case anyways.
+* Requires that the denom is not 1 - if denom=1, handle_push_none should be called.
+*/
 Expr handle_push_div(const Expr &expr, const Direction direction, const int64_t denom) {
     debug(3) << "push_div(" << expr << ", " << direction << ", " << denom << ")\n";
     internal_assert(denom != 1) << "handle_push_div called with denom=1 on Expr: " << expr << "\n";
     internal_assert(denom > 0) << "handle_push_div can only handle positive denominators, received: " << expr << " / " << denom << "\n";
 
     if (const IntImm *op = expr.as<IntImm>()) {
+        // Pushing division to a constant is just applying the division of constants.
         int64_t value = div_imp(op->value, denom);
         return IntImm::make(op->type, value);
     } else if (const Add *op = expr.as<Add>()) {
-        // n > 0 -> (a / n) + (b / n) <= (a + b) / n <= (a / n) + (b / n) + 1
-        Expr rec = handle_push_div(op->a, direction, denom) + handle_push_div(op->b, direction, denom);
+        // A positive denominator (n) implies the following relationships:
+        // Lower bound: (a / n) + (b / n) <= (a + b) / n
+        // Upper bound: (a + b) / n <= (a / n) + (b / n) + 1
+        Expr lhs = handle_push_div(op->a, direction, denom);
+        Expr rhs = handle_push_div(op->b, direction, denom);
+        Expr rec = Add::make(std::move(lhs), std::move(rhs));
         if (direction == Direction::Lower) {
             return rec;
         } else {
             return rec + 1;
         }
     } else if (const Sub *op = expr.as<Sub>()) {
-        // n > 0 -> (a / n) - (b / n) - 1 <= (a - b) / n <= (a / n) - (b / n)
-        Expr rec = handle_push_div(op->a, direction, denom) - handle_push_div(op->b, flip(direction), denom);
+        // A positive denominator (n) implies the following relationships:
+        // Lower bound: (a / n) - (b / n) - 1 <= (a - b) / n
+        // Upper bound: (a - b) / n <= (a / n) - (b / n)
+        Expr lhs = handle_push_div(op->a, direction, denom);
+        Expr rhs = handle_push_div(op->b, flip(direction), denom);
+        Expr rec = Sub::make(std::move(lhs), std::move(rhs));
         if (direction == Direction::Lower) {
             return rec - 1;
         } else {
@@ -64,26 +82,34 @@ Expr handle_push_div(const Expr &expr, const Direction direction, const int64_t 
         }
     } else if (const Div *op = expr.as<Div>()) {
         if (const IntImm *imm = op->b.as<IntImm>()) {
+            // We can keep pushing as long as the denominator remains a positive constant.
             if (imm->value > 0) {
                 return handle_push_div(op->a, direction, denom * imm->value);
             }
         }
         // otherwise let it fall to the base case.
     } else if (const Min *op = expr.as<Min>()) {
-        return min(handle_push_div(op->a, direction, denom), handle_push_div(op->b, direction, denom));
+        // Can always push a positive division inside of a min
+        Expr lhs = handle_push_div(op->a, direction, denom);
+        Expr rhs = handle_push_div(op->b, direction, denom);
+        return Min::make(std::move(lhs), std::move(rhs));
     } else if (const Max *op = expr.as<Max>()) {
-        return max(handle_push_div(op->a, direction, denom), handle_push_div(op->b, direction, denom));
+        // Can always push a positive division inside of a max
+        Expr lhs = handle_push_div(op->a, direction, denom);
+        Expr rhs = handle_push_div(op->b, direction, denom);
+        return Max::make(std::move(lhs), std::move(rhs));
     } else if (const Select *op = expr.as<Select>()) {
-        const Expr true_value = handle_push_div(op->true_value, direction, denom);
-        const Expr false_value = handle_push_div(op->false_value, direction, denom);
-        return select(op->condition, true_value, false_value);
+        // Can always push a positive division inside of a select
+        Expr true_value = handle_push_div(op->true_value, direction, denom);
+        Expr false_value = handle_push_div(op->false_value, direction, denom);
+        return select(op->condition, std::move(true_value), std::move(false_value));
     } else if (const Mul *op = expr.as<Mul>()) {
         // Can only go inside a mul if the constant of multiplication is divisible by the denominator
         // TODO: are there any other cases that we can handle?
 
         // Assume constant is on the RHS of Mul due to simplification.
         if (const IntImm *constant = op->b.as<IntImm>()) {
-            // We will have to change direction if multiplying by a negative constant.
+            // We will have to change direction of the approximation if multiplying by a negative constant.
             const Direction new_direction = (constant->value > 0) ? direction : flip(direction);
 
             if ((constant->value % denom) == 0) {
@@ -92,6 +118,7 @@ Expr handle_push_div(const Expr &expr, const Direction direction, const int64_t 
                 if (new_factor == 1) {
                     return handle_push_none(op->a, new_direction);
                 } else {
+                    // Push the x * (c0 / c1)
                     return handle_push_mul(op->a, new_direction, new_factor);
                 }
             } else if ((denom % constant->value) == 0 && constant->value > 0) {
@@ -100,10 +127,11 @@ Expr handle_push_div(const Expr &expr, const Direction direction, const int64_t 
                 if (new_denom == 1) {
                     return handle_push_none(op->a, new_direction);
                 } else {
+                    // Push the x / (c1 / c0)
                     return handle_push_div(op->a, new_direction, new_denom);
                 }
             } else {
-                // Just push the multiply inwards.
+                // Just push the multiply inwards, and stop pushing division.
                 // Essentially the base case below, without needing to call handle_push_none.
                 Expr expr_denom = IntImm::make(expr.type(), denom);
                 Expr recurse = handle_push_mul(op->a, new_direction, constant->value);
@@ -113,44 +141,58 @@ Expr handle_push_div(const Expr &expr, const Direction direction, const int64_t 
         // otherwise let it fall to the base case.
     }
 
-    // Base case.
+    // Base case. Stop pushing the division inwards,
+    // but recurse on the inside if possible.
     Expr expr_denom = IntImm::make(expr.type(), denom);
     Expr recurse = handle_push_none(expr, direction);
     return Div::make(std::move(recurse), std::move(expr_denom));
 }
 
+/*
+* Approximate method. Push multiplication by a constant inside a number of possible IR nodes.
+* Requires that the factor is not 1 - if factor=1, handle_push_none should be called.
+*/
 Expr handle_push_mul(const Expr &expr, Direction direction, int64_t factor) {
     debug(3) << "push_mul(" << expr << ", " << direction << ", " << factor << ")\n";
     internal_assert(factor != 1) << "handle_push_mul called with factor=1 on Expr: " << expr << "\n";
 
     if (const IntImm *op = expr.as<IntImm>()) {
+        // Pushing multiplication to a constant is just the constant-folded multiplication.
         int64_t value = op->value * factor;
         return IntImm::make(op->type, value);
     } else if (const Add *op = expr.as<Add>()) {
-        Expr a = handle_push_mul(op->a, direction, factor);
-        Expr b = handle_push_mul(op->b, direction, factor);
-        return Add::make(std::move(a), std::move(b));
+        // Can always cleanly push a mul inside of an addition.
+        Expr lhs = handle_push_mul(op->a, direction, factor);
+        Expr rhs = handle_push_mul(op->b, direction, factor);
+        return Add::make(std::move(lhs), std::move(rhs));
     } else if (const Sub *op = expr.as<Sub>()) {
-        Expr a = handle_push_mul(op->a, direction, factor);
-        Expr b = handle_push_mul(op->b, flip(direction), factor);
-        return Sub::make(std::move(a), std::move(b));
+        // Can always cleanly push a mul inside of a subtraction,
+        // but need to flip the direction of approximation of the second argument.
+        Expr lhs = handle_push_mul(op->a, direction, factor);
+        Expr rhs = handle_push_mul(op->b, flip(direction), factor);
+        return Sub::make(std::move(lhs), std::move(rhs));
     } else if (const Min *op = expr.as<Min>()) {
-        Expr a = handle_push_mul(op->a, direction, factor);
-        Expr b = handle_push_mul(op->b, direction, factor);
+        Expr lhs = handle_push_mul(op->a, direction, factor);
+        Expr rhs = handle_push_mul(op->b, direction, factor);
+        // If pushing a negative multiplication, need to convert to max.
+        // c < 0 implies c * min(a, b) = max(c * a, c * b)
         if (factor > 0) {
-            return Min::make(std::move(a), std::move(b));
+            return Min::make(std::move(lhs), std::move(rhs));
         } else {
-            return Max::make(std::move(a), std::move(b));
+            return Max::make(std::move(lhs), std::move(rhs));
         }
     } else if (const Max *op = expr.as<Max>()) {
-        Expr a = handle_push_mul(op->a, direction, factor);
-        Expr b = handle_push_mul(op->b, direction, factor);
+        Expr lhs = handle_push_mul(op->a, direction, factor);
+        Expr rhs = handle_push_mul(op->b, direction, factor);
+        // If pushing a negative multiplication, need to convert to min.
+        // c < 0 implies c * max(a, b) = min(c * a, c * b)
         if (factor > 0) {
-            return Max::make(std::move(a), std::move(b));
+            return Max::make(std::move(lhs), std::move(rhs));
         } else {
-            return Min::make(std::move(a), std::move(b));
+            return Min::make(std::move(lhs), std::move(rhs));
         }
     } else if (const Select *op = expr.as<Select>()) {
+        // Can always cleanly push a mul inside of a Select.
         const Expr true_value = handle_push_mul(op->true_value, direction, factor);
         const Expr false_value = handle_push_mul(op->false_value, direction, factor);
         return select(op->condition, true_value, false_value);
@@ -164,13 +206,13 @@ Expr handle_push_mul(const Expr &expr, Direction direction, int64_t factor) {
     } else if (const Div *op = expr.as<Div>()) {
         // TODO: Is there anything we can do other than the positive and positive case?
         if (const IntImm *constant = op->b.as<IntImm>()) {
-            // Only do this if not trying to be exact.
+            // This is an approximation.
             if (constant->value > 0 && factor > 0) {
                 // Do some factoring simplification
                 int64_t gcd_val = gcd(constant->value, factor);
 
                 // For positive c0 and c1,
-                //   (x * c1) / c0 - (c1 + 1)  <= (x / c0) * c1  <= (x * c1) / c0
+                //   (x * c1) / c0 - (c1 + 1) <= (x / c0) * c1  <= (x * c1) / c0
 
                 if (gcd_val == 1) {
                     // Can't do factoring simplification, do default behavior.
@@ -185,15 +227,20 @@ Expr handle_push_mul(const Expr &expr, Direction direction, int64_t factor) {
                     // Do GCD simplification
                     // All constants (factor, denominator, gcd) must be positive at this point.
                     internal_assert(gcd_val > 0) << "GCD is non-positive: " << gcd_val << "For expression: " << expr << " with factor: " << factor << " bound: " << direction << "\n";
+                    // Factor out the greatest common divisior from both the factor and the denominator.
                     const int64_t new_factor = factor / gcd_val;
                     const int64_t new_denom = constant->value / gcd_val;
                     Expr expr_denom = IntImm::make(expr.type(), new_denom);
+                    // If we have a multiplication by a constant to push, then push it.
                     Expr recurse = (new_factor == 1) ? handle_push_none(op->a, direction) : handle_push_mul(op->a, direction, new_factor);
+                    // If we still have a denominator to push, make a division.
                     Expr recurse_div = (new_denom == 1) ? std::move(recurse) : Div::make(std::move(recurse), std::move(expr_denom));
                     if (direction == Direction::Lower) {
+                        // Lower bound: (x * c1) / c0 - (c1 + 1) <= (x / c0) * c1
                         Expr offset = IntImm::make(op->type, factor - 1);
                         return Sub::make(std::move(recurse_div), std::move(offset));
                     } else {
+                        // Upper bound: (x / c0) * c1  <= (x * c1) / c0
                         return recurse_div;
                     }
                 }
@@ -201,7 +248,8 @@ Expr handle_push_mul(const Expr &expr, Direction direction, int64_t factor) {
         }
     }
 
-    // Base case.
+    // Base case. Stop pushing the multiplication inwards,
+    // but recurse on the inside if possible.
     Expr expr_factor = IntImm::make(expr.type(), factor);
     Expr recurse = handle_push_none(expr, direction);
     return Mul::make(std::move(recurse), std::move(expr_factor));
@@ -266,11 +314,21 @@ public:
     }
 };
 
+/*
+* Visitor for removing terms that are completely unbounded from
+* a min or a max
+*/
 class StripUnboundedTerms : public IRMutator {
+    // Which direction we are approximating.
     Direction direction;
+    // Pointer to scope for checking if a variable is bounded or not.
     const Scope<Interval> *scope_ptr;
+    // The number of times a variable is used. Can be used to remove
+    // non-correlated terms.
     const std::map<std::string, int> &var_uses;
+    // A count of the number of unbounded vars in a given sub expression.
     int32_t unbounded_vars = 0;
+
     void flip_direction() {
         direction = flip(direction);
     }
@@ -278,13 +336,16 @@ class StripUnboundedTerms : public IRMutator {
     using IRMutator::visit;
 
     // Do nothing for constants.
+
     // Don't recurse on casts, casts can bound the size of an Expr.
     Expr visit(const Cast *op) override {
         return op;
     }
 
     Expr visit(const Variable *op) override {
-        // A variable is unbounded if it appears only once *and* has no constant bounds.
+        // A variable is unbounded if both are true:
+        // 1) appears only once (can't be correlated with other expressions)
+        // 2) has no constant bounds (on either side).
         const auto iter = var_uses.find(op->name);
         internal_assert(iter != var_uses.end()) << "Encountered uncounted variable: " << Expr(op) << "\n";
         const int uses = iter->second;
@@ -301,17 +362,9 @@ class StripUnboundedTerms : public IRMutator {
         return op;
     }
 
-    Expr visit(const Add *op) override {
-        Expr a_new = mutate(op->a);
-        Expr b_new = mutate(op->b);
+    // The default beehavior for Add nodes is fine.
 
-        if (a_new.same_as(op->a) && b_new.same_as(op->b)) {
-            return op;
-        } else {
-            return Add::make(std::move(a_new), std::move(b_new));
-        }
-    }
-
+    // Sub nodes must flip the approximation direction for the second argument.
     Expr visit(const Sub *op) override {
         Expr a_new = mutate(op->a);
         flip_direction();
@@ -325,6 +378,8 @@ class StripUnboundedTerms : public IRMutator {
         }
     }
 
+    // Can only recurse on mul by constants, otherwise it's impossible
+    // to know which direction we should be approximating.
     Expr visit(const Mul *op) override {
         // Assume constant is on the right due to simplification
         if (is_const(op->b)) {
@@ -348,6 +403,8 @@ class StripUnboundedTerms : public IRMutator {
         return op;
     }
 
+    // Can only recurse on div by constants, otherwise it's impossible
+    // to know which direction we should be approximating.
     Expr visit(const Div *op) override {
         if (const IntImm *constant = op->b.as<IntImm>()) {
             if (constant->value > 0) {
@@ -358,31 +415,28 @@ class StripUnboundedTerms : public IRMutator {
                     return Div::make(std::move(a), op->b);
                 }
             }
+            // We could handle the negative case, but that is very uncommon.
         }
         return op;
     }
 
     Expr visit(const Min *op) override {
-        // If we are trying to Lower bound a Min, we merge the lower bounds of the two sides.
+        // If we are trying to Lower bound a Min,
+        // we merge the lower bounds of the two sides.
         if (direction == Direction::Lower) {
-            Expr a_new = mutate(op->a);
-            Expr b_new = mutate(op->b);
-            if (!a_new.same_as(op->a) || !b_new.same_as(op->b)) {
-                return Min::make(std::move(a_new), std::move(b_new));
-            } else {
-                return op;
-            }
+            return IRMutator::visit(op);
         }
 
-        // If we are trying to Lower bound a Min, then we can take either of the two sides of a Min,
+        // If we are trying to Upper bound a Min, then we can take either of the two sides of a Min,
         // so choose the relevant one if possible.
         const int32_t original_count = unbounded_vars;
 
         Expr a_new = mutate(op->a);
         const int32_t a_count = unbounded_vars;
 
-        // short circuit if a contains at least one unbounded var
+        // short circuit if a contains at least one unbounded var (meaning a is unbounded)
         if (a_count > original_count) {
+            // The only unbounded vars are those found in b now.
             unbounded_vars = original_count;
             return mutate(op->b);
         }
@@ -392,8 +446,9 @@ class StripUnboundedTerms : public IRMutator {
         Expr b_new = mutate(op->b);
         const int32_t b_count = unbounded_vars;
 
-        // Check if b contains at least one unbounded var
+        // Check if b contains at least one unbounded var (meaning b is unbounded)
         if (b_count > a_count) {
+            // The only unbounded vars are those found in a now.
             unbounded_vars = a_count;
             return a_new;
         }
@@ -409,13 +464,7 @@ class StripUnboundedTerms : public IRMutator {
     Expr visit(const Max *op) override {
         // If we are trying to Upper bound a Max, we merge the upper bounds of the two sides.
         if (direction == Direction::Upper) {
-            Expr a_new = mutate(op->a);
-            Expr b_new = mutate(op->b);
-            if (!a_new.same_as(op->a) || !b_new.same_as(op->b)) {
-                return Max::make(std::move(a_new), std::move(b_new));
-            } else {
-                return op;
-            }
+            return IRMutator::visit(op);
         }
 
         // If we are trying to Lower bound a Max, then we can take either of the two sides of a Max,
@@ -425,7 +474,7 @@ class StripUnboundedTerms : public IRMutator {
         Expr a_new = mutate(op->a);
         int32_t a_count = unbounded_vars;
 
-        // short circuit if a contains at least one unbounded var
+        // short circuit if a contains at least one unbounded var (meaning a is unbounded)
         if (a_count > original_count) {
             unbounded_vars = original_count;
             return mutate(op->b);
@@ -436,13 +485,13 @@ class StripUnboundedTerms : public IRMutator {
         Expr b_new = mutate(op->b);
         int32_t b_count = unbounded_vars;
 
-        // Check if b contains at least one unbounded var
+        // Check if b contains at least one unbounded var (meaning b is unbounded)
         if (b_count > a_count) {
             unbounded_vars = a_count;
             return a_new;
         }
 
-        // No luck, return the mutated Min
+        // No luck, return the mutated Max
         if (!a_new.same_as(op->a) || !b_new.same_as(op->b)) {
             return Max::make(std::move(a_new), std::move(b_new));
         } else {
@@ -493,10 +542,15 @@ public:
     }
 };
 
+/*
+* Visitor for reordering summations and removing like-terms from min/max/select nodes.
+* This is an exact method, no approximations.
+* Summations are represented as a vector of affine terms.
+*/
 class ReorderTerms : public IRGraphMutator {
     using IRGraphMutator::visit;
 
-    // Directly taken from Simplify_Internal.h
+    // Directly taken from Simplify_Internal.h. May want to make this a generic function.
     HALIDE_ALWAYS_INLINE
     bool should_commute(const Expr &a, const Expr &b) {
         if (a.node_type() < b.node_type()) {
@@ -521,10 +575,12 @@ class ReorderTerms : public IRGraphMutator {
         int coefficient;
     };
 
+    // Simple helper function for negating a term.
     AffineTerm negate(const AffineTerm &term) {
         return AffineTerm{term.expr, -term.coefficient};
     }
 
+    // Useful for extracting an affine term from an (x * c) term
     bool is_mul_by_int_const(const Expr &expr, AffineTerm &term) {
         const Mul *mul = expr.as<Mul>();
         if (mul) {
@@ -539,6 +595,7 @@ class ReorderTerms : public IRGraphMutator {
         return false;
     }
 
+    // Given a summation, extract it into a series of affine terms.
     std::vector<AffineTerm> extract_summation(const Expr &e) {
         std::vector<AffineTerm> pending, terms;
         pending.push_back({e, 1});
@@ -562,18 +619,21 @@ class ReorderTerms : public IRGraphMutator {
                 pending.push_back({sub->a, next.coefficient});
                 pending.push_back({sub->b, -next.coefficient});
             } else {
+                // Try to recurse, the node might turn into a summation.
                 next.expr = mutate(next.expr);
 
                 if (next.expr.as<Add>() || next.expr.as<Sub>()) {
                     // After mutation it became an add or sub, throw it back on the pending queue.
                     pending.push_back(next);
                 } else {
+                    // If this term is a mul by a constant, we can extract out the constant and keep trying.
                     AffineTerm term;
                     if (is_mul_by_int_const(next.expr, term)) {
                         internal_assert(term.expr.defined());
                         term.coefficient *= next.coefficient;
                         pending.push_back(term);
                     } else {
+                        // This is a leaf.
                         terms.push_back(next);
                     }
                 }
@@ -599,6 +659,7 @@ class ReorderTerms : public IRGraphMutator {
     // Two-finger O(n) algorithm for simplifying sums
     std::vector<AffineTerm> simplify_linear_summation(const std::vector<AffineTerm> &terms) {
         if (terms.empty()) {
+            // Nothing to do here.
             return terms;
         }
 
@@ -839,6 +900,7 @@ Expr strip_unbounded_terms(const Expr &expr, Direction direction, const Scope<In
     std::map<std::string, int> var_uses;
     CountVarUses counter(var_uses);
     expr.accept(&counter);
+    // To strip unbounded/uncorrelated terms, we need to know use counts.
     StripUnboundedTerms tool(direction, &scope, var_uses);
     return tool.mutate(expr);
 }
@@ -853,7 +915,7 @@ Expr substitute_some_lets(const Expr &expr, size_t count = 100) {
 
 Expr approximate_optimizations(const Expr &expr, Direction direction, const Scope<Interval> &scope) {
     Expr simpl = substitute_some_lets(expr);
-    simpl = simplify(reorder_terms(simpl));
+    simpl = reorder_terms(simpl);
     // TODO: only do push_rationals if correlated divisions exist.
     simpl = push_rationals(simpl, direction);
     simpl = simplify(simpl);
