@@ -42,6 +42,59 @@ Expr handle_push_div(const Expr &expr, Direction direction, int64_t denom);
 Expr handle_push_mul(const Expr &expr, Direction direction, int64_t factor);
 Expr handle_push_none(const Expr &expr, Direction direction);
 
+
+/*
+* Helper functions for pushing a multiplication inside of a division.
+*/
+Expr push_div_inside_mul_helper(const Expr &a, const IntImm *b, const Direction direction, const int64_t denom) {
+    // Can only go inside a mul if the constant of multiplication is divisible by the denominator
+    // TODO: are there any other cases that we can handle?
+
+    // strip off mul-by-one.
+    if (b->value == 1) {
+        return handle_push_div(a, direction, denom);
+    }
+
+    // We will have to change direction of the approximation if multiplying by a negative constant.
+    const Direction new_direction = (b->value > 0) ? direction : flip(direction);
+
+    if ((b->value % denom) == 0) {
+        // (c0 * x) / c1 when c0 % c1 == 0 -> x * (c0 / c1)
+        const int64_t new_factor = div_imp(b->value, denom);
+        if (new_factor == 1) {
+            return handle_push_none(a, new_direction);
+        } else {
+            // Push the x * (c0 / c1)
+            return handle_push_mul(a, new_direction, new_factor);
+        }
+    } else if ((denom % b->value) == 0 && b->value > 0) {
+        // (c0 * x) / c1 when c1 % c0 == 0 and c1 > 0 -> x / (c1 / c0)
+        const int64_t new_denom = div_imp(denom, b->value);
+        if (new_denom == 1) {
+            return handle_push_none(a, new_direction);
+        } else {
+            // Push the x / (c1 / c0)
+            return handle_push_div(a, new_direction, new_denom);
+        }
+    } else {
+        // Just push the multiply inwards, and stop pushing division.
+        // Essentially the base case for handle_push_div, without needing to call handle_push_none.
+        Expr expr_denom = IntImm::make(a.type(), denom);
+        Expr recurse = handle_push_mul(a, new_direction, b->value);
+        return Div::make(std::move(recurse), std::move(expr_denom));
+    }
+}
+
+Expr push_div_inside_mul(const Mul *op, const Direction direction, const int64_t denom) {
+    if (const IntImm *constant = op->b.as<IntImm>()) {
+        return push_div_inside_mul_helper(op->a, constant, direction, denom);
+    } else if (const IntImm *constant = op->a.as<IntImm>()) {
+        return push_div_inside_mul_helper(op->b, constant, direction, denom);
+    } else {
+        return Expr();
+    }
+}
+
 /*
 * Approximate method. Push division by a constant inside a number of possible IR nodes.
 * Requires that the denominator being pushed is positive. This is the common case anyways.
@@ -104,39 +157,9 @@ Expr handle_push_div(const Expr &expr, const Direction direction, const int64_t 
         Expr false_value = handle_push_div(op->false_value, direction, denom);
         return select(op->condition, std::move(true_value), std::move(false_value));
     } else if (const Mul *op = expr.as<Mul>()) {
-        // Can only go inside a mul if the constant of multiplication is divisible by the denominator
-        // TODO: are there any other cases that we can handle?
-
-        // Assume constant is on the RHS of Mul due to simplification.
-        if (const IntImm *constant = op->b.as<IntImm>()) {
-            // We will have to change direction of the approximation if multiplying by a negative constant.
-            const Direction new_direction = (constant->value > 0) ? direction : flip(direction);
-
-            if ((constant->value % denom) == 0) {
-                // (c0 * x) / c1 when c0 % c1 == 0 -> x * (c0 / c1)
-                const int64_t new_factor = div_imp(constant->value, denom);
-                if (new_factor == 1) {
-                    return handle_push_none(op->a, new_direction);
-                } else {
-                    // Push the x * (c0 / c1)
-                    return handle_push_mul(op->a, new_direction, new_factor);
-                }
-            } else if ((denom % constant->value) == 0 && constant->value > 0) {
-                // (c0 * x) / c1 when c1 % c0 == 0 and c1 > 0 -> x / (c1 / c0)
-                const int64_t new_denom = div_imp(denom, constant->value);
-                if (new_denom == 1) {
-                    return handle_push_none(op->a, new_direction);
-                } else {
-                    // Push the x / (c1 / c0)
-                    return handle_push_div(op->a, new_direction, new_denom);
-                }
-            } else {
-                // Just push the multiply inwards, and stop pushing division.
-                // Essentially the base case below, without needing to call handle_push_none.
-                Expr expr_denom = IntImm::make(expr.type(), denom);
-                Expr recurse = handle_push_mul(op->a, new_direction, constant->value);
-                return Div::make(std::move(recurse), std::move(expr_denom));
-            }
+        Expr handled = push_div_inside_mul(op, direction, denom);
+        if (handled.defined()) {
+            return handled;
         }
         // otherwise let it fall to the base case.
     }
@@ -152,7 +175,7 @@ Expr handle_push_div(const Expr &expr, const Direction direction, const int64_t 
 * Approximate method. Push multiplication by a constant inside a number of possible IR nodes.
 * Requires that the factor is not 1 - if factor=1, handle_push_none should be called.
 */
-Expr handle_push_mul(const Expr &expr, Direction direction, int64_t factor) {
+Expr handle_push_mul(const Expr &expr, Direction direction, const int64_t factor) {
     debug(3) << "push_mul(" << expr << ", " << direction << ", " << factor << ")\n";
     internal_assert(factor != 1) << "handle_push_mul called with factor=1 on Expr: " << expr << "\n";
 
@@ -197,10 +220,30 @@ Expr handle_push_mul(const Expr &expr, Direction direction, int64_t factor) {
         const Expr false_value = handle_push_mul(op->false_value, direction, factor);
         return select(op->condition, true_value, false_value);
     } else if (const Mul *op = expr.as<Mul>()) {
-        // Assume constant is on the RHS of Mul due to simplification.
         if (const IntImm *constant = op->b.as<IntImm>()) {
+            // stip off mul-by-one
+            if (constant->value == 1) {
+                return handle_push_mul(op->a, direction, factor);
+            }
+            const int32_t new_factor = factor * constant->value;
             const Direction new_direction = (constant->value > 0) ? direction : flip(direction);
-            return handle_push_mul(op->a, new_direction, factor * constant->value);
+            if (new_factor == 1) {
+                return handle_push_none(op->a, new_direction);
+            } else {
+                return handle_push_mul(op->a, new_direction, new_factor);
+            }
+        } else if (const IntImm *constant = op->a.as<IntImm>()) {
+            // stip off mul-by-one
+            if (constant->value == 1) {
+                return handle_push_mul(op->b, direction, factor);
+            }
+            const int32_t new_factor = factor * constant->value;
+            const Direction new_direction = (constant->value > 0) ? direction : flip(direction);
+            if (new_factor == 1) {
+                return handle_push_none(op->b, new_direction);
+            } else {
+                return handle_push_mul(op->b, new_direction, new_factor);
+            }
         }
         // otherwise fall to base case.
     } else if (const Div *op = expr.as<Div>()) {
@@ -271,9 +314,20 @@ Expr handle_push_none(const Expr &expr, Direction direction) {
         const Expr false_value = handle_push_none(op->false_value, direction);
         return select(op->condition, true_value, false_value);
     } else if (const Mul *op = expr.as<Mul>()) {
-        // Assume constant is on the RHS of Mul due to simplification.
         if (const IntImm *constant = op->b.as<IntImm>()) {
-            return handle_push_mul(op->a, direction, constant->value);
+            if (constant->value == 1) {
+                // strip off a mul-by-one.
+                return handle_push_none(op->a, direction);
+            } else {
+                return handle_push_mul(op->a, direction, constant->value);
+            }
+        } else if (const IntImm *constant = op->a.as<IntImm>()) {
+            if (constant->value == 1) {
+                // strip off a mul-by-one.
+                return handle_push_none(op->b, direction);
+            } else {
+                return handle_push_mul(op->b, direction, constant->value);
+            }
         }
     } else if (const Div *op = expr.as<Div>()) {
         if (const IntImm *constant = op->b.as<IntImm>()) {
@@ -381,7 +435,6 @@ class StripUnboundedTerms : public IRMutator {
     // Can only recurse on mul by constants, otherwise it's impossible
     // to know which direction we should be approximating.
     Expr visit(const Mul *op) override {
-        // Assume constant is on the right due to simplification
         if (is_const(op->b)) {
             const bool neg_const = is_negative_const(op->b);
             if (neg_const) {
@@ -398,6 +451,23 @@ class StripUnboundedTerms : public IRMutator {
                 return op;
             } else {
                 return Mul::make(std::move(a_new), op->b);
+            }
+        } else if (is_const(op->a)) {
+            const bool neg_const = is_negative_const(op->a);
+            if (neg_const) {
+                flip_direction();
+            }
+
+            Expr b_new = mutate(op->b);
+
+            if (neg_const) {
+                flip_direction();
+            }
+
+            if (b_new.same_as(op->b)) {
+                return op;
+            } else {
+                return Mul::make(std::move(b_new), op->a);
             }
         }
         return op;
@@ -584,9 +654,11 @@ class ReorderTerms : public IRGraphMutator {
     bool is_mul_by_int_const(const Expr &expr, AffineTerm &term) {
         const Mul *mul = expr.as<Mul>();
         if (mul) {
-            // Assume constant is on the RHS due to simplification.
-            const IntImm *b = mul->b.as<IntImm>();
-            if (b) {
+            if (const IntImm *a = mul->a.as<IntImm>()) {
+                term.coefficient = a->value;
+                term.expr = mul->b;
+                return true;
+            } else if (const IntImm *b = mul->b.as<IntImm>()) {
                 term.coefficient = b->value;
                 term.expr = mul->a;
                 return true;
