@@ -18,7 +18,8 @@ WEAK void halide_default_error(void *user_context, const char *msg) {
         dst += 1;
     }
     (void)halide_msan_annotate_memory_is_initialized(user_context, buf, dst - buf + 1);
-    halide_print(user_context, buf);
+    halide_context_t *_hc = halide_default_context();
+    _hc->print(user_context, buf);  // TODO: duelling ucons
     abort();
 }
 }

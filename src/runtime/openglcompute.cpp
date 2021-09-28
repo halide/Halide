@@ -809,7 +809,8 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
 
 #ifdef DEBUG_RUNTIME
         print(user_context) << "Compute shader source for: " << kernel_name;
-        halide_print(user_context, src);
+        halide_context_t *_hc = halide_default_context();
+        _hc->print(user_context, src);  // TODO: duelling ucons
 #endif
 
         global_state.ShaderSource(shader, 1, &sources, &sources_lengths);

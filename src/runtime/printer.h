@@ -171,7 +171,8 @@ public:
             if (type == ErrorPrinter) {
                 halide_error(user_context, buf);
             } else if (type == BasicPrinter) {
-                halide_print(user_context, buf);
+                halide_context_t *_hc = halide_default_context();
+                _hc->print(user_context, buf);  // TODO: duelling ucons
             } else {
                 // It's a stringstream. Do nothing.
             }

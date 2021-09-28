@@ -542,10 +542,6 @@ private:
      * during the function. */
     llvm::Value *current_halide_context = nullptr;
 
-    /** The user_context* being used by the function. Expected to remain constant
-     * during the function. If not passed as an argument, loaded from current_halide_context. */
-    llvm::Value *current_ucon = nullptr;
-
     /** Turn off all unsafe math flags in scopes while this is set. */
     bool strict_float;
 

@@ -394,7 +394,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                 }
                 sstr << "\n";
 
-                halide_print(user_context, sstr.str());
+                _hc->print(user_context, sstr.str());  // TODO: duelling ucons
             }
         }
     }
