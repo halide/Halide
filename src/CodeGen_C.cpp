@@ -1867,15 +1867,20 @@ void CodeGen_C::compile(const LoweredFunc &f, const std::map<std::string, std::s
                    << "this function will always fail at runtime\");\n";
             stream << get_indent() << "return halide_error_code_device_malloc_failed;\n";
         } else {
-            // Emit a local user_context we can pass in all cases, either
-            // aliasing __user_context or nullptr.
-            stream << get_indent() << "void * const _ucon = "
-                   << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
-                   << ";\n";
-
             // Load the halide_context_t* we are using (currently always from halide_default_context();
             // could be an explicit arg in the future).
             stream << get_indent() << "halide_context_t * const _hc = halide_default_context();\n";
+
+            // Emit a local user_context we can pass in all cases, either
+            // aliasing __user_context or _hc->user_context.
+            //
+            // TODO: Need to decide what to do about conflicting ucon values here, since the value in
+            // hc->user_context may be different. Do we save/set/restore the value in hc? That seems
+            // unsafe and bad. Maybe just add an assertion that they must match and fail immediately
+            // if they don't? Ugh.
+            stream << get_indent() << "void * const _ucon = "
+                   << (have_user_context ? "const_cast<void *>(__user_context)" : "_hc->user_context")
+                   << ";\n";
 
             if (target.has_feature(Target::NoAsserts)) {
                 stream << get_indent() << "halide_unused(_ucon);";

@@ -597,17 +597,6 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string &name,
     BasicBlock *block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(block);
 
-    // Load the current halide_context_t pointer.
-    {
-        // TODO: we could probably just load the global var instead, but this is unlikely to be
-        // costly enough to move the needle
-        llvm::Function *halide_default_context_fn = module->getFunction("halide_default_context");
-        internal_assert(halide_default_context_fn != nullptr);
-        CallInst *c = builder->CreateCall(halide_default_context_fn, vector<Value *>{}, "_hc");
-        c->setDoesNotThrow();
-        current_halide_context = c;
-    }
-
     // Put the arguments in the symbol table
     {
         size_t i = 0;
@@ -628,6 +617,28 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string &name,
             }
 
             i++;
+        }
+    }
+
+    // Load the current halide_context_t pointer and ucon value.
+    {
+        // TODO: we could probably just load the global var instead, but this is unlikely to be
+        // costly enough to move the needle.
+        llvm::Function *halide_default_context_fn = module->getFunction("halide_default_context");
+        internal_assert(halide_default_context_fn != nullptr);
+        CallInst *c = builder->CreateCall(halide_default_context_fn, vector<Value *>{}, "_hc");
+        c->setDoesNotThrow();
+        current_halide_context = c;
+
+        // TODO: Need to decide what to do about conflicting ucon values here, since the value in
+        // hc->user_context may be different. Do we save/set/restore the value in hc? That seems
+        // unsafe and bad. Maybe just add an assertion that they must match and fail immediately
+        // if they don't? Ugh.
+        current_ucon = sym_get("__user_context", false);
+        if (!current_ucon) {
+            // user_context is always the 0th slot in the halide_context_t.
+            Value *slot_ptr = builder->CreateStructGEP(halide_context_t_type, current_halide_context, 0);
+            current_ucon = builder->CreateLoad(slot_ptr->getType()->getPointerElementType(), slot_ptr, "_ucon");
         }
     }
 }
@@ -4740,11 +4751,8 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
 }
 
 Value *CodeGen_LLVM::get_user_context() const {
-    Value *ctx = sym_get("__user_context", false);
-    if (!ctx) {
-        ctx = ConstantPointerNull::get(i8_t->getPointerTo());  // void*
-    }
-    return ctx;
+    internal_assert(current_ucon != nullptr);
+    return current_ucon;
 }
 
 llvm::Function *CodeGen_LLVM::get_llvm_intrin(llvm::Type *ret_type, const std::string &name, const std::vector<llvm::Type *> &arg_types) {
