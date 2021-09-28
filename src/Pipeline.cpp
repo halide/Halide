@@ -750,34 +750,6 @@ Realization Pipeline::realize(vector<int32_t> sizes, const Target &target,
     return r;
 }
 
-Realization Pipeline::realize(int x_size, int y_size, int z_size, int w_size, const Target &target,
-                              const ParamMap &param_map) {
-    return realize({x_size, y_size, z_size, w_size}, target, param_map);
-}
-
-Realization Pipeline::realize(int x_size, int y_size, int z_size, const Target &target,
-                              const ParamMap &param_map) {
-    return realize({x_size, y_size, z_size}, target, param_map);
-}
-
-Realization Pipeline::realize(int x_size, int y_size, const Target &target,
-                              const ParamMap &param_map) {
-    return realize({x_size, y_size}, target, param_map);
-}
-
-Realization Pipeline::realize(int x_size, const Target &target,
-                              const ParamMap &param_map) {
-    // Use an explicit vector here, since {x_size} can be interpreted
-    // as a scalar initializer
-    vector<int32_t> v = {x_size};
-    return realize(v, target, param_map);
-}
-
-Realization Pipeline::realize(const Target &target,
-                              const ParamMap &param_map) {
-    return realize(vector<int32_t>(), target, param_map);
-}
-
 void Pipeline::add_requirement(const Expr &condition, std::vector<Expr> &error_args) {
     user_assert(defined()) << "Pipeline is undefined\n";
 
@@ -945,6 +917,14 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
                                           const ParamMap &param_map, void *user_context,
                                           bool is_bounds_inference, JITCallArgs &args_result) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
+
+    size_t total_outputs = 0;
+    for (const Func &out : this->outputs()) {
+        total_outputs += out.outputs();
+    }
+    user_assert(outputs.size() == total_outputs)
+        << "Realization requires " << outputs.size() << " output(s) but pipeline produces "
+        << total_outputs << " result(s).\n";
 
     JITModule &compiled_module = contents->jit_module;
     internal_assert(compiled_module.argv_function() ||

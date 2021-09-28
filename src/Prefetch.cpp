@@ -22,6 +22,22 @@ using std::set;
 using std::string;
 using std::vector;
 
+/**
+ * The steps by which prefetch directives are injected and lowered are a bit nonobvious;
+ * here's the overall flow at the time this comment was written:
+ *
+ *  - When the .prefetch() schedule directive is used, a PrefetchDirective is
+ *    added to the relevant Function
+ *  - At the start of lowering (schedule_functions()), a placeholder Prefetch IR nodes (w/ no region) are inserted
+ *  - Various lowering passes mutate the placeholder Prefetch IR nodes as appropriate
+ *  - After storage folding, the Prefetch IR nodes are updated with a proper region (via inject_prefetch())
+ *  - In storage_flattening(), Prefetch IR nodes transformed to Call::prefetch intrinsics:
+ *    - These calls are always wrapped in Evaluate IR Nodes
+ *    - The Evaluate IR nodes are, in turn, possibly in IfTheElse (if condition != const_true())
+ *    - After this point, no Prefetch IR nodes should remain in the IR (only prefetch intrinsics)
+ *  - reduce_prefetch_dimension() is later called to reduce prefetch the dimensionality of the prefetch intrinsic.
+ */
+
 namespace {
 
 // Collect the bounds of all the externally referenced buffers in a stmt.
@@ -100,11 +116,12 @@ private:
         Stmt body = mutate(op->body);
 
         const PrefetchDirective &p = op->prefetch;
-        Expr loop_var = Variable::make(Int(32), p.var);
+        Expr at = Variable::make(Int(32), p.at);
+        Expr from = Variable::make(Int(32), p.from);
 
         // Add loop variable + prefetch offset to interval scope for box computation
-        Expr fetch_at = loop_var + p.offset;
-        map<string, Box> boxes_rw = boxes_touched(LetStmt::make(p.var, fetch_at, body));
+        Expr fetch_at = from + p.offset;
+        map<string, Box> boxes_rw = boxes_touched(LetStmt::make(p.from, fetch_at, body));
 
         // TODO(psuriana): Only prefetch the newly accessed data. We
         // should subtract the box accessed during previous iteration
@@ -146,16 +163,18 @@ private:
                 condition = simplify(prefetch_box.used && condition);
             }
             internal_assert(!new_bounds.empty());
-            return Prefetch::make(op->name, op->types, new_bounds, op->prefetch, condition, body);
+            return Prefetch::make(op->name, op->types, new_bounds, op->prefetch, std::move(condition), std::move(body));
         }
 
         if (!body.same_as(op->body)) {
-            return Prefetch::make(op->name, op->types, op->bounds, op->prefetch, op->condition, body);
+            return Prefetch::make(op->name, op->types, op->bounds, op->prefetch, op->condition, std::move(body));
         } else if (op->bounds.empty()) {
             // Remove the Prefetch IR since it is prefetching an empty region
             user_warning << "Removing prefetch of " << p.name
-                         << " within loop nest of " << p.var << " (offset: "
-                         << p.offset << ") since it is not used at all.\n";
+                         << " at loop nest of " << p.at
+                         << " from location " << p.from
+                         << " + offset " << p.offset
+                         << ") since it is not used at all.\n";
             return body;
         } else {
             return op;
@@ -177,16 +196,17 @@ private:
 
     using IRMutator::visit;
 
-    Stmt add_placeholder_prefetch(const string &loop_var, PrefetchDirective p, const Stmt &body) {
-        debug(5) << "...Injecting placeholder prefetch for " << loop_var << "\n";
-        p.var = loop_var;
+    Stmt add_placeholder_prefetch(const string &at, const string &from, PrefetchDirective p, Stmt body) {
+        debug(5) << "...Injecting placeholder prefetch for loop " << at << "fetch " << from << "\n";
+        p.at = at;
+        p.from = from;
         internal_assert(body.defined());
         if (p.param.defined()) {
-            return Prefetch::make(p.name, {p.param.type()}, Region(), p, const_true(), body);
+            return Prefetch::make(p.name, {p.param.type()}, Region(), p, const_true(), std::move(body));
         } else {
             const auto &it = env.find(p.name);
             internal_assert(it != env.end());
-            return Prefetch::make(p.name, it->second.output_types(), Region(), p, const_true(), body);
+            return Prefetch::make(p.name, it->second.output_types(), Region(), p, const_true(), std::move(body));
         }
     }
 
@@ -199,18 +219,18 @@ private:
             set<string> seen;
             for (int i = prefetch_list.size() - 1; i >= 0; --i) {
                 const PrefetchDirective &p = prefetch_list[i];
-                if (!ends_with(op->name, "." + p.var) || (seen.find(p.name) != seen.end())) {
+                if (!ends_with(op->name, "." + p.at) || (seen.find(p.name) != seen.end())) {
                     continue;
                 }
                 seen.insert(p.name);
 
-                body = add_placeholder_prefetch(op->name, p, body);
+                body = add_placeholder_prefetch(op->name, prefix + p.from, p, std::move(body));
             }
         }
 
         Stmt stmt;
         if (!body.same_as(op->body)) {
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, std::move(body));
         } else {
             stmt = op;
         }
@@ -223,7 +243,7 @@ private:
 class ReducePrefetchDimension : public IRMutator {
     using IRMutator::visit;
 
-    size_t max_dim;
+    const size_t max_dim;
 
     Stmt visit(const Evaluate *op) override {
         Stmt stmt = IRMutator::visit(op);
@@ -236,7 +256,7 @@ class ReducePrefetchDimension : public IRMutator {
         // the dimensions with larger strides and keep the smaller ones in
         // the prefetch call.
 
-        size_t max_arg_size = 2 + 2 * max_dim;  // Prefetch: {base, offset, extent0, stride0, extent1, stride1, ...}
+        const size_t max_arg_size = 2 + 2 * max_dim;  // Prefetch: {base, offset, extent0, stride0, extent1, stride1, ...}
         if (prefetch && (prefetch->args.size() > max_arg_size)) {
             const Variable *base = prefetch->args[0].as<Variable>();
             internal_assert(base && base->type.is_handle());
@@ -244,7 +264,8 @@ class ReducePrefetchDimension : public IRMutator {
             vector<string> index_names;
             Expr new_offset = prefetch->args[1];
             for (size_t i = max_arg_size; i < prefetch->args.size(); i += 2) {
-                Expr stride = prefetch->args[i + 1];
+                // const Expr &extent = prefetch->args[i + 0];  // unused
+                const Expr &stride = prefetch->args[i + 1];
                 string index_name = "prefetch_reduce_" + base->name + "." + std::to_string((i - 1) / 2);
                 index_names.push_back(index_name);
                 new_offset += Variable::make(Int(32), index_name) * stride;
@@ -320,7 +341,9 @@ class SplitPrefetch : public IRMutator {
                 extents.push_back(outer_extent);
             }
 
-            vector<Expr> args = {base, new_offset, Expr(1), simplify(max_byte_size / elem_size)};
+            Expr new_extent = 1;
+            Expr new_stride = simplify(max_byte_size / elem_size);
+            vector<Expr> args = {base, std::move(new_offset), std::move(new_extent), std::move(new_stride)};
             stmt = Evaluate::make(Call::make(prefetch->type, Call::prefetch, args, Call::Intrinsic));
             for (size_t i = 0; i < index_names.size(); ++i) {
                 stmt = For::make(index_names[i], 0, extents[i],

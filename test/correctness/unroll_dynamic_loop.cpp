@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     g.split(x, xo, xi, 8, TailStrategy::GuardWithIf).unroll(xi);
     f.compute_at(g, xo).unroll(x).store_in(MemoryType::Stack);
 
-    Buffer<float> result = g.realize(23);
+    Buffer<float> result = g.realize({23});
     for (int i = 0; i < 23; i++) {
         float correct = i * 2 * 3 * 2;
         if (result(i) != correct) {

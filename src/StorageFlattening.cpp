@@ -117,10 +117,9 @@ private:
         Stmt body = mutate(op->body);
 
         // Compute the size
-        vector<Expr> extents;
+        vector<Expr> extents(op->bounds.size());
         for (size_t i = 0; i < op->bounds.size(); i++) {
-            extents.push_back(op->bounds[i].extent);
-            extents[i] = mutate(extents[i]);
+            extents[i] = mutate(op->bounds[i].extent);
         }
         Expr condition = mutate(op->condition);
 
@@ -238,6 +237,7 @@ private:
         }
 
         Expr value = mutate(op->values[0]);
+        Expr predicate = mutate(op->predicate);
         if (in_gpu && textures.count(op->name)) {
             Expr buffer_var =
                 Variable::make(type_of<halide_buffer_t *>(), op->name + ".buffer", output_buf);
@@ -251,10 +251,14 @@ private:
             args.push_back(value);
             Expr store = Call::make(value.type(), Call::image_store,
                                     args, Call::Intrinsic);
-            return Evaluate::make(store);
+            Stmt result = Evaluate::make(store);
+            if (!is_const_one(op->predicate)) {
+                result = IfThenElse::make(predicate, result);
+            }
+            return result;
         } else {
             Expr idx = mutate(flatten_args(op->name, op->args, Buffer<>(), output_buf));
-            return Store::make(op->name, value, idx, output_buf, const_true(value.type().lanes()), ModulusRemainder());
+            return Store::make(op->name, value, idx, output_buf, predicate, ModulusRemainder());
         }
     }
 
@@ -335,8 +339,8 @@ private:
 
         auto iter = env.find(op->name);
         if (iter != env.end()) {
-            // Order the <min, extent> args based on the storage dims (i.e. innermost
-            // dimension should be first in args)
+            // Order the <min, extent> args based on the storage dims
+            // (i.e. innermost dimension should be first in args)
             vector<int> storage_permutation;
             {
                 Function f = iter->second.first;
@@ -419,11 +423,7 @@ class PromoteToMemoryType : public IRMutator {
     Stmt visit(const Allocate *op) override {
         Type t = upgrade(op->type);
         if (t != op->type) {
-            vector<Expr> extents;
-            for (const Expr &e : op->extents) {
-                extents.push_back(mutate(e));
-            }
-            return Allocate::make(op->name, t, op->memory_type, extents,
+            return Allocate::make(op->name, t, op->memory_type, mutate(op->extents),
                                   mutate(op->condition), mutate(op->body),
                                   mutate(op->new_expr), op->free_function);
         } else {

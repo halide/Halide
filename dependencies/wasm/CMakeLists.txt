@@ -17,7 +17,7 @@ if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
 endif ()
 
 if (WITH_WABT)
-    set(WABT_VER 1.0.20)
+    set(WABT_VER 1.0.24)
 
     message(STATUS "Fetching WABT ${WABT_VER}...")
     FetchContent_Declare(wabt
@@ -43,12 +43,15 @@ if (WITH_WABT)
     # TODO: we want to require unique prefixes to include these files, to avoid ambiguity;
     # this means we have to prefix with "wabt-src/...", which is less bad than other alternatives,
     # but perhaps we could do better (esp. if wabt was smarter about what it exposed?)
-    add_library(wabt-obj INTERFACE)
-    target_sources(wabt-obj INTERFACE $<BUILD_INTERFACE:$<TARGET_OBJECTS:wabt>>)
-    target_include_directories(wabt-obj INTERFACE
+    add_library(Halide_wabt INTERFACE)
+    target_sources(Halide_wabt INTERFACE $<BUILD_INTERFACE:$<TARGET_OBJECTS:wabt>>)
+    target_include_directories(Halide_wabt
+                               SYSTEM # Use -isystem instead of -I; this is a trick so that clang-tidy won't analyze these includes
+                               INTERFACE
                                $<BUILD_INTERFACE:${wabt_SOURCE_DIR}>
                                $<BUILD_INTERFACE:${wabt_BINARY_DIR}>
                                $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/_deps>)
+    set_target_properties(Halide_wabt PROPERTIES EXPORT_NAME wabt)
 endif ()
 
 if (WITH_WASM_SHELL)
@@ -69,7 +72,15 @@ if (WITH_WASM_SHELL)
     # We want to deliberately choose a stable version (rather than top-of-tree);
     # this might be a canary version (if needed to get the updates to v8 that we need)
     # but should be carefully tested before landing.
-    set(WASM_SHELL_VERSION 8.8.97)
+    #
+    # Note that V8 9.1+ is apparently first version of V8/D8 that really does properly
+    # implement the final WASM SIMD spec; versions 8.9 and 9.0 weren't quite complete
+    # (there were some opcode renumberings) so they should be specifically avoided.
+    # As of this writing, v9.1 is still in beta; the shell version below should be updated
+    # to a proper release version (vs canary) once it is final.
+    #
+    # see https://github.com/WebAssembly/simd/blob/master/proposals/simd/ImplementationStatus.md
+    set(WASM_SHELL_VERSION 9.1.269)
     set(WASM_SHELL_URL "https://storage.googleapis.com/chromium-v8/official/canary/v8-${WASM_SHELL_PLATFORM}-rel-${WASM_SHELL_VERSION}.zip")
     message(STATUS "Fetching WASM_SHELL ${WASM_SHELL_URL}...")
     FetchContent_Declare(wasm_shell URL "${WASM_SHELL_URL}")
@@ -114,7 +125,7 @@ function(add_wasm_executable TARGET)
     set(EMCC_FLAGS
         -O3
         -g
-        -std=c++11
+        -std=c++17
         -Wall
         -Wcast-qual
         -Werror
@@ -175,6 +186,12 @@ function(add_wasm_halide_test TARGET)
         list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-simd")
     endif ()
     if (Halide_TARGET MATCHES "wasm_threads")
+        # wasm_threads requires compilation with Emscripten, against a *browser*
+        # environment rather than a shell environment. (This is because the 'pthreads'
+        # support is an elaborate wrapper than Emscripten provides around WebWorkers.)
+        # The version of d8/v8 that we pull does provide enough of a browser-like
+        # environment to support this, but many shell tools (e.g. wabt-interp) don't,
+        # so if you use a different WASM_SHELL, you may have to disable this.
         list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-threads")
     endif ()
 

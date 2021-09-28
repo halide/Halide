@@ -2,16 +2,6 @@
 # Utilities for manipulating Halide target triples
 ##
 
-function(_Halide_get_triple OUTVAR)
-    # Well-formed targets must either start with "host" or a target triple.
-    if (ARGN MATCHES "host")
-        set(${OUTVAR} ${Halide_HOST_TARGET})
-    else ()
-        string(REGEX REPLACE "^([^-]+-[^-]+-[^-]+).*$" "\\1" ${OUTVAR} "${ARGN}")
-    endif ()
-    set(${OUTVAR} "${${OUTVAR}}" PARENT_SCOPE)
-endfunction()
-
 function(_Halide_cmake_target OUTVAR)
     # Get arch from CMake
     string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" arch)
@@ -31,33 +21,47 @@ function(_Halide_cmake_target OUTVAR)
     set(${OUTVAR} "${arch}-${bits}-${os}" PARENT_SCOPE)
 endfunction()
 
+function(_Halide_cache var val doc)
+    if (DEFINED ${var})
+        set(${var} "${${var}}" CACHE STRING "${doc}")
+    else ()
+        set(${var} "${val}" CACHE STRING "${doc}")
+    endif ()
+endfunction()
+
 ##
 # Set Halide `host` and `cmake` meta-target values
 ##
 
-# This variable is set by package scripts and might differ from Halide_CMAKE_TARGET below.
-if (NOT Halide_HOST_TARGET)
-    _Halide_cmake_target(Halide_HOST_TARGET)
-endif ()
+_Halide_cmake_target(_active_triple)
 
-if (NOT Halide_CMAKE_TARGET)
-    _Halide_cmake_target(Halide_CMAKE_TARGET)
-endif ()
+_Halide_cache(Halide_HOST_TARGET "${_active_triple}" "Halide target triple matching the Halide library")
+_Halide_cache(Halide_CMAKE_TARGET "${_active_triple}" "Halide target triple matching the CMake target")
+
+unset(_active_triple)
 
 ##
 # Cache variable to control the global target for add_halide_library.
 ##
 
 if (NOT "$ENV{HL_TARGET}" STREQUAL "")
-    set(Halide_TARGET "$ENV{HL_TARGET}" CACHE STRING "The target to use when compiling AOT tests")
+    set(_default_target "$ENV{HL_TARGET}")
 elseif (Halide_HOST_TARGET STREQUAL Halide_CMAKE_TARGET)
-    set(Halide_TARGET "host" CACHE STRING "The target to use when compiling AOT tests")
+    set(_default_target "host")
 else ()
-    set(Halide_TARGET "${Halide_CMAKE_TARGET}" CACHE STRING "The target to use when compiling AOT tests")
+    set(_default_target "${Halide_CMAKE_TARGET}")
 endif ()
 
-if (NOT Halide_TARGET_MESSAGE_PRINTED)
-    message(STATUS "Halide detected current CMake target:  ${Halide_CMAKE_TARGET}")
-    message(STATUS "Halide using default generator target: ${Halide_TARGET}")
-    set(Halide_TARGET_MESSAGE_PRINTED TRUE CACHE INTERNAL "Limit printing the detected targets multiple times")
+_Halide_cache(Halide_TARGET "${_default_target}" "The default target to use when AOT compiling")
+
+unset(_default_target)
+
+##
+# Print the active values of all special target triples.
+##
+
+if (NOT ${CMAKE_FIND_PACKAGE_NAME}_FIND_QUIETLY)
+    message(STATUS "Halide 'host' platform triple:   ${Halide_HOST_TARGET}")
+    message(STATUS "Halide 'cmake' platform triple:  ${Halide_CMAKE_TARGET}")
+    message(STATUS "Halide default AOT target:       ${Halide_TARGET}")
 endif ()

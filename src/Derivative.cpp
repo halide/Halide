@@ -1166,7 +1166,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             accumulate(op->args[0], adjoint * (make_one(op->type) - op->args[2]));
             accumulate(op->args[1], adjoint * op->args[2]);
             accumulate(op->args[2], adjoint * (op->args[1] - op->args[0]));
-        } else if (op->is_intrinsic(Call::likely)) {
+        } else if (Call::as_tag(op)) {
             accumulate(op->args[0], adjoint);
         } else if (op->is_intrinsic(Call::return_second)) {
             accumulate(op->args[0], make_const(op->type, 0.0));
@@ -1385,9 +1385,7 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
 
         int variable_id = variable_ids[0];
         const string &variable = current_args[variable_id].name();
-        bool solved;
-        Expr result_rhs;
-        std::tie(solved, result_rhs) =
+        auto [solved, result_rhs] =
             solve_inverse(new_args[arg_id] == lhs[arg_id],
                           new_args[arg_id].name(),
                           variable);

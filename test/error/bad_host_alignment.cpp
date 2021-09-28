@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     f.compute_root();
 
     in.set(param_buf);
-    Buffer<uint8_t> result = f.realize(10, 10);
+    Buffer<uint8_t> result = f.realize({10, 10});
 
     printf("Success!\n");
     return 0;

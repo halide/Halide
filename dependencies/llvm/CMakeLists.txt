@@ -11,17 +11,21 @@ set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO RelWithDebInfo Release MinSizeRel "
 set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Release MinSizeRel RelWithDebInfo "")
 
 find_package(LLVM ${Halide_REQUIRE_LLVM_VERSION} REQUIRED)
-find_package(Clang REQUIRED CONFIG HINTS "${LLVM_DIR}/../clang")
+find_package(Clang REQUIRED CONFIG HINTS "${LLVM_DIR}/../clang" "${LLVM_DIR}/../lib/cmake/clang")
+
+set(LLVM_PACKAGE_VERSION "${LLVM_PACKAGE_VERSION}"
+    CACHE INTERNAL "LLVM version")
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+message(STATUS "Using ClangConfig.cmake in: ${Clang_DIR}")
 
-if (LLVM_PACKAGE_VERSION VERSION_LESS 10.0)
-    message(FATAL_ERROR "LLVM version must be 10.0 or newer")
+if (LLVM_PACKAGE_VERSION VERSION_LESS 11.0)
+    message(FATAL_ERROR "LLVM version must be 11.0 or newer")
 endif ()
 
-if (LLVM_PACKAGE_VERSION VERSION_GREATER 13.0)
-    message(WARNING "Halide is not tested on LLVM versions beyond 13.0")
+if (LLVM_PACKAGE_VERSION VERSION_GREATER 14.0)
+    message(WARNING "Halide is not tested on LLVM versions beyond 14.0")
 endif ()
 
 set(Halide_LLVM_DEFS ${LLVM_DEFINITIONS} $<BUILD_INTERFACE:LLVM_VERSION=${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}>)
@@ -53,6 +57,8 @@ set(active_components mcjit bitwriter linker passes)
 set(known_components AArch64 AMDGPU ARM Hexagon Mips NVPTX PowerPC RISCV WebAssembly X86)
 
 # We don't support LLVM10 or below for wasm codegen.
+# TODO: we should probably move this to LLVM 12 or 13, since LLVM11 won't
+# support SIMD usefully enough for Halide
 if (LLVM_PACKAGE_VERSION VERSION_LESS 11.0)
     list(REMOVE_ITEM known_components WebAssembly)
 endif ()
@@ -74,7 +80,8 @@ endforeach ()
 
 set(wasm_libs "")
 if (TARGET_WEBASSEMBLY)
-    find_package(LLD CONFIG REQUIRED HINTS "${LLVM_DIR}/../lld")
+    find_package(LLD CONFIG REQUIRED HINTS "${LLVM_DIR}/../lld" "${LLVM_DIR}/../lib/cmake/lld")
+    message(STATUS "Using LLDConfig.cmake in: ${LLD_DIR}")
 
     # LLVM has a mis-feature that allows it to build and export both static and shared libraries at the same
     # time, while inconsistently linking its own static libraries (for lldWasm and others) to the shared library.

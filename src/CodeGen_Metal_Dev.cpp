@@ -549,6 +549,13 @@ void CodeGen_Metal_Dev::add_kernel(Stmt s,
                                    const vector<DeviceArgument> &args) {
     debug(2) << "CodeGen_Metal_Dev::compile " << name << "\n";
 
+    // We need to scalarize/de-predicate any loads/stores, since Metal does not
+    // support predication.
+    s = scalarize_predicated_loads_stores(s);
+
+    debug(2) << "CodeGen_Metal_Dev: after removing predication: \n"
+             << s;
+
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
     cur_kernel_name = name;
     metal_c.add_kernel(s, name, args);
@@ -737,7 +744,8 @@ void CodeGen_Metal_Dev::init_module() {
     src_stream.clear();
 
     // Write out the Halide math functions.
-    src_stream << "#include <metal_stdlib>\n"
+    src_stream << "#pragma clang diagnostic ignored \"-Wunused-function\"\n"
+               << "#include <metal_stdlib>\n"
                << "using namespace metal;\n"  // Seems like the right way to go.
                << "namespace {\n"
                << "constexpr float float_from_bits(unsigned int x) {return as_type<float>(x);}\n"

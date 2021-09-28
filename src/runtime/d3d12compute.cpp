@@ -188,8 +188,8 @@ typedef SinkPrinter trace;
 #define TRACEPRINT(msg)
 #define TRACELEVEL(level, msg)
 #define TRACEFATAL(msg) d3d12_panic(msg);
-#define TRACEERROR(msg) debug(user_context) << "ERROR: " << msg;
-#define TRACEWARN(msg) debug(user_context) << "WARNING: " << msg;
+#define TRACEERROR(msg) debug(user_context) << "ERROR: " << (msg);
+#define TRACEWARN(msg) debug(user_context) << "WARNING: " << (msg);
 #define TRACEINFO(msg)
 #endif
 //
@@ -218,7 +218,7 @@ void *d3d12_get_library_symbol(void *lib, const char *name) {
 }
 
 #ifndef MAYBE_UNUSED
-#define MAYBE_UNUSED(x) ((void)x)
+#define MAYBE_UNUSED(x) ((void)(x))
 #endif  // MAYBE_UNUSED
 
 #if HALIDE_D3D12_RENDERDOC
@@ -2986,11 +2986,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
                                  int blocksX, int blocksY, int blocksZ,
                                  int threadsX, int threadsY, int threadsZ,
                                  int shared_mem_bytes,
-                                 halide_type_t arg_types[], void *args[], int8_t arg_is_buffer[],
-                                 int num_attributes,
-                                 float *vertex_buffer,
-                                 int num_coords_dim0,
-                                 int num_coords_dim1) {
+                                 halide_type_t arg_types[], void *args[], int8_t arg_is_buffer[]) {
     TRACELOG;
 
     D3D12ContextHolder d3d12_context(user_context, true);

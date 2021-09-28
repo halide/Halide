@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
             f.update().hexagon(y).vectorize(x, 32);
         }
 
-        Realization result = f.realize(1024, 1024);
+        Realization result = f.realize({1024, 1024});
 
         Buffer<int> a = result[0], b = result[1];
 
@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        Realization result = f.realize(1024, 1024);
+        Realization result = f.realize({1024, 1024});
 
         Buffer<int> a = result[0], b = result[1];
 
@@ -114,7 +114,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        Realization result = f.realize(1024, 1024);
+        Realization result = f.realize({1024, 1024});
 
         Buffer<int> a = result[0], b = result[1];
 
@@ -157,7 +157,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        Realization result = f.realize(1024, 1024);
+        Realization result = f.realize({1024, 1024});
 
         Buffer<int> a = result[0], b = result[1];
 

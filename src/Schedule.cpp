@@ -219,11 +219,13 @@ struct FuncScheduleContents {
     std::vector<Bound> estimates;
     std::map<std::string, Internal::FunctionPtr> wrappers;
     MemoryType memory_type = MemoryType::Auto;
-    bool memoized = false, async = false;
+    bool memoized = false;
+    bool async = false;
     Expr memoize_eviction_key;
 
     FuncScheduleContents()
-        : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()){};
+        : store_level(LoopLevel::inlined()), compute_level(LoopLevel::inlined()) {
+    }
 
     // Pass an IRMutator through to all Exprs referenced in the FuncScheduleContents
     void mutate(IRMutator *mutator) {

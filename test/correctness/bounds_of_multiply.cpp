@@ -19,7 +19,7 @@ void test() {
     in.set(foo);
     bound.set(5);
 
-    auto result = f.realize(200);
+    auto result = f.realize({200});
 }
 
 int main(int argc, char **argv) {

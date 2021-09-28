@@ -92,20 +92,6 @@ define weak_odr i32 @halide.hexagon.interleave.b.dup2.h(i8 %low, i8 %high) nounw
   ret i32 %r
 }
 
-define weak_odr <128 x i8> @halide.hexagon.splat.b(i8 %arg) nounwind uwtable readnone alwaysinline {
-  %dup4 = call i32 @halide.hexagon.dup4.b(i8 %arg)
-  %r_32 = tail call <32 x i32> @llvm.hexagon.V6.lvsplatw.128B(i32 %dup4)
-  %r = bitcast <32 x i32> %r_32 to <128 x i8>
-  ret <128 x i8> %r
-}
-
-define weak_odr <64 x i16> @halide.hexagon.splat.h(i16 %arg) nounwind uwtable readnone alwaysinline {
-  %dup2 = call i32 @halide.hexagon.dup2.h(i16 %arg)
-  %r_32 = tail call <32 x i32> @llvm.hexagon.V6.lvsplatw.128B(i32 %dup2)
-  %r = bitcast <32 x i32> %r_32 to <64 x i16>
-  ret <64 x i16> %r
-}
-
 ; Implement various 32 bit multiplications.
 declare <32 x i32> @llvm.hexagon.V6.vaslw.128B(<32 x i32>, i32)
 declare <32 x i32> @llvm.hexagon.V6.vaslw.acc.128B(<32 x i32>, <32 x i32>, i32)

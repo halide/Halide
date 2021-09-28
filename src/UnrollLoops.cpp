@@ -4,6 +4,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
+#include "SimplifyCorrelatedDifferences.h"
 #include "Substitute.h"
 
 using std::pair;
@@ -92,7 +93,7 @@ class UnrollLoops : public IRMutator {
                 }
             }
 
-            return iters;
+            return simplify(iters);
 
         } else {
             return IRMutator::visit(for_loop);

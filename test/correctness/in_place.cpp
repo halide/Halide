@@ -17,16 +17,16 @@ int main(int argc, char **argv) {
     f(r) += f(r - 1);
 
     // Make some test data.
-    Buffer<float> data = lambda(x, sin(x)).realize(100);
+    Buffer<float> data = lambda(x, sin(x)).realize({100});
 
     f.realize(data);
 
     // Do the same thing not in-place
-    Buffer<float> reference_in = lambda(x, sin(x)).realize(100);
+    Buffer<float> reference_in = lambda(x, sin(x)).realize({100});
     Func g;
     g(x) = reference_in(x);
     g(r) += g(r - 1);
-    Buffer<float> reference_out = g.realize(100);
+    Buffer<float> reference_out = g.realize({100});
 
     float err = evaluate_may_gpu<float>(sum(abs(data(r) - reference_out(r))));
 
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
     // storing the same value has undesireable side-effects.
 
     // This sets the even numbered entires to 1.
-    data = lambda(x, sin(x)).realize(100);
+    data = lambda(x, sin(x)).realize({100});
     Func h;
     h(x) = select(x % 2 == 0, 1.0f, undef<float>());
     h.vectorize(x, 4);

@@ -81,15 +81,11 @@ class SplitTuples : public IRMutator {
     }
 
     Stmt visit(const For *op) override {
-        map<string, set<int>> old_func_value_indices = func_value_indices;
-
         FindCallValueIndices find;
         op->body.accept(&find);
 
-        func_value_indices = find.func_value_indices;
-        Stmt stmt = IRMutator::visit(op);
-        func_value_indices = old_func_value_indices;
-        return stmt;
+        ScopedValue<map<string, set<int>>> func_value_indices_v(func_value_indices, find.func_value_indices);
+        return IRMutator::visit(op);
     }
 
     Stmt visit(const Prefetch *op) override {
@@ -103,7 +99,7 @@ class SplitTuples : public IRMutator {
 
             for (const auto &idx : indices->second) {
                 internal_assert(idx < (int)op->types.size());
-                body = Prefetch::make(op->name + "." + std::to_string(idx), {op->types[(idx)]}, op->bounds, op->prefetch, op->condition, body);
+                body = Prefetch::make(op->name + "." + std::to_string(idx), {op->types[(idx)]}, op->bounds, op->prefetch, op->condition, std::move(body));
             }
             return body;
         } else {
@@ -117,18 +113,21 @@ class SplitTuples : public IRMutator {
             internal_assert(it != env.end());
             Function f = it->second;
             string name = op->name;
+            bool changed_name = false;
             if (f.outputs() > 1) {
                 name += "." + std::to_string(op->value_index);
+                changed_name = true;
             }
-            vector<Expr> args;
-            for (const Expr &e : op->args) {
-                args.push_back(mutate(e));
-            }
+            auto [args, changed_args] = mutate_with_changes(op->args);
             // It's safe to hook up the pointer to the function
             // unconditionally. This expr never gets held by a
             // Function, so there can't be a cycle. We do this even
             // for scalar provides.
-            return Call::make(op->type, name, args, op->call_type, f.get_contents());
+            if (changed_name || changed_args) {
+                return Call::make(op->type, name, args, op->call_type, f.get_contents());
+            } else {
+                return op;
+            }
         } else {
             return IRMutator::visit(op);
         }
@@ -145,10 +144,7 @@ class SplitTuples : public IRMutator {
         }
 
         // Mutate the args
-        vector<Expr> args;
-        for (const Expr &e : op->args) {
-            args.push_back(mutate(e));
-        }
+        auto args = mutate(op->args);
 
         // Get the Function
         auto it = env.find(op->name);
@@ -270,7 +266,7 @@ class SplitTuples : public IRMutator {
                 // Just make a provide node
                 int i = *c.begin();
                 string name = op->name + "." + std::to_string(i);
-                s = Provide::make(name, {mutate(op->values[i])}, args);
+                s = Provide::make(name, {mutate(op->values[i])}, args, op->predicate);
             } else {
                 // Make a list of let statements that compute the
                 // values (doing any loads), and then a block of
@@ -283,7 +279,7 @@ class SplitTuples : public IRMutator {
                         lets.emplace_back(var_name, val);
                         val = Variable::make(val.type(), var_name);
                     }
-                    provides.push_back(Provide::make(name, {val}, args));
+                    provides.push_back(Provide::make(name, {val}, args, op->predicate));
                 }
 
                 s = Block::make(provides);
@@ -494,7 +490,7 @@ class SplitScatterGather : public IRMutator {
                 names.push_back(name);
                 v = Variable::make(v.type(), name);
             }
-            provides.push_back(Provide::make(op->name, values, args));
+            provides.push_back(Provide::make(op->name, values, args, op->predicate));
         }
 
         Stmt s = Block::make(provides);

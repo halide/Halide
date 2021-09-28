@@ -25,7 +25,7 @@ def main():
 
     # Realize the function over an 8x8 region.
     print("Evaluating gradient")
-    output = gradient.realize(8, 8)
+    output = gradient.realize([8, 8])
 
     # This will print out all the times gradient(x, y) gets
     # evaluated.
@@ -56,7 +56,7 @@ def main():
     # on linux you can control it manually using the environment
     # variable HL_NUMTHREADS.
     print("\nEvaluating parallel_gradient")
-    parallel_gradient.realize(8, 8)
+    parallel_gradient.realize([8, 8])
 
     print("Success!")
     return 0

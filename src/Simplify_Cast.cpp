@@ -4,10 +4,27 @@ namespace Halide {
 namespace Internal {
 
 Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
-    // We generally don't track bounds through casts, with the
-    // exception of casts that constant-fold to a signed integer, so
-    // we don't need the bounds of the value.
-    Expr value = mutate(op->value, nullptr);
+    Expr value = mutate(op->value, bounds);
+
+    if (bounds) {
+        if (bounds->min_defined && !op->type.can_represent(bounds->min)) {
+            bounds->min_defined = false;
+            if (!no_overflow(op->type)) {
+                // If the type overflows, this invalidates the max too.
+                bounds->max_defined = false;
+            }
+        }
+        if (bounds->max_defined && !op->type.can_represent(bounds->max)) {
+            if (!no_overflow(op->type)) {
+                bounds->min_defined = false;
+            }
+            bounds->max_defined = false;
+        }
+        if (!op->type.can_represent(bounds->alignment.modulus) ||
+            !op->type.can_represent(bounds->alignment.remainder)) {
+            bounds->alignment = ModulusRemainder();
+        }
+    }
 
     if (may_simplify(op->type) && may_simplify(op->value.type())) {
         const Cast *cast = value.as<Cast>();
@@ -17,6 +34,7 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
         int64_t i = 0;
         uint64_t u = 0;
         if (Call::as_intrinsic(value, {Call::signed_integer_overflow})) {
+            clear_bounds_info(bounds);
             return make_signed_integer_overflow(op->type);
         } else if (value.type() == op->type) {
             return value;
@@ -49,10 +67,21 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
             // int -> float
             return make_const(op->type, safe_numeric_cast<double>(i));
         } else if (op->type.is_int() &&
-                   const_uint(value, &u)) {
+                   const_uint(value, &u) &&
+                   op->type.bits() < value.type().bits()) {
             // uint -> int
             // Recursively call mutate just to set the bounds
             return mutate(make_const(op->type, safe_numeric_cast<int64_t>(u)), bounds);
+        } else if (op->type.is_int() &&
+                   const_uint(value, &u) &&
+                   op->type.bits() >= value.type().bits()) {
+            // uint -> int with less than or equal to the number of bits
+            if (op->type.can_represent(u)) {
+                // Recursively call mutate just to set the bounds
+                return mutate(make_const(op->type, safe_numeric_cast<int64_t>(u)), bounds);
+            } else {
+                return make_signed_integer_overflow(op->type);
+            }
         } else if (op->type.is_uint() &&
                    const_uint(value, &u)) {
             // uint -> uint

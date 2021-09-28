@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
     out(x) = e;
     out.gpu_tile(x, xi, 23);
 
-    Buffer<> output = out.realize(23 * 5);
+    Buffer<> output = out.realize({23 * 5});
 
     int result;
     if (result_type == UInt(32)) {

@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <limits>
 #include <string>
 #include <utility>
@@ -42,11 +43,6 @@
 #define HALIDE_NO_USER_CODE_INLINE
 #else
 #define HALIDE_NO_USER_CODE_INLINE HALIDE_NEVER_INLINE
-#endif
-
-// On windows, Halide needs a larger stack than the default MSVC provides
-#ifdef _MSC_VER
-#pragma comment(linker, "/STACK:8388608,1048576")
 #endif
 
 namespace Halide {
@@ -212,6 +208,9 @@ struct all_are_convertible : meta_and<std::is_convertible<Args, To>...> {};
 /** Returns base name and fills in namespaces, outermost one first in vector. */
 std::string extract_namespaces(const std::string &name, std::vector<std::string> &namespaces);
 
+/** Overload that returns base name only */
+std::string extract_namespaces(const std::string &name);
+
 struct FileStat {
     uint64_t file_size;
     uint32_t mod_time;  // Unix epoch time
@@ -349,61 +348,6 @@ struct ScopedValue {
     ScopedValue(ScopedValue &&that) noexcept = default;
 };
 
-// Wrappers for some C++14-isms that are useful and trivially implementable
-// in C++11; these are defined in the Halide::Internal namespace. If we
-// are compiling under C++14 or later, we just use the standard implementations
-// rather than our own.
-#if __cplusplus >= 201402L
-
-// C++14: Use the standard implementations
-using std::index_sequence;
-using std::integer_sequence;
-using std::make_index_sequence;
-using std::make_integer_sequence;
-
-#else
-
-// C++11: std::integer_sequence (etc) is standard in C++14 but not C++11, but
-// is easily written in C++11. This is a simple version that could
-// probably be improved.
-
-template<typename T, T... Ints>
-struct integer_sequence {
-    static constexpr size_t size() {
-        return sizeof...(Ints);
-    }
-};
-
-template<typename T>
-struct next_integer_sequence;
-
-template<typename T, T... Ints>
-struct next_integer_sequence<integer_sequence<T, Ints...>> {
-    using type = integer_sequence<T, Ints..., sizeof...(Ints)>;
-};
-
-template<typename T, T I, T N>
-struct make_integer_sequence_helper {
-    using type = typename next_integer_sequence<
-        typename make_integer_sequence_helper<T, I + 1, N>::type>::type;
-};
-
-template<typename T, T N>
-struct make_integer_sequence_helper<T, N, N> {
-    using type = integer_sequence<T>;
-};
-
-template<typename T, T N>
-using make_integer_sequence = typename make_integer_sequence_helper<T, 0, N>::type;
-
-template<size_t... Ints>
-using index_sequence = integer_sequence<size_t, Ints...>;
-
-template<size_t N>
-using make_index_sequence = make_integer_sequence<size_t, N>;
-
-#endif
-
 // Helpers for timing blocks of code. Put 'TIC;' at the start and
 // 'TOC;' at the end. Timing is reported at the toc via
 // debug(0). The calls can be nested and will pretty-print
@@ -465,6 +409,11 @@ std::string c_print_name(const std::string &name);
  * only for internal tests which need to verify behavior; please don't use this outside
  * of Halide tests. */
 int get_llvm_version();
+
+/** Call the given action in a platform-specific context that provides at least
+ * 8MB of stack space. Currently only has any effect on Windows where it uses
+ * a Fiber. */
+void run_with_large_stack(const std::function<void()> &action);
 
 }  // namespace Internal
 }  // namespace Halide

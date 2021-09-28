@@ -10,6 +10,7 @@ using std::map;
 using std::string;
 
 using namespace Halide;
+using namespace Halide::Internal;
 
 struct Bound {
     int32_t min[3];
@@ -96,7 +97,7 @@ int split_test() {
         f(x, y) = x + y;
         g(x, y) = x - y;
         h(x, y) = f(x - 1, y + 1) + g(x + 2, y - 2);
-        im_ref = h.realize(200, 200);
+        im_ref = h.realize({200, 200});
     }
 
     {
@@ -130,7 +131,7 @@ int split_test() {
         };
         h.set_custom_trace(&my_trace);
 
-        im = h.realize(200, 200);
+        im = h.realize({200, 200});
     }
 
     auto func = [im_ref](int x, int y) {
@@ -143,6 +144,7 @@ int split_test() {
 }
 
 int fuse_test() {
+    const int size = 20;
     Buffer<int> im_ref, im;
     {
         Var x("x"), y("y"), z("z");
@@ -151,7 +153,7 @@ int fuse_test() {
         f(x, y, z) = x + y + z;
         g(x, y, z) = x - y + z;
         h(x, y, z) = f(x + 2, y - 1, z + 3) + g(x - 5, y - 6, z + 2);
-        im_ref = h.realize(100, 100, 100);
+        im_ref = h.realize({size, size, size});
     }
 
     {
@@ -173,18 +175,18 @@ int fuse_test() {
         g.trace_loads().trace_stores();
         h.trace_loads().trace_stores();
         stores = {
-            {f.name(), Bound(2, 101, -1, 98, 3, 102)},
-            {g.name(), Bound(-5, 94, -6, 93, 2, 101)},
-            {h.name(), Bound(0, 99, 0, 99, 0, 99)},
+            {f.name(), Bound(2, size + 1, -1, size - 2, 3, size + 2)},
+            {g.name(), Bound(-5, size - 6, -6, size - 7, 2, size + 1)},
+            {h.name(), Bound(0, size - 1, 0, size - 1, 0, size - 1)},
         };
         loads = {
-            {f.name(), Bound(2, 101, -1, 98, 3, 102)},
-            {g.name(), Bound(-5, 94, -6, 93, 2, 101)},
+            {f.name(), Bound(2, size + 1, -1, size - 2, 3, size + 2)},
+            {g.name(), Bound(-5, size - 6, -6, size - 7, 2, size + 1)},
             {h.name(), Bound()},  // There shouldn't be any load from h
         };
         h.set_custom_trace(&my_trace);
 
-        im = h.realize(100, 100, 100);
+        im = h.realize({size, size, size});
     }
 
     auto func = [im_ref](int x, int y, int z) {
@@ -213,7 +215,7 @@ int multiple_fuse_group_test() {
         h(x, y) += f(x, y) + g(x, y);
         p(x, y) = x + 2;
         q(x, y) = h(x, y) + 2 + p(x, y);
-        im_ref = q.realize(200, 200);
+        im_ref = q.realize({200, 200});
     }
 
     {
@@ -265,7 +267,7 @@ int multiple_fuse_group_test() {
         };
         q.set_custom_trace(&my_trace);
 
-        im = q.realize(200, 200);
+        im = q.realize({200, 200});
     }
 
     auto func = [im_ref](int x, int y) {
@@ -353,7 +355,7 @@ int fuse_compute_at_test() {
         p(x, y) = h(x, y) + 2;
         q(x, y) = x * y;
         r(x, y) = p(x, y - 1) + q(x - 1, y);
-        im_ref = r.realize(167, 167);
+        im_ref = r.realize({167, 167});
     }
 
     {
@@ -403,7 +405,7 @@ int fuse_compute_at_test() {
         };
         r.set_custom_trace(&my_trace);
 
-        im = r.realize(167, 167);
+        im = r.realize({167, 167});
     }
 
     auto func = [im_ref](int x, int y) {
@@ -424,7 +426,7 @@ int double_split_fuse_test() {
         f(x, y) = x + y;
         g(x, y) = 2 + x - y;
         h(x, y) = f(x, y) + g(x, y) + 10;
-        im_ref = h.realize(200, 200);
+        im_ref = h.realize({200, 200});
     }
 
     {
@@ -460,7 +462,7 @@ int double_split_fuse_test() {
         };
         h.set_custom_trace(&my_trace);
 
-        im = h.realize(200, 200);
+        im = h.realize({200, 200});
     }
 
     auto func = [im_ref](int x, int y) {
@@ -474,7 +476,7 @@ int double_split_fuse_test() {
 
 int rgb_yuv420_test() {
     // Somewhat approximating the behavior of rgb -> yuv420 (downsample by half in the u and v channels)
-    const int size = 256;
+    const int size = 64;
     Buffer<int> y_im(size, size), u_im(size / 2, size / 2), v_im(size / 2, size / 2);
     Buffer<int> y_im_ref(size, size), u_im_ref(size / 2, size / 2), v_im_ref(size / 2, size / 2);
 
@@ -637,6 +639,8 @@ int rgb_yuv420_test() {
 }
 
 int vectorize_test() {
+    const int width = 111;
+    const int height = 31;
     Buffer<int> im_ref, im;
     {
         Var x("x"), y("y");
@@ -645,7 +649,7 @@ int vectorize_test() {
         f(x, y) = x + y;
         g(x, y) = x - y;
         h(x, y) = f(x - 1, y + 1) + g(x + 2, y - 2);
-        im_ref = h.realize(111, 111);
+        im_ref = h.realize({width, height});
     }
 
     {
@@ -670,18 +674,18 @@ int vectorize_test() {
         g.trace_loads().trace_stores();
         h.trace_loads().trace_stores();
         stores = {
-            {f.name(), Bound(-1, 109, 1, 111)},
-            {g.name(), Bound(2, 112, -2, 108)},
-            {h.name(), Bound(0, 110, 0, 110)},
+            {f.name(), Bound(-1, width - 2, 1, height)},
+            {g.name(), Bound(2, width + 1, -2, height - 3)},
+            {h.name(), Bound(0, width - 1, 0, height - 1)},
         };
         loads = {
-            {f.name(), Bound(-1, 109, 1, 111)},
-            {g.name(), Bound(2, 112, -2, 108)},
+            {f.name(), Bound(-1, width - 2, 1, height)},
+            {g.name(), Bound(2, width + 1, -2, height - 3)},
             {h.name(), Bound()},  // There shouldn't be any load from h
         };
         h.set_custom_trace(&my_trace);
 
-        im = h.realize(111, 111);
+        im = h.realize({width, height});
     }
 
     auto func = [im_ref](int x, int y) {
@@ -705,7 +709,7 @@ int some_are_skipped_test() {
         p(x, y) = x * y;
         h(x, y) = f(x, y) + g(x + 2, y - 2);
         h(x, y) += f(x - 1, y + 1) + p(x, y);
-        im_ref = h.realize(200, 200);
+        im_ref = h.realize({200, 200});
     }
 
     {
@@ -743,7 +747,7 @@ int some_are_skipped_test() {
         };
         h.set_custom_trace(&my_trace);
 
-        im = h.realize(200, 200);
+        im = h.realize({200, 200});
     }
 
     auto func = [im_ref](int x, int y) {
@@ -1108,7 +1112,7 @@ int with_specialization_test() {
         f(x, y) = x + y;
         g(x, y) = x - y;
         h(x, y) = f(x - 1, y + 1) + g(x + 2, y - 2);
-        im_ref = h.realize(200, 200);
+        im_ref = h.realize({200, 200});
     }
 
     {
@@ -1144,7 +1148,7 @@ int with_specialization_test() {
         h.set_custom_trace(&my_trace);
 
         tile.set(true);
-        im = h.realize(200, 200);
+        im = h.realize({200, 200});
     }
 
     auto func = [im_ref](int x, int y) {
@@ -2005,7 +2009,7 @@ int store_at_different_levels_test() {
 
     consumer.bound(x, 0, 16).bound(y, 0, 16);
 
-    Buffer<int> out = consumer.realize(16, 16);
+    Buffer<int> out = consumer.realize({16, 16});
 
     for (int y = 0; y < out.height(); y++) {
         for (int x = 0; x < out.width(); x++) {
@@ -2016,6 +2020,91 @@ int store_at_different_levels_test() {
                 return -1;
             }
         }
+    }
+
+    return 0;
+}
+
+int rvar_bounds_test() {
+    ImageParam input(Int(16), 2, "input");
+    Var x{"x"}, y{"y"};
+    Func input_c{"input_c"};
+    Func add_1{"add_1"};
+    Func mul_2{"mul_2"};
+    Func sum_1{"sum_1"};
+    Func sum_2{"sum_2"};
+    Func total_sum{"total_sum"};
+    RDom r(input);
+
+    // algorithm
+    input_c(x, y) = input(x, y);
+
+    add_1(x, y) = input_c(x, y) + 1;
+
+    mul_2(x, y) = input_c(x, y) * 2;
+
+    sum_1() = cast<int16_t>(0);
+    sum_2() = cast<int16_t>(0);
+
+    sum_1() += add_1(r.x, r.y);
+    sum_2() += mul_2(r.x, r.y);
+
+    total_sum() = sum_1() + sum_2();
+
+    input.dim(0).set_bounds(0, 32);
+    input.dim(1).set_bounds(0, 64);
+
+    // CPU schedule.
+    int h_factor = 8;
+    int w_factor = 8;
+
+    RVar rxOuter("rxOuter"), rxInner("rxInner");
+    RVar ryOuter("ryOuter"), ryInner("ryInner");
+
+    RVar r_sum_x(sum_1.update(0).get_schedule().dims()[0].var);
+    RVar r_sum_y(sum_1.update(0).get_schedule().dims()[1].var);
+
+    sum_1.update(0).tile(r_sum_x, r_sum_y, rxOuter, ryOuter, rxInner, ryInner, w_factor, h_factor);
+
+    RVar r_sum_x_2(sum_2.update(0).get_schedule().dims()[0].var);
+    RVar r_sum_y_2(sum_2.update(0).get_schedule().dims()[1].var);
+
+    sum_2.update(0).tile(r_sum_x_2, r_sum_y_2, rxOuter, ryOuter, rxInner, ryInner, w_factor, h_factor);
+
+    add_1.compute_at(sum_2, rxOuter);
+    mul_2.compute_at(sum_2, rxOuter);
+
+    input_c.compute_at(sum_2, rxOuter);
+
+    sum_1.update(0).compute_with(sum_2.update(0), rxOuter);
+    sum_1.compute_root();
+    sum_2.compute_root();
+    total_sum.compute_root();
+
+    class CheckAllocationSize : public IRMutator {
+
+    protected:
+        using IRMutator::visit;
+
+        Stmt visit(const Allocate *op) override {
+            if ((op->name == "input_c") && (op->constant_allocation_size() != 64)) {
+                printf("Expected allocation size for input_c is 64, but is %d instead\n", op->constant_allocation_size());
+                exit(-1);
+            }
+            return IRMutator::visit(op);
+        }
+    };
+
+    total_sum.add_custom_lowering_pass(new CheckAllocationSize());
+
+    Buffer<int16_t> in(32, 64);
+    in.fill(1);
+    input.set(in);
+
+    Buffer<int16_t> result = total_sum.realize();
+
+    if (result() != 8192) {
+        return -1;
     }
 
     return 0;
@@ -2159,6 +2248,11 @@ int main(int argc, char **argv) {
 
     printf("Running store_at different levels test\n");
     if (store_at_different_levels_test() != 0) {
+        return -1;
+    }
+
+    printf("Running rvar bounds test\n");
+    if (rvar_bounds_test() != 0) {
         return -1;
     }
 

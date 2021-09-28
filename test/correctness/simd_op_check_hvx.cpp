@@ -54,10 +54,8 @@ public:
             isa_version = 66;
         } else if (target.has_feature(Halide::Target::HVX_v65)) {
             isa_version = 65;
-        } else if (target.has_feature(Halide::Target::HVX_v62)) {
-            isa_version = 62;
         } else {
-            isa_version = 60;
+            isa_version = 62;
         }
 
         // Verify that unaligned loads use the right instructions, and don't try to use
@@ -115,9 +113,7 @@ public:
         check("vadd(v*.uh,v*.uh):sat", hvx_width / 2, u16_sat(u32(u16_1) + u32(u16_2)));
         check("vadd(v*.h,v*.h):sat", hvx_width / 2, i16_sat(i32(i16_1) + i32(i16_2)));
         check("vadd(v*.w,v*.w):sat", hvx_width / 4, i32_sat(i64(i32_1) + i64(i32_2)));
-        if (isa_version >= 62) {
-            check("vadd(v*.uw,v*.uw):sat", hvx_width / 4, u32_sat(u64(u32_1) + u64(u32_2)));
-        }
+        check("vadd(v*.uw,v*.uw):sat", hvx_width / 4, u32_sat(u64(u32_1) + u64(u32_2)));
 
         check("vsub(v*.b,v*.b)", hvx_width / 1, u8_1 - u8_2);
         check("vsub(v*.h,v*.h)", hvx_width / 2, u16_1 - u16_2);
@@ -146,9 +142,7 @@ public:
         check("vadd(v*:*.uh,v*:*.uh):sat", hvx_width / 1, u16_sat(u32(u16_1) + u32(u16_2)));
         check("vadd(v*:*.h,v*:*.h):sat", hvx_width / 1, i16_sat(i32(i16_1) + i32(i16_2)));
         check("vadd(v*:*.w,v*:*.w):sat", hvx_width / 2, i32_sat(i64(i32_1) + i64(i32_2)));
-        if (isa_version >= 62) {
-            check("vadd(v*:*.uw,v*:*.uw):sat", hvx_width / 2, u32_sat(u64(u32_1) + u64(u32_2)));
-        }
+        check("vadd(v*:*.uw,v*:*.uw):sat", hvx_width / 2, u32_sat(u64(u32_1) + u64(u32_2)));
 
         check("vsub(v*:*.b,v*:*.b)", hvx_width * 2, u8_1 - u8_2);
         check("vsub(v*:*.h,v*:*.h)", hvx_width / 1, u16_1 - u16_2);
@@ -326,10 +320,8 @@ public:
         check("v*.ub = vpack(v*.h,v*.h):sat", hvx_width / 1, u8_sat(i32_1));
         check("v*.b = vpack(v*.h,v*.h):sat", hvx_width / 1, i8_sat(i32_1));
         check("v*.h = vsat(v*.w,v*.w)", hvx_width / 1, u8_sat(i32(i16_1) << 8));
-        if (isa_version >= 62) {
-            // v62 - Saturating narrowing cast
-            check("v*.uh = vsat(v*.uw, v*.uw)", hvx_width / 2, u16_sat(u32_1));
-        }
+        // Saturating narrowing cast
+        check("v*.uh = vsat(v*.uw, v*.uw)", hvx_width / 2, u16_sat(u32_1));
 
         check("vround(v*.h,v*.h)", hvx_width / 1, u8_sat((i32(i16_1) + 128) / 256));
         check("vround(v*.h,v*.h)", hvx_width / 1, i8_sat((i32(i16_1) + 128) / 256));
@@ -445,15 +437,10 @@ public:
         check("vnot(v*)", hvx_width / 2, ~u16_1);
         check("vnot(v*)", hvx_width / 4, ~u32_1);
 
-        if (isa_version >= 62) {
-            // v62 - Broadcasting unsigned 8 bit and 16 bit scalars
-            check("v*.b = vsplat(r*)", hvx_width / 1, in_u8(0));
-            check("v*.h = vsplat(r*)", hvx_width / 2, in_u16(0));
-        } else {
-            check("vsplat(r*)", hvx_width / 1, in_u8(0));
-            check("vsplat(r*)", hvx_width / 2, in_u16(0));
-        }
-        check("vsplat(r*)", hvx_width / 4, in_u32(0));
+        // v62 - Broadcasting scalars
+        check("vsplat(r*)", hvx_width / 1, in_u8(y));
+        check("vsplat(r*)", hvx_width / 2, in_u16(y));
+        check("vsplat(r*)", hvx_width / 4, in_u32(y));
 
         check("vmux(q*,v*,v*)", hvx_width / 1, select(i8_1 == i8_2, i8_3, i8_2));
         check("vmux(q*,v*,v*)", hvx_width / 2, select(i16_1 == i16_2, i16_3, i16_2));
@@ -626,19 +613,16 @@ public:
         check("vrmpy(v*.ub,v*.b)", hvx_width, i16(u8_1)*i8_1 + i16(u8_2)*i8_2 + i16(u8_3)*i8_3 + i16(u8_4)*i8_4);
 #endif
 
-#if 0
-        // Temporarily disabling this vrmpy test because of https://github.com/halide/Halide/issues/4248
         // These should also work with 16 bit results. However, it is
         // only profitable to do so if the interleave simplifies away.
         Expr u8_4x4[] = {
-            in_u8(4*x + 0),
-            in_u8(4*x + 1),
-            in_u8(4*x + 2),
-            in_u8(4*x + 3),
+            in_u8(4 * x + 0),
+            in_u8(4 * x + 1),
+            in_u8(4 * x + 2),
+            in_u8(4 * x + 3),
         };
-        check("vrmpy(v*.ub,r*.b)", hvx_width/2, i16(u8_4x4[0])*127 + i16(u8_4x4[1])*126 + i16(u8_4x4[2])*-125 + i16(u8_4x4[3])*124);
+        check("vrmpy(v*.ub,r*.b)", hvx_width / 2, i16(u8_4x4[0]) * 127 + i16(u8_4x4[1]) * 126 + i16(u8_4x4[2]) * -125 + i16(u8_4x4[3]) * 124);
 
-#endif
         // Make sure it doesn't generate if the operands don't interleave.
         check("vmpa(v*.ub,r*.b)", hvx_width, i16(u8_1) * 127 + i16(u8_2) * -126 + i16(u8_3) * 125 + i16(u8_4) * 124);
 
@@ -651,7 +635,6 @@ public:
 
         if (isa_version >= 65) {
             check("v*.h += vasl(v*.h,r*)", hvx_width / 2, i16_1 + (i16_2 << u16(y % 16)));
-            check("v*.h += vasl(v*.h,r*)", hvx_width / 2, i16_1 + (i16(y % 16) << u16_2));
             check("v*.h += vasr(v*.h,r*)", hvx_width / 2, i16_1 + (i16_2 >> u16(y % 16)));
             check("v*.h += vasl(v*.h,r*)", hvx_width / 2, u16_1 + (u16_2 * 16));
             check("v*.h += vasl(v*.h,r*)", hvx_width / 2, i16_1 + (i16_2 * 16));
@@ -666,6 +649,10 @@ public:
         check("vnormamt(v*.w)", hvx_width / 4, max(count_leading_zeros(i32_1), count_leading_zeros(~i32_1)));
         check("vpopcount(v*.h)", hvx_width / 2, popcount(u16_1));
 
+        check("v* = vdelta(v*, v*)", hvx_width, in_u8((x / 8) * 9 + x % 8));
+        check("v* = vdelta(v*, v*)", hvx_width / 2, in_u16((x / 8) * 9 + x % 8));
+        check("v* = vdelta(v*, v*)", hvx_width / 4, in_u32((x / 8) * 9 + x % 8));
+
         int rfac = 4;
         RDom r(0, rfac);
         check("v*.uw = vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u16(in_u8(rfac * x + r))));
@@ -675,21 +662,21 @@ public:
         check("v*.w  = vrmpy(v*.ub,v*.b)", hvx_width / 4, sum(i16(in_u8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
         check("v*.w  = vrmpy(v*.b,v*.b)", hvx_width / 4, sum(i16(in_i8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
         check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r))));
+        check("v*.w += vrmpy(v*.ub,r*.b)", hvx_width / 4, sum(i32(in_u8(rfac * x + r))));
         check("v*.uw = vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * 34));
         check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * u8(r)));
+        check("v*.uw += vrmpy(v*.ub,r*.ub)", hvx_width / 4, sum(i32(in_u8(rfac * x + r)) * u8(r)));
         check("v*.w  += vrmpy(v*.ub,r*.b)", hvx_width / 4, sum(i32(in_u8(rfac * x + r)) * i8(r)));
-        check("v*.w  = vrmpy(v*.ub,r*.b)", hvx_width / 4, sum(i32(in_u8(rfac * x + r)) * (-1)));
         check("v*.uw += vrmpy(v*.ub,v*.ub)", hvx_width / 4, sum(u32(in_u8(rfac * x + r)) * in_u8(rfac * x + r + 32)));
+        check("v*.uw += vrmpy(v*.ub,v*.ub)", hvx_width / 4, sum(i32(in_u8(rfac * x + r)) * in_u8(rfac * x + r + 32)));
         check("v*.w  += vrmpy(v*.ub,v*.b)", hvx_width / 4, sum(i32(in_u8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
         check("v*.w  += vrmpy(v*.b,v*.b)", hvx_width / 4, sum(i32(in_i8(rfac * x + r)) * in_i8(rfac * x + r + 32)));
-        check("v*.w  = vrmpy(v*.ub,r*.b)", hvx_width / 4, sum(i16(in_u8(rfac * x + r)) * (-1)));
         // Sliding window
         // TODO: We can generate accumulative versions of below instructions.
         check("v*:*.uw = vrmpy(v*:*.ub, r*.ub, #*)", hvx_width, sum(u32(in_u8(x + r))));
         check("v*:*.uw = vrmpy(v*:*.ub, r*.ub, #*)", hvx_width, sum(u32(in_u8(x + r)) * 34));
         check("v*:*.w = vrmpy(v*:*.ub, r*.b, #*)", hvx_width, sum(u32(in_u8(x + r)) * i8(r)));
         check("v*:*.w = vrmpy(v*:*.ub, r*.b, #*)", hvx_width, sum(i32(in_u8(x + r)) * i8(-r)));
-        check("v*:*.w = vrmpy(v*:*.ub, r*.b, #*)", hvx_width, sum(i32(in_u8(x + r)) * (-1)));
 
         rfac = 2;
         RDom r2(0, rfac);
@@ -748,6 +735,10 @@ int main(int argc, char **argv) {
     if (getenv("HL_SIMD_OP_CHECK_FILTER")) {
         test_hvx.filter = getenv("HL_SIMD_OP_CHECK_FILTER");
     }
+
+    const int seed = argc > 2 ? atoi(argv[2]) : time(nullptr);
+    std::cout << "simd_op_check test seed: " << seed << "\n";
+    test_hvx.set_seed(seed);
 
     // Remove some features like simd_op_check.cpp used to do.
 

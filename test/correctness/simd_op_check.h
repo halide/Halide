@@ -24,11 +24,14 @@ public:
     std::string filter{"*"};
     std::string output_directory{Internal::get_test_tmp_dir()};
     std::vector<Task> tasks;
+    std::mt19937 rng;
 
     Target target;
 
     ImageParam in_f32{Float(32), 1, "in_f32"};
     ImageParam in_f64{Float(64), 1, "in_f64"};
+    ImageParam in_f16{Float(16), 1, "in_f16"};
+    ImageParam in_bf16{BFloat(16), 1, "in_bf16"};
     ImageParam in_i8{Int(8), 1, "in_i8"};
     ImageParam in_u8{UInt(8), 1, "in_u8"};
     ImageParam in_i16{Int(16), 1, "in_i16"};
@@ -38,8 +41,8 @@ public:
     ImageParam in_i64{Int(64), 1, "in_i64"};
     ImageParam in_u64{UInt(64), 1, "in_u64"};
 
-    const std::vector<ImageParam> image_params{in_f32, in_f64, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
-    const std::vector<Argument> arg_types{in_f32, in_f64, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
+    const std::vector<ImageParam> image_params{in_f32, in_f64, in_f16, in_bf16, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
+    const std::vector<Argument> arg_types{in_f32, in_f64, in_f16, in_bf16, in_i8, in_u8, in_i16, in_u16, in_i32, in_u32, in_i64, in_u64};
     int W;
     int H;
 
@@ -53,6 +56,11 @@ public:
         num_threads = Internal::ThreadPool<void>::num_processors_online();
     }
     virtual ~SimdOpCheckTest() = default;
+
+    void set_seed(int seed) {
+        rng.seed(seed);
+    }
+
     size_t get_num_threads() const {
         return num_threads;
     }
@@ -88,13 +96,20 @@ public:
         return can_run_the_code;
     }
 
-    virtual void compile_and_check(Func f, Func error, const std::string &op, const std::string &name, int vector_width, std::ostringstream &error_msg) {
-        // Compile just the vector Func to assembly.
-        std::string asm_filename = output_directory + "check_" + name + ".s";
-        f.compile_to_assembly(asm_filename, arg_types, target);
+    virtual void compile_and_check(Func error, const std::string &op, const std::string &name, int vector_width, std::ostringstream &error_msg) {
+        std::string fn_name = "test_" + name;
+        std::string file_name = output_directory + fn_name;
+
+        auto ext = Internal::get_output_info(target);
+        std::map<Output, std::string> outputs = {
+            {Output::c_header, file_name + ext.at(Output::c_header).extension},
+            {Output::object, file_name + ext.at(Output::object).extension},
+            {Output::assembly, file_name + ".s"},
+        };
+        error.compile_to(outputs, arg_types, fn_name, target);
 
         std::ifstream asm_file;
-        asm_file.open(asm_filename);
+        asm_file.open(file_name + ".s");
 
         bool found_it = false;
 
@@ -114,10 +129,6 @@ public:
         }
 
         asm_file.close();
-
-        // Also compile the error checking Func (to be sure it compiles without error)
-        std::string fn_name = "test_" + name;
-        error.compile_to_file(output_directory + fn_name, arg_types, fn_name, target);
     }
 
     // Check if pattern p matches str, allowing for wildcards (*).
@@ -191,8 +202,6 @@ public:
         // Include a scalar version
         Halide::Func f_scalar("scalar_" + name);
         f_scalar(x, y) = e;
-        f_scalar.bound(x, 0, W);
-        f_scalar.compute_root();
 
         if (has_inline_reduction.result) {
             // If there's an inline reduction, we want to vectorize it
@@ -207,7 +216,7 @@ public:
             g.compute_at(f, x)
                 .update()
                 .split(x, xo, xi, vector_width)
-                .atomic()
+                .atomic(true)
                 .vectorize(g.rvars()[0])
                 .vectorize(xi);
         }
@@ -218,7 +227,7 @@ public:
         error() = Halide::cast<double>(maximum(absd(f(r_check.x, r_check.y), f_scalar(r_check.x, r_check.y))));
 
         setup_images();
-        compile_and_check(f, error, op, name, vector_width, error_msg);
+        compile_and_check(error, op, name, vector_width, error_msg);
 
         bool can_run_the_code = can_run_code();
         if (can_run_the_code) {
@@ -229,7 +238,6 @@ public:
 
             error.infer_input_bounds({}, run_target);
             // Fill the inputs with noise
-            std::mt19937 rng(123);
             for (auto p : image_params) {
                 Halide::Buffer<> buf = p.get();
                 if (!buf.defined()) continue;
@@ -242,6 +250,8 @@ public:
                     buf.as<float>().for_each_value([&](float &f) { f = (rng() & 0xfff) / 8.0f - 0xff; });
                 } else if (t == Float(64)) {
                     buf.as<double>().for_each_value([&](double &f) { f = (rng() & 0xfff) / 8.0 - 0xff; });
+                } else if (t == Float(16)) {
+                    buf.as<float16_t>().for_each_value([&](float16_t &f) { f = float16_t((rng() & 0xff) / 8.0f - 0xf); });
                 } else {
                     // Random bits is fine
                     for (uint32_t *ptr = (uint32_t *)buf.data();
@@ -301,6 +311,11 @@ public:
     virtual void setup_images() {
         for (auto p : image_params) {
             p.reset();
+
+            const int alignment_bytes = 16;
+            p.set_host_alignment(alignment_bytes);
+            const int alignment = alignment_bytes / p.type().bytes();
+            p.dim(0).set_min((p.dim(0).min() / alignment) * alignment);
         }
     }
     virtual bool test_all() {

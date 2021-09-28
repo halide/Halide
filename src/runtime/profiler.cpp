@@ -106,7 +106,7 @@ WEAK void sampling_profiler_thread(void *) {
 
         uint64_t t1 = halide_current_time_ns(nullptr);
         uint64_t t = t1;
-        while (1) {
+        while (true) {
             int func, active_threads;
             if (s->get_remote_profiler_state) {
                 // Execution has disappeared into remote code running
@@ -298,10 +298,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
             continue;
         }
         sstr.clear();
-        int alloc_avg = 0;
-        if (p->num_allocs != 0) {
-            alloc_avg = p->memory_total / p->num_allocs;
-        }
         bool serial = p->active_threads_numerator == p->active_threads_denominator;
         float threads = p->active_threads_numerator / (p->active_threads_denominator + 1e-10);
         sstr << p->name << "\n"
@@ -375,11 +371,6 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     }
                 }
 
-                int alloc_avg = 0;
-                if (fs->num_allocs != 0) {
-                    alloc_avg = fs->memory_total / fs->num_allocs;
-                }
-
                 if (fs->memory_peak) {
                     cursor += 15;
                     sstr << " peak: " << fs->memory_peak;
@@ -390,6 +381,10 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
                     cursor += 15;
                     while (sstr.size() < cursor) {
                         sstr << " ";
+                    }
+                    int alloc_avg = 0;
+                    if (fs->num_allocs != 0) {
+                        alloc_avg = fs->memory_total / fs->num_allocs;
                     }
                     sstr << " avg: " << alloc_avg;
                 }

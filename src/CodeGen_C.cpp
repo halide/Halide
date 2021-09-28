@@ -323,8 +323,8 @@ CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const 
 
     if (is_header()) {
         // If it's a header, emit an include guard.
-        stream << "#ifndef HALIDE_" << print_name(guard) << "\n"
-               << "#define HALIDE_" << print_name(guard) << "\n"
+        stream << "#ifndef HALIDE_" << c_print_name(guard) << "\n"
+               << "#define HALIDE_" << c_print_name(guard) << "\n"
                << "#include <stdint.h>\n"
                << "\n"
                << "// Forward declarations of the types used in the interface\n"
@@ -515,6 +515,16 @@ public:
         return r;
     }
 
+    static Vec load_predicated(const void *base, const CppVector<int32_t, Lanes> &offset, const Mask &predicate) {
+        Vec r;
+        for (size_t i = 0; i < Lanes; i++) {
+            if (predicate[i]) {
+                r[i] = ((const ElementType*)base)[offset[i]];
+            }
+        }
+        return r;
+    }
+
     static void store(const Vec &v, void *base, int32_t offset) {
         memcpy(((ElementType*)base + offset), v.data(), sizeof(ElementType) * Lanes);
     }
@@ -522,6 +532,14 @@ public:
     static void store_scatter(const Vec &v, void *base, const CppVector<int32_t, Lanes> &offset) {
         for (size_t i = 0; i < Lanes; i++) {
             ((ElementType*)base)[offset[i]] = v[i];
+        }
+    }
+
+    static void store_predicated(const Vec &v, void *base, const CppVector<int32_t, Lanes> &offset, const Mask &predicate) {
+        for (size_t i = 0; i < Lanes; i++) {
+            if (predicate[i]) {
+                ((ElementType*)base)[offset[i]] = v[i];
+            }
         }
     }
 
@@ -1025,6 +1043,15 @@ public:
         return r;
     }
 
+    static Vec load_predicated(const void *base, const NativeVector<int32_t, Lanes> offset, const NativeVector<uint8_t, Lanes> predicate) {
+        Vec r;
+        for (size_t i = 0; i < Lanes; i++) {
+            if (predicate[i]) {
+                r[i] = ((const ElementType*)base)[offset[i]];
+            }
+        }
+        return r;
+    }
     static void store(const Vec v, void *base, int32_t offset) {
         // We only require Vec to be element-aligned, so we can't safely just write
         // directly from memory (might segfault). Use memcpy for safety.
@@ -1038,6 +1065,14 @@ public:
     static void store_scatter(const Vec v, void *base, const NativeVector<int32_t, Lanes> offset) {
         for (size_t i = 0; i < Lanes; i++) {
             ((ElementType*)base)[offset[i]] = v[i];
+        }
+    }
+
+    static void store_predicated(const Vec v, void *base, const NativeVector<int32_t, Lanes> offset, const NativeVector<uint8_t, Lanes> predicate) {
+        for (size_t i = 0; i < Lanes; i++) {
+            if (predicate[i]) {
+                ((ElementType*)base)[offset[i]] = v[i];
+            }
         }
     }
 
@@ -1216,8 +1251,8 @@ public:
         stream << std::flush;
 
         for (const auto &t : vector_types) {
-            string name = type_to_c_type(t, false, false);
-            string scalar_name = type_to_c_type(t.element_of(), false, false);
+            string name = print_type(t, DoNotAppendSpace);
+            string scalar_name = print_type(t.element_of(), DoNotAppendSpace);
             stream << "#if halide_cpp_use_native_vector(" << scalar_name << ", " << t.lanes() << ")\n";
             stream << "using " << name << " = NativeVector<" << scalar_name << ", " << t.lanes() << ">;\n";
             stream << "using " << name << "_ops = NativeVectorOps<" << scalar_name << ", " << t.lanes() << ">;\n";
@@ -1454,6 +1489,246 @@ void CodeGen_C::forward_declare_type_if_needed(const Type &t) {
     forward_declared.insert(t.handle_type);
 }
 
+void CodeGen_C::emit_argv_wrapper(const std::string &function_name,
+                                  const std::vector<LoweredArgument> &args) {
+    if (is_header_or_extern_decl()) {
+        stream << "\nHALIDE_FUNCTION_ATTRS\nint " << function_name << "_argv(void **args);\n";
+        return;
+    }
+
+    stream << "\nHALIDE_FUNCTION_ATTRS\nint " << function_name << "_argv(void **args) {\n";
+    indent += 1;
+
+    stream << get_indent() << "return " << function_name << "(\n";
+    indent += 1;
+
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer()) {
+            stream << get_indent() << "(halide_buffer_t *)args[" << i << "]";
+        } else {
+            stream << get_indent() << "*(" << type_to_c_type(args[i].type, false) << " const *)args[" << i << "]";
+        }
+        if (i + 1 < args.size()) {
+            stream << ",";
+        }
+        stream << "\n";
+    }
+
+    indent -= 1;
+    stream << ");\n";
+
+    indent -= 1;
+    stream << "}";
+}
+
+void CodeGen_C::emit_metadata_getter(const std::string &function_name,
+                                     const std::vector<LoweredArgument> &args,
+                                     const std::map<std::string, std::string> &metadata_name_map) {
+    if (is_header_or_extern_decl()) {
+        stream << "\nHALIDE_FUNCTION_ATTRS\nconst struct halide_filter_metadata_t *" << function_name << "_metadata();\n";
+        return;
+    }
+
+    auto map_name = [&metadata_name_map](const std::string &from) -> std::string {
+        auto it = metadata_name_map.find(from);
+        return it == metadata_name_map.end() ? from : it->second;
+    };
+
+    stream << "\nHALIDE_FUNCTION_ATTRS\nconst struct halide_filter_metadata_t *" << function_name << "_metadata() {\n";
+
+    indent += 1;
+
+    static const char *const kind_names[] = {
+        "halide_argument_kind_input_scalar",
+        "halide_argument_kind_input_buffer",
+        "halide_argument_kind_output_buffer",
+    };
+
+    static const char *const type_code_names[] = {
+        "halide_type_int",
+        "halide_type_uint",
+        "halide_type_float",
+        "halide_type_handle",
+        "halide_type_bfloat",
+    };
+
+    std::set<int64_t> constant_int64_in_use;
+    const auto emit_constant_int64 = [this, &constant_int64_in_use](Expr e) -> std::string {
+        if (!e.defined()) {
+            return "nullptr";
+        }
+
+        internal_assert(!e.type().is_handle()) << "Should never see Handle types here.";
+        if (!is_const(e)) {
+            e = simplify(e);
+            internal_assert(is_const(e)) << "Should only see constant values here.";
+        }
+
+        const IntImm *int_imm = e.as<IntImm>();
+        internal_assert(int_imm && int_imm->type == Int(64));
+
+        const std::string id = "const_" + std::to_string(int_imm->value);
+        if (!constant_int64_in_use.count(int_imm->value)) {
+            stream << get_indent() << "static const int64_t " << id << " = " << int_imm->value << "LL;\n";
+            constant_int64_in_use.insert(int_imm->value);
+        }
+        return "&" + id;
+    };
+
+    int next_scalar_value_id = 0;
+    const auto emit_constant_scalar_value = [this, &next_scalar_value_id](Expr e) -> std::string {
+        if (!e.defined()) {
+            return "nullptr";
+        }
+
+        internal_assert(!e.type().is_handle()) << "Should never see Handle types here.";
+        if (!is_const(e)) {
+            e = simplify(e);
+            internal_assert(is_const(e)) << "Should only see constant values here.";
+        }
+
+        const IntImm *int_imm = e.as<IntImm>();
+        const UIntImm *uint_imm = e.as<UIntImm>();
+        const FloatImm *float_imm = e.as<FloatImm>();
+        internal_assert(int_imm || uint_imm || float_imm);
+        std::string value;
+        if (int_imm) {
+            value = std::to_string(int_imm->value);
+        } else if (uint_imm) {
+            value = std::to_string(uint_imm->value);
+        } else if (float_imm) {
+            value = std::to_string(float_imm->value);
+        }
+
+        std::string c_type = type_to_c_type(e.type(), false);
+        std::string id = "halide_scalar_value_" + std::to_string(next_scalar_value_id++);
+
+        // It's important that we allocate a full scalar_value_t_type here,
+        // even if the type of the value is smaller; downstream consumers should
+        // be able to correctly load an entire scalar_value_t_type regardless of its
+        // type, and if we emit just (say) a uint8 value here, the pointer may be
+        // misaligned and/or the storage after may be unmapped. We'll fake it by
+        // making a constant array of the elements we need, setting the first to the
+        // constant we want, and setting the rest to all-zeros. (This happens to work because
+        // sizeof(halide_scalar_value_t) is evenly divisible by sizeof(any-union-field.)
+
+        const size_t value_size = e.type().bytes();
+        internal_assert(value_size > 0 && value_size <= sizeof(halide_scalar_value_t));
+
+        const size_t array_size = sizeof(halide_scalar_value_t) / value_size;
+        internal_assert(array_size * value_size == sizeof(halide_scalar_value_t));
+
+        stream << get_indent() << "alignas(alignof(halide_scalar_value_t)) static const " << c_type << " " << id << "[" << array_size << "] = {" << value;
+        for (size_t i = 1; i < array_size; i++) {
+            stream << ", 0";
+        }
+        stream << "};\n";
+
+        return "(const halide_scalar_value_t *)&" + id;
+    };
+
+    for (const auto &arg : args) {
+        const auto legalized_name = c_print_name(map_name(arg.name));
+
+        auto argument_estimates = arg.argument_estimates;
+        if (arg.type.is_handle()) {
+            // Handle values are always emitted into metadata as "undefined", regardless of
+            // what sort of Expr is provided.
+            argument_estimates = ArgumentEstimates{};
+        }
+
+        const auto defined_count = [](const Region &r) -> size_t {
+            size_t c = 0;
+            for (const auto &be : r) {
+                c += be.min.defined() ? 1 : 0;
+                c += be.extent.defined() ? 1 : 0;
+            }
+            return c;
+        };
+
+        std::string buffer_estimates_array_ptr = "nullptr";
+        if (arg.is_buffer() && defined_count(argument_estimates.buffer_estimates) > 0) {
+            internal_assert((int)argument_estimates.buffer_estimates.size() == arg.dimensions);
+            std::vector<std::string> constants;
+            for (const auto &be : argument_estimates.buffer_estimates) {
+                Expr min = be.min;
+                if (min.defined()) {
+                    min = cast<int64_t>(min);
+                }
+                Expr extent = be.extent;
+                if (extent.defined()) {
+                    extent = cast<int64_t>(extent);
+                }
+                constants.push_back(emit_constant_int64(min));
+                constants.push_back(emit_constant_int64(extent));
+            }
+
+            stream << get_indent() << "static const int64_t * const buffer_estimates_" << legalized_name << "[" << (int)arg.dimensions * 2 << "] = {\n";
+            indent += 1;
+            for (const auto &c : constants) {
+                stream << get_indent() << c << ",\n";
+            }
+            indent -= 1;
+            stream << get_indent() << "};\n";
+        } else {
+            stream << get_indent() << "int64_t const *const *buffer_estimates_" << legalized_name << " = nullptr;\n";
+        }
+
+        auto scalar_def = emit_constant_scalar_value(argument_estimates.scalar_def);
+        auto scalar_min = emit_constant_scalar_value(argument_estimates.scalar_min);
+        auto scalar_max = emit_constant_scalar_value(argument_estimates.scalar_max);
+        auto scalar_estimate = emit_constant_scalar_value(argument_estimates.scalar_estimate);
+
+        stream << get_indent() << "const halide_scalar_value_t *scalar_def_" << legalized_name << " = " << scalar_def << ";\n";
+        stream << get_indent() << "const halide_scalar_value_t *scalar_min_" << legalized_name << " = " << scalar_min << ";\n";
+        stream << get_indent() << "const halide_scalar_value_t *scalar_max_" << legalized_name << " = " << scalar_max << ";\n";
+        stream << get_indent() << "const halide_scalar_value_t *scalar_estimate_" << legalized_name << " = " << scalar_estimate << ";\n";
+    }
+
+    stream << get_indent() << "static const halide_filter_argument_t args[" << args.size() << "] = {\n";
+    indent += 1;
+    for (const auto &arg : args) {
+        const auto name = map_name(arg.name);
+        const auto legalized_name = c_print_name(name);
+
+        stream << get_indent() << "{\n";
+        indent += 1;
+        stream << get_indent() << "\"" << name << "\",\n";
+        internal_assert(arg.kind < sizeof(kind_names) / sizeof(kind_names[0]));
+        stream << get_indent() << kind_names[arg.kind] << ",\n";
+        stream << get_indent() << (int)arg.dimensions << ",\n";
+        internal_assert(arg.type.code() < sizeof(type_code_names) / sizeof(type_code_names[0]));
+        stream << get_indent() << "{" << type_code_names[arg.type.code()] << ", " << (int)arg.type.bits() << ", " << (int)arg.type.lanes() << "},\n";
+        stream << get_indent() << "scalar_def_" << legalized_name << ",\n";
+        stream << get_indent() << "scalar_min_" << legalized_name << ",\n";
+        stream << get_indent() << "scalar_max_" << legalized_name << ",\n";
+        stream << get_indent() << "scalar_estimate_" << legalized_name << ",\n";
+        stream << get_indent() << "buffer_estimates_" << legalized_name << ",\n";
+        stream << get_indent() << "},\n";
+        indent -= 1;
+    }
+    stream << get_indent() << "};\n";
+    indent -= 1;
+
+    stream << get_indent() << "static const halide_filter_metadata_t md = {\n";
+
+    indent += 1;
+
+    stream << get_indent() << "halide_filter_metadata_t::VERSION,\n";
+    stream << get_indent() << args.size() << ",\n";
+    stream << get_indent() << "args,\n";
+    stream << get_indent() << "\"" << target.to_string() << "\",\n";
+    stream << get_indent() << "\"" << function_name << "\",\n";
+    stream << get_indent() << "};\n";
+    indent -= 1;
+
+    stream << get_indent() << "return &md;\n";
+
+    indent -= 1;
+
+    stream << "}\n";
+}
+
 void CodeGen_C::compile(const Module &input) {
     TypeInfoGatherer type_info;
     for (const auto &f : input.functions()) {
@@ -1517,12 +1792,13 @@ void CodeGen_C::compile(const Module &input) {
     for (const auto &b : input.buffers()) {
         compile(b);
     }
+    const auto metadata_name_map = input.get_metadata_name_map();
     for (const auto &f : input.functions()) {
-        compile(f);
+        compile(f, metadata_name_map);
     }
 }
 
-void CodeGen_C::compile(const LoweredFunc &f) {
+void CodeGen_C::compile(const LoweredFunc &f, const std::map<std::string, std::string> &metadata_name_map) {
     // Don't put non-external function declarations in headers.
     if (is_header_or_extern_decl() && f.linkage == LinkageType::Internal) {
         return;
@@ -1612,12 +1888,12 @@ void CodeGen_C::compile(const LoweredFunc &f) {
         stream << "}\n";
     }
 
-    if (is_header_or_extern_decl() && f.linkage == LinkageType::ExternalPlusMetadata) {
+    if (f.linkage == LinkageType::ExternalPlusMetadata) {
         // Emit the argv version
-        stream << "\nHALIDE_FUNCTION_ATTRS\nint " << simple_name << "_argv(void **args);\n";
+        emit_argv_wrapper(simple_name, args);
 
         // And also the metadata.
-        stream << "\nHALIDE_FUNCTION_ATTRS\nconst struct halide_filter_metadata_t *" << simple_name << "_metadata();\n";
+        emit_metadata_getter(simple_name, args, metadata_name_map);
     }
 
     if (!namespaces.empty()) {
@@ -1644,7 +1920,7 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     // Figure out the offset of the last pixel.
     size_t num_elems = 1;
     for (int d = 0; d < b.dimensions; d++) {
-        num_elems += b.dim[d].stride * (b.dim[d].extent - 1);
+        num_elems += b.dim[d].stride * (size_t)(b.dim[d].extent - 1);
     }
 
     // For now, we assume buffers that aren't scalar are constant,
@@ -1653,22 +1929,33 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
     // used to store stateful module information in offloading runtimes.
     bool is_constant = buffer.dimensions() != 0;
 
-    // Emit the data
-    stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] HALIDE_ATTRIBUTE_ALIGN(32) = {\n";
-    stream << get_indent();
-    for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
-        if (i > 0) {
-            stream << ",";
-            if (i % 16 == 0) {
-                stream << "\n";
-                stream << get_indent();
-            } else {
-                stream << " ";
+    // If it is an GPU source kernel, we would like to see the actual output, not the
+    // uint8 representation. We use a string literal for this.
+    if (ends_with(name, "gpu_source_kernels")) {
+        stream << "static const char *" << name << "_string = R\"BUFCHARSOURCE(";
+        stream.write((char *)b.host, num_elems);
+        stream << ")BUFCHARSOURCE\";\n";
+
+        stream << "static const uint8_t *" << name << "_data HALIDE_ATTRIBUTE_ALIGN(32) = (const uint8_t *) "
+               << name << "_string;\n";
+    } else {
+        // Emit the data
+        stream << "static " << (is_constant ? "const" : "") << " uint8_t " << name << "_data[] HALIDE_ATTRIBUTE_ALIGN(32) = {\n";
+        stream << get_indent();
+        for (size_t i = 0; i < num_elems * b.type.bytes(); i++) {
+            if (i > 0) {
+                stream << ",";
+                if (i % 16 == 0) {
+                    stream << "\n";
+                    stream << get_indent();
+                } else {
+                    stream << " ";
+                }
             }
+            stream << (int)(b.host[i]);
         }
-        stream << (int)(b.host[i]);
+        stream << "\n};\n";
     }
-    stream << "\n};\n";
 
     // Emit the shape (constant even for scalar buffers)
     stream << "static const halide_dimension_t " << name << "_buffer_shape[] = {";
@@ -1728,7 +2015,8 @@ string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
     auto cached = cache.find(rhs);
     if (cached == cache.end()) {
         id = unique_name('_');
-        stream << get_indent() << print_type(t, AppendSpace) << (output_kind == CPlusPlusImplementation ? "const " : "") << id << " = " << rhs << ";\n";
+        const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
+        stream << get_indent() << print_type(t, AppendSpace) << const_flag << id << " = " << rhs << ";\n";
         cache[rhs] = id;
     } else {
         id = cached->second;
@@ -1990,14 +2278,22 @@ void CodeGen_C::visit(const Call *op) {
         rhs << print_reinterpret(op->type, op->args[0]);
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
-        string a0 = print_expr(op->args[0]);
-        string a1 = print_expr(op->args[1]);
-        rhs << a0 << " << " << a1;
+        if (op->args[1].type().is_uint()) {
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " << " << a1;
+        } else {
+            rhs << print_expr(lower_signed_shift_left(op->args[0], op->args[1]));
+        }
     } else if (op->is_intrinsic(Call::shift_right)) {
         internal_assert(op->args.size() == 2);
-        string a0 = print_expr(op->args[0]);
-        string a1 = print_expr(op->args[1]);
-        rhs << a0 << " >> " << a1;
+        if (op->args[1].type().is_uint()) {
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " >> " << a1;
+        } else {
+            rhs << print_expr(lower_signed_shift_right(op->args[0], op->args[1]));
+        }
     } else if (op->is_intrinsic(Call::count_leading_zeros) ||
                op->is_intrinsic(Call::count_trailing_zeros) ||
                op->is_intrinsic(Call::popcount)) {
@@ -2024,7 +2320,7 @@ void CodeGen_C::visit(const Call *op) {
         string arg1 = print_expr(op->args[1]);
         rhs << "return_second(" << arg0 << ", " << arg1 << ")";
     } else if (op->is_intrinsic(Call::if_then_else)) {
-        internal_assert(op->args.size() == 3);
+        internal_assert(op->args.size() == 2 || op->args.size() == 3);
 
         string result_id = unique_name('_');
 
@@ -2038,12 +2334,13 @@ void CodeGen_C::visit(const Call *op) {
         string true_case = print_expr(op->args[1]);
         stream << get_indent() << result_id << " = " << true_case << ";\n";
         close_scope("if " + cond_id);
-        stream << get_indent() << "else\n";
-        open_scope();
-        string false_case = print_expr(op->args[2]);
-        stream << get_indent() << result_id << " = " << false_case << ";\n";
-        close_scope("if " + cond_id + " else");
-
+        if (op->args.size() == 3) {
+            stream << get_indent() << "else\n";
+            open_scope();
+            string false_case = print_expr(op->args[2]);
+            stream << get_indent() << result_id << " = " << false_case << ";\n";
+            close_scope("if " + cond_id + " else");
+        }
         rhs << result_id;
     } else if (op->is_intrinsic(Call::require)) {
         internal_assert(op->args.size() == 3);
@@ -2207,6 +2504,8 @@ void CodeGen_C::visit(const Call *op) {
         rhs << print_expr(op->args[0]) << " / " << print_expr(op->args[1]);
     } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
         rhs << print_expr(op->args[0]) << " % " << print_expr(op->args[1]);
+    } else if (op->is_intrinsic(Call::mux)) {
+        rhs << print_expr(lower_mux(op));
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
                       " integer overflow for int32 and int64 is undefined behavior in"
@@ -2214,11 +2513,17 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::prefetch)) {
         user_assert((op->args.size() == 4) && is_const_one(op->args[2]))
             << "Only prefetch of 1 cache line is supported in C backend.\n";
-        const Variable *base = op->args[0].as<Variable>();
+
+        const Expr &base_address = op->args[0];
+        const Expr &base_offset = op->args[1];
+        // const Expr &extent0 = op->args[2];  // unused
+        // const Expr &stride0 = op->args[3];  // unused
+
+        const Variable *base = base_address.as<Variable>();
         internal_assert(base && base->type.is_handle());
         rhs << "__builtin_prefetch("
             << "((" << print_type(op->type) << " *)" << print_name(base->name)
-            << " + " << print_expr(op->args[1]) << "), 1)";
+            << " + " << print_expr(base_offset) << "), 1)";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         rhs << "(sizeof(halide_buffer_t))";
     } else if (op->is_intrinsic(Call::strict_float)) {
@@ -2260,7 +2565,7 @@ string CodeGen_C::print_scalarized_expr(const Expr &e) {
         Expr e2 = extract_lane(e, lane);
         string elem = print_expr(e2);
         ostringstream rhs;
-        rhs << v << ".replace(" << lane << ", " << elem << ")";
+        rhs << print_type(t) + "_ops::replace(" << v << ", " << lane << ", " << elem << ")";
         v = print_assignment(t, rhs.str());
     }
     return v;
@@ -2288,8 +2593,6 @@ string CodeGen_C::print_extern_call(const Call *op) {
 }
 
 void CodeGen_C::visit(const Load *op) {
-    user_assert(is_const_one(op->predicate)) << "Predicated load is not supported by C backend.\n";
-
     // TODO: We could replicate the logic in the llvm codegen which decides whether
     // the vector access can be aligned. Doing so would also require introducing
     // aligned type equivalents for all the vector types.
@@ -2300,7 +2603,7 @@ void CodeGen_C::visit(const Load *op) {
 
     // If we're loading a contiguous ramp into a vector, just load the vector
     Expr dense_ramp_base = strided_ramp_base(op->index, 1);
-    if (dense_ramp_base.defined()) {
+    if (dense_ramp_base.defined() && is_const_one(op->predicate)) {
         internal_assert(t.is_vector());
         string id_ramp_base = print_expr(dense_ramp_base);
         rhs << print_type(t) + "_ops::load(" << name << ", " << id_ramp_base << ")";
@@ -2308,13 +2611,21 @@ void CodeGen_C::visit(const Load *op) {
         // If index is a vector, gather vector elements.
         internal_assert(t.is_vector());
         string id_index = print_expr(op->index);
-        rhs << print_type(t) + "_ops::load_gather(" << name << ", " << id_index << ")";
+        if (is_const_one(op->predicate)) {
+            rhs << print_type(t) + "_ops::load_gather(" << name << ", " << id_index << ")";
+        } else {
+            string id_predicate = print_expr(op->predicate);
+            rhs << print_type(t) + "_ops::load_predicated(" << name << ", " << id_index << ", " << id_predicate << ")";
+        }
     } else {
+        user_assert(is_const_one(op->predicate)) << "Predicated scalar load is not supported by C backend.\n";
+
         string id_index = print_expr(op->index);
         bool type_cast_needed = !(allocations.contains(op->name) &&
                                   allocations.get(op->name).type.element_of() == t.element_of());
         if (type_cast_needed) {
-            rhs << "((const " << print_type(t.element_of()) << " *)" << name << ")";
+            const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
+            rhs << "((" << const_flag << print_type(t.element_of()) << " *)" << name << ")";
         } else {
             rhs << name;
         }
@@ -2324,8 +2635,6 @@ void CodeGen_C::visit(const Load *op) {
 }
 
 void CodeGen_C::visit(const Store *op) {
-    user_assert(is_const_one(op->predicate)) << "Predicated store is not supported by C backend.\n";
-
     Type t = op->value.type();
 
     if (inside_atomic_mutex_node) {
@@ -2352,7 +2661,7 @@ void CodeGen_C::visit(const Store *op) {
 
     // If we're writing a contiguous ramp, just store the vector.
     Expr dense_ramp_base = strided_ramp_base(op->index, 1);
-    if (dense_ramp_base.defined()) {
+    if (dense_ramp_base.defined() && is_const_one(op->predicate)) {
         internal_assert(op->value.type().is_vector());
         string id_ramp_base = print_expr(dense_ramp_base);
         stream << get_indent() << print_type(t) + "_ops::store(" << id_value << ", " << name << ", " << id_ramp_base << ");\n";
@@ -2360,8 +2669,15 @@ void CodeGen_C::visit(const Store *op) {
         // If index is a vector, scatter vector elements.
         internal_assert(t.is_vector());
         string id_index = print_expr(op->index);
-        stream << get_indent() << print_type(t) + "_ops::store_scatter(" << id_value << ", " << name << ", " << id_index << ");\n";
+        if (is_const_one(op->predicate)) {
+            stream << get_indent() << print_type(t) + "_ops::store_scatter(" << id_value << ", " << name << ", " << id_index << ");\n";
+        } else {
+            string id_predicate = print_expr(op->predicate);
+            stream << get_indent() << print_type(t) + "_ops::store_predicated(" << id_value << ", " << name << ", " << id_index << ", " << id_predicate << ");\n";
+        }
     } else {
+        user_assert(is_const_one(op->predicate)) << "Predicated scalar store is not supported by C backend.\n";
+
         bool type_cast_needed =
             t.is_handle() ||
             !allocations.contains(op->name) ||
@@ -2414,6 +2730,62 @@ void CodeGen_C::visit(const Select *op) {
         rhs << type << "_ops::select(" << cond << ", " << true_val << ", " << false_val << ")";
     }
     print_assignment(op->type, rhs.str());
+}
+
+Expr CodeGen_C::scalarize_vector_reduce(const VectorReduce *op) {
+    Expr (*binop)(Expr, Expr) = nullptr;
+    switch (op->op) {
+    case VectorReduce::Add:
+        binop = Add::make;
+        break;
+    case VectorReduce::Mul:
+        binop = Mul::make;
+        break;
+    case VectorReduce::Min:
+        binop = Min::make;
+        break;
+    case VectorReduce::Max:
+        binop = Max::make;
+        break;
+    case VectorReduce::And:
+        binop = And::make;
+        break;
+    case VectorReduce::Or:
+        binop = Or::make;
+        break;
+    case VectorReduce::SaturatingAdd:
+        binop = saturating_add;
+        break;
+    }
+
+    std::vector<Expr> lanes;
+    int outer_lanes = op->type.lanes();
+    int inner_lanes = op->value.type().lanes() / outer_lanes;
+    for (int outer = 0; outer < outer_lanes; outer++) {
+        Expr reduction = extract_lane(op->value, outer * inner_lanes);
+        for (int inner = 1; inner < inner_lanes; inner++) {
+            reduction = binop(reduction, extract_lane(op->value, outer * inner_lanes + inner));
+        }
+        lanes.push_back(reduction);
+    }
+
+    // No need to concat if there is only a single value.
+    if (lanes.size() == 1) {
+        return lanes[0];
+    }
+
+    return Shuffle::make_concat(lanes);
+}
+
+void CodeGen_C::visit(const VectorReduce *op) {
+    stream << get_indent() << "// Vector reduce: " << op->op << "\n";
+
+    Expr scalarized = scalarize_vector_reduce(op);
+    if (scalarized.type().is_scalar()) {
+        print_assignment(op->type, print_expr(scalarized));
+    } else {
+        print_assignment(op->type, print_scalarized_expr(scalarized));
+    }
 }
 
 void CodeGen_C::visit(const LetStmt *op) {
@@ -2582,11 +2954,12 @@ void CodeGen_C::visit(const Allocate *op) {
         alloc.type = op->type;
         allocations.push(op->name, alloc);
         heap_allocations.push(op->name);
-        stream << op_type << "*" << op_name << " = (" << print_expr(op->new_expr) << ");\n";
+        string new_e = print_expr(op->new_expr);
+        stream << get_indent() << op_type << " *" << op_name << " = (" << op_type << "*)" << new_e << ";\n";
     } else {
         constant_size = op->constant_allocation_size();
         if (constant_size > 0) {
-            int64_t stack_bytes = constant_size * op->type.bytes();
+            int64_t stack_bytes = (int64_t)constant_size * op->type.bytes();
 
             if (stack_bytes > ((int64_t(1) << 31) - 1)) {
                 user_error << "Total size for allocation "
@@ -2596,6 +2969,7 @@ void CodeGen_C::visit(const Allocate *op) {
                 size_id = print_expr(make_const(size_id_type, constant_size));
 
                 if (op->memory_type == MemoryType::Stack ||
+                    op->memory_type == MemoryType::Register ||
                     (op->memory_type == MemoryType::Auto &&
                      can_allocation_fit_on_stack(stack_bytes))) {
                     on_stack = true;
@@ -2734,7 +3108,6 @@ void CodeGen_C::visit(const Evaluate *op) {
 
 void CodeGen_C::visit(const Shuffle *op) {
     internal_assert(!op->vectors.empty());
-    internal_assert(op->vectors[0].type().is_vector());
     for (size_t i = 1; i < op->vectors.size(); i++) {
         internal_assert(op->vectors[0].type() == op->vectors[i].type());
     }
@@ -2757,13 +3130,17 @@ void CodeGen_C::visit(const Shuffle *op) {
         for (size_t vec_idx = 0; vec_idx < op->vectors.size(); vec_idx++) {
             const int vec_lanes = op->vectors[vec_idx].type().lanes();
             if (idx < vec_lanes) {
-                rhs << vecs[vec_idx] << "[" << idx << "]";
+                rhs << vecs[vec_idx];
+                if (op->vectors[vec_idx].type().is_vector()) {
+                    rhs << "[" << idx << "]";
+                }
                 break;
             }
             idx -= vec_lanes;
         }
         internal_assert(!rhs.str().empty());
     } else {
+        internal_assert(op->vectors[0].type().is_vector());
         string src = vecs[0];
         if (op->vectors.size() > 1) {
             // This code has always assumed/required that all the vectors

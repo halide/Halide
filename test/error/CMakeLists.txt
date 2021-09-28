@@ -62,6 +62,7 @@ tests(GROUPS error
       pointer_arithmetic.cpp
       race_condition.cpp
       rdom_undefined.cpp
+      realization_with_too_many_outputs.cpp
       realize_constantly_larger_than_two_gigs.cpp
       reduction_bounds.cpp
       reduction_type_mismatch.cpp
@@ -69,8 +70,10 @@ tests(GROUPS error
       reuse_var_in_schedule.cpp
       reused_args.cpp
       rfactor_inner_dim_non_commutative.cpp
+      run_with_large_stack_throws.cpp
       specialize_fail.cpp
       split_inner_wrong_tail_strategy.cpp
+      split_non_innermost_predicated.cpp
       thread_id_outside_block_id.cpp
       too_many_args.cpp
       tuple_arg_select_undef.cpp
