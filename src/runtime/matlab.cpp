@@ -241,7 +241,8 @@ WEAK void halide_matlab_note_pipeline_description(void *user_context, const hali
     stringstream desc(user_context);
     desc << "Note pipeline definition:\n";
     halide_matlab_describe_pipeline(desc, metadata);
-    halide_print(user_context, desc.str());
+    halide_context_t *_hc = halide_default_context();
+    _hc->print(user_context, desc.str());  // TODO: duelling ucons
 }
 
 WEAK void halide_matlab_error(void *user_context, const char *msg) {

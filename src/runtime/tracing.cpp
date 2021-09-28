@@ -311,7 +311,8 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
 
         {
             ScopedSpinLock lock(&halide_trace_file_lock);
-            halide_print(user_context, (const char *)buffer);
+            halide_context_t *_hc = halide_default_context();
+            _hc->print(user_context, (const char *)buffer);    // TODO: duelling ucons
         }
     }
 

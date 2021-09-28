@@ -287,6 +287,7 @@ WEAK void halide_profiler_memory_free(void *user_context,
 }
 
 WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_state *s) {
+    halide_context_t *_hc = halide_default_context();
 
     char line_buf[1024];
     Printer<StringStreamPrinter, sizeof(line_buf)> sstr(user_context, line_buf);
@@ -310,7 +311,7 @@ WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_st
         }
         sstr << " heap allocations: " << p->num_allocs
              << "  peak heap usage: " << p->memory_peak << " bytes\n";
-        halide_print(user_context, sstr.str());
+        _hc->print(user_context, sstr.str());  // TODO: duelling ucons
 
         bool print_f_states = p->time || p->memory_total;
         if (!print_f_states) {

@@ -208,6 +208,7 @@ WEAK int64_t current_cache_size = 0;
 
 #if CACHE_DEBUGGING
 WEAK void validate_cache() {
+    halide_context_t *_hc = halide_default_context();
     print(nullptr) << "validating cache, "
                    << "current size " << current_cache_size
                    << " of maximum " << max_cache_size << "\n";
@@ -217,11 +218,11 @@ WEAK void validate_cache() {
         while (entry != nullptr) {
             entries_in_hash_table++;
             if (entry->more_recent == nullptr && entry != most_recently_used) {
-                halide_print(nullptr, "cache invalid case 1\n");
+                _hc->print(_hc->user_context, "cache invalid case 1\n");
                 __builtin_trap();
             }
             if (entry->less_recent == nullptr && entry != least_recently_used) {
-                halide_print(nullptr, "cache invalid case 2\n");
+                _hc->print(_hc->user_context, "cache invalid case 2\n");
                 __builtin_trap();
             }
             entry = entry->next;
@@ -243,15 +244,15 @@ WEAK void validate_cache() {
                    << ", mru entries " << entries_from_mru
                    << ", lru entries " << entries_from_lru << "\n";
     if (entries_in_hash_table != entries_from_mru) {
-        halide_print(nullptr, "cache invalid case 3\n");
+        _hc->print(_hc->user_context, "cache invalid case 3\n");
         __builtin_trap();
     }
     if (entries_in_hash_table != entries_from_lru) {
-        halide_print(nullptr, "cache invalid case 4\n");
+        _hc->print(_hc->user_context, "cache invalid case 4\n");
         __builtin_trap();
     }
     if (current_cache_size < 0) {
-        halide_print(nullptr, "cache size is negative\n");
+        _hc->print(_hc->user_context, "cache size is negative\n");
         __builtin_trap();
     }
 }

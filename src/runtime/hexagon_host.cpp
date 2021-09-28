@@ -70,6 +70,7 @@ WEAK void poll_log(void *user_context) {
         return;
     }
 
+    halide_context_t *_hc = halide_default_context();
     while (true) {
         char message[1024];
         int read = 0;
@@ -82,7 +83,7 @@ WEAK void poll_log(void *user_context) {
         }
 
         if (read > 0) {
-            halide_print(user_context, message);
+            _hc->print(user_context, message);  // TODO: duelling ucons
         } else {
             break;
         }

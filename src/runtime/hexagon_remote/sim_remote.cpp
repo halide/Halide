@@ -91,8 +91,9 @@ int load_library(const char *soname, const unsigned char *code, int codeLen, han
     // offloading do not support lazy bindin.
     lib = dlopenbuf(soname, (const char *)code, codeLen, RTLD_LOCAL | RTLD_NOW);
     if (!lib) {
-        halide_print(NULL, "dlopenbuf failed\n");
-        halide_print(NULL, dlerror());
+        halide_context_t *_hc = halide_default_context();
+        _hc->print(_hc->user_context, "dlopenbuf failed\n");
+        _hc->print(_hc->user_context, dlerror());
         return -1;
     }
 
