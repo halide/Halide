@@ -281,7 +281,7 @@ WEAK int halide_matlab_init(void *user_context) {
     // because they'd have to be weak here, and there would be no
     // guarantee that we would get this version (and not the standard
     // one).
-    halide_default_context()->fns.print = halide_matlab_print;
+    halide_default_context()->print = halide_matlab_print;
     halide_set_error_handler(halide_matlab_error);
 
     return halide_error_code_success;

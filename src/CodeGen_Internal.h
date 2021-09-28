@@ -79,6 +79,9 @@ llvm::Type *get_vector_type(llvm::Type *, int);
 /** Which built-in functions require a user-context first argument? */
 bool function_takes_user_context(const std::string &name);
 
+/** Which built-in "functions" should always be called via the hooks in the current halide_context_t? */
+bool function_is_runtime_hook(const std::string &name, int *index = nullptr);
+
 /** Given a size (in bytes), return True if the allocation size can fit
  * on the stack; otherwise, return False. This routine asserts if size is
  * non-positive. */

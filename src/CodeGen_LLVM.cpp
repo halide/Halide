@@ -190,6 +190,7 @@ CodeGen_LLVM::CodeGen_LLVM(const Target &t)
       i16_t(nullptr), i32_t(nullptr), i64_t(nullptr),
       f16_t(nullptr), f32_t(nullptr), f64_t(nullptr),
       halide_buffer_t_type(nullptr),
+      halide_context_t_type(nullptr),
       metadata_t_type(nullptr),
       argument_t_type(nullptr),
       scalar_value_t_type(nullptr),
@@ -458,6 +459,9 @@ void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) 
     halide_buffer_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_buffer_t");
     internal_assert(halide_buffer_t_type) << "Did not find halide_buffer_t in initial module";
 
+    halide_context_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_context_t");
+    internal_assert(halide_context_t_type) << "Did not find halide_context_t in initial module";
+
     type_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_type_t");
     internal_assert(type_t_type) << "Did not find halide_type_t in initial module";
 
@@ -592,6 +596,17 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string &name,
     // Make the initial basic block
     BasicBlock *block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(block);
+
+    // Load the current halide_context_t pointer.
+    {
+        // TODO: we could probably just load the global var instead, but this is unlikely to be
+        // costly enough to move the needle
+        llvm::Function *halide_default_context_fn = module->getFunction("halide_default_context");
+        internal_assert(halide_default_context_fn != nullptr);
+        CallInst *c = builder->CreateCall(halide_default_context_fn, vector<Value *>{}, "_hc");
+        c->setDoesNotThrow();
+        current_halide_context = c;
+    }
 
     // Put the arguments in the symbol table
     {
@@ -3316,40 +3331,30 @@ void CodeGen_LLVM::visit(const Call *op) {
         }
 
         llvm::Function *fn = module->getFunction(name);
-
         llvm::Type *result_type = llvm_type_of(upgrade_type_for_argument_passing(op->type));
+        llvm::FunctionCallee callee = fn;
+
+        int hook_index;
+        bool is_runtime_hook = function_is_runtime_hook(op->name, &hook_index);
 
         // Add a user context arg as needed. It's never a vector.
         bool takes_user_context = function_takes_user_context(op->name);
         if (takes_user_context) {
-            internal_assert(fn) << "External function " << op->name << " is marked as taking user_context, but is not in the runtime module. Check if runtime_api.cpp needs to be rebuilt.\n";
+            internal_assert(fn || is_runtime_hook) << "External function " << op->name << " is marked as taking user_context, but is not in the runtime module. Check if runtime_api.cpp needs to be rebuilt.\n";
             debug(4) << "Adding user_context to " << op->name << " args\n";
             args.insert(args.begin(), get_user_context());
         }
 
-        // If we can't find it, declare it extern "C"
-        if (!fn) {
-            vector<llvm::Type *> arg_types(args.size());
-            for (size_t i = 0; i < args.size(); i++) {
-                arg_types[i] = args[i]->getType();
-                if (arg_types[i]->isVectorTy()) {
-                    VectorType *vt = dyn_cast<VectorType>(arg_types[i]);
-                    arg_types[i] = vt->getElementType();
-                }
-            }
+        if (is_runtime_hook) {
+            internal_assert(hook_index > 0);
 
-            llvm::Type *scalar_result_type = result_type;
-            if (result_type->isVectorTy()) {
-                VectorType *vt = dyn_cast<VectorType>(result_type);
-                scalar_result_type = vt->getElementType();
-            }
+            Value *slot_ptr = builder->CreateStructGEP(halide_context_t_type, current_halide_context, hook_index);
+            Value *fn_ptr = builder->CreateLoad(slot_ptr->getType()->getPointerElementType(), slot_ptr);
+            FunctionType *func_t = cast<llvm::FunctionType>(fn_ptr->getType()->getPointerElementType());
+            callee = llvm::FunctionCallee(func_t, fn_ptr);
+        }
 
-            FunctionType *func_t = FunctionType::get(scalar_result_type, arg_types, false);
-
-            fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
-            fn->setCallingConv(CallingConv::C);
-            debug(4) << "Did not find " << op->name << ". Declared it extern \"C\".\n";
-        } else {
+        if (callee.getCallee()) {
             debug(4) << "Found " << op->name << "\n";
 
             // TODO: Say something more accurate here as there is now
@@ -3383,31 +3388,53 @@ void CodeGen_LLVM::visit(const Call *op) {
                     }
                 }
             }
+        } else if (!fn) {
+
+            // If we can't find it, declare it extern "C"
+            vector<llvm::Type *> arg_types(args.size());
+            for (size_t i = 0; i < args.size(); i++) {
+                arg_types[i] = args[i]->getType();
+                if (arg_types[i]->isVectorTy()) {
+                    VectorType *vt = dyn_cast<VectorType>(arg_types[i]);
+                    arg_types[i] = vt->getElementType();
+                }
+            }
+
+            llvm::Type *scalar_result_type = result_type;
+            if (result_type->isVectorTy()) {
+                VectorType *vt = dyn_cast<VectorType>(result_type);
+                scalar_result_type = vt->getElementType();
+            }
+
+            FunctionType *func_t = FunctionType::get(scalar_result_type, arg_types, false);
+
+            fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
+            fn->setCallingConv(CallingConv::C);
+            callee = fn;
+            debug(4) << "Did not find " << op->name << ". Declared it extern \"C\".\n";
         }
 
+        internal_assert(callee.getCallee());
         if (op->type.is_scalar()) {
-            CallInst *call = builder->CreateCall(fn, args);
+            CallInst *call = builder->CreateCall(callee, args);
             if (op->is_pure()) {
                 call->setDoesNotAccessMemory();
             }
             call->setDoesNotThrow();
             value = call;
         } else {
-
             // Check if a vector version of the function already
             // exists at some useful width.
-            pair<llvm::Function *, int> vec =
-                find_vector_runtime_function(name, op->type.lanes());
+            pair<llvm::Function *, int> vec = find_vector_runtime_function(name, op->type.lanes());
             llvm::Function *vec_fn = vec.first;
             int w = vec.second;
 
-            if (vec_fn) {
+            if (vec_fn && !is_runtime_hook) {
                 value = call_intrin(llvm_type_of(op->type), w,
                                     get_llvm_function_name(vec_fn), args);
             } else {
-
-                // No vector version found. Scalarize. Extract each simd
-                // lane in turn and do one scalar call to the function.
+                // No vector version found. Scalarize.
+                // Extract each simd lane in turn and do one scalar call to the function.
                 value = UndefValue::get(result_type);
                 for (int i = 0; i < op->type.lanes(); i++) {
                     Value *idx = ConstantInt::get(i32_t, i);
@@ -3419,7 +3446,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                             arg_lane[j] = args[j];
                         }
                     }
-                    CallInst *call = builder->CreateCall(fn, arg_lane);
+                    CallInst *call = builder->CreateCall(callee, arg_lane);
                     if (op->is_pure()) {
                         call->setDoesNotAccessMemory();
                     }

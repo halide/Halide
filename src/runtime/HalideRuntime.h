@@ -106,7 +106,11 @@ extern "C" {
  *
  */
 
-typedef struct halide_runtime_function_table_t {
+typedef struct halide_context_t {
+    /** Arbitrary value that user code can specify. Halide will always
+     * initialize this to nullptr and won't change it or examine it. */
+    void *user_context;
+
     /** Print a message to stderr. Main use is to support tracing
      * functionality, print, and print_when calls. Also called by the default
      * halide_error.  This function can be replaced in JITed code by using
@@ -114,15 +118,6 @@ typedef struct halide_runtime_function_table_t {
      * in AOT code. See Func::set_custom_print.
      */
     void (*print)(void *user_context, const char *msg);
-} halide_runtime_function_table_t;
-
-typedef struct halide_context_t {
-    /** Arbitrary value that user code can specify. Halide will always
-     * initialize this to nullptr and won't change it or examine it. */
-    void *user_context;
-
-    /** The function table that defines the current Halide runtime. */
-    halide_runtime_function_table_t fns;
 
     HALIDE_ATTRIBUTE_ALIGN(128)
     char reserved[4096];

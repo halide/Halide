@@ -915,7 +915,7 @@ public:
             args[name] = arg;
         }
         halide_set_error_handler(rungen_halide_error);
-        halide_default_context()->fns.print = rungen_halide_print;
+        halide_default_context()->print = rungen_halide_print;
     }
 
     ArgvCall get_halide_argv_call() const {
@@ -1385,7 +1385,7 @@ public:
     }
 
     void set_quiet(bool quiet = true) {
-        halide_default_context()->fns.print = (quiet ? rungen_halide_print_quiet : rungen_halide_print);
+        halide_default_context()->print = (quiet ? rungen_halide_print_quiet : rungen_halide_print);
     }
 
     void set_parsable_output(bool parsable_output = true) {

@@ -1873,6 +1873,10 @@ void CodeGen_C::compile(const LoweredFunc &f, const std::map<std::string, std::s
                    << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
                    << ";\n";
 
+            // Load the halide_context_t* we are using (currently always from halide_default_context();
+            // could be an explicit arg in the future).
+            stream << get_indent() << "halide_context_t * const _hc = halide_default_context();\n";
+
             if (target.has_feature(Target::NoAsserts)) {
                 stream << get_indent() << "halide_unused(_ucon);";
             }
@@ -2544,7 +2548,7 @@ void CodeGen_C::visit(const Call *op) {
         rhs << print_extern_call(op);
     }
 
-    // Special-case halide_print, which has IR that returns int, but really return void.
+    // Special-case halide_print, which has IR that returns int, but really returns void.
     // The clean thing to do would be to change the definition of halide_print() to return
     // an ignored int, but as halide_print() has many overrides downstream (and in third-party
     // consumers), this is arguably a simpler fix for allowing halide_print() to work in the C++ backend.
@@ -2589,7 +2593,14 @@ string CodeGen_C::print_extern_call(const Call *op) {
     if (function_takes_user_context(op->name)) {
         args.insert(args.begin(), "_ucon");
     }
-    rhs << op->name << "(" << with_commas(args) << ")";
+    if (function_is_runtime_hook(op->name)) {
+        const char * const prefix = "halide_";
+        const size_t prefix_len = strlen(prefix);
+        internal_assert(op->name.find(prefix) == 0);
+        rhs << "_hc->" << op->name.substr(prefix_len) << "(" << with_commas(args) << ")";
+    } else {
+        rhs << op->name << "(" << with_commas(args) << ")";
+    }
     return rhs.str();
 }
 

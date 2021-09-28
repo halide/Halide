@@ -1234,7 +1234,7 @@ wabt::Result extern_callback_wrapper(const std::vector<ExternArgType> &arg_types
 
 bool should_skip_extern_symbol(const std::string &name) {
     static std::set<std::string> symbols = {
-        "halide_print",
+        "halide_print",  // TODO: figure out what to do here
         "halide_error"};
     return symbols.count(name) > 0;
 }

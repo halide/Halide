@@ -190,6 +190,7 @@ protected:
     // @{
     llvm::Type *void_t, *i1_t, *i8_t, *i16_t, *i32_t, *i64_t, *f16_t, *f32_t, *f64_t;
     llvm::StructType *halide_buffer_t_type,
+        *halide_context_t_type,
         *type_t_type,
         *dimension_t_type,
         *metadata_t_type,
@@ -534,6 +535,12 @@ private:
      * destructors. As destructors are registered, code gets added
      * to this block. */
     llvm::BasicBlock *destructor_block;
+
+    /** The halide_context_t* being used by the function. Currently
+     * loaded (via a call to halide_default_context()) at the start of the function;
+     * could be passed as an argument someday. Expected to remain constant
+     * during the function. */
+    llvm::Value *current_halide_context;
 
     /** Turn off all unsafe math flags in scopes while this is set. */
     bool strict_float;

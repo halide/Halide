@@ -409,6 +409,10 @@ class FindExterns : public IRGraphVisitor {
     void visit(const Call *op) override {
         IRGraphVisitor::visit(op);
 
+        if (function_is_runtime_hook(op->name)) {
+            return;
+        }
+
         if ((op->call_type == Call::Extern || op->call_type == Call::PureExtern) && externs.count(op->name) == 0) {
             void *address = get_symbol_address(op->name.c_str());
             if (address == nullptr && !starts_with(op->name, "_")) {
@@ -429,7 +433,8 @@ class FindExterns : public IRGraphVisitor {
                 for (const Expr &e : op->args) {
                     arg_types.push_back(e.type().element_of());
                 }
-                bool is_void_return = op->type.bits() == 0 || op->name == "halide_print";
+                assert(op->name != "halide_print");
+                bool is_void_return = op->type.bits() == 0;
                 ExternSignature sig(is_void_return ? Type() : op->type.element_of(), is_void_return, arg_types);
                 ExternCFunction f(address, sig);
                 JITExtern jit_extern(f);

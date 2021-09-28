@@ -595,6 +595,14 @@ function_t hook_function(const std::map<std::string, JITModule::Symbol> &exports
     return (*hook_setter)(hook);
 }
 
+halide_context_t *get_jit_halide_context(const std::map<std::string, JITModule::Symbol> &exports) {
+    auto iter = exports.find("halide_default_context");
+    internal_assert(iter != exports.end()) << "Failed to find halide_default_context\n";
+    using HalideDefaultContextFn = halide_context_t *(*)();
+    HalideDefaultContextFn halide_default_context = reinterpret_bits<HalideDefaultContextFn>(iter->second.address);
+    return (*halide_default_context)();
+}
+
 void adjust_module_ref_count(void *arg, int32_t count) {
     JITModuleContents *module = (JITModuleContents *)arg;
 
@@ -752,7 +760,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         // Enumerate the functions.
         for (auto &f : *module) {
             // LLVM_Runtime_Linker has marked everything that should be exported as weak
-            if (f.hasWeakLinkage()) {
+            if (f.hasWeakLinkage() || get_llvm_function_name(f) == "halide_default_context") {
                 halide_exports_unique.insert(get_llvm_function_name(f));
             }
         }
@@ -762,8 +770,12 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         runtime.compile_module(std::move(module), "", target, deps, halide_exports);
 
         if (runtime_kind == MainShared) {
-            runtime_internal_handlers.custom_print =
-                hook_function(runtime.exports(), "halide_set_custom_print", print_handler);
+            halide_context_t *hc = get_jit_halide_context(runtime.exports());
+
+            {
+                runtime_internal_handlers.custom_print = hc->print;
+                hc->print = print_handler;
+            }
 
             runtime_internal_handlers.custom_malloc =
                 hook_function(runtime.exports(), "halide_set_custom_malloc", malloc_handler);

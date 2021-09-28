@@ -15,17 +15,15 @@
 extern "C" {
 
 /* Note that this is NOT weak-linkage. */
-static halide_context_internal_t g_halide_default_context = {
-    nullptr,  // user_context
-    {
-        halide_print,  // print
-    },
-    0,  // rt_start_unused
+static halide_context_t g_halide_default_context = {
+    nullptr,       // user_context
+    halide_print,  // print
+    {0},           // reserved
 };
 
 /* Note that this is NOT weak-linkage. */
 struct halide_context_t *halide_default_context() {
-    return (halide_context_t *)&g_halide_default_context;
+    return &g_halide_default_context;
 }
 
 }  // extern "C"

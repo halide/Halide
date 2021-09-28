@@ -260,6 +260,25 @@ bool function_takes_user_context(const std::string &name) {
     return starts_with(name, "halide_error_");
 }
 
+bool function_is_runtime_hook(const std::string &name, int *index) {
+    static std::pair<const char *, size_t> runtime_hooks[] = {
+        {"halide_print", __builtin_offsetof(halide_context_t, print)},
+    };
+    for (const auto &f : runtime_hooks) {
+        if (name == f.first) {
+            if (index) {
+                // TODO: this is very dubious; we want the *slot* index in the struct
+                // (used in CodegenLLVM to call CreateStructGEP()); here we just assume/require
+                // that all the entries in the struct are pointer-sized, which is fragile
+                // and dodgy. Revisit this.
+                *index = (int)(f.second) / sizeof(void *);
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
 bool can_allocation_fit_on_stack(int64_t size) {
     user_assert(size > 0) << "Allocation size should be a positive number\n";
     return (size <= 1024 * 16);
