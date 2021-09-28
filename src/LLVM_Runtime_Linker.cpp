@@ -972,6 +972,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_cache(c, bits_64, debug));
             }
             modules.push_back(get_initmod_to_string(c, bits_64, debug));
+            modules.push_back(get_initmod_runtime_context(c, bits_64, debug));
 
             if (t.arch == Target::Hexagon ||
                 t.has_feature(Target::HVX)) {
@@ -1069,7 +1070,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         if (module_type == ModuleAOT) {
             // These modules are only used for AOT compilation
             modules.push_back(get_initmod_can_use_target(c, bits_64, debug));
-            modules.push_back(get_initmod_runtime_context(c, bits_64, debug));
             if (t.arch == Target::X86) {
                 modules.push_back(get_initmod_x86_cpu_features(c, bits_64, debug));
             }
