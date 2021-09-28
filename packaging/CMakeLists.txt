@@ -99,7 +99,7 @@ install(FILES
         ${Halide_SOURCE_DIR}/README_rungen.md
         ${Halide_SOURCE_DIR}/README_webassembly.md
         COMPONENT Halide_Documentation
-        TYPE DATA)
+        TYPE DOC)
 
 ##
 # Tools
@@ -130,7 +130,7 @@ install(FILES ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/autotune_loop.sh
 
 if (WITH_TUTORIALS)
     install(DIRECTORY ${Halide_SOURCE_DIR}/tutorial
-            TYPE DATA
+            TYPE DOC
             COMPONENT Halide_Documentation
             FILES_MATCHING
             PATTERN "*.cpp"
@@ -209,7 +209,7 @@ install(FILES
 ##
 
 if (WITH_DOCS)
-    install(DIRECTORY ${Halide_BINARY_DIR}/doc/html/
+    install(DIRECTORY ${Halide_BINARY_DIR}/doc/html
             TYPE DOC
             COMPONENT Halide_Documentation)
 endif ()
