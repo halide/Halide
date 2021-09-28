@@ -1872,14 +1872,9 @@ void CodeGen_C::compile(const LoweredFunc &f, const std::map<std::string, std::s
             stream << get_indent() << "halide_context_t * const _hc = halide_default_context();\n";
 
             // Emit a local user_context we can pass in all cases, either
-            // aliasing __user_context or _hc->user_context.
-            //
-            // TODO: Need to decide what to do about conflicting ucon values here, since the value in
-            // hc->user_context may be different. Do we save/set/restore the value in hc? That seems
-            // unsafe and bad. Maybe just add an assertion that they must match and fail immediately
-            // if they don't? Ugh.
+            // aliasing __user_context or nullptr.
             stream << get_indent() << "void * const _ucon = "
-                   << (have_user_context ? "const_cast<void *>(__user_context)" : "_hc->user_context")
+                   << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
                    << ";\n";
 
             if (target.has_feature(Target::NoAsserts)) {

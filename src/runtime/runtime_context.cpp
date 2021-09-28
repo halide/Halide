@@ -16,7 +16,6 @@ extern "C" {
 
 /* Note that this is NOT weak-linkage. */
 static halide_context_t g_halide_default_context = {
-    nullptr,       // user_context
     halide_print,  // print
     {0},           // reserved
 };

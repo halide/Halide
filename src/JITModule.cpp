@@ -158,6 +158,7 @@ namespace {
 JITModule::Symbol compile_and_get_function(ExecutionEngine &ee, const string &name) {
     debug(2) << "JIT Compiling " << name << "\n";
     llvm::Function *fn = ee.FindFunctionNamed(name);
+    internal_assert(fn) << name << " not found";
     internal_assert(fn->getName() == name);
     void *f = (void *)ee.getFunctionAddress(name);
     if (!f) {
@@ -760,7 +761,7 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         // Enumerate the functions.
         for (auto &f : *module) {
             // LLVM_Runtime_Linker has marked everything that should be exported as weak
-            if (f.hasWeakLinkage() || get_llvm_function_name(f) == "halide_default_context") {
+            if (f.hasWeakLinkage() || (runtime_kind == MainShared && get_llvm_function_name(f) == "halide_default_context")) {
                 halide_exports_unique.insert(get_llvm_function_name(f));
             }
         }

@@ -4740,17 +4740,11 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
 }
 
 Value *CodeGen_LLVM::get_user_context() const {
-    // TODO: Need to decide what to do about conflicting ucon values here, since the value in
-    // hc->user_context may be different. Do we save/set/restore the value in hc? That seems
-    // unsafe and bad. Maybe just add an assertion that they must match and fail immediately
-    // if they don't? Ugh.
-    Value *ucon = sym_get("__user_context", false);
-    if (!ucon) {
-        // user_context is always the 0th slot in the halide_context_t.
-        Value *slot_ptr = builder->CreateStructGEP(halide_context_t_type, current_halide_context, 0);
-        ucon = builder->CreateLoad(slot_ptr->getType()->getPointerElementType(), slot_ptr, "_ucon");
+    Value *ctx = sym_get("__user_context", false);
+    if (!ctx) {
+        ctx = ConstantPointerNull::get(i8_t->getPointerTo());  // void*
     }
-    return ucon;
+    return ctx;
 }
 
 llvm::Function *CodeGen_LLVM::get_llvm_intrin(llvm::Type *ret_type, const std::string &name, const std::vector<llvm::Type *> &arg_types) {
