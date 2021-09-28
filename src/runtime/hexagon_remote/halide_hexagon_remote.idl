@@ -48,6 +48,6 @@ interface halide_hexagon_remote
                          in long set_latency,
                          in long latency);
 
-    // Set thread priority
-    long set_thread_priority(in long priority);
+    // Set thread priority and stack size
+    long set_thread_params(in long priority, in long stack_size);
 };

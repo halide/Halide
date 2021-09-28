@@ -3,7 +3,7 @@ Logging to /local/mnt/workspace/aankit/Halide-install/Halide-aankit/src/runtime/
 Logging to /local/mnt/workspace/aankit/Halide-install/Halide-aankit/src/runtime/hexagon_remote/bin/v65/signed_by_debug/secimage_output/SecImage_log.txt
 
 
-     SecImage v5.34 launched as: "/local/mnt/workspace/Hexagon_SDK/4.2.0.2/tools/elfsigner/elfsigner.py --no_disclaimer -i bin/v65/libhalide_hexagon_remote_skel.so -o bin/v65/signed_by_debug"
+     SecImage v5.34 launched as: "/local/mnt/workspace/Hexagon_SDK/4.3.0.0/tools/elfsigner/elfsigner.py --no_disclaimer -i bin/v65/libhalide_hexagon_remote_skel.so -o bin/v65/signed_by_debug"
 
 Config path is set to: /local/mnt/workspace/aankit/Halide-install/Halide-aankit/src/runtime/hexagon_remote/bin/v65/signed_by_debug/libhalide_hexagon_remote_skel_generated_config.xml
 WARNING: OEM ID is set to 0 for sign_id "elf_local"
@@ -65,24 +65,24 @@ Header:
 Program Headers: 
 | Num |     Type    | Offset | VirtAddr | PhysAddr | FileSize | MemSize | Flags | Align |
 |-----|-------------|--------|----------|----------|----------|---------|-------|-------|
-|  1  | LOAD        | 0x3000 |  0x0000  |  0x0000  |  0x7004  |  0x7004 |   RE  | 0x1000|
-|  2  | LOAD        | 0xb000 |  0x8000  |  0x8000  |  0x17f2  |  0x1840 |   RW  | 0x1000|
-|  3  | DYNAMIC     | 0xb570 |  0x8570  |  0x8570  |  0x00b0  |  0x00b0 |   RW  | 0x4   |
-|  4  | 1685382482  | 0xb000 |  0x8000  |  0x8000  |  0x063c  |  0x063c |   RW  | 0x8   |
+|  1  | LOAD        | 0x3000 |  0x0000  |  0x0000  |  0x6ea4  |  0x6ea4 |   RE  | 0x1000|
+|  2  | LOAD        | 0xa000 |  0x7000  |  0x7000  |  0x17ea  |  0x1838 |   RW  | 0x1000|
+|  3  | DYNAMIC     | 0xa570 |  0x7570  |  0x7570  |  0x00b0  |  0x00b0 |   RW  | 0x4   |
+|  4  | 1685382482  | 0xa000 |  0x7000  |  0x7000  |  0x063c  |  0x063c |   RW  | 0x8   |
 
 Hash Segment Properties: 
 | Header Size     | 40B     |
 | Hash Algorithm  | sha256  |
 
 Header: 
-| cert_chain_ptr  | 0x0000a1e8  |
+| cert_chain_ptr  | 0x000091e8  |
 | cert_chain_size | 0x00001800  |
 | code_size       | 0x000000c0  |
-| image_dest_ptr  | 0x0000a028  |
+| image_dest_ptr  | 0x00009028  |
 | image_id        | 0x00000000  |
 | image_size      | 0x000019c0  |
 | image_src       | 0x00000000  |
-| sig_ptr         | 0x0000a0e8  |
+| sig_ptr         | 0x000090e8  |
 | sig_size        | 0x00000100  |
 | version         | 0x00000003  |
 

@@ -46,10 +46,8 @@ int main(int argc, char **argv) {
                                                        &gaussian5x5_pipeline, &sobel_pipeline, &conv3x3a32_pipeline};
 
 #ifdef HALIDE_RUNTIME_HEXAGON
-    // Set thread priority and stack size for RPC thread.
-    // -1 for default priority.
-    // 32KB stack size.
-    halide_hexagon_set_remote_thread_params(NULL, -1, 1024 * 32);
+    // Set thread_priority = 80 and stack_size = 32KB for dsp threads.
+    halide_hexagon_set_thread_params(NULL, 80, 32 * 1024);
 #endif
 
     for (PipelineDescriptorBase *p : pipelines) {
