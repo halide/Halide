@@ -2914,12 +2914,15 @@ void CodeGen_LLVM::visit(const Call *op) {
                 //
                 // The second case handles converting between bool and integer as i1_t and i8_t/u8_t are
                 // interchanged in some circumstances.
-                if ((init_value->getType() != elem_ptr->getType()->getPointerElementType() &&
-                     init_value->getType() == i8_t->getPointerTo())) {
-                    internal_assert(elem_ptr->getType()->getPointerElementType()->isPointerTy());
-                    init_value = builder->CreatePointerCast(init_value, elem_ptr->getType()->getPointerElementType());
-                } else if (init_value->getType() == i1_t || elem_ptr->getType()->getPointerElementType() == i1_t) {
-                    init_value = builder->CreateTruncOrBitCast(init_value, elem_ptr->getType()->getPointerElementType());
+                if (init_value->getType() != elem_ptr->getType()->getPointerElementType()) {
+                    if (init_value->getType() == i8_t->getPointerTo()) {
+                        internal_assert(elem_ptr->getType()->getPointerElementType()->isPointerTy());
+                        init_value = builder->CreatePointerCast(init_value, elem_ptr->getType()->getPointerElementType());
+                    } else if (init_value->getType() == i1_t) {
+                        init_value = builder->CreateTruncOrBitCast(init_value, elem_ptr->getType()->getPointerElementType());
+                    } else if (elem_ptr->getType()->getPointerElementType() == i1_t) {
+                        init_value = builder->CreateZExtOrBitCast(init_value, elem_ptr->getType()->getPointerElementType());
+                    }
                 }
                 builder->CreateStore(init_value, elem_ptr);
             }
