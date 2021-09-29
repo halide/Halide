@@ -494,18 +494,18 @@ WEAK void dump_hash() {
 }
 #endif
 
-static ALWAYS_INLINE uintptr_t addr_hash(uintptr_t addr, uint32_t bits) {
+static ALWAYS_INLINE uintptr_t addr_hash(uintptr_t addr) {
     // Fibonacci hashing. The golden ratio is 1.9E3779B97F4A7C15F39...
     // in hexadecimal.
     if (sizeof(uintptr_t) >= 8) {
-        return (addr * (uintptr_t)0x9E3779B97F4A7C15) >> (64 - bits);
+        return (addr * (uintptr_t)0x9E3779B97F4A7C15) >> (64 - HASH_TABLE_BITS);
     } else {
-        return (addr * (uintptr_t)0x9E3779B9) >> (32 - bits);
+        return (addr * (uintptr_t)0x9E3779B9) >> (32 - HASH_TABLE_BITS);
     }
 }
 
 WEAK hash_bucket &lock_bucket(uintptr_t addr) {
-    uintptr_t hash = addr_hash(addr, HASH_TABLE_BITS);
+    uintptr_t hash = addr_hash(addr);
 
     check_hash(hash);
 
@@ -528,8 +528,8 @@ struct bucket_pair {
 
 WEAK bucket_pair lock_bucket_pair(uintptr_t addr_from, uintptr_t addr_to) {
     // TODO: if resizing is implemented, loop, etc.
-    uintptr_t hash_from = addr_hash(addr_from, HASH_TABLE_BITS);
-    uintptr_t hash_to = addr_hash(addr_to, HASH_TABLE_BITS);
+    uintptr_t hash_from = addr_hash(addr_from);
+    uintptr_t hash_to = addr_hash(addr_to);
 
     check_hash(hash_from);
     check_hash(hash_to);
