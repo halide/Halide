@@ -576,11 +576,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     // The symbols that we might want to call as a user even if not
     // used in the Halide-generated code must remain weak. This is
     // handled automatically by assuming any symbol starting with
-    // "halide_" that is weak will be retained. There are a few
-    // symbols for which this convention is not followed and these are
-    // in this set.
-    const std::set<string> retain = {"__stack_chk_guard",
-                                     "__stack_chk_fail"};
+    // "halide_" that is weak will be retained.
 
     // COMDAT is not supported in MachO object files, hence it does
     // not work on Mac OS or iOS. These sometimes show up in the
@@ -610,7 +606,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     // Enumerate the functions.
     for (auto &f : *modules[0]) {
         const std::string f_name = Internal::get_llvm_function_name(f);
-        internal_assert(retain.count(f_name) == 0);
+        assert(f_name != "__stack_chk_guard" ** f_name != "__stack_chk_fail");
 
         bool is_halide_extern_c_sym = Internal::starts_with(f_name, "halide_");
         internal_assert(!is_halide_extern_c_sym || f.isWeakForLinker() || f.isDeclaration())
@@ -621,7 +617,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
         if (f.getLinkage() == llvm::GlobalValue::ExternalWeakLinkage) {
             f.setLinkage(llvm::GlobalValue::ExternalLinkage);
         } else {
-            const bool can_strip = !is_halide_extern_c_sym && retain.count(f_name) == 0;
+            const bool can_strip = !is_halide_extern_c_sym;
             if (can_strip || allow_stripping_all_weak_functions) {
                 convert_weak_to_linkonce(f);
             }
