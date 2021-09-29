@@ -144,8 +144,8 @@ Then build it like so:
 % cmake --install llvm-build --prefix llvm-install
 ```
 
-Running a serial build will be slow. To improve speed, try running a parallel  
-build. That's done by default in Ninja; for make, use the option -j NNN,   
+Running a serial build will be slow. To improve speed, try running a parallel
+build. That's done by default in Ninja; for make, use the option -j NNN,
 where NNN is the number of parallel jobs, e.g. the number of CPUs you have.
 Then, point Halide to it:
 

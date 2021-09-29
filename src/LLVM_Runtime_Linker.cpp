@@ -133,7 +133,6 @@ DECLARE_CPP_INITMOD(hexagon_cache_allocator)
 DECLARE_CPP_INITMOD(hexagon_dma_pool)
 DECLARE_CPP_INITMOD(qurt_hvx)
 DECLARE_CPP_INITMOD(qurt_hvx_vtcm)
-DECLARE_CPP_INITMOD(qurt_init_fini)
 DECLARE_CPP_INITMOD(qurt_threads)
 DECLARE_CPP_INITMOD(qurt_threads_tsan)
 DECLARE_CPP_INITMOD(qurt_yield)
@@ -917,7 +916,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_qurt_threads(c, bits_64, debug));
                 }
-                modules.push_back(get_initmod_qurt_init_fini(c, bits_64, debug));
             } else if (t.os == Target::NoOS) {
                 // The OS-specific symbols provided by the modules
                 // above are expected to be provided by the containing
