@@ -606,7 +606,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     // Enumerate the functions.
     for (auto &f : *modules[0]) {
         const std::string f_name = Internal::get_llvm_function_name(f);
-        assert(f_name != "__stack_chk_guard" ** f_name != "__stack_chk_fail");
+        assert(f_name != "__stack_chk_guard" && f_name != "__stack_chk_fail");
 
         bool is_halide_extern_c_sym = Internal::starts_with(f_name, "halide_");
         internal_assert(!is_halide_extern_c_sym || f.isWeakForLinker() || f.isDeclaration())
