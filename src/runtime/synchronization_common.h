@@ -228,12 +228,10 @@ ALWAYS_INLINE void atomic_thread_fence_acquire() {
 }  // namespace
 
 class spin_control {
+    // Everyone says this should be 40. Have not measured it.
     int spin_count = 40;
 
 public:
-    // Everyone says this should be 40. Have not measured it.
-    ALWAYS_INLINE spin_control() = default;
-
     ALWAYS_INLINE bool should_spin() {
         if (spin_count > 0) {
             spin_count--;
@@ -282,7 +280,6 @@ class word_lock {
     void unlock_full();
 
 public:
-    ALWAYS_INLINE word_lock() = default;
     ALWAYS_INLINE void lock() {
         if_tsan_pre_lock(this);
 
@@ -567,8 +564,6 @@ WEAK void unlock_bucket_pair(bucket_pair &buckets) {
 struct validate_action {
     bool unpark_one = false;
     uintptr_t invalid_unpark_info = 0;
-
-    ALWAYS_INLINE validate_action() = default;
 };
 
 WEAK bool parking_control_validate(void *control, validate_action &action) {
@@ -1064,8 +1059,6 @@ class fast_cond {
     uintptr_t state = 0;
 
 public:
-    ALWAYS_INLINE fast_cond() = default;
-
     ALWAYS_INLINE void signal() {
         if_tsan_pre_signal(this);
 
