@@ -458,29 +458,23 @@ struct queue_data {
 };
 
 // Must be a power of two.
-#define LOAD_FACTOR 4
+constexpr int LOAD_FACTOR = 4;
 
 struct hash_bucket {
     word_lock mutex;
 
-    queue_data *head;  // Is this queue_data or thread_data?
-    queue_data *tail;  // Is this queue_data or thread_data?
+    queue_data *head = nullptr;  // Is this queue_data or thread_data?
+    queue_data *tail = nullptr;  // Is this queue_data or thread_data?
 };
 
-// The use of a #define here and table_storage is because if
-// a class with a constructor is used, clang generates a COMDAT
-// which cannot be lowered for Mac OS due to MachO. A better
-// solution is desired of course.
-#define HASH_TABLE_BITS 10
+constexpr int HASH_TABLE_SIZE = MAX_THREADS * LOAD_FACTOR;
 struct hash_table {
-    hash_bucket buckets[MAX_THREADS * LOAD_FACTOR];
+    hash_bucket buckets[HASH_TABLE_SIZE];
 };
-WEAK char table_storage[sizeof(hash_table)];
-#define table (*(hash_table *)table_storage)
+WEAK hash_table table;
 
-ALWAYS_INLINE void check_hash(uintptr_t hash) {
-    halide_assert(nullptr, hash < sizeof(table.buckets) / sizeof(table.buckets[0]));
-}
+constexpr int HASH_TABLE_BITS = 10;
+static_assert((1 << HASH_TABLE_BITS) >= MAX_THREADS * LOAD_FACTOR);
 
 #if 0
 WEAK void dump_hash() {
@@ -496,20 +490,29 @@ WEAK void dump_hash() {
 }
 #endif
 
-static ALWAYS_INLINE uintptr_t addr_hash(uintptr_t addr, uint32_t bits) {
+static ALWAYS_INLINE uintptr_t addr_hash(uintptr_t addr) {
     // Fibonacci hashing. The golden ratio is 1.9E3779B97F4A7C15F39...
     // in hexadecimal.
     if (sizeof(uintptr_t) >= 8) {
-        return (addr * (uintptr_t)0x9E3779B97F4A7C15) >> (64 - bits);
+        return (addr * (uintptr_t)0x9E3779B97F4A7C15) >> (64 - HASH_TABLE_BITS);
     } else {
-        return (addr * (uintptr_t)0x9E3779B9) >> (32 - bits);
+        return (addr * (uintptr_t)0x9E3779B9) >> (32 - HASH_TABLE_BITS);
     }
 }
 
-WEAK hash_bucket &lock_bucket(uintptr_t addr) {
-    uintptr_t hash = addr_hash(addr, HASH_TABLE_BITS);
+#ifdef DEBUG_RUNTIME
+// Any hash calculated by addr_hash() should be incapable of being outside this range.
+ALWAYS_INLINE void check_hash(uintptr_t hash) {
+    halide_assert(nullptr, hash < HASH_TABLE_SIZE);
+}
+#endif  // DEBUG_RUNTIME
 
+WEAK hash_bucket &lock_bucket(uintptr_t addr) {
+    uintptr_t hash = addr_hash(addr);
+
+#ifdef DEBUG_RUNTIME
     check_hash(hash);
+#endif
 
     // TODO: if resizing is implemented, loop, etc.
     hash_bucket &bucket = table.buckets[hash];
@@ -530,11 +533,13 @@ struct bucket_pair {
 
 WEAK bucket_pair lock_bucket_pair(uintptr_t addr_from, uintptr_t addr_to) {
     // TODO: if resizing is implemented, loop, etc.
-    uintptr_t hash_from = addr_hash(addr_from, HASH_TABLE_BITS);
-    uintptr_t hash_to = addr_hash(addr_to, HASH_TABLE_BITS);
+    uintptr_t hash_from = addr_hash(addr_from);
+    uintptr_t hash_to = addr_hash(addr_to);
 
+#ifdef DEBUG_RUNTIME
     check_hash(hash_from);
     check_hash(hash_to);
+#endif
 
     // Lock the bucket with the smaller hash first in order
     // to prevent deadlock.
