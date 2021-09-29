@@ -16,7 +16,12 @@ int halide_malloc_alignment();
 
 void *halide_tcm_malloc(void *user_context, unsigned int x) {
     const size_t alignment = halide_malloc_alignment();
-    return tcm_alloc_on_bank(x, alignment, /*bank=*/0);
+    void* ptr = tcm_alloc_on_bank(x, alignment, /*bank=*/0);
+    // Try to allocate on the second bank.
+    if (!ptr) {
+      ptr = tcm_alloc_on_bank(x, alignment, /*bank=*/1);
+    }
+    return ptr;
 }
 
 void halide_tcm_free(void *user_context, void *ptr) {
