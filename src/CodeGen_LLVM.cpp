@@ -2919,9 +2919,9 @@ void CodeGen_LLVM::visit(const Call *op) {
                         internal_assert(elem_ptr->getType()->getPointerElementType()->isPointerTy());
                         init_value = builder->CreatePointerCast(init_value, elem_ptr->getType()->getPointerElementType());
                     } else if (init_value->getType() == i1_t) {
-                        init_value = builder->CreateTruncOrBitCast(init_value, elem_ptr->getType()->getPointerElementType());
-                    } else if (elem_ptr->getType()->getPointerElementType() == i1_t) {
                         init_value = builder->CreateZExtOrBitCast(init_value, elem_ptr->getType()->getPointerElementType());
+                    } else if (elem_ptr->getType()->getPointerElementType() == i1_t) {
+                        init_value = builder->CreateTruncOrBitCast(init_value, elem_ptr->getType()->getPointerElementType());
                     }
                 }
                 builder->CreateStore(init_value, elem_ptr);
