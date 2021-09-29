@@ -476,10 +476,6 @@ WEAK hash_table table;
 constexpr int HASH_TABLE_BITS = 10;
 static_assert((1 << HASH_TABLE_BITS) >= MAX_THREADS * LOAD_FACTOR);
 
-ALWAYS_INLINE void check_hash(uintptr_t hash) {
-    halide_assert(nullptr, hash < HASH_TABLE_SIZE);
-}
-
 #if 0
 WEAK void dump_hash() {
     int i = 0;
@@ -504,10 +500,19 @@ static ALWAYS_INLINE uintptr_t addr_hash(uintptr_t addr) {
     }
 }
 
+#ifdef DEBUG_RUNTIME
+// Any hash calculated by addr_hash() should be incapable of being outside this range.
+ALWAYS_INLINE void check_hash(uintptr_t hash) {
+    halide_assert(nullptr, hash < HASH_TABLE_SIZE);
+}
+#endif  // DEBUG_RUNTIME
+
 WEAK hash_bucket &lock_bucket(uintptr_t addr) {
     uintptr_t hash = addr_hash(addr);
 
+#ifdef DEBUG_RUNTIME
     check_hash(hash);
+#endif
 
     // TODO: if resizing is implemented, loop, etc.
     hash_bucket &bucket = table.buckets[hash];
@@ -531,8 +536,10 @@ WEAK bucket_pair lock_bucket_pair(uintptr_t addr_from, uintptr_t addr_to) {
     uintptr_t hash_from = addr_hash(addr_from);
     uintptr_t hash_to = addr_hash(addr_to);
 
+#ifdef DEBUG_RUNTIME
     check_hash(hash_from);
     check_hash(hash_to);
+#endif
 
     // Lock the bucket with the smaller hash first in order
     // to prevent deadlock.
