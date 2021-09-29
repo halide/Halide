@@ -389,7 +389,7 @@ namespace Internal {
 namespace Metal {
 
 class MetalContextHolder {
-    objc_id const pool;
+    objc_id pool;
     void *const user_context;
 
 public:
