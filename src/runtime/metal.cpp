@@ -389,36 +389,23 @@ namespace Internal {
 namespace Metal {
 
 class MetalContextHolder {
-    objc_id pool;
-    void *user_context;
-
-    // Define these out-of-line as WEAK, to avoid LLVM error "MachO doesn't support COMDATs"
-    void save(void *user_context, bool create);
-    void restore();
+    objc_id const pool;
+    void *const user_context;
 
 public:
     mtl_device *device;
     mtl_command_queue *queue;
     int error;
 
-    ALWAYS_INLINE MetalContextHolder(void *user_context, bool create) {
-        save(user_context, create);
+    ALWAYS_INLINE MetalContextHolder(void *user_context, bool create)
+        : pool(create_autorelease_pool()), user_context(user_context) {
+        error = halide_metal_acquire_context(user_context, &device, &queue, create);
     }
     ALWAYS_INLINE ~MetalContextHolder() {
-        restore();
+        halide_metal_release_context(user_context);
+        drain_autorelease_pool(pool);
     }
 };
-
-WEAK void MetalContextHolder::save(void *user_context_arg, bool create) {
-    user_context = user_context_arg;
-    pool = create_autorelease_pool();
-    error = halide_metal_acquire_context(user_context, &device, &queue, create);
-}
-
-WEAK void MetalContextHolder::restore() {
-    halide_metal_release_context(user_context);
-    drain_autorelease_pool(pool);
-}
 
 struct command_buffer_completed_handler_block_descriptor_1 {
     unsigned long reserved;

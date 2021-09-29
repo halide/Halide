@@ -273,11 +273,6 @@ struct word_lock_queue_data {
     word_lock_queue_data *next = nullptr;
     word_lock_queue_data *prev = nullptr;
     word_lock_queue_data *tail = nullptr;
-
-    ALWAYS_INLINE word_lock_queue_data() = default;
-
-    // Inlined, empty dtor needed to avoid confusing MachO builds
-    ALWAYS_INLINE ~word_lock_queue_data() = default;
 };
 
 class word_lock {
@@ -451,10 +446,6 @@ struct queue_data {
     uintptr_t sleep_address = 0;
     queue_data *next = nullptr;
     uintptr_t unpark_info = 0;
-
-    ALWAYS_INLINE queue_data() = default;
-    // Inlined, empty dtor needed to avoid confusing MachO builds
-    ALWAYS_INLINE ~queue_data() = default;
 };
 
 // Must be a power of two.
