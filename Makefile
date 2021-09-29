@@ -803,7 +803,6 @@ RUNTIME_CPP_COMPONENTS = \
   qurt_allocator \
   qurt_hvx \
   qurt_hvx_vtcm \
-  qurt_init_fini \
   qurt_threads \
   qurt_threads_tsan \
   qurt_yield \
