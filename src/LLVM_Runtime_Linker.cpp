@@ -137,7 +137,6 @@ DECLARE_CPP_INITMOD(qurt_threads)
 DECLARE_CPP_INITMOD(qurt_threads_tsan)
 DECLARE_CPP_INITMOD(qurt_yield)
 DECLARE_CPP_INITMOD(runtime_api)
-DECLARE_CPP_INITMOD(ssp)
 DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(trace_helper)
 DECLARE_CPP_INITMOD(tracing)
@@ -611,6 +610,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     // Enumerate the functions.
     for (auto &f : *modules[0]) {
         const std::string f_name = Internal::get_llvm_function_name(f);
+        internal_assert(retain.count(f_name) == 0);
 
         bool is_halide_extern_c_sym = Internal::starts_with(f_name, "halide_");
         internal_assert(!is_halide_extern_c_sym || f.isWeakForLinker() || f.isDeclaration())
