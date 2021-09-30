@@ -56,13 +56,6 @@ endif ()
 set(active_components mcjit bitwriter linker passes)
 set(known_components AArch64 AMDGPU ARM Hexagon Mips NVPTX PowerPC RISCV WebAssembly X86)
 
-# We don't support LLVM10 or below for wasm codegen.
-# TODO: we should probably move this to LLVM 12 or 13, since LLVM11 won't
-# support SIMD usefully enough for Halide
-if (LLVM_PACKAGE_VERSION VERSION_LESS 11.0)
-    list(REMOVE_ITEM known_components WebAssembly)
-endif ()
-
 foreach (comp IN LISTS known_components)
     string(TOUPPER "TARGET_${comp}" OPTION)
     string(TOUPPER "WITH_${comp}" DEFINE)
