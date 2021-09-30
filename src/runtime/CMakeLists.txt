@@ -76,7 +76,6 @@ set(RUNTIME_CPP
     qurt_yield
     riscv_cpu_features
     runtime_api
-    ssp
     to_string
     trace_helper
     tracing
