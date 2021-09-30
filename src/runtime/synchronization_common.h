@@ -572,6 +572,11 @@ struct validate_action {
 };
 
 struct parking_control {
+    uintptr_t park(uintptr_t addr);
+    uintptr_t unpark_one(uintptr_t addr);
+    int unpark_requeue(uintptr_t addr_from, uintptr_t addr_to, uintptr_t unpark_info);
+
+protected:
     virtual bool validate(validate_action &action) {
         return true;
     }
@@ -584,10 +589,6 @@ struct parking_control {
     virtual void requeue_callback(const validate_action &action, bool one_to_wake, bool some_requeued) {
         // nothing
     }
-
-    uintptr_t park(uintptr_t addr);
-    uintptr_t unpark_one(uintptr_t addr);
-    int unpark_requeue(uintptr_t addr_from, uintptr_t addr_to, uintptr_t unpark_info);
 };
 
 // TODO: Do we need a park_result thing here?
@@ -754,6 +755,7 @@ struct mutex_parking_control : public parking_control {
         : lock_state(lock_state) {
     }
 
+protected:
     bool validate(validate_action &action) override final {
         uintptr_t result;
         atomic_load_relaxed(lock_state, &result);
@@ -875,6 +877,7 @@ struct signal_parking_control : public parking_control {
         : cond_state(cond_state), mutex(mutex) {
     }
 
+protected:
     uintptr_t unpark(int unparked, bool more_waiters) override final {
         if (!more_waiters) {
             uintptr_t val = 0;
@@ -897,6 +900,7 @@ struct broadcast_parking_control : public parking_control {
         : cond_state(cond_state), mutex(mutex) {
     }
 
+protected:
     bool validate(validate_action &action) override final {
         uintptr_t val;
         atomic_load_relaxed(cond_state, &val);
@@ -928,6 +932,7 @@ struct wait_parking_control : public parking_control {
         : cond_state(cond_state), mutex(mutex) {
     }
 
+protected:
     bool validate(validate_action &action) override final {
         uintptr_t val;
         atomic_load_relaxed(cond_state, &val);
