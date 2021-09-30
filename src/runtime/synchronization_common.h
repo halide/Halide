@@ -756,13 +756,13 @@ struct mutex_parking_control final : public parking_control {
     }
 
 protected:
-    bool validate(validate_action &action) override final {
+    bool validate(validate_action &action) final {
         uintptr_t result;
         atomic_load_relaxed(lock_state, &result);
         return result == (lock_bit | parked_bit);
     }
 
-    uintptr_t unpark(int unparked, bool more_waiters) override final {
+    uintptr_t unpark(int unparked, bool more_waiters) final {
         // TODO: consider handling fairness.
         uintptr_t return_state = more_waiters ? parked_bit : 0;
         atomic_store_release(lock_state, &return_state);
@@ -878,7 +878,7 @@ struct signal_parking_control final : public parking_control {
     }
 
 protected:
-    uintptr_t unpark(int unparked, bool more_waiters) override final {
+    uintptr_t unpark(int unparked, bool more_waiters) final {
         if (!more_waiters) {
             uintptr_t val = 0;
             atomic_store_relaxed(cond_state, &val);
@@ -901,7 +901,7 @@ struct broadcast_parking_control final : public parking_control {
     }
 
 protected:
-    bool validate(validate_action &action) override final {
+    bool validate(validate_action &action) final {
         uintptr_t val;
         atomic_load_relaxed(cond_state, &val);
         // By the time this broadcast locked everything and was processed, the cond
@@ -917,7 +917,7 @@ protected:
         return true;
     }
 
-    void requeue_callback(const validate_action &action, bool one_to_wake, bool some_requeued) override final {
+    void requeue_callback(const validate_action &action, bool one_to_wake, bool some_requeued) final {
         if (action.unpark_one && some_requeued) {
             mutex->make_parked();
         }
@@ -933,7 +933,7 @@ struct wait_parking_control final : public parking_control {
     }
 
 protected:
-    bool validate(validate_action &action) override final {
+    bool validate(validate_action &action) final {
         uintptr_t val;
         atomic_load_relaxed(cond_state, &val);
 
@@ -949,11 +949,11 @@ protected:
         return true;
     }
 
-    void before_sleep() override final {
+    void before_sleep() final {
         mutex->unlock();
     }
 
-    uintptr_t unpark(int unparked, bool more_waiters) override final {
+    uintptr_t unpark(int unparked, bool more_waiters) final {
         if (!more_waiters) {
             uintptr_t val = 0;
             atomic_store_relaxed(cond_state, &val);
