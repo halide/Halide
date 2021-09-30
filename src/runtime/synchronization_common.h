@@ -748,7 +748,7 @@ WEAK int parking_control::unpark_requeue(uintptr_t addr_from, uintptr_t addr_to,
     return wakeup != nullptr && action.unpark_one;
 }
 
-struct mutex_parking_control : public parking_control {
+struct mutex_parking_control final : public parking_control {
     uintptr_t *const lock_state;
 
     ALWAYS_INLINE mutex_parking_control(uintptr_t *lock_state)
@@ -869,7 +869,7 @@ public:
     }
 };
 
-struct signal_parking_control : public parking_control {
+struct signal_parking_control final : public parking_control {
     uintptr_t *const cond_state;
     fast_mutex *const mutex;
 
@@ -892,7 +892,7 @@ protected:
     }
 };
 
-struct broadcast_parking_control : public parking_control {
+struct broadcast_parking_control final : public parking_control {
     uintptr_t *const cond_state;
     fast_mutex *const mutex;
 
@@ -924,7 +924,7 @@ protected:
     }
 };
 
-struct wait_parking_control : public parking_control {
+struct wait_parking_control final : public parking_control {
     uintptr_t *const cond_state;
     fast_mutex *const mutex;
 
