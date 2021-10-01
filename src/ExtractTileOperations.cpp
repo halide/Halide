@@ -35,6 +35,7 @@ Type amx_op_type_result_type(AMXOpType op_ty) {
         return Float(32, 256);
     default:
         internal_error << "Unexpected";
+        return Type();
     }
 }
 
