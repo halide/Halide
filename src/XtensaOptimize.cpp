@@ -1016,8 +1016,14 @@ private:
         }
 
         static const std::vector<Pattern> calls = {
+            {"halide_xtensa_avg_u8", halving_add(wild_u8x, wild_u8x)},
+            {"halide_xtensa_avg_i8", halving_add(wild_i8x, wild_i8x)},
+
             {"halide_xtensa_avg_u16", halving_add(wild_u16x, wild_u16x)},
             {"halide_xtensa_avg_i16", halving_add(wild_i16x, wild_i16x)},
+
+            {"halide_xtensa_avg_round_u8", rounding_halving_add(wild_u8x, wild_u8x)},
+            {"halide_xtensa_avg_round_i8", rounding_halving_add(wild_i8x, wild_i8x)},
 
             {"halide_xtensa_avg_round_u16", rounding_halving_add(wild_u16x, wild_u16x)},
             {"halide_xtensa_avg_round_i16", rounding_halving_add(wild_i16x, wild_i16x)},

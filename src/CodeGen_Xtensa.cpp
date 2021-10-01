@@ -2145,8 +2145,12 @@ string CodeGen_Xtensa::print_xtensa_call(const Call *op) {
     std::map<string, string> op_name_to_intrinsic = {
         {"halide_xtensa_sat_add_i16", "IVP_ADDSNX16"},
         {"halide_xtensa_sat_sub_i16", "IVP_SUBSNX16"},
+        {"halide_xtensa_avg_i8", "IVP_AVG2NX8"},
+        {"halide_xtensa_avg_u8", "IVP_AVGU2NX8"},
         {"halide_xtensa_avg_i16", "IVP_AVGNX16"},
         {"halide_xtensa_avg_u16", "IVP_AVGUNX16"},
+        {"halide_xtensa_avg_round_i8", "IVP_AVGR2NX8"},
+        {"halide_xtensa_avg_round_u8", "IVP_AVGRU2NX8U"},
         {"halide_xtensa_avg_round_i16", "IVP_AVGRNX16"},
         {"halide_xtensa_avg_round_u16", "IVP_AVGRUNX16U"},
         {"halide_xtensa_widen_mul_i48", "IVP_MULNX16"},
