@@ -42,6 +42,14 @@ Type amx_op_type_result_type(AMXOpType op_ty) {
 const auto wild_i32 = Variable::make(Int(32), "*");
 const auto wild_i32x = Variable::make(Int(32, 0), "*");
 
+Tile<1> get_1d_tile_index(const Expr &e) {
+    if (const auto *r1 = e.as<Ramp>()) {
+        return {true, r1->base, {r1->stride}, {r1->lanes}};
+    }
+
+    return {};
+}
+
 Tile<2> get_2d_tile_index(const Expr &e) {
     // ramp(ramp(base, 1, 4), x4(stride), 4)
     vector<Expr> matches;
@@ -211,8 +219,8 @@ Matmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType op_t
     }
 
     const auto lhs_tile = get_3d_tile_index(lhs_load->index);
-    const auto rhs_tile = get_2d_tile_index(rhs_load->index);
-    if (!lhs_tile.result || !rhs_tile.result) {
+
+    if (!lhs_tile.result) {
         return {};
     }
 
@@ -220,10 +228,35 @@ Matmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType op_t
     const int tile_y = lhs_tile.extent[1];
     const int tile_r = lhs_tile.extent[2];
     const int factor = reduce->value.type().lanes() / reduce->type.lanes();
+
+    Expr rhs_base;
+    Expr rhs_stride;
+
+    const auto rhs_tile2 = get_2d_tile_index(rhs_load->index);
+    if (!rhs_tile2.result) {
+        const auto rhs_tile1 = get_1d_tile_index(rhs_load->index);
+
+        if (!rhs_tile1.result) {
+            return {};
+        }
+
+        if (rhs_tile1.extent[0] != tile_y * tile_r) {
+            return {};
+        }
+
+        rhs_base = rhs_tile1.base;
+        rhs_stride = rhs_tile1.stride[0];
+    } else {
+        if (tile_y != rhs_tile2.extent[0] || tile_r != rhs_tile2.extent[1]) {
+            return {};
+        }
+
+        rhs_base = rhs_tile2.base;
+        rhs_stride = rhs_tile2.stride[0];
+    }
+
     if (op->index.type().lanes() != tile_x * tile_y ||
-        factor != tile_r ||
-        tile_y != rhs_tile.extent[0] ||
-        tile_r != rhs_tile.extent[1]) {
+        factor != tile_r) {
         return {};
     }
 
@@ -243,7 +276,7 @@ Matmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType op_t
     auto rhs_var = Variable::make(Handle(), rhs_load->name);
     const auto &rhs_load_type = rhs_load->type;
     auto rhs_type = rhs_load_type.with_lanes(1024 / element_width);
-    auto rhs = Call::make(rhs_type, "tile_load", {1, tile_y * tile_r * element_width, rhs_var, rhs_tile.base * element_width, rhs_tile.stride[0] * tile_y * element_width}, Call::Intrinsic);
+    auto rhs = Call::make(rhs_type, "tile_load", {1, tile_y * tile_r * element_width, rhs_var, rhs_base * element_width, rhs_stride * tile_y * element_width}, Call::Intrinsic);
     auto res_type = amx_op_type_result_type(op_type);
 
     // {rows, colbytes, acc, out, lhs, rhs}
