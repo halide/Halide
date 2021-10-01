@@ -134,7 +134,7 @@ Tile<3> get_3d_tile_index(const Expr &e) {
     return {true, base, {x_stride, 0, r_stride}, {x_tile, y_tile, r_tile}};
 }
 
-struct NewMatmul {
+struct Matmul {
     bool result = false;
     Stmt stmt;
     int tile_x;
@@ -142,7 +142,7 @@ struct NewMatmul {
     int tile_r;
 };
 
-NewMatmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType op_type) {
+Matmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType op_type) {
     // m[ramp(0, 1, S)] = VectorAdd(lhs[{XYR tile}] * xX(rhs[{YR tile}])) + m[ramp(0, 1, S)]
     const auto wild_i8x = Variable::make(Int(8, 0), "*");
     const auto wild_u8x = Variable::make(UInt(8, 0), "*");
