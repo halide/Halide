@@ -2143,33 +2143,21 @@ static void wait_until_idle() {
 }
 
 class D3D12ContextHolder {
-    void *user_context;
-
-    // Define these out-of-line as WEAK, to avoid LLVM error "MachO doesn't support COMDATs"
-    void save(void *user_context, bool create);
-    void restore();
+    void *const user_context;
 
 public:
     d3d12_device *device;
     d3d12_command_queue *queue;
     int error;
 
-    ALWAYS_INLINE D3D12ContextHolder(void *user_context, bool create) {
-        save(user_context, create);
+    ALWAYS_INLINE D3D12ContextHolder(void *user_context, bool create)
+        : user_context(user_context) {
+        error = halide_d3d12compute_acquire_context(user_context, &device, &queue, create);
     }
     ALWAYS_INLINE ~D3D12ContextHolder() {
-        restore();
+        halide_d3d12compute_release_context(user_context);
     }
 };
-
-WEAK void D3D12ContextHolder::save(void *user_context_arg, bool create) {
-    user_context = user_context_arg;
-    error = halide_d3d12compute_acquire_context(user_context, &device, &queue, create);
-}
-
-WEAK void D3D12ContextHolder::restore() {
-    halide_d3d12compute_release_context(user_context);
-}
 
 static bool is_buffer_managed(d3d12_buffer *buffer) {
     return buffer->xfer != nullptr;
