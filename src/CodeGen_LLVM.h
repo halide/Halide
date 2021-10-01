@@ -394,10 +394,6 @@ protected:
      */
     size_t requested_alloca_total = 0;
 
-    /** Which buffers came in from the outside world (and so we can't
-     * guarantee their alignment) */
-    std::set<std::string> external_buffer;
-
     /** The user_context argument. May be a constant null if the
      * function is being compiled without a user context. */
     llvm::Value *get_user_context() const;
