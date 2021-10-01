@@ -147,20 +147,6 @@ bool matmul(Halide::Target target) {
         result.realize(out);
     });
     std::cout << "Exec time: " << time << "\n";
-
-    for (int j = 0; j < row; ++j) {
-        for (int i = 0; i < col; ++i) {
-            int32_t val = 0;
-            for (int k = 0; k < acc; ++k) {
-                val += a_buf(k, j) * b_buf(k % 4, i, k / 4);
-            }
-            if (val != out(i, j)) {
-                std::cerr << "Invalid result at " << i << ", " << j << "\n"
-                          << out(i, j) << " != " << val << "\n";
-                return false;
-            }
-        }
-    }
     std::cout << "Success!\n";
     return true;
 }
@@ -244,20 +230,6 @@ bool matmul_bf16(Halide::Target target) {
     });
 
     std::cout << "Exec time: " << time << "\n";
-
-    for (int j = 0; j < row; ++j) {
-        for (int i = 0; i < col; ++i) {
-            float val = 0.f;
-            for (int k = 0; k < acc; ++k) {
-                val += static_cast<float>(a_buf(k, j)) * static_cast<float>(b_buf(k % 2, i, k / 2));
-            }
-            if (!equal_eps(val, out(i, j), 0.01f)) {
-                std::cerr << "Invalid result at " << i << ", " << j << "\n"
-                          << out(i, j) << " != " << val << "\n";
-                return false;
-            }
-        }
-    }
     std::cout << "Success!\n";
     return true;
 }
@@ -269,11 +241,16 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    printf("Running AMX (signed/signed)\n");
     matmul_ss(target);
+    printf("Running AMX (unsigned/signed)\n");
     matmul_us(target);
+    printf("Running AMX (signed/unsigned)\n");
     matmul_su(target);
+    printf("Running AMX (unsigned/unsigned)\n");
     matmul_uu(target);
 
+    printf("Running AMX (bf16)\n");
     matmul_bf16(target);
     return 0;
 }
