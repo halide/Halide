@@ -512,7 +512,7 @@ void merge_handlers(JITHandlers &base, const JITHandlers &addins) {
 void print_handler(void *context, const char *msg) {
     if (context) {
         JITUserContext *jit_user_context = (JITUserContext *)context;
-        (*jit_user_context->handlers.custom_print)(context, msg);
+        (*jit_user_context->handlers.custom_print)(jit_user_context->user_context, msg);
     } else {
         return (*active_handlers.custom_print)(context, msg);
     }
@@ -521,7 +521,7 @@ void print_handler(void *context, const char *msg) {
 void *malloc_handler(void *context, size_t x) {
     if (context) {
         JITUserContext *jit_user_context = (JITUserContext *)context;
-        return (*jit_user_context->handlers.custom_malloc)(context, x);
+        return (*jit_user_context->handlers.custom_malloc)(jit_user_context->user_context, x);
     } else {
         return (*active_handlers.custom_malloc)(context, x);
     }
@@ -530,7 +530,7 @@ void *malloc_handler(void *context, size_t x) {
 void free_handler(void *context, void *ptr) {
     if (context) {
         JITUserContext *jit_user_context = (JITUserContext *)context;
-        (*jit_user_context->handlers.custom_free)(context, ptr);
+        (*jit_user_context->handlers.custom_free)(jit_user_context->user_context, ptr);
     } else {
         (*active_handlers.custom_free)(context, ptr);
     }
@@ -540,7 +540,7 @@ int do_task_handler(void *context, halide_task f, int idx,
                     uint8_t *closure) {
     if (context) {
         JITUserContext *jit_user_context = (JITUserContext *)context;
-        return (*jit_user_context->handlers.custom_do_task)(context, f, idx, closure);
+        return (*jit_user_context->handlers.custom_do_task)(jit_user_context->user_context, f, idx, closure);
     } else {
         return (*active_handlers.custom_do_task)(context, f, idx, closure);
     }
@@ -550,7 +550,7 @@ int do_par_for_handler(void *context, halide_task f,
                        int min, int size, uint8_t *closure) {
     if (context) {
         JITUserContext *jit_user_context = (JITUserContext *)context;
-        return (*jit_user_context->handlers.custom_do_par_for)(context, f, min, size, closure);
+        return (*jit_user_context->handlers.custom_do_par_for)(jit_user_context->user_context, f, min, size, closure);
     } else {
         return (*active_handlers.custom_do_par_for)(context, f, min, size, closure);
     }
@@ -559,7 +559,7 @@ int do_par_for_handler(void *context, halide_task f,
 void error_handler_handler(void *context, const char *msg) {
     if (context) {
         JITUserContext *jit_user_context = (JITUserContext *)context;
-        (*jit_user_context->handlers.custom_error)(context, msg);
+        (*jit_user_context->handlers.custom_error)(jit_user_context->user_context, msg);
     } else {
         (*active_handlers.custom_error)(context, msg);
     }
@@ -568,7 +568,7 @@ void error_handler_handler(void *context, const char *msg) {
 int32_t trace_handler(void *context, const halide_trace_event_t *e) {
     if (context) {
         JITUserContext *jit_user_context = (JITUserContext *)context;
-        return (*jit_user_context->handlers.custom_trace)(context, e);
+        return (*jit_user_context->handlers.custom_trace)(jit_user_context->user_context, e);
     } else {
         return (*active_handlers.custom_trace)(context, e);
     }

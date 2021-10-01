@@ -8,6 +8,7 @@
 #include <map>
 
 #include "Param.h"
+#include "UserContextParam.h"
 #include "Parameter.h"
 
 namespace Halide {
@@ -21,7 +22,7 @@ public:
         const ImageParam *image_param{nullptr};
         halide_scalar_value_t value;
         Buffer<> buf;
-        Buffer<> *buf_out_param;
+        Buffer<> *buf_out_param{nullptr};
 
         template<typename T>
         ParamMapping(const Param<T> &p, const T &val)
@@ -45,6 +46,11 @@ public:
         template<typename T>
         ParamMapping(const ImageParam &p, Buffer<T> *buf_ptr)
             : image_param(&p), buf_out_param((Buffer<> *)buf_ptr) {
+        }
+
+        ParamMapping(const UserContextParam &p, void *user_context)
+            : parameter(&p.parameter()) {
+            value.u.handle = user_context;
         }
     };
 

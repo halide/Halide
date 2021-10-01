@@ -825,8 +825,7 @@ struct ErrorBuffer {
 
     static void handler(void *ctx, const char *message) {
         if (ctx) {
-            JITUserContext *ctx1 = (JITUserContext *)ctx;
-            ErrorBuffer *buf = (ErrorBuffer *)ctx1->user_context;
+            ErrorBuffer *buf = (ErrorBuffer *)ctx;
             buf->concat(message);
         }
     }

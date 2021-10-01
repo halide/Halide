@@ -156,6 +156,7 @@ set(HEADER_FILES
     UnpackBuffers.h
     UnrollLoops.h
     UnsafePromises.h
+    UserContextParam.h
     Util.h
     Var.h
     VectorizeLoops.h
