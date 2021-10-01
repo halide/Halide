@@ -40,32 +40,45 @@ public:
         }
     }
 
-    Expr visit(const Let *op) override {
-        Expr new_value = mutate(op->value);
-        hidden.push(op->name);
-        Expr new_body = mutate(op->body);
-        hidden.pop(op->name);
+    template<typename T>
+    auto visit_let(const T *op) -> decltype(op->body) {
+        decltype(op->body) orig = op;
 
-        if (new_value.same_as(op->value) &&
-            new_body.same_as(op->body)) {
-            return op;
+        struct Frame {
+            const T *op;
+            Expr new_value;
+            ScopedBinding<> bind;
+        };
+        std::vector<Frame> frames;
+        decltype(op->body) body;
+        bool values_unchanged = true;
+        do {
+            Expr new_value = mutate(op->value);
+            values_unchanged &= new_value.same_as(op->value);
+            frames.push_back(Frame{op, std::move(new_value), ScopedBinding<>(hidden, op->name)});
+            body = op->body;
+            op = body.template as<T>();
+        } while (op);
+
+        auto new_body = mutate(body);
+
+        if (values_unchanged &&
+            new_body.same_as(body)) {
+            return orig;
         } else {
-            return Let::make(op->name, new_value, new_body);
+            for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+                new_body = T::make(it->op->name, it->new_value, new_body);
+            }
+            return new_body;
         }
     }
 
-    Stmt visit(const LetStmt *op) override {
-        Expr new_value = mutate(op->value);
-        hidden.push(op->name);
-        Stmt new_body = mutate(op->body);
-        hidden.pop(op->name);
+    Expr visit(const Let *op) override {
+        return visit_let(op);
+    }
 
-        if (new_value.same_as(op->value) &&
-            new_body.same_as(op->body)) {
-            return op;
-        } else {
-            return LetStmt::make(op->name, new_value, new_body);
-        }
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
     }
 
     Stmt visit(const For *op) override {
