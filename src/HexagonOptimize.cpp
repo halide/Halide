@@ -575,7 +575,7 @@ private:
                     Expr b0123 = Shuffle::make_interleave({mpys[0].second, mpys[1].second, mpys[2].second, mpys[3].second});
                     b0123 = simplify(b0123);
                     b0123 = reinterpret(Type(b0123.type().code(), 32, 1), b0123);
-                    Expr new_expr = halide_hexagon_add_4mpy(op->type, suffix, a0123, b0123);
+                    Expr new_expr = halide_hexagon_add_4mpy(op->type.with_bits(32), suffix, a0123, b0123);
                     if (op->type.bits() == 16) {
                         // It's actually safe to use this op on 16 bit
                         // results, we just need to narrow the
@@ -703,7 +703,9 @@ private:
             {"halide.hexagon.acc_add_3mpy.vw.vh.b", wild_i32x + native_interleave(halide_hexagon_add_3mpy(Int(32, 0), ".vh.b", wild_i16x, wild_i32)), Pattern::ReinterleaveOp0},
             {"halide.hexagon.acc_add_4mpy.vw.vub.b", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vub.b", wild_u8x, wild_i32)},
             {"halide.hexagon.acc_add_4mpy.vuw.vub.ub", wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), ".vub.ub", wild_u8x, wild_u32)},
+            {"halide.hexagon.acc_add_4mpy.vuw.vub.ub", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vub.ub", wild_u8x, wild_u32)},
             {"halide.hexagon.acc_add_4mpy.vuw.vub.vub", wild_u32x + halide_hexagon_add_4mpy(UInt(32, 0), ".vub.vub", wild_u8x, wild_u8x)},
+            {"halide.hexagon.acc_add_4mpy.vuw.vub.vub", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vub.vub", wild_u8x, wild_u8x)},
             {"halide.hexagon.acc_add_4mpy.vw.vub.vb", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vub.vb", wild_u8x, wild_i8x)},
             {"halide.hexagon.acc_add_4mpy.vw.vb.vb", wild_i32x + halide_hexagon_add_4mpy(Int(32, 0), ".vb.vb", wild_i8x, wild_i8x)},
 
@@ -912,6 +914,12 @@ private:
     }
 
     Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::if_then_else) && op->args[0].type().is_vector()) {
+            const Broadcast *b = op->args[0].as<Broadcast>();
+            if (!b || b->value.type().is_vector()) {
+                return op;
+            }
+        }
         if (op->is_intrinsic(Call::widening_add)) {
             Expr mpyadds = find_mpyadds(Add::make(cast(op->type, op->args[0]), cast(op->type, op->args[1])));
             if (mpyadds.defined()) {
@@ -1069,6 +1077,16 @@ class VectorReducePatterns : public IRMutator {
             return true;
         }
         return false;
+    }
+
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::if_then_else) && op->args[0].type().is_vector()) {
+            const Broadcast *b = op->args[0].as<Broadcast>();
+            if (!b || b->value.type().is_vector()) {
+                return op;
+            }
+        }
+        return IRMutator::visit(op);
     }
 
     Expr visit(const VectorReduce *op) override {
@@ -1333,6 +1351,18 @@ class EliminateInterleaves : public IRMutator {
             return true;
         }
 
+        if (const Load *load = x.as<Load>()) {
+            if (buffers.contains(load->name)) {
+                return buffers.get(load->name) != BufferState::NotInterleaved;
+            }
+        }
+
+        if (const Add *op = x.as<Add>()) {
+            return yields_removable_interleave(op->a) || yields_removable_interleave(op->b);
+        } else if (const Sub *op = x.as<Sub>()) {
+            return yields_removable_interleave(op->a) || yields_removable_interleave(op->b);
+        }
+
         return false;
     }
 
@@ -1362,21 +1392,34 @@ class EliminateInterleaves : public IRMutator {
             return true;
         }
 
+        if (const Load *load = x.as<Load>()) {
+            if (buffers.contains(load->name)) {
+                return buffers.get(load->name) != BufferState::NotInterleaved;
+            }
+        }
+
+        if (const Add *op = x.as<Add>()) {
+            return yields_interleave(op->a) || yields_interleave(op->b);
+        } else if (const Sub *op = x.as<Sub>()) {
+            return yields_interleave(op->a) || yields_interleave(op->b);
+        }
+
         return false;
     }
 
-    // Check that at least one of exprs is an interleave that should
-    // be removed, and that all of the exprs can yield an interleave.
+    // Check that if we were to remove interleaves from exprs, that
+    // we would remove more interleaves than we added deinterleaves.
     bool yields_removable_interleave(const vector<Expr> &exprs) {
-        bool any_is_interleave = false;
+        int removable = 0;
+        int does_not_yield = 0;
         for (const Expr &i : exprs) {
             if (yields_removable_interleave(i)) {
-                any_is_interleave = true;
+                removable++;
             } else if (!yields_interleave(i)) {
-                return false;
+                does_not_yield++;
             }
         }
-        return any_is_interleave;
+        return removable > 0 && removable >= does_not_yield;
     }
 
     // Asserting that x is an expression that can yield an interleave
@@ -1405,8 +1448,24 @@ class EliminateInterleaves : public IRMutator {
             }
         }
 
-        internal_error << "Expression '" << x << "' does not yield an interleave.\n";
-        return x;
+        if (const Load *load = x.as<Load>()) {
+            if (buffers.contains(load->name)) {
+                BufferState &state = buffers.ref(load->name);
+                if (state != BufferState::NotInterleaved) {
+                    state = BufferState::Interleaved;
+                    return x;
+                }
+            }
+        }
+
+        if (const Add *op = x.as<Add>()) {
+            return Add::make(remove_interleave(op->a), remove_interleave(op->b));
+        } else if (const Sub *op = x.as<Sub>()) {
+            return Sub::make(remove_interleave(op->a), remove_interleave(op->b));
+        }
+
+        // If we rewrite x as interleave(deinterleave(x)), we can remove the interleave.
+        return native_deinterleave(x);
     }
 
     template<typename T>
@@ -1415,9 +1474,7 @@ class EliminateInterleaves : public IRMutator {
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
         if (yields_removable_interleave({a, b})) {
-            a = remove_interleave(a);
-            b = remove_interleave(b);
-            expr = T::make(a, b);
+            expr = T::make(remove_interleave(a), remove_interleave(b));
             expr = native_interleave(expr);
         } else if (!a.same_as(op->a) || !b.same_as(op->b)) {
             expr = T::make(a, b);
@@ -1665,9 +1722,8 @@ class EliminateInterleaves : public IRMutator {
             // This is a deinterleave of an interleave! Remove them both.
             return remove_interleave(args[0]);
         } else if (is_interleavable(op) && yields_removable_interleave(args)) {
-            // All the arguments yield interleaves (and one of
-            // them is an interleave), create a new call with the
-            // interleave removed from the arguments.
+            // We can reduce the total number of interleave and deinterleave
+            // operations by removing interleaves from the arguments.
             for (Expr &i : args) {
                 i = remove_interleave(i);
             }
@@ -1910,6 +1966,16 @@ class OptimizeShuffles : public IRMutator {
 
     using IRMutator::visit;
 
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::if_then_else) && op->args[0].type().is_vector()) {
+            const Broadcast *b = op->args[0].as<Broadcast>();
+            if (!b || b->value.type().is_vector()) {
+                return op;
+            }
+        }
+        return IRMutator::visit(op);
+    }
+
     template<typename NodeType, typename T>
     NodeType visit_let(const T *op) {
         // We only care about vector lets.
@@ -2134,6 +2200,16 @@ class ScatterGatherGenerator : public IRMutator {
 
     using IRMutator::visit;
 
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::if_then_else) && op->args[0].type().is_vector()) {
+            const Broadcast *b = op->args[0].as<Broadcast>();
+            if (!b || b->value.type().is_vector()) {
+                return op;
+            }
+        }
+        return IRMutator::visit(op);
+    }
+
     template<typename NodeType, typename T>
     NodeType visit_let(const T *op) {
         // We only care about vector lets.
@@ -2200,7 +2276,7 @@ class ScatterGatherGenerator : public IRMutator {
         Expr new_index = mutate(cast(ty.with_code(Type::Int), index));
         dst_index = mutate(dst_index);
 
-        return Call::make(ty, "gather", {std::move(dst_base), dst_index, src, size - 1, new_index},
+        return Call::make(ty, Call::hvx_gather, {std::move(dst_base), dst_index, src, size - 1, new_index},
                           Call::Intrinsic);
     }
 

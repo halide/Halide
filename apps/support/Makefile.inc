@@ -26,6 +26,9 @@ BIN_DIR ?= bin
 BIN ?= $(BIN_DIR)
 HL_TARGET ?= host
 
+# Running examples on Hexagon requires Hexagon_SDK
+SDK_ROOT ?= ${HOME}/Qualcomm
+HEXAGON_SDK_ROOT ?= ${SDK_ROOT}/Hexagon_SDK/4.0.0
 
 # GENERATOR_BIN is used mainly for Generators, which are always built
 # (and executed) on the host, regardless of the final target; this saves a bit
@@ -54,7 +57,7 @@ GXX ?= g++
 OPTIMIZE ?= -O3
 
 CFLAGS += $(OPTIMIZE) -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ -I $(HALIDE_DISTRIB_PATH)/apps/support/
-CXXFLAGS += $(OPTIMIZE) -std=c++11 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ $(SANITIZER_FLAGS) -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi
+CXXFLAGS += $(OPTIMIZE) -std=c++17 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ $(SANITIZER_FLAGS) -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi
 
 CXX_VERSION = $(shell $(CXX) --version | head -n1)
 ifneq (,$(findstring clang,$(CXX_VERSION)))
@@ -100,10 +103,10 @@ CXX-host ?= $(CXX)
 CXX-host-opencl ?= $(CXX)
 CXX-host-cuda ?= $(CXX)
 CXX-host-metal ?= $(CXX)
-CXX-host-hvx_128 ?= $(CXX)
-CXX-host-hvx_64 ?= $(CXX)
 CXX-host-hvx ?= $(CXX)
+CXX-hexagon-32-qurt-hvx ?= hexagon-clang++
 CXX-arm-64-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/aarch64-linux-android${ANDROID_API_VERSION}-clang++
+CXX-arm-64-android-arm_dot_prod ?= $(CXX-arm-64-android)
 CXX-arm-32-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/armv7a-linux-androideabi${ANDROID_API_VERSION}-clang++
 CXX-arm-64-profile-android ?= $(CXX-arm-64-android)
 CXX-arm-32-profile-android ?= $(CXX-arm-32-android)
@@ -112,20 +115,33 @@ CXXFLAGS-host ?= $(CXXFLAGS)
 CXXFLAGS-host-opencl ?= $(CXXFLAGS)
 CXXFLAGS-host-cuda ?= $(CXXFLAGS)
 CXXFLAGS-host-metal ?= $(CXXFLAGS)
-CXXFLAGS-host-hvx_128 ?= $(CXXFLAGS)
-CXXFLAGS-host-hvx_64 ?= $(CXXFLAGS)
 CXXFLAGS-arm-64-android ?= $(CXXFLAGS)
+CXXFLAGS-arm-64-android-arm_dot_prod ?= $(CXXFLAGS-arm-64-android)
+CXXFLAGS-hexagon-32-qurt-hvx ?= -mv65 $(CXXFLAGS) -I$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/include/qurt -I$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/include/posix
 CXXFLAGS-arm-32-android ?= $(CXXFLAGS)
+
+AR-host ?= ar
+AR-host-opencl ?= $(AR)
+AR-host-cuda ?= $(AR)
+AR-host-metal ?= $(AR)
+AR-host-hvx ?= $(AR)
+AR-hexagon-32-qurt-hvx ?= ar
+AR-arm-64-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/aarch64-linux-android-ar
+AR-arm-64-android-arm_dot_prod ?= $(AR-arm-64-android)
+AR-arm-32-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/armv7a-linux-androideabi-ar
+AR-arm-64-profile-android ?= $(AR-arm-64-android)
+AR-arm-32-profile-android ?= $(AR-arm-32-android)
 
 LDFLAGS-host ?= $(LDFLAGS)
 LDFLAGS-host-opencl ?= $(LDFLAGS)
 LDFLAGS-host-cuda ?= $(LDFLAGS)
 LDFLAGS-host-metal ?= $(LDFLAGS)
-LDFLAGS-host-hvx_128 ?= $(LDFLAGS)
-LDFLAGS-host-hvx_64 ?= $(LDFLAGS)
+LDFLAGS-host-hvx ?= $(LDFLAGS)
+LDFLAGS-hexagon-32-qurt-hvx =
 # Use the statically-linked version of libc++ on Android by default, for simplicity
 # of deployment. (Despite the name, this applies to libc++, not libstdc++)
 LDFLAGS-arm-64-android ?= -llog -fPIE -pie -static-libstdc++
+LDFLAGS-arm-64-android-arm_dot_prod ?= $(LDFLAGS-arm-64-android)
 LDFLAGS-arm-32-android ?= -llog -fPIE -pie -static-libstdc++
 
 # Put HL_TARGET variants of all of these last, to avoid conflict with the android variants

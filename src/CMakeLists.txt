@@ -366,10 +366,11 @@ add_library(Halide
             $<TARGET_OBJECTS:Halide_initmod>)
 add_library(Halide::Halide ALIAS Halide)
 
+target_link_libraries(Halide PUBLIC Threads::Threads)
 target_link_libraries(Halide PRIVATE Halide::LLVM)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
 target_compile_definitions(Halide PRIVATE $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>)
-target_compile_features(Halide PUBLIC cxx_std_11)
+target_compile_features(Halide PUBLIC cxx_std_17)
 
 include(TargetExportScript)
 ## TODO: implement something similar for Windows/link.exe
@@ -391,8 +392,8 @@ if (Halide_WITH_INTROSPECTION)
     target_compile_definitions(Halide PRIVATE WITH_INTROSPECTION)
 endif ()
 
-if (TARGET wabt-obj)
-    target_link_libraries(Halide PRIVATE wabt-obj)
+if (TARGET Halide_wabt)
+    target_link_libraries(Halide PRIVATE Halide_wabt)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
 endif ()
 

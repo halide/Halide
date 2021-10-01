@@ -76,7 +76,6 @@
 namespace Halide {
 namespace Internal {
 
-using std::map;
 using std::ostringstream;
 using std::string;
 using std::vector;
@@ -109,15 +108,8 @@ void lower_impl(const vector<Function> &output_funcs,
                 Module &result_module) {
     auto time_start = std::chrono::high_resolution_clock::now();
 
-    // Compute an environment
-    map<string, Function> env;
-    for (const Function &f : output_funcs) {
-        populate_environment(f, env);
-    }
-
     // Create a deep-copy of the entire graph of Funcs.
-    vector<Function> outputs;
-    std::tie(outputs, env) = deep_copy(output_funcs, env);
+    auto [outputs, env] = deep_copy(output_funcs, build_environment(output_funcs));
 
     bool any_strict_float = strictify_float(env, t);
     result_module.set_any_strict_float(any_strict_float);
@@ -137,9 +129,7 @@ void lower_impl(const vector<Function> &output_funcs,
 
     // Compute a realization order and determine group of functions which loops
     // are to be fused together
-    vector<string> order;
-    vector<vector<string>> fused_groups;
-    std::tie(order, fused_groups) = realization_order(outputs, env);
+    auto [order, fused_groups] = realization_order(outputs, env);
 
     // Try to simplify the RHS/LHS of a function definition by propagating its
     // specializations' conditions
@@ -314,7 +304,7 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after unrolling:", s);
 
     debug(1) << "Vectorizing...\n";
-    s = vectorize_loops(s, env, t);
+    s = vectorize_loops(s, env);
     s = simplify(s);
     log("Lowering after vectorizing:", s);
 
@@ -393,11 +383,16 @@ void lower_impl(const vector<Function> &output_funcs,
     s = remove_dead_allocations(s);
     s = simplify(s);
     s = hoist_loop_invariant_values(s);
-    log("Lowering after removing dead allocations and hoisting loop invariant values:", s);
+    s = hoist_loop_invariant_if_statements(s);
+    log("Lowering after removing dead allocations and hoisting loop invariants:", s);
 
     debug(1) << "Finding intrinsics...\n";
     s = find_intrinsics(s);
     log("Lowering after finding intrinsics:", s);
+
+    debug(1) << "Hoisting prefetches...\n";
+    s = hoist_prefetches(s);
+    log("Lowering after hoisting prefetches:", s);
 
     debug(1) << "Lowering after final simplification:\n"
              << s << "\n\n";

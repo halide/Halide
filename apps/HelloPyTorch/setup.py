@@ -11,12 +11,10 @@ import torch as th
 def generate_pybind_wrapper(path, headers, has_cuda):
     s = "#include \"torch/extension.h\"\n\n"
     if has_cuda:
-        s += "#define HL_PT_CUDA\n"
+        s += "#include \"HalidePyTorchCudaHelpers.h\"\n"
     s += "#include \"HalidePyTorchHelpers.h\"\n"
     for h in headers:
         s += "#include \"{}\"\n".format(os.path.splitext(h)[0]+".pytorch.h")
-    if has_cuda:
-        s += "#undef HL_PT_CUDA\n"
 
     s += "\nPYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {\n"
     for h in headers:

@@ -65,7 +65,7 @@ protected:
 
     /** Emit a declaration. */
     // @{
-    virtual void compile(const LoweredFunc &func);
+    virtual void compile(const LoweredFunc &func, const std::map<std::string, std::string> &metadata_name_map);
     virtual void compile(const Buffer<> &buffer);
     // @}
 
@@ -95,6 +95,7 @@ protected:
     void create_assertion(const std::string &id_cond, const Expr &message);
     void create_assertion(const Expr &cond, const Expr &message);
 
+    Expr scalarize_vector_reduce(const VectorReduce *op);
     enum AppendSpaceIfNeeded {
         DoNotAppendSpace,
         AppendSpace,
@@ -233,6 +234,7 @@ protected:
     void visit(const Fork *) override;
     void visit(const Acquire *) override;
     void visit(const Atomic *) override;
+    void visit(const VectorReduce *) override;
 
     void visit_binop(Type t, const Expr &a, const Expr &b, const char *op);
     void visit_relop(Type t, const Expr &a, const Expr &b, const char *scalar_op, const char *vector_op);
@@ -263,6 +265,12 @@ protected:
 
     /** true if add_vector_typedefs() has been called. */
     bool using_vector_typedefs;
+
+    void emit_argv_wrapper(const std::string &function_name,
+                           const std::vector<LoweredArgument> &args);
+    void emit_metadata_getter(const std::string &function_name,
+                              const std::vector<LoweredArgument> &args,
+                              const std::map<std::string, std::string> &metadata_name_map);
 };
 
 }  // namespace Internal
