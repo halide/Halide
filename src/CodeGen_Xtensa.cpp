@@ -18,6 +18,24 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
+class UsesDmaCopy : public IRGraphVisitor {
+private:
+    using IRGraphVisitor::visit;
+
+
+protected:
+   void visit(const Call *op) override {
+      if (op->name == "halide_xtensa_copy_1d") {
+          uses_dma = true;
+      }
+
+      IRGraphVisitor::visit(op);
+    }
+
+public:
+  bool uses_dma = false;
+};
+
 void CodeGen_Xtensa::compile(const Module &module) {
     CodeGen_C::compile(module);
 }
@@ -106,7 +124,11 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, s
                 stream << get_indent() << "halide_unused(_ucon);";
             }
 
-            stream << "ScopedDmaInitializer dma_initializer;\n";
+            UsesDmaCopy uses_dma;
+            body.accept(&uses_dma);
+            if (uses_dma.uses_dma) {
+                stream << "ScopedDmaInitializer dma_initializer;\n";
+            }
             // stream << "printf(\"" << simple_name << "\\n\");";
             // Emit the body
             print(body);
