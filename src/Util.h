@@ -413,9 +413,55 @@ std::string c_print_name(const std::string &name, bool prefix_underscore = true)
  * of Halide tests. */
 int get_llvm_version();
 
-/** Call the given action in a platform-specific context that provides at least
- * 8MB of stack space. Currently only has any effect on Windows where it uses
- * a Fiber. */
+}  // namespace Internal
+
+/** Set how much stack the compiler should use for compilation in
+ * bytes. This can also be set through the environment variable
+ * HL_COMPILER_STACK_SIZE, though this function takes precedence. A
+ * value of zero causes the compiler to just use the calling stack for
+ * all compilation tasks.
+ *
+ * Calling this or setting the environment variable should not be
+ * necessary. It is provided for three kinds of testing:
+ *
+ * First, Halide uses it in our internal tests to make sure
+ * we're not using a silly amount of stack size on some
+ * canary programs to avoid stack usage regressions.
+ *
+ * Second, if you have a mysterious crash inside a generator, you can
+ * set a larger stack size as a way to test if it's a stack
+ * overflow. Perhaps our default stack size is not large enough for
+ * your program and schedule. Use this call or the environment var as
+ * a workaround, and then open a bug with a reproducer at
+ * github.com/halide/Halide/issues so that we can determine what's
+ * going wrong that is causing your code to use so much stack.
+ *
+ * Third, perhaps using a side-stack is causing problems with
+ * sanitizing, debugging, or profiling tools. If this is a problem,
+ * you can set HL_COMPILER_STACK_SIZE to zero to make Halide stay on
+ * the main thread's stack.
+ */
+void set_compiler_stack_size(size_t);
+
+/** The default amount of stack used for lowering and codegen. 32 MB
+ * ought to be enough for anyone. */
+constexpr size_t default_compiler_stack_size = 32 * 1024 * 1024;
+
+/** Return how much stack size the compiler should use for calls that
+ * go through run_with_large_stack below. Currently that's lowering
+ * and codegen. If no call to set_compiler_stack_size has been made,
+ * this checks the value of the environment variable
+ * HL_COMPILER_STACK_SIZE. If that's unset, it returns
+ * default_compiler_stack_size, defined above. */
+size_t get_compiler_stack_size();
+
+namespace Internal {
+
+/** Call the given action in a platform-specific context that
+ * provides at least the stack space returned by
+ * get_compiler_stack_size. If that value is zero, just calls the
+ * function on the calling thread. Otherwise on Windows this
+ * uses a Fiber, and on other platforms it uses swapcontext. */
 void run_with_large_stack(const std::function<void()> &action);
 
 }  // namespace Internal

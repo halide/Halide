@@ -413,12 +413,13 @@ struct Realize : public StmtNode<Realize> {
     static const IRNodeType _node_type = IRNodeType::Realize;
 };
 
-/** A sequence of statements to be executed in-order. 'rest' may be
- * undefined. Used rest.defined() to find out. */
+/** A sequence of statements to be executed in-order. 'first' is never
+    a Block, so this can be treated as a linked list. */
 struct Block : public StmtNode<Block> {
     Stmt first, rest;
 
     static Stmt make(Stmt first, Stmt rest);
+
     /** Construct zero or more Blocks to invoke a list of statements in order.
      * This method may not return a Block statement if stmts.size() <= 1. */
     static Stmt make(const std::vector<Stmt> &stmts);

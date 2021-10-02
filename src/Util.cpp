@@ -1,3 +1,9 @@
+#ifdef __APPLE__
+// This needs to be defined before any other includes in translation
+// units that use the getcontext/swapcontext family of functions
+#define _XOPEN_SOURCE
+#endif
+
 #include "Util.h"
 #include "Debug.h"
 #include "Error.h"
@@ -15,6 +21,7 @@
 #include <io.h>
 #else
 #include <cstdlib>
+#include <sys/mman.h>  // For mmap
 #include <unistd.h>
 #endif
 #include <sys/stat.h>
@@ -23,6 +30,7 @@
 #ifdef __linux__
 #define CAN_GET_RUNNING_PROGRAM_NAME
 #include <linux/limits.h>  // For PATH_MAX
+#include <ucontext.h>      // For swapcontext
 #endif
 #if defined(_MSC_VER) && !defined(NOMINMAX)
 #define NOMINMAX
@@ -37,6 +45,24 @@
 #ifdef __APPLE__
 #define CAN_GET_RUNNING_PROGRAM_NAME
 #include <mach-o/dyld.h>
+
+// Get swapcontext/makecontext etc.
+//
+// Apple gets cranky about people using these (because at least some
+// part of passing a pointer to a function that takes some arguments
+// as if it's a function that takes no args and then calling it as a
+// variadic function is deprecated in C) but provides no
+// alternatives. It's likely they'll continue to have to allow them on
+// macos for a long time, and these are the entrypoints that tools
+// like tsan know about, so rolling your own asm is worse. We can
+// switch to an alternative when one exists. Meanwhile, we work around
+// their pesky deprecation macro. This is the last include in this
+// file, so there's no need to restore the value of the macro.
+#undef __OSX_AVAILABLE_BUT_DEPRECATED
+#define __OSX_AVAILABLE_BUT_DEPRECATED(...)
+#undef __API_DEPRECATED
+#define __API_DEPRECATED(...)
+#include <ucontext.h>
 #endif
 
 #ifdef _WIN32
@@ -607,9 +633,50 @@ void WINAPI generic_fiber_entry_point(LPVOID argument) {
 
 #endif
 
+}  // namespace Internal
+
+namespace {
+
+struct CompilerStackSize {
+    CompilerStackSize() {
+        std::string stack_size = Internal::get_env_variable("HL_COMPILER_STACK_SIZE");
+        if (stack_size.empty()) {
+            size = default_compiler_stack_size;
+        } else {
+            size = std::atoi(stack_size.c_str());
+        }
+    }
+    size_t size;
+} stack_size;
+
+}  // namespace
+
+void set_compiler_stack_size(size_t sz) {
+    stack_size.size = sz;
+}
+
+size_t get_compiler_stack_size() {
+    return stack_size.size;
+}
+
+namespace Internal {
+
+namespace {
+// We can't reliably pass arguments through makecontext, because
+// the calling convention involves an invalid function pointer
+// cast which passes different numbers of bits on different
+// platforms, so we use a thread local to pass arguments.
+thread_local void *run_with_large_stack_arg = nullptr;
+}  // namespace
+
 void run_with_large_stack(const std::function<void()> &action) {
+    if (stack_size.size == 0) {
+        // User has requested no stack swapping
+        action();
+        return;
+    }
+
 #if _WIN32
-    constexpr auto required_stack = 8 * 1024 * 1024;
 
     // Only exists for its address, which is used to compute remaining stack space.
     ULONG_PTR approx_stack_pos;
@@ -618,8 +685,8 @@ void run_with_large_stack(const std::function<void()> &action) {
     GetCurrentThreadStackLimits(&stack_low, &stack_high);
     ptrdiff_t stack_remaining = (char *)&approx_stack_pos - (char *)stack_low;
 
-    if (stack_remaining < required_stack) {
-        debug(1) << "Insufficient stack space (" << stack_remaining << " bytes). Switching to fiber with " << required_stack << "-byte stack.\n";
+    if (stack_remaining < stack_size.size) {
+        debug(1) << "Insufficient stack space (" << stack_remaining << " bytes). Switching to fiber with " << stack_size.size << "-byte stack.\n";
 
         auto was_a_fiber = IsThreadAFiber();
 
@@ -627,7 +694,7 @@ void run_with_large_stack(const std::function<void()> &action) {
         internal_assert(main_fiber) << "ConvertThreadToFiber failed with code: " << GetLastError() << "\n";
 
         GenericFiberArgs fiber_args{action, main_fiber};
-        auto *lower_fiber = CreateFiber(required_stack, generic_fiber_entry_point, &fiber_args);
+        auto *lower_fiber = CreateFiber(stack_size.size, generic_fiber_entry_point, &fiber_args);
         internal_assert(lower_fiber) << "CreateFiber failed with code: " << GetLastError() << "\n";
 
         SwitchToFiber(lower_fiber);
@@ -649,10 +716,74 @@ void run_with_large_stack(const std::function<void()> &action) {
 
         return;
     }
+#else
+    // On posixy systems we have makecontext / swapcontext
 
+#ifdef HALIDE_WITH_EXCEPTIONS
+    struct Args {
+        const std::function<void()> &run;
+        std::exception_ptr exception = nullptr;  // NOLINT - clang-tidy complains this isn't thrown
+    } args{action};
+
+    auto trampoline = []() {
+        Args *arg = (Args *)run_with_large_stack_arg;
+        try {
+            arg->run();
+        } catch (...) {
+            arg->exception = std::current_exception();
+        }
+    };
+
+#else
+    struct Args {
+        const std::function<void()> &run;
+    } args{action};
+
+    auto trampoline = []() {
+        ((Args *)run_with_large_stack_arg)->run();
+    };
 #endif
 
-    action();
+    ucontext_t context, calling_context;
+
+    // We'll allocate some protected guard pages at the end of the
+    // stack we're making to catch stack overflows when they happen,
+    // as opposed to having them cause silent corruption. We pick an
+    // amount of memory that should be comfortably larger than most
+    // stack frames - 64k.
+    const size_t guard_band = 64 * 1024;
+
+    void *stack = mmap(nullptr, stack_size.size + guard_band, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    internal_assert(stack) << "mmap failed with error " << strerror(errno);
+
+    int err = mprotect((char *)stack + stack_size.size, guard_band, PROT_NONE);
+    internal_assert(err == 0) << "mprotect failed with error " << strerror(errno);
+
+    err = getcontext(&context);
+    internal_assert(err == 0) << "getcontext failed with error " << strerror(errno);
+
+    context.uc_stack.ss_sp = stack;
+    context.uc_stack.ss_size = stack_size.size;
+    context.uc_stack.ss_flags = 0;
+    context.uc_link = &calling_context;
+
+    run_with_large_stack_arg = &args;
+    makecontext(&context, trampoline, 0);
+
+    err = swapcontext(&calling_context, &context);
+    internal_assert(err == 0) << "swapcontext failed with error " << strerror(errno);
+
+    err = munmap(stack, stack_size.size + guard_band);
+    internal_assert(err == 0) << "munmap failed with error " << strerror(errno);
+
+#ifdef HALIDE_WITH_EXCEPTIONS
+    if (args.exception) {
+        debug(1) << "Subcontext threw exception. Rethrowing...\n";
+        std::rethrow_exception(args.exception);
+    }
+#endif
+
+#endif
 }
 
 }  // namespace Internal
