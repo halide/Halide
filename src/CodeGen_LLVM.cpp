@@ -598,9 +598,6 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string &name,
         size_t i = 0;
         for (auto &arg : function->args()) {
             if (args[i].is_buffer()) {
-                // Track this buffer name so that loads and stores from it
-                // don't try to be too aligned.
-                external_buffer.insert(args[i].name);
                 sym_push(args[i].name + ".buffer", &arg);
             } else {
                 Type passed_type = upgrade_type_for_argument_passing(args[i].type);
@@ -2212,7 +2209,6 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
         Value *vpred = codegen(op->predicate);
         Halide::Type value_type = op->value.type();
         Value *val = codegen(op->value);
-        bool is_external = (external_buffer.find(op->name) != external_buffer.end());
         int alignment = value_type.bytes();
         int native_bits = native_vector_bits();
         int native_bytes = native_bits / 8;
@@ -2230,7 +2226,7 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
         // If it is an external buffer, then we cannot assume that the host pointer
         // is aligned to at least the native vector width. However, we may be able to do
         // better than just assuming that it is unaligned.
-        if (is_external && op->param.defined()) {
+        if (op->param.defined()) {
             int host_alignment = op->param.host_alignment();
             alignment = gcd(alignment, host_alignment);
         }
@@ -2301,7 +2297,6 @@ llvm::Value *CodeGen_LLVM::codegen_dense_vector_load(const Type &type, const std
     debug(4) << "Vectorize predicated dense vector load:\n\t"
              << "(" << type << ")" << name << "[ramp(base, 1, " << type.lanes() << ")]\n";
 
-    bool is_external = (external_buffer.find(name) != external_buffer.end());
     int align_bytes = type.bytes();  // The size of a single element
 
     int native_bits = native_vector_bits();
@@ -2324,14 +2319,12 @@ llvm::Value *CodeGen_LLVM::codegen_dense_vector_load(const Type &type, const std
     // If it is an external buffer, then we cannot assume that the host pointer
     // is aligned to at least native vector width. However, we may be able to do
     // better than just assuming that it is unaligned.
-    if (is_external) {
-        if (param.defined()) {
-            int host_alignment = param.host_alignment();
-            align_bytes = gcd(align_bytes, host_alignment);
-        } else if (get_target().has_feature(Target::JIT) && image.defined()) {
-            // If we're JITting, use the actual pointer value to determine alignment for embedded buffers.
-            align_bytes = gcd(align_bytes, (int)(((uintptr_t)image.data()) & std::numeric_limits<int>::max()));
-        }
+    if (param.defined()) {
+        int host_alignment = param.host_alignment();
+        align_bytes = gcd(align_bytes, host_alignment);
+    } else if (get_target().has_feature(Target::JIT) && image.defined()) {
+        // If we're JITting, use the actual pointer value to determine alignment for embedded buffers.
+        align_bytes = gcd(align_bytes, (int)(((uintptr_t)image.data()) & std::numeric_limits<int>::max()));
     }
 
     // For dense vector loads wider than the native vector
@@ -4064,7 +4057,6 @@ void CodeGen_LLVM::visit(const Store *op) {
     };
 
     Value *val = codegen(op->value);
-    bool is_external = (external_buffer.find(op->name) != external_buffer.end());
 
     if (value_type.is_scalar()) {
         // Scalar
@@ -4095,7 +4087,7 @@ void CodeGen_LLVM::visit(const Store *op) {
             // If it is an external buffer, then we cannot assume that the host pointer
             // is aligned to at least the native vector width. However, we may be able to do
             // better than just assuming that it is unaligned.
-            if (is_external && op->param.defined()) {
+            if (op->param.defined()) {
                 int host_alignment = op->param.host_alignment();
                 alignment = gcd(alignment, host_alignment);
             }
