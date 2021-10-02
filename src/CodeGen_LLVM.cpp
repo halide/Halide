@@ -226,7 +226,7 @@ CodeGen_LLVM::CodeGen_LLVM(const Target &t)
       destructor_block(nullptr),
       strict_float(t.has_feature(Target::StrictFloat)),
       llvm_large_code_model(t.has_feature(Target::LLVMLargeCodeModel)) {
-    initialize_llvm();
+    initialize_llvm(t);
 }
 
 void CodeGen_LLVM::set_context(llvm::LLVMContext &context) {
@@ -267,8 +267,12 @@ void CodeGen_LLVM::initialize_llvm(const Target &target) {
                 arg_vec = split_string(args, " ");
             }
             if (target.vector_bits != 0) {
-                std::string min_vector_width_arg = "-aarch64-sve-vector-bits-min=" + std::to_string(target.vector_bits);
-                arg_vec.push_back(min_vector_width_arg);
+                std::string arm_min_vector_width_arg = "-aarch64-sve-vector-bits-min=" + std::to_string(target.vector_bits);
+                arg_vec.push_back(arm_min_vector_width_arg);
+                std::string rvv_min_vector_width_arg = "-riscv-v-vector-bits-min=" + std::to_string(target.vector_bits);
+                arg_vec.push_back(rvv_min_vector_width_arg);
+                std::string rvv_max_vector_width_arg = "-riscv-v-vector-bits-max=" + std::to_string(target.vector_bits);
+                arg_vec.push_back(rvv_max_vector_width_arg);
             }
             vector<const char *> c_arg_vec;
             c_arg_vec.push_back("llc");

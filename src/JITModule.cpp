@@ -247,7 +247,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
                                const std::vector<std::string> &requested_exports) {
 
     // Ensure that LLVM is initialized
-    CodeGen_LLVM::initialize_llvm();
+    CodeGen_LLVM::initialize_llvm(target);
 
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
