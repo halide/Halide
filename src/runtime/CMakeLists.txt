@@ -152,6 +152,8 @@ set(RUNTIME_CXX_FLAGS
     -fno-vectorize
     # Note: we don't want static locals to get thread synchronization stuff.
     -fno-threadsafe-statics
+    # Necessary for using virtual functions in the runtime code.
+    -fno-rtti
     -Wall
     -Wcast-qual
     -Werror
