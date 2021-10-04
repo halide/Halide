@@ -504,8 +504,6 @@ llvm::Triple get_triple_for_target(const Target &target) {
 
         if (target.os == Target::Linux) {
             triple.setOS(llvm::Triple::Linux);
-            // TODO: Check what options there are here.
-            triple.setEnvironment(llvm::Triple::GNUEABIHF);
         } else if (target.os == Target::NoOS) {
             // for baremetal environment
         } else {
