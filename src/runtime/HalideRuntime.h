@@ -546,12 +546,6 @@ struct halide_trace_event_t {
 
     /** The length of the coordinates array */
     int32_t dimensions;
-
-#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
-    // If we don't explicitly mark the default ctor as inline,
-    // certain build configurations can fail (notably iOS)
-    HALIDE_ALWAYS_INLINE halide_trace_event_t() = default;
-#endif
 };
 
 /** Called when Funcs are marked as trace_load, trace_store, or
@@ -617,10 +611,6 @@ struct halide_trace_packet_t {
     // @}
 
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
-    // If we don't explicitly mark the default ctor as inline,
-    // certain build configurations can fail (notably iOS)
-    HALIDE_ALWAYS_INLINE halide_trace_packet_t() = default;
-
     /** Get the coordinates array, assuming this packet is laid out in
      * memory as it was written. The coordinates array comes
      * immediately after the packet header. */
