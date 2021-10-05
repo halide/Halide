@@ -6,7 +6,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
 
     double times[3] = {0.f, 0.f, 0.f};
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 3; i++) {
         for (int c = 0; c < 3; c++) {
             MemoryType mem_type;
             bool use_bound;
@@ -35,8 +35,10 @@ int main(int argc, char **argv) {
 
             Var yo, yi;
             // Place the y loop body in its own function with its own
-            // stack frame by making a parallel loop of size 1.
-            g.split(y, yo, yi, 1).parallel(yi);
+            // stack frame by making a parallel loop of some size
+            // which will be 1 in practice.
+            Param<int> task_size;
+            g.split(y, yo, yi, task_size).parallel(yi);
             f.compute_at(g, yi).store_in(mem_type);
 
             if (use_bound) {
@@ -44,6 +46,7 @@ int main(int argc, char **argv) {
             }
 
             Buffer<float> out(8, 1024);
+            task_size.set(1);
             double t = 1e3 * Tools::benchmark(10, 100, [&]() {
                            g.realize(out);
                        });
