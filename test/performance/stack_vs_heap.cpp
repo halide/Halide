@@ -5,8 +5,27 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
 
+    double times[3] = {0.f, 0.f, 0.f};
     for (int i = 0; i < 10; i++) {
-        for (auto mem_type : {MemoryType::Stack, MemoryType::Heap}) {
+        for (int c = 0; c < 3; c++) {
+            MemoryType mem_type;
+            bool use_bound;
+            // Check three cases:
+
+            if (c == 0) {
+                // Allocation on the stack where size is known.
+                mem_type = MemoryType::Stack;
+                use_bound = true;
+            } else if (c == 1) {
+                // Allocation on the stack where the size is dynamic
+                mem_type = MemoryType::Stack;
+                use_bound = false;
+            } else {
+                // Allocation on the heap where the size is dynamic
+                mem_type = MemoryType::Heap;
+                use_bound = false;
+            }
+
             Func f;
             Var x, y;
             f(x, y) = x / 18.3f + y;
@@ -14,16 +33,32 @@ int main(int argc, char **argv) {
             Func g;
             g(x, y) = f(x, y) + f(x, y + 1);
 
-            g.parallel(y);
-            f.compute_at(g, y).store_in(mem_type);
+            Var yo, yi;
+            // Place the y loop body in its own function with its own
+            // stack frame by making a parallel loop of size 1.
+            g.split(y, yo, yi, 1).parallel(yi);
+            f.compute_at(g, yi).store_in(mem_type);
 
-            Buffer<float> out(32, 1024);
+            if (use_bound) {
+                f.bound_extent(x, 8);
+            }
+
+            Buffer<float> out(8, 1024);
             double t = 1e3 * Tools::benchmark(10, 100, [&]() {
                            g.realize(out);
                        });
-
-            std::cout << mem_type << ": " << t << "\n";
+            times[c] += t;
         }
+    }
+
+    printf("Constant-sized stack allocation: %f\n"
+           "Use alloca: %f\n"
+           "Use malloc: %f\n",
+           times[0], times[1], times[2]);
+
+    if (times[0] > times[1] || times[1] > times[2]) {
+        printf("The runtimes should have been in increasing order\n");
+        return 1;
     }
 
     return 0;
