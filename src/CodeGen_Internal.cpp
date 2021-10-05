@@ -262,6 +262,7 @@ bool function_takes_user_context(const std::string &name) {
 
 bool can_allocation_fit_on_stack(int64_t size) {
     user_assert(size > 0) << "Allocation size should be a positive number\n";
+    // Should match the threshold defined in runtime/pseudostack.cpp
     return (size <= 1024 * 16);
 }
 
