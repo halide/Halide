@@ -229,12 +229,36 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         ++arg_iter;  // skip the user context *
         slot = builder->CreatePointerCast(slot, arg_iter->getType());
         ++arg_iter;  // skip the pointer to the stack slot
-        llvm_size = builder->CreateIntCast(llvm_size, arg_iter->getType(), false);
+        llvm::Type *size_type = arg_iter->getType();
+        llvm_size = builder->CreateIntCast(llvm_size, size_type, false);
         Value *args[3] = {get_user_context(), slot, llvm_size};
         Value *call = builder->CreateCall(malloc_fn, args);
+        llvm::Type *ptr_type = llvm_type_of(type)->getPointerTo();
+        call = builder->CreatePointerCast(call, ptr_type);
 
-        // Fix the type to avoid pointless bitcasts later
-        allocation.ptr = builder->CreatePointerCast(call, llvm_type_of(type)->getPointerTo());
+        // Figure out how much we need to allocate on the real stack
+        Value *returned_null = builder->CreateIsNull(call);
+        debug(0) << "a\n";
+        size_type->dump();
+        Value *size_zero = ConstantInt::get(size_type, 0);
+        debug(0) << "b\n";
+        Value *alloca_size = builder->CreateSelect(returned_null, llvm_size, size_zero);
+        // Allocate it. It's zero most of the time.
+        // TODO: Stack alignment?
+        debug(0) << "c\n";
+        Value *stack_ptr = builder->CreateAlloca(i8_t->getPointerTo(), alloca_size);
+        debug(0) << "d\n";
+        stack_ptr = builder->CreatePointerCast(stack_ptr, ptr_type);
+        // Set the stack ptr to the right thing
+        debug(0) << "e\n";
+        Value *slot_ptr_ptr = builder->CreatePointerCast(slot, ptr_type->getPointerTo());
+        debug(0) << "f\n";
+        Value *ptr = builder->CreateSelect(returned_null, stack_ptr, call);
+        debug(0) << "g\n";
+        builder->CreateStore(ptr, slot_ptr_ptr);
+        debug(0) << "h\n";
+
+        allocation.ptr = ptr;
         allocation.pseudostack_slot = slot;
     } else {
         if (new_expr.defined()) {
