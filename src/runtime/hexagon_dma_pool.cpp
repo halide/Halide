@@ -123,16 +123,16 @@ WEAK int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engi
     virtual_engine_addr->in_use = false;
 
     bool delete_dma_pool = true;
-    for (auto &k : hexagon_dma_pool->virtual_engine_list) {
-        if (k.in_use) {
+    for (const auto &engine : hexagon_dma_pool->virtual_engine_list) {
+        if (engine.in_use) {
             delete_dma_pool = false;
         }
     }
 
     if (delete_dma_pool) {
-        for (auto &i : hexagon_dma_pool->dma_engine_list) {
-            if (i.engine_addr) {
-                int err = nDmaWrapper_FreeDma((t_DmaWrapper_DmaEngineHandle)i.engine_addr);
+        for (const auto &engine : hexagon_dma_pool->dma_engine_list) {
+            if (engine.engine_addr) {
+                int err = nDmaWrapper_FreeDma((t_DmaWrapper_DmaEngineHandle)engine.engine_addr);
                 if (err != QURT_EOK) {
                     error(user_context) << "Hexagon: Failure to Free DMA\n";
                     nRet = err;
@@ -163,17 +163,17 @@ WEAK void *halide_hexagon_allocate_dma_resource(void *user_context) {
             hexagon_dma_pool->dma_engine_list[i].engine_addr = nullptr;
             hexagon_dma_pool->dma_engine_list[i].assigned = false;
             hexagon_dma_pool->virtual_engine_list[i].in_use = false;
-            for (unsigned char &mapped_engine : hexagon_dma_pool->virtual_engine_list[i].mapped_engines) {
-                mapped_engine = 0;
+            for (uint8_t &engine : hexagon_dma_pool->virtual_engine_list[i].mapped_engines) {
+                engine = 0;
             }
             hexagon_dma_pool->virtual_engine_list[i].num_of_engines = 0;
         }
     }
 
-    for (auto &i : hexagon_dma_pool->virtual_engine_list) {
-        if (i.in_use == false) {
-            i.in_use = true;
-            void *virtual_addr = &i;
+    for (auto &engine : hexagon_dma_pool->virtual_engine_list) {
+        if (engine.in_use == false) {
+            engine.in_use = true;
+            void *virtual_addr = &engine;
             return (void *)virtual_addr;
         }
     }

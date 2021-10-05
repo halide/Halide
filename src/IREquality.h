@@ -57,9 +57,9 @@ public:
     }
 
     void clear() {
-        for (auto &entrie : entries) {
-            entrie.a = Expr();
-            entrie.b = Expr();
+        for (auto &entry : entries) {
+            entry.a = Expr();
+            entry.b = Expr();
         }
     }
 

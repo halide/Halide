@@ -1362,16 +1362,14 @@ Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,
                     // The first native LUT, use vlut.
                     result_i = call_intrin_cast(native_result_ty, vlut,
                                                 {idx_i, lut_slices[j], mask[0]});
-                    result_i =
-                        call_intrin_cast(native_result_ty, vlut_acc,
-                                         {result_i, idx_i, lut_slices[j], mask[1]});
+                    result_i = call_intrin_cast(native_result_ty, vlut_acc,
+                                                {result_i, idx_i, lut_slices[j], mask[1]});
                 } else if (max_index >= pass_index * native_lut_elements / lut_passes) {
                     // Not the first native LUT, accumulate the LUT
                     // with the previous result.
-                    for (const auto &m : mask) {
-                        result_i =
-                            call_intrin_cast(native_result_ty, vlut_acc,
-                                             {result_i, idx_i, lut_slices[j], m});
+                    for (Value *v : mask) {
+                        result_i = call_intrin_cast(native_result_ty, vlut_acc,
+                                                    {result_i, idx_i, lut_slices[j], v});
                     }
                 }
             }
