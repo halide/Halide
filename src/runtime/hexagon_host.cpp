@@ -993,7 +993,7 @@ WEAK int halide_hexagon_set_thread_params(void *user_context, int priority, int 
     debug(user_context) << "        " << result << "\n";
     if (result != 0) {
         error(user_context) << "remote_set_thread_params failed.\n";
-        return -1;
+        return result;
     }
     return 0;
 }
