@@ -981,9 +981,9 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
         }
     }
 
-    for (size_t i = 0; i < edges.size(); i++) {
-        edges[i].producer->outgoing_edges.push_back(&(edges[i]));
-        edges[i].consumer->incoming_edges.push_back(&(edges[i]));
+    for (auto &edge : edges) {
+        edge.producer->outgoing_edges.push_back(&edge);
+        edge.consumer->incoming_edges.push_back(&edge);
     }
 
     // Compute transitive dependencies
