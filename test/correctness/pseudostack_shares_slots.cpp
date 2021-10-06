@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
         for (int sz = 20000; sz <= 20016; sz += 8) {
             mallocs.clear();
             p.set(sz);
-            chain.back().realize({sz});
+            chain.back().realize({sz * 4});
             int sz1 = sz + 2 * 20 - 1;
             int sz2 = sz1 - 2;
             if (mallocs.size() != 2 ||
@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
         for (int sz = 160000; sz <= 160128; sz += 64) {
             mallocs.clear();
             p.set(sz);
-            chain.back().realize({sz});
+            chain.back().realize({sz * 4});
             int sz1 = sz / 4 + 23;
             int sz2 = sz1 - 2;
             int sz3 = sz + 19;
