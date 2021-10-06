@@ -483,8 +483,7 @@ void CodeGen_X86::visit(const Call *op) {
     // clang-format on
 
     vector<Expr> matches;
-    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
-        const Pattern &pattern = patterns[i];
+    for (const auto &pattern : patterns) {
         if (expr_match(pattern.pattern, op, matches)) {
             value = call_overloaded_intrin(op->type, pattern.intrin, matches);
             if (value) {

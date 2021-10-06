@@ -977,8 +977,8 @@ void CodeGen_ARM::visit(const Store *op) {
         int alignment = t.bytes();
 
         // Codegen the lets
-        for (size_t i = 0; i < lets.size(); i++) {
-            sym_push(lets[i].first, codegen(lets[i].second));
+        for (auto &let : lets) {
+            sym_push(let.first, codegen(let.second));
         }
 
         // Codegen all the vector args.
@@ -1049,8 +1049,8 @@ void CodeGen_ARM::visit(const Store *op) {
         }
 
         // pop the lets from the symbol table
-        for (size_t i = 0; i < lets.size(); i++) {
-            sym_pop(lets[i].first);
+        for (auto &let : lets) {
+            sym_pop(let.first);
         }
 
         return;
