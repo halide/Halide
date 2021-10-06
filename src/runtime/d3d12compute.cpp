@@ -2655,12 +2655,12 @@ static bool d3d12_allocation_cache_put_buffer(void *user_context, d3d12_buffer *
 
     ScopedMutexLock lock(&buffer_pool_lock);
 
-    for (size_t i = 0; i < MaxBuffersInCache; ++i) {
-        if (buffer_pool[i] != nullptr) {
+    for (auto &buffer : buffer_pool) {
+        if (buffer != nullptr) {
             continue;
         }
         TRACEPRINT("caching allocation for later use...\n");
-        buffer_pool[i] = dbuffer;
+        buffer = dbuffer;
         return true;
     }
 
@@ -2812,13 +2812,11 @@ WEAK int halide_d3d12compute_device_release(void *user_context) {
     if (device) {
         d3d12compute_device_sync_internal(device, nullptr);
 
-        for (int i = 0; i < MaxFrames; ++i) {
-            d3d12_frame *frame = &frame_pool[i];
-            release_object(frame);
+        for (auto &frame : frame_pool) {
+            release_object(&frame);
         }
 
-        for (int i = 0; i < MaxBuffersInCache; ++i) {
-            d3d12_buffer *buffer = buffer_pool[i];
+        for (auto &buffer : buffer_pool) {
             release_object(buffer);
         }
 
