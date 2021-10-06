@@ -64,18 +64,12 @@ struct make_int_t {
 
 template<typename LhsInt8, typename RhsInt8>
 bool matmul() {
-    constexpr bool lhs_signed = std::is_signed<LhsInt8>::value;
-    constexpr bool rhs_signed = std::is_signed<RhsInt8>::value;
-
-    auto lhs = typename std::conditional<lhs_signed, make_int_t, make_uint_t>::type{};
-    auto rhs = typename std::conditional<rhs_signed, make_int_t, make_uint_t>::type{};
-
     constexpr int row = 16;
     constexpr int col = 16;
     constexpr int acc = 16;
 
-    Buffer<int8_t> A_buf(acc, row);
-    Buffer<int8_t> B_buf(4, col, acc / 4);
+    Buffer<LhsInt8> A_buf(acc, row);
+    Buffer<RhsInt8> B_buf(4, col, acc / 4);
 
     Var x("x"), y("y");
     RDom r(0, acc);
@@ -226,13 +220,15 @@ auto matmul_uu = &matmul<uint8_t, uint8_t>;
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
     if (!t.has_feature(Target::AVX512_SapphireRapids)) {
-        printf("[SKIP] No AMX support\n");
+        printf("[SKIP] No AMX target enabled\n");
         return 0;
     }
 
     printf("Running AMX matmul (signed/signed)\n");
     if (!matmul_ss()) {
         return -1;
+    } else {
+        printf("Success!\n");
     }
 
     // llvm >= 13.0 is required for unsigned and float AMX instructions
@@ -240,23 +236,30 @@ int main(int argc, char **argv) {
         printf("Running AMX matmul (signed/unsigned)\n");
         if (!matmul_su()) {
             return -1;
+        } else {
+            printf("Success!\n");
         }
 
         printf("Running AMX matmul (unsigned/signed)\n");
         if (!matmul_us()) {
             return -1;
+        } else {
+            printf("Success!\n");
         }
 
         printf("Running AMX matmul (unsigned/unsigned)\n");
         if (!matmul_uu()) {
             return -1;
+        } else {
+            printf("Success!\n");
         }
 
         printf("Running AMX matmul (bf16)\n");
         if (!matmul_bf16()) {
             return -1;
+        } else {
+            printf("Success!\n");
         }
     }
-    printf("Success!\n");
     return 0;
 }
