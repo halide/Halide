@@ -37,6 +37,7 @@ public:
     enum Operator {
         Add,
         Sub,
+        ReverseSub,  // in(1) - in(0) instead of in(0) - in(1)
         Mul,
         Less,
         LessEqual,
@@ -53,6 +54,14 @@ private:
 public:
     BinaryOp(const TensorPtr &a, const TensorPtr &b, const TensorPtr &output, Operator op, ActivationFunction activation = ActivationFunction::None)
         : ElementwiseOp({a, b}, {output}), op_(op), activation_(activation) {
+    }
+
+    Operator op() const {
+        return op_;
+    }
+
+    void set_op(Operator op) {
+        op_ = op;
     }
 
     void accept(OpVisitor *v);

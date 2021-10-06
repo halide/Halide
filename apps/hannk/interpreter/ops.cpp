@@ -580,6 +580,8 @@ TResult implement_binary(BinaryOp::Operator op, TOperand a, TOperand b) {
         return a + b;
     case BinaryOp::Sub:
         return a - b;
+    case BinaryOp::ReverseSub:
+        return b - a;
     case BinaryOp::Mul:
         return a * b;
     case BinaryOp::Less:
@@ -612,8 +614,13 @@ void BinaryOp::execute() {
 
         switch (op_) {
         case Add:
+            add_uint8(in1_buf, in1->quantization(), 1, in2_buf, in2->quantization(), 1, out_buf, out->quantization(), activation_);
+            return;
         case Sub:
-            add_uint8(in1_buf, in1->quantization(), 1, in2_buf, in2->quantization(), op_ == Add ? 1 : -1, out_buf, out->quantization(), activation_);
+            add_uint8(in1_buf, in1->quantization(), 1, in2_buf, in2->quantization(), -1, out_buf, out->quantization(), activation_);
+            return;
+        case ReverseSub:
+            add_uint8(in1_buf, in1->quantization(), -1, in2_buf, in2->quantization(), 1, out_buf, out->quantization(), activation_);
             return;
         case Mul:
             mul_uint8(in1_buf, in1->quantization(), in2_buf, in2->quantization(), out_buf, out->quantization(), activation_);

@@ -165,6 +165,7 @@ class VerifyAllAllocated : public TensorVisitor {
 void Interpreter::init(InterpreterOptions options) {
     pad_for_ops(model_.get());
     in_place(model_.get());
+    legalize_broadcasts(model_.get());
     fold_constants(model_.get());
     remove_dead_ops(model_.get());
 

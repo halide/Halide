@@ -482,4 +482,47 @@ void fold_constants(OpGroup *root) {
     }
 }
 
+namespace {
+
+class LegalizeBroadcasts : public OpVisitor {
+    void visit(BinaryOp *op) {
+        switch (op->op()) {
+        case BinaryOp::Add:
+        case BinaryOp::ReverseSub:
+        case BinaryOp::Sub:
+        case BinaryOp::Mul: {
+            TensorPtr in0 = op->input(0);
+            TensorPtr in1 = op->input(1);
+
+            if (in0->rank() >= 1 && in1->rank() >= 1 &&
+                in0->extent(0) == 1 && in1->extent(0) > 1) {
+                op->set_input(0, in1);
+                op->set_input(1, in0);
+                if (op->op() == BinaryOp::Sub) {
+                    op->set_op(BinaryOp::ReverseSub);
+                } else if (op->op() == BinaryOp::ReverseSub) {
+                    op->set_op(BinaryOp::Sub);
+                }
+            }
+            return;
+        }
+        default:
+            break;
+        }
+    }
+
+    void visit(OpGroup *op) {
+        for (int i = 0; i < op->op_count(); i++) {
+            op->op(i)->accept(this);
+        }
+    }
+};
+
+}  // namespace
+
+void legalize_broadcasts(OpGroup *op) {
+    LegalizeBroadcasts legalizer;
+    op->accept(&legalizer);
+}
+
 }  // namespace hannk

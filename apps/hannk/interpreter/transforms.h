@@ -19,6 +19,10 @@ void pad_for_ops(OpGroup *op);
 // constant as well.
 void fold_constants(OpGroup *op);
 
+// For BinaryOps that support broadcasting of dimensions with extent=1,
+// ensure that the broadcast dimension is in the second input.
+void legalize_broadcasts(OpGroup *op);
+
 }  // namespace hannk
 
 #endif  // HANNK_TRANSFORMS_H
