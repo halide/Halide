@@ -19,6 +19,21 @@ struct ClampUnsafeAccesses : IRMutator {
 protected:
     using IRMutator::visit;
 
+    Expr visit(const Let *let) override {
+        return visit_let<Let, Expr>(let);
+    }
+
+    Stmt visit(const LetStmt *let) override {
+        return visit_let<LetStmt, Stmt>(let);
+    }
+
+    Expr visit(const Variable *var) override {
+        if (is_inside_indexing && let_vars.count(var->name) != 0) {
+            index_vars.insert(var->name);
+        }
+        return var;
+    }
+
     Expr visit(const Call *call) override {
         // TODO: should this be call->is_intrinsic()?
         if (call->call_type != Call::Halide) {
@@ -42,11 +57,31 @@ protected:
         return IRMutator::visit(call);
     }
 
+private:
+    template<typename L, typename Body>
+    Body visit_let(const L *let) {
+        let_vars.insert(let->name);
+        Body body = mutate(let->body);
+
+        Expr value;
+        if (index_vars.count(let->name) != 0) {
+            ScopedValue s(is_inside_indexing, true);
+            value = mutate(let->value);
+            index_vars.erase(let->name);
+        } else {
+            value = mutate(let->value);
+        }
+
+        let_vars.erase(let->name);
+        return L::make(let->name, std::move(value), std::move(body));
+    }
+
     bool bounds_smaller_than_type(const Interval &bounds, Type type) {
         return bounds.is_bounded() && !(equal(bounds.min, type.min()) && equal(bounds.max, type.max()));
     }
 
-private:
+    std::set<std::string> let_vars;
+    std::set<std::string> index_vars;
     bool is_inside_indexing = false;
 };
 
