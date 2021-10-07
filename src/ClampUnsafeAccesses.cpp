@@ -32,13 +32,9 @@ protected:
                 //   3. The schedule for f uses RoundUp or ShiftInwards
                 //   4. h is not compute_at within f's produce node
 
-                auto [new_args, _] = mutate_with_changes(call->args);
-                return Max::make(
-                    Min::make(
-                        Call::make(call->type, call->name, new_args, call->call_type,
-                                   call->func, call->value_index, call->image, call->param),
-                        std::move(bounds.max)),
-                    std::move(bounds.min));
+                auto [new_args, changed] = mutate_with_changes(call->args);
+                Expr new_call = changed ? call : Call::make(call->type, call->name, new_args, call->call_type, call->func, call->value_index, call->image, call->param);
+                return Max::make(Min::make(new_call, std::move(bounds.max)), std::move(bounds.min));
             }
         }
 
