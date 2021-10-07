@@ -16,6 +16,7 @@
 #include "BoundsInference.h"
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
+#include "ClampUnsafeAccesses.h"
 #include "CompilerLogger.h"
 #include "Debug.h"
 #include "DebugArguments.h"
@@ -161,6 +162,12 @@ void lower_impl(const vector<Function> &output_funcs,
     // function. Used in later bounds inference passes.
     debug(1) << "Computing bounds of each function's value\n";
     FuncValueBounds func_bounds = compute_function_value_bounds(order, env);
+
+    // Clamp unsafe instances where a Func f accesses a Func g using
+    // an index which depends on a third Func h.
+    debug(1) << "Clamping unsafe data-dependent accesses\n";
+    s = clamp_unsafe_accesses(s, env, func_bounds);
+    log("Lowering after clamping unsafe data-dependent accesses", s);
 
     // This pass injects nested definitions of variable names, so we
     // can't simplify statements from here until we fix them up. (We
