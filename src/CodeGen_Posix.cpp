@@ -240,9 +240,14 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         Value *returned_null = builder->CreateIsNull(call);
         Value *size_zero = ConstantInt::get(size_type, 0);
         Value *alloca_size = builder->CreateSelect(returned_null, llvm_size, size_zero);
+
         // Allocate it. It's zero most of the time.
-        Value *stack_ptr = builder->CreateAlloca(i8_t->getPointerTo(), alloca_size);
-        stack_ptr = builder->CreatePointerCast(stack_ptr, ptr_type);
+        AllocaInst *alloca_inst = builder->CreateAlloca(i8_t->getPointerTo(), alloca_size);
+
+        // Give it the right alignment
+        alloca_inst->setAlignment(llvm::Align(native_vector_bits() / 8));
+
+        Value *stack_ptr = builder->CreatePointerCast(alloca_inst, ptr_type);
         // Set the pseudostack slot ptr to the right thing so we reuse
         // this pointer next time around.
         Value *slot_ptr_ptr = builder->CreatePointerCast(slot, ptr_type->getPointerTo());
