@@ -237,24 +237,34 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         call = builder->CreatePointerCast(call, ptr_type);
 
         // Figure out how much we need to allocate on the real stack
-        Value *returned_null = builder->CreateIsNull(call);
-        Value *size_zero = ConstantInt::get(size_type, 0);
-        Value *alloca_size = builder->CreateSelect(returned_null, llvm_size, size_zero);
+        Value *returned_non_null = builder->CreateIsNotNull(call);
+
+        BasicBlock *here_bb = builder->GetInsertBlock();
+        BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
+        BasicBlock *need_alloca_bb = BasicBlock::Create(*context, "then_bb", function);
+
+        builder->CreateCondBr(returned_non_null, after_bb, need_alloca_bb, very_likely_branch);
+        builder->SetInsertPoint(need_alloca_bb);
 
         // Allocate it. It's zero most of the time.
-        AllocaInst *alloca_inst = builder->CreateAlloca(i8_t->getPointerTo(), alloca_size);
-
+        AllocaInst *alloca_inst = builder->CreateAlloca(i8_t->getPointerTo(), llvm_size);
         // Give it the right alignment
         alloca_inst->setAlignment(llvm::Align(native_vector_bits() / 8));
 
-        Value *stack_ptr = builder->CreatePointerCast(alloca_inst, ptr_type);
         // Set the pseudostack slot ptr to the right thing so we reuse
         // this pointer next time around.
+        Value *stack_ptr = builder->CreatePointerCast(alloca_inst, ptr_type);
         Value *slot_ptr_ptr = builder->CreatePointerCast(slot, ptr_type->getPointerTo());
-        Value *ptr = builder->CreateSelect(returned_null, stack_ptr, call);
-        builder->CreateStore(ptr, slot_ptr_ptr);
+        builder->CreateStore(stack_ptr, slot_ptr_ptr);
 
-        allocation.ptr = ptr;
+        builder->CreateBr(after_bb);
+        builder->SetInsertPoint(after_bb);
+
+        PHINode *phi = builder->CreatePHI(ptr_type, 2);
+        phi->addIncoming(stack_ptr, need_alloca_bb);
+        phi->addIncoming(call, here_bb);
+
+        allocation.ptr = phi;
         allocation.pseudostack_slot = slot;
     } else {
         if (new_expr.defined()) {
