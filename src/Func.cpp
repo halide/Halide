@@ -2785,7 +2785,7 @@ vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &exprs) const {
     }
 
     CountImplicitVars count(exprs);
-    for (auto &e : exprs) {
+    for (const auto &e : exprs) {
         e.accept(&count);
     }
 
