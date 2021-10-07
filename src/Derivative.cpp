@@ -1206,8 +1206,8 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
     // Add Let expressions
     adjoint = add_let_expression(adjoint, let_var_mapping, let_variables);
     vector<Expr> lhs = call_args;
-    for (auto &lh : lhs) {
-        lh = add_let_expression(lh, let_var_mapping, let_variables);
+    for (auto &arg : lhs) {
+        arg = add_let_expression(arg, let_var_mapping, let_variables);
     }
     Expr adjoint_before_canonicalize = adjoint;
     vector<Expr> lhs_before_canonicalize = lhs;
@@ -1422,9 +1422,9 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
     // When we update d_f, the second n would be replaced by y.
     // We need to make sure we also update the call argument to g.
     // Adjoint is automatically handled in the loop above.
-    for (auto &lh : lhs) {
+    for (auto &let : lhs) {
         for (const auto &it : lhs_substitute_map) {
-            lh = substitute(it.first, it.second, lh);
+            let = substitute(it.first, it.second, let);
         }
     }
 

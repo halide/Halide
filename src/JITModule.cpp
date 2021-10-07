@@ -182,12 +182,12 @@ public:
     }
 
     uint64_t getSymbolAddress(const std::string &name) override {
-        for (auto &m : modules) {
-            std::map<std::string, JITModule::Symbol>::const_iterator iter = m.exports().find(name);
-            if (iter == m.exports().end() && starts_with(name, "_")) {
-                iter = m.exports().find(name.substr(1));
+        for (const auto &module : modules) {
+            std::map<std::string, JITModule::Symbol>::const_iterator iter = module.exports().find(name);
+            if (iter == module.exports().end() && starts_with(name, "_")) {
+                iter = module.exports().find(name.substr(1));
             }
-            if (iter != m.exports().end()) {
+            if (iter != module.exports().end()) {
                 return (uint64_t)iter->second.address;
             }
         }
