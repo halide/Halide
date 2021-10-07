@@ -900,8 +900,8 @@ void compile_multitarget(const std::string &fn_name,
         Expr can_use;
         if (target != base_target) {
             std::vector<Expr> features_struct_args;
-            for (uint64_t cur_target_feature : cur_target_features) {
-                features_struct_args.emplace_back(UIntImm::make(UInt(64), cur_target_feature));
+            for (uint64_t feature : cur_target_features) {
+                features_struct_args.emplace_back(UIntImm::make(UInt(64), feature));
             }
             can_use = Call::make(Int(32), "halide_can_use_target_features",
                                  {kFeaturesWordCount, Call::make(type_of<uint64_t *>(), Call::make_struct, features_struct_args, Call::Intrinsic)},
