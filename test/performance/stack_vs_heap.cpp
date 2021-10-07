@@ -59,8 +59,8 @@ int main(int argc, char **argv) {
            "Use malloc: %f\n",
            times[0], times[1], times[2]);
 
-    if (times[0] > times[1] || times[1] > times[2]) {
-        printf("The runtimes should have been in increasing order\n");
+    if (times[0] > times[2] || times[1] > times[2]) {
+        printf("Stack allocations should be cheaper than heap allocations\n");
         return 1;
     }
 
