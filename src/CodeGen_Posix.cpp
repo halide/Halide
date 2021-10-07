@@ -38,8 +38,8 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     Expr total_size_hi = make_zero(UInt(64));
 
     Expr low_mask = make_const(UInt(64), (uint64_t)(0xffffffff));
-    for (size_t i = 0; i < extents.size(); i++) {
-        Expr next_extent = cast(UInt(32), max(0, extents[i]));
+    for (const auto &extent : extents) {
+        Expr next_extent = cast(UInt(32), max(0, extent));
 
         // Update total_size >> 32. This math can't overflow due to
         // the loop invariant:

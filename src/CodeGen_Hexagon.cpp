@@ -1362,16 +1362,14 @@ Value *CodeGen_Hexagon::vlut256(Value *lut, Value *idx, int min_index,
                     // The first native LUT, use vlut.
                     result_i = call_intrin_cast(native_result_ty, vlut,
                                                 {idx_i, lut_slices[j], mask[0]});
-                    result_i =
-                        call_intrin_cast(native_result_ty, vlut_acc,
-                                         {result_i, idx_i, lut_slices[j], mask[1]});
+                    result_i = call_intrin_cast(native_result_ty, vlut_acc,
+                                                {result_i, idx_i, lut_slices[j], mask[1]});
                 } else if (max_index >= pass_index * native_lut_elements / lut_passes) {
                     // Not the first native LUT, accumulate the LUT
                     // with the previous result.
-                    for (int m = 0; m < 2; m++) {
-                        result_i =
-                            call_intrin_cast(native_result_ty, vlut_acc,
-                                             {result_i, idx_i, lut_slices[j], mask[m]});
+                    for (Value *v : mask) {
+                        result_i = call_intrin_cast(native_result_ty, vlut_acc,
+                                                    {result_i, idx_i, lut_slices[j], v});
                     }
                 }
             }
@@ -2080,8 +2078,8 @@ Value *CodeGen_Hexagon::codegen_cache_allocation_size(
     Expr total_size_hi = make_zero(UInt(32));
 
     Expr low_mask = make_const(UInt(32), (uint32_t)(0xfffff));
-    for (size_t i = 0; i < extents.size(); i++) {
-        Expr next_extent = cast(UInt(32), extents[i]);
+    for (const auto &extent : extents) {
+        Expr next_extent = cast(UInt(32), extent);
 
         // Update total_size >> 24. This math can't overflow due to
         // the loop invariant:
@@ -2224,8 +2222,8 @@ void CodeGen_Hexagon::visit(const Allocate *alloc) {
         }
         // Calculate size of allocation.
         Expr size = alloc->type.bytes();
-        for (size_t i = 0; i < alloc->extents.size(); i++) {
-            size *= alloc->extents[i];
+        for (const auto &extent : alloc->extents) {
+            size *= extent;
         }
         size += allocation_padding(alloc->type);
         Expr new_expr =
