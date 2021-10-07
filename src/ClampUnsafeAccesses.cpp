@@ -27,9 +27,7 @@ protected:
 
         if (is_inside_indexing) {
             auto bounds = func_bounds.at({call->name, call->value_index});
-            const Expr &bounds_are_non_trivial = call->type.min() < bounds.min && bounds.max < call->type.max();
-
-            if (bounds.is_bounded() && can_prove(bounds_are_non_trivial)) {
+            if (bounds_smaller_than_type(bounds, call->type)) {
                 // TODO: check additional conditions for clamping h in f(x) = g(h(x))
                 //   3. The schedule for f uses RoundUp or ShiftInwards
                 //   4. h is not compute_at within f's produce node
@@ -46,6 +44,15 @@ protected:
 
         ScopedValue s(is_inside_indexing, true);
         return IRMutator::visit(call);
+    }
+
+    bool bounds_smaller_than_type(const Interval &bounds, Type type) {
+        if (!bounds.is_bounded()) {
+            return false;
+        }
+
+        const Expr &bounds_are_non_trivial = type.min() < bounds.min && bounds.max < type.max();
+        return can_prove(bounds_are_non_trivial);
     }
 
 private:
