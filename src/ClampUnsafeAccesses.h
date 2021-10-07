@@ -17,8 +17,8 @@ namespace Halide::Internal {
  * 3. The schedule for f uses RoundUp or ShiftInwards
  * 4. h is not compute_at within f's produce node
  */
-Stmt clamp_unsafe_accesses(const Stmt& s, const std::map<std::string, Function> &env, FuncValueBounds &func_bounds);
+Stmt clamp_unsafe_accesses(const Stmt &s, const std::map<std::string, Function> &env, FuncValueBounds &func_bounds);
 
-}
+}  // namespace Halide::Internal
 
 #endif  // HALIDE_CLAMPUNSAFEACCESSES_H
