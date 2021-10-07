@@ -228,8 +228,8 @@ struct CheckVars : public IRGraphVisitor {
         }
 
         // Is it a pure argument?
-        for (size_t i = 0; i < pure_args.size(); i++) {
-            if (var->name == pure_args[i]) {
+        for (auto &pure_arg : pure_args) {
+            if (var->name == pure_arg) {
                 return;
             }
         }
@@ -391,8 +391,8 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         << "In pure definition of Func \"" << name() << "\":\n"
         << "Func with extern definition cannot be given a pure definition.\n";
     user_assert(!name().empty()) << "A Func may not have an empty name.\n";
-    for (size_t i = 0; i < values.size(); i++) {
-        user_assert(values[i].defined())
+    for (auto &value : values) {
+        user_assert(value.defined())
             << "In pure definition of Func \"" << name() << "\":\n"
             << "Undefined expression in right-hand-side of definition.\n";
     }
@@ -467,10 +467,10 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     ReductionDomain rdom;
     contents->init_def = Definition(init_def_args, values, rdom, true);
 
-    for (size_t i = 0; i < args.size(); i++) {
-        Dim d = {args[i], ForType::Serial, DeviceAPI::None, DimType::PureVar};
+    for (const auto &arg : args) {
+        Dim d = {arg, ForType::Serial, DeviceAPI::None, DimType::PureVar};
         contents->init_def.schedule().dims().push_back(d);
-        StorageDim sd = {args[i]};
+        StorageDim sd = {arg};
         contents->func_schedule.storage_dims().push_back(sd);
     }
 
@@ -507,8 +507,8 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
         << "Func " << name() << " cannot be given a new update definition, "
         << "because it has already been realized or used in the definition of another Func.\n";
 
-    for (size_t i = 0; i < values.size(); i++) {
-        user_assert(values[i].defined())
+    for (auto &value : values) {
+        user_assert(value.defined())
             << "In update definition " << update_idx << " of Func \"" << name() << "\":\n"
             << "Undefined expression in right-hand-side of update.\n";
     }
@@ -652,12 +652,11 @@ void Function::define_update(const vector<Expr> &_args, vector<Expr> values) {
 
     // First add any reduction domain
     if (check.reduction_domain.defined()) {
-        for (size_t i = 0; i < check.reduction_domain.domain().size(); i++) {
+        for (const auto &rvar : check.reduction_domain.domain()) {
             // Is this RVar actually pure (safe to parallelize and
             // reorder)? It's pure if one value of the RVar can never
             // access from the same memory that another RVar is
             // writing to.
-            const ReductionVariable &rvar = check.reduction_domain.domain()[i];
             const string &v = rvar.var;
 
             bool pure = can_parallelize_rvar(v, name(), r);
@@ -715,9 +714,9 @@ void Function::define_extern(const std::string &function_name,
 
     std::vector<string> arg_names;
     std::vector<Expr> arg_exprs;
-    for (size_t i = 0; i < args.size(); i++) {
-        arg_names.push_back(args[i].name());
-        arg_exprs.push_back(args[i]);
+    for (const auto &arg : args) {
+        arg_names.push_back(arg.name());
+        arg_exprs.push_back(arg);
     }
     contents->args = arg_names;
     contents->extern_function_name = function_name;

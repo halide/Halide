@@ -182,13 +182,12 @@ public:
     }
 
     uint64_t getSymbolAddress(const std::string &name) override {
-        for (size_t i = 0; i < modules.size(); i++) {
-            const JITModule &m = modules[i];
-            std::map<std::string, JITModule::Symbol>::const_iterator iter = m.exports().find(name);
-            if (iter == m.exports().end() && starts_with(name, "_")) {
-                iter = m.exports().find(name.substr(1));
+        for (const auto &module : modules) {
+            std::map<std::string, JITModule::Symbol>::const_iterator iter = module.exports().find(name);
+            if (iter == module.exports().end() && starts_with(name, "_")) {
+                iter = module.exports().find(name.substr(1));
             }
-            if (iter != m.exports().end()) {
+            if (iter != module.exports().end()) {
                 return (uint64_t)iter->second.address;
             }
         }
@@ -301,8 +300,8 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     // TODO: If this ever works in LLVM, this would allow profiling of JIT code with symbols with oprofile.
     //listeners.push_back(llvm::createOProfileJITEventListener());
 
-    for (size_t i = 0; i < listeners.size(); i++) {
-        ee->RegisterJITEventListener(listeners[i]);
+    for (auto &listener : listeners) {
+        ee->RegisterJITEventListener(listener);
     }
 
     // Retrieve function pointers from the compiled module (which also
@@ -321,16 +320,16 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
         exports[function_name + "_argv"] = argv_entrypoint;
     }
 
-    for (size_t i = 0; i < requested_exports.size(); i++) {
-        exports[requested_exports[i]] = compile_and_get_function(*ee, requested_exports[i]);
+    for (const auto &requested_export : requested_exports) {
+        exports[requested_export] = compile_and_get_function(*ee, requested_export);
     }
 
     debug(2) << "Finalizing object\n";
     ee->finalizeObject();
     // Do any target-specific post-compilation module meddling
-    for (size_t i = 0; i < listeners.size(); i++) {
-        ee->UnregisterJITEventListener(listeners[i]);
-        delete listeners[i];
+    for (auto &listener : listeners) {
+        ee->UnregisterJITEventListener(listener);
+        delete listener;
     }
     listeners.clear();
 
