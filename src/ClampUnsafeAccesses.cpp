@@ -29,7 +29,7 @@ protected:
 
     Expr visit(const Variable *var) override {
         if (is_inside_indexing && let_vars.contains(var->name)) {
-            index_vars.push(var->name, true);
+            let_vars.ref(var->name) = true;
         }
         return var;
     }
@@ -43,9 +43,7 @@ protected:
         if (is_inside_indexing) {
             auto bounds = func_bounds.at({call->name, call->value_index});
             if (bounds_smaller_than_type(bounds, call->type)) {
-                // TODO: check additional conditions for clamping h in f(x) = g(h(x))
-                //   3. The schedule for f uses RoundUp or ShiftInwards
-                //   4. h is not compute_at within f's produce node
+                // TODO: check that the clamped function's allocation bounds might be wider than its compute bounds
 
                 auto [new_args, changed] = mutate_with_changes(call->args);
                 Expr new_call = changed ? call : Call::make(call->type, call->name, new_args, call->call_type, call->func, call->value_index, call->image, call->param);
@@ -60,19 +58,18 @@ protected:
 private:
     template<typename L, typename Body>
     Body visit_let(const L *let) {
-        let_vars.push(let->name, true);
+        ScopedBinding<bool> binding(let_vars, let->name, false);
+
         Body body = mutate(let->body);
 
         Expr value;
-        if (index_vars.contains(let->name)) {
+        if (let_vars.get(let->name)) {
             ScopedValue s(is_inside_indexing, true);
             value = mutate(let->value);
-            index_vars.pop(let->name);
         } else {
             value = mutate(let->value);
         }
 
-        let_vars.pop(let->name);
         return L::make(let->name, std::move(value), std::move(body));
     }
 
@@ -80,8 +77,12 @@ private:
         return bounds.is_bounded() && !(equal(bounds.min, type.min()) && equal(bounds.max, type.max()));
     }
 
+    /**
+     * A let-var is marked "true" if is used somewhere in an indexing expression.
+     * visit_let will process its value binding with is_inside_indexing set when
+     * this is the case.
+     */
     Scope<bool> let_vars;
-    Scope<bool> index_vars;
     bool is_inside_indexing = false;
 };
 
