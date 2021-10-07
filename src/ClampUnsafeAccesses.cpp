@@ -28,7 +28,7 @@ protected:
     }
 
     Expr visit(const Variable *var) override {
-        if (is_inside_indexing && let_vars.count(var->name) != 0) {
+        if (is_inside_indexing && let_vars.find(var->name) != let_vars.end()) {
             index_vars.insert(var->name);
         }
         return var;
@@ -64,7 +64,7 @@ private:
         Body body = mutate(let->body);
 
         Expr value;
-        if (index_vars.count(let->name) != 0) {
+        if (index_vars.find(let->name) != index_vars.end()) {
             ScopedValue s(is_inside_indexing, true);
             value = mutate(let->value);
             index_vars.erase(let->name);
