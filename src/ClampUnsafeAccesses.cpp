@@ -1,6 +1,6 @@
 #include "ClampUnsafeAccesses.h"
+#include "IREquality.h"
 #include "IRMutator.h"
-#include "IROperator.h"
 #include "IRPrinter.h"
 #include "Simplify.h"
 
@@ -43,12 +43,7 @@ protected:
     }
 
     bool bounds_smaller_than_type(const Interval &bounds, Type type) {
-        if (!bounds.is_bounded()) {
-            return false;
-        }
-
-        const Expr &bounds_are_non_trivial = type.min() < bounds.min && bounds.max < type.max();
-        return can_prove(bounds_are_non_trivial);
+        return bounds.is_bounded() && !(equal(bounds.min, type.min()) && equal(bounds.max, type.max()));
     }
 
 private:
