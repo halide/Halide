@@ -68,21 +68,20 @@ class ExtractBlockSize : public IRVisitor {
         Scope<Interval> scope;
         scope.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
         // For non-rectangular thread loops, use a bounding box. We'll inject if statements later.
-        for (int i = 0; i < 4; i++) {
-            if (block_extent[i].defined() &&
-                expr_uses_var(block_extent[i], op->name)) {
-                block_extent[i] = simplify(common_subexpression_elimination(block_extent[i]));
-                block_extent[i] = simplify(bounds_of_expr_in_scope(block_extent[i], scope).max);
+        for (Expr &e : block_extent) {
+            if (e.defined() && expr_uses_var(e, op->name)) {
+                e = simplify(common_subexpression_elimination(e));
+                e = simplify(bounds_of_expr_in_scope(e, scope).max);
             }
         }
     }
 
     void visit(const LetStmt *op) override {
         IRVisitor::visit(op);
-        for (int i = 0; i < 4; i++) {
-            if (block_extent[i].defined() &&
-                expr_uses_var(block_extent[i], op->name)) {
-                block_extent[i] = simplify(Let::make(op->name, op->value, block_extent[i]));
+        for (Expr &e : block_extent) {
+            if (e.defined() &&
+                expr_uses_var(e, op->name)) {
+                e = simplify(Let::make(op->name, op->value, e));
             }
         }
     }
@@ -482,8 +481,8 @@ private:
         alloc.type = op->type;
         alloc.liveness = IntInterval(barrier_stage, barrier_stage);
         alloc.size = 1;
-        for (size_t i = 0; i < op->extents.size(); i++) {
-            alloc.size *= op->extents[i];
+        for (const auto &extent : op->extents) {
+            alloc.size *= extent;
         }
         alloc.size = simplify(alloc.size);
         alloc.memory_type = op->memory_type;
@@ -1121,8 +1120,8 @@ class ExtractRegisterAllocations : public IRMutator {
         alloc.type = op->type;
         alloc.size = 1;
         alloc.loop_var = loop_var;
-        for (size_t i = 0; i < op->extents.size(); i++) {
-            alloc.size *= op->extents[i];
+        for (const auto &extent : op->extents) {
+            alloc.size *= extent;
         }
         alloc.size = simplify(mutate(alloc.size));
         alloc.memory_type = op->memory_type;
