@@ -28,8 +28,8 @@ protected:
     }
 
     Expr visit(const Variable *var) override {
-        if (is_inside_indexing && let_vars.find(var->name) != let_vars.end()) {
-            index_vars.insert(var->name);
+        if (is_inside_indexing && let_vars.contains(var->name)) {
+            index_vars.push(var->name, true);
         }
         return var;
     }
@@ -60,19 +60,19 @@ protected:
 private:
     template<typename L, typename Body>
     Body visit_let(const L *let) {
-        let_vars.insert(let->name);
+        let_vars.push(let->name, true);
         Body body = mutate(let->body);
 
         Expr value;
-        if (index_vars.find(let->name) != index_vars.end()) {
+        if (index_vars.contains(let->name)) {
             ScopedValue s(is_inside_indexing, true);
             value = mutate(let->value);
-            index_vars.erase(let->name);
+            index_vars.pop(let->name);
         } else {
             value = mutate(let->value);
         }
 
-        let_vars.erase(let->name);
+        let_vars.pop(let->name);
         return L::make(let->name, std::move(value), std::move(body));
     }
 
@@ -80,8 +80,8 @@ private:
         return bounds.is_bounded() && !(equal(bounds.min, type.min()) && equal(bounds.max, type.max()));
     }
 
-    std::set<std::string> let_vars;
-    std::set<std::string> index_vars;
+    Scope<bool> let_vars;
+    Scope<bool> index_vars;
     bool is_inside_indexing = false;
 };
 
