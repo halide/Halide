@@ -10,9 +10,13 @@
 
 /** The threshold at which "stack" allocations should actually be backed by the heap. */
 namespace Halide {
+namespace Runtime {
+namespace Internal {
 namespace Constants {
 static constexpr size_t maximum_stack_allocation_bytes = 16384;
 }
+}  // namespace Internal
+}  // namespace Runtime
 }  // namespace Halide
 
 #endif
