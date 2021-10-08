@@ -42,7 +42,7 @@ protected:
         if (is_inside_indexing) {
             auto bounds = func_bounds.at({call->name, call->value_index});
             if (bounds_smaller_than_type(bounds, call->type)) {
-                // TODO: check that the clamped function's allocation bounds might be wider than its compute bounds
+                // TODO(#6297): check that the clamped function's allocation bounds might be wider than its compute bounds
 
                 auto [new_args, changed] = mutate_with_changes(call->args);
                 Expr new_call = changed ? call : Call::make(call->type, call->name, new_args, call->call_type, call->func, call->value_index, call->image, call->param);
