@@ -192,11 +192,34 @@ void halide_thread_yield();
 }  // extern "C"
 
 namespace {
+template <typename T>
+struct remove_reference {
+    using type = T;
+};
+
+template <typename T>
+struct remove_reference<T &> {
+    using type = T;
+};
+
+template <typename T>
+struct remove_reference<T &&> {
+    using type = T;
+};
+
+template <typename T>
+using remove_reference_t = typename remove_reference<T>::type;
+
+template <typename T>
+ALWAYS_INLINE constexpr remove_reference_t<T> &&move(T && t) noexcept {
+    return static_cast<remove_reference_t<T> &&>(t);
+}
+
 template<typename T>
 ALWAYS_INLINE void swap(T &a, T &b) {
-    T t = a;
-    a = b;
-    b = t;
+    T tmp = move(a);
+    a = move(b);
+    b = move(tmp);
 }
 
 template<typename T>

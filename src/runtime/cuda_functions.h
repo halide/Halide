@@ -22,11 +22,14 @@ CUDA_FN(CUresult, cuDeviceGet, (CUdevice * device, int ordinal));
 CUDA_FN(CUresult, cuDeviceGetAttribute, (int *, CUdevice_attribute attrib, CUdevice dev));
 CUDA_FN(CUresult, cuDeviceGetName, (char *, int len, CUdevice dev));
 CUDA_FN(CUresult, cuDeviceTotalMem, (size_t *, CUdevice dev));
+CUDA_FN(CUresult, cuDevicePrimaryCtxRetain, (CUcontext *ctx, CUdevice dev));
+CUDA_FN(CUresult, cuDevicePrimaryCtxRelease, (CUdevice dev));
 CUDA_FN_3020(CUresult, cuCtxCreate, cuCtxCreate_v2, (CUcontext * pctx, unsigned int flags, CUdevice dev));
 CUDA_FN_4000(CUresult, cuCtxDestroy, cuCtxDestroy_v2, (CUcontext pctx));
 CUDA_FN(CUresult, cuProfilerStop, ());
 CUDA_FN(CUresult, cuCtxGetApiVersion, (CUcontext ctx, unsigned int *version));
-CUDA_FN(CUresult, cuCtxGetDevice, (CUdevice *));
+CUDA_FN(CUresult, cuCtxGetDevice, (CUdevice *device));
+CUDA_FN(CUresult, cuCtxGetCurrent, (CUcontext *ctx));
 CUDA_FN(CUresult, cuModuleLoadData, (CUmodule * module, const void *image));
 CUDA_FN(CUresult, cuModuleLoadDataEx, (CUmodule * module, const void *image, unsigned int numOptions, CUjit_option *options, void **optionValues));
 CUDA_FN(CUresult, cuModuleUnload, (CUmodule module));
@@ -37,8 +40,13 @@ CUDA_FN_3020(CUresult, cuMemcpyHtoD, cuMemcpyHtoD_v2, (CUdeviceptr dstDevice, co
 CUDA_FN_3020(CUresult, cuMemcpyDtoH, cuMemcpyDtoH_v2, (void *dstHost, CUdeviceptr srcDevice, size_t ByteCount));
 CUDA_FN_3020(CUresult, cuMemcpyDtoD, cuMemcpyDtoD_v2, (CUdeviceptr dstHost, CUdeviceptr srcDevice, size_t ByteCount));
 CUDA_FN_3020(CUresult, cuMemcpy3D, cuMemcpy3D_v2, (const CUDA_MEMCPY3D *pCopy));
+CUDA_FN_3020(CUresult, cuMemcpyHtoDAsync, cuMemcpyHtoDAsync_v2, (CUdeviceptr dstDevice, const void *srcHost, size_t ByteCount, CUstream hStream));
+CUDA_FN_3020(CUresult, cuMemcpyDtoHAsync, cuMemcpyDtoHAsync_v2, (void *dstHost, CUdeviceptr srcDevice, size_t ByteCount, CUstream hStream));
+CUDA_FN_3020(CUresult, cuMemcpyDtoDAsync, cuMemcpyDtoDAsync_v2, (CUdeviceptr dstHost, CUdeviceptr srcDevice, size_t ByteCount, CUstream hStream));
+CUDA_FN_3020(CUresult, cuMemcpy3DAsync, cuMemcpy3DAsync_v2, (const CUDA_MEMCPY3D *pCopy, CUstream hStream));
 CUDA_FN(CUresult, cuLaunchKernel, (CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ, unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra));
 CUDA_FN(CUresult, cuCtxSynchronize, ());
+
 
 CUDA_FN_4000(CUresult, cuCtxPushCurrent, cuCtxPushCurrent_v2, (CUcontext ctx));
 CUDA_FN_4000(CUresult, cuCtxPopCurrent, cuCtxPopCurrent_v2, (CUcontext * pctx));
