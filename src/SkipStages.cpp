@@ -27,8 +27,8 @@ bool extern_call_uses_buffer(const Call *op, const std::string &func) {
         if (starts_with(op->name, "halide_memoization")) {
             return false;
         }
-        for (size_t i = 0; i < op->args.size(); i++) {
-            const Variable *var = op->args[i].as<Variable>();
+        for (const auto &arg : op->args) {
+            const Variable *var = arg.as<Variable>();
             if (var &&
                 starts_with(var->name, func + ".") &&
                 ends_with(var->name, ".buffer")) {
@@ -275,8 +275,8 @@ private:
     bool memoize_call_uses_buffer(const Call *op) {
         internal_assert(op->call_type == Call::Extern);
         internal_assert(starts_with(op->name, "halide_memoization"));
-        for (size_t i = 0; i < op->args.size(); i++) {
-            const Variable *var = op->args[i].as<Variable>();
+        for (const auto &arg : op->args) {
+            const Variable *var = arg.as<Variable>();
             if (var &&
                 starts_with(var->name, buffer + ".") &&
                 ends_with(var->name, ".buffer")) {
