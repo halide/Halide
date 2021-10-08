@@ -28,8 +28,8 @@ protected:
     }
 
     Expr visit(const Variable *var) override {
-        if (is_inside_indexing && let_vars.contains(var->name)) {
-            let_vars.ref(var->name) = true;
+        if (is_inside_indexing && let_var_inside_indexing.contains(var->name)) {
+            let_var_inside_indexing.ref(var->name) = true;
         }
         return var;
     }
@@ -58,17 +58,11 @@ protected:
 private:
     template<typename L, typename Body>
     Body visit_let(const L *let) {
-        ScopedBinding<bool> binding(let_vars, let->name, false);
-
+        ScopedBinding<bool> binding(let_var_inside_indexing, let->name, false);
         Body body = mutate(let->body);
 
-        Expr value;
-        if (let_vars.get(let->name)) {
-            ScopedValue s(is_inside_indexing, true);
-            value = mutate(let->value);
-        } else {
-            value = mutate(let->value);
-        }
+        ScopedValue s(is_inside_indexing, is_inside_indexing || let_var_inside_indexing.get(let->name));
+        Expr value = mutate(let->value);
 
         return L::make(let->name, std::move(value), std::move(body));
     }
@@ -82,7 +76,7 @@ private:
      * visit_let will process its value binding with is_inside_indexing set when
      * this is the case.
      */
-    Scope<bool> let_vars;
+    Scope<bool> let_var_inside_indexing;
     bool is_inside_indexing = false;
 };
 
