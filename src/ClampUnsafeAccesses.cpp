@@ -35,7 +35,6 @@ protected:
     }
 
     Expr visit(const Call *call) override {
-        // TODO: should this be call->is_intrinsic()?
         if (call->call_type != Call::Halide) {
             return IRMutator::visit(call);
         }
