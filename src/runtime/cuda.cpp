@@ -120,120 +120,10 @@ WEAK struct FreeListItem {
 WEAK halide_mutex free_list_lock;
 
 
-
-/** A unique_ptr-like wrapper around CUDAContext */
-class CUDAContext {
-public:
-    enum Ownership {
-        Owned = 0,
-        RetainedPrimary,
-        Adopted
-    };
-    CUDAContext() = default;
-    CUDAContext(CUDAContext &&other) {
-        *this = move(other);
-    }
-
-    CUDAContext(void *user_context, CUcontext context, CUdevice device, Ownership ownership)
-    : user_context(user_context), context(context), device(device), ownership(ownership) {
-    }
-
-
-    static CUresult create(void *user_context, CUDAContext &result) {
-        CUDAContext out;
-        out.user_context = user_context;
-        out.ownership = Owned;
-        CUresult ret;
-        ret = halide_cuda_select_device(user_context, &out.device);
-        if (ret != CUDA_SUCCESS)
-            return ret;
-        ret = create_cuda_context(user_context, out.device, &out.context);
-        if (ret != CUDA_SUCCESS)
-            return ret;
-        result = move(out);
-        return CUDA_SUCCESS;
-    }
-
-    static CUresult retain_primary(void *user_context, CUDAContext &result) {
-        CUDAContext out;
-        out.user_context = user_context;
-        out.ownership = RetainedPrimary;
-        CUresult ret;
-        ret = halide_cuda_select_device(user_context, &out.device);
-        if (ret != CUDA_SUCCESS)
-            return ret;
-        ret = cuDevicePrimaryCtxRetain(&out.context, out.device);
-        if (ret != CUDA_SUCCESS)
-            return ret;
-        result = move(out);
-        return CUDA_SUCCESS;
-    }
-
-    ~CUDAContext() {
-        reset();
-    }
-
-    CUDAContext &operator=(CUDAContext &&other) {
-        swap(context, other.context);
-        swap(device, other.device);
-        swap(ownership, other.ownership);
-        swap(user_context, other.user_context);
-        other.reset();
-        return *this;
-    }
-
-    CUresult reset() {
-        if (context) {
-            switch (ownership) {
-            case Owned:
-                halide_cuda_release_unused_context_allocations(user_context, context);
-                return cuCtxDestroy(context);
-            case RetainedPrimary:
-                return cuDevicePrimaryCtxRelease(device);
-            default:
-                // nothing to do
-                break;
-            }
-        }
-        context = nullptr;
-        ownership = Owned;
-        device = 0;
-        return CUDA_SUCCESS;
-    }
-
-    void adopt(const CUDAContext &ctx) {
-        if (ctx.get() == get())
-            return;
-        reset();
-        user_context = ctx.user_context;
-        context = ctx.context;
-        device = ctx.device;
-        ownership = Adopted;
-    }
-
-    explicit operator bool() const noexcept {
-        return context != nullptr;
-    }
-
-    operator CUcontext() const {
-        return get();
-    }
-
-    CUcontext get() const {
-        return context;
-    }
-
-private:
-    void *user_context = nullptr;
-    CUcontext context = nullptr;
-    CUdevice device = 0;
-    Ownership ownership = Owned;
-};
-
 namespace {
 // global context - it's used when no thread_local context is specified
-CUDAContext g_context;
-thread_local CUDAContext thread_context;
+CUcontext g_context;
+thread_local CUcontext thread_context;
 thread_local CUstream current_stream = nullptr;
 }  // namespace
 
@@ -269,10 +159,11 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
         // that's in the process of being destroyed. Things will go badly
         // in general if you call device_release while other Halide code
         // is running though.
-        if (g_context) {
+        local_val = g_context;
+        if (local_val) {
             // There's a global context - use it in this thread.
-            thread_context.adopt(g_context);
-            *ctx = thread_context.get();
+            thread_context = local_val;
+            *ctx = local_val;;
             return 0;
         }
 
@@ -286,12 +177,17 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
             ScopedMutexLock spinlock(&context_lock);
             local_val = g_context;
             if (local_val == nullptr) {
-                CUDAContext new_ctx;
-                CUresult ret = CUDAContext::create(user_context, new_ctx);
-                if (ret != CUDA_SUCCESS)
-                    return ret;
-                g_context = move(new_ctx);
-                thread_context.adopt(g_context);
+                CUdevice dev;
+                CUresult err = halide_cuda_select_device(user_context, &dev);
+                if (err != CUDA_SUCCESS) {
+                    error(user_context) << "Error while obtaining a CUDA device: " << get_error_name(err);
+                    return err;
+                }
+                err = create_cuda_context(user_context, dev, &local_val);
+                if (err != CUDA_SUCCESS)
+                    return err;
+                g_context = local_val;
+                thread_context = g_context;
             }
             local_val = thread_context;
         }  // spinlock
@@ -343,9 +239,9 @@ WEAK int halide_cuda_set_current_context(void *user_context, CUcontext context) 
             return pop_err;
         }
 
-        thread_context = CUDAContext(user_context, context, dev, CUDAContext::Adopted);
+        thread_context = context;
     } else {
-        thread_context.reset();
+        thread_context = nullptr;
     }
     return 0;
 }
@@ -740,7 +636,11 @@ WEAK void halide_cuda_finalize_kernels(void *user_context, void *state_ptr) {
     }
 }
 
-/** Free unused allocations from a given CUDA context. */
+/** Free unused allocations from a given CUDA context.
+ * This should be called by the user when a custom context which has been used with Halide
+ * is about to be destroyed.
+ * Perhaps we should avoid this memory recycling altogether when using a custom context?
+ */
 extern "C" WEAK int halide_cuda_release_unused_context_allocations(void *user_context, CUcontext ctx) {
     FreeListItem *item, *to_keep_head = nullptr, *to_keep = nullptr;
     {
@@ -927,9 +827,10 @@ WEAK int halide_cuda_device_release(void *user_context) {
             ScopedMutexLock spinlock(&context_lock);
 
             if (g_context) {
-                debug(user_context) << "    cuCtxDestroy " << g_context.get() << "\n";
+                debug(user_context) << "    cuCtxDestroy " << g_context << "\n";
                 err = cuProfilerStop();
-                err = g_context.reset();
+                err = cuCtxDestroy(g_context);
+                g_context = nullptr;
                 halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
             }
         }  // spinlock
