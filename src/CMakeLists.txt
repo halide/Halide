@@ -366,6 +366,10 @@ add_library(Halide
             $<TARGET_OBJECTS:Halide_initmod>)
 add_library(Halide::Halide ALIAS Halide)
 
+set(Halide_LIBHALIDE_SUFFIX "" CACHE STRING "Suffix to add to libHalide library")
+
+set_target_properties(Halide PROPERTIES OUTPUT_NAME Halide${Halide_LIBHALIDE_SUFFIX})
+
 target_link_libraries(Halide PUBLIC Threads::Threads)
 target_link_libraries(Halide PRIVATE Halide::LLVM)
 target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
