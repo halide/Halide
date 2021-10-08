@@ -230,9 +230,12 @@ private:
     Ownership ownership = Owned;
 };
 
+namespace {
+// global context - it's used when no thread_local context is specified
 CUDAContext g_context;
 thread_local CUDAContext thread_context;
-
+thread_local CUstream current_stream = nullptr;
+}  // namespace
 
 }  // namespace Cuda
 }  // namespace Internal
@@ -302,34 +305,57 @@ WEAK int halide_cuda_release_context(void *user_context) {
     return 0;
 }
 
-thread_local CUstream current_stream = nullptr;
-
-WEAK int halide_cuda_set_current_context(void *user_context, void *cu_context) {
-    CUcontext context = (CUcontext)cu_context;
+/** Sets the specified CUDA context as a current context for the calling thread.
+ *
+ * NOTE: this does not work correctly when mixing parallel execution with GPU offloading.
+ */
+WEAK int halide_cuda_set_current_context(void *user_context, CUcontext context) {
     if (context) {
-        CUdevice dev;
-        CUresult err = cuCtxPushCurrent(context);
+        ensure_libcuda_init(user_context);
+        if (!cuInit) {
+            error(user_context) << "Could not find cuda system libraries";
+            return CUDA_ERROR_FILE_NOT_FOUND;
+        }
+
+        CUresult err = cuInit(0);
         if (err != CUDA_SUCCESS) {
-            error(user_context) << "cuCtxPushCurrent failed from context " << cu_context << " with error " << get_error_name(err);
+            error(user_context) << "CUDA: cuInit failed: "
+                                << get_error_name(err);
+            return err;
+        }
+
+
+        CUdevice dev;
+        err = cuCtxPushCurrent(context);
+        if (err != CUDA_SUCCESS) {
+            error(user_context) << "cuCtxPushCurrent failed from context " << context << " with error " << get_error_name(err);
             return err;
         }
         err = cuCtxGetDevice(&dev);
+        CUcontext old_context;
+        CUresult pop_err = cuCtxPopCurrent(&old_context);
         if (err != CUDA_SUCCESS) {
-            error(user_context) << "cuCtxGetDevice failed from context " << cu_context << " with error " << get_error_name(err);
+            error(user_context) << "cuCtxGetDevice failed from context " << context << " with error " << get_error_name(err);
             return err;
         }
-        CUcontext old_context;
-        err = cuCtxPopCurrent(&old_context);
-        if (err != CUDA_SUCCESS) {
-            error(user_context) << "cuCtxPopCurrent failed with error " << get_error_name(err);
-            return err;
+        if (pop_err != CUDA_SUCCESS) {
+            error(user_context) << "cuCtxPopCurrent failed with error " << get_error_name(pop_err);
+            return pop_err;
         }
 
         thread_context = CUDAContext(user_context, context, dev, CUDAContext::Adopted);
+    } else {
+        thread_context.reset();
     }
     return 0;
 }
 
+/** Sets the specified CUDA stream as a current stream for the calling thread.
+ * This stream will be used for launching GPU-offloaded tasks and for buffer copying
+ * involving device memory.
+ *
+ * NOTE: this does not work correctly when mixing parallel execution with GPU offloading.
+ */
 WEAK int halide_cuda_set_current_stream(void *user_context, CUstream stream) {
     current_stream = stream;
     return 0;
@@ -1623,7 +1649,8 @@ WEAK halide_device_interface_t cuda_device_interface = {
     halide_device_wrap_native,
     halide_device_detach_native,
     halide_cuda_compute_capability,
-    &cuda_device_interface_impl};
+    &cuda_device_interface_impl
+};
 
 }  // namespace Cuda
 }  // namespace Internal
