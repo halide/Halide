@@ -32,6 +32,10 @@ add_library(hannk_log_hdr INTERFACE)
 target_include_directories(hannk_log_hdr INTERFACE
                            $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 
+add_library(status INTERFACE)
+target_include_directories(status INTERFACE
+                           $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
+
 add_library(model_runner STATIC
             model_runner.cpp)
 target_include_directories(model_runner PUBLIC

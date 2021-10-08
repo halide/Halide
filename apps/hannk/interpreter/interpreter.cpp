@@ -14,8 +14,7 @@ extern "C" int halide_malloc_alignment();
 namespace hannk {
 
 Interpreter::Interpreter(std::unique_ptr<OpGroup> m, InterpreterOptions options)
-    : model_(std::move(m)) {
-    init(options);
+    : model_(std::move(m)), options_(std::move(options)) {
 }
 
 Interpreter::~Interpreter() {
@@ -160,60 +159,92 @@ class VerifyAllAllocated : public TensorVisitor {
     }
 };
 
+// We must override this to ensure that we don't have a Halide error handler
+// that aborts. We *always* want an error code returned.
+struct InstallErrorHandler {
+    halide_error_handler_t old_handler;
+
+    static void hannk_error_handler(void *user_context, const char *msg) {
+        HLOG(ERROR) << msg;
+    }
+
+    InstallErrorHandler() {
+        old_handler = halide_set_error_handler(hannk_error_handler);
+    }
+
+    ~InstallErrorHandler() {
+        (void)halide_set_error_handler(old_handler);
+    }
+};
+
 }  // namespace
 
-void Interpreter::init(InterpreterOptions options) {
-    pad_for_ops(model_.get());
+Status Interpreter::init() {
+    InstallErrorHandler handler;
+
+    if (inited_) {
+        return VSTATUS(Error, "Do not call init() twice");
+    }
+
+    Status status;
+
+    status = pad_for_ops(model_.get());
+    if (!status.ok()) {
+        return status;
+    }
+
     in_place(model_.get());
-    fold_constants(model_.get());
+
+    status = fold_constants(model_.get());
+    if (!status.ok()) {
+        return status;
+    }
+
     remove_dead_ops(model_.get());
 
     assert(tensor_storage_arena_ == nullptr);
-    tensor_storage_arena_ = allocate_tensors(model_.get(), options);
+    tensor_storage_arena_ = allocate_tensors(model_.get(), options_);
 
 #ifndef NDEBUG
     VerifyAllAllocated verify_all;
     model_->accept(&verify_all);
 #endif
+
+    inited_ = true;
+    return Status::OK;
 }
 
-void Interpreter::execute() {
-    model_->execute();
-}
+Status Interpreter::execute() {
+    InstallErrorHandler handler;
 
-TensorPtr Interpreter::get_tensor(const std::string &name) {
-    for (int i = 0; i < model_->op_count(); i++) {
-        Op *op = model_->op(i);
-        for (int j = 0; j < op->input_count(); j++) {
-            if (op->input(j)->name() == name) {
-                return op->input(j);
-            }
-        }
-        for (int j = 0; j < op->output_count(); j++) {
-            if (op->output(j)->name() == name) {
-                return op->output(j);
-            }
-        }
+    if (!inited_) {
+        return VSTATUS(Error, "Must call init() before execute()");
     }
-    return nullptr;
+    return model_->execute();
 }
 
-std::vector<TensorPtr> Interpreter::inputs() {
+Status Interpreter::get_inputs(std::vector<TensorPtr> *inputs) {
+    if (!inited_) {
+        return Status::Error;
+    }
+
     std::vector<TensorPtr> result;
     for (int i = 0; i < model_->input_count(); i++) {
-        result.push_back(model_->input(i));
+        inputs->push_back(model_->input(i));
     }
-
-    return result;
+    return Status::OK;
 }
 
-std::vector<TensorPtr> Interpreter::outputs() {
-    std::vector<TensorPtr> result;
-    for (int i = 0; i < model_->output_count(); i++) {
-        result.push_back(model_->output(i));
+Status Interpreter::get_outputs(std::vector<TensorPtr> *outputs) {
+    if (!inited_) {
+        return Status::Error;
     }
 
-    return result;
+    std::vector<TensorPtr> result;
+    for (int i = 0; i < model_->output_count(); i++) {
+        outputs->push_back(model_->output(i));
+    }
+    return Status::OK;
 }
 
 }  // namespace hannk

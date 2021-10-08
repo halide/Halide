@@ -29,7 +29,7 @@ public:
         : Op(std::move(inputs), std::move(outputs)) {
     }
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const;
 };
 
 class BinaryOp : public ElementwiseOp {
@@ -57,7 +57,7 @@ public:
 
     void accept(OpVisitor *v);
 
-    void execute();
+    Status execute();
 
     void dump(std::ostream &os) const {
         os << "  " << to_string(op_) << " " << output()->name() << std::endl;
@@ -82,9 +82,9 @@ public:
 
     void accept(OpVisitor *v);
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const;
 
-    void execute();
+    Status execute();
 
     void dump(std::ostream &os) const {
         os << "  Concatenation " << output()->name() << std::endl;
@@ -127,9 +127,9 @@ public:
     }
 
     halide_type_t filter_type() const;
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const;
 
-    void execute();
+    Status execute();
 
     void dump(std::ostream &os) const {
         os << "  Conv " << output()->name() << std::endl;
@@ -177,9 +177,9 @@ public:
         return Op::input(2);
     }
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const;
 
-    void execute();
+    Status execute();
 
     void dump(std::ostream &os) const {
         os << "  DepthwiseConv2D " << output()->name() << std::endl;
@@ -200,7 +200,7 @@ public:
 
     void accept(OpVisitor *v);
 
-    void execute();
+    Status execute();
 
     void dump(std::ostream &os) const {
         os << "  ElementwiseProgram" << std::endl;
@@ -217,9 +217,9 @@ public:
 
     void accept(OpVisitor *v);
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const;
 
-    void execute();
+    Status execute();
 
     void dump(std::ostream &os) const {
         os << "  Gather " << output()->name() << std::endl;
@@ -234,9 +234,9 @@ public:
 
     void accept(OpVisitor *v);
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const;
 
-    void execute();
+    Status execute();
 
     void dump(std::ostream &os) const {
         os << "  L2Normalization " << output()->name() << std::endl;
@@ -254,9 +254,9 @@ public:
 
     void accept(OpVisitor *v);
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const;
 
-    void execute();
+    Status execute();
 
     void dump(std::ostream &os) const {
         os << "  Pad " << output()->name() << std::endl;
@@ -298,11 +298,11 @@ public:
         return padding_;
     }
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const;
 
     void accept(OpVisitor *v);
 
-    void execute();
+    Status execute();
 
     void dump(std::ostream &os) const {
         os << "  " << to_string(op_) << "Pool " << output()->name() << std::endl;
@@ -327,11 +327,11 @@ public:
         : Op({input, indices}, {output}), op_(op) {
     }
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const;
 
     void accept(OpVisitor *v);
 
-    void execute();
+    Status execute();
 
     void dump(std::ostream &os) const {
         os << "  " << to_string(op_) << " " << output()->name() << std::endl;
@@ -351,9 +351,9 @@ public:
 
     void accept(OpVisitor *v);
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const;
 
-    void execute();
+    Status execute();
 
     void dump(std::ostream &os) const {
         os << "  Reshape " << output()->name() << std::endl;
@@ -368,9 +368,9 @@ public:
 
     void accept(OpVisitor *v);
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const;
 
-    void execute();
+    Status execute();
 
     void dump(std::ostream &os) const {
         os << "  Shape " << output()->name() << std::endl;
@@ -387,9 +387,9 @@ public:
 
     void accept(OpVisitor *v);
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const;
 
-    void execute();
+    Status execute();
 
     void dump(std::ostream &os) const {
         os << "  Softmax " << output()->name() << std::endl;
@@ -406,9 +406,9 @@ public:
 
     void accept(OpVisitor *v);
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const;
 
-    void execute();
+    Status execute();
 
     void dump(std::ostream &os) const {
         const char *name = block_size_ > 0 ? "SpaceToDepth" : "DepthToSpace";
@@ -434,9 +434,9 @@ public:
 
     void accept(OpVisitor *v);
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const;
 
-    void execute();
+    Status execute();
 
     void dump(std::ostream &os) const {
         os << "  Split" << std::endl;
@@ -451,9 +451,9 @@ public:
 
     void accept(OpVisitor *v);
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const;
 
-    void execute();
+    Status execute();
 
     void dump(std::ostream &os) const {
         os << "  TileConvFilterOp " << output()->name() << std::endl;
@@ -468,9 +468,9 @@ public:
 
     void accept(OpVisitor *v);
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const;
 
-    void execute();
+    Status execute();
 
     void dump(std::ostream &os) const {
         os << "  TransposeOp " << output()->name() << std::endl;
@@ -501,7 +501,7 @@ public:
 
     void accept(OpVisitor *v);
 
-    void execute();
+    Status execute();
 
     void dump(std::ostream &os) const {
         os << "  " << to_string(op_) << " " << output()->name() << std::endl;
@@ -518,9 +518,9 @@ public:
 
     void accept(OpVisitor *v);
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const;
 
-    void execute();
+    Status execute();
 
     void dump(std::ostream &os) const {
         os << "  UpsampleChannels " << output()->name() << std::endl;

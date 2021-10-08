@@ -54,6 +54,10 @@
 namespace hannk {
 namespace {
 
+inline TfLiteStatus status_to_tflite_status(const Status &status) {
+    return status.ok() ? kTfLiteOk : kTfLiteError;
+}
+
 using tflite::TfLiteIntArrayView;
 
 constexpr char kDelegateName[] = "HannkDelegate";
@@ -388,6 +392,10 @@ public:
         InterpreterOptions options;
         options.verbosity = options_.verbosity;
         interpreter_ = std::unique_ptr<Interpreter>(new Interpreter(std::move(model_), std::move(options)));
+        auto status = interpreter_->init();
+        if (!status.ok()) {
+            return status_to_tflite_status(status);
+        }
 
         for (int tensor_id : TfLiteIntArrayView(node->outputs)) {
             if (tensor_id == kTfLiteOptionalTensor) {
@@ -443,7 +451,11 @@ public:
         }
 
         // TODO: execute needs to return an error code.
-        interpreter_->execute();
+        auto status = interpreter_->execute();
+        if (!status.ok()) {
+            TF_LITE_KERNEL_LOG(context, "interpreter_->execute() failed:", status.to_string().c_str());
+            return status_to_tflite_status(status);;
+        }
 
         // Dynamic tensors can't share their memory, because we didn't
         // necessarily know the size until the pipeline was executed,

@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "interpreter/model.h"
+#include "util/status.h"
 
 namespace hannk {
 
@@ -19,24 +20,22 @@ struct InterpreterOptions {
 class Interpreter {
     std::unique_ptr<OpGroup> model_;
     std::unique_ptr<char[]> tensor_storage_arena_;
-
-    void init(InterpreterOptions options);
+    InterpreterOptions options_;
+    bool inited_ = false;
 
 public:
     explicit Interpreter(std::unique_ptr<OpGroup> m, InterpreterOptions options = InterpreterOptions());
     ~Interpreter();
 
-    // Return the Tensor in the current Model with the given name.
-    // If none with that name, return null. Tensor is still owned by the Model.
-    TensorPtr get_tensor(const std::string &name);
-
-    void execute();
+    // Must call init() exactly once, before any calls to execute().
+    Status init();
+    Status execute();
 
     // Return the Tensor(s) that are the initial input(s) of the Model.
-    std::vector<TensorPtr> inputs();
+    Status get_inputs(std::vector<TensorPtr> *inputs);
 
     // Return the Tensor(s) that are the final output(s) of the Model.
-    std::vector<TensorPtr> outputs();
+    Status get_outputs(std::vector<TensorPtr> *outputs);
 
     // Movable but not copyable.
     Interpreter() = delete;

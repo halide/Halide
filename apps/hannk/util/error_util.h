@@ -8,6 +8,10 @@
 #include "HalideRuntime.h"
 #include "util/hannk_log.h"
 
+// operator<< likes to be in the global namespace
+std::ostream &operator<<(std::ostream &stream, const halide_type_t &type);
+std::ostream &operator<<(std::ostream &s, const halide_dimension_t &dim);
+
 namespace hannk {
 
 // There should be std::size, like std::begin and std::end.
@@ -15,9 +19,6 @@ template<typename T, size_t N>
 constexpr size_t size(T (&)[N]) {
     return N;
 }
-
-std::ostream &operator<<(std::ostream &stream, const halide_type_t &type);
-std::ostream &operator<<(std::ostream &s, const halide_dimension_t &dim);
 
 template<typename T>
 inline std::ostream &operator<<(std::ostream &s, const std::vector<T> &v) {

@@ -30,6 +30,14 @@ Op::~Op() {
     }
 }
 
+Status Op::map_bounds(int input_idx, BoundsMap *result) const {
+    if (output_count() == 1) {
+        return map_bounds(input_idx, 0, result);
+    } else {
+        return VSTATUS(Error, "More than one output requires get_full_crop override.");
+    }
+}
+
 void Op::set_input(int idx, TensorPtr t) {
     if (inputs_[idx]) {
         inputs_[idx]->remove_consumer(this);
@@ -76,16 +84,20 @@ bool Op::is_output(const TensorPtr &t) const {
     return false;
 }
 
-void OpGroup::execute() {
+Status OpGroup::execute() {
     for (int i = 0; i < op_count(); i++) {
-        op(i)->execute();
+        auto status = op(i)->execute();
+        if (!status.ok()) {
+            return status;
+        }
     }
+    return Status::OK;
 }
 
-BoundsMap OpGroup::map_bounds(int input_idx, int output_idx) const {
-    BoundsMap result(input(input_idx)->rank(), output(output_idx)->rank());
+Status OpGroup::map_bounds(int input_idx, int output_idx, BoundsMap *result) const {
+    *result = BoundsMap(input(input_idx)->rank(), output(output_idx)->rank());
     // TODO
-    return result;
+    return Status::OK;
 }
 
 void OpGroup::add(OpPtr to_add, const Op *before) {

@@ -18,7 +18,8 @@ void run_benchmark(const std::string &filename, const InterpreterOptions &option
         std::cout << filename;
     }
 
-    std::vector<char> buffer = read_entire_file(filename);
+    std::vector<char> buffer;
+    read_entire_file(filename, &buffer).check();
     std::unique_ptr<OpGroup> model = parse_tflite_model_from_buffer(buffer.data());
 
     if (options.verbosity >= 1) {
@@ -28,14 +29,14 @@ void run_benchmark(const std::string &filename, const InterpreterOptions &option
     Interpreter interpreter(std::move(model), options);
 
     if (!options.trace) {
-        auto result = Halide::Tools::benchmark([&]() { interpreter.execute(); });
+        auto result = Halide::Tools::benchmark([&]() { interpreter.execute().check(); });
         std::cout << ": " << result.wall_time * 1e6 << " us" << std::endl;
 
         halide_profiler_report(nullptr);
         halide_profiler_reset();
     } else {
         std::cout << std::endl;
-        interpreter.execute();
+        interpreter.execute().check();
     }
 }
 

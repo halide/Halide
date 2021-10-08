@@ -2,6 +2,8 @@
 #include <cmath>
 #include <iostream>
 
+#define HALIDE_FUNCTION_ATTRS HALIDE_MUST_USE_RESULT
+
 #include "halide/add_uint8_uint8.h"
 #include "halide/average_pool_uint8.h"
 #include "halide/constants.h"
@@ -28,6 +30,7 @@
 #include "interpreter/elementwise_program.h"
 #include "interpreter/ops.h"
 #include "util/error_util.h"
+#include "util/status.h"
 
 namespace hannk {
 
@@ -195,34 +198,42 @@ TypedBufferT<T> slice_last_dim(TypedBufferT<T> buf, int at) {
 }
 
 template<int FnRank, typename Fn, typename... Bufs>
-void loop_nest_impl(Fn &&fn, halide_buffer_t op0, Bufs... ops) {
+Status loop_nest_impl(Fn &&fn, halide_buffer_t op0, Bufs... ops) {
     assert(all(op0.dimensions == ops.dimensions...));
     if (op0.dimensions == FnRank) {
-        fn(&op0, &ops...);
+        return fn(&op0, &ops...);
     } else {
         const int last_dim = op0.dimensions - 1;
         const int min = op0.dim[last_dim].min;
         const int extent = op0.dim[last_dim].extent;
         const int max = min + extent - 1;
         for (int i = min; i <= max; i++) {
-            loop_nest_impl<FnRank>(fn, slice_last_dim(op0, i), slice_last_dim(ops, i)...);
+            auto status = loop_nest_impl<FnRank>(fn, slice_last_dim(op0, i), slice_last_dim(ops, i)...);
+            if (!status.ok()) {
+                return status;
+            }
         }
     }
+    return Status::OK;
 }
 
 template<typename Fn, typename T, typename... Ts>
-void scalar_loop_nest_impl(Fn &&fn, TypedBufferT<T> op0, TypedBufferT<Ts>... ops) {
+Status scalar_loop_nest_impl(Fn &&fn, TypedBufferT<T> op0, TypedBufferT<Ts>... ops) {
     if (op0.dimensions == 0) {
-        fn(*(T *)op0.host, *(Ts *)ops.host...);
+        return fn(*(T *)op0.host, *(Ts *)ops.host...);
     } else {
         const int last_dim = op0.dimensions - 1;
         const int min = op0.dim[last_dim].min;
         const int extent = op0.dim[last_dim].extent;
         const int max = min + extent - 1;
         for (int i = min; i <= max; i++) {
-            scalar_loop_nest_impl(fn, slice_last_dim(op0, i), slice_last_dim(ops, i)...);
+            auto status = scalar_loop_nest_impl(fn, slice_last_dim(op0, i), slice_last_dim(ops, i)...);
+            if (!status.ok()) {
+                return status;
+            }
         }
     }
+    return Status::OK;
 }
 
 void broadcast_dims(int min, int extent) {
@@ -261,30 +272,30 @@ void broadcast_shapes(int rank, halide_buffer_t *a, Bufs *...rest) {
 // 3. Padding shapes to the required rank of `fn`.
 // 4. Iterating and slicing the extra dimensions of the shapes before calling `fn`.
 template<int FnRank, typename Fn, typename T, typename... Ts>
-void elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
+Status elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
     const int rank = std::max({FnRank, op0.dimensions(), ops.dimensions()...});
     pad_to_rank(rank, op0, ops...);
     broadcast_shapes(rank, op0.raw_buffer(), ops.raw_buffer()...);
     optimize_elementwise_shapes(op0.raw_buffer(), ops.raw_buffer()...);
-    loop_nest_impl<FnRank>(fn, *op0.raw_buffer(), *ops.raw_buffer()...);
+    return loop_nest_impl<FnRank>(fn, *op0.raw_buffer(), *ops.raw_buffer()...);
 }
 
 // This is the same as the above, except it calls fn with scalar values at each
 // element of the buffer.
 template<typename Fn, typename T, typename... Ts>
-void scalar_elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
+Status scalar_elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
     const int rank = std::max({op0.dimensions(), ops.dimensions()...});
     pad_to_rank(rank, op0, ops...);
     broadcast_shapes(rank, op0.raw_buffer(), ops.raw_buffer()...);
     optimize_elementwise_shapes(op0.raw_buffer(), ops.raw_buffer()...);
-    scalar_loop_nest_impl(fn, *(TypedBufferT<T> *)op0.raw_buffer(), *(TypedBufferT<Ts> *)ops.raw_buffer()...);
+    return scalar_loop_nest_impl(fn, *(TypedBufferT<T> *)op0.raw_buffer(), *(TypedBufferT<Ts> *)ops.raw_buffer()...);
 }
 
 // This helper is similar to the above, but it only implements steps 3 and 4.
 template<int FnRank, typename Fn, typename T, typename... Ts>
-void loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
+Status loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
     pad_to_rank(FnRank, op0, ops...);
-    loop_nest_impl<FnRank>(fn, *op0.raw_buffer(), *ops.raw_buffer()...);
+    return loop_nest_impl<FnRank>(fn, *op0.raw_buffer(), *ops.raw_buffer()...);
 }
 
 // Check if and b are aliases of the same buffer.
@@ -366,7 +377,7 @@ public:
     }
 };
 
-Interval get_quantized_min_max(ActivationFunction activation, int zero_point, double scale) {
+Status get_quantized_min_max(ActivationFunction activation, int zero_point, double scale, Interval *result) {
     int min = 0;
     int max = 255;
     if (activation == ActivationFunction::None) {
@@ -380,23 +391,27 @@ Interval get_quantized_min_max(ActivationFunction activation, int zero_point, do
         min = zero_point + (int)std::round(-1.0 / scale);
         max = zero_point + (int)std::round(1.0 / scale);
     } else {
-        HLOG(FATAL) << "Unsupported quantized activation function type.";
+        return VSTATUS(UnimplementedOp, "Unsupported quantized activation function type ", (int)activation);
     }
-    return {std::max(min, 0), std::min(max, 255)};
+    *result = {std::max(min, 0), std::min(max, 255)};
+    return Status::OK;
 }
 
-Interval get_output_range(ActivationFunction activation, const QuantizationInfo &quantization) {
+Status get_output_range(ActivationFunction activation, const QuantizationInfo &quantization, Interval *result) {
     const int output_zero = quantization.uniform_zero();
     assert(output_zero >= 0 && output_zero <= 255);
 
     const float output_scale = quantization.uniform_scale();
 
-    const auto output_range = get_quantized_min_max(activation, output_zero, output_scale);
-    assert(output_range.min >= 0 && output_range.min <= 255);
-    assert(output_range.max >= 0 && output_range.max <= 255);
-    assert(output_range.min <= output_range.max);
+    auto status = get_quantized_min_max(activation, output_zero, output_scale, result);
+    if (!status.ok()) {
+        return status;
+    }
+    assert(result->min >= 0 && result->min <= 255);
+    assert(result->max >= 0 && result->max <= 255);
+    assert(result->min <= result->max);
 
-    return output_range;
+    return Status::OK;
 }
 
 struct MultiplyParams {
@@ -420,10 +435,10 @@ MultiplyParams get_quantized_multiply_params(const QuantizationInfo &a, const Qu
     return result;
 }
 
-void add_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q, int in1sign,
-               const HalideBuffer<const void> &in2, const QuantizationInfo &in2q, int in2sign,
-               const HalideBuffer<void> &out, const QuantizationInfo &outq,
-               ActivationFunction activation = ActivationFunction::None) {
+Status add_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q, int in1sign,
+                 const HalideBuffer<const void> &in2, const QuantizationInfo &in2q, int in2sign,
+                 const HalideBuffer<void> &out, const QuantizationInfo &outq,
+                 ActivationFunction activation = ActivationFunction::None) {
     const int in1_zero = in1q.uniform_zero();
     const int in2_zero = in2q.uniform_zero();
     const int out_zero = outq.uniform_zero();
@@ -435,19 +450,23 @@ void add_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q
     const int in1_multiplier = std::lround(in1_scale / out_scale) * in1sign;
     const int in2_multiplier = std::lround(in2_scale / out_scale) * in2sign;
 
-    const auto out_range = get_output_range(activation, outq);
+    Interval output_range;
+    auto status = get_output_range(activation, outq, &output_range);
+    if (!status.ok()) {
+        return status;
+    }
 
-    auto add_rank2 = [&](halide_buffer_t *in1_buf, halide_buffer_t *in2_buf, halide_buffer_t *out_buf) {
-        add_uint8_uint8(in1_buf, in1_zero, in1_multiplier, in2_buf, in2_zero, in2_multiplier,
-                        out_zero, out_range.min, out_range.max, out_buf);
+    auto add_rank2 = [&](halide_buffer_t *in1_buf, halide_buffer_t *in2_buf, halide_buffer_t *out_buf) -> Status {
+        return halide_error_to_status(add_uint8_uint8(in1_buf, in1_zero, in1_multiplier, in2_buf, in2_zero, in2_multiplier,
+                                                      out_zero, output_range.min, output_range.max, out_buf));
     };
-    elementwise_loop_nest<2>(add_rank2, in1, in2, out);
+    return elementwise_loop_nest<2>(add_rank2, in1, in2, out);
 }
 
-void mul_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q,
-               const HalideBuffer<const void> &in2, const QuantizationInfo &in2q,
-               const HalideBuffer<void> &out, const QuantizationInfo &outq,
-               ActivationFunction activation = ActivationFunction::None) {
+Status mul_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q,
+                 const HalideBuffer<const void> &in2, const QuantizationInfo &in2q,
+                 const HalideBuffer<void> &out, const QuantizationInfo &outq,
+                 ActivationFunction activation = ActivationFunction::None) {
     const int in1_zero = in1q.uniform_zero();
     const int in2_zero = in2q.uniform_zero();
     const int out_zero = outq.uniform_zero();
@@ -460,33 +479,36 @@ void mul_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q
     multiplier *= power_of_two(-2 * mul_input_shift);
     assert(multiplier.exponent() <= 0);
 
-    const auto out_range = get_output_range(activation, outq);
+    Interval output_range;
+    auto status = get_output_range(activation, outq, &output_range);
+    if (!status.ok()) {
+        return status;
+    }
 
     auto mul_rank2 = [&](halide_buffer_t *in1_buf, halide_buffer_t *in2_buf, halide_buffer_t *out_buf) {
-        mul_uint8_uint8_uint8(in1_buf, in1_zero, in2_buf, in2_zero,
-                              out_zero, multiplier.mantissa(), -multiplier.exponent(),
-                              out_range.min, out_range.max, out_buf);
+        return halide_error_to_status(mul_uint8_uint8_uint8(in1_buf, in1_zero, in2_buf, in2_zero,
+                                                            out_zero, multiplier.mantissa(), -multiplier.exponent(),
+                                                            output_range.min, output_range.max, out_buf));
     };
-    elementwise_loop_nest<2>(mul_rank2, in1, in2, out);
+    return elementwise_loop_nest<2>(mul_rank2, in1, in2, out);
 }
 
-void requantize(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
-                HalideBuffer<void> out, const QuantizationInfo &outq,
-                ActivationFunction activation = ActivationFunction::None) {
+Status requantize(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
+                  HalideBuffer<void> out, const QuantizationInfo &outq,
+                  ActivationFunction activation = ActivationFunction::None) {
     if (inq == outq) {
         // Some of these are just copies, or no-ops.
-        if (is_alias(in.raw_buffer(), out.raw_buffer())) {
-            return;
-        } else {
+        if (!is_alias(in.raw_buffer(), out.raw_buffer())) {
             out.copy_from(in);
         }
+        return Status::OK;
     } else if (in.type() == halide_type_of<uint8_t>() &&
                out.type() == halide_type_of<uint8_t>()) {
         // TODO: Maybe a dedicated pipeline for this would be better. It
         // could be a little faster, and avoid some quantization error.
-        add_uint8(in, inq, 1, in, inq, 0, out, outq, activation);
+        return add_uint8(in, inq, 1, in, inq, 0, out, outq, activation);
     } else {
-        HLOG(FATAL) << "Unable to requantize " << in.type() << " -> " << out.type() << "\n";
+        return VSTATUS(UnimplementedOp, "Unable to requantize ",in.type(), " -> ", out.type());
     }
 }
 
@@ -500,18 +522,23 @@ ActivationFunction to_activation(UnaryOp::Operator op) {
         return ActivationFunction::ReluN1To1;
     case UnaryOp::Tanh:
         return ActivationFunction::Tanh;
-    default:
-        HLOG(FATAL) << UnaryOp::to_string(op) << " is not an activation function";
+    case UnaryOp::Logistic:
+    case UnaryOp::Negate:
+    case UnaryOp::Square:
         return ActivationFunction::None;
+    // no default case: we want a compile error if any of the enums aren't handled
     }
 }
 
 }  // namespace
 
-BoundsMap ElementwiseOp::map_bounds(int input_idx, int output_idx) const {
+Status ElementwiseOp::map_bounds(int input_idx, int output_idx, BoundsMap *result) const {
     int rank = output(output_idx)->rank();
-    assert(rank == input(input_idx)->rank());
-    return BoundsMap::elementwise(rank);
+    if (rank != input(input_idx)->rank()) {
+        return Status::Error;
+    }
+    *result = BoundsMap::elementwise(rank);
+    return Status::OK;
 }
 
 const char *BinaryOp::to_string(BinaryOp::Operator op) {
@@ -530,9 +557,7 @@ const char *BinaryOp::to_string(BinaryOp::Operator op) {
         return "Equal";
     case NotEqual:
         return "NotEqual";
-    default:
-        HLOG(FATAL) << "Unsupported binary op\n";
-        return nullptr;
+    // no default case: we want a compile error if any of the enums aren't handled
     }
 }
 
@@ -590,15 +615,12 @@ TResult implement_binary(BinaryOp::Operator op, TOperand a, TOperand b) {
         return a == b;
     case BinaryOp::NotEqual:
         return a != b;
-    default:
-        HLOG(FATAL) << "Unknown binary operator " << BinaryOp::to_string(op);
-        return TResult();
     }
 }
 
 }  // namespace
 
-void BinaryOp::execute() {
+Status BinaryOp::execute() {
     const TensorPtr &in1 = input(0);
     const TensorPtr &in2 = input(1);
     const TensorPtr &out = output();
@@ -613,11 +635,9 @@ void BinaryOp::execute() {
         switch (op_) {
         case Add:
         case Sub:
-            add_uint8(in1_buf, in1->quantization(), 1, in2_buf, in2->quantization(), op_ == Add ? 1 : -1, out_buf, out->quantization(), activation_);
-            return;
+            return add_uint8(in1_buf, in1->quantization(), 1, in2_buf, in2->quantization(), op_ == Add ? 1 : -1, out_buf, out->quantization(), activation_);
         case Mul:
-            mul_uint8(in1_buf, in1->quantization(), in2_buf, in2->quantization(), out_buf, out->quantization(), activation_);
-            return;
+            return mul_uint8(in1_buf, in1->quantization(), in2_buf, in2->quantization(), out_buf, out->quantization(), activation_);
         default:
             break;
         }
@@ -629,11 +649,11 @@ void BinaryOp::execute() {
         const auto &out_buf = out->buffer<int32_t>();
 
         // This is really slow, only intended to support scalar operations.
-        auto scalar_op = [&](int32_t a, int32_t b, int32_t &result) {
+        auto scalar_op = [&](int32_t a, int32_t b, int32_t &result) -> Status {
             result = implement_binary<int32_t>(op_, a, b);
+            return Status::OK;
         };
-        scalar_elementwise_loop_nest(scalar_op, in1_buf, in2_buf, out_buf);
-        return;
+        return scalar_elementwise_loop_nest(scalar_op, in1_buf, in2_buf, out_buf);
     } else if (out->type() == halide_type_of<bool>() && out->rank() == 0) {
         double in1_scalar = dequantize_scalar(in1.get());
         double in2_scalar = dequantize_scalar(in2.get());
@@ -642,41 +662,43 @@ void BinaryOp::execute() {
         switch (op_) {
         case Less:
             out_buf() = in1_scalar < in2_scalar;
-            return;
+            return Status::OK;
         case LessEqual:
             out_buf() = in1_scalar <= in2_scalar;
-            return;
+            return Status::OK;
         case Equal:
             out_buf() = in1_scalar == in2_scalar;
-            return;
+            return Status::OK;
         case NotEqual:
             out_buf() = in1_scalar != in2_scalar;
-            return;
+            return Status::OK;
         default:
             break;
         }
     }
-    HLOG(FATAL)
-        << "Unsupported binary op " << to_string(op_)
-        << " for types " << in1->type() << ", " << in2->type() << ", " << out->type();
+
+    return VSTATUS(UnimplementedOp, "Unsupported BinaryOp ", to_string(op_), " for types ", in1->type(),
+                   " ", in2->type(), " ", out->type());
 }
 
-BoundsMap ConcatenationOp::map_bounds(int input_idx, int output_idx) const {
+Status ConcatenationOp::map_bounds(int input_idx, int output_idx, BoundsMap *result) const {
     int rank = output()->rank();
-    assert(rank == input(input_idx)->rank());
+    if (rank != input(input_idx)->rank()) {
+        return Status::Error;
+    }
 
     int offset = 0;
     for (int i = 0; i < input_idx; i++) {
         offset += input(i)->extent(axis_);
     }
-    BoundsMap result = BoundsMap::elementwise(rank);
-    result.at(axis_, axis_).bounds += offset;
-    return result;
+    *result = BoundsMap::elementwise(rank);
+    result->at(axis_, axis_).bounds += offset;
+    return Status::OK;
 }
 
-void ConcatenationOp::execute() {
+Status ConcatenationOp::execute() {
     if (is_no_op_) {
-        return;
+        return Status::OK;
     }
     const auto &output_buf = output()->buffer();
 
@@ -689,8 +711,12 @@ void ConcatenationOp::execute() {
 
         auto output_crop = output_buf;
         crop_to_union(output_crop, input_buf);
-        requantize(input_buf, input(i)->quantization(), output_crop, output()->quantization());
+        auto status = requantize(input_buf, input(i)->quantization(), output_crop, output()->quantization());
+        if (!status.ok()) {
+            return status;
+        }
     }
+    return Status::OK;
 }
 
 halide_type_t ConvOp::filter_type() const {
@@ -708,54 +734,58 @@ halide_type_t ConvOp::filter_type() const {
     }
 }
 
-BoundsMap ConvOp::map_bounds(int input_idx, int output_idx) const {
+Status ConvOp::map_bounds(int input_idx, int output_idx, BoundsMap *result) const {
 #ifdef CONV_R16
     const int unroll_reduction = filter()->extent(0) >= 16 ? 16 : 4;
 #else
     const int unroll_reduction = 4;
 #endif
     if (input_idx == 0) {
-        BoundsMap result(input()->rank(), output()->rank());
-        result
-            .constant(0, align_up(input()->extent(0), unroll_reduction))
-            .elementwise(input()->rank() - 1, input()->rank() - 1);
+        *result = BoundsMap(input()->rank(), output()->rank());
+        result->constant(0, align_up(input()->extent(0), unroll_reduction));
+        result->elementwise(input()->rank() - 1, input()->rank() - 1);
         for (int i = 1; i < input()->rank() - 1; i++) {
-            result.downsample(i, i, stride_[i - 1], Interval(0, dilation_[i - 1] * (filter()->extent(i) - 1)));
+            result->downsample(i, i, stride_[i - 1], Interval(0, dilation_[i - 1] * (filter()->extent(i) - 1)));
         }
-        return result;
+        return Status::OK;
     } else if (input_idx == 1) {
         // Pass minimal sized buffers to learn about the alignment requirements.
         HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
         HalideBuffer<int32_t> bias_buf(nullptr, 1);
         HalideBuffer<void> filter_buf(filter_type(), nullptr, 1, 1, 1, 1, 1, 1);
         HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
-        conv_u8_u8_u8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf);
+        auto status = halide_error_to_status(conv_u8_u8_u8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf));
+        if (!status.ok()) {
+            return status;
+        }
 
         const int vector_reduction = filter_buf.dim(0).extent();
         const int vector_tile = filter_buf.dim(1).extent();
         const int channel_alignment = unroll_reduction / vector_reduction;
-        BoundsMap result(input()->rank() + 2, output()->rank());
-        result
-            .constant(0, vector_reduction)
-            .constant(1, vector_tile)
-            .constant(2, align_up(ceil_div(filter()->extent(0), vector_reduction), channel_alignment))
-            .upsample(3, 0, vector_tile);
+        *result = BoundsMap(input()->rank() + 2, output()->rank());
+        result->constant(0, vector_reduction);
+        result->constant(1, vector_tile);
+        result->constant(2, align_up(ceil_div(filter()->extent(0), vector_reduction), channel_alignment));
+        result->upsample(3, 0, vector_tile);
         for (int i = 1; i < output()->rank() - 1; i++) {
-            result.constant(i + 3, filter()->bounds(i));
+            result->constant(i + 3, filter()->bounds(i));
         }
-        return result;
+        return Status::OK;
     } else {
-        assert(input_idx == 2);
-        return BoundsMap(1, output()->rank()).elementwise(0, 0);
+        if (input_idx != 2) {
+            return Status::Error;
+        }
+        *result = BoundsMap(1, output()->rank()).elementwise(0, 0);
+        return Status::OK;
     }
 }
 
 namespace {
 
-void call_conv2d(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t *bias,
-                 const MultiplyParams &params, const std::array<int, 2> &stride,
-                 const std::array<int, 2> &dilation, const Interval &output_range,
-                 halide_buffer_t *output) {
+Status call_conv2d(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t *bias,
+                   const MultiplyParams &params, const std::array<int, 2> &stride,
+                   const std::array<int, 2> &dilation, const Interval &output_range,
+                   halide_buffer_t *output) {
     using Conv2DFn = decltype(&::hannk::conv_u8_u8_u8);
 
     Conv2DFn fn;
@@ -770,15 +800,15 @@ void call_conv2d(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_
     {
         fn = output->type == halide_type_of<int16_t>() ? hannk::conv_u8_u8_i16 : hannk::conv_u8_u8_u8;
     }
-    fn(input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias,
-       stride[0], stride[1], dilation[0], dilation[1], params.c.mantissa(),
-       -params.c.exponent(), (uint8_t)params.c_zero, output_range.min, output_range.max,
-       output);
+    return halide_error_to_status(fn(input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias,
+                                     stride[0], stride[1], dilation[0], dilation[1], params.c.mantissa(),
+                                     -params.c.exponent(), (uint8_t)params.c_zero, output_range.min, output_range.max,
+                                     output));
 }
 
 }  // namespace
 
-void ConvOp::execute() {
+Status ConvOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &filt = filter();
     const TensorPtr &out = output();
@@ -793,7 +823,11 @@ void ConvOp::execute() {
         MultiplyParams params =
             get_quantized_multiply_params(in->quantization(), filt->quantization(), out->quantization());
 
-        const auto output_range = get_output_range(activation_, out->quantization());
+        Interval output_range;
+        auto status = get_output_range(activation_, out->quantization(), &output_range);
+        if (!status.ok()) {
+            return status;
+        }
 
         // Pad with dummy dimensions up to 2D.
         while (input_buf.dimensions() < 4) {
@@ -825,80 +859,91 @@ void ConvOp::execute() {
             }
         }
 
-        call_conv2d(input_buf, filter_buf, bias_buf, params, stride_, dilation_, output_range, output_buf);
-    } else {
-        HLOG(FATAL) << "Unsupported type " << out->type() << "\n";
+        return call_conv2d(input_buf, filter_buf, bias_buf, params, stride_, dilation_, output_range, output_buf);
     }
+    return VSTATUS(UnimplementedOp, "Unsupported type ", out->type());
 }
 
 namespace {
 
 // Wrapper to dispatch to the appropriate variant of depthwise_conv.
-void call_depthwise_conv_uint8(
+Status call_depthwise_conv_uint8(
     halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_t *bias,
     const MultiplyParams &params, const std::array<int, 2> &stride, const std::array<int, 2> &dilation,
     int input_stride_x, const Interval &output_range, halide_buffer_t *output) {
     if (input_stride_x != 0) {
-        depthwise_conv_shallow_uint8(
+        return halide_error_to_status(depthwise_conv_shallow_uint8(
             input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias,
             stride[0], stride[1], dilation[0], dilation[1], input_stride_x, params.c.mantissa(), -params.c.exponent(),
-            (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output);
+            (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output));
     } else if (input->dim[0].extent == 1) {
-        depthwise_conv_broadcast_uint8(
+        return halide_error_to_status(depthwise_conv_broadcast_uint8(
             input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias,
             stride[0], stride[1], dilation[0], dilation[1], input_stride_x, params.c.mantissa(), -params.c.exponent(),
-            (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output);
+            (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output));
     } else {
-        ::hannk::depthwise_conv_uint8(
+        return halide_error_to_status(::hannk::depthwise_conv_uint8(
             input, (uint8_t)params.a_zero, filter, (uint8_t)params.b_zero, bias,
             stride[0], stride[1], dilation[0], dilation[1], input_stride_x, params.c.mantissa(), -params.c.exponent(),
-            (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output);
+            (uint8_t)params.c_zero, (uint8_t)output_range.min, (uint8_t)output_range.max, output));
     }
 }
 
-int get_depthwise_conv_channel_alignment() {
+Status get_depthwise_conv_channel_alignment(int *alignment) {
     // Pass minimal sized buffers to learn about the alignment requirements.
     HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
     HalideBuffer<int32_t> bias_buf(nullptr, 1);
     HalideBuffer<uint8_t> filter_buf(nullptr, 1, 1, 1);
     HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
-    depthwise_conv_uint8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, output_buf);
-    return input_buf.dim(0).extent();
+    auto status = halide_error_to_status(depthwise_conv_uint8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, output_buf));
+    if (!status.ok()) {
+        return status;
+    }
+    *alignment = input_buf.dim(0).extent();
+    return Status::OK;
 }
 
 }  // namespace
 
-BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
-    assert(output_idx == 0);
+Status DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx, BoundsMap *result) const {
+    if (output_idx != 0) {
+        return Status::Error;
+    }
     if (input_idx == 0) {
-        BoundsMap result(4, 4);
-        result
-            .upsample(0, 0, depth_multiplier_)
-            .downsample(1, 1, stride_[0], Interval(0, dilation_[0] * (filter()->extent(1) - 1)))
-            .downsample(2, 2, stride_[1], Interval(0, dilation_[1] * (filter()->extent(2) - 1)))
-            .elementwise(3, 3);
+        *result = BoundsMap(4, 4);
+        result->upsample(0, 0, depth_multiplier_);
+        result->downsample(1, 1, stride_[0], Interval(0, dilation_[0] * (filter()->extent(1) - 1)));
+        result->downsample(2, 2, stride_[1], Interval(0, dilation_[1] * (filter()->extent(2) - 1)));
+        result->elementwise(3, 3);
         if (depth_multiplier_ == 1) {
-            const int alignment = get_depthwise_conv_channel_alignment();
+            int alignment;
+            auto status = get_depthwise_conv_channel_alignment(&alignment);
+            if (!status.ok()) {
+                return status;
+            }
             if (alignment % input()->extent(0) == 0 && stride_[0] == 1) {
                 // We can use the shallow version of depthwise here.
             } else {
-                result.align_input(0, alignment);
+                result->align_input(0, alignment);
             }
         }
-        return result;
+        return Status::OK;
     } else if (input_idx == 1) {
-        return BoundsMap(3, 4)
-            .elementwise(0, 0)
-            .constant(1, filter()->bounds(1))
-            .constant(2, filter()->bounds(2));
+        *result = BoundsMap(3, 4)
+                      .elementwise(0, 0)
+                      .constant(1, filter()->bounds(1))
+                      .constant(2, filter()->bounds(2));
+        return Status::OK;
     } else if (input_idx == 2) {
-        return BoundsMap(1, 4).elementwise(0, 0);
+        *result = BoundsMap(1, 4).elementwise(0, 0);
+        return Status::OK;
     } else {
-        return BoundsMap(0, 4);
+        *result = BoundsMap(0, 4);
+        return Status::OK;
     }
 }
 
-void DepthwiseConv2DOp::execute() {
+Status DepthwiseConv2DOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &filt = filter();
     const TensorPtr &out = output();
@@ -914,7 +959,11 @@ void DepthwiseConv2DOp::execute() {
         MultiplyParams params =
             get_quantized_multiply_params(in->quantization(), filt->quantization(), out->quantization());
 
-        const auto output_range = get_output_range(activation_, out->quantization());
+        Interval output_range;
+        auto status = get_output_range(activation_, out->quantization(), &output_range);
+        if (!status.ok()) {
+            return status;
+        }
 
         // If the number of channels is small and divides the channel alignment,
         // and the stride of the filter in x is 1, we can use the "shallow"
@@ -923,19 +972,25 @@ void DepthwiseConv2DOp::execute() {
         int input_stride_x = 0;
         if (stride_[0] == 1 &&
             can_fuse_cx(FuseType::InPlace, input_buf) &&
-            can_fuse_cx(FuseType::InPlace, output_buf) &&
-            get_depthwise_conv_channel_alignment() % input_buf.dim(0).extent() == 0) {
-            input_stride_x = input_buf.dim(1).stride();
-            fuse_cx(FuseType::InPlace, input_buf);
-            fuse_cx(FuseType::InPlace, output_buf);
+            can_fuse_cx(FuseType::InPlace, output_buf)) {
+            int alignment;
+            auto status = get_depthwise_conv_channel_alignment(&alignment);
+            if (!status.ok()) {
+                return status;
+            }
+            if (alignment % input_buf.dim(0).extent() == 0) {
+                input_stride_x = input_buf.dim(1).stride();
+                fuse_cx(FuseType::InPlace, input_buf);
+                fuse_cx(FuseType::InPlace, output_buf);
+            }
         }
 
         assert(depth_multiplier_ == 1);
-        call_depthwise_conv_uint8(input_buf, filter_buf, bias_buf, params,
-                                  stride_, dilation_, input_stride_x, output_range, output_buf);
-    } else {
-        HLOG(FATAL) << "Unsupported type " << out->type() << "\n";
+        return call_depthwise_conv_uint8(input_buf, filter_buf, bias_buf, params,
+                                         stride_, dilation_, input_stride_x, output_range, output_buf);
     }
+
+    return VSTATUS(UnimplementedOp, "Unsupported type ", out->type());
 }
 
 namespace {
@@ -988,7 +1043,7 @@ bool can_use_elementwise_program(const Op *op) {
 
 }  // namespace
 
-void ElementwiseProgramOp::execute() {
+Status ElementwiseProgramOp::execute() {
     const auto &in0 = input(0)->buffer();
     const auto &in1 = input(std::min(input_count() - 1, 1))->buffer();
     const auto &in2 = input(std::min(input_count() - 1, 2))->buffer();
@@ -999,35 +1054,35 @@ void ElementwiseProgramOp::execute() {
     using arg_ptr = halide_buffer_t *;
     if (can_use_elementwise_program<TypeArray<5, uint8_t>, TypeArray<1, uint8_t>>(this)) {
         auto rank2 = [&](arg_ptr in0, arg_ptr in1, arg_ptr in2, arg_ptr in3, arg_ptr in4, arg_ptr out0) {
-            elementwise_5xuint8_1xuint8(in0, in1, in2, in3, in4, program_, out0);
+            return halide_error_to_status(elementwise_5xuint8_1xuint8(in0, in1, in2, in3, in4, program_, out0));
         };
-        elementwise_loop_nest<2>(rank2, in0, in1, in2, in3, in4, out0);
-        return;
+        return elementwise_loop_nest<2>(rank2, in0, in1, in2, in3, in4, out0);
     } else if (can_use_elementwise_program<TypeArray<5, int16_t>, TypeList<uint8_t, int16_t>>(this)) {
         auto rank2 = [&](arg_ptr in0, arg_ptr in1, arg_ptr in2, arg_ptr in3, arg_ptr in4, arg_ptr out0, arg_ptr out1) {
-            elementwise_5xint16_1xuint8int16(in0, in1, in2, in3, in4, program_, out0, out1);
+            return halide_error_to_status(elementwise_5xint16_1xuint8int16(in0, in1, in2, in3, in4, program_, out0, out1));
         };
-        elementwise_loop_nest<2>(rank2, in0, in1, in2, in3, in4, out0, out1);
-        return;
+        return elementwise_loop_nest<2>(rank2, in0, in1, in2, in3, in4, out0, out1);
     }
-    HLOG(FATAL) << "Unsupported elementwise program\n";
+    return VSTATUS(UnimplementedOp, "Unsupported elementwise program");
 }
 
-BoundsMap GatherOp::map_bounds(int input_idx, int output_idx) const {
+Status GatherOp::map_bounds(int input_idx, int output_idx, BoundsMap *result) const {
     if (input_idx == 0) {
-        BoundsMap result = BoundsMap::elementwise(output()->rank());
+        *result = BoundsMap::elementwise(output()->rank());
         // We need potentially anything from the dimension we are gathering.
-        result.constant(axis_, input()->extent(axis_));
-        return result;
+        result->constant(axis_, input()->extent(axis_));
+        return Status::OK;
     } else {
-        assert(input_idx == 1);
-        BoundsMap result(1, output()->rank());
-        result.elementwise(0, axis_);
-        return result;
+        if (input_idx != 1) {
+            return Status::Error;
+        }
+        *result = BoundsMap(1, output()->rank());
+        result->elementwise(0, axis_);
+        return Status::OK;
     }
 }
 
-void GatherOp::execute() {
+Status GatherOp::execute() {
     const HalideBuffer<const void> &in = input(0)->buffer();
     HalideBuffer<const int32_t> indices = input(1)->buffer();
     const HalideBuffer<void> &out = output()->buffer();
@@ -1041,17 +1096,20 @@ void GatherOp::execute() {
         HalideBuffer<void> out_i = out.sliced(axis_, i);
         out_i.copy_from(in_i);
     }
+    return Status::OK;
 }
 
-BoundsMap L2NormalizationOp::map_bounds(int input_idx, int output_idx) const {
-    assert(input_idx == 0);
-    assert(output_idx == 0);
-    return BoundsMap(2, 2)
-        .constant(0, input()->bounds(0))
-        .elementwise(1, 1);
+Status L2NormalizationOp::map_bounds(int input_idx, int output_idx, BoundsMap *result) const {
+    if (input_idx != 0 || output_idx != 0) {
+        return Status::Error;
+    }
+    *result = BoundsMap(2, 2)
+                  .constant(0, input()->bounds(0))
+                  .elementwise(1, 1);
+    return Status::OK;
 }
 
-void L2NormalizationOp::execute() {
+Status L2NormalizationOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
@@ -1067,35 +1125,41 @@ void L2NormalizationOp::execute() {
         assert(out->quantization().uniform_zero() == 128);
 
         auto l2_normalization_rank2 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
-            l2_normalization_uint8(in_buf, input_zero, out_buf);
+            return halide_error_to_status(l2_normalization_uint8(in_buf, input_zero, out_buf));
         };
-        loop_nest<2>(l2_normalization_rank2, in_buf, out_buf);
-    } else {
-        HLOG(FATAL) << "Unsupported type " << out->type() << "\n";
+        return loop_nest<2>(l2_normalization_rank2, in_buf, out_buf);
     }
+
+    return VSTATUS(UnimplementedOp, "Unsupported type ", out->type());
 }
 
-BoundsMap PadOp::map_bounds(int input_idx, int output_idx) const {
-    assert(output_idx == 0);
+Status PadOp::map_bounds(int input_idx, int output_idx, BoundsMap *result) const {
+    if (output_idx != 0) {
+        return Status::Error;
+    }
     const int rank = output()->rank();
     if (input_idx == 0) {
         if (input(1)) {
-            BoundsMap result(rank, rank);
+            *result = BoundsMap(rank, rank);
             const auto &padding = input(1)->buffer<const int32_t>();
             for (int d = 0; d < output()->rank(); d++) {
-                result.elementwise(d, d, padding(0, d));
+                result->elementwise(d, d, padding(0, d));
             }
-            return result;
+            return Status::OK;
         } else {
-            return BoundsMap::elementwise(rank);
+            *result = BoundsMap::elementwise(rank);
+            return Status::OK;
         }
     } else {
-        assert(input_idx == 1);
-        return BoundsMap(1, rank).constant(0, rank);
+        if (input_idx != 1) {
+            return Status::Error;
+        }
+        *result = BoundsMap(1, rank).constant(0, rank);
+        return Status::OK;
     }
 }
 
-void PadOp::execute() {
+Status PadOp::execute() {
     const TensorPtr &in = input(0);
     const TensorPtr &padding = input(1);
     const TensorPtr &out = output();
@@ -1145,14 +1209,20 @@ void PadOp::execute() {
             if (output_min < input_min) {
                 auto before = output_buf.cropped(d, output_min, input_min - output_min);
                 pad_to_rank(4, before);
-                fill_uint8(pad_value, before);
+                auto status = halide_error_to_status(fill_uint8(pad_value, before));
+                if (!status.ok()) {
+                    return status;
+                }
             } else {
                 input_min = output_min;
             }
             if (output_max > input_max) {
                 auto after = output_buf.cropped(d, input_max + 1, output_max - input_max);
                 pad_to_rank(4, after);
-                fill_uint8(pad_value, after);
+                auto status = halide_error_to_status(fill_uint8(pad_value, after));
+                if (!status.ok()) {
+                    return status;
+                }
             } else {
                 input_max = output_max;
             }
@@ -1163,11 +1233,15 @@ void PadOp::execute() {
             input_buf.dim(0).max() < output_buf.dim(0).max()) {
             pad_to_rank(4, input_buf);
             pad_to_rank(4, output_buf);
-            copy_uint8_uint8(input_buf, pad_value, output_buf);
+            auto status = halide_error_to_status(copy_uint8_uint8(input_buf, pad_value, output_buf));
+            if (!status.ok()) {
+                return status;
+            }
         }
-    } else {
-        HLOG(FATAL) << "Unsupported type " << out->type() << "\n";
+        return Status::OK;
     }
+
+    return VSTATUS(UnimplementedOp, "Unsupported type ", out->type());
 }
 
 namespace {
@@ -1186,22 +1260,21 @@ const char *Pool2DOp::to_string(Pool2DOp::Operator op) {
         return "Average";
     case Max:
         return "Max";
-    default:
-        HLOG(FATAL) << "Unsupported pool op\n";
-        return nullptr;
+    // no default case: we want a compile error if any of the enums aren't handled
     }
 }
 
-BoundsMap Pool2DOp::map_bounds(int input_idx, int output_idx) const {
+Status Pool2DOp::map_bounds(int input_idx, int output_idx, BoundsMap *result) const {
     assert(output_idx == 0);
-    return BoundsMap(4, 4)
-        .elementwise(0, 0)
-        .downsample(1, 1, stride_[0], Interval(0, filter_size_[0] - 1))
-        .downsample(2, 2, stride_[1], Interval(0, filter_size_[1] - 1))
-        .elementwise(3, 3);
+    *result = BoundsMap(4, 4)
+                  .elementwise(0, 0)
+                  .downsample(1, 1, stride_[0], Interval(0, filter_size_[0] - 1))
+                  .downsample(2, 2, stride_[1], Interval(0, filter_size_[1] - 1))
+                  .elementwise(3, 3);
+    return Status::OK;
 }
 
-void Pool2DOp::execute() {
+Status Pool2DOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
@@ -1210,7 +1283,11 @@ void Pool2DOp::execute() {
         auto input_buf = in->buffer();
         auto output_buf = out->buffer();
 
-        const auto output_range = get_output_range(activation_, out->quantization());
+        Interval output_range;
+        auto status = get_output_range(activation_, out->quantization(), &output_range);
+        if (!status.ok()) {
+            return status;
+        }
 
         const int in_width = input_buf.dim(1).extent();
         const int in_height = input_buf.dim(2).extent();
@@ -1221,26 +1298,24 @@ void Pool2DOp::execute() {
 
         switch (op_) {
         case Average:
-            average_pool_uint8(input_buf, stride_[0], stride_[1], filter_size_[0], filter_size_[1],
-                               output_range.min, output_range.max, output_buf);
+            return halide_error_to_status(average_pool_uint8(input_buf, stride_[0], stride_[1], filter_size_[0], filter_size_[1],
+                                                             output_range.min, output_range.max, output_buf));
             break;
         case Max:
-            max_pool_uint8(input_buf, stride_[0], stride_[1], filter_size_[0], filter_size_[1],
-                           output_range.min, output_range.max, output_buf);
+            return halide_error_to_status(max_pool_uint8(input_buf, stride_[0], stride_[1], filter_size_[0], filter_size_[1],
+                                                         output_range.min, output_range.max, output_buf));
             break;
         }
-    } else {
-        HLOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
+
+    return VSTATUS(UnimplementedOp, "Unsupported type ", out->type());
 }
 
 const char *ReductionOp::to_string(Operator op) {
     switch (op) {
     case Mean:
         return "Mean";
-    default:
-        HLOG(FATAL) << "Unsupported reduction operator.\n";
-        return nullptr;
+    // no default case: we want a compile error if any of the enums aren't handled
     }
 }
 
@@ -1254,27 +1329,28 @@ bool ReductionOp::reducing(int d) const {
     return false;
 }
 
-BoundsMap ReductionOp::map_bounds(int input_idx, int output_idx) const {
+Status ReductionOp::map_bounds(int input_idx, int output_idx, BoundsMap *result) const {
     assert(output_idx == 0);
 
     if (input_idx == 0) {
         int output_d = 0;
-        BoundsMap result(input()->rank(), output()->rank());
+        *result = BoundsMap(input()->rank(), output()->rank());
         for (int d = 0; d < input()->rank(); d++) {
             if (reducing(d)) {
-                result.constant(d, input()->bounds(d));
+                result->constant(d, input()->bounds(d));
             } else {
-                result.elementwise(d, output_d++);
+                result->elementwise(d, output_d++);
             }
         }
         assert(output_d == output()->rank());
-        return result;
+        return Status::OK;
     } else {
-        return BoundsMap(1, output()->rank()).all(input(1)->bounds(), output()->rank());
+        *result = BoundsMap(1, output()->rank()).all(input(1)->bounds(), output()->rank());
+        return Status::OK;
     }
 }
 
-void ReductionOp::execute() {
+Status ReductionOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
@@ -1294,17 +1370,20 @@ void ReductionOp::execute() {
                     extents[d] = input_buf.dim(d).extent();
                 }
             }
-            mean_uint8(input_buf, mins[0], extents[0], mins[1], extents[1],
-                       mins[2], extents[2], mins[3], extents[3], output_buf);
+            return halide_error_to_status(mean_uint8(input_buf, mins[0], extents[0], mins[1], extents[1],
+                                                     mins[2], extents[2], mins[3], extents[3], output_buf));
         }
     }
+
+    return VSTATUS(UnimplementedOp, "Unsupported type ", out->type());
 }
 
 // TODO: Maybe this is only a reshape in some dimensions, in which case we might be able to split it.
-BoundsMap ReshapeOp::map_bounds(int input_idx, int output_idx) const {
+Status ReshapeOp::map_bounds(int input_idx, int output_idx, BoundsMap *result) const {
     assert(input_idx == 0);
     assert(output_idx == 0);
-    return BoundsMap::all(input()->bounds(), output()->rank());
+    *result = BoundsMap::all(input()->bounds(), output()->rank());
+    return Status::OK;
 }
 
 SmallVector<int, max_rank> ReshapeOp::calc_new_shape() const {
@@ -1345,7 +1424,7 @@ SmallVector<int, max_rank> ReshapeOp::calc_new_shape() const {
     return new_shape;
 }
 
-void ReshapeOp::execute() {
+Status ReshapeOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
@@ -1381,16 +1460,19 @@ void ReshapeOp::execute() {
         size_t output_size = output_buf.number_of_elements() * out->type().bytes();
         memcpy(output_buf.data(), input_buf.data(), output_size);
     }
+
+    return Status::OK;
 }
 
-BoundsMap ShapeOp::map_bounds(int input_idx, int output_idx) const {
+Status ShapeOp::map_bounds(int input_idx, int output_idx, BoundsMap *result) const {
     assert(input_idx == 0);
     assert(output_idx == 0);
     // This doesn't actually read anything from the input.
-    return BoundsMap(input()->rank(), 1);
+    *result = BoundsMap(input()->rank(), 1);
+    return Status::OK;
 }
 
-void ShapeOp::execute() {
+Status ShapeOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
@@ -1400,20 +1482,21 @@ void ShapeOp::execute() {
         for (int i = out_buf.dim(0).min(); i <= out_buf.dim(0).max(); i++) {
             out_buf(i) = in->extent(i);
         }
-    } else {
-        HLOG(FATAL) << "Unsupported type " << out->type() << "\n";
     }
+
+    return VSTATUS(UnimplementedOp, "Unsupported type ", out->type());
 }
 
-BoundsMap SoftmaxOp::map_bounds(int input_idx, int output_idx) const {
+Status SoftmaxOp::map_bounds(int input_idx, int output_idx, BoundsMap *result) const {
     assert(input_idx == 0);
     assert(output_idx == 0);
-    return BoundsMap(2, 2)
-        .constant(0, input()->bounds(0))
-        .elementwise(1, 1);
+    *result = BoundsMap(2, 2)
+                  .constant(0, input()->bounds(0))
+                  .elementwise(1, 1);
+    return Status::OK;
 }
 
-void SoftmaxOp::execute() {
+Status SoftmaxOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
@@ -1440,13 +1523,13 @@ void SoftmaxOp::execute() {
         assert(output_multiplier.exponent() <= 0);
 
         auto softmax_rank2 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
-            softmax_uint8(in_buf, input_multiplier.mantissa(), -input_multiplier.exponent(),
-                          output_zero, output_multiplier.mantissa(), -output_multiplier.exponent(), out_buf);
+            return halide_error_to_status(softmax_uint8(in_buf, input_multiplier.mantissa(), -input_multiplier.exponent(),
+                                                        output_zero, output_multiplier.mantissa(), -output_multiplier.exponent(), out_buf));
         };
-        loop_nest<2>(softmax_rank2, in_buf, out_buf);
-    } else {
-        HLOG(FATAL) << "Unsupported type " << out->type() << "\n";
+        return loop_nest<2>(softmax_rank2, in_buf, out_buf);
     }
+
+    return VSTATUS(UnimplementedOp, "Unsupported type ", out->type());
 }
 
 namespace {
@@ -1473,29 +1556,29 @@ void SpaceToDepth(HalideBuffer<const void> input, int block_size, HalideBuffer<v
 
 }  // namespace
 
-BoundsMap SpaceDepthOp::map_bounds(int input_idx, int output_idx) const {
+Status SpaceDepthOp::map_bounds(int input_idx, int output_idx, BoundsMap *result) const {
     assert(input_idx == 0);
     assert(output_idx == 0);
 
     const int rank = output()->rank();
     assert(input()->rank() == rank);
-    BoundsMap result(rank, rank);
+    *result = BoundsMap(rank, rank);
     if (block_size_ > 0) {
-        result.upsample(0, 0, block_size_ * block_size_);
-        result.downsample(1, 1, block_size_);
-        result.downsample(2, 2, block_size_);
+        result->upsample(0, 0, block_size_ * block_size_);
+        result->downsample(1, 1, block_size_);
+        result->downsample(2, 2, block_size_);
     } else {
-        result.downsample(0, 0, block_size_ * block_size_);
-        result.upsample(1, 1, -block_size_);
-        result.upsample(2, 2, -block_size_);
+        result->downsample(0, 0, block_size_ * block_size_);
+        result->upsample(1, 1, -block_size_);
+        result->upsample(2, 2, -block_size_);
     }
     for (int d = 3; d < rank; d++) {
-        result.elementwise(d, d);
+        result->elementwise(d, d);
     }
-    return result;
+    return Status::OK;
 }
 
-void SpaceDepthOp::execute() {
+Status SpaceDepthOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
@@ -1509,10 +1592,13 @@ void SpaceDepthOp::execute() {
         } else {
             DepthToSpace(in_buf, -block_size_, out_buf);
         }
+        return Status::OK;
     }
+
+    return VSTATUS(UnimplementedOp, "Unsupported type ", out->type());
 }
 
-BoundsMap SplitOp::map_bounds(int input_idx, int output_idx) const {
+Status SplitOp::map_bounds(int input_idx, int output_idx, BoundsMap *result) const {
     assert(input_idx == 0);
     const int rank = input()->rank();
     assert(output(output_idx)->rank() == rank);
@@ -1522,14 +1608,14 @@ BoundsMap SplitOp::map_bounds(int input_idx, int output_idx) const {
         offset += output(i)->extent(axis_);
     }
 
-    BoundsMap result = BoundsMap::elementwise(rank);
-    result.at(axis_, axis_).bounds -= offset;
-    return result;
+    *result = BoundsMap::elementwise(rank);
+    result->at(axis_, axis_).bounds -= offset;
+    return Status::OK;
 }
 
-void SplitOp::execute() {
+Status SplitOp::execute() {
     if (is_no_op_) {
-        return;
+        return Status::OK;
     }
     const auto &input_buf = input()->buffer();
 
@@ -1539,21 +1625,26 @@ void SplitOp::execute() {
         assert(output_buf.dim(axis_).min() == 0);
 
         output_buf.translate(axis_, concatenated_i);
-        requantize(input_buf, input()->quantization(), output_buf, output(i)->quantization());
+        auto status = requantize(input_buf, input()->quantization(), output_buf, output(i)->quantization());
+        if (!status.ok()) {
+            return status;
+        }
 
         concatenated_i += output_buf.dim(axis_).extent();
     }
+    return Status::OK;
 }
 
-BoundsMap TileConvFilterOp::map_bounds(int input_idx, int output_idx) const {
+Status TileConvFilterOp::map_bounds(int input_idx, int output_idx, BoundsMap *result) const {
     assert(input_idx == 0);
     assert(output_idx == 0);
     // TODO: Maybe we could say more here, but it usually doesn't
     // matter because this op usually gets constant folded.
-    return BoundsMap::all(input()->bounds(), output()->rank());
+    *result = BoundsMap::all(input()->bounds(), output()->rank());
+    return Status::OK;
 }
 
-void TileConvFilterOp::execute() {
+Status TileConvFilterOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
@@ -1569,24 +1660,25 @@ void TileConvFilterOp::execute() {
             output_buf.add_dimension();
         }
 
-        tile_conv_filter_uint8(input_buf, input_zero, output_zero, output_buf);
-    } else {
-        HLOG(FATAL) << "Unsupported type " << in->type() << "\n";
+        return halide_error_to_status(tile_conv_filter_uint8(input_buf, input_zero, output_zero, output_buf));
     }
+    return VSTATUS(UnimplementedOp, "Unsupported type ", out->type());
 }
 
-BoundsMap TransposeOp::map_bounds(int input_idx, int output_idx) const {
+Status TransposeOp::map_bounds(int input_idx, int output_idx, BoundsMap *result) const {
     assert(output_idx == 0);
     if (input_idx == 0) {
         // TODO: Maybe we can do better here for dimensions that aren't reordered.
-        return BoundsMap::all(input(0)->bounds(), output()->rank());
+        *result = BoundsMap::all(input(0)->bounds(), output()->rank());
+        return Status::OK;
     } else {
         assert(input_idx == 1);
-        return BoundsMap::all({Interval(0, output()->rank() - 1)}, output()->rank());
+        *result = BoundsMap::all({Interval(0, output()->rank() - 1)}, output()->rank());
+        return Status::OK;
     }
 }
 
-void TransposeOp::execute() {
+Status TransposeOp::execute() {
     auto in_buf = input(0)->buffer();
     const auto &dims_buf = input(1)->buffer<const int32_t>();
     auto out_buf = output()->buffer();
@@ -1603,6 +1695,8 @@ void TransposeOp::execute() {
     // Copy the buffers.
     // TODO: This is slow if one of the transposed dimensions is the dimension with stride 1.
     out_buf.copy_from(in_buf);
+
+    return Status::OK;
 }
 
 const char *UnaryOp::to_string(UnaryOp::Operator op) {
@@ -1621,13 +1715,11 @@ const char *UnaryOp::to_string(UnaryOp::Operator op) {
         return "Square";
     case Tanh:
         return "Tanh";
-    default:
-        HLOG(FATAL) << "Unsupported unary op\n";
-        return nullptr;
+    // no default case: we want a compile error if any of the enums aren't handled
     }
 }
 
-void UnaryOp::execute() {
+Status UnaryOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
@@ -1658,10 +1750,9 @@ void UnaryOp::execute() {
             auto program_buf = p.assemble({result});
 
             auto logistic_rank2 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
-                elementwise_5xuint8_1xuint8(in_buf, in_buf, in_buf, in_buf, in_buf, program_buf, out_buf);
+                return halide_error_to_status(elementwise_5xuint8_1xuint8(in_buf, in_buf, in_buf, in_buf, in_buf, program_buf, out_buf));
             };
-            elementwise_loop_nest<2>(logistic_rank2, in_buf, out_buf);
-            return;
+            return elementwise_loop_nest<2>(logistic_rank2, in_buf, out_buf);
         } else if (op_ == Tanh) {
             IntFloat<int16_t> in_multiplier(in_scale);
             in_multiplier *= power_of_two(-left_shift);
@@ -1678,46 +1769,39 @@ void UnaryOp::execute() {
             auto program_buf = p.assemble({result});
 
             auto tanh_rank2 = [&](halide_buffer_t *in_buf, halide_buffer_t *out_buf) {
-                elementwise_5xuint8_1xuint8(in_buf, in_buf, in_buf, in_buf, in_buf, program_buf, out_buf);
+                return halide_error_to_status(elementwise_5xuint8_1xuint8(in_buf, in_buf, in_buf, in_buf, in_buf, program_buf, out_buf));
             };
-            elementwise_loop_nest<2>(tanh_rank2, in_buf, out_buf);
-            return;
+            return elementwise_loop_nest<2>(tanh_rank2, in_buf, out_buf);
         } else if (op_ == Negate) {
-            add_uint8(in_buf, in->quantization(), -1, in_buf, in->quantization(), 0, out_buf, out->quantization());
-            return;
+            return add_uint8(in_buf, in->quantization(), -1, in_buf, in->quantization(), 0, out_buf, out->quantization());
         } else if (op_ == Square) {
-            mul_uint8(in_buf, in->quantization(), in_buf, in->quantization(), out_buf, out->quantization());
-            return;
+            return mul_uint8(in_buf, in->quantization(), in_buf, in->quantization(), out_buf, out->quantization());
         } else if (op_ == Relu || op_ == Relu6 || op_ == ReluN1To1) {
-            requantize(in_buf, in->quantization(), out_buf, out->quantization(), to_activation(op_));
-            return;
+            return requantize(in_buf, in->quantization(), out_buf, out->quantization(), to_activation(op_));
         }
     }
-    HLOG(FATAL)
-        << "Unsupported unary op " << to_string(op_)
-        << " for types " << in->type() << ", " << out->type();
+    return VSTATUS(UnimplementedOp, "Unsupported UnaryOp ", to_string(op_), " for types ", in->type(), " ", out->type());
 }
 
-BoundsMap UpsampleChannelsOp::map_bounds(int input_idx, int output_idx) const {
+Status UpsampleChannelsOp::map_bounds(int input_idx, int output_idx, BoundsMap *result) const {
     assert(input_idx == 0);
     assert(output_idx == 0);
     int rank = output(output_idx)->rank();
     assert(rank == input(input_idx)->rank());
-    return BoundsMap::elementwise(rank).upsample(0, 0, factor_);
+    *result = BoundsMap::elementwise(rank).upsample(0, 0, factor_);
+    return Status::OK;
 }
 
-void UpsampleChannelsOp::execute() {
+Status UpsampleChannelsOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
     if (in->type() == halide_type_of<uint8_t>() && out->type() == halide_type_of<uint8_t>()) {
         auto in_buf = in->buffer();
         auto out_buf = out->buffer();
-        upsample_channels_uint8(in_buf, factor_, out_buf);
-        return;
+        return halide_error_to_status(upsample_channels_uint8(in_buf, factor_, out_buf));
     }
-    HLOG(FATAL)
-        << "Unsupported UpsampleChannels op for types " << in->type() << ", " << out->type();
+    return VSTATUS(UnimplementedOp, "Unsupported UpsampleChannelsOp for types ", in->type(), " ", out->type());
 }
 
 void BinaryOp::accept(OpVisitor *v) {

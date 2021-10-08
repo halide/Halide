@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     runner.status();
 
     for (auto f : files_to_process) {
-        runner.run(f);
+        runner.run(f).check();
         halide_profiler_report(nullptr);
         halide_profiler_reset();
     }

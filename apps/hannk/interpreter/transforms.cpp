@@ -293,14 +293,18 @@ void replace_consumers(const TensorPtr &from, const TensorPtr &to) {
 
 // Find ops that need padding and add an explicit pad op.
 class PadForOps : public OpVisitor {
-    void pad_for_op(Op *op, int input_idx, int output_idx) {
+    Status pad_for_op(Op *op, int input_idx, int output_idx) {
         TensorPtr input = op->input(input_idx);
         TensorPtr output = op->output(output_idx);
-        BoundsMap deps = op->map_bounds(input_idx, output_idx);
+        BoundsMap deps;
+        auto status = op->map_bounds(input_idx, output_idx, &deps);
+        if (!status.ok()) {
+            return status;
+        }
         Box required = deps.evaluate(output->bounds());
 
         if (is_subset_of(required, input->bounds())) {
-            return;
+            return Status::OK;
         }
 
         // Make a PadOp and a new tensor for the padded result.
@@ -324,16 +328,31 @@ class PadForOps : public OpVisitor {
         // Add the new tensor, op, and update the input.
         OpPtr pad = make_op<PadOp>(input, padding, padded);
         new_ops.emplace_back(std::move(pad));
+        return Status::OK;
     }
 
     void visit(ConvOp *op) {
-        pad_for_op(op, 0, 0);
+        auto status = pad_for_op(op, 0, 0);
+        if (!status.ok()) {
+            if (final_status.ok()) {
+                final_status = status;
+            }
+            return;
+        }
 
         // We also need to tile the filter.
         TensorPtr filter = op->filter();
         if (op->filter()->rank() == op->input()->rank()) {
             // This op has not yet had its filter tiled, do it now.
-            BoundsMap bounds = op->map_bounds(1, 0);
+            BoundsMap bounds;
+            auto status = op->map_bounds(1, 0, &bounds);
+            if (!status.ok()) {
+                if (final_status.ok()) {
+                    final_status = status;
+                }
+                return;
+            }
+
             Box tiled_shape = bounds.evaluate(op->output()->bounds());
 
             halide_type_t type = op->filter_type();
@@ -373,7 +392,13 @@ class PadForOps : public OpVisitor {
 
         // TODO: It might be worth enabling UpsampleChannels to handle padding, and fusing the padding
         // in the case we need to upsample the channels.
-        pad_for_op(op, 0, 0);
+        auto status = pad_for_op(op, 0, 0);
+        if (!status.ok()) {
+            if (final_status.ok()) {
+                final_status = status;
+            }
+            return;
+        }
     }
 
     void visit(OpGroup *op) {
@@ -384,6 +409,7 @@ class PadForOps : public OpVisitor {
 
 public:
     std::vector<OpPtr> new_ops;
+    Status final_status = Status::OK;
 };
 
 class FusePadOps : public OpVisitor {
@@ -416,9 +442,12 @@ class FusePadOps : public OpVisitor {
 
 }  // namespace
 
-void pad_for_ops(OpGroup *op) {
+Status pad_for_ops(OpGroup *op) {
     PadForOps padder;
     op->accept(&padder);
+    if (!padder.final_status.ok()) {
+        return padder.final_status;
+    }
     // We need to add in reverse order, so ops that depend on newly added ops go
     // in the right place.
     for (auto i = padder.new_ops.rbegin(); i != padder.new_ops.rend(); ++i) {
@@ -430,6 +459,7 @@ void pad_for_ops(OpGroup *op) {
     // a waste.
     FusePadOps fuser;
     op->accept(&fuser);
+    return Status::OK;
 }
 
 namespace {
@@ -446,12 +476,15 @@ bool can_execute(const Op *op) {
 
 }  // namespace
 
-void fold_constants(OpGroup *root) {
+Status fold_constants(OpGroup *root) {
     std::vector<const Op *> to_remove;
     for (int i = 0; i < root->op_count(); i++) {
         Op *op = root->op(i);
         if (OpGroup *group = cast_op<OpGroup>(op)) {
-            fold_constants(group);
+            auto status = fold_constants(group);
+            if (!status.ok()) {
+                return status;
+            }
         }
         if (can_execute(op)) {
             // Allocate all the outputs.
@@ -466,7 +499,10 @@ void fold_constants(OpGroup *root) {
             }
 
             // Run the whole op.
-            op->execute();
+            auto status = op->execute();
+            if (!status.ok()) {
+                return status;
+            }
 
             // Mark the outputs constant.
             for (int j = 0; j < op->output_count(); j++) {
@@ -480,6 +516,8 @@ void fold_constants(OpGroup *root) {
     for (const Op *i : to_remove) {
         root->remove(i);
     }
+
+    return Status::OK;
 }
 
 }  // namespace hannk

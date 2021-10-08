@@ -14,6 +14,7 @@
 #include "util/buffer_util.h"
 #include "util/error_util.h"
 #include "util/small_vector.h"
+#include "util/status.h"
 
 namespace hannk {
 
@@ -126,6 +127,10 @@ class BoundsMap {
     DimMap data_[max_rank * (max_rank + 1)];
 
 public:
+    BoundsMap()
+        : dims_in_(0), dims_out_(0) {
+    }
+
     BoundsMap(int dims_in, int dims_out)
         : dims_in_(dims_in), dims_out_(dims_out) {
         assert(dims_in <= max_rank);
@@ -268,18 +273,12 @@ public:
     virtual ~Op();
 
     // Get the bounds required of all inputs and outputs given a crop.
-    virtual BoundsMap map_bounds(int input_idx, int output_idx) const = 0;
-    BoundsMap map_bounds(int input_idx) const {
-        if (output_count() == 1) {
-            return map_bounds(input_idx, 0);
-        } else {
-            HLOG(FATAL) << "More than one output requires get_full_crop override.";
-            return BoundsMap(0, 0);
-        }
-    }
+    virtual Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const = 0;
+
+    Status map_bounds(int input_idx, BoundsMap *result) const;
 
     // Execute the op on a given crop.
-    virtual void execute() = 0;
+    virtual Status execute() = 0;
 
     virtual void accept(OpVisitor *v) = 0;
 
@@ -343,9 +342,9 @@ public:
     void add(OpPtr to_insert, const Op *before = nullptr);
     void remove(const Op *op);
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const;
 
-    void execute();
+    Status execute();
 
     int op_count() const {
         return ops_.size();

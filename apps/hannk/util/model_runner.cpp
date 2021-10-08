@@ -390,9 +390,12 @@ ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer
     InterpreterOptions options;
     options.verbosity = verbosity;
     Interpreter interpreter(std::move(model), std::move(options));
+    interpreter.init().check();
 
     // Fill in the inputs with pseudorandom data (save the seeds for later).
-    for (TensorPtr t : interpreter.inputs()) {
+    std::vector<TensorPtr> inputs;
+    interpreter.get_inputs(&inputs).check();
+    for (TensorPtr t : inputs) {
         if (t->is_constant()) {
             // Skip constant buffers, just like TFlite does later on.
             continue;
@@ -410,10 +413,12 @@ ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer
     // halide_set_num_threads(threads);
 
     // Execute once, to prime the pump
-    interpreter.execute();
+    interpreter.execute().check();
 
     // Save the outputs from that execution (before benchmarking)
-    for (TensorPtr t : interpreter.outputs()) {
+    std::vector<TensorPtr> outputs;
+    interpreter.get_outputs(&outputs).check();
+    for (TensorPtr t : outputs) {
         if (verbosity) {
             std::cout << "HALIDE output is " << t->name() << " type " << t->type() << "\n";
         }
@@ -424,7 +429,7 @@ ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer
     // Now benchmark it
     if (do_benchmark) {
         result.time = bench([&interpreter]() {
-            interpreter.execute();
+            interpreter.execute().check();
         });
     }
 
@@ -575,7 +580,7 @@ int ModelRunner::parse_flags(int argc, char **argv, std::vector<std::string> &fi
     return 0;
 }
 
-void ModelRunner::run(const std::string &filename) {
+Status ModelRunner::run(const std::string &filename) {
     std::map<WhichRun, RunResult> results;
 
     if (run_count == 0) {
@@ -615,7 +620,11 @@ void ModelRunner::run(const std::string &filename) {
         std::cout << "Processing " << filename << " ...\n";
     }
 
-    const std::vector<char> buffer = read_entire_file(filename);
+    std::vector<char> buffer;
+    auto status = read_entire_file(filename, &buffer);
+    if (!status.ok()) {
+        return status;
+    }
 
     const auto exec_tflite = [this, &buffer]() {
         return run_in_tflite(buffer);
@@ -675,14 +684,19 @@ void ModelRunner::run(const std::string &filename) {
             }
         }
 
-        if (!all_matched && !keep_going) {
-            exit(1);
+        if (!all_matched) {
+            std::cerr << "Some runs exceeded the error threshold!\n";
+            if (!keep_going) {
+                return Status::Error;
+            }
         }
     }
 
     if (csv_output) {
         std::cout << '\n';
     }
+
+    return Status::OK;
 }
 
 }  // namespace hannk

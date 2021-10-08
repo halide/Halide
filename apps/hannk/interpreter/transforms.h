@@ -2,6 +2,7 @@
 #define HANNK_TRANSFORMS_H
 
 #include "interpreter/ops.h"
+#include "util/status.h"
 
 namespace hannk {
 
@@ -13,11 +14,11 @@ void remove_dead_ops(OpGroup *op);
 
 // Add pad ops before ops that need it, so those ops can
 // assume everything needed of the input is in bounds.
-void pad_for_ops(OpGroup *op);
+Status pad_for_ops(OpGroup *op);
 
 // Execute ops that are constant, and mark the results
 // constant as well.
-void fold_constants(OpGroup *op);
+Status fold_constants(OpGroup *op);
 
 }  // namespace hannk
 

@@ -3,7 +3,11 @@
 set -e
 
 HANNK_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+if [ -z ${BUILD_DIR} ]; then
 BUILD_DIR="${HANNK_DIR}/build"
+fi
+echo Using BUILD_DIR=${BUILD_DIR}
 
 mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
