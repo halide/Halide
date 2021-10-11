@@ -41,10 +41,10 @@ extern "C" WEAK void *halide_opencl_get_symbol(void *user_context, const char *n
         "/System/Library/Frameworks/OpenCL.framework/OpenCL",
 #endif
     };
-    for (size_t i = 0; i < sizeof(lib_names) / sizeof(lib_names[0]); i++) {
-        lib_opencl = halide_load_library(lib_names[i]);
+    for (auto &lib_name : lib_names) {
+        lib_opencl = halide_load_library(lib_name);
         if (lib_opencl) {
-            debug(user_context) << "    Loaded OpenCL runtime library: " << lib_names[i] << "\n";
+            debug(user_context) << "    Loaded OpenCL runtime library: " << lib_name << "\n";
             break;
         }
     }

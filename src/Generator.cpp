@@ -138,8 +138,8 @@ std::vector<Type> parse_halide_type_list(const std::string &types) {
 void ValueTracker::track_values(const std::string &name, const std::vector<Expr> &values) {
     std::vector<std::vector<Expr>> &history = values_history[name];
     if (history.empty()) {
-        for (size_t i = 0; i < values.size(); ++i) {
-            history.push_back({values[i]});
+        for (const auto &value : values) {
+            history.push_back({value});
         }
         return;
     }
@@ -583,8 +583,8 @@ void StubEmitter::emit() {
     stream << get_indent() << "generator_params.to_generator_params_map(),\n";
     stream << get_indent() << "{\n";
     indent_level++;
-    for (size_t i = 0; i < inputs.size(); ++i) {
-        stream << get_indent() << "Stub::to_stub_input_vector(inputs." << inputs[i]->name() << ")";
+    for (auto *input : inputs) {
+        stream << get_indent() << "Stub::to_stub_input_vector(inputs." << input->name() << ")";
         stream << ",\n";
     }
     indent_level--;
@@ -1586,8 +1586,11 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
     // First: the original inputs. Note that scalar inputs remain scalar,
     // rather being promoted into zero-dimensional buffers.
     for (const auto *input : pi.inputs()) {
-        // There can be multiple Funcs/Parameters per input if the input is an Array
-        internal_assert(input->parameters_.size() == input->funcs_.size());
+        // There can be multiple Funcs/Parameters per input if the
+        // input is an Array.
+        if (input->is_array()) {
+            internal_assert(input->parameters_.size() == input->funcs_.size());
+        }
         for (const auto &p : input->parameters_) {
             gradient_inputs.push_back(to_argument(p));
             debug(DBG) << "    gradient copied input is: " << gradient_inputs.back().name << "\n";

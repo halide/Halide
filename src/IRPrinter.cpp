@@ -444,8 +444,7 @@ void IRPrinter::visit(const FloatImm *op) {
 
 void IRPrinter::visit(const StringImm *op) {
     stream << "\"";
-    for (size_t i = 0; i < op->value.size(); i++) {
-        unsigned char c = op->value[i];
+    for (unsigned char c : op->value) {
         if (c >= ' ' && c <= '~' && c != '\\' && c != '"') {
             stream << c;
         } else {
@@ -840,9 +839,9 @@ void IRPrinter::visit(const Provide *op) {
 void IRPrinter::visit(const Allocate *op) {
     ScopedBinding<> bind(known_type, op->name);
     stream << get_indent() << "allocate " << op->name << "[" << op->type;
-    for (size_t i = 0; i < op->extents.size(); i++) {
+    for (const auto &extent : op->extents) {
         stream << " * ";
-        print(op->extents[i]);
+        print(extent);
     }
     stream << "]";
     if (op->memory_type != MemoryType::Auto) {

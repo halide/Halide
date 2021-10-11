@@ -49,10 +49,10 @@ extern "C" WEAK void *halide_cuda_get_symbol(void *user_context, const char *nam
         "/Library/Frameworks/CUDA.framework/CUDA",
 #endif
     };
-    for (size_t i = 0; i < sizeof(lib_names) / sizeof(lib_names[0]); i++) {
-        lib_cuda = halide_load_library(lib_names[i]);
+    for (auto &lib_name : lib_names) {
+        lib_cuda = halide_load_library(lib_name);
         if (lib_cuda) {
-            debug(user_context) << "    Loaded CUDA runtime library: " << lib_names[i] << "\n";
+            debug(user_context) << "    Loaded CUDA runtime library: " << lib_name << "\n";
             break;
         }
     }

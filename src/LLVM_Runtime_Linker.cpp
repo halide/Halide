@@ -133,12 +133,10 @@ DECLARE_CPP_INITMOD(hexagon_cache_allocator)
 DECLARE_CPP_INITMOD(hexagon_dma_pool)
 DECLARE_CPP_INITMOD(qurt_hvx)
 DECLARE_CPP_INITMOD(qurt_hvx_vtcm)
-DECLARE_CPP_INITMOD(qurt_init_fini)
 DECLARE_CPP_INITMOD(qurt_threads)
 DECLARE_CPP_INITMOD(qurt_threads_tsan)
 DECLARE_CPP_INITMOD(qurt_yield)
 DECLARE_CPP_INITMOD(runtime_api)
-DECLARE_CPP_INITMOD(ssp)
 DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(trace_helper)
 DECLARE_CPP_INITMOD(tracing)
@@ -506,8 +504,6 @@ llvm::Triple get_triple_for_target(const Target &target) {
 
         if (target.os == Target::Linux) {
             triple.setOS(llvm::Triple::Linux);
-            // TODO: Check what options there are here.
-            triple.setEnvironment(llvm::Triple::GNUEABIHF);
         } else if (target.os == Target::NoOS) {
             // for baremetal environment
         } else {
@@ -545,21 +541,21 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
 
     // Set the layout and triple on the modules before linking, so
     // llvm doesn't complain while combining them.
-    for (size_t i = 0; i < modules.size(); i++) {
+    for (auto &module : modules) {
         if (t.os == Target::Windows &&
-            !Internal::starts_with(modules[i]->getName().str(), "windows_")) {
+            !Internal::starts_with(module->getName().str(), "windows_")) {
             // When compiling for windows, all wchars are
             // 16-bit. Generic modules may have it set to 32-bit. Drop
             // any module flags on the generic modules and use the
             // more correct ones on the windows-specific modules to
             // avoid a conflict. This is safe as long as the generic
             // modules never actually use a wchar.
-            if (auto *module_flags = modules[i]->getModuleFlagsMetadata()) {
-                modules[i]->eraseNamedMetadata(module_flags);
+            if (auto *module_flags = module->getModuleFlagsMetadata()) {
+                module->eraseNamedMetadata(module_flags);
             }
         }
-        modules[i]->setDataLayout(data_layout);
-        modules[i]->setTargetTriple(triple.str());
+        module->setDataLayout(data_layout);
+        module->setTargetTriple(triple.str());
     }
 
     // Link them all together
@@ -578,11 +574,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     // The symbols that we might want to call as a user even if not
     // used in the Halide-generated code must remain weak. This is
     // handled automatically by assuming any symbol starting with
-    // "halide_" that is weak will be retained. There are a few
-    // symbols for which this convention is not followed and these are
-    // in this set.
-    const std::set<string> retain = {"__stack_chk_guard",
-                                     "__stack_chk_fail"};
+    // "halide_" that is weak will be retained.
 
     // COMDAT is not supported in MachO object files, hence it does
     // not work on Mac OS or iOS. These sometimes show up in the
@@ -612,6 +604,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     // Enumerate the functions.
     for (auto &f : *modules[0]) {
         const std::string f_name = Internal::get_llvm_function_name(f);
+        assert(f_name != "__stack_chk_guard" && f_name != "__stack_chk_fail");
 
         bool is_halide_extern_c_sym = Internal::starts_with(f_name, "halide_");
         internal_assert(!is_halide_extern_c_sym || f.isWeakForLinker() || f.isDeclaration())
@@ -622,7 +615,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
         if (f.getLinkage() == llvm::GlobalValue::ExternalWeakLinkage) {
             f.setLinkage(llvm::GlobalValue::ExternalLinkage);
         } else {
-            const bool can_strip = !is_halide_extern_c_sym && retain.count(f_name) == 0;
+            const bool can_strip = !is_halide_extern_c_sym;
             if (can_strip || allow_stripping_all_weak_functions) {
                 convert_weak_to_linkonce(f);
             }
@@ -917,7 +910,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_qurt_threads(c, bits_64, debug));
                 }
-                modules.push_back(get_initmod_qurt_init_fini(c, bits_64, debug));
             } else if (t.os == Target::NoOS) {
                 // The OS-specific symbols provided by the modules
                 // above are expected to be provided by the containing
@@ -1225,9 +1217,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
 
     // For now, the PTX backend does not handle calling functions. So mark all functions
     // AvailableExternally to ensure they are inlined or deleted.
-    for (llvm::Module::iterator iter = modules[0]->begin(); iter != modules[0]->end(); iter++) {
-        llvm::Function &f = *iter;
-
+    for (auto &f : *modules[0]) {
         // This is intended to set all definitions (not extern declarations)
         // to "available externally" which should guarantee they do not exist
         // after the resulting module is finalized to code. That is they must

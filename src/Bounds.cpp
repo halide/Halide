@@ -1909,10 +1909,30 @@ class SolveIfThenElse : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
-        push_var(op->name);
-        Stmt stmt = IRMutator::visit(op);
-        pop_var(op->name);
-        return stmt;
+        Stmt orig = op;
+        vector<const LetStmt *> frames;
+        Stmt body;
+        do {
+            frames.push_back(op);
+            push_var(op->name);
+            body = op->body;
+            op = body.as<LetStmt>();
+        } while (op);
+
+        Stmt s = mutate(body);
+
+        if (s.same_as(body)) {
+            for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+                pop_var((*it)->name);
+            }
+            return orig;
+        } else {
+            for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+                pop_var((*it)->name);
+                s = LetStmt::make((*it)->name, (*it)->value, s);
+            }
+            return s;
+        }
     }
 
     Stmt visit(const For *op) override {
@@ -2842,11 +2862,11 @@ private:
         }
 
         if (consider_calls) {
-            for (size_t i = 0; i < op->args.size(); i++) {
-                op->args[i].accept(this);
+            for (const auto &arg : op->args) {
+                arg.accept(this);
             }
-            for (size_t i = 0; i < op->values.size(); i++) {
-                op->values[i].accept(this);
+            for (const auto &value : op->values) {
+                value.accept(this);
             }
         }
     }
@@ -2901,6 +2921,41 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
                     relevant = true;
                 }
                 return op;
+            }
+
+            Stmt visit(const LetStmt *op) override {
+                // Walk eagerly through an entire let chain and either
+                // accept or reject all of them, not worrying about
+                // the case where some outer lets are relevant and
+                // some inner lets are not.
+                vector<const LetStmt *> frames;
+                Stmt orig = op;
+                Stmt body;
+                do {
+                    // Visit the value just to check relevance. We
+                    // don't expect Exprs to be mutated, so no need to
+                    // keep the result.
+                    mutate(op->value);
+                    frames.push_back(op);
+                    body = op->body;
+                    op = body.as<LetStmt>();
+                } while (op);
+
+                Stmt s = mutate(body);
+
+                if (s.same_as(body)) {
+                    return orig;
+                } else if (!relevant) {
+                    // All the lets were irrelevant and so was the body
+                    internal_assert(s.same_as(no_op));
+                    return s;
+                } else {
+                    // Rewrap the lets around the mutated body
+                    for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+                        s = LetStmt::make((*it)->name, (*it)->value, s);
+                    }
+                    return s;
+                }
             }
 
         public:
@@ -3086,8 +3141,8 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                                               const map<string, Function> &env) {
     FuncValueBounds fb;
 
-    for (size_t i = 0; i < order.size(); i++) {
-        Function f = env.find(order[i])->second;
+    for (const auto &func_name : order) {
+        Function f = env.find(func_name)->second;
         const vector<string> f_args = f.args();
         for (int j = 0; j < f.outputs(); j++) {
             pair<string, int> key = {f.name(), j};
@@ -3129,7 +3184,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
             }
 
             debug(2) << "Bounds on value " << j
-                     << " for func " << order[i]
+                     << " for func " << func_name
                      << " are: " << result.min << ", " << result.max << "\n";
         }
     }

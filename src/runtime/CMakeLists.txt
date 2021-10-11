@@ -71,13 +71,11 @@ set(RUNTIME_CPP
     qurt_allocator
     qurt_hvx
     qurt_hvx_vtcm
-    qurt_init_fini
     qurt_threads
     qurt_threads_tsan
     qurt_yield
     riscv_cpu_features
     runtime_api
-    ssp
     to_string
     trace_helper
     tracing
@@ -154,6 +152,8 @@ set(RUNTIME_CXX_FLAGS
     -fno-vectorize
     # Note: we don't want static locals to get thread synchronization stuff.
     -fno-threadsafe-statics
+    # Necessary for using virtual functions in the runtime code.
+    -fno-rtti
     -Wall
     -Wcast-qual
     -Werror
