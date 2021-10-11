@@ -674,7 +674,7 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.HonorSignDependentRoundingFPMathOption = !per_instruction_fast_math_flags;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
-#if LLVM_VERSION >= 13
+#if LLVM_VERSION >= 130
     // nothing
 #else
     options.StackAlignmentOverride = 0;
