@@ -459,62 +459,6 @@ protected:
         }
     }
 
-    Scope<Expr> replacements;
-    Expr visit(const Variable *op) override {
-        if (replacements.contains(op->name)) {
-            return replacements.get(op->name);
-        } else {
-            return op;
-        }
-    }
-
-    template<typename T>
-    auto visit_let(const T *op) -> decltype(op->body) {
-        decltype(op->body) orig = op;
-        struct Frame {
-            const T *let;
-            Expr new_value;
-            ScopedBinding<Expr> bind;
-            Frame(const T *let, const Expr &new_value, ScopedBinding<Expr> &&bind)
-                : let(let), new_value(new_value), bind(std::move(bind)) {
-            }
-        };
-        std::vector<Frame> frames;
-        decltype(op->body) body;
-        do {
-            body = op->body;
-            Expr value = mutate(op->value);
-            bool should_replace = false;
-            if (const Call *call = value.as<Call>()) {
-                should_replace = call->is_intrinsic({Call::widening_add,
-                                                     Call::widening_sub,
-                                                     Call::widening_mul,
-                                                     Call::widening_shift_right,
-                                                     Call::widening_shift_left});
-            }
-            value = mutate(value);
-            frames.emplace_back(op, value, ScopedBinding<Expr>(should_replace, replacements, op->name, value));
-            op = body.template as<T>();
-        } while (op);
-
-        body = mutate(body);
-
-        while (!frames.empty()) {
-            body = T::make(frames.back().let->name, frames.back().new_value, body);
-            frames.pop_back();
-        }
-
-        return body;
-    }
-
-    Expr visit(const Let *op) override {
-        return visit_let(op);
-    }
-
-    Stmt visit(const LetStmt *op) override {
-        return visit_let(op);
-    }
-
     Expr visit(const Call *op) override {
         if (!find_intrinsics_for_type(op->type)) {
             return IRMutator::visit(op);
@@ -625,14 +569,103 @@ protected:
     }
 };
 
+// Substitute in let values than have an output vector
+// type wider than all the types of other variables
+// referenced. This can't cause combinatorial explosion,
+// because each let in a chain has a wider value than the
+// ones it refers to.
+class SubstituteInWideningLets : public IRMutator {
+    using IRMutator::visit;
+
+    bool widens(const Expr &e) {
+        class AllInputsNarrowerThan : public IRVisitor {
+            int bits;
+
+            using IRVisitor::visit;
+
+            void visit(const Variable *op) override {
+                result &= op->type.bits() < bits;
+            }
+
+            void visit(const Load *op) override {
+                result &= op->type.bits() < bits;
+            }
+
+        public:
+            AllInputsNarrowerThan(Type t)
+                : bits(t.bits()) {
+            }
+            bool result = true;
+        } widens(e.type());
+        e.accept(&widens);
+        return widens.result;
+    }
+
+    Scope<Expr> replacements;
+    Expr visit(const Variable *op) override {
+        if (replacements.contains(op->name)) {
+            return replacements.get(op->name);
+        } else {
+            return op;
+        }
+    }
+
+    template<typename T>
+    auto visit_let(const T *op) -> decltype(op->body) {
+        decltype(op->body) orig = op;
+        struct Frame {
+            const T *let;
+            Expr new_value;
+            ScopedBinding<Expr> bind;
+            Frame(const T *let, const Expr &new_value, ScopedBinding<Expr> &&bind)
+                : let(let), new_value(new_value), bind(std::move(bind)) {
+            }
+        };
+        std::vector<Frame> frames;
+        decltype(op->body) body;
+        do {
+            body = op->body;
+            Expr value = op->value;
+            bool should_replace = value.type().is_vector() && widens(value);
+
+            // TODO: If it's an int32/64 vector, it may be
+            // implicitly widening because overflow is UB. Hard to
+            // see how to handle this without worrying about
+            // combinatorial explosion of substitutions.
+            value = mutate(value);
+            frames.emplace_back(op, value, ScopedBinding<Expr>(should_replace, replacements, op->name, value));
+            op = body.template as<T>();
+        } while (op);
+
+        body = mutate(body);
+
+        while (!frames.empty()) {
+            if (!frames.back().bind.bound()) {
+                body = T::make(frames.back().let->name, frames.back().new_value, body);
+            }
+            frames.pop_back();
+        }
+
+        return body;
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
+    }
+};
+
 }  // namespace
 
 Stmt find_intrinsics(const Stmt &s) {
-    return FindIntrinsics().mutate(s);
+    return FindIntrinsics().mutate(SubstituteInWideningLets().mutate(s));
 }
 
 Expr find_intrinsics(const Expr &e) {
-    return FindIntrinsics().mutate(e);
+    return FindIntrinsics().mutate(SubstituteInWideningLets().mutate(e));
 }
 
 Expr lower_widening_add(const Expr &a, const Expr &b) {

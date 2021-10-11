@@ -12,7 +12,18 @@ Expr narrow(Expr a) {
 void check(Expr test, Expr expected, Type required_type) {
     // Some of the below tests assume the simplifier has run.
     test = simplify(test);
-    Expr result = find_intrinsics(test);
+
+    // Make sure the pattern is robust to CSE. We only enforce this
+    // for types with well-defined overflow for now.
+    if (test.type().bits() < 32 || test.type().is_uint()) {
+        auto bundle = [](const Expr &e) {
+            return Call::make(e.type(), Call::bundle, {e, e}, Call::PureIntrinsic);
+        };
+        test = common_subexpression_elimination(bundle(test));
+        expected = bundle(expected);
+    }
+
+    Expr result = substitute_in_all_lets(find_intrinsics(test));
     if (!equal(result, expected) || required_type != expected.type()) {
         std::cerr << "failure!\n";
         std::cerr << "test: " << test << "\n";
@@ -189,6 +200,7 @@ int main(int argc, char **argv) {
     check(u8(widening_add(u8x, u8y) / 2), halving_add(u8x, u8y));
     check((i32x + i32y) / 2, halving_add(i32x, i32y));
     check((f32x + f32y) / 2, (f32x + f32y) * 0.5f);
+
 
     check(i8((i16(i8x) - i8y) / 2), halving_sub(i8x, i8y));
     check(u8((u16(u8x) - u8y) / 2), halving_sub(u8x, u8y));
