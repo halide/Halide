@@ -909,9 +909,7 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
                 // is evenly divisble by the number of channels (ie, extent(0))
                 can_be_shallow(alignment, input()->extent(0), input()->extent(1))) {
                 // We can use the shallow version of depthwise here.
-HLOG(INFO)<<"SHALLOW\n";
             } else {
-HLOG(INFO)<<"NOT-SHALLOW\n";
                 result.align_input(0, alignment);
             }
         }
@@ -958,13 +956,8 @@ void DepthwiseConv2DOp::execute() {
             // is evenly divisble by the number of channels (ie, extent(0))
             can_be_shallow(get_depthwise_conv_channel_alignment(), input_buf.dim(0).extent(), input_buf.dim(1).extent())) {
             input_stride_x = input_buf.dim(1).stride();
-HLOG(INFO)<<"FUSING\n";
-HLOG(INFO)<<"BEFORE FUSE:\ninput:"<<dims_to_string(input_buf)<<"\noutput:"<<dims_to_string(output_buf)<<"\n";
             fuse_cx(FuseType::InPlace, input_buf);
             fuse_cx(FuseType::InPlace, output_buf);
-HLOG(INFO)<<"AFTER FUSE:\ninput:"<<dims_to_string(input_buf)<<"\noutput:"<<dims_to_string(output_buf)<<"\n";
-        } else {
-HLOG(INFO)<<"NOT-FUSING\n";
         }
 
         assert(depth_multiplier_ == 1);
