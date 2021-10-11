@@ -429,7 +429,7 @@ protected:
             auto is_x_wide_int_or_uint = is_x_wide_int || is_x_wide_uint;
             // We can't do everything we want here with rewrite rules alone. So, we rewrite them
             // to rounding_shifts with the widening still in place, and narrow it after the rewrite
-            // scuceeds.
+            // succeeds.
             // clang-format off
             if (rewrite(max(min(rounding_shift_right(x, y), upper), lower), rounding_shift_right(x, y), is_x_wide_int_or_uint) ||
                 rewrite(rounding_shift_right(x, y), rounding_shift_right(x, y), is_x_wide_int_or_uint) ||

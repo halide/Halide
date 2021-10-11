@@ -386,16 +386,18 @@ void lower_impl(const vector<Function> &output_funcs,
     s = flatten_nested_ramps(s);
     log("Lowering after flattening nested ramps:", s);
 
-    debug(1) << "Finding intrinsics...\n";
-    s = find_intrinsics(s);
-    log("Lowering after finding intrinsics:", s);
-
     debug(1) << "Removing dead allocations and moving loop invariant code...\n";
     s = remove_dead_allocations(s);
     s = simplify(s);
     s = hoist_loop_invariant_values(s);
     s = hoist_loop_invariant_if_statements(s);
     log("Lowering after removing dead allocations and hoisting loop invariants:", s);
+
+    debug(1) << "Finding intrinsics...\n";
+    // Must be run after the last simplification, because it turns
+    // divisions into shifts, which the simplifier reverses.
+    s = find_intrinsics(s);
+    log("Lowering after finding intrinsics:", s);
 
     debug(1) << "Hoisting prefetches...\n";
     s = hoist_prefetches(s);
