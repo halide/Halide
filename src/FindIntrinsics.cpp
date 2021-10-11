@@ -459,6 +459,62 @@ protected:
         }
     }
 
+    Scope<Expr> replacements;
+    Expr visit(const Variable *op) override {
+        if (replacements.contains(op->name)) {
+            return replacements.get(op->name);
+        } else {
+            return op;
+        }
+    }
+
+    template<typename T>
+    auto visit_let(const T *op) -> decltype(op->body) {
+        decltype(op->body) orig = op;
+        struct Frame {
+            const T *let;
+            Expr new_value;
+            ScopedBinding<Expr> bind;
+            Frame(const T *let, const Expr &new_value, ScopedBinding<Expr> &&bind)
+                : let(let), new_value(new_value), bind(std::move(bind)) {
+            }
+        };
+        std::vector<Frame> frames;
+        decltype(op->body) body;
+        do {
+            body = op->body;
+            Expr value = mutate(op->value);
+            bool should_replace = false;
+            if (const Call *call = value.as<Call>()) {
+                should_replace = call->is_intrinsic({Call::widening_add,
+                                                     Call::widening_sub,
+                                                     Call::widening_mul,
+                                                     Call::widening_shift_right,
+                                                     Call::widening_shift_left});
+            }
+            value = mutate(value);
+            frames.emplace_back(op, value, ScopedBinding<Expr>(should_replace, replacements, op->name, value));
+            op = body.template as<T>();
+        } while (op);
+
+        body = mutate(body);
+
+        while (!frames.empty()) {
+            body = T::make(frames.back().let->name, frames.back().new_value, body);
+            frames.pop_back();
+        }
+
+        return body;
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
+    }
+
     Expr visit(const Call *op) override {
         if (!find_intrinsics_for_type(op->type)) {
             return IRMutator::visit(op);
