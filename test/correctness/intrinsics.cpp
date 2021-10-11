@@ -112,23 +112,30 @@ void check_intrinsics_over_range() {
     }
 }
 
+Var x;
+Expr make_leaf(Type t, const char *name) {
+    return Load::make(t, name, Ramp::make(x, 1, t.lanes()),
+                      Buffer<>{}, Parameter{},
+                      const_true(t.lanes()), ModulusRemainder{});
+}
+
 int main(int argc, char **argv) {
-    Expr i8x = Variable::make(Int(8, 4), "i8x");
-    Expr i8y = Variable::make(Int(8, 4), "i8y");
-    Expr i8z = Variable::make(Int(8, 4), "i8w");
-    Expr i8w = Variable::make(Int(8, 4), "i8z");
-    Expr u8x = Variable::make(UInt(8, 4), "u8x");
-    Expr u8y = Variable::make(UInt(8, 4), "u8y");
-    Expr u8z = Variable::make(UInt(8, 4), "u8w");
-    Expr u8w = Variable::make(UInt(8, 4), "u8z");
-    Expr u32x = Variable::make(UInt(32, 4), "u32x");
-    Expr u32y = Variable::make(UInt(32, 4), "u32y");
-    Expr i32x = Variable::make(Int(32, 4), "i32x");
-    Expr i32y = Variable::make(Int(32, 4), "i32y");
-    Expr f16x = Variable::make(Float(16, 4), "f16x");
-    Expr f16y = Variable::make(Float(16, 4), "f16y");
-    Expr f32x = Variable::make(Float(32, 4), "f32x");
-    Expr f32y = Variable::make(Float(32, 4), "f32y");
+    Expr i8x = make_leaf(Int(8, 4), "i8x");
+    Expr i8y = make_leaf(Int(8, 4), "i8y");
+    Expr i8z = make_leaf(Int(8, 4), "i8w");
+    Expr i8w = make_leaf(Int(8, 4), "i8z");
+    Expr u8x = make_leaf(UInt(8, 4), "u8x");
+    Expr u8y = make_leaf(UInt(8, 4), "u8y");
+    Expr u8z = make_leaf(UInt(8, 4), "u8w");
+    Expr u8w = make_leaf(UInt(8, 4), "u8z");
+    Expr u32x = make_leaf(UInt(32, 4), "u32x");
+    Expr u32y = make_leaf(UInt(32, 4), "u32y");
+    Expr i32x = make_leaf(Int(32, 4), "i32x");
+    Expr i32y = make_leaf(Int(32, 4), "i32y");
+    Expr f16x = make_leaf(Float(16, 4), "f16x");
+    Expr f16y = make_leaf(Float(16, 4), "f16y");
+    Expr f32x = make_leaf(Float(32, 4), "f32x");
+    Expr f32y = make_leaf(Float(32, 4), "f32y");
 
     // Check powers of two multiply/divide rewritten to shifts.
     check(i8x * 2, i8x << 1);
@@ -138,7 +145,7 @@ int main(int argc, char **argv) {
 
     check(i16(i8x) * 4096, widening_shift_left(i8x, 12));
     check(u16(u8x) * 128, widening_shift_left(u8x, 7));
-    //check(u32(u8x) * 256, u32(widening_shift_left(u8x, u8(8))));
+    // check(u32(u8x) * 256, u32(widening_shift_left(u8x, u8(8))));
 
     // Check widening arithmetic
     check(i16(i8x) + i8y, widening_add(i8x, i8y));
@@ -200,7 +207,6 @@ int main(int argc, char **argv) {
     check(u8(widening_add(u8x, u8y) / 2), halving_add(u8x, u8y));
     check((i32x + i32y) / 2, halving_add(i32x, i32y));
     check((f32x + f32y) / 2, (f32x + f32y) * 0.5f);
-
 
     check(i8((i16(i8x) - i8y) / 2), halving_sub(i8x, i8y));
     check(u8((u16(u8x) - u8y) / 2), halving_sub(u8x, u8y));

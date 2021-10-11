@@ -592,6 +592,14 @@ class SubstituteInWideningLets : public IRMutator {
                 result &= op->type.bits() < bits;
             }
 
+            void visit(const Call *op) override {
+                if (op->is_pure() && op->is_intrinsic()) {
+                    IRVisitor::visit(op);
+                } else {
+                    result &= op->type.bits() < bits;
+                }
+            }
+
         public:
             AllInputsNarrowerThan(Type t)
                 : bits(t.bits()) {
@@ -613,13 +621,12 @@ class SubstituteInWideningLets : public IRMutator {
 
     template<typename T>
     auto visit_let(const T *op) -> decltype(op->body) {
-        decltype(op->body) orig = op;
         struct Frame {
-            const T *let;
+            std::string name;
             Expr new_value;
             ScopedBinding<Expr> bind;
-            Frame(const T *let, const Expr &new_value, ScopedBinding<Expr> &&bind)
-                : let(let), new_value(new_value), bind(std::move(bind)) {
+            Frame(const std::string &name, const Expr &new_value, ScopedBinding<Expr> &&bind)
+                : name(name), new_value(new_value), bind(std::move(bind)) {
             }
         };
         std::vector<Frame> frames;
@@ -627,14 +634,54 @@ class SubstituteInWideningLets : public IRMutator {
         do {
             body = op->body;
             Expr value = op->value;
-            bool should_replace = value.type().is_vector() && widens(value);
+            bool should_replace = find_intrinsics_for_type(value.type()) && widens(value);
+
+            // We can only substitute in pure stuff. Isolate all
+            // impure subexpressions and leave them behind here as
+            // lets.
+            class LeaveBehindSubexpressions : public IRMutator {
+                using IRMutator::visit;
+
+                Expr visit(const Call *op) override {
+                    if (!op->is_pure() || !op->is_intrinsic()) {
+                        // Only enter pure intrinsics (e.g. existing uses of widening_add)
+                        std::string name = unique_name('t');
+                        frames.emplace_back(name, op, ScopedBinding<Expr>{});
+                        return Variable::make(op->type, name);
+                    } else {
+                        return IRMutator::visit(op);
+                    }
+                }
+
+                Expr visit(const Load *op) override {
+                    // Never enter loads. They can be impure and none
+                    // of our patterns match them.
+                    std::string name = unique_name('t');
+                    frames.emplace_back(name, op, ScopedBinding<Expr>{});
+                    return Variable::make(op->type, name);
+                }
+
+                std::vector<Frame> &frames;
+
+            public:
+                LeaveBehindSubexpressions(std::vector<Frame> &frames)
+                    : frames(frames) {
+                }
+            } extractor(frames);
+
+            if (should_replace) {
+                value = extractor.mutate(value);
+                // Check it wasn't lifted entirely
+                should_replace = !value.as<Variable>();
+            }
 
             // TODO: If it's an int32/64 vector, it may be
             // implicitly widening because overflow is UB. Hard to
             // see how to handle this without worrying about
             // combinatorial explosion of substitutions.
             value = mutate(value);
-            frames.emplace_back(op, value, ScopedBinding<Expr>(should_replace, replacements, op->name, value));
+            ScopedBinding<Expr> bind(should_replace, replacements, op->name, value);
+            frames.emplace_back(op->name, value, std::move(bind));
             op = body.template as<T>();
         } while (op);
 
@@ -642,7 +689,7 @@ class SubstituteInWideningLets : public IRMutator {
 
         while (!frames.empty()) {
             if (!frames.back().bind.bound()) {
-                body = T::make(frames.back().let->name, frames.back().new_value, body);
+                body = T::make(frames.back().name, frames.back().new_value, body);
             }
             frames.pop_back();
         }
