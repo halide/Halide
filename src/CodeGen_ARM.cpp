@@ -808,16 +808,22 @@ void CodeGen_ARM::visit(const Cast *op) {
             // regular narrowing casts.
             {u8_sat(wild_u32x_), u8_sat(u16_sat(wild_u32x_))},
             {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
+            {u8_sat(wild_f32x_), u8_sat(i16_sat(wild_f32x_))},
             {i8_sat(wild_u32x_), i8_sat(u16_sat(wild_u32x_))},
             {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
+            {i8_sat(wild_f32x_), i8_sat(i16_sat(wild_f32x_))},
             {u16_sat(wild_u64x_), u16_sat(u32_sat(wild_u64x_))},
             {u16_sat(wild_i64x_), u16_sat(i32_sat(wild_i64x_))},
+            {u16_sat(wild_f64x_), u16_sat(i32_sat(wild_f64x_))},
             {i16_sat(wild_u64x_), i16_sat(u32_sat(wild_u64x_))},
             {i16_sat(wild_i64x_), i16_sat(i32_sat(wild_i64x_))},
+            {i16_sat(wild_f64x_), i16_sat(i32_sat(wild_f64x_))},
             {u8_sat(wild_u64x_), u8_sat(u16_sat(u32_sat(wild_u64x_)))},
             {u8_sat(wild_i64x_), u8_sat(i16_sat(i32_sat(wild_i64x_)))},
+            {u8_sat(wild_f64x_), u8_sat(i16_sat(i32_sat(wild_f64x_)))},
             {i8_sat(wild_u64x_), i8_sat(u16_sat(u32_sat(wild_u64x_)))},
             {i8_sat(wild_i64x_), i8_sat(i16_sat(i32_sat(wild_i64x_)))},
+            {i8_sat(wild_f64x_), i8_sat(i16_sat(i32_sat(wild_f64x_)))},
         };
         for (const auto &i : cast_rewrites) {
             if (expr_match(i.first, op, matches)) {
