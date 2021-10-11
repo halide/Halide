@@ -613,7 +613,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     options.HonorSignDependentRoundingFPMathOption = false;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
-#if LLVM_VERSION >= 13
+#if LLVM_VERSION >= 130
     // nothing
 #else
     options.StackAlignmentOverride = 0;
