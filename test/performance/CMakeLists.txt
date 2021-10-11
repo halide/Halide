@@ -24,6 +24,7 @@ tests(GROUPS performance
       realize_overhead.cpp
       rfactor.cpp
       rgb_interleaved.cpp
+      stack_vs_heap.cpp
       sort.cpp
       thread_safe_jit.cpp
       vectorize.cpp

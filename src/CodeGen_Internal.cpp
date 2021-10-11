@@ -7,6 +7,7 @@
 #include "LLVM_Headers.h"
 #include "Simplify.h"
 #include "Simplify_Internal.h"
+#include "runtime/constants.h"
 
 namespace Halide {
 namespace Internal {
@@ -260,7 +261,7 @@ bool function_takes_user_context(const std::string &name) {
 
 bool can_allocation_fit_on_stack(int64_t size) {
     user_assert(size > 0) << "Allocation size should be a positive number\n";
-    return (size <= 1024 * 16);
+    return (size <= (int64_t)Runtime::Internal::Constants::maximum_stack_allocation_bytes);
 }
 
 Expr lower_int_uint_div(const Expr &a, const Expr &b) {
