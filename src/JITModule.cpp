@@ -877,10 +877,14 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     return result;
 }
 
-void JITSharedRuntime::populate_jit_handlers(JITUserContext &jit_user_context,
-                                             const JITHandlers &handlers) {
-    jit_user_context.handlers = active_handlers;
-    merge_handlers(jit_user_context.handlers, handlers);
+void JITSharedRuntime::populate_jit_handlers(JITUserContext *jit_user_context, const JITHandlers &handlers) {
+    // Take the active global handlers
+    JITHandlers merged = active_handlers;
+    // Clobber with any custom handlers set on the pipeline
+    merge_handlers(merged, handlers);
+    // Clobber with any custom handlers set on the call
+    merge_handlers(merged, jit_user_context->handlers);
+    jit_user_context->handlers = merged;
 }
 
 void JITSharedRuntime::release_all() {

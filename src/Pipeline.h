@@ -145,7 +145,7 @@ private:
 
     // For the three method below, precisely one of the first two args should be non-null
     void prepare_jit_call_arguments(RealizationArg &output, const Target &target, const ParamMap &param_map,
-                                    void *user_context, bool is_bounds_inference, JITCallArgs &args_result);
+                                    JITUserContext **user_context, bool is_bounds_inference, JITCallArgs &args_result);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
@@ -491,6 +491,13 @@ public:
     Realization realize(std::vector<int32_t> sizes = {}, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
 
+    /** Same as above, but takes a custom user-provided context to be
+     * passed to runtime functions. */
+    Realization realize(JITUserContext *context,
+                        std::vector<int32_t> sizes = {},
+                        const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
+
     /** Evaluate this Pipeline into an existing allocated buffer or
      * buffers. If the buffer is also one of the arguments to the
      * function, strange things may happen, as the pipeline isn't
@@ -500,7 +507,15 @@ public:
      * shape, but the shape can vary across the different output
      * Funcs. This form of realize does *not* automatically copy data
      * back from the GPU. */
-    void realize(RealizationArg output, const Target &target = Target(),
+    void realize(RealizationArg output,
+                 const Target &target = Target(),
+                 const ParamMap &param_map = ParamMap::empty_map());
+
+    /** Same as above, but takes a custom user-provided context to be
+     * passed to runtime functions. */
+    void realize(JITUserContext *context,
+                 RealizationArg output,
+                 const Target &target = Target(),
                  const ParamMap &param_map = ParamMap::empty_map());
 
     /** For a given size of output, or a given set of output buffers,

@@ -829,6 +829,13 @@ public:
     Realization realize(std::vector<int32_t> sizes = {}, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
 
+    /** Same as above, but takes a custom user-provided context to be
+     * passed to runtime functions. */
+    Realization realize(JITUserContext *context,
+                        std::vector<int32_t> sizes = {},
+                        const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
+
     /** Evaluate this function into an existing allocated buffer or
      * buffers. If the buffer is also one of the arguments to the
      * function, strange things may happen, as the pipeline isn't
@@ -836,6 +843,13 @@ public:
      * they must have matching sizes. This form of realize does *not*
      * automatically copy data back from the GPU. */
     void realize(Pipeline::RealizationArg outputs, const Target &target = Target(),
+                 const ParamMap &param_map = ParamMap::empty_map());
+
+    /** Same as above, but takes a custom user-provided context to be
+     * passed to runtime functions. */
+    void realize(JITUserContext *context,
+                 Pipeline::RealizationArg outputs,
+                 const Target &target = Target(),
                  const ParamMap &param_map = ParamMap::empty_map());
 
     /** For a given size of output, or a given output buffer,

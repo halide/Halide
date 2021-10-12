@@ -46,7 +46,7 @@ struct JITErrorBuffer;
 }
 
 struct JITUserContext {
-    Internal::JITErrorBuffer *error_buffer;
+    Internal::JITErrorBuffer *error_buffer{nullptr};
     JITHandlers handlers;
 };
 
@@ -167,7 +167,7 @@ class JITSharedRuntime {
 public:
     // Note only the first llvm::Module passed in here is used. The same shared runtime is used for all JIT.
     static std::vector<JITModule> get(llvm::Module *m, const Target &target, bool create = true);
-    static void populate_jit_handlers(JITUserContext &jit_user_context, const JITHandlers &handlers);
+    static void populate_jit_handlers(JITUserContext *jit_user_context, const JITHandlers &handlers);
     static JITHandlers set_default_handlers(const JITHandlers &handlers);
 
     /** Set the maximum number of bytes used by memoization caching.

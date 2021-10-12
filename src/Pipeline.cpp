@@ -714,6 +714,13 @@ JITHandlers &Pipeline::jit_handlers() {
 
 Realization Pipeline::realize(vector<int32_t> sizes, const Target &target,
                               const ParamMap &param_map) {
+    return realize(nullptr, std::move(sizes), target, param_map);
+}
+
+Realization Pipeline::realize(JITUserContext *context,
+                              vector<int32_t> sizes,
+                              const Target &target,
+                              const ParamMap &param_map) {
     user_assert(defined()) << "Pipeline is undefined\n";
     vector<Buffer<>> bufs;
     for (auto &out : contents->outputs) {
@@ -726,13 +733,13 @@ Realization Pipeline::realize(vector<int32_t> sizes, const Target &target,
     // Do an output bounds query if we can. Otherwise just assume the
     // output size is good.
     if (!target.has_feature(Target::NoBoundsQuery)) {
-        realize(r, target, param_map);
+        realize(context, r, target, param_map);
     }
     for (size_t i = 0; i < r.size(); i++) {
         r[i].allocate();
     }
     // Do the actual computation
-    realize(r, target, param_map);
+    realize(context, r, target, param_map);
 
     // Crop back to the requested size if necessary
     bool needs_crop = false;
@@ -836,28 +843,31 @@ struct JITErrorBuffer {
 
 struct JITFuncCallContext {
     JITErrorBuffer error_buffer;
-    JITUserContext jit_context;
+    JITUserContext *context;
     bool custom_error_handler;
 
-    JITFuncCallContext(const JITHandlers &handlers) {
-        JITHandlers local_handlers = handlers;
-        if (local_handlers.custom_error == nullptr) {
-            custom_error_handler = false;
-            local_handlers.custom_error = JITErrorBuffer::handler;
-        } else {
-            custom_error_handler = true;
+    JITFuncCallContext(JITUserContext *context, const JITHandlers &pipeline_handlers)
+        : context(context) {
+        custom_error_handler = (context->handlers.custom_error != nullptr ||
+                                pipeline_handlers.custom_error != nullptr);
+        // Hook the error handler if not set
+        if (!custom_error_handler) {
+            context->handlers.custom_error = JITErrorBuffer::handler;
         }
-        // Add default handlers for anything not set
-        JITSharedRuntime::populate_jit_handlers(jit_context, local_handlers);
-        jit_context.error_buffer = &error_buffer;
 
-        debug(2) << "custom_print: " << (void *)jit_context.handlers.custom_print << "\n"
-                 << "custom_malloc: " << (void *)jit_context.handlers.custom_malloc << "\n"
-                 << "custom_free: " << (void *)jit_context.handlers.custom_free << "\n"
-                 << "custom_do_task: " << (void *)jit_context.handlers.custom_do_task << "\n"
-                 << "custom_do_par_for: " << (void *)jit_context.handlers.custom_do_par_for << "\n"
-                 << "custom_error: " << (void *)jit_context.handlers.custom_error << "\n"
-                 << "custom_trace: " << (void *)jit_context.handlers.custom_trace << "\n";
+        // Add the handlers stored in the pipeline for anything else
+        // not set, then for anything still not set, use the global
+        // active handlers.
+        JITSharedRuntime::populate_jit_handlers(context, pipeline_handlers);
+        context->error_buffer = &error_buffer;
+
+        debug(2) << "custom_print: " << (void *)context->handlers.custom_print << "\n"
+                 << "custom_malloc: " << (void *)context->handlers.custom_malloc << "\n"
+                 << "custom_free: " << (void *)context->handlers.custom_free << "\n"
+                 << "custom_do_task: " << (void *)context->handlers.custom_do_task << "\n"
+                 << "custom_do_par_for: " << (void *)context->handlers.custom_do_par_for << "\n"
+                 << "custom_error: " << (void *)context->handlers.custom_error << "\n"
+                 << "custom_trace: " << (void *)context->handlers.custom_trace << "\n";
     }
 
     void report_if_error(int exit_status) {
@@ -915,7 +925,7 @@ public:
 // currently bound value for all of the params and image
 // params.
 void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target &target,
-                                          const ParamMap &param_map, void *user_context,
+                                          const ParamMap &param_map, JITUserContext **user_context,
                                           bool is_bounds_inference, JITCallArgs &args_result) {
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
 
@@ -1049,7 +1059,15 @@ int Pipeline::call_jit_code(const Target &target, const JITCallArgs &args) {
     return contents->jit_module.argv_function()(args.store);
 }
 
-void Pipeline::realize(RealizationArg outputs, const Target &t,
+void Pipeline::realize(RealizationArg outputs,
+                       const Target &t,
+                       const ParamMap &param_map) {
+    realize(nullptr, std::move(outputs), t, param_map);
+}
+
+void Pipeline::realize(JITUserContext *context,
+                       RealizationArg outputs,
+                       const Target &t,
                        const ParamMap &param_map) {
     Target target = t;
     user_assert(defined()) << "Can't realize an undefined Pipeline\n";
@@ -1091,12 +1109,15 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
     compile_jit(target);
 
     // This has to happen after a runtime has been compiled in compile_jit.
-    JITFuncCallContext jit_context(jit_handlers());
-    void *user_context_storage = &jit_context.jit_context;
+    JITUserContext empty_jit_user_context{};
+    if (!context) {
+        context = &empty_jit_user_context;
+    }
+    JITFuncCallContext jit_call_context(context, jit_handlers());
 
     JITCallArgs args(contents->inferred_args.size() + outputs.size());
     prepare_jit_call_arguments(outputs, target, param_map,
-                               &user_context_storage, false, args);
+                               &context, false, args);
 
     // The handlers in the jit_context default to the default handlers
     // in the runtime of the shared module (e.g. halide_print_impl,
@@ -1146,16 +1167,15 @@ void Pipeline::realize(RealizationArg outputs, const Target &t,
         JITModule::Symbol reset_sym =
             contents->jit_module.find_symbol_by_name("halide_profiler_reset");
         if (report_sym.address && reset_sym.address) {
-            void *uc = &jit_context.jit_context;
-            void (*report_fn_ptr)(void *) = (void (*)(void *))(report_sym.address);
-            report_fn_ptr(uc);
+            void (*report_fn_ptr)(JITUserContext *) = (void (*)(JITUserContext *))(report_sym.address);
+            report_fn_ptr(context);
 
             void (*reset_fn_ptr)() = (void (*)())(reset_sym.address);
             reset_fn_ptr();
         }
     }
 
-    jit_context.finalize(exit_status);
+    jit_call_context.finalize(exit_status);
 }
 
 void Pipeline::infer_input_bounds(RealizationArg outputs, const Target &target, const ParamMap &param_map) {
@@ -1163,13 +1183,14 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const Target &target, 
     compile_jit(target);
 
     // This has to happen after a runtime has been compiled in compile_jit.
-    JITFuncCallContext jit_context(jit_handlers());
-    void *user_context_storage = &jit_context.jit_context;
+    JITUserContext empty_user_context = {};
+    JITUserContext *context = &empty_user_context;
+    JITFuncCallContext jit_context(context, jit_handlers());
 
     size_t args_size = contents->inferred_args.size() + outputs.size();
     JITCallArgs args(args_size);
     prepare_jit_call_arguments(outputs, contents->jit_target, param_map,
-                               &user_context_storage, true, args);
+                               &context, true, args);
 
     struct TrackedBuffer {
         // The query buffer, and a backup to check for changes. We
