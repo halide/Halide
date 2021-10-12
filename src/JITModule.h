@@ -24,11 +24,10 @@ struct JITExtern;
 struct Target;
 class Module;
 
-// TODO: docs
 struct JITUserContext;
 
+/** A set of custom overrides of runtime functions */
 struct JITHandlers {
-    // TODO: fix these names
     void (*custom_print)(JITUserContext *, const char *){nullptr};
     void *(*custom_malloc)(JITUserContext *, size_t){nullptr};
     void (*custom_free)(JITUserContext *, void *){nullptr};
@@ -45,6 +44,9 @@ namespace Internal {
 struct JITErrorBuffer;
 }
 
+/** A context to be passed to Pipeline::realize. Inherit from this to
+ * pass your own custom context object. Modify the handlers field to
+ * override runtime functions per-call to realize. */
 struct JITUserContext {
     Internal::JITErrorBuffer *error_buffer{nullptr};
     JITHandlers handlers;
