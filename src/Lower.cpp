@@ -394,6 +394,8 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after removing dead allocations and hoisting loop invariants:", s);
 
     debug(1) << "Finding intrinsics...\n";
+    // Must be run after the last simplification, because it turns
+    // divisions into shifts, which the simplifier reverses.
     s = find_intrinsics(s);
     log("Lowering after finding intrinsics:", s);
 
