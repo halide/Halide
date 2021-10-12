@@ -830,7 +830,8 @@ public:
                         const ParamMap &param_map = ParamMap::empty_map());
 
     /** Same as above, but takes a custom user-provided context to be
-     * passed to runtime functions. */
+     * passed to runtime functions. This can be used to pass state to
+     * runtime overrides in a thread-safe manner. */
     Realization realize(JITUserContext *context,
                         std::vector<int32_t> sizes = {},
                         const Target &target = Target(),
@@ -846,7 +847,8 @@ public:
                  const ParamMap &param_map = ParamMap::empty_map());
 
     /** Same as above, but takes a custom user-provided context to be
-     * passed to runtime functions. */
+     * passed to runtime functions. This can be used to pass state to
+     * runtime overrides in a thread-safe manner. */
     void realize(JITUserContext *context,
                  Pipeline::RealizationArg outputs,
                  const Target &target = Target(),
@@ -884,6 +886,18 @@ public:
                             const ParamMap &param_map = ParamMap::empty_map());
     // @}
 
+    /** Versions of infer_input_bounds that take a custom user context
+     * to pass to runtime functions. */
+    // @{
+    void infer_input_bounds(JITUserContext *context,
+                            const std::vector<int32_t> &sizes,
+                            const Target &target = get_jit_target_from_environment(),
+                            const ParamMap &param_map = ParamMap::empty_map());
+    void infer_input_bounds(JITUserContext *context,
+                            Pipeline::RealizationArg outputs,
+                            const Target &target = get_jit_target_from_environment(),
+                            const ParamMap &param_map = ParamMap::empty_map());
+    // @}
     /** Statically compile this function to llvm bitcode, with the
      * given filename (which should probably end in .bc), type
      * signature, and C function name (which defaults to the same name
@@ -2599,26 +2613,38 @@ inline void assign_results(Realization &r, int idx, First first, Second second, 
  * expression. This can be thought of as a scalar version of
  * \ref Func::realize */
 template<typename T>
-HALIDE_NO_USER_CODE_INLINE T evaluate(const Expr &e) {
+HALIDE_NO_USER_CODE_INLINE T evaluate(JITUserContext *ctx, const Expr &e) {
     user_assert(e.type() == type_of<T>())
         << "Can't evaluate expression "
         << e << " of type " << e.type()
         << " as a scalar of type " << type_of<T>() << "\n";
     Func f;
     f() = e;
-    Buffer<T> im = f.realize();
+    Buffer<T> im = f.realize(ctx);
     return im();
+}
+
+/** evaluate with a default user context */
+template<typename T>
+HALIDE_NO_USER_CODE_INLINE T evaluate(const Expr &e) {
+    return evaluate<T>(nullptr, e);
+}
+
+/** JIT-compile and run enough code to evaluate a Halide Tuple. */
+template<typename First, typename... Rest>
+HALIDE_NO_USER_CODE_INLINE void evaluate(JITUserContext *ctx, Tuple t, First first, Rest &&...rest) {
+    Internal::check_types<First, Rest...>(t, 0);
+
+    Func f;
+    f() = t;
+    Realization r = f.realize(ctx);
+    Internal::assign_results(r, 0, first, rest...);
 }
 
 /** JIT-compile and run enough code to evaluate a Halide Tuple. */
 template<typename First, typename... Rest>
 HALIDE_NO_USER_CODE_INLINE void evaluate(Tuple t, First first, Rest &&...rest) {
-    Internal::check_types<First, Rest...>(t, 0);
-
-    Func f;
-    f() = t;
-    Realization r = f.realize();
-    Internal::assign_results(r, 0, first, rest...);
+    evaluate<First, Rest...>(nullptr, std::move(t), std::forward<First>(first), std::forward<Rest...>(rest...));
 }
 
 namespace Internal {

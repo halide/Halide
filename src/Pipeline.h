@@ -532,6 +532,18 @@ public:
                             const ParamMap &param_map = ParamMap::empty_map());
     // @}
 
+    /** Variants of infer_inputs_bounds that take a custom user context */
+    // @{
+    void infer_input_bounds(JITUserContext *context,
+                            const std::vector<int32_t> &sizes,
+                            const Target &target = get_jit_target_from_environment(),
+                            const ParamMap &param_map = ParamMap::empty_map());
+    void infer_input_bounds(JITUserContext *context,
+                            RealizationArg output,
+                            const Target &target = get_jit_target_from_environment(),
+                            const ParamMap &param_map = ParamMap::empty_map());
+    // @}
+
     /** Infer the arguments to the Pipeline, sorted into a canonical order:
      * all buffers (sorted alphabetically by name), followed by all non-buffers
      * (sorted alphabetically by name).

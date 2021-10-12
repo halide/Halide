@@ -1179,12 +1179,21 @@ void Pipeline::realize(JITUserContext *context,
 }
 
 void Pipeline::infer_input_bounds(RealizationArg outputs, const Target &target, const ParamMap &param_map) {
+    infer_input_bounds(nullptr, std::move(outputs), target, param_map);
+}
+
+void Pipeline::infer_input_bounds(JITUserContext *context,
+                                  RealizationArg outputs,
+                                  const Target &target,
+                                  const ParamMap &param_map) {
     user_assert(!target.has_feature(Target::NoBoundsQuery)) << "You may not call infer_input_bounds() with Target::NoBoundsQuery set.";
     compile_jit(target);
 
     // This has to happen after a runtime has been compiled in compile_jit.
     JITUserContext empty_user_context = {};
-    JITUserContext *context = &empty_user_context;
+    if (!context) {
+        context = &empty_user_context;
+    }
     JITFuncCallContext jit_context(context, jit_handlers());
 
     size_t args_size = contents->inferred_args.size() + outputs.size();
@@ -1287,13 +1296,20 @@ void Pipeline::infer_input_bounds(RealizationArg outputs, const Target &target, 
 void Pipeline::infer_input_bounds(const std::vector<int32_t> &sizes,
                                   const Target &target,
                                   const ParamMap &param_map) {
+    infer_input_bounds(nullptr, sizes, target, param_map);
+}
+
+void Pipeline::infer_input_bounds(JITUserContext *context,
+                                  const std::vector<int32_t> &sizes,
+                                  const Target &target,
+                                  const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Pipeline.\n";
     vector<Buffer<>> bufs;
     for (Type t : contents->outputs[0].output_types()) {
         bufs.emplace_back(t, sizes);
     }
     Realization r(bufs);
-    infer_input_bounds(r, target, param_map);
+    infer_input_bounds(context, r, target, param_map);
 }
 
 void Pipeline::invalidate_cache() {
