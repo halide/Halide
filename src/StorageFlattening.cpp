@@ -440,12 +440,6 @@ class SubstituteBoundedAllocation : public IRMutator {
 
     Stmt visit(const Allocate *op) override {
         auto iter = env.find(op->name);
-        if (iter == env.end()) {
-            debug(0) << op->name << "\n";
-            for (auto e : env) {
-                debug(0) << "In the list: " << e.first << "\n";
-            }
-        }
         // It's possible that there are some other allocations which are safe to
         // ignore.
         if (iter == env.end()) {
@@ -468,8 +462,8 @@ class SubstituteBoundedAllocation : public IRMutator {
             // TODO(vknsn): needs it's own error, but let's use some random one for now.
             Expr size_too_small_error =
                 Call::make(Int(32),
-                           "halide_error_requirement_failed",
-                           {StringImm::make(op->name), StringImm::make(" explicit allocation size is smaller than required")},
+                           "halide_error_allocation_bound_too_small",
+                           {StringImm::make(op->name), f.schedule().allocation_bound(), total_extent},
                            Call::Extern);
             Stmt size_to_small_check = AssertStmt::make(total_extent <= f.schedule().allocation_bound(), size_too_small_error);
             body = Block::make(size_to_small_check, body);

@@ -280,9 +280,9 @@ WEAK int halide_error_allocation_bound_too_small(void *user_context, const char 
                                                  int provided_size, int required_size) {
     error(user_context)
         << "The explicit allocation bound (" << provided_size
-        << " of " << func_name
-        << " is too small to store the required region "
-        << " (" << required_size << ").";
+        << ") of " << func_name
+        << " is too small to store the required region ("
+        << required_size << ").";
     return halide_error_code_allocation_bound_too_small;
 }
 
