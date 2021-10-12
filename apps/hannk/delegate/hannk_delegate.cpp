@@ -583,11 +583,11 @@ private:
     }
 
     OpPtr BuildGreater(TfLiteContext *context, TfLiteNode *node) {
-        return BuildBinary(context, node, BinaryOp::Less, true);
+        return BuildBinary(context, node, BinaryOp::LessEqual, true);
     }
 
     OpPtr BuildGreaterEqual(TfLiteContext *context, TfLiteNode *node) {
-        return BuildBinary(context, node, BinaryOp::LessEqual, true);
+        return BuildBinary(context, node, BinaryOp::Less, true);
     }
 
     OpPtr BuildEqual(TfLiteContext *context, TfLiteNode *node) {
