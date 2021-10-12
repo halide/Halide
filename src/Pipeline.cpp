@@ -640,36 +640,41 @@ void Pipeline::compile_jit(const Target &target_arg) {
     contents->jit_module = jit_module;
 }
 
+template<typename A, typename B>
+void set_handler(A &a, B b) {
+    a = (A)b;
+}
+
 void Pipeline::set_error_handler(void (*handler)(void *, const char *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    contents->jit_handlers.custom_error = handler;
+    set_handler(contents->jit_handlers.custom_error, handler);
 }
 
 void Pipeline::set_custom_allocator(void *(*cust_malloc)(void *, size_t),
                                     void (*cust_free)(void *, void *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    contents->jit_handlers.custom_malloc = cust_malloc;
-    contents->jit_handlers.custom_free = cust_free;
+    set_handler(contents->jit_handlers.custom_malloc, cust_malloc);
+    set_handler(contents->jit_handlers.custom_free, cust_free);
 }
 
 void Pipeline::set_custom_do_par_for(int (*cust_do_par_for)(void *, int (*)(void *, int, uint8_t *), int, int, uint8_t *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    contents->jit_handlers.custom_do_par_for = cust_do_par_for;
+    set_handler(contents->jit_handlers.custom_do_par_for, cust_do_par_for);
 }
 
 void Pipeline::set_custom_do_task(int (*cust_do_task)(void *, int (*)(void *, int, uint8_t *), int, uint8_t *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    contents->jit_handlers.custom_do_task = cust_do_task;
+    set_handler(contents->jit_handlers.custom_do_task, cust_do_task);
 }
 
 void Pipeline::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    contents->jit_handlers.custom_trace = trace_fn;
+    set_handler(contents->jit_handlers.custom_trace, trace_fn);
 }
 
 void Pipeline::set_custom_print(void (*cust_print)(void *, const char *)) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    contents->jit_handlers.custom_print = cust_print;
+    set_handler(contents->jit_handlers.custom_print, cust_print);
 }
 
 void Pipeline::set_jit_externs(const std::map<std::string, JITExtern> &externs) {
@@ -702,7 +707,7 @@ const vector<CustomLoweringPass> &Pipeline::custom_lowering_passes() {
     return contents->custom_lowering_passes;
 }
 
-const JITHandlers &Pipeline::jit_handlers() {
+JITHandlers &Pipeline::jit_handlers() {
     user_assert(defined()) << "Pipeline is undefined\n";
     return contents->jit_handlers;
 }
@@ -788,9 +793,8 @@ void Pipeline::trace_pipeline() {
     contents->trace_pipeline = true;
 }
 
-namespace {
-
-struct ErrorBuffer {
+namespace Internal {
+struct JITErrorBuffer {
     enum { MaxBufSize = 4096 };
     char buf[MaxBufSize];
     std::atomic<size_t> end{0};
@@ -823,31 +827,29 @@ struct ErrorBuffer {
         return std::string(buf, end);
     }
 
-    static void handler(void *ctx, const char *message) {
-        if (ctx) {
-            JITUserContext *ctx1 = (JITUserContext *)ctx;
-            ErrorBuffer *buf = (ErrorBuffer *)ctx1->user_context;
-            buf->concat(message);
+    static void handler(JITUserContext *ctx, const char *message) {
+        if (ctx && ctx->error_buffer) {
+            ctx->error_buffer->concat(message);
         }
     }
 };
 
 struct JITFuncCallContext {
-    ErrorBuffer error_buffer;
+    JITErrorBuffer error_buffer;
     JITUserContext jit_context;
     bool custom_error_handler;
 
     JITFuncCallContext(const JITHandlers &handlers) {
-        void *user_context = nullptr;
         JITHandlers local_handlers = handlers;
         if (local_handlers.custom_error == nullptr) {
             custom_error_handler = false;
-            local_handlers.custom_error = ErrorBuffer::handler;
-            user_context = &error_buffer;
+            local_handlers.custom_error = JITErrorBuffer::handler;
         } else {
             custom_error_handler = true;
         }
-        JITSharedRuntime::init_jit_user_context(jit_context, user_context, local_handlers);
+        // Add default handlers for anything not set
+        JITSharedRuntime::populate_jit_handlers(jit_context, local_handlers);
+        jit_context.error_buffer = &error_buffer;
 
         debug(2) << "custom_print: " << (void *)jit_context.handlers.custom_print << "\n"
                  << "custom_malloc: " << (void *)jit_context.handlers.custom_malloc << "\n"
@@ -876,8 +878,7 @@ struct JITFuncCallContext {
         report_if_error(exit_status);
     }
 };
-
-}  // namespace
+}  // namespace Internal
 
 struct Pipeline::JITCallArgs {
     size_t size{0};

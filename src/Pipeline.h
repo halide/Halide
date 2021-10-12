@@ -349,6 +349,8 @@ public:
      */
     void compile_jit(const Target &target = get_jit_target_from_environment());
 
+    // TODO: deprecate all of these and replace with versions that take a JITUserContext
+
     /** Set the error handler function that be called in the case of
      * runtime errors during halide pipelines. If you are compiling
      * statically, you can also just define your own function with
@@ -457,7 +459,7 @@ public:
 
     /** Get a struct containing the currently set custom functions
      * used by JIT. */
-    const Internal::JITHandlers &jit_handlers();
+    JITHandlers &jit_handlers();
 
     /** Add a custom pass to be used during lowering. It is run after
      * all other lowering passes. Can be used to verify properties of

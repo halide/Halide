@@ -1114,7 +1114,7 @@ public:
 
     /** Get a struct containing the currently set custom functions
      * used by JIT. */
-    const Internal::JITHandlers &jit_handlers();
+    JITHandlers &jit_handlers();
 
     /** Add a custom pass to be used during lowering. It is run after
      * all other lowering passes. Can be used to verify properties of

@@ -3280,7 +3280,7 @@ const vector<CustomLoweringPass> &Func::custom_lowering_passes() {
     return pipeline().custom_lowering_passes();
 }
 
-const Internal::JITHandlers &Func::jit_handlers() {
+JITHandlers &Func::jit_handlers() {
     return pipeline().jit_handlers();
 }
 

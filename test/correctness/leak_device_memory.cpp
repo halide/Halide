@@ -15,10 +15,6 @@ void halide_print(void *user_context, const char *str) {
 
 int main(int argc, char **argv) {
 
-    Internal::JITHandlers handlers;
-    handlers.custom_print = halide_print;
-    Internal::JITSharedRuntime::set_default_handlers(handlers);
-
     Target target = get_jit_target_from_environment();
 
     // We need debug output to record object creation.
