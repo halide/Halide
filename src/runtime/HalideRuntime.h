@@ -1163,6 +1163,9 @@ enum halide_error_code_t {
      * pipeline, or enable the appropriate device backend. */
     halide_error_code_device_dirty_with_no_device_support = -44,
 
+    /** An explicit allocation bound provided is too small to store
+     * all the values produced by the function. */
+    halide_error_code_allocation_bound_too_small = -45,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1234,6 +1237,8 @@ extern int halide_error_device_interface_no_device(void *user_context);
 extern int halide_error_host_and_device_dirty(void *user_context);
 extern int halide_error_buffer_is_null(void *user_context, const char *routine);
 extern int halide_error_device_dirty_with_no_device_support(void *user_context, const char *buffer_name);
+extern int halide_error_allocation_bound_too_small(void *user_context, const char *func_name,
+                                                   int provided_size, int required_size);
 // @}
 
 /** Optional features a compilation Target can have.

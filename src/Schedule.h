@@ -574,6 +574,11 @@ public:
     bool &async();
     bool async() const;
 
+    /** This expression is set if the schedule has explicit allocation
+     *  bound specified. */
+    Expr &allocation_bound();
+    Expr allocation_bound() const;
+
     /** The list and order of dimensions used to store this
      * function. The first dimension in the vector corresponds to the
      * innermost dimension for storage (i.e. which dimension is

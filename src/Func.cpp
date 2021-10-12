@@ -2165,6 +2165,12 @@ Func &Func::async() {
     return *this;
 }
 
+Func &Func::bound_allocation(Expr bound) {
+    invalidate_cache();
+    func.schedule().allocation_bound() = bound;
+    return *this;
+}
+
 Stage Func::specialize(const Expr &c) {
     invalidate_cache();
     return Stage(func, func.definition(), 0).specialize(c);
