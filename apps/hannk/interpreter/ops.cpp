@@ -905,8 +905,6 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
         if (depth_multiplier_ == 1) {
             const int alignment = get_depthwise_conv_channel_alignment();
             if (stride_[0] == 1 &&
-                // This is correct: we want to use shallow when the vector size (ie, alignment)
-                // is evenly divisble by the number of channels (ie, extent(0))
                 can_be_shallow(alignment, input()->extent(0), input()->extent(1))) {
                 // We can use the shallow version of depthwise here.
             } else {
@@ -952,8 +950,6 @@ void DepthwiseConv2DOp::execute() {
         if (stride_[0] == 1 &&
             can_fuse_cx(FuseType::InPlace, input_buf) &&
             can_fuse_cx(FuseType::InPlace, output_buf) &&
-            // This is correct: we want to use shallow when the vector size (ie, alignment)
-            // is evenly divisble by the number of channels (ie, extent(0))
             can_be_shallow(get_depthwise_conv_channel_alignment(), input_buf.dim(0).extent(), input_buf.dim(1).extent())) {
             input_stride_x = input_buf.dim(1).stride();
             fuse_cx(FuseType::InPlace, input_buf);
