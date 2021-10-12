@@ -1499,8 +1499,7 @@ void SpaceDepthOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
-    if (in->type() == halide_type_of<uint8_t>() &&
-        out->type() == halide_type_of<uint8_t>()) {
+    if (in->type() == out->type()) {
         const auto &in_buf = in->buffer();
         const auto &out_buf = out->buffer();
 
@@ -1509,6 +1508,8 @@ void SpaceDepthOp::execute() {
         } else {
             DepthToSpace(in_buf, -block_size_, out_buf);
         }
+    } else {
+        HLOG(FATAL) << "Unsupported types " << in->type() << " " << out->type() << "\n";
     }
 }
 
