@@ -5,11 +5,11 @@ namespace PythonBindings {
 
 namespace {
 
-void halide_python_error(void *, const char *msg) {
+void halide_python_error(JITUserContext *, const char *msg) {
     throw Error(msg);
 }
 
-void halide_python_print(void *, const char *msg) {
+void halide_python_print(JITUserContext *, const char *msg) {
     py::print(msg, py::arg("end") = "");
 }
 
