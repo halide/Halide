@@ -62,6 +62,7 @@ int main(int argc, char **argv) {
         ctx1.handlers.custom_error = my_error_handler;
         Buffer<float> bad_buf(100, 100);
         bad_buf.raw_buffer()->device_interface = get_device_interface_for_device_api(DeviceAPI::CUDA);
+        bad_buf.raw_buffer()->set_host_dirty(true);
         bad_buf.raw_buffer()->set_device_dirty(true);
         // This should fail and call the hooked error handler, because
         // device_dirty is set but there's no device allocation.
