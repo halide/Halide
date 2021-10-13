@@ -11,7 +11,7 @@ T *cast_op(Op *x) {
     public:
         T *result = nullptr;
 
-        void visit(T *op) {
+        void visit(T *op) override {
             result = op;
         }
     };
@@ -171,19 +171,19 @@ class InPlace : public OpVisitor {
         }
     }
 
-    void visit(BinaryOp *op) {
+    void visit(BinaryOp *op) override {
         maybe_alias_elementwise(op);
     }
 
-    void visit(UnaryOp *op) {
+    void visit(UnaryOp *op) override {
         maybe_alias_elementwise(op);
     }
 
-    void visit(ElementwiseProgramOp *op) {
+    void visit(ElementwiseProgramOp *op) override {
         maybe_alias_elementwise(op);
     }
 
-    void visit(ConcatenationOp *op) {
+    void visit(ConcatenationOp *op) override {
         bool is_no_op = true;
         TensorOffset offset(op->axis() + 1);
         for (int i = 0; i < op->input_count(); i++) {
@@ -197,7 +197,7 @@ class InPlace : public OpVisitor {
         }
     }
 
-    void visit(SplitOp *op) {
+    void visit(SplitOp *op) override {
         bool is_no_op = true;
         TensorOffset offset(op->axis() + 1);
         for (int i = 0; i < op->output_count(); i++) {
@@ -211,7 +211,7 @@ class InPlace : public OpVisitor {
         }
     }
 
-    void visit(PadOp *op) {
+    void visit(PadOp *op) override {
         if (!op->input(1) || !op->input(1)->is_constant()) {
             return;
         }
@@ -227,7 +227,7 @@ class InPlace : public OpVisitor {
         maybe_alias_tensors(op->input(), op->output(), offset);
     }
 
-    void visit(ReshapeOp *op) {
+    void visit(ReshapeOp *op) override {
         const TensorPtr &input = op->input();
         const TensorPtr &output = op->output();
 
@@ -251,7 +251,7 @@ class InPlace : public OpVisitor {
         }
     }
 
-    void visit(OpGroup *op) {
+    void visit(OpGroup *op) override {
         for (int i = 0; i < op->op_count(); i++) {
             op->op(i)->accept(this);
         }
@@ -326,7 +326,7 @@ class PadForOps : public OpVisitor {
         new_ops.emplace_back(std::move(pad));
     }
 
-    void visit(ConvOp *op) {
+    void visit(ConvOp *op) override {
         pad_for_op(op, 0, 0);
 
         // We also need to tile the filter.
@@ -352,7 +352,7 @@ class PadForOps : public OpVisitor {
         }
     }
 
-    void visit(DepthwiseConv2DOp *op) {
+    void visit(DepthwiseConv2DOp *op) override {
         TensorPtr input = op->input();
         TensorPtr output = op->output();
         if (op->depth_multiplier() != 1 && op->depth_multiplier() < output->extent(0)) {
@@ -376,7 +376,7 @@ class PadForOps : public OpVisitor {
         pad_for_op(op, 0, 0);
     }
 
-    void visit(OpGroup *op) {
+    void visit(OpGroup *op) override {
         for (int i = 0; i < op->op_count(); i++) {
             op->op(i)->accept(this);
         }
@@ -387,7 +387,7 @@ public:
 };
 
 class FusePadOps : public OpVisitor {
-    void visit(PadOp *op) {
+    void visit(PadOp *op) override {
         if (op->input()->producers().size() != 1 || op->input()->consumers().size() != 1) {
             return;
         }
@@ -407,7 +407,7 @@ class FusePadOps : public OpVisitor {
         }
     }
 
-    void visit(OpGroup *op) {
+    void visit(OpGroup *op) override {
         for (int i = 0; i < op->op_count(); i++) {
             op->op(i)->accept(this);
         }
