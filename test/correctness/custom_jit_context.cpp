@@ -70,6 +70,14 @@ int main(int argc, char **argv) {
             printf("Fail to call custom error handler from context passed to copy_to_host: %d\n", ctx1.which_handler);
             return -1;
         }
+
+        ctx1.which_handler = 0;
+        // This should also fail
+        bad_buf.copy_to_device(t, &ctx1);
+        if (ctx1.which_handler != 4) {
+            printf("Fail to call custom error handler from context passed to copy_to_device: %d\n", ctx1.which_handler);
+            return -1;
+        }
     }
 
     printf("Success!\n");
