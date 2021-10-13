@@ -7,7 +7,7 @@ using namespace Halide;
 
 Internal::GpuObjectLifetimeTracker tracker;
 
-void halide_print(void *user_context, const char *str) {
+void halide_print(JITUserContext *user_context, const char *str) {
     printf("%s", str);
 
     tracker.record_gpu_debug(str);
@@ -17,6 +17,11 @@ int main(int argc, char *argv[]) {
     Var x, xi;
 
     Target target = get_jit_target_from_environment();
+
+    // We need to hook the default handler too, to catch the frees done by release_all
+    JITHandlers handlers;
+    handlers.custom_print = halide_print;
+    Internal::JITSharedRuntime::set_default_handlers(handlers);
 
     // We need debug output to record object creation.
     target.set_feature(Target::Debug);
@@ -36,7 +41,6 @@ int main(int argc, char *argv[]) {
         } else if (target.has_feature(Target::HVX)) {
             g.hexagon();
         }
-        h.set_custom_print(halide_print);
 
         h.realize({256}, target);
     }

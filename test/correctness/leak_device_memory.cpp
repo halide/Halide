@@ -7,7 +7,7 @@ using namespace Halide;
 
 Internal::GpuObjectLifetimeTracker tracker;
 
-void halide_print(void *user_context, const char *str) {
+void halide_print(JITUserContext *user_context, const char *str) {
     printf("%s", str);
 
     tracker.record_gpu_debug(str);
@@ -19,6 +19,11 @@ int main(int argc, char **argv) {
 
     // We need debug output to record object creation.
     target.set_feature(Target::Debug);
+
+    // We need to hook the default handler too, to catch the frees done by release_all
+    JITHandlers handlers;
+    handlers.custom_print = halide_print;
+    Internal::JITSharedRuntime::set_default_handlers(handlers);
 
     // This tests what happens when you make a shallow copy of a
     // Runtime::Buffer and then give the copy a device
@@ -44,7 +49,6 @@ int main(int argc, char **argv) {
                 f.hexagon();
             }
 
-            f.set_custom_print(halide_print);
             f.realize({50, 50}, target);
 
             // The copy now has a non-zero dev field, but the original

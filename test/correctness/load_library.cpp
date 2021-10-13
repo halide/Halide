@@ -15,7 +15,7 @@ namespace {
 int load_library_calls = 0;
 int get_library_symbol_calls = 0;
 
-void my_error_handler(JITUserContext *u, const char *msg) {
+void my_error_handler(void *u, const char *msg) {
     // Emitting "error.*:" to stdout or stderr will cause CMake to report the
     // test as a failure on Windows, regardless of error code returned,
     // hence the abbreviation to "err".
@@ -60,6 +60,16 @@ void *my_get_library_symbol_impl(JITUserContext *lib, const char *name) {
 }  // namespace
 
 int main(int argc, char **argv) {
+    // Replace the default way the JIT looks for the OpenCL API. This
+    // must be done before we try to compile anything that might
+    // generate the OpenCL runtime module.
+    JITHandlers handlers;
+    handlers.custom_get_symbol = my_get_symbol_impl;
+    handlers.custom_load_library = my_load_library_impl;
+    handlers.custom_get_library_symbol = my_get_library_symbol_impl;
+
+    Internal::JITSharedRuntime::set_default_handlers(handlers);
+
     Target target = get_jit_target_from_environment();
     if (!target.has_feature(Target::OpenCL)) {
         printf("[SKIP] OpenCL not enabled.\n");
@@ -71,10 +81,7 @@ int main(int argc, char **argv) {
     f(x, y) = cast<int32_t>(x + y);
     f.gpu_tile(x, y, xi, yi, 8, 8, TailStrategy::Auto, DeviceAPI::OpenCL);
 
-    f.jit_handlers().custom_get_symbol = my_get_symbol_impl;
-    f.jit_handlers().custom_load_library = my_load_library_impl;
-    f.jit_handlers().custom_get_library_symbol = my_get_library_symbol_impl;
-    f.jit_handlers().custom_error = my_error_handler;
+    f.set_error_handler(my_error_handler);
 
     Buffer<int32_t> out = f.realize({64, 64}, target);
 
