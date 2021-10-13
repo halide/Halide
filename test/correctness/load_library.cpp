@@ -60,21 +60,18 @@ void *my_get_library_symbol_impl(JITUserContext *lib, const char *name) {
 }  // namespace
 
 int main(int argc, char **argv) {
-    // Replace the default way the JIT looks for the OpenCL API. This
-    // must be done before we try to compile anything that might
-    // generate the OpenCL runtime module.
+    Target target = get_jit_target_from_environment();
+    if (!target.has_feature(Target::OpenCL)) {
+        printf("[SKIP] OpenCL not enabled.\n");
+        return 0;
+    }
+
     JITHandlers handlers;
     handlers.custom_get_symbol = my_get_symbol_impl;
     handlers.custom_load_library = my_load_library_impl;
     handlers.custom_get_library_symbol = my_get_library_symbol_impl;
 
     Internal::JITSharedRuntime::set_default_handlers(handlers);
-
-    Target target = get_jit_target_from_environment();
-    if (!target.has_feature(Target::OpenCL)) {
-        printf("[SKIP] OpenCL not enabled.\n");
-        return 0;
-    }
 
     Var x, y, xi, yi;
     Func f;
