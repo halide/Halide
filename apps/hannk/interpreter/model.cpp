@@ -76,7 +76,23 @@ bool Op::is_output(const TensorPtr &t) const {
     return false;
 }
 
+void Op::dump(std::ostream &os, int indent) const {
+    const std::string spaces(indent, ' ');
+
+    os << spaces << "OP:" << this->name() << "\n";
+    for (auto t : this->inputs_) {
+        os << spaces << "  (i:) ";
+        t->dump(os);
+    }
+    for (auto t : this->outputs_) {
+        os << spaces << "  (o:) ";
+        t->dump(os);
+    }
+    os << "\n";
+}
+
 void OpGroup::execute() {
+
     for (int i = 0; i < op_count(); i++) {
         op(i)->execute();
     }
@@ -121,12 +137,12 @@ void OpGroup::accept(OpVisitor *v) {
     v->visit(this);
 }
 
-void OpGroup::dump(std::ostream &os) const {
-    os << "Ops: " << std::endl;
+void OpGroup::dump(std::ostream &os, int indent) const {
+    Op::dump(os, indent);
     for (const auto &i : ops_) {
-        i->dump(os);
+        i->dump(os, indent + 4);
     }
-    os << std::endl;
+    os << "\n";
 }
 
 }  // namespace hannk

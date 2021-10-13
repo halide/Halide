@@ -283,7 +283,9 @@ public:
 
     virtual void accept(OpVisitor *v) = 0;
 
-    virtual void dump(std::ostream &os) const = 0;
+    virtual void dump(std::ostream &os, int indent = 0) const;
+
+    virtual std::string name() const = 0;
 
     int input_count() const {
         return inputs_.size();
@@ -358,7 +360,10 @@ public:
     }
 
     void accept(OpVisitor *v);
-    void dump(std::ostream &os) const;
+    void dump(std::ostream &os, int indent = 0) const;
+    std::string name() const {
+        return "OpGroup";
+    }
 };
 
 }  // namespace hannk
