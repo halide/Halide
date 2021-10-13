@@ -1,6 +1,8 @@
 #ifndef HANNK_TRANSFORMS_H
 #define HANNK_TRANSFORMS_H
 
+#include <unordered_set>
+
 #include "interpreter/ops.h"
 
 namespace hannk {
@@ -18,6 +20,9 @@ void pad_for_ops(OpGroup *op);
 // Execute ops that are constant, and mark the results
 // constant as well.
 void fold_constants(OpGroup *op);
+
+// Verify that no Op comes before any of its input Tensors are produced.
+bool check_op_order(OpGroup *op_group, std::unordered_set<Tensor *> &valid_tensors);
 
 }  // namespace hannk
 

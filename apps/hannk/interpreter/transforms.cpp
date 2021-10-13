@@ -68,7 +68,8 @@ public:
             }
 
             if (dead) {
-                op_group->remove(op);
+                bool removed = op_group->remove(op);
+                HCHECK(removed);
             }
         }
     }
@@ -422,7 +423,10 @@ void pad_for_ops(OpGroup *op) {
     // We need to add in reverse order, so ops that depend on newly added ops go
     // in the right place.
     for (auto i = padder.new_ops.rbegin(); i != padder.new_ops.rend(); ++i) {
-        op->add(std::move(*i));
+        assert(*i != nullptr);
+        // Add returns nullptr on success; on failure, it returns the OpPtr we passed it
+        OpPtr result = op->add(std::move(*i));
+        HCHECK(result == nullptr) << "Unable to add op: " << result->name();
     }
 
     // Some networks use padding already for other reasons, so
@@ -478,8 +482,32 @@ void fold_constants(OpGroup *root) {
     }
 
     for (const Op *i : to_remove) {
-        root->remove(i);
+        bool removed = root->remove(i);
+        HCHECK(removed);
     }
+}
+
+// Verify that no Op comes before any of its input Tensors are produced.
+bool check_op_order(OpGroup *op_group, std::unordered_set<Tensor *> &valid_tensors) {
+    for (int i = 0; i < op_group->op_count(); i++) {
+        Op *op = op_group->op(i);
+        for (int j = 0; j < op->input_count(); j++) {
+            Tensor *t = op->input(j).get();
+            if (!t->is_constant() && !valid_tensors.count(t)) {
+                HLOG(ERROR) << "Op " << op->name() << " uses tensor " << op->input(j)->name() << " but it is not produced yet\n";
+                return false;
+            }
+        }
+        if (OpGroup *sub_group = cast_op<OpGroup>(op)) {
+            if (!check_op_order(sub_group, valid_tensors)) {
+                return false;
+            }
+        }
+        for (int j = 0; j < op->output_count(); j++) {
+            valid_tensors.insert(op->output(j).get());
+        }
+    }
+    return true;
 }
 
 }  // namespace hannk

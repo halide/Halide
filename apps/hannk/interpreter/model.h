@@ -326,6 +326,20 @@ public:
     bool is_input(const TensorPtr &t) const;
     bool is_output(const TensorPtr &t) const;
 
+    bool consumes_output_of(const Op *op) const;
+
+    // Inserts `to_add` in front of the first op that consumes at least one of its outputs, and returns nullptr.
+    // If no such op is found, does nothing and returns the original OpPtr.
+    [[nodiscard]] virtual OpPtr add(OpPtr to_add) {
+        return to_add;
+    }
+
+    // Removes `to_remove` and returns true.
+    // If `to_remove` is not found, do nothing and return false.
+    [[nodiscard]] virtual bool remove(const Op *to_remove) {
+        return false;
+    }
+
     // Movable but not copyable.
     Op() = delete;
     Op(const Op &) = delete;
@@ -342,8 +356,8 @@ public:
         : Op(std::move(inputs), std::move(outputs)), ops_(std::move(ops)) {
     }
 
-    void add(OpPtr to_insert, const Op *before = nullptr);
-    void remove(const Op *op);
+    [[nodiscard]] OpPtr add(OpPtr to_add) override;
+    [[nodiscard]] bool remove(const Op *op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 

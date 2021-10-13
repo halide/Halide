@@ -160,13 +160,32 @@ class VerifyAllAllocated : public TensorVisitor {
     }
 };
 
+// Verify that no Op comes before any of its input Tensors are produced.
+void do_check_op_order(OpGroup *root) {
+    std::unordered_set<Tensor *> valid_tensors;
+    for (int j = 0; j < root->input_count(); j++) {
+        valid_tensors.insert(root->input(j).get());
+    }
+    if (!check_op_order(root, valid_tensors)) {
+        HCHECK(0) << "The model is not in the correct order.";
+    }
+}
+
 }  // namespace
 
 void Interpreter::init(InterpreterOptions options) {
+#ifndef NDEBUG
+    do_check_op_order(model_.get());
+#endif
+
     pad_for_ops(model_.get());
     in_place(model_.get());
     fold_constants(model_.get());
     remove_dead_ops(model_.get());
+
+#ifndef NDEBUG
+    do_check_op_order(model_.get());
+#endif
 
     assert(tensor_storage_arena_ == nullptr);
     tensor_storage_arena_ = allocate_tensors(model_.get(), options);

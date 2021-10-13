@@ -91,6 +91,18 @@ void Op::dump(std::ostream &os, int indent) const {
     os << "\n";
 }
 
+bool Op::consumes_output_of(const Op *op) const {
+    for (const auto &o : op->outputs_) {
+        for (const auto &i : this->inputs_) {
+            if (i == o) {
+                // i consumes an output of op.
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void OpGroup::execute() {
     for (int i = 0; i < op_count(); i++) {
         op(i)->execute();
@@ -103,33 +115,36 @@ BoundsMap OpGroup::map_bounds(int input_idx, int output_idx) const {
     return result;
 }
 
-void OpGroup::add(OpPtr to_add, const Op *before) {
-    for (auto i = ops_.begin(); i != ops_.end(); ++i) {
-        if (i->get() == before) {
-            ops_.insert(i, std::move(to_add));
-            return;
-        } else {
-            for (int j = 0; j < to_add->output_count(); ++j) {
-                for (int k = 0; k < (*i)->input_count(); ++k) {
-                    if ((*i)->input(k) == to_add->output(j)) {
-                        // i consumes an output of to_add.
-                        ops_.insert(i, std::move(to_add));
-                        return;
-                    }
-                }
-            }
+OpPtr OpGroup::add(OpPtr to_add) {
+    assert(to_add != nullptr);
+    for (auto it = ops_.begin(); it != ops_.end(); ++it) {
+        if ((*it)->consumes_output_of(to_add.get())) {
+            // i directly consumes the output of to_add.
+            ops_.insert(it, std::move(to_add));
+            return nullptr;
+        }
+        to_add = (*it)->add(std::move(to_add));
+        if (to_add == nullptr) {
+            // there is a nested Op that consumes the output to_add.
+            return nullptr;
         }
     }
-    ops_.push_back(std::move(to_add));
+    // Generally an error case, but caller should deal with it
+    return to_add;
 }
 
-void OpGroup::remove(const Op *op) {
-    for (auto i = ops_.begin(); i != ops_.end(); ++i) {
-        if (i->get() == op) {
-            ops_.erase(i);
-            return;
+bool OpGroup::remove(const Op *to_remove) {
+    for (auto it = ops_.begin(); it != ops_.end(); ++it) {
+        if (it->get() == to_remove) {
+            ops_.erase(it);
+            return true;
+        }
+        if ((*it)->remove(to_remove)) {
+            return true;
         }
     }
+    // Generally an error case, but caller should deal with it
+    return false;
 }
 
 void OpGroup::accept(OpVisitor *v) {
