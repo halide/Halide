@@ -92,7 +92,6 @@ void Op::dump(std::ostream &os, int indent) const {
 }
 
 void OpGroup::execute() {
-
     for (int i = 0; i < op_count(); i++) {
         op(i)->execute();
     }

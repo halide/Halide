@@ -438,7 +438,7 @@ public:
     void execute();
 
     std::string name() const {
-        return "Split";
+        return "SplitOp";
     }
 };
 
