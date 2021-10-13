@@ -47,7 +47,7 @@ void *my_load_library_impl(const char *name) {
     return nullptr;
 }
 
-void *my_get_library_symbol_impl(JITUserContext *lib, const char *name) {
+void *my_get_library_symbol_impl(void *lib, const char *name) {
     get_library_symbol_calls++;
     if (lib != nullptr || strcmp(name, "clGetPlatformIDs") != 0) {
         fprintf(stderr, "Saw unexpected call: get_library_symbol(%p, %s)\n", lib, name);
@@ -66,18 +66,24 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    // These calls are only available for AOT-compiled code:
+    //
+    //   halide_set_custom_get_symbol(my_get_symbol_impl);
+    //   halide_set_custom_load_library(my_load_library_impl);
+    //   halide_set_custom_get_library_symbol(my_get_library_symbol_impl);
+    //
+    // For JIT code, we must use JITSharedRuntime::set_default_handlers().
+
     JITHandlers handlers;
     handlers.custom_get_symbol = my_get_symbol_impl;
     handlers.custom_load_library = my_load_library_impl;
     handlers.custom_get_library_symbol = my_get_library_symbol_impl;
-
     Internal::JITSharedRuntime::set_default_handlers(handlers);
 
     Var x, y, xi, yi;
     Func f;
     f(x, y) = cast<int32_t>(x + y);
     f.gpu_tile(x, y, xi, yi, 8, 8, TailStrategy::Auto, DeviceAPI::OpenCL);
-
     f.set_error_handler(my_error_handler);
 
     Buffer<int32_t> out = f.realize({64, 64}, target);

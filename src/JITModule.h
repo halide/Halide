@@ -37,7 +37,7 @@ struct JITHandlers {
     int32_t (*custom_trace)(JITUserContext *, const halide_trace_event_t *){nullptr};
     void *(*custom_get_symbol)(const char *name){nullptr};
     void *(*custom_load_library)(const char *name){nullptr};
-    void *(*custom_get_library_symbol)(JITUserContext *lib, const char *name){nullptr};
+    void *(*custom_get_library_symbol)(void *lib, const char *name){nullptr};
 };
 
 namespace Internal {

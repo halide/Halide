@@ -574,7 +574,7 @@ void *load_library_handler(const char *name) {
     return (*active_handlers.custom_load_library)(name);
 }
 
-void *get_library_symbol_handler(JITUserContext *lib, const char *name) {
+void *get_library_symbol_handler(void *lib, const char *name) {
     return (*active_handlers.custom_get_library_symbol)(lib, name);
 }
 
