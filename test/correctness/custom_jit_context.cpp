@@ -18,11 +18,18 @@ void my_print_handler_3(JITUserContext *u, const char *msg) {
     ((MyJITContext *)u)->which_handler = 3;
 }
 
+void my_error_handler(JITUserContext *u, const char *msg) {
+    ((MyJITContext *)u)->which_handler = 4;
+}
+
 int main(int argc, char **argv) {
     Func f;
     Var x;
 
     f(x) = print(x);
+
+    // Test the appropriate handler is called and the appropriate
+    // context object is passed to it in a variety of contexts.
 
     MyJITContext ctx1, ctx2;
     ctx1.handlers.custom_print = my_print_handler_1;
@@ -48,6 +55,21 @@ int main(int argc, char **argv) {
     if (ctx1.which_handler != 3) {
         printf("Fail to call per-Pipeline custom print handler: %d\n", ctx1.which_handler);
         return -1;
+    }
+
+    Target t = get_jit_target_from_environment();
+    if (t.has_feature(Target::CUDA)) {
+        ctx1.handlers.custom_error = my_error_handler;
+        Buffer<float> bad_buf(100, 100);
+        bad_buf.raw_buffer()->device_interface = get_device_interface_for_device_api(DeviceAPI::CUDA);
+        bad_buf.raw_buffer()->set_device_dirty(true);
+        // This should fail and call the hooked error handler, because
+        // device_dirty is set but there's no device allocation.
+        bad_buf.copy_to_host(&ctx1);
+        if (ctx1.which_handler != 4) {
+            printf("Fail to call custom error handler from context passed to copy_to_host: %d\n", ctx1.which_handler);
+            return -1;
+        }
     }
 
     printf("Success!\n");
