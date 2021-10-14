@@ -33,6 +33,19 @@ namespace hannk {
 
 namespace {
 
+#if 0
+// Useful for debugging
+std::string dims_to_string(const halide_buffer_t *buf) {
+    std::ostringstream oss;
+    oss << "{";
+    for (int i = 0; i < buf->dimensions; i++) {
+        oss << "{" << buf->dim[i] << "},";
+    }
+    oss << "}";
+    return oss.str();
+}
+#endif
+
 // Split a dimension d into two new dimensions. Dim d will have min 0
 // and extent factor, while the new dim d + 1 will have the outer split dimension.
 template<typename T>
@@ -50,6 +63,7 @@ void split(int d, int factor, HalideBuffer<T> &buf) {
     dim1.stride *= factor;
 }
 
+// TODO: FuseType::Delete is unused and could likely be removed.
 enum class FuseType {
     // Delete the second of the fused dimension, reducing the rank by 1.
     Delete,
@@ -98,8 +112,8 @@ bool can_fuse_xy(FuseType type, const halide_buffer_t *buf) {
 }
 
 // Fuse dimensions d0 and d1 of buf.
-// If pad is true, add a new dimension of extent 1 and min 0 at the end.
-// If pad is false, d1 is deleted from the buffer.
+// If type==Pad, add a new dimension of extent 1 and min 0 at the end.
+// If type==Delete, d1 is deleted from the buffer.
 void fuse(int d0, int d1, FuseType type, halide_buffer_t *buf) {
     assert(can_fuse(d0, d1, type, buf));
     halide_dimension_t &dim0 = buf->dim[d0];
@@ -810,7 +824,8 @@ void ConvOp::execute() {
             // small output sizes.
             // TODO: Maybe we can just treat all of x, y, b as batch dimensions and fuse
             // them all where possible, which might be a further improvement.
-            while (can_fuse_xy(FuseType::Pad, input_buf) && can_fuse_xy(FuseType::Pad, output_buf) &&
+            while (can_fuse_xy(FuseType::Pad, input_buf) &&
+                   can_fuse_xy(FuseType::Pad, output_buf) &&
                    input_buf.dim(1).extent() == output_buf.dim(1).extent()) {
                 fuse_xy(FuseType::Pad, input_buf);
                 fuse_xy(FuseType::Pad, output_buf);
@@ -856,6 +871,7 @@ void call_depthwise_conv_uint8(
     }
 }
 
+// TODO: this could probably be cached rather than recalculated each time
 int get_depthwise_conv_channel_alignment() {
     // Pass minimal sized buffers to learn about the alignment requirements.
     HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
@@ -864,6 +880,15 @@ int get_depthwise_conv_channel_alignment() {
     HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
     depthwise_conv_uint8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, output_buf);
     return input_buf.dim(0).extent();
+}
+
+bool can_be_shallow(int alignment, int extent_0, int extent_1) {
+    // This is correct: we want to use shallow when the vector size (ie, alignment)
+    // is evenly divisble by the number of channels (ie, extent(0)).
+    //
+    // To avoid OOB access for tiny buffers, we also check that the fused width
+    // is at least one vector wide.
+    return (alignment % extent_0) == 0 && (extent_0 * extent_1 >= alignment);
 }
 
 }  // namespace
@@ -879,7 +904,8 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
             .elementwise(3, 3);
         if (depth_multiplier_ == 1) {
             const int alignment = get_depthwise_conv_channel_alignment();
-            if (alignment % input()->extent(0) == 0 && stride_[0] == 1) {
+            if (stride_[0] == 1 &&
+                can_be_shallow(alignment, input()->extent(0), input()->extent(1))) {
                 // We can use the shallow version of depthwise here.
             } else {
                 result.align_input(0, alignment);
@@ -924,7 +950,7 @@ void DepthwiseConv2DOp::execute() {
         if (stride_[0] == 1 &&
             can_fuse_cx(FuseType::InPlace, input_buf) &&
             can_fuse_cx(FuseType::InPlace, output_buf) &&
-            get_depthwise_conv_channel_alignment() % input_buf.dim(0).extent() == 0) {
+            can_be_shallow(get_depthwise_conv_channel_alignment(), input_buf.dim(0).extent(), input_buf.dim(1).extent())) {
             input_stride_x = input_buf.dim(1).stride();
             fuse_cx(FuseType::InPlace, input_buf);
             fuse_cx(FuseType::InPlace, output_buf);
@@ -1499,8 +1525,7 @@ void SpaceDepthOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
-    if (in->type() == halide_type_of<uint8_t>() &&
-        out->type() == halide_type_of<uint8_t>()) {
+    if (in->type() == out->type()) {
         const auto &in_buf = in->buffer();
         const auto &out_buf = out->buffer();
 
@@ -1509,6 +1534,8 @@ void SpaceDepthOp::execute() {
         } else {
             DepthToSpace(in_buf, -block_size_, out_buf);
         }
+    } else {
+        HLOG(FATAL) << "Unsupported types " << in->type() << " " << out->type() << "\n";
     }
 }
 

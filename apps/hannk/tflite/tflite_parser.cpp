@@ -438,9 +438,9 @@ public:
         case tflite::BuiltinOperator_GATHER:
             return parse_gather(op);
         case tflite::BuiltinOperator_GREATER:
-            return parse_binary(op, BinaryOp::Less, true);
-        case tflite::BuiltinOperator_GREATER_EQUAL:
             return parse_binary(op, BinaryOp::LessEqual, true);
+        case tflite::BuiltinOperator_GREATER_EQUAL:
+            return parse_binary(op, BinaryOp::Less, true);
         case tflite::BuiltinOperator_L2_NORMALIZATION:
             return parse_l2_normalization(op);
         case tflite::BuiltinOperator_LESS:

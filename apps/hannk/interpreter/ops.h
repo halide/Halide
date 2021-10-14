@@ -59,8 +59,8 @@ public:
 
     void execute();
 
-    void dump(std::ostream &os) const {
-        os << "  " << to_string(op_) << " " << output()->name() << std::endl;
+    std::string name() const {
+        return std::string("BinaryOp(") + to_string(op_) + ")";
     }
 };
 
@@ -86,8 +86,8 @@ public:
 
     void execute();
 
-    void dump(std::ostream &os) const {
-        os << "  Concatenation " << output()->name() << std::endl;
+    std::string name() const {
+        return "ConcatenationOp";
     }
 };
 
@@ -131,8 +131,8 @@ public:
 
     void execute();
 
-    void dump(std::ostream &os) const {
-        os << "  Conv " << output()->name() << std::endl;
+    std::string name() const {
+        return "ConvOp";
     }
 };
 
@@ -181,8 +181,8 @@ public:
 
     void execute();
 
-    void dump(std::ostream &os) const {
-        os << "  DepthwiseConv2D " << output()->name() << std::endl;
+    std::string name() const {
+        return "DepthwiseConv2DOp";
     }
 };
 
@@ -202,8 +202,8 @@ public:
 
     void execute();
 
-    void dump(std::ostream &os) const {
-        os << "  ElementwiseProgram" << std::endl;
+    std::string name() const {
+        return "ElementwiseProgramOp";
     }
 };
 
@@ -221,8 +221,8 @@ public:
 
     void execute();
 
-    void dump(std::ostream &os) const {
-        os << "  Gather " << output()->name() << std::endl;
+    std::string name() const {
+        return "GatherOp";
     }
 };
 
@@ -238,8 +238,8 @@ public:
 
     void execute();
 
-    void dump(std::ostream &os) const {
-        os << "  L2Normalization " << output()->name() << std::endl;
+    std::string name() const {
+        return "L2NormalizationOp";
     }
 };
 
@@ -258,8 +258,8 @@ public:
 
     void execute();
 
-    void dump(std::ostream &os) const {
-        os << "  Pad " << output()->name() << std::endl;
+    std::string name() const {
+        return "PadOp";
     }
 };
 
@@ -304,8 +304,8 @@ public:
 
     void execute();
 
-    void dump(std::ostream &os) const {
-        os << "  " << to_string(op_) << "Pool " << output()->name() << std::endl;
+    std::string name() const {
+        return std::string("Pool2DOp(") + to_string(op_) + ")";
     }
 };
 
@@ -333,8 +333,8 @@ public:
 
     void execute();
 
-    void dump(std::ostream &os) const {
-        os << "  " << to_string(op_) << " " << output()->name() << std::endl;
+    std::string name() const {
+        return std::string("ReductionOp(") + to_string(op_) + ")";
     }
 };
 
@@ -355,8 +355,8 @@ public:
 
     void execute();
 
-    void dump(std::ostream &os) const {
-        os << "  Reshape " << output()->name() << std::endl;
+    std::string name() const {
+        return "ReshapeOp";
     }
 };
 
@@ -372,8 +372,8 @@ public:
 
     void execute();
 
-    void dump(std::ostream &os) const {
-        os << "  Shape " << output()->name() << std::endl;
+    std::string name() const {
+        return "ShapeOp";
     }
 };
 
@@ -391,8 +391,8 @@ public:
 
     void execute();
 
-    void dump(std::ostream &os) const {
-        os << "  Softmax " << output()->name() << std::endl;
+    std::string name() const {
+        return "SoftmaxOp";
     }
 };
 
@@ -410,9 +410,8 @@ public:
 
     void execute();
 
-    void dump(std::ostream &os) const {
-        const char *name = block_size_ > 0 ? "SpaceToDepth" : "DepthToSpace";
-        os << "  " << name << " " << output()->name() << std::endl;
+    std::string name() const {
+        return block_size_ > 0 ? "SpaceToDepthOp" : "DepthToSpaceOp";
     }
 };
 
@@ -438,8 +437,8 @@ public:
 
     void execute();
 
-    void dump(std::ostream &os) const {
-        os << "  Split" << std::endl;
+    std::string name() const {
+        return "SplitOp";
     }
 };
 
@@ -455,8 +454,8 @@ public:
 
     void execute();
 
-    void dump(std::ostream &os) const {
-        os << "  TileConvFilterOp " << output()->name() << std::endl;
+    std::string name() const {
+        return "TileConvFilterOp";
     }
 };
 
@@ -472,8 +471,8 @@ public:
 
     void execute();
 
-    void dump(std::ostream &os) const {
-        os << "  TransposeOp " << output()->name() << std::endl;
+    std::string name() const {
+        return "TransposeOp";
     }
 };
 
@@ -503,8 +502,8 @@ public:
 
     void execute();
 
-    void dump(std::ostream &os) const {
-        os << "  " << to_string(op_) << " " << output()->name() << std::endl;
+    std::string name() const {
+        return std::string("UnaryOp(") + to_string(op_) + ")";
     }
 };
 
@@ -522,8 +521,8 @@ public:
 
     void execute();
 
-    void dump(std::ostream &os) const {
-        os << "  UpsampleChannels " << output()->name() << std::endl;
+    std::string name() const {
+        return "UpsampleChannelsOp";
     }
 };
 

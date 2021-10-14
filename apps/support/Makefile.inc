@@ -121,6 +121,7 @@ CXXFLAGS-hexagon-32-qurt-hvx ?= -mv65 $(CXXFLAGS) -I$(HEXAGON_SDK_ROOT)/rtos/qur
 CXXFLAGS-arm-32-android ?= $(CXXFLAGS)
 
 AR-host ?= ar
+AR-host-debug ?= ar
 AR-host-opencl ?= $(AR)
 AR-host-cuda ?= $(AR)
 AR-host-metal ?= $(AR)
