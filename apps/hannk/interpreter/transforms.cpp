@@ -102,7 +102,6 @@ class InPlaceReshape : public LeafOpVisitor {
     }
 };
 
-
 // Try to alias outputs to inputs when it is safe.
 class InPlace : public LeafOpVisitor {
     using OpVisitor::visit;
