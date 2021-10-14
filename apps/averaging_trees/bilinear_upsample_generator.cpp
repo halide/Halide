@@ -23,28 +23,10 @@ public:
         in01 = cast<uint16_t>(in01);
         in11 = cast<uint16_t>(in11);
 
-        // Somewhat naive version
-        /*
         Expr out00 = 9 * in00 + 3 * (in01 + in10) + in11;
         Expr out10 = 9 * in10 + 3 * (in00 + in11) + in01;
         Expr out01 = 9 * in01 + 3 * (in00 + in11) + in10;
         Expr out11 = 9 * in11 + 3 * (in01 + in10) + in00;
-        */
-
-        // Version which attempts to share more work. It's slightly faster.
-
-        // Do a widening add of each opposing pair
-        Expr diag0011 = in00 + in11;
-        Expr diag1001 = in10 + in01;
-
-        // The widened sum of all four
-        Expr avg = diag0011 + diag1001;
-
-        // Each output is a shift-and-add of several of the above.
-        Expr out00 = avg + diag1001 * 2 + in00 * 8;
-        Expr out10 = avg + diag0011 * 2 + in10 * 8;
-        Expr out01 = avg + diag0011 * 2 + in01 * 8;
-        Expr out11 = avg + diag1001 * 2 + in11 * 8;
 
         // Round and narrow
         out00 = cast<uint8_t>((out00 + 8) / 16);
