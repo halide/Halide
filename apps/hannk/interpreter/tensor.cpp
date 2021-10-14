@@ -372,7 +372,7 @@ void Tensor::dump(std::ostream &os) const {
         os << (alias_type_ == AliasType::Offset ? " alias_offset{" : " alias_reshaped{");
         for (const auto &weak : *aliases_) {
             TensorPtr tp = weak.lock();  // null if the weak_ptr has expired
-            os << " " << (void*) tp.get();
+            os << " " << (void *)tp.get();
         }
         os << " } storage_offset{";
         for (size_t i = 0; i < storage_offset_.size(); i++) {

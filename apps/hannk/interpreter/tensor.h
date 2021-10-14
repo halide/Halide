@@ -64,10 +64,10 @@ using TensorStoragePtr = std::shared_ptr<TensorStorage>;
 
 enum class AliasType {
     None,
-    Offset,            // The aliased Tensors are translated/cropped views of the same buffer.
-                       // External tensors cannot be in an offset-alias group.
-    Reshaped,          // The aliased Tensors share the same host pointer and have identical elem_count but different shapes
-                       // At most one External tensor can be in a reshape-alias group.
+    Offset,    // The aliased Tensors are translated/cropped views of the same buffer.
+               // External tensors cannot be in an offset-alias group.
+    Reshaped,  // The aliased Tensors share the same host pointer and have identical elem_count but different shapes
+               // At most one External tensor can be in a reshape-alias group.
 };
 
 class Tensor {
