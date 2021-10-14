@@ -44,6 +44,10 @@ std::string dims_to_string(const halide_buffer_t *buf) {
     oss << "}";
     return oss.str();
 }
+
+std::string dims_to_string(const HalideBuffer<void> &buf) {
+    return dims_to_string(buf.raw_buffer());
+}
 #endif
 
 // Split a dimension d into two new dimensions. Dim d will have min 0
