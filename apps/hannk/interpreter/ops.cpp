@@ -956,7 +956,7 @@ void DepthwiseConv2DOp::execute() {
             fuse_cx(FuseType::InPlace, output_buf);
         }
 
-        assert(depth_multiplier_ == 1);
+        assert(depth_multiplier_ == 1 || depth_multiplier_ >= out->extent(0));
         call_depthwise_conv_uint8(input_buf, filter_buf, bias_buf, params,
                                   stride_, dilation_, input_stride_x, output_range, output_buf);
     } else {
