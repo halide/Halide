@@ -60,7 +60,7 @@ public:
         Var xi, yi;
 
         // The unrolled tiling removes the select
-        output.tile(x, y, xi, yi, 2, 2).vectorize(x, 64).unroll(xi).unroll(yi);
+        output.tile(x, y, xi, yi, 2, 2).vectorize(x, natural_vector_size<uint8_t>()).unroll(xi).unroll(yi);
 
         output.dim(0).set_bounds(0, SZ);
         output.dim(1).set_bounds(0, SZ);
@@ -111,7 +111,7 @@ public:
 
         Var xi, yi;
 
-        output.tile(x, y, xi, yi, 2, 2).vectorize(x, 64).unroll(xi).unroll(yi);
+        output.tile(x, y, xi, yi, 2, 2).vectorize(x, natural_vector_size<uint8_t>()).unroll(xi).unroll(yi);
 
         output.dim(0).set_bounds(0, SZ);
         output.dim(1).set_bounds(0, SZ);
