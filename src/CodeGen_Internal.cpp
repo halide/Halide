@@ -344,14 +344,17 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
         Expr mult = make_const(num.type(), multiplier);
         Expr val = mul_shift_right(num, mult, (method == 1 ? shift : 0) + num.type().bits());
 
-        if (method == 2) {
+        if (method == 2 || method == 3) {
             // Average with original numerator.
             val = Call::make(val.type(), Call::sorted_avg, {val, num}, Call::PureIntrinsic);
+        } else if (method == 3) {
+            // Average with original numerator, rounding up
+            val = rounding_halving_add(val, num);
+        }
 
-            // Do the final shift
-            if (shift) {
-                val = val >> make_const(UInt(t.bits()), shift);
-            }
+        // Do the final shift
+        if (shift && (method == 2 || method == 3)) {
+            val = val >> make_const(UInt(t.bits()), shift);
         }
 
         return val;
