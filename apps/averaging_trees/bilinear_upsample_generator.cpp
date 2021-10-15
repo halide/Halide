@@ -1,58 +1,26 @@
 #include "Halide.h"
 
-#define SZ 2048
-
 using namespace Halide;
 
-class BilinearUpsampleRoundUp : public Generator<BilinearUpsampleRoundUp> {
-public:
-    Input<Buffer<uint8_t>> input{"input", 2};
-    Output<Buffer<uint8_t>> output{"output", 2};
-
-    void generate() {
-        Var x, y;
-
-        Expr in00 = input(x / 2, y / 2);
-        Expr in10 = input(x / 2 + 1, y / 2);
-        Expr in01 = input(x / 2, y / 2 + 1);
-        Expr in11 = input(x / 2 + 1, y / 2 + 1);
-
-        // Widen
-        in00 = cast<uint16_t>(in00);
-        in10 = cast<uint16_t>(in10);
-        in01 = cast<uint16_t>(in01);
-        in11 = cast<uint16_t>(in11);
-
-        Expr out00 = 9 * in00 + 3 * (in01 + in10) + in11;
-        Expr out10 = 9 * in10 + 3 * (in00 + in11) + in01;
-        Expr out01 = 9 * in01 + 3 * (in00 + in11) + in10;
-        Expr out11 = 9 * in11 + 3 * (in01 + in10) + in00;
-
-        // Round and narrow
-        out00 = cast<uint8_t>((out00 + 8) / 16);
-        out10 = cast<uint8_t>((out10 + 8) / 16);
-        out01 = cast<uint8_t>((out01 + 8) / 16);
-        out11 = cast<uint8_t>((out11 + 8) / 16);
-
-        output(x, y) = select(x % 2 == 0 && y % 2 == 0, out00,
-                              x % 2 == 1 && y % 2 == 0, out10,
-                              x % 2 == 0 && y % 2 == 1, out01,
-                              out11);
-
-        Var xi, yi;
-
-        // The unrolled tiling removes the select
-        output.tile(x, y, xi, yi, 2, 2).vectorize(x, natural_vector_size<uint8_t>()).unroll(xi).unroll(yi);
-
-        output.dim(0).set_bounds(0, SZ);
-        output.dim(1).set_bounds(0, SZ);
-    }
+enum class Method {
+    Averaging,
+    RoundUp,
+    RoundToEven,
+    Dither
 };
 
-class BilinearUpsampleAveraging : public Generator<BilinearUpsampleAveraging> {
+class BilinearUpsample : public Generator<BilinearUpsample> {
 public:
     Input<Buffer<uint8_t>> input{"input", 2};
     Output<Buffer<uint8_t>> output{"output", 2};
+    Input<int> noise_seed{"noise_seed"};
+    GeneratorParam<Method> method{
+        "method",
+        Method::Averaging,
+        {{"averaging", Method::Averaging},
+         {"round_up", Method::RoundUp},
+         {"round_to_even", Method::RoundToEven},
+         {"dither", Method::Dither}}};
 
     Expr avg_u(Expr a, Expr b) {
         return Internal::rounding_halving_add(a, b);
@@ -81,11 +49,86 @@ public:
         Expr in01 = input(x / 2, y / 2 + 1);
         Expr in11 = input(x / 2 + 1, y / 2 + 1);
 
-        Expr out00 = avg1339(in11, in01, in10, in00);
-        Expr out10 = avg1339(in01, in00, in11, in10);
-        Expr out01 = avg1339(in10, in00, in11, in01);
-        Expr out11 = avg1339(in00, in01, in10, in11);
+        Expr out00, out10, out01, out11;
 
+        if (method == Method::Averaging) {
+            out00 = avg1339(in11, in01, in10, in00);
+            out10 = avg1339(in01, in00, in11, in10);
+            out01 = avg1339(in10, in00, in11, in01);
+            out11 = avg1339(in00, in01, in10, in11);
+        } else {
+
+            // Widen
+            in00 = cast<uint16_t>(in00);
+            in10 = cast<uint16_t>(in10);
+            in01 = cast<uint16_t>(in01);
+            in11 = cast<uint16_t>(in11);
+
+            out00 = 9 * in00 + 3 * (in01 + in10) + in11;
+            out10 = 9 * in10 + 3 * (in00 + in11) + in01;
+            out01 = 9 * in01 + 3 * (in00 + in11) + in10;
+            out11 = 9 * in11 + 3 * (in01 + in10) + in00;
+
+            // Round and narrow
+            if (method == Method::RoundUp) {
+                auto round = [](const Expr &e) {
+                    return cast<uint8_t>((e + 8) / 16);
+                };
+                out00 = round(out00);
+                out10 = round(out10);
+                out01 = round(out01);
+                out11 = round(out11);
+            } else if (method == Method::RoundToEven) {
+                auto round = [](const Expr &e) {
+                    Expr x = e + 7;
+                    Expr adj = (x >> 4) & 1;
+                    return cast<uint8_t>((x + adj) / 16);
+                };
+                out00 = round(out00);
+                out10 = round(out10);
+                out01 = round(out01);
+                out11 = round(out11);
+            } else {
+                // Dither
+
+                // Make some 28-bit unsigned white noise
+                Func white_noise;
+                white_noise(x, y) = random_uint() >> 4;
+
+                // Turn it into 28-bit unsigned red noise, by blurring it
+                Func red_noise;
+                red_noise(x, y) =
+                    (white_noise(x - 1, y - 1) + 2 * white_noise(x, y - 1) + white_noise(x + 1, y - 1) +
+                     2 * white_noise(x - 1, y) + 4 * white_noise(x, y) + 2 * white_noise(x + 1, y) +
+                     white_noise(x - 1, y + 1) + 2 * white_noise(x, y + 1) + white_noise(x + 1, y) + 8) /
+                    16;
+
+                // Turn it into 4-bit signed blue noise with a reasonably uniform histogram
+                Func blue_noise;
+                blue_noise(x, y) = clamp(cast<int16_t>(((cast<int32_t>(white_noise(x, y)) - red_noise(x, y)) >> 24) + 8), 0, 15);
+                // Precompute it once
+                blue_noise.compute_root().memoize();
+
+                // Pick a fixed random offset into it
+                Func offset;
+                offset() = {random_uint(noise_seed) & 31, random_uint(noise_seed) & 31};
+                offset.compute_root();
+
+                auto round = [&](const Expr &e) {
+                    // Pick a pseudo-random offset into
+                    // the blue noise pattern, such that
+                    // we can still do dense vector loads
+                    // from it
+
+                    Expr noise = blue_noise(x + offset()[0], y + offset()[1]);
+                    return cast<uint8_t>((e + noise) / 16);
+                };
+                out00 = round(out00);
+                out10 = round(out10);
+                out01 = round(out01);
+                out11 = round(out11);
+            }
+        }
         output(x, y) = select(x % 2 == 0 && y % 2 == 0, out00,
                               x % 2 == 1 && y % 2 == 0, out10,
                               x % 2 == 0 && y % 2 == 1, out01,
@@ -93,12 +136,18 @@ public:
 
         Var xi, yi;
 
-        output.tile(x, y, xi, yi, 2, 2).vectorize(x, natural_vector_size<uint8_t>()).unroll(xi).unroll(yi);
+        const int vec = natural_vector_size<uint8_t>();
 
-        output.dim(0).set_bounds(0, SZ);
-        output.dim(1).set_bounds(0, SZ);
+        // The unrolled tiling removes the select
+        output
+            .tile(x, y, xi, yi, 2 * vec, 2, TailStrategy::RoundUp)
+            .unroll(xi, 2)
+            .unroll(yi)
+            .vectorize(xi);
+
+        output.dim(0).set_min(0);
+        output.dim(1).set_min(0);
     }
 };
 
-HALIDE_REGISTER_GENERATOR(BilinearUpsampleAveraging, bilinear_upsample_averaging);
-HALIDE_REGISTER_GENERATOR(BilinearUpsampleRoundUp, bilinear_upsample_round_up);
+HALIDE_REGISTER_GENERATOR(BilinearUpsample, bilinear_upsample);
