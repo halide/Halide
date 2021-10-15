@@ -2167,7 +2167,7 @@ Func &Func::async() {
 
 Func &Func::bound_allocation(Expr bound) {
     invalidate_cache();
-    func.schedule().allocation_bound() = bound;
+    func.schedule().allocation_bound() = std::move(bound);
     return *this;
 }
 
