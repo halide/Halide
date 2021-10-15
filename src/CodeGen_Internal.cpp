@@ -344,7 +344,7 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
         Expr mult = make_const(num.type(), multiplier);
         Expr val = mul_shift_right(num, mult, (method == 1 ? shift : 0) + num.type().bits());
 
-        if (method == 2 || method == 3) {
+        if (method == 2) {
             // Average with original numerator.
             val = Call::make(val.type(), Call::sorted_avg, {val, num}, Call::PureIntrinsic);
         } else if (method == 3) {
