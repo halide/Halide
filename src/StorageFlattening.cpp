@@ -459,7 +459,6 @@ class SubstituteBoundedAllocation : public IRMutator {
             if (can_prove(total_extent > f.schedule().allocation_bound())) {
                 user_error << "Explicit allocation bound is smaller than required\n";
             }
-            // TODO(vknsn): needs it's own error, but let's use some random one for now.
             Expr size_too_small_error =
                 Call::make(Int(32),
                            "halide_error_allocation_bound_too_small",

@@ -9,6 +9,7 @@ tests(GROUPS error
       auto_schedule_no_parallel.cpp
       auto_schedule_no_reorder.cpp
       autodiff_unbounded.cpp
+      bad_allocation_bound.cpp
       bad_bound.cpp
       bad_compute_at.cpp
       bad_compute_with.cpp
