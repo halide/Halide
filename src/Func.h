@@ -831,7 +831,9 @@ public:
 
     /** Same as above, but takes a custom user-provided context to be
      * passed to runtime functions. This can be used to pass state to
-     * runtime overrides in a thread-safe manner. */
+     * runtime overrides in a thread-safe manner. A nullptr context is
+     * legal, and is equivalent to calling the variant of realize
+     * that does not take a context. */
     Realization realize(JITUserContext *context,
                         std::vector<int32_t> sizes = {},
                         const Target &target = Target(),
@@ -848,7 +850,9 @@ public:
 
     /** Same as above, but takes a custom user-provided context to be
      * passed to runtime functions. This can be used to pass state to
-     * runtime overrides in a thread-safe manner. */
+     * runtime overrides in a thread-safe manner. A nullptr context is
+     * legal, and is equivalent to calling the variant of realize
+     * that does not take a context. */
     void realize(JITUserContext *context,
                  Pipeline::RealizationArg outputs,
                  const Target &target = Target(),
@@ -1141,7 +1145,8 @@ public:
     void set_custom_print(void (*handler)(void *, const char *));
 
     /** Get a struct containing the currently set custom functions
-     * used by JIT. */
+     * used by JIT. This can be mutated. Changes will take effect the
+     * next time this Func is realized. */
     JITHandlers &jit_handlers();
 
     /** Add a custom pass to be used during lowering. It is run after

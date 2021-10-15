@@ -458,7 +458,8 @@ public:
     const std::map<std::string, JITExtern> &get_jit_externs();
 
     /** Get a struct containing the currently set custom functions
-     * used by JIT. */
+     * used by JIT. This can be mutated. Changes will take effect the
+     * next time this Pipeline is realized. */
     JITHandlers &jit_handlers();
 
     /** Add a custom pass to be used during lowering. It is run after
@@ -492,7 +493,9 @@ public:
                         const ParamMap &param_map = ParamMap::empty_map());
 
     /** Same as above, but takes a custom user-provided context to be
-     * passed to runtime functions. */
+     * passed to runtime functions. A nullptr context is legal, and is
+     * equivalent to calling the variant of realize that does not take
+     * a context. */
     Realization realize(JITUserContext *context,
                         std::vector<int32_t> sizes = {},
                         const Target &target = Target(),
@@ -512,7 +515,9 @@ public:
                  const ParamMap &param_map = ParamMap::empty_map());
 
     /** Same as above, but takes a custom user-provided context to be
-     * passed to runtime functions. */
+     * passed to runtime functions. A nullptr context is legal, and
+     * is equivalent to calling the variant of realize that does not
+     * take a context. */
     void realize(JITUserContext *context,
                  RealizationArg output,
                  const Target &target = Target(),
