@@ -610,6 +610,25 @@ TResult implement_binary(BinaryOp::Operator op, TOperand a, TOperand b) {
     }
 }
 
+template<typename TOperand, typename TResult>
+bool try_scalar_binary_op(BinaryOp::Operator op, const TensorPtr &a, const TensorPtr &b, const TensorPtr &result) {
+    if (a->type() == halide_type_of<TOperand>() &&
+        b->type() == halide_type_of<TOperand>() &&
+        result->type() == halide_type_of<TResult>()) {
+        const auto &a_buf = a->buffer<const TOperand>();
+        const auto &b_buf = b->buffer<const TOperand>();
+        const auto &result_buf = result->buffer<TResult>();
+
+        // This is really slow, only intended to support scalar operations.
+        const auto scalar_op = [&](TOperand a_scalar, TOperand b_scalar, TResult &result_scalar) {
+            result_scalar = implement_binary<TResult, TOperand>(op, a_scalar, b_scalar);
+        };
+        scalar_elementwise_loop_nest(scalar_op, a_buf, b_buf, result_buf);
+        return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 void BinaryOp::execute() {
@@ -635,39 +654,45 @@ void BinaryOp::execute() {
         default:
             break;
         }
-    } else if (in1->type() == halide_type_of<int32_t>() &&
-               in2->type() == halide_type_of<int32_t>() &&
-               out->type() == halide_type_of<int32_t>()) {
-        const auto &in1_buf = in1->buffer<const int32_t>();
-        const auto &in2_buf = in2->buffer<const int32_t>();
-        const auto &out_buf = out->buffer<int32_t>();
-
+    } else {
         // This is really slow, only intended to support scalar operations.
-        auto scalar_op = [&](int32_t a, int32_t b, int32_t &result) {
-            result = implement_binary<int32_t>(op_, a, b);
-        };
-        scalar_elementwise_loop_nest(scalar_op, in1_buf, in2_buf, out_buf);
-        return;
-    } else if (out->type() == halide_type_of<bool>() && out->rank() == 0) {
-        double in1_scalar = dequantize_scalar(in1.get());
-        double in2_scalar = dequantize_scalar(in2.get());
-        auto out_buf = out->buffer<bool>();
+        if (try_scalar_binary_op<int32_t, int32_t>(op_, in1, in2, out)) {
+            return;
+        }
 
-        switch (op_) {
-        case Less:
-            out_buf() = in1_scalar < in2_scalar;
-            return;
-        case LessEqual:
-            out_buf() = in1_scalar <= in2_scalar;
-            return;
-        case Equal:
-            out_buf() = in1_scalar == in2_scalar;
-            return;
-        case NotEqual:
-            out_buf() = in1_scalar != in2_scalar;
-            return;
-        default:
-            break;
+        // TODO: these can be useful for debugging pipelines that use op variants we don't fully support yet
+        // (e.g. float32) -- leaving this here (but commented out) as a useful reference, but *please*
+        // don't add any permanent usage here at this time (the ops almost certainly need to be written in Halide).
+        //
+        // if (try_scalar_binary_op<float, float>(op_, in1, in2, out)) {
+        //     return;
+        // }
+        // // This is for the LESS, etc operators, which may store results in uint8 rather than bool
+        // if (try_scalar_binary_op<float, uint8_t>(op_, in1, in2, out)) {
+        //     return;
+        // }
+
+        if (out->type() == halide_type_of<bool>() && out->rank() == 0) {
+            double in1_scalar = dequantize_scalar(in1.get());
+            double in2_scalar = dequantize_scalar(in2.get());
+            auto out_buf = out->buffer<bool>();
+
+            switch (op_) {
+            case Less:
+                out_buf() = in1_scalar < in2_scalar;
+                return;
+            case LessEqual:
+                out_buf() = in1_scalar <= in2_scalar;
+                return;
+            case Equal:
+                out_buf() = in1_scalar == in2_scalar;
+                return;
+            case NotEqual:
+                out_buf() = in1_scalar != in2_scalar;
+                return;
+            default:
+                break;
+            }
         }
     }
     HLOG(FATAL)
