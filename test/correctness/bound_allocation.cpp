@@ -15,7 +15,6 @@ private:
             if (size) {
                 // Trim of the suffix.
                 std::string name = op->name.substr(0, op->name.find("$"));
-                std::cout << name << "\n";
                 allocation_size[name] = *size;
             }
         }
