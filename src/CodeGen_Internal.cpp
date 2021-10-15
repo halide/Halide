@@ -348,7 +348,17 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
             // Average with original numerator.
             val = Call::make(val.type(), Call::sorted_avg, {val, num}, Call::PureIntrinsic);
         } else if (method == 3) {
-            // Average with original numerator, rounding up
+            // Average with original numerator, rounding up. This
+            // method exists because this is cheaper than averaging
+            // with the original numerator on x86, where there's an
+            // average-round-up instruction (pavg), but no
+            // average-round-down instruction. Using method 2,
+            // sorted_avg lowers to three instructions on x86.
+            //
+            // On ARM and other architectures with both
+            // average-round-up and average-round-down instructions
+            // there's no reason to prefer either method 2 or method 3
+            // over the other.
             val = rounding_halving_add(val, num);
         }
 
