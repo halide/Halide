@@ -208,11 +208,12 @@ public:
 };
 
 class GatherOp : public Op {
-    int axis_;
+    const int axis_;
+    const int batch_dims_;
 
 public:
-    GatherOp(TensorPtr input, TensorPtr indices, TensorPtr output, int axis)
-        : Op({input, indices}, {output}), axis_(axis) {
+    GatherOp(TensorPtr input, TensorPtr indices, TensorPtr output, int axis, int batch_dims)
+        : Op({input, indices}, {output}), axis_(axis), batch_dims_(batch_dims) {
     }
 
     void accept(OpVisitor *v);
