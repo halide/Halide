@@ -19,7 +19,7 @@ tests(GROUPS correctness
       bitwise_ops.cpp
       bool_compute_root_vectorize.cpp
       bound.cpp
-      bound_allocation.cpp
+      bound_storage.cpp
       bound_small_allocations.cpp
       boundary_conditions.cpp
       bounds.cpp
