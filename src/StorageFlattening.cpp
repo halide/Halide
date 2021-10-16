@@ -206,7 +206,9 @@ private:
         stmt = Allocate::make(op->name, op->types[0], op->memory_type, allocation_extents, condition, stmt);
 
         // Wrap it into storage bound asserts.
-        stmt = Block::make(Block::make(bound_asserts), stmt);
+        if (!bound_asserts.empty()) {
+            stmt = Block::make(Block::make(bound_asserts), stmt);
+        }
 
         // Compute the strides
         for (int i = (int)op->bounds.size() - 1; i > 0; i--) {
