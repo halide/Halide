@@ -10,14 +10,19 @@ private:
     using Internal::IRMutator::visit;
 
     Internal::Stmt visit(const Internal::Allocate *op) override {
-        if (op->extents.size() == 1) {
-            const auto *size = Internal::as_const_int(op->extents[0]);
+        int total_size = 1;
+        for (const auto &e : op->extents) {
+            const auto *size = Internal::as_const_int(e);
             if (size) {
-                // Trim of the suffix.
-                std::string name = op->name.substr(0, op->name.find("$"));
-                allocation_size[name] = *size;
+                total_size = total_size * (*size);
+            } else {
+                total_size = 0;
             }
         }
+        // Trim of the suffix.
+        std::string name = op->name.substr(0, op->name.find("$"));
+        allocation_size[name] = total_size;
+
         return Internal::IRMutator::visit(op);
     }
 };
@@ -32,7 +37,7 @@ int main(int argc, char **argv) {
 
         f.compute_at(g, y);
         const int fixed_alloc_size = 16;
-        f.bound_allocation(fixed_alloc_size);
+        f.bound_storage(x, fixed_alloc_size);
         FindAllocations s;
         g.add_custom_lowering_pass(&s, []() {});
         Module m = g.compile_to_module({});
@@ -64,9 +69,10 @@ int main(int argc, char **argv) {
 
         f.compute_at(g, y);
         h.compute_root();
-        const int fixed_alloc_size_f = 16, fixed_alloc_size_h = 10 * 10;
-        f.bound_allocation(fixed_alloc_size_f);
-        h.bound_allocation(fixed_alloc_size_h);
+        const int fixed_alloc_size_f = 16, fixed_alloc_size_h = 10;
+        f.bound_storage(x, fixed_alloc_size_f);
+        h.bound_storage(x, fixed_alloc_size_h);
+        h.bound_storage(y, fixed_alloc_size_h);
         FindAllocations s;
         g.add_custom_lowering_pass(&s, []() {});
         Module m = g.compile_to_module({});
@@ -75,7 +81,7 @@ int main(int argc, char **argv) {
             return -1;
         }
 
-        if (s.allocation_size["h"] != fixed_alloc_size_h) {
+        if (s.allocation_size["h"] != fixed_alloc_size_h * fixed_alloc_size_h) {
             std::cerr << "Allocation size for h doesn't match one which was set explicitly \n";
             return -1;
         }
@@ -93,7 +99,7 @@ int main(int argc, char **argv) {
             }
         }
     }
-    // Test for expression bound.
+    // Test for an expression bound.
     {
         ImageParam input(Int(32), 2);
         Func f("f"), g("g");
@@ -102,7 +108,7 @@ int main(int argc, char **argv) {
         g(x, y) = 2 * f(x, y);
 
         f.compute_at(g, y);
-        f.bound_allocation(input.width());
+        f.bound_storage(x, input.width());
 
         Buffer<int> input_buffer(10, 10);
         input_buffer.fill(10);

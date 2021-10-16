@@ -221,7 +221,6 @@ struct FuncScheduleContents {
     MemoryType memory_type = MemoryType::Auto;
     bool memoized = false;
     bool async = false;
-    Expr allocation_bound;
     Expr memoize_eviction_key;
 
     FuncScheduleContents()
@@ -342,7 +341,6 @@ FuncSchedule FuncSchedule::deep_copy(
     copy.contents->memoized = contents->memoized;
     copy.contents->memoize_eviction_key = contents->memoize_eviction_key;
     copy.contents->async = contents->async;
-    copy.contents->allocation_bound = contents->allocation_bound;
 
     // Deep-copy wrapper functions.
     for (const auto &iter : contents->wrappers) {
@@ -384,14 +382,6 @@ bool &FuncSchedule::async() {
 
 bool FuncSchedule::async() const {
     return contents->async;
-}
-
-Expr &FuncSchedule::allocation_bound() {
-    return contents->allocation_bound;
-}
-
-Expr FuncSchedule::allocation_bound() const {
-    return contents->allocation_bound;
 }
 
 std::vector<StorageDim> &FuncSchedule::storage_dims() {
@@ -486,9 +476,6 @@ void FuncSchedule::accept(IRVisitor *visitor) const {
     }
     if (memoize_eviction_key().defined()) {
         memoize_eviction_key().accept(visitor);
-    }
-    if (allocation_bound().defined()) {
-        allocation_bound().accept(visitor);
     }
 }
 

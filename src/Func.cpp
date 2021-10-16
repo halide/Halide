@@ -2165,12 +2165,6 @@ Func &Func::async() {
     return *this;
 }
 
-Func &Func::bound_allocation(Expr bound) {
-    invalidate_cache();
-    func.schedule().allocation_bound() = std::move(bound);
-    return *this;
-}
-
 Stage Func::specialize(const Expr &c) {
     invalidate_cache();
     return Stage(func, func.definition(), 0).specialize(c);
@@ -2604,6 +2598,23 @@ Func &Func::align_storage(const Var &dim, const Expr &alignment) {
     user_error << "In schedule for " << name()
                << ", could not find var " << dim.name()
                << " to align the storage of.\n"
+               << dump_dim_list(func.schedule().storage_dims());
+    return *this;
+}
+
+Func &Func::bound_storage(const Var &dim, const Expr &bound) {
+    invalidate_cache();
+
+    vector<StorageDim> &dims = func.schedule().storage_dims();
+    for (auto &d : dims) {
+        if (var_name_match(d.var, dim.name())) {
+            d.bound = bound;
+            return *this;
+        }
+    }
+    user_error << "In schedule for " << name()
+               << ", could not find var " << dim.name()
+               << " to bound the storage of.\n"
                << dump_dim_list(func.schedule().storage_dims());
     return *this;
 }

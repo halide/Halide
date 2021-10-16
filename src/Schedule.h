@@ -479,6 +479,9 @@ struct StorageDim {
      * "alignment". Set by Func::align_storage. */
     Expr alignment;
 
+    /** The bounds allocated (not computed). Set by Func::bound_storage. */
+    Expr bound;
+
     /** If the Func is explicitly folded along this axis (with
      * Func::fold_storage) this gives the extent of the circular
      * buffer used, and whether it is used in increasing order
@@ -573,11 +576,6 @@ public:
     /** Is the production of this Function done asynchronously */
     bool &async();
     bool async() const;
-
-    /** This expression is set if the schedule has explicit allocation
-     *  bound specified. */
-    Expr &allocation_bound();
-    Expr allocation_bound() const;
 
     /** The list and order of dimensions used to store this
      * function. The first dimension in the vector corresponds to the

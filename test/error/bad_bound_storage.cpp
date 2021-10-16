@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
     g(x, y) = f(x, y) * 2;
 
     f.compute_at(g, y);
-    f.bound_allocation(3);
+    f.bound_storage(x, 9);
     g.realize({10, 10});
 
     printf("Success!\n");

@@ -132,6 +132,7 @@ private:
         // also affects the device allocation in some backends).
         vector<Expr> allocation_extents(extents.size());
         vector<int> storage_permutation;
+        vector<Stmt> bound_asserts;
         {
             auto iter = env.find(op->name);
             internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
@@ -142,6 +143,20 @@ private:
                 for (size_t j = 0; j < args.size(); j++) {
                     if (args[j] == storage_dims[i].var) {
                         storage_permutation.push_back((int)j);
+                        Expr bound = storage_dims[i].bound;
+                        if (bound.defined()) {
+                            if (can_prove(extents[j] > bound)) {
+                                user_error << "Explicit storage bound for variable " << args[j] << " of function " << op->name << " is smaller than required\n";
+                            }
+                            Expr bound_too_small_error =
+                                Call::make(Int(32),
+                                           "halide_error_storage_bound_too_small",
+                                           {StringImm::make(op->name), StringImm::make(args[j]), bound, extents[j]},
+                                           Call::Extern);
+                            Stmt size_to_small_check = AssertStmt::make(extents[j] <= bound, bound_too_small_error);
+                            bound_asserts.push_back(size_to_small_check);
+                            extents[j] = bound;
+                        }
                         Expr alignment = storage_dims[i].alignment;
                         if (alignment.defined()) {
                             allocation_extents[j] = ((extents[j] + alignment - 1) / alignment) * alignment;
@@ -189,6 +204,9 @@ private:
 
         // Make the allocation node
         stmt = Allocate::make(op->name, op->types[0], op->memory_type, allocation_extents, condition, stmt);
+
+        // Wrap it into storage bound asserts.
+        stmt = Block::make(Block::make(bound_asserts), stmt);
 
         // Compute the strides
         for (int i = (int)op->bounds.size() - 1; i > 0; i--) {
@@ -433,54 +451,6 @@ class PromoteToMemoryType : public IRMutator {
     }
 };
 
-class SubstituteBoundedAllocation : public IRMutator {
-    using IRMutator::visit;
-
-    const map<string, Function> &env;
-
-    Stmt visit(const Allocate *op) override {
-        auto iter = env.find(op->name);
-        // It's possible that there are some other allocations which are safe to
-        // ignore.
-        if (iter == env.end()) {
-            return IRMutator::visit(op);
-        }
-
-        Function f = iter->second;
-
-        if (f.schedule().allocation_bound().defined()) {
-            // Add an assert to make sure that computed allocation size is not
-            // greater than provided one.
-            Stmt body = mutate(op->body);
-            Expr total_extent = op->extents[0];
-            for (int ix = 1; ix < (int)op->extents.size(); ix++) {
-                total_extent = total_extent * op->extents[ix];
-            }
-            if (can_prove(total_extent > f.schedule().allocation_bound())) {
-                user_error << "Explicit allocation bound is smaller than required\n";
-            }
-            Expr size_too_small_error =
-                Call::make(Int(32),
-                           "halide_error_allocation_bound_too_small",
-                           {StringImm::make(op->name), f.schedule().allocation_bound(), total_extent},
-                           Call::Extern);
-            Stmt size_to_small_check = AssertStmt::make(total_extent <= f.schedule().allocation_bound(), size_too_small_error);
-            body = Block::make(size_to_small_check, body);
-            return Allocate::make(op->name, op->type, op->memory_type,
-                                  {f.schedule().allocation_bound()},
-                                  mutate(op->condition), body,
-                                  mutate(op->new_expr), op->free_function);
-        } else {
-            return IRMutator::visit(op);
-        }
-    }
-
-public:
-    SubstituteBoundedAllocation(const map<string, Function> &e)
-        : env(e) {
-    }
-};
-
 }  // namespace
 
 Stmt storage_flattening(Stmt s,
@@ -505,7 +475,6 @@ Stmt storage_flattening(Stmt s,
     }
 
     s = FlattenDimensions(tuple_env, outputs, target).mutate(s);
-    s = SubstituteBoundedAllocation(env).mutate(s);
     s = PromoteToMemoryType().mutate(s);
     return s;
 }

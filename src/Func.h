@@ -2340,12 +2340,13 @@ public:
      */
     Func &async();
 
-    /** Statically declare that the size of the storage for a function
-     * to allocate should be defined by specified expression. If bounds 
-     * inference decides that it requires more storage for this function 
-     * than the allocation size you have stated, a runtime error will
-     * occur when you try to run your pipeline. */
-    Func &bound_allocation(Expr bound);
+    /** Bound the extent of a Func's storage, but not extent of its
+     * compute. This can be useful for forcing a function's allocation 
+     * to be a fixed size, which often means it can go on the stack. 
+     * If bounds inference decides that it requires more storage for 
+     * this function than the allocation size you have stated, a runtime
+     * error will occur when you try to run the pipeline. */
+    Func &bound_storage(const Var &dim, const Expr &bound);
 
     /** Allocate storage for this function within f's loop over
      * var. Scheduling storage is optional, and can be used to
