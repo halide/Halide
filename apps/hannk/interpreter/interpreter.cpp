@@ -160,6 +160,7 @@ class VerifyAllAllocated : public TensorVisitor {
     }
 };
 
+#ifndef NDEBUG
 // Verify that no Op comes before any of its input Tensors are produced.
 void do_check_op_order(OpGroup *root) {
     std::unordered_set<Tensor *> valid_tensors;
@@ -170,6 +171,7 @@ void do_check_op_order(OpGroup *root) {
         HCHECK(0) << "The model is not in the correct order.";
     }
 }
+#endif
 
 }  // namespace
 
