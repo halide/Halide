@@ -1083,15 +1083,46 @@ void GatherOp::execute() {
     HalideBuffer<const int32_t> indices = input(1)->buffer();
     const HalideBuffer<void> &out = output()->buffer();
 
+    // Haven't yet found an instance of TFLite's Gather op that
+    // specifies a nonzero values. Implement and test once we do.
+    HCHECK(batch_dims_ == 0) << "TODO: GatherOp doesn't yet support batch_dim != 0";
+
     if (indices.dimensions() == 0) {
-        indices.embed(0, 0);
+        // Yes, a 0D (scalar) here is documented as legal in TFLite
+        indices.embed(0, 0);  // make 1-D
     }
 
-    for (int i = out.dim(axis_).min(); i <= out.dim(axis_).max(); i++) {
-        HalideBuffer<const void> in_i = in.sliced(axis_, indices(i));
-        HalideBuffer<void> out_i = out.sliced(axis_, i);
-        out_i.copy_from(in_i);
+#ifndef NDEBUG
+    assert(out.dimensions() == in.dimensions() + indices.dimensions() - 1);
+    for (int i = 0; i < out.dimensions(); i++) {
+        if (i < axis_) {
+            assert(out.dim(i).extent() == in.dim(i).extent());
+        } else if (i < axis_ + indices.dimensions()) {
+            assert(out.dim(i).extent() == indices.dim(i - axis_).extent());
+        } else {
+            assert(out.dim(i).extent() == in.dim(i - indices.dimensions() + 1).extent());
+        }
     }
+
+    // Negative values for axis_ are handled by the parser
+    assert(axis_ >= 0 && axis_ < in.dimensions());
+#endif
+
+    // Note that the TFLite Gather op restricts indices to 1D (or 0D),
+    // but other NN libraries (eg NNAPI) alloe for it to be multidimensional,
+    // so we must copy more robustly.
+    //
+    // (TODO: support TFLite's GatherNd op, which is similar to this.)
+    const int pos_dims = indices.dimensions();
+    indices.for_each_element([&](const int *pos) {
+        const int index = indices(pos);
+        HalideBuffer<const void> in_i = in.sliced(axis_, index);
+        HalideBuffer<void> out_i = out.sliced(axis_, pos[0]);
+        for (int i = 1; i < pos_dims; i++) {
+            out_i = out_i.sliced(axis_, pos[i]);
+        }
+        out_i.copy_from(in_i);
+    });
 }
 
 BoundsMap L2NormalizationOp::map_bounds(int input_idx, int output_idx) const {

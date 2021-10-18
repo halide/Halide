@@ -709,12 +709,18 @@ private:
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteGatherParams *params = (const TfLiteGatherParams *)(node->builtin_data);
         int axis = params->axis;
+        int batch_dims = params->batch_dims;
         if (axis < 0) {
             axis += input->rank();
         }
         axis = input->rank() - 1 - axis;
-        return make_op<GatherOp>(input, indices, output, axis);
+        return make_op<GatherOp>(input, indices, output, axis, batch_dims);
     }
+
+    // TODO: support GATHER_ND once we find a testcase for it
+    // OpPtr BuildGatherNd(TfLiteContext *context, TfLiteNode *node) {
+    //     return BuildGather(context, node);
+    // }
 
     OpPtr BuildReshape(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
@@ -1341,8 +1347,24 @@ class NodeSupport {
         if (!InputsHaveCorrectTypes({ANY, I32})) {
             return false;
         }
+        const TfLiteGatherParams *params = (const TfLiteGatherParams *)(node_->builtin_data);
+        if (params->batch_dims != 0) {
+            // TODO: we don't support other values for this yet, but we should.
+            return false;
+        }
         return true;
     }
+
+    // TODO: support GATHER_ND once we find a testcase for it
+    // bool IsNodeSupported_GatherNd() const {
+    //     if (!IsVersionOK(1, 2)) {
+    //         return false;
+    //     }
+    //     if (!InputsHaveCorrectTypes({ANY, I32})) {
+    //         return false;
+    //     }
+    //     return true;
+    // }
 
     bool IsNodeSupported_Conv2d() const {
         if (!IsVersionOK(1, 2)) {
