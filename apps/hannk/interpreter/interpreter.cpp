@@ -65,7 +65,7 @@ bool needs_arena_allocation(const TensorPtr &t) {
 }
 
 class FindAllocatableTensors : public TensorVisitor {
-    void visit_tensor(const TensorPtr &t) {
+    void visit_tensor(const TensorPtr &t) override {
         if (!needs_arena_allocation(t)) {
             return;
         }
