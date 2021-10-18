@@ -6,13 +6,14 @@ enum class Method {
     Averaging,
     RoundUp,
     RoundToEven,
-    Dither
+    Dither,
+    Float
 };
 
 class BilinearUpsample : public Generator<BilinearUpsample> {
 public:
-    Input<Buffer<uint8_t>> input{"input", 2};
-    Output<Buffer<uint8_t>> output{"output", 2};
+    Input<Buffer<>> input{"input", 2};
+    Output<Buffer<>> output{"output", 2};
     Input<int> noise_seed{"noise_seed"};
     GeneratorParam<Method> method{
         "method",
@@ -20,7 +21,8 @@ public:
         {{"averaging", Method::Averaging},
          {"round_up", Method::RoundUp},
          {"round_to_even", Method::RoundToEven},
-         {"dither", Method::Dither}}};
+         {"dither", Method::Dither},
+         {"float", Method::Float}}};
 
     Expr avg_u(Expr a, Expr b) {
         return Internal::rounding_halving_add(a, b);
@@ -51,7 +53,12 @@ public:
 
         Expr out00, out10, out01, out11;
 
-        if (method == Method::Averaging) {
+        if (method == Method::Float) {
+            out00 = (9 * in00 + 3 * (in01 + in10) + in11) / 16.0f;
+            out10 = (9 * in10 + 3 * (in00 + in11) + in01) / 16.0f;
+            out01 = (9 * in01 + 3 * (in00 + in11) + in10) / 16.0f;
+            out11 = (9 * in11 + 3 * (in01 + in10) + in00) / 16.0f;
+        } else if (method == Method::Averaging) {
             out00 = avg1339(in11, in01, in10, in00);
             out10 = avg1339(in01, in00, in11, in10);
             out01 = avg1339(in10, in00, in11, in01);
@@ -111,7 +118,8 @@ public:
 
                 // Pick a fixed random offset into it
                 Func offset;
-                offset() = {random_uint(noise_seed) & 31, random_uint(noise_seed) & 31};
+                offset(x) = {random_uint(noise_seed) % 32,
+                             random_uint(noise_seed) % 32};
                 offset.compute_root();
 
                 auto round = [&](const Expr &e) {
@@ -120,7 +128,7 @@ public:
                     // we can still do dense vector loads
                     // from it
 
-                    Expr noise = blue_noise(x + offset()[0], y + offset()[1]);
+                    Expr noise = blue_noise(x + offset(0)[0], y + offset(0)[1]);
                     return cast<uint8_t>((e + noise) / 16);
                 };
                 out00 = round(out00);
@@ -136,7 +144,7 @@ public:
 
         Var xi, yi;
 
-        const int vec = natural_vector_size<uint8_t>();
+        const int vec = natural_vector_size(input.type());
 
         // The unrolled tiling removes the select
         output
