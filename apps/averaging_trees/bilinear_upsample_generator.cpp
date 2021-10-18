@@ -13,8 +13,9 @@ enum class Method {
 class BilinearUpsample : public Generator<BilinearUpsample> {
 public:
     Input<Buffer<>> input{"input", 2};
+    Input<Buffer<uint8_t>> noise{"noise", 2};
     Output<Buffer<>> output{"output", 2};
-    Input<int> noise_seed{"noise_seed"};
+
     GeneratorParam<Method> method{
         "method",
         Method::Averaging,
@@ -66,10 +67,12 @@ public:
         } else {
 
             // Widen
-            in00 = cast<uint16_t>(in00);
-            in10 = cast<uint16_t>(in10);
-            in01 = cast<uint16_t>(in01);
-            in11 = cast<uint16_t>(in11);
+            if (!input.type().is_float()) {
+                in00 = cast<uint16_t>(in00);
+                in10 = cast<uint16_t>(in10);
+                in01 = cast<uint16_t>(in01);
+                in11 = cast<uint16_t>(in11);
+            }
 
             out00 = 9 * in00 + 3 * (in01 + in10) + in11;
             out10 = 9 * in10 + 3 * (in00 + in11) + in01;
@@ -98,38 +101,14 @@ public:
             } else {
                 // Dither
 
-                // Make some 28-bit unsigned white noise
-                Func white_noise;
-                white_noise(x, y) = random_uint() >> 4;
-
-                // Turn it into 28-bit unsigned red noise, by blurring it
-                Func red_noise;
-                red_noise(x, y) =
-                    (white_noise(x - 1, y - 1) + 2 * white_noise(x, y - 1) + white_noise(x + 1, y - 1) +
-                     2 * white_noise(x - 1, y) + 4 * white_noise(x, y) + 2 * white_noise(x + 1, y) +
-                     white_noise(x - 1, y + 1) + 2 * white_noise(x, y + 1) + white_noise(x + 1, y) + 8) /
-                    16;
-
-                // Turn it into 4-bit signed blue noise with a reasonably uniform histogram
-                Func blue_noise;
-                blue_noise(x, y) = clamp(cast<int16_t>(((cast<int32_t>(white_noise(x, y)) - red_noise(x, y)) >> 24) + 8), 0, 15);
-                // Precompute it once
-                blue_noise.compute_root().memoize();
-
-                // Pick a fixed random offset into it
-                Func offset;
-                offset(x) = {random_uint(noise_seed) % 32,
-                             random_uint(noise_seed) % 32};
-                offset.compute_root();
-
                 auto round = [&](const Expr &e) {
-                    // Pick a pseudo-random offset into
-                    // the blue noise pattern, such that
-                    // we can still do dense vector loads
-                    // from it
+                    Expr n = noise(x % 32, y % 32);
 
-                    Expr noise = blue_noise(x + offset(0)[0], y + offset(0)[1]);
-                    return cast<uint8_t>((e + noise) / 16);
+                    if (input.type().is_float()) {
+                        return cast<uint8_t>(clamp(Halide::floor((e * 256.0f + n) / 16.0f), 0.f, 255.f));
+                    } else {
+                        return cast<uint8_t>((e + n) / 16);
+                    }
                 };
                 out00 = round(out00);
                 out10 = round(out10);
@@ -144,7 +123,7 @@ public:
 
         Var xi, yi;
 
-        const int vec = natural_vector_size(input.type());
+        const int vec = natural_vector_size(output.type());
 
         // The unrolled tiling removes the select
         output

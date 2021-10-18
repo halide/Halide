@@ -2,6 +2,7 @@
 #include "bin/bilinear_upsample_averaging.h"
 #include "bin/bilinear_upsample_dither.h"
 #include "bin/bilinear_upsample_float.h"
+#include "bin/bilinear_upsample_float_dither.h"
 #include "bin/bilinear_upsample_round_to_even.h"
 #include "bin/bilinear_upsample_round_up.h"
 #include "halide_benchmark.h"
@@ -58,6 +59,13 @@ void compute_relative_bias_and_error(Halide::Runtime::Buffer<uint8_t> out,
     r->bias /= out.width() * out.height();
 }
 
+Halide::Runtime::Buffer<uint8_t> load_and_rescale_noise(const char *filename) {
+    // We only need 4-bit noise
+    Halide::Runtime::Buffer<uint8_t> noise = Halide::Tools::load_image(filename);
+    noise.for_each_value([](uint8_t &x) { x >>= 4; });
+    return noise;
+}
+
 int main(int argc, char **argv) {
     Halide::Runtime::Buffer<uint8_t> in(SZ / 2 + 1, SZ / 2 + 1), out(SZ, SZ);
     Halide::Runtime::Buffer<float> in_float(SZ / 2 + 1, SZ / 2 + 1), out_float(SZ, SZ);
@@ -65,27 +73,35 @@ int main(int argc, char **argv) {
     std::mt19937 rng{0};
     in.for_each_value([&](uint8_t &x, float &y) { x = rng(); y = x; }, in_float);
 
+    // Load some tileable blue noise for dithering from:
+    // http://momentsingraphics.de/BlueNoise.html
+    auto noise0 = load_and_rescale_noise("noise0.png");
+    auto noise1 = load_and_rescale_noise("noise1.png");
+    auto noise2 = load_and_rescale_noise("noise2.png");
+    auto noise3 = load_and_rescale_noise("noise3.png");
+    auto noise4 = load_and_rescale_noise("noise4.png");
+
     Result averaging, round_up, round_to_even, dither, float_;
     int count = 0;
     for (int i = 0; i < 10; i++) {
         averaging.time += Halide::Tools::benchmark(10, 10, [&]() {
-            bilinear_upsample_averaging(in, 0, out);
+            bilinear_upsample_averaging(in, noise0, out);
         });
 
         round_up.time += Halide::Tools::benchmark(10, 10, [&]() {
-            bilinear_upsample_round_up(in, 0, out);
+            bilinear_upsample_round_up(in, noise0, out);
         });
 
         round_to_even.time += Halide::Tools::benchmark(10, 10, [&]() {
-            bilinear_upsample_round_to_even(in, 0, out);
+            bilinear_upsample_round_to_even(in, noise0, out);
         });
 
         dither.time += Halide::Tools::benchmark(10, 10, [&]() {
-            bilinear_upsample_dither(in, 0, out);
+            bilinear_upsample_dither(in, noise0, out);
         });
 
         float_.time += Halide::Tools::benchmark(10, 10, [&]() {
-            bilinear_upsample_float(in_float, 0, out_float);
+            bilinear_upsample_float(in_float, noise0, out_float);
         });
         count++;
         if (i == 1) {
@@ -101,19 +117,19 @@ int main(int argc, char **argv) {
     dither.time /= count;
     float_.time /= count;
 
-    bilinear_upsample_round_up(in, 0, out);
+    bilinear_upsample_round_up(in, noise0, out);
     compute_bias_and_error(in, out, &round_up);
 
-    bilinear_upsample_averaging(in, 0, out);
+    bilinear_upsample_averaging(in, noise0, out);
     compute_bias_and_error(in, out, &averaging);
 
-    bilinear_upsample_round_to_even(in, 0, out);
+    bilinear_upsample_round_to_even(in, noise0, out);
     compute_bias_and_error(in, out, &round_to_even);
 
-    bilinear_upsample_dither(in, 0, out);
+    bilinear_upsample_dither(in, noise0, out);
     compute_bias_and_error(in, out, &dither);
 
-    bilinear_upsample_float(in_float, 0, out_float);
+    bilinear_upsample_float(in_float, noise0, out_float);
     compute_bias_and_error(in_float, out_float, &float_);
 
     printf("Results for single bilinear upsample from 1MP to 4MP:\n");
@@ -146,10 +162,10 @@ int main(int argc, char **argv) {
                     double fy = y + dy / 16.0f + 1 / 32.0f;
                     fx -= 5;
                     fy -= 5;
-                    accum += (fx * fx + fy * fy < 2.5 * 2.5) ? 1.0 : 0.0;
+                    accum += (fx * fx + fy * fy < 2.75 * 2.75) ? 1.0 : 0.0;
                 }
             }
-            double intensity = accum / 256.0;
+            double intensity = 1.0f - accum / 256.0;
             circle_in(x, y) = std::trunc(intensity * 5);
             float_circle_in(x, y) = circle_in(x, y) / 256.0f;
         }
@@ -162,57 +178,53 @@ int main(int argc, char **argv) {
     auto circ = circle_in.cropped(0, 0, 256).cropped(1, 0, 256);
 
     Halide::Tools::save_image(circ, "circle_input.png");
+    circ = circle1.cropped(0, 0, 256).cropped(1, 0, 256);
 
     float_.time = Halide::Tools::benchmark(10, 10, [&]() {
-        bilinear_upsample_float(float_circle_in, 0, float_circle1);
-        bilinear_upsample_float(float_circle1, 1, float_circle0);
-        bilinear_upsample_float(float_circle0, 2, float_circle1);
-        bilinear_upsample_float(float_circle1, 3, float_circle0);
-        bilinear_upsample_float(float_circle0, 4, float_circle1);
+        bilinear_upsample_float(float_circle_in, noise0, float_circle1);
+        bilinear_upsample_float(float_circle1, noise1, float_circle0);
+        bilinear_upsample_float(float_circle0, noise2, float_circle1);
+        bilinear_upsample_float(float_circle1, noise3, float_circle0);
+        bilinear_upsample_float_dither(float_circle0, noise4, circle1);
     });
-    float_circle1.crop(0, 0, 256);
-    float_circle1.crop(1, 0, 256);
-    Halide::Tools::convert_and_save_image(float_circle1, "circle_float.png");
+    Halide::Tools::convert_and_save_image(circ, "circle_float.png");
 
-    circ = circle1.cropped(0, 0, 256).cropped(1, 0, 256);
     averaging.time = Halide::Tools::benchmark(10, 10, [&]() {
-        bilinear_upsample_averaging(circle_in, 0, circle1);
-        bilinear_upsample_averaging(circle1, 1, circle0);
-        bilinear_upsample_averaging(circle0, 2, circle1);
-        bilinear_upsample_averaging(circle1, 3, circle0);
-        bilinear_upsample_averaging(circle0, 4, circle1);
+        bilinear_upsample_averaging(circle_in, noise0, circle1);
+        bilinear_upsample_averaging(circle1, noise1, circle0);
+        bilinear_upsample_averaging(circle0, noise2, circle1);
+        bilinear_upsample_averaging(circle1, noise3, circle0);
+        bilinear_upsample_averaging(circle0, noise4, circle1);
     });
     Halide::Tools::save_image(circ, "circle_averaging.png");
     compute_relative_bias_and_error(circ, float_circle1, &averaging);
 
     round_up.time = Halide::Tools::benchmark(10, 10, [&]() {
-        bilinear_upsample_round_up(circle_in, 0, circle1);
-        bilinear_upsample_round_up(circle1, 1, circle0);
-        bilinear_upsample_round_up(circle0, 2, circle1);
-        bilinear_upsample_round_up(circle1, 3, circle0);
-        bilinear_upsample_round_up(circle0, 4, circle1);
+        bilinear_upsample_round_up(circle_in, noise0, circle1);
+        bilinear_upsample_round_up(circle1, noise1, circle0);
+        bilinear_upsample_round_up(circle0, noise2, circle1);
+        bilinear_upsample_round_up(circle1, noise3, circle0);
+        bilinear_upsample_round_up(circle0, noise4, circle1);
     });
     Halide::Tools::save_image(circ, "circle_round_up.png");
     compute_relative_bias_and_error(circ, float_circle1, &round_up);
 
     round_to_even.time = Halide::Tools::benchmark(10, 10, [&]() {
-        bilinear_upsample_round_to_even(circle_in, 0, circle1);
-        bilinear_upsample_round_to_even(circle1, 1, circle0);
-        bilinear_upsample_round_to_even(circle0, 2, circle1);
-        bilinear_upsample_round_to_even(circle1, 3, circle0);
-        bilinear_upsample_round_to_even(circle0, 4, circle1);
+        bilinear_upsample_round_to_even(circle_in, noise0, circle1);
+        bilinear_upsample_round_to_even(circle1, noise1, circle0);
+        bilinear_upsample_round_to_even(circle0, noise2, circle1);
+        bilinear_upsample_round_to_even(circle1, noise3, circle0);
+        bilinear_upsample_round_to_even(circle0, noise4, circle1);
     });
     Halide::Tools::save_image(circ, "circle_round_to_even.png");
     compute_relative_bias_and_error(circ, float_circle1, &round_to_even);
 
-    // White noise pattern is initialized on first run
-    bilinear_upsample_dither(circle_in, 0, circle1);
     dither.time = Halide::Tools::benchmark(10, 10, [&]() {
-        bilinear_upsample_dither(circle_in, 0, circle1);
-        bilinear_upsample_dither(circle1, 1, circle0);
-        bilinear_upsample_dither(circle0, 2, circle1);
-        bilinear_upsample_dither(circle1, 3, circle0);
-        bilinear_upsample_dither(circle0, 4, circle1);
+        bilinear_upsample_dither(circle_in, noise0, circle1);
+        bilinear_upsample_dither(circle1, noise1, circle0);
+        bilinear_upsample_dither(circle0, noise2, circle1);
+        bilinear_upsample_dither(circle1, noise3, circle0);
+        bilinear_upsample_dither(circle0, noise4, circle1);
     });
     Halide::Tools::save_image(circ, "circle_dither.png");
     compute_relative_bias_and_error(circ, float_circle1, &dither);
