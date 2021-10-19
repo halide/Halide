@@ -257,7 +257,7 @@ Target::Feature calculate_host_cuda_capability(Target t) {
         return Target::CUDACapability70;
     } else if (ver < 80) {
         return Target::CUDACapability75;
-    } else if (ver < 86) {
+    } else if (ver < 86 || LLVM_VERSION < 130) {
         return Target::CUDACapability80;
     } else {
         return Target::CUDACapability86;
