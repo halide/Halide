@@ -544,6 +544,7 @@ string CodeGen_PTX_Dev::march() const {
 
 string CodeGen_PTX_Dev::mcpu() const {
     if (target.has_feature(Target::CUDACapability86)) {
+        user_assert(LLVM_VERSION >= 130) << "The linked LLVM version does not support cuda compute capability 8.6\n";
         return "sm_86";
     } else if (target.has_feature(Target::CUDACapability80)) {
         return "sm_80";
