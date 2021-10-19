@@ -610,6 +610,25 @@ TResult implement_binary(BinaryOp::Operator op, TOperand a, TOperand b) {
     }
 }
 
+template<typename TOperand, typename TResult>
+bool try_scalar_binary_op(BinaryOp::Operator op, const TensorPtr &a, const TensorPtr &b, const TensorPtr &result) {
+    if (a->type() == halide_type_of<TOperand>() &&
+        b->type() == halide_type_of<TOperand>() &&
+        result->type() == halide_type_of<TResult>()) {
+        const auto &a_buf = a->buffer<const TOperand>();
+        const auto &b_buf = b->buffer<const TOperand>();
+        const auto &result_buf = result->buffer<TResult>();
+
+        // This is really slow, only intended to support scalar operations.
+        const auto scalar_op = [&](TOperand a_scalar, TOperand b_scalar, TResult &result_scalar) {
+            result_scalar = implement_binary<TResult, TOperand>(op, a_scalar, b_scalar);
+        };
+        scalar_elementwise_loop_nest(scalar_op, a_buf, b_buf, result_buf);
+        return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 void BinaryOp::execute() {
@@ -635,39 +654,45 @@ void BinaryOp::execute() {
         default:
             break;
         }
-    } else if (in1->type() == halide_type_of<int32_t>() &&
-               in2->type() == halide_type_of<int32_t>() &&
-               out->type() == halide_type_of<int32_t>()) {
-        const auto &in1_buf = in1->buffer<const int32_t>();
-        const auto &in2_buf = in2->buffer<const int32_t>();
-        const auto &out_buf = out->buffer<int32_t>();
-
+    } else {
         // This is really slow, only intended to support scalar operations.
-        auto scalar_op = [&](int32_t a, int32_t b, int32_t &result) {
-            result = implement_binary<int32_t>(op_, a, b);
-        };
-        scalar_elementwise_loop_nest(scalar_op, in1_buf, in2_buf, out_buf);
-        return;
-    } else if (out->type() == halide_type_of<bool>() && out->rank() == 0) {
-        double in1_scalar = dequantize_scalar(in1.get());
-        double in2_scalar = dequantize_scalar(in2.get());
-        auto out_buf = out->buffer<bool>();
+        if (try_scalar_binary_op<int32_t, int32_t>(op_, in1, in2, out)) {
+            return;
+        }
 
-        switch (op_) {
-        case Less:
-            out_buf() = in1_scalar < in2_scalar;
-            return;
-        case LessEqual:
-            out_buf() = in1_scalar <= in2_scalar;
-            return;
-        case Equal:
-            out_buf() = in1_scalar == in2_scalar;
-            return;
-        case NotEqual:
-            out_buf() = in1_scalar != in2_scalar;
-            return;
-        default:
-            break;
+        // TODO: these can be useful for debugging pipelines that use op variants we don't fully support yet
+        // (e.g. float32) -- leaving this here (but commented out) as a useful reference, but *please*
+        // don't add any permanent usage here at this time (the ops almost certainly need to be written in Halide).
+        //
+        // if (try_scalar_binary_op<float, float>(op_, in1, in2, out)) {
+        //     return;
+        // }
+        // // This is for the LESS, etc operators, which may store results in uint8 rather than bool
+        // if (try_scalar_binary_op<float, uint8_t>(op_, in1, in2, out)) {
+        //     return;
+        // }
+
+        if (out->type() == halide_type_of<bool>() && out->rank() == 0) {
+            double in1_scalar = dequantize_scalar(in1.get());
+            double in2_scalar = dequantize_scalar(in2.get());
+            auto out_buf = out->buffer<bool>();
+
+            switch (op_) {
+            case Less:
+                out_buf() = in1_scalar < in2_scalar;
+                return;
+            case LessEqual:
+                out_buf() = in1_scalar <= in2_scalar;
+                return;
+            case Equal:
+                out_buf() = in1_scalar == in2_scalar;
+                return;
+            case NotEqual:
+                out_buf() = in1_scalar != in2_scalar;
+                return;
+            default:
+                break;
+            }
         }
     }
     HLOG(FATAL)
@@ -1058,15 +1083,46 @@ void GatherOp::execute() {
     HalideBuffer<const int32_t> indices = input(1)->buffer();
     const HalideBuffer<void> &out = output()->buffer();
 
+    // Haven't yet found an instance of TFLite's Gather op that
+    // specifies a nonzero values. Implement and test once we do.
+    HCHECK(batch_dims_ == 0) << "TODO: GatherOp doesn't yet support batch_dim != 0";
+
     if (indices.dimensions() == 0) {
-        indices.embed(0, 0);
+        // Yes, a 0D (scalar) here is documented as legal in TFLite
+        indices.embed(0, 0);  // make 1-D
     }
 
-    for (int i = out.dim(axis_).min(); i <= out.dim(axis_).max(); i++) {
-        HalideBuffer<const void> in_i = in.sliced(axis_, indices(i));
-        HalideBuffer<void> out_i = out.sliced(axis_, i);
-        out_i.copy_from(in_i);
+#ifndef NDEBUG
+    assert(out.dimensions() == in.dimensions() + indices.dimensions() - 1);
+    for (int i = 0; i < out.dimensions(); i++) {
+        if (i < axis_) {
+            assert(out.dim(i).extent() == in.dim(i).extent());
+        } else if (i < axis_ + indices.dimensions()) {
+            assert(out.dim(i).extent() == indices.dim(i - axis_).extent());
+        } else {
+            assert(out.dim(i).extent() == in.dim(i - indices.dimensions() + 1).extent());
+        }
     }
+
+    // Negative values for axis_ are handled by the parser
+    assert(axis_ >= 0 && axis_ < in.dimensions());
+#endif
+
+    // Note that the TFLite Gather op restricts indices to 1D (or 0D),
+    // but other NN libraries (eg NNAPI) alloe for it to be multidimensional,
+    // so we must copy more robustly.
+    //
+    // (TODO: support TFLite's GatherNd op, which is similar to this.)
+    const int pos_dims = indices.dimensions();
+    indices.for_each_element([&](const int *pos) {
+        const int index = indices(pos);
+        HalideBuffer<const void> in_i = in.sliced(axis_, index);
+        HalideBuffer<void> out_i = out.sliced(axis_, pos[0]);
+        for (int i = 1; i < pos_dims; i++) {
+            out_i = out_i.sliced(axis_, pos[i]);
+        }
+        out_i.copy_from(in_i);
+    });
 }
 
 BoundsMap L2NormalizationOp::map_bounds(int input_idx, int output_idx) const {
