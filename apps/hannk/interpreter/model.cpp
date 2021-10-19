@@ -1,5 +1,6 @@
 #include "interpreter/model.h"
 #include "interpreter/ops.h"
+#include "interpreter/transforms.h"
 #include "util/error_util.h"
 
 #include <cmath>
@@ -58,22 +59,25 @@ void Op::set_output(TensorPtr t) {
     set_output(0, std::move(t));
 }
 
-bool Op::is_input(const TensorPtr &t) const {
-    for (auto &i : inputs_) {
-        if (i == t) {
-            return true;
+namespace {
+
+int index_of_tensor(const std::vector<TensorPtr> &v, const TensorPtr &t) {
+    for (size_t i = 0; i < v.size(); i++) {
+        if (t == v[i]) {
+            return (int)i;
         }
     }
-    return false;
+    return -1;
 }
 
-bool Op::is_output(const TensorPtr &t) const {
-    for (auto &o : outputs_) {
-        if (o == t) {
-            return true;
-        }
-    }
-    return false;
+}  // namespace
+
+int Op::index_of_input(const TensorPtr &t) const {
+    return index_of_tensor(inputs_, t);
+}
+
+int Op::index_of_output(const TensorPtr &t) const {
+    return index_of_tensor(outputs_, t);
 }
 
 void Op::dump(std::ostream &os, int indent) const {
@@ -91,18 +95,6 @@ void Op::dump(std::ostream &os, int indent) const {
     os << "\n";
 }
 
-bool Op::consumes_output_of(const Op *op) const {
-    for (const auto &o : op->outputs_) {
-        for (const auto &i : this->inputs_) {
-            if (i == o) {
-                // i consumes an output of op.
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
 void OpGroup::execute() {
     for (int i = 0; i < op_count(); i++) {
         op(i)->execute();
@@ -118,15 +110,21 @@ BoundsMap OpGroup::map_bounds(int input_idx, int output_idx) const {
 OpPtr OpGroup::add(OpPtr to_add) {
     assert(to_add != nullptr);
     for (auto it = ops_.begin(); it != ops_.end(); ++it) {
-        if ((*it)->consumes_output_of(to_add.get())) {
-            // i directly consumes the output of to_add.
-            ops_.insert(it, std::move(to_add));
-            return nullptr;
+        Op *sub_op = it->get();
+        for (int output_idx = 0; output_idx < to_add->output_count(); output_idx++) {
+            const TensorPtr &output = to_add->output(output_idx);
+            if (sub_op->is_input(output)) {
+                // sub_op directly consumes at least one output of to_add.
+                ops_.insert(it, std::move(to_add));
+                return nullptr;
+            }
         }
-        to_add = (*it)->add(std::move(to_add));
-        if (to_add == nullptr) {
-            // there is a nested Op that consumes the output to_add.
-            return nullptr;
+        if (OpGroup *group = cast_op<OpGroup>(sub_op)) {
+            to_add = group->add(std::move(to_add));
+            if (to_add == nullptr) {
+                // there is a nested OpGroup that consumes the output to_add.
+                return nullptr;
+            }
         }
     }
     // Generally an error case, but caller should deal with it
@@ -135,12 +133,15 @@ OpPtr OpGroup::add(OpPtr to_add) {
 
 bool OpGroup::remove(const Op *to_remove) {
     for (auto it = ops_.begin(); it != ops_.end(); ++it) {
-        if (it->get() == to_remove) {
+        Op *sub_op = it->get();
+        if (sub_op == to_remove) {
             ops_.erase(it);
             return true;
         }
-        if ((*it)->remove(to_remove)) {
-            return true;
+        if (OpGroup *group = cast_op<OpGroup>(sub_op)) {
+            if (group->remove(to_remove)) {
+                return true;
+            }
         }
     }
     // Generally an error case, but caller should deal with it
