@@ -146,7 +146,7 @@ private:
                         Expr bound = storage_dims[i].bound;
                         if (bound.defined()) {
                             if (can_prove(extents[j] > bound)) {
-                                user_error << "Explicit storage bound for variable " << args[j] << " of function " << op->name << " is smaller than required\n";
+                                user_error << "Explicit storage bound (" << bound << ") for variable " << args[j] << " of function " << op->name << " is smaller than required (" << extents[j] << ")\n";
                             }
                             Expr bound_too_small_error =
                                 Call::make(Int(32),
