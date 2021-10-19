@@ -543,7 +543,9 @@ string CodeGen_PTX_Dev::march() const {
 }
 
 string CodeGen_PTX_Dev::mcpu() const {
-    if (target.has_feature(Target::CUDACapability80)) {
+    if (target.has_feature(Target::CUDACapability86)) {
+        return "sm_86";
+    } else if (target.has_feature(Target::CUDACapability80)) {
         return "sm_80";
     } else if (target.has_feature(Target::CUDACapability75)) {
         return "sm_75";
@@ -565,7 +567,9 @@ string CodeGen_PTX_Dev::mcpu() const {
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
-    if (target.has_feature(Target::CUDACapability80)) {
+    if (target.has_feature(Target::CUDACapability86)) {
+        return "+ptx71";
+    } else if (target.has_feature(Target::CUDACapability80)) {
         return "+ptx70";
     } else if (target.has_feature(Target::CUDACapability70) ||
                target.has_feature(Target::CUDACapability75)) {
