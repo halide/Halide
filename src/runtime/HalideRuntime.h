@@ -1163,9 +1163,9 @@ enum halide_error_code_t {
      * pipeline, or enable the appropriate device backend. */
     halide_error_code_device_dirty_with_no_device_support = -44,
 
-    /** An explicit allocation bound provided is too small to store
+    /** An explicit storage bound provided is too small to store
      * all the values produced by the function. */
-    halide_error_code_allocation_bound_too_small = -45,
+    halide_error_code_storage_bound_too_small = -45,
 };
 
 /** Halide calls the functions below on various error conditions. The

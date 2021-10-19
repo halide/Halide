@@ -283,7 +283,7 @@ WEAK int halide_error_storage_bound_too_small(void *user_context, const char *fu
         << ") of dimension " << var_name << " of " << func_name
         << " is too small to store the required region ("
         << required_size << ").";
-    return halide_error_code_allocation_bound_too_small;
+    return halide_error_code_storage_bound_too_small;
 }
 
 }  // extern "C"
