@@ -1137,10 +1137,23 @@ void L2NormalizationOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
+    // Negative values for axis_ must be normalized by the parser
+    assert(axis_ >= 0 && axis_ < in->rank());
+
     if (in->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
-        const auto &in_buf = in->buffer();
-        const auto &out_buf = out->buffer();
+        // Make local copies in case we need to transpose them
+        HalideBuffer<void> in_buf = in->buffer();
+        HalideBuffer<void> out_buf = out->buffer();
+
+        // TODO: we currently assume that the axis-is-0 case is the most common
+        // and most important, and optimize for it; the other cases, we just transpose,
+        // which currently requires less-efficient specializations in the Halide code.
+        // Revisit if this proves too slow in practice.
+        if (axis_ != 0) {
+            in_buf.transpose(0, axis_);
+            out_buf.transpose(0, axis_);
+        }
 
         const int input_zero = in->quantization().uniform_zero();
         assert(input_zero >= 0 && input_zero <= 255);
