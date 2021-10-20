@@ -293,6 +293,8 @@ void replace_consumers(const TensorPtr &from, const TensorPtr &to) {
 
 // Find ops that need padding and add an explicit pad op.
 class PadForOps : public OpVisitor {
+    using OpVisitor::visit;
+
     void pad_for_op(Op *op, int input_idx, int output_idx) {
         TensorPtr input = op->input(input_idx);
         TensorPtr output = op->output(output_idx);
@@ -387,6 +389,8 @@ public:
 };
 
 class FusePadOps : public OpVisitor {
+    using OpVisitor::visit;
+
     void visit(PadOp *op) override {
         if (op->input()->producers().size() != 1 || op->input()->consumers().size() != 1) {
             return;
