@@ -319,13 +319,14 @@ public:
     static const char *to_string(Operator op);
 
 protected:
-    Operator op_;
+    const Operator op_;
+    const bool keep_dims_;
 
     bool reducing(int d) const;
 
 public:
-    ReductionOp(const TensorPtr &input, const TensorPtr &indices, const TensorPtr &output, Operator op)
-        : Op({input, indices}, {output}), op_(op) {
+    ReductionOp(Operator op, const TensorPtr &input, const TensorPtr &indices, bool keep_dims, const TensorPtr &output)
+        : Op({input, indices}, {output}), op_(op), keep_dims_(keep_dims) {
     }
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;

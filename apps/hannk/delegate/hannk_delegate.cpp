@@ -792,7 +792,9 @@ private:
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto indices = GetTensorById(context, node->inputs->data[1]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return make_op<ReductionOp>(input, indices, output, ReductionOp::Mean);
+        const TfLiteReducerParams *params = (const TfLiteReducerParams *)(node->builtin_data);
+        const bool keep_dims = params ? params->keep_dims : false;
+        return make_op<ReductionOp>(ReductionOp::Mean, input, indices, keep_dims, output);
     }
 
     OpPtr BuildSpaceToDepth(TfLiteContext *context, TfLiteNode *node) {
