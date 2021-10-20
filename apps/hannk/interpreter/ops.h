@@ -228,9 +228,11 @@ public:
 };
 
 class L2NormalizationOp : public Op {
+    const int axis_;
+
 public:
-    L2NormalizationOp(const TensorPtr &input, const TensorPtr &output)
-        : Op({input}, {output}) {
+    L2NormalizationOp(const TensorPtr &input, const TensorPtr &output, int axis)
+        : Op({input}, {output}), axis_(axis) {
     }
 
     void accept(OpVisitor *v) override;
