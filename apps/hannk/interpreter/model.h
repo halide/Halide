@@ -344,9 +344,9 @@ public:
     void add(OpPtr to_insert, const Op *before = nullptr);
     void remove(const Op *op);
 
-    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const;
+    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const override;
 
-    Status execute();
+    Status execute() override;
 
     int op_count() const {
         return ops_.size();

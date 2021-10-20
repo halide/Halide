@@ -523,9 +523,6 @@ public:
     Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const override;
 
     Status execute() override;
-    Status map_bounds(int input_idx, int output_idx, BoundsMap *result) const override;
-
-    Status execute() override;
 
     std::string name() const override {
         return "UpsampleChannelsOp";

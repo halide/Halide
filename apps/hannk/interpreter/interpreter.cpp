@@ -210,7 +210,7 @@ Status Interpreter::init() {
     model_->accept(&verify_all);
 #endif
 
-    if (options.verbosity >= 2) {
+    if (options_.verbosity >= 2) {
         std::ostringstream os;
         os << "Model after transformations:\n";
         model_->dump(os);

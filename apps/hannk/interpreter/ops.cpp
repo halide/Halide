@@ -232,22 +232,18 @@ Status loop_nest_impl(Fn &&fn, halide_buffer_t op0, Bufs... ops) {
 }
 
 template<typename Fn, typename T, typename... Ts>
-Status scalar_loop_nest_impl(Fn &&fn, TypedBufferT<T> op0, TypedBufferT<Ts>... ops) {
+void scalar_loop_nest_impl(Fn &&fn, TypedBufferT<T> op0, TypedBufferT<Ts>... ops) {
     if (op0.dimensions == 0) {
-        return fn(*(T *)op0.host, *(Ts *)ops.host...);
+        fn(*(T *)op0.host, *(Ts *)ops.host...);
     } else {
         const int last_dim = op0.dimensions - 1;
         const int min = op0.dim[last_dim].min;
         const int extent = op0.dim[last_dim].extent;
         const int max = min + extent - 1;
         for (int i = min; i <= max; i++) {
-            auto status = scalar_loop_nest_impl(fn, slice_last_dim(op0, i), slice_last_dim(ops, i)...);
-            if (!status.ok()) {
-                return status;
-            }
+            scalar_loop_nest_impl(fn, slice_last_dim(op0, i), slice_last_dim(ops, i)...);
         }
     }
-    return Status::OK;
 }
 
 void broadcast_dims(int min, int extent) {
@@ -297,12 +293,12 @@ Status elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... o
 // This is the same as the above, except it calls fn with scalar values at each
 // element of the buffer.
 template<typename Fn, typename T, typename... Ts>
-Status scalar_elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
+void scalar_elementwise_loop_nest(Fn &&fn, HalideBuffer<T> op0, HalideBuffer<Ts>... ops) {
     const int rank = std::max({op0.dimensions(), ops.dimensions()...});
     pad_to_rank(rank, op0, ops...);
     broadcast_shapes(rank, op0.raw_buffer(), ops.raw_buffer()...);
     optimize_elementwise_shapes(op0.raw_buffer(), ops.raw_buffer()...);
-    return scalar_loop_nest_impl(fn, *(TypedBufferT<T> *)op0.raw_buffer(), *(TypedBufferT<Ts> *)ops.raw_buffer()...);
+    scalar_loop_nest_impl(fn, *(TypedBufferT<T> *)op0.raw_buffer(), *(TypedBufferT<Ts> *)ops.raw_buffer()...);
 }
 
 // This helper is similar to the above, but it only implements steps 3 and 4.
@@ -522,7 +518,7 @@ Status requantize(const HalideBuffer<const void> &in, const QuantizationInfo &in
         // could be a little faster, and avoid some quantization error.
         return add_uint8(in, inq, 1, in, inq, 0, out, outq, activation);
     } else {
-        return VSTATUS(UnimplementedOp, "Unable to requantize ",in.type(), " -> ", out.type());
+        return VSTATUS(UnimplementedOp, "Unable to requantize ", in.type(), " -> ", out.type());
     }
 }
 
@@ -540,7 +536,7 @@ ActivationFunction to_activation(UnaryOp::Operator op) {
     case UnaryOp::Negate:
     case UnaryOp::Square:
         return ActivationFunction::None;
-    // no default case: we want a compile error if any of the enums aren't handled
+        // no default case: we want a compile error if any of the enums aren't handled
     }
 }
 
@@ -571,7 +567,7 @@ const char *BinaryOp::to_string(BinaryOp::Operator op) {
         return "Equal";
     case NotEqual:
         return "NotEqual";
-    // no default case: we want a compile error if any of the enums aren't handled
+        // no default case: we want a compile error if any of the enums aren't handled
     }
 }
 
@@ -676,9 +672,7 @@ Status BinaryOp::execute() {
         }
     } else {
         // This is really slow, only intended to support scalar operations.
-        Status status = try_scalar_binary_op<int32_t, int32_t>(op_, in1, in2, out);
-        // TODO
-        if (status.ok()) {
+        if (try_scalar_binary_op<int32_t, int32_t>(op_, in1, in2, out)) {
             return Status::OK;
         }
 
@@ -687,11 +681,11 @@ Status BinaryOp::execute() {
         // don't add any permanent usage here at this time (the ops almost certainly need to be written in Halide).
         //
         // if (try_scalar_binary_op<float, float>(op_, in1, in2, out)) {
-        //     return;
+        //     return Status::OK;
         // }
         // // This is for the LESS, etc operators, which may store results in uint8 rather than bool
         // if (try_scalar_binary_op<float, uint8_t>(op_, in1, in2, out)) {
-        //     return;
+        //     return Status::OK;
         // }
 
         if (out->type() == halide_type_of<bool>() && out->rank() == 0) {
@@ -1356,7 +1350,7 @@ const char *Pool2DOp::to_string(Pool2DOp::Operator op) {
         return "Average";
     case Max:
         return "Max";
-    // no default case: we want a compile error if any of the enums aren't handled
+        // no default case: we want a compile error if any of the enums aren't handled
     }
 }
 
@@ -1411,7 +1405,7 @@ const char *ReductionOp::to_string(Operator op) {
     switch (op) {
     case Mean:
         return "Mean";
-    // no default case: we want a compile error if any of the enums aren't handled
+        // no default case: we want a compile error if any of the enums aren't handled
     }
 }
 
@@ -1810,7 +1804,7 @@ const char *UnaryOp::to_string(UnaryOp::Operator op) {
         return "Square";
     case Tanh:
         return "Tanh";
-    // no default case: we want a compile error if any of the enums aren't handled
+        // no default case: we want a compile error if any of the enums aren't handled
     }
 }
 
