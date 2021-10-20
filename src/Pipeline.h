@@ -145,7 +145,7 @@ private:
 
     // For the three method below, precisely one of the first two args should be non-null
     void prepare_jit_call_arguments(RealizationArg &output, const Target &target, const ParamMap &param_map,
-                                    void *user_context, bool is_bounds_inference, JITCallArgs &args_result);
+                                    JITUserContext **user_context, bool is_bounds_inference, JITCallArgs &args_result);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
@@ -349,6 +349,8 @@ public:
      */
     void compile_jit(const Target &target = get_jit_target_from_environment());
 
+    // TODO: deprecate all of these and replace with versions that take a JITUserContext
+
     /** Set the error handler function that be called in the case of
      * runtime errors during halide pipelines. If you are compiling
      * statically, you can also just define your own function with
@@ -456,8 +458,9 @@ public:
     const std::map<std::string, JITExtern> &get_jit_externs();
 
     /** Get a struct containing the currently set custom functions
-     * used by JIT. */
-    const Internal::JITHandlers &jit_handlers();
+     * used by JIT. This can be mutated. Changes will take effect the
+     * next time this Pipeline is realized. */
+    JITHandlers &jit_handlers();
 
     /** Add a custom pass to be used during lowering. It is run after
      * all other lowering passes. Can be used to verify properties of
@@ -489,6 +492,15 @@ public:
     Realization realize(std::vector<int32_t> sizes = {}, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
 
+    /** Same as above, but takes a custom user-provided context to be
+     * passed to runtime functions. A nullptr context is legal, and is
+     * equivalent to calling the variant of realize that does not take
+     * a context. */
+    Realization realize(JITUserContext *context,
+                        std::vector<int32_t> sizes = {},
+                        const Target &target = Target(),
+                        const ParamMap &param_map = ParamMap::empty_map());
+
     /** Evaluate this Pipeline into an existing allocated buffer or
      * buffers. If the buffer is also one of the arguments to the
      * function, strange things may happen, as the pipeline isn't
@@ -498,7 +510,17 @@ public:
      * shape, but the shape can vary across the different output
      * Funcs. This form of realize does *not* automatically copy data
      * back from the GPU. */
-    void realize(RealizationArg output, const Target &target = Target(),
+    void realize(RealizationArg output,
+                 const Target &target = Target(),
+                 const ParamMap &param_map = ParamMap::empty_map());
+
+    /** Same as above, but takes a custom user-provided context to be
+     * passed to runtime functions. A nullptr context is legal, and
+     * is equivalent to calling the variant of realize that does not
+     * take a context. */
+    void realize(JITUserContext *context,
+                 RealizationArg output,
+                 const Target &target = Target(),
                  const ParamMap &param_map = ParamMap::empty_map());
 
     /** For a given size of output, or a given set of output buffers,
@@ -511,6 +533,18 @@ public:
                             const Target &target = get_jit_target_from_environment(),
                             const ParamMap &param_map = ParamMap::empty_map());
     void infer_input_bounds(RealizationArg output,
+                            const Target &target = get_jit_target_from_environment(),
+                            const ParamMap &param_map = ParamMap::empty_map());
+    // @}
+
+    /** Variants of infer_inputs_bounds that take a custom user context */
+    // @{
+    void infer_input_bounds(JITUserContext *context,
+                            const std::vector<int32_t> &sizes,
+                            const Target &target = get_jit_target_from_environment(),
+                            const ParamMap &param_map = ParamMap::empty_map());
+    void infer_input_bounds(JITUserContext *context,
+                            RealizationArg output,
                             const Target &target = get_jit_target_from_environment(),
                             const ParamMap &param_map = ParamMap::empty_map());
     // @}
