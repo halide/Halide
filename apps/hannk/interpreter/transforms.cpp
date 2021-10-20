@@ -8,6 +8,8 @@ namespace {
 template<typename T>
 T *cast_op(Op *x) {
     class Caster : public OpVisitor {
+        using OpVisitor::visit;
+
     public:
         T *result = nullptr;
 
