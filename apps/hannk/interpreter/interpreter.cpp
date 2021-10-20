@@ -14,8 +14,7 @@ extern "C" int halide_malloc_alignment();
 namespace hannk {
 
 Interpreter::Interpreter(std::unique_ptr<OpGroup> m, InterpreterOptions options)
-    : model_(std::move(m)) {
-    init(options);
+    : model_(std::move(m)), options_(std::move(options)) {
 }
 
 Interpreter::~Interpreter() {
@@ -162,33 +161,58 @@ class VerifyAllAllocated : public TensorVisitor {
 
 }  // namespace
 
-void Interpreter::init(InterpreterOptions options) {
-    pad_for_ops(model_.get());
+bool Interpreter::prepare() {
+    if (prepared_) {
+        HLOG(ERROR) << "Do not call prepare() twice";
+        return false;
+    }
+
+    // We must prepare the model before doing the transforms, as some of the
+    // transforms may rely on information cached by prepare(), e.g. alignment requirements.
+    // (Note that any transforms that add new ops are expected to call prepare() on them,
+    // returning errors as appropriate.)
+    if (!model_->prepare()) {
+        HLOG(ERROR) << "model_->prepare() failed.";
+        return false;
+    }
+
+    if (!pad_for_ops(model_.get())) {
+        HLOG(ERROR) << "pad_for_ops() failed.";
+        return false;
+    }
     in_place(model_.get());
     fold_constants(model_.get());
     remove_dead_ops(model_.get());
 
     assert(tensor_storage_arena_ == nullptr);
-    tensor_storage_arena_ = allocate_tensors(model_.get(), options);
+    tensor_storage_arena_ = allocate_tensors(model_.get(), options_);
 
 #ifndef NDEBUG
     VerifyAllAllocated verify_all;
     model_->accept(&verify_all);
 #endif
 
-    if (options.verbosity >= 2) {
+    if (options_.verbosity >= 2) {
         std::ostringstream os;
         os << "Model after transformations:\n";
         model_->dump(os);
         HLOG(INFO) << os.str();
     }
+
+    prepared_ = true;
+    return true;
 }
 
 void Interpreter::execute() {
+    if (!prepared_) {
+        HLOG(ERROR) << "Must call prepare() before execute()";
+        return;
+    }
     model_->execute();
 }
 
 TensorPtr Interpreter::get_tensor(const std::string &name) {
+    HCHECK(prepared_);
     for (int i = 0; i < model_->op_count(); i++) {
         Op *op = model_->op(i);
         for (int j = 0; j < op->input_count(); j++) {
@@ -206,6 +230,7 @@ TensorPtr Interpreter::get_tensor(const std::string &name) {
 }
 
 std::vector<TensorPtr> Interpreter::inputs() {
+    HCHECK(prepared_);
     std::vector<TensorPtr> result;
     for (int i = 0; i < model_->input_count(); i++) {
         result.push_back(model_->input(i));
@@ -215,6 +240,7 @@ std::vector<TensorPtr> Interpreter::inputs() {
 }
 
 std::vector<TensorPtr> Interpreter::outputs() {
+    HCHECK(prepared_);
     std::vector<TensorPtr> result;
     for (int i = 0; i < model_->output_count(); i++) {
         result.push_back(model_->output(i));

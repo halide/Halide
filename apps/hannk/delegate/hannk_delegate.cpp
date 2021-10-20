@@ -388,6 +388,10 @@ public:
         InterpreterOptions options;
         options.verbosity = options_.verbosity;
         interpreter_ = std::unique_ptr<Interpreter>(new Interpreter(std::move(model_), std::move(options)));
+        if (!interpreter_->prepare()) {
+            TF_LITE_KERNEL_LOG(context, "hannk::Interpreter::prepare() failed");
+            return kTfLiteDelegateError;
+        }
 
         for (int tensor_id : TfLiteIntArrayView(node->outputs)) {
             if (tensor_id == kTfLiteOptionalTensor) {
