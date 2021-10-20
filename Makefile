@@ -417,6 +417,7 @@ SOURCE_FILES = \
   Buffer.cpp \
   CanonicalizeGPUVars.cpp \
   Closure.cpp \
+  ClampUnsafeAccesses.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
   CodeGen_D3D12Compute_Dev.cpp \
@@ -590,6 +591,7 @@ HEADER_FILES = \
   BoundSmallAllocations.h \
   Buffer.h \
   CanonicalizeGPUVars.h \
+  ClampUnsafeAccesses.h \
   Closure.h \
   CodeGen_C.h \
   CodeGen_D3D12Compute_Dev.h \

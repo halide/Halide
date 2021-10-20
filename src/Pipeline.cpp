@@ -127,9 +127,9 @@ struct PipelineContents {
 
     void clear_custom_lowering_passes() {
         invalidate_cache();
-        for (size_t i = 0; i < custom_lowering_passes.size(); i++) {
-            if (custom_lowering_passes[i].deleter) {
-                custom_lowering_passes[i].deleter();
+        for (auto &custom_lowering_pass : custom_lowering_passes) {
+            if (custom_lowering_pass.deleter) {
+                custom_lowering_pass.deleter();
             }
         }
         custom_lowering_passes.clear();
@@ -527,9 +527,9 @@ std::string Pipeline::generate_function_name() const {
     user_assert(defined()) << "Pipeline is undefined\n";
     // Come up with a name for a generated function
     string name = contents->outputs[0].name();
-    for (size_t i = 0; i < name.size(); i++) {
-        if (!isalnum(name[i])) {
-            name[i] = '_';
+    for (char &c : name) {
+        if (!isalnum(c)) {
+            c = '_';
         }
     }
     return name;
@@ -995,10 +995,8 @@ Pipeline::make_externs_jit_module(const Target &target,
     // Externs that are Funcs get their own JITModule. All standalone functions are
     // held in a single JITModule at the end of the list (if there are any).
     JITModule free_standing_jit_externs;
-    for (std::map<std::string, JITExtern>::iterator iter = externs_in_out.begin();
-         iter != externs_in_out.end();
-         iter++) {
-        Pipeline pipeline = iter->second.pipeline();
+    for (auto &iter : externs_in_out) {
+        Pipeline pipeline = iter.second.pipeline();
         if (pipeline.defined()) {
             PipelineContents &pipeline_contents(*pipeline.contents);
 
@@ -1006,7 +1004,7 @@ Pipeline::make_externs_jit_module(const Target &target,
             pipeline.compile_jit(target);
 
             free_standing_jit_externs.add_dependency(pipeline_contents.jit_module);
-            free_standing_jit_externs.add_symbol_for_export(iter->first, pipeline_contents.jit_module.entrypoint_symbol());
+            free_standing_jit_externs.add_symbol_for_export(iter.first, pipeline_contents.jit_module.entrypoint_symbol());
             void *address = pipeline_contents.jit_module.entrypoint_symbol().address;
             std::vector<Type> arg_types;
             // Add the arguments to the compiled pipeline
@@ -1023,9 +1021,9 @@ Pipeline::make_externs_jit_module(const Target &target,
                 arg_types.push_back(type_of<struct halide_buffer_t *>());
             }
             ExternSignature signature(Int(32), false, arg_types);
-            iter->second = JITExtern(ExternCFunction(address, signature));
+            iter.second = JITExtern(ExternCFunction(address, signature));
         } else {
-            free_standing_jit_externs.add_extern_for_export(iter->first, iter->second.extern_c_function());
+            free_standing_jit_externs.add_extern_for_export(iter.first, iter.second.extern_c_function());
         }
     }
     if (free_standing_jit_externs.compiled() || !free_standing_jit_externs.exports().empty()) {

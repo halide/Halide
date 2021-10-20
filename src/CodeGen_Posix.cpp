@@ -221,20 +221,50 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 
         // Even if we're reusing a stack slot, we need to call
         // pseudostack_alloc to potentially reallocate.
-        llvm::Function *malloc_fn = module->getFunction("pseudostack_alloc");
-        internal_assert(malloc_fn) << "Could not find pseudostack_alloc in module\n";
-        malloc_fn->setReturnDoesNotAlias();
+        llvm::Function *alloc_fn = module->getFunction("pseudostack_alloc");
+        internal_assert(alloc_fn) << "Could not find pseudostack_alloc in module\n";
+        alloc_fn->setReturnDoesNotAlias();
 
-        llvm::Function::arg_iterator arg_iter = malloc_fn->arg_begin();
+        llvm::Function::arg_iterator arg_iter = alloc_fn->arg_begin();
         ++arg_iter;  // skip the user context *
         slot = builder->CreatePointerCast(slot, arg_iter->getType());
         ++arg_iter;  // skip the pointer to the stack slot
-        llvm_size = builder->CreateIntCast(llvm_size, arg_iter->getType(), false);
+        llvm::Type *size_type = arg_iter->getType();
+        llvm_size = builder->CreateIntCast(llvm_size, size_type, false);
         Value *args[3] = {get_user_context(), slot, llvm_size};
-        Value *call = builder->CreateCall(malloc_fn, args);
+        Value *call = builder->CreateCall(alloc_fn, args);
+        llvm::Type *ptr_type = llvm_type_of(type)->getPointerTo();
+        call = builder->CreatePointerCast(call, ptr_type);
 
-        // Fix the type to avoid pointless bitcasts later
-        allocation.ptr = builder->CreatePointerCast(call, llvm_type_of(type)->getPointerTo());
+        // Figure out how much we need to allocate on the real stack
+        Value *returned_non_null = builder->CreateIsNotNull(call);
+
+        BasicBlock *here_bb = builder->GetInsertBlock();
+        BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
+        BasicBlock *need_alloca_bb = BasicBlock::Create(*context, "then_bb", function);
+
+        builder->CreateCondBr(returned_non_null, after_bb, need_alloca_bb, very_likely_branch);
+        builder->SetInsertPoint(need_alloca_bb);
+
+        // Allocate it. It's zero most of the time.
+        AllocaInst *alloca_inst = builder->CreateAlloca(i8_t->getPointerTo(), llvm_size);
+        // Give it the right alignment
+        alloca_inst->setAlignment(llvm::Align(native_vector_bits() / 8));
+
+        // Set the pseudostack slot ptr to the right thing so we reuse
+        // this pointer next time around.
+        Value *stack_ptr = builder->CreatePointerCast(alloca_inst, ptr_type);
+        Value *slot_ptr_ptr = builder->CreatePointerCast(slot, ptr_type->getPointerTo());
+        builder->CreateStore(stack_ptr, slot_ptr_ptr);
+
+        builder->CreateBr(after_bb);
+        builder->SetInsertPoint(after_bb);
+
+        PHINode *phi = builder->CreatePHI(ptr_type, 2);
+        phi->addIncoming(stack_ptr, need_alloca_bb);
+        phi->addIncoming(call, here_bb);
+
+        allocation.ptr = phi;
         allocation.pseudostack_slot = slot;
     } else {
         if (new_expr.defined()) {
