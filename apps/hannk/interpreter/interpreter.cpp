@@ -24,6 +24,8 @@ namespace {
 
 // TODO: maybe move this to a separate file? Not sure if it's complex enough to be worthy or not.
 class TensorVisitor : public OpVisitor {
+    using OpVisitor::visit;
+
     virtual void visit_tensor(const TensorPtr &t) = 0;
 
     void visit(OpGroup *g) override {
