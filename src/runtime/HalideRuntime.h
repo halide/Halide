@@ -1925,10 +1925,20 @@ extern void halide_register_device_allocation_pool(struct halide_device_allocati
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
 
 namespace {
+
 template<typename T>
-struct check_is_pointer;
+struct check_is_pointer_helper {
+    static constexpr bool value = false;
+};
+
 template<typename T>
-struct check_is_pointer<T *> {};
+struct check_is_pointer_helper<T *> {
+    static constexpr bool value = true;
+};
+
+template<class T>
+struct check_is_pointer : check_is_pointer_helper<T> {};
+
 }  // namespace
 
 /** Construct the halide equivalent of a C type */
@@ -1936,8 +1946,9 @@ template<typename T>
 HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of() {
     // Create a compile-time error if T is not a pointer (without
     // using any includes - this code goes into the runtime).
-    check_is_pointer<T> check;
-    (void)check;
+    // (Note that we can't have uninitialized variables in constexpr functions,
+    // even if those variables aren't used.)
+    static_assert(check_is_pointer<T>::value, "Expected a pointer type here");
     return halide_type_t(halide_type_handle, 64);
 }
 
