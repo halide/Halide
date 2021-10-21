@@ -65,7 +65,7 @@ bool needs_arena_allocation(const TensorPtr &t) {
 }
 
 class FindAllocatableTensors : public TensorVisitor {
-    void visit_tensor(const TensorPtr &t) {
+    void visit_tensor(const TensorPtr &t) override {
         if (!needs_arena_allocation(t)) {
             return;
         }
@@ -175,6 +175,13 @@ void Interpreter::init(InterpreterOptions options) {
     VerifyAllAllocated verify_all;
     model_->accept(&verify_all);
 #endif
+
+    if (options.verbosity >= 2) {
+        std::ostringstream os;
+        os << "Model after transformations:\n";
+        model_->dump(os);
+        HLOG(INFO) << os.str();
+    }
 }
 
 void Interpreter::execute() {

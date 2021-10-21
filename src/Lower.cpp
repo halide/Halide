@@ -23,6 +23,7 @@
 #include "DebugToFile.h"
 #include "Deinterleave.h"
 #include "EarlyFree.h"
+#include "ExtractTileOperations.h"
 #include "FindCalls.h"
 #include "FindIntrinsics.h"
 #include "FlattenNestedRamps.h"
@@ -382,6 +383,14 @@ void lower_impl(const vector<Function> &output_funcs,
     s = lower_unsafe_promises(s, t);
     log("Lowering after lowering unsafe promises:", s);
 
+#if LLVM_VERSION >= 120
+    if (t.has_feature(Target::AVX512_SapphireRapids)) {
+        debug(1) << "Extracting tile operations...\n";
+        s = extract_tile_operations(s);
+        log("Lowering after extracting tile operations:", s);
+    }
+#endif
+
     debug(1) << "Flattening nested ramps...\n";
     s = flatten_nested_ramps(s);
     log("Lowering after flattening nested ramps:", s);
@@ -394,6 +403,8 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after removing dead allocations and hoisting loop invariants:", s);
 
     debug(1) << "Finding intrinsics...\n";
+    // Must be run after the last simplification, because it turns
+    // divisions into shifts, which the simplifier reverses.
     s = find_intrinsics(s);
     log("Lowering after finding intrinsics:", s);
 

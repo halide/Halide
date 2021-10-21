@@ -60,6 +60,7 @@ set(HEADER_FILES
     ExprUsesVar.h
     Extern.h
     ExternFuncArgument.h
+    ExtractTileOperations.h
     FastIntegerDivide.h
     FindCalls.h
     FindIntrinsics.h
@@ -221,6 +222,7 @@ set(SOURCE_FILES
     EmulateFloat16Math.cpp
     Error.cpp
     Expr.cpp
+    ExtractTileOperations.cpp
     FastIntegerDivide.cpp
     FindCalls.cpp
     FindIntrinsics.cpp

@@ -20,3 +20,14 @@ add_library(interpreter STATIC
 target_include_directories(interpreter PUBLIC $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 target_link_libraries(interpreter PRIVATE elementwise_program op_impls interpreter_lower Halide::Runtime)
 
+foreach (LIB IN ITEMS
+            elementwise_program
+            interpreter_lower
+            interpreter)
+    target_compile_options(${LIB}
+                           PRIVATE
+                           $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Woverloaded-virtual>
+                           $<$<CXX_COMPILER_ID:GNU>:-Wsuggest-override>
+                           $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-destructor-override>
+                           $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-override>)
+endforeach ()

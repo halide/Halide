@@ -3106,7 +3106,22 @@ Realization Func::realize(std::vector<int32_t> sizes, const Target &target,
     return pipeline().realize(std::move(sizes), target, param_map);
 }
 
+Realization Func::realize(JITUserContext *context,
+                          std::vector<int32_t> sizes,
+                          const Target &target,
+                          const ParamMap &param_map) {
+    user_assert(defined()) << "Can't realize undefined Func.\n";
+    return pipeline().realize(context, std::move(sizes), target, param_map);
+}
+
 void Func::infer_input_bounds(const std::vector<int32_t> &sizes,
+                              const Target &target,
+                              const ParamMap &param_map) {
+    infer_input_bounds(nullptr, sizes, target, param_map);
+}
+
+void Func::infer_input_bounds(JITUserContext *context,
+                              const std::vector<int32_t> &sizes,
                               const Target &target,
                               const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
@@ -3116,7 +3131,7 @@ void Func::infer_input_bounds(const std::vector<int32_t> &sizes,
         outputs[i] = std::move(im);
     }
     Realization r(outputs);
-    infer_input_bounds(r, target, param_map);
+    infer_input_bounds(context, r, target, param_map);
 }
 
 OutputImageParam Func::output_buffer() const {
@@ -3297,18 +3312,34 @@ const vector<CustomLoweringPass> &Func::custom_lowering_passes() {
     return pipeline().custom_lowering_passes();
 }
 
-const Internal::JITHandlers &Func::jit_handlers() {
+JITHandlers &Func::jit_handlers() {
     return pipeline().jit_handlers();
 }
 
-void Func::realize(Pipeline::RealizationArg outputs, const Target &target,
+void Func::realize(Pipeline::RealizationArg outputs,
+                   const Target &target,
                    const ParamMap &param_map) {
     pipeline().realize(std::move(outputs), target, param_map);
 }
 
-void Func::infer_input_bounds(Pipeline::RealizationArg outputs, const Target &target,
+void Func::realize(JITUserContext *context,
+                   Pipeline::RealizationArg outputs,
+                   const Target &target,
+                   const ParamMap &param_map) {
+    pipeline().realize(context, std::move(outputs), target, param_map);
+}
+
+void Func::infer_input_bounds(Pipeline::RealizationArg outputs,
+                              const Target &target,
                               const ParamMap &param_map) {
     pipeline().infer_input_bounds(std::move(outputs), target, param_map);
+}
+
+void Func::infer_input_bounds(JITUserContext *context,
+                              Pipeline::RealizationArg outputs,
+                              const Target &target,
+                              const ParamMap &param_map) {
+    pipeline().infer_input_bounds(context, std::move(outputs), target, param_map);
 }
 
 void Func::compile_jit(const Target &target) {
