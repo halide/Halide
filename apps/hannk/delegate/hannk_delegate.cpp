@@ -755,7 +755,8 @@ private:
     OpPtr BuildL2Normalization(TfLiteContext *context, TfLiteNode *node) {
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return make_op<L2NormalizationOp>(input, output);
+        const int axis = 0;  // In TFLite, normalization is always against the first axis.
+        return make_op<L2NormalizationOp>(input, output, axis);
     }
 
     OpPtr BuildUnary(TfLiteContext *context, TfLiteNode *node, UnaryOp::Operator type) {

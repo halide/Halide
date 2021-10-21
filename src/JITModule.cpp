@@ -298,7 +298,7 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
         listeners.push_back(llvm::JITEventListener::createIntelJITEventListener());
     }
     // TODO: If this ever works in LLVM, this would allow profiling of JIT code with symbols with oprofile.
-    //listeners.push_back(llvm::createOProfileJITEventListener());
+    // listeners.push_back(llvm::createOProfileJITEventListener());
 
     for (auto &listener : listeners) {
         ee->RegisterJITEventListener(listener);
@@ -508,66 +508,59 @@ void merge_handlers(JITHandlers &base, const JITHandlers &addins) {
     }
 }
 
-void print_handler(void *context, const char *msg) {
+void print_handler(JITUserContext *context, const char *msg) {
     if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        (*jit_user_context->handlers.custom_print)(context, msg);
+        (*context->handlers.custom_print)(context, msg);
     } else {
         return (*active_handlers.custom_print)(context, msg);
     }
 }
 
-void *malloc_handler(void *context, size_t x) {
+void *malloc_handler(JITUserContext *context, size_t x) {
     if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        return (*jit_user_context->handlers.custom_malloc)(context, x);
+        return (*context->handlers.custom_malloc)(context, x);
     } else {
         return (*active_handlers.custom_malloc)(context, x);
     }
 }
 
-void free_handler(void *context, void *ptr) {
+void free_handler(JITUserContext *context, void *ptr) {
     if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        (*jit_user_context->handlers.custom_free)(context, ptr);
+        (*context->handlers.custom_free)(context, ptr);
     } else {
         (*active_handlers.custom_free)(context, ptr);
     }
 }
 
-int do_task_handler(void *context, halide_task f, int idx,
+int do_task_handler(JITUserContext *context, halide_task_t f, int idx,
                     uint8_t *closure) {
     if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        return (*jit_user_context->handlers.custom_do_task)(context, f, idx, closure);
+        return (*context->handlers.custom_do_task)(context, f, idx, closure);
     } else {
         return (*active_handlers.custom_do_task)(context, f, idx, closure);
     }
 }
 
-int do_par_for_handler(void *context, halide_task f,
+int do_par_for_handler(JITUserContext *context, halide_task_t f,
                        int min, int size, uint8_t *closure) {
     if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        return (*jit_user_context->handlers.custom_do_par_for)(context, f, min, size, closure);
+        return (*context->handlers.custom_do_par_for)(context, f, min, size, closure);
     } else {
         return (*active_handlers.custom_do_par_for)(context, f, min, size, closure);
     }
 }
 
-void error_handler_handler(void *context, const char *msg) {
+void error_handler_handler(JITUserContext *context, const char *msg) {
     if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        (*jit_user_context->handlers.custom_error)(context, msg);
+        (*context->handlers.custom_error)(context, msg);
     } else {
         (*active_handlers.custom_error)(context, msg);
     }
 }
 
-int32_t trace_handler(void *context, const halide_trace_event_t *e) {
+int32_t trace_handler(JITUserContext *context, const halide_trace_event_t *e) {
     if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        return (*jit_user_context->handlers.custom_trace)(context, e);
+        return (*context->handlers.custom_trace)(context, e);
     } else {
         return (*active_handlers.custom_trace)(context, e);
     }
@@ -884,16 +877,14 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     return result;
 }
 
-// TODO: Either remove user_context argument figure out how to make
-// caller provided user context work with JIT. (At present, this
-// cascaded handler calls cannot work with the right context as
-// JITModule needs its context to be passed in case the called handler
-// calls another callback which is not overriden by the caller.)
-void JITSharedRuntime::init_jit_user_context(JITUserContext &jit_user_context,
-                                             void *user_context, const JITHandlers &handlers) {
-    jit_user_context.handlers = active_handlers;
-    jit_user_context.user_context = user_context;
-    merge_handlers(jit_user_context.handlers, handlers);
+void JITSharedRuntime::populate_jit_handlers(JITUserContext *jit_user_context, const JITHandlers &handlers) {
+    // Take the active global handlers
+    JITHandlers merged = active_handlers;
+    // Clobber with any custom handlers set on the pipeline
+    merge_handlers(merged, handlers);
+    // Clobber with any custom handlers set on the call
+    merge_handlers(merged, jit_user_context->handlers);
+    jit_user_context->handlers = merged;
 }
 
 void JITSharedRuntime::release_all() {
