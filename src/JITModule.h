@@ -24,6 +24,34 @@ struct JITExtern;
 struct Target;
 class Module;
 
+struct JITUserContext;
+
+/** A set of custom overrides of runtime functions */
+struct JITHandlers {
+    void (*custom_print)(JITUserContext *, const char *){nullptr};
+    void *(*custom_malloc)(JITUserContext *, size_t){nullptr};
+    void (*custom_free)(JITUserContext *, void *){nullptr};
+    int (*custom_do_task)(JITUserContext *, halide_task_t, int, uint8_t *){nullptr};
+    int (*custom_do_par_for)(JITUserContext *, halide_task_t, int, int, uint8_t *){nullptr};
+    void (*custom_error)(JITUserContext *, const char *){nullptr};
+    int32_t (*custom_trace)(JITUserContext *, const halide_trace_event_t *){nullptr};
+    void *(*custom_get_symbol)(const char *name){nullptr};
+    void *(*custom_load_library)(const char *name){nullptr};
+    void *(*custom_get_library_symbol)(void *lib, const char *name){nullptr};
+};
+
+namespace Internal {
+struct JITErrorBuffer;
+}
+
+/** A context to be passed to Pipeline::realize. Inherit from this to
+ * pass your own custom context object. Modify the handlers field to
+ * override runtime functions per-call to realize. */
+struct JITUserContext {
+    Internal::JITErrorBuffer *error_buffer{nullptr};
+    JITHandlers handlers;
+};
+
 namespace Internal {
 
 class JITModuleContents;
@@ -137,31 +165,11 @@ struct JITModule {
     bool compiled() const;
 };
 
-typedef int (*halide_task)(void *user_context, int, uint8_t *);
-
-struct JITHandlers {
-    void (*custom_print)(void *, const char *){nullptr};
-    void *(*custom_malloc)(void *, size_t){nullptr};
-    void (*custom_free)(void *, void *){nullptr};
-    int (*custom_do_task)(void *, halide_task, int, uint8_t *){nullptr};
-    int (*custom_do_par_for)(void *, halide_task, int, int, uint8_t *){nullptr};
-    void (*custom_error)(void *, const char *){nullptr};
-    int32_t (*custom_trace)(void *, const halide_trace_event_t *){nullptr};
-    void *(*custom_get_symbol)(const char *name){nullptr};
-    void *(*custom_load_library)(const char *name){nullptr};
-    void *(*custom_get_library_symbol)(void *lib, const char *name){nullptr};
-};
-
-struct JITUserContext {
-    void *user_context;
-    JITHandlers handlers;
-};
-
 class JITSharedRuntime {
 public:
     // Note only the first llvm::Module passed in here is used. The same shared runtime is used for all JIT.
     static std::vector<JITModule> get(llvm::Module *m, const Target &target, bool create = true);
-    static void init_jit_user_context(JITUserContext &jit_user_context, void *user_context, const JITHandlers &handlers);
+    static void populate_jit_handlers(JITUserContext *jit_user_context, const JITHandlers &handlers);
     static JITHandlers set_default_handlers(const JITHandlers &handlers);
 
     /** Set the maximum number of bytes used by memoization caching.
