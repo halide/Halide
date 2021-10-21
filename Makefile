@@ -455,6 +455,7 @@ SOURCE_FILES = \
   EmulateFloat16Math.cpp \
   Error.cpp \
   Expr.cpp \
+  ExtractTileOperations.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
   FindIntrinsics.cpp \
@@ -629,6 +630,7 @@ HEADER_FILES = \
   ExprUsesVar.h \
   Extern.h \
   ExternFuncArgument.h \
+  ExtractTileOperations.h \
   FastIntegerDivide.h \
   FindCalls.h \
   FindIntrinsics.h \
@@ -841,6 +843,7 @@ RUNTIME_LL_COMPONENTS = \
   x86_avx \
   x86_avx2 \
   x86_avx512 \
+  x86_amx \
   x86_sse41
 
 RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
