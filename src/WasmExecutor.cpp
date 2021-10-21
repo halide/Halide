@@ -355,10 +355,6 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     return read_entire_file(wasm_output.pathname());
 }
 
-inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
-    return ((int)code) | (bits << 8);
-}
-
 // dynamic_type_dispatch is a utility for functors that want to be able
 // to dynamically dispatch a halide_type_t to type-specialized code.
 // To use it, a functor must be a *templated* class, e.g.
@@ -380,10 +376,10 @@ template<template<typename> class Functor, typename... Args>
 auto dynamic_type_dispatch(const halide_type_t &type, Args &&... args) -> decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
 
 #define HANDLE_CASE(CODE, BITS, TYPE)  \
-    case halide_type_code(CODE, BITS): \
+    case halide_type_t(CODE, BITS).as_u32(): \
         return Functor<TYPE>()(std::forward<Args>(args)...);
 
-    switch (halide_type_code((halide_type_code_t)type.code, type.bits)) {
+    switch (type.element_of().as_u32()) {
         HANDLE_CASE(halide_type_bfloat, 16, bfloat16_t)
         HANDLE_CASE(halide_type_float, 16, float16_t)
         HANDLE_CASE(halide_type_float, 32, float)
