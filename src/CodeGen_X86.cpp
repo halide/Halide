@@ -79,15 +79,21 @@ protected:
     void visit(const EQ *) override;
     void visit(const NE *) override;
     void visit(const Select *) override;
+    void visit(const Allocate *) override;
+    void visit(const Load *) override;
+    void visit(const Store *) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &init) override;
     // @}
+
+private:
+    Scope<MemoryType> mem_type;
 };
 
 CodeGen_X86::CodeGen_X86(Target t)
     : CodeGen_Posix(complete_x86_target(t)) {
 }
 
-const int max_intrinsic_args = 4;
+const int max_intrinsic_args = 6;
 
 struct x86Intrinsic {
     const char *intrin_name;
@@ -95,6 +101,10 @@ struct x86Intrinsic {
     const char *name;
     halide_type_t arg_types[max_intrinsic_args];
     Target::Feature feature = Target::FeatureEnd;
+    uint32_t flags = 0;
+    enum Options {
+        AccessesMemory = 1 << 0,
+    };
 };
 
 // clang-format off
@@ -200,6 +210,19 @@ const x86Intrinsic intrinsic_defs[] = {
     {"dpwssdsx16", Int(32, 16), "saturating_dot_product", {Int(32, 16), Int(16, 32), Int(16, 32)}, Target::AVX512_SapphireRapids},
     {"dpwssdsx8", Int(32, 8), "saturating_dot_product", {Int(32, 8), Int(16, 16), Int(16, 16)}, Target::AVX512_SapphireRapids},
     {"dpwssdsx4", Int(32, 4), "saturating_dot_product", {Int(32, 4), Int(16, 8), Int(16, 8)}, Target::AVX512_SapphireRapids},
+
+    {"tileloadd64_i8", Int(8, 1024), "tile_load", {Int(16), Int(16), Handle(), Int(64), Int(64)}, Target::AVX512_SapphireRapids, x86Intrinsic::AccessesMemory},
+    {"tileloadd64_i8", UInt(8, 1024), "tile_load", {Int(16), Int(16), Handle(), Int(64), Int(64)}, Target::AVX512_SapphireRapids, x86Intrinsic::AccessesMemory},
+    {"tileloadd64_bf16", BFloat(16, 512), "tile_load", {Int(16), Int(16), Handle(), Int(64), Int(64)}, Target::AVX512_SapphireRapids, x86Intrinsic::AccessesMemory},
+    {"tdpbssd", Int(32, 256), "tile_matmul", {Int(16), Int(16), Int(16), Int(32, 256), Int(8, 1024), Int(8, 1024)},  Target::AVX512_SapphireRapids},
+    {"tdpbsud", Int(32, 256), "tile_matmul", {Int(16), Int(16), Int(16), Int(32, 256), Int(8, 1024), UInt(8, 1024)}, Target::AVX512_SapphireRapids},
+    {"tdpbusd", Int(32, 256), "tile_matmul", {Int(16), Int(16), Int(16), Int(32, 256), UInt(8, 1024), Int(8, 1024)}, Target::AVX512_SapphireRapids},
+    {"tdpbuud", Int(32, 256), "tile_matmul", {Int(16), Int(16), Int(16), Int(32, 256), UInt(8, 1024), UInt(8, 1024)}, Target::AVX512_SapphireRapids},
+    {"tdpbf16ps", Float(32, 256), "tile_matmul", {Int(16), Int(16), Int(16), Float(32, 256), BFloat(16, 512), BFloat(16, 512)}, Target::AVX512_SapphireRapids},
+    {"tilezero_i32", Int(32, 256), "tile_zero", {Int(16), Int(16)},  Target::AVX512_SapphireRapids},
+    {"tilezero_f32", Float(32, 256), "tile_zero", {Int(16), Int(16)}, Target::AVX512_SapphireRapids},
+    {"tilestored64_i32", Int(32), "tile_store", {Int(16), Int(16), Handle(), Int(64), Int(64), Int(32, 256)}, Target::AVX512_SapphireRapids, x86Intrinsic::AccessesMemory},
+    {"tilestored64_f32", Int(32), "tile_store", {Int(16), Int(16), Handle(), Int(64), Int(64), Float(32, 256)}, Target::AVX512_SapphireRapids, x86Intrinsic::AccessesMemory},
 };
 // clang-format on
 
@@ -222,7 +245,9 @@ void CodeGen_X86::init_module() {
         }
 
         auto *fn = declare_intrin_overload(i.name, ret_type, i.intrin_name, std::move(arg_types));
-        fn->addFnAttr(llvm::Attribute::ReadNone);
+        if ((i.flags & x86Intrinsic::AccessesMemory) == 0) {
+            fn->addFnAttr(llvm::Attribute::ReadNone);
+        }
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
 }
@@ -584,6 +609,38 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
     CodeGen_Posix::codegen_vector_reduce(op, init);
 }
 
+void CodeGen_X86::visit(const Allocate *op) {
+    ScopedBinding<MemoryType> bind(mem_type, op->name, op->memory_type);
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_X86::visit(const Load *op) {
+    if (mem_type.contains(op->name) && mem_type.get(op->name) == MemoryType::AMXTile) {
+        const Ramp *ramp = op->index.as<Ramp>();
+        internal_assert(ramp) << "Expected AMXTile to have index ramp\n";
+        Value *ptr = codegen_buffer_pointer(op->name, op->type, ramp->base);
+        LoadInst *load = builder->CreateAlignedLoad(ptr->getType()->getPointerElementType(), ptr, llvm::Align(op->type.bytes()));
+        add_tbaa_metadata(load, op->name, op->index);
+        value = load;
+        return;
+    }
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_X86::visit(const Store *op) {
+    if (mem_type.contains(op->name) && mem_type.get(op->name) == MemoryType::AMXTile) {
+        Value *val = codegen(op->value);
+        Halide::Type value_type = op->value.type();
+        const Ramp *ramp = op->index.as<Ramp>();
+        internal_assert(ramp) << "Expected AMXTile to have index ramp\n";
+        Value *ptr = codegen_buffer_pointer(op->name, value_type, ramp->base);
+        StoreInst *store = builder->CreateAlignedStore(val, ptr, llvm::Align(value_type.bytes()));
+        add_tbaa_metadata(store, op->name, op->index);
+        return;
+    }
+    CodeGen_Posix::visit(op);
+}
+
 string CodeGen_X86::mcpu() const {
     if (target.has_feature(Target::AVX512_SapphireRapids)) {
 #if LLVM_VERSION >= 120
@@ -644,7 +701,7 @@ string CodeGen_X86::mattrs() const {
         }
         if (target.has_feature(Target::AVX512_SapphireRapids)) {
 #if LLVM_VERSION >= 120
-            features += ",+avx512bf16,+avx512vnni";
+            features += ",+avx512bf16,+avx512vnni,+amx-int8,+amx-bf16";
 #else
             user_error << "AVX512 SapphireRapids requires LLVM 12 or later.";
 #endif

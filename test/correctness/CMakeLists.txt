@@ -312,6 +312,7 @@ tests(GROUPS correctness
       strided_load.cpp
       target.cpp
       thread_safety.cpp
+      tiled_matmul.cpp
       tracing.cpp
       tracing_bounds.cpp
       tracing_broadcast.cpp
