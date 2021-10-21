@@ -365,7 +365,8 @@ public:
     OpPtr parse_l2_normalization(const tflite::Operator *op) {
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return make_op<L2NormalizationOp>(input, output);
+        const int axis = 0;  // In TFLite, normalization is always against the first axis.
+        return make_op<L2NormalizationOp>(input, output, axis);
     }
 
     OpPtr parse_reduction(const tflite::Operator *op, ReductionOp::Operator reduction_op) {

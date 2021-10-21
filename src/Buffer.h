@@ -11,6 +11,8 @@ namespace Halide {
 template<typename T = void>
 class Buffer;
 
+struct JITUserContext;
+
 namespace Internal {
 
 struct BufferContents {
@@ -577,23 +579,23 @@ public:
     // @}
 
     /** Copy to the GPU, using the device API that is the default for the given Target. */
-    int copy_to_device(const Target &t = get_jit_target_from_environment()) {
-        return copy_to_device(DeviceAPI::Default_GPU, t);
+    int copy_to_device(const Target &t = get_jit_target_from_environment(), JITUserContext *context = nullptr) {
+        return copy_to_device(DeviceAPI::Default_GPU, t, context);
     }
 
     /** Copy to the GPU, using the given device API */
-    int copy_to_device(const DeviceAPI &d, const Target &t = get_jit_target_from_environment()) {
-        return contents->buf.copy_to_device(get_device_interface_for_device_api(d, t, "Buffer::copy_to_device"));
+    int copy_to_device(const DeviceAPI &d, const Target &t = get_jit_target_from_environment(), JITUserContext *context = nullptr) {
+        return contents->buf.copy_to_device(get_device_interface_for_device_api(d, t, "Buffer::copy_to_device"), context);
     }
 
     /** Allocate on the GPU, using the device API that is the default for the given Target. */
-    int device_malloc(const Target &t = get_jit_target_from_environment()) {
-        return device_malloc(DeviceAPI::Default_GPU, t);
+    int device_malloc(const Target &t = get_jit_target_from_environment(), JITUserContext *context = nullptr) {
+        return device_malloc(DeviceAPI::Default_GPU, t, context);
     }
 
     /** Allocate storage on the GPU, using the given device API */
-    int device_malloc(const DeviceAPI &d, const Target &t = get_jit_target_from_environment()) {
-        return contents->buf.device_malloc(get_device_interface_for_device_api(d, t, "Buffer::device_malloc"));
+    int device_malloc(const DeviceAPI &d, const Target &t = get_jit_target_from_environment(), JITUserContext *context = nullptr) {
+        return contents->buf.device_malloc(get_device_interface_for_device_api(d, t, "Buffer::device_malloc"), context);
     }
 
     /** Wrap a native handle, using the given device API.
@@ -601,8 +603,8 @@ public:
      * as the handle argument must match the API that the default
      * resolves to and it is clearer and more reliable to pass the
      * resolved DeviceAPI explicitly. */
-    int device_wrap_native(const DeviceAPI &d, uint64_t handle, const Target &t = get_jit_target_from_environment()) {
-        return contents->buf.device_wrap_native(get_device_interface_for_device_api(d, t, "Buffer::device_wrap_native"), handle);
+    int device_wrap_native(const DeviceAPI &d, uint64_t handle, const Target &t = get_jit_target_from_environment(), JITUserContext *context = nullptr) {
+        return contents->buf.device_wrap_native(get_device_interface_for_device_api(d, t, "Buffer::device_wrap_native"), handle, context);
     }
 };
 
