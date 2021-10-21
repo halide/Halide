@@ -1879,4 +1879,10 @@ void UnaryOp::accept(OpVisitor *v) {
     v->visit(this);
 }
 
+void LeafOpVisitor::visit(OpGroup *op) {
+    for (int i = 0; i < op->op_count(); i++) {
+        op->op(i)->accept(this);
+    }
+}
+
 }  // namespace hannk
